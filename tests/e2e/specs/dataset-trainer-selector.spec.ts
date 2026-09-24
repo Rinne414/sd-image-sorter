@@ -363,7 +363,7 @@ test('maps Anima and Kohya contracts into exact controls and payload fields', as
   })
 })
 
-test('fails closed for HTTP errors and succeeds only after explicit Retry', async ({ page }) => {
+test('contract HTTP errors keep plain export working and packages need an explicit Retry', async ({ page }) => {
   let attempts = 0
   await page.route('**/api/dataset/trainers', (route) => {
     attempts += 1
@@ -377,18 +377,24 @@ test('fails closed for HTTP errors and succeeds only after explicit Retry', asyn
   const state = page.getByTestId('dataset-trainer-contract-state')
   await expect(state).toHaveAttribute('data-state', 'error')
   await expect(state).toContainText('503')
+  // Only verified packages need the contracts. Plain export and the generic
+  // mask formats stay usable while the package selector waits for Retry.
   await expect(page.getByTestId('dataset-trainer-package')).toBeDisabled()
-  await expect(page.getByTestId('dataset-readiness-check')).toBeDisabled()
-  await expect(page.locator('#btn-dataset-export')).toBeDisabled()
-  const payloadError = await page.evaluate(() => {
-    try {
-      ;(window as any).DatasetMaker._buildExportPayload()
-      return ''
-    } catch (error) {
-      return (error as Error).message
-    }
+  await expect(page.getByTestId('dataset-trainer-package').locator('option')).toHaveText([
+    'Images + captions only',
+  ])
+  await expect(page.locator('#dataset-mask-export')).toBeEnabled()
+  await expect(page.locator('#dataset-mask-export option')).toHaveText([
+    "Don't export",
+    'OneTrainer (name-masklabel.png beside image)',
+    'Kohya conditioning masks (mask/ folder)',
+  ])
+  await expect(page.getByTestId('dataset-readiness-check')).toBeEnabled()
+  await expect(page.locator('#btn-dataset-export')).toBeEnabled()
+  expect(await page.evaluate(() => (window as any).DatasetMaker._buildExportPayload())).toMatchObject({
+    trainer_config: 'none',
+    mask_export: 'none',
   })
-  expect(payloadError).toContain('503')
 
   await page.getByTestId('dataset-trainer-contract-retry').click()
   await expect(state).toHaveAttribute('data-state', 'ready')
@@ -519,7 +525,7 @@ test('changing trainer settings invalidates an accepted Readiness report', async
 
   await selectCustomOption(page, 'dataset-trainer-package', 'kohya_toml')
   await expect(page.getByTestId('dataset-readiness-state')).toHaveAttribute('data-state', 'stale')
-  await expect(page.locator('#btn-dataset-export')).toBeDisabled()
+  await expect(page.locator('#btn-dataset-export')).toBeEnabled()
 })
 
 test('trainer controls stay visible and unclipped at supported desktop widths', async ({ page }) => {

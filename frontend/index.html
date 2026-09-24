@@ -4523,7 +4523,7 @@
                                     </label>
                                     <label class="form-label">
                                         <span data-i18n="batchExport.loraMaxTags">Max tags (0 = unlimited)</span>
-                                        <input type="number" id="dataset-max-tags" class="form-input" value="0" min="0" max="200">
+                                        <input type="number" id="dataset-max-tags" class="form-input" value="0" min="0" max="1000">
                                     </label>
                                     </div>
                                 </details>
@@ -5226,6 +5226,27 @@
                                 <span data-i18n="dataset.confirmTitle">Ready to export</span>
                             </h3>
                             <ul class="dataset-confirm-summary" id="dataset-confirm-summary"></ul>
+                            <section class="dataset-confirm-check" id="dataset-confirm-check"
+                                     data-testid="dataset-confirm-check" aria-live="polite">
+                                <p class="dataset-confirm-check-status" id="dataset-confirm-check-status"
+                                   data-testid="dataset-confirm-check-status"></p>
+                                <ul class="dataset-confirm-check-issues" id="dataset-confirm-check-issues"
+                                    data-testid="dataset-confirm-check-issues"></ul>
+                                <label class="form-checkbox dataset-confirm-option" id="dataset-confirm-skip-row" hidden>
+                                    <input type="checkbox" id="dataset-confirm-skip-blocked"
+                                           data-testid="dataset-confirm-skip-blocked">
+                                    <span id="dataset-confirm-skip-label"></span>
+                                </label>
+                                <label class="form-checkbox dataset-confirm-option" id="dataset-confirm-empty-row" hidden>
+                                    <input type="checkbox" id="dataset-confirm-allow-empty"
+                                           data-testid="dataset-confirm-allow-empty">
+                                    <span id="dataset-confirm-empty-label"></span>
+                                </label>
+                                <p class="dataset-confirm-package-note" id="dataset-confirm-package-note"
+                                   data-i18n="dataset.confirmSkipPackageNote" hidden>Trainer packages need every image. Fix these images or remove them from the dataset.</p>
+                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-confirm-recheck"
+                                        data-testid="dataset-confirm-recheck" data-i18n="dataset.confirmCheckRetry" hidden>Check again</button>
+                            </section>
                             <div class="dataset-modal-actions">
                                 <button class="btn btn-ghost" id="btn-dataset-confirm-cancel" data-i18n="common.cancel">Cancel</button>
                                 <button class="btn btn-primary" id="btn-dataset-confirm-go" data-i18n="dataset.confirmGo">Yes, export now</button>

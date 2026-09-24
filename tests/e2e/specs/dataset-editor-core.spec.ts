@@ -2278,7 +2278,7 @@ test('historical trigger cleanup rejects a blacklist overflow atomically', async
       'Legacy Trigger, Current_Trigger'
     )
     ;(document.getElementById('dataset-blacklist') as HTMLTextAreaElement).value = Array.from(
-      { length: 999 },
+      { length: 9999 },
       (_, index) => `existing-${index}`,
     ).join('\n')
     dm._renderQueue()
@@ -2294,7 +2294,7 @@ test('historical trigger cleanup rejects a blacklist overflow atomically', async
   await page.locator('#input-modal-field').fill('Legacy Trigger')
   await page.locator('#btn-input-ok').click()
 
-  await expect(page.locator('#toast-container .toast.error')).toContainText('1,000-entry limit')
+  await expect(page.locator('#toast-container .toast.error')).toContainText('10,000-entry limit')
   await expect(page.locator('#toast-container .toast.success')).toHaveCount(0)
   expect(await page.evaluate(() => {
     const dm = (window as any).DatasetMaker
@@ -2887,6 +2887,27 @@ test('opening Smart Tag from Dataset Maker uses the Dataset trigger', async ({ p
   await page.locator('#btn-dataset-smart-tag').click()
   await expect(page.locator('#smart-tag-trigger')).toHaveValue('Shared_Trigger')
   await expect(page.locator('#dataset-trigger')).toHaveValue('Shared_Trigger')
+})
+
+test('Tag all sends a dataset with folder-imported images to Smart Tag', async ({ page }) => {
+  let tagStartRequests = 0
+  await page.route('**/api/tag/start', (route) => {
+    tagStartRequests += 1
+    return route.fulfill({ json: {} })
+  })
+  await seedDatasetQueue(page)
+  await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    dm.imageIds = [...dm.imageIds, -9001]
+    dm.localItemPaths.set(-9001, 'C:/folder/local-9001.png')
+  })
+
+  await page.evaluate(() => (window as any).DatasetMaker._tagAll())
+
+  await expect(page.locator('#smart-tag-modal')).toHaveClass(/visible/)
+  await expect(page.locator('#toast-container .toast.info'))
+    .toContainText('Folder images are tagged with Smart Tag')
+  expect(tagStartRequests).toBe(0)
 })
 
 test('opening Smart Tag from Dataset Maker rejects an invalid trigger', async ({ page }) => {

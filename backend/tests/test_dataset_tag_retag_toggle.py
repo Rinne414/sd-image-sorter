@@ -42,12 +42,14 @@ def test_tag_all_reads_checkbox_not_hardcoded_retag():
     assert "retag_all: retagAll" in js
 
 
-def test_tag_all_skips_local_source_items():
+def test_tag_all_routes_folder_imports_to_smart_tag():
     """Path-source items (negative ids) cannot use the legacy
-    /api/tag/start endpoint because they have no DB row. Tag all
-    must filter them out before sending."""
+    /api/tag/start endpoint because they have no DB row. Instead of refusing,
+    Tag all opens Smart Tag, which tags Library and folder items in one run."""
     js = _dataset_family_source()
     assert "isLocalId" in js, (
         "_tagAll does not filter local-source items — backend will 404 on negative ids."
     )
-    assert "dataset.tagAllOnlyLocal" in js
+    assert "this._openDatasetSmartTag()" in js
+    assert "dataset.tagAllRoutedSmartTag" in js
+    assert "dataset.tagAllOnlyLocal" not in js

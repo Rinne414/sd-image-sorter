@@ -335,7 +335,7 @@ def test_create_rejects_incompatible_trainer_settings(test_client, settings):
         _project_settings_with(("caption_render", "common_tags"), ["x" * 501]),
         _project_settings_with(
             ("caption_render", "common_tags"),
-            [f"tag-{index}" for index in range(1001)],
+            [f"tag-{index}" for index in range(10001)],
         ),
         _project_settings_with(
             ("caption_render", "template", "replace_rules"),
@@ -345,7 +345,7 @@ def test_create_rejects_incompatible_trainer_settings(test_client, settings):
             ("caption_render", "template", "replace_rules"),
             {"tag": " replacement"},
         ),
-        _project_settings_with(("caption_render", "template", "max_tags"), 201),
+        _project_settings_with(("caption_render", "template", "max_tags"), 1001),
         _project_settings_with(("output", "mode"), "unsupported"),
         _project_settings_with(("trainer", "repeats"), True),
         _project_settings_with(("trainer", "batch"), 65),
@@ -396,7 +396,7 @@ def test_create_rejects_invalid_project_settings(test_client, settings):
 
 
 def test_caption_tag_list_limits_match_project_preview_readiness_and_export() -> None:
-    tags = [f"tag-{index}" for index in range(1000)]
+    tags = [f"tag-{index}" for index in range(10000)]
     settings = _project_settings_with(("caption_render", "blacklist"), tags)
 
     project = DatasetProjectSettingsV1.model_validate(settings, strict=True)
@@ -404,12 +404,12 @@ def test_caption_tag_list_limits_match_project_preview_readiness_and_export() ->
     readiness = DatasetReadinessRequest(blacklist=tags, common_tags=tags)
     export = DatasetExportRequest(blacklist=tags, common_tags=tags)
 
-    assert len(project.caption_render.blacklist) == 1000
-    assert len(preview.blacklist) == 1000
-    assert len(readiness.blacklist) == 1000
-    assert len(export.blacklist) == 1000
+    assert len(project.caption_render.blacklist) == 10000
+    assert len(preview.blacklist) == 10000
+    assert len(readiness.blacklist) == 10000
+    assert len(export.blacklist) == 10000
 
-    too_many_tags = [*tags, "tag-1000"]
+    too_many_tags = [*tags, "tag-10000"]
     with pytest.raises(ValidationError):
         DatasetExportPreviewRequest(blacklist=too_many_tags)
     with pytest.raises(ValidationError):
@@ -476,7 +476,7 @@ def test_trigger_contract_accepts_space_or_underscore_spelling(
     (
         {"trigger": "___"},
         {"trigger": "x" * 101},
-        {"blacklist": [f"tag-{index}" for index in range(1001)]},
+        {"blacklist": [f"tag-{index}" for index in range(10001)]},
     ),
 )
 @pytest.mark.parametrize(
@@ -1351,3 +1351,103 @@ def test_update_rejects_non_strict_or_extra_fields(test_client, payload: dict[st
     created = _create_project(test_client, "Strict", []).json()
     response = test_client.put(f"/api/dataset/projects/{created['id']}", json=payload)
     assert response.status_code == 400
+
+
+
+def _kept(item: dict[str, object]) -> dict[str, object]:
+    return {**item, "keep_as_saved": True}
+
+
+def test_save_keeps_missing_and_changed_sources_marked_instead_of_refusing(
+    test_client,
+    tmp_path: Path,
+):
+    db = test_client.test_db
+    library_id = _add_image(db, tmp_path, "library-gone.png")
+    present = tmp_path / "present.png"
+    present.write_bytes(b"present-source")
+    gone = tmp_path / "gone.png"
+    gone.write_bytes(b"gone-source")
+    changed = tmp_path / "changed.png"
+    changed.write_bytes(b"changed-source-before")
+    created = _create_mixed_project(
+        test_client,
+        "Keep unresolved",
+        [
+            _library_item(library_id),
+            _local_item(present),
+            _local_item(gone),
+            _local_item(changed),
+        ],
+    ).json()
+    saved_changed = created["items"][3]
+    with db.get_db() as conn:
+        conn.execute("DELETE FROM images WHERE id = ?", (library_id,))
+    gone.unlink()
+    changed.write_bytes(b"changed-source-after-with-another-size")
+    _session_path_cache.clear()
+
+    saved = test_client.put(
+        f"/api/dataset/projects/{created['id']}",
+        json={
+            "name": "Keep unresolved, renamed",
+            "items": [
+                _local_item(present),
+                _kept(_library_item(library_id)),
+                _kept(_local_item(gone)),
+                _kept(_local_item(changed)),
+            ],
+            "expected_revision": 1,
+            "settings": _default_project_settings(),
+        },
+    )
+
+    assert saved.status_code == 200, saved.text
+    body = saved.json()
+    assert body["name"] == "Keep unresolved, renamed"
+    assert body["missing_image_ids"] == [library_id]
+    statuses = [
+        item.get("source_status", "missing" if item.get("missing") else "available")
+        for item in body["items"]
+    ]
+    assert statuses == ["available", "missing", "missing", "changed"]
+    kept_changed = body["items"][3]
+    assert (kept_changed["size"], kept_changed["mtime_ns"]) == (
+        saved_changed["size"],
+        saved_changed["mtime_ns"],
+    )
+
+
+def test_keep_as_saved_needs_an_entry_the_project_already_has(
+    test_client,
+    tmp_path: Path,
+):
+    present = tmp_path / "present.png"
+    present.write_bytes(b"present-source")
+    stranger = tmp_path / "stranger.png"
+    created = _create_mixed_project(
+        test_client,
+        "Keep needs history",
+        [_local_item(present)],
+    ).json()
+
+    response = test_client.put(
+        f"/api/dataset/projects/{created['id']}",
+        json={
+            "name": "Keep needs history",
+            "items": [_local_item(present), _kept(_local_item(stranger))],
+            "expected_revision": 1,
+            "settings": _default_project_settings(),
+        },
+    )
+    created_with_kept = test_client.post(
+        "/api/dataset/projects",
+        json={
+            "name": "Kept on create",
+            "items": [_kept(_local_item(present))],
+            "settings": _default_project_settings(),
+        },
+    )
+
+    assert response.status_code == 400
+    assert created_with_kept.status_code == 400

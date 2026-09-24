@@ -7,6 +7,8 @@
     'use strict';
     if (!window.DatasetMaker) return;
     const DM = window.DatasetMaker;
+    // Mirrors DATASET_CAPTION_TAG_LIST_MAX_LENGTH on the backend.
+    const BLACKLIST_MAX_ENTRIES = 10000;
 
     const normalizeCaptionToken = (value) => String(value || '')
         .replace(/[\s_]+/g, ' ')
@@ -247,6 +249,44 @@
     // `this` binding (DM.method() -> this === DM) is identical.
     Object.assign(DM, {
 
+        // Opens Smart Tag scoped to every Dataset Maker item (Library and
+        // folder-imported alike). Returns false when it could not open.
+        _openDatasetSmartTag() {
+            if (typeof window.SmartTag?.open !== 'function') {
+                this._toast(this._t('dataset.smartTagUnavailable',
+                    'Smart Tag feature is not available.'), 'error', 3000);
+                return false;
+            }
+            const datasetTrigger = document.getElementById('dataset-trigger');
+            const smartTagTrigger = document.getElementById('smart-tag-trigger');
+            if (!datasetTrigger || !smartTagTrigger) {
+                throw new TypeError('Dataset Smart Tag trigger controls are unavailable.');
+            }
+            const rawTrigger = datasetTrigger.value;
+            const issue = datasetTriggerIssue(rawTrigger);
+            if (issue === 'format' || issue === 'normalized-empty') {
+                datasetTrigger.value = String(this._lastValidDatasetTrigger || '');
+                this._syncTriggerQuickfillButton();
+                const key = issue === 'format'
+                    ? 'dataset.quickfillTriggerInvalid'
+                    : 'dataset.quickfillTriggerInvalidEmpty';
+                const fallback = issue === 'format'
+                    ? 'Trigger word must be one token of 100 characters or fewer, cannot contain commas or line breaks, and cannot contain tabs or other control whitespace. Plain spaces are allowed.'
+                    : 'Trigger word must contain characters other than spaces or underscores.';
+                this._toast(this._t(key, fallback), 'error', 6000);
+                return false;
+            }
+            const trigger = canonicalDatasetTrigger(rawTrigger);
+            if (datasetTrigger.value !== trigger) {
+                datasetTrigger.value = trigger;
+                datasetTrigger.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            smartTagTrigger.value = trigger;
+            smartTagTrigger.dispatchEvent(new Event('input', { bubbles: true }));
+            window.SmartTag.open();
+            return true;
+        },
+
         _syncTriggerQuickfillButton() {
             const trigger = document.getElementById('dataset-trigger');
             const button = document.getElementById('btn-dataset-quickfill-trigger');
@@ -264,38 +304,7 @@
 
             // Smart Tag button - opens the Smart Tag modal (reuses Gallery's modal)
             document.getElementById('btn-dataset-smart-tag')?.addEventListener('click', () => {
-                if (typeof window.SmartTag?.open === 'function') {
-                    const datasetTrigger = document.getElementById('dataset-trigger');
-                    const smartTagTrigger = document.getElementById('smart-tag-trigger');
-                    if (!datasetTrigger || !smartTagTrigger) {
-                        throw new TypeError('Dataset Smart Tag trigger controls are unavailable.');
-                    }
-                    const rawTrigger = datasetTrigger.value;
-                    const issue = datasetTriggerIssue(rawTrigger);
-                    if (issue === 'format' || issue === 'normalized-empty') {
-                        datasetTrigger.value = String(this._lastValidDatasetTrigger || '');
-                        this._syncTriggerQuickfillButton();
-                        const key = issue === 'format'
-                            ? 'dataset.quickfillTriggerInvalid'
-                            : 'dataset.quickfillTriggerInvalidEmpty';
-                        const fallback = issue === 'format'
-                            ? 'Trigger word must be one token of 100 characters or fewer, cannot contain commas or line breaks, and cannot contain tabs or other control whitespace. Plain spaces are allowed.'
-                            : 'Trigger word must contain characters other than spaces or underscores.';
-                        this._toast(this._t(key, fallback), 'error', 6000);
-                        return;
-                    }
-                    const trigger = canonicalDatasetTrigger(rawTrigger);
-                    if (datasetTrigger.value !== trigger) {
-                        datasetTrigger.value = trigger;
-                        datasetTrigger.dispatchEvent(new Event('input', { bubbles: true }));
-                    }
-                    smartTagTrigger.value = trigger;
-                    smartTagTrigger.dispatchEvent(new Event('input', { bubbles: true }));
-                    window.SmartTag.open();
-                } else {
-                    this._toast(this._t('dataset.smartTagUnavailable',
-                        'Smart Tag feature is not available.'), 'error', 3000);
-                }
+                this._openDatasetSmartTag();
             });
 
             // P10: Add to collection button
@@ -425,9 +434,9 @@
                     triggerBlacklistVariants(staleToken),
                 );
                 const blacklistChanged = nextBlacklist !== blacklist.value;
-                if (captionListLength(nextBlacklist) > 1000) {
+                if (captionListLength(nextBlacklist) > BLACKLIST_MAX_ENTRIES) {
                     this._toast(this._t('dataset.cleanupTriggerBlacklistLimit',
-                        'This would push the blacklist past its 1,000-entry limit. Remove some entries first; no captions were changed.'),
+                        'This would push the blacklist past its 10,000-entry limit. Remove some entries first; no captions were changed.'),
                     'error', 8000);
                     return;
                 }
@@ -1007,11 +1016,7 @@
 
             // Export flow
             document.getElementById('btn-dataset-readiness-check')?.addEventListener('click', () => {
-                if (this._readinessView?.state === 'error' && this._readinessView?.activeJobId) {
-                    this._resumeReadinessCheck?.();
-                    return;
-                }
-                this._startReadinessCheck?.();
+                this._runReadinessCheckAction?.();
             });
             document.getElementById('btn-dataset-readiness-cancel')?.addEventListener('click', () => this._cancelReadinessCheck?.());
             document.getElementById('dataset-readiness-issues')?.addEventListener('click', (event) => {
@@ -1020,8 +1025,17 @@
                 this._openReadinessIssue?.(Number(target.dataset.readinessImageId));
             });
             document.getElementById('btn-dataset-export')?.addEventListener('click', () => this._showConfirmModal());
-            document.getElementById('btn-dataset-confirm-cancel')?.addEventListener('click', () => this._hideConfirmModal());
+            document.getElementById('btn-dataset-confirm-cancel')?.addEventListener('click', () => this._cancelConfirmModal());
             document.getElementById('btn-dataset-confirm-go')?.addEventListener('click', () => this._runExport());
+            document.getElementById('btn-dataset-confirm-recheck')?.addEventListener('click', () => {
+                this._runReadinessCheckAction?.();
+            });
+            document.getElementById('dataset-confirm-skip-blocked')?.addEventListener('change', (event) => {
+                this._setExportOption('skip_blocked_items', event.target.checked);
+            });
+            document.getElementById('dataset-confirm-allow-empty')?.addEventListener('change', (event) => {
+                this._setExportOption('allow_empty_captions', event.target.checked);
+            });
             document.getElementById('btn-dataset-export-cancel')?.addEventListener('click', () => this._cancelExportJob?.());
 
             // Result modal

@@ -336,9 +336,25 @@ def test_bucket_export_aligns_image_mask_and_preserves_caption_and_source(
 @pytest.mark.parametrize(
     ("request_updates", "expected_error"),
     (
-        ({"image_paths": ["C:/local/source.png"], "image_ids": []}, "library image_ids"),
-        ({"image_ids": [0]}, "positive library image_id"),
-        ({"dataset_scan_tokens": [{"scan_token": "a" * 32}]}, "dataset_scan_tokens"),
+        (
+            {
+                "image_paths": ["C:/local/source.png"],
+                "image_ids": [],
+                "bucket_resize": _bucket_settings(subject_aware=True),
+            },
+            "library image_ids",
+        ),
+        (
+            {"image_ids": [0], "bucket_resize": _bucket_settings(subject_aware=True)},
+            "positive library image_id",
+        ),
+        (
+            {
+                "dataset_scan_tokens": [{"scan_token": "a" * 32}],
+                "bucket_resize": _bucket_settings(subject_aware=True),
+            },
+            "dataset_scan_tokens",
+        ),
         ({"image_op": "move"}, "image_op='copy'"),
         ({"output_mode": "beside_image", "output_folder": ""}, "output_mode='folder'"),
         ({"trainer_config": "kohya_toml"}, "Verified Package v2"),
@@ -361,6 +377,47 @@ def test_bucket_resize_rejects_unsupported_export_shapes(
 
     with pytest.raises(HTTPException, match=expected_error):
         _validate_export_request_read_only(request)
+
+
+@pytest.mark.parametrize(
+    "request_updates",
+    (
+        {"image_paths": ["C:/local/source.png"], "image_ids": []},
+        {"dataset_scan_tokens": [{"scan_token": "a" * 32}], "image_ids": []},
+    ),
+)
+def test_center_bucket_resize_accepts_folder_imported_sources(
+    tmp_path: Path,
+    request_updates: dict[str, object],
+) -> None:
+    payload: dict[str, object] = {
+        "image_ids": [1],
+        "output_folder": str(tmp_path / "out"),
+        "trainer_resolution": 1024,
+        "bucket_resize": _bucket_settings(subject_aware=False),
+    }
+    payload.update(request_updates)
+
+    _validate_export_request_read_only(DatasetExportRequest.model_validate(payload))
+
+
+def test_center_bucket_export_resizes_a_folder_imported_source(tmp_path: Path) -> None:
+    source = tmp_path / "folder-source.png"
+    Image.new("RGB", (16, 10), color=(20, 40, 60)).save(source)
+    output = tmp_path / "bucketed-folder"
+
+    result = export_dataset(DatasetExportRequest(
+        image_paths=[str(source)],
+        output_folder=str(output),
+        image_overrides={str(source.resolve()): "folder caption"},
+        trainer_resolution=256,
+        bucket_resize=_bucket_settings(subject_aware=False),
+    ))
+
+    assert result.status == "ok"
+    with Image.open(output / source.name) as exported:
+        assert exported.size == (320, 192)
+    assert (output / "folder-source.txt").read_text(encoding="utf-8") == "folder caption"
 
 
 def test_bucket_resize_request_and_preview_defaults_are_backward_compatible() -> None:

@@ -39,8 +39,12 @@ Object.assign(SeparationConsole, {
             const out = document.getElementById('sepcon-health-results');
             const btn = document.getElementById('sepcon-health-run');
             if (!out) return;
-            const ids = this._queueIds().filter(id => id > 0);
-            const skipped = this._queueIds().length - ids.length;
+            // Mirrors MAX_REPORT_IMAGES in dataset_consistency_service.py. A
+            // larger queue is checked up to this many and the result says so.
+            const maxCheckedImages = 20000;
+            const galleryIds = this._queueIds().filter(id => id > 0);
+            const ids = galleryIds.slice(0, maxCheckedImages);
+            const skipped = this._queueIds().length - galleryIds.length;
             if (ids.length === 0) {
                 out.hidden = false;
                 out.textContent = sepconT('No gallery images in the queue (local imports are not in the DB yet).',
@@ -63,7 +67,7 @@ Object.assign(SeparationConsole, {
                 });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 this._lastHealthReport = await response.json();
-                this._renderHealth(out, this._lastHealthReport, skipped);
+                this._renderHealth(out, this._lastHealthReport, skipped, galleryIds.length);
             } catch (e) {
                 out.textContent = sepconT('Health check failed: ', '健检失败：') + String(e.message || e);
             } finally {
@@ -71,7 +75,7 @@ Object.assign(SeparationConsole, {
             }
         },
 
-        _renderHealth(out, report, skippedLocal) {
+        _renderHealth(out, report, skippedLocal, galleryTotal = 0) {
             out.textContent = '';
             const zh = sepconT('en', 'zh') === 'zh';
             const summary = document.createElement('div');
@@ -88,6 +92,15 @@ Object.assign(SeparationConsole, {
                 note.className = 'sepcon-health-note';
                 note.textContent = sepconT(`(${skippedLocal} local-import images skipped — not in the DB)`,
                     `（跳过 ${skippedLocal} 张本地导入图片 — 尚未入库）`);
+                out.appendChild(note);
+            }
+            const scopeTotal = Math.max(Number(report.images_in_scope || 0), Number(galleryTotal || 0));
+            if (report.images_truncated || scopeTotal > Number(report.images || 0)) {
+                const note = document.createElement('div');
+                note.className = 'sepcon-health-note';
+                note.textContent = sepconT(
+                    `Checked only the first ${report.images} of ${scopeTotal} images.`,
+                    `只检查了前 ${report.images} 张，共 ${scopeTotal} 张。`);
                 out.appendChild(note);
             }
             for (const finding of report.findings || []) {

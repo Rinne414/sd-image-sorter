@@ -477,6 +477,9 @@
         return selectedContract(this) !== null;
     };
 
+    // Contracts only gate verified trainer packages. When they fail to load,
+    // the package selector stays on "Images + captions only" and plain export
+    // (with the generic mask formats) keeps working.
     DM._trainerExportFields = function () {
         const state = this._trainerContractState;
         if (!state || state.status === 'idle' || state.status === 'loading') {
@@ -485,7 +488,6 @@
                 'Loading verified trainer contracts...',
             ));
         }
-        if (state.status === 'error') throw new Error(state.errorMessage);
         return buildTrainerExportFields(this, state);
     };
 
@@ -497,7 +499,6 @@
                 'Loading verified trainer contracts...',
             );
         }
-        if (state.status === 'error') return state.errorMessage;
         try {
             buildTrainerExportFields(this, state);
             return '';
@@ -539,7 +540,7 @@
         status.dataset.state = state.status;
         retry.hidden = state.status !== 'error';
         selector.disabled = state.status !== 'ready';
-        mask.disabled = state.status !== 'ready';
+        mask.disabled = state.status === 'idle' || state.status === 'loading';
         selector.dispatchEvent(new Event('dataset:select-sync'));
         mask.dispatchEvent(new Event('dataset:select-sync'));
         if (state.status === 'loading' || state.status === 'idle') {
@@ -578,6 +579,18 @@
         selector.replaceChildren(noneOption, ...contractOptions);
         const available = ['none', ...state.contracts.map((contract) => contract.wireValue)];
         selector.value = available.includes(preferredValue) ? preferredValue : 'none';
+        selector.dispatchEvent(new Event('dataset:select-sync'));
+    };
+
+    DM._installPlainExportTrainerOption = function () {
+        const selector = document.getElementById('dataset-trainer-package');
+        if (!selector) throw new Error('Dataset trainer selector requires #dataset-trainer-package');
+        selector.replaceChildren(createOption(
+            'none',
+            this._t('dataset.trainerPackageNone', 'Images + captions only'),
+            'dataset.trainerPackageNone',
+        ));
+        selector.value = 'none';
         selector.dispatchEvent(new Event('dataset:select-sync'));
     };
 
@@ -677,10 +690,9 @@
             if (generation !== this._trainerContractLoadGeneration) return;
             const message = error instanceof Error ? error.message : String(error);
             this._trainerContractState = createState('error', [], message);
+            this._installPlainExportTrainerOption();
             this._renderTrainerContractState();
-            this._renderTrainerSettingError();
-            this._renderReadiness?.();
-            this._updateExportEnabled?.();
+            this._applyTrainerSelection(false);
             window.Logger?.warn?.('dataset_trainer_contract_load_failed', {
                 generation,
                 error_type: error?.constructor?.name || typeof error,

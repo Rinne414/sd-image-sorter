@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import stat
-from typing import Literal, NoReturn, TypedDict
+from typing import Literal, NoReturn, NotRequired, TypedDict
 
 from db_core import get_db
 from utils.dataset_ids import dataset_source_id
@@ -13,6 +13,8 @@ from utils.dataset_ids import dataset_source_id
 class DatasetProjectLibraryItemInput(TypedDict):
     item_type: Literal["library"]
     image_id: int
+    # True keeps a saved entry whose Library image no longer exists.
+    missing: NotRequired[bool]
 
 
 class DatasetProjectLocalItemInput(TypedDict):
@@ -255,7 +257,12 @@ def _replace_project_items(
                     image_id, local_source_id
                 ) VALUES (?, ?, 'library', ?, ?, NULL)
                 """,
-                (project_id, position, image_id, image_id),
+                (
+                    project_id,
+                    position,
+                    image_id,
+                    None if item.get("missing", False) else image_id,
+                ),
             )
             continue
 
@@ -484,7 +491,11 @@ def create_dataset_project_record(
         _require_active_name_available(conn, name, name_key, None)
         _require_images_exist(
             conn,
-            [item["image_id"] for item in items if item["item_type"] == "library"],
+            [
+                item["image_id"]
+                for item in items
+                if item["item_type"] == "library" and not item.get("missing", False)
+            ],
         )
         cursor = conn.execute(
             """
@@ -515,7 +526,11 @@ def update_dataset_project_record(
         _require_active_name_available(conn, name, name_key, project_id)
         _require_images_exist(
             conn,
-            [item["image_id"] for item in items if item["item_type"] == "library"],
+            [
+                item["image_id"]
+                for item in items
+                if item["item_type"] == "library" and not item.get("missing", False)
+            ],
         )
         cursor = conn.execute(
             """

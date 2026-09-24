@@ -1251,7 +1251,8 @@ test('rename changes only the project name and preserves saved settings', async 
 
   await expect.poll(() => renameBody).toEqual({
     name: 'After rename',
-    items: [{ item_type: 'library', image_id: 101 }],
+    // A rename sends every saved entry back unchanged.
+    items: [{ item_type: 'library', image_id: 101, keep_as_saved: true }],
     settings: stored.settings,
     expected_revision: 4,
   })
@@ -3014,6 +3015,46 @@ test('Save sends expected_revision and a 409 leaves the loaded revision unchange
     savedTrigger: '',
     localTrigger: 'conflict_token',
     draftTrigger: 'conflict_token',
+  })
+})
+
+test('Save and Rename keep unresolved sources instead of refusing', async ({ page }) => {
+  const bodies: Array<Record<string, unknown>> = []
+  const stored = project(14, 'Unresolved kept', 2, [
+    { position: 0, source_image_id: 202, image_id: 202, missing: false },
+    { position: 1, source_image_id: 999, image_id: null, missing: true },
+  ], null)
+  await page.route('**/api/dataset/projects', (route) =>
+    route.fulfill({ json: { projects: [projectSummary(stored)] } }))
+  await page.route('**/api/dataset/projects/14', (route) => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: stored })
+    bodies.push(route.request().postDataJSON() as Record<string, unknown>)
+    return route.fulfill({ json: stored })
+  })
+  await openDataset(page)
+  await page.getByTestId('dataset-project-selector').selectOption('14')
+  await expect(page.getByTestId('dataset-project-status')).toHaveAttribute('data-state', 'loaded')
+  await expect(page.getByTestId('dataset-project-missing')).toContainText('#999')
+  await expect(page.getByTestId('dataset-project-missing')).toContainText('Saving keeps these entries')
+  await expect(page.getByTestId('dataset-project-save')).toBeEnabled()
+
+  await page.getByTestId('dataset-project-save').click()
+  await expect.poll(() => bodies.length).toBe(1)
+  expect(bodies[0].items).toEqual([
+    { item_type: 'library', image_id: 202 },
+    { item_type: 'library', image_id: 999, keep_as_saved: true },
+  ])
+
+  await page.getByTestId('dataset-project-menu').click()
+  await page.getByTestId('dataset-project-rename').click()
+  await submitInputModal(page, 'Unresolved kept, renamed')
+  await expect.poll(() => bodies.length).toBe(2)
+  expect(bodies[1]).toMatchObject({
+    name: 'Unresolved kept, renamed',
+    items: [
+      { item_type: 'library', image_id: 202, keep_as_saved: true },
+      { item_type: 'library', image_id: 999, keep_as_saved: true },
+    ],
   })
 })
 

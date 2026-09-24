@@ -407,6 +407,37 @@ test('beside_image output mode forces output_folder="" and image_op="copy" (pinn
   expect(payload.image_op).toBe('copy')
 })
 
+test('beside_image stays available when some imports have no known path and says they are left out', async ({ page }) => {
+  await seedDataset(page)
+  const state = await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    dm.imageIds = [901, -902]
+    // A restored Library item without a capability hint still has a backend path.
+    dm.meta.set(901, { filename: 'a.png', width: 1024, height: 1024 })
+    dm.meta.set(-902, { source: 'local', filename: 'lost.png' })
+    dm.localItemPaths.delete(-902)
+    dm.localManifestTokens.clear()
+    const beside = document.querySelector('input[name="dataset-output-mode"][value="beside_image"]') as HTMLInputElement
+    beside.checked = true
+    beside.dispatchEvent(new Event('change', { bubbles: true }))
+    dm._updateExportEnabled()
+    return {
+      besideDisabled: beside.disabled,
+      stats: dm._sidecarCapabilityStats(),
+      reason: dm._exportDisabledReason(),
+      warning: document.getElementById('dataset-beside-image-warning')?.textContent,
+      imageIds: dm._buildExportPayload().image_ids,
+    }
+  })
+  expect(state).toMatchObject({
+    besideDisabled: false,
+    stats: { besideReady: 1, unknown: 1 },
+    reason: '',
+    imageIds: [901],
+  })
+  expect(state.warning).toContain('1 image(s) have no known file path, so they are left out.')
+})
+
 // ---------------------------------------------------------------------------
 // LoRA-type pruning (cleanups)
 // ---------------------------------------------------------------------------

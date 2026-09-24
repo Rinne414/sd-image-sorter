@@ -71,7 +71,6 @@ def _validate_subject_crop_request(
     request: DatasetExportRequest,
     *,
     output_mode: str,
-    mask_export_mode: str,
     trainer_config_mode: str,
 ) -> None:
     settings = request.subject_crop
@@ -102,11 +101,6 @@ def _validate_subject_crop_request(
             status_code=400,
             detail="subject_crop requires every item to have a positive library image_id",
         )
-    if mask_export_mode == "none":
-        raise HTTPException(
-            status_code=400,
-            detail="subject_crop requires mask_export to preserve the aligned cropped mask",
-        )
     if trainer_config_mode != "none":
         raise HTTPException(
             status_code=400,
@@ -136,20 +130,34 @@ def _validate_bucket_resize_request(
             status_code=400,
             detail="bucket_resize requires image_op='copy'; source images are never moved",
         )
-    if request.image_paths:
+    # Center bucketing only reads the source pixels. Subject-aware bucketing
+    # reads the stored mask, and stored masks are keyed by library image id.
+    if settings.subject_aware and request.image_paths:
         raise HTTPException(
             status_code=400,
-            detail="bucket_resize requires indexed library image_ids; local image_paths are unsupported",
+            detail=(
+                "subject-aware bucket_resize requires indexed library image_ids; "
+                "local image_paths are unsupported"
+            ),
         )
-    if request.dataset_scan_tokens:
+    if settings.subject_aware and request.dataset_scan_tokens:
         raise HTTPException(
             status_code=400,
-            detail="bucket_resize does not support dataset_scan_tokens; select indexed library images",
+            detail=(
+                "subject-aware bucket_resize does not support dataset_scan_tokens; "
+                "select indexed library images"
+            ),
         )
-    if not request.image_ids or any(int(image_id) <= 0 for image_id in request.image_ids):
+    if settings.subject_aware and (
+        not request.image_ids
+        or any(int(image_id) <= 0 for image_id in request.image_ids)
+    ):
         raise HTTPException(
             status_code=400,
-            detail="bucket_resize requires every item to have a positive library image_id",
+            detail=(
+                "subject-aware bucket_resize requires every item to have a positive "
+                "library image_id"
+            ),
         )
     if trainer_config_mode != "none":
         raise HTTPException(
@@ -418,7 +426,6 @@ def _validate_export_request_read_only(request: DatasetExportRequest) -> Optiona
     _validate_subject_crop_request(
         request,
         output_mode=output_mode,
-        mask_export_mode=mask_export_mode,
         trainer_config_mode=trainer_config_mode,
     )
     _validate_bucket_resize_request(
@@ -435,6 +442,14 @@ def _validate_export_request_read_only(request: DatasetExportRequest) -> Optiona
         raise HTTPException(
             status_code=400,
             detail="Verified trainer packages require image_op='copy'",
+        )
+    if package_requested(request) and request.skip_blocked_items:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "skip_blocked_items is not available for verified trainer packages; "
+                "a package must contain every requested item"
+            ),
         )
     if output_mode == "beside_image" and trainer_config_mode != "none":
         raise HTTPException(

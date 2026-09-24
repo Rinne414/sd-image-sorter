@@ -512,10 +512,17 @@
             const limitBadge = document.createElement('span');
             limitBadge.className = 'dataset-audit-badge dataset-audit-badge-limited';
             limitBadge.title = t('dataset.auditLimitedTip',
-                'The near-duplicate check stops at {limit} images to keep the audit fast. Audit a smaller selection for a full check.',
+                'Above {limit} images the near-duplicate check only finds exact matches. Use Check every pair for a full check.',
                 { limit: 5000 });
             limitBadge.textContent = t('dataset.auditLimitedBadge', 'Near-duplicate check capped');
             badges.appendChild(limitBadge);
+            // Clicks are handled by the delegated listener in audit-run.js.
+            const fullCheck = document.createElement('button');
+            fullCheck.type = 'button';
+            fullCheck.id = 'btn-dataset-audit-full-check';
+            fullCheck.className = 'btn btn-ghost btn-small';
+            fullCheck.textContent = t('dataset.auditFullCheck', 'Check every pair (slower)');
+            badges.appendChild(fullCheck);
         }
 
         wrap.hidden = false;

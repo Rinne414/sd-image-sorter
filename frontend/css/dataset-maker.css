@@ -1772,6 +1772,76 @@
     line-height: 1.5;
 }
 
+/* Export confirm: the check Export runs, plus its per-export options */
+#view-dataset .dataset-confirm-check {
+    display: grid;
+    gap: 8px;
+    margin: 0 0 18px 0;
+    padding: 10px 12px;
+    border-left: 3px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.03);
+    font-size: 13px;
+}
+#view-dataset .dataset-confirm-check:has(.dataset-confirm-check-status[data-state="blocked"]),
+#view-dataset .dataset-confirm-check:has(.dataset-confirm-check-status[data-state="error"]),
+#view-dataset .dataset-confirm-check:has(.dataset-confirm-check-status[data-state="lost"]) {
+    border-left-color: var(--danger);
+}
+#view-dataset .dataset-confirm-check:has(.dataset-confirm-check-status[data-state="warnings"]) {
+    border-left-color: var(--warning);
+}
+#view-dataset .dataset-confirm-check-status {
+    margin: 0;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+#view-dataset .dataset-confirm-check-issues {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 4px;
+    max-height: 132px;
+    overflow-y: auto;
+}
+#view-dataset .dataset-confirm-check-issues:empty {
+    display: none;
+}
+#view-dataset .dataset-confirm-check-issues li {
+    padding-left: 8px;
+    border-left: 2px solid var(--warning);
+    color: var(--text-secondary, #D6D6D6);
+    font-size: 12px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+#view-dataset .dataset-confirm-check-issues li.severity-blocker {
+    border-left-color: var(--danger);
+}
+#view-dataset .dataset-confirm-check-issues li.dataset-confirm-check-more {
+    border-left-color: transparent;
+    color: var(--text-muted, #A6A6A6);
+}
+#view-dataset .dataset-confirm-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    cursor: pointer;
+}
+#view-dataset .dataset-confirm-option[hidden],
+#view-dataset .dataset-confirm-package-note[hidden],
+#view-dataset #btn-dataset-confirm-recheck[hidden] {
+    display: none;
+}
+#view-dataset .dataset-confirm-package-note {
+    margin: 0;
+    color: var(--text-secondary, #D6D6D6);
+    font-size: 12px;
+}
+#view-dataset #btn-dataset-confirm-recheck {
+    justify-self: start;
+}
+
 
 /* Workbench quick-fill button row (one-click common-tag presets) */
 #view-dataset .dataset-quickfill-row {

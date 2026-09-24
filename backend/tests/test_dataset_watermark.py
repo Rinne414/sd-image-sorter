@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 from PIL import Image, ImageDraw
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 import database as db
 from services.dataset_export.artifacts import _validate_export_request_read_only
@@ -62,6 +63,19 @@ def _stage_image(tmp_path: Path) -> tuple[int, Path]:
     image_id = int(db.add_image(path=str(source), filename=source.name))
     db.add_tags(image_id, [{"tag": "subject", "confidence": 0.99}])
     return image_id, source
+
+
+def test_dataset_watermark_removal_accepts_up_to_64_regions() -> None:
+    region = {"x": 0, "y": 0, "width": 100, "height": 100}
+    settings = {**_removal_settings(), "regions": [region] * 64}
+
+    request = DatasetExportRequest.model_validate({"watermark_removal": settings})
+
+    assert len(request.watermark_removal.regions) == 64
+    with pytest.raises(ValidationError):
+        DatasetExportRequest.model_validate({
+            "watermark_removal": {**settings, "regions": [region] * 65},
+        })
 
 
 def test_dataset_request_defaults_watermark_removal_to_disabled() -> None:

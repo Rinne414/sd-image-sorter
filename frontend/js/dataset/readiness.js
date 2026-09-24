@@ -137,6 +137,13 @@
             trainable_pairs: requireNonNegativeInteger(summaryRecord, 'trainable_pairs', `${label}.summary`),
             blocker_count: requireNonNegativeInteger(summaryRecord, 'blocker_count', `${label}.summary`),
             warning_count: requireNonNegativeInteger(summaryRecord, 'warning_count', `${label}.summary`),
+            // Absent means none: reports without skippable or empty-caption items.
+            skippable_items: Object.hasOwn(summaryRecord, 'skippable_items')
+                ? requireNonNegativeInteger(summaryRecord, 'skippable_items', `${label}.summary`)
+                : 0,
+            empty_caption_items: Object.hasOwn(summaryRecord, 'empty_caption_items')
+                ? requireNonNegativeInteger(summaryRecord, 'empty_caption_items', `${label}.summary`)
+                : 0,
         };
         if (summary.status === 'ready' && (summary.blocker_count > 0 || summary.warning_count > 0)) {
             throw new RangeError(`${label}.summary ready status cannot include blockers or warnings`);
@@ -363,8 +370,8 @@
             stateElement.textContent = this._t(stateKey, stateFallback);
         }
         if (messageElement) {
-            const idleMessage = this._t('dataset.readinessIdleDetail', 'Run the complete check for the current export settings.');
-            const staleMessage = this._t('dataset.readinessStaleDetail', 'Export settings changed. Check again before exporting.');
+            const idleMessage = this._t('dataset.readinessIdleDetail', 'Export runs this check for you. You can also run it now.');
+            const staleMessage = this._t('dataset.readinessStaleDetail', 'Settings changed. Export checks again for you.');
             messageElement.textContent = view.message || (view.state === 'idle' ? idleMessage : (view.state === 'stale' ? staleMessage : ''));
         }
 
@@ -413,6 +420,7 @@
             }
         }
 
+        this._renderConfirmCheck?.();
         if (!issuesElement) return;
         issuesElement.replaceChildren();
         if (!report) return;
@@ -447,21 +455,23 @@
         }
     };
 
-    DM._readinessExportDisabledReason = function () {
+    // Export itself starts the check (see _renderConfirmCheck in export-run.js),
+    // so an unchecked or stale report never disables the Export button.
+    DM._hasAcceptedReadiness = function () {
         this._refreshReadinessStaleness();
-        const state = this._readinessView?.state || 'idle';
-        if (EXPORTABLE_STATES.has(state)) return '';
-        const reasons = {
-            idle: ['dataset.readinessExportIdle', 'Run Readiness Check before exporting.'],
-            checking: ['dataset.readinessExportChecking', 'Wait for the Readiness Check to finish.'],
-            blocked: ['dataset.readinessExportBlocked', 'Resolve the readiness blockers before exporting.'],
-            stale: ['dataset.readinessExportStale', 'Export settings changed. Check readiness again.'],
-            error: ['dataset.readinessExportError', 'Readiness Check failed. Fix the error and run it again.'],
-            cancelled: ['dataset.readinessExportCancelled', 'Readiness Check was cancelled. Run it again before exporting.'],
-            lost: ['dataset.readinessExportLost', 'The readiness job was lost. Run the check again.'],
-        };
-        const [key, fallback] = reasons[state] || reasons.error;
-        return this._t(key, fallback);
+        const view = this._readinessView;
+        return EXPORTABLE_STATES.has(view?.state)
+            && !!view?.report
+            && !!this._readinessAcceptedSignature;
+    };
+
+    // One entry point for "check now": resume a job whose polling failed,
+    // otherwise start a fresh check for the current settings.
+    DM._runReadinessCheckAction = function () {
+        if (this._readinessView?.state === 'error' && this._readinessView?.activeJobId) {
+            return this._resumeReadinessCheck();
+        }
+        return this._startReadinessCheck();
     };
 
     DM._refreshReadinessStaleness = function () {

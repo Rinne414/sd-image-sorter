@@ -26,7 +26,17 @@ import shutil
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Optional, Sequence, TypeAlias
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    TypeAlias,
+)
 
 from fastapi import HTTPException
 from PIL import Image, UnidentifiedImageError
@@ -104,6 +114,7 @@ from services.dataset_export.planning import (
     _requested_item_count,
     _resolve_dataset_image_path,
 )
+from services.dataset_export.readiness import readiness_item_key
 from services.dataset_export.package_integrity import (
     DatasetPackageBuild,
     PackageIntegrityError,
@@ -431,6 +442,7 @@ def export_dataset(
     progress_callback: Optional[ExportProgressCallback] = None,
     cancel_event: Optional[threading.Event] = None,
     pending_package_run_id: Optional[str] = None,
+    skipped_items: Optional[Mapping[str, str]] = None,
 ) -> DatasetExportResponse:
     return _export_dataset(
         request,
@@ -438,6 +450,7 @@ def export_dataset(
         cancel_event=cancel_event,
         pending_package_run_id=pending_package_run_id,
         completion_gate=None,
+        skipped_items=skipped_items or {},
     )
 
 
@@ -448,6 +461,7 @@ def export_dataset_job(
     cancel_event: threading.Event,
     pending_package_run_id: str,
     completion_gate: Callable[[], bool],
+    skipped_items: Optional[Mapping[str, str]] = None,
 ) -> DatasetExportResponse:
     return _export_dataset(
         request,
@@ -455,6 +469,7 @@ def export_dataset_job(
         cancel_event=cancel_event,
         pending_package_run_id=pending_package_run_id,
         completion_gate=completion_gate,
+        skipped_items=skipped_items or {},
     )
 
 
@@ -465,10 +480,15 @@ def _export_dataset(
     cancel_event: Optional[threading.Event],
     pending_package_run_id: Optional[str],
     completion_gate: Optional[Callable[[], bool]],
+    skipped_items: Mapping[str, str],
 ) -> DatasetExportResponse:
     """Run a full dataset export. Atomic-per-row: a per-image failure
     leaves earlier rows intact and adds an error entry for the failed
     one.
+
+    ``skipped_items`` comes from the authorizing Readiness plan: items keyed
+    there are recorded as skipped (reason = the Readiness issue code) instead
+    of being exported.
 
     This is intentionally streaming: scan-token folder exports, explicit path
     exports, and DB-backed image exports are consumed in chunks. The backend no
@@ -742,6 +762,14 @@ def _export_dataset(
             annotation_selection_key(image_id, src_image_path)
         )
         filename = os.path.basename(src_image_path) or f"image-{image_id}"
+        readiness_skip = (
+            skipped_items.get(readiness_item_key(image_id, src_image_path))
+            if skipped_items
+            else None
+        )
+        if readiness_skip is not None:
+            _record_skip(image_id, src_image_path, readiness_skip, filename)
+            return True
         dst_image_path: Optional[Path] = None
         dst_caption_path: Optional[Path] = None
         skip_reason: Optional[str] = None
@@ -1383,6 +1411,10 @@ def _export_dataset(
         normalized_path = _resolve_dataset_image_path(raw_path)
         display_path = str(raw_path or "")
         if not normalized_path:
+            readiness_skip = skipped_items.get(readiness_item_key(0, display_path))
+            if readiness_skip is not None:
+                _record_skip(0, display_path, readiness_skip, os.path.basename(display_path))
+                return True
             _record_error(0, display_path, f"path not a readable image: {display_path}", os.path.basename(display_path))
             return True
         if normalized_path in seen_virtual_paths:
@@ -1411,6 +1443,10 @@ def _export_dataset(
                     break
                 record = images_map.get(image_id)
                 if not record:
+                    readiness_skip = skipped_items.get(readiness_item_key(image_id, ""))
+                    if readiness_skip is not None:
+                        _record_skip(image_id, "", readiness_skip, f"id-{image_id}")
+                        continue
                     _record_error(image_id, "", f"image {image_id} not found in library", f"id-{image_id}")
                     continue
                 if not _export_record(dict(record), tags_map.get(image_id, []) or []):

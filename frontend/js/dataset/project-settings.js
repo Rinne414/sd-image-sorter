@@ -23,6 +23,9 @@
     const MAX_TRIGGER_LENGTH = 100;
     const MAX_TAG_LENGTH = 500;
     const MAX_LIST_LENGTH = 1000;
+    // Mirrors DATASET_CAPTION_TAG_LIST_MAX_LENGTH and the project max_tags cap.
+    const MAX_TAG_LIST_LENGTH = 10000;
+    const MAX_TAGS_PER_CAPTION = 1000;
     const DATASET_TRIGGER_EDGE_WHITESPACE = /^[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+|[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+$/gu;
     const DATASET_TRIGGER_INTERNAL_WHITESPACE = /[\u0009-\u000d\u001c-\u001f\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]/u;
 
@@ -166,8 +169,8 @@
 
     function requireTrimmedList(value, label) {
         if (!Array.isArray(value)) throw new TypeError(`${label} must be an array.`);
-        if (value.length > MAX_LIST_LENGTH) {
-            throw new RangeError(`${label} must contain at most ${MAX_LIST_LENGTH} entries.`);
+        if (value.length > MAX_TAG_LIST_LENGTH) {
+            throw new RangeError(`${label} must contain at most ${MAX_TAG_LIST_LENGTH} entries.`);
         }
         return Object.freeze(value.map((item, index) => {
             const parsed = requireString(item, `${label}[${index}]`, false, MAX_TAG_LENGTH);
@@ -239,7 +242,7 @@
                     template.max_tags,
                     'settings.caption_render.template.max_tags',
                     0,
-                    200,
+                    MAX_TAGS_PER_CAPTION,
                 ),
             }),
         });
@@ -651,12 +654,6 @@
                 'Subject crop requires Copy so source images remain untouched.',
             );
         }
-        if (requireElement('dataset-mask-export').value === 'none') {
-            return dm._t(
-                'dataset.subjectCropRequiresMaskExport',
-                'Choose a training-mask export format before enabling subject crop.',
-            );
-        }
         if (requireElement('dataset-trainer-package').value !== 'none') {
             return dm._t(
                 'dataset.subjectCropNoPackage',
@@ -694,12 +691,15 @@
                 'Bucket preprocessing is not available with verified trainer packages.',
             );
         }
+        // Center bucketing reads only the source pixels. Subject-aware
+        // bucketing reads stored masks, which exist only for Library images.
+        const subjectAware = requireElement('dataset-bucket-resize-subject-aware').checked;
         const hasLocalItems = (dm.imageIds || []).some((imageId) => dm.isLocalId?.(imageId));
         const hasScanTokens = (dm._getDatasetScanTokenSources?.() || []).length > 0;
-        if (hasLocalItems || hasScanTokens) {
+        if (subjectAware && (hasLocalItems || hasScanTokens)) {
             return dm._t(
                 'dataset.bucketResizeRequiresLibrary',
-                'Bucket preprocessing requires indexed Library images.',
+                'Subject-aware bucketing needs Library images with saved masks. Turn it off to center-crop folder images.',
             );
         }
         const resolution = Number(requireElement('dataset-trainer-resolution').value);

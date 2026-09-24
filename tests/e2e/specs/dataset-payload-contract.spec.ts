@@ -304,16 +304,19 @@ test('subject crop project settings restore the custom dropdown state', async ({
   )).toHaveText('Composite on solid color')
 })
 
-test('subject crop keeps export disabled until a mask export format is selected', async ({ page }) => {
+test('subject crop exports without requiring a mask export format', async ({ page }) => {
   await seedDatasetQueue(page)
   await openSubjectCropControls(page)
   await page.locator('#dataset-output-folder').fill('C:/training/subject-crop-contract')
   await page.getByTestId('dataset-subject-crop-enabled').check()
 
-  await expect(page.locator('#btn-dataset-export')).toBeDisabled()
-  await expect(page.locator('#dataset-export-disabled-hint')).toHaveText(
-    'Choose a training-mask export format before enabling subject crop.',
-  )
+  await expect(page.locator('#dataset-mask-export')).toHaveValue('none')
+  await expect(page.locator('#btn-dataset-export')).toBeEnabled()
+  await expect(page.locator('#dataset-export-disabled-hint')).toBeHidden()
+  expect(await page.evaluate(() => (window as any).DatasetMaker._buildExportPayload())).toMatchObject({
+    mask_export: 'none',
+    subject_crop: { enabled: true },
+  })
 })
 
 test('export-preview request carries the pinned payload and renders SERVER output names', async ({ page }) => {

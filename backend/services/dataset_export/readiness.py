@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, List, Literal, Optional, Tuple
+from types import MappingProxyType
+from typing import Callable, Dict, List, Literal, Mapping, Optional, Tuple
 
 import database as db
 from PIL import Image, UnidentifiedImageError
@@ -42,6 +44,7 @@ from services.dataset_export.annotations import (
     ResolvedAnnotationSelection,
     resolve_annotation_selections,
 )
+from services.dataset_export.package_integrity import package_requested
 from services.dataset_export.models import (
     DatasetReadinessIssue,
     DatasetReadinessIssueEvidence,
@@ -99,10 +102,31 @@ _CAPTION_RECORD_FIELDS = (
     "aesthetic_score",
 )
 _CAPTION_TAG_FIELDS = ("tag", "confidence", "category", "source")
+# Beside-image planning reasons that mean the source vanished after inspection.
+_MISSING_SOURCE_PLAN_REASONS = frozenset({
+    "missing_source_path",
+    "source_missing",
+    "source_folder_missing",
+})
+_SKIPPED_ITEM_ACTION = (
+    "This item is left out of the export. Fix it and export again to include it."
+)
 
 
 class DatasetReadinessCancelledError(RuntimeError):
     """Raised when a readiness caller requests cooperative cancellation."""
+
+
+@dataclass(frozen=True)
+class DatasetReadinessPlan:
+    """A Readiness report plus every item the export must leave out.
+
+    ``skipped_items`` maps ``readiness_item_key`` values to the issue code that
+    caused the skip. Unlike ``report.issues`` it is never truncated.
+    """
+
+    report: DatasetReadinessReport
+    skipped_items: Mapping[str, str]
 
 
 def _stable_json(value: object) -> bytes:
@@ -159,6 +183,26 @@ def _normalize_fingerprint_path(raw_path: str) -> str:
         return str(Path(normalized).resolve()) if normalized else ""
     except (OSError, ValueError):
         return str(raw_path).strip()
+
+
+def readiness_item_key(image_id: int, source_path: str) -> str:
+    """Identify one requested item the same way in Readiness and export.
+
+    Library items use their id. Path items use the normalized path; resolving
+    an already resolved path returns it unchanged, so callers holding the
+    resolved source path may use it directly.
+    """
+    if image_id > 0:
+        return str(image_id)
+    return _normalize_fingerprint_path(source_path) if source_path else ""
+
+
+def _skipped_issue(issue: DatasetReadinessIssue) -> DatasetReadinessIssue:
+    return issue.model_copy(update={
+        "severity": "warning",
+        "message": f"Skipped: {issue.message}",
+        "action": _SKIPPED_ITEM_ACTION,
+    })
 
 
 def _normalize_keyed_values(values: Dict[str, str]) -> Dict[str, str]:
@@ -324,6 +368,22 @@ def run_dataset_readiness(
     cancellation_requested: CancellationRequested,
 ) -> DatasetReadinessReport:
     """Traverse every requested source and plan pairs without output writes."""
+    return plan_dataset_readiness(
+        request,
+        readiness_report_id=readiness_report_id,
+        progress_callback=progress_callback,
+        cancellation_requested=cancellation_requested,
+    ).report
+
+
+def plan_dataset_readiness(
+    request: DatasetReadinessRequest,
+    *,
+    readiness_report_id: str,
+    progress_callback: ReadinessProgressCallback,
+    cancellation_requested: CancellationRequested,
+) -> DatasetReadinessPlan:
+    """Build the Readiness report and the complete set of skipped items."""
     _validate_export_request_read_only(request)
     total_requested = _requested_item_count(request)
     output_mode = _output_mode(request)
@@ -371,6 +431,16 @@ def run_dataset_readiness(
     used_caption_paths: set[str] = set()
     used_mask_paths: set[str] = set()
     seen_virtual_paths: set[str] = set()
+    skip_blocked = bool(request.skip_blocked_items)
+    allow_empty_captions = bool(request.allow_empty_captions)
+    # With the "skip" overwrite policy an existing output is the user's own
+    # choice, not a problem. Verified packages still require every item.
+    skip_existing_outputs = (
+        request.overwrite_policy == "skip" and not package_requested(request)
+    )
+    skipped_items: Dict[str, str] = {}
+    skippable_items = 0
+    empty_caption_items = 0
     input_hasher = hashlib.sha256(
         bytes.fromhex(dataset_readiness_fingerprint(request))
     )
@@ -387,6 +457,22 @@ def run_dataset_readiness(
             warning_count += 1
         if len(issues) < DATASET_READINESS_ISSUE_LIMIT:
             issues = [*issues, issue]
+
+    def settle_skippable(
+        item_key: str,
+        item_issues: List[DatasetReadinessIssue],
+    ) -> bool:
+        """Record problems that only affect one item; True when it is skipped."""
+        nonlocal skippable_items
+        skippable_items += 1
+        if not skip_blocked:
+            for issue in item_issues:
+                add_issue(issue)
+            return False
+        skipped_items[item_key] = item_issues[0].code
+        for issue in item_issues:
+            add_issue(_skipped_issue(issue))
+        return True
 
     def note_dialect_advisory(
         advisory: Optional[CaptionDialectAdvisory],
@@ -416,17 +502,20 @@ def run_dataset_readiness(
         nonlocal processed
         normalized_path = _normalize_fingerprint_path(raw_path) if raw_path else ""
         update_input("unreadable", {"image_id": image_id, "path": normalized_path})
-        add_issue(_make_issue(
-            severity="blocker",
-            code="source_unreadable",
-            message=f"Source image is missing or unreadable: {raw_path!r}",
-            image_id=image_id if image_id > 0 else None,
-            source_path=normalized_path or None,
-            destination=None,
-            observed="missing, unreadable, or not a valid image",
-            expected="a readable Pillow-verifiable image with positive dimensions",
-            action="Restore or replace the source image, then run readiness again.",
-        ))
+        settle_skippable(
+            str(image_id) if image_id > 0 else normalized_path,
+            [_make_issue(
+                severity="blocker",
+                code="source_unreadable",
+                message=f"Source image is missing or unreadable: {raw_path!r}",
+                image_id=image_id if image_id > 0 else None,
+                source_path=normalized_path or None,
+                destination=None,
+                observed="missing, unreadable, or not a valid image",
+                expected="a readable Pillow-verifiable image with positive dimensions",
+                action="Restore or replace the source image, then run readiness again.",
+            )],
+        )
         processed += 1
         emit_progress()
 
@@ -436,6 +525,7 @@ def run_dataset_readiness(
         source_identity: SourceIdentity,
     ) -> None:
         nonlocal export_index, processed, trainable_pairs, sample_pairs
+        nonlocal empty_caption_items
         if cancellation_requested():
             raise DatasetReadinessCancelledError(
                 f"Dataset readiness cancelled after {processed} of {total_requested} items"
@@ -520,6 +610,29 @@ def run_dataset_readiness(
                 "output_caption_path": None,
                 "skip_reason": skip_reason,
             })
+            planned_destination = (
+                str(output_folder)
+                if output_mode == "folder"
+                else str(Path(source_path).parent)
+            )
+            if skip_reason == "existing" and skip_existing_outputs:
+                add_issue(_make_issue(
+                    severity="warning",
+                    code="existing_output_skipped",
+                    message=(
+                        f"The output for {source_path!r} already exists, so it is "
+                        "skipped as the overwrite setting asks"
+                    ),
+                    image_id=image_id if image_id > 0 else None,
+                    source_path=source_path,
+                    destination=planned_destination,
+                    observed="existing output",
+                    expected="an output path that does not exist yet",
+                    action="Choose replace or keep both in the overwrite setting to write it.",
+                ))
+                processed += 1
+                emit_progress()
+                return
             issue_code = (
                 skip_reason
                 if skip_reason in {
@@ -529,17 +642,21 @@ def run_dataset_readiness(
                 }
                 else "unpaired_output"
             )
-            add_issue(_make_issue(
+            plan_issue = _make_issue(
                 severity="blocker",
                 code=issue_code,
                 message=f"No paired output can be planned for {source_path!r}: {skip_reason or 'unknown reason'}",
                 image_id=image_id if image_id > 0 else None,
                 source_path=source_path,
-                destination=str(output_folder) if output_mode == "folder" else str(Path(source_path).parent),
+                destination=planned_destination,
                 observed=skip_reason or "no caption destination",
                 expected="one unique image destination and one caption with the same final stem",
                 action="Change the naming or overwrite policy so every image and caption keep one shared stem.",
-            ))
+            )
+            if skip_reason in _MISSING_SOURCE_PLAN_REASONS:
+                settle_skippable(annotation_key, [plan_issue])
+            else:
+                add_issue(plan_issue)
             processed += 1
             emit_progress()
             return
@@ -658,7 +775,7 @@ def run_dataset_readiness(
                     advisories=compose_advisories,
                 )
         except Exception as exc:  # noqa: BLE001 - the failure becomes an actionable blocker
-            add_issue(_make_issue(
+            settle_skippable(annotation_key, [_make_issue(
                 severity="blocker",
                 code="caption_render_failed",
                 message=f"Caption rendering failed for {source_path!r}: {type(exc).__name__}: {exc}",
@@ -668,7 +785,7 @@ def run_dataset_readiness(
                 observed=f"{type(exc).__name__}: {exc}",
                 expected="caption rendering completes without an exception",
                 action="Correct the caption template or annotation that caused rendering to fail.",
-            ))
+            )])
             processed += 1
             emit_progress()
             return
@@ -691,7 +808,9 @@ def run_dataset_readiness(
             note_dialect_advisory(advisory, source_path)
 
         if not caption.strip():
-            add_issue(_make_issue(
+            empty_caption_items += 1
+        if not caption.strip() and not allow_empty_captions:
+            settle_skippable(annotation_key, [_make_issue(
                 severity="blocker",
                 code="empty_caption",
                 message=f"Caption renders empty for {source_path!r}",
@@ -701,7 +820,7 @@ def run_dataset_readiness(
                 observed="empty caption",
                 expected="a non-empty rendered caption",
                 action="Add tags or a caption override, then run readiness again.",
-            ))
+            )])
             processed += 1
             emit_progress()
             return
@@ -751,6 +870,9 @@ def run_dataset_readiness(
         source_size = (width, height)
         raw_source_size = source_size
         source_orientation = 1
+        # Collected per item so skippable problems can be settled together.
+        hard_issues: List[DatasetReadinessIssue] = []
+        soft_issues: List[DatasetReadinessIssue] = []
 
         if stored_mask_required:
             from services import mask_service
@@ -808,7 +930,7 @@ def run_dataset_readiness(
                     if alias_source == stored_mask
                     else "source image"
                 )
-                add_issue(_make_issue(
+                hard_issues.append(_make_issue(
                     severity="blocker",
                     code=(
                         "mask_source_destination_alias"
@@ -894,7 +1016,7 @@ def run_dataset_readiness(
                 except (SubjectCropError, ValueError) as exc:
                     subject_crop_error = str(exc)
             if subject_crop_error is not None:
-                add_issue(_make_issue(
+                soft_issues.append(_make_issue(
                     severity="blocker",
                     code="subject_crop_mask_invalid",
                     message=(
@@ -948,7 +1070,7 @@ def run_dataset_readiness(
             except (BucketTransformError, ValueError) as exc:
                 bucket_error = str(exc)
             if bucket_error is not None:
-                add_issue(_make_issue(
+                soft_issues.append(_make_issue(
                     severity="blocker",
                     code="bucket_resize_mask_invalid",
                     message=(
@@ -977,7 +1099,7 @@ def run_dataset_readiness(
                 if stored_mask is None
                 else f"{issue_prefix}_mask_unreadable"
             )
-            add_issue(_make_issue(
+            soft_issues.append(_make_issue(
                 severity="blocker",
                 code=missing_code,
                 message=(
@@ -993,6 +1115,15 @@ def run_dataset_readiness(
                 expected=f"one stored {mask_name} mask for every exported image",
                 action="Create or import the mask, then run readiness again.",
             ))
+
+        if soft_issues and not hard_issues:
+            if settle_skippable(annotation_key, soft_issues):
+                processed += 1
+                emit_progress()
+                return
+        else:
+            for issue in [*hard_issues, *soft_issues]:
+                add_issue(issue)
 
         trainable_pairs += 1
         if len(sample_pairs) < DATASET_READINESS_PAIR_SAMPLE_LIMIT:
@@ -1116,7 +1247,7 @@ def run_dataset_readiness(
         ))
 
     status = _readiness_status(blocker_count, warning_count)
-    return DatasetReadinessReport(
+    report = DatasetReadinessReport(
         report_id=readiness_report_id,
         input_fingerprint=input_hasher.hexdigest(),
         rule_version=DATASET_READINESS_RULE_VERSION,
@@ -1127,10 +1258,16 @@ def run_dataset_readiness(
             trainable_pairs=trainable_pairs,
             blocker_count=blocker_count,
             warning_count=warning_count,
+            skippable_items=skippable_items,
+            empty_caption_items=empty_caption_items,
         ),
         issues=issues,
         total_issues=total_issues,
         issues_truncated=total_issues > len(issues),
         sample_pairs=sample_pairs,
         sample_pairs_truncated=trainable_pairs > len(sample_pairs),
+    )
+    return DatasetReadinessPlan(
+        report=report,
+        skipped_items=MappingProxyType(dict(skipped_items)),
     )

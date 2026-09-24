@@ -31,6 +31,17 @@
         'readiness_blocked',
     ]);
 
+    // Per-export choices offered in the confirm dialog. They only differ from
+    // the defaults while that dialog is open, so a later check or preview
+    // never carries a stale choice.
+    const DEFAULT_EXPORT_OPTIONS = Object.freeze({
+        skip_blocked_items: false,
+        allow_empty_captions: false,
+    });
+    const CONFIRM_ISSUE_PREVIEW_LIMIT = 5;
+    const CONFIRM_RETRY_STATES = new Set(['error', 'cancelled', 'lost']);
+    const EXPORTABLE_READINESS_STATES = new Set(['ready', 'warnings']);
+
     const invalidExportResponse = message => new Error(`Invalid dataset export API response: ${message}`);
 
     function exportHttpErrorText(status, payload, rawText) {
@@ -304,7 +315,147 @@
     }[c]));
 
     // ---------- Confirm modal ----------
+    DM._exportOptionsForPayload = function () {
+        return this._exportOptions || DEFAULT_EXPORT_OPTIONS;
+    };
+
+    DM._resetExportOptions = function () {
+        this._exportOptions = DEFAULT_EXPORT_OPTIONS;
+        const skip = document.getElementById('dataset-confirm-skip-blocked');
+        const allowEmpty = document.getElementById('dataset-confirm-allow-empty');
+        if (skip) skip.checked = false;
+        if (allowEmpty) allowEmpty.checked = false;
+    };
+
+    DM._setExportOption = function (key, enabled) {
+        if (!Object.hasOwn(DEFAULT_EXPORT_OPTIONS, key)) {
+            throw new RangeError(`Unknown dataset export option: ${key}`);
+        }
+        this._exportOptions = Object.freeze({
+            ...this._exportOptionsForPayload(),
+            [key]: enabled === true,
+        });
+        // The choice is part of the checked payload, so check again now. An
+        // in-flight check settles as stale and the dialog restarts it.
+        this._markReadinessStale?.();
+        if (!this._readinessView?.activeJobId) this._startReadinessCheck?.();
+        this._renderConfirmCheck();
+    };
+
+    function confirmCheckStatusText(dm, view, options) {
+        const state = view.state;
+        const report = view.report;
+        if (state === 'ready' || state === 'warnings') {
+            const summary = report?.summary || {};
+            const pairs = Number(summary.trainable_pairs || 0);
+            const base = state === 'ready'
+                ? dm._t('dataset.confirmCheckReady',
+                    '{pairs} image and caption pair(s) passed the check.', { pairs })
+                : dm._t('dataset.confirmCheckWarnings',
+                    '{pairs} pair(s) passed the check. Notes are listed below.', { pairs });
+            const skipped = Number(summary.skippable_items || 0);
+            if (!options.skip_blocked_items || skipped <= 0) return base;
+            return `${base} ${dm._t('dataset.confirmSkippedNote',
+                '{count} image(s) with problems will be skipped.', { count: skipped })}`;
+        }
+        if (state === 'blocked') {
+            return dm._t('dataset.confirmCheckBlocked', '{count} problem(s) stop this export.',
+                { count: Number(report?.summary?.blocker_count || 0) });
+        }
+        if (CONFIRM_RETRY_STATES.has(state)) {
+            return dm._t('dataset.confirmCheckFailed', 'The check did not finish: {message}',
+                { message: view.message || state });
+        }
+        const running = dm._t('dataset.confirmCheckRunning', 'Checking the dataset before export...');
+        const total = Number(view.total || 0);
+        return total > 0 ? `${running} ${Number(view.processed || 0)}/${total}` : running;
+    }
+
+    function renderConfirmIssues(dm, list, report) {
+        list.replaceChildren();
+        if (!report) return;
+        const blockers = report.issues.filter((issue) => issue.severity === 'blocker');
+        const shown = (blockers.length > 0 ? blockers : report.issues)
+            .slice(0, CONFIRM_ISSUE_PREVIEW_LIMIT);
+        for (const issue of shown) {
+            const item = document.createElement('li');
+            item.className = `severity-${issue.severity}`;
+            item.textContent = issue.message;
+            list.appendChild(item);
+        }
+        if (report.total_issues > shown.length) {
+            const more = document.createElement('li');
+            more.className = 'dataset-confirm-check-more';
+            more.textContent = dm._t('dataset.confirmMoreIssues', 'See the full list under Readiness.');
+            list.appendChild(more);
+        }
+    }
+
+    DM._renderConfirmOptions = function (report, state) {
+        const skipRow = document.getElementById('dataset-confirm-skip-row');
+        const skip = document.getElementById('dataset-confirm-skip-blocked');
+        const skipLabel = document.getElementById('dataset-confirm-skip-label');
+        const emptyRow = document.getElementById('dataset-confirm-empty-row');
+        const allowEmpty = document.getElementById('dataset-confirm-allow-empty');
+        const emptyLabel = document.getElementById('dataset-confirm-empty-label');
+        const packageNote = document.getElementById('dataset-confirm-package-note');
+        if (!skipRow || !skip || !skipLabel || !emptyRow || !allowEmpty || !emptyLabel || !packageNote) {
+            throw new Error('Dataset export confirmation options are incomplete');
+        }
+        const options = this._exportOptionsForPayload();
+        const hasPackage = this._hasSelectedTrainerPackage?.() === true;
+        const summary = report?.summary;
+        skip.checked = options.skip_blocked_items;
+        allowEmpty.checked = options.allow_empty_captions;
+        if (summary) {
+            skipLabel.textContent = this._t('dataset.confirmSkipBlocked',
+                'Skip the {count} image(s) with problems and export the rest',
+                { count: summary.skippable_items });
+            emptyLabel.textContent = this._t('dataset.confirmAllowEmpty',
+                'Write an empty caption file for the {count} image(s) with no caption',
+                { count: summary.empty_caption_items });
+        }
+        const skippable = Number(summary?.skippable_items || 0);
+        skipRow.hidden = !options.skip_blocked_items && !(skippable > 0 && !hasPackage);
+        emptyRow.hidden = !options.allow_empty_captions
+            && !(Number(summary?.empty_caption_items || 0) > 0);
+        packageNote.hidden = !(hasPackage && skippable > 0 && state === 'blocked');
+    };
+
+    DM._renderConfirmCheck = function () {
+        const modal = document.getElementById('dataset-confirm-modal');
+        if (!modal || modal.hidden) return;
+        const status = document.getElementById('dataset-confirm-check-status');
+        const issues = document.getElementById('dataset-confirm-check-issues');
+        const retry = document.getElementById('btn-dataset-confirm-recheck');
+        const go = document.getElementById('btn-dataset-confirm-go');
+        if (!status || !issues || !retry || !go) {
+            throw new Error('Dataset export confirmation check controls are incomplete');
+        }
+        // A settings change re-renders this dialog through _setReadinessView.
+        if (this._refreshReadinessStaleness?.()) return;
+        const view = this._readinessView || { state: 'idle' };
+        // Nothing checked for these exact settings yet: Export runs the check.
+        if ((view.state === 'idle' || view.state === 'stale') && !view.activeJobId) {
+            Promise.resolve().then(() => this._startReadinessCheck?.());
+        }
+        go.disabled = !(EXPORTABLE_READINESS_STATES.has(view.state)
+            && view.report
+            && this._readinessAcceptedSignature);
+        retry.hidden = !CONFIRM_RETRY_STATES.has(view.state);
+        status.dataset.state = view.state;
+        status.textContent = confirmCheckStatusText(this, view, this._exportOptionsForPayload());
+        renderConfirmIssues(this, issues, view.report);
+        this._renderConfirmOptions(view.report, view.state);
+    };
+
+    DM._cancelConfirmModal = function () {
+        this._hideConfirmModal();
+        this._resetExportOptions();
+    };
+
     DM._showConfirmModal = function () {
+        this._resetExportOptions();
         this._refreshReadinessStaleness?.();
         if (!this._isReadyToExport()) {
             this._validateOutputFolder();
@@ -384,12 +535,19 @@
                 '<strong>{count}</strong> have your manually-edited captions',
                 { count: editedCount }));
         }
+        const withoutPath = Number(this._sidecarCapabilityStats?.().unknown || 0);
+        if (withoutPath > 0) {
+            items.push(this._t('dataset.confirmSummaryNoPath',
+                '<strong>{count}</strong> image(s) have no known file path. They are left out.',
+                { count: withoutPath }));
+        }
         // innerHTML sink: `items` is trusted markup. Every entry interpolates
         // only numeric counts or escapeHtml()-wrapped strings (action label,
         // folder, naming). Any new item that embeds user-influenced text MUST
         // escapeHtml it before pushing — _t() does not escape its params.
         list.innerHTML = items.map(s => `<li>${s}</li>`).join('');
         modal.hidden = false;
+        this._renderConfirmCheck();
     };
 
     DM._hideConfirmModal = function () {
@@ -652,6 +810,9 @@
                                 activeJobId: null,
                                 report: null,
                             });
+                            this._toast(this._t('dataset.exportRecheckNeeded',
+                                'Files or settings changed after the check. Press Export to check again.'),
+                            'warning');
                         } catch (error) {
                             const view = this._readinessView || {};
                             this._setReadinessView?.({
@@ -775,10 +936,17 @@
     };
 
     DM._runExport = async function () {
-        this._refreshReadinessStaleness?.();
         if (!this._isReadyToExport()) {
-            this._hideConfirmModal();
+            this._cancelConfirmModal();
             this._toast(this._exportDisabledReason(), 'warning');
+            return;
+        }
+        if (!this._hasAcceptedReadiness?.()) {
+            // Not checked for these exact settings yet: the dialog runs the
+            // check and enables its confirm button when it passes.
+            const modal = document.getElementById('dataset-confirm-modal');
+            if (modal && !modal.hidden) this._renderConfirmCheck();
+            else this._showConfirmModal();
             return;
         }
         this._hideConfirmModal();
@@ -800,6 +968,7 @@
             readiness_report_id: report.report_id,
             readiness_input_fingerprint: report.input_fingerprint,
         };
+        this._resetExportOptions();
         await this._startExportJob(payload);
     };
 
@@ -848,6 +1017,10 @@
                 html = this._t('dataset.resultDetailOk',
                     '<strong>{count}</strong> image+caption pairs exported to <code>{folder}</code>',
                     { count: exported, folder: escapeHtml(folder) });
+                if (skipped > 0) {
+                    html += ` ${this._t('dataset.resultDetailSkipped',
+                        '<strong>{count}</strong> image(s) were skipped.', { count: skipped })}`;
+                }
             } else if (resolved === 'partial') {
                 html = this._t('dataset.resultDetailPartial',
                     '<strong>{exported}</strong> exported, <strong>{errors}</strong> failed, <strong>{skipped}</strong> skipped. Files are in <code>{folder}</code>',

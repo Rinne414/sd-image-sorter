@@ -184,7 +184,7 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
-test('starts idle, blocks Export, and Check posts the single export payload', async ({ page }) => {
+test('starts idle, keeps Export enabled, and Check posts the single export payload', async ({ page }) => {
   let capturedBody: Record<string, unknown> | null = null
   let startRequests = 0
   let releaseStartResponse!: () => void
@@ -209,7 +209,8 @@ test('starts idle, blocks Export, and Check posts the single export payload', as
   await seedReadyToCheckDataset(page)
 
   await expect(page.getByTestId('dataset-readiness-state')).toHaveAttribute('data-state', 'idle')
-  await expect(page.locator('#btn-dataset-export')).toBeDisabled()
+  // Export runs this check itself, so an unchecked dataset does not disable it.
+  await expect(page.locator('#btn-dataset-export')).toBeEnabled()
   await expect(page.getByTestId('dataset-readiness-cancel')).toBeHidden()
 
   const expectedPayload = await page.evaluate(() => (window as any).DatasetMaker._buildExportPayload())
@@ -275,7 +276,7 @@ test('final Export attaches the accepted proof and a backend conflict marks it s
   })
   await expect(page.getByTestId('dataset-readiness-state')).toHaveAttribute('data-state', 'stale')
   await expect(page.locator('#dataset-readiness-message')).toContainText('Run Readiness Check again.')
-  await expect(page.locator('#btn-dataset-export')).toBeDisabled()
+  await expect(page.locator('#btn-dataset-export')).toBeEnabled()
   await expect(page.locator('#dataset-result-modal')).toBeHidden()
 })
 
@@ -310,10 +311,10 @@ test('malformed export conflict clears the accepted proof and fails explicitly',
   await expect(page.locator('#dataset-readiness-message')).toContainText(
     'readiness conflict.code must be a string',
   )
-  await expect(page.locator('#btn-dataset-export')).toBeDisabled()
+  await expect(page.locator('#btn-dataset-export')).toBeEnabled()
 })
 
-test('Ready enables Export, while Blocked disables it and renders an image-linked issue', async ({ page }) => {
+test('Ready and Blocked keep Export enabled and Blocked renders an image-linked issue', async ({ page }) => {
   const blocker: ReadinessIssue = {
     severity: 'blocker',
     code: 'empty_caption',
@@ -366,7 +367,7 @@ test('Ready enables Export, while Blocked disables it and renders an image-linke
 
   await page.getByTestId('dataset-readiness-check').click()
   await expect(page.getByTestId('dataset-readiness-state')).toHaveAttribute('data-state', 'blocked')
-  await expect(page.locator('#btn-dataset-export')).toBeDisabled()
+  await expect(page.locator('#btn-dataset-export')).toBeEnabled()
   const issue = page.getByTestId('dataset-readiness-issue').filter({ hasText: blocker.message })
   await expect(issue).toHaveAttribute('data-image-id', '-902')
   await expect(issue).toContainText(blocker.source_path || '')
@@ -448,7 +449,7 @@ test('a successful export invalidates the accepted Readiness report before anoth
 
   await expect(page.locator('#dataset-result-modal')).toBeVisible()
   await expect(page.getByTestId('dataset-readiness-state')).toHaveAttribute('data-state', 'stale')
-  await expect(page.locator('#btn-dataset-export')).toBeDisabled()
+  await expect(page.locator('#btn-dataset-export')).toBeEnabled()
   const readiness = await page.evaluate(() => {
     const dm = (window as any).DatasetMaker
     return {
@@ -604,14 +605,14 @@ test('output-folder and caption edits mark a Ready report stale before confirmat
   await expect(page.locator('#btn-dataset-export')).toBeEnabled()
   await page.locator('#dataset-output-folder').fill('C:/training/changed')
   await expect(page.getByTestId('dataset-readiness-state')).toHaveAttribute('data-state', 'stale')
-  await expect(page.locator('#btn-dataset-export')).toBeDisabled()
+  await expect(page.locator('#btn-dataset-export')).toBeEnabled()
 
   await page.getByTestId('dataset-readiness-check').click()
   await expect(page.locator('#btn-dataset-export')).toBeEnabled()
   await page.evaluate(() => (window as any).DatasetMaker._setPipelineTab('workbench'))
   await page.locator('#dataset-editor-textarea').fill('1girl, standing, changed caption')
   await expect(page.getByTestId('dataset-readiness-state')).toHaveAttribute('data-state', 'stale')
-  await expect(page.locator('#btn-dataset-export')).toBeDisabled()
+  await expect(page.locator('#btn-dataset-export')).toBeEnabled()
 })
 
 test('Warnings keeps Export enabled and renders the backend warning verbatim', async ({ page }) => {
@@ -642,7 +643,7 @@ test('Warnings keeps Export enabled and renders the backend warning verbatim', a
   await expect(issue).toContainText(warning.action)
 })
 
-test('Cancel posts to the shared bulk-job endpoint and leaves Export disabled', async ({ page }) => {
+test('Cancel posts to the shared bulk-job endpoint and keeps Export available', async ({ page }) => {
   let cancelMethod = ''
   let statusRequests = 0
   let releaseRunningResponse!: () => void
@@ -688,7 +689,7 @@ test('Cancel posts to the shared bulk-job endpoint and leaves Export disabled', 
   await stalePollResponse
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
   await expect(page.getByTestId('dataset-readiness-state')).toHaveAttribute('data-state', 'cancelled')
-  await expect(page.locator('#btn-dataset-export')).toBeDisabled()
+  await expect(page.locator('#btn-dataset-export')).toBeEnabled()
 })
 
 test('reload resumes the readiness job stored in sessionStorage', async ({ page }) => {
@@ -927,22 +928,22 @@ test('malformed, backend-error, and lost jobs render explicit non-exportable sta
   await page.getByTestId('dataset-readiness-check').click()
   await expect(page.getByTestId('dataset-readiness-state')).toHaveAttribute('data-state', 'error')
   await expect(page.locator('#dataset-readiness-message')).toContainText('must be a string')
-  await expect(page.locator('#btn-dataset-export')).toBeDisabled()
+  await expect(page.locator('#btn-dataset-export')).toBeEnabled()
 
   await page.getByTestId('dataset-readiness-check').click()
   await expect(page.getByTestId('dataset-readiness-state')).toHaveAttribute('data-state', 'error')
   await expect(page.locator('#dataset-readiness-message')).toContainText('ready status cannot include blockers or warnings')
-  await expect(page.locator('#btn-dataset-export')).toBeDisabled()
+  await expect(page.locator('#btn-dataset-export')).toBeEnabled()
 
   await page.getByTestId('dataset-readiness-check').click()
   await expect(page.getByTestId('dataset-readiness-state')).toHaveAttribute('data-state', 'error')
   await expect(page.locator('#dataset-readiness-message')).toContainText('must inspect every requested item')
-  await expect(page.locator('#btn-dataset-export')).toBeDisabled()
+  await expect(page.locator('#btn-dataset-export')).toBeEnabled()
 
   await page.getByTestId('dataset-readiness-check').click()
   await expect(page.getByTestId('dataset-readiness-state')).toHaveAttribute('data-state', 'error')
   await expect(page.locator('#dataset-readiness-message')).toContainText('does not match requested job')
-  await expect(page.locator('#btn-dataset-export')).toBeDisabled()
+  await expect(page.locator('#btn-dataset-export')).toBeEnabled()
 
   await page.getByTestId('dataset-readiness-check').click()
   await expect(page.getByTestId('dataset-readiness-state')).toHaveAttribute('data-state', 'error')
@@ -951,7 +952,121 @@ test('malformed, backend-error, and lost jobs render explicit non-exportable sta
   await page.getByTestId('dataset-readiness-check').click()
   await expect(page.getByTestId('dataset-readiness-state')).toHaveAttribute('data-state', 'lost')
   await expect(page.locator('#dataset-readiness-message')).toContainText('This check can no longer be found')
-  await expect(page.locator('#btn-dataset-export')).toBeDisabled()
+  await expect(page.locator('#btn-dataset-export')).toBeEnabled()
+})
+
+test('Export runs the check in its dialog and can skip the images with problems', async ({ page }) => {
+  const consoleErrors: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text())
+  })
+  const blocker: ReadinessIssue = {
+    severity: 'blocker',
+    code: 'empty_caption',
+    message: 'Caption renders empty for ready-b.png',
+    issue_id: 'issue-auto-empty',
+    rule_version: 'dataset-readiness-v1',
+    evidence: { observed: 'empty caption', expected: 'a non-empty rendered caption' },
+    action: 'Add tags or a caption override, then run readiness again.',
+    destination: 'C:/training/ready/ready-b.txt',
+    image_id: 902,
+    source_path: 'C:/source/ready-902.png',
+  }
+  const blocked = readinessReport('blocked', [blocker])
+  blocked.summary = { ...blocked.summary, skippable_items: 1, empty_caption_items: 1 } as typeof blocked.summary
+  const skipped = readinessReport('warnings', [{
+    ...blocker,
+    severity: 'warning',
+    message: `Skipped: ${blocker.message}`,
+  }])
+  skipped.summary = { ...skipped.summary, trainable_pairs: 1, skippable_items: 1, empty_caption_items: 1 } as typeof skipped.summary
+  const readinessBodies: Array<Record<string, unknown>> = []
+  await page.route('**/api/dataset/readiness/start', (route) => {
+    readinessBodies.push(route.request().postDataJSON() as Record<string, unknown>)
+    const jobId = readinessBodies.length === 1 ? 'job-auto-blocked' : 'job-auto-skip'
+    return route.fulfill({ status: 202, json: startResponse(jobId) })
+  })
+  await page.route('**/api/bulk-jobs/job-auto-blocked', (route) =>
+    route.fulfill({ json: doneJob('job-auto-blocked', blocked) }))
+  await page.route('**/api/bulk-jobs/job-auto-skip', (route) =>
+    route.fulfill({ json: doneJob('job-auto-skip', skipped) }))
+  let exportBody: Record<string, unknown> | null = null
+  await page.route('**/api/dataset/export/start', (route) => {
+    exportBody = route.request().postDataJSON() as Record<string, unknown>
+    return route.fulfill({
+      status: 202,
+      json: {
+        status: 'started',
+        job_id: 'export-skip-one',
+        total: 2,
+        output_folder: 'C:/training/ready',
+        message: 'Dataset export started',
+      },
+    })
+  })
+  const exportJob = successfulExportJob('export-skip-one')
+  await page.route('**/api/bulk-jobs/export-skip-one', (route) => route.fulfill({
+    json: {
+      ...exportJob,
+      result: { ...exportJob.result, exported: 1, skipped: 1 },
+    },
+  }))
+  await seedReadyToCheckDataset(page)
+
+  await page.locator('#btn-dataset-export').click()
+  const dialog = page.locator('#dataset-confirm-modal')
+  const status = page.getByTestId('dataset-confirm-check-status')
+  await expect(dialog).toBeVisible()
+  await expect(status).toHaveText('1 problem(s) stop this export.')
+  await expect(page.getByTestId('dataset-confirm-check-issues')).toContainText(blocker.message)
+  await expect(page.locator('#btn-dataset-confirm-go')).toBeDisabled()
+  await expect(page.locator('#dataset-confirm-skip-row'))
+    .toHaveText('Skip the 1 image(s) with problems and export the rest')
+  await expect(page.locator('#dataset-confirm-empty-row'))
+    .toHaveText('Write an empty caption file for the 1 image(s) with no caption')
+  expect(readinessBodies).toHaveLength(1)
+  expect(readinessBodies[0]).not.toHaveProperty('skip_blocked_items')
+
+  for (const viewport of [
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+    { width: 2560, height: 1440 },
+  ]) {
+    await page.setViewportSize(viewport)
+    const layout = await page.evaluate(() => {
+      const card = document.querySelector('#dataset-confirm-modal .dataset-modal-card')
+      const go = document.getElementById('btn-dataset-confirm-go')
+      if (!card || !go) throw new Error('Confirm dialog nodes are missing')
+      const cardRect = card.getBoundingClientRect()
+      const goRect = go.getBoundingClientRect()
+      return {
+        horizontalOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        cardInside: cardRect.left >= 0 && cardRect.right <= window.innerWidth
+          && cardRect.top >= 0 && cardRect.bottom <= window.innerHeight,
+        goInside: goRect.bottom <= window.innerHeight && goRect.right <= window.innerWidth,
+      }
+    })
+    expect(layout).toEqual({ horizontalOverflow: 0, cardInside: true, goInside: true })
+  }
+  await page.setViewportSize({ width: 1366, height: 768 })
+
+  await page.getByTestId('dataset-confirm-skip-blocked').check()
+  await expect(status).toHaveText(
+    '1 pair(s) passed the check. Notes are listed below. 1 image(s) with problems will be skipped.')
+  await expect(page.locator('#btn-dataset-confirm-go')).toBeEnabled()
+  expect(readinessBodies).toHaveLength(2)
+  expect(readinessBodies[1]).toMatchObject({ skip_blocked_items: true })
+
+  await page.locator('#btn-dataset-confirm-go').click()
+  await expect(page.locator('#dataset-result-modal')).toBeVisible()
+  expect(exportBody).toMatchObject({
+    skip_blocked_items: true,
+    readiness_report_id: 'job-auto-skip',
+  })
+  await expect(page.locator('#dataset-result-detail')).toContainText('1 image(s) were skipped.')
+  expect(await page.evaluate(() => (window as any).DatasetMaker._buildExportPayload()))
+    .not.toHaveProperty('skip_blocked_items')
+  expect(consoleErrors).toEqual([])
 })
 
 test('readiness stays unclipped and error-free at supported desktop widths', async ({ page }) => {

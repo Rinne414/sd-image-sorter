@@ -1300,6 +1300,13 @@
             throw new TypeError('Dataset export requires DatasetMaker._watermarkRemovalExportSettings');
         }
         const trainerFields = this._trainerExportFields();
+        // Confirm-dialog choices ride along only when chosen, so the default
+        // wire payload keeps its pinned key set.
+        const exportOptions = this._exportOptionsForPayload?.() || {};
+        const optionFields = {
+            ...(exportOptions.skip_blocked_items ? { skip_blocked_items: true } : {}),
+            ...(exportOptions.allow_empty_captions ? { allow_empty_captions: true } : {}),
+        };
 
         return {
             image_ids: galleryIds,
@@ -1325,6 +1332,7 @@
             bucket_resize: this._bucketResizeExportSettings(),
             watermark_removal: this._watermarkRemovalExportSettings(),
             ...trainerFields,
+            ...optionFields,
         };
     };
 

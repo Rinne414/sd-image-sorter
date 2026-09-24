@@ -244,6 +244,34 @@
             : Object.freeze({ item_type: 'local', path: item.path }));
     }
 
+    // Saved entries sent back unchanged: the backend keeps their stored
+    // identity (and missing or changed mark) instead of re-reading the source.
+    function keptProjectRequestItems(items) {
+        return items.map((item) => item.item_type === 'library'
+            ? Object.freeze({
+                item_type: 'library',
+                image_id: requirePositiveInteger(item.source_image_id, 'items[].source_image_id'),
+                keep_as_saved: true,
+            })
+            : Object.freeze({ item_type: 'local', path: item.path, keep_as_saved: true }));
+    }
+
+    function projectRequestItemKey(item) {
+        return item.item_type === 'library'
+            ? `library:${item.image_id}`
+            : `local:${String(item.path).replace(/\\/g, '/')}`;
+    }
+
+    // The queue holds only available entries. Unresolved saved entries are
+    // appended as kept so saving never drops them; one the user re-imported
+    // into the queue is sent from the queue instead.
+    function projectSaveItems(queueItems, unresolvedItems) {
+        const queued = new Set(queueItems.map(projectRequestItemKey));
+        const kept = keptProjectRequestItems(unresolvedItems)
+            .filter((item) => !queued.has(projectRequestItemKey(item)));
+        return [...queueItems, ...kept];
+    }
+
     function projectItemHasIssue(item) {
         return item.item_type === 'library'
             ? item.missing
@@ -517,7 +545,7 @@
                 ? ''
                 : this._t(
                     'dataset.projectMissing',
-                    'Project source problems: {issues}. Saving is off so nothing gets removed by mistake.',
+                    'Project source problems: {issues}. Saving keeps these entries as they are.',
                     { issues: issues.join('; ') },
                 );
         },
@@ -560,7 +588,6 @@
             selector.disabled = this._projectBusy;
 
             const active = this._activeProject;
-            const hasMissing = (this._projectMissingItems || []).length > 0;
             const save = document.getElementById('btn-dataset-project-save');
             const rename = document.getElementById('btn-dataset-project-rename');
             const archive = document.getElementById('btn-dataset-project-archive');
@@ -568,9 +595,9 @@
             const remove = document.getElementById('btn-dataset-project-delete');
             const saveAs = document.getElementById('btn-dataset-project-save-as');
             if (saveAs) saveAs.disabled = this._projectBusy;
-            if (save) save.disabled = !active || active.archived_at !== null || hasMissing || this._projectBusy;
+            if (save) save.disabled = !active || active.archived_at !== null || this._projectBusy;
             if (rename) {
-                rename.disabled = !active || active.archived_at !== null || hasMissing || this._projectBusy;
+                rename.disabled = !active || active.archived_at !== null || this._projectBusy;
             }
             if (archive) archive.disabled = !active || active.archived_at !== null || this._projectBusy;
             if (restore) restore.disabled = !active || active.archived_at === null || this._projectBusy;
@@ -976,17 +1003,6 @@
             const active = this._activeProject;
             if (!active || active.archived_at !== null) return;
             this._flushPendingDatasetEdits?.();
-            if ((this._projectMissingItems || []).length > 0) {
-                this._toast(
-                    this._t(
-                        'dataset.projectMissingSaveBlocked',
-                        'This project has unresolved sources. Resolve them before saving or renaming.',
-                    ),
-                    'error',
-                    5000,
-                );
-                return;
-            }
             this._flushProjectDraftPersistence();
             this._projectBusy = true;
             this._setProjectStatus('saving', 'dataset.projectStatusSaving', 'Saving...');
@@ -1002,7 +1018,7 @@
                 await this._materializeProjectLocalItems();
                 if (!(await this._confirmProjectDraftScope())) return;
                 this._requireUnchangedProjectSettings(settingsSnapshot);
-                const items = this._projectItems();
+                const items = projectSaveItems(this._projectItems(), this._projectMissingItems || []);
                 const body = await requestProjectJson(
                     `/api/dataset/projects/${active.id}`,
                     {
@@ -1031,17 +1047,6 @@
             const active = this._activeProject;
             if (!active) return;
             this._flushProjectDraftPersistence();
-            if ((this._projectMissingItems || []).length > 0) {
-                this._toast(
-                    this._t(
-                        'dataset.projectMissingSaveBlocked',
-                        'This project has unresolved sources. Resolve them before saving or renaming.',
-                    ),
-                    'error',
-                    5000,
-                );
-                return;
-            }
             const name = await this._requestProjectName(
                 'dataset.projectRenameTitle',
                 'Rename dataset project',
@@ -1050,7 +1055,8 @@
                 active.name,
             );
             if (name === null || name === active.name) return;
-            const items = storedProjectRequestItems(active.items);
+            // A rename changes only the name, so every saved entry is kept as is.
+            const items = keptProjectRequestItems(active.items);
             this._projectBusy = true;
             this._renderProjectControls();
             try {

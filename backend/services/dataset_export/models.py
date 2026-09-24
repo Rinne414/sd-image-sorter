@@ -231,7 +231,7 @@ class DatasetWatermarkRemovalSettings(BaseModel):
     method: Literal["telea", "ns"] = "telea"
     radius: int = Field(default=3, strict=True, ge=1, le=20)
     padding_percent: int = Field(default=0, strict=True, ge=0, le=10)
-    regions: List[DatasetWatermarkRegion] = Field(default_factory=list, max_length=8)
+    regions: List[DatasetWatermarkRegion] = Field(default_factory=list, max_length=64)
 
     @model_validator(mode="after")
     def validate_regions(self) -> "DatasetWatermarkRemovalSettings":
@@ -348,6 +348,15 @@ class DatasetExportRequest(BaseModel):
     # keep_tokens = N). This is how the trigger word survives shuffling.
     # 0 = don't emit shuffle/keep lines at all.
     trainer_keep_tokens: int = Field(default=0, ge=0, le=50)
+
+    # Per-item problems (unreadable source, empty or failed caption, missing
+    # mask) normally block the whole export. With ``skip_blocked_items`` the
+    # Readiness check downgrades them to warnings and the export leaves exactly
+    # those items out. Collisions and source overwrites still block.
+    skip_blocked_items: bool = False
+    # Write an empty caption file instead of treating an empty caption as a
+    # problem (regularization images, trigger-only training).
+    allow_empty_captions: bool = False
 
     # Public export transports require both values. They stay optional in the
     # shared model so read-only readiness and the internal engine can use the
@@ -530,6 +539,11 @@ class DatasetReadinessSummary(BaseModel):
     trainable_pairs: int
     blocker_count: int
     warning_count: int
+    # Items whose only problems are skippable. With skip_blocked_items these
+    # are the items the export leaves out.
+    skippable_items: int = 0
+    # Items whose rendered caption is empty, whether or not that is allowed.
+    empty_caption_items: int = 0
 
 
 class DatasetReadinessReport(BaseModel):

@@ -1,5 +1,6 @@
 /**
- * Dataset Maker — Tag all (_tagAll via POST /api/tag/start + AI job queue toasts).
+ * Dataset Maker — Tag all (_tagAll via POST /api/tag/start + AI job queue
+ * toasts; datasets with folder-imported images go to Smart Tag).
  * Moved VERBATIM from dataset-maker-part3.js L381-448.
  * Load order is pinned by the ordered async=false loader in dataset/core.js.
  */
@@ -17,15 +18,17 @@
         // Honour the "re-tag already-tagged" checkbox. Default OFF so the
         // first / repeat click only touches images that lack tags.
         const retagAll = !!document.getElementById('dataset-tag-retag-all')?.checked;
-        // Local-source items (negative ids) cannot be sent to the legacy
-        // /api/tag/start path because they have no DB row. Filter them
-        // out and tell the user how many were skipped.
+        // Local-source items (negative ids) have no DB row, so the legacy
+        // /api/tag/start path cannot tag them. Smart Tag tags Library and
+        // folder-imported items alike, so a dataset with any folder images
+        // goes there and one run covers everything.
         const galleryIds = this.imageIds.filter((id) => !(this.isLocalId && this.isLocalId(id)));
-        const localSkipped = this.imageIds.length - galleryIds.length;
-        if (galleryIds.length === 0) {
-            this._toast(this._t('dataset.tagAllOnlyLocal',
-                '"Tag all images" only works on images from the Gallery. Use Smart Tag for folder-imported images, or scan the folder into the library first.'),
-                'warning', 6000);
+        if (galleryIds.length < this.imageIds.length) {
+            if (this._openDatasetSmartTag()) {
+                this._toast(this._t('dataset.tagAllRoutedSmartTag',
+                    'Folder images are tagged with Smart Tag. It covers every image in this dataset. Press Run Smart Tag to start.'),
+                'info', 6000);
+            }
             return;
         }
         try {
@@ -56,13 +59,7 @@
             const startedFb = retagAll
                 ? 'Tagging started (retagging EVERY image). Progress is at the top of the screen.'
                 : 'Tagging started (skipping already-tagged images). Progress is at the top of the screen.';
-            let msg = this._t(startedKey, startedFb);
-            if (localSkipped > 0) {
-                msg += ' ' + this._t('dataset.tagAllSkippedLocal',
-                    'Skipped {count} folder-imported images; use Smart Tag for those.',
-                    { count: localSkipped });
-            }
-            this._toast(msg, 'success', 6000);
+            this._toast(this._t(startedKey, startedFb), 'success', 6000);
             // Attach the shared tagging progress UI (the floating bar at the
             // top of the screen + completion refresh) to the job we just
             // started — the same poll loop the gallery Start-Tag button uses.

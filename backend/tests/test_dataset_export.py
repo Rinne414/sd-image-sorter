@@ -176,16 +176,16 @@ def test_sync_export_rechecks_proof_expiry_after_current_input_scan(
         "output_folder": str(output),
         "image_overrides": {str(image_id): "subject"},
     })
-    real_run = readiness_authorization.run_dataset_readiness
+    real_plan = readiness_authorization.plan_dataset_readiness
 
     def expire_after_scan(*args, **kwargs):
-        report = real_run(*args, **kwargs)
+        plan = real_plan(*args, **kwargs)
         now[0] = 111.0
-        return report
+        return plan
 
     monkeypatch.setattr(
         readiness_authorization,
-        "run_dataset_readiness",
+        "plan_dataset_readiness",
         expire_after_scan,
     )
 
@@ -859,13 +859,13 @@ def test_export_move_removes_source(test_client, staged_images, tmp_path: Path):
 
 
 def test_export_overwrite_policy_skip(test_client, staged_images, tmp_path: Path):
-    """A reviewed blocker prevents the legacy skip path from writing."""
+    """The "skip" overwrite policy leaves existing outputs alone and exports the rest."""
     out = tmp_path / "out"
     out.mkdir()
     # Pre-create one of the targets
     existing = out / "train_001.png"
     existing.write_bytes(b"DO NOT OVERWRITE")
-    image_ids = [staged_images[0][0]]
+    image_ids = [staged_images[0][0], staged_images[1][0]]
 
     response = test_client.post("/api/dataset/export", json={
         "image_ids": image_ids,
@@ -874,10 +874,38 @@ def test_export_overwrite_policy_skip(test_client, staged_images, tmp_path: Path
         "image_op": "copy",
         "overwrite_policy": "skip",
     })
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["exported"] == 1
+    assert body["skipped"] == 1
+    assert existing.read_bytes() == b"DO NOT OVERWRITE", "existing file was overwritten"
+    assert (out / "train_002.png").exists()
+
+
+def test_export_overwrite_policy_skip_with_nothing_new_is_blocked(
+    test_client,
+    staged_images,
+    tmp_path: Path,
+):
+    """Skipping every item leaves nothing to export, which still blocks."""
+    out = tmp_path / "out"
+    out.mkdir()
+    existing = out / "train_001.png"
+    existing.write_bytes(b"DO NOT OVERWRITE")
+
+    response = test_client.post("/api/dataset/export", json={
+        "image_ids": [staged_images[0][0]],
+        "output_folder": str(out),
+        "naming_pattern": "train_{index:03d}",
+        "image_op": "copy",
+        "overwrite_policy": "skip",
+    })
     assert response.status_code == 409, response.text
     body = response.json()
     assert body["code"] == "readiness_blocked"
-    assert "unpaired_output" in {issue["code"] for issue in body["issues"]}
+    assert {"existing_output_skipped", "zero_trainable_pairs"} <= {
+        issue["code"] for issue in body["issues"]
+    }
     assert existing.read_bytes() == b"DO NOT OVERWRITE", "existing file was overwritten"
 
 

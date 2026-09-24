@@ -13,6 +13,9 @@
         return document.querySelector('input[name="dataset-output-mode"]:checked')?.value || 'folder';
     };
 
+    // ``unknown`` counts only local items with no file path: the export payload
+    // cannot include them. Library items always resolve their path on the
+    // backend, so a missing capability hint does not make them unknown.
     DM._sidecarCapabilityStats = function () {
         const ids = Array.from(this.imageIds || []);
         let besideReady = 0;
@@ -26,10 +29,13 @@
                 besideReady += 1;
                 continue;
             }
+            if (this.isLocalId?.(id) && !this.localItemPaths?.get?.(Number(id))) {
+                unknown += 1;
+                continue;
+            }
             const capability = String(meta.sidecar_capability || '').trim();
-            if (capability === 'beside_image') besideReady += 1;
-            else if (capability === 'cache_only') cacheOnly += 1;
-            else unknown += 1;
+            if (capability === 'cache_only') cacheOnly += 1;
+            else besideReady += 1;
         }
         if (this.localManifestTokens) {
             for (const [token, source] of this.localManifestTokens.entries()) {
@@ -56,16 +62,8 @@
                 return this._t('dataset.exportNeedBesideSource',
                     'Use Gallery or folder path scan images before writing .txt beside originals.');
             }
-            // v3.4.4 fix #7: cache-only items (drag/drop, ZIP, RAR) CAN write
-            // a same-name .txt beside the imported app-data copy — the import
-            // notice in the UI explicitly promises that. Only genuinely UNKNOWN
-            // sources (no resolved path at all) actually block the write, so
-            // gate on those alone instead of cacheOnly + unknown.
-            if (stats.unknown > 0) {
-                return this._t('dataset.exportBesideBlocked',
-                    '{count} imports have an unknown source path and cannot write beside originals.',
-                    { count: stats.unknown });
-            }
+            // Items with no known path are left out (the confirm dialog and
+            // the output-mode note say how many); they never block the rest.
             return '';
         }
         if (!(document.getElementById('dataset-output-folder')?.value || '').trim()) {
@@ -83,7 +81,7 @@
         if (bucketResizeReason) return bucketResizeReason;
         const watermarkRemovalReason = this._watermarkRemovalDisabledReason?.();
         if (watermarkRemovalReason) return watermarkRemovalReason;
-        return this._readinessExportDisabledReason?.() || '';
+        return '';
     };
 
     DM._syncSourceCapabilityStatus = function () {
@@ -107,24 +105,22 @@
         const warning = document.getElementById('dataset-beside-image-warning');
         const besideRadio = document.querySelector('input[name="dataset-output-mode"][value="beside_image"]');
         const folderRadio = document.querySelector('input[name="dataset-output-mode"][value="folder"]');
-        // v3.4.4 fix #7: only genuinely unknown sources block beside_image.
-        // cache_only items write beside their imported app-data copy (the
-        // import notice promises this), so they must NOT disable the radio
-        // or auto-flip the user's selection back to folder.
+        // Items with no known path never disable this mode: they are left
+        // out and the note below says how many. cache_only items write beside
+        // their imported app-data copy (the import notice promises this).
         const trainerPackageSelected = this._hasSelectedTrainerPackage?.() === true;
-        const besideBlocked = stats.total > 0 && stats.unknown > 0;
         if (besideRadio) {
-            besideRadio.disabled = besideBlocked || trainerPackageSelected;
+            besideRadio.disabled = trainerPackageSelected;
         }
         const effectiveMode = this._outputMode();
         document.querySelectorAll('[data-export-folder-only]').forEach((el) => {
             el.hidden = effectiveMode === 'beside_image';
         });
         if (warning) {
-            if (besideBlocked) {
+            if (effectiveMode === 'beside_image' && stats.unknown > 0) {
                 warning.hidden = false;
-                warning.textContent = this._t('dataset.outputModeBesideBlocked',
-                    '{count} imports have an unknown source path and cannot write beside originals. Use folder export, or import via Gallery/folder path scan.',
+                warning.textContent = this._t('dataset.outputModeBesideUnknown',
+                    '{count} image(s) have no known file path, so they are left out. The rest get a .txt beside the original.',
                     { count: stats.unknown });
             } else if (effectiveMode === 'beside_image') {
                 warning.hidden = false;

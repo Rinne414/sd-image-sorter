@@ -17,13 +17,13 @@ from services.dataset_export.models import (
     DatasetExportRequest,
     DatasetReadinessConflict,
     DatasetReadinessIssue,
-    DatasetReadinessReport,
     DatasetReadinessRequest,
 )
 from services.dataset_export.readiness import (
     DATASET_READINESS_RULE_VERSION,
+    DatasetReadinessPlan,
     dataset_readiness_fingerprint,
-    run_dataset_readiness,
+    plan_dataset_readiness,
 )
 from services.dataset_export.readiness_proof_store import (
     ReadinessProof,
@@ -146,8 +146,11 @@ def _get_proof(request: DatasetExportRequest) -> ReadinessProof:
 
 def authorize_dataset_export(
     request: DatasetExportRequest,
-) -> DatasetReadinessReport:
-    """Re-run Readiness and reject stale or blocked proof before export writes."""
+) -> DatasetReadinessPlan:
+    """Re-run Readiness and reject stale or blocked proof before export writes.
+
+    The returned plan names every item the export must skip.
+    """
     proof = _get_proof(request)
     report_id = proof.report_id
     if proof.rule_version != DATASET_READINESS_RULE_VERSION:
@@ -190,12 +193,13 @@ def authorize_dataset_export(
             issues=list(proof.report.issues),
         )
 
-    current = run_dataset_readiness(
+    plan = plan_dataset_readiness(
         readiness_request,
         readiness_report_id=report_id,
         progress_callback=lambda _processed, _total, _message: None,
         cancellation_requested=lambda: False,
     )
+    current = plan.report
     if current.summary.blocker_count > 0:
         raise _conflict(
             code="readiness_blocked",
@@ -221,4 +225,4 @@ def authorize_dataset_export(
             issues=list(current.issues),
         )
     _get_proof(request)
-    return current
+    return plan

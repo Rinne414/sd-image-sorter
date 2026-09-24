@@ -34,6 +34,8 @@ def test_consistency_report_flags_trigger_and_variants(test_client, tmp_path):
     assert response.status_code == 200
     report = response.json()
     assert report["images"] == 3
+    assert report["images_in_scope"] == 3
+    assert report["images_truncated"] is False
 
     findings = {f["id"]: f for f in report["findings"]}
 
@@ -171,3 +173,31 @@ def test_consistency_report_rejects_trigger_check_without_effective_captions(
 
     assert response.status_code == 400
     assert "effective_captions is required" in response.text
+
+
+def test_consistency_report_says_when_it_checked_only_the_first_images(
+    test_client,
+    tmp_path,
+    monkeypatch,
+):
+    import database as db
+    import services.dataset_consistency_service as consistency
+    import services.tag_export_service as tag_export_service
+
+    ids = [_add_image(db, tmp_path, f"cap-{index}.png", ["1girl"]) for index in range(3)]
+    monkeypatch.setattr(consistency, "MAX_REPORT_IMAGES", 2)
+    monkeypatch.setattr(
+        tag_export_service,
+        "iter_selection_token_id_chunks",
+        lambda _token, chunk_size, snapshot: iter([ids]),
+    )
+
+    response = test_client.post("/api/tags/consistency/report", json={
+        "selection_token": "token-for-three-images",
+    })
+
+    assert response.status_code == 200
+    report = response.json()
+    assert report["images"] == 2
+    assert report["images_in_scope"] == 3
+    assert report["images_truncated"] is True

@@ -14,7 +14,10 @@ from services.dataset_export.models import (
     disabled_subject_crop_settings,
     disabled_watermark_removal_settings,
 )
-from services.dataset_trigger import DatasetTrigger
+from services.dataset_trigger import (
+    DATASET_CAPTION_TAG_LIST_MAX_LENGTH,
+    DatasetTrigger,
+)
 from utils.path_validation import normalize_user_path
 
 
@@ -48,7 +51,7 @@ class DatasetProjectTemplateSettings(BaseModel):
     replace_rules: dict[ProjectReplaceRuleText, ProjectReplaceRuleValue] = Field(
         max_length=1000
     )
-    max_tags: NonNegativeStrictInt = Field(le=200)
+    max_tags: NonNegativeStrictInt = Field(le=1000)
 
     @field_validator("replace_rules")
     @classmethod
@@ -68,8 +71,8 @@ class DatasetProjectCaptionRenderSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     trigger: DatasetTrigger
-    common_tags: list[ProjectTag] = Field(max_length=1000)
-    blacklist: list[ProjectTag] = Field(max_length=1000)
+    common_tags: list[ProjectTag] = Field(max_length=DATASET_CAPTION_TAG_LIST_MAX_LENGTH)
+    blacklist: list[ProjectTag] = Field(max_length=DATASET_CAPTION_TAG_LIST_MAX_LENGTH)
     normalize_tag_underscores: bool = Field(strict=True)
     content_mode: Literal["template"]
     prefix: str = Field(max_length=4096)
@@ -210,6 +213,9 @@ class DatasetProjectLibraryItemRequest(BaseModel):
 
     item_type: Literal["library"]
     image_id: PositiveStrictInt
+    # Keep the entry exactly as the saved project stores it, even when the
+    # Library image is gone. Only valid on update, for an entry it already has.
+    keep_as_saved: bool = False
 
 
 class DatasetProjectLocalItemRequest(BaseModel):
@@ -217,6 +223,9 @@ class DatasetProjectLocalItemRequest(BaseModel):
 
     item_type: Literal["local"]
     path: str = Field(min_length=1)
+    # Keep the saved file identity untouched, even when the file is missing or
+    # changed. The entry keeps its missing or changed mark; nothing is rebound.
+    keep_as_saved: bool = False
 
     @field_validator("path")
     @classmethod

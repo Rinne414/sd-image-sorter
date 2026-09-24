@@ -465,6 +465,8 @@ class DatasetAuditRequest(BaseModel):
     enable_untagged: bool = True
     extra_tag_counts: Dict[str, int] = Field(default_factory=dict)
     item_limit: int = Field(default=AUDIT_RESPONSE_ITEM_LIMIT, ge=0, le=50_000)
+    # Compare every pair for near duplicates on large sets (slower).
+    near_duplicate_full: bool = False
 
 
 @router.post(
@@ -527,6 +529,7 @@ def post_dataset_audit(payload: DatasetAuditRequest) -> Dict[str, Any]:
             enable_phash=bool(payload.enable_phash),
             enable_untagged=bool(payload.enable_untagged),
             item_limit=int(payload.item_limit),
+            near_duplicate_full=bool(payload.near_duplicate_full),
         )
     except HTTPException:
         raise

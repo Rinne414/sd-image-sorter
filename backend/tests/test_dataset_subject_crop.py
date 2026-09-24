@@ -226,6 +226,38 @@ def test_subject_crop_export_aligns_image_mask_and_preserves_caption_and_source(
     assert source.stat().st_mtime_ns == source_stat.st_mtime_ns
 
 
+def test_subject_crop_without_mask_export_writes_only_image_and_caption(
+    test_db,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    image_id, source = _stage_library_image(tmp_path)
+    masks_dir = tmp_path / "masks"
+    monkeypatch.setattr(mask_service, "MASKS_DIR", masks_dir)
+    stored_mask = _write_mask(masks_dir, image_id)
+    with Image.open(stored_mask) as opened:
+        mask = opened.copy()
+    mask.paste(96, (2, 1, 8, 7))
+    mask.save(stored_mask)
+    output = tmp_path / "cropped-no-mask"
+    request = DatasetExportRequest(
+        image_ids=[image_id],
+        output_folder=str(output),
+        image_overrides={str(image_id): "crop only"},
+        subject_crop=_crop_settings("keep_background", alpha_threshold=32),
+    )
+
+    _validate_export_request_read_only(request)
+    result = export_dataset(request)
+
+    with Image.open(output / source.name) as image_result:
+        assert image_result.size == (6, 6)
+    assert result.status == "ok"
+    assert result.masks_written == 0
+    assert not (output / "mask").exists()
+    assert (output / "subject.txt").read_text(encoding="utf-8") == "crop only"
+
+
 @pytest.mark.parametrize(
     ("mask_state", "expected_error"),
     (
@@ -281,7 +313,6 @@ def test_subject_crop_rejects_invalid_mask_before_writing_image_or_caption(
         ({"image_op": "move"}, "image_op='copy'"),
         ({"output_mode": "beside_image", "output_folder": ""}, "output_mode='folder'"),
         ({"dataset_scan_tokens": [{"scan_token": "a" * 32}]}, "dataset_scan_tokens"),
-        ({"mask_export": "none"}, "mask_export"),
         ({"trainer_config": "kohya_toml"}, "trainer_config='none'"),
     ),
 )

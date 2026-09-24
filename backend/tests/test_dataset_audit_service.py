@@ -8,6 +8,7 @@ must be opt-in via the request payload.
 """
 from __future__ import annotations
 
+import hashlib
 import sys
 from pathlib import Path
 
@@ -92,6 +93,50 @@ def test_duplicate_groups_large_dataset_uses_exact_hash_fallback():
 
     assert len(groups) == 1
     assert sorted(groups[0]["image_ids"]) == [10, 20]
+
+
+def test_duplicate_groups_full_check_compares_every_pair_on_large_sets():
+    rows = [
+        {
+            "image_id": i,
+            "abs_path": f"/img{i}.png",
+            "phash_hex": hashlib.sha256(str(i).encode()).hexdigest()[:16],
+        }
+        for i in range(5001)
+    ]
+    rows[10]["phash_hex"] = "abc0000000000000"
+    rows[20]["phash_hex"] = "abc0000000000000"
+    rows[30]["phash_hex"] = "abc0000000000001"  # near, but not exact
+
+    groups = _build_duplicate_groups(rows, phash_max=4, full=True)
+
+    assert [sorted(group["image_ids"]) for group in groups] == [[10, 20, 30]]
+
+
+def test_audit_full_near_duplicate_run_is_not_reported_as_limited(
+    tmp_path: Path,
+    monkeypatch,
+):
+    import services.dataset_audit_service as dass
+
+    source = tmp_path / "one.png"
+    Image.new("RGB", (8, 8)).save(source)
+    monkeypatch.setattr(dass, "PHASH_NEAR_DUPLICATE_LIMIT", 1)
+    monkeypatch.setattr(dass, "_phash_backend_error", lambda: "")
+    monkeypatch.setattr(dass, "_safe_phash_hex", lambda _path: "ff00ff00ff00ff00")
+    paths = [str(source), str(source)]
+
+    limited = audit_dataset(image_paths=paths, phash_max=2, enable_phash=True)
+    full = audit_dataset(
+        image_paths=paths,
+        phash_max=2,
+        enable_phash=True,
+        near_duplicate_full=True,
+    )
+
+    assert limited["summary"]["near_duplicate_check_limited"] is True
+    assert full["summary"]["near_duplicate_check_limited"] is False
+    assert len(full["duplicate_groups"]) == 1
 
 
 # ============== audit_dataset (path-mode) ==============

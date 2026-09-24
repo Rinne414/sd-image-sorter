@@ -29,7 +29,9 @@
         if (el) el.textContent = text || '';
     }
 
-    async function runAudit() {
+    // ``fullNearDuplicate`` compares every pair for near duplicates even on
+    // large sets (slower); the capped-audit badge offers it.
+    async function runAudit({ fullNearDuplicate = false } = {}) {
         if (AUDIT_STATE.running) return;
         const logicalCount = DM._getLogicalDatasetCount?.() || DM.imageIds?.length || 0;
         if (!logicalCount) {
@@ -104,6 +106,7 @@
                     enable_untagged: checkCaptions,
                     extra_tag_counts: extraTagCounts,
                     item_limit: 50000,
+                    near_duplicate_full: fullNearDuplicate === true,
                 }),
             });
             if (!r.ok) {
@@ -153,11 +156,15 @@
     }
 
     function bindAudit() {
-        $('btn-dataset-audit-run')?.addEventListener('click', runAudit);
+        $('btn-dataset-audit-run')?.addEventListener('click', () => runAudit());
         $('btn-dataset-audit-download')?.addEventListener('click', downloadReport);
         $('btn-dataset-import-audit')?.addEventListener('click', () => {
             DM._showAuditModal?.();
             runAudit();
+        });
+        $('dataset-audit-modal')?.addEventListener('click', (event) => {
+            if (!event.target.closest?.('#btn-dataset-audit-full-check')) return;
+            runAudit({ fullNearDuplicate: true });
         });
         $('btn-dataset-audit-close')?.addEventListener('click', () => DM._hideAuditModal?.());
         $('dataset-audit-modal')?.querySelector?.('.dataset-modal-backdrop')?.addEventListener('click', () => DM._hideAuditModal?.());

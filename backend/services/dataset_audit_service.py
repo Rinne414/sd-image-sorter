@@ -190,17 +190,17 @@ def _hamming_distance_hex(a: str, b: str) -> int:
 
 
 def _build_duplicate_groups(
-    rows: List[Dict[str, Any]], phash_max: int
+    rows: List[Dict[str, Any]], phash_max: int, *, full: bool = False
 ) -> List[Dict[str, Any]]:
     """Cluster rows by Hamming-distance proximity into duplicate groups.
 
-    Naive O(N^2). Acceptable up to ~5000 images (the Dataset Maker
-    session cap). Higher-volume callers should use a vp-tree or BK-tree
-    instead — out of scope for v3.2.2.
+    Naive O(N^2). Above ``PHASH_NEAR_DUPLICATE_LIMIT`` rows only exact hash
+    matches are grouped, unless ``full`` asks for every pair to be compared
+    (the user opted into a slower run).
     """
     if phash_max < 0:
         return []
-    if len(rows) > PHASH_NEAR_DUPLICATE_LIMIT:
+    if len(rows) > PHASH_NEAR_DUPLICATE_LIMIT and not full:
         # The near-duplicate algorithm below is O(N^2). For 100k-image
         # datasets, report exact hash collisions only so audit cannot lock up
         # the process. Smaller LoRA-sized sets still get the original behavior.
@@ -299,6 +299,7 @@ def audit_dataset(
     enable_phash: bool = True,
     enable_untagged: bool = True,
     item_limit: int = AUDIT_RESPONSE_ITEM_LIMIT,
+    near_duplicate_full: bool = False,
 ) -> Dict[str, Any]:
     """Run the audit pipeline over a Dataset Maker session.
 
@@ -320,6 +321,9 @@ def audit_dataset(
                              a user wants a focused pass without paying the
                              AI inference cost or seeing checks they
                              intentionally disabled.
+    * ``near_duplicate_full`` - compare every pair for near duplicates even
+                             above ``PHASH_NEAR_DUPLICATE_LIMIT`` images
+                             (slower; the user asks for it explicitly).
 
     Returns the report dict shape documented in the module docstring.
     """
@@ -364,7 +368,7 @@ def audit_dataset(
             _track_exact_duplicate(row)
             return
         duplicate_rows.append(row)
-        if len(duplicate_rows) <= PHASH_NEAR_DUPLICATE_LIMIT:
+        if near_duplicate_full or len(duplicate_rows) <= PHASH_NEAR_DUPLICATE_LIMIT:
             return
         duplicate_exact_mode = True
         for prior in duplicate_rows:
@@ -510,7 +514,11 @@ def audit_dataset(
                 if len(bucket) > 1
             ]
         else:
-            duplicate_groups = _build_duplicate_groups(duplicate_rows, int(phash_max))
+            duplicate_groups = _build_duplicate_groups(
+                duplicate_rows,
+                int(phash_max),
+                full=near_duplicate_full,
+            )
 
     avg_aesthetic = (sum(aesthetic_scores) / len(aesthetic_scores)) if aesthetic_scores else None
     return {
@@ -523,7 +531,10 @@ def audit_dataset(
             "missing_count": missing_count,
             "avg_aesthetic": (round(avg_aesthetic, 3) if avg_aesthetic is not None else None),
             "near_duplicate_check_limited": bool(
-                enable_phash and phash_max is not None and total_rows > PHASH_NEAR_DUPLICATE_LIMIT
+                enable_phash
+                and phash_max is not None
+                and total_rows > PHASH_NEAR_DUPLICATE_LIMIT
+                and not near_duplicate_full
             ),
             "near_duplicate_checked": phash_checked,
             "near_duplicate_attempted": phash_attempted_count,

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -105,7 +105,8 @@ def _caption_tags(caption: str) -> set[str]:
     }
 
 
-def _resolve_scope_ids(request: ConsistencyReportRequest) -> List[int]:
+def _resolve_scope_ids(request: ConsistencyReportRequest) -> Tuple[List[int], int]:
+    """Return the ids to check (at most MAX_REPORT_IMAGES) and the scope size."""
     if request.image_ids:
         seen = set()
         ids: List[int] = []
@@ -114,19 +115,20 @@ def _resolve_scope_ids(request: ConsistencyReportRequest) -> List[int]:
             if image_id > 0 and image_id not in seen:
                 seen.add(image_id)
                 ids.append(image_id)
-        return ids[:MAX_REPORT_IMAGES]
+        return ids[:MAX_REPORT_IMAGES], len(ids)
     if request.selection_token:
         from services.tag_export_service import iter_selection_token_id_chunks
 
         ids = []
+        scope_total = 0
         for chunk in iter_selection_token_id_chunks(
             request.selection_token, chunk_size=500, snapshot=True
         ):
-            ids.extend(int(v) for v in chunk)
-            if len(ids) >= MAX_REPORT_IMAGES:
-                break
-        return ids[:MAX_REPORT_IMAGES]
-    return []
+            scope_total += len(chunk)
+            if len(ids) < MAX_REPORT_IMAGES:
+                ids.extend(int(v) for v in chunk)
+        return ids[:MAX_REPORT_IMAGES], scope_total
+    return [], 0
 
 
 def _finding(
@@ -153,10 +155,17 @@ def _finding(
 
 
 def build_consistency_report(request: ConsistencyReportRequest) -> Dict[str, Any]:
-    ids = _resolve_scope_ids(request)
+    ids, scope_total = _resolve_scope_ids(request)
     total = len(ids)
     if total == 0:
-        return {"images": 0, "findings": [], "tag_frequencies": [], "shot_distribution": {}}
+        return {
+            "images": 0,
+            "images_in_scope": scope_total,
+            "images_truncated": False,
+            "findings": [],
+            "tag_frequencies": [],
+            "shot_distribution": {},
+        }
 
     effective_captions = None
     if request.effective_captions is not None:
@@ -381,6 +390,10 @@ def build_consistency_report(request: ConsistencyReportRequest) -> Dict[str, Any
 
     return {
         "images": total,
+        # The check covers at most MAX_REPORT_IMAGES; say so instead of
+        # silently reporting on a prefix of a larger scope.
+        "images_in_scope": scope_total,
+        "images_truncated": scope_total > total,
         "trigger": request.trigger,
         "training_purpose": purpose,
         "findings": findings,

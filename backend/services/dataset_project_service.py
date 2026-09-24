@@ -144,16 +144,86 @@ def _capture_local_source(
     }
 
 
+def _saved_item_input(
+    item: DatasetProjectLibraryItemRequest | DatasetProjectLocalItemRequest,
+    saved_record: project_db.DatasetProjectRecord | None,
+) -> project_db.DatasetProjectItemInput:
+    """Return a saved entry unchanged, keeping its missing or changed mark.
+
+    Nothing is re-read from disk, so a missing or replaced file is never
+    rebound to a new identity; it only keeps its place in the project.
+    """
+    saved_items = saved_record["items"] if saved_record is not None else []
+    if isinstance(item, DatasetProjectLibraryItemRequest):
+        for saved in saved_items:
+            if (
+                saved["item_type"] == "library"
+                and saved["source_image_id"] == item.image_id
+            ):
+                return {
+                    "item_type": "library",
+                    "image_id": item.image_id,
+                    "missing": bool(saved["missing"]),
+                }
+        raise DatasetProjectSourceValidationError(
+            f"library image {item.image_id}",
+            "keep_as_saved needs an entry that the saved project already has",
+        )
+    try:
+        requested_key = indexed_image_path_match_key(
+            str(Path(normalize_user_path(item.path)).resolve(strict=False))
+        )
+    except (OSError, ValueError) as error:
+        raise DatasetProjectSourceValidationError(
+            item.path,
+            f"the path cannot be resolved: {error}",
+        ) from error
+    for saved in saved_items:
+        if (
+            saved["item_type"] == "local"
+            and indexed_image_path_match_key(saved["path"]) == requested_key
+        ):
+            return {
+                "item_type": "local",
+                "path": saved["path"],
+                "path_key": requested_key,
+                "size": saved["size"],
+                "mtime_ns": saved["mtime_ns"],
+                "device": saved["device"],
+                "inode": saved["inode"],
+            }
+    raise DatasetProjectSourceValidationError(
+        item.path,
+        "keep_as_saved needs an entry that the saved project already has",
+    )
+
+
 def _capture_project_items(
     request: DatasetProjectCreateRequest | DatasetProjectUpdateRequest,
     trusted_sources: dict[str, tuple[int, str, str, str]],
     project_id: int | None,
+    saved_record: project_db.DatasetProjectRecord | None = None,
 ) -> list[project_db.DatasetProjectItemInput]:
     captured: list[project_db.DatasetProjectItemInput] = []
     local_path_keys: set[str] = set()
     for item in request.items:
+        if item.keep_as_saved:
+            kept = _saved_item_input(item, saved_record)
+            if kept["item_type"] == "local":
+                if kept["path_key"] in local_path_keys:
+                    raise DatasetProjectSourceValidationError(
+                        kept["path"],
+                        "the canonical path appears more than once in the project",
+                    )
+                local_path_keys.add(kept["path_key"])
+            captured.append(kept)
+            continue
         if isinstance(item, DatasetProjectLibraryItemRequest):
-            captured.append({"item_type": "library", "image_id": item.image_id})
+            captured.append({
+                "item_type": "library",
+                "image_id": item.image_id,
+                "missing": False,
+            })
             continue
         local_source = _capture_local_source(item, trusted_sources, project_id)
         path_key = local_source["path_key"]
@@ -341,6 +411,7 @@ def update_dataset_project(
         request,
         _trusted_local_sources(current_record),
         project_id,
+        current_record,
     )
     sidecar_snapshot = _captured_sidecar_snapshot(captured_items)
     record = project_db.update_dataset_project_record(

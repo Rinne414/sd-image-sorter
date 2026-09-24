@@ -174,12 +174,13 @@ def export_dataset(
     pending_package_run_id: Optional[str] = None,
 ) -> DatasetExportResponse:
     """Authorize and execute a synchronous public dataset export."""
-    authorize_dataset_export(request)
+    authorization = authorize_dataset_export(request)
     return _export_dataset_engine(
         request,
         progress_callback=progress_callback,
         cancel_event=cancel_event,
         pending_package_run_id=pending_package_run_id,
+        skipped_items=authorization.skipped_items,
     )
 
 
@@ -192,7 +193,7 @@ def export_dataset_job(
     completion_gate: Callable[[], bool],
 ) -> DatasetExportResponse:
     """Re-authorize at the async worker boundary before artifact writes."""
-    authorize_dataset_export(request)
+    authorization = authorize_dataset_export(request)
     output_path = _validate_export_request(request)
     if output_path is None:
         raise PackageIntegrityError(
@@ -211,6 +212,7 @@ def export_dataset_job(
         cancel_event=cancel_event,
         pending_package_run_id=pending_package_run_id,
         completion_gate=completion_gate,
+        skipped_items=authorization.skipped_items,
     )
 
 
