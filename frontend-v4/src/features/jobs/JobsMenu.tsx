@@ -8,6 +8,7 @@ import { useClickOutside, useLayer } from '../../ui/layers'
 import { canStop, jobHeadline, stopJob, undoJob, useJobs, type Job } from './jobs'
 import styles from './Jobs.module.css'
 import { isFinished } from './progress'
+import { useSelectionDialog } from '../selection/dialogs'
 
 /** Failures listed per job; the rest are counted. */
 const MAX_LISTED = 20
@@ -108,7 +109,7 @@ function JobRow({ job }: { job: Job }) {
       {job.adopted && <p className={styles.note}>{t('jobs.startedElsewhere')}</p>}
       {!finished && job.destination && (
         <p className={`${styles.note} mono`} title={job.destination}>
-          {t('jobs.to', { path: tailOfPath(job.destination, 44) })}
+          {t(job.kind === 'reconnect' ? 'jobs.in' : 'jobs.to', { path: tailOfPath(job.destination, 44) })}
         </p>
       )}
       {!finished && (
@@ -145,6 +146,18 @@ function JobRow({ job }: { job: Job }) {
           ))}
           {unlisted > 0 && <li className={styles.note}>{t('jobs.moreFailures', { n: unlisted })}</li>}
         </ul>
+      )}
+      {finished && p.toReview > 0 && (
+        <button
+          type="button"
+          className="btn"
+          onClick={() => {
+            setOpen(false)
+            useSelectionDialog.getState().showFor('missing', null, 1)
+          }}
+        >
+          {t('jobs.review', { n: p.toReview })}
+        </button>
       )}
       {job.undo && (
         <button type="button" className="btn" onClick={() => void undoJob(job)} disabled={job.undo.done}>

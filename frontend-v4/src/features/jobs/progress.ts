@@ -1,10 +1,11 @@
 // Reads the backend's progress payloads for long jobs into one shape.
 // move/copy: GET /api/move/progress · trash: GET /api/images/delete-selected/progress
 // · remove: GET /api/images/remove-selected/progress · tag: GET /api/tag/progress
-// · install: GET /api/models/download-progress · colors: GET /api/colors/progress.
+// · install: GET /api/models/download-progress · colors: GET /api/colors/progress
+// · reconnect: GET /api/images/reconnect-missing/progress.
 
 /** tags: a bulk tag edit, finished when it is recorded (kept for its undo). */
-export type JobKind = 'move' | 'copy' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors'
+export type JobKind = 'move' | 'copy' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors' | 'reconnect'
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
 
 export interface JobFailure {
@@ -28,6 +29,8 @@ export interface JobProgress {
   topTags: { tag: string; count: number }[]
   /** install only: the model is on disk but the app must restart to use all of it. */
   needsRestart: boolean
+  /** reconnect only: found files that match several missing records and wait for the user. */
+  toReview: number
   currentItem: string | null
   message: string
 }
@@ -135,6 +138,7 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
     alreadyGone: 0,
     topTags: [],
     needsRestart: false,
+    toReview: 0,
     currentItem: str(raw.current_item) || null,
     message: str(raw.message),
   }
@@ -158,6 +162,8 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
       return base
     case 'colors':
       return readColors(base, raw)
+    case 'reconnect':
+      return { ...base, succeeded: num(raw.matched), failedCount: num(raw.errors), toReview: num(raw.review_pending_total) }
   }
 }
 

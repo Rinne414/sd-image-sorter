@@ -47,7 +47,7 @@ export const useJobs = create<JobsState>((set, get) => ({
   clearFinished: () => set({ jobs: get().jobs.filter((j) => !isFinished(j.progress.status)) }),
 }))
 
-type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors'
+type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors' | 'reconnect'
 
 const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind)
 
@@ -82,6 +82,10 @@ const DRIVERS: Record<Queue, Driver> = {
     poll: async () => unwrap(await api.GET('/api/colors/progress')),
     cancel: async () => unwrap(await api.POST('/api/colors/cancel')),
   },
+  reconnect: {
+    poll: async () => unwrap(await api.GET('/api/images/reconnect-missing/progress')),
+    cancel: async () => unwrap(await api.POST('/api/images/reconnect-missing/cancel')),
+  },
   // Bulk tag edits finish inside their request; they are never polled.
   tags: {
     poll: async () => ({ status: 'done' }),
@@ -114,6 +118,7 @@ export function startingProgress(total: number, status: JobProgress['status'] = 
     alreadyGone: 0,
     topTags: [],
     needsRestart: false,
+    toReview: 0,
     currentItem: null,
     message: '',
   }
@@ -240,6 +245,7 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   install: ['model-status'],
   tags: ['images', 'image', 'suggest', 'image-count', 'library-health'],
   colors: ['images', 'image', 'image-count', 'colors-missing'],
+  reconnect: ['images', 'image', 'missing-summary', 'missing-groups', 'repair-candidates', 'library-health', 'folders'],
 }
 
 let onUndo: ((job: Job) => Promise<void>) | null = null
@@ -289,6 +295,7 @@ const RUNNING: Record<JobKind, MessageKey> = {
   install: 'jobs.running.install',
   tags: 'jobs.done.tags',
   colors: 'jobs.running.colors',
+  reconnect: 'jobs.running.reconnect',
 }
 
 const DONE: Record<JobKind, MessageKey> = {
@@ -300,6 +307,7 @@ const DONE: Record<JobKind, MessageKey> = {
   install: 'jobs.done.install',
   tags: 'jobs.done.tags',
   colors: 'jobs.done.colors',
+  reconnect: 'jobs.done.reconnect',
 }
 
 /** One line that says what happened (or is happening) to this job. */
@@ -322,7 +330,7 @@ export function jobHeadline(job: Job): string {
     case 'done': {
       // Chinese joins the destination without a space; English carries its own.
       let text = tr(DONE[job.kind], { n: p.succeeded, name: job.label ?? '' })
-      if (job.destination) text += tr('jobs.to', { path: tailOfPath(job.destination, 40) })
+      if (job.destination && (job.kind === 'move' || job.kind === 'copy')) text += tr('jobs.to', { path: tailOfPath(job.destination, 40) })
       if (p.failedCount) text += tr('jobs.failedSuffix', { n: p.failedCount })
       if (p.alreadyGone) text += tr('jobs.alreadyGone', { n: p.alreadyGone })
       return text

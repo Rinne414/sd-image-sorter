@@ -125,6 +125,26 @@ describe('readProgress', () => {
     expect(readProgress('colors', { ...running, running: false, completed: 9 })).toMatchObject({ status: 'done', succeeded: 9 })
   })
 
+  test('reconnect: files checked, records found again, and matches left for review', () => {
+    const p = readProgress('reconnect', {
+      status: 'done',
+      current: 120,
+      total: 120,
+      checked_files: 120,
+      matched: 40,
+      ambiguous: 3,
+      review_pending_total: 3,
+      errors: 1,
+      current_item: null,
+    })
+    expect(p).toMatchObject({ status: 'done', current: 120, total: 120, succeeded: 40, failedCount: 1, toReview: 3 })
+    expect(readProgress('reconnect', { status: 'running', current: 10, total: 0, matched: 2 })).toMatchObject({
+      status: 'running',
+      succeeded: 2,
+      toReview: 0,
+    })
+  })
+
   test('unknown or reset states never look like success', () => {
     expect(readProgress('move', { status: 'idle' }).status).toBe('idle')
     expect(readProgress('move', { status: 'exploded' }).status).toBe('error')

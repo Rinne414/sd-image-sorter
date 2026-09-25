@@ -13,7 +13,7 @@ import { expect, type Page } from '@playwright/test'
 
 export const repoRoot = path.resolve(__dirname, '..', '..', '..')
 export const tmpRoot = path.join(repoRoot, '.tmp')
-const dbPath = process.env.SD_IMAGE_SORTER_DB_PATH || path.join(repoRoot, 'data', 'images.db')
+export const dbPath = process.env.SD_IMAGE_SORTER_DB_PATH || path.join(repoRoot, 'data', 'images.db')
 
 export const VIEWPORTS = [
   { width: 1366, height: 768 },

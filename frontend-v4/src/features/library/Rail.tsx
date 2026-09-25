@@ -209,7 +209,7 @@ function Status() {
   const rows: StatusRow[] = [
     { key: 'rail.untagged', n: untagged, action: { label: t('sel.tag'), run: () => showFor('tag', null, untagged) } },
     { key: 'rail.unreadable', n: c.unreadable ?? 0 },
-    { key: 'rail.missing', n: missing.data ?? 0 },
+    { key: 'rail.missing', n: missing.data ?? 0, action: { label: t('status.handleMissing'), run: () => showFor('missing', null, missing.data ?? 0) } },
     { key: 'rail.metaError', n: c.metadata_error ?? 0 },
     {
       key: 'status.colorsMissing',
