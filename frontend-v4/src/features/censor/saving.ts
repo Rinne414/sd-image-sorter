@@ -7,12 +7,13 @@ import { batchKey } from '../batch/batchApi'
 import { withCensorState, type Op } from './ops'
 import { renderOps } from './paint'
 import { createRaster, type Raster } from './raster'
-import { editOf, forgetEdit, isDirty, libraryOf, patchEdit, unsavedIds } from './session'
+import { ItemGoneError, runSave } from './saveFlow'
+import { libraryOf, unsavedIds } from './session'
 
 // Loading originals and saving censored copies. A copy is saved from a fresh
-// replay of the ops on the original (the same bytes the editor shows), then
-// the ops go into the item's state so reopening the batch can edit them again.
-// An image counts as censored only after the copy upload succeeded.
+// replay of the ops on the original (the same bytes the editor shows), sent
+// together with the ops (the item's state) so reopening the batch can edit
+// them again. An image counts as censored only after that request succeeded.
 
 const ORIGINALS_KEPT = 3
 const originals = new Map<number, Promise<Raster>>()
@@ -81,24 +82,34 @@ const itemRequest = (batchId: number, imageId: number) => ({
   headers: { 'X-SD-Library-Id': libraryFor(batchId) },
 })
 
-async function writeState(batchId: number, imageId: number, ops: Op[], raster: Raster | null): Promise<void> {
-  const state = cachedItem(batchId, imageId)?.item_state ?? null
-  const censor = raster && { v: 1 as const, width: raster.width, height: raster.height, ops }
-  const body = { item_state: withCensorState(state, censor) }
-  storeItem(batchId, unwrap<BatchItem>(await api.PATCH('/api/batches/{batch_id}/items/{image_id}', { ...itemRequest(batchId, imageId), body })))
+/** The item state to send: `null` rather than an empty object when nothing is left. */
+function stateBody(state: Record<string, unknown>): Record<string, unknown> | null {
+  return Object.keys(state).length > 0 ? state : null
 }
 
-/** Make the server match `ops`: a copy plus the ops, or (no ops) no copy and no ops. */
+/**
+ * Make the server hold exactly `ops`, in ONE request each way: the rendered
+ * copy together with the ops (PUT), or (no ops) no copy and no ops (DELETE
+ * with the state). The server writes both or neither, so a copy never sits
+ * next to ops it was not made from.
+ */
 async function writeCopy(batchId: number, imageId: number, ops: Op[]): Promise<void> {
-  if (ops.length === 0) {
-    storeItem(batchId, unwrap<BatchItem>(await api.DELETE('/api/batches/{batch_id}/items/{image_id}/censored', itemRequest(batchId, imageId))))
-    await writeState(batchId, imageId, ops, null)
-    return
+  const state = cachedItem(batchId, imageId)?.item_state ?? null
+  try {
+    if (ops.length === 0) {
+      const body = { item_state: stateBody(withCensorState(state, null)) }
+      storeItem(batchId, unwrap<BatchItem>(await api.DELETE('/api/batches/{batch_id}/items/{image_id}/censored', { ...itemRequest(batchId, imageId), body })))
+      return
+    }
+    const rendered = renderOps(await loadOriginal(imageId), ops)
+    const censor = { v: 1 as const, width: rendered.width, height: rendered.height, ops }
+    const body = { image_data: await encodePng(rendered), item_state: stateBody(withCensorState(state, censor)) }
+    storeItem(batchId, unwrap<BatchItem>(await api.PUT('/api/batches/{batch_id}/items/{image_id}/censored', { ...itemRequest(batchId, imageId), body })))
+  } catch (error) {
+    throw gone(error) ? new ItemGoneError((error as Error).message) : error
+  } finally {
+    void queryClient.invalidateQueries({ queryKey: ['batches'] })
   }
-  const rendered = renderOps(await loadOriginal(imageId), ops)
-  const body = { image_data: await encodePng(rendered) }
-  storeItem(batchId, unwrap<BatchItem>(await api.PUT('/api/batches/{batch_id}/items/{image_id}/censored', { ...itemRequest(batchId, imageId), body })))
-  await writeState(batchId, imageId, ops, rendered)
 }
 
 const gone = (error: unknown) =>
@@ -108,33 +119,8 @@ const gone = (error: unknown) =>
  * Save one image's edit if it changed (`force`: even when it did not, e.g. to
  * delete a copy that has no ops). Returns true when the server now matches it.
  */
-export async function saveImage(batchId: number, imageId: number, force = false): Promise<boolean> {
-  const edit = editOf(batchId, imageId)
-  if (!edit || (!force && !isDirty(edit))) return true
-  if (edit.saving) {
-    patchEdit(batchId, imageId, { again: true })
-    return false
-  }
-  const ops = edit.ops
-  patchEdit(batchId, imageId, { saving: true, again: false })
-  let ok = false
-  try {
-    await writeCopy(batchId, imageId, ops)
-    patchEdit(batchId, imageId, { saved: ops, error: null })
-    ok = true
-  } catch (error) {
-    if (gone(error)) {
-      forgetEdit(batchId, imageId)
-      return false
-    }
-    patchEdit(batchId, imageId, { error: (error as Error).message || tr('censor.saveUnknown') })
-  } finally {
-    patchEdit(batchId, imageId, { saving: false })
-    void queryClient.invalidateQueries({ queryKey: ['batches'] })
-  }
-  const after = editOf(batchId, imageId)
-  if (after?.again && isDirty(after)) return saveImage(batchId, imageId)
-  return ok && !(after && isDirty(after))
+export function saveImage(batchId: number, imageId: number, force = false): Promise<boolean> {
+  return runSave(batchId, imageId, (ops) => writeCopy(batchId, imageId, ops), { force, unknownReason: tr('censor.saveUnknown') })
 }
 
 /**

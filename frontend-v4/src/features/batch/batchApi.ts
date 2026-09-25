@@ -113,15 +113,18 @@ export interface AddResult {
   skipped: number
 }
 
-export async function addToBatch(batchId: number, imageIds: number[]): Promise<AddResult | null> {
-  try {
-    const res = unwrap<{ batch: Batch; added_image_ids: number[]; skipped_image_ids: number[] }>(
-      await api.POST('/api/batches/{batch_id}/items', { params: { path: { batch_id: batchId } }, body: { image_ids: imageIds } }),
-    )
-    return { batch: store(res.batch), added: res.added_image_ids.length, skipped: res.skipped_image_ids.length }
-  } catch (error) {
-    return fail(error)
-  }
+/** Append images; runs in the batch's queue, after any change to it that is still on its way. */
+export function addToBatch(batchId: number, imageIds: number[]): Promise<AddResult | null> {
+  return enqueue(batchId, async () => {
+    try {
+      const res = unwrap<{ batch: Batch; added_image_ids: number[]; skipped_image_ids: number[] }>(
+        await api.POST('/api/batches/{batch_id}/items', { params: { path: { batch_id: batchId } }, body: { image_ids: imageIds } }),
+      )
+      return { batch: store(res.batch), added: res.added_image_ids.length, skipped: res.skipped_image_ids.length }
+    } catch (error) {
+      return fail(error)
+    }
+  })
 }
 
 // Changes to one batch run one after another: batch patches (each with the

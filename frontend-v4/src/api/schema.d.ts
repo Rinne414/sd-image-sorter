@@ -6229,10 +6229,27 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
-        /** BatchCensoredCopyRequest */
+        /**
+         * BatchCensoredCopyRequest
+         * @description ``item_state``, when sent, is written together with the copy: both or neither.
+         */
         BatchCensoredCopyRequest: {
             /** Image Data */
             image_data: string;
+            /** Item State */
+            item_state?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * BatchCensoredDiscardRequest
+         * @description Optional body of a discard: the item's new state, written with the discard.
+         */
+        BatchCensoredDiscardRequest: {
+            /** Item State */
+            item_state?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** BatchCreateRequest */
         BatchCreateRequest: {
@@ -20849,7 +20866,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["BatchCensoredDiscardRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

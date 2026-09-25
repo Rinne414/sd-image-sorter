@@ -9,7 +9,9 @@ Paths are stored relative to the batch folder so a portable install can move.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
+import uuid
 from pathlib import Path
 
 from config import get_data_dir
@@ -60,6 +62,48 @@ def remove_file_quietly(path: Path | None) -> None:
         path.unlink(missing_ok=True)
     except OSError:
         logger.warning("Could not remove batch working file %s", path, exc_info=True)
+
+
+class StagedCopy:
+    """A new working copy written beside its target and swapped in only while
+    the database row that points at it commits.
+
+    ``swap_in`` runs inside that transaction: the previous copy is set aside
+    and the new one takes its place. If anything fails before the commit
+    lands, ``roll_back`` brings the previous copy back and removes the new
+    one, so a copy on disk always matches the row. Dot-names keep these files
+    out of ``prune_censored_files``.
+    """
+
+    def __init__(self, target: Path):
+        self.target = target
+        token = uuid.uuid4().hex
+        self.staged = target.with_name(f".{target.stem}.{token}.new{target.suffix}")
+        self._aside = target.with_name(f".{target.stem}.{token}.old{target.suffix}")
+        self._set_aside = False
+        self._swapped = False
+
+    def swap_in(self) -> None:
+        if self.target.exists():
+            os.replace(self.target, self._aside)
+            self._set_aside = True
+        os.replace(self.staged, self.target)
+        self._swapped = True
+
+    def roll_back(self) -> None:
+        try:
+            if self._set_aside:
+                os.replace(self._aside, self.target)
+            elif self._swapped:
+                self.target.unlink(missing_ok=True)
+        except OSError:
+            logger.error(
+                "Could not put back the previous working copy %s", self.target, exc_info=True
+            )
+        remove_file_quietly(self.staged)
+
+    def finish(self) -> None:
+        remove_file_quietly(self._aside)
 
 
 def remove_batch_folder(batch_id: int) -> None:

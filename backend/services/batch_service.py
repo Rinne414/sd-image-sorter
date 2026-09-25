@@ -19,6 +19,7 @@ import db_batches as batch_db
 from services import batch_workdir
 from services.batch_models import (
     BatchCensoredCopyRequest,
+    BatchCensoredDiscardRequest,
     BatchCreateRequest,
     BatchImageIdsRequest,
     BatchItemPatchRequest,
@@ -212,6 +213,16 @@ def reorder_items(batch_id: int, request: BatchReorderRequest) -> dict[str, Any]
     return get_batch(batch_id)
 
 
+def _item_state_field(
+    request: BatchItemPatchRequest | BatchCensoredCopyRequest | BatchCensoredDiscardRequest,
+) -> dict[str, Any]:
+    """The item_state column change a request asks for: none when absent, NULL for null."""
+    if "item_state" not in request.model_fields_set:
+        return {}
+    state = request.item_state
+    return {"item_state_json": None if state is None else json.dumps(state)}
+
+
 def patch_item(
     batch_id: int, image_id: int, request: BatchItemPatchRequest
 ) -> dict[str, Any]:
@@ -219,9 +230,7 @@ def patch_item(
     if "output_name" in request.model_fields_set:
         name = (request.output_name or "").strip()
         fields["output_name"] = name or None
-    if "item_state" in request.model_fields_set:
-        state = request.item_state
-        fields["item_state_json"] = None if state is None else json.dumps(state)
+    fields.update(_item_state_field(request))
     row = batch_db.update_item(batch_id, image_id, fields)
     return _item_response(batch_id, row)
 
@@ -250,6 +259,13 @@ def _decode_censored_image(image_data: str) -> Image.Image:
 def save_censored_copy(
     batch_id: int, image_id: int, request: BatchCensoredCopyRequest
 ) -> dict[str, Any]:
+    """Write the copy and (when sent) the item state as one change: both or neither.
+
+    The copy is encoded to a staging file first; it replaces the previous copy
+    inside the database transaction that records it, and any failure up to
+    the commit (the item went away, the database refused) puts the previous
+    copy back.
+    """
     from services.censor_service import CensorService
 
     batch_db.read_item(batch_id, image_id)
@@ -260,20 +276,29 @@ def save_censored_copy(
         raise RuntimeError(
             f"Censored copy path for image {image_id} left batch {batch_id}"
         )
-    clean = CensorService._strip_all_metadata(image)
-    CensorService._save_image_with_format(clean, str(target), "png", {})
+    copy = batch_workdir.StagedCopy(target)
+    fields = {"censored_path": relative_path, **_item_state_field(request)}
     try:
-        row = batch_db.update_item(batch_id, image_id, {"censored_path": relative_path})
-    except batch_db.BatchError:
-        # The item (or batch) went away while we were writing.
-        batch_workdir.remove_file_quietly(target)
+        clean = CensorService._strip_all_metadata(image)
+        CensorService._save_image_with_format(clean, str(copy.staged), "png", {})
+        row = batch_db.update_item(batch_id, image_id, fields, before_commit=copy.swap_in)
+    except BaseException:
+        copy.roll_back()
         raise
+    copy.finish()
     return _item_response(batch_id, row)
 
 
-def discard_censored_copy(batch_id: int, image_id: int) -> dict[str, Any]:
+def discard_censored_copy(
+    batch_id: int, image_id: int, request: BatchCensoredDiscardRequest | None = None
+) -> dict[str, Any]:
+    """Drop the copy (and, when sent, set the item state) in one database change.
+
+    The file goes only after that change committed: a failure keeps both.
+    """
     current = batch_db.read_item(batch_id, image_id)
-    row = batch_db.update_item(batch_id, image_id, {"censored_path": None})
+    fields = {"censored_path": None, **(_item_state_field(request) if request else {})}
+    row = batch_db.update_item(batch_id, image_id, fields)
     batch_workdir.remove_file_quietly(
         batch_workdir.resolve_censored_path(batch_id, current["censored_path"])
     )

@@ -10,7 +10,7 @@ step, archive state); item operations validate themselves and only touch
 from __future__ import annotations
 
 import sqlite3
-from typing import Any
+from typing import Any, Callable
 
 from db_core import get_db
 from library_context import current_library_sql, get_current_library_id
@@ -361,8 +361,17 @@ def _require_item(
     return dict(row)
 
 
-def update_item(batch_id: int, image_id: int, fields: dict[str, Any]) -> dict[str, Any]:
-    """Set per-item columns: output_name, item_state_json, censored_path/_at."""
+def update_item(
+    batch_id: int,
+    image_id: int,
+    fields: dict[str, Any],
+    before_commit: Callable[[], None] | None = None,
+) -> dict[str, Any]:
+    """Set per-item columns: output_name, item_state_json, censored_path/_at.
+
+    ``before_commit`` runs inside the write transaction after the row changed;
+    if it raises, nothing is committed (a file swap that must match the row).
+    """
     allowed = {"output_name", "item_state_json", "censored_path"}
     unknown = set(fields) - allowed
     if unknown:
@@ -384,7 +393,10 @@ def update_item(batch_id: int, image_id: int, fields: dict[str, Any]) -> dict[st
                 (*params, batch_id, image_id),
             )
         _touch(conn, batch_id)
-        return _require_item(conn, batch_id, image_id)
+        row = _require_item(conn, batch_id, image_id)
+        if before_commit is not None:
+            before_commit()
+        return row
 
 
 def list_templates(kind: str | None) -> list[dict[str, Any]]:

@@ -112,6 +112,17 @@ async function apiItem(page: Page, imageId: number): Promise<ApiItem> {
 
 const stripItem = (page: Page, i: number) => page.getByTestId('censor-strip-item').nth(i)
 
+/** The batch writes the page sends from now on, as "METHOD /path" (plus whether a body came with it). */
+function recordWrites(page: Page): string[] {
+  const writes: string[] = []
+  page.on('request', (req) => {
+    const url = new URL(req.url())
+    if (req.method() === 'GET' || !url.pathname.startsWith('/api/batches/')) return
+    writes.push(`${req.method()} ${url.pathname}${req.postData() ? ' +body' : ''}`)
+  })
+  return writes
+}
+
 /** Drag through image-pixel points on the canvas. */
 async function paint(page: Page, points: [number, number][]): Promise<void> {
   const box = await page.getByTestId('censor-canvas').boundingBox()
@@ -211,7 +222,8 @@ test('paint, leave the image, and the saved copy differs only where painted; und
   expect(painted?.inside).toBeGreaterThan(90)
   expect(painted?.far).toBe(0)
 
-  // leaving the image saves its copy
+  // leaving the image saves its copy and its ops in one request
+  const writes = recordWrites(page)
   await page.keyboard.press('ArrowRight')
   await expect(page.getByTestId('censor-position')).toHaveText('2 / 2')
   await expect(stripItem(page, 0)).toHaveAttribute('data-state', 'saved')
@@ -223,6 +235,7 @@ test('paint, leave the image, and the saved copy differs only where painted; und
   const saved = await apiItem(page, ids[0] as number)
   expect(saved.has_censored).toBe(true)
   expect(saved.item_state?.censor?.ops).toHaveLength(1)
+  expect(writes).toEqual([`PUT /api/batches/${batchId}/items/${ids[0]}/censored +body`])
   // the second image has no edits and no copy
   await expect(stripItem(page, 1)).toHaveAttribute('data-state', 'clean')
   expect((await page.request.get(`/api/batches/${batchId}/items/${ids[1]}/censored`)).status()).toBe(404)
@@ -285,8 +298,10 @@ test('"Back to original" asks first (Cancel focused) and removes the copy', asyn
   await expect(stripItem(page, 0)).toHaveAttribute('data-state', 'saved')
 
   await page.getByTestId('censor-reset').click()
+  const writes = recordWrites(page)
   await page.getByTestId('censor-reset-ok').click()
   await expect(stripItem(page, 0)).toHaveAttribute('data-state', 'clean')
+  expect(writes).toEqual([`DELETE /api/batches/${batchId}/items/${ids[0]}/censored +body`])
   await expect.poll(async () => (await page.request.get(`/api/batches/${batchId}/items/${ids[0]}/censored`)).status()).toBe(404)
   const item = await apiItem(page, ids[0] as number)
   expect(item.has_censored).toBe(false)
@@ -306,9 +321,13 @@ test('a failed save shows on the item with its reason and is retried on the next
   await openBatch(page)
   await expect(page.getByTestId('censor-position')).toHaveText('2 / 2')
   const failing = /\/api\/batches\/\d+\/items\/\d+\/censored$/
-  await page.route(failing, (route) =>
-    route.request().method() === 'PUT' ? route.fulfill({ status: 500, json: { detail: 'disk full (test)' } }) : route.continue(),
+  // the save fails once
+  await page.route(
+    failing,
+    (route) => (route.request().method() === 'PUT' ? route.fulfill({ status: 500, json: { detail: 'disk full (test)' } }) : route.continue()),
+    { times: 1 },
   )
+  const writes = recordWrites(page)
   await paint(page, STROKE)
   await page.keyboard.press('ArrowLeft')
   await expect(stripItem(page, 1)).toHaveAttribute('data-state', 'error')
@@ -317,14 +336,18 @@ test('a failed save shows on the item with its reason and is retried on the next
   const item = await apiItem(page, ids[1] as number)
   expect(item.has_censored).toBe(false)
   expect(item.item_state?.censor).toBeUndefined()
-
-  await page.unroute(failing)
+  // still unsaved: leaving the image it failed on does not count it as censored
   await page.keyboard.press('ArrowRight')
   await expect(page.getByTestId('censor-status')).toContainText('Save failed: disk full (test).')
   await page.keyboard.press('ArrowLeft')
   await expect(stripItem(page, 1)).toHaveAttribute('data-state', 'saved')
   await expect(page.getByTestId('censor-strip-failed')).toHaveCount(0)
-  expect((await apiItem(page, ids[1] as number)).has_censored).toBe(true)
+  // the retry wrote the copy and the ops together; no separate state request was ever sent
+  const retried = await apiItem(page, ids[1] as number)
+  expect(retried.has_censored).toBe(true)
+  expect(retried.item_state?.censor?.ops).toHaveLength(1)
+  const copy = `PUT /api/batches/${batchId}/items/${ids[1]}/censored +body`
+  expect(writes).toEqual([copy, copy])
 })
 
 test('an unsaved edit makes closing the tab ask first', async ({ page }) => {

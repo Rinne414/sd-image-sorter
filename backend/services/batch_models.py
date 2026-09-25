@@ -84,10 +84,22 @@ class BatchItemPatchRequest(BaseModel):
 
 
 class BatchCensoredCopyRequest(BaseModel):
+    """``item_state``, when sent, is written together with the copy: both or neither."""
+
     model_config = ConfigDict(extra="forbid")
 
     # Same bound as the censor editor's canvas save (CensorSaveDataRequest).
     image_data: str = Field(min_length=1, max_length=100_000_000)
+    # Same as the item PATCH: absent keeps the state, null clears it.
+    item_state: dict[str, Any] | None = None
+
+
+class BatchCensoredDiscardRequest(BaseModel):
+    """Optional body of a discard: the item's new state, written with the discard."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    item_state: dict[str, Any] | None = None
 
 
 class BatchTemplateCreateRequest(BaseModel):

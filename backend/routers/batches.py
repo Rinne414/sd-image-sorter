@@ -9,13 +9,14 @@ from __future__ import annotations
 
 from typing import Any, Literal, NoReturn, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import FileResponse
 
 import db_batches as batch_db
 from services import batch_export_service, batch_service
 from services.batch_models import (
     BatchCensoredCopyRequest,
+    BatchCensoredDiscardRequest,
     BatchCreateRequest,
     BatchExportRequest,
     BatchImageIdsRequest,
@@ -282,9 +283,13 @@ def get_batch_item_censored(batch_id: int, image_id: int) -> FileResponse:
 @router.delete(
     "/{batch_id}/items/{image_id}/censored", summary="Discard an item's censored copy"
 )
-def delete_batch_item_censored(batch_id: int, image_id: int) -> dict[str, Any]:
+def delete_batch_item_censored(
+    batch_id: int,
+    image_id: int,
+    request: Optional[BatchCensoredDiscardRequest] = Body(default=None),
+) -> dict[str, Any]:
     try:
-        return batch_service.discard_censored_copy(batch_id, image_id)
+        return batch_service.discard_censored_copy(batch_id, image_id, request)
     except batch_db.BatchError as error:
         _raise_http_error(error)
 
