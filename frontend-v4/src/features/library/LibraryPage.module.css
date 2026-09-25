@@ -1,0 +1,103 @@
+.page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.page[data-rail] {
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+}
+
+.page[data-card] {
+  grid-template-columns: minmax(0, 1fr) var(--card-w);
+}
+
+.page[data-rail][data-card] {
+  grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--card-w);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.gridArea {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  color: var(--text-2);
+  background: var(--stage);
+  text-align: center;
+  padding: 24px;
+}
+
+.notice p {
+  margin: 0;
+}
+
+.noticeTitle {
+  font-size: var(--fs-5);
+  color: var(--text);
+}
+
+/* Appears only while something is picked; floats over the grid bottom. */
+.selBar {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100% - 32px);
+  padding: 8px 10px 8px 14px;
+  background: var(--surface-2);
+  box-shadow: var(--shadow-float), inset 3px 0 0 var(--pick);
+  border-radius: var(--cut) var(--radius);
+  corner-shape: bevel round;
+  white-space: nowrap;
+  animation: rise var(--t-med) var(--ease);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    translate: -50% 8px;
+  }
+}
+
+.selCount {
+  color: var(--pick-bright);
+  font-weight: 600;
+}
+
+.selGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.selLabel {
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.selNote {
+  color: var(--faint);
+  font-size: var(--fs-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}

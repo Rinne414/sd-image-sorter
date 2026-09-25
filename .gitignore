@@ -174,6 +174,9 @@ reference/
 node_modules/
 package.json
 package-lock.json
+# V4 frontend is a real npm project: keep its manifest and lockfile.
+!frontend-v4/package.json
+!frontend-v4/package-lock.json
 
 # ToriiGate model files (auto-downloaded, very large)
 models/toriigate/

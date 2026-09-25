@@ -1,0 +1,62 @@
+.wrap {
+  position: relative;
+}
+
+.caret {
+  color: var(--muted);
+  font-size: var(--fs-1);
+}
+
+.menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 180px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface-2);
+  box-shadow: var(--shadow-float);
+  border-radius: var(--cut) var(--radius);
+  corner-shape: bevel round;
+}
+
+.menu[data-align="right"] {
+  left: auto;
+  right: 0;
+}
+
+.menu li[data-divider] {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px 6px 6px;
+  border: 0;
+  background: none;
+  text-align: left;
+  white-space: nowrap;
+  border-radius: var(--radius);
+}
+
+.menu button:hover {
+  background: var(--wash-hover);
+}
+
+.check {
+  width: 12px;
+  color: var(--accent);
+  font-size: 8px;
+  text-align: center;
+}
+
+.itemLabel {
+  flex: 1;
+}

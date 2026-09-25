@@ -1,0 +1,106 @@
+.bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px 10px 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+}
+
+.glyph {
+  position: absolute;
+  left: 11px;
+  top: 5px;
+  color: var(--muted);
+  font-size: 15px;
+  pointer-events: none;
+}
+
+.input {
+  width: 100%;
+  height: 30px;
+  padding: 0 12px 0 32px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-1);
+  color: var(--text);
+  font-size: var(--fs-3);
+  border-radius: var(--cut) var(--radius);
+  corner-shape: bevel round;
+  transition: border-color var(--t-fast) var(--ease);
+}
+
+.input::placeholder {
+  color: var(--faint);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent-line);
+  background: var(--surface-2);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  color: var(--text);
+  background: var(--wash-strong);
+  font-size: var(--fs-2);
+  border-radius: var(--cut-sm);
+  corner-shape: bevel;
+}
+
+.chip:hover {
+  background: var(--accent-soft);
+}
+
+.chip[data-kind="excludeTag"] {
+  color: var(--danger-ink);
+}
+
+.chip[data-kind="stars"] {
+  color: var(--warn);
+}
+
+.chipKey {
+  color: var(--muted);
+}
+
+.chip[data-kind="stars"] .chipKey {
+  color: inherit;
+}
+
+.warning {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  color: var(--danger-ink);
+  font-size: var(--fs-2);
+}
+
+.count {
+  align-self: center;
+  min-width: 88px;
+  text-align: right;
+  color: var(--accent);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}

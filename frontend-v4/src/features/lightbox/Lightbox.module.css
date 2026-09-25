@@ -1,0 +1,203 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: var(--stage);
+  animation: fade var(--t-med) var(--ease);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 12px 0 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.pos {
+  color: var(--accent);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.barGap {
+  flex: 1;
+}
+
+.heart {
+  border: 0;
+  background: none;
+  font-size: 18px;
+  color: var(--faint);
+  padding: 0 6px;
+}
+
+.heart[data-on] {
+  color: var(--ai);
+}
+
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+}
+
+.overlay[data-info] .body {
+  grid-template-columns: minmax(0, 1fr) var(--card-w);
+}
+
+.stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  overflow: hidden;
+  padding: 12px 64px;
+}
+
+.stage[data-actual] {
+  overflow: auto;
+  place-items: start center;
+  padding: 0;
+}
+
+.imgWrap {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  cursor: zoom-in;
+  min-height: 0;
+}
+
+.stage[data-actual] .imgWrap {
+  width: auto;
+  height: auto;
+  cursor: zoom-out;
+}
+
+.under,
+.full {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.stage[data-actual] .under {
+  display: none;
+}
+
+.stage[data-actual] .full {
+  width: auto;
+  height: auto;
+  max-width: none;
+  opacity: 1;
+}
+
+.full {
+  opacity: 0;
+  transition: opacity var(--t-med) var(--ease);
+}
+
+.full[data-ready] {
+  opacity: 1;
+}
+
+.nav {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  width: 44px;
+  height: 88px;
+  translate: 0 -50%;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 40px;
+  line-height: 1;
+  border-radius: var(--radius);
+}
+
+.nav:hover:not(:disabled) {
+  background: var(--wash-hover);
+  color: var(--text);
+}
+
+.nav:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.prev {
+  left: 10px;
+}
+
+.next {
+  right: 10px;
+}
+
+/* Film strip with sprocket holes: the neighbours, always in reach. */
+.strip {
+  display: flex;
+  gap: 6px;
+  height: 104px;
+  padding: 16px 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 8px, rgba(240, 231, 229, 0.13) 8px 17px) top 4px left / 100% 6px no-repeat,
+    repeating-linear-gradient(90deg, transparent 0 8px, rgba(240, 231, 229, 0.13) 8px 17px) bottom 4px left / 100% 6px no-repeat,
+    #0b080d;
+  border-top: 1px solid var(--hairline);
+}
+
+.frame {
+  flex: none;
+  height: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  background: var(--surface-1);
+  opacity: 0.55;
+  transition: opacity var(--t-fast) var(--ease);
+}
+
+.frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.frame:hover {
+  opacity: 0.85;
+}
+
+.frame[data-active] {
+  opacity: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.frame[data-picked] {
+  box-shadow: 0 0 0 2px var(--pick);
+}

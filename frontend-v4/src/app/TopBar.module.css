@@ -1,0 +1,104 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--topbar-h);
+  padding: 0 10px 0 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px 0 4px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  border-radius: var(--radius);
+}
+
+.brand:hover {
+  background: var(--wash-hover);
+}
+
+.mark {
+  color: var(--accent);
+}
+
+.brandName {
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.version {
+  font-size: var(--fs-1);
+  color: var(--on-accent);
+  background: var(--accent);
+  padding: 0 5px;
+  line-height: 16px;
+  clip-path: polygon(4px 0, 100% 0, 100% 100%, 0 100%, 0 4px);
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  margin-left: 14px;
+}
+
+.tab {
+  position: relative;
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: var(--fs-4);
+  border-radius: var(--radius);
+}
+
+.tab:hover {
+  color: var(--text);
+  background: var(--wash);
+}
+
+.tab[aria-current="page"] {
+  color: var(--text);
+}
+
+.tab[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: -7px;
+  height: 2px;
+  background: var(--accent);
+}
+
+.gap {
+  flex: 1;
+}
+
+.command {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: clamp(200px, 22vw, 320px);
+  height: 30px;
+  padding: 0 8px 0 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-1);
+  color: var(--faint);
+  border-radius: var(--cut-sm) var(--radius);
+  corner-shape: bevel round;
+}
+
+.command:hover {
+  border-color: var(--line-strong);
+  color: var(--muted);
+}

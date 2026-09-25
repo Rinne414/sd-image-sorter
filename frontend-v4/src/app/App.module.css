@@ -1,0 +1,10 @@
+.app {
+  display: grid;
+  grid-template-rows: var(--topbar-h) minmax(0, 1fr);
+  height: 100vh;
+  min-width: 1280px;
+}
+
+.body {
+  min-height: 0;
+}

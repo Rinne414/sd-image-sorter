@@ -8,13 +8,23 @@ import re
 import zlib
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 
 logger = logging.getLogger("sd-image-sorter")
 
 _STATIC_CACHE_BUST_RE = re.compile(r'((?:src|href)=")(/static/[^"?]+\.(?:js|css))(")')
+
+
+class ImmutableStaticFiles(StaticFiles):
+    """Serve content-hashed build assets with a year-long immutable cache."""
+
+    async def get_response(self, path: str, scope):  # type: ignore[override]
+        response = await super().get_response(path, scope)
+        if response.status_code == 200:
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
 
 
 class NoCacheStaticFiles(StaticFiles):
@@ -82,3 +92,34 @@ def serve_frontend_index(*, frontend_path: str, app_version: str):
         logger.warning("Falling back to FileResponse for index.html: %s", exc)
         return FileResponse(index_path, headers={"Cache-Control": "no-cache"})
 
+
+V4_NOT_BUILT_MESSAGE = (
+    "SD Image Sorter V4 has not been built yet.\n"
+    "Run `npm install` and `npm run build` in the frontend-v4 folder, then reload this page.\n"
+    "The V3.5 app is still at /."
+)
+
+
+def mount_frontend_v4(app: FastAPI, *, dist_path: str) -> None:
+    """Serve the V4 frontend build at /v4/ next to the V3.5 app at /.
+
+    ``dist_path`` is the Vite build output (index.html + content-hashed
+    assets/). Client-side routes under /v4/ fall back to index.html; asset
+    paths never do, so a missing file is a real 404.
+    """
+    assets_path = os.path.join(dist_path, "assets")
+    if os.path.isdir(assets_path):
+        app.mount("/v4/assets", ImmutableStaticFiles(directory=assets_path), name="v4-assets")
+
+    @app.get("/v4", include_in_schema=False)
+    async def v4_redirect():
+        return RedirectResponse(url="/v4/")
+
+    @app.get("/v4/{spa_path:path}", include_in_schema=False)
+    async def v4_index(spa_path: str = ""):
+        index_path = os.path.join(dist_path, "index.html")
+        if not os.path.isfile(index_path):
+            return PlainTextResponse(V4_NOT_BUILT_MESSAGE, status_code=503)
+        if spa_path.startswith("assets/") or spa_path == "assets":
+            return PlainTextResponse("Not Found", status_code=404)
+        return FileResponse(index_path, headers={"Cache-Control": "no-cache"})

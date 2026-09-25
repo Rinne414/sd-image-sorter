@@ -1,0 +1,167 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-3);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+img {
+  display: block;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(240, 231, 229, 0.16) transparent;
+}
+
+/* Shared control shapes. Components compose these; nothing overrides them later. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--fs-3);
+  white-space: nowrap;
+  text-decoration: none;
+  border-radius: var(--cut-sm) var(--radius) var(--radius) var(--radius);
+  corner-shape: bevel round round round;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+
+.btn:hover {
+  background: var(--surface-3);
+  border-color: var(--muted);
+}
+
+.btn[aria-pressed="true"],
+.btn[aria-expanded="true"] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+  border-radius: var(--cut) var(--radius);
+  corner-shape: bevel round;
+}
+
+.btn-primary:hover {
+  background: var(--accent-bright);
+  border-color: var(--accent-bright);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+}
+
+.btn-ghost:hover {
+  background: var(--wash-hover);
+  border-color: transparent;
+}
+
+.btn-icon {
+  width: 30px;
+  padding: 0;
+}
+
+kbd {
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  color: var(--muted);
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  padding: 0 4px;
+  line-height: 16px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Tag chips coloured by category. The category class sets --c. */
+.chip {
+  --c: var(--cat-unknown);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  color: var(--c);
+  background: color-mix(in srgb, var(--c) 11%, transparent);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+  border-radius: var(--cut-sm);
+  corner-shape: bevel;
+}
+
+.cat-character { --c: var(--cat-character); }
+.cat-artist { --c: var(--cat-artist); }
+.cat-body { --c: var(--cat-body); }
+.cat-expression { --c: var(--cat-expression); }
+.cat-outfit { --c: var(--cat-outfit); }
+.cat-pose { --c: var(--cat-pose); }
+.cat-angle { --c: var(--cat-angle); }
+.cat-action { --c: var(--cat-action); }
+.cat-background { --c: var(--cat-background); }
+.cat-style { --c: var(--cat-style); }
+.cat-quality { --c: var(--cat-quality); }
+.cat-meta { --c: var(--cat-meta); }
+.cat-rating { --c: var(--cat-rating); }
+.cat-unknown { --c: var(--cat-unknown); }

@@ -1,0 +1,137 @@
+.scroller {
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  background: var(--stage);
+  outline: none;
+}
+
+.scroller[aria-busy] .canvas {
+  opacity: 0.45;
+  pointer-events: none;
+  transition: opacity var(--t-med) var(--ease);
+}
+
+.canvas {
+  position: relative;
+  width: 100%;
+}
+
+.tile {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  cursor: pointer;
+  background: var(--surface-1);
+  contain: layout style;
+  user-select: none;
+}
+
+.img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: var(--surface-1);
+}
+
+/* Film-edge strip: generator code + stars, shown on hover. */
+.edge {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 14px 7px 4px;
+  font-size: var(--fs-1);
+  color: var(--text-2);
+  letter-spacing: 0.06em;
+  background: linear-gradient(transparent, rgba(9, 6, 11, 0.78));
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease);
+  pointer-events: none;
+}
+
+.tile:hover .edge {
+  opacity: 1;
+}
+
+.stars {
+  color: var(--warn);
+  letter-spacing: 0;
+}
+
+.heart {
+  position: absolute;
+  top: 5px;
+  right: 7px;
+  color: var(--ai);
+  font-size: 13px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
+
+/* Picked: periwinkle ring and the pick order in a cut-corner badge. */
+.tile[data-picked] {
+  box-shadow: 0 0 0 2px var(--pick);
+}
+
+.tile[data-picked] .img {
+  opacity: 0.86;
+}
+
+.pick {
+  position: absolute;
+  top: 0;
+  left: 0;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  display: grid;
+  place-items: center;
+  background: var(--pick);
+  color: var(--on-pick);
+  font-size: var(--fs-1);
+  font-weight: 700;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%);
+  pointer-events: none;
+}
+
+/* The image being inspected: camera viewfinder corners, not a box. */
+.viewfinder {
+  --c: var(--accent);
+  --l: 16px;
+  --w: 2px;
+  position: absolute;
+  inset: -5px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--c) 0 0) top left / var(--l) var(--w),
+    linear-gradient(var(--c) 0 0) top left / var(--w) var(--l),
+    linear-gradient(var(--c) 0 0) top right / var(--l) var(--w),
+    linear-gradient(var(--c) 0 0) top right / var(--w) var(--l),
+    linear-gradient(var(--c) 0 0) bottom left / var(--l) var(--w),
+    linear-gradient(var(--c) 0 0) bottom left / var(--w) var(--l),
+    linear-gradient(var(--c) 0 0) bottom right / var(--l) var(--w),
+    linear-gradient(var(--c) 0 0) bottom right / var(--w) var(--l);
+  background-repeat: no-repeat;
+}
+
+.tile[data-inspected] .edge {
+  opacity: 1;
+}
+
+.more {
+  position: sticky;
+  bottom: 12px;
+  margin: 0 auto;
+  width: max-content;
+  padding: 4px 12px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--fs-2);
+  border-radius: var(--radius);
+}

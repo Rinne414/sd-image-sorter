@@ -1,0 +1,119 @@
+/* V4 design tokens. One owner for every colour, size and shape.
+   Palette = Dusk, sampled from the owner's own library (2026-09-24):
+   plum-ink surfaces from the shadows, warm text from the highlights,
+   peach for actions, periwinkle for what the user picked, pink for AI output. */
+
+:root {
+  color-scheme: dark;
+
+  /* surfaces, darkest to lightest */
+  --stage: #09060b;
+  --bg: #100d13;
+  --surface-1: #18141b;
+  --surface-2: #211c24;
+  --surface-3: #2b252f;
+  --line: #322c37;
+  --line-strong: #443d48;
+  --hairline: #1d1821;
+  --scrim: rgba(9, 6, 11, 0.8);
+
+  /* text */
+  --text: #f0e7e5;
+  --text-2: #c4b7b4;
+  --muted: #9f949e;
+  --faint: #6b6270;
+
+  /* roles */
+  --accent: #f3a582;
+  --accent-bright: #feb38f;
+  --accent-soft: rgba(243, 165, 130, 0.13);
+  --accent-line: rgba(243, 165, 130, 0.48);
+  --on-accent: #26120c;
+
+  --pick: #96a7e7;
+  --pick-bright: #a9b8f0;
+  --pick-soft: rgba(150, 167, 231, 0.16);
+  --on-pick: #0f1224;
+
+  --ai: #eca7bd;
+  --ok: #8ec899;
+  --warn: #e8c270;
+  --danger: #e1556f;
+  --danger-ink: #ffb8c4;
+
+  --wash: rgba(240, 231, 229, 0.04);
+  --wash-hover: rgba(240, 231, 229, 0.07);
+  --wash-strong: rgba(240, 231, 229, 0.1);
+
+  /* 14 tag categories (mirrors backend tag_rules.categorize_tag) */
+  --cat-character: #f3a582;
+  --cat-artist: #eca7bd;
+  --cat-body: #f2c9a8;
+  --cat-expression: #e8c270;
+  --cat-outfit: #c9a7ec;
+  --cat-pose: #a9c3ea;
+  --cat-angle: #8fc7d6;
+  --cat-action: #f0908a;
+  --cat-background: #8ec899;
+  --cat-style: #dcb6f2;
+  --cat-quality: #b9aea6;
+  --cat-meta: #8c8491;
+  --cat-rating: #e1556f;
+  --cat-unknown: #c4b7b4;
+
+  /* type */
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", Consolas, ui-monospace, monospace;
+  --fs-1: 11px;
+  --fs-2: 12px;
+  --fs-3: 13px;
+  --fs-4: 14px;
+  --fs-5: 16px;
+  --fs-6: 20px;
+  --fs-7: 26px;
+
+  /* shape: cut corners on actions and chips (bevel), soft elsewhere */
+  --cut: 7px;
+  --cut-sm: 5px;
+  --radius: 3px;
+
+  /* layout */
+  --topbar-h: 46px;
+  --rail-w: 232px;
+  --card-w: 380px;
+  --gap-grid: 6px;
+
+  /* motion: short and calm */
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --t-fast: 120ms;
+  --t-med: 180ms;
+
+  --shadow-float: 0 10px 30px rgba(6, 3, 9, 0.55), 0 0 0 1px rgba(240, 231, 229, 0.06);
+}
+
+@media (min-width: 1800px) {
+  :root {
+    --rail-w: 256px;
+    --card-w: 420px;
+  }
+}
+
+@media (min-width: 2400px) {
+  :root {
+    --fs-1: 12px;
+    --fs-2: 13px;
+    --fs-3: 14px;
+    --fs-4: 15px;
+    --fs-5: 17px;
+    --topbar-h: 50px;
+    --rail-w: 280px;
+    --card-w: 480px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-fast: 1ms;
+    --t-med: 1ms;
+  }
+}

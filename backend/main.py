@@ -112,7 +112,7 @@ from fastapi.responses import JSONResponse
 import app_static
 from app_diagnostics import build_support_diagnostics, open_support_log_file
 from app_security import _is_loopback_host, configure_security_middleware
-from app_static import mount_frontend_static, serve_frontend_index, static_cache_bust_token
+from app_static import mount_frontend_static, mount_frontend_v4, serve_frontend_index, static_cache_bust_token
 
 _STATIC_CACHE_BUST_RE = app_static._STATIC_CACHE_BUST_RE
 
@@ -376,6 +376,10 @@ configure_security_middleware(app)
 # Serve frontend static files
 frontend_path = str(BACKEND_DIR.parent / "frontend")
 mount_frontend_static(app, frontend_path=frontend_path)
+
+# V4 frontend (Vite build) at /v4/, coexisting with the V3.5 app at /.
+frontend_v4_dist_path = str(BACKEND_DIR.parent / "frontend-v4" / "dist")
+mount_frontend_v4(app, dist_path=frontend_v4_dist_path)
 
 
 def _static_cache_bust_token(asset_path: str) -> str:

@@ -1,0 +1,220 @@
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+} from '@tanstack/react-query'
+import { api, unwrap } from './client'
+import type { paths } from './schema'
+import type {
+  CategorizeResponse,
+  CollectionRow,
+  GeneratorCount,
+  ImageDetailResponse,
+  ImagesPage,
+  LibrariesResponse,
+  LibraryHealth,
+  TagCategory,
+} from './types'
+import type { ImageQueryParams } from '../lib/query'
+import { useApp } from '../state/store'
+import { translate, useLang } from '../i18n'
+import { useToasts } from '../ui/toasts'
+
+type ImagesQuery = NonNullable<paths['/api/images']['get']['parameters']['query']>
+
+export const PAGE_SIZE = 240
+
+type PageParam = { cursor?: string; offset?: number }
+
+export function useLibraries() {
+  return useQuery({
+    queryKey: ['libraries'],
+    queryFn: async ({ signal }) => unwrap<LibrariesResponse>(await api.GET('/api/libraries', { signal })),
+    staleTime: 60_000,
+  })
+}
+
+export function useImages(params: ImageQueryParams) {
+  const libraryId = useApp((s) => s.libraryId)
+  return useInfiniteQuery({
+    queryKey: ['images', libraryId, params],
+    initialPageParam: {} as PageParam,
+    queryFn: async ({ pageParam, signal }) => {
+      const query = { ...params, limit: PAGE_SIZE, ...pageParam } as ImagesQuery
+      return unwrap<ImagesPage>(await api.GET('/api/images', { params: { query }, signal }))
+    },
+    getNextPageParam: (last): PageParam | undefined => {
+      if (!last.has_more) return undefined
+      if (last.next_cursor) return { cursor: last.next_cursor }
+      if (last.next_offset !== null && last.next_offset !== undefined) return { offset: last.next_offset }
+      return undefined
+    },
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  })
+}
+
+export function useImageDetail(id: number | null) {
+  return useQuery({
+    queryKey: ['image', id],
+    enabled: id !== null,
+    queryFn: async ({ signal }) =>
+      unwrap<ImageDetailResponse>(
+        await api.GET('/api/images/{image_id}', { params: { path: { image_id: id as number } }, signal }),
+      ),
+    staleTime: 60_000,
+  })
+}
+
+/** Semantic category (14 kinds) for each tag, used to colour prompts and chips. */
+export function useCategories(tags: string[]) {
+  const key = [...new Set(tags)].sort()
+  return useQuery({
+    queryKey: ['categorize', key.join('|')],
+    enabled: key.length > 0,
+    queryFn: async ({ signal }) => {
+      const res = unwrap<CategorizeResponse>(await api.POST('/api/prompts/categorize', { body: key, signal }))
+      const map = new Map<string, TagCategory>()
+      for (const row of res.results) map.set(row.tag, row.category)
+      return map
+    },
+    staleTime: Infinity,
+  })
+}
+
+export function useGenerators() {
+  const libraryId = useApp((s) => s.libraryId)
+  return useQuery({
+    queryKey: ['generators', libraryId],
+    queryFn: async ({ signal }) =>
+      unwrap<{ generators: GeneratorCount[] }>(await api.GET('/api/generators', { signal })).generators,
+    staleTime: 60_000,
+  })
+}
+
+export function useFolders() {
+  const libraryId = useApp((s) => s.libraryId)
+  return useQuery({
+    queryKey: ['folders', libraryId],
+    queryFn: async ({ signal }) => unwrap<{ folders: string[] }>(await api.GET('/api/folders', { signal })).folders,
+    staleTime: 60_000,
+  })
+}
+
+export function useLibraryHealth() {
+  const libraryId = useApp((s) => s.libraryId)
+  return useQuery({
+    queryKey: ['library-health', libraryId],
+    queryFn: async ({ signal }) => unwrap<LibraryHealth>(await api.GET('/api/library-health', { signal })),
+    staleTime: 60_000,
+  })
+}
+
+export function useMissingCount() {
+  const libraryId = useApp((s) => s.libraryId)
+  return useQuery({
+    queryKey: ['missing-summary', libraryId],
+    queryFn: async ({ signal }) =>
+      unwrap<{ total: number }>(await api.GET('/api/images/missing-summary', { signal })).total,
+    staleTime: 60_000,
+  })
+}
+
+export function useFavorites() {
+  const libraryId = useApp((s) => s.libraryId)
+  return useQuery({
+    queryKey: ['favorites', libraryId],
+    queryFn: async ({ signal }) => {
+      const [ids, cols] = await Promise.all([
+        api.GET('/api/collections/favorites/ids', { signal }).then((r) => unwrap<{ image_ids: number[] }>(r)),
+        api.GET('/api/collections', { signal }).then((r) => unwrap<{ collections: (CollectionRow & { slug?: string })[] }>(r)),
+      ])
+      const fav = cols.collections.find((c) => c.slug === 'favorites')
+      return { ids: new Set(ids.image_ids), collectionId: fav?.id ?? null }
+    },
+    staleTime: 30_000,
+  })
+}
+
+type ImagesData = InfiniteData<ImagesPage, PageParam>
+
+type FavoritesData = { ids: Set<number>; collectionId: number | null }
+
+function reportWriteError(error: Error): void {
+  const lang = useLang.getState().lang
+  useToasts.getState().push(translate(lang, 'error.saveFailed', { reason: error.message }), 'error')
+}
+
+export function useSetRating() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ ids, stars }: { ids: number[]; stars: number }) => {
+      for (const id of ids) {
+        unwrap(await api.POST('/api/images/{image_id}/rating', { params: { path: { image_id: id } }, body: { stars } }))
+      }
+    },
+    onMutate: ({ ids, stars }) => {
+      const lists = qc.getQueriesData<ImagesData>({ queryKey: ['images'] })
+      const details = ids.map((id) => [id, qc.getQueryData<ImageDetailResponse>(['image', id])] as const)
+      const hit = new Set(ids)
+      qc.setQueriesData<ImagesData>({ queryKey: ['images'] }, (data) =>
+        data
+          ? {
+              ...data,
+              pages: data.pages.map((p) => ({
+                ...p,
+                images: p.images.map((img) => (hit.has(img.id) ? { ...img, user_rating: stars } : img)),
+              })),
+            }
+          : data,
+      )
+      for (const id of ids) {
+        qc.setQueryData<ImageDetailResponse>(['image', id], (d) =>
+          d ? { ...d, image: { ...d.image, user_rating: stars } } : d,
+        )
+      }
+      return { lists, details }
+    },
+    onError: (error, _vars, snapshot) => {
+      for (const [key, data] of snapshot?.lists ?? []) qc.setQueryData(key, data)
+      for (const [id, data] of snapshot?.details ?? []) qc.setQueryData(['image', id], data)
+      // Some ids may have been saved before the failure: fetch the truth.
+      void qc.invalidateQueries({ queryKey: ['images'] })
+      void qc.invalidateQueries({ queryKey: ['image'] })
+      reportWriteError(error)
+    },
+  })
+}
+
+export function useToggleFavorite() {
+  const qc = useQueryClient()
+  const libraryId = useApp((s) => s.libraryId)
+  return useMutation({
+    mutationFn: async ({ ids, favorited }: { ids: number[]; favorited: boolean }) => {
+      for (const id of ids) {
+        unwrap(await api.POST('/api/collections/favorites', { body: { image_id: id, favorited } }))
+      }
+    },
+    onMutate: ({ ids, favorited }) => {
+      const before = qc.getQueryData<FavoritesData>(['favorites', libraryId])
+      qc.setQueryData<FavoritesData>(['favorites', libraryId], (d) => {
+        if (!d) return d
+        const next = new Set(d.ids)
+        for (const id of ids) {
+          if (favorited) next.add(id)
+          else next.delete(id)
+        }
+        return { ...d, ids: next }
+      })
+      return { before }
+    },
+    onError: (error, _vars, snapshot) => {
+      if (snapshot?.before) qc.setQueryData(['favorites', libraryId], snapshot.before)
+      void qc.invalidateQueries({ queryKey: ['favorites'] })
+      reportWriteError(error)
+    },
+  })
+}
