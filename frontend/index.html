@@ -7025,6 +7025,10 @@
                         <input type="checkbox" id="pub-master-censored" checked>
                         <span data-i18n="pub.masterCensored">Use censored version where available</span>
                     </label>
+                    <label class="pub-master-label" id="pub-censor-names-label" hidden>
+                        <input type="checkbox" id="pub-use-censor-names" checked>
+                        <span data-i18n="pub.useCensorNames">Use the file names from Censor Edit</span>
+                    </label>
                     <button class="btn btn-ghost btn-small" id="btn-pub-repair" type="button" data-i18n="pub.repair">Re-pair</button>
                     <button class="btn btn-ghost btn-small" id="btn-pub-add-selection" type="button" data-i18n="pub.addSelection">Add gallery selection</button>
                     <span class="pub-toolbar-count" id="pub-count"></span>
@@ -7067,11 +7071,28 @@
                             <span data-i18n="pub.suffix">Censored suffix</span>
                             <input type="text" id="pub-suffix" class="input-field" value="_censored" autocomplete="off" spellcheck="false">
                         </label>
+                        <label class="pub-field pub-metadata-field">
+                            <span data-i18n="save.metadataHandling">Metadata / Generation Info</span>
+                            <select id="pub-metadata-option" class="input-field">
+                                <option value="strip" selected data-i18n="save.metadataStrip">Remove metadata</option>
+                                <option value="keep" data-i18n="save.metadataKeep">Keep original metadata</option>
+                                <option value="minimal" data-i18n="save.metadataMinimal">Keep basic info only</option>
+                            </select>
+                        </label>
                         <label class="pub-overwrite-label">
                             <input type="checkbox" id="pub-overwrite">
                             <span data-i18n="pub.overwrite">Overwrite existing files</span>
                         </label>
                         <button class="btn btn-primary" id="btn-pub-export" type="button" data-i18n="pub.export">Export set</button>
+                    </div>
+                    <div class="pub-uncensored-check" id="pub-uncensored-check" role="alertdialog" aria-labelledby="pub-uncensored-title" hidden>
+                        <p class="pub-uncensored-title" id="pub-uncensored-title"></p>
+                        <ul class="pub-uncensored-list" id="pub-uncensored-list"></ul>
+                        <div class="pub-uncensored-actions">
+                            <button class="btn btn-primary" id="btn-pub-uncensored-cancel" type="button" data-i18n="pub.uncensoredCancel">Cancel</button>
+                            <button class="btn btn-secondary" id="btn-pub-uncensored-skip" type="button" data-i18n="pub.uncensoredSkip">Leave these out</button>
+                            <button class="btn btn-ghost danger" id="btn-pub-uncensored-include" type="button" data-i18n="pub.uncensoredInclude">Export them uncensored</button>
+                        </div>
                     </div>
                     <details class="pub-watermark-panel" id="pub-watermark-panel">
                         <summary>

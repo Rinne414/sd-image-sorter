@@ -514,6 +514,40 @@ test.describe('Entry page (opted in)', () => {
     await expect(page.locator('#nav-tab-reader')).toBeVisible()
   })
 
+  test('Pixiv tile never skips censoring: a selection goes to Censor Edit, none stays in the Gallery', async ({ page }) => {
+    // Nothing selected: land in the Gallery to pick, with a hint, and never
+    // in the publish set.
+    await page.click('#entry-mission-pixiv')
+    await expect(page.locator('#entry-page')).toBeHidden()
+    await expect(page.locator('#view-gallery')).toBeVisible()
+    await expect(page.locator('#publish-set-modal.visible')).toHaveCount(0)
+    await expect(page.locator('#toast-container .toast', { hasText: /Censor Edit|打码编辑/ }).first()).toBeVisible()
+
+    // A selection is queued for Censor Edit, which is step 2 of the mission.
+    await page.click('#nav-brand')
+    await expect(page.locator('#entry-page')).toBeVisible()
+    await page.evaluate(() => {
+      const w = window as any
+      w.__queuedForCensor = null
+      w.addToCensorQueue = (payload: unknown) => {
+        w.__queuedForCensor = payload
+        w.App.switchView('censor')
+      }
+      w.setSelectionState({
+        selectionMode: true,
+        selectedIds: new Set([41, 42]),
+        scope: 'visible',
+        filterKey: null,
+        selectionToken: null,
+        selectionTotal: 0,
+      })
+    })
+    await page.click('#entry-mission-pixiv')
+    await expect.poll(() => page.evaluate(() => (window as any).__queuedForCensor)).toEqual([41, 42])
+    await expect(page.locator('#view-censor')).toHaveClass(/active/)
+    await expect(page.locator('#publish-set-modal.visible')).toHaveCount(0)
+  })
+
   test('top-level ESC returns to the entry overlay', async ({ page }) => {
     await page.click('#entry-fn-gallery')
     await expect(page.locator('#entry-page')).toBeHidden()

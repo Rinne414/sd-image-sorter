@@ -810,16 +810,24 @@
                 enterMission('lora');
                 navigate('dataset');
             },
-            // v3.5.0: the Pixiv mission tile routes through the batch-bar
-            // button so it inherits its guard — with a selection it opens the
-            // publish-set workbench with those ids; with none it shows the
-            // "pick images first" toast instead of an empty modal blocking
-            // the very gallery the user needs to pick from.
+            // The Pixiv mission goes pick -> censor -> order -> export, and the
+            // tile follows those steps: a selection goes to Censor Edit (the
+            // batch-bar button, so it inherits its handling of "select all
+            // matching"); with none the user lands in the Gallery to pick.
+            // It never opens the publish set directly, which would skip
+            // censoring.
             'entry-mission-pixiv': () => {
                 enterMission('pixiv');
                 navigate('gallery');
-                const publishButton = document.getElementById('btn-publish-selected');
-                if (publishButton) publishButton.click();
+                const hasSelection = typeof window.getSelectedGalleryCount === 'function'
+                    && window.getSelectedGalleryCount() > 0;
+                const censorButton = document.getElementById('btn-send-to-censor');
+                if (hasSelection && censorButton) {
+                    censorButton.click();
+                    return;
+                }
+                window.showToast?.(t('pub.entryPickThenCensor', null,
+                    'Select the images for this set in the Gallery first, then click Censor Edit in the bar at the bottom.'), 'info');
             },
             'entry-mission-organize': () => {
                 enterMission('organize');

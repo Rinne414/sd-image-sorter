@@ -535,19 +535,67 @@ async function processCensorBatchItems(handler, { pageSize = CENSOR_TOKEN_QUEUE_
     };
 }
 
+// A name given here (Batch Rename) travels to the publish set; an untouched
+// original name does not, so the set keeps its own 01/02/03 numbering.
+function censorQueueRenamedName(item) {
+    const stem = (name) => String(name || '').replace(/\.[^/.]+$/, '');
+    return stem(item.outputFilename) && stem(item.outputFilename) !== stem(item.originalFilename)
+        ? String(item.outputFilename)
+        : '';
+}
+
+// Render one censored result into the hand-over folder through the same save
+// path as Save. Only an item with a rendered result can go: Save would export
+// anything else from its source file, which is the uncensored original.
+async function stageCensorItemForPublish(item, folder) {
+    const hasOperations = Array.isArray(item.editOperations) && item.editOperations.length > 0;
+    const hasResult = shouldUseProxyEditMode(item) ? hasOperations : (hasOperations || Boolean(item.currentDataUrl));
+    if (!hasResult) throw new Error('No censored result to hand over');
+    const baseName = `${item.id}_${String(item.outputFilename || item.originalFilename).replace(/\.[^/.]+$/, '')}`;
+    // "keep": the workbench's own metadata choice decides what goes out.
+    return saveCensorQueueItem(item, 'original', 'keep', false, { folder, baseName });
+}
+
 // Hand the queue, in its current order and including images still on the
-// selection cursor, to the publish-set workbench.
+// selection cursor, to the publish-set workbench — with the censored results
+// themselves, so the workbench never guesses the censored copy by file name.
 async function sendCensorQueueToPublishSet() {
     if (!hasCensorQueueWork()) {
         window.App.showToast(censorT('censor.noImagesToSave', null, 'No images in queue to save'), 'info');
         return;
     }
     if (typeof window.PublishSet?.open !== 'function') return;
-    const ids = [];
-    await processCensorBatchItems(async (item) => {
-        ids.push(Number(item.id));
-    });
-    window.PublishSet.open(ids);
+    const entries = [];
+    let stagingFolder = '';
+    let failedCount = 0;
+    showLoading(true, censorT('censor.publishPreparing', null, 'Preparing the censored images for Publish Set...'));
+    try {
+        await processCensorBatchItems(async (item) => {
+            const entry = { id: Number(item.id), outputName: censorQueueRenamedName(item) };
+            if (itemHasCensorContent(item)) {
+                try {
+                    if (!stagingFolder) {
+                        stagingFolder = (await window.App.API.post('/api/publish/staging-folder', {})).folder;
+                    }
+                    const staged = await stageCensorItemForPublish(item, stagingFolder);
+                    entry.censoredPath = staged.output_path;
+                    entry.censoredName = staged.filename;
+                } catch (error) {
+                    Logger.error(error);
+                    failedCount += 1;
+                    entry.censorFailed = true;
+                }
+            }
+            entries.push(entry);
+        });
+    } finally {
+        showLoading(false);
+    }
+    if (failedCount > 0) {
+        window.App.showToast(censorT('censor.publishPrepareFailed', { count: failedCount },
+            '{count} censored image(s) could not be prepared; Publish Set marks them as not censored.'), 'warning');
+    }
+    window.PublishSet.open(entries);
 }
 
 function moveQueueSelectionToPosition(targetPosition) {

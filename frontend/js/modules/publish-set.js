@@ -9,17 +9,26 @@
  *
  * The workbench is deliberately stateless on the backend: the list order in
  * this modal IS the publish order sent to the export endpoint.
+ *
+ * From Censor Edit the queue arrives with its results: each censored image
+ * was rendered into a staging folder and its file travels with the entry
+ * (pair.source === 'censor'), together with any name given there. Nothing
+ * goes out uncensored without the user picking that in the check before
+ * export, and generation info is removed unless the user keeps it.
  */
 (function () {
     'use strict';
 
     const SETTINGS_KEY = 'sd-sorter-publish-settings';
+    const METADATA_OPTIONS = ['strip', 'keep', 'minimal'];
 
     const STATE = {
-        items: [],        // {id, filename, path, width, height, fileSize, pair, useCensored}
+        items: [],        // {id, filename, path, width, height, fileSize, pair, useCensored, outputName, censorFailed}
+        handoff: new Map(), // id -> {censoredPath, censoredName, outputName, censorFailed} from Censor Edit
         loading: false,
         exporting: false,
         dragIndex: -1,
+        pendingCheck: null, // resolver of the open "not censored" check
     };
 
     function $(id) { return document.getElementById(id); }
@@ -69,6 +78,7 @@
             if (Number.isFinite(saved.watermarkSize)) $('pub-watermark-size').value = String(saved.watermarkSize);
             if (Number.isFinite(saved.watermarkMargin)) $('pub-watermark-margin').value = String(saved.watermarkMargin);
             if (typeof saved.watermarkColor === 'string') $('pub-watermark-color').value = saved.watermarkColor;
+            if (METADATA_OPTIONS.includes(saved.metadataOption)) $('pub-metadata-option').value = saved.metadataOption;
             syncWatermarkControls();
         } catch (err) { /* corrupted settings are non-fatal */ }
     }
@@ -89,8 +99,15 @@
                 watermarkSize: Number($('pub-watermark-size').value),
                 watermarkMargin: Number($('pub-watermark-margin').value),
                 watermarkColor: $('pub-watermark-color').value,
+                metadataOption: currentMetadataOption(),
             }));
         } catch (err) { /* storage full/blocked is non-fatal */ }
+    }
+
+    // Generation info leaves the set unless the user keeps it on purpose.
+    function currentMetadataOption() {
+        const value = $('pub-metadata-option')?.value;
+        return METADATA_OPTIONS.includes(value) ? value : 'strip';
     }
 
     // ------------------------------------------------------------------
@@ -149,7 +166,16 @@
         return response.json();
     }
 
+    // A result handed over by Censor Edit wins over pairing by file name.
     function pairFromEntry(entry) {
+        const handoff = STATE.handoff.get(entry.image_id);
+        if (handoff && handoff.censoredPath) {
+            return {
+                path: handoff.censoredPath,
+                filename: handoff.censoredName || entry.filename,
+                source: 'censor',
+            };
+        }
         if (!entry.found) return null;
         return {
             path: entry.censored_path,
@@ -167,16 +193,22 @@
             const missing = data.pairs.filter((entry) => entry.missing).length;
             STATE.items = data.pairs
                 .filter((entry) => !entry.missing)
-                .map((entry) => ({
-                    id: entry.image_id,
-                    filename: entry.filename,
-                    path: entry.path,
-                    width: entry.width,
-                    height: entry.height,
-                    fileSize: entry.file_size,
-                    pair: pairFromEntry(entry),
-                    useCensored: wantCensored && entry.found,
-                }));
+                .map((entry) => {
+                    const pair = pairFromEntry(entry);
+                    const handoff = STATE.handoff.get(entry.image_id) || {};
+                    return {
+                        id: entry.image_id,
+                        filename: entry.filename,
+                        path: entry.path,
+                        width: entry.width,
+                        height: entry.height,
+                        fileSize: entry.file_size,
+                        pair: pair,
+                        useCensored: wantCensored && !!pair,
+                        outputName: handoff.outputName || '',
+                        censorFailed: !!handoff.censorFailed,
+                    };
+                });
             if (missing > 0) {
                 showToast(t('pub.missingSkipped', '{count} image(s) were not found in the library and were skipped', { count: missing }), 'warning');
             }
@@ -212,6 +244,7 @@
             const byId = new Map(data.pairs.map((entry) => [entry.image_id, entry]));
             STATE.items = STATE.items.map((item) => {
                 const entry = byId.get(item.id);
+                // A Censor Edit result survives; only name-based matches refresh.
                 const pair = entry && !entry.missing ? pairFromEntry(entry) : null;
                 return Object.assign({}, item, {
                     pair: pair,
@@ -243,6 +276,25 @@
         return String(start + position).padStart(pad, '0');
     }
 
+    function splitName(name) {
+        const text = String(name || '');
+        const dot = text.lastIndexOf('.');
+        return dot > 0 ? { stem: text.slice(0, dot), ext: text.slice(dot).toLowerCase() } : { stem: text, ext: '' };
+    }
+
+    function useCensorNames() {
+        return $('pub-use-censor-names').checked && STATE.items.some((item) => item.outputName);
+    }
+
+    // Mirrors the server: a Censor Edit name when one is used, else the
+    // numbered name; the extension always follows the file that goes out.
+    function exportNameFor(item, position) {
+        const source = item.useCensored && item.pair ? item.pair.filename : item.filename;
+        const ext = splitName(source).ext || '.png';
+        if (useCensorNames() && item.outputName) return splitName(item.outputName).stem + ext;
+        return ($('pub-prefix').value || '').trim() + numberingFor(position) + ext;
+    }
+
     function makeEl(tag, className, text) {
         const node = document.createElement(tag);
         if (className) node.className = className;
@@ -263,6 +315,7 @@
             count.textContent = '';
         }
         $('pub-empty').hidden = STATE.items.length > 0 || STATE.loading;
+        $('pub-censor-names-label').hidden = !STATE.items.some((item) => item.outputName);
         $('btn-pub-export').disabled = STATE.exporting || STATE.loading || !STATE.items.length;
         $('btn-pub-repair').disabled = STATE.loading || !STATE.items.length;
         $('btn-pub-add-selection').disabled = STATE.loading;
@@ -349,13 +402,20 @@
         const dims = (item.width && item.height) ? (item.width + '×' + item.height + ' · ') : '';
         meta.appendChild(makeEl('div', 'pub-item-facts', dims + fmtBytes(item.fileSize)));
         const pairLine = makeEl('div', 'pub-item-pair ' + (item.pair ? 'is-paired' : 'is-unpaired'));
-        if (item.pair) {
+        if (item.pair && item.pair.source === 'censor') {
+            pairLine.textContent = t('pub.pairFromCensor', 'Censored in Censor Edit');
+            pairLine.title = item.pair.path;
+        } else if (item.pair) {
             pairLine.textContent = item.pair.filename;
             pairLine.title = item.pair.path;
+        } else if (item.censorFailed) {
+            pairLine.textContent = t('pub.censorPrepareFailed', '— the censored result could not be prepared');
         } else {
             pairLine.textContent = t('pub.noPair', '— no censored version found');
         }
         meta.appendChild(pairLine);
+        meta.appendChild(makeEl('div', 'pub-item-outname',
+            t('pub.exportsAs', 'Exports as {name}', { name: exportNameFor(item, index) })));
         row.appendChild(meta);
 
         row.appendChild(buildVariantToggle(item, index));
@@ -390,6 +450,8 @@
     }
 
     function render() {
+        // The list the "not censored" check named may no longer be the set.
+        answerUncensoredCheck('cancel');
         const list = $('pub-items');
         list.replaceChildren();
         STATE.items.forEach((item, index) => list.appendChild(buildRow(item, index)));
@@ -400,6 +462,12 @@
     // Export
     // ------------------------------------------------------------------
 
+    function metadataSummary(option) {
+        if (option === 'keep') return t('pub.metadataKeptNote', 'original generation info kept');
+        if (option === 'minimal') return t('pub.metadataMinimalNote', 'only basic info kept');
+        return t('pub.metadataStrippedNote', 'generation info removed');
+    }
+
     function renderExportResult(result) {
         const box = $('pub-result');
         box.replaceChildren();
@@ -407,8 +475,16 @@
         const summary = makeEl('div', 'pub-result-line pub-result-ok',
             t('pub.exportedSummary', 'Exported {count} file(s) to {folder}', {
                 count: result.exported.length, folder: result.output_folder,
-            }));
+            }) + ' · ' + metadataSummary(result.metadata_option));
         box.appendChild(summary);
+        result.exported.forEach((entry) => {
+            const variant = entry.used_censored
+                ? t('pub.resultCensored', 'censored')
+                : t('pub.resultOriginal', 'original, not censored');
+            box.appendChild(makeEl('div',
+                'pub-result-line pub-result-file' + (entry.used_censored ? '' : ' pub-result-warn'),
+                entry.output_name + ' ← ' + variant));
+        });
         if (result.caption_file) {
             box.appendChild(makeEl('div', 'pub-result-line',
                 '📝 ' + t('pub.captionWritten', 'Caption saved as {name}', { name: result.caption_file })));
@@ -424,6 +500,46 @@
             const name = item ? item.filename : (entry.image_id !== null ? '#' + entry.image_id : 'caption.txt');
             box.appendChild(makeEl('div', 'pub-result-line pub-result-error', '✗ ' + name + ' — ' + entry.error));
         });
+    }
+
+    function uncensoredReason(item) {
+        if (item.censorFailed) return t('pub.reasonPrepareFailed', 'the censored result could not be prepared');
+        if (!item.pair) return t('pub.reasonNoPair', 'no censored version found');
+        return t('pub.reasonChoseOriginal', 'set to Original');
+    }
+
+    function answerUncensoredCheck(choice) {
+        const resolve = STATE.pendingCheck;
+        if (!resolve) return;
+        STATE.pendingCheck = null;
+        $('pub-uncensored-check').hidden = true;
+        resolve(choice);
+    }
+
+    // Images that would go out uncensored are named before anything is
+    // written. Cancel is the default; exporting them as they are is a choice.
+    function askAboutUncensored(items) {
+        answerUncensoredCheck('cancel');
+        const panel = $('pub-uncensored-check');
+        $('pub-uncensored-title').textContent = t('pub.uncensoredTitle',
+            '{count} image(s) would be exported uncensored, with the original pixels:', { count: items.length });
+        const list = $('pub-uncensored-list');
+        list.replaceChildren();
+        items.forEach((item) => {
+            list.appendChild(makeEl('li', null, (item.filename || ('#' + item.id)) + ' — ' + uncensoredReason(item)));
+        });
+        $('btn-pub-uncensored-skip').hidden = items.length === STATE.items.length;
+        panel.hidden = false;
+        panel.scrollIntoView({ block: 'nearest' });
+        $('btn-pub-uncensored-cancel').focus();
+        return new Promise((resolve) => { STATE.pendingCheck = resolve; });
+    }
+
+    function exportItemPayload(item) {
+        const payload = { image_id: item.id, use_censored: item.useCensored };
+        if (item.useCensored && item.pair && item.pair.source === 'censor') payload.censored_path = item.pair.path;
+        if (useCensorNames() && item.outputName) payload.output_name = item.outputName;
+        return payload;
     }
 
     async function runExport() {
@@ -444,6 +560,14 @@
             }), 'warning');
             return;
         }
+        let exportItems = STATE.items;
+        const uncensored = STATE.items.filter((item) => !item.useCensored);
+        if (uncensored.length) {
+            const choice = await askAboutUncensored(uncensored);
+            if (choice === 'cancel') return;
+            if (choice === 'skip') exportItems = STATE.items.filter((item) => item.useCensored);
+        }
+        const metadataOption = currentMetadataOption();
         STATE.exporting = true;
         renderStatus();
         const button = $('btn-pub-export');
@@ -453,10 +577,8 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    items: STATE.items.map((item) => ({
-                        image_id: item.id,
-                        use_censored: item.useCensored,
-                    })),
+                    items: exportItems.map(exportItemPayload),
+                    metadata_option: metadataOption,
                     output_folder: folder,
                     name_prefix: $('pub-prefix').value || '',
                     start_index: Math.max(0, parseInt($('pub-start').value, 10) || 1),
@@ -479,9 +601,13 @@
             const result = await response.json();
             renderExportResult(result);
             if (result.success && result.exported.length) {
-                showToast(t('pub.exportDone', 'Publish set exported ({count} files)', {
-                    count: result.exported.length,
-                }), 'success');
+                const censoredCount = result.exported.filter((entry) => entry.used_censored).length;
+                showToast(t('pub.exportDoneDetail',
+                    'Publish set exported: {censored} censored, {original} original · {metadata}', {
+                        censored: censoredCount,
+                        original: result.exported.length - censoredCount,
+                        metadata: metadataSummary(result.metadata_option),
+                    }), censoredCount === result.exported.length ? 'success' : 'warning');
             } else if (result.errors.length) {
                 showToast(t('pub.exportPartial', 'Export finished with {count} error(s); see details', {
                     count: result.errors.length,
@@ -505,14 +631,31 @@
         return !!modal && modal.classList.contains('visible');
     }
 
-    function open(imageIds) {
+    // Entries are image ids (Gallery) or, from Censor Edit, objects carrying
+    // the handed-over result: {id, censoredPath, censoredName, outputName, censorFailed}.
+    function open(entries) {
         const modal = $('publish-set-modal');
         if (!modal) return;
         loadSettings();
         modal.classList.add('visible');
         $('pub-result').hidden = true;
         $('pub-result').replaceChildren();
-        const ids = Array.isArray(imageIds) ? imageIds.filter((id) => Number.isFinite(Number(id))) : [];
+        STATE.handoff = new Map();
+        const ids = [];
+        (Array.isArray(entries) ? entries : []).forEach((entry) => {
+            const isObject = entry !== null && typeof entry === 'object';
+            const id = Number(isObject ? entry.id : entry);
+            if (!Number.isFinite(id)) return;
+            ids.push(id);
+            if (isObject) {
+                STATE.handoff.set(id, {
+                    censoredPath: entry.censoredPath || '',
+                    censoredName: entry.censoredName || '',
+                    outputName: entry.outputName || '',
+                    censorFailed: !!entry.censorFailed,
+                });
+            }
+        });
         if (ids.length) {
             loadItems(ids);
         } else {
@@ -522,6 +665,7 @@
     }
 
     function close() {
+        answerUncensoredCheck('cancel');
         const modal = $('publish-set-modal');
         if (modal) modal.classList.remove('visible');
     }
@@ -546,10 +690,23 @@
         $('btn-close-publish-set')?.addEventListener('click', close);
         modal.querySelector('.modal-backdrop')?.addEventListener('click', close);
         document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape' && isOpen() && !STATE.exporting) close();
+            if (event.key !== 'Escape' || !isOpen() || STATE.exporting) return;
+            // Esc answers the open check first; the workbench stays open.
+            if (STATE.pendingCheck) {
+                event.preventDefault();
+                answerUncensoredCheck('cancel');
+                return;
+            }
+            close();
         });
 
         $('btn-pub-export')?.addEventListener('click', runExport);
+        $('btn-pub-uncensored-cancel')?.addEventListener('click', () => answerUncensoredCheck('cancel'));
+        $('btn-pub-uncensored-skip')?.addEventListener('click', () => answerUncensoredCheck('skip'));
+        $('btn-pub-uncensored-include')?.addEventListener('click', () => answerUncensoredCheck('include'));
+        $('pub-metadata-option')?.addEventListener('change', saveSettings);
+        $('pub-use-censor-names')?.addEventListener('change', render);
+        $('pub-prefix')?.addEventListener('change', render);
         $('btn-pub-repair')?.addEventListener('click', rePair);
         $('btn-pub-add-selection')?.addEventListener('click', addGallerySelection);
         $('pub-master-censored')?.addEventListener('change', onMasterToggle);

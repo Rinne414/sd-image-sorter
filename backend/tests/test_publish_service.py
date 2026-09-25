@@ -25,7 +25,12 @@ def _write_png_bytes(path, payload: bytes) -> None:
 @pytest.fixture
 def pub_env(test_db, tmp_path):
     """Library with three originals; one censored sibling on disk only, one
-    censored variant indexed in the library from a different folder."""
+    censored variant indexed in the library from a different folder.
+
+    The files are marker bytes, not images, so the naming and pairing tests
+    export with ``metadata_option="keep"`` (a byte copy). What the default
+    export does to generation info is covered in test_publish_metadata.py.
+    """
     originals = tmp_path / "originals"
     elsewhere = tmp_path / "censor-output"
 
@@ -89,6 +94,7 @@ def test_export_sequential_naming_and_order(pub_env):
     result = ps.export_set(
         items=[{"image_id": 3}, {"image_id": 1}, {"image_id": 2}],
         output_folder=str(out),
+        metadata_option="keep",
         name_prefix="set_",
         start_index=1,
         pad_width=2,
@@ -106,6 +112,7 @@ def test_export_uses_censored_variant_and_keeps_its_extension(pub_env):
     result = ps.export_set(
         items=[{"image_id": 1, "use_censored": True}, {"image_id": 2, "use_censored": True}],
         output_folder=str(out),
+        metadata_option="keep",
     )
     assert result["success"] is True
     assert [e["output_name"] for e in result["exported"]] == ["01.png", "02.jpg"]
@@ -119,6 +126,7 @@ def test_export_censored_missing_errors_instead_of_silent_fallback(pub_env):
     result = ps.export_set(
         items=[{"image_id": 3, "use_censored": True}, {"image_id": 1}],
         output_folder=str(out),
+        metadata_option="keep",
     )
     assert result["success"] is False
     assert len(result["errors"]) == 1
@@ -131,6 +139,7 @@ def test_export_censored_missing_errors_instead_of_silent_fallback(pub_env):
     assert result["exported"] == [{
         "index": 2, "output_name": "02.png", "image_id": 1,
         "used_censored": False, "source_path": str(pub_env["originals"] / "alpha.png"),
+        "metadata": "keep",
     }]
 
 
@@ -139,12 +148,14 @@ def test_export_skips_existing_unless_overwrite(pub_env):
     out.mkdir(parents=True)
     (out / "01.png").write_bytes(b"pre-existing")
 
-    kept = ps.export_set(items=[{"image_id": 1}], output_folder=str(out))
+    kept = ps.export_set(items=[{"image_id": 1}], output_folder=str(out), metadata_option="keep")
     assert kept["exported"] == []
     assert kept["skipped_existing"] == [{"image_id": 1, "output_name": "01.png"}]
     assert (out / "01.png").read_bytes() == b"pre-existing"
 
-    replaced = ps.export_set(items=[{"image_id": 1}], output_folder=str(out), overwrite=True)
+    replaced = ps.export_set(
+        items=[{"image_id": 1}], output_folder=str(out), overwrite=True, metadata_option="keep",
+    )
     assert replaced["skipped_existing"] == []
     assert (out / "01.png").read_bytes() == b"alpha-original"
 
@@ -170,6 +181,7 @@ def test_export_unknown_id_keeps_later_numbers_stable(pub_env):
     result = ps.export_set(
         items=[{"image_id": 999}, {"image_id": 1}],
         output_folder=str(out),
+        metadata_option="keep",
         start_index=1,
     )
     assert result["errors"][0]["image_id"] == 999
@@ -182,6 +194,7 @@ def test_export_clamps_pad_and_start_and_sanitizes_prefix(pub_env):
     result = ps.export_set(
         items=[{"image_id": 1}],
         output_folder=str(out),
+        metadata_option="keep",
         name_prefix='se<t>:"|?*',
         start_index=7,
         pad_width=9,

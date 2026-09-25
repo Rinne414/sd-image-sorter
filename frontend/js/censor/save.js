@@ -126,9 +126,11 @@ function resolveCensorOutputFormat(item, formatOption) {
     return CENSOR_SOURCE_FORMATS.has(ext) ? ext : 'png';
 }
 
-async function saveCensorQueueItem(item, formatOption = 'png', metadataOption = 'strip', allowOverwrite = false) {
-    const folder = CensorState.outputFolder;
-    const baseName = item.outputFilename.replace(/\.[^/.]+$/, '');
+// `target` redirects one save (the Publish Set hand-over writes into its
+// staging folder under a name of its own); Save uses the chosen folder.
+async function saveCensorQueueItem(item, formatOption = 'png', metadataOption = 'strip', allowOverwrite = false, target = {}) {
+    const folder = target.folder || CensorState.outputFolder;
+    const baseName = target.baseName || item.outputFilename.replace(/\.[^/.]+$/, '');
     const outputFormat = resolveCensorOutputFormat(item, formatOption);
     const finalFilename = `${baseName}.${outputFormat}`;
 
