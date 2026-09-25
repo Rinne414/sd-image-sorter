@@ -57,6 +57,9 @@
   --on-image: #f3eee4; /* marks drawn over thumbnails (the favourite heart) */
   --ai-on-image: #8fbde6; /* a model's marks drawn over pictures (detected regions) */
   --ok-on-image: #a8c996;
+  --hist-r: rgba(228, 96, 80, 0.55); /* the Adjust tab's histogram channels */
+  --hist-g: rgba(122, 184, 110, 0.5);
+  --hist-b: rgba(110, 150, 220, 0.5);
 
   --shadow-float: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(236, 230, 218, 0.06);
 
@@ -123,6 +126,9 @@
   --on-image: #f3eee4;
   --ai-on-image: #8fbde6;
   --ok-on-image: #a8c996;
+  --hist-r: rgba(196, 52, 38, 0.45);
+  --hist-g: rgba(52, 128, 44, 0.4);
+  --hist-b: rgba(40, 90, 170, 0.4);
 
   --shadow-float: 0 10px 28px rgba(40, 34, 24, 0.16), 0 0 0 1px rgba(28, 26, 23, 0.1);
 

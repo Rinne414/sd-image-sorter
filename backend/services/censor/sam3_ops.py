@@ -182,8 +182,7 @@ class _Sam3Mixin:
         )
 
         try:
-            with Image.open(image_path) as src:
-                image = src.convert("RGB")
+            image = _open_rgb(image_path, request.upright)
 
             # Use SAM3 to detect foreground objects
             # We use a generic "main subject" prompt to detect the foreground

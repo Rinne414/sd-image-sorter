@@ -1,7 +1,7 @@
 import { api, unwrap } from '../../api/client'
 import { tr } from '../jobs/jobs'
-import { bitmapFromRgba, maskShapeOf, regionsFromDetections, textDetector, type MaskBitmap, type RawDetection } from './detection'
-import { detectBody, frameMismatch, refineBody, segmentBody, type DetectPlan, type Size } from './detectRequests'
+import { alphaBitmap, bitmapFromRgba, maskShapeOf, regionsFromDetections, textDetector, type MaskBitmap, type RawDetection } from './detection'
+import { detectBody, frameMismatch, refineBody, removeBgBody, segmentBody, type DetectPlan, type Size } from './detectRequests'
 import { newOpId, type Box, type CensorStyle, type RegionOp, type RegionShape } from './ops'
 
 // The detection endpoints: /api/censor/models, /detect, /batch-refine-mask,
@@ -56,10 +56,8 @@ interface MaskPayload {
   image_height?: unknown
 }
 
-async function decodeMask(p: MaskPayload): Promise<MaskBitmap | null> {
-  const src = p.mask || (p.mask_ref ? `/api/censor/mask-cache/${encodeURIComponent(p.mask_ref)}` : null)
-  const bounds = Array.isArray(p.mask_bounds) ? (p.mask_bounds as unknown[]) : null
-  if (!src || !bounds || bounds.length !== 4) return null
+/** The pixels of a PNG (data URL or served), exactly as stored. */
+async function decodePng(src: string): Promise<ImageData> {
   const res = await fetch(src)
   if (!res.ok) throw new Error(tr('censor.detect.maskFailed', { status: res.status }))
   const bitmap = await createImageBitmap(await res.blob(), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' })
@@ -68,11 +66,18 @@ async function decodeMask(p: MaskPayload): Promise<MaskBitmap | null> {
     const ctx = canvas.getContext('2d', { willReadFrequently: true })
     if (!ctx) throw new Error(tr('censor.noCanvas'))
     ctx.drawImage(bitmap, 0, 0)
-    const data = ctx.getImageData(0, 0, bitmap.width, bitmap.height).data
-    return bitmapFromRgba(data, bitmap.width, bitmap.height, Math.round(Number(bounds[0])), Math.round(Number(bounds[1])))
+    return ctx.getImageData(0, 0, bitmap.width, bitmap.height)
   } finally {
     bitmap.close()
   }
+}
+
+async function decodeMask(p: MaskPayload): Promise<MaskBitmap | null> {
+  const src = p.mask || (p.mask_ref ? `/api/censor/mask-cache/${encodeURIComponent(p.mask_ref)}` : null)
+  const bounds = Array.isArray(p.mask_bounds) ? (p.mask_bounds as unknown[]) : null
+  if (!src || !bounds || bounds.length !== 4) return null
+  const png = await decodePng(src)
+  return bitmapFromRgba(png.data, png.width, png.height, Math.round(Number(bounds[0])), Math.round(Number(bounds[1])))
 }
 
 interface DetectAnswer {
@@ -179,3 +184,21 @@ export async function segmentWord(
   if (!shape) return null
   return { type: 'region', id: newOpId(), source: 'detection', detector: textDetector(word), label: word, style, block, shape }
 }
+
+interface RemoveBgAnswer {
+  status?: string
+  preview?: string | null
+}
+
+/** SAM3's foreground of the picture (what stays when the background goes); null when it found none. */
+export async function foregroundMask(imageId: number, edgeThreshold: number, library: string, picture: Size): Promise<MaskShapeLike | null> {
+  const body = removeBgBody(imageId, edgeThreshold)
+  const res = unwrap<RemoveBgAnswer>(await api.POST('/api/censor/remove-background', { body, ...inLibrary(library) }))
+  if (res.status !== 'ok' || !res.preview) return null
+  const png = await decodePng(res.preview)
+  checkFrame({ image_width: png.width, image_height: png.height }, picture)
+  const shape = maskShapeOf(alphaBitmap(png.data, png.width, png.height))
+  return shape && shape.type === 'mask' ? shape : null
+}
+
+export type MaskShapeLike = Extract<RegionShape, { type: 'mask' }>

@@ -1,9 +1,14 @@
-import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useT } from '../../i18n'
+import { isNoAdjust } from './adjust'
+import { useAdjustDraft } from './adjustDraft'
 import styles from './CanvasView.module.css'
-import { appendManual, farEnough, newOpId, roundPoint, type Op, type StrokeOp } from './ops'
-import { createPainter, createScratch, renderInto, type Painter, type Scratch } from './paint'
+import { ChangesOverlay } from './ChangesOverlay'
+import { cloneOffsetFor, cloneSourceOf, setCloneSource, useCloneSource } from './clone'
+import { appendBase, appendManual, farEnough, newOpId, roundPoint, type Op, type StrokeOp } from './ops'
+import { createPainter, createScratch, newBaseCache, renderInto, type BaseCache, type Painter, type Scratch } from './paint'
 import { useCensorPanel } from './panel'
+import { publishPixels } from './pixels'
 import { cloneRaster, type Raster, type Rect } from './raster'
 import { RegionOverlay } from './RegionOverlay'
 import { loadOriginal } from './saving'
@@ -12,7 +17,8 @@ import { toImage, useCanvasView, ZOOM_STEP } from './view'
 
 // The picture being censored. Holds the pixels (original + result) and turns
 // pointer input into strokes: painted live into the result buffer, then
-// handed up as a new op list when the pointer lets go.
+// handed up as a new op list when the pointer lets go. While the Adjust tab
+// is open, its unapplied sliders are shown on the picture as a preview.
 
 let drawing = false
 
@@ -26,6 +32,7 @@ interface Loaded {
   result: Raster
   image: ImageData
   scratch: Scratch
+  cache: BaseCache
 }
 
 type Load = { state: 'loading' } | { state: 'error'; reason: string } | ({ state: 'ready' } & Loaded)
@@ -41,7 +48,7 @@ function useLoaded(imageId: number): Load {
         const result = cloneRaster(original)
         const image = new ImageData(result.data, result.width, result.height)
         const scratch = createScratch(original.width, original.height)
-        setLoad({ id: imageId, load: { state: 'ready', original, result, image, scratch } })
+        setLoad({ id: imageId, load: { state: 'ready', original, result, image, scratch, cache: newBaseCache() } })
       },
       (error: Error) => live && setLoad({ id: imageId, load: { state: 'error', reason: error.message } }),
     )
@@ -50,6 +57,15 @@ function useLoaded(imageId: number): Load {
     }
   }, [imageId])
   return load.id === imageId ? load.load : { state: 'loading' }
+}
+
+/** The clone stamp's sample point: the source, or (once a stroke fixed the offset) the pointer plus the offset. */
+function placeCloneMark(mark: HTMLDivElement | null, imageId: number, vx: number, vy: number): void {
+  const clone = cloneSourceOf(imageId)
+  if (!mark || !clone.source) return
+  const v = useCanvasView.getState()
+  const [sx, sy] = clone.offset ? [vx + clone.offset[0] * v.z, vy + clone.offset[1] * v.z] : [v.tx + clone.source[0] * v.z, v.ty + clone.source[1] * v.z]
+  mark.style.transform = `translate(${sx}px, ${sy}px) translate(-50%, -50%)`
 }
 
 interface Stroke {
@@ -73,26 +89,35 @@ export function CanvasView({ imageId, ops, onCommit }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const ringRef = useRef<HTMLDivElement>(null)
+  const markRef = useRef<HTMLDivElement>(null)
   const rendered = useRef<Op[] | null>(null)
+  const base = useRef<Raster | null>(null)
   const drag = useRef<Drag>(null)
   const view = useCanvasView()
   const size = useCensorSettings((s) => s.size)
-  const reviewing = useCensorPanel((s) => s.tab === 'review')
+  const cloning = useCensorSettings((s) => s.tool === 'clone')
+  const source = useCloneSource((s) => (s.imageId === imageId ? s.source : null))
+  const tab = useCensorPanel((s) => s.tab)
+  const showChanges = useCensorPanel((s) => s.showChanges)
+  const draft = useAdjustDraft((s) => s.values)
+  const preview = tab === 'adjust' && !isNoAdjust(draft) ? draft : null
+  const shown = useMemo(() => (preview ? appendBase(ops, { type: 'adjust', id: 'preview', values: preview }) : ops), [ops, preview])
   const ready = load.state === 'ready' ? load : null
 
-  // Draw the picture: fully when the image arrives or the list changed from outside (undo, redo, reset).
+  // Draw the picture: fully when the image arrives or the list changed from outside (undo, redo, reset, a preview).
   useLayoutEffect(() => {
     const canvas = canvasRef.current
-    if (!ready || !canvas || rendered.current === ops) return
+    if (!ready || !canvas || rendered.current === shown) return
     if (canvas.width !== ready.result.width || canvas.height !== ready.result.height) {
       canvas.width = ready.result.width
       canvas.height = ready.result.height
       useCanvasView.getState().setImage(ready.result.width, ready.result.height)
     }
-    renderInto(ready.result, ready.original, ops, ready.scratch)
+    base.current = renderInto(ready.result, ready.original, shown, ready.scratch, ready.cache)
     canvas.getContext('2d')?.putImageData(ready.image, 0, 0)
-    rendered.current = ops
-  }, [ready, ops])
+    rendered.current = shown
+    publishPixels(imageId, ready.result, ready.original)
+  }, [ready, shown, imageId])
 
   useLayoutEffect(() => {
     const el = viewportRef.current
@@ -143,18 +168,23 @@ export function CanvasView({ imageId, ops, onCommit }: Props) {
   }
 
   const moveRing = (e: ReactPointerEvent) => {
+    const [vx, vy] = local(e) as [number, number]
     const ring = ringRef.current
-    if (!ring) return
-    const [vx, vy] = local(e)
-    ring.style.transform = `translate(${vx}px, ${vy}px) translate(-50%, -50%)`
+    if (ring) ring.style.transform = `translate(${vx}px, ${vy}px) translate(-50%, -50%)`
+    placeCloneMark(markRef.current, imageId, vx, vy)
   }
 
   const startStroke = (e: ReactPointerEvent) => {
     if (!ready) return
     const s = useCensorSettings.getState()
     const [x, y] = imagePoint(e)
-    const op: StrokeOp = { type: 'stroke', id: newOpId(), tool: s.tool, style: s.style, size: s.size, block: s.block, color: s.color, opacity: s.opacity, points: [x, y] }
-    const painter = createPainter(ready.result, ready.original, op, ready.scratch)
+    if (s.tool === 'clone' && e.altKey) return setCloneSource(imageId, x, y)
+    const offset = s.tool === 'clone' ? cloneOffsetFor(imageId, x, y) : null
+    // Without a source the clone stamp has nothing to copy (the canvas says to Alt+click first).
+    if (s.tool === 'clone' && !offset) return
+    const stroke: StrokeOp = { type: 'stroke', id: newOpId(), tool: s.tool, style: s.style, size: s.size, block: s.block, color: s.color, opacity: s.opacity, points: [x, y] }
+    const op: StrokeOp = offset ? { ...stroke, offset } : stroke
+    const painter = createPainter(ready.result, base.current ?? ready.original, op, ready.scratch)
     const touched = blit(painter.add([x, y]))
     drag.current = { kind: 'stroke', stroke: { op, painter, touched } }
   }
@@ -202,7 +232,8 @@ export function CanvasView({ imageId, ops, onCommit }: Props) {
     e.currentTarget.dataset.cursor = cursor
     if (d?.kind !== 'stroke' || !d.stroke.touched) return
     const next = appendManual(ops, { ...d.stroke.op, points: [...d.stroke.op.points] })
-    rendered.current = next
+    rendered.current = preview ? appendBase(next, { type: 'adjust', id: 'preview', values: preview }) : next
+    if (ready) publishPixels(imageId, ready.result, ready.original)
     onCommit(next)
   }
 
@@ -238,7 +269,14 @@ export function CanvasView({ imageId, ops, onCommit }: Props) {
         data-pixelated={view.z >= 2 || undefined}
         data-testid="censor-canvas"
       />
-      {ready && reviewing && <RegionOverlay ops={ops} width={ready.result.width} height={ready.result.height} zoom={view.z} style={style} />}
+      {ready && showChanges && <ChangesOverlay imageId={imageId} style={style} />}
+      {ready && tab === 'review' && <RegionOverlay ops={ops} width={ready.result.width} height={ready.result.height} zoom={view.z} style={style} />}
+      {ready && cloning && source && <div ref={markRef} className={styles.cloneMark} aria-hidden data-testid="censor-clone-source" />}
+      {ready && cloning && !source && (
+        <p className={styles.hint} role="status" data-testid="censor-clone-hint">
+          {t('censor.clone.hint')}
+        </p>
+      )}
       {load.state === 'loading' && <p className={styles.note}>{t('censor.loading')}</p>}
       {load.state === 'error' && (
         <p className={styles.note} role="alert">

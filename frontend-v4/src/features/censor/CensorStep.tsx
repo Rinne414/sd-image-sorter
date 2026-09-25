@@ -4,6 +4,8 @@ import { useT, type MessageKey } from '../../i18n'
 import { Icon } from '../../ui/Icon'
 import { stepLabel } from '../batch/labels'
 import { CanvasView, isDrawing } from './CanvasView'
+import { ChangesConfirm } from './ChangesConfirm'
+import { requestShowChanges } from './changes'
 import styles from './CensorStep.module.css'
 import { detectCurrent } from './detectRun'
 import { DownloadConfirm } from './DownloadConfirm'
@@ -11,19 +13,21 @@ import { Filmstrip } from './Filmstrip'
 import type { KeyAction } from './keys'
 import type { Op } from './ops'
 import { useCensorPanel } from './panel'
+import { RemoveBgDialog } from './RemoveBgDialog'
 import { reviewActions } from './reviewActions'
 import type { ReviewActions } from './ReviewPanel'
 import { saveAll } from './saving'
 import { changeOps, itemStatus, redoEdit, rememberImage, startImage, syncItems, undoEdit, useEdit, type ImageEdit, type ItemStatus } from './session'
 import { useCensorSettings } from './settings'
+import { ShortcutList } from './ShortcutList'
 import { ToolPanel } from './ToolPanel'
 import { useCensorKeys } from './useCensorKeys'
 import { useCanvasView } from './view'
 
 // The Pixiv batch's censor step: the batch's images down the left, the picture
-// in the middle, the tools on the right (brush, AI detect, review). Every edit
-// is an op list per image; an image's censored copy is rendered and saved when
-// the user leaves it.
+// in the middle, the tools on the right (brush, adjust, AI detect, review).
+// Every edit is an op list per image; an image's censored copy is rendered and
+// saved when the user leaves it.
 
 const NO_OPS: Op[] = []
 
@@ -75,8 +79,12 @@ export default function CensorStep({ batch, next, onNext }: Props) {
     if (to >= 0) go(to)
   })
 
+  const [dialog, setDialog] = useState<'bg' | null>(null)
   const review = reviewActions(batch, item, index, go)
-  useCensorKeys((action: KeyAction) => runKey(action, { batchId: batch.id, item, index, go, review }))
+  useCensorKeys((action: KeyAction) => {
+    if (action.type === 'removeBg') return setDialog('bg')
+    runKey(action, { batchId: batch.id, item, index, go, review })
+  })
 
   if (!item) return <section className={styles.empty}>{t('censor.empty')}</section>
 
@@ -88,9 +96,11 @@ export default function CensorStep({ batch, next, onNext }: Props) {
         <div className={styles.stage}>
           <CanvasView key={item.image_id} imageId={item.image_id} ops={edit?.ops ?? NO_OPS} onCommit={(ops) => changeOps(batch.id, item, ops)} />
         </div>
-        <ToolPanel batch={batch} item={item} edit={edit} review={review} />
+        <ToolPanel batch={batch} item={item} edit={edit} review={review} onRemoveBg={() => setDialog('bg')} />
       </div>
       <DownloadConfirm />
+      <ChangesConfirm />
+      {dialog === 'bg' && <RemoveBgDialog batchId={batch.id} item={item} onClose={() => setDialog(null)} />}
     </section>
   )
 }
@@ -127,6 +137,10 @@ function runKey(action: KeyAction, { batchId, item, index, go, review }: KeyCont
       return review.approve()
     case 'skip':
       return review.skip()
+    case 'changes':
+      return requestShowChanges(!useCensorPanel.getState().showChanges)
+    case 'removeBg':
+      return
     case 'undo':
     case 'redo':
       if (item && !isDrawing()) (action.type === 'undo' ? undoEdit : redoEdit)(batchId, item.image_id)
@@ -173,6 +187,7 @@ function EditorBar({ batch, item, index, edit, next, onNext, onGo }: BarProps) {
         </button>
       )}
       <span className={styles.gap} />
+      <ShortcutList />
       {next && (
         <button type="button" className="btn btn-primary" onClick={() => onNext(next)} data-testid="step-next">
           {t('batch.panel.next', { step: stepLabel(next, t) })}

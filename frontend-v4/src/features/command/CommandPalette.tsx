@@ -7,6 +7,7 @@ import { useApp } from '../../state/store'
 import { useTheme } from '../../theme'
 import { useLayer } from '../../ui/layers'
 import { addPicksTo, recentBatches } from '../batch/AddToBatchMenu'
+import { quickCensor } from '../censor/quickCensor'
 import { useBatches } from '../batch/batchApi'
 import { askNewBatch } from '../batch/dialogStore'
 import { BATCH_KINDS } from '../batch/labels'
@@ -103,6 +104,7 @@ function Palette() {
       for (const b of recentBatches(batches.data)) {
         list.push(mk(`sel-add-${b.id}`, 'palette.group.selection', 'palette.cmd.picksTo', () => void addPicksTo(b, picks()), undefined, { name: b.name }))
       }
+      list.push(mk('sel-censor', 'palette.group.selection', 'palette.cmd.censorPicks', () => void quickCensor(picks())))
     }
     if (s.selection.length > 0) {
       const show = useSelectionDialog.getState().show

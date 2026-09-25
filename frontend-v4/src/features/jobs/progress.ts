@@ -3,11 +3,11 @@
 // · remove: GET /api/images/remove-selected/progress · tag: GET /api/tag/progress
 // · install: GET /api/models/download-progress · colors: GET /api/colors/progress
 // · reconnect: GET /api/images/reconnect-missing/progress · scan: GET /api/scan/progress
-// · detect/refine: censor detection run by this page (features/censor/detectAll.ts).
+// · detect/refine/adjust: censor work over a batch run by this page (features/censor/detectAll.ts).
 
 /**
  * tags: a bulk tag edit, finished when it is recorded (kept for its undo).
- * detect/refine: censor detection or SAM3 refining over a batch, run in this page.
+ * detect/refine/adjust: censor detection, SAM3 refining or filters over a batch, run in this page.
  */
 export type JobKind =
   | 'move'
@@ -22,6 +22,7 @@ export type JobKind =
   | 'scan'
   | 'detect'
   | 'refine'
+  | 'adjust'
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
 
 export interface JobFailure {
@@ -212,7 +213,8 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
     case 'scan':
       return readScan(base, raw, ctx)
     case 'detect':
-    case 'refine': {
+    case 'refine':
+    case 'adjust': {
       const failures = namedErrors(raw.failed)
       return { ...base, succeeded: num(raw.succeeded), failures, failedCount: failures.length }
     }

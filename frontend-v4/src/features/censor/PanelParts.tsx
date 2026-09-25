@@ -17,9 +17,10 @@ interface SliderProps {
   onChange: (value: number) => void
   testId: string
   extra?: ReactNode
+  step?: number
 }
 
-export function Slider({ label, value, min, max, unit, onChange, testId, extra }: SliderProps) {
+export function Slider({ label, value, min, max, unit, onChange, testId, extra, step }: SliderProps) {
   return (
     <label className={styles.field}>
       <span className={styles.fieldHead}>
@@ -30,7 +31,7 @@ export function Slider({ label, value, min, max, unit, onChange, testId, extra }
           {unit}
         </span>
       </span>
-      <input type="range" min={min} max={max} value={value} onChange={(e) => onChange(Number(e.target.value))} data-testid={testId} />
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} data-testid={testId} />
     </label>
   )
 }

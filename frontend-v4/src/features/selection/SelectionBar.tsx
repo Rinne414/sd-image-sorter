@@ -12,6 +12,7 @@ import { Menu } from '../../ui/Menu'
 import { useToasts } from '../../ui/toasts'
 import { Stars } from '../card/Stars'
 import { AddToBatchMenu } from '../batch/AddToBatchMenu'
+import { quickCensor } from '../censor/quickCensor'
 import { useSelectionDialog } from './dialogs'
 import styles from './SelectionBar.module.css'
 
@@ -109,6 +110,7 @@ export function SelectionBar({ params, total, images, hasMore, onRate, onFavorit
         up
         label={t('sel.more')}
         items={[
+          { id: 'censor', label: t('sel.censor'), onSelect: () => void quickCensor(useApp.getState().selection) },
           { id: 'copy', label: t('sel.copy'), onSelect: () => show('copy') },
           { id: 'edit-tags', label: t('sel.editTags'), onSelect: () => show('edit-tags') },
           { id: 'export', label: t('sel.exportData'), onSelect: () => show('export') },

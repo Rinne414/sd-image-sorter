@@ -13,6 +13,8 @@ export type Effect =
   | { kind: 'fill'; r: number; g: number; b: number; alpha: number }
   /** Put the original pixel back. */
   | { kind: 'restore' }
+  /** Copy the original pixel (dx, dy) away (clone stamp); pixels whose source is outside the picture stay. */
+  | { kind: 'clone'; dx: number; dy: number }
 
 /** Paint colour (r, g, b) with opacity `alpha` over pixel `p` (byte offset), source-over. */
 export function blendPixel(data: Uint8ClampedArray, p: number, r: number, g: number, b: number, alpha: number): void {
@@ -96,7 +98,7 @@ function boxPass(src: Uint8ClampedArray, dst: Uint8ClampedArray, w: number, h: n
  * only depends on source pixels within 3 x radius, so a rectangle with that
  * margin gives exact values for everything inside the margin.
  */
-export function blurRect(source: Raster, rect: Rect, radius: number): Uint8ClampedArray {
+export function blurRect(source: Raster, rect: Rect, radius: number): Uint8ClampedArray<ArrayBuffer> {
   const { x, y, w, h } = rect
   const a = new Uint8ClampedArray(w * h * 4)
   for (let row = 0; row < h; row++) {

@@ -47,6 +47,13 @@ export function bitmapFromRgba(rgba: ArrayLike<number>, w: number, h: number, x:
   return { x, y, w, h, bits }
 }
 
+/** A mask from the alpha channel only (a picture whose background was made transparent). */
+export function alphaBitmap(rgba: ArrayLike<number>, w: number, h: number): MaskBitmap {
+  const bits = new Uint8Array(w * h)
+  for (let i = 0; i < w * h; i++) bits[i] = (rgba[i * 4 + 3] as number) >= 128 ? 1 : 0
+  return { x: 0, y: 0, w, h, bits }
+}
+
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 
 /** A detector box clipped to the image; null when nothing of it is inside. */

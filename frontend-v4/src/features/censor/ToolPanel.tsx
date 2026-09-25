@@ -3,7 +3,9 @@ import type { Batch, BatchItem } from '../../api/types'
 import { useT, type MessageKey } from '../../i18n'
 import { Dialog } from '../../ui/Dialog'
 import { Icon } from '../../ui/Icon'
+import { AdjustPanel } from './AdjustPanel'
 import { DetectPanel } from './DetectPanel'
+import { requestShowChanges } from './changes'
 import { useCensorPanel, type PanelTab } from './panel'
 import { HistoryButtons, Section, Slider } from './PanelParts'
 import { ReviewPanel, type ReviewActions } from './ReviewPanel'
@@ -14,8 +16,14 @@ import { useCensorSettings } from './settings'
 import styles from './ToolPanel.module.css'
 import { useCanvasView, ZOOM_STEP } from './view'
 
-const TOOL_LABEL: Record<Tool, MessageKey> = { brush: 'censor.tool.brush', pen: 'censor.tool.pen', eraser: 'censor.tool.eraser' }
-const TOOL_TIP: Record<Tool, MessageKey> = { brush: 'censor.tool.brushTip', pen: 'censor.tool.penTip', eraser: 'censor.tool.eraserTip' }
+const TOOL_LABEL: Record<Tool, MessageKey> = { brush: 'censor.tool.brush', pen: 'censor.tool.pen', eraser: 'censor.tool.eraser', clone: 'censor.tool.clone' }
+const TOOL_TIP: Record<Tool, MessageKey> = {
+  brush: 'censor.tool.brushTip',
+  pen: 'censor.tool.penTip',
+  eraser: 'censor.tool.eraserTip',
+  clone: 'censor.tool.cloneTip',
+}
+const TOOL_KEY: Record<Tool, string> = { brush: 'B', pen: 'P', eraser: 'E', clone: 'G' }
 const STYLE_LABEL: Record<CensorStyle, MessageKey> = {
   mosaic: 'censor.style.mosaic',
   blur: 'censor.style.blur',
@@ -27,6 +35,7 @@ function ToolSettings() {
   const t = useT()
   const s = useCensorSettings()
   if (s.tool === 'eraser') return <p className={styles.note}>{t('censor.eraserNote')}</p>
+  if (s.tool === 'clone') return <p className={styles.note}>{t('censor.clone.note')}</p>
   if (s.tool === 'pen') {
     return (
       <>
@@ -51,6 +60,18 @@ function ToolSettings() {
       <Slider label={t('censor.block')} value={s.block} min={BLOCK_MIN} max={BLOCK_MAX} unit=" px" onChange={s.setBlock} testId="censor-block" />
       <p className={styles.note}>{t('censor.blockNote')}</p>
     </>
+  )
+}
+
+/** "Show changes" (H): every pixel that differs from the original, highlighted. */
+function ChangesToggle() {
+  const t = useT()
+  const on = useCensorPanel((s) => s.showChanges)
+  return (
+    <button type="button" className="btn" aria-pressed={on} onClick={() => requestShowChanges(!on)} title={t('censor.changes.tip')} data-testid="censor-changes-toggle">
+      {t('censor.changes.toggle')}
+      <kbd>H</kbd>
+    </button>
   )
 }
 
@@ -82,16 +103,18 @@ interface Props {
   item: BatchItem
   edit: ImageEdit | undefined
   review: ReviewActions
+  onRemoveBg: () => void
 }
 
 const TABS: { id: PanelTab; label: MessageKey }[] = [
   { id: 'brush', label: 'censor.tab.brush' },
+  { id: 'adjust', label: 'censor.tab.adjust' },
   { id: 'detect', label: 'censor.tab.detect' },
   { id: 'review', label: 'censor.tab.review' },
 ]
 
-/** The right-hand panel: brush / detect / review tabs, and far below them "back to original". */
-export function ToolPanel({ batch, item, edit, review }: Props) {
+/** The right-hand panel: brush / adjust / detect / review tabs, and far below them "back to original". */
+export function ToolPanel({ batch, item, edit, review, onRemoveBg }: Props) {
   const t = useT()
   const tab = useCensorPanel((s) => s.tab)
   const setTab = useCensorPanel((s) => s.setTab)
@@ -109,6 +132,7 @@ export function ToolPanel({ batch, item, edit, review }: Props) {
       </div>
       <div className={styles.body} role="tabpanel">
         {tab === 'brush' && <BrushTab batchId={batch.id} item={item} edit={edit} />}
+        {tab === 'adjust' && <AdjustPanel batch={batch} item={item} onRemoveBg={onRemoveBg} />}
         {tab === 'detect' && <DetectPanel batch={batch} item={item} />}
         {tab === 'review' && <ReviewPanel batch={batch} item={item} edit={edit} actions={review} />}
       </div>
@@ -132,7 +156,7 @@ function BrushTab({ batchId, item, edit }: { batchId: number; item: BatchItem; e
           {TOOLS.map((tool) => (
             <button key={tool} type="button" className="btn" aria-pressed={s.tool === tool} onClick={() => s.setTool(tool)} title={t(TOOL_TIP[tool])} data-testid={`censor-tool-${tool}`}>
               {t(TOOL_LABEL[tool])}
-              <kbd>{tool[0]?.toUpperCase()}</kbd>
+              <kbd>{TOOL_KEY[tool]}</kbd>
             </button>
           ))}
         </div>
@@ -160,6 +184,7 @@ function BrushTab({ batchId, item, edit }: { batchId: number; item: BatchItem; e
       </Section>
       <Section title={t('censor.view')}>
         <ViewControls />
+        <ChangesToggle />
         <p className={styles.note}>{t('censor.panNote')}</p>
       </Section>
     </>

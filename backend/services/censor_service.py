@@ -175,6 +175,9 @@ class RemoveBackgroundRequest(BaseModel):
     image_id: int = Field(..., ge=1)
     fill_mode: str = Field("transparent", pattern="^(transparent|white|black)$")
     edge_threshold: float = Field(0.5, ge=0.0, le=1.0)
+    # True: the preview (and the mask in its alpha) is in the upright frame
+    # (EXIF orientation applied), as V4's canvas shows it. False: raw frame.
+    upright: bool = False
 
 
 # ---------------------------------------------------------------------------

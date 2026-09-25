@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { detectBody, frameMismatch, refineBody, segmentBody, type DetectPlan } from './detectRequests'
+import { detectBody, frameMismatch, refineBody, removeBgBody, segmentBody, type DetectPlan } from './detectRequests'
 
 const PLAN: DetectPlan = {
   detector: 'nudenet',
@@ -26,6 +26,7 @@ describe('detection requests', () => {
     expect(detectBody(7, { ...PLAN, detector: 'sam3', targets: null })).toMatchObject({ text_prompts: ['face'], target_classes: null, upright: true })
     expect(refineBody(7, [[1.4, 2.6, 30, 40]], 0.5)).toEqual({ items: [{ image_id: 7, box: [1, 3, 30, 40], upright: true }], sam3_confidence: 0.5, upright: true })
     expect(segmentBody(7, 'tattoo')).toEqual({ image_id: 7, text_prompt: 'tattoo', upright: true })
+    expect(removeBgBody(7, 0.4)).toEqual({ image_id: 7, fill_mode: 'transparent', edge_threshold: 0.4, upright: true })
   })
 
   it('an answer measured on a picture of another size is named; a matching one passes', () => {

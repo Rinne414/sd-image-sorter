@@ -9,14 +9,14 @@
 /* Brush / Detect / Review: printed tabs on a rule, the open one underlined in amber. */
 .tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   flex: none;
   border-bottom: 1px solid var(--line);
 }
 
 .tab {
   height: 36px;
-  padding: 0 6px;
+  padding: 0 2px;
   border: 0;
   border-bottom: 2px solid transparent;
   background: none;
@@ -62,7 +62,7 @@
 
 .tools {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
 }
 

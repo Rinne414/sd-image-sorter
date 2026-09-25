@@ -59,3 +59,43 @@
 .ring[data-hover] {
   display: block;
 }
+
+/* "Show changes": the differing pixels in marker red, over the picture, never saved. */
+.changes {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+
+/* The clone stamp's sample point: a small cross with a light and a dark rule. */
+.cloneMark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--on-image), var(--on-image)) center / 2px 100% no-repeat,
+    linear-gradient(var(--on-image), var(--on-image)) center / 100% 2px no-repeat;
+  filter: drop-shadow(0 0 1px var(--film)) drop-shadow(0 0 1px var(--film));
+}
+
+/* A one-line instruction over the top of the picture (e.g. "Alt+click to set the clone source"). */
+.hint {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  margin: 0;
+  padding: 4px 10px;
+  transform: translateX(-50%);
+  background: var(--tile-caption-bg);
+  color: var(--on-image);
+  font-size: var(--fs-2);
+  border-radius: var(--radius);
+  pointer-events: none;
+  white-space: nowrap;
+}

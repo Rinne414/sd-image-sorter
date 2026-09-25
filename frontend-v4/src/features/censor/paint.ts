@@ -1,14 +1,21 @@
+import { applyBaseOps } from './adjust'
 import { blendPixel, blurMargin, blurRect, mosaicCell, parseHex, type Effect } from './effects'
-import type { Op } from './ops'
+import { isBase, type BaseOp, type Op, type RegionOp, type StrokeOp } from './ops'
 import { clipRect, cloneRaster, unionRect, visitCapsule, visitMask, visitPolygon, type Raster, type Rect, type Visit } from './raster'
 
 // Applying ops to pixels. Live painting feeds a stroke to a Painter a few
 // points at a time; replay (undo, reload, the saved copy) feeds whole ops.
 // Both give the same bytes: every covered pixel gets its value from the
 // picture as it was before the op, whatever order the pieces arrive in.
+// Picture edits (filters, background removal) first turn the original into
+// the base picture; the eraser restores and the clone stamp samples that base.
 
-export function effectOf(op: Op): Effect {
+/** An op painted over part of the picture (everything but the picture edits). */
+export type PaintOp = StrokeOp | RegionOp
+
+export function effectOf(op: PaintOp): Effect {
   if (op.type === 'stroke' && op.tool === 'eraser') return { kind: 'restore' }
+  if (op.type === 'stroke' && op.tool === 'clone') return { kind: 'clone', dx: op.offset?.[0] ?? 0, dy: op.offset?.[1] ?? 0 }
   if (op.type === 'stroke' && op.tool === 'pen') {
     const [r, g, b] = parseHex(op.color)
     return { kind: 'fill', r, g, b, alpha: op.opacity / 100 }
@@ -55,6 +62,15 @@ function applyToFresh(effect: Effect, target: Raster, original: Raster, base: Ra
     for (const i of fresh) blendPixel(d, i * 4, effect.r, effect.g, effect.b, effect.alpha)
   } else if (effect.kind === 'restore') {
     for (const i of fresh) d.set(original.data.subarray(i * 4, i * 4 + 4), i * 4)
+  } else if (effect.kind === 'clone') {
+    const w = target.width
+    for (const i of fresh) {
+      const x = (i % w) + effect.dx
+      const y = Math.floor(i / w) + effect.dy
+      if (x < 0 || y < 0 || x >= w || y >= target.height) continue
+      const s = (y * w + x) * 4
+      d.set(original.data.subarray(s, s + 4), i * 4)
+    }
   } else if (effect.kind === 'blur' && base) {
     const m = blurMargin(effect.radius)
     const region = clipRect(rect.x - m, rect.y - m, rect.x + rect.w + m, rect.y + rect.h + m, target.width, target.height)
@@ -69,8 +85,8 @@ function applyToFresh(effect: Effect, target: Raster, original: Raster, base: Ra
   }
 }
 
-/** A painter for one op on `target`. `original` is the untouched image (the eraser restores from it). */
-export function createPainter(target: Raster, original: Raster, op: Op, scratch?: Scratch): Painter {
+/** A painter for one op on `target`. `original` is the base picture (the eraser restores from it, the clone stamp samples it). */
+export function createPainter(target: Raster, original: Raster, op: PaintOp, scratch?: Scratch): Painter {
   const { width, height } = target
   const effect = effectOf(op)
   const own = scratch ?? createScratch(width, height)
@@ -143,15 +159,38 @@ export function createPainter(target: Raster, original: Raster, op: Op, scratch?
 }
 
 /** Apply a whole op; returns what changed. */
-export function applyOp(target: Raster, original: Raster, op: Op, scratch?: Scratch): Rect | null {
+export function applyOp(target: Raster, original: Raster, op: PaintOp, scratch?: Scratch): Rect | null {
   return createPainter(target, original, op, scratch).add(op.type === 'stroke' ? op.points : [])
 }
 
-/** Redraw `target` as `original` + `ops` (target is overwritten; same size as original). */
-export function renderInto(target: Raster, original: Raster, ops: readonly Op[], scratch?: Scratch): void {
-  target.data.set(original.data)
+/** The last base picture made, reused while the picture edits stay the same objects (strokes change often; filters rarely). */
+export interface BaseCache {
+  original: Raster | null
+  ops: readonly BaseOp[]
+  base: Raster | null
+}
+
+export const newBaseCache = (): BaseCache => ({ original: null, ops: [], base: null })
+
+function baseFor(original: Raster, ops: readonly Op[], cache: BaseCache | undefined): Raster {
+  const baseOps = ops.filter(isBase)
+  const same = cache && cache.base && cache.original === original && cache.ops.length === baseOps.length && cache.ops.every((op, i) => op === baseOps[i])
+  if (same && cache.base) return cache.base
+  const base = applyBaseOps(original, baseOps)
+  if (cache) Object.assign(cache, { original, ops: baseOps, base })
+  return base
+}
+
+/**
+ * Redraw `target` as `original` + `ops` (target is overwritten; same size as
+ * original). Returns the base picture the strokes were painted against.
+ */
+export function renderInto(target: Raster, original: Raster, ops: readonly Op[], scratch?: Scratch, cache?: BaseCache): Raster {
+  const base = baseFor(original, ops, cache)
+  target.data.set(base.data)
   const shared = scratch ?? createScratch(original.width, original.height)
-  for (const op of ops) if (!(op.type === 'region' && op.off)) applyOp(target, original, op, shared)
+  for (const op of ops) if (!isBase(op) && !(op.type === 'region' && op.off)) applyOp(target, base, op, shared)
+  return base
 }
 
 /** A new raster with `ops` applied to `original`. */

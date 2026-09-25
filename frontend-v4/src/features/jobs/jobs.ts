@@ -49,8 +49,8 @@ export const useJobs = create<JobsState>((set, get) => ({
 
 type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors' | 'reconnect' | 'scan' | 'detect'
 
-// Detecting and SAM3 refining both keep the detector busy: one at a time.
-const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind === 'refine' ? 'detect' : kind)
+// Censor work over a batch (detecting, SAM3 refining, filters) runs one at a time.
+const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind === 'refine' || kind === 'adjust' ? 'detect' : kind)
 
 /**
  * A job that runs in this page instead of on the backend reports through the
@@ -299,6 +299,7 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   // Each image's result is saved (and the batch refreshed) as it arrives.
   detect: [],
   refine: [],
+  adjust: [],
 }
 
 let onUndo: ((job: Job) => Promise<void>) | null = null
@@ -360,6 +361,7 @@ const RUNNING: Record<JobKind, MessageKey> = {
   scan: 'jobs.running.scan',
   detect: 'jobs.running.detect',
   refine: 'jobs.running.refine',
+  adjust: 'jobs.running.adjust',
 }
 
 const DONE: Record<JobKind, MessageKey> = {
@@ -375,6 +377,7 @@ const DONE: Record<JobKind, MessageKey> = {
   scan: 'jobs.done.scan',
   detect: 'jobs.done.detect',
   refine: 'jobs.done.refine',
+  adjust: 'jobs.done.adjust',
 }
 
 /** One line that says what happened (or is happening) to this job. */

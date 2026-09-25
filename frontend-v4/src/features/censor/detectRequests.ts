@@ -51,6 +51,11 @@ export function segmentBody(imageId: number, word: string) {
   return { image_id: imageId, text_prompt: word, upright: true }
 }
 
+/** The background comes back transparent: its alpha is the foreground mask (the fill is applied here). */
+export function removeBgBody(imageId: number, edgeThreshold: number) {
+  return { image_id: imageId, fill_mode: 'transparent', edge_threshold: edgeThreshold, upright: true }
+}
+
 const sizeText = (w: unknown, h: unknown) => `${String(w ?? '?')}×${String(h ?? '?')}`
 
 /** When the answer was measured on a picture of another size: both sizes as text; null when they agree. */

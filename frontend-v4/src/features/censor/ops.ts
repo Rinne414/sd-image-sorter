@@ -7,15 +7,20 @@
  *    of it and is saved next to it (batch item_state.censor).
  * 2. Every op is plain JSON in IMAGE pixels (never screen pixels), so zoom,
  *    reloads and a different screen replay it exactly.
- * 3. AI detection results are `region` ops with `source: 'detection'` (a
- *    polygon or a run-length mask). They always form a PREFIX of the list:
- *    detections render first, then every manual op in the order the user made
- *    it. A manual stroke, including an eraser that corrects a wrong detection,
- *    therefore always wins over what a detector produced.
- * 4. insertDetections adds regions to that prefix; replaceDetections
- *    (re-detect) swaps out the earlier detection ops (all, or one detector's)
- *    for new ones. Neither removes, changes or reorders a manual op. Manual ops
- *    are only ever appended (appendManual).
+ * 3. The list has three groups, always in this order:
+ *    a. picture edits (`adjust` filters, `background` removal), in the order
+ *       made. They turn the original into the BASE picture: what the eraser
+ *       restores and the clone stamp samples, and what censoring covers;
+ *    b. AI detection results: `region` ops with `source: 'detection'` (a
+ *       polygon or a run-length mask);
+ *    c. manual strokes, in the order the user made them.
+ *    A manual stroke, including an eraser that corrects a wrong detection,
+ *    therefore always wins over what a detector produced, and a filter never
+ *    lightens a black bar or un-blurs a mosaic.
+ * 4. appendBase adds a picture edit at the end of group a; insertDetections
+ *    and replaceDetections (re-detect) change group b only (all detections, or
+ *    one detector's). Manual ops are only ever appended (appendManual). None
+ *    of them removes, changes or reorders an op of another group.
  * 5. Lists are immutable: every change makes a new list, so undo history is a
  *    stack of old lists and "unsaved" is simply `ops !== savedOps`.
  * 6. A detection switched off in review keeps its place in the list with
@@ -23,10 +28,10 @@
  */
 
 export type CensorStyle = 'mosaic' | 'blur' | 'black' | 'white'
-export type Tool = 'brush' | 'pen' | 'eraser'
+export type Tool = 'brush' | 'pen' | 'eraser' | 'clone'
 
 export const STYLES: readonly CensorStyle[] = ['mosaic', 'blur', 'black', 'white']
-export const TOOLS: readonly Tool[] = ['brush', 'pen', 'eraser']
+export const TOOLS: readonly Tool[] = ['brush', 'pen', 'eraser', 'clone']
 
 export const SIZE_MIN = 5
 export const SIZE_MAX = 200
@@ -51,6 +56,8 @@ export interface StrokeOp {
   opacity: number
   /** Flat x0, y0, x1, y1, ... in image pixels. */
   points: number[]
+  /** Clone stamp: where it copies from, as whole pixels from each stroke point (source minus point). */
+  offset?: [number, number]
 }
 
 export type RegionShape =
@@ -79,7 +86,49 @@ export interface RegionOp {
   off?: boolean
 }
 
-export type Op = StrokeOp | RegionOp
+/** The picture filters of the Adjust tab. 0 everywhere changes nothing. */
+export type AdjustKey = 'brightness' | 'contrast' | 'saturation' | 'hue' | 'blur' | 'sharpen' | 'temperature' | 'vignette'
+export type AdjustValues = Record<AdjustKey, number>
+
+export const ADJUST_KEYS: readonly AdjustKey[] = ['brightness', 'contrast', 'saturation', 'hue', 'blur', 'sharpen', 'temperature', 'vignette']
+
+/** Slider ranges (V3.5's): min, max, step. */
+export const ADJUST_RANGE: Record<AdjustKey, readonly [number, number, number]> = {
+  brightness: [-100, 100, 5],
+  contrast: [-100, 100, 5],
+  saturation: [-100, 100, 5],
+  hue: [0, 360, 5],
+  blur: [0, 20, 1],
+  sharpen: [0, 100, 5],
+  temperature: [-50, 50, 5],
+  vignette: [0, 100, 5],
+}
+
+export const NO_ADJUST: AdjustValues = { brightness: 0, contrast: 0, saturation: 0, hue: 0, blur: 0, sharpen: 0, temperature: 0, vignette: 0 }
+
+/** Filters over the whole picture (group a). */
+export interface AdjustOp {
+  type: 'adjust'
+  id: string
+  values: AdjustValues
+}
+
+export type BackgroundFill = 'transparent' | 'white' | 'black'
+export const BACKGROUND_FILLS: readonly BackgroundFill[] = ['transparent', 'white', 'black']
+
+/** Background removal (group a): every pixel outside the foreground mask becomes `fill`. */
+export interface BackgroundOp {
+  type: 'background'
+  id: string
+  fill: BackgroundFill
+  /** The foreground (what stays), as a run-length mask. */
+  mask: { x: number; y: number; w: number; h: number; runs: number[] }
+}
+
+/** A picture edit: changes the whole picture, before any censoring. */
+export type BaseOp = AdjustOp | BackgroundOp
+
+export type Op = StrokeOp | RegionOp | BaseOp
 
 /** What item_state.censor holds for one batch item. */
 export interface SavedCensorState {
@@ -102,6 +151,16 @@ export function isDetection(op: Op): op is RegionOp {
   return op.type === 'region' && op.source === 'detection'
 }
 
+export function isBase(op: Op): op is BaseOp {
+  return op.type === 'adjust' || op.type === 'background'
+}
+
+/** A picture edit goes after the earlier picture edits, before every detection and stroke. */
+export function appendBase(ops: readonly Op[], op: BaseOp): Op[] {
+  const base = ops.filter(isBase)
+  return [...base, op, ...ops.filter((o) => !isBase(o))]
+}
+
 /** A manual op always goes after everything that is already there. */
 export function appendManual(ops: readonly Op[], op: StrokeOp): Op[] {
   return [...ops, op]
@@ -121,9 +180,10 @@ export function replaceDetections(
   regions: readonly RegionOp[],
   drop: (op: RegionOp) => boolean = () => true,
 ): Op[] {
+  const base = ops.filter(isBase)
   const kept = ops.filter((op): op is RegionOp => isDetection(op) && !drop(op))
-  const manual = ops.filter((op) => !isDetection(op))
-  return [...kept, ...regions, ...manual]
+  const manual = ops.filter((op) => !isDetection(op) && !isBase(op))
+  return [...base, ...kept, ...regions, ...manual]
 }
 
 /** Replace one detector's earlier regions with its new ones. */
@@ -156,10 +216,14 @@ const oneOf = <T extends string>(v: unknown, list: readonly T[], fallback: T): T
 
 function parseStroke(o: Record<string, unknown>): StrokeOp | null {
   if (!numList(o.points) || o.points.length < 2 || o.points.length % 2 !== 0) return null
-  return {
+  const tool = oneOf(o.tool, TOOLS, 'brush')
+  const offset = numList(o.offset) && o.offset.length === 2 ? ([Math.round(o.offset[0] as number), Math.round(o.offset[1] as number)] as [number, number]) : null
+  // A clone stroke without a source copies nothing: left out.
+  if (tool === 'clone' && !offset) return null
+  const stroke: StrokeOp = {
     type: 'stroke',
     id: typeof o.id === 'string' ? o.id : newOpId(),
-    tool: oneOf(o.tool, TOOLS, 'brush'),
+    tool,
     style: oneOf(o.style, STYLES, 'mosaic'),
     size: clamp(isNum(o.size) ? o.size : 30, SIZE_MIN, SIZE_MAX),
     block: clamp(isNum(o.block) ? Math.round(o.block) : 16, BLOCK_MIN, BLOCK_MAX),
@@ -167,6 +231,26 @@ function parseStroke(o: Record<string, unknown>): StrokeOp | null {
     opacity: clamp(isNum(o.opacity) ? Math.round(o.opacity) : 100, OPACITY_MIN, OPACITY_MAX),
     points: o.points,
   }
+  return tool === 'clone' && offset ? { ...stroke, offset } : stroke
+}
+
+function parseAdjust(o: Record<string, unknown>): AdjustOp | null {
+  const raw = o.values && typeof o.values === 'object' ? (o.values as Record<string, unknown>) : null
+  if (!raw) return null
+  const values = { ...NO_ADJUST }
+  for (const key of ADJUST_KEYS) {
+    const [lo, hi] = ADJUST_RANGE[key]
+    const v = raw[key]
+    values[key] = isNum(v) ? clamp(Math.round(v), lo, hi) : 0
+  }
+  return { type: 'adjust', id: typeof o.id === 'string' ? o.id : newOpId(), values }
+}
+
+function parseBackground(o: Record<string, unknown>): BackgroundOp | null {
+  const shape = parseShape({ ...(o.mask as object), type: 'mask' })
+  if (!shape || shape.type !== 'mask') return null
+  const { x, y, w, h, runs } = shape
+  return { type: 'background', id: typeof o.id === 'string' ? o.id : newOpId(), fill: oneOf(o.fill, BACKGROUND_FILLS, 'transparent'), mask: { x, y, w, h, runs } }
 }
 
 function parseShape(v: unknown): RegionShape | null {
@@ -209,7 +293,14 @@ export function parseReviewed(itemState: unknown): boolean | null {
   return typeof reviewed === 'boolean' ? reviewed : null
 }
 
-/** The ops stored in an item's state; anything malformed is left out, detections moved to the front. */
+const PARSERS: Record<string, (o: Record<string, unknown>) => Op | null> = {
+  stroke: parseStroke,
+  region: parseRegion,
+  adjust: parseAdjust,
+  background: parseBackground,
+}
+
+/** The ops stored in an item's state; anything malformed is left out, the three groups put in order. */
 export function parseOps(itemState: unknown): Op[] {
   const list = censorOf(itemState)?.ops
   if (!Array.isArray(list)) return []
@@ -217,7 +308,7 @@ export function parseOps(itemState: unknown): Op[] {
   for (const raw of list) {
     if (!raw || typeof raw !== 'object') continue
     const o = raw as Record<string, unknown>
-    const op = o.type === 'stroke' ? parseStroke(o) : o.type === 'region' ? parseRegion(o) : null
+    const op = typeof o.type === 'string' ? (PARSERS[o.type]?.(o) ?? null) : null
     if (op) ops.push(op)
   }
   return replaceDetections(ops, ops.filter(isDetection))

@@ -177,6 +177,7 @@ describe('readProgress', () => {
       succeeded: 1,
       failed: [{ image_id: 12, filename: 'b.png', error: 'NudeNet could not read image file' }],
     }
+    expect(readProgress('adjust', done).failures).toHaveLength(1)
     const p = readProgress('refine', done)
     expect(p).toMatchObject({ status: 'cancelled', current: 2, succeeded: 1, failedCount: 1 })
     expect(p.failures).toEqual([{ id: 12, name: 'b.png', reason: 'NudeNet could not read image file' }])

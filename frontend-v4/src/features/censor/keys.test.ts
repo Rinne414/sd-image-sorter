@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { keyAction, type KeyPress } from './keys'
+import { keyAction, SHORTCUTS, type KeyPress } from './keys'
 
 const press = (key: string, mods: Partial<KeyPress> = {}): KeyPress => ({
   key,
@@ -46,7 +46,9 @@ describe('censor keys', () => {
     expect(keyAction(press('d'), 'none')).toEqual({ type: 'detect' })
     expect(keyAction(press('D'), 'control')).toEqual({ type: 'detect' })
     expect(keyAction(press('d'), 'text')).toBeNull()
-    for (const key of ['1', 'a', 's', 'r', 'Enter']) expect(keyAction(press(key), 'none')).toBeNull()
+    for (const key of ['1', 'a', 's', 'Enter']) expect(keyAction(press(key), 'none')).toBeNull()
+    // outside review R removes the background
+    expect(keyAction(press('r'), 'none')).toEqual({ type: 'removeBg' })
 
     expect(keyAction(press('1'), 'none', true)).toEqual({ type: 'region', n: 1 })
     expect(keyAction(press('9'), 'none', true)).toEqual({ type: 'region', n: 9 })
@@ -63,6 +65,40 @@ describe('censor keys', () => {
     for (const key of ['1', 'a', 's', 'r', 'Enter']) expect(keyAction(press(key), 'text', true)).toBeNull()
     expect(keyAction(press('Enter'), 'control', true)).toBeNull()
     expect(keyAction(press('1', { shiftKey: true }), 'none', true)).toBeNull()
+  })
+
+  it('G clone, H show changes', () => {
+    expect(keyAction(press('g'), 'none')).toEqual({ type: 'tool', tool: 'clone' })
+    expect(keyAction(press('h'), 'none', true)).toEqual({ type: 'changes' })
+  })
+
+  it('the shortcut list shows exactly the keys that do something', () => {
+    const label = (key: string, mods: Partial<KeyPress>) => {
+      const named: Record<string, string> = { ArrowLeft: '←', ArrowRight: '→' }
+      const base = named[key] ?? (key.length === 1 ? key.toUpperCase() : key)
+      return `${mods.ctrlKey ? 'Ctrl+' : ''}${mods.shiftKey ? 'Shift+' : ''}${base}`
+    }
+    const listed = (text: string, reviewing: boolean) =>
+      SHORTCUTS.some(
+        (s) =>
+          s.when !== 'pointer' &&
+          (s.when !== 'review' || reviewing) &&
+          (s.when !== 'outside' || !reviewing) &&
+          s.keys.some((k) => k === text || (k === '1–9' && /^[1-9]$/.test(text))),
+      )
+    const keys = [...'abcdefghijklmnopqrstuvwxyz0123456789[]', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'F1', 'F2', 'Delete', 'Escape', ' ']
+    const combos: Partial<KeyPress>[] = [{}, { ctrlKey: true }, { ctrlKey: true, shiftKey: true }]
+    for (const reviewing of [false, true]) {
+      for (const key of keys) {
+        for (const mods of combos) {
+          const action = keyAction(press(key, mods), 'none', reviewing)
+          // Shift is ignored for [ and ], so only the plain form is listed.
+          const shown = listed(label(key, mods), reviewing)
+          if (action) expect(shown, `${label(key, mods)} (review ${reviewing}) does something but is not listed`).toBe(true)
+          else expect(shown, `${label(key, mods)} (review ${reviewing}) is listed but does nothing`).toBe(false)
+        }
+      }
+    }
   })
 
   it('leaves the arrows to a slider but still takes tool keys there', () => {

@@ -148,3 +148,12 @@
 .item[data-review="approved"] .review {
   color: var(--ok-on-image);
 }
+
+/* Picked with Ctrl/Shift+click: a china-marker ring inside the frame. */
+.item[data-picked] .frame {
+  box-shadow: inset 0 0 0 2px var(--marker);
+}
+
+.item[data-picked][aria-current="true"] .frame {
+  box-shadow: 0 0 0 1px var(--accent), inset 0 0 0 2px var(--marker);
+}

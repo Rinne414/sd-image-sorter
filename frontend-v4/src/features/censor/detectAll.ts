@@ -17,7 +17,7 @@ import { editOf, initialEdit, keyOf, useCensorSession } from './session'
 // "waiting for review" mark right away, so a reload loses nothing. Stop ends
 // it after the image being worked on; running it again goes on with the rest.
 
-type RunKind = 'detect' | 'refine'
+type RunKind = 'detect' | 'refine' | 'adjust'
 
 /** What the Jobs drawer polls; the shape its progress reader expects. Owned by the one run going. */
 interface RunState {
@@ -54,7 +54,8 @@ async function store(batchId: number, item: BatchItem): Promise<void> {
   if (!outcome.ok) throw new Error(outcome.reason ?? tr('censor.all.gone'))
 }
 
-async function runJob(kind: RunKind, batchId: number, items: BatchItem[], work: (item: BatchItem) => Promise<void>): Promise<RunState> {
+/** Work through `items` one by one as a job in the Jobs drawer, saving each image's result. */
+export async function runJob(kind: RunKind, batchId: number, items: BatchItem[], work: (item: BatchItem) => Promise<void>): Promise<RunState> {
   const state: RunState = { status: 'running', current: 0, total: items.length, succeeded: 0, failed: [], current_item: null }
   run = state
   stopAsked = false

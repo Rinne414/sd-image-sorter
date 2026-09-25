@@ -4,7 +4,10 @@ import { thumbnailUrl } from '../../api/client'
 import type { BatchItem } from '../../api/types'
 import { useT, type MessageKey } from '../../i18n'
 import styles from './Filmstrip.module.css'
+import { pickClick, useCensorPanel } from './panel'
 import { initialEdit, itemStatus, keyOf, useCensorSession, type ItemStatus } from './session'
+
+const NONE: number[] = []
 
 const ITEM_H = 116
 const PAD = 8
@@ -28,6 +31,8 @@ interface Props {
 export function Filmstrip({ batchId, items, current, onPick }: Props) {
   const t = useT()
   const edits = useCensorSession((s) => s.edits)
+  const picked = useCensorPanel((s) => (s.picked.batchId === batchId ? s.picked.ids : NONE))
+  const order = items.map((item) => item.image_id)
   const scrollRef = useRef<HTMLDivElement>(null)
   const virtualizer = useVirtualizer({
     count: items.length,
@@ -67,9 +72,16 @@ export function Filmstrip({ batchId, items, current, onPick }: Props) {
                 title={status === 'error' && edit?.error ? `${label} (${edit.error})` : label}
                 data-state={status}
                 data-review={reviewed === null ? undefined : reviewed ? 'approved' : 'waiting'}
+                data-picked={picked.includes(item.image_id) || undefined}
                 data-testid="censor-strip-item"
                 data-id={item.image_id}
-                onClick={() => onPick(row.index)}
+                onClick={(e) => {
+                  // Ctrl+click and Shift+click pick images (the Adjust tab applies to them); a plain click opens one.
+                  if (e.ctrlKey || e.metaKey) return pickClick(batchId, order, item.image_id, 'toggle')
+                  if (e.shiftKey) return pickClick(batchId, order, item.image_id, 'range')
+                  pickClick(batchId, order, item.image_id, 'clear')
+                  onPick(row.index)
+                }}
               >
                 <span className={styles.frame}>
                   <img src={thumbnailUrl(item.image_id, 256)} alt="" loading="lazy" decoding="async" draggable={false} />

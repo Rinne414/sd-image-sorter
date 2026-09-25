@@ -1,10 +1,13 @@
+import type { MessageKey } from '../../i18n'
 import type { Tool } from './ops'
 import { SIZE_STEP } from './settings'
 
 // The censor editor's keys as a pure mapping, so the rules can be tested:
 // letters and brackets never fire while the user types text, arrows never
 // while any form control has the focus (a slider uses them itself). The
-// review keys (1-9, A, Enter, S, R) exist only in review mode.
+// review keys (1-9, A, Enter, S, R) exist only in review mode; outside it R
+// removes the background. SHORTCUTS below is the list the editor shows; a
+// test checks it against keyAction so the two cannot drift apart.
 
 export type KeyAction =
   | { type: 'tool'; tool: Tool }
@@ -20,6 +23,8 @@ export type KeyAction =
   | { type: 'approve' }
   | { type: 'skip' }
   | { type: 'redetect' }
+  | { type: 'removeBg' }
+  | { type: 'changes' }
 
 export interface KeyPress {
   key: string
@@ -41,7 +46,7 @@ export function focusKind(target: EventTarget | null): FocusKind {
   return 'none'
 }
 
-const TOOL_KEYS: Record<string, Tool> = { b: 'brush', p: 'pen', e: 'eraser' }
+const TOOL_KEYS: Record<string, Tool> = { b: 'brush', p: 'pen', e: 'eraser', g: 'clone' }
 
 function withCtrl(key: string, shift: boolean): KeyAction | null {
   if (key === 'z') return shift ? { type: 'redo' } : { type: 'undo' }
@@ -58,6 +63,8 @@ function reviewKey(key: string, focus: FocusKind): KeyAction | null {
   return REVIEW_KEYS[key] ?? null
 }
 
+const PLAIN_KEYS: Record<string, KeyAction> = { '0': { type: 'fit' }, d: { type: 'detect' }, h: { type: 'changes' } }
+
 export function keyAction(e: KeyPress, focus: FocusKind, reviewing = false): KeyAction | null {
   if (e.altKey) return null
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key
@@ -72,12 +79,50 @@ export function keyAction(e: KeyPress, focus: FocusKind, reviewing = false): Key
   if (e.shiftKey) return null
   const tool = TOOL_KEYS[key]
   if (tool) return { type: 'tool', tool }
-  if (key === '0') return { type: 'fit' }
-  if (key === 'd') return { type: 'detect' }
+  const plain = PLAIN_KEYS[key]
+  if (plain) return plain
   const review = reviewing ? reviewKey(key, focus) : null
   if (review) return review
+  if (key === 'r' && !reviewing) return { type: 'removeBg' }
   if (focus === 'control') return null
   if (key === 'ArrowLeft') return { type: 'go', delta: -1 }
   if (key === 'ArrowRight') return { type: 'go', delta: 1 }
   return null
 }
+
+// ---- the list the editor shows ----
+
+export type ShortcutGroup = 'tools' | 'edit' | 'review' | 'view'
+
+export interface Shortcut {
+  /** As shown, e.g. 'Ctrl+Z'; one row may list several. `1–9` is the digit range. */
+  keys: string[]
+  label: MessageKey
+  group: ShortcutGroup
+  /** review: only in review mode; outside: only outside it; pointer: a mouse gesture, not a key. */
+  when?: 'review' | 'outside' | 'pointer'
+}
+
+export const SHORTCUTS: readonly Shortcut[] = [
+  { keys: ['B'], label: 'censor.tool.brush', group: 'tools' },
+  { keys: ['P'], label: 'censor.tool.pen', group: 'tools' },
+  { keys: ['E'], label: 'censor.tool.eraser', group: 'tools' },
+  { keys: ['G'], label: 'censor.tool.clone', group: 'tools' },
+  { keys: ['Alt+click'], label: 'censor.keys.cloneSource', group: 'tools', when: 'pointer' },
+  { keys: ['[', ']'], label: 'censor.size', group: 'tools' },
+  { keys: ['Ctrl+Z'], label: 'censor.undo', group: 'edit' },
+  { keys: ['Ctrl+Shift+Z', 'Ctrl+Y'], label: 'censor.redo', group: 'edit' },
+  { keys: ['Ctrl+S'], label: 'censor.saveNow', group: 'edit' },
+  { keys: ['R'], label: 'censor.bg.title', group: 'edit', when: 'outside' },
+  { keys: ['D'], label: 'censor.detect.this', group: 'review' },
+  { keys: ['1–9'], label: 'censor.keys.region', group: 'review', when: 'review' },
+  { keys: ['A'], label: 'censor.review.toggleAll', group: 'review', when: 'review' },
+  { keys: ['Enter'], label: 'censor.review.approve', group: 'review', when: 'review' },
+  { keys: ['S'], label: 'censor.review.skip', group: 'review', when: 'review' },
+  { keys: ['R'], label: 'censor.review.redetect', group: 'review', when: 'review' },
+  { keys: ['←', '→'], label: 'censor.keys.move', group: 'view' },
+  { keys: ['0'], label: 'censor.fit', group: 'view' },
+  { keys: ['H'], label: 'censor.changes.toggle', group: 'view' },
+  { keys: ['Ctrl+wheel'], label: 'censor.keys.zoom', group: 'view', when: 'pointer' },
+  { keys: ['Space+drag'], label: 'censor.keys.pan', group: 'view', when: 'pointer' },
+]
