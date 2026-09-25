@@ -5,7 +5,7 @@ import { translate, useLang, useT, type MessageKey, type Params } from '../../i1
 import { useApp } from '../../state/store'
 import { useTheme } from '../../theme'
 import { useLayer } from '../../ui/layers'
-import { recentBatches } from '../batch/AddToBatchMenu'
+import { recentBatches } from '../batch/addPicks'
 import { useBatches } from '../batch/batchApi'
 import { askNewBatch } from '../batch/dialogStore'
 import { BATCH_KINDS } from '../batch/labels'
