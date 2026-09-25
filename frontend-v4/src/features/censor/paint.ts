@@ -151,7 +151,7 @@ export function applyOp(target: Raster, original: Raster, op: Op, scratch?: Scra
 export function renderInto(target: Raster, original: Raster, ops: readonly Op[], scratch?: Scratch): void {
   target.data.set(original.data)
   const shared = scratch ?? createScratch(original.width, original.height)
-  for (const op of ops) applyOp(target, original, op, shared)
+  for (const op of ops) if (!(op.type === 'region' && op.off)) applyOp(target, original, op, shared)
 }
 
 /** A new raster with `ops` applied to `original`. */

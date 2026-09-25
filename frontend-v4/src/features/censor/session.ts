@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Batch, BatchItem } from '../../api/types'
 import { EMPTY_HISTORY, record, redo, undo, type History } from './history'
-import { parseOps, type Op } from './ops'
+import { parseOps, parseReviewed, type Op } from './ops'
 
 // Censor edits of every image touched since the page loaded, per batch. Kept
 // outside React so undo history survives switching images and steps, and a
@@ -11,6 +11,10 @@ export interface ImageEdit {
   ops: Op[]
   /** The list the server's copy was made from; null when the server has no copy of these ops. */
   saved: Op[] | null
+  /** Review mark: null never detected, false waiting for review, true approved. */
+  reviewed: boolean | null
+  /** The review mark the server holds. */
+  savedReviewed: boolean | null
   history: History
   error: string | null
   saving: boolean
@@ -25,11 +29,13 @@ export const keyOf = (batchId: number, imageId: number) => `${batchId}:${imageId
 /** The edit an item starts with: the ops stored with it, "saved" when its copy exists (or it has none). */
 export function initialEdit(item: BatchItem): ImageEdit {
   const ops = parseOps(item.item_state)
-  return { ops, saved: ops.length === 0 || item.has_censored ? ops : null, history: EMPTY_HISTORY, error: null, saving: false, again: false }
+  const reviewed = parseReviewed(item.item_state)
+  const saved = ops.length === 0 || item.has_censored ? ops : null
+  return { ops, saved, reviewed, savedReviewed: reviewed, history: EMPTY_HISTORY, error: null, saving: false, again: false }
 }
 
 export function isDirty(edit: ImageEdit): boolean {
-  return edit.ops !== edit.saved
+  return edit.ops !== edit.saved || edit.reviewed !== edit.savedReviewed
 }
 
 export function itemStatus(item: BatchItem, edit: ImageEdit | undefined): ItemStatus {
@@ -123,6 +129,15 @@ export function changeOps(batchId: number, item: BatchItem, ops: Op[]): void {
   useCensorSession.setState((s) => {
     const edit = s.edits[key] ?? initialEdit(item)
     return { edits: { ...s.edits, [key]: { ...edit, ops, history: record(edit.history, edit.ops) } } }
+  })
+}
+
+/** Set the image's review mark (saved with its ops). */
+export function setReviewed(batchId: number, item: BatchItem, reviewed: boolean | null): void {
+  const key = keyOf(batchId, item.image_id)
+  useCensorSession.setState((s) => {
+    const edit = s.edits[key] ?? initialEdit(item)
+    return edit.reviewed === reviewed ? s : { edits: { ...s.edits, [key]: { ...edit, reviewed } } }
   })
 }
 

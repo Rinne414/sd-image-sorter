@@ -47,9 +47,26 @@ export const useJobs = create<JobsState>((set, get) => ({
   clearFinished: () => set({ jobs: get().jobs.filter((j) => !isFinished(j.progress.status)) }),
 }))
 
-type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors' | 'reconnect' | 'scan'
+type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors' | 'reconnect' | 'scan' | 'detect'
 
-const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind)
+// Detecting and SAM3 refining both keep the detector busy: one at a time.
+const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind === 'refine' ? 'detect' : kind)
+
+/**
+ * A job that runs in this page instead of on the backend reports through the
+ * feature that runs it (registered here, so this core stays feature-free).
+ * `snapshot` answers in the shape its progress reader expects.
+ */
+export interface LocalJobSource {
+  snapshot: () => unknown
+  cancel: () => void
+}
+
+let detectSource: LocalJobSource | null = null
+
+export function setDetectSource(source: LocalJobSource): void {
+  detectSource = source
+}
 
 interface Driver {
   poll: () => Promise<unknown>
@@ -100,6 +117,11 @@ const DRIVERS: Record<Queue, Driver> = {
   tags: {
     poll: async () => ({ status: 'done' }),
     cancel: null,
+  },
+  // Censor detection over a batch runs in this page; a reload ends it (the poll then reports an error).
+  detect: {
+    poll: async () => detectSource?.snapshot() ?? null,
+    cancel: async () => detectSource?.cancel(),
   },
 }
 
@@ -274,6 +296,9 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   colors: ['images', 'image', 'image-count', 'colors-missing'],
   scan: ['images', 'image', 'generators', 'folders', 'libraries', 'library-health', 'missing-summary', 'missing-groups', 'colors-missing', 'image-count'],
   reconnect: ['images', 'image', 'missing-summary', 'missing-groups', 'repair-candidates', 'library-health', 'folders'],
+  // Each image's result is saved (and the batch refreshed) as it arrives.
+  detect: [],
+  refine: [],
 }
 
 let onUndo: ((job: Job) => Promise<void>) | null = null
@@ -333,6 +358,8 @@ const RUNNING: Record<JobKind, MessageKey> = {
   colors: 'jobs.running.colors',
   reconnect: 'jobs.running.reconnect',
   scan: 'jobs.running.scan',
+  detect: 'jobs.running.detect',
+  refine: 'jobs.running.refine',
 }
 
 const DONE: Record<JobKind, MessageKey> = {
@@ -346,6 +373,8 @@ const DONE: Record<JobKind, MessageKey> = {
   colors: 'jobs.done.colors',
   reconnect: 'jobs.done.reconnect',
   scan: 'jobs.done.scan',
+  detect: 'jobs.done.detect',
+  refine: 'jobs.done.refine',
 }
 
 /** One line that says what happened (or is happening) to this job. */

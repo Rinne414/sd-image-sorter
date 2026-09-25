@@ -10,8 +10,11 @@ import { editOf, forgetEdit, isDirty, patchEdit } from './session'
 /** The item or its batch no longer exists: there is nothing left to save to. */
 export class ItemGoneError extends Error {}
 
-/** Make the server hold exactly these ops: their copy and the ops together, or (no ops) neither. */
-export type WriteOps = (ops: Op[]) => Promise<void>
+/**
+ * Make the server hold exactly these ops and review mark: the copy and the
+ * state together, or (no ops) no copy and the state.
+ */
+export type WriteOps = (ops: Op[], reviewed: boolean | null) => Promise<void>
 
 export interface SaveOptions {
   /** Write even when nothing changed (e.g. to drop a copy that has no ops). */
@@ -28,12 +31,12 @@ export async function runSave(batchId: number, imageId: number, write: WriteOps,
     patchEdit(batchId, imageId, { again: true })
     return false
   }
-  const ops = edit.ops
+  const { ops, reviewed } = edit
   patchEdit(batchId, imageId, { saving: true, again: false })
   let ok = false
   try {
-    await write(ops)
-    patchEdit(batchId, imageId, { saved: ops, error: null })
+    await write(ops, reviewed)
+    patchEdit(batchId, imageId, { saved: ops, savedReviewed: reviewed, error: null })
     ok = true
   } catch (error) {
     if (error instanceof ItemGoneError) {

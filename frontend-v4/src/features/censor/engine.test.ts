@@ -5,6 +5,7 @@ import {
   farEnough,
   insertDetections,
   parseOps,
+  parseReviewed,
   redetect,
   replaceDetections,
   withCensorState,
@@ -279,6 +280,27 @@ describe('saved state', () => {
     expect(withCensorState({ name: 'x' }, saved)).toEqual({ name: 'x', censor: saved })
     expect(withCensorState({ name: 'x', censor: 1 }, { ...saved, ops: [] })).toEqual({ name: 'x' })
     expect(withCensorState(null, null)).toEqual({})
+    // a review mark is kept even without ops (detected, nothing found)
+    const marked = { ...saved, ops: [], reviewed: false }
+    expect(withCensorState({ name: 'x' }, marked)).toEqual({ name: 'x', censor: marked })
+  })
+
+  it('reads the review mark and the region extras (score, box, switched off)', () => {
+    const state = {
+      censor: {
+        v: 1,
+        reviewed: true,
+        ops: [{ type: 'region', id: 'r', source: 'detection', detector: 'nudenet', label: 'anus', style: 'black', block: 8, confidence: 1.7, box: [1, 2, 3, 4], off: true, shape: { type: 'polygon', points: [0, 0, 1, 0, 1, 1] } }],
+      },
+    }
+    expect(parseReviewed(state)).toBe(true)
+    expect(parseReviewed({ censor: { v: 1, ops: [] } })).toBeNull()
+    expect(parseReviewed(null)).toBeNull()
+    expect(parseOps(state)[0]).toMatchObject({ confidence: 1, box: [1, 2, 3, 4], off: true })
+    const plain = parseOps({ censor: { ops: [{ ...state.censor.ops[0], off: 'yes', box: [1, 2], confidence: 'x' }] } })[0]
+    expect(plain).not.toHaveProperty('off')
+    expect(plain).not.toHaveProperty('box')
+    expect(plain).not.toHaveProperty('confidence')
   })
 
   it('skips pointer samples closer than an eighth of the brush', () => {

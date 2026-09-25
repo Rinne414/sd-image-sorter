@@ -3,7 +3,9 @@ import { useT } from '../../i18n'
 import styles from './CanvasView.module.css'
 import { appendManual, farEnough, newOpId, roundPoint, type Op, type StrokeOp } from './ops'
 import { createPainter, createScratch, renderInto, type Painter, type Scratch } from './paint'
+import { useCensorPanel } from './panel'
 import { cloneRaster, type Raster, type Rect } from './raster'
+import { RegionOverlay } from './RegionOverlay'
 import { loadOriginal } from './saving'
 import { useCensorSettings } from './settings'
 import { toImage, useCanvasView, ZOOM_STEP } from './view'
@@ -75,6 +77,7 @@ export function CanvasView({ imageId, ops, onCommit }: Props) {
   const drag = useRef<Drag>(null)
   const view = useCanvasView()
   const size = useCensorSettings((s) => s.size)
+  const reviewing = useCensorPanel((s) => s.tab === 'review')
   const ready = load.state === 'ready' ? load : null
 
   // Draw the picture: fully when the image arrives or the list changed from outside (undo, redo, reset).
@@ -235,6 +238,7 @@ export function CanvasView({ imageId, ops, onCommit }: Props) {
         data-pixelated={view.z >= 2 || undefined}
         data-testid="censor-canvas"
       />
+      {ready && reviewing && <RegionOverlay ops={ops} width={ready.result.width} height={ready.result.height} zoom={view.z} style={style} />}
       {load.state === 'loading' && <p className={styles.note}>{t('censor.loading')}</p>}
       {load.state === 'error' && (
         <p className={styles.note} role="alert">

@@ -18,6 +18,8 @@
  *    are only ever appended (appendManual).
  * 5. Lists are immutable: every change makes a new list, so undo history is a
  *    stack of old lists and "unsaved" is simply `ops !== savedOps`.
+ * 6. A detection switched off in review keeps its place in the list with
+ *    `off: true` and is skipped when rendering; switching it on again brings it back.
  */
 
 export type CensorStyle = 'mosaic' | 'blur' | 'black' | 'white'
@@ -55,6 +57,9 @@ export type RegionShape =
   | { type: 'polygon'; points: number[] }
   | { type: 'mask'; x: number; y: number; w: number; h: number; runs: number[] }
 
+/** A detector's box: x1, y1, x2, y2 in image pixels. */
+export type Box = [number, number, number, number]
+
 /** An area a detector found, censored with `style`. */
 export interface RegionOp {
   type: 'region'
@@ -66,6 +71,12 @@ export interface RegionOp {
   style: CensorStyle
   block: number
   shape: RegionShape
+  /** The detector's score 0-1, when it gave one. */
+  confidence?: number
+  /** The detector's box (SAM3 refines from it). */
+  box?: Box
+  /** Switched off in review: still listed, not applied. */
+  off?: boolean
 }
 
 export type Op = StrokeOp | RegionOp
@@ -76,6 +87,8 @@ export interface SavedCensorState {
   width: number
   height: number
   ops: Op[]
+  /** Absent: never detected. false: detected, waiting for review. true: approved in review. */
+  reviewed?: boolean
 }
 
 let counter = 0
@@ -169,7 +182,7 @@ function parseShape(v: unknown): RegionShape | null {
 function parseRegion(o: Record<string, unknown>): RegionOp | null {
   const shape = parseShape(o.shape)
   if (!shape || o.source !== 'detection') return null
-  return {
+  const region: RegionOp = {
     type: 'region',
     id: typeof o.id === 'string' ? o.id : newOpId(),
     source: 'detection',
@@ -179,12 +192,26 @@ function parseRegion(o: Record<string, unknown>): RegionOp | null {
     block: clamp(isNum(o.block) ? Math.round(o.block) : 16, BLOCK_MIN, BLOCK_MAX),
     shape,
   }
+  if (isNum(o.confidence)) region.confidence = clamp(o.confidence, 0, 1)
+  if (numList(o.box) && o.box.length === 4) region.box = [o.box[0], o.box[1], o.box[2], o.box[3]] as Box
+  if (o.off === true) region.off = true
+  return region
+}
+
+const censorOf = (itemState: unknown): Record<string, unknown> | null => {
+  const censor = itemState && typeof itemState === 'object' ? (itemState as Record<string, unknown>).censor : null
+  return censor && typeof censor === 'object' ? (censor as Record<string, unknown>) : null
+}
+
+/** The review mark stored with an item: null when it was never detected. */
+export function parseReviewed(itemState: unknown): boolean | null {
+  const reviewed = censorOf(itemState)?.reviewed
+  return typeof reviewed === 'boolean' ? reviewed : null
 }
 
 /** The ops stored in an item's state; anything malformed is left out, detections moved to the front. */
 export function parseOps(itemState: unknown): Op[] {
-  const censor = itemState && typeof itemState === 'object' ? (itemState as Record<string, unknown>).censor : null
-  const list = censor && typeof censor === 'object' ? (censor as Record<string, unknown>).ops : null
+  const list = censorOf(itemState)?.ops
   if (!Array.isArray(list)) return []
   const ops: Op[] = []
   for (const raw of list) {
@@ -196,9 +223,12 @@ export function parseOps(itemState: unknown): Op[] {
   return replaceDetections(ops, ops.filter(isDetection))
 }
 
-/** The item state to send: every other step's keys kept, `censor` set (or removed when there are no ops). */
+/**
+ * The item state to send: every other step's keys kept, `censor` set, or
+ * removed when there is nothing to keep (no ops and no review mark).
+ */
 export function withCensorState(itemState: Record<string, unknown> | null, saved: SavedCensorState | null): Record<string, unknown> {
   const rest: Record<string, unknown> = { ...(itemState ?? {}) }
   delete rest.censor
-  return saved && saved.ops.length > 0 ? { ...rest, censor: saved } : rest
+  return saved && (saved.ops.length > 0 || saved.reviewed !== undefined) ? { ...rest, censor: saved } : rest
 }

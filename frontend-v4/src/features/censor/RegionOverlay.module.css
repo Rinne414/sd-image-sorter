@@ -1,0 +1,44 @@
+.overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.region polygon,
+.region rect {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+/* A dark rule under the cyanotype line keeps outlines visible on any picture. */
+.halo {
+  stroke: var(--film);
+  stroke-width: 4px;
+}
+
+.line {
+  stroke: var(--ai-on-image);
+  stroke-width: 2px;
+}
+
+.region[data-off] .line {
+  stroke: var(--on-image);
+  stroke-dasharray: 5 4;
+}
+
+.number {
+  fill: var(--ai-on-image);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: var(--film);
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
+}
+
+.region[data-off] .number {
+  fill: var(--on-image);
+}

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BatchItem } from '../../api/types'
 import type { Op, StrokeOp } from './ops'
 import { ItemGoneError, runSave, type WriteOps } from './saveFlow'
-import { changeOps, editOf, itemStatus, syncItems, unsavedIds, useCensorSession } from './session'
+import { changeOps, editOf, itemStatus, setReviewed, syncItems, unsavedIds, useCensorSession } from './session'
 
 const BATCH = 3
 const IMAGE = 11
@@ -48,7 +48,7 @@ describe('saving one image', () => {
     const write = vi.fn<WriteOps>().mockRejectedValueOnce(new Error('HTTP 500')).mockResolvedValueOnce(undefined)
 
     expect(await save(write)).toBe(false)
-    expect(write).toHaveBeenCalledWith(ops)
+    expect(write).toHaveBeenCalledWith(ops, null)
     const failed = editOf(BATCH, IMAGE)
     expect(failed).toMatchObject({ error: 'HTTP 500', saving: false, saved: [] })
     // never counted as censored: the server did not take the copy
@@ -57,7 +57,7 @@ describe('saving one image', () => {
 
     expect(await save(write)).toBe(true)
     expect(write).toHaveBeenCalledTimes(2)
-    expect(write).toHaveBeenLastCalledWith(ops)
+    expect(write).toHaveBeenLastCalledWith(ops, null)
     const saved = editOf(BATCH, IMAGE)
     expect(saved?.saved).toBe(ops)
     expect(saved?.error).toBeNull()
@@ -76,7 +76,7 @@ describe('saving one image', () => {
     expect(await save(write)).toBe(true)
     expect(write).not.toHaveBeenCalled()
     expect(await save(write, true)).toBe(true)
-    expect(write).toHaveBeenCalledWith([])
+    expect(write).toHaveBeenCalledWith([], null)
   })
 
   it('a save asked for while one runs runs again with the newest ops', async () => {
@@ -96,9 +96,27 @@ describe('saving one image', () => {
     finish()
 
     expect(await running).toBe(true)
-    expect(write).toHaveBeenNthCalledWith(1, first)
-    expect(write).toHaveBeenNthCalledWith(2, newest)
+    expect(write).toHaveBeenNthCalledWith(1, first, null)
+    expect(write).toHaveBeenNthCalledWith(2, newest, null)
     expect(editOf(BATCH, IMAGE)?.saved).toBe(newest)
+  })
+
+  it('the review mark is saved with the ops: a new mark alone makes the image unsaved', async () => {
+    const write = vi.fn<WriteOps>().mockResolvedValue(undefined)
+    setReviewed(BATCH, item(), false)
+    expect(unsavedIds(BATCH)).toEqual([IMAGE])
+    expect(await save(write)).toBe(true)
+    expect(write).toHaveBeenLastCalledWith([], false)
+    expect(editOf(BATCH, IMAGE)).toMatchObject({ reviewed: false, savedReviewed: false })
+    expect(unsavedIds(BATCH)).toEqual([])
+
+    changeOps(BATCH, item(), [stroke('a')])
+    setReviewed(BATCH, item(), true)
+    expect(await save(write)).toBe(true)
+    expect(write).toHaveBeenLastCalledWith([stroke('a')], true)
+    // the same mark again changes nothing
+    setReviewed(BATCH, item(), true)
+    expect(unsavedIds(BATCH)).toEqual([])
   })
 
   it('an item that no longer exists is forgotten, not retried', async () => {

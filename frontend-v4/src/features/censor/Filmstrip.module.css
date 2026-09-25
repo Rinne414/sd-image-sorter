@@ -131,3 +131,20 @@
   color: var(--danger);
   font-size: var(--fs-2);
 }
+
+/* Review mark in the frame's corner: waiting in cyanotype (a model's work), approved in the ok ink; both on the dark caption tile. */
+.review {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  padding: 0 4px;
+  background: var(--tile-caption-bg);
+  color: var(--ai-on-image);
+  font-size: var(--fs-1);
+  line-height: 16px;
+  border-radius: var(--radius);
+}
+
+.item[data-review="approved"] .review {
+  color: var(--ok-on-image);
+}

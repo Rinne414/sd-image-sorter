@@ -1,12 +1,15 @@
-import { useRef, useState, type ReactNode } from 'react'
-import type { BatchItem } from '../../api/types'
+import { useRef, useState } from 'react'
+import type { Batch, BatchItem } from '../../api/types'
 import { useT, type MessageKey } from '../../i18n'
 import { Dialog } from '../../ui/Dialog'
 import { Icon } from '../../ui/Icon'
-import { isDrawing } from './CanvasView'
+import { DetectPanel } from './DetectPanel'
+import { useCensorPanel, type PanelTab } from './panel'
+import { HistoryButtons, Section, Slider } from './PanelParts'
+import { ReviewPanel, type ReviewActions } from './ReviewPanel'
 import { BLOCK_MAX, BLOCK_MIN, OPACITY_MAX, OPACITY_MIN, SIZE_MAX, SIZE_MIN, STYLES, TOOLS, type CensorStyle, type Tool } from './ops'
 import { saveImage } from './saving'
-import { changeOps, redoEdit, undoEdit, type ImageEdit } from './session'
+import { changeOps, type ImageEdit } from './session'
 import { useCensorSettings } from './settings'
 import styles from './ToolPanel.module.css'
 import { useCanvasView, ZOOM_STEP } from './view'
@@ -18,42 +21,6 @@ const STYLE_LABEL: Record<CensorStyle, MessageKey> = {
   blur: 'censor.style.blur',
   black: 'censor.style.black',
   white: 'censor.style.white',
-}
-
-interface SliderProps {
-  label: string
-  value: number
-  min: number
-  max: number
-  unit: string
-  onChange: (value: number) => void
-  testId: string
-  extra?: ReactNode
-}
-
-function Slider({ label, value, min, max, unit, onChange, testId, extra }: SliderProps) {
-  return (
-    <label className={styles.field}>
-      <span className={styles.fieldHead}>
-        <span>{label}</span>
-        {extra}
-        <span className={`${styles.value} mono`}>
-          {value}
-          {unit}
-        </span>
-      </span>
-      <input type="range" min={min} max={max} value={value} onChange={(e) => onChange(Number(e.target.value))} data-testid={testId} />
-    </label>
-  )
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className={styles.section}>
-      <h3 className={styles.heading}>{title}</h3>
-      {children}
-    </section>
-  )
 }
 
 function ToolSettings() {
@@ -111,26 +78,55 @@ function ViewControls() {
 }
 
 interface Props {
-  batchId: number
+  batch: Batch
   item: BatchItem
   edit: ImageEdit | undefined
+  review: ReviewActions
 }
 
-/** The right-hand panel: tool, its settings, undo/redo, view, and far below them "back to original". */
-export function ToolPanel({ batchId, item, edit }: Props) {
-  const t = useT()
-  const s = useCensorSettings()
-  const [confirming, setConfirming] = useState(false)
-  const canUndo = (edit?.history.past.length ?? 0) > 0
-  const canRedo = (edit?.history.future.length ?? 0) > 0
-  const canReset = (edit?.ops.length ?? 0) > 0 || item.has_censored
+const TABS: { id: PanelTab; label: MessageKey }[] = [
+  { id: 'brush', label: 'censor.tab.brush' },
+  { id: 'detect', label: 'censor.tab.detect' },
+  { id: 'review', label: 'censor.tab.review' },
+]
 
-  const run = (step: typeof undoEdit) => {
-    if (!isDrawing()) step(batchId, item.image_id)
-  }
+/** The right-hand panel: brush / detect / review tabs, and far below them "back to original". */
+export function ToolPanel({ batch, item, edit, review }: Props) {
+  const t = useT()
+  const tab = useCensorPanel((s) => s.tab)
+  const setTab = useCensorPanel((s) => s.setTab)
+  const [confirming, setConfirming] = useState(false)
+  const canReset = (edit?.ops.length ?? 0) > 0 || item.has_censored
 
   return (
     <aside className={styles.panel} aria-label={t('censor.tools')} data-testid="censor-tools">
+      <div className={styles.tabs} role="tablist" aria-label={t('censor.tools')}>
+        {TABS.map(({ id, label }) => (
+          <button key={id} type="button" role="tab" aria-selected={tab === id} className={styles.tab} onClick={() => setTab(id)} data-testid={`censor-tab-${id}`}>
+            {t(label)}
+          </button>
+        ))}
+      </div>
+      <div className={styles.body} role="tabpanel">
+        {tab === 'brush' && <BrushTab batchId={batch.id} item={item} edit={edit} />}
+        {tab === 'detect' && <DetectPanel batch={batch} item={item} />}
+        {tab === 'review' && <ReviewPanel batch={batch} item={item} edit={edit} actions={review} />}
+      </div>
+      <div className={styles.danger}>
+        <button type="button" className="btn btn-ghost" onClick={() => setConfirming(true)} disabled={!canReset} data-testid="censor-reset">
+          {t('censor.reset')}
+        </button>
+      </div>
+      {confirming && <ResetDialog batchId={batch.id} item={item} ops={edit?.ops ?? []} onClose={() => setConfirming(false)} />}
+    </aside>
+  )
+}
+
+function BrushTab({ batchId, item, edit }: { batchId: number; item: BatchItem; edit: ImageEdit | undefined }) {
+  const t = useT()
+  const s = useCensorSettings()
+  return (
+    <>
       <Section title={t('censor.tools')}>
         <div className={styles.tools} role="group" aria-label={t('censor.tools')}>
           {TOOLS.map((tool) => (
@@ -160,28 +156,13 @@ export function ToolPanel({ batchId, item, edit }: Props) {
         <ToolSettings />
       </Section>
       <Section title={t('censor.history')}>
-        <div className={styles.pair}>
-          <button type="button" className="btn" onClick={() => run(undoEdit)} disabled={!canUndo} title={t('censor.undoTip')} data-testid="censor-undo">
-            <Icon name="undo" size={14} />
-            {t('censor.undo')}
-          </button>
-          <button type="button" className="btn" onClick={() => run(redoEdit)} disabled={!canRedo} title={t('censor.redoTip')} data-testid="censor-redo">
-            <Icon name="redo" size={14} />
-            {t('censor.redo')}
-          </button>
-        </div>
+        <HistoryButtons batchId={batchId} item={item} edit={edit} />
       </Section>
       <Section title={t('censor.view')}>
         <ViewControls />
         <p className={styles.note}>{t('censor.panNote')}</p>
       </Section>
-      <div className={styles.danger}>
-        <button type="button" className="btn btn-ghost" onClick={() => setConfirming(true)} disabled={!canReset} data-testid="censor-reset">
-          {t('censor.reset')}
-        </button>
-      </div>
-      {confirming && <ResetDialog batchId={batchId} item={item} ops={edit?.ops ?? []} onClose={() => setConfirming(false)} />}
-    </aside>
+    </>
   )
 }
 

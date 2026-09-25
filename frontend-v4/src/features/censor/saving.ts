@@ -4,7 +4,7 @@ import type { Batch, BatchItem } from '../../api/types'
 import { useApp } from '../../state/store'
 import { tr } from '../jobs/jobs'
 import { batchKey } from '../batch/batchApi'
-import { withCensorState, type Op } from './ops'
+import { withCensorState, type Op, type SavedCensorState } from './ops'
 import { renderOps } from './paint'
 import { createRaster, type Raster } from './raster'
 import { ItemGoneError, runSave } from './saveFlow'
@@ -61,7 +61,7 @@ export async function encodePng(raster: Raster): Promise<string> {
 
 // A batch belongs to one library: its saves name that library explicitly, so
 // a save still in flight after the user switched libraries lands in the right one.
-const libraryFor = (batchId: number) => libraryOf(batchId) ?? useApp.getState().libraryId
+export const libraryFor = (batchId: number) => libraryOf(batchId) ?? useApp.getState().libraryId
 const key = (batchId: number) => batchKey(libraryFor(batchId), batchId)
 
 function cachedItem(batchId: number, imageId: number): BatchItem | undefined {
@@ -87,22 +87,31 @@ function stateBody(state: Record<string, unknown>): Record<string, unknown> | nu
   return Object.keys(state).length > 0 ? state : null
 }
 
+/** What item_state.censor should hold: null when there is nothing to keep. */
+function censorState(item: BatchItem | undefined, ops: Op[], reviewed: boolean | null, size?: { width: number; height: number }): SavedCensorState | null {
+  if (ops.length === 0 && reviewed === null) return null
+  const width = size?.width ?? item?.width ?? 0
+  const height = size?.height ?? item?.height ?? 0
+  return { v: 1, width, height, ops, ...(reviewed === null ? {} : { reviewed }) }
+}
+
 /**
- * Make the server hold exactly `ops`, in ONE request each way: the rendered
- * copy together with the ops (PUT), or (no ops) no copy and no ops (DELETE
- * with the state). The server writes both or neither, so a copy never sits
- * next to ops it was not made from.
+ * Make the server hold exactly `ops` and the review mark, in ONE request each
+ * way: the rendered copy together with the state (PUT), or (no ops) no copy
+ * and the state (DELETE with the state). The server writes both or neither,
+ * so a copy never sits next to ops it was not made from.
  */
-async function writeCopy(batchId: number, imageId: number, ops: Op[]): Promise<void> {
-  const state = cachedItem(batchId, imageId)?.item_state ?? null
+async function writeCopy(batchId: number, imageId: number, ops: Op[], reviewed: boolean | null): Promise<void> {
+  const item = cachedItem(batchId, imageId)
+  const state = item?.item_state ?? null
   try {
     if (ops.length === 0) {
-      const body = { item_state: stateBody(withCensorState(state, null)) }
+      const body = { item_state: stateBody(withCensorState(state, censorState(item, ops, reviewed))) }
       storeItem(batchId, unwrap<BatchItem>(await api.DELETE('/api/batches/{batch_id}/items/{image_id}/censored', { ...itemRequest(batchId, imageId), body })))
       return
     }
     const rendered = renderOps(await loadOriginal(imageId), ops)
-    const censor = { v: 1 as const, width: rendered.width, height: rendered.height, ops }
+    const censor = censorState(item, ops, reviewed, rendered)
     const body = { image_data: await encodePng(rendered), item_state: stateBody(withCensorState(state, censor)) }
     storeItem(batchId, unwrap<BatchItem>(await api.PUT('/api/batches/{batch_id}/items/{image_id}/censored', { ...itemRequest(batchId, imageId), body })))
   } catch (error) {
@@ -120,7 +129,7 @@ const gone = (error: unknown) =>
  * delete a copy that has no ops). Returns true when the server now matches it.
  */
 export function saveImage(batchId: number, imageId: number, force = false): Promise<boolean> {
-  return runSave(batchId, imageId, (ops) => writeCopy(batchId, imageId, ops), { force, unknownReason: tr('censor.saveUnknown') })
+  return runSave(batchId, imageId, (ops, reviewed) => writeCopy(batchId, imageId, ops, reviewed), { force, unknownReason: tr('censor.saveUnknown') })
 }
 
 /**

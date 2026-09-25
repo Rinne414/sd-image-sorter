@@ -1,12 +1,49 @@
 .panel {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
+  border-left: 1px solid var(--line);
+}
+
+/* Brush / Detect / Review: printed tabs on a rule, the open one underlined in amber. */
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  flex: none;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  height: 36px;
+  padding: 0 6px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font-size: var(--fs-3);
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--text);
+  background: var(--wash-hover);
+}
+
+.tab[aria-selected="true"] {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
   gap: 14px;
+  flex: 1;
   min-height: 0;
   padding: 12px 14px;
   overflow-y: auto;
-  background: var(--bg);
-  border-left: 1px solid var(--line);
 }
 
 .section {
@@ -121,8 +158,8 @@
 
 /* "Back to original" sits alone at the bottom, well away from the tools. */
 .danger {
-  margin-top: auto;
-  padding-top: 12px;
+  flex: none;
+  padding: 10px 14px;
   border-top: 1px solid var(--line);
 }
 
@@ -139,4 +176,26 @@
   margin: 0;
   max-width: 440px;
   line-height: 1.7;
+}
+
+.dialogList {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dialogList li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.dialogList span {
+  color: var(--text-2);
 }

@@ -2,8 +2,9 @@ import { api, ApiError, unwrap } from '../../api/client'
 import { fetchModelStatus } from '../../api/queries'
 import { queryClient } from '../../api/queryClient'
 import { useToasts } from '../../ui/toasts'
+import { installThen } from '../jobs/installJob'
 import { addJob, isQueueBusy, startingProgress, tr } from '../jobs/jobs'
-import { readiness, taggerInfo, type ModelCard, type TaggerInfo } from './taggers'
+import { readiness, taggerInfo, type ModelCard } from './taggers'
 
 export interface TagOptions {
   model: string
@@ -53,33 +54,6 @@ async function startTagJob(ids: number[] | null, o: TagOptions, count: number): 
       ids: ids ?? [],
       ctx: { baseRunId: before.run_id ?? 0 },
       progress: startingProgress(count, res.status === 'queued' ? 'queued' : 'running'),
-    })
-    return true
-  } catch (error) {
-    return fail(error)
-  }
-}
-
-/** Download a model, then run `then`. False (with the reason said) when the download could not start. */
-async function installThen(info: TaggerInfo, then: () => void): Promise<boolean> {
-  if (isQueueBusy('install')) {
-    useToasts.getState().push(tr('jobs.busy'), 'error')
-    return false
-  }
-  try {
-    const res = unwrap<{ model_id?: string }>(
-      await api.POST('/api/models/prepare', { body: { model_id: info.card, variant: info.variant } }),
-    )
-    if (res.model_id && res.model_id !== info.card) {
-      useToasts.getState().push(tr('tagging.otherDownload', { name: res.model_id }), 'error')
-      return false
-    }
-    addJob({
-      kind: 'install',
-      label: info.label,
-      ctx: { modelId: info.card },
-      progress: { ...startingProgress(0), unit: 'bytes' },
-      then,
     })
     return true
   } catch (error) {

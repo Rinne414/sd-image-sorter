@@ -167,6 +167,24 @@ describe('readProgress', () => {
     expect(readProgress('scan', { run_id: 10, status: 'running' }, { runId: 9 }).status).toBe('idle')
   })
 
+  test('detect and refine (run in this page): counts, the image being worked on, failures by name', () => {
+    const running = { status: 'running', current: 1, total: 3, succeeded: 1, failed: [], current_item: 'b.png' }
+    expect(readProgress('detect', running)).toMatchObject({ status: 'running', current: 1, total: 3, succeeded: 1, failedCount: 0, currentItem: 'b.png' })
+    const done = {
+      status: 'cancelled',
+      current: 2,
+      total: 3,
+      succeeded: 1,
+      failed: [{ image_id: 12, filename: 'b.png', error: 'NudeNet could not read image file' }],
+    }
+    const p = readProgress('refine', done)
+    expect(p).toMatchObject({ status: 'cancelled', current: 2, succeeded: 1, failedCount: 1 })
+    expect(p.failures).toEqual([{ id: 12, name: 'b.png', reason: 'NudeNet could not read image file' }])
+    expect(isFinished(p.status)).toBe(true)
+    // the page was reloaded while it ran: nothing reports any more
+    expect(readProgress('detect', null).status).toBe('error')
+  })
+
   test('unknown or reset states never look like success', () => {
     expect(readProgress('move', { status: 'idle' }).status).toBe('idle')
     expect(readProgress('move', { status: 'exploded' }).status).toBe('error')

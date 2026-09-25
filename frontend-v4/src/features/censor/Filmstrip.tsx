@@ -4,7 +4,7 @@ import { thumbnailUrl } from '../../api/client'
 import type { BatchItem } from '../../api/types'
 import { useT, type MessageKey } from '../../i18n'
 import styles from './Filmstrip.module.css'
-import { itemStatus, keyOf, useCensorSession, type ItemStatus } from './session'
+import { initialEdit, itemStatus, keyOf, useCensorSession, type ItemStatus } from './session'
 
 const ITEM_H = 116
 const PAD = 8
@@ -52,8 +52,10 @@ export function Filmstrip({ batchId, items, current, onPick }: Props) {
             const item = items[row.index] as BatchItem
             const edit = edits[keyOf(batchId, item.image_id)]
             const status = itemStatus(item, edit)
+            const reviewed = (edit ?? initialEdit(item)).reviewed
+            const review = reviewed === null ? null : t(reviewed ? 'censor.state.approved' : 'censor.state.waiting')
             const state = t(STATE_LABEL[status])
-            const label = t('censor.strip.item', { i: row.index + 1, name: item.filename, state })
+            const label = t('censor.strip.item', { i: row.index + 1, name: item.filename, state: review ? `${state} · ${review}` : state })
             return (
               <button
                 key={item.image_id}
@@ -64,12 +66,14 @@ export function Filmstrip({ batchId, items, current, onPick }: Props) {
                 aria-label={label}
                 title={status === 'error' && edit?.error ? `${label} (${edit.error})` : label}
                 data-state={status}
+                data-review={reviewed === null ? undefined : reviewed ? 'approved' : 'waiting'}
                 data-testid="censor-strip-item"
                 data-id={item.image_id}
                 onClick={() => onPick(row.index)}
               >
                 <span className={styles.frame}>
                   <img src={thumbnailUrl(item.image_id, 256)} alt="" loading="lazy" decoding="async" draggable={false} />
+                  {review && <span className={styles.review}>{review}</span>}
                 </span>
                 <span className={styles.caption}>
                   <span className="mono">{row.index + 1}</span>

@@ -2,10 +2,26 @@
 // move/copy: GET /api/move/progress · trash: GET /api/images/delete-selected/progress
 // · remove: GET /api/images/remove-selected/progress · tag: GET /api/tag/progress
 // · install: GET /api/models/download-progress · colors: GET /api/colors/progress
-// · reconnect: GET /api/images/reconnect-missing/progress · scan: GET /api/scan/progress.
+// · reconnect: GET /api/images/reconnect-missing/progress · scan: GET /api/scan/progress
+// · detect/refine: censor detection run by this page (features/censor/detectAll.ts).
 
-/** tags: a bulk tag edit, finished when it is recorded (kept for its undo). */
-export type JobKind = 'move' | 'copy' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors' | 'reconnect' | 'scan'
+/**
+ * tags: a bulk tag edit, finished when it is recorded (kept for its undo).
+ * detect/refine: censor detection or SAM3 refining over a batch, run in this page.
+ */
+export type JobKind =
+  | 'move'
+  | 'copy'
+  | 'trash'
+  | 'remove'
+  | 'tag'
+  | 'install'
+  | 'tags'
+  | 'colors'
+  | 'reconnect'
+  | 'scan'
+  | 'detect'
+  | 'refine'
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
 
 export interface JobFailure {
@@ -195,6 +211,11 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
       return { ...base, succeeded: num(raw.matched), failedCount: num(raw.errors), toReview: num(raw.review_pending_total) }
     case 'scan':
       return readScan(base, raw, ctx)
+    case 'detect':
+    case 'refine': {
+      const failures = namedErrors(raw.failed)
+      return { ...base, succeeded: num(raw.succeeded), failures, failedCount: failures.length }
+    }
   }
 }
 

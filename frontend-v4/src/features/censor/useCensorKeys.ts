@@ -2,11 +2,12 @@ import { useEffect, useRef } from 'react'
 import { useApp } from '../../state/store'
 import { layerCount } from '../../ui/layers'
 import { focusKind, keyAction, type KeyAction } from './keys'
+import { useCensorPanel } from './panel'
 import { useCanvasView } from './view'
 
 /**
  * The editor's keys. The listener exists only while the editor is mounted, so
- * [ ] B P E and the arrows never act anywhere else; anything floating above the
+ * [ ] B P E D, the review keys and the arrows never act anywhere else; anything floating above the
  * page (a dialog, the palette) takes the keys first. Space held over the
  * picture turns dragging into panning.
  */
@@ -24,7 +25,7 @@ export function useCensorKeys(run: (action: KeyAction) => void): void {
         if (!view().panKey) view().setPanKey(true)
         return
       }
-      const action = keyAction(e, focus)
+      const action = keyAction(e, focus, useCensorPanel.getState().tab === 'review')
       if (!action) return
       e.preventDefault()
       runRef.current(action)

@@ -5,9 +5,14 @@ import { Icon } from '../../ui/Icon'
 import { stepLabel } from '../batch/labels'
 import { CanvasView, isDrawing } from './CanvasView'
 import styles from './CensorStep.module.css'
+import { detectCurrent } from './detectRun'
+import { DownloadConfirm } from './DownloadConfirm'
 import { Filmstrip } from './Filmstrip'
 import type { KeyAction } from './keys'
 import type { Op } from './ops'
+import { useCensorPanel } from './panel'
+import { reviewActions } from './reviewActions'
+import type { ReviewActions } from './ReviewPanel'
 import { saveAll } from './saving'
 import { changeOps, itemStatus, redoEdit, rememberImage, startImage, syncItems, undoEdit, useEdit, type ImageEdit, type ItemStatus } from './session'
 import { useCensorSettings } from './settings'
@@ -16,8 +21,9 @@ import { useCensorKeys } from './useCensorKeys'
 import { useCanvasView } from './view'
 
 // The Pixiv batch's censor step: the batch's images down the left, the picture
-// in the middle, the tools on the right. Every edit is an op list per image;
-// an image's censored copy is rendered and saved when the user leaves it.
+// in the middle, the tools on the right (brush, AI detect, review). Every edit
+// is an op list per image; an image's censored copy is rendered and saved when
+// the user leaves it.
 
 const NO_OPS: Op[] = []
 
@@ -60,15 +66,17 @@ export default function CensorStep({ batch, next, onNext }: Props) {
     rememberImage(batch.id, target.image_id)
   }
 
-  useCensorKeys((action: KeyAction) => {
-    const settings = useCensorSettings.getState()
-    if (action.type === 'tool') settings.setTool(action.tool)
-    else if (action.type === 'size') settings.setSize(settings.size + action.delta)
-    else if (action.type === 'fit') useCanvasView.getState().fit()
-    else if (action.type === 'save') void saveAll(batch.id)
-    else if (action.type === 'go') go(index + action.delta)
-    else if (item && !isDrawing()) (action.type === 'undo' ? undoEdit : redoEdit)(batch.id, item.image_id)
+  // Work that ended while the editor is open asks for an image (detect all opens review on the first one waiting).
+  const jump = useCensorPanel((s) => s.jump)
+  useEffect(() => {
+    if (!jump || jump.batchId !== batch.id) return
+    useCensorPanel.setState({ jump: null })
+    const to = items.findIndex((i) => i.image_id === jump.imageId)
+    if (to >= 0) go(to)
   })
+
+  const review = reviewActions(batch, item, index, go)
+  useCensorKeys((action: KeyAction) => runKey(action, { batchId: batch.id, item, index, go, review }))
 
   if (!item) return <section className={styles.empty}>{t('censor.empty')}</section>
 
@@ -80,10 +88,49 @@ export default function CensorStep({ batch, next, onNext }: Props) {
         <div className={styles.stage}>
           <CanvasView key={item.image_id} imageId={item.image_id} ops={edit?.ops ?? NO_OPS} onCommit={(ops) => changeOps(batch.id, item, ops)} />
         </div>
-        <ToolPanel batchId={batch.id} item={item} edit={edit} />
+        <ToolPanel batch={batch} item={item} edit={edit} review={review} />
       </div>
+      <DownloadConfirm />
     </section>
   )
+}
+
+interface KeyContext {
+  batchId: number
+  item: BatchItem | undefined
+  index: number
+  go: (to: number) => void
+  review: ReviewActions
+}
+
+function runKey(action: KeyAction, { batchId, item, index, go, review }: KeyContext): void {
+  const settings = useCensorSettings.getState()
+  switch (action.type) {
+    case 'tool':
+      return settings.setTool(action.tool)
+    case 'size':
+      return settings.setSize(settings.size + action.delta)
+    case 'fit':
+      return useCanvasView.getState().fit()
+    case 'save':
+      return void saveAll(batchId)
+    case 'go':
+      return go(index + action.delta)
+    case 'detect':
+    case 'redetect':
+      return item ? void detectCurrent(batchId, item) : undefined
+    case 'region':
+      return review.toggle(action.n)
+    case 'allRegions':
+      return review.toggleAll()
+    case 'approve':
+      return review.approve()
+    case 'skip':
+      return review.skip()
+    case 'undo':
+    case 'redo':
+      if (item && !isDrawing()) (action.type === 'undo' ? undoEdit : redoEdit)(batchId, item.image_id)
+  }
 }
 
 interface BarProps {

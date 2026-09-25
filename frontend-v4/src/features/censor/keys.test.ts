@@ -42,6 +42,29 @@ describe('censor keys', () => {
     expect(keyAction(press('s', { ctrlKey: true }), 'text')).toEqual({ type: 'save' })
   })
 
+  it('D detects anywhere in the editor; the review keys act only in review mode', () => {
+    expect(keyAction(press('d'), 'none')).toEqual({ type: 'detect' })
+    expect(keyAction(press('D'), 'control')).toEqual({ type: 'detect' })
+    expect(keyAction(press('d'), 'text')).toBeNull()
+    for (const key of ['1', 'a', 's', 'r', 'Enter']) expect(keyAction(press(key), 'none')).toBeNull()
+
+    expect(keyAction(press('1'), 'none', true)).toEqual({ type: 'region', n: 1 })
+    expect(keyAction(press('9'), 'none', true)).toEqual({ type: 'region', n: 9 })
+    expect(keyAction(press('a'), 'none', true)).toEqual({ type: 'allRegions' })
+    expect(keyAction(press('Enter'), 'none', true)).toEqual({ type: 'approve' })
+    expect(keyAction(press('s'), 'none', true)).toEqual({ type: 'skip' })
+    expect(keyAction(press('r'), 'none', true)).toEqual({ type: 'redetect' })
+    // 0 still fits, the tools and arrows still work, Ctrl+S still saves
+    expect(keyAction(press('0'), 'none', true)).toEqual({ type: 'fit' })
+    expect(keyAction(press('e'), 'none', true)).toEqual({ type: 'tool', tool: 'eraser' })
+    expect(keyAction(press('ArrowRight'), 'none', true)).toEqual({ type: 'go', delta: 1 })
+    expect(keyAction(press('s', { ctrlKey: true }), 'none', true)).toEqual({ type: 'save' })
+    // typing in the SAM3 words box never reviews; Enter on a slider does not approve
+    for (const key of ['1', 'a', 's', 'r', 'Enter']) expect(keyAction(press(key), 'text', true)).toBeNull()
+    expect(keyAction(press('Enter'), 'control', true)).toBeNull()
+    expect(keyAction(press('1', { shiftKey: true }), 'none', true)).toBeNull()
+  })
+
   it('leaves the arrows to a slider but still takes tool keys there', () => {
     expect(keyAction(press('ArrowRight'), 'control')).toBeNull()
     expect(keyAction(press('ArrowLeft'), 'control')).toBeNull()
