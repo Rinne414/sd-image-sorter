@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { BatchKind } from '../api/types'
 import { isSortBase, type SortBase } from '../lib/sort'
 
 export type Page = 'home' | 'library' | 'batch' | 'sort'
@@ -44,10 +45,22 @@ function writeJson(key: string, value: unknown): void {
   }
 }
 
-function pageFromHash(): Page {
+/** Page and open batch from the address: #/library, #/batch, #/batch/12, #/home, #/sort. */
+function routeFromHash(): { page: Page; batchId: number | null } {
   const h = location.hash.replace(/^#\/?/, '')
-  return h === 'home' || h === 'batch' || h === 'sort' ? h : 'library'
+  const batch = /^batch\/(\d+)$/.exec(h)
+  if (batch) return { page: 'batch', batchId: Number(batch[1]) }
+  const page: Page = h === 'home' || h === 'batch' || h === 'sort' ? h : 'library'
+  return { page, batchId: null }
 }
+
+function writeHash(page: Page, batchId: number | null): void {
+  const hash = page === 'batch' && batchId !== null ? `#/batch/${batchId}` : `#/${page}`
+  if (location.hash !== hash) history.replaceState(null, '', hash)
+}
+
+/** Picking in the library for a batch: an existing one, or a new one made from the picks. */
+export type AddTarget = { batchId: number } | { kind: BatchKind }
 
 export interface Scope {
   generators: string[]
@@ -66,6 +79,9 @@ interface AppState extends Prefs {
   selectionAnchor: number | null
   lightboxId: number | null
   paletteOpen: boolean
+  /** The batch open on the Batch page (null: the list). */
+  batchId: number | null
+  adding: AddTarget | null
 
   setPage: (page: Page) => void
   setLibrary: (id: string) => void
@@ -85,6 +101,8 @@ interface AppState extends Prefs {
   openLightbox: (id: number) => void
   closeLightbox: () => void
   setPaletteOpen: (open: boolean) => void
+  openBatch: (id: number) => void
+  setAdding: (target: AddTarget | null) => void
 }
 
 function loadPrefs(): Prefs {
@@ -108,7 +126,6 @@ function savePrefs(state: Prefs): void {
 
 export const useApp = create<AppState>((set, get) => ({
   ...prefs,
-  page: pageFromHash(),
   libraryId: storedLibrary,
   queryText: '',
   scope: { generators: [], folder: null, favorites: false },
@@ -117,10 +134,13 @@ export const useApp = create<AppState>((set, get) => ({
   selectionAnchor: null,
   lightboxId: null,
   paletteOpen: false,
+  ...routeFromHash(),
+  adding: null,
 
   setPage: (page) => {
-    if (location.hash !== `#/${page}`) history.replaceState(null, '', `#/${page}`)
-    set({ page })
+    // The Batch tab opens the list; a batch opens through openBatch.
+    writeHash(page, null)
+    set({ page, batchId: null, lightboxId: null })
   },
   setLibrary: (id) => {
     writeJson(LIBRARY_KEY, { v: 2, currentId: id })
@@ -130,7 +150,10 @@ export const useApp = create<AppState>((set, get) => ({
       inspectedId: null,
       selection: [],
       selectionAnchor: null,
+      batchId: null,
+      adding: null,
     })
+    if (get().page === 'batch') writeHash('batch', null)
   },
   setQueryText: (queryText) => set({ queryText }),
   setScope: (patch) => set({ scope: { ...get().scope, ...patch } }),
@@ -175,6 +198,11 @@ export const useApp = create<AppState>((set, get) => ({
   openLightbox: (lightboxId) => set({ lightboxId, inspectedId: lightboxId }),
   closeLightbox: () => set({ lightboxId: null }),
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
+  openBatch: (batchId) => {
+    writeHash('batch', batchId)
+    set({ page: 'batch', batchId, lightboxId: null })
+  },
+  setAdding: (adding) => set({ adding }),
 }))
 
-window.addEventListener('hashchange', () => useApp.setState({ page: pageFromHash() }))
+window.addEventListener('hashchange', () => useApp.setState({ ...routeFromHash(), lightboxId: null }))

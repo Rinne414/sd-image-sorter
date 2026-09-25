@@ -58,7 +58,8 @@
   min-width: 0;
 }
 
-.clearIcon {
+.clearIcon,
+.terse {
   display: none;
 }
 
@@ -70,5 +71,9 @@
 
   .clearIcon {
     display: block;
+  }
+
+  .terse {
+    display: inline;
   }
 }

@@ -72,3 +72,28 @@
 .itemLabel {
   flex: 1;
 }
+
+.menu li.group {
+  padding: 6px 8px 2px;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.menu li.group[data-divider] {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.menu li .itemLabel {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:global(.btn-primary) > .caret {
+  color: inherit;
+  opacity: 0.7;
+}

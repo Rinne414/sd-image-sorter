@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { imageFileUrl, thumbnailUrl } from '../../api/client'
-import { useFavorites, useSetRating, useToggleFavorite } from '../../api/queries'
+import { useFavorites, useImageDetail, useSetRating, useToggleFavorite } from '../../api/queries'
 import type { ImageSummary } from '../../api/types'
 import { useT } from '../../i18n'
 import { isTypingTarget } from '../../lib/format'
@@ -20,6 +20,8 @@ interface Props {
   total: number
   hasMore: boolean
   fetchMore: () => void
+  /** Space and the Pick button add to the library's picks; off where that makes no sense (a batch). */
+  pickable?: boolean
 }
 
 function readInfoPref(): boolean {
@@ -31,7 +33,7 @@ function readInfoPref(): boolean {
 }
 
 /** One image up close. The film strip below keeps the neighbours in reach. */
-export function Lightbox({ images, total, hasMore, fetchMore }: Props) {
+export function Lightbox({ images, total, hasMore, fetchMore, pickable = true }: Props) {
   const t = useT()
   const id = useApp((s) => s.lightboxId)
   const selection = useApp((s) => s.selection)
@@ -41,6 +43,8 @@ export function Lightbox({ images, total, hasMore, fetchMore }: Props) {
   const favorites = useFavorites()
   const setRating = useSetRating()
   const toggleFav = useToggleFavorite()
+  // The detail is fetched for the generation card anyway; lists that carry no rating read it from there.
+  const detail = useImageDetail(id)
   const [info, setInfo] = useState(readInfoPref)
   const [actual, setActual] = useState(false)
   const [loadedId, setLoadedId] = useState<number | null>(null)
@@ -76,7 +80,7 @@ export function Lightbox({ images, total, hasMore, fetchMore }: Props) {
       else if (key === 'End') {
         const last = images.at(-1)
         if (last) open(last.id)
-      } else if (key === ' ') togglePick(cur)
+      } else if (key === ' ' && pickable) togglePick(cur)
       else if (/^[0-5]$/.test(key) && !e.ctrlKey && !e.metaKey) setRating.mutate({ ids: [cur], stars: Number(key) })
       else if (key === 'f' || key === 'F') {
         const fav = favorites.data?.ids.has(cur) ?? false
@@ -127,7 +131,7 @@ export function Lightbox({ images, total, hasMore, fetchMore }: Props) {
         </span>
         <span className={`${styles.name} mono`}>{current?.filename}</span>
         <span className={styles.barGap} />
-        <Stars value={current?.user_rating ?? 0} onChange={(n) => setRating.mutate({ ids: [id], stars: n })} />
+        <Stars value={detail.data?.image.user_rating ?? current?.user_rating ?? 0} onChange={(n) => setRating.mutate({ ids: [id], stars: n })} />
         <button
           type="button"
           className={styles.heart}
@@ -138,9 +142,11 @@ export function Lightbox({ images, total, hasMore, fetchMore }: Props) {
         >
           <Icon name="heart" filled={isFav} size={17} />
         </button>
-        <button type="button" className="btn" aria-pressed={picked} onClick={() => togglePick(id)}>
-          {picked ? t('lightbox.picked') : t('lightbox.pick')} <kbd>Space</kbd>
-        </button>
+        {pickable && (
+          <button type="button" className="btn" aria-pressed={picked} onClick={() => togglePick(id)}>
+            {picked ? t('lightbox.picked') : t('lightbox.pick')} <kbd>Space</kbd>
+          </button>
+        )}
         <button type="button" className="btn" aria-pressed={actual} onClick={() => setActual(!actual)}>
           {actual ? t('lightbox.fit') : t('lightbox.actual')} <kbd>Z</kbd>
         </button>
@@ -184,7 +190,7 @@ export function Lightbox({ images, total, hasMore, fetchMore }: Props) {
             type="button"
             className={styles.frame}
             data-active={img.id === id || undefined}
-            data-picked={selection.includes(img.id) || undefined}
+            data-picked={(pickable && selection.includes(img.id)) || undefined}
             onClick={() => open(img.id)}
           >
             <img src={thumbnailUrl(img.id, 256)} alt="" loading="lazy" draggable={false} />

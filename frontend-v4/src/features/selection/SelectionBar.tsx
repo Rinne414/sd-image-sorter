@@ -11,6 +11,7 @@ import { Icon } from '../../ui/Icon'
 import { Menu } from '../../ui/Menu'
 import { useToasts } from '../../ui/toasts'
 import { Stars } from '../card/Stars'
+import { AddToBatchMenu } from '../batch/AddToBatchMenu'
 import { useSelectionDialog } from './dialogs'
 import styles from './SelectionBar.module.css'
 
@@ -76,12 +77,21 @@ export function SelectionBar({ params, total, images, hasMore, onRate, onFavorit
           className={`btn btn-ghost ${styles.all}`}
           onClick={() => void selectAll()}
           disabled={selecting}
+          title={t('sel.selectAll', { n: total })}
           data-testid="select-all-matching"
         >
-          {selecting ? t('sel.selecting') : t('sel.selectAll', { n: total })}
+          {selecting ? (
+            t('sel.selecting')
+          ) : (
+            <>
+              <span className={styles.wordy}>{t('sel.selectAll', { n: total })}</span>
+              <span className={styles.terse}>{t('sel.selectAllShort', { n: total })}</span>
+            </>
+          )}
         </button>
       )}
       <span className={styles.rule} aria-hidden />
+      <AddToBatchMenu />
       <span className={styles.stars} title={t('sel.rate')}>
         <Stars value={0} onChange={(n) => n > 0 && onRate(n)} size="sm" />
       </span>
@@ -95,13 +105,11 @@ export function SelectionBar({ params, total, images, hasMore, onRate, onFavorit
       <button type="button" className="btn" onClick={() => show('move')}>
         {t('sel.move')}
       </button>
-      <button type="button" className="btn" onClick={() => show('copy')}>
-        {t('sel.copy')}
-      </button>
       <Menu
         up
         label={t('sel.more')}
         items={[
+          { id: 'copy', label: t('sel.copy'), onSelect: () => show('copy') },
           { id: 'edit-tags', label: t('sel.editTags'), onSelect: () => show('edit-tags') },
           { id: 'export', label: t('sel.exportData'), onSelect: () => show('export') },
           { id: 'move-library', label: t('sel.moveLibrary'), onSelect: () => show('move-library') },

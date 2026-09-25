@@ -1,0 +1,188 @@
+.page {
+  height: 100%;
+  overflow-y: auto;
+  background: var(--stage);
+}
+
+.sheet {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 28px 32px 64px;
+}
+
+@media (min-width: 2400px) {
+  .sheet {
+    max-width: 1400px;
+  }
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-7);
+  font-weight: 650;
+}
+
+.count {
+  color: var(--accent);
+  font-size: var(--fs-2);
+  letter-spacing: 0.04em;
+}
+
+.gap {
+  flex: 1;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  cursor: pointer;
+}
+
+.toggle input {
+  accent-color: var(--accent);
+}
+
+.lead {
+  margin: 8px 0 16px;
+  max-width: 760px;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+
+.empty {
+  margin: 0;
+  padding: 28px 20px;
+  color: var(--text-2);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.section {
+  margin: 36px 0 0;
+  font-size: var(--fs-1);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.section + .rows {
+  margin-top: 10px;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.row[data-archived] {
+  opacity: 0.72;
+}
+
+.collection {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 8px 4px;
+}
+
+.open {
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: var(--radius);
+}
+
+.info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.name,
+.plainName {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-5);
+  font-weight: 600;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plainName {
+  font-size: var(--fs-4);
+}
+
+.name:hover {
+  color: var(--accent);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.kind {
+  color: var(--text-2);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  white-space: nowrap;
+}
+
+.fix {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+
+.fix:hover {
+  color: var(--text);
+}
+
+/* Delete sits last, after a gap, away from Open. */
+.danger {
+  margin-left: 10px;
+  color: var(--danger);
+}
+
+.danger:hover {
+  color: var(--danger);
+}

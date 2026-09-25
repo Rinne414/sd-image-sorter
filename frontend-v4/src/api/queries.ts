@@ -132,7 +132,7 @@ export function useFavorites() {
     queryFn: async ({ signal }) => {
       const [ids, cols] = await Promise.all([
         api.GET('/api/collections/favorites/ids', { signal }).then((r) => unwrap<{ image_ids: number[] }>(r)),
-        api.GET('/api/collections', { signal }).then((r) => unwrap<{ collections: (CollectionRow & { slug?: string })[] }>(r)),
+        api.GET('/api/collections', { signal }).then((r) => unwrap<{ collections: CollectionRow[] }>(r)),
       ])
       const fav = cols.collections.find((c) => c.slug === 'favorites')
       return { ids: new Set(ids.image_ids), collectionId: fav?.id ?? null }

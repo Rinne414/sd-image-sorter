@@ -5656,6 +5656,166 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/batches/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List saved batch templates and the built-in step sets */
+        get: operations["get_batch_templates_api_batches_templates_get"];
+        put?: never;
+        /** Save a batch template */
+        post: operations["post_batch_template_api_batches_templates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/batches/templates/{template_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a batch template */
+        delete: operations["delete_batch_template_api_batches_templates__template_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List batches of the current library */
+        get: operations["get_batches_api_batches_get"];
+        put?: never;
+        /** Create a batch */
+        post: operations["post_batch_api_batches_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/batches/{batch_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a batch with its items in order */
+        get: operations["get_batch_api_batches__batch_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete a batch and its working folder */
+        delete: operations["delete_batch_api_batches__batch_id__delete"];
+        options?: never;
+        head?: never;
+        /** Change a batch's name, steps, settings or current step */
+        patch: operations["patch_batch_api_batches__batch_id__patch"];
+        trace?: never;
+    };
+    "/api/batches/{batch_id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Append images to a batch */
+        post: operations["post_batch_items_api_batches__batch_id__items_post"];
+        /** Remove images from a batch */
+        delete: operations["delete_batch_items_api_batches__batch_id__items_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/batches/{batch_id}/items/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Reorder a batch's items */
+        put: operations["put_batch_item_order_api_batches__batch_id__items_order_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/batches/{batch_id}/items/{image_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Set one item's output name or state */
+        patch: operations["patch_batch_item_api_batches__batch_id__items__image_id__patch"];
+        trace?: never;
+    };
+    "/api/batches/{batch_id}/items/{image_id}/censored": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an item's censored copy */
+        get: operations["get_batch_item_censored_api_batches__batch_id__items__image_id__censored_get"];
+        /** Save an item's censored copy */
+        put: operations["put_batch_item_censored_api_batches__batch_id__items__image_id__censored_put"];
+        post?: never;
+        /** Discard an item's censored copy */
+        delete: operations["delete_batch_item_censored_api_batches__batch_id__items__image_id__censored_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/batches/{batch_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Export a batch for posting (Pixiv) */
+        post: operations["post_batch_export_api_batches__batch_id__export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/metadata/health": {
         parameters: {
             query?: never;
@@ -6069,6 +6229,86 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** BatchCensoredCopyRequest */
+        BatchCensoredCopyRequest: {
+            /** Image Data */
+            image_data: string;
+        };
+        /** BatchCreateRequest */
+        BatchCreateRequest: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "pixiv" | "dataset" | "custom";
+            /** Name */
+            name: string;
+            /** Template Id */
+            template_id?: number | null;
+            /** Image Ids */
+            image_ids?: number[];
+        };
+        /** BatchExportRequest */
+        BatchExportRequest: {
+            /** Output Folder */
+            output_folder: string;
+            /**
+             * Name Template
+             * @default {batch}_{n:02}
+             */
+            name_template: string;
+            /**
+             * Start Number
+             * @default 1
+             */
+            start_number: number;
+            /**
+             * Metadata Option
+             * @default strip
+             * @enum {string}
+             */
+            metadata_option: "strip" | "keep" | "minimal";
+            /**
+             * Output Format
+             * @default original
+             * @enum {string}
+             */
+            output_format: "original" | "png" | "jpg" | "webp";
+            /**
+             * Overwrite
+             * @default false
+             */
+            overwrite: boolean;
+            /**
+             * Caption Text
+             * @default
+             */
+            caption_text: string;
+            watermark?: components["schemas"]["PublishWatermarkSettings"];
+            /**
+             * Missing Censored
+             * @default block
+             * @enum {string}
+             */
+            missing_censored: "block" | "skip" | "original";
+        };
+        /** BatchImageIdsRequest */
+        BatchImageIdsRequest: {
+            /** Image Ids */
+            image_ids: number[];
+        };
+        /**
+         * BatchItemPatchRequest
+         * @description Only the fields present are changed; ``output_name: null`` clears it.
+         */
+        BatchItemPatchRequest: {
+            /** Output Name */
+            output_name?: string | null;
+            /** Item State */
+            item_state?: {
+                [key: string]: unknown;
+            } | null;
+        };
         /**
          * BatchMaskRefineRequest
          * @description Request model for batch mask refinement via SAM3.
@@ -6173,6 +6413,26 @@ export interface components {
             /** Split By */
             split_by?: string | null;
         };
+        /**
+         * BatchPatchRequest
+         * @description Only the fields present are changed; ``current_step: null`` clears it.
+         */
+        BatchPatchRequest: {
+            /** Revision */
+            revision: number;
+            /** Name */
+            name?: string | null;
+            /** Steps */
+            steps?: components["schemas"]["BatchStep"][] | null;
+            /** Settings */
+            settings?: {
+                [key: string]: unknown;
+            } | null;
+            /** Current Step */
+            current_step?: string | null;
+            /** Archived */
+            archived?: boolean | null;
+        };
         /** BatchProcessRequest */
         BatchProcessRequest: {
             /**
@@ -6252,6 +6512,21 @@ export interface components {
             started_at?: number | null;
             /** Updated At */
             updated_at?: number | null;
+        };
+        /** BatchReorderRequest */
+        BatchReorderRequest: {
+            /** Image Ids */
+            image_ids: number[];
+        };
+        /** BatchStep */
+        BatchStep: {
+            /** Id */
+            id: string;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
         };
         /**
          * BatchTagExportRequest
@@ -6339,6 +6614,22 @@ export interface components {
              * @default false
              */
             background: boolean;
+        };
+        /** BatchTemplateCreateRequest */
+        BatchTemplateCreateRequest: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "pixiv" | "dataset" | "custom";
+            /** Name */
+            name: string;
+            /** Steps */
+            steps: components["schemas"]["BatchStep"][];
+            /** Settings */
+            settings?: {
+                [key: string]: unknown;
+            };
         };
         /** Body_import_files_api_import_files_post */
         Body_import_files_api_import_files_post: {
@@ -20043,6 +20334,569 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_batch_templates_api_batches_templates_get: {
+        parameters: {
+            query?: {
+                kind?: ("pixiv" | "dataset" | "custom") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_batch_template_api_batches_templates_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchTemplateCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_batch_template_api_batches_templates__template_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_batches_api_batches_get: {
+        parameters: {
+            query?: {
+                include_archived?: boolean;
+                kind?: ("pixiv" | "dataset" | "custom") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_batch_api_batches_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_batch_api_batches__batch_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_batch_api_batches__batch_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_batch_api_batches__batch_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_batch_items_api_batches__batch_id__items_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchImageIdsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_batch_items_api_batches__batch_id__items_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchImageIdsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_batch_item_order_api_batches__batch_id__items_order_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchReorderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_batch_item_api_batches__batch_id__items__image_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: number;
+                image_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchItemPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_batch_item_censored_api_batches__batch_id__items__image_id__censored_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: number;
+                image_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_batch_item_censored_api_batches__batch_id__items__image_id__censored_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: number;
+                image_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchCensoredCopyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_batch_item_censored_api_batches__batch_id__items__image_id__censored_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: number;
+                image_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_batch_export_api_batches__batch_id__export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

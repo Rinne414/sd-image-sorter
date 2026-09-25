@@ -68,12 +68,72 @@ export interface GeneratorCount {
   count: number
 }
 
+/** A V3.5 collection (GET /api/collections); "favorites" is the built-in one. */
 export interface CollectionRow {
   id: number
+  slug: string
   name: string
-  kind?: string | null
-  is_system?: boolean | number | null
-  image_count?: number | null
+  folder_path: string | null
+  created_at: string | null
+  item_count: number
+}
+
+export type BatchKind = 'pixiv' | 'dataset' | 'custom'
+
+export interface BatchStep {
+  id: string
+  enabled: boolean
+}
+
+/** One row of GET /api/batches. */
+export interface BatchSummary {
+  id: number
+  kind: BatchKind
+  name: string
+  current_step: string | null
+  revision: number
+  archived_at: string | null
+  created_at: string
+  updated_at: string
+  item_count: number
+  censored_count: number
+  /** The first four items, in order. */
+  cover_image_ids: number[]
+}
+
+export interface BatchItem {
+  image_id: number
+  position: number
+  filename: string
+  width: number | null
+  height: number | null
+  output_name: string | null
+  has_censored: boolean
+  censored_at: string | null
+  item_state: Record<string, unknown> | null
+}
+
+/** GET /api/batches/{id}: the batch with its items in order. */
+export interface Batch extends Omit<BatchSummary, 'cover_image_ids'> {
+  library_id: string
+  steps: BatchStep[]
+  settings: Record<string, unknown>
+  dataset_project_id: number | null
+  items: BatchItem[]
+}
+
+export interface BatchTemplate {
+  id: number
+  kind: BatchKind
+  name: string
+  steps: BatchStep[]
+  settings: Record<string, unknown>
+  created_at: string
+}
+
+export interface BatchTemplatesResponse {
+  templates: BatchTemplate[]
+  builtin_steps: Record<BatchKind, BatchStep[]>
 }
 
 export interface LibraryHealth {

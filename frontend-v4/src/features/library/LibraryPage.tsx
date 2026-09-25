@@ -5,6 +5,7 @@ import { isTypingTarget } from '../../lib/format'
 import { parseSearch, toImageParams } from '../../lib/searchQuery'
 import { apiSort } from '../../lib/sort'
 import { useApp } from '../../state/store'
+import { AddingBanner } from '../batch/AddingBanner'
 import { GenerationCard } from '../card/GenerationCard'
 import { Lightbox } from '../lightbox/Lightbox'
 import { useSelectionDialog } from '../selection/dialogs'
@@ -26,6 +27,7 @@ export function LibraryPage() {
   const railOpen = useApp((s) => s.railOpen)
   const inspectedId = useApp((s) => s.inspectedId)
   const selection = useApp((s) => s.selection)
+  const adding = useApp((s) => s.adding)
   const favorites = useFavorites()
   const setRating = useSetRating()
   const toggleFav = useToggleFavorite()
@@ -135,6 +137,7 @@ export function LibraryPage() {
       {railOpen && <Rail texture={texture} />}
       <main className={styles.main}>
         <QueryBar total={total} inputRef={inputRef} />
+        {adding && <AddingBanner target={adding} />}
         <div className={styles.gridArea}>
           {query.isError ? (
             <div className={styles.notice}>

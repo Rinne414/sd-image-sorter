@@ -1,5 +1,8 @@
 import { useEffect } from 'react'
+import { BatchDialogs } from '../features/batch/BatchDialogs'
+import { BatchPage } from '../features/batch/BatchPage'
 import { CommandPalette } from '../features/command/CommandPalette'
+import { HomePage } from '../features/home/HomePage'
 import { JobsRunner } from '../features/jobs/JobsRunner'
 import { DropImport } from '../features/import/DropImport'
 import { SelectionDialogs } from '../features/selection/SelectionDialogs'
@@ -37,14 +40,15 @@ export function App() {
       <TopBar />
       <div className={styles.body}>
         {page === 'library' && <LibraryPage />}
-        {page === 'batch' && <PlannedPage title="planned.batch.title" body="planned.batch.body" />}
+        {page === 'batch' && <BatchPage />}
         {page === 'sort' && <PlannedPage title="planned.sort.title" body="planned.sort.body" />}
-        {page === 'home' && <PlannedPage title="planned.home.title" body="planned.home.body" />}
+        {page === 'home' && <HomePage />}
       </div>
       <CommandPalette />
       <JobsRunner />
       <DropImport />
       <SelectionDialogs />
+      <BatchDialogs />
       <Toasts />
     </div>
   )

@@ -6,6 +6,10 @@ import { copyText } from '../../lib/format'
 import { useApp } from '../../state/store'
 import { useTheme } from '../../theme'
 import { useLayer } from '../../ui/layers'
+import { addPicksTo, recentBatches } from '../batch/AddToBatchMenu'
+import { useBatches } from '../batch/batchApi'
+import { askNewBatch } from '../batch/dialogStore'
+import { BATCH_KINDS } from '../batch/labels'
 import { useJobs } from '../jobs/jobs'
 import { useSelectionDialog } from '../selection/dialogs'
 import styles from './CommandPalette.module.css'
@@ -35,6 +39,7 @@ function Palette() {
   const lang = useLang((s) => s.lang)
   const setOpen = useApp((s) => s.setPaletteOpen)
   const libraries = useLibraries()
+  const batches = useBatches()
   const inspectedId = useApp((s) => s.inspectedId)
   const detail = useImageDetail(inspectedId)
   const [q, setQ] = useState('')
@@ -84,6 +89,21 @@ function Palette() {
     if (useJobs.getState().jobs.length > 0) {
       list.push(mk('jobs', 'palette.group.library', 'palette.cmd.jobs', () => useJobs.getState().setDrawerOpen(true)))
     }
+    for (const kind of BATCH_KINDS) {
+      list.push(mk(`new-batch-${kind}`, 'palette.group.batch', `batch.menu.new.${kind}`, () => askNewBatch(kind, [], 'page')))
+    }
+    for (const b of recentBatches(batches.data)) {
+      list.push(mk(`open-batch-${b.id}`, 'palette.group.batch', 'palette.cmd.openBatch', () => s.openBatch(b.id), undefined, { name: b.name }))
+    }
+    if (s.selection.length > 0) {
+      const picks = () => useApp.getState().selection
+      for (const kind of BATCH_KINDS) {
+        list.push(mk(`sel-new-${kind}`, 'palette.group.selection', `palette.cmd.picksToNew.${kind}`, () => askNewBatch(kind, picks(), 'selection')))
+      }
+      for (const b of recentBatches(batches.data)) {
+        list.push(mk(`sel-add-${b.id}`, 'palette.group.selection', 'palette.cmd.picksTo', () => void addPicksTo(b, picks()), undefined, { name: b.name }))
+      }
+    }
     if (s.selection.length > 0) {
       const show = useSelectionDialog.getState().show
       list.push(
@@ -103,7 +123,7 @@ function Palette() {
       if (prompt) list.push(mk('copy-prompt', 'palette.group.image', 'palette.cmd.copyPrompt', () => void copyText(prompt)))
     }
     return list
-  }, [lang, libraries.data, inspectedId, detail.data])
+  }, [lang, libraries.data, batches.data, inspectedId, detail.data])
 
   const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean)
   const shown = commands.filter((c) => terms.every((term) => c.haystack.includes(term)))

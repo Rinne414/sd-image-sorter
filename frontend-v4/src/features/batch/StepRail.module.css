@@ -1,0 +1,150 @@
+.rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
+  border-right: 1px solid var(--line);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 8px 6px 16px;
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--fs-1);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px 8px 12px;
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  text-align: left;
+  border-radius: var(--radius);
+}
+
+.step:hover {
+  background: var(--wash-hover);
+  color: var(--text);
+}
+
+.num {
+  width: 18px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  text-align: right;
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.step[data-state="current"] {
+  background: var(--accent-soft);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.step[data-state="current"] .num {
+  color: var(--accent);
+}
+
+.step[data-state="done"] .num {
+  color: var(--ok);
+}
+
+.done {
+  color: var(--ok);
+  font-size: var(--fs-1);
+}
+
+.editRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 6px 0 10px;
+  border-radius: var(--radius);
+  border-top: 2px solid transparent;
+  cursor: grab;
+}
+
+.editRow:hover {
+  background: var(--wash-hover);
+}
+
+.editRow[data-over] {
+  border-top-color: var(--accent);
+}
+
+.editRow[data-off] .editName {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--line-strong);
+}
+
+.editRow input {
+  accent-color: var(--accent);
+}
+
+.grip {
+  display: grid;
+  color: var(--faint);
+}
+
+.editName {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  border-radius: var(--radius);
+  cursor: grab;
+}
+
+.foot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 16px 16px;
+  border-top: 1px solid var(--hairline);
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}

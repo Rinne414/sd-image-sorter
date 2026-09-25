@@ -60,7 +60,7 @@ for (const viewport of VIEWPORTS) {
       await openLibrary(page, TOKEN, COUNT, theme)
       await pick(page, 0, 1)
       const bar = page.getByTestId('selection-bar')
-      for (const name of ['Move to…', 'Copy to…', 'More', 'Clear']) {
+      for (const name of ['Add to batch', 'Move to…', 'More', 'Clear']) {
         await expect(bar.getByRole('button', { name, exact: false }).first()).toBeInViewport({ ratio: 1 })
       }
       await expect(bar.getByTestId('select-all-matching')).toBeInViewport({ ratio: 1 })
@@ -128,7 +128,8 @@ test('move and copy go through the folder browser', async ({ page }) => {
   // copy: the last destination is offered first
   await page.keyboard.press('Escape')
   const third = await pick(page, 2)
-  await bar.getByRole('button', { name: 'Copy to…' }).click()
+  await bar.getByRole('button', { name: 'More' }).click()
+  await page.getByRole('menuitem', { name: 'Copy to…' }).click()
   await page.getByTestId('folder-recent').getByRole('button', { name: /keep$/ }).click()
   await expect(pathInput).toHaveValue(keep)
   await picker.getByRole('button', { name: 'Copy 1 here' }).click()

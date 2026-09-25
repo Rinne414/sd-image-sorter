@@ -1,0 +1,48 @@
+.panel {
+  height: 100%;
+  overflow-y: auto;
+  padding: 48px 40px;
+}
+
+.sheet {
+  max-width: 620px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.kicker {
+  color: var(--accent);
+  font-size: var(--fs-2);
+  letter-spacing: 0.1em;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-7);
+  font-weight: 650;
+}
+
+.what {
+  margin: 0;
+  font-size: var(--fs-5);
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.applies {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.note {
+  margin: 0;
+  color: var(--muted);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}

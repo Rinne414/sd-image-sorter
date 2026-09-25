@@ -16,28 +16,41 @@ api.use({
 
 export class ApiError extends Error {
   readonly status: number
+  /** The backend's error code when it sends one (e.g. "batch_revision_conflict"). */
+  readonly code: string | null
+  /** The whole error body, for callers that need its details (ids, lists). */
+  readonly body: unknown
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code: string | null = null, body: unknown = null) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.code = code
+    this.body = body
   }
 }
 
 function detailOf(body: unknown): string | null {
-  if (body && typeof body === 'object' && 'detail' in body) {
-    const detail = (body as { detail: unknown }).detail
-    if (typeof detail === 'string') return detail
-    if (Array.isArray(detail)) return detail.map((d) => (d as { msg?: string }).msg ?? '').join('; ')
-  }
+  if (!body || typeof body !== 'object') return null
+  const { detail, message, error } = body as { detail?: unknown; message?: unknown; error?: unknown }
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) return detail.map((d) => (d as { msg?: string }).msg ?? '').join('; ')
+  // The global error envelope: { error, message?, code?, ... }
+  if (typeof message === 'string') return message
+  if (typeof error === 'string') return error
   return null
+}
+
+function codeOf(body: unknown): string | null {
+  const code = body && typeof body === 'object' ? (body as { code?: unknown }).code : null
+  return typeof code === 'string' ? code : null
 }
 
 /** Unwrap an openapi-fetch result: return data or throw an ApiError with the server's reason. */
 export function unwrap<T>(result: { data?: unknown; error?: unknown; response: Response }): T {
   if (result.error !== undefined || !result.response.ok) {
     const reason = detailOf(result.error) ?? result.response.statusText ?? 'request failed'
-    throw new ApiError(result.response.status, reason)
+    throw new ApiError(result.response.status, reason, codeOf(result.error), result.error ?? null)
   }
   return result.data as T
 }
