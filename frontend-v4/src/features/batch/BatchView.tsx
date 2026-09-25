@@ -16,6 +16,7 @@ import { NameStep } from './NameStep'
 import { OrderStep } from './OrderStep'
 import { PickStep } from './PickStep'
 import { StepPanel } from './StepPanel'
+import { TagStep } from './TagStep'
 import { StepRail } from './StepRail'
 
 // The censor editor is big and only one step needs it: it loads on first use.
@@ -118,6 +119,8 @@ function Loaded({ batch }: { batch: Batch }) {
             <OrderStep batch={batch} next={next?.id ?? null} onNext={goTo} />
           ) : current === 'name' ? (
             <NameStep batch={batch} next={next?.id ?? null} onNext={goTo} />
+          ) : current === 'tag' && batch.kind === 'dataset' ? (
+            <TagStep batch={batch} next={next?.id ?? null} onNext={goTo} />
           ) : current === 'export' && batch.kind === 'pixiv' ? (
             <ExportStep batch={batch} onGo={goTo} />
           ) : (

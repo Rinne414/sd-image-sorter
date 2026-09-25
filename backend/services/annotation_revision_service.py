@@ -154,6 +154,11 @@ def create_project_training_caption_revision(
 ) -> TrainingCaptionHeadResponse:
     content = request.content.model_dump(mode="python")
     subject = request.subject
+    ai = request.ai_provenance
+    source = ai.source if ai is not None else "manual"
+    author = "ai" if ai is not None else "user"
+    provider = ai.provider if ai is not None else None
+    model = ai.model if ai is not None else None
     if isinstance(subject, ProjectLibraryAnnotationSubject):
         mutation = db.create_project_library_training_caption_revision(
             project_id,
@@ -161,10 +166,10 @@ def create_project_training_caption_revision(
             subject.image_id,
             request.expected_head_generation,
             content,
-            "manual",
-            "user",
-            None,
-            None,
+            source,
+            author,
+            provider,
+            model,
         )
     elif isinstance(subject, ProjectLocalAnnotationSubject):
         mutation = db.create_project_local_training_caption_revision(
@@ -173,10 +178,10 @@ def create_project_training_caption_revision(
             subject.path,
             request.expected_head_generation,
             content,
-            "manual",
-            "user",
-            None,
-            None,
+            source,
+            author,
+            provider,
+            model,
         )
     else:
         raise TypeError(f"Unsupported annotation subject model: {type(subject).__name__}")

@@ -6,6 +6,7 @@ import { tailOfPath } from '../../lib/paths'
 import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
 import { isFinished, readProgress, type JobKind, type JobProgress, type ReadContext } from './progress'
+import { driveSmartTag } from './smartTagDriver'
 
 // Every long job the user started (or that was already running when V4
 // opened) lives here until dismissed. The backend runs one job per queue
@@ -48,6 +49,7 @@ export const useJobs = create<JobsState>((set, get) => ({
 }))
 
 type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors' | 'reconnect' | 'scan' | 'detect'
+  | 'smarttag'
 
 // Censor work over a batch (detecting, SAM3 refining, filters) runs one at a time.
 const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind === 'refine' || kind === 'adjust' ? 'detect' : kind)
@@ -123,6 +125,7 @@ const DRIVERS: Record<Queue, Driver> = {
     poll: async () => detectSource?.snapshot() ?? null,
     cancel: async () => detectSource?.cancel(),
   },
+  smarttag: driveSmartTag,
 }
 
 export const canStop = (kind: JobKind) => DRIVERS[queueOf(kind)].cancel !== null
@@ -300,6 +303,7 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   detect: [],
   refine: [],
   adjust: [],
+  smarttag: ['images', 'image', 'suggest', 'image-count', 'library-health', 'batch-project', 'batch-heads', 'dataset-preview'],
 }
 
 let onUndo: ((job: Job) => Promise<void>) | null = null
@@ -362,6 +366,7 @@ const RUNNING: Record<JobKind, MessageKey> = {
   detect: 'jobs.running.detect',
   refine: 'jobs.running.refine',
   adjust: 'jobs.running.adjust',
+  smarttag: 'dataset.job.running',
 }
 
 const DONE: Record<JobKind, MessageKey> = {
@@ -378,6 +383,7 @@ const DONE: Record<JobKind, MessageKey> = {
   detect: 'jobs.done.detect',
   refine: 'jobs.done.refine',
   adjust: 'jobs.done.adjust',
+  smarttag: 'dataset.job.done',
 }
 
 /** One line that says what happened (or is happening) to this job. */

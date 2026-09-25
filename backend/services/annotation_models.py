@@ -68,9 +68,20 @@ class TrainingCaptionHeadRequest(_StrictModel):
     subject: ProjectAnnotationSubject
 
 
+class TrainingCaptionAiProvenance(_StrictModel):
+    """Who wrote an AI revision: the tagger (wd14) or a describer (vlm)."""
+
+    source: Literal["wd14", "vlm"]
+    provider: AnnotationProvenanceIdentity | None = None
+    model: AnnotationProvenanceIdentity | None = None
+
+
 class TrainingCaptionRevisionCreateRequest(TrainingCaptionHeadRequest):
     expected_head_generation: NonNegativeStrictInt
     content: TrainingCaptionContentV1
+    # V4: a revision written from AI results is recorded as such (author
+    # "ai"), so a later AI run can tell it from a user's own edit.
+    ai_provenance: TrainingCaptionAiProvenance | None = None
 
 
 class TrainingCaptionRestoreRequest(_StrictModel):

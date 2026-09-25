@@ -1,9 +1,11 @@
+import { readSmartTag, type SmartTagContext } from './smartTagJob'
 // Reads the backend's progress payloads for long jobs into one shape.
 // move/copy: GET /api/move/progress · trash: GET /api/images/delete-selected/progress
 // · remove: GET /api/images/remove-selected/progress · tag: GET /api/tag/progress
 // · install: GET /api/models/download-progress · colors: GET /api/colors/progress
 // · reconnect: GET /api/images/reconnect-missing/progress · scan: GET /api/scan/progress
 // · detect/refine/adjust: censor work over a batch run by this page (features/censor/detectAll.ts).
+// · smarttag: GET /api/smart-tag/progress (a dataset batch's tag step), read in smartTagJob.ts.
 
 /**
  * tags: a bulk tag edit, finished when it is recorded (kept for its undo).
@@ -23,6 +25,7 @@ export type JobKind =
   | 'detect'
   | 'refine'
   | 'adjust'
+  | 'smarttag'
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
 
 export interface JobFailure {
@@ -66,6 +69,8 @@ export interface ReadContext {
   modelId?: string
   /** scan: the run we started; any other run on the backend is not ours. */
   runId?: number
+  /** smarttag: our run's job id and its place in the AI queue. */
+  smartTag?: SmartTagContext
 }
 
 const KNOWN: ReadonlySet<string> = new Set(['running', 'cancelling', 'done', 'cancelled', 'error', 'idle'])
@@ -218,6 +223,8 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
       const failures = namedErrors(raw.failed)
       return { ...base, succeeded: num(raw.succeeded), failures, failedCount: failures.length }
     }
+    case 'smarttag':
+      return readSmartTag(base, raw, ctx.smartTag)
   }
 }
 

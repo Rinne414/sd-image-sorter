@@ -162,7 +162,8 @@ export type DatasetProjectItemRequest = components['schemas']['DatasetProjectUpd
 /** GET /api/batches/{id}/project: a dataset batch's project and the names of its Library images. */
 export interface BatchProjectView {
   project: DatasetProject
-  library_images: { id: number; filename: string; width: number | null; height: number | null }[]
+  /** tagged: the tagger has run on the image (images.tagged_at is set). */
+  library_images: { id: number; filename: string; width: number | null; height: number | null; tagged?: boolean }[]
   /** Folder images that live in the batch's uploads folder (deleted with the batch). */
   uploaded_count: number
 }

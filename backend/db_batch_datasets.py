@@ -250,7 +250,9 @@ def list_unlinked_projects(include_archived: bool) -> list[dict[str, Any]]:
 
 
 def library_image_info(image_ids: list[int]) -> list[dict[str, Any]]:
-    """File name and size of this library's images, for a dataset batch's tiles."""
+    """File name, size and tagged state of this library's images, for a dataset
+    batch (``tagged``: the AI tagger has run on it, which Smart Tag's
+    ``skip_existing`` goes by)."""
     lib_sql, lib_params = current_library_sql()
     found: list[dict[str, Any]] = []
     with get_db() as conn:
@@ -258,10 +260,12 @@ def library_image_info(image_ids: list[int]) -> list[dict[str, Any]]:
             placeholders = ",".join("?" for _ in chunk)
             rows = conn.execute(
                 f"""
-                SELECT id, filename, width, height FROM images
+                SELECT id, filename, width, height,
+                       tagged_at IS NOT NULL AS tagged
+                FROM images
                 WHERE id IN ({placeholders}) AND {lib_sql}
                 """,
                 (*chunk, *lib_params),
             ).fetchall()
-            found.extend(dict(row) for row in rows)
+            found.extend({**dict(row), "tagged": bool(row["tagged"])} for row in rows)
     return found

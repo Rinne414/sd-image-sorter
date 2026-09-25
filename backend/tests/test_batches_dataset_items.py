@@ -83,10 +83,27 @@ def test_project_view_names_library_images_and_matches_v35(
     names = {row["id"]: row["filename"] for row in view["library_images"]}
     assert names == {a: "alpha.png", b: "beta.png"}
     assert all(
-        set(row) == {"id", "filename", "width", "height"}
+        set(row) == {"id", "filename", "width", "height", "tagged"}
         for row in view["library_images"]
     )
     assert view["uploaded_count"] == 0
+
+
+def test_project_view_says_which_library_images_are_tagged(
+    test_client, test_db, tmp_path
+):
+    a = seed_image(test_db, tmp_path / "lib", "alpha")
+    b = seed_image(test_db, tmp_path / "lib", "beta", seed=1)
+    with test_db.get_db() as conn:
+        conn.execute(
+            "UPDATE images SET tagged_at = CURRENT_TIMESTAMP WHERE id = ?", (a,)
+        )
+    batch = _dataset_batch(test_client, "Tagged", [a, b])
+
+    view = _view(test_client, batch["id"])
+
+    tagged = {row["id"]: row["tagged"] for row in view["library_images"]}
+    assert tagged == {a: True, b: False}
 
 
 def test_project_view_refuses_other_kinds_orphans_and_other_libraries(
