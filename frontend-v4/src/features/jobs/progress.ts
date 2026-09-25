@@ -3,7 +3,8 @@
 // · remove: GET /api/images/remove-selected/progress · tag: GET /api/tag/progress
 // · install: GET /api/models/download-progress.
 
-export type JobKind = 'move' | 'copy' | 'trash' | 'remove' | 'tag' | 'install'
+/** tags: a bulk tag edit, finished when it is recorded (kept for its undo). */
+export type JobKind = 'move' | 'copy' | 'trash' | 'remove' | 'tag' | 'install' | 'tags'
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
 
 export interface JobFailure {
@@ -135,6 +136,8 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
       return readTag(base, raw, ctx)
     case 'install':
       return readInstall(base, raw, ctx)
+    case 'tags':
+      return base
   }
 }
 

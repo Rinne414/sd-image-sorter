@@ -5,7 +5,7 @@ import { tailOfPath } from '../../lib/paths'
 import { useApp } from '../../state/store'
 import { Icon } from '../../ui/Icon'
 import { useClickOutside, useLayer } from '../../ui/layers'
-import { canStop, jobHeadline, stopJob, useJobs, type Job } from './jobs'
+import { canStop, jobHeadline, stopJob, undoJob, useJobs, type Job } from './jobs'
 import styles from './Jobs.module.css'
 import { isFinished } from './progress'
 
@@ -145,6 +145,11 @@ function JobRow({ job }: { job: Job }) {
           ))}
           {unlisted > 0 && <li className={styles.note}>{t('jobs.moreFailures', { n: unlisted })}</li>}
         </ul>
+      )}
+      {job.undo && (
+        <button type="button" className="btn" onClick={() => void undoJob(job)} disabled={job.undo.done}>
+          {job.undo.done ? t('jobs.undone') : t('jobs.undo')}
+        </button>
       )}
       {finished && failedIds.length > 0 && (
         <button type="button" className="btn" onClick={pickFailed}>

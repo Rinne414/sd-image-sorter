@@ -1,0 +1,156 @@
+.ops {
+  display: inline-flex;
+  margin-bottom: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+}
+
+.op {
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-left: 1px solid var(--line-strong);
+  background: none;
+  color: var(--text-2);
+}
+
+.op:first-child {
+  border-left: 0;
+}
+
+.op:hover {
+  background: var(--wash-hover);
+}
+
+.op[aria-pressed="true"] {
+  background: var(--wash-strong);
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.form {
+  display: grid;
+  gap: 10px;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.field input {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-3);
+  border-radius: var(--radius);
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.field small {
+  color: var(--muted);
+  font-size: var(--fs-1);
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.arrow {
+  padding-bottom: 6px;
+  color: var(--muted);
+}
+
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.check input {
+  accent-color: var(--accent);
+}
+
+.preview {
+  margin-top: 16px;
+  padding: 10px 12px;
+  min-height: 64px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.preview p {
+  margin: 0;
+}
+
+.preview p + p {
+  margin-top: 4px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.result {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.samples {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-2);
+}
+
+.samples li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+}
+
+.file {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.removed {
+  color: var(--danger);
+}
+
+.added {
+  color: var(--ok);
+}

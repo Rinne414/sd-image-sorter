@@ -27,6 +27,8 @@ export interface Job {
   label: string | null
   /** Runs once if the job ends well (a download, then the work that needed it). */
   then?: () => void
+  /** A bulk tag edit that can be undone once. */
+  undo?: { opId: string; done: boolean }
 }
 
 interface JobsState {
@@ -45,7 +47,7 @@ export const useJobs = create<JobsState>((set, get) => ({
   clearFinished: () => set({ jobs: get().jobs.filter((j) => !isFinished(j.progress.status)) }),
 }))
 
-type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install'
+type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags'
 
 const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind)
 
@@ -76,6 +78,11 @@ const DRIVERS: Record<Queue, Driver> = {
     poll: async () => unwrap(await api.GET('/api/models/download-progress')),
     cancel: null,
   },
+  // Bulk tag edits finish inside their request; they are never polled.
+  tags: {
+    poll: async () => ({ status: 'done' }),
+    cancel: null,
+  },
 }
 
 export const canStop = (kind: JobKind) => DRIVERS[queueOf(kind)].cancel !== null
@@ -87,7 +94,7 @@ let seq = 0
 
 export const tr = (key: MessageKey, params?: Params) => translate(useLang.getState().lang, key, params)
 
-function patchJob(id: string, patch: Partial<Job>): void {
+export function patchJob(id: string, patch: Partial<Job>): void {
   useJobs.setState((s) => ({ jobs: s.jobs.map((j) => (j.id === id ? { ...j, ...patch } : j)) }))
 }
 
@@ -227,6 +234,18 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   remove: GONE_KEYS,
   tag: ['images', 'image', 'suggest', 'image-count', 'library-health'],
   install: ['model-status'],
+  tags: ['images', 'image', 'suggest', 'image-count', 'library-health'],
+}
+
+let onUndo: ((job: Job) => Promise<void>) | null = null
+
+/** The feature that knows how to undo a `tags` job registers here (keeps this core feature-free). */
+export function setUndoHandler(handler: (job: Job) => Promise<void>): void {
+  onUndo = handler
+}
+
+export function undoJob(job: Job): Promise<void> {
+  return onUndo ? onUndo(job) : Promise.resolve()
 }
 
 /** The job ended: refresh what it changed, drop vanished picks, tell the user, run what waited. */
@@ -250,7 +269,8 @@ function finish(job: Job): void {
   const show = { label: tr('jobs.show'), run: () => useJobs.getState().setDrawerOpen(true) }
   // A download that leads straight into other work speaks through that work.
   if (!(job.then && p.status === 'done')) {
-    useToasts.getState().push(jobHeadline(job), failedSomething ? 'error' : 'info', failedSomething ? show : undefined)
+    const undo = job.undo && onUndo ? { label: tr('toast.undo'), run: () => void onUndo?.(job) } : undefined
+    useToasts.getState().push(jobHeadline(job), failedSomething ? 'error' : 'info', failedSomething ? show : undo)
   }
   if (p.status === 'done') job.then?.()
 }
@@ -262,6 +282,7 @@ const RUNNING: Record<JobKind, MessageKey> = {
   remove: 'jobs.running.remove',
   tag: 'jobs.running.tag',
   install: 'jobs.running.install',
+  tags: 'jobs.done.tags',
 }
 
 const DONE: Record<JobKind, MessageKey> = {
@@ -271,6 +292,7 @@ const DONE: Record<JobKind, MessageKey> = {
   remove: 'jobs.done.remove',
   tag: 'jobs.done.tag',
   install: 'jobs.done.install',
+  tags: 'jobs.done.tags',
 }
 
 /** One line that says what happened (or is happening) to this job. */

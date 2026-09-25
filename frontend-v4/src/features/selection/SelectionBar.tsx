@@ -102,7 +102,8 @@ export function SelectionBar({ params, total, images, hasMore, onRate, onFavorit
         up
         label={t('sel.more')}
         items={[
-          { id: 'remove', label: t('sel.remove'), hint: 'Del', danger: true, onSelect: () => show('remove') },
+          { id: 'edit-tags', label: t('sel.editTags'), onSelect: () => show('edit-tags') },
+          { id: 'remove', label: t('sel.remove'), hint: 'Del', danger: true, divider: true, onSelect: () => show('remove') },
           { id: 'trash', label: t('sel.trash'), danger: true, onSelect: () => show('trash') },
         ]}
       />
