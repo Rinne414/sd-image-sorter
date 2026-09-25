@@ -8,6 +8,8 @@ import { isTypingTarget } from '../../lib/format'
 import { useApp } from '../../state/store'
 import { GenerationCard } from '../card/GenerationCard'
 import { Stars } from '../card/Stars'
+import { copyAndSay, openImageFolder } from '../library/fileActions'
+import { lightboxKey, type LightboxKey } from '../library/keys'
 import { Icon } from '../../ui/Icon'
 import { useLayer } from '../../ui/layers'
 import styles from './Lightbox.module.css'
@@ -22,6 +24,8 @@ interface Props {
   fetchMore: () => void
   /** Space and the Pick button add to the library's picks; off where that makes no sense (a batch). */
   pickable?: boolean
+  /** The image at a position in the whole result, for one opened outside the loaded pages (a random pick). */
+  fetchAt?: (offset: number) => Promise<ImageSummary | null>
 }
 
 function readInfoPref(): boolean {
@@ -33,12 +37,14 @@ function readInfoPref(): boolean {
 }
 
 /** One image up close. The film strip below keeps the neighbours in reach. */
-export function Lightbox({ images, total, hasMore, fetchMore, pickable = true }: Props) {
+export function Lightbox({ images, total, hasMore, fetchMore, pickable = true, fetchAt }: Props) {
   const t = useT()
   const id = useApp((s) => s.lightboxId)
+  const at = useApp((s) => s.lightboxAt)
   const selection = useApp((s) => s.selection)
   const close = useApp((s) => s.closeLightbox)
   const open = useApp((s) => s.openLightbox)
+  const openAt = useApp((s) => s.openLightboxAt)
   const togglePick = useApp((s) => s.togglePick)
   const favorites = useFavorites()
   const setRating = useSetRating()
@@ -55,8 +61,29 @@ export function Lightbox({ images, total, hasMore, fetchMore, pickable = true }:
 
   const index = images.findIndex((img) => img.id === id)
   const current = index >= 0 ? images[index] : undefined
+  // Outside the loaded pages (a random pick): step through the result on the server instead.
+  const outside = index < 0 && at !== null
 
-  const go = (delta: number) => {
+  // Where the last step outside the loaded pages is heading: quick presses chain from it.
+  const heading = useRef<number | null>(null)
+  const stepTo = async (offset: number) => {
+    if (!fetchAt || offset < 0 || offset >= total) return
+    heading.current = offset
+    const hit = await fetchAt(offset).catch(() => null)
+    if (heading.current !== offset) return
+    heading.current = null
+    if (!hit) return
+    setActual(false)
+    if (images.some((img) => img.id === hit.id)) open(hit.id)
+    else openAt(hit.id, offset)
+  }
+
+  const go = (delta: 1 | -1) => {
+    if (index < 0) {
+      const from = heading.current ?? at
+      if (from !== null) void stepTo(from + delta)
+      return
+    }
     const next = images[index + delta]
     if (next) {
       setActual(false)
@@ -65,33 +92,48 @@ export function Lightbox({ images, total, hasMore, fetchMore, pickable = true }:
     if (delta > 0 && index + delta >= images.length - 5 && hasMore) fetchMore()
   }
 
+  /** What a big-image key does here; false when it does not apply (the key is left alone). */
+  const act = (action: LightboxKey, cur: number): boolean => {
+    switch (action.type) {
+      case 'go':
+        go(action.delta)
+        return true
+      case 'first':
+        if (images[0]) open(images[0].id)
+        return true
+      case 'last': {
+        const last = images.at(-1)
+        if (outside) void stepTo(total - 1)
+        else if (last) open(last.id)
+        return true
+      }
+      case 'pick':
+        if (pickable) togglePick(cur)
+        return pickable
+      case 'rate':
+        setRating.mutate({ ids: [cur], stars: action.stars })
+        return true
+      case 'favorite':
+        toggleFav.mutate({ ids: [cur], favorited: !(favorites.data?.ids.has(cur) ?? false) })
+        return true
+      case 'info':
+        toggleInfo()
+        return true
+      case 'zoom':
+        setActual((a) => !a)
+        return true
+    }
+  }
+
   useEffect(() => {
     if (id === null) return
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target) || !isTop()) return
-      const state = useApp.getState()
-      const cur = state.lightboxId
-      if (cur === null) return
-      const key = e.key
-      let handled = true
-      if (key === 'ArrowRight' || key === 'ArrowDown') go(1)
-      else if (key === 'ArrowLeft' || key === 'ArrowUp') go(-1)
-      else if (key === 'Home' && images[0]) open(images[0].id)
-      else if (key === 'End') {
-        const last = images.at(-1)
-        if (last) open(last.id)
-      } else if (key === ' ' && pickable) togglePick(cur)
-      else if (/^[0-5]$/.test(key) && !e.ctrlKey && !e.metaKey) setRating.mutate({ ids: [cur], stars: Number(key) })
-      else if (key === 'f' || key === 'F') {
-        const fav = favorites.data?.ids.has(cur) ?? false
-        toggleFav.mutate({ ids: [cur], favorited: !fav })
-      } else if (key === 'i' || key === 'I') toggleInfo()
-      else if (key === 'z' || key === 'Z') setActual((a) => !a)
-      else handled = false
-      if (handled) {
-        e.preventDefault()
-        e.stopPropagation()
-      }
+      const cur = useApp.getState().lightboxId
+      const action = lightboxKey(e)
+      if (cur === null || !action || !act(action, cur)) return
+      e.preventDefault()
+      e.stopPropagation()
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
@@ -119,17 +161,43 @@ export function Lightbox({ images, total, hasMore, fetchMore, pickable = true }:
   }
 
   const lo = Math.max(0, index - STRIP_RADIUS)
-  const strip = images.slice(lo, Math.max(index, 0) + STRIP_RADIUS + 1)
+  const strip = index >= 0 ? images.slice(lo, index + STRIP_RADIUS + 1) : []
   const picked = selection.includes(id)
   const isFav = favorites.data?.ids.has(id) ?? false
+  const position = index >= 0 ? index + 1 : at !== null ? at + 1 : null
+  const path = detail.data?.image.path ?? current?.path ?? null
+  const atStart = index >= 0 ? index <= 0 : !outside || (at ?? 0) <= 0
+  const atEnd = index >= 0 ? index >= images.length - 1 && !hasMore : !outside || !fetchAt || (at ?? 0) >= total - 1
 
   return createPortal(
     <div className={styles.overlay} role="dialog" aria-modal="true" data-testid="lightbox" data-info={info || undefined}>
       <header className={styles.bar}>
-        <span className={`${styles.pos} mono`}>
-          {t('lightbox.position', { i: index + 1, n: total })}
+        {position !== null && <span className={`${styles.pos} mono`}>{t('lightbox.position', { i: position, n: total })}</span>}
+        <span className={`${styles.name} mono`} title={path ?? undefined}>
+          {current?.filename ?? detail.data?.image.filename}
         </span>
-        <span className={`${styles.name} mono`}>{current?.filename}</span>
+        <button
+          type="button"
+          className={`btn btn-ghost btn-icon ${styles.fileBtn}`}
+          onClick={() => void openImageFolder(id)}
+          title={t('lib.file.openFolder')}
+          aria-label={t('lib.file.openFolder')}
+          data-testid="lightbox-open-folder"
+        >
+          <Icon name="folder" size={15} />
+        </button>
+        {path && (
+          <button
+            type="button"
+            className={`btn btn-ghost btn-icon ${styles.fileBtn}`}
+            onClick={() => void copyAndSay(path, { key: 'lib.file.path' })}
+            title={t('lib.file.copyPath')}
+            aria-label={t('lib.file.copyPath')}
+            data-testid="lightbox-copy-path"
+          >
+            <Icon name="copy" size={14} />
+          </button>
+        )}
         <span className={styles.barGap} />
         <Stars value={detail.data?.image.user_rating ?? current?.user_rating ?? 0} onChange={(n) => setRating.mutate({ ids: [id], stars: n })} />
         <button
@@ -160,7 +228,7 @@ export function Lightbox({ images, total, hasMore, fetchMore, pickable = true }:
 
       <div className={styles.body}>
         <div className={styles.stage} data-actual={actual || undefined} onClick={(e) => e.target === e.currentTarget && close()}>
-          <button type="button" className={`${styles.nav} ${styles.prev}`} onClick={() => go(-1)} disabled={index <= 0} aria-label={t('lightbox.prev')}>
+          <button type="button" className={`${styles.nav} ${styles.prev}`} onClick={() => go(-1)} disabled={atStart} aria-label={t('lightbox.prev')}>
             <Icon name="left" size={28} />
           </button>
           <div className={styles.imgWrap} onClick={() => setActual(!actual)}>
@@ -171,12 +239,12 @@ export function Lightbox({ images, total, hasMore, fetchMore, pickable = true }:
               className={styles.full}
               data-ready={loadedId === id || undefined}
               src={imageFileUrl(id)}
-              alt={current?.filename ?? ''}
+              alt={current?.filename ?? detail.data?.image.filename ?? ''}
               draggable={false}
               onLoad={() => setLoadedId(id)}
             />
           </div>
-          <button type="button" className={`${styles.nav} ${styles.next}`} onClick={() => go(1)} disabled={index >= images.length - 1 && !hasMore} aria-label={t('lightbox.next')}>
+          <button type="button" className={`${styles.nav} ${styles.next}`} onClick={() => go(1)} disabled={atEnd} aria-label={t('lightbox.next')}>
             <Icon name="right" size={28} />
           </button>
         </div>
@@ -193,7 +261,7 @@ export function Lightbox({ images, total, hasMore, fetchMore, pickable = true }:
             data-picked={(pickable && selection.includes(img.id)) || undefined}
             onClick={() => open(img.id)}
           >
-            <img src={thumbnailUrl(img.id, 256)} alt="" loading="lazy" draggable={false} />
+            <img src={thumbnailUrl(img.id, 256)} alt="" loading="lazy" decoding="async" draggable={false} />
           </button>
         ))}
       </div>

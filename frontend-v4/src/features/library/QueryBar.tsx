@@ -43,6 +43,8 @@ export function QueryBar({ total, inputRef }: Props) {
   const setTileSize = useApp((s) => s.setTileSize)
   const cardOpen = useApp((s) => s.cardOpen)
   const toggleCard = useApp((s) => s.toggleCard)
+  const railOpen = useApp((s) => s.railOpen)
+  const toggleRail = useApp((s) => s.toggleRail)
   const [draft, setDraft] = useState(queryText)
   const [caret, setCaret] = useState(0)
   const [focused, setFocused] = useState(false)
@@ -106,6 +108,18 @@ export function QueryBar({ total, inputRef }: Props) {
 
   return (
     <div className={styles.bar}>
+      {!railOpen && (
+        <button
+          type="button"
+          className="btn btn-ghost btn-icon"
+          onClick={toggleRail}
+          aria-label={t('rail.expand')}
+          title={t('rail.expand')}
+          data-testid="rail-expand"
+        >
+          <Icon name="right" size={14} />
+        </button>
+      )}
       <div className={styles.field}>
         <span className={styles.glyph} aria-hidden>
           <Icon name="search" size={15} />

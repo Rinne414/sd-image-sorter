@@ -78,6 +78,11 @@ interface AppState extends Prefs {
   selection: number[]
   selectionAnchor: number | null
   lightboxId: number | null
+  /**
+   * Where the big image sits in the whole result when it is outside the loaded
+   * pages (a random pick); null when it is one of the loaded images.
+   */
+  lightboxAt: number | null
   paletteOpen: boolean
   /** The batch open on the Batch page (null: the list). */
   batchId: number | null
@@ -99,6 +104,8 @@ interface AppState extends Prefs {
   setSelection: (ids: number[]) => void
   clearSelection: () => void
   openLightbox: (id: number) => void
+  /** Open an image that may lie outside the loaded pages, at `at` in the result. */
+  openLightboxAt: (id: number, at: number) => void
   closeLightbox: () => void
   setPaletteOpen: (open: boolean) => void
   openBatch: (id: number) => void
@@ -133,6 +140,7 @@ export const useApp = create<AppState>((set, get) => ({
   selection: [],
   selectionAnchor: null,
   lightboxId: null,
+  lightboxAt: null,
   paletteOpen: false,
   ...routeFromHash(),
   adding: null,
@@ -195,8 +203,9 @@ export const useApp = create<AppState>((set, get) => ({
   },
   setSelection: (ids) => set({ selection: [...ids], selectionAnchor: ids.at(-1) ?? null }),
   clearSelection: () => set({ selection: [], selectionAnchor: null }),
-  openLightbox: (lightboxId) => set({ lightboxId, inspectedId: lightboxId }),
-  closeLightbox: () => set({ lightboxId: null }),
+  openLightbox: (lightboxId) => set({ lightboxId, lightboxAt: null, inspectedId: lightboxId }),
+  openLightboxAt: (lightboxId, lightboxAt) => set({ lightboxId, lightboxAt, inspectedId: lightboxId }),
+  closeLightbox: () => set({ lightboxId: null, lightboxAt: null }),
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
   openBatch: (batchId) => {
     writeHash('batch', batchId)

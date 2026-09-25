@@ -1,22 +1,17 @@
 import { useEffect, useState } from 'react'
-import { api, unwrap } from '../../api/client'
 import { prefetchTagging } from '../../api/queries'
-import type { components } from '../../api/schema'
 import type { ImageSummary } from '../../api/types'
 import { useT } from '../../i18n'
 import type { ImageQueryParams } from '../../lib/searchQuery'
-import { toSelectionBody } from '../../lib/selectionBody'
 import { useApp } from '../../state/store'
 import { Icon } from '../../ui/Icon'
-import { Menu } from '../../ui/Menu'
+import { Menu, type MenuItem } from '../../ui/Menu'
 import { useToasts } from '../../ui/toasts'
 import { Stars } from '../card/Stars'
-import { AddToBatchMenu } from '../batch/AddToBatchMenu'
-import { quickCensor } from '../censor/quickCensor'
-import { useSelectionDialog } from './dialogs'
+import { menuItemsOf, say, type ImageAction } from './actions'
+import { useBulkActions } from './actionOps'
+import { invertPicks, matchingIds } from './invert'
 import styles from './SelectionBar.module.css'
-
-type SelectionIdsBody = components['schemas']['SelectionIdsRequest']
 
 interface Props {
   /** The gallery's current filter, used to pick every match on the server. */
@@ -24,18 +19,16 @@ interface Props {
   total: number | null
   images: ImageSummary[]
   hasMore: boolean
-  onRate: (stars: number) => void
-  onFavorite: () => void
 }
 
 /** Docked under the grid while anything is picked: what can be done to the picks. */
-export function SelectionBar({ params, total, images, hasMore, onRate, onFavorite }: Props) {
+export function SelectionBar({ params, total, images, hasMore }: Props) {
   const t = useT()
   const selection = useApp((s) => s.selection)
   const clear = useApp((s) => s.clearSelection)
-  const show = useSelectionDialog((s) => s.show)
+  const actions = useBulkActions(selection)
   const [covered, setCovered] = useState<{ key: string; size: number } | null>(null)
-  const [selecting, setSelecting] = useState(false)
+  const [busy, setBusy] = useState<'all' | 'invert' | null>(null)
   const key = JSON.stringify(params)
 
   // Toasts sit above the bar instead of on top of it.
@@ -52,22 +45,31 @@ export function SelectionBar({ params, total, images, hasMore, onRate, onFavorit
   const offerAll = total !== null && total > 0 && !allMatchesPicked
 
   const selectAll = async () => {
-    setSelecting(true)
+    setBusy('all')
     try {
-      // Filters left out of the body take the server's defaults, same as the gallery list.
-      const body = toSelectionBody(params) as unknown as SelectionIdsBody
-      const res = unwrap<{ image_ids: number[] }>(await api.POST('/api/images/selection-ids', { body }))
+      const ids = await matchingIds(params)
       const s = useApp.getState()
       const have = new Set(s.selection)
-      const next = [...s.selection, ...res.image_ids.filter((id) => !have.has(id))]
+      const next = [...s.selection, ...ids.filter((id) => !have.has(id))]
       s.setSelection(next)
       setCovered({ key, size: next.length })
     } catch (error) {
       useToasts.getState().push(t('sel.selectAllFailed', { reason: (error as Error).message }), 'error')
     } finally {
-      setSelecting(false)
+      setBusy(null)
     }
   }
+
+  const invert = async () => {
+    setBusy('invert')
+    await invertPicks(params)
+    setCovered(null)
+    setBusy(null)
+  }
+
+  const main = actions.filter((a) => a.bar === 'main')
+  const more = actions.filter((a) => a.bar === 'more')
+  const moreItems: MenuItem[] = menuItemsOf(t, more).map((item, i) => (item.danger && !more[i - 1]?.danger ? { ...item, divider: true } : item))
 
   return (
     <div className={styles.bar} role="toolbar" aria-label={t('sel.count', { n: selection.length })} data-testid="selection-bar">
@@ -77,11 +79,11 @@ export function SelectionBar({ params, total, images, hasMore, onRate, onFavorit
           type="button"
           className={`btn btn-ghost ${styles.all}`}
           onClick={() => void selectAll()}
-          disabled={selecting}
+          disabled={busy !== null}
           title={t('sel.selectAll', { n: total })}
           data-testid="select-all-matching"
         >
-          {selecting ? (
+          {busy === 'all' ? (
             t('sel.selecting')
           ) : (
             <>
@@ -91,34 +93,21 @@ export function SelectionBar({ params, total, images, hasMore, onRate, onFavorit
           )}
         </button>
       )}
+      <button
+        type="button"
+        className={`btn btn-ghost ${styles.all}`}
+        onClick={() => void invert()}
+        disabled={busy !== null}
+        title={t('lib.sel.invertTitle')}
+        data-testid="invert-picks"
+      >
+        {busy === 'invert' ? t('lib.sel.inverting') : t('lib.sel.invert')}
+      </button>
       <span className={styles.rule} aria-hidden />
-      <AddToBatchMenu />
-      <span className={styles.stars} title={t('sel.rate')}>
-        <Stars value={0} onChange={(n) => n > 0 && onRate(n)} size="sm" />
-      </span>
-      <button type="button" className="btn" onClick={onFavorite} aria-label={t('sel.favorite')} title={t('sel.favorite')}>
-        <Icon name="heart" size={14} />
-        <span className={styles.wordy}>{t('sel.favorite')}</span>
-      </button>
-      <button type="button" className="btn" onClick={() => show('tag')} onPointerEnter={prefetchTagging} onFocus={prefetchTagging}>
-        {t('sel.tag')}
-      </button>
-      <button type="button" className="btn" onClick={() => show('move')}>
-        {t('sel.move')}
-      </button>
-      <Menu
-        up
-        label={t('sel.more')}
-        items={[
-          { id: 'censor', label: t('sel.censor'), onSelect: () => void quickCensor(useApp.getState().selection) },
-          { id: 'copy', label: t('sel.copy'), onSelect: () => show('copy') },
-          { id: 'edit-tags', label: t('sel.editTags'), onSelect: () => show('edit-tags') },
-          { id: 'export', label: t('sel.exportData'), onSelect: () => show('export') },
-          { id: 'move-library', label: t('sel.moveLibrary'), onSelect: () => show('move-library') },
-          { id: 'remove', label: t('sel.remove'), hint: 'Del', danger: true, divider: true, onSelect: () => show('remove') },
-          { id: 'trash', label: t('sel.trash'), danger: true, onSelect: () => show('trash') },
-        ]}
-      />
+      {main.map((action) => (
+        <BarAction key={action.id} action={action} />
+      ))}
+      <Menu up label={t('sel.more')} items={moreItems} />
       <span className={styles.spacer} />
       <button type="button" className="btn btn-ghost" onClick={clear} aria-label={t('sel.clear')} title={t('sel.clear')}>
         <span className={styles.wordy}>{t('sel.clear')}</span>
@@ -126,5 +115,36 @@ export function SelectionBar({ params, total, images, hasMore, onRate, onFavorit
         <kbd className={styles.wordy}>Esc</kbd>
       </button>
     </div>
+  )
+}
+
+/** One of the bar's up-front actions, drawn the way it reads best. */
+function BarAction({ action }: { action: ImageAction }) {
+  const t = useT()
+  const label = say(t, action.label)
+  if (action.id === 'batch') {
+    return <Menu up primary label={label} items={menuItemsOf(t, action.children ?? [])} testId="add-to-batch" />
+  }
+  if (action.id === 'rate') {
+    const byStars = new Map(action.children?.map((c) => [c.hint, c]))
+    return (
+      <span className={styles.stars} title={label} data-action="rate">
+        <Stars value={0} onChange={(n) => n > 0 && byStars.get(String(n))?.run?.()} size="sm" />
+      </span>
+    )
+  }
+  if (action.id === 'favorite') {
+    return (
+      <button type="button" className="btn" onClick={action.run} aria-label={label} title={label} data-action="favorite">
+        <Icon name="heart" size={14} />
+        <span className={styles.wordy}>{label}</span>
+      </button>
+    )
+  }
+  const prefetch = action.id === 'tag' ? prefetchTagging : undefined
+  return (
+    <button type="button" className="btn" onClick={action.run} onPointerEnter={prefetch} onFocus={prefetch} data-action={action.id}>
+      {label}
+    </button>
   )
 }

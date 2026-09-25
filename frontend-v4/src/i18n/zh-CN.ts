@@ -1,9 +1,11 @@
 // Source language pack. Every key here must exist in en.ts (the type enforces it).
 import { zhCNDataset } from './zh-CN.dataset'
 import { zhCNPublish } from './zh-CN.publish'
+import { zhCNLibrary } from './zh-CN.library'
 
 export const zhCN = {
   ...zhCNPublish,
+  ...zhCNLibrary,
   ...zhCNDataset,
   'app.name': 'SD Image Sorter',
   'nav.home': '首页',
@@ -415,7 +417,6 @@ export const zhCN = {
   'palette.cmd.onlyFavorites': '只看收藏',
   'palette.cmd.clearFilters': '清空所有筛选',
   'palette.cmd.openFull': '看大图',
-  'palette.cmd.copyPrompt': '复制 prompt',
   'palette.cmd.backToV3': '回到 V3.5',
   'palette.group.selection': '选中的图',
   'palette.cmd.move': '把选中的图移动到…',

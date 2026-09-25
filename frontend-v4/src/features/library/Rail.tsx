@@ -14,6 +14,7 @@ import { useApp } from '../../state/store'
 import styles from './Rail.module.css'
 import { Icon } from '../../ui/Icon'
 import { useClickOutside, useLayer } from '../../ui/layers'
+import { useRailSections, type RailSectionId } from './railSections'
 
 interface Props {
   /** Prompt text woven faintly behind the library name. */
@@ -59,23 +60,23 @@ export function Rail({ texture }: Props) {
 
         <SmartFilters />
 
-        <h3 className={styles.heading}>{t('rail.sources')}</h3>
-        <ul className={styles.list}>
-          {(generators.data ?? []).map((g) => (
-            <Row
-              key={g.generator}
-              active={scope.generators.includes(g.generator)}
-              label={generatorName(g.generator, t)}
-              count={g.count}
-              dim={g.generator === 'unknown' || g.generator === 'others'}
-              onClick={() => toggleGen(g.generator)}
-            />
-          ))}
-        </ul>
+        <Section id="sources" title={t('rail.sources')}>
+          <ul className={styles.list}>
+            {(generators.data ?? []).map((g) => (
+              <Row
+                key={g.generator}
+                active={scope.generators.includes(g.generator)}
+                label={generatorName(g.generator, t)}
+                count={g.count}
+                dim={g.generator === 'unknown' || g.generator === 'others'}
+                onClick={() => toggleGen(g.generator)}
+              />
+            ))}
+          </ul>
+        </Section>
 
         {folders.data && folders.data.length > 0 && (
-          <>
-            <h3 className={styles.heading}>{t('rail.folders')}</h3>
+          <Section id="folders" title={t('rail.folders')}>
             <ul className={styles.list}>
               {folders.data.map((f) => (
                 <Row
@@ -87,12 +88,31 @@ export function Rail({ texture }: Props) {
                 />
               ))}
             </ul>
-          </>
+          </Section>
         )}
       </div>
 
       <Status />
     </nav>
+  )
+}
+
+/** A rail heading that folds its list away; remembered across reloads. */
+function Section({ id, title, children }: { id: RailSectionId; title: string; children: React.ReactNode }) {
+  const folded = useRailSections((s) => !!s.folded[id])
+  const toggle = useRailSections((s) => s.toggle)
+  return (
+    <section data-rail-section={id}>
+      <h3 className={styles.heading}>
+        <button type="button" className={styles.fold} aria-expanded={!folded} onClick={() => toggle(id)}>
+          <span className={styles.foldCaret} aria-hidden>
+            <Icon name="caret" size={11} />
+          </span>
+          {title}
+        </button>
+      </h3>
+      {!folded && children}
+    </section>
   )
 }
 
@@ -119,6 +139,16 @@ function LibraryLabel({ name, count, texture }: { name: string; count: number | 
       <div className={styles.texture} aria-hidden>
         {texture}
       </div>
+      <button
+        type="button"
+        className={`btn btn-ghost btn-icon ${styles.collapse}`}
+        onClick={() => useApp.getState().toggleRail()}
+        aria-label={t('rail.collapse')}
+        title={t('rail.collapse')}
+        data-testid="rail-collapse"
+      >
+        <Icon name="left" size={14} />
+      </button>
       <button
         type="button"
         className={styles.libraryButton}
@@ -246,7 +276,15 @@ function Status() {
   const shown = rows.filter((r) => r.n > 0)
   return (
     <section className={styles.status} aria-label={t('rail.status')} data-testid="library-status">
-      <h3 className={styles.heading}>{t('rail.status')}</h3>
+      <StatusBody shown={shown} />
+    </section>
+  )
+}
+
+function StatusBody({ shown }: { shown: StatusRow[] }) {
+  const t = useT()
+  return (
+    <Section id="status" title={t('rail.status')}>
       {shown.length === 0 ? (
         <p className={styles.clean}>{t('rail.statusClean')}</p>
       ) : (
@@ -263,7 +301,7 @@ function Status() {
           ))}
         </ul>
       )}
-    </section>
+    </Section>
   )
 }
 
@@ -275,14 +313,13 @@ function SmartFilters() {
   const queryText = useApp((s) => s.queryText)
   if (!list.length) return null
   return (
-    <>
-      <h3 className={styles.heading}>{t('rail.saved')}</h3>
+    <Section id="saved" title={t('rail.saved')}>
       <ul className={styles.list} data-testid="smart-filters">
         {list.map((s, i) => (
           <SmartFilterRow key={s.id} saved={s} index={i} active={queryText.trim() === s.query} />
         ))}
       </ul>
-    </>
+    </Section>
   )
 }
 

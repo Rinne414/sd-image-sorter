@@ -1,0 +1,112 @@
+/* Same surface as the dropdown menus (Menu.module.css), placed at the pointer. */
+.menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 220px;
+  max-width: 340px;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--surface-2);
+  box-shadow: var(--shadow-float);
+  border-radius: var(--radius-lg);
+  outline: none;
+  font-size: var(--fs-3);
+}
+
+/* The menu itself takes the focus only so arrow keys work; the items show where focus is. */
+.menu:focus-visible {
+  outline: none;
+}
+
+.sub {
+  z-index: 61;
+  min-width: 200px;
+}
+
+.header {
+  padding: 6px 8px 5px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group[data-divider] {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.heading {
+  padding: 5px 8px 2px;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.sub .heading[data-divider] {
+  margin-top: 4px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 27px;
+  padding: 4px 8px 4px 10px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  white-space: nowrap;
+  border-radius: var(--radius);
+  outline: none;
+}
+
+.item:hover:not(:disabled),
+.item:focus-visible,
+.item[aria-expanded='true'] {
+  background: var(--wash-hover);
+}
+
+.item:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+
+.item:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+.item[data-danger] {
+  color: var(--danger);
+}
+
+.item[data-danger]:hover,
+.item[data-danger]:focus-visible {
+  background: var(--danger-soft);
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: var(--fs-1);
+}
+
+.more {
+  display: grid;
+  color: var(--muted);
+}

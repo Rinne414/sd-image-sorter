@@ -5,6 +5,7 @@ import type { ImageTag, TagCategory } from '../../api/types'
 import { useT, type MessageKey } from '../../i18n'
 import { copyText, fileSize, generatorCode } from '../../lib/format'
 import { readGeneration, shortModelName, toParameterText, type GenerationInfo } from '../../lib/meta'
+import { parentFolder, tailOfPath } from '../../lib/paths'
 import { promptTagKeys, segmentPrompt, tagKey } from '../../lib/prompt'
 import { useApp } from '../../state/store'
 import styles from './Card.module.css'
@@ -13,6 +14,7 @@ import { Stars } from './Stars'
 import { Icon } from '../../ui/Icon'
 import { TagInput } from '../../ui/TagInput'
 import { addTags, removeTag, reparse, saveCaptions } from './cardEdits'
+import { copyAndSay, openImageFolder } from '../library/fileActions'
 
 const TAGS_SHOWN = 24
 
@@ -99,6 +101,8 @@ function CardBody({ id, variant }: { id: number; variant: 'panel' | 'overlay' })
         <Stars value={stars} onChange={(n) => setRating.mutate({ ids: [id], stars: n })} />
       </div>
       )}
+
+      {variant === 'panel' && image?.path && <FileRow id={id} path={image.path} />}
 
       {image && !image.prompt && !gen?.characters.length && <p className={styles.muted}>{t('card.noPrompt')}</p>}
 
@@ -200,6 +204,39 @@ function CardBody({ id, variant }: { id: number; variant: 'panel' | 'overlay' })
         {image?.file_size ? <span className={`${styles.muted} mono`}>{fileSize(image.file_size)}</span> : null}
       </div>
     </aside>
+  )
+}
+
+/** Where the file lives, with the two ways to reach it. */
+function FileRow({ id, path }: { id: number; path: string }) {
+  const t = useT()
+  const folder = parentFolder(path) ?? path
+  return (
+    <div className={styles.fileRow}>
+      <span className={`${styles.folder} mono`} title={path}>
+        {tailOfPath(folder, 56)}
+      </span>
+      <button
+        type="button"
+        className={styles.copy}
+        onClick={() => void openImageFolder(id)}
+        title={t('lib.file.openFolder')}
+        aria-label={t('lib.file.openFolder')}
+        data-testid="card-open-folder"
+      >
+        <Icon name="folder" size={14} />
+      </button>
+      <button
+        type="button"
+        className={styles.copy}
+        onClick={() => void copyAndSay(path, { key: 'lib.file.path' })}
+        title={t('lib.file.copyPath')}
+        aria-label={t('lib.file.copyPath')}
+        data-testid="card-copy-path"
+      >
+        <Icon name="copy" size={14} />
+      </button>
+    </div>
   )
 }
 

@@ -61,6 +61,7 @@ export function Menu({ label, items, title, align = 'left', up = false, primary 
                 type="button"
                 role={item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
                 aria-checked={item.checked}
+                data-item={item.id}
                 onClick={() => {
                   item.onSelect()
                   setOpen(false)

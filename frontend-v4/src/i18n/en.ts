@@ -1,9 +1,11 @@
 import { enDataset } from './en.dataset'
 import { enPublish } from './en.publish'
+import { enLibrary } from './en.library'
 import type { MessageKey } from './zh-CN'
 
 export const en: Record<MessageKey, string> = {
   ...enPublish,
+  ...enLibrary,
   ...enDataset,
   'app.name': 'SD Image Sorter',
   'nav.home': 'Home',
@@ -415,7 +417,6 @@ export const en: Record<MessageKey, string> = {
   'palette.cmd.onlyFavorites': 'Only favorites',
   'palette.cmd.clearFilters': 'Clear all filters',
   'palette.cmd.openFull': 'Open large',
-  'palette.cmd.copyPrompt': 'Copy prompt',
   'palette.cmd.backToV3': 'Back to V3.5',
   'palette.group.selection': 'Picks',
   'palette.cmd.move': 'Move picks to…',

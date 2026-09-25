@@ -1,18 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useImageDetail, useLibraries } from '../../api/queries'
+import { useLibraries } from '../../api/queries'
 import { translate, useLang, useT, type MessageKey, type Params } from '../../i18n'
-import { copyText } from '../../lib/format'
 import { useApp } from '../../state/store'
 import { useTheme } from '../../theme'
 import { useLayer } from '../../ui/layers'
-import { addPicksTo, recentBatches } from '../batch/AddToBatchMenu'
-import { quickCensor } from '../censor/quickCensor'
+import { recentBatches } from '../batch/AddToBatchMenu'
 import { useBatches } from '../batch/batchApi'
 import { askNewBatch } from '../batch/dialogStore'
 import { BATCH_KINDS } from '../batch/labels'
 import { useJobs } from '../jobs/jobs'
+import { currentLibraryParams } from '../library/params'
+import { openRandom } from '../library/randomOpen'
+import { useShortcutSheet } from '../library/ShortcutSheet'
+import { paletteText, runnable, type ImageAction } from '../selection/actions'
+import { useBulkActions, useImageActions } from '../selection/actionOps'
 import { useSelectionDialog } from '../selection/dialogs'
+import { invertPicks } from '../selection/invert'
 import styles from './CommandPalette.module.css'
 
 interface Command {
@@ -29,6 +33,21 @@ function both(key: MessageKey, params?: Params): string {
   return `${translate('zh-CN', key, params)} ${translate('en', key, params)}`.toLowerCase()
 }
 
+const zh = (key: MessageKey, params?: Params) => translate('zh-CN', key, params)
+const en = (key: MessageKey, params?: Params) => translate('en', key, params)
+
+/** A shared image action as a command; either language finds it. */
+function fromAction(action: ImageAction, group: MessageKey, prefix: string, lang: 'zh-CN' | 'en'): Command {
+  return {
+    id: `${prefix}-${action.id}`,
+    group,
+    label: paletteText(lang === 'zh-CN' ? zh : en, action),
+    haystack: `${paletteText(zh, action)} ${paletteText(en, action)}`.toLowerCase(),
+    run: () => action.run?.(),
+    ...(action.hint ? { hint: action.hint } : {}),
+  }
+}
+
 export function CommandPalette() {
   const open = useApp((s) => s.paletteOpen)
   if (!open) return null
@@ -42,7 +61,10 @@ function Palette() {
   const libraries = useLibraries()
   const batches = useBatches()
   const inspectedId = useApp((s) => s.inspectedId)
-  const detail = useImageDetail(inspectedId)
+  // Fixed while the palette is open, like everything a command applies to.
+  const [picks] = useState(() => useApp.getState().selection)
+  const bulk = useBulkActions(picks)
+  const single = useImageActions(inspectedId)
   const [q, setQ] = useState('')
   const [active, setActive] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -85,6 +107,8 @@ function Palette() {
       const name = lib.is_default && lib.name === 'Main library' ? translate(lang, 'rail.mainLibrary') : lib.name
       list.push(mk(`lib-${lib.id}`, 'palette.group.library', 'palette.cmd.switchTo', () => s.setLibrary(lib.id), undefined, { name }))
     }
+    list.push(mk('random', 'palette.group.library', 'lib.palette.random', () => void openRandom()))
+    if (s.page === 'library') list.push(mk('invert', 'palette.group.library', 'lib.palette.invert', () => void invertPicks(currentLibraryParams()), 'Ctrl+I'))
     list.push(mk('import', 'palette.group.library', 'palette.cmd.import', () => useSelectionDialog.getState().showFor('import', null, 1)))
     list.push(mk('libraries', 'palette.group.library', 'palette.cmd.libraries', () => useSelectionDialog.getState().showFor('libraries', null, 1)))
     if (useJobs.getState().jobs.length > 0) {
@@ -96,36 +120,12 @@ function Palette() {
     for (const b of recentBatches(batches.data)) {
       list.push(mk(`open-batch-${b.id}`, 'palette.group.batch', 'palette.cmd.openBatch', () => s.openBatch(b.id), undefined, { name: b.name }))
     }
-    if (s.selection.length > 0) {
-      const picks = () => useApp.getState().selection
-      for (const kind of BATCH_KINDS) {
-        list.push(mk(`sel-new-${kind}`, 'palette.group.selection', `palette.cmd.picksToNew.${kind}`, () => askNewBatch(kind, picks(), 'selection')))
-      }
-      for (const b of recentBatches(batches.data)) {
-        list.push(mk(`sel-add-${b.id}`, 'palette.group.selection', 'palette.cmd.picksTo', () => void addPicksTo(b, picks()), undefined, { name: b.name }))
-      }
-      list.push(mk('sel-censor', 'palette.group.selection', 'palette.cmd.censorPicks', () => void quickCensor(picks())))
-    }
-    if (s.selection.length > 0) {
-      const show = useSelectionDialog.getState().show
-      list.push(
-        mk('sel-tag', 'palette.group.selection', 'palette.cmd.tag', () => show('tag')),
-        mk('sel-edit-tags', 'palette.group.selection', 'palette.cmd.editTags', () => show('edit-tags')),
-        mk('sel-export', 'palette.group.selection', 'palette.cmd.exportData', () => show('export')),
-        mk('sel-move-library', 'palette.group.selection', 'palette.cmd.moveLibrary', () => show('move-library')),
-        mk('sel-move', 'palette.group.selection', 'palette.cmd.move', () => show('move')),
-        mk('sel-copy', 'palette.group.selection', 'palette.cmd.copy', () => show('copy')),
-        mk('sel-remove', 'palette.group.selection', 'palette.cmd.remove', () => show('remove'), 'Del'),
-        mk('sel-trash', 'palette.group.selection', 'palette.cmd.trash', () => show('trash')),
-      )
-    }
-    if (inspectedId !== null) {
-      list.push(mk('open-full', 'palette.group.image', 'palette.cmd.openFull', () => s.openLightbox(inspectedId), 'Enter'))
-      const prompt = detail.data?.image.prompt
-      if (prompt) list.push(mk('copy-prompt', 'palette.group.image', 'palette.cmd.copyPrompt', () => void copyText(prompt)))
-    }
+    // The same list as the selection bar and the right-click menu.
+    if (picks.length > 0) for (const a of runnable(bulk)) list.push(fromAction(a, 'palette.group.selection', 'sel', lang))
+    for (const a of runnable(single)) list.push(fromAction(a, 'palette.group.image', 'img', lang))
+    list.push(mk('shortcuts', 'lib.palette.groupHelp', 'lib.palette.shortcuts', () => useShortcutSheet.getState().setOpen(true)))
     return list
-  }, [lang, libraries.data, batches.data, inspectedId, detail.data])
+  }, [lang, libraries.data, batches.data, picks, bulk, single])
 
   const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean)
   const shown = commands.filter((c) => terms.every((term) => c.haystack.includes(term)))

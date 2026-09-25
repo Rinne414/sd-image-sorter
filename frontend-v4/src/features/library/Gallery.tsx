@@ -1,12 +1,14 @@
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual'
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent } from 'react'
 import { thumbnailUrl } from '../../api/client'
 import type { ImageSummary } from '../../api/types'
 import { useT } from '../../i18n'
-import { generatorCode } from '../../lib/format'
+import { generatorCode, isTypingTarget } from '../../lib/format'
 import { useApp, type Layout, type TileSize } from '../../state/store'
 import { Icon } from '../../ui/Icon'
 import { PickMark } from '../../ui/PickMark'
+import { useCardMenu } from './CardMenu'
+import { dragPayload, INTERNAL_DRAG } from './drag'
 import styles from './Gallery.module.css'
 
 const TILE_TARGET: Record<TileSize, number> = { s: 170, m: 236, l: 330 }
@@ -22,6 +24,7 @@ interface Props {
   isFetchingMore: boolean
   fetchMore: () => void
   favorites: Set<number>
+  onFavorite: (id: number, on: boolean) => void
   onReady?: (handle: GalleryHandle) => void
   /** Old results still on screen while new ones load: dimmed, not clickable. */
   stale?: boolean
@@ -46,7 +49,25 @@ function tileHeight(img: ImageSummary | undefined, colW: number, layout: Layout)
   return Math.round(colW * ratio)
 }
 
-export function Gallery({ images, hasMore, isFetchingMore, fetchMore, favorites, onReady, stale }: Props) {
+/** Dragging a card carries the original file out (ComfyUI, Explorer); our own text fields refuse it. */
+function onTileDragStart(e: DragEvent, img: ImageSummary): void {
+  for (const [type, value] of Object.entries(dragPayload(img, location.origin))) e.dataTransfer.setData(type, value)
+  e.dataTransfer.effectAllowed = 'copyMove'
+  const thumb = e.currentTarget.querySelector('img')
+  if (thumb) e.dataTransfer.setDragImage(thumb, 24, 24)
+}
+
+function useRefuseCardDropsInFields(): void {
+  useEffect(() => {
+    const onDrop = (e: globalThis.DragEvent) => {
+      if (e.dataTransfer?.types.includes(INTERNAL_DRAG) && isTypingTarget(e.target)) e.preventDefault()
+    }
+    window.addEventListener('drop', onDrop, true)
+    return () => window.removeEventListener('drop', onDrop, true)
+  }, [])
+}
+
+export function Gallery({ images, hasMore, isFetchingMore, fetchMore, favorites, onFavorite, onReady, stale }: Props) {
   const t = useT()
   const scrollRef = useRef<HTMLDivElement>(null)
   const width = useElementWidth(scrollRef)
@@ -174,6 +195,15 @@ export function Gallery({ images, hasMore, isFetchingMore, fetchMore, favorites,
 
   const onTileDouble = useCallback((id: number) => useApp.getState().openLightbox(id), [])
 
+  // Right-click: the card's menu; it shows in the generation card too, so the menu's subject is visible.
+  const onTileMenu = useCallback((e: MouseEvent, id: number) => {
+    e.preventDefault()
+    useApp.getState().inspect(id)
+    useCardMenu.getState().show({ id, x: e.clientX, y: e.clientY, keyboard: false })
+  }, [])
+
+  useRefuseCardDropsInFields()
+
   const pickOrder = new Map(selection.map((id, i) => [id, i + 1]))
 
   return (
@@ -197,6 +227,8 @@ export function Gallery({ images, hasMore, isFetchingMore, fetchMore, favorites,
               favorite={favorites.has(img.id)}
               onClick={onTileClick}
               onDouble={onTileDouble}
+              onMenu={onTileMenu}
+              onFavorite={onFavorite}
             />
           )
         })}
@@ -219,10 +251,14 @@ interface TileProps {
   favorite: boolean
   onClick: (e: MouseEvent, id: number) => void
   onDouble: (id: number) => void
+  onMenu: (e: MouseEvent, id: number) => void
+  onFavorite: (id: number, on: boolean) => void
 }
 
 const Tile = memo(function Tile(p: TileProps) {
+  const t = useT()
   const stars = p.img.user_rating ?? 0
+  const heartLabel = p.favorite ? t('card.unfavorite') : t('card.favorite')
   return (
     <div
       className={styles.tile}
@@ -233,6 +269,9 @@ const Tile = memo(function Tile(p: TileProps) {
       style={{ transform: `translate(${p.left}px, ${p.top}px)`, width: p.width, height: p.height }}
       onClick={(e) => p.onClick(e, p.img.id)}
       onDoubleClick={() => p.onDouble(p.img.id)}
+      onContextMenu={(e) => p.onMenu(e, p.img.id)}
+      draggable
+      onDragStart={(e) => onTileDragStart(e, p.img)}
       title={p.img.filename}
     >
       <img
@@ -253,11 +292,25 @@ const Tile = memo(function Tile(p: TileProps) {
           </span>
         )}
       </div>
-      {p.favorite && (
-        <span className={styles.heart} aria-hidden>
-          <Icon name="heart" filled size={14} />
-        </span>
-      )}
+      {/* Always there when favourited; on hover otherwise. Keyboard users have F. */}
+      <button
+        type="button"
+        className={styles.heart}
+        data-on={p.favorite || undefined}
+        aria-pressed={p.favorite}
+        aria-label={heartLabel}
+        title={heartLabel}
+        tabIndex={-1}
+        draggable={false}
+        onClick={(e) => {
+          e.stopPropagation()
+          p.onFavorite(p.img.id, !p.favorite)
+        }}
+        onDoubleClick={(e) => e.stopPropagation()}
+        data-testid="tile-heart"
+      >
+        <Icon name="heart" filled={p.favorite} size={14} />
+      </button>
       {p.pick > 0 && <PickMark seed={p.img.id} order={p.pick} />}
       {p.inspected && <span className={styles.viewfinder} aria-hidden />}
     </div>

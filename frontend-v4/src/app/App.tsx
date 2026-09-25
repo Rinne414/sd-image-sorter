@@ -6,7 +6,9 @@ import { HomePage } from '../features/home/HomePage'
 import { JobsRunner } from '../features/jobs/JobsRunner'
 import { DropImport } from '../features/import/DropImport'
 import { SelectionDialogs } from '../features/selection/SelectionDialogs'
+import { appKey } from '../features/library/keys'
 import { LibraryPage } from '../features/library/LibraryPage'
+import { ShortcutSheet } from '../features/library/ShortcutSheet'
 import { useLang } from '../i18n'
 import { useApp } from '../state/store'
 import styles from './App.module.css'
@@ -25,7 +27,7 @@ export function App() {
   // Ctrl K opens the palette from anywhere, even while typing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+      if (appKey(e) === 'palette') {
         e.preventDefault()
         const s = useApp.getState()
         s.setPaletteOpen(!s.paletteOpen)
@@ -45,6 +47,7 @@ export function App() {
         {page === 'home' && <HomePage />}
       </div>
       <CommandPalette />
+      <ShortcutSheet />
       <JobsRunner />
       <DropImport />
       <SelectionDialogs />

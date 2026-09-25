@@ -642,6 +642,9 @@ Save an image copy with edited metadata fields.
 #### POST /api/open-folder
 Open an image's containing folder in the host file explorer.
 
+#### POST /api/open-path
+Open an existing folder in the host file explorer (Windows explorer, macOS open, Linux xdg-open). Body: `{ "path": "D:/exports/pixiv" }`. The path must pass the shared path validation and be an existing directory: a missing folder returns 404, a file or a suspicious path returns 400 and nothing is launched. The launcher receives an argument list (no shell). Returns `{ "success": true, "path": "<resolved folder>" }`.
+
 #### POST /api/parse-image
 Parse uploaded image metadata without inserting into library DB.
 

@@ -39,6 +39,18 @@
   font-size: var(--fs-2);
 }
 
+/* Reach the file: open its folder, copy its path. Quiet, next to the name they act on. */
+.fileBtn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  color: var(--muted);
+}
+
+.fileBtn:hover {
+  color: var(--text);
+}
+
 .barGap {
   flex: 1;
 }

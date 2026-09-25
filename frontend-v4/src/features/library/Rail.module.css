@@ -10,7 +10,8 @@
 /* The library's name label, with its own prompts woven faintly behind. */
 .label {
   position: relative;
-  padding: 16px 14px 14px 16px;
+  /* room on the right for the collapse button */
+  padding: 16px 40px 14px 16px;
   border-bottom: 1px solid var(--hairline);
   overflow: visible;
 }
@@ -279,4 +280,47 @@
   color: var(--muted);
   text-decoration: none;
   cursor: default;
+}
+
+/* Hide the rail: a quiet button at the top right of the library label. */
+.collapse {
+  position: absolute;
+  top: 12px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  color: var(--muted);
+}
+
+.collapse:hover {
+  color: var(--text);
+}
+
+/* A section heading folds its list; the caret turns when folded. */
+.fold {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: left;
+}
+
+.fold:hover {
+  color: var(--text-2);
+}
+
+.foldCaret {
+  display: grid;
+  transition: rotate var(--t-fast) var(--ease);
+}
+
+.fold[aria-expanded='false'] .foldCaret {
+  rotate: -90deg;
 }

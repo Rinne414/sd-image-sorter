@@ -9,6 +9,7 @@ import { canStop, jobHeadline, stopJob, undoJob, useJobs, type Job } from './job
 import styles from './Jobs.module.css'
 import { isFinished } from './progress'
 import { useSelectionDialog } from '../selection/dialogs'
+import { openFolderPath } from '../library/fileActions'
 
 /** Failures listed per job; the rest are counted. */
 const MAX_LISTED = 20
@@ -88,6 +89,8 @@ function JobRow({ job }: { job: Job }) {
   const listed = p.failures.slice(0, MAX_LISTED)
   const unlisted = Math.max(p.failedCount, p.failures.length) - listed.length
   const failedIds = p.failures.map((f) => f.id).filter((id): id is number => id !== null)
+  // A finished move or copy: the next step is usually to look at where the files went.
+  const destination = job.kind === 'move' || job.kind === 'copy' ? job.destination : null
 
   const pickFailed = () => {
     const s = useApp.getState()
@@ -172,6 +175,11 @@ function JobRow({ job }: { job: Job }) {
       {finished && failedIds.length > 0 && (
         <button type="button" className="btn" onClick={pickFailed}>
           {t('jobs.pickFailed', { n: failedIds.length })}
+        </button>
+      )}
+      {finished && destination && (
+        <button type="button" className="btn" onClick={() => void openFolderPath(destination)} data-testid="job-open-folder">
+          {t('lib.file.openDestination')}
         </button>
       )}
     </li>

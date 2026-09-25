@@ -68,14 +68,31 @@
   letter-spacing: 0;
 }
 
+/* Favourite: always shown when on, offered on hover when off. */
 .heart {
   position: absolute;
-  top: 6px;
-  right: 7px;
+  top: 3px;
+  right: 3px;
   display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--on-image);
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.75));
-  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease);
+}
+
+.heart[data-on],
+.tile:hover .heart {
+  opacity: 1;
+}
+
+.heart:hover {
+  color: var(--marker);
 }
 
 /* The image being inspected: camera viewfinder corners, not a box. */

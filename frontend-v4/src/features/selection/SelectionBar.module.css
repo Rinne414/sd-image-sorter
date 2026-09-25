@@ -65,7 +65,8 @@
 
 /* Narrow grids (a small laptop with both side columns open): words give way to icons. */
 @container (max-width: 860px) {
-  .wordy {
+  .wordy,
+  .rule {
     display: none;
   }
 
