@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse
 
 import db_batch_datasets as batch_dataset_db
 import db_batches as batch_db
-from services import batch_export_service, batch_service
+from services import batch_dataset_service, batch_export_service, batch_service
 from services.batch_models import (
     BatchCensoredCopyRequest,
     BatchCensoredDiscardRequest,
@@ -151,6 +151,27 @@ def _dataset_conflict(error: batch_db.BatchError) -> Optional[HTTPException]:
                 "batch_id": error.batch_id,
             },
         )
+    if isinstance(error, batch_dataset_db.BatchNotDatasetError):
+        return HTTPException(
+            409,
+            {
+                "code": "batch_not_dataset",
+                "message": str(error),
+                "batch_id": error.batch_id,
+            },
+        )
+    if isinstance(error, batch_db.BatchProjectRevisionConflictError):
+        return HTTPException(
+            409,
+            {
+                "code": "dataset_project_revision_conflict",
+                "message": "Dataset project changed since it was loaded. "
+                "Reload it before deleting.",
+                "project_id": error.project_id,
+                "expected_revision": error.expected_revision,
+                "current_revision": error.current_revision,
+            },
+        )
     return None
 
 
@@ -195,11 +216,16 @@ def _export_error(error: batch_db.BatchError) -> Optional[HTTPException]:
     return None
 
 
-def _raise_http_error(error: batch_db.BatchError) -> NoReturn:
+def batch_http_error(error: batch_db.BatchError) -> HTTPException:
+    """The HTTP answer for an expected batch error (other routers use it too)."""
     http_error = _not_found(error) or _conflict(error) or _export_error(error)
     if http_error is None:
         raise RuntimeError(f"Unhandled batch error: {error}") from error
-    raise http_error from error
+    return http_error
+
+
+def _raise_http_error(error: batch_db.BatchError) -> NoReturn:
+    raise batch_http_error(error) from error
 
 
 @router.get(
@@ -261,9 +287,23 @@ def patch_batch(batch_id: int, request: BatchPatchRequest) -> dict[str, Any]:
 
 
 @router.delete("/{batch_id}", summary="Delete a batch and its working folder")
-def delete_batch(batch_id: int) -> dict[str, Any]:
+def delete_batch(
+    batch_id: int,
+    expected_project_revision: Optional[int] = Query(None, ge=1),
+) -> dict[str, Any]:
     try:
-        return batch_service.delete_batch(batch_id)
+        return batch_service.delete_batch(batch_id, expected_project_revision)
+    except batch_db.BatchError as error:
+        _raise_http_error(error)
+
+
+@router.get(
+    "/{batch_id}/project",
+    summary="Get a dataset batch's project with its Library image names",
+)
+def get_batch_project(batch_id: int) -> dict[str, Any]:
+    try:
+        return batch_dataset_service.project_view(batch_id)
     except batch_db.BatchError as error:
         _raise_http_error(error)
 

@@ -6,6 +6,7 @@ import { useApp } from '../../state/store'
 import { Icon } from '../../ui/Icon'
 import { patchBatch, useBatch } from './batchApi'
 import { currentAfterEdit, enabledSteps } from './batchLogic'
+import { useBatchDialog } from './dialogStore'
 import styles from './BatchView.module.css'
 import { ExportStep } from './ExportStep'
 import { InlineName } from './InlineName'
@@ -37,7 +38,25 @@ export function BatchView({ id }: { id: number }) {
     )
   }
   if (!batch.data) return <section className={styles.notice}>{t('grid.loading')}</section>
+  if (batch.data.orphaned) return <Orphaned batch={batch.data} />
   return <Loaded batch={batch.data} />
+}
+
+/** V3.5 deleted this dataset batch's project: nothing is left to work on, only the batch to delete. */
+function Orphaned({ batch }: { batch: Batch }) {
+  const t = useT()
+  const setPage = useApp((s) => s.setPage)
+  return (
+    <section className={styles.notice} data-testid="batch-orphaned-view">
+      <p>{t('dataset.orphanedView', { name: batch.name })}</p>
+      <button type="button" className="btn" onClick={() => setPage('batch')}>
+        {t('batch.view.backToList')}
+      </button>
+      <button type="button" className="btn btn-danger" onClick={() => useBatchDialog.getState().show({ type: 'delete', batch: { ...batch, orphaned: true } })}>
+        {t('batch.delete.button')}
+      </button>
+    </section>
+  )
 }
 
 function Loaded({ batch }: { batch: Batch }) {

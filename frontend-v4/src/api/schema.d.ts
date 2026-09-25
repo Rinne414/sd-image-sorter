@@ -5728,6 +5728,23 @@ export interface paths {
         patch: operations["patch_batch_api_batches__batch_id__patch"];
         trace?: never;
     };
+    "/api/batches/{batch_id}/project": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a dataset batch's project with its Library image names */
+        get: operations["get_batch_project_api_batches__batch_id__project_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/batches/{batch_id}/items": {
         parameters: {
             query?: never;
@@ -5827,6 +5844,26 @@ export interface paths {
         put?: never;
         /** Export a batch for posting (Pixiv) */
         post: operations["post_batch_export_api_batches__batch_id__export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/batches/{batch_id}/items/{image_id}/censored/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save an item's censored copy from an uploaded file
+         * @description Multipart: ``file`` = the PNG or lossless WebP bytes; optional ``item_state`` = JSON text (object or null).
+         */
+        put: operations["put_batch_item_censored_file_api_batches__batch_id__items__image_id__censored_file_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6268,7 +6305,14 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
-        /** BatchCreateRequest */
+        /**
+         * BatchCreateRequest
+         * @description A new batch, or (``dataset_project_id``) the batch of an existing dataset project.
+         *
+         *     A linked batch takes its name and images from the project, so ``name`` and
+         *     ``image_ids`` are refused with a ``dataset_project_id``; ``name`` is
+         *     required otherwise.
+         */
         BatchCreateRequest: {
             /**
              * Kind
@@ -6276,11 +6320,13 @@ export interface components {
              */
             kind: "pixiv" | "dataset" | "custom";
             /** Name */
-            name: string;
+            name?: string | null;
             /** Template Id */
             template_id?: number | null;
             /** Image Ids */
             image_ids?: number[];
+            /** Dataset Project Id */
+            dataset_project_id?: number | null;
         };
         /**
          * BatchExportNamesRequest
@@ -6717,6 +6763,8 @@ export interface components {
              * @default true
              */
             recursive: boolean;
+            /** Batch Id */
+            batch_id?: number | null;
         };
         /** Body_preview_process_api_obfuscate_preview_post */
         Body_preview_process_api_obfuscate_preview_post: {
@@ -20639,7 +20687,9 @@ export interface operations {
     };
     delete_batch_api_batches__batch_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                expected_project_revision?: number | null;
+            };
             header?: never;
             path: {
                 batch_id: number;
@@ -20684,6 +20734,39 @@ export interface operations {
                 "application/json": components["schemas"]["BatchPatchRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_batch_project_api_batches__batch_id__project_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -21015,6 +21098,40 @@ export interface operations {
                 "application/json": components["schemas"]["BatchExportRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_batch_item_censored_file_api_batches__batch_id__items__image_id__censored_file_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: number;
+                image_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

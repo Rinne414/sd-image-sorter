@@ -57,5 +57,4 @@ export function unwrap<T>(result: { data?: unknown; error?: unknown; response: R
   return result.data as T
 }
 
-export const thumbnailUrl = (id: number, size: number) => `/api/image-thumbnail/${id}?size=${size}`
-export const imageFileUrl = (id: number) => `/api/image-file/${id}`
+export { imageFileUrl, thumbnailUrl } from './urls'

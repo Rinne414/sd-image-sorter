@@ -83,6 +83,17 @@ class BatchDatasetItemsInProjectError(BatchError):
         )
 
 
+class BatchProjectRevisionConflictError(BatchError):
+    def __init__(self, project_id: int, expected_revision: int, current_revision: int):
+        self.project_id = project_id
+        self.expected_revision = expected_revision
+        self.current_revision = current_revision
+        super().__init__(
+            f"Dataset project {project_id} revision conflict: expected "
+            f"{expected_revision}, current {current_revision}"
+        )
+
+
 def _begin_write(conn: sqlite3.Connection) -> None:
     conn.execute("BEGIN IMMEDIATE")
 
@@ -437,22 +448,36 @@ def _update_batch_row(
         )
 
 
-def delete_batch(batch_id: int) -> None:
+def delete_batch(batch_id: int, expected_project_revision: int | None = None) -> None:
     """Delete the batch; a dataset batch takes its project with it (D30).
 
     The project cascade removes its items, folder-image references and every
     caption subject, revision and head. Library rows and image files (Library
-    or folder) are never touched.
+    or folder) are never touched. With ``expected_project_revision`` a project
+    changed since the user confirmed (by V3.5, say) is not deleted.
     """
     with get_db() as conn:
         _begin_write(conn)
         row = _batch_row(conn, batch_id)
+        project_id = row["dataset_project_id"]
+        if project_id is not None and expected_project_revision is not None:
+            _require_project_revision(conn, int(project_id), expected_project_revision)
         conn.execute("DELETE FROM batches WHERE id = ?", (batch_id,))
-        if row["dataset_project_id"] is not None:
+        if project_id is not None:
             conn.execute(
-                "DELETE FROM dataset_projects WHERE id = ?",
-                (int(row["dataset_project_id"]),),
+                "DELETE FROM dataset_projects WHERE id = ?", (int(project_id),)
             )
+
+
+def _require_project_revision(
+    conn: sqlite3.Connection, project_id: int, expected_revision: int
+) -> None:
+    row = conn.execute(
+        "SELECT revision FROM dataset_projects WHERE id = ?", (project_id,)
+    ).fetchone()
+    current = int(row[0]) if row is not None else 0
+    if current != expected_revision:
+        raise BatchProjectRevisionConflictError(project_id, expected_revision, current)
 
 
 def add_items(batch_id: int, image_ids: list[int]) -> tuple[list[int], list[int]]:

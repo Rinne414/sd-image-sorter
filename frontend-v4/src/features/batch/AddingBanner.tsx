@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useT } from '../../i18n'
 import { useApp, type AddTarget } from '../../state/store'
-import { addToBatch, useBatch } from './batchApi'
+import { useBatch } from './batchApi'
+import { addLibraryPicks } from './datasetApi'
 import { askNewBatch } from './dialogStore'
 import styles from './AddingBanner.module.css'
 import { kindLabel } from './labels'
@@ -20,8 +21,9 @@ function ForExisting({ batchId }: { batchId: number }) {
   const n = selection.length
 
   const add = async () => {
+    if (!batch.data) return
     setBusy(true)
-    const res = await addToBatch(batchId, selection)
+    const res = await addLibraryPicks(batch.data, selection)
     setBusy(false)
     if (!res) return
     const s = useApp.getState()
@@ -42,7 +44,7 @@ function ForExisting({ batchId }: { batchId: number }) {
         <strong>{t('batch.adding.to', { name })}</strong>
         <span className={styles.hint}>{t('batch.adding.hint')}</span>
       </span>
-      <button type="button" className="btn btn-primary" onClick={() => void add()} disabled={n === 0 || busy} data-testid="adding-add">
+      <button type="button" className="btn btn-primary" onClick={() => void add()} disabled={n === 0 || busy || !batch.data} data-testid="adding-add">
         {t('batch.adding.add', { n })}
       </button>
       <button type="button" className="btn btn-ghost" onClick={back}>

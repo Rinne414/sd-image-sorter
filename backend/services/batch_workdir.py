@@ -1,6 +1,7 @@
 """Per-batch working folders under ``<data dir>/batches/<batch_id>/``.
 
-Only files this app derived live here (censored working copies). The database
+Only files this app derived live here (censored working copies) and files
+dropped or uploaded into a dataset batch (``uploads/``). The database
 column ``batch_items.censored_path`` is the truth: a file without a row is
 garbage and is removed; a row whose file vanished counts as "no censored copy".
 Paths are stored relative to the batch folder so a portable install can move.
@@ -20,6 +21,7 @@ from utils.path_validation import is_directory_symlink_or_junction
 logger = logging.getLogger(__name__)
 
 CENSORED_DIR = "censored"
+UPLOADS_DIR = "uploads"
 
 
 def batches_root() -> Path:
@@ -28,6 +30,11 @@ def batches_root() -> Path:
 
 def batch_folder(batch_id: int) -> Path:
     return batches_root() / str(int(batch_id))
+
+
+def uploads_folder(batch_id: int) -> Path:
+    """Files dropped or uploaded into a dataset batch; they go with the batch."""
+    return batch_folder(batch_id) / UPLOADS_DIR
 
 
 def censored_relative_path(image_id: int) -> str:

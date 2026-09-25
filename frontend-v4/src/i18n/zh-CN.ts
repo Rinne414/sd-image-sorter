@@ -1,8 +1,10 @@
 // Source language pack. Every key here must exist in en.ts (the type enforces it).
+import { zhCNDataset } from './zh-CN.dataset'
 import { zhCNPublish } from './zh-CN.publish'
 
 export const zhCN = {
   ...zhCNPublish,
+  ...zhCNDataset,
   'app.name': 'SD Image Sorter',
   'nav.home': '首页',
   'nav.library': '图库',

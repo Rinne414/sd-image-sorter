@@ -4,6 +4,7 @@ import { queryClient } from '../../api/queryClient'
 import { useLang, useT } from '../../i18n'
 import { useApp } from '../../state/store'
 import { Dialog } from '../../ui/Dialog'
+import { fileDropsClaimed } from '../../ui/dropClaim'
 import { useToasts } from '../../ui/toasts'
 import { tr } from '../jobs/jobs'
 import { useSelectionDialog } from '../selection/dialogs'
@@ -13,7 +14,8 @@ const IMAGE = /\.(png|jpe?g|webp|bmp|gif)$/i
 /** Files read from a dropped folder to recognise where it lives. */
 const SAMPLE_FILES = 5
 
-const hasFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files')
+// A view that takes file drops itself (a dataset batch) has claimed them: stand aside.
+const hasFiles = (e: DragEvent) => !fileDropsClaimed() && !!e.dataTransfer && [...e.dataTransfer.types].includes('Files')
 
 function readSample(dir: FileSystemDirectoryEntry): Promise<{ name: string; size: number }[]> {
   return new Promise((resolve) => {

@@ -4,13 +4,14 @@ import { useT } from '../../i18n'
 import { isTypingTarget } from '../../lib/format'
 import { useApp } from '../../state/store'
 import { layerCount } from '../../ui/layers'
-import { reorderBatch } from './batchApi'
 import { moveCursor } from './batchLogic'
+import { entryThumb, type Entry } from './entries'
 import { ItemBadges, ItemImage } from './ItemImage'
 import { stepLabel } from './labels'
 import { dropIndex, moveTo, reorderTarget } from './orderLogic'
 import styles from './OrderStep.module.css'
 import { StepBar } from './StepBar'
+import { useBatchEntries } from './useBatchEntries'
 
 interface Drag {
   from: number
@@ -42,7 +43,8 @@ interface Props {
 /** The posting order: large pictures as they will be posted; drag, or Alt + arrows / Home / End. */
 export function OrderStep({ batch, next, onNext }: Props) {
   const t = useT()
-  const items = batch.items
+  const source = useBatchEntries(batch)
+  const items = source.entries
   const gridRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const cols = useColumns(gridRef)
@@ -52,11 +54,11 @@ export function OrderStep({ batch, next, onNext }: Props) {
   const at = Math.min(cursor, items.length - 1)
 
   const move = (from: number, to: number) => {
-    const ids = items.map((item) => item.image_id)
-    const reordered = moveTo(ids, from, to)
-    if (reordered === ids) return
-    const place = reordered.indexOf(ids[from] as number)
-    void reorderBatch(batch.id, reordered)
+    const keys = items.map((item) => item.key)
+    const reordered = moveTo(keys, from, to)
+    if (reordered === keys) return
+    const place = reordered.indexOf(keys[from] as string)
+    source.reorder(reordered)
     setCursor(place)
     setSaid(t('batch.order.moved', { name: items[from]?.filename ?? '', n: place + 1 }))
   }
@@ -114,7 +116,7 @@ export function OrderStep({ batch, next, onNext }: Props) {
           <div ref={gridRef} className={styles.grid}>
             {items.map((item, index) => (
               <div
-                key={item.image_id}
+                key={item.key}
                 className={styles.tile}
                 role="option"
                 aria-selected={index === at}
@@ -123,13 +125,14 @@ export function OrderStep({ batch, next, onNext }: Props) {
                 data-dragging={drag?.from === index || undefined}
                 data-drop={drag && drag.over === index && drag.from !== index ? (drag.after ? 'after' : 'before') : undefined}
                 data-testid="order-tile"
-                data-id={item.image_id}
+                data-id={item.imageId ?? undefined}
+                data-key={item.key}
                 title={item.filename}
                 draggable
                 onClick={() => setCursor(index)}
                 onDragStart={(e) => {
                   e.dataTransfer.effectAllowed = 'move'
-                  e.dataTransfer.setData('text/plain', String(item.image_id))
+                  e.dataTransfer.setData('text/plain', item.key)
                   setCursor(index)
                   setDrag({ from: index, over: index, after: false })
                 }}
@@ -138,14 +141,14 @@ export function OrderStep({ batch, next, onNext }: Props) {
                 onDragEnd={() => setDrag(null)}
               >
                 <div className={styles.frame}>
-                  <ItemImage batch={batch} item={item} size={512} />
+                  <EntryImage batch={batch} entry={item} />
                   <span className={`${styles.number} mono`} data-testid="order-number">
                     {index + 1}
                   </span>
                 </div>
                 <div className={styles.meta}>
                   <span className={`${styles.caption} mono`}>{item.filename}</span>
-                  <ItemBadges item={item} />
+                  {item.item && <ItemBadges item={item.item} />}
                 </div>
               </div>
             ))}
@@ -157,4 +160,11 @@ export function OrderStep({ batch, next, onNext }: Props) {
       </p>
     </section>
   )
+}
+
+/** A Pixiv or custom item as it will be posted (censored copy); a dataset image as it is. */
+function EntryImage({ batch, entry }: { batch: Batch; entry: Entry }) {
+  if (entry.item) return <ItemImage batch={batch} item={entry.item} size={512} />
+  const src = entryThumb(entry, 512)
+  return <div className={styles.plain}>{src && <img src={src} alt="" loading="lazy" decoding="async" draggable={false} />}</div>
 }

@@ -6,6 +6,8 @@ import { Dialog } from '../../ui/Dialog'
 import { useToasts } from '../../ui/toasts'
 import { tr } from '../jobs/jobs'
 import { createBatch, deleteBatch, saveTemplate, useBatches, useBatchTemplates } from './batchApi'
+import { DatasetDeleteBody, useDatasetDeleteFacts } from './DatasetDelete'
+import { useUnlinkedProjects } from './datasetApi'
 import { useBatchDialog, type BatchDialog } from './dialogStore'
 import { defaultBatchName, enabledSteps, templateSettings } from './batchLogic'
 import styles from './BatchDialogs.module.css'
@@ -49,12 +51,14 @@ function CreateDialog({ dialog, onClose }: { dialog: Extract<BatchDialog, { type
   const t = useT()
   const lang = useLang((s) => s.lang)
   const all = useBatches(true)
+  // A dataset batch's name is its project's, which must not repeat any active project's (V3.5 ones too).
+  const unlinked = useUnlinkedProjects(true)
   const templates = useBatchTemplates()
   const { kind, template, imageIds, origin } = dialog
   const base = template?.name ?? kindLabel(kind, t)
   const suggested = useMemo(
-    () => defaultBatchName(base, new Date(), lang, (all.data ?? []).map((b) => b.name)),
-    [base, lang, all.data],
+    () => defaultBatchName(base, new Date(), lang, [...(all.data ?? []), ...(unlinked.data ?? [])].map((b) => b.name)),
+    [base, lang, all.data, unlinked.data],
   )
   const [name, setName] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -110,14 +114,17 @@ function CreateDialog({ dialog, onClose }: { dialog: Extract<BatchDialog, { type
   )
 }
 
-function DeleteDialog({ batch, onClose }: { batch: { id: number; name: string; item_count: number }; onClose: () => void }) {
+function DeleteDialog({ batch, onClose }: { batch: Extract<BatchDialog, { type: 'delete' }>['batch']; onClose: () => void }) {
   const t = useT()
   const cancelRef = useRef<HTMLButtonElement>(null)
   const [busy, setBusy] = useState(false)
+  const dataset = batch.kind === 'dataset' && !batch.orphaned
+  const facts = useDatasetDeleteFacts(batch.id, dataset)
 
   const go = async () => {
     setBusy(true)
-    const ok = await deleteBatch(batch)
+    // A dataset batch deletes its project: only the version the user was shown.
+    const ok = await deleteBatch(batch, dataset ? (facts.data?.project.revision ?? null) : null)
     setBusy(false)
     if (ok) onClose()
   }
@@ -127,7 +134,7 @@ function DeleteDialog({ batch, onClose }: { batch: { id: number; name: string; i
       <button ref={cancelRef} type="button" className="btn btn-ghost" onClick={onClose}>
         {t('common.cancel')}
       </button>
-      <button type="button" className="btn btn-danger" onClick={() => void go()} disabled={busy} data-testid="batch-delete-ok">
+      <button type="button" className="btn btn-danger" onClick={() => void go()} disabled={busy || (dataset && facts.isPending)} data-testid="batch-delete-ok">
         {t('batch.delete.ok')}
       </button>
     </>
@@ -135,7 +142,13 @@ function DeleteDialog({ batch, onClose }: { batch: { id: number; name: string; i
 
   return (
     <Dialog title={t('batch.delete.title', { name: batch.name })} onClose={onClose} footer={footer} testId="batch-delete-dialog" initialFocus={cancelRef}>
-      <p className={styles.body}>{t('batch.delete.body', { n: batch.item_count })}</p>
+      {dataset ? (
+        <DatasetDeleteBody facts={facts.data ?? null} failed={facts.isError} />
+      ) : batch.kind === 'dataset' ? (
+        <p className={styles.body}>{t('dataset.delete.orphanBody')}</p>
+      ) : (
+        <p className={styles.body}>{t('batch.delete.body', { n: batch.item_count })}</p>
+      )}
     </Dialog>
   )
 }

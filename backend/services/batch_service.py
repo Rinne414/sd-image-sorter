@@ -224,8 +224,10 @@ def patch_batch(batch_id: int, request: BatchPatchRequest) -> dict[str, Any]:
     return get_batch(batch_id)
 
 
-def delete_batch(batch_id: int) -> dict[str, Any]:
-    batch_db.delete_batch(batch_id)
+def delete_batch(
+    batch_id: int, expected_project_revision: int | None = None
+) -> dict[str, Any]:
+    batch_db.delete_batch(batch_id, expected_project_revision)
     try:
         batch_workdir.remove_batch_folder(batch_id)
     except OSError:

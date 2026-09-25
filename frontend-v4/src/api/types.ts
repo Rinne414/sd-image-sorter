@@ -1,6 +1,8 @@
 // Response shapes the backend returns. Most FastAPI routes have no response
 // model, so the generated schema types requests only; these fill the gap.
 
+import type { components } from './schema'
+
 export interface ImageSummary {
   id: number
   filename: string
@@ -97,8 +99,33 @@ export interface BatchSummary {
   updated_at: string
   item_count: number
   censored_count: number
-  /** The first four items, in order. */
+  /** The first four items, in order (a dataset batch: its first four Library images). */
   cover_image_ids: number[]
+  /** A dataset batch's Dataset Maker project (null: other kinds, or the project was deleted). */
+  dataset_project_id: number | null
+  /** The linked project's revision (the CAS value for writing its items). */
+  project_revision: number | null
+  /** A dataset batch whose project V3.5 deleted: it can only be deleted. */
+  orphaned: boolean
+  /** The V3.5 collection a custom batch was made from. */
+  source_collection_id: number | null
+}
+
+/** A V3.5 dataset project no batch shows yet (GET /api/batches). */
+export interface UnlinkedDatasetProject {
+  id: number
+  name: string
+  revision: number
+  archived_at: string | null
+  created_at: string
+  updated_at: string
+  item_count: number
+  cover_image_ids: number[]
+}
+
+export interface BatchesResponse {
+  batches: BatchSummary[]
+  unlinked_dataset_projects: UnlinkedDatasetProject[]
 }
 
 export interface BatchItem {
@@ -113,13 +140,39 @@ export interface BatchItem {
   item_state: Record<string, unknown> | null
 }
 
-/** GET /api/batches/{id}: the batch with its items in order. */
-export interface Batch extends Omit<BatchSummary, 'cover_image_ids'> {
+/**
+ * GET /api/batches/{id}: the batch with its items in order (a dataset batch's
+ * live in its project). The dataset fields are optional here only so that
+ * hand-built test batches of other kinds need not spell them out.
+ */
+export interface Batch extends Omit<BatchSummary, 'source_collection_id' | 'cover_image_ids' | 'project_revision' | 'orphaned'> {
+  cover_image_ids?: number[]
+  project_revision?: number | null
+  orphaned?: boolean
   library_id: string
   steps: BatchStep[]
   settings: Record<string, unknown>
-  dataset_project_id: number | null
   items: BatchItem[]
+}
+
+export type DatasetProject = components['schemas']['DatasetProjectResponse']
+export type DatasetProjectItem = DatasetProject['items'][number]
+export type DatasetProjectItemRequest = components['schemas']['DatasetProjectUpdateRequest']['items'][number]
+
+/** GET /api/batches/{id}/project: a dataset batch's project and the names of its Library images. */
+export interface BatchProjectView {
+  project: DatasetProject
+  library_images: { id: number; filename: string; width: number | null; height: number | null }[]
+  /** Folder images that live in the batch's uploads folder (deleted with the batch). */
+  uploaded_count: number
+}
+
+/** One image POST /api/dataset/folder-scan or /upload-files surfaced. */
+export interface ScannedImage {
+  abs_path: string
+  filename: string
+  width?: number | null
+  height?: number | null
 }
 
 export interface BatchTemplate {

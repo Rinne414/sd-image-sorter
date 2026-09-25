@@ -46,6 +46,8 @@ interface Props {
   testId?: string
   /** Options shown under the destination (import settings, ...). */
   extra?: ReactNode
+  /** What the chosen folder is called under the list (default: the destination). */
+  targetLabel?: string
 }
 
 /** Choose a folder by browsing; typing a path also works. */
@@ -59,6 +61,7 @@ export function FolderChooser({
   onClose,
   testId = 'folder-picker',
   extra,
+  targetLabel,
 }: Props) {
   const t = useT()
   const [listing, setListing] = useState<Listing | null>(null)
@@ -273,7 +276,7 @@ export function FolderChooser({
         </ul>
       </div>
       <p className={styles.target} data-testid="folder-target">
-        <span className={styles.targetLabel}>{t('picker.target')}</span>
+        <span className={styles.targetLabel}>{targetLabel ?? t('picker.target')}</span>
         {target ? (
           <span className="mono">
             {target}

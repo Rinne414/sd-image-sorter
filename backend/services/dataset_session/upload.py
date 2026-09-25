@@ -21,7 +21,7 @@ import uuid
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from config import ALLOWED_IMAGE_EXTENSIONS
 from services.dataset_session.allowlist import _register_session_paths
@@ -231,13 +231,20 @@ async def _extract_rar_into_dataset(
     return _ArchiveExtractResult(skipped=skipped)
 
 
-async def upload_files_for_dataset(files, *, recursive: bool = True) -> Dict[str, Any]:
+async def upload_files_for_dataset(
+    files, *, recursive: bool = True, upload_dir: Optional[Path] = None
+) -> Dict[str, Any]:
     """Save uploaded files to a temp directory and return scan-like items.
 
     Accepts a list of FastAPI UploadFile objects. Returns the same shape
     as scan_folder_for_dataset so the frontend can use addLocalItems().
+    ``upload_dir`` (V4) puts the files in a dataset batch's own folder
+    instead of the shared upload directory.
     """
-    upload_dir = _svc()._get_upload_dir()
+    if upload_dir is None:
+        upload_dir = _svc()._get_upload_dir()
+    else:
+        upload_dir.mkdir(parents=True, exist_ok=True)
     items: List[Dict[str, Any]] = []
     skipped = 0
     truncated = False

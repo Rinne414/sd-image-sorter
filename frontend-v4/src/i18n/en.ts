@@ -1,8 +1,10 @@
+import { enDataset } from './en.dataset'
 import { enPublish } from './en.publish'
 import type { MessageKey } from './zh-CN'
 
 export const en: Record<MessageKey, string> = {
   ...enPublish,
+  ...enDataset,
   'app.name': 'SD Image Sorter',
   'nav.home': 'Home',
   'nav.library': 'Library',

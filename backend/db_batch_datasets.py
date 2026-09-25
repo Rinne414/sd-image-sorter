@@ -20,6 +20,7 @@ from db_batches import (
     BatchError,
     _batch_row,
     _begin_write,
+    _chunks,
     _require_library_images,
     _update_batch_row,
     project_summaries,
@@ -38,6 +39,12 @@ class BatchDatasetNameConflictError(BatchError):
     def __init__(self, name: str):
         self.name = name
         super().__init__(f"An active dataset project already uses the name {name!r}")
+
+
+class BatchNotDatasetError(BatchError):
+    def __init__(self, batch_id: int):
+        self.batch_id = batch_id
+        super().__init__(f"Batch {batch_id} is not a dataset batch")
 
 
 class BatchDatasetOrphanedError(BatchError):
@@ -240,3 +247,21 @@ def list_unlinked_projects(include_archived: bool) -> list[dict[str, Any]]:
         key=lambda project: (project["updated_at"], project["id"]),
         reverse=True,
     )
+
+
+def library_image_info(image_ids: list[int]) -> list[dict[str, Any]]:
+    """File name and size of this library's images, for a dataset batch's tiles."""
+    lib_sql, lib_params = current_library_sql()
+    found: list[dict[str, Any]] = []
+    with get_db() as conn:
+        for chunk in _chunks(image_ids):
+            placeholders = ",".join("?" for _ in chunk)
+            rows = conn.execute(
+                f"""
+                SELECT id, filename, width, height FROM images
+                WHERE id IN ({placeholders}) AND {lib_sql}
+                """,
+                (*chunk, *lib_params),
+            ).fetchall()
+            found.extend(dict(row) for row in rows)
+    return found

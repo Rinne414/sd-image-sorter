@@ -1,4 +1,5 @@
 .step {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -141,4 +142,123 @@
 .tile[data-pending] {
   opacity: 0.45;
   pointer-events: none;
+}
+
+/* Selected for a removal: the china-marker ring, drawn over the picture (the cursor keeps its own). */
+.tile[data-selected] .frame::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 0 3px var(--marker);
+  border-radius: var(--radius);
+  pointer-events: none;
+}
+
+/* Reordering by drag: where it will land, and the one being carried. */
+.tile[data-dragging] {
+  opacity: 0.5;
+}
+
+.tile[data-drop]::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 22px;
+  width: 3px;
+  background: var(--accent);
+  border-radius: var(--radius);
+}
+
+.tile[data-drop='before']::before {
+  left: -6px;
+}
+
+.tile[data-drop='after']::before {
+  right: -6px;
+}
+
+.gone {
+  padding: 8px;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  text-align: center;
+}
+
+.captionRow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  height: 18px;
+}
+
+.source,
+.status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  height: 16px;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  font-size: var(--fs-1);
+  line-height: 1;
+  border-radius: var(--radius);
+}
+
+.source {
+  color: var(--text-2);
+}
+
+.status {
+  color: var(--warn);
+}
+
+.selectedCount {
+  color: var(--marker);
+  font-weight: 600;
+}
+
+.busy {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+/* Files dragged over a dataset batch: a printed frame over the grid, nothing glowing. */
+.dropOverlay {
+  position: absolute;
+  inset: 8px;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  background: var(--scrim);
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-lg);
+  pointer-events: none;
+}
+
+.dropText {
+  max-width: 460px;
+  margin: 0;
+  padding: 10px 16px;
+  color: var(--text);
+  background: var(--surface-2);
+  line-height: 1.6;
+  text-align: center;
+  border-radius: var(--radius);
+}
+
+.emptyActions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.captionRow .caption {
+  flex: 1;
+  min-width: 0;
 }

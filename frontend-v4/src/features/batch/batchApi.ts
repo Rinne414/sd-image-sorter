@@ -17,6 +17,7 @@ import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
 import { tr } from '../jobs/jobs'
 import { restoreOrder } from './batchLogic'
+import { libraryKey } from './datasetItems'
 import { applyOrder } from './orderLogic'
 
 // Batches of the current library: reads are TanStack queries keyed by the
@@ -80,8 +81,9 @@ function fail(error: unknown): null {
   return null
 }
 
-function refreshLists(): void {
+export function refreshLists(): void {
   void queryClient.invalidateQueries({ queryKey: ['batches'] })
+  void queryClient.invalidateQueries({ queryKey: ['dataset-projects-unlinked'] })
 }
 
 function store(batch: Batch): Batch {
@@ -104,6 +106,10 @@ export async function createBatch({ kind, name, templateId = null, imageIds = []
     )
     return store(res.batch)
   } catch (error) {
+    if (error instanceof ApiError && error.code === 'dataset_project_name_conflict') {
+      toast(tr('dataset.nameTaken', { name: name.trim() }), 'error')
+      return null
+    }
     return fail(error)
   }
 }
@@ -150,11 +156,11 @@ export function enqueue<T>(id: number, task: () => Promise<T>): Promise<T> {
   return result
 }
 
-/** Images on their way out of a batch ("batchId:imageId"): asking again for one of them does nothing. */
+/** Images on their way out of a batch ("batchId:entry key"): asking again for one of them does nothing. */
 export const useRemoving = create<{ keys: ReadonlySet<string> }>(() => ({ keys: new Set<string>() }))
-export const removingKey = (batchId: number, imageId: number) => `${batchId}:${imageId}`
+export const removingKey = (batchId: number, entryKey: string) => `${batchId}:${entryKey}`
 
-function markRemoving(keys: string[], on: boolean): void {
+export function markRemoving(keys: string[], on: boolean): void {
   const next = new Set(useRemoving.getState().keys)
   for (const key of keys) {
     if (on) next.add(key)
@@ -170,9 +176,9 @@ function markRemoving(keys: string[], on: boolean): void {
  */
 export async function removeFromBatch(batch: Batch, imageIds: number[]): Promise<boolean> {
   const busy = useRemoving.getState().keys
-  const ids = [...new Set(imageIds)].filter((id) => !busy.has(removingKey(batch.id, id)))
+  const ids = [...new Set(imageIds)].filter((id) => !busy.has(removingKey(batch.id, libraryKey(id))))
   if (ids.length === 0) return false
-  const keys = ids.map((id) => removingKey(batch.id, id))
+  const keys = ids.map((id) => removingKey(batch.id, libraryKey(id)))
   markRemoving(keys, true)
   try {
     return await enqueue(batch.id, () => takeOut(batch, ids))
@@ -293,10 +299,22 @@ export function patchBatch(id: number, changes: PatchChanges, fallbackRevision: 
   return enqueue(id, () => sendPatch(id, changes, fallbackRevision))
 }
 
-export async function deleteBatch(batch: { id: number; name: string }): Promise<boolean> {
+/**
+ * Delete a batch. A dataset batch takes its project with it: `projectRevision`
+ * (what the user confirmed against) stops the delete when V3.5 changed the
+ * project meanwhile.
+ */
+export async function deleteBatch(batch: { id: number; name: string }, projectRevision: number | null = null): Promise<boolean> {
   try {
-    unwrap(await api.DELETE('/api/batches/{batch_id}', { params: { path: { batch_id: batch.id } } }))
+    const query = projectRevision === null ? {} : { expected_project_revision: projectRevision }
+    unwrap(await api.DELETE('/api/batches/{batch_id}', { params: { path: { batch_id: batch.id }, query } }))
   } catch (error) {
+    if (error instanceof ApiError && error.code === 'dataset_project_revision_conflict') {
+      refreshLists()
+      void queryClient.invalidateQueries({ queryKey: ['batch-project'] })
+      toast(tr('dataset.deleteConflict', { name: batch.name }), 'error')
+      return false
+    }
     return fail(error) ?? false
   }
   queryClient.removeQueries({ queryKey: batchKey(libraryId(), batch.id) })

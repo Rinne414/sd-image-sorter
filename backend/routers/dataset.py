@@ -659,6 +659,18 @@ async def post_dataset_translate(payload: DatasetTranslateRequest) -> Dict[str, 
 # ------------------------------ upload-files ------------------------------
 
 
+def _batch_upload_dir(batch_id: int):
+    """The uploads folder of a V4 dataset batch of this library (404/409 otherwise)."""
+    from db_batches import BatchError
+    from routers.batches import batch_http_error
+    from services.batch_dataset_service import upload_folder_for
+
+    try:
+        return upload_folder_for(batch_id)
+    except BatchError as error:
+        raise batch_http_error(error) from error
+
+
 @router.post(
     "/dataset/upload-files",
     summary="Upload image files directly into the Dataset Maker session",
@@ -675,11 +687,17 @@ async def post_dataset_translate(payload: DatasetTranslateRequest) -> Dict[str, 
 async def post_dataset_upload_files(
     files: List[UploadFile] = File(...),
     recursive: bool = Form(True),
+    batch_id: Optional[int] = Form(None, ge=1),
 ) -> Dict[str, Any]:
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded.")
+    # V4: a dataset batch keeps its uploads in its own working folder,
+    # which goes away with the batch.
+    upload_dir = _batch_upload_dir(batch_id) if batch_id is not None else None
     try:
-        return await upload_files_for_dataset(files, recursive=recursive)
+        return await upload_files_for_dataset(
+            files, recursive=recursive, upload_dir=upload_dir
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:

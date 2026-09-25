@@ -1,10 +1,11 @@
-import type { BatchSummary } from '../../api/types'
+import type { BatchKind, BatchSummary } from '../../api/types'
 import { useT } from '../../i18n'
 import { useApp } from '../../state/store'
 import { Menu, type MenuItem } from '../../ui/Menu'
 import { useToasts } from '../../ui/toasts'
 import { tr } from '../jobs/jobs'
-import { addToBatch, useBatches, useBatchTemplates } from './batchApi'
+import { useBatches, useBatchTemplates } from './batchApi'
+import { addLibraryPicks } from './datasetApi'
 import { askNewBatch } from './dialogStore'
 import { BATCH_KINDS, kindLabel } from './labels'
 
@@ -12,8 +13,8 @@ import { BATCH_KINDS, kindLabel } from './labels'
 export const RECENT_BATCHES = 5
 
 /** Add these images to an existing batch and say what happened, with a way to open it. */
-export async function addPicksTo(batch: { id: number; name: string }, ids: number[]): Promise<boolean> {
-  const res = await addToBatch(batch.id, ids)
+export async function addPicksTo(batch: { id: number; name: string; kind: BatchKind }, ids: number[]): Promise<boolean> {
+  const res = await addLibraryPicks(batch, ids)
   if (!res) return false
   const text =
     res.skipped > 0
@@ -23,8 +24,9 @@ export async function addPicksTo(batch: { id: number; name: string }, ids: numbe
   return true
 }
 
+/** Recent batches that can take images (a dataset batch whose project was deleted cannot). */
 export function recentBatches(batches: BatchSummary[] | undefined, max = RECENT_BATCHES): BatchSummary[] {
-  return (batches ?? []).slice(0, max)
+  return (batches ?? []).filter((b) => !b.orphaned).slice(0, max)
 }
 
 /** "Add to batch ▾" on the selection bar: a new batch of any kind or template, or a recent batch. */

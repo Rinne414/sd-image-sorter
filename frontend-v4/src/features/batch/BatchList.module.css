@@ -186,3 +186,12 @@
 .danger:hover {
   color: var(--danger);
 }
+
+/* A dataset batch whose project V3.5 deleted: only Delete is left. */
+.warn {
+  color: var(--warn);
+}
+
+.row[data-orphaned] .open {
+  opacity: 0.6;
+}
