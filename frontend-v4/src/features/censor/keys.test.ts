@@ -67,9 +67,11 @@ describe('censor keys', () => {
     expect(keyAction(press('1', { shiftKey: true }), 'none', true)).toBeNull()
   })
 
-  it('G clone, H show changes', () => {
+  it('G clone, H show changes, F2 rename', () => {
     expect(keyAction(press('g'), 'none')).toEqual({ type: 'tool', tool: 'clone' })
     expect(keyAction(press('h'), 'none', true)).toEqual({ type: 'changes' })
+    expect(keyAction(press('F2'), 'none')).toEqual({ type: 'rename' })
+    expect(keyAction(press('F2'), 'text')).toBeNull()
   })
 
   it('the shortcut list shows exactly the keys that do something', () => {

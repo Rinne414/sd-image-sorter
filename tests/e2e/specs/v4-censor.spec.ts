@@ -118,6 +118,8 @@ function recordWrites(page: Page): string[] {
   page.on('request', (req) => {
     const url = new URL(req.url())
     if (req.method() === 'GET' || !url.pathname.startsWith('/api/batches/')) return
+    // The export-name preview (shown in the editor bar) is a POST that writes nothing.
+    if (url.pathname.endsWith('/export/names')) return
     writes.push(`${req.method()} ${url.pathname}${req.postData() ? ' +body' : ''}`)
   })
   return writes

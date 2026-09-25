@@ -929,6 +929,14 @@ export const zhCN = {
   'censor.keys.altClick': 'Alt+点击',
   'censor.keys.ctrlWheel': 'Ctrl+滚轮',
   'censor.keys.spaceDrag': '空格+拖动',
+  'censor.rename.title': '重命名这张图',
+  'censor.rename.tip': '导出时写出的文件名（F2 修改）',
+  'censor.rename.pending': '正在计算文件名…',
+  'censor.rename.file': '原文件：',
+  'censor.rename.final': '导出时的文件名：',
+  'censor.rename.label': '自己定的名字（不含扩展名）',
+  'censor.rename.note': '留空就按「命名」步骤的规则取名，和「命名」步骤里改的是同一个名字。',
+  'censor.rename.ok': '保存',
   'censor.quick.name': '打码',
 } as const
 

@@ -1,0 +1,43 @@
+.form {
+  display: grid;
+  gap: 10px;
+}
+
+.line {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.line .mono {
+  color: var(--text);
+  word-break: break-all;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.field input {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  border-radius: var(--radius);
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}

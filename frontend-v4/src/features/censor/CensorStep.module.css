@@ -68,6 +68,26 @@
   flex: 1;
 }
 
+/* The file name the export writes (F2 changes it): shrinks before anything else in the bar. */
+.name {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 24%;
+  gap: 6px;
+  padding: 0 6px;
+}
+
+.name .mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+  font-size: var(--fs-2);
+}
+
+.arrow {
+  color: var(--muted);
+}
+
 
 .work {
   display: grid;

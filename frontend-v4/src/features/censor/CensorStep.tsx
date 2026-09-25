@@ -13,7 +13,9 @@ import { Filmstrip } from './Filmstrip'
 import type { KeyAction } from './keys'
 import type { Op } from './ops'
 import { useCensorPanel } from './panel'
+import { useFinalName } from './finalName'
 import { RemoveBgDialog } from './RemoveBgDialog'
+import { RenameDialog } from './RenameDialog'
 import { reviewActions } from './reviewActions'
 import type { ReviewActions } from './ReviewPanel'
 import { saveAll } from './saving'
@@ -53,6 +55,7 @@ export default function CensorStep({ batch, next, onNext }: Props) {
   const index = found >= 0 ? found : items.length > 0 ? 0 : -1
   const item = index >= 0 ? items[index] : undefined
   const edit = useEdit(batch.id, item?.image_id ?? null)
+  const finalName = useFinalName(batch, item?.image_id ?? -1)
 
   useLayoutEffect(() => syncItems(batch), [batch])
 
@@ -79,10 +82,11 @@ export default function CensorStep({ batch, next, onNext }: Props) {
     if (to >= 0) go(to)
   })
 
-  const [dialog, setDialog] = useState<'bg' | null>(null)
+  const [dialog, setDialog] = useState<'bg' | 'rename' | null>(null)
   const review = reviewActions(batch, item, index, go)
   useCensorKeys((action: KeyAction) => {
     if (action.type === 'removeBg') return setDialog('bg')
+    if (action.type === 'rename') return setDialog('rename')
     runKey(action, { batchId: batch.id, item, index, go, review })
   })
 
@@ -90,7 +94,7 @@ export default function CensorStep({ batch, next, onNext }: Props) {
 
   return (
     <section className={styles.editor} aria-label={t('censor.editor')} data-testid="censor-editor">
-      <EditorBar batch={batch} item={item} index={index} edit={edit} next={next} onNext={onNext} onGo={go} />
+      <EditorBar batch={batch} item={item} index={index} edit={edit} next={next} onNext={onNext} onGo={go} onRename={() => setDialog('rename')} finalName={finalName} />
       <div className={styles.work}>
         <Filmstrip batchId={batch.id} items={items} current={index} onPick={go} />
         <div className={styles.stage}>
@@ -101,6 +105,7 @@ export default function CensorStep({ batch, next, onNext }: Props) {
       <DownloadConfirm />
       <ChangesConfirm />
       {dialog === 'bg' && <RemoveBgDialog batchId={batch.id} item={item} onClose={() => setDialog(null)} />}
+      {dialog === 'rename' && <RenameDialog batch={batch} item={item} finalName={finalName} onClose={() => setDialog(null)} />}
     </section>
   )
 }
@@ -140,6 +145,7 @@ function runKey(action: KeyAction, { batchId, item, index, go, review }: KeyCont
     case 'changes':
       return requestShowChanges(!useCensorPanel.getState().showChanges)
     case 'removeBg':
+    case 'rename':
       return
     case 'undo':
     case 'redo':
@@ -155,9 +161,11 @@ interface BarProps {
   next: string | null
   onNext: (step: string) => void
   onGo: (index: number) => void
+  onRename: () => void
+  finalName: string | null
 }
 
-function EditorBar({ batch, item, index, edit, next, onNext, onGo }: BarProps) {
+function EditorBar({ batch, item, index, edit, next, onNext, onGo, onRename, finalName }: BarProps) {
   const t = useT()
   const n = batch.items.length
   const status = itemStatus(item, edit)
@@ -178,6 +186,15 @@ function EditorBar({ batch, item, index, edit, next, onNext, onGo }: BarProps) {
       <span className={`${styles.file} mono`} title={item.filename}>
         {item.filename}
       </span>
+      <button type="button" className={`btn btn-ghost ${styles.name}`} onClick={onRename} title={t('censor.rename.tip')} data-testid="censor-rename">
+        <span className={styles.arrow} aria-hidden>
+          →
+        </span>
+        <span className="mono" data-testid="censor-output-name">
+          {finalName ?? t('censor.rename.pending')}
+        </span>
+        <kbd>F2</kbd>
+      </button>
       <span className={styles.status} data-state={status} title={text} role="status" data-testid="censor-status">
         {text}
       </span>

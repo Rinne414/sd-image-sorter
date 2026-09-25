@@ -25,6 +25,7 @@ export type KeyAction =
   | { type: 'redetect' }
   | { type: 'removeBg' }
   | { type: 'changes' }
+  | { type: 'rename' }
 
 export interface KeyPress {
   key: string
@@ -77,6 +78,7 @@ export function keyAction(e: KeyPress, focus: FocusKind, reviewing = false): Key
   if (key === '[') return { type: 'size', delta: -SIZE_STEP }
   if (key === ']') return { type: 'size', delta: SIZE_STEP }
   if (e.shiftKey) return null
+  if (key === 'F2') return { type: 'rename' }
   const tool = TOOL_KEYS[key]
   if (tool) return { type: 'tool', tool }
   const plain = PLAIN_KEYS[key]
@@ -114,6 +116,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { keys: ['Ctrl+Shift+Z', 'Ctrl+Y'], label: 'censor.redo', group: 'edit' },
   { keys: ['Ctrl+S'], label: 'censor.saveNow', group: 'edit' },
   { keys: ['R'], label: 'censor.bg.title', group: 'edit', when: 'outside' },
+  { keys: ['F2'], label: 'censor.rename.title', group: 'edit' },
   { keys: ['D'], label: 'censor.detect.this', group: 'review' },
   { keys: ['1–9'], label: 'censor.keys.region', group: 'review', when: 'review' },
   { keys: ['A'], label: 'censor.review.toggleAll', group: 'review', when: 'review' },

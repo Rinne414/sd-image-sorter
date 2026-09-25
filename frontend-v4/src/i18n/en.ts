@@ -929,5 +929,13 @@ export const en: Record<MessageKey, string> = {
   'censor.keys.altClick': 'Alt+click',
   'censor.keys.ctrlWheel': 'Ctrl+wheel',
   'censor.keys.spaceDrag': 'Space+drag',
+  'censor.rename.title': 'Rename this image',
+  'censor.rename.tip': 'The file name the export writes (F2 changes it)',
+  'censor.rename.pending': 'Working out the file name…',
+  'censor.rename.file': 'Original file:',
+  'censor.rename.final': 'Name in the export:',
+  'censor.rename.label': 'Its own name (without the extension)',
+  'censor.rename.note': 'Leave it empty to use the rule of the Name step; it is the same name the Name step edits.',
+  'censor.rename.ok': 'Save',
   'censor.quick.name': 'Censor',
 }

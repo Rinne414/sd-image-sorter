@@ -5,7 +5,7 @@ import { cleanupImages, dbPath, openLibrary, pageOverflow, runBackendScript, see
 /**
  * V4 censor step extras: the clone stamp (Alt+click source, copies the
  * original), a filter applied to both images landing in both saved copies
- * (and sitting before the strokes), "show changes", remove
+ * (and sitting before the strokes), "show changes", the export name and F2, remove
  * background (SAM3 stubbed), the shortcut list, and "Censor…" from the
  * library's selection bar. Nothing runs a model: remove-background and the
  * model status are answered with page.route.
@@ -250,6 +250,44 @@ test('a filter applied to both images lands in both saved copies, before the str
   await expect(page.getByTestId('censor-adjust-brightness')).toHaveValue('0')
 })
 
+/** The name the export would write for an image now, as the server works it out with the default Name settings. */
+async function serverName(page: Page, imageId: number): Promise<string | null> {
+  const res = await page.request.post(`/api/batches/${batchId}/export/names`, {
+    data: { name_template: '{batch}_{n:02}', start_number: 1, output_format: 'original', missing_censored: 'block' },
+  })
+  const items = ((await res.json()) as { items: { image_id: number; output_name: string | null }[] }).items
+  return items.find((i) => i.image_id === imageId)?.output_name ?? null
+}
+
+test('the bar shows the export name the server computes; F2 sets an own name, empty goes back to the rule', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openBatch(page)
+  const a = ids[0] as number
+  await stripItem(page, 0).click()
+  const shown = page.getByTestId('censor-output-name')
+  const byRule = await serverName(page, a)
+  expect(byRule).toMatch(/_01\.png$/)
+  await expect(shown).toHaveText(byRule as string)
+  await page.getByTestId('censor-position').click()
+  await page.keyboard.press('F2')
+  const dialog = page.getByTestId('censor-rename-dialog')
+  await expect(dialog).toContainText(byRule as string)
+  const input = page.getByTestId('censor-rename-input')
+  await expect(input).toBeFocused()
+  await input.fill('cover_01')
+  await input.press('Enter')
+  await expect(dialog).toHaveCount(0)
+  await expect(shown).toHaveText('cover_01.png')
+  expect((await apiItem(page, a)).output_name).toBe('cover_01')
+  expect(await serverName(page, a)).toBe('cover_01.png')
+  // empty: the Name step's rule again
+  await page.getByTestId('censor-rename').click()
+  await page.getByTestId('censor-rename-input').fill('')
+  await page.getByTestId('censor-rename-ok').click()
+  await expect(shown).toHaveText(byRule as string)
+  expect((await apiItem(page, a)).output_name).toBeNull()
+})
+
 test('remove background (R): SAM3 finds the subject, white fill previews and applies as a picture edit', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   await page.route('**/api/models/status', (route) => route.fulfill({ json: { models: [{ id: 'sam3', status: 'ready', available: true }] } }))
@@ -299,7 +337,7 @@ test('the shortcut list shows the editor keys', async ({ page }) => {
   await page.getByTestId('censor-shortcuts').click()
   const list = page.getByTestId('censor-shortcut-list')
   await expect(list).toBeVisible()
-  for (const text of ['Clone', 'Show changes', 'Remove background', '(in review)']) await expect(list).toContainText(text)
+  for (const text of ['Clone', 'Show changes', 'Rename this image', 'Remove background', '(in review)']) await expect(list).toContainText(text)
   await expect(list).toBeInViewport({ ratio: 1 })
   await page.keyboard.press('Escape')
   await expect(list).toHaveCount(0)
@@ -312,7 +350,7 @@ test('the tabs and tools fit every desktop size', async ({ page }) => {
     else await page.reload()
     await page.getByTestId('censor-tab-adjust').click()
     expect(await pageOverflow(page), `overflow at ${vp.width}`).toBeLessThanOrEqual(0)
-    for (const id of ['censor-adjust-apply', 'censor-preset-reset', 'censor-reset', 'step-next', 'censor-shortcuts']) {
+    for (const id of ['censor-adjust-apply', 'censor-preset-reset', 'censor-reset', 'step-next', 'censor-rename', 'censor-shortcuts']) {
       await expect(page.getByTestId(id), `${id} at ${vp.width}`).toBeInViewport({ ratio: 1 })
     }
     await page.getByTestId('censor-tab-brush').click()
