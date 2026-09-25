@@ -379,7 +379,11 @@
     // ---------- Keyboard shortcuts for workbench ----------
     document.addEventListener('keydown', function (e) {
         const view = document.getElementById('view-dataset');
-        if (!view || view.hidden) return;
+        // Views switch with the .active class (never [hidden]); without this,
+        // Delete in the Gallery or Censor Edit removed the dataset's image.
+        if (!view || !view.classList.contains('active')) return;
+        // A dialog on top owns the keyboard.
+        if (document.querySelector('.modal.visible, .dataset-modal:not([hidden])')) return;
         const maker = view.querySelector('.dataset-maker');
         if (!maker || maker.dataset.activeTab !== 'workbench') return;
         const tag = document.activeElement?.tagName?.toLowerCase();
