@@ -1,13 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
-import type { BatchItem } from '../../api/types'
+import { useEffect, useState } from 'react'
+import type { Batch, BatchItem } from '../../api/types'
 import { useT } from '../../i18n'
-import { Dialog } from '../../ui/Dialog'
 import type { ExportFailure, ExportRun } from './exportApi'
+import { ExportConfirm } from './ExportConfirm'
 import type { ExportSettings, MissingPolicy } from './exportSettings'
 import styles from './ExportStep.module.css'
 import type { Preflight } from './preflight'
 
 interface Props {
+  batch: Batch
   check: Preflight
   settings: ExportSettings
   run: ExportRun | undefined
@@ -45,7 +46,8 @@ function Elapsed({ started }: { started: number }) {
 export function PreflightPanel(props: Props) {
   const { check, settings, run, unsaved, notReady } = props
   const t = useT()
-  const [originals, setOriginals] = useState(false)
+  // Leaving images out or exporting originals shows the exact files first.
+  const [confirm, setConfirm] = useState<'skip' | 'original' | null>(null)
   const [acceptUnreviewed, setAcceptUnreviewed] = useState(false)
   const running = run?.state === 'running'
   const missing = check.missing.length
@@ -82,10 +84,10 @@ export function PreflightPanel(props: Props) {
                 {t('batch.export.goCensor', { n: missing })}
               </button>
             )}
-            <button type="button" className="btn" disabled={blocked || needReviewNod || missing === check.total} onClick={() => go('skip')} data-testid="preflight-skip">
+            <button type="button" className="btn" disabled={blocked || needReviewNod || missing === check.total} onClick={() => setConfirm('skip')} data-testid="preflight-skip">
               {t('batch.export.skipThem', { n: check.total - missing })}
             </button>
-            <button type="button" className="btn btn-danger" disabled={blocked || needReviewNod} onClick={() => setOriginals(true)} data-testid="preflight-originals">
+            <button type="button" className="btn btn-danger" disabled={blocked || needReviewNod} onClick={() => setConfirm('original')} data-testid="preflight-originals">
               {t('batch.export.originals', { n: missing })}
             </button>
           </div>
@@ -123,14 +125,16 @@ export function PreflightPanel(props: Props) {
       )}
       {notReady && !running && <p className={styles.fieldProblem}>{notReady}</p>}
 
-      {originals && (
-        <OriginalsConfirm
-          n={missing}
-          metadata={settings.metadata_option}
-          onCancel={() => setOriginals(false)}
+      {confirm && (
+        <ExportConfirm
+          batch={props.batch}
+          settings={settings}
+          policy={confirm}
+          missing={missing}
+          onCancel={() => setConfirm(null)}
           onOk={() => {
-            setOriginals(false)
-            go('original')
+            setConfirm(null)
+            go(confirm)
           }}
         />
       )}
@@ -173,26 +177,5 @@ function FailureBox({ failure, running, onReplace, onGoName }: { failure: Exclud
       {failure.kind === 'sources' && <p>{t('batch.export.fail.sources', { names })}</p>}
       {failure.kind === 'other' && <p>{t('batch.export.fail.other', { reason: failure.message })}</p>}
     </div>
-  )
-}
-
-function OriginalsConfirm({ n, metadata, onCancel, onOk }: { n: number; metadata: ExportSettings['metadata_option']; onCancel: () => void; onOk: () => void }) {
-  const t = useT()
-  const cancelRef = useRef<HTMLButtonElement>(null)
-  const footer = (
-    <>
-      <button ref={cancelRef} type="button" className="btn btn-ghost" onClick={onCancel} data-testid="originals-cancel">
-        {t('common.cancel')}
-      </button>
-      <button type="button" className="btn btn-danger" onClick={onOk} data-testid="originals-ok">
-        {t('batch.export.originalsOk', { n })}
-      </button>
-    </>
-  )
-  return (
-    <Dialog title={t('batch.export.originalsTitle', { n })} onClose={onCancel} footer={footer} testId="originals-dialog" initialFocus={cancelRef}>
-      <p className={styles.dialogText}>{t('batch.export.originalsBody', { n })}</p>
-      <p className={styles.dialogText}>{t(metadata === 'keep' ? 'batch.export.originalsKeep' : 'batch.export.originalsStripped')}</p>
-    </Dialog>
   )
 }

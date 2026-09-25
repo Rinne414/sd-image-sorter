@@ -73,6 +73,7 @@ export function ExportStep({ batch, onGo }: Props) {
           <ExportForm settings={settings} update={update} disabled={run?.state === 'running'} />
         </div>
         <PreflightPanel
+          batch={batch}
           check={check}
           settings={settings}
           run={run}

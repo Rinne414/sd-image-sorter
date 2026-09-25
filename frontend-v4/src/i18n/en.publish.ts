@@ -29,6 +29,8 @@ export const enPublish: Record<keyof typeof zhCNPublish, string> = {
   'batch.name.own': 'Own name',
   'batch.name.clearOwn': 'Back to the naming rule',
   'batch.name.edit': 'Give "{name}" its own name (without extension)',
+  'batch.name.missingNote': '{n} images have no censored copy yet. The numbers here count every image; if you leave them out at export, the later numbers close up. The export confirmation lists the final names.',
+  'batch.name.noCopyTip': 'No censored copy yet: if it is left out at export, the later numbers close up',
 
   'batch.export.hint': 'Generation data is removed by default; each image uses its censored copy',
   'batch.export.folder': 'Output folder',
@@ -98,6 +100,13 @@ export const enPublish: Record<keyof typeof zhCNPublish, string> = {
   'batch.export.originalsStripped': 'Generation data is still removed.',
   'batch.export.originalsKeep': 'You also chose to keep generation data: their prompts go out too.',
   'batch.export.originalsOk': 'Export {n} originals',
+  'batch.export.confirmSkipTitle': 'Leave out the {n} images without a censored copy?',
+  'batch.export.confirmSkipBody': '{n} images without a censored copy are left out and the later numbers close up. These files will be written:',
+  'batch.export.confirmSkipOk': 'Export {n} images',
+  'batch.export.confirmFiles': 'These files will be written:',
+  'batch.export.confirmLeftOut': 'Left out: {names}',
+  'batch.export.confirmPending': 'Working out the final file names…',
+  'batch.export.confirmOriginal': 'Original (not censored)',
 
   'batch.result.done': 'Exported {n} images',
   'batch.result.partial': 'Exported {n} images, {failed} failed',

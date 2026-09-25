@@ -29,6 +29,8 @@ export const zhCNPublish = {
   'batch.name.own': '单独命名',
   'batch.name.clearOwn': '改回按规则命名',
   'batch.name.edit': '给「{name}」单独起名（不含扩展名）',
+  'batch.name.missingNote': '{n} 张还没有打码版。这里按全部导出给序号；导出时如果选择不导出它们，后面的序号会往前补，最终文件名会在导出前的确认里列出。',
+  'batch.name.noCopyTip': '还没有打码版：导出时如果不导出它，后面的序号会往前补',
 
   'batch.export.hint': '默认去除生成信息，每张自动用打码版',
   'batch.export.folder': '输出文件夹',
@@ -98,6 +100,13 @@ export const zhCNPublish = {
   'batch.export.originalsStripped': '生成信息仍然会去除。',
   'batch.export.originalsKeep': '而且你选了保留生成信息：提示词也会跟着导出。',
   'batch.export.originalsOk': '导出 {n} 张原图',
+  'batch.export.confirmSkipTitle': '不导出没有打码版的 {n} 张？',
+  'batch.export.confirmSkipBody': '没有打码版的 {n} 张不导出，后面的序号往前补。会写出这些文件：',
+  'batch.export.confirmSkipOk': '导出 {n} 张',
+  'batch.export.confirmFiles': '会写出这些文件：',
+  'batch.export.confirmLeftOut': '不导出：{names}',
+  'batch.export.confirmPending': '正在计算最终文件名…',
+  'batch.export.confirmOriginal': '原图（未打码）',
 
   'batch.result.done': '已导出 {n} 张',
   'batch.result.partial': '导出了 {n} 张，{failed} 张失败',

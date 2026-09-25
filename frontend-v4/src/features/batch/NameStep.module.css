@@ -205,3 +205,14 @@
 .ownTag {
   color: var(--accent);
 }
+
+.missingNote {
+  max-width: 980px;
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--warn);
+  background: var(--wash);
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}

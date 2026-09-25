@@ -217,7 +217,7 @@ test('order: numbers and badges, reorder by Alt+keys and by drag, saved in the b
   await expect(tile(a)).toHaveAttribute('aria-selected', 'true')
   expect(await tileIds(page)).toEqual([c, a, b])
 
-  // drag b onto the left half of a: [c, b, a]; then Alt+ArrowRight puts b back last
+  // drag b onto the left half of a: [c, b, a]; Alt+ArrowRight and back, it stays in the middle
   const box = await tile(a).boundingBox()
   if (!box) throw new Error('no tile box')
   await tile(b).dragTo(tile(a), { targetPosition: { x: 10, y: box.height / 2 } })
@@ -225,7 +225,9 @@ test('order: numbers and badges, reorder by Alt+keys and by drag, saved in the b
   await expect(tile(b)).toHaveAttribute('aria-selected', 'true')
   await page.keyboard.press('Alt+ArrowRight')
   await expect.poll(() => tileIds(page)).toEqual([c, a, b])
-  await expect.poll(() => apiOrder(page)).toEqual([c, a, b])
+  await page.keyboard.press('Alt+ArrowLeft')
+  await expect.poll(() => tileIds(page)).toEqual([c, b, a])
+  await expect.poll(() => apiOrder(page)).toEqual([c, b, a])
   await expect(page.getByTestId('order-number')).toHaveText(['1', '2', '3'])
 
   // the page never went back in history on Alt+arrows
@@ -252,38 +254,41 @@ test('name: template preview matches, a duplicate (any case) blocks next, own na
   await page.getByTestId('name-token').filter({ hasText: '{n:02}' }).click()
   await expect(page.getByTestId('name-template')).toHaveValue('post-{n:02}')
   await expect(finalOf(c)).toHaveText('post-01.jpg')
-  await expect(finalOf(a)).toHaveText('post-02.png')
-  await expect(finalOf(b)).toHaveText('post-03.png')
+  await expect(finalOf(b)).toHaveText('post-02.png')
+  await expect(finalOf(a)).toHaveText('post-03.png')
+  // b has no censored copy: the page says its number closes up if it is left out
+  await expect(page.getByTestId('name-missing-note')).toContainText('1')
+  await expect(page.locator(`[data-testid="name-row"][data-id="${b}"]`).getByTestId('name-no-copy')).toBeVisible()
 
   // an unknown token is named and blocks next
   await page.getByTestId('name-template').fill('post-{index}')
   await expect(page.getByTestId('name-template-problem')).toContainText('{index}')
   await expect(page.getByTestId('step-next')).toBeDisabled()
   await page.getByTestId('name-template').fill('post-{n:02}')
-  await expect(finalOf(b)).toHaveText('post-03.png')
+  await expect(finalOf(a)).toHaveText('post-03.png')
 
-  // b's own name "POST-02" collides with a's "post-02.png"
-  await finalOf(b).click()
+  // a's own name "POST-02" collides with b's "post-02.png"
+  await finalOf(a).click()
   await page.getByTestId('inline-name').fill('POST-02')
   await page.getByTestId('inline-name').press('Enter')
-  await expect(finalOf(b)).toHaveText('POST-02.png')
+  await expect(finalOf(a)).toHaveText('POST-02.png')
   const rowOf = (id: number) => page.locator(`[data-testid="name-row"][data-id="${id}"]`)
   await expect(rowOf(a)).toHaveAttribute('data-duplicate', 'true')
   await expect(rowOf(b)).toHaveAttribute('data-duplicate', 'true')
   await expect(page.getByTestId('name-blocked')).toBeVisible()
   await expect(page.getByTestId('step-next')).toBeDisabled()
 
-  await rowOf(b).getByTestId('name-clear').click()
-  await expect(finalOf(b)).toHaveText('post-03.png')
-  await expect(rowOf(a)).not.toHaveAttribute('data-duplicate', 'true')
+  await rowOf(a).getByTestId('name-clear').click()
+  await expect(finalOf(a)).toHaveText('post-03.png')
+  await expect(rowOf(b)).not.toHaveAttribute('data-duplicate', 'true')
   await expect(page.getByTestId('step-next')).toBeEnabled()
   const saved = (await (await page.request.get(`/api/batches/${batchId}`)).json()) as { items: { image_id: number; output_name: string | null }[] }
-  expect(saved.items.find((i) => i.image_id === b)?.output_name).toBeNull()
+  expect(saved.items.find((i) => i.image_id === a)?.output_name).toBeNull()
   expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
   expect(errors).toEqual([])
 })
 
-test('export: blocked with the missing one listed, "leave out" writes 2 clean files that are the censored copies', async ({ page }) => {
+test('export: blocked with the missing one listed, "leave out" confirms the renumbered names and writes exactly those, clean and censored', async ({ page }) => {
   const errors = watchErrors(page)
   await page.setViewportSize({ width: 1366, height: 768 })
   await openBatch(page)
@@ -321,6 +326,18 @@ test('export: blocked with the missing one listed, "leave out" writes 2 clean fi
 
   await expect(page.getByTestId('preflight-skip')).toHaveText('Leave them out, export the other 2')
   await page.getByTestId('preflight-skip').click()
+  // the Name step showed a as post-03.png; left out, the numbers close up and the confirmation says so
+  const confirm = page.getByTestId('export-confirm')
+  await expect(confirm.getByTestId('export-confirm-body')).toHaveAttribute('data-policy', 'skip')
+  await expect(confirm.getByTestId('confirm-name')).toHaveText(['post-01.jpg', 'post-02.png'])
+  await expect(confirm.getByTestId('confirm-left-out')).toContainText(nameOf[b] as string)
+  await expect(page.getByTestId('export-result')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(confirm).toHaveCount(0)
+  expect(fs.readdirSync(OUT)).toEqual([])
+  await page.getByTestId('preflight-skip').click()
+  await expect(confirm.getByTestId('confirm-name')).toHaveText(['post-01.jpg', 'post-02.png'])
+  await confirm.getByTestId('confirm-ok').click()
   const result = page.getByTestId('export-result')
   await expect(result).toBeVisible({ timeout: 30_000 })
   await expect(result.getByTestId('result-row')).toHaveCount(2)
@@ -348,7 +365,7 @@ test('export: blocked with the missing one listed, "leave out" writes 2 clean fi
   expect(errors).toEqual([])
 })
 
-test('export originals needs a second confirm (focus on Cancel) and still removes generation data', async ({ page }) => {
+test('export originals: the confirmation lists every final name (focus on Cancel); generation data is still removed', async ({ page }) => {
   const errors = watchErrors(page)
   await page.setViewportSize({ width: 1366, height: 768 })
   await openBatch(page)
@@ -358,28 +375,36 @@ test('export originals needs a second confirm (focus on Cancel) and still remove
   await expect(page.getByTestId('export-folder')).toHaveText(OUT)
   await page.getByTestId('export-overwrite').check()
 
+  const b = ids[1] as number
   await page.getByTestId('preflight-originals').click()
-  const dialog = page.getByTestId('originals-dialog')
-  await expect(dialog).toBeVisible()
+  const dialog = page.getByTestId('export-confirm')
+  await expect(dialog.getByTestId('export-confirm-body')).toHaveAttribute('data-policy', 'original')
   await expect(dialog).toContainText('Generation data is still removed.')
-  await expect(page.getByTestId('originals-cancel')).toBeFocused()
+  await expect(dialog.getByTestId('confirm-name')).toHaveText(['post-01.jpg', 'post-02.png', 'post-03.png'])
+  await expect(dialog.locator('[data-testid="confirm-row"][data-source="original"]')).toContainText(nameOf[b] as string)
+  await expect(page.getByTestId('confirm-cancel')).toBeFocused()
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
   await expect(page.getByTestId('export-result')).toHaveCount(0)
 
   await page.getByTestId('preflight-originals').click()
-  await page.getByTestId('originals-ok').click()
+  await expect(dialog.getByTestId('confirm-name')).toHaveText(['post-01.jpg', 'post-02.png', 'post-03.png'])
+  await page.getByTestId('confirm-ok').click()
   const result = page.getByTestId('export-result')
   await expect(result).toBeVisible({ timeout: 30_000 })
   await expect(result.getByTestId('result-row')).toHaveCount(3)
   await expect(result.locator('[data-testid="result-row"][data-source="original"]')).toHaveCount(1)
-  await expect(result.locator('[data-testid="result-row"][data-source="original"]')).toContainText('post-03.png')
+  await expect(result.locator('[data-testid="result-row"][data-source="original"]')).toContainText('post-02.png')
   await expect(result.getByTestId('result-meta')).toHaveText(['Removed', 'Removed', 'Removed'])
 
   expect(fs.readdirSync(OUT).sort()).toEqual(['post-01.jpg', 'post-02.png', 'post-03.png'])
   for (const file of fs.readdirSync(OUT)) expect(metadataOf(path.join(OUT, file)), file).toEqual({ carriers: [], marker: false })
   const lib = path.join(tmpRoot, DIR)
-  const [orig] = pixelDiffs([{ file: path.join(OUT, 'post-03.png'), censored: null, original: path.join(lib, `${PREFIX}b.png`) }])
+  const [orig, censoredA] = pixelDiffs([
+    { file: path.join(OUT, 'post-02.png'), censored: null, original: path.join(lib, `${PREFIX}b.png`) },
+    { file: path.join(OUT, 'post-03.png'), censored: path.join(lib, 'censored-a.png'), original: path.join(lib, `${PREFIX}a.png`) },
+  ])
   expect(orig?.original).toBe(0)
+  expect(censoredA?.censored).toBe(0)
   expect(errors).toEqual([])
 })

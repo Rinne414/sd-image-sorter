@@ -398,3 +398,56 @@
   color: var(--text-2);
   font-size: var(--fs-2);
 }
+
+/* ---- the exact files, before an export that leaves images out or uses originals ---- */
+
+.confirmList {
+  max-height: 44vh;
+  margin: 0 0 10px;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  counter-reset: file;
+  border-top: 1px solid var(--line);
+}
+
+.confirmRow {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1.2fr) minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 2px;
+  border-bottom: 1px solid var(--hairline);
+  counter-increment: file;
+}
+
+.confirmRow::before {
+  content: counter(file);
+  color: var(--edge-print);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2);
+  text-align: right;
+}
+
+.confirmName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.confirmFrom {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.confirmOriginal {
+  color: var(--danger);
+  font-size: var(--fs-2);
+  font-weight: 600;
+  white-space: nowrap;
+}

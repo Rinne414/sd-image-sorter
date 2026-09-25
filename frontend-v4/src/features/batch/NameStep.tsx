@@ -39,6 +39,8 @@ export function NameStep({ batch, next, onNext }: Props) {
   const dups = duplicateIds(preview)
   const blocked = block === 'template' || block === 'duplicates'
   const byId = new Map((preview?.items ?? []).map((row) => [row.image_id, row]))
+  // Numbered here as if exported; left out at export, the later numbers close up.
+  const noCopy = batch.items.filter((item) => !item.has_censored).length
 
   return (
     <section className={styles.step} data-testid="name-step">
@@ -56,6 +58,11 @@ export function NameStep({ batch, next, onNext }: Props) {
       </StepBar>
       <div className={styles.scroller}>
         <TemplateForm settings={settings} update={update} problem={hasTemplate ? (preview?.template_error?.token ?? null) : ''} />
+        {noCopy > 0 && (
+          <p className={styles.missingNote} data-testid="name-missing-note">
+            {t('batch.name.missingNote', { n: noCopy })}
+          </p>
+        )}
         <ol className={styles.list} data-testid="name-list">
           {batch.items.map((item, index) => (
             <NameRow key={item.image_id} batch={batch} item={item} index={index} row={byId.get(item.image_id)} duplicate={dups.has(item.image_id)} stale={stale} />
@@ -188,7 +195,11 @@ function NameRow({ batch, item, index, row, duplicate, stale }: RowProps) {
       </span>
       <span className={styles.tags}>
         {duplicate && <span className={styles.dupTag}>{t('batch.name.duplicate')}</span>}
-        {!item.has_censored && <span className={styles.warnTag}>{t('batch.badge.missing')}</span>}
+        {!item.has_censored && (
+          <span className={styles.warnTag} title={t('batch.name.noCopyTip')} data-testid="name-no-copy">
+            {t('batch.badge.missing')}
+          </span>
+        )}
         {item.output_name && (
           <>
             <span className={styles.ownTag}>{t('batch.name.own')}</span>
