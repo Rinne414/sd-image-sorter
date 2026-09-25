@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from services import batch_export_service
 from services.batch_naming import BatchNameTemplateError, render_output_stem
 from tests.batch_fixtures import (
     MARKER,
@@ -398,3 +399,92 @@ def test_invalid_output_folder_is_rejected(
 
 def test_export_of_unknown_batch_is_404(test_client, tmp_path, batch_data_dir):
     assert _export(test_client, 424242, tmp_path / "out").status_code == 404
+
+
+# --- failures while writing ------------------------------------------------------
+
+
+def test_original_policy_refuses_when_the_original_file_is_gone(
+    test_client, test_db, tmp_path, batch_data_dir
+):
+    a = seed_image(test_db, tmp_path / "lib", "a", seed=1)
+    b = seed_image(test_db, tmp_path / "lib", "b", seed=2)
+    batch = create_batch(test_client, [a, b], name="Lost")
+    save_censored(test_client, batch["id"], a)
+    (tmp_path / "lib" / "b.png").unlink()
+    out_dir = tmp_path / "out"
+
+    response = _export(test_client, batch["id"], out_dir, missing_censored="original")
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "batch_export_sources_missing"
+    assert response.json()["missing"] == [{"image_id": b, "filename": "b.png"}]
+    assert _files(out_dir) == []
+
+
+def test_a_failing_item_is_reported_and_never_replaced_by_its_original(
+    test_client, test_db, tmp_path, batch_data_dir, monkeypatch
+):
+    a = seed_image(test_db, tmp_path / "lib", "a", seed=1)
+    b = seed_image(test_db, tmp_path / "lib", "b", seed=2)
+    batch = create_batch(test_client, [a, b], name="P")
+    save_censored(test_client, batch["id"], a)
+    save_censored(test_client, batch["id"], b)
+    real_load = batch_export_service._load_pixels
+
+    def load_or_fail(item, keep_orientation_tag):
+        if item.image_id == a:
+            raise OSError("censored copy unreadable")
+        return real_load(item, keep_orientation_tag=keep_orientation_tag)
+
+    monkeypatch.setattr(batch_export_service, "_load_pixels", load_or_fail)
+    out_dir = tmp_path / "out"
+
+    response = _export(test_client, batch["id"], out_dir, missing_censored="original")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["success"] is False
+    assert body["errors"] == [
+        {"image_id": a, "filename": "a.png", "error": "censored copy unreadable"}
+    ]
+    assert [
+        (i["image_id"], i["output_name"], i["source"]) for i in body["exported"]
+    ] == [(b, "P_02.png", "censored")]
+    assert _files(out_dir) == ["P_02.png"]
+    assert pixels(out_dir / "P_02.png") == pixels(censored_image())
+
+
+def test_an_interrupted_byte_copy_leaves_the_previous_export_intact(
+    test_client, test_db, tmp_path, batch_data_dir, monkeypatch
+):
+    a = seed_image(test_db, tmp_path / "lib", "a")
+    batch = create_batch(test_client, [a], name="K")
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    previous = out_dir / "K_01.png"
+    previous.write_bytes(b"previous export")
+
+    def interrupted_copy(reader, writer, length=0):
+        writer.write(reader.read(64))
+        raise OSError("disk full")
+
+    monkeypatch.setattr(batch_export_service.shutil, "copyfileobj", interrupted_copy)
+
+    response = _export(
+        test_client,
+        batch["id"],
+        out_dir,
+        metadata_option="keep",
+        missing_censored="original",
+        overwrite=True,
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["success"] is False
+    assert body["exported"] == []
+    assert body["errors"][0]["image_id"] == a
+    assert "disk full" in body["errors"][0]["error"]
+    assert previous.read_bytes() == b"previous export"
+    assert _files(out_dir) == ["K_01.png"]

@@ -179,11 +179,16 @@ def create_batch(
 
 
 def save_censored(
-    client, batch_id: int, image_id: int, image: Image.Image | None = None
+    client,
+    batch_id: int,
+    image_id: int,
+    image: Image.Image | None = None,
+    headers: dict[str, str] | None = None,
 ):
     response = client.put(
         f"/api/batches/{batch_id}/items/{image_id}/censored",
         json={"image_data": png_data_url(image or censored_image())},
+        headers=headers or {},
     )
     assert response.status_code == 200, response.text
     return response.json()

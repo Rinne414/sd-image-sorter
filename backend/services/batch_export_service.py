@@ -36,6 +36,11 @@ from services.watermark_service import (
     WatermarkServiceError,
     apply_text_watermark,
 )
+from utils.atomic_staging import (
+    create_staging_sibling,
+    discard_staging_file,
+    publish_staging_file,
+)
 from utils.source_paths import resolve_existing_indexed_image_path
 
 logger = logging.getLogger(__name__)
@@ -47,6 +52,7 @@ _FORMAT_BY_SUFFIX = {
     ".webp": ("webp", ".webp"),
 }
 _SUFFIX_BY_FORMAT = {"png": ".png", "jpg": ".jpg", "webp": ".webp"}
+_COPY_BLOCK_BYTES = 1024 * 1024
 
 
 class BatchExportMissingCensoredError(batch_db.BatchError):
@@ -121,6 +127,7 @@ def _plan_sources(batch_id: int, rows: list[dict[str, Any]], policy: str):
             source, source_path = "original", _original_path(row) or ""
             if not source_path:
                 missing_originals.append(ident)
+                continue
         else:
             no_censored.append(ident)
             continue
@@ -195,6 +202,39 @@ def _watermarked(image: Image.Image, config: TextWatermarkConfig) -> Image.Image
     return marked if _image_has_alpha(image) else marked.convert("RGB")
 
 
+def _copy_file_atomically(source_path: str, final_path: str) -> None:
+    """Byte-copy through a staging sibling, then publish it over the destination.
+
+    Same staging and publishing as the encode path
+    (``output_io._save_pillow_image_atomically``): a copy interrupted while
+    overwriting an earlier export leaves that export intact instead of
+    truncated, and a hard-linked destination keeps its links.
+    """
+    target = Path(final_path)
+    staging, descriptor = create_staging_sibling(target)
+    try:
+        handle = os.fdopen(descriptor, "wb")
+    except BaseException:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+        discard_staging_file(staging)
+        raise
+    try:
+        with handle, open(source_path, "rb") as reader:
+            shutil.copyfileobj(reader, handle, _COPY_BLOCK_BYTES)
+            handle.flush()
+            try:
+                os.fsync(handle.fileno())
+            except OSError:
+                pass
+        publish_staging_file(staging, target)
+    except BaseException:
+        discard_staging_file(staging)
+        raise
+
+
 def _carries_metadata(output_format: str, save_kwargs: dict[str, object]) -> bool:
     # _save_image_with_format writes pnginfo only into PNG and exif only into JPEG/WebP.
     if output_format == "png":
@@ -218,7 +258,7 @@ def _writer_for(
     ):
 
         def copy_bytes(final_path: str, _overwrite: bool) -> list[str]:
-            shutil.copyfile(item.source_path, final_path)
+            _copy_file_atomically(item.source_path, final_path)
             return []
 
         return copy_bytes, False
