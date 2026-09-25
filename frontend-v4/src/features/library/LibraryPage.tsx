@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useFavorites, useImageDetail, useImages, useSetRating, useToggleFavorite } from '../../api/queries'
 import { useT } from '../../i18n'
 import { isTypingTarget } from '../../lib/format'
-import { parseQuery, toImageParams } from '../../lib/query'
+import { parseSearch, toImageParams } from '../../lib/searchQuery'
 import { useApp } from '../../state/store'
 import { GenerationCard } from '../card/GenerationCard'
 import { Stars } from '../card/Stars'
@@ -30,7 +30,7 @@ export function LibraryPage() {
   const params = useMemo(
     () =>
       toImageParams(
-        parseQuery(queryText).filter,
+        parseSearch(queryText),
         {
           generators: scope.generators,
           folder: scope.folder,

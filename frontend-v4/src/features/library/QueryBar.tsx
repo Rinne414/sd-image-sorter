@@ -1,27 +1,31 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLibrarySuggest } from '../../api/queries'
 import { useT, type MessageKey } from '../../i18n'
-import { parseQuery, tokenize, type QueryChip, type SortKey } from '../../lib/query'
 import { generatorName } from '../../lib/format'
+import { SYNTAX_ROWS, parseSearch, suggestionContext, withoutToken, type Part, type SortKey } from '../../lib/searchQuery'
 import { useApp } from '../../state/store'
+import { Icon } from '../../ui/Icon'
+import { useClickOutside, useLayer } from '../../ui/layers'
 import { Menu } from '../../ui/Menu'
 import styles from './QueryBar.module.css'
-import { Icon } from '../../ui/Icon'
 
 const SORTS: SortKey[] = ['newest', 'oldest', 'user_rating', 'aesthetic', 'random', 'name_asc']
 const APPLY_DELAY_MS = 300
-
-const CHIP_LABEL: Record<QueryChip['kind'], MessageKey> = {
-  text: 'query.chip.text',
-  tag: 'query.chip.tag',
-  excludeTag: 'query.chip.excludeTag',
-  generator: 'query.chip.generator',
-  rating: 'query.chip.rating',
-  stars: 'query.chip.stars',
+const RATING_NAMES: Record<string, MessageKey> = {
+  general: 'rating.general',
+  sensitive: 'rating.sensitive',
+  questionable: 'rating.questionable',
+  explicit: 'rating.explicit',
 }
 
 interface Props {
   total: number | null
   inputRef: React.RefObject<HTMLInputElement | null>
+}
+
+interface Option {
+  value: string
+  count?: number
 }
 
 export function QueryBar({ total, inputRef }: Props) {
@@ -37,6 +41,10 @@ export function QueryBar({ total, inputRef }: Props) {
   const cardOpen = useApp((s) => s.cardOpen)
   const toggleCard = useApp((s) => s.toggleCard)
   const [draft, setDraft] = useState(queryText)
+  const [caret, setCaret] = useState(0)
+  const [focused, setFocused] = useState(false)
+  const [dismissed, setDismissed] = useState(false)
+  const [active, setActive] = useState(0)
   const timer = useRef<number | undefined>(undefined)
 
   useEffect(() => setDraft(queryText), [queryText])
@@ -47,18 +55,42 @@ export function QueryBar({ total, inputRef }: Props) {
     else timer.current = window.setTimeout(() => setQueryText(text), APPLY_DELAY_MS)
   }
 
-  const parsed = parseQuery(draft)
+  const parsed = useMemo(() => parseSearch(draft), [draft])
 
-  const removeChip = (chip: QueryChip) => {
-    const kept = tokenize(draft).filter((tok) => {
-      const one = parseQuery(tok).chips[0]
-      if (chip.kind === 'text') return one && one.kind !== 'text'
-      return !(one && one.kind === chip.kind && one.value === chip.value)
-    })
-    const next = kept.map((tok) => (/\s/.test(tok) ? `"${tok}"` : tok)).join(' ')
+  // Value suggestions for the key:value token under the caret.
+  const ctx = focused ? suggestionContext(draft, caret) : null
+  const library = useLibrarySuggest(ctx?.source === 'library' ? (ctx.endpoint ?? null) : null, ctx?.prefix ?? '')
+  const options: Option[] = !ctx
+    ? []
+    : ctx.source === 'enum'
+      ? (ctx.values ?? []).filter((v) => v.startsWith(ctx.prefix.toLowerCase())).map((value) => ({ value }))
+      : (library.data ?? [])
+  const suggestOpen =
+    !dismissed && options.length > 0 && !(options.length === 1 && options[0]?.value === ctx?.prefix)
+
+  useEffect(() => setActive(0), [ctx?.prefix, ctx?.key])
+  useLayer(suggestOpen, () => setDismissed(true))
+
+  const setText = (next: string, now: boolean) => {
     setDraft(next)
-    apply(next, true)
+    setDismissed(false)
+    apply(next, now)
   }
+
+  const accept = (option: Option) => {
+    if (!ctx) return
+    const value = /\s/.test(option.value) ? `"${option.value}"` : option.value
+    const before = draft.slice(0, ctx.valueStart) + value + ' '
+    const next = before + draft.slice(ctx.tokenEnd).replace(/^\s+/, '')
+    setText(next, true)
+    requestAnimationFrame(() => {
+      inputRef.current?.focus()
+      inputRef.current?.setSelectionRange(before.length, before.length)
+      setCaret(before.length)
+    })
+  }
+
+  const removePart = (part: Part) => setText(withoutToken(parsed.tokens, part.token), true)
 
   return (
     <div className={styles.bar}>
@@ -72,52 +104,74 @@ export function QueryBar({ total, inputRef }: Props) {
           value={draft}
           placeholder={t('query.placeholder')}
           spellCheck={false}
+          autoComplete="off"
+          role="combobox"
+          aria-expanded={suggestOpen}
+          aria-controls="query-suggest"
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
           onChange={(e) => {
-            setDraft(e.target.value)
-            apply(e.target.value)
+            setCaret(e.target.selectionStart ?? e.target.value.length)
+            setText(e.target.value, false)
           }}
           onKeyDown={(e) => {
+            if (suggestOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+              e.preventDefault()
+              setActive((a) => (e.key === 'ArrowDown' ? Math.min(options.length - 1, a + 1) : Math.max(0, a - 1)))
+              return
+            }
+            if (suggestOpen && (e.key === 'Enter' || e.key === 'Tab')) {
+              const option = options[active]
+              if (option) {
+                e.preventDefault()
+                accept(option)
+                return
+              }
+            }
             if (e.key === 'Enter') apply(draft, true)
             if (e.key === 'Escape') {
-              if (draft) {
-                setDraft('')
-                apply('', true)
-              } else {
-                e.currentTarget.blur()
-              }
               e.stopPropagation()
+              if (draft) setText('', true)
+              else e.currentTarget.blur()
             }
           }}
           aria-label={t('query.placeholder')}
           data-testid="query-input"
         />
-        {parsed.chips.length > 0 && (
-          <div className={styles.chips}>
-            {parsed.chips.map((chip) => (
-              <button
-                key={`${chip.kind}:${chip.value}`}
-                type="button"
-                className={styles.chip}
-                data-kind={chip.kind}
-                onClick={() => removeChip(chip)}
-                title={t('query.clear')}
-              >
-                <span className={styles.chipKey}>{t(CHIP_LABEL[chip.kind], { n: chip.value })}</span>
-                {chip.kind !== 'stars' && (
-                  <span>{chip.kind === 'generator' ? generatorName(chip.value, t) : chip.value}</span>
-                )}
-                <Icon name="close" size={11} />
-              </button>
+        {suggestOpen && (
+          <ul id="query-suggest" className={styles.suggest} role="listbox" data-testid="query-suggest">
+            {options.map((o, i) => (
+              <li key={o.value}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={i === active}
+                  className={styles.suggestRow}
+                  // mousedown, so the input keeps focus and the caret position
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    accept(o)
+                  }}
+                  onMouseEnter={() => setActive(i)}
+                >
+                  <span className={styles.suggestValue}>{o.value}</span>
+                  {o.count !== undefined && <span className={`${styles.suggestCount} mono`}>{o.count.toLocaleString()}</span>}
+                </button>
+              </li>
             ))}
-            {parsed.warnings.map((w) => (
-              <span key={w} className={styles.warning}>
-                {t('query.warning', { token: w })}
-              </span>
+          </ul>
+        )}
+        {parsed.parts.length > 0 && (
+          <div className={styles.chips} data-testid="query-chips">
+            {parsed.parts.map((part, i) => (
+              <Chip key={`${part.token}-${i}`} part={part} onRemove={() => removePart(part)} />
             ))}
           </div>
         )}
       </div>
 
+      <SyntaxHelp onExample={(ex) => setText(draft ? `${draft.trimEnd()} ${ex}` : ex, true)} />
       <Menu
         label={`${t('sort.label')}：${t(`sort.${sort}` as MessageKey)}`}
         items={SORTS.map((s) => ({
@@ -142,6 +196,87 @@ export function QueryBar({ total, inputRef }: Props) {
       <span className={`${styles.count} mono`} data-testid="result-count">
         {total === null ? '' : t('grid.count', { n: total })}
       </span>
+    </div>
+  )
+}
+
+function Chip({ part, onRemove }: { part: Part; onRemove: () => void }) {
+  const t = useT()
+  if (part.kind === 'warn') {
+    return (
+      <button
+        type="button"
+        className={styles.chip}
+        data-kind="warn"
+        onClick={onRemove}
+        title={part.hint || t('query.clear')}
+      >
+        <span>{t('query.warning', { token: part.raw })}</span>
+        <span className={styles.chipKey}>{t(`searchWarn.${part.reason}` as MessageKey)}</span>
+        <Icon name="close" size={11} />
+      </button>
+    )
+  }
+  const negated = part.kind === 'filter' && part.key.startsWith('-')
+  const key = part.kind === 'free' ? 'free' : part.key.replace(/^-/, '')
+  let value = part.value
+  if (part.kind === 'filter' && key === 'generator') value = generatorName(part.value, t)
+  if (part.kind === 'filter' && key === 'rating' && RATING_NAMES[part.value]) value = t(RATING_NAMES[part.value]!)
+  return (
+    <button type="button" className={styles.chip} data-kind={negated ? 'exclude' : key} onClick={onRemove} title={t('query.clear')}>
+      <span className={styles.chipKey}>
+        {negated ? `${t('qkey.not')} ` : ''}
+        {t(`qkey.${key}` as MessageKey)}
+      </span>
+      <span>
+        {part.kind === 'filter' && part.op ? `${part.op} ` : ''}
+        {value}
+      </span>
+      <Icon name="close" size={11} />
+    </button>
+  )
+}
+
+/** The "?" next to the box: every key, one line each; clicking an example adds it. */
+function SyntaxHelp({ onExample }: { onExample: (example: string) => void }) {
+  const t = useT()
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useLayer(open, () => setOpen(false))
+  useClickOutside(ref, open, () => setOpen(false))
+  return (
+    <div className={styles.helpWrap} ref={ref}>
+      <button
+        type="button"
+        className="btn btn-icon"
+        aria-expanded={open}
+        aria-label={t('query.help')}
+        title={t('query.help')}
+        onClick={() => setOpen(!open)}
+        data-testid="query-help"
+      >
+        ?
+      </button>
+      {open && (
+        <div className={styles.help} role="dialog" aria-label={t('searchHelp.title')}>
+          <p className={styles.helpIntro}>{t('searchHelp.intro')}</p>
+          <table className={styles.helpTable}>
+            <tbody>
+              {SYNTAX_ROWS.map((row) => (
+                <tr key={row.key}>
+                  <td className="mono">{row.key === 'free' ? t('qkey.free') : row.syntax}</td>
+                  <td>
+                    <button type="button" className={`${styles.example} mono`} onClick={() => onExample(row.example)}>
+                      {row.example}
+                    </button>
+                  </td>
+                  <td>{t(`searchHelp.${row.key}` as MessageKey)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,42 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import { parseQuery, toImageParams } from './query'
 import { segmentPrompt, promptTagKeys } from './prompt'
 import { readGeneration, toParameterText } from './meta'
-
-describe('parseQuery', () => {
-  test('free text goes to search, key:value tokens become filters', () => {
-    const q = parseQuery('silver hair tag:school_uniform gen:novelai ★4 rating:nsfw')
-    expect(q.filter.text).toBe('silver hair')
-    expect(q.filter.tags).toEqual(['school_uniform'])
-    expect(q.filter.generators).toEqual(['nai'])
-    expect(q.filter.minStars).toBe(4)
-    expect(q.filter.ratings).toEqual(['questionable', 'explicit'])
-    expect(q.warnings).toEqual([])
-  })
-
-  test('negated tags, quoted values and chinese keys', () => {
-    const q = parseQuery('-tag:"long hair" 标签:smile 星>=3')
-    expect(q.filter.excludeTags).toEqual(['long_hair'])
-    expect(q.filter.tags).toEqual(['smile'])
-    expect(q.filter.minStars).toBe(3)
-  })
-
-  test('unknown keys stay in the free text; bad rating warns', () => {
-    const q = parseQuery('foo:bar rating:blue')
-    expect(q.filter.text).toBe('foo:bar')
-    expect(q.warnings).toEqual(['rating:blue'])
-  })
-
-  test('stars> is exclusive', () => {
-    expect(parseQuery('stars>3').filter.minStars).toBe(4)
-  })
-
-  test('params merge the rail scope and drop empty values', () => {
-    const q = parseQuery('gen:nai')
-    const p = toImageParams(q.filter, { generators: ['comfyui'], folder: 'L:/x', favoritesCollectionId: null }, 'newest')
-    expect(p).toEqual({ sort_by: 'newest', generators: 'comfyui,nai', folder: 'L:/x' })
-  })
-})
 
 describe('segmentPrompt', () => {
   test('a1111 weights and loras', () => {

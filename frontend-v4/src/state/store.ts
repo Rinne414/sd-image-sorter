@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { SortKey } from '../lib/query'
+import type { SortKey } from '../lib/searchQuery'
 
 export type Page = 'home' | 'library' | 'batch' | 'sort'
 export type Layout = 'masonry' | 'grid'

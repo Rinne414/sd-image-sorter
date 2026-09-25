@@ -208,3 +208,46 @@ test('theme toggle cycles and survives a reload', async ({ page }) => {
   await page.reload()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
 })
+
+test('search: suggestions, chips and warnings', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await openLibrary(page)
+  const input = page.getByTestId('query-input')
+
+  // library values: prompt tokens come with counts; Esc closes only the list
+  await input.fill(`${TOKEN} prompt:silv`)
+  const suggest = page.getByTestId('query-suggest')
+  await expect(suggest).toContainText('silver hair')
+  await page.keyboard.press('Escape')
+  await expect(suggest).toHaveCount(0)
+  await expect(input).toHaveValue(`${TOKEN} prompt:silv`)
+
+  // typing again reopens it; Enter takes the highlighted value (quoted, it has a space)
+  await input.press('End')
+  await input.pressSequentially('e')
+  await expect(suggest).toContainText('silver hair')
+  await input.press('Enter')
+  await expect(input).toHaveValue(`${TOKEN} prompt:"silver hair" `)
+  await expect(page.getByTestId('result-count')).toHaveText('24 images')
+
+  // enum keys suggest their fixed values
+  await input.fill(`${TOKEN} gen:n`)
+  await expect(suggest).toContainText('nai')
+  await input.press('Enter')
+  await expect(input).toHaveValue(`${TOKEN} gen:nai `)
+
+  // a chip removes its own condition
+  const chips = page.getByTestId('query-chips')
+  await chips.getByRole('button', { name: /Source/ }).click()
+  await expect(input).toHaveValue(TOKEN)
+
+  // a value the language doesn't know becomes a warning, not a silent filter
+  await input.fill(`${TOKEN} rating:blue`)
+  await expect(chips).toContainText('unknown rating')
+  await expect(page.getByTestId('result-count')).toHaveText('24 images')
+
+  // the ? panel lists the syntax and an example adds itself
+  await page.getByTestId('query-help').click()
+  await page.getByRole('button', { name: 'score>=7' }).click()
+  await expect(input).toHaveValue(/score>=7$/)
+})

@@ -18,7 +18,7 @@ import type {
   LibraryHealth,
   TagCategory,
 } from './types'
-import type { ImageQueryParams } from '../lib/query'
+import type { ImageQueryParams } from '../lib/searchQuery'
 import { useApp } from '../state/store'
 import { translate, useLang } from '../i18n'
 import { useToasts } from '../ui/toasts'
@@ -216,5 +216,36 @@ export function useToggleFavorite() {
       void qc.invalidateQueries({ queryKey: ['favorites'] })
       reportWriteError(error)
     },
+  })
+}
+
+type SuggestEndpoint = 'tags' | 'checkpoints' | 'loras' | 'prompts'
+
+const SUGGEST_FIELD: Record<SuggestEndpoint, string> = {
+  tags: 'tag',
+  checkpoints: 'checkpoint',
+  loras: 'lora',
+  prompts: 'prompt',
+}
+
+/** Values from the library for a key:partial token, most used first. */
+export function useLibrarySuggest(endpoint: SuggestEndpoint | null, prefix: string) {
+  const libraryId = useApp((s) => s.libraryId)
+  return useQuery({
+    queryKey: ['suggest', libraryId, endpoint, prefix],
+    enabled: endpoint !== null && prefix.length > 0,
+    queryFn: async ({ signal }) => {
+      const url = `/api/${endpoint}/library?q=${encodeURIComponent(prefix)}&limit=10`
+      const res = await fetch(url, { signal, headers: { 'X-SD-Library-Id': libraryId } })
+      if (!res.ok) return []
+      const body = (await res.json()) as Record<string, { count?: number }[] | undefined>
+      const field = SUGGEST_FIELD[endpoint as SuggestEndpoint]
+      return (body[endpoint as string] ?? []).map((row) => ({
+        value: String((row as Record<string, unknown>)[field] ?? ''),
+        count: row.count,
+      }))
+    },
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
   })
 }
