@@ -58,6 +58,59 @@ describe('readProgress', () => {
     expect(p).toMatchObject({ status: 'done', succeeded: 4, failedCount: 0, alreadyGone: 1, failures: [] })
   })
 
+  test('tag: a run older than ours is ours still waiting, never an early "done"', () => {
+    const stale = { status: 'done', run_id: 4, current: 50, total: 50, tagged: 50, errors: 0, pipeline_queue: { total_queued: 1 } }
+    expect(readProgress('tag', stale, { baseRunId: 4 })).toMatchObject({ status: 'queued', current: 0 })
+    expect(readProgress('tag', { ...stale, pipeline_queue: { total_queued: 0 } }, { baseRunId: 4 }).status).toBe('running')
+  })
+
+  test('tag: counts, failures and the most common tags of our run', () => {
+    const p = readProgress(
+      'tag',
+      {
+        status: 'done',
+        run_id: 5,
+        current: 3,
+        total: 3,
+        tagged: 2,
+        errors: 1,
+        last_run_stats: { top_tags: [{ tag: '1girl', count: 2 }, { tag: 'solo', count: 1 }] },
+      },
+      { baseRunId: 4 },
+    )
+    expect(p).toMatchObject({ status: 'done', current: 3, total: 3, succeeded: 2, failedCount: 1, unit: 'images' })
+    expect(p.topTags).toEqual([
+      { tag: '1girl', count: 2 },
+      { tag: 'solo', count: 1 },
+    ])
+  })
+
+  test('install: bytes while downloading, then the settled result for our model', () => {
+    const idle = { active: false, downloaded: 0, total: 0, prepare_result: { active: false, model_id: '', status: '' } }
+    expect(readProgress('install', idle, { modelId: 'wd14' }).status).toBe('running')
+
+    const downloading = { active: true, downloaded: 100, total: 400, filename: 'model.onnx', prepare_result: { active: true, model_id: 'wd14' } }
+    expect(readProgress('install', downloading, { modelId: 'wd14' })).toMatchObject({
+      status: 'running',
+      current: 100,
+      total: 400,
+      unit: 'bytes',
+      currentItem: 'model.onnx',
+    })
+
+    const ok = { active: false, prepare_result: { active: false, model_id: 'wd14', status: 'ok', message: 'ready' } }
+    expect(readProgress('install', ok, { modelId: 'wd14' })).toMatchObject({ status: 'done', needsRestart: false })
+
+    const restart = { prepare_result: { active: false, model_id: 'wd14', status: 'ok', restart_recommended: true, message: 'restart' } }
+    expect(readProgress('install', restart, { modelId: 'wd14' })).toMatchObject({ status: 'done', needsRestart: true })
+
+    const failed = { prepare_result: { active: false, model_id: 'wd14', status: 'error', message: '', error: 'HTTP 403' } }
+    expect(readProgress('install', failed, { modelId: 'wd14' })).toMatchObject({ status: 'error', message: 'HTTP 403' })
+
+    const other = { prepare_result: { active: false, model_id: 'clip', status: 'ok' } }
+    expect(readProgress('install', other, { modelId: 'wd14' }).status).toBe('running')
+  })
+
   test('unknown or reset states never look like success', () => {
     expect(readProgress('move', { status: 'idle' }).status).toBe('idle')
     expect(readProgress('move', { status: 'exploded' }).status).toBe('error')

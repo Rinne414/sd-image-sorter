@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, unwrap } from '../../api/client'
+import { prefetchTagging } from '../../api/queries'
 import type { components } from '../../api/schema'
 import type { ImageSummary } from '../../api/types'
 import { useT } from '../../i18n'
@@ -87,6 +88,9 @@ export function SelectionBar({ params, total, images, hasMore, onRate, onFavorit
       <button type="button" className="btn" onClick={onFavorite} aria-label={t('sel.favorite')} title={t('sel.favorite')}>
         <Icon name="heart" size={14} />
         <span className={styles.wordy}>{t('sel.favorite')}</span>
+      </button>
+      <button type="button" className="btn" onClick={() => show('tag')} onPointerEnter={prefetchTagging} onFocus={prefetchTagging}>
+        {t('sel.tag')}
       </button>
       <button type="button" className="btn" onClick={() => show('move')}>
         {t('sel.move')}

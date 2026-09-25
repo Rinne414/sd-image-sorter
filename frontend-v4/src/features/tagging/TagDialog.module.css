@@ -1,0 +1,149 @@
+.lead {
+  margin: 0 0 12px;
+  line-height: 1.6;
+}
+
+.error {
+  color: var(--danger);
+}
+
+.list {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  max-height: min(340px, 42vh);
+  overflow-y: auto;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 18px 170px minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  align-items: baseline;
+  padding: 8px 12px 8px 10px;
+  border-top: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.row:first-child {
+  border-top: 0;
+}
+
+.row:hover {
+  background: var(--wash-hover);
+}
+
+.row[data-checked] {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.row input {
+  margin: 0;
+  accent-color: var(--accent);
+  align-self: center;
+}
+
+.name {
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge {
+  margin-left: 6px;
+  padding: 0 5px;
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  font-size: var(--fs-1);
+  font-weight: 400;
+  border-radius: var(--radius);
+}
+
+.note {
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.state {
+  color: var(--muted);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+  text-align: right;
+}
+
+.state[data-state="ready"] {
+  color: var(--ok);
+}
+
+.state[data-state="restart"] {
+  color: var(--danger);
+}
+
+.advanced {
+  margin-top: 12px;
+}
+
+.advanced summary {
+  width: fit-content;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 16px;
+  margin-top: 10px;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+  font-size: var(--fs-2);
+  color: var(--muted);
+}
+
+.field input {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  border-radius: var(--radius);
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.field small {
+  color: var(--muted);
+  font-size: var(--fs-1);
+}
+
+.wideField {
+  grid-column: 1 / -1;
+}
+
+.wideField input {
+  font-family: var(--font-ui);
+}
+
+.field small.warn {
+  color: var(--warn);
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.check input {
+  accent-color: var(--accent);
+}

@@ -6,7 +6,7 @@ import { folderNameProblem, joinFolder, parentFolder, tailOfPath, type FolderNam
 import { Dialog } from '../../ui/Dialog'
 import { Icon } from '../../ui/Icon'
 import { useLayer } from '../../ui/layers'
-import { startFileJob } from '../jobs/jobs'
+import { startFileJob } from '../jobs/fileJobs'
 import { recentDestinations, rememberDestination } from './dialogs'
 import styles from './FolderPicker.module.css'
 

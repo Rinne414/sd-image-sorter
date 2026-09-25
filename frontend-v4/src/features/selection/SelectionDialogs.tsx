@@ -2,7 +2,8 @@ import { useMemo, useRef, useState } from 'react'
 import { loadedNames } from '../../api/loaded'
 import { useLang, useT } from '../../i18n'
 import { Dialog } from '../../ui/Dialog'
-import { startFileJob } from '../jobs/jobs'
+import { startFileJob } from '../jobs/fileJobs'
+import { TagDialog } from '../tagging/TagDialog'
 import { useSelectionDialog } from './dialogs'
 import { FolderPicker } from './FolderPicker'
 import styles from './SelectionDialogs.module.css'
@@ -14,6 +15,7 @@ export function SelectionDialogs() {
   const close = useSelectionDialog((s) => s.close)
   if (!open || ids.length === 0) return null
   if (open === 'move' || open === 'copy') return <FolderPicker operation={open} ids={ids} onClose={close} />
+  if (open === 'tag') return <TagDialog ids={ids} onClose={close} />
   return <ConfirmFileAction kind={open} ids={ids} onClose={close} />
 }
 

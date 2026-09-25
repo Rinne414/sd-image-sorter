@@ -5,7 +5,7 @@ import { tailOfPath } from '../../lib/paths'
 import { useApp } from '../../state/store'
 import { Icon } from '../../ui/Icon'
 import { useClickOutside, useLayer } from '../../ui/layers'
-import { jobHeadline, stopJob, useJobs, type Job } from './jobs'
+import { canStop, jobHeadline, stopJob, useJobs, type Job } from './jobs'
 import styles from './Jobs.module.css'
 import { isFinished } from './progress'
 
@@ -117,18 +117,24 @@ function JobRow({ job }: { job: Job }) {
             <span style={{ width: `${total ? (p.current / total) * 100 : 0}%` }} />
           </div>
           <div className={styles.numbers}>
-            <span className="mono">
-              {p.current.toLocaleString()} / {total.toLocaleString()}
-            </span>
+            <span className="mono">{amount(p.current, total, p.unit)}</span>
             <span className={styles.item} title={p.currentItem ?? undefined}>
               {p.currentItem}
             </span>
-            <button type="button" className="btn" onClick={() => void stopJob(job)} disabled={p.status === 'cancelling'}>
-              {t('jobs.stop')}
-            </button>
+            {canStop(job.kind) && (
+              <button type="button" className="btn" onClick={() => void stopJob(job)} disabled={p.status === 'cancelling'}>
+                {t('jobs.stop')}
+              </button>
+            )}
           </div>
         </>
       )}
+      {finished && p.topTags.length > 0 && (
+        <p className={styles.topTags} data-testid="job-top-tags">
+          {t('jobs.topTags', { tags: p.topTags.slice(0, 6).map((x) => `${x.tag} ×${x.count}`).join(' · ') })}
+        </p>
+      )}
+      {finished && p.needsRestart && <p className={styles.warnNote}>{t('jobs.needsRestart')}</p>}
       {listed.length > 0 && (
         <ul className={styles.failures}>
           {listed.map((f, i) => (
@@ -147,6 +153,14 @@ function JobRow({ job }: { job: Job }) {
       )}
     </li>
   )
+}
+
+const MB = 1024 * 1024
+
+function amount(current: number, total: number, unit: 'images' | 'bytes'): string {
+  if (unit === 'images') return `${current.toLocaleString()} / ${total.toLocaleString()}`
+  const mb = (b: number) => Math.round(b / MB).toLocaleString()
+  return total > 0 ? `${mb(current)} / ${mb(total)} MB` : `${mb(current)} MB`
 }
 
 function nameFor(id: number | null): string {

@@ -7,6 +7,7 @@ import {
   type InfiniteData,
 } from '@tanstack/react-query'
 import { api, unwrap } from './client'
+import { queryClient } from './queryClient'
 import type { paths } from './schema'
 import type {
   CategorizeResponse,
@@ -19,6 +20,7 @@ import type {
   TagCategory,
 } from './types'
 import type { ImageQueryParams } from '../lib/searchQuery'
+import type { ModelCard } from '../features/tagging/taggers'
 import { useApp } from '../state/store'
 import { translate, useLang } from '../i18n'
 import { useToasts } from '../ui/toasts'
@@ -265,4 +267,45 @@ export function useImageCount(params: ImageQueryParams | null) {
     },
     staleTime: 30_000,
   })
+}
+
+export interface TaggerModel {
+  name: string
+  disabled: boolean
+  default_threshold: number
+  default_character_threshold: number
+  default_max_tags_per_image: number
+  recommended: boolean
+}
+
+const taggerModelsQuery = {
+  queryKey: ['tagger-models'],
+  queryFn: async ({ signal }: { signal?: AbortSignal }) =>
+    unwrap<{ models: TaggerModel[]; default: string }>(await api.GET('/api/tagger/models', { signal })),
+  staleTime: 5 * 60_000,
+}
+
+/** Tagger models the backend offers, and its default. */
+export function useTaggerModels() {
+  return useQuery(taggerModelsQuery)
+}
+
+export const fetchModelStatus = async (signal?: AbortSignal) =>
+  unwrap<{ models: ModelCard[] }>(await api.GET('/api/models/status', { signal }))
+
+const modelStatusQuery = {
+  queryKey: ['model-status'],
+  queryFn: ({ signal }: { signal?: AbortSignal }) => fetchModelStatus(signal),
+  staleTime: 30_000,
+}
+
+/** Which AI models are on disk (the Model Center cards). */
+export function useModelStatus() {
+  return useQuery(modelStatusQuery)
+}
+
+/** Start loading what the tag panel shows (the status takes about a second), e.g. on hover. */
+export function prefetchTagging(): void {
+  void queryClient.prefetchQuery(taggerModelsQuery)
+  void queryClient.prefetchQuery(modelStatusQuery)
 }
