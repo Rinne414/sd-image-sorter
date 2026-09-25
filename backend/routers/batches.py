@@ -18,6 +18,7 @@ from services.batch_models import (
     BatchCensoredCopyRequest,
     BatchCensoredDiscardRequest,
     BatchCreateRequest,
+    BatchExportNamesRequest,
     BatchExportRequest,
     BatchImageIdsRequest,
     BatchItemPatchRequest,
@@ -290,6 +291,18 @@ def delete_batch_item_censored(
 ) -> dict[str, Any]:
     try:
         return batch_service.discard_censored_copy(batch_id, image_id, request)
+    except batch_db.BatchError as error:
+        _raise_http_error(error)
+
+
+@router.post(
+    "/{batch_id}/export/names", summary="Preview the file names of a batch export"
+)
+def post_batch_export_names(
+    batch_id: int, request: BatchExportNamesRequest
+) -> dict[str, Any]:
+    try:
+        return batch_export_service.preview_names(batch_id, request)
     except batch_db.BatchError as error:
         _raise_http_error(error)
 

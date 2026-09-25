@@ -116,17 +116,22 @@ class BatchTemplateCreateRequest(BaseModel):
         return _unique_step_ids(value)
 
 
-class BatchExportRequest(BaseModel):
+class BatchExportNamesRequest(BaseModel):
+    """What decides an export's file names; also the body of the name preview."""
+
     model_config = ConfigDict(extra="forbid")
 
-    output_folder: str = Field(min_length=1)
     name_template: str = Field(default="{batch}_{n:02}", min_length=1, max_length=200)
     start_number: int = Field(default=1, ge=0)
-    metadata_option: Literal["strip", "keep", "minimal"] = "strip"
     output_format: Literal["original", "png", "jpg", "webp"] = "original"
+    missing_censored: Literal["block", "skip", "original"] = "block"
+
+
+class BatchExportRequest(BatchExportNamesRequest):
+    output_folder: str = Field(min_length=1)
+    metadata_option: Literal["strip", "keep", "minimal"] = "strip"
     overwrite: bool = False
     caption_text: str = ""
     watermark: PublishWatermarkSettings = Field(
         default_factory=PublishWatermarkSettings
     )
-    missing_censored: Literal["block", "skip", "original"] = "block"

@@ -1,0 +1,29 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  height: 46px;
+  padding: 0 12px 0 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.count {
+  flex: none;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.gap {
+  flex: 1;
+}

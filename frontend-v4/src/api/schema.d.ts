@@ -6309,8 +6309,6 @@ export interface components {
              * @enum {string}
              */
             missing_censored: "block" | "skip" | "original";
-            /** Approved Original Ids */
-            approved_original_ids?: number[];
         };
         /** BatchExportRequest */
         BatchExportRequest: {
@@ -6336,8 +6334,6 @@ export interface components {
              * @enum {string}
              */
             missing_censored: "block" | "skip" | "original";
-            /** Approved Original Ids */
-            approved_original_ids?: number[];
             /** Output Folder */
             output_folder: string;
             /**
@@ -9780,6 +9776,11 @@ export interface components {
              * @default 0.5
              */
             edge_threshold: number;
+            /**
+             * Upright
+             * @default false
+             */
+            upright: boolean;
         };
         /** RemoveSelectedImagesRequest */
         RemoveSelectedImagesRequest: {

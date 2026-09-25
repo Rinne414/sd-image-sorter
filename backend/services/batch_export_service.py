@@ -26,8 +26,13 @@ from PIL import Image, ImageOps
 
 import db_batches as batch_db
 from services import batch_workdir
-from services.batch_models import BatchExportRequest
-from services.batch_naming import render_output_stem, safe_stem, validate_template
+from services.batch_models import BatchExportNamesRequest, BatchExportRequest
+from services.batch_naming import (
+    BatchNameTemplateError,
+    render_output_stem,
+    safe_stem,
+    validate_template,
+)
 from services.censor.output_io import _image_has_alpha, _normalize_censor_source
 from services.indexed_file_mutation_service import save_and_reconcile_checked
 from services.publish_service import CAPTION_FILENAME, _validated_output_folder
@@ -109,6 +114,26 @@ def _original_path(row: dict[str, Any]) -> str | None:
     )
 
 
+def _source_kind(has_copy: bool, policy: str) -> str:
+    """Where an item's pixels come from: censored, original, skip or missing (block)."""
+    if has_copy:
+        return "censored"
+    if policy == "original":
+        return "original"
+    return "skip" if policy == "skip" else "missing"
+
+
+def _planned_item(row: dict[str, Any], source: str, source_path: str) -> _PlannedItem:
+    return _PlannedItem(
+        image_id=int(row["image_id"]),
+        position=int(row["position"]),
+        filename=row["filename"],
+        output_name_override=row["output_name"],
+        source=source,
+        source_path=source_path,
+    )
+
+
 def _plan_sources(batch_id: int, rows: list[dict[str, Any]], policy: str):
     """Pick each item's source; returns (planned, skipped) or raises before writing."""
     planned: list[_PlannedItem] = []
@@ -118,29 +143,18 @@ def _plan_sources(batch_id: int, rows: list[dict[str, Any]], policy: str):
     for row in rows:
         ident = {"image_id": int(row["image_id"]), "filename": row["filename"]}
         censored = batch_workdir.existing_censored_path(batch_id, row["censored_path"])
-        if censored is not None:
-            source, source_path = "censored", str(censored)
-        elif policy == "skip":
+        kind = _source_kind(censored is not None, policy)
+        if kind == "skip":
             skipped.append({**ident, "reason": "no_censored_copy"})
             continue
-        elif policy == "original":
-            source, source_path = "original", _original_path(row) or ""
-            if not source_path:
-                missing_originals.append(ident)
-                continue
-        else:
+        if kind == "missing":
             no_censored.append(ident)
             continue
-        planned.append(
-            _PlannedItem(
-                image_id=ident["image_id"],
-                position=int(row["position"]),
-                filename=row["filename"],
-                output_name_override=row["output_name"],
-                source=source,
-                source_path=source_path,
-            )
-        )
+        source_path = str(censored) if kind == "censored" else _original_path(row)
+        if not source_path:
+            missing_originals.append(ident)
+            continue
+        planned.append(_planned_item(row, kind, source_path))
     if no_censored:
         raise BatchExportMissingCensoredError(no_censored)
     if missing_originals:
@@ -148,9 +162,10 @@ def _plan_sources(batch_id: int, rows: list[dict[str, Any]], policy: str):
     return planned, skipped
 
 
-def _assign_names(
-    planned: list[_PlannedItem], batch_name: str, request: BatchExportRequest
-):
+def _name_items(
+    planned: list[_PlannedItem], batch_name: str, request: BatchExportNamesRequest
+) -> list[dict[str, Any]]:
+    """Give every planned item its output name; returns the case-insensitive duplicates."""
     by_key: dict[str, list[_PlannedItem]] = {}
     for offset, item in enumerate(planned):
         item.output_format, suffix = _output_format(
@@ -164,11 +179,17 @@ def _assign_names(
         )
         item.output_name = safe_stem(stem) + suffix
         by_key.setdefault(item.output_name.casefold(), []).append(item)
-    duplicates = [
+    return [
         {"output_name": group[0].output_name, "image_ids": [i.image_id for i in group]}
         for group in by_key.values()
         if len(group) > 1
     ]
+
+
+def _assign_names(
+    planned: list[_PlannedItem], batch_name: str, request: BatchExportRequest
+):
+    duplicates = _name_items(planned, batch_name, request)
     if duplicates:
         raise BatchExportDuplicateNamesError(duplicates)
 
@@ -349,6 +370,61 @@ def _guarded(
         logger.warning("Batch export failed for %s: %s", ident, exc)
         errors.append({**ident, "error": str(exc)})
     return None
+
+
+def _preview_row(
+    row: dict[str, Any], has_copy: bool, item: _PlannedItem | None, number: int | None
+) -> dict[str, Any]:
+    return {
+        "image_id": int(row["image_id"]),
+        "position": int(row["position"]),
+        "filename": row["filename"],
+        "has_censored": has_copy,
+        "included": item is not None,
+        "source": item.source if item is not None else None,
+        "number": number,
+        "overridden": bool(row["output_name"]),
+        "output_name": (item.output_name or None) if item is not None else None,
+    }
+
+
+def preview_names(batch_id: int, request: BatchExportNamesRequest) -> dict[str, Any]:
+    """The file names an export with these options would write; nothing is written.
+
+    Uses the export's own source choice and naming, so the two cannot disagree.
+    With ``block`` every item is named (as if its missing copy were resolved;
+    its ``source`` is ``missing``); ``skip`` leaves items out exactly like the
+    export. A broken template and duplicate names come back as data.
+    """
+    batch_row, rows = batch_db.read_batch(batch_id)
+    entries: list[tuple[dict[str, Any], bool, _PlannedItem | None]] = []
+    planned: list[_PlannedItem] = []
+    for row in rows:
+        censored = batch_workdir.existing_censored_path(batch_id, row["censored_path"])
+        has_copy = censored is not None
+        kind = _source_kind(has_copy, request.missing_censored)
+        item = None if kind == "skip" else _planned_item(row, kind, "")
+        if item is not None:
+            planned.append(item)
+        entries.append((row, has_copy, item))
+    duplicates: list[dict[str, Any]] = []
+    template_error = None
+    try:
+        validate_template(request.name_template)
+        duplicates = _name_items(planned, str(batch_row["name"]), request)
+    except BatchNameTemplateError as error:
+        template_error = {"token": error.token, "message": str(error)}
+        for item in planned:
+            item.output_name = ""
+    numbers = {id(item): request.start_number + i for i, item in enumerate(planned)}
+    return {
+        "items": [
+            _preview_row(row, has_copy, item, numbers.get(id(item)))
+            for row, has_copy, item in entries
+        ],
+        "duplicates": duplicates,
+        "template_error": template_error,
+    }
 
 
 def export_batch(batch_id: int, request: BatchExportRequest) -> dict[str, Any]:

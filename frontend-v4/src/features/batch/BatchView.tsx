@@ -7,8 +7,11 @@ import { Icon } from '../../ui/Icon'
 import { patchBatch, useBatch } from './batchApi'
 import { currentAfterEdit, enabledSteps } from './batchLogic'
 import styles from './BatchView.module.css'
+import { ExportStep } from './ExportStep'
 import { InlineName } from './InlineName'
 import { kindLabel } from './labels'
+import { NameStep } from './NameStep'
+import { OrderStep } from './OrderStep'
 import { PickStep } from './PickStep'
 import { StepPanel } from './StepPanel'
 import { StepRail } from './StepRail'
@@ -90,6 +93,12 @@ function Loaded({ batch }: { batch: Batch }) {
             <Suspense fallback={<section className={styles.notice}>{t('censor.opening')}</section>}>
               <CensorStep batch={batch} next={next?.id ?? null} onNext={goTo} />
             </Suspense>
+          ) : current === 'order' ? (
+            <OrderStep batch={batch} next={next?.id ?? null} onNext={goTo} />
+          ) : current === 'name' ? (
+            <NameStep batch={batch} next={next?.id ?? null} onNext={goTo} />
+          ) : current === 'export' && batch.kind === 'pixiv' ? (
+            <ExportStep batch={batch} onGo={goTo} />
           ) : (
             <StepPanel batch={batch} step={current} next={next?.id ?? null} onNext={goTo} />
           )}

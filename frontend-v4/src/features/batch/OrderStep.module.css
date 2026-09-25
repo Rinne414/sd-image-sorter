@@ -1,0 +1,105 @@
+.step {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.scroller {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  outline: none;
+}
+
+.scroller:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent-line);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px 12px;
+  padding: 16px;
+}
+
+.empty {
+  margin: 48px auto;
+  max-width: 440px;
+  color: var(--text-2);
+  text-align: center;
+  line-height: 1.7;
+}
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  cursor: grab;
+}
+
+.tile[data-dragging] {
+  opacity: 0.4;
+}
+
+.frame {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.tile[data-cursor] .frame {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* Where a dragged picture will land: a rule in the gap before or after this one. */
+.tile[data-drop]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent);
+}
+
+.tile[data-drop="before"]::after {
+  left: -8px;
+}
+
+.tile[data-drop="after"]::after {
+  right: -8px;
+}
+
+.number {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  min-width: 30px;
+  padding: 0 6px;
+  background: var(--tile-caption-bg);
+  color: var(--edge-print);
+  font-size: var(--fs-4);
+  font-weight: 600;
+  line-height: 26px;
+  text-align: center;
+  border-radius: var(--radius);
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.caption {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  line-height: 18px;
+}

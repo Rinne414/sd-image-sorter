@@ -213,17 +213,16 @@ test('take an image out and undo it, open one up close, rename, and the current 
   await page.getByTestId('inline-name').press('Enter')
   await expect(page.getByTestId('batch-name')).toHaveText(`${NAME} renamed`)
 
-  // the censor step is the editor (v4-censor.spec covers it); a step not built yet says so
+  // the censor step is the editor (v4-censor.spec covers it); order, name and export are v4-pixiv-export.spec's
   await page.getByTestId('rail-step').filter({ hasText: 'Censor' }).click()
   await expect(page.getByTestId('censor-editor')).toBeVisible()
   await page.getByTestId('rail-step').filter({ hasText: 'Name' }).click()
-  const panel = page.getByTestId('step-panel')
-  await expect(panel).toHaveAttribute('data-step', 'name')
-  await expect(panel).toContainText('Applies to all 3 images in this batch.')
+  await expect(page.getByTestId('name-step')).toBeVisible()
+  await expect(page.getByTestId('name-row')).toHaveCount(3)
   await expect(page.getByTestId('rail-step').filter({ hasText: 'Pick' })).toContainText('done')
   await expect.poll(async () => (await apiJson<ApiBatch>(page, `/api/batches/${batchId}`)).current_step).toBe('name')
   await page.reload()
-  await expect(page.getByTestId('step-panel')).toHaveAttribute('data-step', 'name')
+  await expect(page.getByTestId('name-step')).toBeVisible()
   const saved = await apiJson<ApiBatch>(page, `/api/batches/${batchId}`)
   expect(saved.name).toBe(`${NAME} renamed`)
 })

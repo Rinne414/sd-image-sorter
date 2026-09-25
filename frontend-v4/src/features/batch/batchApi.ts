@@ -17,6 +17,7 @@ import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
 import { tr } from '../jobs/jobs'
 import { restoreOrder } from './batchLogic'
+import { applyOrder } from './orderLogic'
 
 // Batches of the current library: reads are TanStack queries keyed by the
 // library; writes are plain async functions (menus, dialogs and keys call
@@ -133,7 +134,7 @@ export function addToBatch(batchId: number, imageIds: number[]): Promise<AddResu
 // each other's answer into the cache.
 const queues = new Map<number, { chain: Promise<unknown>; waiting: number }>()
 
-function enqueue<T>(id: number, task: () => Promise<T>): Promise<T> {
+export function enqueue<T>(id: number, task: () => Promise<T>): Promise<T> {
   const slot = queues.get(id) ?? { chain: Promise.resolve(), waiting: 0 }
   slot.waiting += 1
   queues.set(id, slot)
@@ -330,6 +331,56 @@ export async function deleteTemplate(template: BatchTemplate): Promise<void> {
   toast(tr('batch.templateDeleted', { name: template.name }), 'info', {
     label: tr('toast.undo'),
     run: () => void saveTemplate(template.kind, template.name, template.steps, template.settings),
+  })
+}
+
+/** More changes to this batch are waiting behind the one running now. */
+const moreQueued = (id: number) => (queues.get(id)?.waiting ?? 1) > 1
+
+/**
+ * Put the batch's items in this order: the screen follows at once, the save
+ * runs in the batch's queue and sends the newest order on screen (so fast
+ * Alt+arrow presses end as one consistent order).
+ */
+export function reorderBatch(batchId: number, imageIds: readonly number[]): Promise<boolean> {
+  const key = batchKey(libraryId(), batchId)
+  queryClient.setQueryData<Batch>(key, (b) => (b ? { ...b, items: applyOrder(b.items, imageIds) } : b))
+  return enqueue(batchId, async () => {
+    const order = queryClient.getQueryData<Batch>(key)?.items.map((item) => item.image_id) ?? [...imageIds]
+    try {
+      const next = unwrap<Batch>(await api.PUT('/api/batches/{batch_id}/items/order', { params: { path: { batch_id: batchId } }, body: { image_ids: order } }))
+      if (!moreQueued(batchId)) store(next)
+      return true
+    } catch (error) {
+      void queryClient.invalidateQueries({ queryKey: key })
+      return fail(error) ?? false
+    }
+  })
+}
+
+/** Give one image its own export name (null: back to the naming template). */
+export function setOutputName(batchId: number, imageId: number, name: string | null): Promise<boolean> {
+  const key = batchKey(libraryId(), batchId)
+  // Only this field is written into the cache: a censored copy saved meanwhile keeps its own answer.
+  const put = (value: string | null) =>
+    queryClient.setQueryData<Batch>(key, (b) =>
+      b ? { ...b, items: b.items.map((item) => (item.image_id === imageId ? { ...item, output_name: value } : item)) } : b,
+    )
+  put(name)
+  return enqueue(batchId, async () => {
+    try {
+      const item = unwrap<BatchItem>(
+        await api.PATCH('/api/batches/{batch_id}/items/{image_id}', {
+          params: { path: { batch_id: batchId, image_id: imageId } },
+          body: { output_name: name },
+        }),
+      )
+      put(item.output_name)
+      return true
+    } catch (error) {
+      void queryClient.invalidateQueries({ queryKey: key })
+      return fail(error) ?? false
+    }
   })
 }
 
