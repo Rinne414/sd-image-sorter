@@ -794,6 +794,9 @@ Start background tagging.
 | `allow_unsafe_acceleration` | bool | false | Reserved unsafe acceleration override |
 | `batch_size` | int \| null | null | Optional user override for runtime chunk size. If omitted, Custom ONNX starts conservatively |
 
+#### GET /api/tag/scope-count
+How many images a whole-library tagging run (no `image_ids`) would process in the current library: `?retag_all=false` (default) counts readable images with no AI tags yet, `?retag_all=true` counts every readable image. Returns `{ "count", "retag_all" }`. The tag modal shows it next to Start.
+
 #### GET /api/tag/progress
 Get tagging progress.
 The response now includes truthful runtime fields so the UI can distinguish target mode from the backend that actually ran:
@@ -1468,7 +1471,7 @@ Generate obfuscation preview.
 ### Aesthetic
 
 #### GET /api/aesthetic/status
-Get aesthetic scorer availability and scored count.
+Get aesthetic scorer availability and scored count. Returns `{ "available", "message", "scored_count", "to_score_count" }`; `to_score_count` is how many images of the current library have no aesthetic score yet, i.e. what `POST /api/aesthetic/score-all` would process.
 
 #### POST /api/aesthetic/score/{image_id}
 Score a single image.

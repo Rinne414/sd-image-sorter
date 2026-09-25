@@ -278,12 +278,26 @@ Object.assign(window.V321Integration, {
 
         let isReady = false;
         let message = '';
+        let toScore = null;
         try {
             const taskState = await refreshAestheticTaskState();
             isReady = Boolean(taskState?.status?.available);
             message = taskState?.status?.message || '';
+            const reported = taskState?.status?.to_score_count;
+            toScore = reported === null || reported === undefined ? null : Number(reported);
         } catch (_e) {
             isReady = false;
+        }
+        // Scoring always runs over the library's unscored images (not a
+        // selection), so say how many before Start.
+        const scopeEl = document.getElementById('tagger-aesthetic-scope');
+        if (scopeEl) {
+            scopeEl.hidden = !Number.isFinite(toScore);
+            if (Number.isFinite(toScore)) {
+                scopeEl.textContent = i18n('tagger.aestheticScopeCount',
+                    'This run scores the {count} images in this library that have no aesthetic score yet.')
+                    .replace('{count}', toScore.toLocaleString());
+            }
         }
 
         if (titleEl) {

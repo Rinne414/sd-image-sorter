@@ -36,6 +36,10 @@ Object.assign(window.VLMCaption, {
                 this._showStatus('vlm-batch-status', 'No images to caption. Select images or use current view.', 'error');
                 return;
             }
+            if (batchTarget.payload?.filters && !(await this._confirmWholeViewCaption(batchTarget.payload.filters))) {
+                this._showBatchUI(false, { keepPanel: true });
+                return;
+            }
 
             const resp = await fetch('/api/vlm/caption-batch', {
                 method: 'POST',
@@ -298,6 +302,36 @@ Object.assign(window.VLMCaption, {
             };
         }
         return this._buildImageIdsBatchTarget(loadedIds);
+    },
+
+    // Nothing selected means every image the Gallery filter shows, and an API
+    // provider may bill per image, so the real count and the cost are said
+    // before anything is sent. Resolves true to go ahead.
+    async _confirmWholeViewCaption(filters) {
+        let count = null;
+        let exact = true;
+        try {
+            const response = await fetch('/api/images/selection-token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(filters),
+            });
+            if (response.ok) {
+                const data = await response.json();
+                count = Number(data?.total_estimate);
+                exact = data?.exact_total !== false;
+            }
+        } catch (_e) { /* the question below still names the scope */ }
+        const shown = Number.isFinite(count)
+            ? (exact ? '' : '~') + count.toLocaleString()
+            : this._t('vlm.confirmWholeViewAll', 'all');
+        const title = this._t('vlm.confirmWholeViewTitle', 'Caption {count} images with the VLM?').replace('{count}', shown);
+        const body = this._t('vlm.confirmWholeViewBody',
+            'Nothing is selected, so every image the current Gallery filter shows gets a caption. A paid API provider bills for each image.');
+        if (typeof window.showConfirm !== 'function') return window.confirm(`${title}\n\n${body}`);
+        return new Promise((resolve) => {
+            window.showConfirm(title, body, () => resolve(true), () => resolve(false));
+        });
     },
 
     _extractFailedImageIds(data) {

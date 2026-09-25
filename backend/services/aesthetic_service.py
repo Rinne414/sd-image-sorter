@@ -196,6 +196,8 @@ class AestheticService:
             "available": available,
             "message": None if available else "Aesthetic predictor dependencies are not installed",
             "scored_count": self._scored_count(),
+            # What "Score Aesthetic" would process: the library's unscored images.
+            "to_score_count": self.count_images_to_score(force=False),
         }
 
     def score_single_image(
