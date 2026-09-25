@@ -80,6 +80,7 @@ function Palette() {
       list.push(mk(`lib-${lib.id}`, 'palette.group.library', 'palette.cmd.switchTo', () => s.setLibrary(lib.id), undefined, { name }))
     }
     list.push(mk('import', 'palette.group.library', 'palette.cmd.import', () => useSelectionDialog.getState().showFor('import', null, 1)))
+    list.push(mk('libraries', 'palette.group.library', 'palette.cmd.libraries', () => useSelectionDialog.getState().showFor('libraries', null, 1)))
     if (useJobs.getState().jobs.length > 0) {
       list.push(mk('jobs', 'palette.group.library', 'palette.cmd.jobs', () => useJobs.getState().setDrawerOpen(true)))
     }
@@ -89,6 +90,7 @@ function Palette() {
         mk('sel-tag', 'palette.group.selection', 'palette.cmd.tag', () => show('tag')),
         mk('sel-edit-tags', 'palette.group.selection', 'palette.cmd.editTags', () => show('edit-tags')),
         mk('sel-export', 'palette.group.selection', 'palette.cmd.exportData', () => show('export')),
+        mk('sel-move-library', 'palette.group.selection', 'palette.cmd.moveLibrary', () => show('move-library')),
         mk('sel-move', 'palette.group.selection', 'palette.cmd.move', () => show('move')),
         mk('sel-copy', 'palette.group.selection', 'palette.cmd.copy', () => show('copy')),
         mk('sel-remove', 'palette.group.selection', 'palette.cmd.remove', () => show('remove'), 'Del'),

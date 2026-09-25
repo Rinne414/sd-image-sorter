@@ -126,6 +126,7 @@ function LibraryLabel({ name, count, texture }: { name: string; count: number | 
         aria-haspopup="menu"
         title={t('rail.switchLibrary')}
         onClick={() => setOpen(!open)}
+        data-testid="library-switch"
       >
         <span className={styles.libraryName}>{name}</span>
         <span className={styles.caret} aria-hidden>
@@ -151,6 +152,30 @@ function LibraryLabel({ name, count, texture }: { name: string; count: number | 
               </button>
             </li>
           ))}
+          <li className={styles.menuDivider}>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false)
+                useSelectionDialog.getState().showFor('new-library', null, 1)
+              }}
+            >
+              {t('libraries.newMenu')}
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false)
+                useSelectionDialog.getState().showFor('libraries', null, 1)
+              }}
+            >
+              {t('libraries.manageMenu')}
+            </button>
+          </li>
         </ul>
       )}
     </div>

@@ -1,0 +1,150 @@
+.lead {
+  margin: 0 0 12px;
+  line-height: 1.6;
+}
+
+.note {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  max-height: min(44vh, 400px);
+  overflow-y: auto;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: baseline;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.row:first-child {
+  border-top: 0;
+}
+
+.row[data-current] {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.name {
+  color: var(--text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.here {
+  margin-left: 8px;
+  color: var(--accent);
+  font-size: var(--fs-1);
+  font-weight: 400;
+}
+
+.count {
+  color: var(--muted);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
+.actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.fix {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+
+.fix:hover {
+  color: var(--text);
+}
+
+.danger {
+  color: var(--danger);
+}
+
+.confirm {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-2);
+}
+
+.confirm > span {
+  flex: 1 1 280px;
+  color: var(--text);
+}
+
+.renameInput,
+.create input {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: var(--radius);
+}
+
+.renameInput:focus,
+.create input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.create {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.create input {
+  flex: 1;
+  min-width: 0;
+}
+
+.choices {
+  display: grid;
+  gap: 2px;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.choice:hover {
+  background: var(--wash-hover);
+}
+
+.choice input {
+  accent-color: var(--accent);
+}
+
+.choice span:nth-child(2) {
+  flex: 1;
+}

@@ -8,6 +8,7 @@ import { TagEditDialog } from '../tagedit/TagEditDialog'
 import { ExportDataDialog } from '../exportdata/ExportDataDialog'
 import { MissingDialog } from '../status/MissingDialog'
 import { ImportDialog } from '../import/ImportDialog'
+import { LibrariesDialog, MoveToLibraryDialog } from '../libraries/LibrariesDialog'
 import { useSelectionDialog } from './dialogs'
 import { FolderPicker } from './FolderPicker'
 import styles from './SelectionDialogs.module.css'
@@ -22,8 +23,10 @@ export function SelectionDialogs() {
   if (open === 'tag') return <TagDialog ids={ids} count={count} onClose={close} />
   if (open === 'missing') return <MissingDialog onClose={close} />
   if (open === 'import') return <ImportDialog onClose={close} />
+  if (open === 'libraries' || open === 'new-library') return <LibrariesDialog creating={open === 'new-library'} onClose={close} />
   if (!ids) return null
   if (open === 'move' || open === 'copy') return <FolderPicker operation={open} ids={ids} onClose={close} />
+  if (open === 'move-library') return <MoveToLibraryDialog ids={ids} onClose={close} />
   if (open === 'edit-tags') return <TagEditDialog ids={ids} onClose={close} />
   if (open === 'export') return <ExportDataDialog ids={ids} onClose={close} />
   return <ConfirmFileAction kind={open} ids={ids} onClose={close} />

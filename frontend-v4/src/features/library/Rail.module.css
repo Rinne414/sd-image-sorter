@@ -231,6 +231,12 @@
   font-size: var(--fs-2);
 }
 
+.menuDivider {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
 .issues {
   margin: 0;
   padding: 0 8px;

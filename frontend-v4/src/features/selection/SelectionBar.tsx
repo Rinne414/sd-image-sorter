@@ -104,6 +104,7 @@ export function SelectionBar({ params, total, images, hasMore, onRate, onFavorit
         items={[
           { id: 'edit-tags', label: t('sel.editTags'), onSelect: () => show('edit-tags') },
           { id: 'export', label: t('sel.exportData'), onSelect: () => show('export') },
+          { id: 'move-library', label: t('sel.moveLibrary'), onSelect: () => show('move-library') },
           { id: 'remove', label: t('sel.remove'), hint: 'Del', danger: true, divider: true, onSelect: () => show('remove') },
           { id: 'trash', label: t('sel.trash'), danger: true, onSelect: () => show('trash') },
         ]}
