@@ -1,7 +1,7 @@
 .bar {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   height: var(--topbar-h);
   padding: 0 10px 0 12px;
   background: var(--bg);
@@ -25,7 +25,7 @@
 }
 
 .mark {
-  color: var(--accent);
+  color: var(--text);
 }
 
 .brandName {
@@ -36,47 +36,47 @@
 
 .version {
   font-size: var(--fs-1);
-  color: var(--on-accent);
-  background: var(--accent);
-  padding: 0 5px;
-  line-height: 16px;
-  clip-path: polygon(4px 0, 100% 0, 100% 100%, 0 100%, 0 4px);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  padding: 0 4px;
+  line-height: 15px;
+  border-radius: var(--radius);
 }
 
 .tabs {
   display: flex;
   gap: 2px;
   margin-left: 14px;
+  align-self: stretch;
 }
 
 .tab {
   position: relative;
-  height: 32px;
   padding: 0 14px;
   border: 0;
   background: none;
   color: var(--muted);
   font-size: var(--fs-4);
-  border-radius: var(--radius);
 }
 
 .tab:hover {
   color: var(--text);
-  background: var(--wash);
 }
 
 .tab[aria-current="page"] {
   color: var(--text);
+  font-weight: 600;
 }
 
+/* The active tab sits on the rule like a tab on a file folder. */
 .tab[aria-current="page"]::after {
   content: "";
   position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: -7px;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
   height: 2px;
-  background: var(--accent);
+  background: var(--text);
 }
 
 .gap {
@@ -86,16 +86,23 @@
 .command {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  width: clamp(200px, 22vw, 320px);
+  gap: 8px;
+  width: clamp(210px, 22vw, 320px);
   height: 30px;
-  padding: 0 8px 0 12px;
+  margin-right: 4px;
+  padding: 0 7px 0 10px;
   border: 1px solid var(--line);
   background: var(--surface-1);
   color: var(--faint);
-  border-radius: var(--cut-sm) var(--radius);
-  corner-shape: bevel round;
+  border-radius: var(--radius);
+}
+
+.commandText {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .command:hover {

@@ -45,11 +45,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 14px 7px 4px;
+  height: 20px;
+  padding: 0 7px;
   font-size: var(--fs-1);
-  color: var(--text-2);
-  letter-spacing: 0.06em;
-  background: linear-gradient(transparent, rgba(9, 6, 11, 0.78));
+  color: var(--edge-print);
+  letter-spacing: 0.08em;
+  background: var(--tile-caption-bg);
   opacity: 0;
   transition: opacity var(--t-fast) var(--ease);
   pointer-events: none;
@@ -60,43 +61,20 @@
 }
 
 .stars {
-  color: var(--warn);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--edge-print);
   letter-spacing: 0;
 }
 
 .heart {
   position: absolute;
-  top: 5px;
+  top: 6px;
   right: 7px;
-  color: var(--ai);
-  font-size: 13px;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
-  pointer-events: none;
-}
-
-/* Picked: periwinkle ring and the pick order in a cut-corner badge. */
-.tile[data-picked] {
-  box-shadow: 0 0 0 2px var(--pick);
-}
-
-.tile[data-picked] .img {
-  opacity: 0.86;
-}
-
-.pick {
-  position: absolute;
-  top: 0;
-  left: 0;
-  min-width: 22px;
-  height: 20px;
-  padding: 0 6px;
   display: grid;
-  place-items: center;
-  background: var(--pick);
-  color: var(--on-pick);
-  font-size: var(--fs-1);
-  font-weight: 700;
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%);
+  color: #f3eee4;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.75));
   pointer-events: none;
 }
 
@@ -131,6 +109,7 @@
   width: max-content;
   padding: 4px 12px;
   background: var(--surface-2);
+  border: 1px solid var(--line);
   color: var(--muted);
   font-size: var(--fs-2);
   border-radius: var(--radius);

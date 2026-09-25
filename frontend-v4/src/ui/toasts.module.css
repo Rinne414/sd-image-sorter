@@ -17,8 +17,7 @@
   background: var(--surface-2);
   color: var(--text);
   box-shadow: var(--shadow-float), inset 3px 0 0 var(--accent);
-  border-radius: var(--cut) var(--radius);
-  corner-shape: bevel round;
+  border-radius: var(--radius-lg);
   animation: rise var(--t-med) var(--ease);
 }
 
@@ -34,6 +33,7 @@
 }
 
 .close {
+  display: grid;
   flex: none;
   border: 0;
   background: none;

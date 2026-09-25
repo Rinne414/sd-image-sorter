@@ -11,6 +11,7 @@ import { Gallery, type GalleryHandle } from './Gallery'
 import styles from './LibraryPage.module.css'
 import { QueryBar } from './QueryBar'
 import { Rail } from './Rail'
+import { Icon } from '../../ui/Icon'
 
 export function LibraryPage() {
   const t = useT()
@@ -175,7 +176,7 @@ function SelectionBar({ count, onRate, onFavorite }: { count: number; onRate: (n
         <Stars value={0} onChange={(n) => n > 0 && onRate(n)} size="sm" />
       </span>
       <button type="button" className="btn" onClick={onFavorite}>
-        ♥ {t('sel.favorite')}
+        <Icon name="heart" size={14} /> {t('sel.favorite')}
       </button>
       <span className={styles.selNote}>{t('sel.more')}</span>
       <button type="button" className="btn btn-ghost" onClick={clear}>

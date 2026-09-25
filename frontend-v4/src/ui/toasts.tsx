@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { useT } from '../i18n'
 import styles from './toasts.module.css'
+import { Icon } from './Icon'
 
 const LIFETIME_MS = 6000
 const MAX_TOASTS = 4
@@ -44,7 +45,7 @@ export function Toasts() {
         <div key={toast.id} className={styles.toast} data-tone={toast.tone}>
           <span>{toast.text}</span>
           <button type="button" className={styles.close} onClick={() => dismiss(toast.id)} aria-label={t('toast.close')}>
-            ✕
+            <Icon name="close" size={14} />
           </button>
         </div>
       ))}

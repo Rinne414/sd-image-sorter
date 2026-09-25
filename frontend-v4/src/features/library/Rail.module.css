@@ -54,8 +54,9 @@
 }
 
 .caret {
+  display: grid;
+  align-self: center;
   color: var(--muted);
-  font-size: var(--fs-2);
 }
 
 .libraryButton:hover .caret {
@@ -82,8 +83,7 @@
   list-style: none;
   background: var(--surface-2);
   box-shadow: var(--shadow-float);
-  border-radius: var(--cut) var(--radius);
-  corner-shape: bevel round;
+  border-radius: var(--radius-lg);
 }
 
 .menu button {
@@ -124,7 +124,7 @@
   font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .list {
@@ -180,7 +180,8 @@
 }
 
 .fav {
-  color: var(--ai);
+  display: grid;
+  color: var(--marker);
 }
 
 .status {

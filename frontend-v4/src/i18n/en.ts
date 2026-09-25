@@ -146,6 +146,14 @@ export const en: Record<MessageKey, string> = {
   'rating.questionable': 'Questionable',
   'rating.explicit': 'Explicit',
 
+  'theme.dark': 'Dark',
+  'theme.light': 'Light',
+  'theme.system': 'Match system',
+  'theme.current': 'Appearance: {name} (click to switch)',
+  'palette.cmd.themeDark': 'Dark appearance',
+  'palette.cmd.themeLight': 'Light appearance',
+  'palette.cmd.themeSystem': 'Match system appearance',
+
   'error.generic': 'Something went wrong: {reason}',
   'error.saveFailed': "Couldn't save: {reason}. It's back to how it was.",
   'toast.close': 'Close',

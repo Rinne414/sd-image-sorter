@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useT } from '../../i18n'
+import { Icon } from '../../ui/Icon'
 import styles from './Card.module.css'
 
 interface Props {
@@ -24,10 +25,11 @@ export function Stars({ value, onChange, size = 'md' }: Props) {
           className={styles.star}
           data-on={n <= shown || undefined}
           title={value === n ? t('card.clearStars') : t('card.stars', { n })}
+          aria-label={value === n ? t('card.clearStars') : t('card.stars', { n })}
           onMouseEnter={() => setHover(n)}
           onClick={() => onChange(value === n ? 0 : n)}
         >
-          ★
+          <Icon name="star" filled={n <= shown} size={size === 'sm' ? 13 : 15} />
         </button>
       ))}
     </span>

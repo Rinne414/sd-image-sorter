@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import styles from './Menu.module.css'
+import { Icon } from './Icon'
 
 export interface MenuItem {
   id: string
@@ -54,7 +55,7 @@ export function Menu({ label, items, title, align = 'left' }: Props) {
       >
         {label}
         <span className={styles.caret} aria-hidden>
-          ▾
+          <Icon name="caret" size={13} />
         </span>
       </button>
       {open && (

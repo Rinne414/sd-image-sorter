@@ -4,6 +4,7 @@ import { useImageDetail, useLibraries } from '../../api/queries'
 import { translate, useLang, useT, type MessageKey, type Params } from '../../i18n'
 import { copyText } from '../../lib/format'
 import { useApp } from '../../state/store'
+import { useTheme } from '../../theme'
 import styles from './CommandPalette.module.css'
 
 interface Command {
@@ -57,6 +58,9 @@ function Palette() {
       mk('rail', 'palette.group.view', 'palette.cmd.toggleRail', () => s.toggleRail()),
       mk('masonry', 'palette.group.view', 'palette.cmd.masonry', () => s.setLayout('masonry')),
       mk('grid', 'palette.group.view', 'palette.cmd.grid', () => s.setLayout('grid')),
+      mk('theme-dark', 'palette.group.view', 'palette.cmd.themeDark', () => useTheme.getState().setMode('dark')),
+      mk('theme-light', 'palette.group.view', 'palette.cmd.themeLight', () => useTheme.getState().setMode('light')),
+      mk('theme-system', 'palette.group.view', 'palette.cmd.themeSystem', () => useTheme.getState().setMode('system')),
       mk('favorites', 'palette.group.library', 'palette.cmd.onlyFavorites', () => {
         s.setPage('library')
         s.setScope({ favorites: true })

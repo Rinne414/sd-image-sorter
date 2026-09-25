@@ -8,6 +8,7 @@ import { isTypingTarget } from '../../lib/format'
 import { useApp } from '../../state/store'
 import { GenerationCard } from '../card/GenerationCard'
 import { Stars } from '../card/Stars'
+import { Icon } from '../../ui/Icon'
 import styles from './Lightbox.module.css'
 
 const STRIP_RADIUS = 14
@@ -132,7 +133,7 @@ export function Lightbox({ images, total, hasMore, fetchMore }: Props) {
           title={isFav ? t('card.unfavorite') : t('card.favorite')}
           onClick={() => toggleFav.mutate({ ids: [id], favorited: !isFav })}
         >
-          ♥
+          <Icon name="heart" filled={isFav} size={17} />
         </button>
         <button type="button" className="btn" aria-pressed={picked} onClick={() => togglePick(id)}>
           {picked ? t('lightbox.picked') : t('lightbox.pick')} <kbd>Space</kbd>
@@ -144,14 +145,14 @@ export function Lightbox({ images, total, hasMore, fetchMore }: Props) {
           {t('lightbox.info')} <kbd>I</kbd>
         </button>
         <button type="button" className="btn btn-icon btn-ghost" onClick={close} title={t('lightbox.close')} aria-label={t('lightbox.close')}>
-          ✕
+          <Icon name="close" />
         </button>
       </header>
 
       <div className={styles.body}>
         <div className={styles.stage} data-actual={actual || undefined} onClick={(e) => e.target === e.currentTarget && close()}>
           <button type="button" className={`${styles.nav} ${styles.prev}`} onClick={() => go(-1)} disabled={index <= 0} aria-label={t('lightbox.prev')}>
-            ‹
+            <Icon name="left" size={28} />
           </button>
           <div className={styles.imgWrap} onClick={() => setActual(!actual)}>
             {/* The thumbnail holds the frame until the full image is ready: no black flash. */}
@@ -167,7 +168,7 @@ export function Lightbox({ images, total, hasMore, fetchMore }: Props) {
             />
           </div>
           <button type="button" className={`${styles.nav} ${styles.next}`} onClick={() => go(1)} disabled={index >= images.length - 1 && !hasMore} aria-label={t('lightbox.next')}>
-            ›
+            <Icon name="right" size={28} />
           </button>
         </div>
         {info && <GenerationCard id={id} variant="overlay" />}

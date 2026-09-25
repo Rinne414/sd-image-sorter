@@ -4,6 +4,7 @@ import { useT, type MessageKey } from '../../i18n'
 import { generatorName, shortFolder } from '../../lib/format'
 import { useApp } from '../../state/store'
 import styles from './Rail.module.css'
+import { Icon } from '../../ui/Icon'
 
 interface Props {
   /** Prompt text woven faintly behind the library name. */
@@ -40,7 +41,7 @@ export function Rail({ texture }: Props) {
           <Row
             active={scope.favorites}
             label={t('rail.favorites')}
-            icon="♥"
+            icon={<Icon name="heart" filled size={13} />}
             iconClass={styles.fav}
             count={favorites.data?.ids.size}
             onClick={() => setScope({ favorites: !scope.favorites })}
@@ -133,7 +134,7 @@ function LibraryLabel({ name, count, texture }: { name: string; count: number | 
       >
         <span className={styles.libraryName}>{name}</span>
         <span className={styles.caret} aria-hidden>
-          ▾
+          <Icon name="caret" size={14} />
         </span>
       </button>
       {count !== null && <span className={`${styles.libraryCount} mono`}>{t('rail.images', { n: count })}</span>}
@@ -166,7 +167,7 @@ interface RowProps {
   count?: number | undefined
   active: boolean
   onClick: () => void
-  icon?: string
+  icon?: React.ReactNode
   iconClass?: string
   dim?: boolean
   title?: string

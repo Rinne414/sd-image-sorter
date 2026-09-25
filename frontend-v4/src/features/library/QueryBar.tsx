@@ -5,6 +5,7 @@ import { generatorName } from '../../lib/format'
 import { useApp } from '../../state/store'
 import { Menu } from '../../ui/Menu'
 import styles from './QueryBar.module.css'
+import { Icon } from '../../ui/Icon'
 
 const SORTS: SortKey[] = ['newest', 'oldest', 'user_rating', 'aesthetic', 'random', 'name_asc']
 const APPLY_DELAY_MS = 300
@@ -63,7 +64,7 @@ export function QueryBar({ total, inputRef }: Props) {
     <div className={styles.bar}>
       <div className={styles.field}>
         <span className={styles.glyph} aria-hidden>
-          ⌕
+          <Icon name="search" size={15} />
         </span>
         <input
           ref={inputRef}
@@ -105,7 +106,7 @@ export function QueryBar({ total, inputRef }: Props) {
                 {chip.kind !== 'stars' && (
                   <span>{chip.kind === 'generator' ? generatorName(chip.value, t) : chip.value}</span>
                 )}
-                <span aria-hidden>×</span>
+                <Icon name="close" size={11} />
               </button>
             ))}
             {parsed.warnings.map((w) => (

@@ -10,6 +10,7 @@ import { useApp } from '../../state/store'
 import styles from './Card.module.css'
 import { PromptText } from './PromptText'
 import { Stars } from './Stars'
+import { Icon } from '../../ui/Icon'
 
 const TAGS_SHOWN = 24
 
@@ -87,10 +88,11 @@ function CardBody({ id, variant }: { id: number; variant: 'panel' | 'overlay' })
           className={styles.heartBtn}
           data-on={isFav || undefined}
           title={isFav ? t('card.unfavorite') : t('card.favorite')}
+          aria-label={isFav ? t('card.unfavorite') : t('card.favorite')}
           aria-pressed={isFav}
           onClick={() => toggleFav.mutate({ ids: [id], favorited: !isFav })}
         >
-          ♥
+          <Icon name="heart" filled={isFav} size={16} />
         </button>
         <Stars value={stars} onChange={(n) => setRating.mutate({ ids: [id], stars: n })} />
       </div>
@@ -371,7 +373,7 @@ function CopyButton({ text, label, compact }: { text: string; label?: string; co
   if (compact) {
     return (
       <button type="button" className={styles.copy} onClick={() => void onClick()} title={t('card.copy')}>
-        {done ? t('card.copied') : '⧉'}
+        {done ? t('card.copied') : <Icon name="copy" size={14} />}
       </button>
     )
   }

@@ -1,66 +1,143 @@
 /* V4 design tokens. One owner for every colour, size and shape.
-   Palette = Dusk, sampled from the owner's own library (2026-09-24):
-   plum-ink surfaces from the shadows, warm text from the highlights,
-   peach for actions, periwinkle for what the user picked, pink for AI output. */
 
-:root {
+   Two themes, both taken from how photographers cull a shoot:
+   - "darkroom" (dark): warm near-black, paper-white type, amber edge print.
+   - "proof" (light): a contact sheet on proof paper, ink-black type.
+   Shared marks: a vermilion china-marker for picked frames, cyanotype blue
+   for anything a model produced. No gradients, glows or blur; one spot colour
+   per role. Theme is set on <html data-theme="dark|light"> before first paint. */
+
+:root,
+[data-theme="dark"] {
   color-scheme: dark;
 
   /* surfaces, darkest to lightest */
-  --stage: #09060b;
-  --bg: #100d13;
-  --surface-1: #18141b;
-  --surface-2: #211c24;
-  --surface-3: #2b252f;
-  --line: #322c37;
-  --line-strong: #443d48;
-  --hairline: #1d1821;
-  --scrim: rgba(9, 6, 11, 0.8);
+  --stage: #0d0c0b;
+  --bg: #131210;
+  --surface-1: #1a1917;
+  --surface-2: #22211e;
+  --surface-3: #2d2b27;
+  --line: #34322d;
+  --line-strong: #4a463f;
+  --hairline: #1f1e1b;
+  --scrim: rgba(8, 7, 6, 0.62);
+  --overlay-panel: rgba(26, 25, 23, 0.96);
 
-  /* text */
-  --text: #f0e7e5;
-  --text-2: #c4b7b4;
-  --muted: #9f949e;
-  --faint: #6b6270;
+  /* type */
+  --text: #ece6da;
+  --text-2: #bfb8aa;
+  --muted: #8f887b;
+  --faint: #7a7367;
 
   /* roles */
-  --accent: #f3a582;
-  --accent-bright: #feb38f;
-  --accent-soft: rgba(243, 165, 130, 0.13);
-  --accent-line: rgba(243, 165, 130, 0.48);
-  --on-accent: #26120c;
+  --ink-button: #ece6da; /* primary buttons are printed in paper white */
+  --on-ink-button: #131210;
+  --accent: #e2a03f; /* amber edge print: focus, active, counts */
+  --accent-soft: rgba(226, 160, 63, 0.12);
+  --accent-line: rgba(226, 160, 63, 0.5);
+  --marker: #e4553c; /* china marker: picked frames */
+  --marker-soft: rgba(228, 85, 60, 0.14);
+  --on-marker: #1a0c08;
+  --ai: #79a7cf; /* cyanotype: what a model produced */
+  --ok: #8fb07c;
+  --warn: #d9a441;
+  --danger: #e0685a;
+  --danger-soft: rgba(224, 104, 90, 0.12);
 
-  --pick: #96a7e7;
-  --pick-bright: #a9b8f0;
-  --pick-soft: rgba(150, 167, 231, 0.16);
-  --on-pick: #0f1224;
+  --wash: rgba(236, 230, 218, 0.04);
+  --wash-hover: rgba(236, 230, 218, 0.07);
+  --wash-strong: rgba(236, 230, 218, 0.1);
+  --scrollbar: rgba(236, 230, 218, 0.18);
 
-  --ai: #eca7bd;
-  --ok: #8ec899;
-  --warn: #e8c270;
-  --danger: #e1556f;
-  --danger-ink: #ffb8c4;
+  /* film (the same black rebate in both themes, as on a contact print) */
+  --film: #0e0d0c;
+  --film-hole: rgba(236, 230, 218, 0.17);
+  --edge-print: #e2a03f;
+  --tile-caption-bg: rgba(13, 12, 11, 0.82);
 
-  --wash: rgba(240, 231, 229, 0.04);
-  --wash-hover: rgba(240, 231, 229, 0.07);
-  --wash-strong: rgba(240, 231, 229, 0.1);
+  --shadow-float: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(236, 230, 218, 0.06);
 
   /* 14 tag categories (mirrors backend tag_rules.categorize_tag) */
-  --cat-character: #f3a582;
-  --cat-artist: #eca7bd;
-  --cat-body: #f2c9a8;
-  --cat-expression: #e8c270;
-  --cat-outfit: #c9a7ec;
-  --cat-pose: #a9c3ea;
-  --cat-angle: #8fc7d6;
-  --cat-action: #f0908a;
-  --cat-background: #8ec899;
-  --cat-style: #dcb6f2;
-  --cat-quality: #b9aea6;
-  --cat-meta: #8c8491;
-  --cat-rating: #e1556f;
-  --cat-unknown: #c4b7b4;
+  --cat-character: #e7a15b;
+  --cat-artist: #e5806c;
+  --cat-body: #d8b48c;
+  --cat-expression: #e0c45c;
+  --cat-outfit: #b89cd4;
+  --cat-pose: #8db3d9;
+  --cat-angle: #78bfbc;
+  --cat-action: #d98ba0;
+  --cat-background: #92b980;
+  --cat-style: #c7a3c9;
+  --cat-quality: #aaa296;
+  --cat-meta: #80796f;
+  --cat-rating: #de5a4c;
+  --cat-unknown: #bfb8aa;
+  --chip-mix: 12%;
+}
 
+[data-theme="light"] {
+  color-scheme: light;
+
+  --stage: #e3ded3;
+  --bg: #eeeae2;
+  --surface-1: #f6f3ed;
+  --surface-2: #fbf9f5;
+  --surface-3: #e6e1d6;
+  --line: #d2cbbd;
+  --line-strong: #b8b0a0;
+  --hairline: #e2dcd0;
+  --scrim: rgba(40, 36, 30, 0.35);
+  --overlay-panel: rgba(246, 243, 237, 0.97);
+
+  --text: #1c1a17;
+  --text-2: #3f3b34;
+  --muted: #655f55;
+  --faint: #857d6e;
+
+  --ink-button: #1c1a17;
+  --on-ink-button: #f6f3ed;
+  --accent: #8a5409;
+  --accent-soft: rgba(138, 84, 9, 0.1);
+  --accent-line: rgba(138, 84, 9, 0.45);
+  --marker: #b5311a;
+  --marker-soft: rgba(181, 49, 26, 0.1);
+  --on-marker: #fff8f4;
+  --ai: #2d6590;
+  --ok: #3d6a30;
+  --warn: #835709;
+  --danger: #b3261e;
+  --danger-soft: rgba(179, 38, 30, 0.08);
+
+  --wash: rgba(28, 26, 23, 0.035);
+  --wash-hover: rgba(28, 26, 23, 0.06);
+  --wash-strong: rgba(28, 26, 23, 0.09);
+  --scrollbar: rgba(28, 26, 23, 0.22);
+
+  --film: #151412;
+  --film-hole: rgba(238, 234, 226, 0.2);
+  --edge-print: #e2a03f;
+  --tile-caption-bg: rgba(21, 20, 18, 0.8);
+
+  --shadow-float: 0 10px 28px rgba(40, 34, 24, 0.16), 0 0 0 1px rgba(28, 26, 23, 0.1);
+
+  --cat-character: #955710;
+  --cat-artist: #a53f2d;
+  --cat-body: #85603a;
+  --cat-expression: #86680b;
+  --cat-outfit: #6b4d93;
+  --cat-pose: #2e5f8e;
+  --cat-angle: #1f716f;
+  --cat-action: #983e59;
+  --cat-background: #3e6a32;
+  --cat-style: #7a4e80;
+  --cat-quality: #69625a;
+  --cat-meta: #8a8378;
+  --cat-rating: #b3261e;
+  --cat-unknown: #57514a;
+  --chip-mix: 10%;
+}
+
+:root {
   /* type */
   --font-ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
   --font-mono: "Cascadia Mono", "JetBrains Mono", Consolas, ui-monospace, monospace;
@@ -72,10 +149,9 @@
   --fs-6: 20px;
   --fs-7: 26px;
 
-  /* shape: cut corners on actions and chips (bevel), soft elsewhere */
-  --cut: 7px;
-  --cut-sm: 5px;
-  --radius: 3px;
+  /* shape: small square-ish corners and hairlines, like printed matter */
+  --radius: 2px;
+  --radius-lg: 3px;
 
   /* layout */
   --topbar-h: 46px;
@@ -87,8 +163,6 @@
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --t-fast: 120ms;
   --t-med: 180ms;
-
-  --shadow-float: 0 10px 30px rgba(6, 3, 9, 0.55), 0 0 0 1px rgba(240, 231, 229, 0.06);
 }
 
 @media (min-width: 1800px) {

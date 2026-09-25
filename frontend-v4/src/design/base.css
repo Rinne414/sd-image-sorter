@@ -18,6 +18,7 @@ body {
   font-size: var(--fs-3);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
   overflow: hidden;
 }
 
@@ -37,6 +38,10 @@ img {
   display: block;
 }
 
+svg {
+  flex: none;
+}
+
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -48,7 +53,7 @@ img {
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(240, 231, 229, 0.16) transparent;
+  scrollbar-color: var(--scrollbar) transparent;
 }
 
 /* Shared control shapes. Components compose these; nothing overrides them later. */
@@ -60,48 +65,50 @@ img {
   height: 30px;
   padding: 0 12px;
   border: 1px solid var(--line-strong);
-  background: var(--surface-2);
+  background: transparent;
   color: var(--text);
   font-size: var(--fs-3);
   white-space: nowrap;
   text-decoration: none;
-  border-radius: var(--cut-sm) var(--radius) var(--radius) var(--radius);
-  corner-shape: bevel round round round;
+  border-radius: var(--radius);
   transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
 }
 
 .btn:hover {
-  background: var(--surface-3);
+  background: var(--wash-hover);
   border-color: var(--muted);
 }
 
 .btn[aria-pressed="true"],
 .btn[aria-expanded="true"] {
-  border-color: var(--accent-line);
-  background: var(--accent-soft);
+  border-color: var(--text-2);
+  background: var(--wash-strong);
 }
 
+/* Primary actions are printed in ink: paper-white on dark, ink-black on light. */
 .btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
+  background: var(--ink-button);
+  border-color: var(--ink-button);
+  color: var(--on-ink-button);
   font-weight: 600;
-  border-radius: var(--cut) var(--radius);
-  corner-shape: bevel round;
 }
 
 .btn-primary:hover {
-  background: var(--accent-bright);
-  border-color: var(--accent-bright);
+  background: var(--text-2);
+  border-color: var(--text-2);
+}
+
+.btn-primary kbd {
+  color: inherit;
+  border-color: currentColor;
+  opacity: 0.6;
 }
 
 .btn-ghost {
-  background: transparent;
   border-color: transparent;
 }
 
 .btn-ghost:hover {
-  background: var(--wash-hover);
   border-color: transparent;
 }
 
@@ -115,8 +122,7 @@ kbd {
   font-size: var(--fs-1);
   color: var(--muted);
   border: 1px solid var(--line-strong);
-  border-bottom-width: 2px;
-  border-radius: 3px;
+  border-radius: var(--radius);
   padding: 0 4px;
   line-height: 16px;
 }
@@ -142,13 +148,13 @@ kbd {
   align-items: center;
   gap: 4px;
   height: 22px;
-  padding: 0 8px;
+  padding: 0 7px;
   color: var(--c);
-  background: color-mix(in srgb, var(--c) 11%, transparent);
+  background: color-mix(in srgb, var(--c) var(--chip-mix), transparent);
+  border: 1px solid color-mix(in srgb, var(--c) 22%, transparent);
   font-size: var(--fs-2);
   white-space: nowrap;
-  border-radius: var(--cut-sm);
-  corner-shape: bevel;
+  border-radius: var(--radius);
 }
 
 .cat-character { --c: var(--cat-character); }

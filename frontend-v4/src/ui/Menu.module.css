@@ -3,8 +3,8 @@
 }
 
 .caret {
+  display: grid;
   color: var(--muted);
-  font-size: var(--fs-1);
 }
 
 .menu {
@@ -18,8 +18,7 @@
   list-style: none;
   background: var(--surface-2);
   box-shadow: var(--shadow-float);
-  border-radius: var(--cut) var(--radius);
-  corner-shape: bevel round;
+  border-radius: var(--radius-lg);
 }
 
 .menu[data-align="right"] {

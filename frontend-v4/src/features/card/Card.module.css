@@ -15,7 +15,7 @@
 }
 
 .card[data-variant="overlay"] {
-  background: rgba(24, 20, 27, 0.94);
+  background: var(--overlay-panel);
   border-left: 1px solid var(--line);
   padding-top: 18px;
 }
@@ -27,7 +27,7 @@
 }
 
 .error {
-  color: var(--danger-ink);
+  color: var(--danger);
   margin: 0;
 }
 
@@ -61,9 +61,8 @@
 /* ---- film frame: the preview with parameters on its edges ---- */
 .frame {
   margin: 0;
-  background: #0b080d;
-  border-radius: var(--cut) var(--radius);
-  corner-shape: bevel round;
+  background: var(--film);
+  border-radius: var(--radius);
   overflow: hidden;
 }
 
@@ -73,7 +72,7 @@
   flex-direction: column;
   gap: 3px;
   padding: 4px 10px;
-  background: #0b080d;
+  background: var(--film);
 }
 
 .edgeStrip[data-part="bottom"] {
@@ -83,13 +82,13 @@
 .edgeStrip[data-inline] {
   padding: 8px 10px;
   border-radius: var(--radius);
-  background: #0b080d;
+  background: var(--film);
 }
 
 .holes {
   height: 6px;
   margin: 0 -10px;
-  background: repeating-linear-gradient(90deg, transparent 0 7px, rgba(240, 231, 229, 0.16) 7px 15px);
+  background: repeating-linear-gradient(90deg, transparent 0 7px, var(--film-hole) 7px 15px);
 }
 
 .codes {
@@ -106,19 +105,19 @@
   font-family: var(--font-mono);
   font-size: var(--fs-1);
   letter-spacing: 0.06em;
-  color: color-mix(in srgb, var(--warn) 82%, transparent);
+  color: color-mix(in srgb, var(--edge-print) 88%, transparent);
   cursor: copy;
   white-space: nowrap;
 }
 
 .code:hover {
-  color: var(--warn);
+  color: var(--edge-print);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
 .codeKey {
-  color: color-mix(in srgb, var(--warn) 48%, transparent);
+  color: color-mix(in srgb, var(--edge-print) 50%, transparent);
   margin-right: 5px;
 }
 
@@ -174,10 +173,9 @@
 }
 
 .heartBtn {
+  display: grid;
   border: 0;
   background: none;
-  font-size: 17px;
-  line-height: 1;
   color: var(--faint);
   padding: 2px 4px;
 }
@@ -187,7 +185,7 @@
 }
 
 .heartBtn[data-on] {
-  color: var(--ai);
+  color: var(--marker);
 }
 
 .stars {
@@ -195,20 +193,15 @@
 }
 
 .star {
+  display: grid;
   border: 0;
   background: none;
   padding: 0 1px;
-  font-size: 16px;
-  line-height: 1;
   color: var(--line-strong);
 }
 
-.stars[data-size="sm"] .star {
-  font-size: 13px;
-}
-
 .star[data-on] {
-  color: var(--warn);
+  color: var(--accent);
 }
 
 /* ---- sections ---- */
@@ -232,6 +225,7 @@
 }
 
 .copy {
+  display: grid;
   border: 0;
   background: none;
   color: var(--muted);
@@ -280,7 +274,7 @@
   font-family: var(--font-mono);
   font-size: 0.88em;
   padding: 0 4px;
-  background: color-mix(in srgb, var(--ai) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ai) 35%, transparent);
   border-radius: var(--radius);
 }
 
@@ -307,7 +301,7 @@
 }
 
 .card[data-variant="overlay"] .expandable::after {
-  background: linear-gradient(transparent, rgb(24, 20, 27));
+  background: linear-gradient(transparent, var(--surface-1));
 }
 
 .expandable[data-open] {
@@ -369,11 +363,11 @@
   display: grid;
   place-items: center;
   height: 20px;
-  color: var(--on-accent);
-  background: var(--accent);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
   font-size: var(--fs-1);
   font-weight: 700;
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%);
+  border-radius: var(--radius);
 }
 
 .models {
@@ -413,8 +407,7 @@
   padding: 1px 7px;
   color: var(--ai);
   border: 1px solid color-mix(in srgb, var(--ai) 38%, transparent);
-  border-radius: var(--cut-sm) var(--radius);
-  corner-shape: bevel round;
+  border-radius: var(--radius);
 }
 
 .chips {
@@ -430,8 +423,7 @@
   background: none;
   color: var(--muted);
   font-size: var(--fs-2);
-  border-radius: var(--cut-sm);
-  corner-shape: bevel;
+  border-radius: var(--radius);
 }
 
 .more:hover {

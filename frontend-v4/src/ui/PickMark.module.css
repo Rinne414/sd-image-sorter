@@ -1,0 +1,38 @@
+.mark {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.box {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.box path {
+  fill: none;
+  stroke: var(--marker);
+  stroke-width: 2.6px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.95;
+}
+
+.order {
+  position: absolute;
+  top: 6px;
+  left: 7px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  display: grid;
+  place-items: center;
+  background: var(--marker);
+  color: var(--on-marker);
+  font-size: var(--fs-1);
+  font-weight: 700;
+  border-radius: var(--radius);
+}

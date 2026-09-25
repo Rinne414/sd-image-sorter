@@ -5,6 +5,8 @@ import type { ImageSummary } from '../../api/types'
 import { useT } from '../../i18n'
 import { generatorCode } from '../../lib/format'
 import { useApp, type Layout, type TileSize } from '../../state/store'
+import { Icon } from '../../ui/Icon'
+import { PickMark } from '../../ui/PickMark'
 import styles from './Gallery.module.css'
 
 const TILE_TARGET: Record<TileSize, number> = { s: 170, m: 236, l: 330 }
@@ -244,10 +246,19 @@ const Tile = memo(function Tile(p: TileProps) {
       />
       <div className={styles.edge}>
         <span className="mono">{generatorCode(p.img.generator)}</span>
-        {stars > 0 && <span className={styles.stars}>{'★'.repeat(stars)}</span>}
+        {stars > 0 && (
+          <span className={styles.stars}>
+            <Icon name="star" filled size={11} />
+            {stars}
+          </span>
+        )}
       </div>
-      {p.favorite && <span className={styles.heart} aria-hidden>♥</span>}
-      {p.pick > 0 && <span className={`${styles.pick} mono`}>{p.pick}</span>}
+      {p.favorite && (
+        <span className={styles.heart} aria-hidden>
+          <Icon name="heart" filled size={14} />
+        </span>
+      )}
+      {p.pick > 0 && <PickMark seed={p.img.id} order={p.pick} />}
       {p.inspected && <span className={styles.viewfinder} aria-hidden />}
     </div>
   )

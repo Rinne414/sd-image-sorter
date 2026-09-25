@@ -6,7 +6,7 @@
   justify-content: center;
   align-items: flex-start;
   padding-top: 14vh;
-  background: rgba(9, 6, 11, 0.55);
+  background: var(--scrim);
 }
 
 .palette {
@@ -16,8 +16,7 @@
   flex-direction: column;
   background: var(--surface-2);
   box-shadow: var(--shadow-float);
-  border-radius: var(--cut) var(--radius);
-  corner-shape: bevel round;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   animation: drop var(--t-med) var(--ease);
 }
@@ -55,7 +54,7 @@
   font-size: var(--fs-1);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .row {

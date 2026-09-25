@@ -144,6 +144,14 @@ export const zhCN = {
   'rating.questionable': '可疑',
   'rating.explicit': '限制级',
 
+  'theme.dark': '深色',
+  'theme.light': '浅色',
+  'theme.system': '跟随系统',
+  'theme.current': '外观：{name}（点一下切换）',
+  'palette.cmd.themeDark': '深色外观',
+  'palette.cmd.themeLight': '浅色外观',
+  'palette.cmd.themeSystem': '外观跟随系统',
+
   'error.generic': '出错了：{reason}',
   'error.saveFailed': '没有存上：{reason}。已经恢复成原来的样子。',
   'toast.close': '关闭',

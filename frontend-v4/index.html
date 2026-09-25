@@ -1,10 +1,21 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="dusk">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
     <title>SD Image Sorter</title>
+    <script>
+      // Pick the theme before first paint (same rule as src/theme.ts).
+      ;(function () {
+        var mode = 'system'
+        try {
+          mode = localStorage.getItem('sd-v4-theme') || 'system'
+        } catch (e) {}
+        var light = mode === 'light' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches)
+        document.documentElement.dataset.theme = light ? 'light' : 'dark'
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

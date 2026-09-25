@@ -1,5 +1,7 @@
 import { useLang, useT, type MessageKey } from '../i18n'
 import { useApp, type Page } from '../state/store'
+import { useTheme, type ThemeMode } from '../theme'
+import { Icon } from '../ui/Icon'
 import styles from './TopBar.module.css'
 
 const TABS: [Page, MessageKey][] = [
@@ -8,6 +10,12 @@ const TABS: [Page, MessageKey][] = [
   ['sort', 'nav.sort'],
 ]
 
+const THEME_LABEL: Record<ThemeMode, MessageKey> = {
+  dark: 'theme.dark',
+  light: 'theme.light',
+  system: 'theme.system',
+}
+
 export function TopBar() {
   const t = useT()
   const page = useApp((s) => s.page)
@@ -15,6 +23,9 @@ export function TopBar() {
   const setPaletteOpen = useApp((s) => s.setPaletteOpen)
   const lang = useLang((s) => s.lang)
   const setLang = useLang((s) => s.setLang)
+  const mode = useTheme((s) => s.mode)
+  const theme = useTheme((s) => s.theme)
+  const cycleTheme = useTheme((s) => s.cycle)
 
   return (
     <header className={styles.bar}>
@@ -41,8 +52,19 @@ export function TopBar() {
       <span className={styles.gap} />
 
       <button type="button" className={styles.command} onClick={() => setPaletteOpen(true)} data-testid="open-palette">
-        <span>{t('nav.command')}</span>
+        <Icon name="search" size={14} />
+        <span className={styles.commandText}>{t('nav.command')}</span>
         <kbd>Ctrl K</kbd>
+      </button>
+      <button
+        type="button"
+        className="btn btn-ghost btn-icon"
+        onClick={cycleTheme}
+        title={t('theme.current', { name: t(THEME_LABEL[mode]) })}
+        aria-label={t('theme.current', { name: t(THEME_LABEL[mode]) })}
+        data-testid="theme-toggle"
+      >
+        <Icon name={theme === 'dark' ? 'moon' : 'sun'} />
       </button>
       <button type="button" className="btn btn-ghost" onClick={() => setLang(lang === 'zh-CN' ? 'en' : 'zh-CN')}>
         {t('nav.language')}
@@ -54,16 +76,16 @@ export function TopBar() {
   )
 }
 
-/** A single film frame with sprocket holes: the app's mark. */
+/** A single frame of film with its sprocket holes: the app's mark. */
 function FrameMark() {
   return (
     <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden className={styles.mark}>
-      <rect x="1" y="3" width="20" height="16" rx="2" fill="currentColor" opacity="0.18" />
-      <rect x="5" y="6.5" width="12" height="9" rx="1" fill="currentColor" />
-      {[3, 7, 11, 15].map((x) => (
-        <g key={x} fill="var(--bg)">
-          <rect x={x + 0.5} y="3.8" width="2" height="1.4" rx="0.3" />
-          <rect x={x + 0.5} y="16.8" width="2" height="1.4" rx="0.3" />
+      <rect x="1.5" y="3.5" width="19" height="15" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="5.5" y="7" width="11" height="8" fill="currentColor" />
+      {[3.2, 7.2, 11.2, 15.2].map((x) => (
+        <g key={x} fill="currentColor">
+          <rect x={x} y="4.6" width="2" height="1.2" />
+          <rect x={x} y="16.2" width="2" height="1.2" />
         </g>
       ))}
     </svg>
