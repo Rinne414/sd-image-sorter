@@ -1058,6 +1058,58 @@ List the ids of all favorited images (plus `count`) for fast client-side heart-s
 #### POST /api/collections/favorites
 Set the favorite state of one image. Body carries `image_id` and `favorited` (default `true`; pass `false` to unfavorite). Returns `{ "favorited": bool }`.
 
+### Batches
+
+A batch (V4) is a saved, ordered group of images with steps and settings: a Pixiv post, a dataset or a custom group. Every route is scoped to the request's library (`X-SD-Library-Id`, default `main`); a batch or template of another library answers `404` exactly like a missing one. Errors use the global envelope with a `code` (`batch_not_found`, `batch_images_not_found`, `batch_item_not_found`, `batch_template_not_found`, `batch_revision_conflict`, `batch_items_mismatch`, `batch_invalid`, ...). Working files (censored copies) live under `<data dir>/batches/<batch_id>/censored/<image_id>.png`. Deleting an image row from the Library removes it from every batch (FK cascade); its censored copy is removed the next time items are added to or removed from that batch.
+
+#### GET /api/batches/templates
+List the library's saved templates plus the built-in step sets. Query: `kind` (`pixiv` | `dataset` | `custom`, optional). Returns `{ "templates": [{ "id", "kind", "name", "steps": [{ "id", "enabled" }], "settings", "created_at" }], "builtin_steps": { "pixiv": [...], "dataset": [...], "custom": [...] } }`. Built-in Pixiv steps: `pick`, `censor`, `order`, `name`, `export`.
+
+#### POST /api/batches/templates
+Save a template. Body: `{ "kind", "name", "steps": [{ "id": "^[a-z][a-z0-9_-]{0,39}$", "enabled": true }], "settings": {} }` (at least one step; step ids unique). Returns `201` with the template.
+
+#### DELETE /api/batches/templates/{template_id}
+Delete a template of the current library. Returns `{ "deleted": true, "template_id" }`; `404` when it does not exist here.
+
+#### GET /api/batches
+List batches, newest change first. Query: `include_archived` (default `false`), `kind` (optional). Returns `{ "batches": [{ "id", "kind", "name", "current_step", "revision", "archived_at", "created_at", "updated_at", "item_count", "censored_count", "cover_image_ids": [first 4 image ids in order] }] }`.
+
+#### POST /api/batches
+Create a batch. Body: `{ "kind": "pixiv" | "dataset" | "custom", "name", "template_id": null, "image_ids": [] }`. Steps and settings come from the template (its `kind` must match, else `422 batch_invalid`) or the built-in set; `current_step` starts at the first step. `image_ids` are appended in the given order; repeated ids are skipped and reported. Every id must be an image of the current library, otherwise `404 batch_images_not_found` and nothing is created. Returns `201 { "batch": <batch>, "skipped_image_ids": [] }`.
+
+#### GET /api/batches/{batch_id}
+One batch with its items in order: `{ "id", "library_id", "kind", "name", "steps", "settings", "current_step", "dataset_project_id", "revision", "archived_at", "created_at", "updated_at", "item_count", "censored_count", "items": [{ "image_id", "position", "filename", "width", "height", "output_name", "has_censored", "censored_at", "item_state" }] }`. `has_censored` is true only when the working copy exists on disk.
+
+#### PATCH /api/batches/{batch_id}
+Change the batch row. Body: `{ "revision" (required), "name"?, "steps"?, "settings"?, "current_step"?, "archived"? }`; only the fields sent change (`current_step: null` clears it). Compare-and-set: a stale `revision` returns `409 batch_revision_conflict` with `current_revision`, and nothing changes. `current_step` must be one of the steps (`422 batch_invalid`); when new `steps` drop the current step it moves to the first step. `archived: true` hides the batch from the default list. Every successful patch increments `revision`; item operations do not. Returns the batch.
+
+#### DELETE /api/batches/{batch_id}
+Delete the batch rows and its working folder. Original image files and Library rows are never touched. Returns `{ "deleted": true, "batch_id" }`.
+
+#### POST /api/batches/{batch_id}/items
+Append images in the given order. Body: `{ "image_ids": [..] }`. Ids already in the batch (or repeated) are skipped. Unknown or other-library ids return `404 batch_images_not_found` and nothing is added. Returns `{ "batch", "added_image_ids", "skipped_image_ids" }`.
+
+#### DELETE /api/batches/{batch_id}/items
+Remove images from the batch (body `{ "image_ids": [..] }`); positions are compacted and the removed items' censored copies are deleted. Returns `{ "batch", "removed_image_ids", "not_found_image_ids" }`.
+
+#### PUT /api/batches/{batch_id}/items/order
+Reorder. Body: `{ "image_ids": [the full current set, in the new order] }`. A list that does not match the current items returns `409 batch_items_mismatch` with `missing_image_ids` / `unexpected_image_ids`; repeated ids return `400`. Returns the batch.
+
+#### PATCH /api/batches/{batch_id}/items/{image_id}
+Set one item's `output_name` (a file name without extension that overrides the export name template; `null` or empty clears it) and/or `item_state` (free JSON object for the steps). Returns the item.
+
+#### PUT /api/batches/{batch_id}/items/{image_id}/censored
+Save the item's censored working copy. Body: `{ "image_data": "data:image/png;base64,..." }` (same decoding and limits as the censor editor's save: 40 MB, 40 megapixels; `400` for invalid data, `413` when too large). The copy is written atomically as PNG **without any metadata**, replacing an earlier copy. Returns the item (`has_censored: true`, `censored_at`).
+
+#### GET /api/batches/{batch_id}/items/{image_id}/censored
+Serve the item's censored working copy (`image/png`, `Cache-Control: no-store`); `404 batch_censored_copy_not_found` when there is none.
+
+#### DELETE /api/batches/{batch_id}/items/{image_id}/censored
+Discard the item's censored copy (file and columns). Returns the item.
+
+#### POST /api/batches/{batch_id}/export
+Export the batch for posting (Pixiv). Body: `{ "output_folder", "name_template": "{batch}_{n:02}", "start_number": 1, "metadata_option": "strip" | "keep" | "minimal" (default "strip"), "output_format": "original" | "png" | "jpg" | "webp", "overwrite": false, "caption_text": "", "watermark": { same shape as the publish-set watermark }, "missing_censored": "block" | "skip" | "original" (default "block") }`. Every item uses its censored copy. With `block`, any item without one returns `409 batch_export_missing_censored` with `missing: [{ "image_id", "filename" }]` and nothing is written; `skip` leaves those items out (reported in `skipped`); `original` exports their original files, still stripped unless `keep` is chosen. Name tokens: `{batch}`, `{n}`, `{n:0W}` (zero-padded to W digits, W = 1-9), `{original}` (original name without extension); numbers count the exported items from `start_number`; an item's `output_name` overrides the template; the extension follows the output format (`original` = the original file's format). Refusals before any write: invalid folder `400`, unknown token `422 batch_export_name_template_invalid`, duplicate names (case-insensitive) `422 batch_export_duplicate_names` with `duplicates: [{ "output_name", "image_ids" }]`, a missing original with `original` `409 batch_export_sources_missing`, existing files (including `caption.txt`) without `overwrite` `409 batch_export_files_exist` with `existing`. `strip` re-encodes the pixels only (no PNG text, EXIF or XMP); `minimal` keeps only the ICC profile and DPI; `keep` copies the original's metadata (a byte copy when an original is exported in its own format without a watermark). An original's EXIF rotation is applied to the pixels when its metadata is not kept. Optional `caption_text` is written to `caption.txt`. Returns `{ "success", "batch_id", "output_folder", "exported": [{ "image_id", "position", "filename", "output_name", "output_path", "source": "censored" | "original", "used_censored", "metadata_option", "generation_data_removed", "watermarked", "overwrote_existing", "reconciled_image_id", "warnings" }], "skipped", "errors", "caption_file" }`.
+
 ### Entry Page
 
 #### GET /api/entry/summary
