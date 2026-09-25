@@ -5,6 +5,7 @@ import {
   applyTextRun,
   bitmapFromRgba,
   detectionsOf,
+  erasedRegions,
   maskInBox,
   refinable,
   regionsFromDetections,
@@ -163,6 +164,27 @@ describe('detections never touch manual strokes', () => {
     ops = applyTextRun(ops, textDetector('face'), t3)
     expect(detectionsOf(ops).map((r) => r.label)).toEqual(['logo', 'anus', 'face'])
     expect(refinable(ops).map((r) => r.label)).toEqual(['anus'])
+  })
+})
+
+describe('regions the eraser went over', () => {
+  it('names each detection an eraser stroke overlaps, so review can say it was changed by hand', () => {
+    const regions = regionsFromDetections(
+      [
+        { box: [10, 10, 30, 30], class: 'breasts', confidence: 0.9 },
+        { box: [60, 40, 80, 60], class: 'pussy', confidence: 0.8 },
+      ],
+      { ...OPTS, maskShape: 'box' },
+      null,
+    )
+    const [first, second] = regions as [RegionOp, RegionOp]
+    const eraser = { ...stroke('e', 0), tool: 'eraser' as const, size: 6, points: [32, 20, 40, 20] }
+    const brush = { ...stroke('b', 0), points: [70, 50] }
+    const ops = applyDetectRun([eraser, brush], regions)
+    // the eraser's edge (32 - 3) reaches into the first box; a brush stroke is not an erase
+    expect([...erasedRegions(ops)]).toEqual([first.id])
+    expect(erasedRegions(applyDetectRun([brush], regions)).size).toBe(0)
+    expect(erasedRegions(ops).has(second.id)).toBe(false)
   })
 })
 

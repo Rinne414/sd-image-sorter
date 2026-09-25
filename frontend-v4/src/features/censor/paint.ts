@@ -8,7 +8,9 @@ import { clipRect, cloneRaster, unionRect, visitCapsule, visitMask, visitPolygon
 // Both give the same bytes: every covered pixel gets its value from the
 // picture as it was before the op, whatever order the pieces arrive in.
 // Picture edits (filters, background removal) first turn the original into
-// the base picture; the eraser restores and the clone stamp samples that base.
+// the base picture, which the eraser restores. The clone stamp copies the
+// picture as it is just before its stroke (censoring included), from a
+// snapshot, so it never un-censors anything and never copies its own output.
 
 /** An op painted over part of the picture (everything but the picture edits). */
 export type PaintOp = StrokeOp | RegionOp
@@ -56,26 +58,27 @@ export interface Painter {
   add(points: readonly number[]): Rect | null
 }
 
-function applyToFresh(effect: Effect, target: Raster, original: Raster, base: Raster | null, fresh: number[], rect: Rect): void {
+/** `before`: the picture just before this op (blur and clone read it, so an op never reads its own output). */
+function applyToFresh(effect: Effect, target: Raster, original: Raster, before: Raster | null, fresh: number[], rect: Rect): void {
   const d = target.data
   if (effect.kind === 'fill') {
     for (const i of fresh) blendPixel(d, i * 4, effect.r, effect.g, effect.b, effect.alpha)
   } else if (effect.kind === 'restore') {
     for (const i of fresh) d.set(original.data.subarray(i * 4, i * 4 + 4), i * 4)
-  } else if (effect.kind === 'clone') {
+  } else if (effect.kind === 'clone' && before) {
     const w = target.width
     for (const i of fresh) {
       const x = (i % w) + effect.dx
       const y = Math.floor(i / w) + effect.dy
       if (x < 0 || y < 0 || x >= w || y >= target.height) continue
       const s = (y * w + x) * 4
-      d.set(original.data.subarray(s, s + 4), i * 4)
+      d.set(before.data.subarray(s, s + 4), i * 4)
     }
-  } else if (effect.kind === 'blur' && base) {
+  } else if (effect.kind === 'blur' && before) {
     const m = blurMargin(effect.radius)
     const region = clipRect(rect.x - m, rect.y - m, rect.x + rect.w + m, rect.y + rect.h + m, target.width, target.height)
     if (!region) return
-    const blurred = blurRect(base, region, effect.radius)
+    const blurred = blurRect(before, region, effect.radius)
     for (const i of fresh) {
       const x = i % target.width
       const y = (i - x) / target.width
@@ -85,13 +88,13 @@ function applyToFresh(effect: Effect, target: Raster, original: Raster, base: Ra
   }
 }
 
-/** A painter for one op on `target`. `original` is the base picture (the eraser restores from it, the clone stamp samples it). */
+/** A painter for one op on `target`. `original` is the base picture (the eraser restores from it). */
 export function createPainter(target: Raster, original: Raster, op: PaintOp, scratch?: Scratch): Painter {
   const { width, height } = target
   const effect = effectOf(op)
   const own = scratch ?? createScratch(width, height)
   const stamp = nextStamp(own)
-  const base = effect.kind === 'blur' ? cloneRaster(target) : null
+  const before = effect.kind === 'blur' || effect.kind === 'clone' ? cloneRaster(target) : null
   const block = effect.kind === 'mosaic' ? effect.block : 1
   const cols = Math.ceil(width / block)
   const cells = effect.kind === 'mosaic' ? new Uint8Array(cols * Math.ceil(height / block)) : null
@@ -124,7 +127,7 @@ export function createPainter(target: Raster, original: Raster, op: PaintOp, scr
     })
     if (fresh.length === 0) return null
     const rect = { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 }
-    applyToFresh(effect, target, original, base, fresh, rect)
+    applyToFresh(effect, target, original, before, fresh, rect)
     return rect
   }
 

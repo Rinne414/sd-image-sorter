@@ -331,6 +331,63 @@ test('remove background (R): SAM3 finds the subject, white fill previews and app
   await expect.poll(async () => px((await pixels(page, b, false)).b, 10, 10)).not.toEqual([255, 255, 255, 255])
 })
 
+test('cloning from inside a detected region copies its censoring, never the picture under it; an eraser over it shows in review', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await page.route('**/api/censor/models', (route) =>
+    route.fulfill({ json: { status: 'ok', recommended_backend: 'nudenet', models: [{ id: 'nudenet', name: 'NudeNet v3', available: true }] } }),
+  )
+  await page.route('**/api/models/status', (route) => route.fulfill({ json: { models: [{ id: 'censor-nudenet', status: 'ready', available: true }] } }))
+  await page.route('**/api/censor/detect', (route) =>
+    route.fulfill({
+      json: {
+        status: 'ok',
+        detections: [{ box: [20, 20, 80, 70], class: 'breasts', confidence: 0.9 }],
+        combined_mask: null,
+        combined_mask_ref: null,
+        combined_mask_bounds: null,
+        image_width: W,
+        image_height: H,
+        warnings: [],
+      },
+    }),
+  )
+  await openBatch(page)
+  const b = ids[1] as number
+  await stripItem(page, 1).click()
+  await expect(page.getByTestId('censor-position')).toHaveText('2 / 2')
+  await page.getByTestId('censor-style-black').click()
+  await page.getByTestId('censor-position').click()
+  await page.keyboard.press('d')
+  await expect(stripItem(page, 1)).toHaveAttribute('data-review', 'waiting')
+  await expect.poll(async () => px((await pixels(page, b, false)).b, 50, 45)).toEqual([0, 0, 0, 255])
+
+  // Alt+click inside the black region, paint on a clean spot
+  await page.keyboard.press('g')
+  await page.getByTestId('censor-size').fill('10')
+  const [sx, sy] = await at(page, 50, 45)
+  await page.keyboard.down('Alt')
+  await page.mouse.click(sx, sy)
+  await page.keyboard.up('Alt')
+  await paint(page, [[150, 120], [154, 120]])
+  await expect.poll(async () => px((await pixels(page, b, false)).b, 150, 120)).toEqual([0, 0, 0, 255])
+
+  // the eraser over the region's edge: review says the region was changed by hand
+  await page.keyboard.press('e')
+  await paint(page, [[76, 45], [90, 45]])
+  await page.getByTestId('censor-tab-review').click()
+  await expect(page.getByTestId('censor-review-region')).toHaveAttribute('data-erased', 'true')
+  await expect(page.getByTestId('censor-review-region')).toContainText('erased by hand')
+
+  await page.getByTestId('censor-position').click()
+  await page.keyboard.press('ArrowLeft')
+  await expect(stripItem(page, 1)).toHaveAttribute('data-state', 'saved')
+  const copy = await pixels(page, b, true)
+  // the destination holds the censored source pixels, not the (brightened) picture under the region
+  expect(px(copy.b, 150, 120)).toEqual(px(copy.b, 50, 45))
+  expect(px(copy.b, 150, 120)).toEqual([0, 0, 0, 255])
+  expect(px(copy.b, 150, 120)).not.toEqual(brighter(px(copy.a, 50, 45)))
+})
+
 test('the shortcut list shows the editor keys', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   await openBatch(page)

@@ -78,13 +78,30 @@ describe('clone stamp', () => {
     expect(px(offEdge, 38, 10)).toEqual(px(original, 38, 10))
   })
 
-  it('samples the picture before any censoring: cloning over a black bar brings back clean pixels', () => {
+  it('copies the picture as shown, censoring included: cloning a black bar extends it, never un-censors', () => {
     const original = gradient()
     const bar = stroke({ id: 'bar', style: 'black', size: 12, points: [25, 15] })
     const clone = stroke({ id: 'c', tool: 'clone', size: 4, points: [10, 10], offset: [15, 5] })
     const out = renderOps(original, [bar, clone])
     expect(px(out, 25, 15)).toEqual([0, 0, 0, 255])
-    expect(px(out, 10, 10)).toEqual(px(original, 25, 15))
+    expect(px(out, 10, 10)).toEqual([0, 0, 0, 255])
+    expect(px(out, 9, 9)).toEqual([0, 0, 0, 255])
+  })
+
+  it('copies the censoring of a detection region too, and never its own output; replay gives the same bytes', () => {
+    const original = gradient()
+    const opts = { detector: 'nudenet', style: 'white' as const, block: 8, maskShape: 'box' as const, confidence: 0, width: W, height: H }
+    const regions = regionsFromDetections([{ box: [20, 10, 30, 20], class: 'breasts', confidence: 0.9 }], opts, null)
+    // clone from inside the white region (25, 15) to a clean spot (5, 25)
+    const clone = stroke({ id: 'c', tool: 'clone', size: 4, points: [5, 25], offset: [20, -10] })
+    const ops = appendManual(applyDetectRun([], regions), clone)
+    const out = renderOps(original, ops)
+    expect(px(out, 5, 25)).toEqual([255, 255, 255, 255])
+    // overlapping source and destination: each pixel comes from the picture before this stroke
+    const overlap = stroke({ id: 'o', tool: 'clone', size: 6, points: [10, 10, 14, 10], offset: [2, 0] })
+    const shifted = renderOps(original, [overlap])
+    expect(px(shifted, 11, 10)).toEqual(px(original, 13, 10))
+    expect(Array.from(renderOps(original, ops).data)).toEqual(Array.from(out.data))
   })
 
   it('a clone stroke without a source is dropped when read back', () => {

@@ -10,13 +10,16 @@
  * 3. The list has three groups, always in this order:
  *    a. picture edits (`adjust` filters, `background` removal), in the order
  *       made. They turn the original into the BASE picture: what the eraser
- *       restores and the clone stamp samples, and what censoring covers;
+ *       restores, and what censoring covers;
  *    b. AI detection results: `region` ops with `source: 'detection'` (a
  *       polygon or a run-length mask);
  *    c. manual strokes, in the order the user made them.
  *    A manual stroke, including an eraser that corrects a wrong detection,
  *    therefore always wins over what a detector produced, and a filter never
- *    lightens a black bar or un-blurs a mosaic.
+ *    lightens a black bar or un-blurs a mosaic. The clone stamp copies the
+ *    picture as rendered up to its own stroke (picture edits, detections and
+ *    every earlier stroke), read from a snapshot taken before the stroke: it
+ *    can extend censoring but never copies uncensored pixels over it.
  * 4. appendBase adds a picture edit at the end of group a; insertDetections
  *    and replaceDetections (re-detect) change group b only (all detections, or
  *    one detector's). Manual ops are only ever appended (appendManual). None

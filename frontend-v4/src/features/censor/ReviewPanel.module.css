@@ -73,6 +73,13 @@
   white-space: nowrap;
 }
 
+/* Changed by hand after the detection (the eraser went over it): the marker ink, like any manual edit. */
+.manual {
+  margin-left: 6px;
+  color: var(--marker);
+  font-size: var(--fs-1);
+}
+
 .conf {
   color: var(--text-2);
   font-size: var(--fs-2);

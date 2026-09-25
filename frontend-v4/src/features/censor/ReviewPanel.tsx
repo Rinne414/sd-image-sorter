@@ -1,6 +1,6 @@
 import type { Batch, BatchItem } from '../../api/types'
 import { useT, type MessageKey } from '../../i18n'
-import { detectionsOf, isTextRegion } from './detection'
+import { detectionsOf, erasedRegions, isTextRegion } from './detection'
 import { useDetectBusy } from './detectRun'
 import { TARGETS, type Target } from './detectSettings'
 import { TARGET_LABEL } from './DetectPanel'
@@ -46,7 +46,15 @@ interface Props {
 type Mark = 'none' | 'waiting' | 'approved'
 
 /** This image's regions, each switched off or on by its number key or a click. */
-function RegionList({ regions, mark, actions }: { regions: RegionOp[]; mark: Mark; actions: ReviewActions }) {
+interface ListProps {
+  regions: RegionOp[]
+  /** Regions the eraser went over (the original shows there). */
+  erased: ReadonlySet<string>
+  mark: Mark
+  actions: ReviewActions
+}
+
+function RegionList({ regions, erased, mark, actions }: ListProps) {
   const t = useT()
   return (
     <Section title={t('censor.review.regions', { n: regions.length })}>
@@ -63,9 +71,17 @@ function RegionList({ regions, mark, actions }: { regions: RegionOp[]; mark: Mar
                 onClick={() => actions.toggle(i + 1)}
                 title={t(region.off ? 'censor.review.regionOff' : 'censor.review.regionOn')}
                 data-testid="censor-review-region"
+                data-erased={erased.has(region.id) || undefined}
               >
                 <kbd>{i < 9 ? i + 1 : ' '}</kbd>
-                <span className={styles.regionName}>{regionName(region, t)}</span>
+                <span className={styles.regionName}>
+                  {regionName(region, t)}
+                  {erased.has(region.id) && (
+                    <span className={styles.manual} title={t('censor.review.erasedTip')}>
+                      {t('censor.review.erased')}
+                    </span>
+                  )}
+                </span>
                 <span className={`${styles.conf} mono`}>{region.confidence === undefined ? '' : `${Math.round(region.confidence * 100)}%`}</span>
               </button>
             </li>
@@ -103,7 +119,7 @@ export function ReviewPanel({ batch, item, edit, actions }: Props) {
           {busy === 'detect' ? t('censor.detect.running') : t(MARK[mark])}
         </p>
       </Section>
-      <RegionList regions={regions} mark={mark} actions={actions} />
+      <RegionList regions={regions} erased={erasedRegions(current.ops)} mark={mark} actions={actions} />
       <div className={styles.actions}>
         <button type="button" className="btn btn-primary" onClick={actions.approve} data-testid="censor-review-approve">
           {t('censor.review.approve')}

@@ -1,4 +1,4 @@
-import { isDetection, newOpId, replaceDetections, type Box, type CensorStyle, type Op, type RegionOp, type RegionShape } from './ops'
+import { isDetection, newOpId, replaceDetections, type Box, type CensorStyle, type Op, type RegionOp, type RegionShape, type StrokeOp } from './ops'
 
 // Turning what the detectors answer into region ops, and the list changes a
 // review makes. Pure (no canvas, no network) so the rules can be tested:
@@ -203,4 +203,40 @@ export function toggleAllRegions(ops: readonly Op[]): Op[] {
 /** Boxes SAM3 can refine: regions with a detector box, not text regions. */
 export function refinable(ops: readonly Op[]): (RegionOp & { box: Box })[] {
   return detectionsOf(ops).filter((op): op is RegionOp & { box: Box } => !!op.box && !isTextRegion(op))
+}
+
+// ---- review: what the eraser changed ----
+
+type Bounds = [number, number, number, number]
+
+function shapeBounds(shape: RegionShape): Bounds {
+  if (shape.type === 'mask') return [shape.x, shape.y, shape.x + shape.w, shape.y + shape.h]
+  const xs = shape.points.filter((_, i) => i % 2 === 0)
+  const ys = shape.points.filter((_, i) => i % 2 === 1)
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
+}
+
+function strokeBounds(op: StrokeOp): Bounds {
+  const xs = op.points.filter((_, i) => i % 2 === 0)
+  const ys = op.points.filter((_, i) => i % 2 === 1)
+  const r = op.size / 2
+  return [Math.min(...xs) - r, Math.min(...ys) - r, Math.max(...xs) + r, Math.max(...ys) + r]
+}
+
+const overlaps = (a: Bounds, b: Bounds) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]
+
+/**
+ * Detections an eraser stroke went over (by their bounding boxes). Strokes
+ * always render after detections, so there the original shows again: review
+ * marks these regions as changed by hand.
+ */
+export function erasedRegions(ops: readonly Op[]): Set<string> {
+  const erasers = ops.filter((op): op is StrokeOp => op.type === 'stroke' && op.tool === 'eraser').map(strokeBounds)
+  const out = new Set<string>()
+  if (erasers.length === 0) return out
+  for (const region of detectionsOf(ops)) {
+    const bounds = shapeBounds(region.shape)
+    if (erasers.some((e) => overlaps(e, bounds))) out.add(region.id)
+  }
+  return out
 }
