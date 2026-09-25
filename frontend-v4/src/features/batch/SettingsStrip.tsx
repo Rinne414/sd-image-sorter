@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import type { Batch } from '../../api/types'
 import { useT, type MessageKey } from '../../i18n'
 import { useLayer } from '../../ui/layers'
@@ -6,6 +6,7 @@ import { CaptionPreview } from './CaptionPreview'
 import { splitList, type DatasetForm } from './datasetSettings'
 import styles from './DatasetSettings.module.css'
 import { SettingsFields } from './SettingsFields'
+import { setSettingsPanel, useSettingsPanel } from './settingsPanel'
 import { useDatasetSettings, useTemplatePresets, type SaveState } from './useDatasetSettings'
 
 const STATE: Record<SaveState, MessageKey> = {
@@ -52,9 +53,10 @@ function Summary({ form }: { form: DatasetForm }) {
  */
 export function SettingsStrip({ batch }: { batch: Batch }) {
   const t = useT()
-  const s = useDatasetSettings(batch)
+  const open = useSettingsPanel((st) => st.open)
+  const setOpen = setSettingsPanel
+  const s = useDatasetSettings(batch, open)
   const presets = useTemplatePresets()
-  const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLInputElement>(null)
   // Esc closes the panel; a trigger still being typed counts, as it does on leaving the field.
   useLayer(open, () => {
@@ -66,6 +68,8 @@ export function SettingsStrip({ batch }: { batch: Batch }) {
   useEffect(() => {
     if (open) triggerRef.current?.focus()
   }, [open])
+  // Another batch opens with the panel closed.
+  useEffect(() => () => setSettingsPanel(false), [batch.id])
 
   const form = s.form
   return (

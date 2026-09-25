@@ -17,6 +17,7 @@ import {
   type DatasetForm,
 } from './datasetSettings'
 import { pathKey } from './datasetItems'
+import { useProjectHeads } from './datasetTagApi'
 import { entriesFromProject, type Entry } from './entries'
 
 /** Quiet time after the last edit before the settings are saved. */
@@ -85,11 +86,14 @@ async function saveForm(batch: Batch, view: BatchProjectView, form: DatasetForm)
  * The dataset batch's settings as the strip edits them. Edits apply to the
  * preview at once and are saved after a short pause; the trigger is typed
  * apart and only counts once it is finished (blur or Enter), so a half-typed
- * trigger never lands on the blacklist as an "old" one.
+ * trigger never lands on the blacklist as an "old" one. The preview (the
+ * first PREVIEW_LIMIT images, edited ones as their saved revision) is only
+ * asked for while `previewOn`.
  */
-export function useDatasetSettings(batch: Batch) {
+export function useDatasetSettings(batch: Batch, previewOn = true) {
   const project = useBatchProject(batch)
   const view = project.data
+  const heads = useProjectHeads(previewOn ? view : undefined)
   const saved = useMemo(() => (view ? formFromSettings(view.project.settings, readBatchDataset(batch.settings)) : null), [view, batch.settings])
   const [draft, setDraft] = useState<DatasetForm | null>(null)
   const [triggerText, setTriggerText] = useState<string | null>(null)
@@ -138,7 +142,10 @@ export function useDatasetSettings(batch: Batch) {
   // The preview shows the form as it is on screen, the trigger being typed included.
   const shown = form ? (typing !== null ? withTriggerChange({ ...form, trigger: typing }, savedTrigger) : form) : null
   const entries = useMemo(() => (view ? entriesFromProject(view) : []), [view])
-  const body = useDebounced(shown ? JSON.stringify(previewBody(shown, entries, PREVIEW_LIMIT)) : null, PREVIEW_AFTER_MS)
+  // Edited images preview as their revision; until the heads are read nothing is asked (a failed read previews the template).
+  const scope = view && heads.data ? { projectId: view.project.id, projectRevision: view.project.revision, heads: heads.data } : null
+  const ready = previewOn && (scope !== null || heads.isError)
+  const body = useDebounced(ready && shown ? JSON.stringify(previewBody(shown, entries.slice(0, PREVIEW_LIMIT), PREVIEW_LIMIT, scope)) : null, PREVIEW_AFTER_MS)
   const library = useApp((s) => s.libraryId)
   const preview = useQuery({
     queryKey: ['dataset-preview', library, batch.id, body],

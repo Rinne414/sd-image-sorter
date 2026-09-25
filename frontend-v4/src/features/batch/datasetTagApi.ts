@@ -72,17 +72,29 @@ export function useVlmStatus() {
   })
 }
 
-interface HeadRow {
+export interface HeadRow {
   item: { item_type: 'library'; image_id: number } | { item_type: 'local'; path: string }
+  subject_id: number | null
   generation: number
-  active_revision: { author_class: Author } | null
+  active_revision: { id: number; author_class: Author; content: CaptionContent } | null
 }
 
-async function fetchHeads(view: BatchProjectView, signal?: AbortSignal): Promise<Map<string, HeadInfo>> {
+/** A head row as the steps keep it (who wrote it, its revision and content). */
+export function headInfo(row: HeadRow): HeadInfo {
+  const active = row.active_revision
+  return {
+    generation: row.generation,
+    author: active?.author_class ?? null,
+    ...(active ? { revisionId: active.id, content: active.content } : {}),
+    ...(row.subject_id !== null ? { subjectId: row.subject_id } : {}),
+  }
+}
+
+export async function fetchHeads(view: BatchProjectView, signal?: AbortSignal): Promise<Map<string, HeadInfo>> {
   const heads = new Map<string, HeadInfo>()
   let after: number | undefined
   for (;;) {
-    const page = unwrap<{ items: (HeadRow & { subject_id: number | null })[]; has_more: boolean; next_after_subject_id: number | null }>(
+    const page = unwrap<{ items: HeadRow[]; has_more: boolean; next_after_subject_id: number | null }>(
       await api.GET('/api/annotations/projects/{project_id}/training-captions/heads', {
         params: {
           path: { project_id: view.project.id },
@@ -92,7 +104,7 @@ async function fetchHeads(view: BatchProjectView, signal?: AbortSignal): Promise
       }),
     )
     for (const row of page.items) {
-      if (row.generation > 0) heads.set(headKey(row.item), { generation: row.generation, author: row.active_revision?.author_class ?? null })
+      if (row.generation > 0) heads.set(headKey(row.item), headInfo(row))
     }
     if (!page.has_more || page.next_after_subject_id === null) return heads
     after = page.next_after_subject_id
@@ -103,12 +115,16 @@ async function fetchHeads(view: BatchProjectView, signal?: AbortSignal): Promise
 export function useProjectHeads(view: BatchProjectView | undefined) {
   const library = useApp((s) => s.libraryId)
   return useQuery({
-    queryKey: ['batch-heads', library, view?.project.id, view?.project.revision],
+    queryKey: headsKey(library, view?.project.id, view?.project.revision),
     enabled: !!view,
     queryFn: ({ signal }) => fetchHeads(view as BatchProjectView, signal),
+    // A new project revision (a settings save) reads them again; the same project's old map stays meanwhile.
+    placeholderData: (previous, query) => (query?.queryKey[2] === view?.project.id ? previous : undefined),
     staleTime: 15_000,
   })
 }
+
+export const headsKey = (library: string, projectId?: number, revision?: number) => ['batch-heads', library, projectId, revision] as const
 
 /** Describer models that run on this computer, as model cards. */
 const DESCRIBER_CARDS: Record<'florence2' | 'toriigate', TaggerInfo & { sizeHint: string }> = {

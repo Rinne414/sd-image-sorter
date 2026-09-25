@@ -91,10 +91,42 @@ export function previewable(entries: readonly Entry[]): { ids: number[]; paths: 
   return { ids, paths }
 }
 
-/** The body of POST /api/dataset/export-preview: these entries under the form's rules. */
-export function previewBody(form: DatasetForm, entries: readonly Entry[], limit: number) {
-  const { ids, paths } = previewable(entries)
+/** The project's caption revisions a preview names (by entry key), at the project revision they belong to. */
+export interface CaptionScope {
+  projectId: number
+  projectRevision: number
+  heads: ReadonlyMap<string, { revisionId?: number }>
+}
+
+export type AnnotationSelection = { kind: 'revision_ref'; revision_id: number } | { kind: 'dynamic_source' }
+
+/**
+ * Each entry's caption as the export takes it: its active revision, or the
+ * template when it was never edited. Keys are what the backend matches:
+ * a Library image's id, a folder image's path.
+ */
+export function annotationSelections(entries: readonly Entry[], heads: CaptionScope['heads']): Record<string, AnnotationSelection> {
+  const out: Record<string, AnnotationSelection> = {}
+  for (const entry of entries) {
+    const key = entry.imageId !== null ? String(entry.imageId) : entry.path
+    if (key === null || (entry.imageId === null && entry.status === 'missing')) continue
+    const revision = heads.get(entry.key)?.revisionId
+    out[key] = revision ? { kind: 'revision_ref', revision_id: revision } : { kind: 'dynamic_source' }
+  }
+  return out
+}
+
+/**
+ * The body of POST /api/dataset/export-preview: these entries under the
+ * form's rules. With a scope, edited images show their revision (the same
+ * selections the export sends); a folder image whose file changed since it
+ * was added has no caption the backend can name, so it is left out then.
+ */
+export function previewBody(form: DatasetForm, entries: readonly Entry[], limit: number, scope?: CaptionScope | null) {
+  const named = scope ? entries.filter((e) => !(e.imageId === null && e.status === 'changed')) : entries
+  const { ids, paths } = previewable(named)
   const options = templateOptions(form)
+  const selections = scope ? annotationSelections(named, scope.heads) : {}
   return {
     image_ids: ids,
     image_paths: paths,
@@ -107,6 +139,9 @@ export function previewBody(form: DatasetForm, entries: readonly Entry[], limit:
     template_options: options,
     caption_transforms: captionTransforms(form),
     limit: Math.max(1, Math.min(500, limit)),
+    ...(scope && Object.keys(selections).length > 0
+      ? { dataset_project_id: scope.projectId, dataset_project_revision: scope.projectRevision, annotation_selections: selections }
+      : {}),
   }
 }
 

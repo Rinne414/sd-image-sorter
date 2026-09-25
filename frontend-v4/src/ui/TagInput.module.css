@@ -56,3 +56,8 @@
 .count {
   color: var(--muted);
 }
+
+.zh {
+  margin-left: 6px;
+  color: var(--muted);
+}

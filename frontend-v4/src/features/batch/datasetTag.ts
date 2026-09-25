@@ -59,6 +59,10 @@ export type Author = 'user' | 'ai' | 'system' | 'import'
 export interface HeadInfo {
   generation: number
   author: Author | null
+  /** The active revision, its subject and content (set when read from the server). */
+  revisionId?: number
+  subjectId?: number
+  content?: CaptionContent
 }
 
 export interface TagScope {
