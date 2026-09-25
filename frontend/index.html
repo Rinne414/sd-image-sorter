@@ -8540,6 +8540,18 @@
 
             <!-- Actions -->
             <div class="modal-actions smart-tag-actions">
+                <!-- Asked before a run when "re-tag" is off and some images already
+                     have tags; it lives in the sticky action bar so it is never
+                     scrolled out of view or covered by it. -->
+                <div class="smart-tag-existing-check" id="smart-tag-existing-check" role="alertdialog" aria-labelledby="smart-tag-existing-title" hidden>
+                    <p class="smart-tag-existing-title" id="smart-tag-existing-title"></p>
+                    <p class="form-help" data-i18n="smartTag.existingHelp">Skipped images get no tags, no natural-language caption and no trigger word.</p>
+                    <div class="smart-tag-existing-actions">
+                        <button class="btn btn-ghost" id="btn-smart-tag-existing-cancel" type="button" data-i18n="smartTag.cancel">Cancel</button>
+                        <button class="btn btn-secondary" id="btn-smart-tag-existing-skip" type="button"></button>
+                        <button class="btn btn-primary" id="btn-smart-tag-existing-include" type="button"></button>
+                    </div>
+                </div>
                 <button class="btn btn-ghost" id="btn-smart-tag-cancel-modal" data-i18n="smartTag.cancel">Cancel</button>
                 <button class="btn btn-danger" id="btn-smart-tag-cancel-job" hidden data-i18n="smartTag.cancelJob">Stop</button>
                 <button class="btn btn-primary" id="btn-smart-tag-run">

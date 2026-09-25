@@ -2047,6 +2047,10 @@ Missing, unreadable, malformed, schema-invalid, or truncated result stores retur
 with the `job_id`, result path, and concrete cause. Clients preserve existing edits and
 must not render a success state when the page cannot be read.
 
+#### POST /api/smart-tag/tagged-count
+
+Count how many library images of a planned run already have tags (`tagged_at` set). Body: `{ "image_ids": [int, ...], "selection_token": "..." }` (both optional; path sources are never skipped, so they are not sent). Returns `{ "checked", "already_tagged" }`. With `skip_existing` on, `/start` drops those images entirely (no tags, no natural-language caption, no trigger word), so the Smart Tag dialog asks this first and lets the user skip or process them. 400 for an invalid selection token.
+
 #### POST /api/smart-tag/cancel
 
 Request cancellation of the active Smart Tag job. The worker stops at the next image boundary;

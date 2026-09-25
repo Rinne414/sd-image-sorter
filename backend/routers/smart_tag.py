@@ -4,6 +4,7 @@ Endpoints:
     POST /api/smart-tag/start      - validate input, queue a worker thread, return job snapshot
     GET  /api/smart-tag/progress   - poll the active or named job
     POST /api/smart-tag/cancel     - request cancellation of the active job
+    POST /api/smart-tag/tagged-count - how many requested images already have tags
 
 The router is intentionally thin - the heavy lifting lives in
 ``services/smart_tag_service.py``. That separation matches the rest of
@@ -23,6 +24,7 @@ from services.smart_tag_service import (
     get_job,
 )
 from services.smart_tag.request import SmartTagCaptionProfile
+from services.smart_tag.sources import count_already_tagged
 from services.tagging_pipeline_service import (
     TaggingPipelineService,
     get_tagging_pipeline_service,
@@ -143,6 +145,27 @@ def results(
             extra={"job_id": job_id},
         )
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+class SmartTagTaggedCountRequest(BaseModel):
+    """Library sources of a planned run; paths are never skipped, so not sent."""
+    model_config = ConfigDict(extra="ignore")
+
+    image_ids: List[int] = Field(default_factory=list, max_length=SMART_TAG_MAX_EXPLICIT_SOURCES)
+    selection_token: Optional[str] = Field(default=None, min_length=1, max_length=16384)
+
+
+@router.post("/tagged-count")
+def tagged_count(request: SmartTagTaggedCountRequest) -> Dict[str, int]:
+    """Count the requested library images that already have tags.
+
+    With skip_existing on, Smart Tag drops these images entirely; the dialog
+    shows the count and lets the user skip or process them.
+    """
+    try:
+        return count_already_tagged(request.image_ids, request.selection_token)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/cancel")

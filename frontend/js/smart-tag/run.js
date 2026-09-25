@@ -142,7 +142,9 @@
 
         // Reuse the existing toast helper if available; fall back to alert.
         const noiseStripped = snap.noise_stripped_count || 0;
-        const noiseSuffix = noiseStripped > 0 ? ` · ${noiseStripped} noise tags removed` : '';
+        const noiseSuffix = noiseStripped > 0
+            ? smartTagT('smartTag.noiseSuffix', ' · {count} noise tags removed').replace('{count}', String(noiseStripped))
+            : '';
         const firstError = Array.isArray(snap.errors)
             ? snap.errors.find((entry) => entry && entry.error)
             : null;
@@ -159,14 +161,25 @@
                 ? ` · ${errorLabel}`
                 : errorSuffix
             : '';
+        // Already-tagged images left alone by "skip existing" got nothing, not
+        // even the caption or trigger word, so the toast counts them.
+        const skipped = snap.skipped || 0;
+        const skippedSuffix = skipped > 0
+            ? smartTagT('smartTag.skippedSuffix', ' · {count} skipped (already had tags)').replace('{count}', String(skipped))
+            : '';
+        const fill = (template, values) => Object.keys(values)
+            .reduce((text, name) => text.split(`{${name}}`).join(String(values[name])), template);
         const isWarning = status === 'warning' || (status === 'completed' && fail > 0);
         const message = status === 'cancelled'
-            ? `Smart Tag cancelled at ${ok + fail}/${total}${noiseSuffix}`
+            ? fill(smartTagT('smartTag.cancelledToast', 'Smart Tag cancelled at {done}/{total}{extra}'),
+                { done: ok + fail, total, extra: noiseSuffix + skippedSuffix })
             : status === 'failed'
                 ? `Smart Tag failed: ${snap.message || 'unknown error'}${failedErrorSuffix}`
                 : isWarning
-                    ? `Smart Tag finished with warnings: ${ok} ok, ${fail} failed${noiseSuffix}${errorSuffix}.`
-                    : `Smart Tag finished: ${ok} ok, ${fail} failed${noiseSuffix}.`;
+                    ? fill(smartTagT('smartTag.finishedWarningsToast', 'Smart Tag finished with warnings: {ok} ok, {fail} failed{extra}.'),
+                        { ok, fail, extra: noiseSuffix + skippedSuffix + errorSuffix })
+                    : fill(smartTagT('smartTag.finishedToast', 'Smart Tag finished: {ok} ok, {fail} failed{extra}.'),
+                        { ok, fail, extra: noiseSuffix + skippedSuffix });
         const toastType = status === 'failed'
             ? 'error'
             : status === 'cancelled'
@@ -208,7 +221,51 @@
         activeJobId = null;
     }
 
+    let pendingExistingChoice = null;
+
+    function answerExistingChoice(choice) {
+        const resolve = pendingExistingChoice;
+        if (!resolve) return;
+        pendingExistingChoice = null;
+        const panel = smartTag$('#smart-tag-existing-check');
+        if (panel) panel.hidden = true;
+        resolve(choice);
+    }
+
+    function showExistingChoice(count) {
+        answerExistingChoice('cancel');
+        const panel = smartTag$('#smart-tag-existing-check');
+        if (!panel) return Promise.resolve('skip');
+        const fill = (key, fallback) => smartTagT(key, fallback).replace('{count}', String(count));
+        smartTag$('#smart-tag-existing-title').textContent = fill('smartTag.existingTitle',
+            '{count} of these images already have tags.');
+        smartTag$('#btn-smart-tag-existing-skip').textContent = fill('smartTag.existingSkip', 'Skip those {count}');
+        smartTag$('#btn-smart-tag-existing-include').textContent = fill('smartTag.existingInclude', 'Process those {count} too');
+        panel.hidden = false;
+        smartTag$('#btn-smart-tag-existing-skip').focus();
+        return new Promise((resolve) => { pendingExistingChoice = resolve; });
+    }
+
+    // Returns 'skip' | 'include' | 'cancel'. A failed count does not block
+    // the run: the finish toast still reports what was skipped.
+    async function askAboutAlreadyTagged(form) {
+        if (!form.image_ids.length && !form.selection_token) return 'skip';
+        let counts;
+        try {
+            counts = await postJson('/api/smart-tag/tagged-count', {
+                image_ids: form.image_ids,
+                selection_token: form.selection_token || undefined,
+            });
+        } catch (err) {
+            (window.Logger?.warn || console.warn)('[smart-tag] tagged-count failed', err);
+            return 'skip';
+        }
+        const count = Number(counts?.already_tagged) || 0;
+        return count > 0 ? showExistingChoice(count) : 'skip';
+    }
+
     async function runSmartTag() {
+        answerExistingChoice('cancel');
         const form = readForm();
         if (
             !form.image_ids.length
@@ -237,6 +294,14 @@
                 window.showToast(smartTagT('smartTag.pickOneMode', 'Pick booru tags, natural-language captioning, or both.'), 'warning');
             }
             return;
+        }
+
+        // "Skip existing" drops already-tagged images entirely: no tags, no
+        // caption, no trigger word. Say how many first and let the user pick.
+        if (form.skip_existing) {
+            const choice = await askAboutAlreadyTagged(form);
+            if (choice === 'cancel') return;
+            if (choice === 'include') form.skip_existing = false;
         }
 
         // Destructive-replace guard: replace mode overwrites existing

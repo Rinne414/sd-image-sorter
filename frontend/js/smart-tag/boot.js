@@ -21,6 +21,9 @@
 
         const runBtn = smartTag$('#btn-smart-tag-run');
         if (runBtn) runBtn.addEventListener('click', runSmartTag);
+        smartTag$('#btn-smart-tag-existing-cancel')?.addEventListener('click', () => answerExistingChoice('cancel'));
+        smartTag$('#btn-smart-tag-existing-skip')?.addEventListener('click', () => answerExistingChoice('skip'));
+        smartTag$('#btn-smart-tag-existing-include')?.addEventListener('click', () => answerExistingChoice('include'));
 
         const cancelBtn = smartTag$('#btn-smart-tag-cancel-job');
         if (cancelBtn) cancelBtn.addEventListener('click', cancelSmartTag);

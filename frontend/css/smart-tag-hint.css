@@ -113,6 +113,21 @@
 #smart-tag-modal .smart-tag-progress { grid-area: progress; }
 #smart-tag-modal .smart-tag-progress[hidden] { display: none; }
 
+#smart-tag-modal .smart-tag-existing-check {
+    display: flex;
+    flex: 1 0 100%;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1px solid var(--warning, #DAAC35);
+    border-radius: var(--radius-md, 8px);
+    background: var(--surface-2, #1a1a1a);
+}
+#smart-tag-modal .smart-tag-existing-check[hidden] { display: none; }
+#smart-tag-modal .smart-tag-existing-title { margin: 0; font-weight: 600; color: var(--warning, #DAAC35); }
+#smart-tag-modal .smart-tag-existing-check .form-help { margin: 0; }
+#smart-tag-modal .smart-tag-existing-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
 #smart-tag-modal .smart-tag-basic-grid,
 #smart-tag-modal .smart-tag-vote-grid,
 #smart-tag-modal .smart-tag-natural-grid {
@@ -263,6 +278,7 @@
     display: flex;
     gap: 8px;
     justify-content: flex-end;
+    flex-wrap: wrap;
     position: sticky;
     bottom: -1px;
     padding-top: 10px;
