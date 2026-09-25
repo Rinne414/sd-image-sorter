@@ -87,6 +87,7 @@ function Palette() {
       list.push(
         mk('sel-tag', 'palette.group.selection', 'palette.cmd.tag', () => show('tag')),
         mk('sel-edit-tags', 'palette.group.selection', 'palette.cmd.editTags', () => show('edit-tags')),
+        mk('sel-export', 'palette.group.selection', 'palette.cmd.exportData', () => show('export')),
         mk('sel-move', 'palette.group.selection', 'palette.cmd.move', () => show('move')),
         mk('sel-copy', 'palette.group.selection', 'palette.cmd.copy', () => show('copy')),
         mk('sel-remove', 'palette.group.selection', 'palette.cmd.remove', () => show('remove'), 'Del'),

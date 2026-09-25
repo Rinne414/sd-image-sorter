@@ -5,6 +5,7 @@ import { Dialog } from '../../ui/Dialog'
 import { startFileJob } from '../jobs/fileJobs'
 import { TagDialog } from '../tagging/TagDialog'
 import { TagEditDialog } from '../tagedit/TagEditDialog'
+import { ExportDataDialog } from '../exportdata/ExportDataDialog'
 import { useSelectionDialog } from './dialogs'
 import { FolderPicker } from './FolderPicker'
 import styles from './SelectionDialogs.module.css'
@@ -18,6 +19,7 @@ export function SelectionDialogs() {
   if (open === 'move' || open === 'copy') return <FolderPicker operation={open} ids={ids} onClose={close} />
   if (open === 'tag') return <TagDialog ids={ids} onClose={close} />
   if (open === 'edit-tags') return <TagEditDialog ids={ids} onClose={close} />
+  if (open === 'export') return <ExportDataDialog ids={ids} onClose={close} />
   return <ConfirmFileAction kind={open} ids={ids} onClose={close} />
 }
 
