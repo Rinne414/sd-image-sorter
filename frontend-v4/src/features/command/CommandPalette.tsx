@@ -79,6 +79,7 @@ function Palette() {
       const name = lib.is_default && lib.name === 'Main library' ? translate(lang, 'rail.mainLibrary') : lib.name
       list.push(mk(`lib-${lib.id}`, 'palette.group.library', 'palette.cmd.switchTo', () => s.setLibrary(lib.id), undefined, { name }))
     }
+    list.push(mk('import', 'palette.group.library', 'palette.cmd.import', () => useSelectionDialog.getState().showFor('import', null, 1)))
     if (useJobs.getState().jobs.length > 0) {
       list.push(mk('jobs', 'palette.group.library', 'palette.cmd.jobs', () => useJobs.getState().setDrawerOpen(true)))
     }

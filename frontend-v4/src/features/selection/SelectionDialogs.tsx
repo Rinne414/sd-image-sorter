@@ -7,6 +7,7 @@ import { TagDialog } from '../tagging/TagDialog'
 import { TagEditDialog } from '../tagedit/TagEditDialog'
 import { ExportDataDialog } from '../exportdata/ExportDataDialog'
 import { MissingDialog } from '../status/MissingDialog'
+import { ImportDialog } from '../import/ImportDialog'
 import { useSelectionDialog } from './dialogs'
 import { FolderPicker } from './FolderPicker'
 import styles from './SelectionDialogs.module.css'
@@ -20,6 +21,7 @@ export function SelectionDialogs() {
   if (!open || count === 0) return null
   if (open === 'tag') return <TagDialog ids={ids} count={count} onClose={close} />
   if (open === 'missing') return <MissingDialog onClose={close} />
+  if (open === 'import') return <ImportDialog onClose={close} />
   if (!ids) return null
   if (open === 'move' || open === 'copy') return <FolderPicker operation={open} ids={ids} onClose={close} />
   if (open === 'edit-tags') return <TagEditDialog ids={ids} onClose={close} />

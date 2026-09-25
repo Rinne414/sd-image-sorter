@@ -3,6 +3,7 @@ import { useApp, type Page } from '../state/store'
 import { useTheme, type ThemeMode } from '../theme'
 import { Icon } from '../ui/Icon'
 import { JobsMenu } from '../features/jobs/JobsMenu'
+import { useSelectionDialog } from '../features/selection/dialogs'
 import styles from './TopBar.module.css'
 
 const TABS: [Page, MessageKey][] = [
@@ -53,6 +54,14 @@ export function TopBar() {
       <span className={styles.gap} />
 
       <JobsMenu />
+      <button
+        type="button"
+        className="btn"
+        onClick={() => useSelectionDialog.getState().showFor('import', null, 1)}
+        data-testid="import-button"
+      >
+        {t('import.button')}
+      </button>
       <button type="button" className={styles.command} onClick={() => setPaletteOpen(true)} data-testid="open-palette">
         <Icon name="search" size={14} />
         <span className={styles.commandText}>{t('nav.command')}</span>

@@ -1,0 +1,45 @@
+.options {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.check input {
+  accent-color: var(--accent);
+}
+
+.advanced {
+  display: grid;
+  gap: 6px;
+}
+
+.advanced summary {
+  width: fit-content;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  cursor: pointer;
+}
+
+.advanced[open] {
+  padding-bottom: 4px;
+}
+
+.warn {
+  margin: 0 0 0 22px;
+  color: var(--warn);
+  font-size: var(--fs-2);
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}

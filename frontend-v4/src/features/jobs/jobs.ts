@@ -47,14 +47,18 @@ export const useJobs = create<JobsState>((set, get) => ({
   clearFinished: () => set({ jobs: get().jobs.filter((j) => !isFinished(j.progress.status)) }),
 }))
 
-type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors' | 'reconnect'
+type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors' | 'reconnect' | 'scan'
 
 const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind)
 
 interface Driver {
   poll: () => Promise<unknown>
   /** null: the backend cannot stop this kind of job. */
-  cancel: (() => Promise<unknown>) | null
+  cancel: ((job: Job) => Promise<unknown>) | null
+  /** After the job ends (an import clears its finished run so the next one may start). */
+  settle?: (job: Job) => Promise<unknown>
+  /** Refreshed while the job runs, whenever more images have arrived. */
+  liveKeys?: string[]
 }
 
 const DRIVERS: Record<Queue, Driver> = {
@@ -85,6 +89,12 @@ const DRIVERS: Record<Queue, Driver> = {
   reconnect: {
     poll: async () => unwrap(await api.GET('/api/images/reconnect-missing/progress')),
     cancel: async () => unwrap(await api.POST('/api/images/reconnect-missing/cancel')),
+  },
+  scan: {
+    poll: async () => unwrap(await api.GET('/api/scan/progress')),
+    cancel: async (job) => unwrap(await api.POST('/api/scan/cancel', { body: { run_id: job.ctx.runId ?? 0, source: 'manual' } })),
+    settle: async (job) => unwrap(await api.POST('/api/scan/acknowledge', { body: { run_id: job.ctx.runId ?? 0, source: 'manual' } })),
+    liveKeys: ['images', 'generators', 'folders', 'libraries'],
   },
   // Bulk tag edits finish inside their request; they are never polled.
   tags: {
@@ -119,6 +129,8 @@ export function startingProgress(total: number, status: JobProgress['status'] = 
     topTags: [],
     needsRestart: false,
     toReview: 0,
+    phase: null,
+    updated: 0,
     currentItem: null,
     message: '',
   }
@@ -152,17 +164,26 @@ export async function stopJob(job: Job): Promise<void> {
   const cancel = DRIVERS[queueOf(job.kind)].cancel
   if (!cancel) return
   try {
-    await cancel()
+    await cancel(job)
     patchJob(job.id, { progress: { ...job.progress, status: 'cancelling' } })
   } catch (error) {
     useToasts.getState().push(tr('error.generic', { reason: (error as Error).message }), 'error')
   }
 }
 
+/** Live refreshes are at most this often, however fast images arrive. */
+const LIVE_REFRESH_MS = 3000
+let lastLiveRefresh = 0
+
 async function pollOne(job: Job): Promise<void> {
   try {
-    const progress = readProgress(job.kind, await DRIVERS[queueOf(job.kind)].poll(), job.ctx)
+    const driver = DRIVERS[queueOf(job.kind)]
+    const progress = readProgress(job.kind, await driver.poll(), job.ctx)
     patchJob(job.id, { progress, pollErrors: 0 })
+    if (driver.liveKeys && progress.succeeded > job.progress.succeeded && Date.now() - lastLiveRefresh > LIVE_REFRESH_MS) {
+      lastLiveRefresh = Date.now()
+      for (const key of driver.liveKeys) void queryClient.invalidateQueries({ queryKey: [key] })
+    }
     if (isFinished(progress.status)) finish({ ...job, progress })
   } catch (error) {
     const pollErrors = job.pollErrors + 1
@@ -224,6 +245,11 @@ export async function adoptRunningJobs(): Promise<void> {
       const progress = readProgress('tag', raw, ctx)
       return { kind: 'tag', progress, ctx, count: progress.total }
     }),
+    adopt('scan', (raw) => {
+      if (!['starting', 'running', 'cancelling'].includes(String(raw.status))) return null
+      const ctx = { runId: Number(raw.run_id ?? 0) }
+      return { kind: 'scan', progress: readProgress('scan', raw, ctx), ctx }
+    }),
     adopt('install', (raw) => {
       const result = (raw.prepare_result ?? {}) as Record<string, unknown>
       if (result.active !== true || typeof result.model_id !== 'string') return null
@@ -245,6 +271,7 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   install: ['model-status'],
   tags: ['images', 'image', 'suggest', 'image-count', 'library-health'],
   colors: ['images', 'image', 'image-count', 'colors-missing'],
+  scan: ['images', 'image', 'generators', 'folders', 'libraries', 'library-health', 'missing-summary', 'missing-groups', 'colors-missing', 'image-count'],
   reconnect: ['images', 'image', 'missing-summary', 'missing-groups', 'repair-candidates', 'library-health', 'folders'],
 }
 
@@ -262,6 +289,8 @@ export function undoJob(job: Job): Promise<void> {
 /** The job ended: refresh what it changed, drop vanished picks, tell the user, run what waited. */
 function finish(job: Job): void {
   const p = job.progress
+  const settle = DRIVERS[queueOf(job.kind)].settle
+  if (settle && !job.adopted) void settle(job).catch(() => undefined)
   if (job.kind === 'trash' || job.kind === 'remove') {
     // The backend works through the ids in the order sent, so the first
     // `current` were handled; failures among them are still there.
@@ -296,6 +325,7 @@ const RUNNING: Record<JobKind, MessageKey> = {
   tags: 'jobs.done.tags',
   colors: 'jobs.running.colors',
   reconnect: 'jobs.running.reconnect',
+  scan: 'jobs.running.scan',
 }
 
 const DONE: Record<JobKind, MessageKey> = {
@@ -308,6 +338,7 @@ const DONE: Record<JobKind, MessageKey> = {
   tags: 'jobs.done.tags',
   colors: 'jobs.done.colors',
   reconnect: 'jobs.done.reconnect',
+  scan: 'jobs.done.scan',
 }
 
 /** One line that says what happened (or is happening) to this job. */
@@ -331,6 +362,7 @@ export function jobHeadline(job: Job): string {
       // Chinese joins the destination without a space; English carries its own.
       let text = tr(DONE[job.kind], { n: p.succeeded, name: job.label ?? '' })
       if (job.destination && (job.kind === 'move' || job.kind === 'copy')) text += tr('jobs.to', { path: tailOfPath(job.destination, 40) })
+      if (p.updated) text += tr('jobs.updatedSuffix', { n: p.updated })
       if (p.failedCount) text += tr('jobs.failedSuffix', { n: p.failedCount })
       if (p.alreadyGone) text += tr('jobs.alreadyGone', { n: p.alreadyGone })
       return text

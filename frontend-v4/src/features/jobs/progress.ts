@@ -2,10 +2,10 @@
 // move/copy: GET /api/move/progress · trash: GET /api/images/delete-selected/progress
 // · remove: GET /api/images/remove-selected/progress · tag: GET /api/tag/progress
 // · install: GET /api/models/download-progress · colors: GET /api/colors/progress
-// · reconnect: GET /api/images/reconnect-missing/progress.
+// · reconnect: GET /api/images/reconnect-missing/progress · scan: GET /api/scan/progress.
 
 /** tags: a bulk tag edit, finished when it is recorded (kept for its undo). */
-export type JobKind = 'move' | 'copy' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors' | 'reconnect'
+export type JobKind = 'move' | 'copy' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors' | 'reconnect' | 'scan'
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
 
 export interface JobFailure {
@@ -31,6 +31,10 @@ export interface JobProgress {
   needsRestart: boolean
   /** reconnect only: found files that match several missing records and wait for the user. */
   toReview: number
+  /** scan only: finding and adding files, then reading their generation details. */
+  phase: 'files' | 'details' | null
+  /** scan only: images already in the library whose details were read again. */
+  updated: number
   currentItem: string | null
   message: string
 }
@@ -41,6 +45,8 @@ export interface ReadContext {
   baseRunId?: number
   /** install: the model card being prepared. */
   modelId?: string
+  /** scan: the run we started; any other run on the backend is not ours. */
+  runId?: number
 }
 
 const KNOWN: ReadonlySet<string> = new Set(['running', 'cancelling', 'done', 'cancelled', 'error', 'idle'])
@@ -102,6 +108,23 @@ function readColors(base: JobProgress, raw: Raw): JobProgress {
   }
 }
 
+function readScan(base: JobProgress, raw: Raw, ctx: ReadContext): JobProgress {
+  if (ctx.runId !== undefined && num(raw.run_id) !== ctx.runId) return { ...base, status: 'idle' }
+  const status = str(raw.status)
+  const details = raw.import_complete === true && num(raw.metadata_pending) > 0
+  const total = raw.total_final === true ? num(raw.total) : Math.max(num(raw.total), num(raw.counted))
+  return {
+    ...base,
+    status: status === 'starting' ? 'running' : base.status,
+    phase: details ? 'details' : 'files',
+    current: details ? num(raw.metadata_processed) : num(raw.processed),
+    total: details ? num(raw.metadata_total) : total,
+    succeeded: num(raw.new),
+    updated: num(raw.updated),
+    failedCount: num(raw.errors),
+  }
+}
+
 function readInstall(base: JobProgress, raw: Raw, ctx: ReadContext): JobProgress {
   const result = obj(raw.prepare_result)
   const downloading = raw.active === true || result.active === true
@@ -139,6 +162,8 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
     topTags: [],
     needsRestart: false,
     toReview: 0,
+    phase: null,
+    updated: 0,
     currentItem: str(raw.current_item) || null,
     message: str(raw.message),
   }
@@ -164,6 +189,8 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
       return readColors(base, raw)
     case 'reconnect':
       return { ...base, succeeded: num(raw.matched), failedCount: num(raw.errors), toReview: num(raw.review_pending_total) }
+    case 'scan':
+      return readScan(base, raw, ctx)
   }
 }
 

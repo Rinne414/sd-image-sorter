@@ -145,6 +145,24 @@ describe('readProgress', () => {
     })
   })
 
+  test('scan: files first, then generation details, then done with new and updated counts', () => {
+    const counting = { run_id: 9, status: 'starting', processed: 0, total: 0, counted: 40, total_final: false, new: 0, updated: 0, errors: 0 }
+    expect(readProgress('scan', counting, { runId: 9 })).toMatchObject({ status: 'running', phase: 'files', current: 0, total: 40 })
+
+    const files = { ...counting, status: 'running', processed: 25, total: 60, total_final: true, new: 20, current_item: 'a.png' }
+    expect(readProgress('scan', files, { runId: 9 })).toMatchObject({ phase: 'files', current: 25, total: 60, succeeded: 20, currentItem: 'a.png' })
+
+    const details = { ...files, processed: 60, import_complete: true, metadata_processed: 10, metadata_total: 60, metadata_pending: 50 }
+    expect(readProgress('scan', details, { runId: 9 })).toMatchObject({ phase: 'details', current: 10, total: 60 })
+
+    const done = { ...details, status: 'done', metadata_pending: 0, new: 55, updated: 5, errors: 2 }
+    expect(readProgress('scan', done, { runId: 9 })).toMatchObject({ status: 'done', succeeded: 55, updated: 5, failedCount: 2 })
+  })
+
+  test('scan: another run on the backend is not ours', () => {
+    expect(readProgress('scan', { run_id: 10, status: 'running' }, { runId: 9 }).status).toBe('idle')
+  })
+
   test('unknown or reset states never look like success', () => {
     expect(readProgress('move', { status: 'idle' }).status).toBe('idle')
     expect(readProgress('move', { status: 'exploded' }).status).toBe('error')

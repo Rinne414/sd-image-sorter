@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { api, unwrap } from '../api/client'
 import { useT, type MessageKey } from '../i18n'
 import { folderNameProblem, joinFolder, tailOfPath, type FolderNameProblem } from '../lib/paths'
@@ -44,6 +44,8 @@ interface Props {
   onChoose: (target: string) => Promise<boolean>
   onClose: () => void
   testId?: string
+  /** Options shown under the destination (import settings, ...). */
+  extra?: ReactNode
 }
 
 /** Choose a folder by browsing; typing a path also works. */
@@ -56,6 +58,7 @@ export function FolderChooser({
   onChoose,
   onClose,
   testId = 'folder-picker',
+  extra,
 }: Props) {
   const t = useT()
   const [listing, setListing] = useState<Listing | null>(null)
@@ -280,6 +283,7 @@ export function FolderChooser({
           <span className={styles.placeholder}>{t('picker.pickFolder')}</span>
         )}
       </p>
+      {extra}
     </Dialog>
   )
 }
