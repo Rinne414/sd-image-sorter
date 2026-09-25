@@ -1,0 +1,33 @@
+/* While files are dragged over the window: a printed frame, nothing glowing. */
+.overlay {
+  position: fixed;
+  inset: 10px;
+  z-index: 95;
+  display: grid;
+  place-items: center;
+  background: var(--scrim);
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-lg);
+  pointer-events: none;
+}
+
+.text {
+  margin: 0;
+  padding: 10px 16px;
+  color: var(--text);
+  background: var(--surface-2);
+  font-size: var(--fs-5);
+  border-radius: var(--radius);
+}
+
+.body {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.names {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  overflow-wrap: anywhere;
+}

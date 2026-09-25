@@ -65,6 +65,56 @@ for (const viewport of VIEWPORTS) {
   })
 }
 
+test('dropped image files are copied in only after asking', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openV4(page)
+  await search(page, 'v4drop-')
+  await expect(page.getByTestId('result-count')).toHaveText('0 images')
+
+  const drag = async (type: 'dragenter' | 'drop') =>
+    page.evaluate(async (kind) => {
+      const w = window as unknown as { __v4dt?: DataTransfer }
+      if (!w.__v4dt) {
+        const make = (name: string, colour: string) =>
+          new Promise<File>((resolve) => {
+            const c = document.createElement('canvas')
+            c.width = 24
+            c.height = 24
+            const g = c.getContext('2d')!
+            g.fillStyle = colour
+            g.fillRect(0, 0, 24, 24)
+            c.toBlob((b) => resolve(new File([b!], name, { type: 'image/png' })))
+          })
+        const dt = new DataTransfer()
+        dt.items.add(await make('v4drop-a.png', '#c33'))
+        dt.items.add(await make('v4drop-b.png', '#3c3'))
+        w.__v4dt = dt
+      }
+      window.dispatchEvent(new DragEvent(kind, { dataTransfer: w.__v4dt, cancelable: true, bubbles: true }))
+    }, type)
+
+  await drag('dragenter')
+  await expect(page.getByTestId('drop-overlay')).toBeVisible()
+  await drag('drop')
+  await expect(page.getByTestId('drop-overlay')).toHaveCount(0)
+  const dialog = page.getByTestId('drop-dialog')
+  await expect(dialog).toContainText('Add 2 images to the library?')
+  await expect(dialog).toContainText('v4drop-a.png, v4drop-b.png')
+
+  // cancelling copies nothing
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(dialog).toHaveCount(0)
+  await search(page, 'v4drop-')
+  await expect(page.getByTestId('result-count')).toHaveText('0 images')
+
+  await drag('dragenter')
+  await drag('drop')
+  await page.getByTestId('drop-dialog').getByRole('button', { name: 'Copy in 2' }).click()
+  await expect(page.getByTestId('drop-dialog')).toHaveCount(0)
+  await expect(page.getByTestId('result-count')).toHaveText('2 images')
+  cleanupImages('v4drop-', [])
+})
+
 test('a folder imports as a job and its images appear; the folder is remembered', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   await openV4(page)

@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { CommandPalette } from '../features/command/CommandPalette'
 import { JobsRunner } from '../features/jobs/JobsRunner'
+import { DropImport } from '../features/import/DropImport'
 import { SelectionDialogs } from '../features/selection/SelectionDialogs'
 import { LibraryPage } from '../features/library/LibraryPage'
 import { useLang } from '../i18n'
@@ -42,6 +43,7 @@ export function App() {
       </div>
       <CommandPalette />
       <JobsRunner />
+      <DropImport />
       <SelectionDialogs />
       <Toasts />
     </div>

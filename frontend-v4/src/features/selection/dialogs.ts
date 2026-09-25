@@ -13,9 +13,11 @@ interface DialogState {
   /** null: the dialog works on a set the backend picks (e.g. every untagged image). */
   ids: number[] | null
   count: number
+  /** Where a folder dialog should open (a dropped folder), if anywhere in particular. */
+  hint: string | null
   show: (dialog: SelectionDialog) => void
   /** Open for a set other than the picks. */
-  showFor: (dialog: SelectionDialog, ids: number[] | null, count: number) => void
+  showFor: (dialog: SelectionDialog, ids: number[] | null, count: number, hint?: string) => void
   close: () => void
 }
 
@@ -23,13 +25,14 @@ export const useSelectionDialog = create<DialogState>((set) => ({
   open: null,
   ids: [],
   count: 0,
+  hint: null,
   show: (dialog) => {
     const ids = useApp.getState().selection
     if (ids.length === 0) return
-    set({ open: dialog, ids: [...ids], count: ids.length })
+    set({ open: dialog, ids: [...ids], count: ids.length, hint: null })
   },
-  showFor: (dialog, ids, count) => set({ open: dialog, ids: ids ? [...ids] : null, count }),
-  close: () => set({ open: null, ids: [], count: 0 }),
+  showFor: (dialog, ids, count, hint) => set({ open: dialog, ids: ids ? [...ids] : null, count, hint: hint ?? null }),
+  close: () => set({ open: null, ids: [], count: 0, hint: null }),
 }))
 
 const RECENT_KEY = 'sd-v4-recent-destinations'

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useFolders } from '../../api/queries'
 import { useT } from '../../i18n'
 import { FolderChooser } from '../../ui/FolderChooser'
+import { useSelectionDialog } from '../selection/dialogs'
 import styles from './ImportDialog.module.css'
 import { recentImports, startImport, type ImportOptions } from './importJob'
 
@@ -12,6 +13,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
   const t = useT()
   const [o, setO] = useState<ImportOptions>(START)
   const recent = useMemo(recentImports, [])
+  const hint = useSelectionDialog((s) => s.hint)
   const folders = useFolders()
   // The library's own top folders are where re-imports usually go.
   const libraryFolders = (folders.data ?? []).slice(0, 5)
@@ -46,7 +48,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
     <FolderChooser
       title={t('import.title')}
       confirmLabel={t('import.start')}
-      start={recent[0] ?? null}
+      start={hint ?? recent[0] ?? null}
       shortcuts={[
         { heading: t('picker.recent'), paths: recent, testId: 'import-recent' },
         { heading: t('import.libraryFolders'), paths: libraryFolders },
