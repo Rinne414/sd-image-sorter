@@ -430,6 +430,66 @@
   color: var(--text);
 }
 
+/* A tag's remove mark appears on hover or keyboard focus only. */
+.tagChip {
+  position: relative;
+}
+
+/* Zero width, not display:none, so the keyboard can still reach it. */
+.tagRemove {
+  display: inline-flex;
+  align-items: center;
+  width: 0;
+  margin: 0 -3px 0 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: none;
+  color: inherit;
+  opacity: 0;
+}
+
+.tagChip:hover .tagRemove,
+.tagRemove:focus-visible {
+  width: 12px;
+  margin-left: 1px;
+  opacity: 0.8;
+}
+
+.tagRemove:hover {
+  opacity: 1;
+}
+
+.captionField {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.captionField textarea {
+  width: 100%;
+  padding: 6px 8px;
+  resize: vertical;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-3);
+  border-radius: var(--radius);
+}
+
+.captionField textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.captionActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .caption {
   margin: 0;
   color: var(--text-2);

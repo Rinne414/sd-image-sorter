@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { thumbnailUrl } from '../../api/client'
 import { useCategories, useFavorites, useImageDetail, useSetRating, useToggleFavorite } from '../../api/queries'
 import type { ImageTag, TagCategory } from '../../api/types'
@@ -11,6 +11,8 @@ import styles from './Card.module.css'
 import { PromptText } from './PromptText'
 import { Stars } from './Stars'
 import { Icon } from '../../ui/Icon'
+import { TagInput } from '../../ui/TagInput'
+import { addTags, removeTag, reparse, saveCaptions } from './cardEdits'
 
 const TAGS_SHOWN = 24
 
@@ -150,12 +152,18 @@ function CardBody({ id, variant }: { id: number; variant: 'panel' | 'overlay' })
 
       {variant === 'overlay' && gen && <EdgeCodes gen={gen} generator={image?.generator ?? null} rating={tags.rating} inline />}
 
-      {tags.general.length > 0 && <TagList tags={tags.general} categories={categories.data} />}
+      {(tags.general.length > 0 || variant === 'panel') && (
+        <TagList id={id} tags={tags.general} categories={categories.data} editable={variant === 'panel'} />
+      )}
 
-      {(image?.nl_caption || image?.ai_caption) && (
-        <Section label={t('card.caption')} copy={image.nl_caption ?? image.ai_caption ?? ''}>
-          <p className={styles.caption}>{image.nl_caption ?? image.ai_caption}</p>
-        </Section>
+      {image && (
+        <CaptionSection
+          key={id}
+          id={id}
+          ai={image.ai_caption}
+          nl={image.nl_caption}
+          editable={variant === 'panel'}
+        />
       )}
 
       {gen && gen.extra.length > 0 && (
@@ -183,6 +191,11 @@ function CardBody({ id, variant }: { id: number; variant: 'panel' | 'overlay' })
         )}
         {image && gen && (
           <CopyButton text={toParameterText(image.prompt, image.negative_prompt, gen)} label={t('card.copyAll')} />
+        )}
+        {variant === 'panel' && (
+          <button type="button" className="btn btn-ghost" onClick={() => void reparse(id)} title={t('card.reparseHint')}>
+            {t('card.reparse')}
+          </button>
         )}
         {image?.file_size ? <span className={`${styles.muted} mono`}>{fileSize(image.file_size)}</span> : null}
       </div>
@@ -297,15 +310,89 @@ function EdgeCodes({
   )
 }
 
-function Section({ label, copy, children }: { label: string; copy?: string; children: React.ReactNode }) {
+function Section({
+  label,
+  copy,
+  action,
+  children,
+}: {
+  label: string
+  copy?: string
+  action?: React.ReactNode
+  children: React.ReactNode
+}) {
   return (
     <section className={styles.section}>
       <header className={styles.sectionHead}>
         <span className={styles.label}>{label}</span>
+        {action}
         {copy !== undefined && <CopyButton text={copy} compact />}
       </header>
       {children}
     </section>
+  )
+}
+
+/** The image's captions; in the side card they can be written or cleared. */
+function CaptionSection({ id, ai, nl, editable }: { id: number; ai: string | null; nl: string | null; editable: boolean }) {
+  const t = useT()
+  const [editing, setEditing] = useState(false)
+  const [aiText, setAiText] = useState(ai ?? '')
+  const [nlText, setNlText] = useState(nl ?? '')
+  const [saving, setSaving] = useState(false)
+  useEffect(() => {
+    if (editing) return
+    setAiText(ai ?? '')
+    setNlText(nl ?? '')
+  }, [ai, nl, editing])
+
+  const shown = nl || ai
+  if (!shown && !editable) return null
+
+  if (editing) {
+    const save = async () => {
+      const patch: { ai_caption?: string; nl_caption?: string } = {}
+      if (aiText !== (ai ?? '')) patch.ai_caption = aiText
+      if (nlText !== (nl ?? '')) patch.nl_caption = nlText
+      setSaving(true)
+      const ok = await saveCaptions(id, patch)
+      setSaving(false)
+      if (ok) setEditing(false)
+    }
+    return (
+      <section className={styles.section} data-testid="caption-editor">
+        <header className={styles.sectionHead}>
+          <span className={styles.label}>{t('card.caption')}</span>
+        </header>
+        <label className={styles.captionField}>
+          <span>{t('card.nlCaption')}</span>
+          <textarea value={nlText} rows={3} onChange={(e) => setNlText(e.target.value)} autoFocus />
+        </label>
+        <label className={styles.captionField}>
+          <span>{t('card.aiCaption')}</span>
+          <textarea value={aiText} rows={2} onChange={(e) => setAiText(e.target.value)} />
+        </label>
+        <div className={styles.captionActions}>
+          <button type="button" className="btn btn-ghost" onClick={() => setEditing(false)}>
+            {t('common.cancel')}
+          </button>
+          <button type="button" className="btn btn-primary" onClick={() => void save()} disabled={saving}>
+            {t('card.saveCaption')}
+          </button>
+        </div>
+      </section>
+    )
+  }
+
+  const edit = editable ? (
+    <button type="button" className={styles.more} onClick={() => setEditing(true)}>
+      {shown ? t('card.editCaption') : t('card.addCaption')}
+    </button>
+  ) : undefined
+  return (
+    <Section label={t('card.caption')} copy={shown ? shown : undefined} action={edit}>
+      {shown && <p className={styles.caption}>{shown}</p>}
+    </Section>
   )
 }
 
@@ -329,7 +416,17 @@ function Negative({ text }: { text: string }) {
   )
 }
 
-function TagList({ tags, categories }: { tags: ImageTag[]; categories: Map<string, TagCategory> | undefined }) {
+function TagList({
+  id,
+  tags,
+  categories,
+  editable,
+}: {
+  id: number
+  tags: ImageTag[]
+  categories: Map<string, TagCategory> | undefined
+  editable: boolean
+}) {
   const t = useT()
   const [all, setAll] = useState(false)
   const shown = all ? tags : tags.slice(0, TAGS_SHOWN)
@@ -345,10 +442,21 @@ function TagList({ tags, categories }: { tags: ImageTag[]; categories: Map<strin
         {shown.map((tg) => (
           <span
             key={tg.tag}
-            className={`chip cat-${categories?.get(tagKey(tg.tag)) ?? 'unknown'}`}
+            className={`chip cat-${categories?.get(tagKey(tg.tag)) ?? 'unknown'} ${styles.tagChip}`}
             title={tg.confidence ? `${Math.round(tg.confidence * 100)}%` : undefined}
           >
             {tg.tag.replace(/_/g, ' ')}
+            {editable && (
+              <button
+                type="button"
+                className={styles.tagRemove}
+                onClick={() => void removeTag(id, tg.tag)}
+                aria-label={t('card.removeTag', { tag: tg.tag })}
+                title={t('card.removeTag', { tag: tg.tag })}
+              >
+                <Icon name="close" size={10} />
+              </button>
+            )}
           </span>
         ))}
         {tags.length > TAGS_SHOWN && (
@@ -357,6 +465,14 @@ function TagList({ tags, categories }: { tags: ImageTag[]; categories: Map<strin
           </button>
         )}
       </div>
+      {editable && (
+        <TagInput
+          placeholder={t('card.addTag')}
+          label={t('card.addTag')}
+          onSubmit={(added) => addTags(id, added)}
+          testId="card-tag-input"
+        />
+      )}
     </section>
   )
 }

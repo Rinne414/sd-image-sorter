@@ -1,0 +1,58 @@
+.wrap {
+  position: relative;
+}
+
+.input {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px dashed var(--line-strong);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-2);
+  border-radius: var(--radius);
+}
+
+.input:focus {
+  outline: none;
+  border-style: solid;
+  border-color: var(--accent);
+}
+
+.list {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 3px;
+  list-style: none;
+  background: var(--surface-2);
+  box-shadow: var(--shadow-float);
+  border-radius: var(--radius-lg);
+}
+
+.list button {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  text-align: left;
+  border-radius: var(--radius);
+}
+
+.list button[aria-selected="true"],
+.list button:hover {
+  background: var(--wash-hover);
+  color: var(--text);
+}
+
+.count {
+  color: var(--muted);
+}
