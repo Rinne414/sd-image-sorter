@@ -14,10 +14,12 @@ import styles from './SelectionDialogs.module.css'
 export function SelectionDialogs() {
   const open = useSelectionDialog((s) => s.open)
   const ids = useSelectionDialog((s) => s.ids)
+  const count = useSelectionDialog((s) => s.count)
   const close = useSelectionDialog((s) => s.close)
-  if (!open || ids.length === 0) return null
+  if (!open || count === 0) return null
+  if (open === 'tag') return <TagDialog ids={ids} count={count} onClose={close} />
+  if (!ids) return null
   if (open === 'move' || open === 'copy') return <FolderPicker operation={open} ids={ids} onClose={close} />
-  if (open === 'tag') return <TagDialog ids={ids} onClose={close} />
   if (open === 'edit-tags') return <TagEditDialog ids={ids} onClose={close} />
   if (open === 'export') return <ExportDataDialog ids={ids} onClose={close} />
   return <ConfirmFileAction kind={open} ids={ids} onClose={close} />

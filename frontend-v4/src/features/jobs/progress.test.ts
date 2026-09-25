@@ -111,6 +111,20 @@ describe('readProgress', () => {
     expect(readProgress('install', other, { modelId: 'wd14' }).status).toBe('running')
   })
 
+  test('colors: running with counts, then done when the backend stops', () => {
+    const running = { running: true, cancel_requested: false, total: 10, completed: 3, failed: 1, current_image: 'x.png' }
+    expect(readProgress('colors', running)).toMatchObject({
+      status: 'running',
+      current: 4,
+      total: 10,
+      succeeded: 3,
+      failedCount: 1,
+      currentItem: 'x.png',
+    })
+    expect(readProgress('colors', { ...running, cancel_requested: true }).status).toBe('cancelling')
+    expect(readProgress('colors', { ...running, running: false, completed: 9 })).toMatchObject({ status: 'done', succeeded: 9 })
+  })
+
   test('unknown or reset states never look like success', () => {
     expect(readProgress('move', { status: 'idle' }).status).toBe('idle')
     expect(readProgress('move', { status: 'exploded' }).status).toBe('error')

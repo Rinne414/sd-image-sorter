@@ -238,5 +238,39 @@
   font-size: var(--fs-2);
   color: var(--warn);
   display: grid;
-  gap: 2px;
+  gap: 4px;
+}
+
+.issues li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+
+.issues li[data-quiet] {
+  color: var(--muted);
+}
+
+/* The fix for a status row: a small printed link, not another button slab. */
+.fix {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+
+.fix:hover {
+  color: var(--text);
+  text-decoration-color: var(--text-2);
+}
+
+.fix:disabled {
+  color: var(--muted);
+  text-decoration: none;
+  cursor: default;
 }

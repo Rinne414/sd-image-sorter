@@ -7,7 +7,9 @@ import { loadTagOptions, rememberedThresholds, saveTagOptions, startTagging, typ
 import { isTagger, readiness, taggerInfo, type Readiness, type TaggerInfo } from './taggers'
 
 interface Props {
-  ids: number[]
+  /** null: every image that has no tags yet (the backend picks them). */
+  ids: number[] | null
+  count: number
   onClose: () => void
 }
 
@@ -24,7 +26,7 @@ const splitTags = (text: string) =>
     .filter(Boolean)
 
 /** One panel for tagging the picks: which tagger, then (rarely) the advanced knobs. */
-export function TagDialog({ ids, onClose }: Props) {
+export function TagDialog({ ids, count, onClose }: Props) {
   const t = useT()
   const models = useTaggerModels()
   const status = useModelStatus()
@@ -42,7 +44,7 @@ export function TagDialog({ ids, onClose }: Props) {
     setBlacklistText(loaded.blacklist.join(', '))
   }, [models.data, o])
 
-  const n = ids.length
+  const n = count
   const current = list.find((m) => m.name === o?.model)
   const info = o ? taggerInfo(o.model) : null
   // Until the status arrives (it takes about a second) nothing is claimed about downloads.
@@ -60,7 +62,7 @@ export function TagDialog({ ids, onClose }: Props) {
     const options = { ...o, blacklist: splitTags(blacklistText) }
     saveTagOptions(options)
     setStarting(true)
-    const ok = await startTagging(ids, options)
+    const ok = await startTagging(ids, options, count)
     setStarting(false)
     if (ok) onClose()
   }
@@ -96,8 +98,8 @@ export function TagDialog({ ids, onClose }: Props) {
   )
 
   return (
-    <Dialog title={t('tagging.title', { n })} onClose={onClose} footer={footer} testId="tag-dialog" wide>
-      <p className={styles.lead}>{t('tagging.retagAll', { n })}</p>
+    <Dialog title={t(ids ? 'tagging.title' : 'tagging.titleUntagged', { n })} onClose={onClose} footer={footer} testId="tag-dialog" wide>
+      <p className={styles.lead}>{ids ? t('tagging.retagAll', { n }) : t('tagging.untaggedLead')}</p>
       {models.isError && <p className={styles.error}>{t('error.generic', { reason: models.error.message })}</p>}
       {models.isPending && <p className={styles.lead}>{t('picker.loading')}</p>}
       <div className={styles.list} role="radiogroup" aria-label={t('tagging.tagger')}>

@@ -10,20 +10,26 @@ export type SelectionDialog = 'move' | 'copy' | 'remove' | 'trash' | 'tag' | 'ed
 
 interface DialogState {
   open: SelectionDialog | null
-  ids: number[]
+  /** null: the dialog works on a set the backend picks (e.g. every untagged image). */
+  ids: number[] | null
+  count: number
   show: (dialog: SelectionDialog) => void
+  /** Open for a set other than the picks. */
+  showFor: (dialog: SelectionDialog, ids: number[] | null, count: number) => void
   close: () => void
 }
 
 export const useSelectionDialog = create<DialogState>((set) => ({
   open: null,
   ids: [],
+  count: 0,
   show: (dialog) => {
     const ids = useApp.getState().selection
     if (ids.length === 0) return
-    set({ open: dialog, ids: [...ids] })
+    set({ open: dialog, ids: [...ids], count: ids.length })
   },
-  close: () => set({ open: null, ids: [] }),
+  showFor: (dialog, ids, count) => set({ open: dialog, ids: ids ? [...ids] : null, count }),
+  close: () => set({ open: null, ids: [], count: 0 }),
 }))
 
 const RECENT_KEY = 'sd-v4-recent-destinations'

@@ -26,7 +26,7 @@ export interface Job {
   /** A model download: the model's display name. */
   label: string | null
   /** Runs once if the job ends well (a download, then the work that needed it). */
-  then?: () => void
+  then?: (job: Job) => void | Promise<void>
   /** A bulk tag edit that can be undone once. */
   undo?: { opId: string; done: boolean }
 }
@@ -47,7 +47,7 @@ export const useJobs = create<JobsState>((set, get) => ({
   clearFinished: () => set({ jobs: get().jobs.filter((j) => !isFinished(j.progress.status)) }),
 }))
 
-type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags'
+type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors'
 
 const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind)
 
@@ -77,6 +77,10 @@ const DRIVERS: Record<Queue, Driver> = {
   install: {
     poll: async () => unwrap(await api.GET('/api/models/download-progress')),
     cancel: null,
+  },
+  colors: {
+    poll: async () => unwrap(await api.GET('/api/colors/progress')),
+    cancel: async () => unwrap(await api.POST('/api/colors/cancel')),
   },
   // Bulk tag edits finish inside their request; they are never polled.
   tags: {
@@ -235,6 +239,7 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   tag: ['images', 'image', 'suggest', 'image-count', 'library-health'],
   install: ['model-status'],
   tags: ['images', 'image', 'suggest', 'image-count', 'library-health'],
+  colors: ['images', 'image', 'image-count', 'colors-missing'],
 }
 
 let onUndo: ((job: Job) => Promise<void>) | null = null
@@ -272,7 +277,7 @@ function finish(job: Job): void {
     const undo = job.undo && onUndo ? { label: tr('toast.undo'), run: () => void onUndo?.(job) } : undefined
     useToasts.getState().push(jobHeadline(job), failedSomething ? 'error' : 'info', failedSomething ? show : undo)
   }
-  if (p.status === 'done') job.then?.()
+  if (p.status === 'done') void job.then?.(job)
 }
 
 const RUNNING: Record<JobKind, MessageKey> = {
@@ -283,6 +288,7 @@ const RUNNING: Record<JobKind, MessageKey> = {
   tag: 'jobs.running.tag',
   install: 'jobs.running.install',
   tags: 'jobs.done.tags',
+  colors: 'jobs.running.colors',
 }
 
 const DONE: Record<JobKind, MessageKey> = {
@@ -293,6 +299,7 @@ const DONE: Record<JobKind, MessageKey> = {
   tag: 'jobs.done.tag',
   install: 'jobs.done.install',
   tags: 'jobs.done.tags',
+  colors: 'jobs.done.colors',
 }
 
 /** One line that says what happened (or is happening) to this job. */

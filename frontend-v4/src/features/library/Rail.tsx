@@ -4,6 +4,10 @@ import { parseSearch, toImageParams } from '../../lib/searchQuery'
 import { useSavedSearches, type SavedSearch } from '../../state/savedSearches'
 import { useToasts } from '../../ui/toasts'
 import { useFavorites, useFolders, useGenerators, useLibraries, useLibraryHealth, useMissingCount } from '../../api/queries'
+import { useJobs } from '../jobs/jobs'
+import { isFinished } from '../jobs/progress'
+import { useSelectionDialog } from '../selection/dialogs'
+import { startColorAnalysis, useColorsMissing } from '../status/colorAnalysis'
 import { useT, type MessageKey } from '../../i18n'
 import { generatorName, shortFolder } from '../../lib/format'
 import { useApp } from '../../state/store'
@@ -183,30 +187,54 @@ function Row({ label, count, active, onClick, icon, iconClass, dim, title }: Row
   )
 }
 
-/** Only speaks up when something needs attention. */
+interface StatusRow {
+  key: MessageKey
+  n: number
+  /** Quiet rows are chores, not problems (colour analysis). */
+  quiet?: boolean
+  action?: { label: string; run: () => void; busy?: boolean }
+}
+
+/** Only speaks up when something needs attention, and offers the fix next to it. */
 function Status() {
   const t = useT()
   const health = useLibraryHealth()
   const missing = useMissingCount()
+  const colors = useColorsMissing()
+  const showFor = useSelectionDialog((s) => s.showFor)
+  const analysing = useJobs((s) => s.jobs.some((j) => j.kind === 'colors' && !isFinished(j.progress.status)))
   if (!health.data) return null
   const c = health.data.issue_counts
-  const issues: [MessageKey, number][] = (
-    [
-      ['rail.untagged', c.untagged ?? 0],
-      ['rail.unreadable', c.unreadable ?? 0],
-      ['rail.missing', missing.data ?? 0],
-      ['rail.metaError', c.metadata_error ?? 0],
-    ] as [MessageKey, number][]
-  ).filter(([, n]) => n > 0)
+  const untagged = c.untagged ?? 0
+  const rows: StatusRow[] = [
+    { key: 'rail.untagged', n: untagged, action: { label: t('sel.tag'), run: () => showFor('tag', null, untagged) } },
+    { key: 'rail.unreadable', n: c.unreadable ?? 0 },
+    { key: 'rail.missing', n: missing.data ?? 0 },
+    { key: 'rail.metaError', n: c.metadata_error ?? 0 },
+    {
+      key: 'status.colorsMissing',
+      n: colors.data?.missing ?? 0,
+      quiet: true,
+      action: { label: analysing ? t('status.analysing') : t('status.analyse'), run: () => void startColorAnalysis(), busy: analysing },
+    },
+  ]
+  const shown = rows.filter((r) => r.n > 0)
   return (
-    <section className={styles.status} aria-label={t('rail.status')}>
+    <section className={styles.status} aria-label={t('rail.status')} data-testid="library-status">
       <h3 className={styles.heading}>{t('rail.status')}</h3>
-      {issues.length === 0 ? (
+      {shown.length === 0 ? (
         <p className={styles.clean}>{t('rail.statusClean')}</p>
       ) : (
         <ul className={styles.issues}>
-          {issues.map(([key, n]) => (
-            <li key={key}>{t(key, { n })}</li>
+          {shown.map((r) => (
+            <li key={r.key} data-quiet={r.quiet || undefined}>
+              <span>{t(r.key, { n: r.n })}</span>
+              {r.action && (
+                <button type="button" className={styles.fix} onClick={r.action.run} disabled={r.action.busy}>
+                  {r.action.label}
+                </button>
+              )}
+            </li>
           ))}
         </ul>
       )}

@@ -23,7 +23,7 @@ const fail = (error: unknown) => {
   return false
 }
 
-async function startTagJob(ids: number[], o: TagOptions): Promise<boolean> {
+async function startTagJob(ids: number[] | null, o: TagOptions, count: number): Promise<boolean> {
   if (isQueueBusy('tag')) {
     useToasts.getState().push(tr('jobs.busy'), 'error')
     return false
@@ -34,7 +34,8 @@ async function startTagJob(ids: number[], o: TagOptions): Promise<boolean> {
     const res = unwrap<{ status?: string }>(
       await api.POST('/api/tag/start', {
         body: {
-          image_ids: ids,
+          // No ids: the backend tags every image that has no tags yet.
+          ...(ids ? { image_ids: ids } : {}),
           model_name: o.model,
           threshold: o.threshold,
           character_threshold: o.characterThreshold,
@@ -48,10 +49,10 @@ async function startTagJob(ids: number[], o: TagOptions): Promise<boolean> {
     )
     addJob({
       kind: 'tag',
-      count: ids.length,
-      ids,
+      count,
+      ids: ids ?? [],
       ctx: { baseRunId: before.run_id ?? 0 },
-      progress: startingProgress(ids.length, res.status === 'queued' ? 'queued' : 'running'),
+      progress: startingProgress(count, res.status === 'queued' ? 'queued' : 'running'),
     })
     return true
   } catch (error) {
@@ -87,7 +88,7 @@ async function installThen(info: TaggerInfo, then: () => void): Promise<boolean>
 }
 
 /** Tag `ids` with the chosen tagger, downloading it first when it is not on disk. */
-export async function startTagging(ids: number[], o: TagOptions): Promise<boolean> {
+export async function startTagging(ids: number[] | null, o: TagOptions, count: number): Promise<boolean> {
   const info = taggerInfo(o.model)
   let cards: ModelCard[] | undefined
   try {
@@ -100,8 +101,8 @@ export async function startTagging(ids: number[], o: TagOptions): Promise<boolea
     useToasts.getState().push(tr('tagging.needsRestart', { name: info.label }), 'error')
     return false
   }
-  if (state === 'ready') return startTagJob(ids, o)
-  return installThen(info, () => void startTagJob(ids, o))
+  if (state === 'ready') return startTagJob(ids, o, count)
+  return installThen(info, () => void startTagJob(ids, o, count))
 }
 
 const OPTIONS_KEY = 'sd-v4-tag-options'

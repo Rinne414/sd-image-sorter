@@ -1,10 +1,10 @@
 // Reads the backend's progress payloads for long jobs into one shape.
 // move/copy: GET /api/move/progress · trash: GET /api/images/delete-selected/progress
 // · remove: GET /api/images/remove-selected/progress · tag: GET /api/tag/progress
-// · install: GET /api/models/download-progress.
+// · install: GET /api/models/download-progress · colors: GET /api/colors/progress.
 
 /** tags: a bulk tag edit, finished when it is recorded (kept for its undo). */
-export type JobKind = 'move' | 'copy' | 'trash' | 'remove' | 'tag' | 'install' | 'tags'
+export type JobKind = 'move' | 'copy' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors'
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
 
 export interface JobFailure {
@@ -81,6 +81,24 @@ function readTag(base: JobProgress, raw: Raw, ctx: ReadContext): JobProgress {
   return { ...base, succeeded: num(raw.tagged), failedCount: num(raw.errors), topTags }
 }
 
+/** Colour analysis reports a running flag instead of a status word. */
+function readColors(base: JobProgress, raw: Raw): JobProgress {
+  const running = raw.running === true
+  const status = running ? (raw.cancel_requested === true ? 'cancelling' : 'running') : 'done'
+  const completed = num(raw.completed)
+  const failed = num(raw.failed)
+  return {
+    ...base,
+    status,
+    current: completed + failed,
+    total: num(raw.total),
+    succeeded: completed,
+    failedCount: failed,
+    currentItem: str(raw.current_image) || null,
+    message: '',
+  }
+}
+
 function readInstall(base: JobProgress, raw: Raw, ctx: ReadContext): JobProgress {
   const result = obj(raw.prepare_result)
   const downloading = raw.active === true || result.active === true
@@ -138,6 +156,8 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
       return readInstall(base, raw, ctx)
     case 'tags':
       return base
+    case 'colors':
+      return readColors(base, raw)
   }
 }
 

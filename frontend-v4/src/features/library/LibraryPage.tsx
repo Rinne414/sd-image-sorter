@@ -9,6 +9,7 @@ import { GenerationCard } from '../card/GenerationCard'
 import { Lightbox } from '../lightbox/Lightbox'
 import { useSelectionDialog } from '../selection/dialogs'
 import { SelectionBar } from '../selection/SelectionBar'
+import { startColorAnalysis, useColorsMissing } from '../status/colorAnalysis'
 import { Gallery, type GalleryHandle } from './Gallery'
 import styles from './LibraryPage.module.css'
 import { QueryBar } from './QueryBar'
@@ -43,6 +44,7 @@ export function LibraryPage() {
     [queryText, scope, sort, sortReverse, favorites.data?.collectionId],
   )
   const query = useImages(params)
+  const colors = useColorsMissing()
   const images = useMemo(() => query.data?.pages.flatMap((p) => p.images) ?? [], [query.data])
   const total = query.data?.pages[0]?.total ?? null
   const fetchMore = useCallback(() => void query.fetchNextPage(), [query])
@@ -144,7 +146,16 @@ export function LibraryPage() {
           ) : query.isSuccess && images.length === 0 ? (
             <div className={styles.notice}>
               <p className={styles.noticeTitle}>{t('grid.empty')}</p>
-              <p>{t('grid.emptyHint')}</p>
+              {usesColorData(params) && (colors.data?.missing ?? 0) > 0 ? (
+                <>
+                  <p data-testid="color-hint">{t('status.colorHint', { n: colors.data?.missing ?? 0 })}</p>
+                  <button type="button" className="btn" onClick={() => void startColorAnalysis()}>
+                    {t('status.colorHintAction')}
+                  </button>
+                </>
+              ) : (
+                <p>{t('grid.emptyHint')}</p>
+              )}
             </div>
           ) : (
             <Gallery
@@ -174,4 +185,21 @@ export function LibraryPage() {
       <Lightbox images={images} total={total ?? images.length} hasMore={query.hasNextPage} fetchMore={fetchMore} />
     </div>
   )
+}
+
+/** Filters that only see images with colour analysis. */
+const COLOR_KEYS = [
+  'color_hues',
+  'exclude_color_hues',
+  'exclude_colors',
+  'color_temperature',
+  'brightness_distribution',
+  'brightness_min',
+  'brightness_max',
+  'min_saturation',
+  'max_saturation',
+]
+
+function usesColorData(params: Record<string, unknown>): boolean {
+  return COLOR_KEYS.some((k) => k in params)
 }
