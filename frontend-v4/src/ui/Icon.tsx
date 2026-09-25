@@ -12,6 +12,8 @@ export type IconName =
   | 'caret'
   | 'sun'
   | 'moon'
+  | 'folder'
+  | 'up'
 
 const STAR =
   '8,1.6 9.6,5.8 14.2,6 10.6,8.9 11.8,13.3 8,10.8 4.2,13.3 5.4,8.9 1.8,6 6.4,5.8'
@@ -111,6 +113,21 @@ export function Icon({ name, size = 16, filled = false, className, title }: Prop
         <svg {...common}>
           {t}
           <path d="M13 10.2A5.6 5.6 0 0 1 5.8 3a5.6 5.6 0 1 0 7.2 7.2Z" />
+        </svg>
+      )
+    case 'folder':
+      return (
+        <svg {...common}>
+          {t}
+          <path d="M1.8 4.2c0-.6.4-1 1-1h3.3l1.4 1.6h5.7c.6 0 1 .4 1 1v6.4c0 .6-.4 1-1 1H2.8c-.6 0-1-.4-1-1Z" />
+          <path d="M1.8 6.6h12.4" />
+        </svg>
+      )
+    case 'up':
+      return (
+        <svg {...common}>
+          {t}
+          <path d="M8 13.2V3.4M3.8 7.4 8 3.2l4.2 4.2" />
         </svg>
       )
   }

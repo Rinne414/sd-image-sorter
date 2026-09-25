@@ -26,6 +26,11 @@
   right: 0;
 }
 
+.menu[data-up] {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
 .menu li[data-divider] {
   margin-top: 4px;
   padding-top: 4px;
@@ -47,6 +52,14 @@
 
 .menu button:hover {
   background: var(--wash-hover);
+}
+
+.menu li[data-danger] button {
+  color: var(--danger);
+}
+
+.menu li[data-danger] button:hover {
+  background: var(--danger-soft);
 }
 
 .check {

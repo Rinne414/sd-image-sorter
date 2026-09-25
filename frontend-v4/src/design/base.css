@@ -104,6 +104,24 @@ svg {
   opacity: 0.6;
 }
 
+/* Destructive confirmations: the danger ink on the surface, never a filled red slab. */
+.btn-danger {
+  border-color: var(--danger);
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.btn-danger:hover {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}
+
 .btn-ghost {
   border-color: transparent;
 }

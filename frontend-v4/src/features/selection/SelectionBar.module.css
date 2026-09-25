@@ -1,0 +1,74 @@
+/* Appears only while something is picked; docked to the bottom of the grid. */
+.bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 10px 0 16px;
+  background: var(--surface-1);
+  border-top: 1px solid var(--line-strong);
+  box-shadow: inset 3px 0 0 var(--marker);
+  white-space: nowrap;
+  container-type: inline-size;
+  animation: rise var(--t-med) var(--ease);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+
+.count {
+  color: var(--marker);
+  font-weight: 700;
+}
+
+.all {
+  color: var(--text-2);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+  padding: 0 6px;
+}
+
+.all:hover {
+  color: var(--text);
+  text-decoration-color: var(--text-2);
+}
+
+.rule {
+  width: 1px;
+  height: 20px;
+  background: var(--line);
+}
+
+.stars {
+  display: inline-flex;
+}
+
+.spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+.clearIcon {
+  display: none;
+}
+
+/* Narrow grids (a small laptop with both side columns open): words give way to icons. */
+@container (max-width: 860px) {
+  .wordy {
+    display: none;
+  }
+
+  .clearIcon {
+    display: block;
+  }
+}

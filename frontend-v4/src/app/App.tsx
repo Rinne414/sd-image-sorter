@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
 import { CommandPalette } from '../features/command/CommandPalette'
+import { JobsRunner } from '../features/jobs/JobsRunner'
+import { SelectionDialogs } from '../features/selection/SelectionDialogs'
 import { LibraryPage } from '../features/library/LibraryPage'
 import { useLang } from '../i18n'
 import { useApp } from '../state/store'
@@ -39,6 +41,8 @@ export function App() {
         {page === 'home' && <PlannedPage title="planned.home.title" body="planned.home.body" />}
       </div>
       <CommandPalette />
+      <JobsRunner />
+      <SelectionDialogs />
       <Toasts />
     </div>
   )

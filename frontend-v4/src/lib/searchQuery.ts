@@ -581,7 +581,10 @@ export type ImageQueryParams = Record<string, string | number | boolean>
 
 const csv = (values: string[]) => [...new Set(values)].join(',')
 
-/** Query line + left-rail scope → /api/images parameters. */
+/**
+ * Query line + left-rail scope → /api/images parameters. Every key emitted
+ * here needs a row in selectionBody.ts, or "select all matches" refuses to run.
+ */
 export function toImageParams(q: ParsedQuery, scope: ScopeFilter, sortBy: string): ImageQueryParams {
   const p: ImageQueryParams = { sort_by: sortBy }
   const put = (k: string, v: string | number | boolean | undefined | null) => {

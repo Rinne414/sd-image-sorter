@@ -6,13 +6,13 @@ import { parseSearch, toImageParams } from '../../lib/searchQuery'
 import { apiSort } from '../../lib/sort'
 import { useApp } from '../../state/store'
 import { GenerationCard } from '../card/GenerationCard'
-import { Stars } from '../card/Stars'
 import { Lightbox } from '../lightbox/Lightbox'
+import { useSelectionDialog } from '../selection/dialogs'
+import { SelectionBar } from '../selection/SelectionBar'
 import { Gallery, type GalleryHandle } from './Gallery'
 import styles from './LibraryPage.module.css'
 import { QueryBar } from './QueryBar'
 import { Rail } from './Rail'
-import { Icon } from '../../ui/Icon'
 import { layerCount } from '../../ui/layers'
 
 export function LibraryPage() {
@@ -100,6 +100,10 @@ export function LibraryPage() {
         case '/':
           inputRef.current?.focus()
           break
+        case 'Delete':
+          if (s.selection.length) useSelectionDialog.getState().show('remove')
+          else handled = false
+          break
         default:
           handled = false
       }
@@ -156,7 +160,10 @@ export function LibraryPage() {
           )}
           {selection.length > 0 && (
             <SelectionBar
-              count={selection.length}
+              params={params}
+              total={total}
+              images={images}
+              hasMore={query.hasNextPage}
               onRate={(n) => setRating.mutate({ ids: selection, stars: n })}
               onFavorite={() => toggleFav.mutate({ ids: selection, favorited: true })}
             />
@@ -165,27 +172,6 @@ export function LibraryPage() {
       </main>
       {cardOpen && <GenerationCard id={inspectedId} />}
       <Lightbox images={images} total={total ?? images.length} hasMore={query.hasNextPage} fetchMore={fetchMore} />
-    </div>
-  )
-}
-
-function SelectionBar({ count, onRate, onFavorite }: { count: number; onRate: (n: number) => void; onFavorite: () => void }) {
-  const t = useT()
-  const clear = useApp((s) => s.clearSelection)
-  return (
-    <div className={styles.selBar} role="toolbar" aria-label={t('sel.count', { n: count })} data-testid="selection-bar">
-      <strong className={styles.selCount}>{t('sel.count', { n: count })}</strong>
-      <span className={styles.selGroup}>
-        <span className={styles.selLabel}>{t('sel.rate')}</span>
-        <Stars value={0} onChange={(n) => n > 0 && onRate(n)} size="sm" />
-      </span>
-      <button type="button" className="btn" onClick={onFavorite}>
-        <Icon name="heart" size={14} /> {t('sel.favorite')}
-      </button>
-      <span className={styles.selNote}>{t('sel.more')}</span>
-      <button type="button" className="btn btn-ghost" onClick={clear}>
-        {t('sel.clear')} <kbd>Esc</kbd>
-      </button>
     </div>
   )
 }

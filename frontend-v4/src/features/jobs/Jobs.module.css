@@ -1,0 +1,179 @@
+.wrap {
+  position: relative;
+}
+
+.button {
+  position: relative;
+  gap: 6px;
+}
+
+.buttonCount {
+  color: var(--accent);
+  font-size: var(--fs-2);
+}
+
+.buttonCount[data-trouble] {
+  color: var(--danger);
+}
+
+/* A hairline of progress under the label while anything runs. */
+.buttonMeter {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 3px;
+  height: 2px;
+  background: var(--line);
+}
+
+.buttonMeter span,
+.meter span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--t-med) var(--ease);
+}
+
+.drawer {
+  position: fixed;
+  z-index: 40;
+  top: calc(var(--topbar-h) + 4px);
+  right: 8px;
+  width: min(var(--card-w), calc(100vw - 32px));
+  max-height: calc(100vh - var(--topbar-h) - 20px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-2);
+  box-shadow: var(--shadow-float);
+  border-radius: var(--radius-lg);
+  animation: drop var(--t-med) var(--ease);
+}
+
+@keyframes drop {
+  from {
+    opacity: 0;
+    translate: 0 -6px;
+  }
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 8px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--fs-4);
+  font-weight: 600;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.job {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 12px 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.job:last-child {
+  border-bottom: 0;
+}
+
+.job[data-status="done"],
+.job[data-status="cancelled"],
+.job[data-status="idle"] {
+  box-shadow: inset 2px 0 0 var(--line-strong);
+}
+
+.job[data-status="running"],
+.job[data-status="cancelling"] {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.job[data-status="error"] {
+  box-shadow: inset 2px 0 0 var(--danger);
+}
+
+.jobHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.headline {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meter {
+  height: 3px;
+  background: var(--line);
+}
+
+.numbers {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-2);
+}
+
+.item {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.failures {
+  margin: 0;
+  padding: 6px 0 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  border-top: 1px dashed var(--line);
+  font-size: var(--fs-2);
+}
+
+.failures li {
+  display: grid;
+  gap: 1px;
+}
+
+.failName {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.failReason {
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.job > button {
+  align-self: flex-start;
+}

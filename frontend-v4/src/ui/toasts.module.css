@@ -9,6 +9,11 @@
   max-width: min(420px, calc(100vw - 32px));
 }
 
+/* Lifted above the selection bar while it is docked at the bottom. */
+:global(html[data-selbar]) .stack {
+  bottom: 62px;
+}
+
 .toast {
   display: flex;
   align-items: flex-start;

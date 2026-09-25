@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLibrarySuggest } from '../../api/queries'
 import { useT, type MessageKey } from '../../i18n'
 import { generatorName } from '../../lib/format'
@@ -49,8 +49,21 @@ export function QueryBar({ total, inputRef }: Props) {
   const [dismissed, setDismissed] = useState(false)
   const [active, setActive] = useState(0)
   const timer = useRef<number | undefined>(undefined)
+  /** Where the caret goes after a programmatic edit; placed in the same commit as the text. */
+  const pendingCaret = useRef<number | null>(null)
 
   useEffect(() => setDraft(queryText), [queryText])
+
+  // Not a requestAnimationFrame: a key pressed before the next frame would
+  // land at the old caret and splice the new text onto the old.
+  useLayoutEffect(() => {
+    const at = pendingCaret.current
+    if (at === null) return
+    pendingCaret.current = null
+    inputRef.current?.focus()
+    inputRef.current?.setSelectionRange(at, at)
+    setCaret(at)
+  }, [draft, inputRef])
 
   const apply = (text: string, now = false) => {
     window.clearTimeout(timer.current)
@@ -85,12 +98,8 @@ export function QueryBar({ total, inputRef }: Props) {
     const value = /\s/.test(option.value) ? `"${option.value}"` : option.value
     const before = draft.slice(0, ctx.valueStart) + value + ' '
     const next = before + draft.slice(ctx.tokenEnd).replace(/^\s+/, '')
+    pendingCaret.current = before.length
     setText(next, true)
-    requestAnimationFrame(() => {
-      inputRef.current?.focus()
-      inputRef.current?.setSelectionRange(before.length, before.length)
-      setCaret(before.length)
-    })
   }
 
   const removePart = (part: Part) => setText(withoutToken(parsed.tokens, part.token), true)

@@ -11,6 +11,8 @@ export interface MenuItem {
   onSelect: () => void
   /** Starts a new group with a divider above it. */
   divider?: boolean
+  /** Destructive: shown in the danger colour. */
+  danger?: boolean
 }
 
 interface Props {
@@ -18,10 +20,12 @@ interface Props {
   items: MenuItem[]
   title?: string
   align?: 'left' | 'right'
+  /** Open above the button (for bars docked at the bottom of the screen). */
+  up?: boolean
 }
 
 /** A button that opens a short list. Esc, outside click or a choice closes it. */
-export function Menu({ label, items, title, align = 'left' }: Props) {
+export function Menu({ label, items, title, align = 'left', up = false }: Props) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -44,9 +48,9 @@ export function Menu({ label, items, title, align = 'left' }: Props) {
         </span>
       </button>
       {open && (
-        <ul className={styles.menu} data-align={align} role="menu">
+        <ul className={styles.menu} data-align={align} data-up={up || undefined} role="menu">
           {items.map((item) => (
-            <li key={item.id} data-divider={item.divider || undefined}>
+            <li key={item.id} data-divider={item.divider || undefined} data-danger={item.danger || undefined}>
               <button
                 type="button"
                 role={item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}

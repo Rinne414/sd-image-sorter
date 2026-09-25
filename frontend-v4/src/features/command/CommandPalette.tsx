@@ -6,6 +6,8 @@ import { copyText } from '../../lib/format'
 import { useApp } from '../../state/store'
 import { useTheme } from '../../theme'
 import { useLayer } from '../../ui/layers'
+import { useJobs } from '../jobs/jobs'
+import { useSelectionDialog } from '../selection/dialogs'
 import styles from './CommandPalette.module.css'
 
 interface Command {
@@ -76,6 +78,18 @@ function Palette() {
       if (lib.id === s.libraryId) continue
       const name = lib.is_default && lib.name === 'Main library' ? translate(lang, 'rail.mainLibrary') : lib.name
       list.push(mk(`lib-${lib.id}`, 'palette.group.library', 'palette.cmd.switchTo', () => s.setLibrary(lib.id), undefined, { name }))
+    }
+    if (useJobs.getState().jobs.length > 0) {
+      list.push(mk('jobs', 'palette.group.library', 'palette.cmd.jobs', () => useJobs.getState().setDrawerOpen(true)))
+    }
+    if (s.selection.length > 0) {
+      const show = useSelectionDialog.getState().show
+      list.push(
+        mk('sel-move', 'palette.group.selection', 'palette.cmd.move', () => show('move')),
+        mk('sel-copy', 'palette.group.selection', 'palette.cmd.copy', () => show('copy')),
+        mk('sel-remove', 'palette.group.selection', 'palette.cmd.remove', () => show('remove'), 'Del'),
+        mk('sel-trash', 'palette.group.selection', 'palette.cmd.trash', () => show('trash')),
+      )
     }
     if (inspectedId !== null) {
       list.push(mk('open-full', 'palette.group.image', 'palette.cmd.openFull', () => s.openLightbox(inspectedId), 'Enter'))

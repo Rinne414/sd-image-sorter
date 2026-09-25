@@ -1,0 +1,181 @@
+.pathRow {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.path {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-3);
+  border-radius: var(--radius);
+}
+
+.path:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.error {
+  margin: 0 0 8px;
+  color: var(--danger);
+  font-size: var(--fs-2);
+  overflow-wrap: anywhere;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 10px;
+  height: min(300px, 40vh);
+}
+
+.places {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+  border-right: 1px solid var(--line);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.groupTitle {
+  margin: 0 0 2px;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.place,
+.folder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  padding: 3px 8px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  text-align: left;
+  border-radius: var(--radius);
+}
+
+.place {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
+.place:hover,
+.folder:hover {
+  background: var(--wash-hover);
+  color: var(--text);
+}
+
+.folders {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.folders[aria-busy] {
+  opacity: 0.6;
+}
+
+.folder svg {
+  color: var(--accent);
+}
+
+.folderName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  padding: 12px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.target {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin: 12px 0 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.targetLabel {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.newTag {
+  margin-left: 8px;
+  padding: 0 5px;
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  border-radius: var(--radius);
+}
+
+.placeholder {
+  color: var(--muted);
+}
+
+.footStart {
+  margin-right: auto;
+  min-width: 0;
+}
+
+.naming {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nameInput {
+  width: 200px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--accent);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: var(--radius);
+}
+
+.nameInput:focus {
+  outline: none;
+}
+
+.nameProblem {
+  color: var(--danger);
+  font-size: var(--fs-2);
+}

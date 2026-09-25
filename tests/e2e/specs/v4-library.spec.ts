@@ -1,8 +1,6 @@
-import fsSync from 'node:fs'
-import path from 'node:path'
-import { execFileSync } from 'node:child_process'
-
 import { expect, test, type Page } from '@playwright/test'
+
+import { cleanupImages, openLibrary as open, pageOverflow, seedImages, VIEWPORTS } from '../fixtures/v4-seed'
 
 /**
  * V4 library page (served by the same backend at /v4/, next to V3.5 at /).
@@ -14,103 +12,19 @@ import { expect, test, type Page } from '@playwright/test'
 
 test.describe.configure({ mode: 'serial' })
 
-const repoRoot = path.resolve(__dirname, '..', '..', '..')
 const TOKEN = 'v4e2etoken'
 const COUNT = 24
-const VIEWPORTS = [
-  { width: 1366, height: 768 },
-  { width: 1920, height: 1080 },
-  { width: 2560, height: 1440 },
-]
+const PREFIX = 'v4e2e-'
+const DIR = 'v4-e2e'
 
-function backendPython(): string {
-  const candidates = process.platform === 'win32'
-    ? [path.join(repoRoot, 'backend', 'venv', 'Scripts', 'python.exe'), 'python']
-    : [path.join(repoRoot, 'backend', 'venv', 'bin', 'python'), 'python3']
-  return process.env.PW_BACKEND_PYTHON || candidates.find((c) => !c.includes(path.sep) || fsSync.existsSync(c)) || candidates[0]!
-}
-
-function runBackendScript(script: string): string {
-  return execFileSync(backendPython(), ['-X', 'utf8', '-c', script], { cwd: repoRoot, stdio: 'pipe' })
-    .toString('utf8')
-    .trim()
-}
-
-const dbPath = process.env.SD_IMAGE_SORTER_DB_PATH || path.join(repoRoot, 'data', 'images.db')
-
-function seed(): void {
-  runBackendScript(`
-import json, shutil, sqlite3
-from pathlib import Path
-from PIL import Image
-
-root = Path(${JSON.stringify(repoRoot)}) / ".tmp" / "v4-e2e"
-shutil.rmtree(root, ignore_errors=True)
-root.mkdir(parents=True, exist_ok=True)
-shapes = [(64, 96), (96, 64), (80, 80), (48, 120)]
-meta = json.dumps({"_parsed": {"generation_params": {"steps": 28, "sampler": "k_euler", "seed": 424242, "cfg_scale": 5}}})
-with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
-    cur = conn.cursor()
-    cur.execute("DELETE FROM image_prompt_tokens WHERE image_id IN (SELECT id FROM images WHERE filename LIKE 'v4e2e-%')")
-    cur.execute("DELETE FROM images WHERE filename LIKE 'v4e2e-%'")
-    for i in range(${COUNT}):
-        w, h = shapes[i % len(shapes)]
-        name = f"v4e2e-{i:02d}.png"
-        path = (root / name).resolve()
-        Image.new("RGB", (w, h), (40 + i * 8, 90, 160 - i * 4)).save(path)
-        prompt = f"${TOKEN}, 1girl, (silver hair:1.2), smile, frame {i}"
-        cur.execute(
-            """INSERT INTO images (path, filename, generator, prompt, negative_prompt, metadata_json,
-                   width, height, file_size, source_size, source_mtime_ns, is_readable, metadata_status,
-                   created_at, library_order_time, user_rating)
-               VALUES (?, ?, 'nai', ?, 'lowres', ?, ?, ?, ?, ?, ?, 1, 'complete',
-                   datetime('now', ?), datetime('now', ?), 0)""",
-            (str(path), name, prompt, meta, w, h, path.stat().st_size, path.stat().st_size,
-             path.stat().st_mtime_ns, f"-{i} minutes", f"-{i} minutes"),
-        )
-        image_id = cur.lastrowid
-        for token in ("${TOKEN}", "1girl", "silver hair", "smile"):
-            cur.execute("INSERT OR IGNORE INTO image_prompt_tokens (image_id, token) VALUES (?, ?)", (image_id, token))
-    conn.commit()
-print("ok")
-`)
-}
-
-function cleanup(): void {
-  runBackendScript(`
-import sqlite3
-with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
-    conn.execute("DELETE FROM image_prompt_tokens WHERE image_id IN (SELECT id FROM images WHERE filename LIKE 'v4e2e-%')")
-    conn.execute("DELETE FROM images WHERE filename LIKE 'v4e2e-%'")
-    conn.commit()
-print("ok")
-`)
-}
-
-async function openLibrary(page: Page, theme: 'dark' | 'light' = 'dark') {
-  // Seed language and theme once per page, so a later reload keeps what the test changed.
-  await page.addInitScript((th) => {
-    const flag = 'v4e2e-init-' + th
-    if (sessionStorage.getItem(flag)) return
-    sessionStorage.setItem(flag, '1')
-    localStorage.setItem('sd-image-sorter-lang', 'en')
-    localStorage.setItem('sd-v4-theme', th)
-  }, theme)
-  const res = await page.goto('/v4/', { waitUntil: 'domcontentloaded' })
-  expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
-  const input = page.getByTestId('query-input')
-  await input.fill(TOKEN)
-  await input.press('Enter')
-  await expect(page.getByTestId('result-count')).toHaveText(`${COUNT} images`)
-  await expect(page.locator('[data-testid="gallery-scroller"]:not([aria-busy])')).toBeVisible()
-}
+const openLibrary = (page: Page, theme: 'dark' | 'light' = 'dark') => open(page, TOKEN, COUNT, theme)
 
 async function ratingOf(page: Page, id: string): Promise<number> {
   return page.evaluate(async (x) => (await (await fetch(`/api/images/${x}`)).json()).image.user_rating, id)
 }
 
-test.beforeAll(() => seed())
-test.afterAll(() => cleanup())
+test.beforeAll(() => seedImages({ prefix: PREFIX, token: TOKEN, count: COUNT, dir: DIR }))
+test.afterAll(() => cleanupImages(PREFIX, [DIR]))
 
 for (const viewport of VIEWPORTS) {
   test(`layout fits at ${viewport.width}x${viewport.height} in both themes`, async ({ page }) => {
@@ -123,8 +37,7 @@ for (const viewport of VIEWPORTS) {
       for (const id of ['query-input', 'result-count', 'open-palette', 'theme-toggle']) {
         await expect(page.getByTestId(id)).toBeInViewport()
       }
-      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
-      expect(overflow).toBeLessThanOrEqual(0)
+      expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
     }
   })
 }
