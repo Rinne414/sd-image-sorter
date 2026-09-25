@@ -2,14 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLibrarySuggest } from '../../api/queries'
 import { useT, type MessageKey } from '../../i18n'
 import { generatorName } from '../../lib/format'
-import { SYNTAX_ROWS, parseSearch, suggestionContext, withoutToken, type Part, type SortKey } from '../../lib/searchQuery'
+import { SYNTAX_ROWS, parseSearch, suggestionContext, withoutToken, type Part } from '../../lib/searchQuery'
+import { SORTS, canReverse } from '../../lib/sort'
 import { useApp } from '../../state/store'
 import { Icon } from '../../ui/Icon'
 import { useClickOutside, useLayer } from '../../ui/layers'
 import { Menu } from '../../ui/Menu'
 import styles from './QueryBar.module.css'
+import { FilterPanel } from './FilterPanel'
 
-const SORTS: SortKey[] = ['newest', 'oldest', 'user_rating', 'aesthetic', 'random', 'name_asc']
 const APPLY_DELAY_MS = 300
 const RATING_NAMES: Record<string, MessageKey> = {
   general: 'rating.general',
@@ -34,6 +35,8 @@ export function QueryBar({ total, inputRef }: Props) {
   const setQueryText = useApp((s) => s.setQueryText)
   const sort = useApp((s) => s.sort)
   const setSort = useApp((s) => s.setSort)
+  const sortReverse = useApp((s) => s.sortReverse)
+  const setSortReverse = useApp((s) => s.setSortReverse)
   const layout = useApp((s) => s.layout)
   const setLayout = useApp((s) => s.setLayout)
   const tileSize = useApp((s) => s.tileSize)
@@ -171,15 +174,21 @@ export function QueryBar({ total, inputRef }: Props) {
         )}
       </div>
 
+      <FilterPanel text={draft} onChange={(next) => setText(next, true)} />
       <SyntaxHelp onExample={(ex) => setText(draft ? `${draft.trimEnd()} ${ex}` : ex, true)} />
       <Menu
-        label={`${t('sort.label')}：${t(`sort.${sort}` as MessageKey)}`}
-        items={SORTS.map((s) => ({
-          id: s,
-          label: t(`sort.${s}` as MessageKey),
-          checked: s === sort,
-          onSelect: () => setSort(s),
-        }))}
+        label={`${t('sort.label')}：${t(`sort.${sort}` as MessageKey)}${sortReverse && canReverse(sort) ? ' ↑' : ''}`}
+        items={[
+          ...SORTS.map((s) => ({
+            id: s.base,
+            label: t(`sort.${s.base}` as MessageKey),
+            checked: s.base === sort,
+            onSelect: () => setSort(s.base),
+          })),
+          ...(canReverse(sort)
+            ? [{ id: 'reverse', label: t('sort.reverse'), checked: sortReverse, onSelect: () => setSortReverse(!sortReverse), divider: true }]
+            : []),
+        ]}
       />
       <Menu
         label={t('view.label')}

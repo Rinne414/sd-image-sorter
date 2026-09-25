@@ -251,3 +251,55 @@ test('search: suggestions, chips and warnings', async ({ page }) => {
   await page.getByRole('button', { name: 'score>=7' }).click()
   await expect(input).toHaveValue(/score>=7$/)
 })
+
+test('filter panel, smart filters and reverse sort', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openLibrary(page)
+  const input = page.getByTestId('query-input')
+  const count = page.getByTestId('result-count')
+
+  // the panel writes into the query line and the filter really applies
+  await page.getByTestId('filter-button').click()
+  const panel = page.getByTestId('filter-panel')
+  await expect(panel).toBeInViewport()
+  await panel.getByRole('button', { name: 'General' }).click()
+  await expect(input).toHaveValue(`${TOKEN} rating:general`)
+  await panel.getByRole('button', { name: 'General' }).click()
+  await expect(input).toHaveValue(TOKEN)
+  await panel.getByRole('button', { name: 'Portrait' }).click()
+  await expect(input).toHaveValue(`${TOKEN} aspect:portrait`)
+  await expect(count).toHaveText('12 images')
+
+  // save it; the rail lists it with its own count
+  await page.getByTestId('filter-save-name').fill('tall ones')
+  await panel.getByRole('button', { name: 'Save as smart filter' }).click()
+  const smart = page.getByTestId('smart-filters')
+  await expect(smart).toContainText('tall ones')
+  await expect(smart).toContainText('12')
+
+  // clear, then the smart filter brings the query back
+  await panel.getByRole('button', { name: 'Clear all' }).click()
+  await expect(input).toHaveValue('')
+  await page.keyboard.press('Escape')
+  await expect(panel).toHaveCount(0)
+  await smart.getByRole('button', { name: /^tall ones/ }).click()
+  await expect(input).toHaveValue(`${TOKEN} aspect:portrait`)
+  await expect(count).toHaveText('12 images')
+
+  // delete with undo
+  await smart.getByRole('button', { name: /^tall ones/ }).hover()
+  await smart.getByRole('button', { name: 'Delete "tall ones"' }).click()
+  await expect(page.getByTestId('smart-filters')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Undo' }).click()
+  await expect(page.getByTestId('smart-filters')).toContainText('tall ones')
+
+  // reverse sort puts the oldest first
+  await input.fill(TOKEN)
+  await input.press('Enter')
+  await expect(count).toHaveText('24 images')
+  await expect(page.getByTestId('tile').first()).toHaveAttribute('title', 'v4e2e-00.png')
+  await page.getByRole('button', { name: /^Sort\s*[:：]/ }).click()
+  await page.getByRole('menuitemcheckbox', { name: 'Reverse order' }).click()
+  await expect(page.locator('[data-testid="gallery-scroller"]:not([aria-busy])')).toBeVisible()
+  await expect(page.getByTestId('tile').first()).toHaveAttribute('title', 'v4e2e-23.png')
+})

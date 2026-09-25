@@ -12,8 +12,6 @@
 //   ★4 / ☆4            V4 shorthand for stars>=4
 //   anything else      free text (file name, checkpoint, prompt)
 
-export type SortKey = 'newest' | 'oldest' | 'user_rating' | 'aesthetic' | 'random' | 'name_asc'
-
 export const GENERATOR_VALUES = [
   'comfyui', 'nai', 'webui', 'forge', 'reforge', 'fooocus', 'easy-diffusion', 'invokeai',
   'swarmui', 'drawthings', 'gemini', 'gpt-image', 'others', 'unknown',
@@ -584,8 +582,8 @@ export type ImageQueryParams = Record<string, string | number | boolean>
 const csv = (values: string[]) => [...new Set(values)].join(',')
 
 /** Query line + left-rail scope → /api/images parameters. */
-export function toImageParams(q: ParsedQuery, scope: ScopeFilter, sort: SortKey): ImageQueryParams {
-  const p: ImageQueryParams = { sort_by: sort }
+export function toImageParams(q: ParsedQuery, scope: ScopeFilter, sortBy: string): ImageQueryParams {
+  const p: ImageQueryParams = { sort_by: sortBy }
   const put = (k: string, v: string | number | boolean | undefined | null) => {
     if (v === undefined || v === null || v === '') return
     p[k] = v

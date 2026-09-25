@@ -249,3 +249,20 @@ export function useLibrarySuggest(endpoint: SuggestEndpoint | null, prefix: stri
     placeholderData: keepPreviousData,
   })
 }
+
+/** How many images match these params (smart filter counts). */
+export function useImageCount(params: ImageQueryParams | null) {
+  const libraryId = useApp((s) => s.libraryId)
+  return useQuery({
+    queryKey: ['image-count', libraryId, params],
+    enabled: params !== null,
+    queryFn: async ({ signal }) => {
+      const qs = new URLSearchParams(Object.entries(params ?? {}).map(([k, v]) => [k, String(v)]))
+      qs.delete('sort_by')
+      const res = await fetch(`/api/images/count?${qs}`, { signal, headers: { 'X-SD-Library-Id': libraryId } })
+      if (!res.ok) throw new Error(res.statusText)
+      return ((await res.json()) as { total: number }).total
+    },
+    staleTime: 30_000,
+  })
+}

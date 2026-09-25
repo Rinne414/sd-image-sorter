@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { SortKey } from '../lib/searchQuery'
+import { isSortBase, type SortBase } from '../lib/sort'
 
 export type Page = 'home' | 'library' | 'batch' | 'sort'
 export type Layout = 'masonry' | 'grid'
@@ -14,10 +14,18 @@ interface Prefs {
   tileSize: TileSize
   cardOpen: boolean
   railOpen: boolean
-  sort: SortKey
+  sort: SortBase
+  sortReverse: boolean
 }
 
-const DEFAULT_PREFS: Prefs = { layout: 'masonry', tileSize: 'm', cardOpen: true, railOpen: true, sort: 'newest' }
+const DEFAULT_PREFS: Prefs = {
+  layout: 'masonry',
+  tileSize: 'm',
+  cardOpen: true,
+  railOpen: true,
+  sort: 'newest',
+  sortReverse: false,
+}
 
 function readJson<T>(key: string): Partial<T> {
   try {
@@ -63,7 +71,8 @@ interface AppState extends Prefs {
   setLibrary: (id: string) => void
   setQueryText: (text: string) => void
   setScope: (patch: Partial<Scope>) => void
-  setSort: (sort: SortKey) => void
+  setSort: (sort: SortBase) => void
+  setSortReverse: (reverse: boolean) => void
   setLayout: (layout: Layout) => void
   setTileSize: (size: TileSize) => void
   toggleCard: () => void
@@ -78,12 +87,23 @@ interface AppState extends Prefs {
   setPaletteOpen: (open: boolean) => void
 }
 
-const prefs: Prefs = { ...DEFAULT_PREFS, ...readJson<Prefs>(PREFS_KEY) }
+function loadPrefs(): Prefs {
+  const stored = readJson<Prefs & { sort: string }>(PREFS_KEY)
+  const prefs: Prefs = { ...DEFAULT_PREFS, ...stored, sort: DEFAULT_PREFS.sort }
+  // Prototype builds stored backend keys ("oldest", "name_asc"); map them onto base + reverse.
+  const raw = stored.sort
+  if (isSortBase(raw)) prefs.sort = raw
+  else if (raw === 'oldest') Object.assign(prefs, { sort: 'newest', sortReverse: true })
+  else if (raw === 'name_asc') prefs.sort = 'name'
+  return prefs
+}
+
+const prefs = loadPrefs()
 const storedLibrary = readJson<{ currentId: string }>(LIBRARY_KEY).currentId ?? 'main'
 
 function savePrefs(state: Prefs): void {
-  const { layout, tileSize, cardOpen, railOpen, sort } = state
-  writeJson(PREFS_KEY, { layout, tileSize, cardOpen, railOpen, sort })
+  const { layout, tileSize, cardOpen, railOpen, sort, sortReverse } = state
+  writeJson(PREFS_KEY, { layout, tileSize, cardOpen, railOpen, sort, sortReverse })
 }
 
 export const useApp = create<AppState>((set, get) => ({
@@ -116,6 +136,10 @@ export const useApp = create<AppState>((set, get) => ({
   setScope: (patch) => set({ scope: { ...get().scope, ...patch } }),
   setSort: (sort) => {
     set({ sort })
+    savePrefs(get())
+  },
+  setSortReverse: (sortReverse) => {
+    set({ sortReverse })
     savePrefs(get())
   },
   setLayout: (layout) => {

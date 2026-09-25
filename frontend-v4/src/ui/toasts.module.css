@@ -32,8 +32,14 @@
   }
 }
 
+.text {
+  flex: 1;
+  padding-top: 5px;
+}
+
 .close {
   display: grid;
+  align-self: center;
   flex: none;
   border: 0;
   background: none;

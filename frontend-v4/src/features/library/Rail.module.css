@@ -179,6 +179,42 @@
   color: var(--accent);
 }
 
+.savedRow {
+  position: relative;
+}
+
+.savedRow .row {
+  padding-right: 26px;
+}
+
+.remove {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  translate: 0 -50%;
+  display: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  background: var(--surface-2);
+  color: var(--muted);
+  border-radius: var(--radius);
+}
+
+.savedRow:hover .remove,
+.remove:focus-visible {
+  display: grid;
+}
+
+.savedRow:hover .count {
+  visibility: hidden;
+}
+
+.remove:hover {
+  color: var(--danger);
+}
+
 .fav {
   display: grid;
   color: var(--marker);

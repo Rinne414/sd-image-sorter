@@ -1,4 +1,8 @@
 import { useRef, useState } from 'react'
+import { useImageCount } from '../../api/queries'
+import { parseSearch, toImageParams } from '../../lib/searchQuery'
+import { useSavedSearches, type SavedSearch } from '../../state/savedSearches'
+import { useToasts } from '../../ui/toasts'
 import { useFavorites, useFolders, useGenerators, useLibraries, useLibraryHealth, useMissingCount } from '../../api/queries'
 import { useT, type MessageKey } from '../../i18n'
 import { generatorName, shortFolder } from '../../lib/format'
@@ -48,6 +52,8 @@ export function Rail({ texture }: Props) {
             onClick={() => setScope({ favorites: !scope.favorites })}
           />
         </ul>
+
+        <SmartFilters />
 
         <h3 className={styles.heading}>{t('rail.sources')}</h3>
         <ul className={styles.list}>
@@ -205,5 +211,68 @@ function Status() {
         </ul>
       )}
     </section>
+  )
+}
+
+/** Saved query lines for this library, each with a live count. */
+function SmartFilters() {
+  const t = useT()
+  const libraryId = useApp((s) => s.libraryId)
+  const list = useSavedSearches((s) => s.byLibrary[libraryId]) ?? []
+  const queryText = useApp((s) => s.queryText)
+  if (!list.length) return null
+  return (
+    <>
+      <h3 className={styles.heading}>{t('rail.saved')}</h3>
+      <ul className={styles.list} data-testid="smart-filters">
+        {list.map((s, i) => (
+          <SmartFilterRow key={s.id} saved={s} index={i} active={queryText.trim() === s.query} />
+        ))}
+      </ul>
+    </>
+  )
+}
+
+function SmartFilterRow({ saved, index, active }: { saved: SavedSearch; index: number; active: boolean }) {
+  const t = useT()
+  const libraryId = useApp((s) => s.libraryId)
+  const setQueryText = useApp((s) => s.setQueryText)
+  const setScope = useApp((s) => s.setScope)
+  const remove = useSavedSearches((s) => s.remove)
+  const restore = useSavedSearches((s) => s.restore)
+  const count = useImageCount(toImageParams(parseSearch(saved.query), { generators: [], folder: null, favoritesCollectionId: null }, 'newest'))
+  return (
+    <li className={styles.savedRow}>
+      <button
+        type="button"
+        className={styles.row}
+        aria-pressed={active}
+        title={saved.query}
+        onClick={() => {
+          setScope({ favorites: false, folder: null, generators: [] })
+          setQueryText(saved.query)
+        }}
+      >
+        <span className={styles.rowLabel}>{saved.name}</span>
+        {count.data !== undefined && <span className={`${styles.count} mono`}>{count.data.toLocaleString()}</span>}
+      </button>
+      <button
+        type="button"
+        className={styles.remove}
+        aria-label={t('rail.savedRemove', { name: saved.name })}
+        title={t('rail.savedRemove', { name: saved.name })}
+        onClick={() => {
+          const gone = remove(libraryId, saved.id)
+          if (gone) {
+            useToasts.getState().push(t('rail.savedRemoved', { name: gone.name }), 'info', {
+              label: t('toast.undo'),
+              run: () => restore(libraryId, gone, index),
+            })
+          }
+        }}
+      >
+        <Icon name="close" size={12} />
+      </button>
+    </li>
   )
 }

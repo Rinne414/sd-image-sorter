@@ -3,6 +3,7 @@ import { useFavorites, useImageDetail, useImages, useSetRating, useToggleFavorit
 import { useT } from '../../i18n'
 import { isTypingTarget } from '../../lib/format'
 import { parseSearch, toImageParams } from '../../lib/searchQuery'
+import { apiSort } from '../../lib/sort'
 import { useApp } from '../../state/store'
 import { GenerationCard } from '../card/GenerationCard'
 import { Stars } from '../card/Stars'
@@ -19,6 +20,7 @@ export function LibraryPage() {
   const queryText = useApp((s) => s.queryText)
   const scope = useApp((s) => s.scope)
   const sort = useApp((s) => s.sort)
+  const sortReverse = useApp((s) => s.sortReverse)
   const cardOpen = useApp((s) => s.cardOpen)
   const railOpen = useApp((s) => s.railOpen)
   const inspectedId = useApp((s) => s.inspectedId)
@@ -36,9 +38,9 @@ export function LibraryPage() {
           folder: scope.folder,
           favoritesCollectionId: scope.favorites ? (favorites.data?.collectionId ?? null) : null,
         },
-        sort,
+        apiSort(sort, sortReverse),
       ),
-    [queryText, scope, sort, favorites.data?.collectionId],
+    [queryText, scope, sort, sortReverse, favorites.data?.collectionId],
   )
   const query = useImages(params)
   const images = useMemo(() => query.data?.pages.flatMap((p) => p.images) ?? [], [query.data])
