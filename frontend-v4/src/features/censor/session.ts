@@ -26,11 +26,20 @@ export type ItemStatus = 'clean' | 'dirty' | 'saving' | 'saved' | 'error'
 
 export const keyOf = (batchId: number, imageId: number) => `${batchId}:${imageId}`
 
-/** The edit an item starts with: the ops stored with it, "saved" when its copy exists (or it has none). */
+/**
+ * Does the batch hold a censored copy for these ops? Any ops: yes. No ops:
+ * only when the image was approved in review, so the export finds a copy for
+ * every approved image (then the untouched picture, saved like any copy).
+ */
+export function needsCopy(ops: readonly Op[], reviewed: boolean | null): boolean {
+  return ops.length > 0 || reviewed === true
+}
+
+/** The edit an item starts with: the ops stored with it, "saved" when its copy exists (or it needs none). */
 export function initialEdit(item: BatchItem): ImageEdit {
   const ops = parseOps(item.item_state)
   const reviewed = parseReviewed(item.item_state)
-  const saved = ops.length === 0 || item.has_censored ? ops : null
+  const saved = !needsCopy(ops, reviewed) || item.has_censored ? ops : null
   return { ops, saved, reviewed, savedReviewed: reviewed, history: EMPTY_HISTORY, error: null, saving: false, again: false }
 }
 
@@ -52,7 +61,7 @@ export function itemStatus(item: BatchItem, edit: ImageEdit | undefined): ItemSt
  * unsaved, so leaving the image renders the copy again.
  */
 export function reconcile(edit: ImageEdit, item: BatchItem): ImageEdit {
-  if (edit.saving || isDirty(edit) || edit.ops.length === 0 || item.has_censored) return edit
+  if (edit.saving || isDirty(edit) || !needsCopy(edit.ops, edit.reviewed) || item.has_censored) return edit
   return { ...edit, saved: null }
 }
 

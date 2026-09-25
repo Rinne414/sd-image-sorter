@@ -8,7 +8,7 @@ import { withCensorState, type Op, type SavedCensorState } from './ops'
 import { renderOps } from './paint'
 import { createRaster, type Raster } from './raster'
 import { ItemGoneError, runSave } from './saveFlow'
-import { libraryOf, unsavedIds } from './session'
+import { libraryOf, needsCopy, unsavedIds } from './session'
 
 // Loading originals and saving censored copies. A copy is saved from a fresh
 // replay of the ops on the original (the same bytes the editor shows), sent
@@ -97,15 +97,16 @@ function censorState(item: BatchItem | undefined, ops: Op[], reviewed: boolean |
 
 /**
  * Make the server hold exactly `ops` and the review mark, in ONE request each
- * way: the rendered copy together with the state (PUT), or (no ops) no copy
- * and the state (DELETE with the state). The server writes both or neither,
- * so a copy never sits next to ops it was not made from.
+ * way: the rendered copy together with the state (PUT), or, when no copy is
+ * needed (no ops and not approved), no copy and the state (DELETE with the
+ * state). The server writes both or neither, so a copy never sits next to ops
+ * it was not made from.
  */
 async function writeCopy(batchId: number, imageId: number, ops: Op[], reviewed: boolean | null): Promise<void> {
   const item = cachedItem(batchId, imageId)
   const state = item?.item_state ?? null
   try {
-    if (ops.length === 0) {
+    if (!needsCopy(ops, reviewed)) {
       const body = { item_state: stateBody(withCensorState(state, censorState(item, ops, reviewed))) }
       storeItem(batchId, unwrap<BatchItem>(await api.DELETE('/api/batches/{batch_id}/items/{image_id}/censored', { ...itemRequest(batchId, imageId), body })))
       return

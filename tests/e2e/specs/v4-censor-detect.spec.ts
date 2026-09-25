@@ -242,7 +242,7 @@ async function goToImage(page: Page, i: number): Promise<void> {
 }
 
 /** Pixels of the editor canvas (`copy` false) or the saved copy (true), plus the original's. */
-async function pixels(page: Page, imageId: number, copy: boolean): Promise<{ a: number[]; b: number[] } | null> {
+async function pixels(page: Page, imageId: number, copy: boolean, batch = batchId): Promise<{ a: number[]; b: number[] } | null> {
   return page.evaluate(
     async ({ id, batch, fromCopy }) => {
       const decode = async (url: string) => {
@@ -263,7 +263,7 @@ async function pixels(page: Page, imageId: number, copy: boolean): Promise<{ a: 
       }
       return a && b ? { a: Array.from(a.data), b: Array.from(b.data) } : null
     },
-    { id: imageId, batch: batchId, fromCopy: copy },
+    { id: imageId, batch, fromCopy: copy },
   )
 }
 
@@ -695,6 +695,40 @@ test('a rotated JPEG is drawn upright; an answer measured on another frame is re
   await expect(stripItem(page, 0)).toHaveAttribute('data-review', 'waiting')
   await page.getByTestId('censor-tab-review').click()
   await expect(page.getByTestId('censor-review-region')).toHaveCount(1)
+
+  // approved with every region switched off: the batch holds a copy, and it is the original picture
+  const sameAsOriginal = async () => {
+    const p = await pixels(page, rotatedId, true, rotatedBatch)
+    return p ? p.a.filter((v, i) => v !== p.b[i]).length + Math.abs(p.a.length - p.b.length) : -1
+  }
+  await focusEditor(page)
+  await page.keyboard.press('a')
+  await expect(page.getByTestId('censor-review-region')).toHaveAttribute('aria-pressed', 'false')
+  await page.keyboard.press('Enter')
+  const rotatedItem = async () => ((await (await page.request.get(`/api/batches/${rotatedBatch}`)).json()) as { items: ApiItem[] }).items[0] as ApiItem
+  await expect.poll(async () => (await rotatedItem()).item_state?.censor?.reviewed).toBe(true)
+  expect((await rotatedItem()).has_censored).toBe(true)
+  expect((await page.request.get(`/api/batches/${rotatedBatch}/items/${rotatedId}/censored`)).status()).toBe(200)
+  expect(await sameAsOriginal()).toBe(0)
+
+  // approved with nothing at all to censor (the detection undone): still a copy, not deleted
+  await page.keyboard.press('Control+z')
+  await page.keyboard.press('Control+z')
+  await expect(page.getByTestId('censor-review-region')).toHaveCount(0)
+  await page.keyboard.press('Control+s')
+  await expect.poll(async () => (await rotatedItem()).item_state?.censor?.ops.length).toBe(0)
+  const approvedNothing = await rotatedItem()
+  expect(approvedNothing.item_state?.censor?.reviewed).toBe(true)
+  expect(approvedNothing.has_censored).toBe(true)
+  expect((await page.request.get(`/api/batches/${rotatedBatch}/items/${rotatedId}/censored`)).status()).toBe(200)
+  expect(await sameAsOriginal()).toBe(0)
+
+  // "Back to original" takes the approval back: waiting for review, no copy kept
+  await page.getByTestId('censor-reset').click()
+  await page.getByTestId('censor-reset-ok').click()
+  await expect.poll(async () => (await rotatedItem()).has_censored).toBe(false)
+  expect((await rotatedItem()).item_state?.censor?.reviewed).toBe(false)
+  await expect(stripItem(page, 0)).toHaveAttribute('data-review', 'waiting')
 })
 
 test('the detect and review tabs fit every desktop size', async ({ page }) => {

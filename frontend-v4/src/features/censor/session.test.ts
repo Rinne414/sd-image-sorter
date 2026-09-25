@@ -5,7 +5,9 @@ import {
   changeOps,
   editOf,
   initialEdit,
+  isDirty,
   itemStatus,
+  needsCopy,
   patchEdit,
   reconcile,
   redoEdit,
@@ -101,5 +103,23 @@ describe('censor session', () => {
     rememberImage(7, 3)
     expect(startImage(b)).toBe(3)
     expect(startImage(batch([]))).toBeNull()
+  })
+
+  it('an approved image always has a copy (the export uses it), even with nothing to censor', () => {
+    expect(needsCopy([], null)).toBe(false)
+    expect(needsCopy([], false)).toBe(false)
+    expect(needsCopy([], true)).toBe(true)
+    expect(needsCopy([stroke], null)).toBe(true)
+    expect(needsCopy([stroke], false)).toBe(true)
+    const approvedNothing = { censor: { v: 1, width: 8, height: 8, ops: [], reviewed: true } }
+    // approved, nothing to censor, no copy yet: unsaved, so leaving the image makes the copy
+    expect(itemStatus(item(1, { item_state: approvedNothing }), undefined)).toBe('dirty')
+    expect(itemStatus(item(1, { item_state: approvedNothing, has_censored: true }), undefined)).toBe('saved')
+    // waiting for review with nothing found: no copy is needed
+    const waitingNothing = { censor: { v: 1, width: 8, height: 8, ops: [], reviewed: false } }
+    expect(itemStatus(item(1, { item_state: waitingNothing }), undefined)).toBe('clean')
+    // the copy went away while the image stays approved: saved again on leave
+    const known = initialEdit(item(1, { item_state: approvedNothing, has_censored: true }))
+    expect(isDirty(reconcile(known, item(1, { item_state: approvedNothing })))).toBe(true)
   })
 })

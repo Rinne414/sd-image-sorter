@@ -9,7 +9,7 @@ import { HistoryButtons, Section, Slider } from './PanelParts'
 import { ReviewPanel, type ReviewActions } from './ReviewPanel'
 import { BLOCK_MAX, BLOCK_MIN, OPACITY_MAX, OPACITY_MIN, SIZE_MAX, SIZE_MIN, STYLES, TOOLS, type CensorStyle, type Tool } from './ops'
 import { saveImage } from './saving'
-import { changeOps, type ImageEdit } from './session'
+import { changeOps, editOf, setReviewed, type ImageEdit } from './session'
 import { useCensorSettings } from './settings'
 import styles from './ToolPanel.module.css'
 import { useCanvasView, ZOOM_STEP } from './view'
@@ -181,6 +181,9 @@ function ResetDialog({ batchId, item, ops, onClose }: ResetProps) {
   const go = () => {
     onClose()
     if (ops.length > 0) changeOps(batchId, item, [])
+    // An approval was for the censoring just removed: the image goes back to waiting
+    // for review, so no copy is kept (an approved image always has one).
+    if (editOf(batchId, item.image_id)?.reviewed === true) setReviewed(batchId, item, false)
     void saveImage(batchId, item.image_id, true)
   }
 
