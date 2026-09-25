@@ -30,7 +30,6 @@ export function StepPanel({ batch, step, next, onNext }: Props) {
         <h2 className={styles.title}>{stepLabel(step, t)}</h2>
         <p className={styles.what}>{t(whatKey(step, batch.kind), { n })}</p>
         <p className={styles.applies}>{n === 0 ? t('batch.panel.appliesNone') : t('batch.panel.applies', { n })}</p>
-        {step === 'censor' && n > 0 && <p className={styles.applies}>{t('batch.panel.censored', { c: batch.censored_count })}</p>}
         <p className={styles.note}>{t('batch.panel.notYet')}</p>
         <div className={styles.actions}>
           {next && (

@@ -1,0 +1,61 @@
+.viewport {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--stage);
+  touch-action: none;
+  user-select: none;
+  outline: none;
+}
+
+.viewport[data-cursor="paint"] {
+  cursor: crosshair;
+}
+
+.viewport[data-cursor="grab"] {
+  cursor: grab;
+}
+
+.viewport[data-cursor="grabbing"] {
+  cursor: grabbing;
+}
+
+.canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.canvas[data-pixelated] {
+  image-rendering: pixelated;
+}
+
+.note {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 24px;
+  color: var(--text-2);
+  text-align: center;
+}
+
+/* The brush outline at the current zoom: a light and a dark rule, so it shows on any picture. */
+.ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 1px solid var(--on-image);
+  box-shadow: 0 0 0 1px var(--film), inset 0 0 0 1px var(--film);
+  border-radius: 50%;
+  pointer-events: none;
+  display: none;
+}
+
+.ring[data-hover] {
+  display: block;
+}

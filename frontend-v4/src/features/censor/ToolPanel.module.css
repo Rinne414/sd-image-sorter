@@ -1,0 +1,142 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  padding: 12px 14px;
+  overflow-y: auto;
+  background: var(--bg);
+  border-left: 1px solid var(--line);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.heading {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.tools {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.tools :global(.btn) {
+  padding: 0 6px;
+  gap: 5px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.grid :global(.btn) {
+  padding: 0 6px;
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.row :global(.btn:last-child) {
+  flex: 1;
+}
+
+.zoom {
+  width: 52px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  text-align: center;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fieldHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+
+.value {
+  margin-left: auto;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.keys {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.field input[type="range"] {
+  width: 100%;
+  margin: 4px 0;
+  accent-color: var(--accent);
+}
+
+.colorField {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.colorField input[type="color"] {
+  width: 44px;
+  height: 26px;
+  padding: 1px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-1);
+  border-radius: var(--radius);
+}
+
+.note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}
+
+/* "Back to original" sits alone at the bottom, well away from the tools. */
+.danger {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.danger :global(.btn) {
+  width: 100%;
+  color: var(--danger);
+}
+
+.danger :global(.btn:hover) {
+  background: var(--danger-soft);
+}
+
+.dialogBody {
+  margin: 0;
+  max-width: 440px;
+  line-height: 1.7;
+}

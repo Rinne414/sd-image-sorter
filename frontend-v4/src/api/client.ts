@@ -6,10 +6,12 @@ import { useApp } from '../state/store'
 // OpenAPI schema (regenerate with `npm run gen:api`).
 export const api = createClient<paths>({ baseUrl: '' })
 
-// Every request names the library it works on (same header V3.5 sends).
+// Every request names the library it works on (same header V3.5 sends). A
+// request that already names one keeps it: work that finishes after the user
+// switched libraries (a censor save) must still go to its own library.
 api.use({
   onRequest({ request }) {
-    request.headers.set('X-SD-Library-Id', useApp.getState().libraryId)
+    if (!request.headers.has('X-SD-Library-Id')) request.headers.set('X-SD-Library-Id', useApp.getState().libraryId)
     return request
   },
 })

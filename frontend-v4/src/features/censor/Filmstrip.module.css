@@ -1,0 +1,133 @@
+.strip {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
+  border-right: 1px solid var(--line);
+}
+
+.scroller {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.list {
+  position: relative;
+  width: 100%;
+}
+
+.item {
+  position: absolute;
+  top: 0;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 108px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  text-align: left;
+}
+
+.frame {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 84px;
+  background: var(--film);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.frame img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* The state mark: a rule down the frame's left edge in the state's colour. */
+.frame::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: transparent;
+}
+
+.item[data-state="dirty"] .frame::before,
+.item[data-state="saving"] .frame::before {
+  background: var(--warn);
+}
+
+.item[data-state="saved"] .frame::before {
+  background: var(--ok);
+}
+
+.item[data-state="error"] .frame::before {
+  background: var(--danger);
+}
+
+.item:hover .frame {
+  border-color: var(--line-strong);
+}
+
+.item[aria-current="true"] .frame {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.caption {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--fs-2);
+  line-height: 16px;
+}
+
+.caption .mono {
+  color: var(--muted);
+}
+
+.item[aria-current="true"] .caption .mono {
+  color: var(--accent);
+}
+
+.state {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.item[data-state="dirty"] .state,
+.item[data-state="saving"] .state {
+  color: var(--warn);
+}
+
+.item[data-state="saved"] .state {
+  color: var(--ok);
+}
+
+.item[data-state="error"] .state {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.failed {
+  margin: 0;
+  padding: 8px;
+  border-top: 1px solid var(--line);
+  color: var(--danger);
+  font-size: var(--fs-2);
+}

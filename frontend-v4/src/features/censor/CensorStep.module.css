@@ -1,0 +1,90 @@
+.editor {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 46px;
+  padding: 0 12px 0 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.pos {
+  min-width: 48px;
+  color: var(--text);
+  font-size: var(--fs-2);
+  text-align: center;
+}
+
+.rule {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  background: var(--line);
+}
+
+.file {
+  flex: 0 1 auto;
+  min-width: 60px;
+  max-width: 28%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+  font-size: var(--fs-2);
+}
+
+.status {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.status[data-state="dirty"],
+.status[data-state="saving"] {
+  color: var(--warn);
+}
+
+.status[data-state="saved"] {
+  color: var(--ok);
+}
+
+.status[data-state="error"] {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.gap {
+  flex: 1;
+}
+
+.work {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr) 256px;
+  min-height: 0;
+}
+
+.stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  margin: 0;
+  padding: 24px;
+  color: var(--text-2);
+}

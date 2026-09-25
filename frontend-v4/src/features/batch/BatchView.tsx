@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { ApiError } from '../../api/client'
 import type { Batch } from '../../api/types'
 import { useT } from '../../i18n'
@@ -12,6 +12,9 @@ import { kindLabel } from './labels'
 import { PickStep } from './PickStep'
 import { StepPanel } from './StepPanel'
 import { StepRail } from './StepRail'
+
+// The censor editor is big and only one step needs it: it loads on first use.
+const CensorStep = lazy(() => import('../censor/CensorStep'))
 
 /** One batch: its name, the step rail on the left, the current step's work on the right. */
 export function BatchView({ id }: { id: number }) {
@@ -83,6 +86,10 @@ function Loaded({ batch }: { batch: Batch }) {
         <main className={styles.main}>
           {current === 'pick' ? (
             <PickStep batch={batch} next={next?.id ?? null} onNext={goTo} />
+          ) : current === 'censor' ? (
+            <Suspense fallback={<section className={styles.notice}>{t('censor.opening')}</section>}>
+              <CensorStep batch={batch} next={next?.id ?? null} onNext={goTo} />
+            </Suspense>
           ) : (
             <StepPanel batch={batch} step={current} next={next?.id ?? null} onNext={goTo} />
           )}
