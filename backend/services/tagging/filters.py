@@ -124,6 +124,7 @@ def _build_last_run_stats(
     total_tagged: int,
     total_errors: int,
     top_tags_counter: Any,
+    total_tag_count: int = 0,
 ) -> Dict[str, Any]:
     """Snapshot of the just-finished tagging run for the post-completion
     stats modal (v3.2.2 T-power-PR2 / H).
@@ -131,11 +132,14 @@ def _build_last_run_stats(
     Only ever populated on terminal progress states (done / cancelled /
     error). The frontend uses the presence of this key to know it's
     safe to pop the modal exactly once.
+
+    ``avg_tags_per_image`` is tag rows written per tagged image
+    (``total_tag_count / total_tagged``).
     """
     import time as _time
 
     elapsed = max(0.0, _time.time() - float(start_time)) if start_time else 0.0
-    avg = (total_tagged / total_processed) if total_processed else 0.0
+    avg = (total_tag_count / total_tagged) if total_tagged else 0.0
     top = []
     try:
         # ``top_tags_counter`` is a collections.Counter from the worker.
@@ -150,6 +154,7 @@ def _build_last_run_stats(
         "total_processed": int(total_processed),
         "total_tagged": int(total_tagged),
         "total_errors": int(total_errors),
+        "total_tag_count": int(total_tag_count),
         "avg_tags_per_image": round(avg, 2),
         "top_tags": top,
     }

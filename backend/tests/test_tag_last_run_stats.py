@@ -29,13 +29,16 @@ def test_basic_run():
         total_tagged=48,
         total_errors=2,
         top_tags_counter=counter,
+        total_tag_count=1200,
     )
     assert out["total_processed"] == 50
     assert out["total_tagged"] == 48
     assert out["total_errors"] == 2
+    assert out["total_tag_count"] == 1200
     assert out["elapsed_seconds"] >= 9.5
-    # avg = 48/50 = 0.96
-    assert abs(out["avg_tags_per_image"] - 0.96) < 0.01
+    # Tags per tagged image: 1200 tag rows over 48 images = 25.0. (It used to
+    # be total_tagged / total_processed, a ratio that can never exceed 1.)
+    assert out["avg_tags_per_image"] == 25.0
     # top tags by count desc, capped at 10
     names = [t["tag"] for t in out["top_tags"]]
     assert names[0] == "1girl"
