@@ -59,7 +59,7 @@ export function PickBar(p: Props) {
       )}
       <span className={styles.gap} />
       {importing && (
-        <span className={styles.busy} role="status" data-testid="dataset-importing">
+        <span className={styles.busy} aria-live="polite" data-testid="dataset-importing">
           {importing}
         </span>
       )}

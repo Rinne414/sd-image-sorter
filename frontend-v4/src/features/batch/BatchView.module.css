@@ -81,3 +81,13 @@
 .notice p {
   margin: 0;
 }
+
+/* A dataset batch has its settings strip between the head and the steps; its panel covers the steps. */
+.view[data-strip] {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.view[data-strip] .body {
+  grid-row: 3;
+  grid-column: 1;
+}

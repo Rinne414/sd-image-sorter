@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api, ApiError, unwrap } from '../../api/client'
 import { queryClient } from '../../api/queryClient'
 import type { Batch, BatchKind, BatchProjectView, DatasetProject, ScannedImage, UnlinkedDatasetProject } from '../../api/types'
+import type { ProjectSettings } from './datasetSettings'
 import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
 import { tr } from '../jobs/jobs'
@@ -120,8 +121,17 @@ export interface WriteResult {
   view: BatchProjectView
 }
 
-/** One PUT that turns the project's entries into `change(entries)`; errors are thrown to the caller. */
-async function writeOnce(batchId: number, change: (refs: EntryRef[]) => EntryRef[]): Promise<WriteResult> {
+type SettingsChange = (settings: ProjectSettings) => ProjectSettings
+
+/**
+ * One PUT that turns the project's entries into `change(entries)` (and its
+ * settings into `settingsChange(settings)`); errors are thrown to the caller.
+ */
+async function writeOnce(
+  batchId: number,
+  change: (refs: EntryRef[]) => EntryRef[],
+  settingsChange: SettingsChange = (s) => s,
+): Promise<WriteResult> {
   const view = await currentView(batchId)
   const { project } = view
   const before = project.items.map(savedRef)
@@ -133,7 +143,7 @@ async function writeOnce(batchId: number, change: (refs: EntryRef[]) => EntryRef
         expected_revision: project.revision,
         name: project.name,
         items: projectPutItems(project.items, after, surfaced),
-        settings: project.settings,
+        settings: settingsChange(project.settings),
       },
     }),
   )
@@ -163,6 +173,11 @@ function inQueue(batchId: number, task: () => Promise<WriteResult>): Promise<Wri
 
 export function writeEntries(batchId: number, change: (refs: EntryRef[]) => EntryRef[]): Promise<WriteResult | null> {
   return inQueue(batchId, () => writeOnce(batchId, change))
+}
+
+/** Save the project's settings (the V1 settings V3.5 reads), built from the ones saved now. */
+export async function saveProjectSettings(batchId: number, change: SettingsChange): Promise<boolean> {
+  return (await inQueue(batchId, () => writeOnce(batchId, (refs) => refs, change))) !== null
 }
 
 function explain(batchId: number, error: unknown): void {

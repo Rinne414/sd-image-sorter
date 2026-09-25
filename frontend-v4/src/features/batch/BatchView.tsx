@@ -6,6 +6,7 @@ import { useApp } from '../../state/store'
 import { Icon } from '../../ui/Icon'
 import { patchBatch, useBatch } from './batchApi'
 import { currentAfterEdit, enabledSteps } from './batchLogic'
+import { SettingsStrip } from './SettingsStrip'
 import { useBatchDialog } from './dialogStore'
 import styles from './BatchView.module.css'
 import { ExportStep } from './ExportStep'
@@ -73,7 +74,7 @@ function Loaded({ batch }: { batch: Batch }) {
   }
 
   return (
-    <div className={styles.view} data-testid="batch-view" data-batch-id={batch.id}>
+    <div className={styles.view} data-testid="batch-view" data-batch-id={batch.id} data-strip={batch.kind === 'dataset' || undefined}>
       <header className={styles.head}>
         <button type="button" className="btn btn-ghost" onClick={() => setPage('batch')} data-testid="batch-back">
           <Icon name="left" size={14} />
@@ -103,6 +104,7 @@ function Loaded({ batch }: { batch: Batch }) {
           {t('rail.images', { n: batch.item_count })}
         </span>
       </header>
+      {batch.kind === 'dataset' && <SettingsStrip batch={batch} />}
       <div className={styles.body}>
         <StepRail batch={batch} current={current} onGo={goTo} />
         <main className={styles.main}>

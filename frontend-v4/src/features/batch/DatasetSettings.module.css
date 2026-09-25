@@ -1,0 +1,291 @@
+/* A dataset batch's training settings: one strip under the batch head, and
+   the panel it opens over the steps (form on the left, final captions on the right). */
+
+.strip {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  height: 40px;
+  padding: 0 16px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
+.stripTitle {
+  flex: none;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-2);
+}
+
+.summary > span {
+  flex: none;
+}
+
+.summary b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.warnText {
+  color: var(--warn);
+}
+
+.gap {
+  flex: 1;
+}
+
+.state {
+  flex: none;
+  color: var(--muted);
+}
+
+.state[data-state='failed'] {
+  color: var(--danger);
+}
+
+.panel {
+  grid-row: 3;
+  grid-column: 1;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: minmax(380px, 470px) minmax(0, 1fr);
+  min-height: 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  padding: 16px 18px 24px;
+  overflow-y: auto;
+  border-right: 1px solid var(--line);
+}
+
+.field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.field > span:first-child {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.field input:not([type='checkbox']),
+.field select,
+.field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 5px 9px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-3);
+  border-radius: var(--radius);
+}
+
+.field input:not([type='checkbox']),
+.field select {
+  height: 30px;
+}
+
+.field textarea {
+  min-height: 56px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.field input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  line-height: 1.5;
+}
+
+.problem {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--fs-1);
+}
+
+.note {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-1);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.row > select,
+.row > input {
+  flex: 1;
+}
+
+.cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.cat {
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+.cat[aria-pressed='true'] {
+  opacity: 1;
+  border-color: var(--c);
+  text-decoration: line-through;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.check input {
+  accent-color: var(--accent);
+}
+
+.advanced {
+  display: grid;
+  gap: 12px;
+}
+
+.advanced summary {
+  width: fit-content;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  cursor: pointer;
+}
+
+.vars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: var(--fs-1);
+}
+
+.vars code {
+  color: var(--text-2);
+}
+
+/* The final captions. */
+.preview {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.previewHead {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.previewHead h3 {
+  margin: 0;
+  font-size: var(--fs-4);
+}
+
+.previewList {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 6px 18px 18px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.item img,
+.thumbGap {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  background: var(--film);
+  border-radius: var(--radius);
+}
+
+.itemName {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.caption {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.ruleToken {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.itemError {
+  margin: 2px 0 0;
+  color: var(--danger);
+  font-size: var(--fs-1);
+}
+
+.previewEmpty {
+  margin: 32px 18px;
+  color: var(--text-2);
+}
