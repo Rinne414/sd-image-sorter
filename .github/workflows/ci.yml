@@ -36,6 +36,10 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
+      - name: Install V4 frontend dependencies
+        working-directory: frontend-v4
+        run: npm ci
+
       - name: Run full CI script
         run: python scripts/run_ci.py
 

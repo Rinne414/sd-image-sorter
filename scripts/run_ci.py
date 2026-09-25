@@ -338,6 +338,36 @@ def _run_ci(
             ROOT,
         ),
         (
+            "v4 frontend typecheck",
+            [
+                str(NODE_EXECUTABLE),
+                "./node_modules/typescript/lib/tsc.js",
+                "--noEmit",
+                "-p",
+                "tsconfig.json",
+            ],
+            ROOT / "frontend-v4",
+        ),
+        (
+            "v4 frontend unit tests",
+            [
+                str(NODE_EXECUTABLE),
+                "./node_modules/vitest/vitest.mjs",
+                "run",
+            ],
+            ROOT / "frontend-v4",
+        ),
+        (
+            # The V4 E2E specs load /v4/ from this build (frontend-v4/dist).
+            "v4 frontend build",
+            [
+                str(NODE_EXECUTABLE),
+                "./node_modules/vite/bin/vite.js",
+                "build",
+            ],
+            ROOT / "frontend-v4",
+        ),
+        (
             "playwright e2e",
             [
                 str(NODE_EXECUTABLE),
