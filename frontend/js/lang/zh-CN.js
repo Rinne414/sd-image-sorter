@@ -1959,6 +1959,8 @@ window.I18nLang_zhCN = {
     'export.tagsTitle': '导出 Tags',
     'export.selectedCount': '只包含已选择的 {count} 张图片',
     'batchExport.selectedCount': '这个批量导出只会处理已选择的 {count} 张图片',
+    'batchExport.captionEditsRestored': '有 {count} 张图的描述修改上次还没导出，已经恢复；下次导出训练 caption 时会用上。',
+    'batchExport.captionEditsClearedForMode': '换了内容格式，{count} 张图的描述修改已清除：它们是按之前的格式写的。',
     'batchExport.previewNoSelection': '还没有选择图片。请先到「图库」里选择图片。',
     'batchExport.previewRendering': '正在生成预览…',
     'export.tagsInstead': '查看 Tags',

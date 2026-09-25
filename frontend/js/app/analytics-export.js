@@ -812,6 +812,8 @@ async function executeBatchExport() {
         const skipped = Number(result?.skipped || 0);
         const errorCount = Number(result?.error_count ?? result?.errors ?? 0);
         const errorMessages = Array.isArray(result?.error_messages) ? result.error_messages : [];
+        // Written to files: the export preview no longer keeps them for a reload.
+        if (exported > 0) window.V321Integration?.markCaptionEditsExported?.();
 
         if ((result.status === 'ok' || errorCount === 0) && exported > 0 && skipped === 0) {
             showToast(appT('export.success', 'Exported {count} tag files successfully.', {

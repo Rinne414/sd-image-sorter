@@ -461,3 +461,37 @@ test('NL tab: the source card, the ToriiGate route and Start fit at desktop size
     await page.screenshot({ path: `../../.tmp/v35-fix/nl-tab-${viewport.width}x${viewport.height}.png` })
   }
 })
+
+// The export preview's caption edits lived in memory only: a reload or a
+// closed tab dropped them without a word unless the editor window happened
+// to be open. They are now kept until they are exported.
+test('export caption edits survive a reload until they are exported', async ({ page }) => {
+  await openApp(page)
+  await page.evaluate(() => {
+    const V = window.V321Integration as any
+    V._setPreviewCaption(101, 'hand-edited caption')
+    V._setNlEdit(101, 'A hand-edited sentence.')
+    V._setCaptionType(102, 'nl')
+  })
+
+  await page.reload()
+  await openApp(page)
+  // Restored once the export panel's first content-format pass has run.
+  await expect.poll(() => page.evaluate(() => {
+    const V = window.V321Integration as any
+    return {
+      caption: V.editedCaptions.get(101),
+      nl: V.editedNl.get(101),
+      type: V.captionTypes.get(102),
+    }
+  })).toEqual({ caption: 'hand-edited caption', nl: 'A hand-edited sentence.', type: 'nl' })
+  await expect(page.locator('#toast-container .toast', { hasText: /2 image/ }).first()).toBeVisible()
+
+  // Once exported they are not brought back again.
+  await page.evaluate(() => (window.V321Integration as any).markCaptionEditsExported())
+  await page.reload()
+  await openApp(page)
+  await page.waitForTimeout(500)
+  expect(await page.evaluate(() => (window.V321Integration as any).editedCaptions.size)).toBe(0)
+  expect(await page.evaluate(() => localStorage.getItem('sd-sorter-export-caption-edits'))).toBeNull()
+})

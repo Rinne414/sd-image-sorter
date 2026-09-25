@@ -87,6 +87,7 @@ Object.assign(window.V321Integration, {
             if (!r.ok) throw new Error('combined HTTP ' + r.status);
             const result = await r.json();
             if (!result.download_url) throw new Error('combined export did not return a download URL');
+            this.markCaptionEditsExported();
 
             if (destination === 'clipboard') {
                 if (requestedTotal <= 5000) {

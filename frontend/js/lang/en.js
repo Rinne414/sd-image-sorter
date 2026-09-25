@@ -1781,6 +1781,8 @@ window.I18nLang_en = {
     'export.tagsTitle': 'Export Tags',
     'export.selectedCount': 'This export includes only {count} selected images.',
     'batchExport.selectedCount': 'This batch export includes only {count} selected images.',
+    'batchExport.captionEditsRestored': 'Caption edits for {count} image(s) that were not exported yet are back; the next training-caption export uses them.',
+    'batchExport.captionEditsClearedForMode': 'Caption edits for {count} image(s) were cleared: they were written for the previous content format.',
     'batchExport.previewNoSelection': 'No images selected. Select images in Gallery first.',
     'batchExport.previewRendering': 'Rendering preview…',
     'export.tagsInstead': 'Show Tags',
