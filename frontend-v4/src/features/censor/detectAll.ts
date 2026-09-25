@@ -3,10 +3,11 @@ import { useToasts } from '../../ui/toasts'
 import { addJob, isQueueBusy, setDetectSource, startingProgress, tr } from '../jobs/jobs'
 import { applyRefined, refinable } from './detection'
 import { detectImage, refineRegions, type DetectPlan } from './detectApi'
-import { applyChange, applyDetections, cardsFor, loadCensorModels, makePlan, opsNow, reason, withModels } from './detectRun'
+import { applyChange, applyDetections, cardsFor, loadCensorModels, makePlan, opsNow, pictureSize, reason, withModels } from './detectRun'
 import { useDetectSettings } from './detectSettings'
 import { useCensorPanel } from './panel'
 import { detectAllTargets, nextToReview, type ReviewItem } from './review'
+import { saveOutcome } from './saveFlow'
 import { libraryFor, saveImage } from './saving'
 import { editOf, initialEdit, keyOf, useCensorSession } from './session'
 
@@ -42,13 +43,15 @@ setDetectSource({
 
 const toast = (text: string, kind: 'info' | 'error' = 'info') => useToasts.getState().push(text, kind)
 
-/** Save the image's new ops; a failure to save is this image's failure. */
+/**
+ * Save the image's new ops; a failure to save is this image's failure. When a
+ * save of the image is already running (the user just left it), this waits
+ * for the save that carries the result before deciding.
+ */
 async function store(batchId: number, item: BatchItem): Promise<void> {
-  if (await saveImage(batchId, item.image_id)) return
-  const edit = editOf(batchId, item.image_id)
-  // Still saving (the user left the image a moment ago): that save carries the result.
-  if (edit && !edit.error) return
-  throw new Error(edit?.error ?? tr('censor.all.gone'))
+  const saved = await saveImage(batchId, item.image_id)
+  const outcome = saveOutcome(saved, editOf(batchId, item.image_id))
+  if (!outcome.ok) throw new Error(outcome.reason ?? tr('censor.all.gone'))
 }
 
 async function runJob(kind: RunKind, batchId: number, items: BatchItem[], work: (item: BatchItem) => Promise<void>): Promise<RunState> {
@@ -88,7 +91,7 @@ function openReview(batchId: number, items: readonly BatchItem[]): void {
 async function detectAllNow(batchId: number, items: BatchItem[], targets: BatchItem[], plan: DetectPlan): Promise<void> {
   const warnings = new Set<string>()
   const done = await runJob('detect', batchId, targets, async (item) => {
-    const result = await detectImage(item.image_id, plan, libraryFor(batchId))
+    const result = await detectImage(item.image_id, plan, libraryFor(batchId), await pictureSize(item.image_id))
     for (const w of result.warnings) warnings.add(w)
     await applyDetections(batchId, item, result.regions)
   })
@@ -120,7 +123,8 @@ async function refineAllNow(batchId: number, items: BatchItem[]): Promise<void> 
   const confidence = useDetectSettings.getState().confidence
   let kept = 0
   const done = await runJob('refine', batchId, items, async (item) => {
-    const result = await refineRegions(item.image_id, refinable(opsNow(batchId, item)), confidence, libraryFor(batchId))
+    const regions = refinable(opsNow(batchId, item))
+    const result = await refineRegions(item.image_id, regions, confidence, libraryFor(batchId), await pictureSize(item.image_id))
     if (result.shapes.size === 0 && result.errors.length > 0) throw new Error(result.errors[0])
     kept += result.kept
     await applyChange(batchId, item, (ops) => applyRefined(ops, result.shapes), false)

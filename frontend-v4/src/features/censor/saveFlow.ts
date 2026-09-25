@@ -1,11 +1,12 @@
 import type { Op } from './ops'
-import { editOf, forgetEdit, isDirty, patchEdit } from './session'
+import { editOf, forgetEdit, isDirty, keyOf, patchEdit, type ImageEdit } from './session'
 
 // What saving does to one image's edit, apart from the network so it can be
 // tested. The image counts as saved only after `write` succeeded (the copy
 // and its ops travel in one request); a failure keeps it unsaved with the
 // reason, and the next leave tries again; a save asked for while one runs
-// runs once more afterwards with the newest ops.
+// runs once more afterwards with the newest ops, and whoever asked for it
+// gets the outcome of that later save.
 
 /** The item or its batch no longer exists: there is nothing left to save to. */
 export class ItemGoneError extends Error {}
@@ -23,14 +24,29 @@ export interface SaveOptions {
   unknownReason: string
 }
 
-/** Returns true when the server now matches the edit. */
-export async function runSave(batchId: number, imageId: number, write: WriteOps, options: SaveOptions): Promise<boolean> {
+/** The save running per image (`batch:image`), including the retry it will run when asked again meanwhile. */
+const inFlight = new Map<string, Promise<boolean>>()
+
+/**
+ * Returns true when the server now matches the edit. Asked while a save of
+ * the image runs: marks it to run again and resolves when that retry settled.
+ */
+export function runSave(batchId: number, imageId: number, write: WriteOps, options: SaveOptions): Promise<boolean> {
   const edit = editOf(batchId, imageId)
-  if (!edit || (!options.force && !isDirty(edit))) return true
+  if (!edit || (!options.force && !isDirty(edit))) return Promise.resolve(true)
+  const key = keyOf(batchId, imageId)
   if (edit.saving) {
     patchEdit(batchId, imageId, { again: true })
-    return false
+    return inFlight.get(key) ?? Promise.resolve(false)
   }
+  const done = saveOnce(batchId, imageId, edit, write, options).finally(() => {
+    if (inFlight.get(key) === done) inFlight.delete(key)
+  })
+  inFlight.set(key, done)
+  return done
+}
+
+async function saveOnce(batchId: number, imageId: number, edit: ImageEdit, write: WriteOps, options: SaveOptions): Promise<boolean> {
   const { ops, reviewed } = edit
   patchEdit(batchId, imageId, { saving: true, again: false })
   let ok = false
@@ -50,4 +66,17 @@ export async function runSave(batchId: number, imageId: number, write: WriteOps,
   const after = editOf(batchId, imageId)
   if (after?.again && isDirty(after)) return runSave(batchId, imageId, write, { unknownReason: options.unknownReason })
   return ok && !(after && isDirty(after))
+}
+
+export type SaveOutcome = { ok: true } | { ok: false; reason: string | null }
+
+/**
+ * What a finished save means for work that saved on its own (detect all):
+ * false with no error means newer edits came in and are saved later, which
+ * is fine; an error or a forgotten item (gone from the batch) is a failure.
+ */
+export function saveOutcome(saved: boolean, edit: ImageEdit | undefined): SaveOutcome {
+  if (!edit) return { ok: false, reason: null }
+  if (saved || !edit.error) return { ok: true }
+  return { ok: false, reason: edit.error }
 }

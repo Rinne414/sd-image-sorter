@@ -782,6 +782,7 @@ export const zhCN = {
   'censor.detect.found': '找到 {n} 个区域，已打码。在「审核」里可以逐个关掉。',
   'censor.detect.none': '没找到要打码的区域。可以调低置信度，或换一个检测器。',
   'censor.detect.failed': '检测失败：{reason}',
+  'censor.detect.sizeMismatch': '检测结果是按 {got} 的图算的，但这张图显示为 {want}，结果没有采用。',
   'censor.detect.maskFailed': '遮罩读取失败（服务器返回 {status}）',
   'censor.sam3.title': 'SAM3 按文字找',
   'censor.sam3.words': '要找的东西（英文，用逗号分开）',

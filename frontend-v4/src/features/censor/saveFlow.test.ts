@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BatchItem } from '../../api/types'
 import type { Op, StrokeOp } from './ops'
-import { ItemGoneError, runSave, type WriteOps } from './saveFlow'
+import { ItemGoneError, runSave, saveOutcome, type WriteOps } from './saveFlow'
 import { changeOps, editOf, itemStatus, setReviewed, syncItems, unsavedIds, useCensorSession } from './session'
 
 const BATCH = 3
@@ -91,14 +91,48 @@ describe('saving one image', () => {
     const running = save(write)
     changeOps(BATCH, item(), [...first, stroke('b')])
     const newest = editOf(BATCH, IMAGE)?.ops as Op[]
-    expect(await save(write)).toBe(false)
+    // the second ask waits for the save that carries it, not for the one running now
+    const queued = save(write)
     expect(editOf(BATCH, IMAGE)?.again).toBe(true)
     finish()
 
     expect(await running).toBe(true)
+    expect(await queued).toBe(true)
+    expect(write).toHaveBeenCalledTimes(2)
     expect(write).toHaveBeenNthCalledWith(1, first, null)
     expect(write).toHaveBeenNthCalledWith(2, newest, null)
     expect(editOf(BATCH, IMAGE)?.saved).toBe(newest)
+  })
+
+  it('a queued save reports the retry: a failing retry is a failure with its reason, never an early "saved"', async () => {
+    changeOps(BATCH, item(), [stroke('a')])
+    let finish: () => void = () => {}
+    const write = vi
+      .fn<WriteOps>()
+      .mockImplementationOnce(() => new Promise<void>((resolve) => (finish = resolve)))
+      .mockRejectedValueOnce(new Error('disk full'))
+
+    const running = save(write)
+    changeOps(BATCH, item(), [stroke('a'), stroke('b')])
+    const queued = save(write)
+    let settled = false
+    void queued.then(() => (settled = true))
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    finish()
+    expect(await queued).toBe(false)
+    expect(await running).toBe(false)
+    const edit = editOf(BATCH, IMAGE)
+    expect(saveOutcome(false, edit)).toEqual({ ok: false, reason: 'disk full' })
+    expect(unsavedIds(BATCH)).toEqual([IMAGE])
+  })
+
+  it('what a save means for a job: saved; newer edits still to save (fine); failed; gone', () => {
+    const edit = editOf(BATCH, IMAGE)
+    expect(saveOutcome(true, edit)).toEqual({ ok: true })
+    expect(saveOutcome(false, edit && { ...edit, error: null })).toEqual({ ok: true })
+    expect(saveOutcome(false, edit && { ...edit, error: 'HTTP 500' })).toEqual({ ok: false, reason: 'HTTP 500' })
+    expect(saveOutcome(false, undefined)).toEqual({ ok: false, reason: null })
   })
 
   it('the review mark is saved with the ops: a new mark alone makes the image unsaved', async () => {

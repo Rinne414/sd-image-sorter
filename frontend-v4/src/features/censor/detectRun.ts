@@ -9,11 +9,11 @@ import { tr } from '../jobs/jobs'
 import type { ModelCard } from '../tagging/taggers'
 import { isDrawing } from './CanvasView'
 import { applyDetectRun, applyRefined, applyTextRun, refinable, textDetector } from './detection'
-import { censorModelsQuery, detectImage, refineRegions, segmentWord, type CensorModels, type DetectPlan } from './detectApi'
+import { censorModelsQuery, detectImage, refineRegions, segmentWord, type CensorModels, type DetectPlan, type Size } from './detectApi'
 import { effectiveDetector, promptWords, usesTargets, useDetectSettings, type DetectorId } from './detectSettings'
 import type { Op, RegionOp } from './ops'
 import { useCensorPanel } from './panel'
-import { libraryFor } from './saving'
+import { libraryFor, loadOriginal } from './saving'
 import { changeOps, editOf, initialEdit, setReviewed } from './session'
 import { useCensorSettings } from './settings'
 
@@ -139,6 +139,12 @@ export async function applyChange(batchId: number, item: BatchItem, change: (ops
   if (detected) setReviewed(batchId, item, false)
 }
 
+/** The picture's size as the editor decodes it (upright); answers for another size are refused. */
+export async function pictureSize(imageId: number): Promise<Size> {
+  const { width, height } = await loadOriginal(imageId)
+  return { width, height }
+}
+
 export const applyDetections = (batchId: number, item: BatchItem, regions: RegionOp[]) =>
   applyChange(batchId, item, (ops) => applyDetectRun(ops, regions), true)
 
@@ -166,7 +172,9 @@ export const reason = (error: unknown) => (error as Error).message || tr('censor
 
 async function detectNow(batchId: number, item: BatchItem, plan: DetectPlan): Promise<void> {
   try {
-    const { regions, warnings } = await busyWhile(`${batchId}:${item.image_id}`, 'detect', () => detectImage(item.image_id, plan, libraryFor(batchId)))
+    const { regions, warnings } = await busyWhile(`${batchId}:${item.image_id}`, 'detect', async () =>
+      detectImage(item.image_id, plan, libraryFor(batchId), await pictureSize(item.image_id)),
+    )
     await applyDetections(batchId, item, regions)
     // In review the region list already shows what was found; elsewhere say it.
     if (regions.length === 0) toast(tr('censor.detect.none'))
@@ -190,7 +198,9 @@ async function refineNow(batchId: number, item: BatchItem): Promise<void> {
   if (regions.length === 0) return void toast(tr('censor.refine.nothing'), 'error')
   try {
     const confidence = useDetectSettings.getState().confidence
-    const result = await busyWhile(`${batchId}:${item.image_id}`, 'refine', () => refineRegions(item.image_id, regions, confidence, libraryFor(batchId)))
+    const result = await busyWhile(`${batchId}:${item.image_id}`, 'refine', async () =>
+      refineRegions(item.image_id, regions, confidence, libraryFor(batchId), await pictureSize(item.image_id)),
+    )
     await applyChange(batchId, item, (ops) => applyRefined(ops, result.shapes), false)
     toast(tr('censor.refine.done', { n: result.shapes.size, kept: result.kept }), result.errors.length ? 'error' : 'info')
   } catch (error) {
@@ -210,7 +220,7 @@ async function segmentNow(batchId: number, item: BatchItem, words: string[]): Pr
   try {
     await busyWhile(key, 'text', async () => {
       for (const word of words) {
-        const region = await segmentWord(item.image_id, word, style, block, libraryFor(batchId))
+        const region = await segmentWord(item.image_id, word, style, block, libraryFor(batchId), await pictureSize(item.image_id))
         const detector = textDetector(word)
         if (!region) missed.push(word)
         // Nothing found and nothing found before: the list stays as it is.

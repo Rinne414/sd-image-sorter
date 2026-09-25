@@ -5799,6 +5799,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/batches/{batch_id}/export/names": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview the file names of a batch export */
+        post: operations["post_batch_export_names_api_batches__batch_id__export_names_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/batches/{batch_id}/export": {
         parameters: {
             query?: never;
@@ -6265,10 +6282,11 @@ export interface components {
             /** Image Ids */
             image_ids?: number[];
         };
-        /** BatchExportRequest */
-        BatchExportRequest: {
-            /** Output Folder */
-            output_folder: string;
+        /**
+         * BatchExportNamesRequest
+         * @description What decides an export's file names; also the body of the name preview.
+         */
+        BatchExportNamesRequest: {
             /**
              * Name Template
              * @default {batch}_{n:02}
@@ -6280,17 +6298,54 @@ export interface components {
              */
             start_number: number;
             /**
-             * Metadata Option
-             * @default strip
+             * Output Format
+             * @default original
              * @enum {string}
              */
-            metadata_option: "strip" | "keep" | "minimal";
+            output_format: "original" | "png" | "jpg" | "webp";
+            /**
+             * Missing Censored
+             * @default block
+             * @enum {string}
+             */
+            missing_censored: "block" | "skip" | "original";
+            /** Approved Original Ids */
+            approved_original_ids?: number[];
+        };
+        /** BatchExportRequest */
+        BatchExportRequest: {
+            /**
+             * Name Template
+             * @default {batch}_{n:02}
+             */
+            name_template: string;
+            /**
+             * Start Number
+             * @default 1
+             */
+            start_number: number;
             /**
              * Output Format
              * @default original
              * @enum {string}
              */
             output_format: "original" | "png" | "jpg" | "webp";
+            /**
+             * Missing Censored
+             * @default block
+             * @enum {string}
+             */
+            missing_censored: "block" | "skip" | "original";
+            /** Approved Original Ids */
+            approved_original_ids?: number[];
+            /** Output Folder */
+            output_folder: string;
+            /**
+             * Metadata Option
+             * @default strip
+             * @enum {string}
+             */
+            metadata_option: "strip" | "keep" | "minimal";
             /**
              * Overwrite
              * @default false
@@ -6302,12 +6357,6 @@ export interface components {
              */
             caption_text: string;
             watermark?: components["schemas"]["PublishWatermarkSettings"];
-            /**
-             * Missing Censored
-             * @default block
-             * @enum {string}
-             */
-            missing_censored: "block" | "skip" | "original";
         };
         /** BatchImageIdsRequest */
         BatchImageIdsRequest: {
@@ -6338,6 +6387,11 @@ export interface components {
              * @default 0.5
              */
             sam3_confidence: number;
+            /**
+             * Upright
+             * @default false
+             */
+            upright: boolean;
         };
         /**
          * BatchMoveRequest
@@ -6993,6 +7047,11 @@ export interface components {
             target_classes?: string[] | null;
             /** Text Prompts */
             text_prompts?: string[] | null;
+            /**
+             * Upright
+             * @default false
+             */
+            upright: boolean;
         };
         /** CensorPairsRequest */
         CensorPairsRequest: {
@@ -9432,6 +9491,11 @@ export interface components {
             text_prompt?: string | null;
             /** Sam3 Confidence */
             sam3_confidence?: number | null;
+            /**
+             * Upright
+             * @default false
+             */
+            upright: boolean;
         };
         /** MaskSaveRequest */
         MaskSaveRequest: {
@@ -10856,6 +10920,11 @@ export interface components {
             text_prompt: string;
             /** Presence Threshold */
             presence_threshold?: number | null;
+            /**
+             * Upright
+             * @default false
+             */
+            upright: boolean;
         };
         /** TipoSuggestRequest */
         TipoSuggestRequest: {
@@ -20869,6 +20938,43 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": components["schemas"]["BatchCensoredDiscardRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_batch_export_names_api_batches__batch_id__export_names_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchExportNamesRequest"];
             };
         };
         responses: {

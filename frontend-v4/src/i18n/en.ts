@@ -783,6 +783,7 @@ export const en: Record<MessageKey, string> = {
   'censor.detect.found': 'Found {n} areas and censored them. Switch any of them off in Review.',
   'censor.detect.none': 'Nothing to censor was found. Try a lower confidence or another detector.',
   'censor.detect.failed': 'Detection failed: {reason}',
+  'censor.detect.sizeMismatch': 'The detector measured this picture as {got}, but it shows as {want}; the result was not used.',
   'censor.detect.maskFailed': 'could not read the mask (the server answered {status})',
   'censor.sam3.title': 'SAM3 by words',
   'censor.sam3.words': 'What to find (English, comma separated)',

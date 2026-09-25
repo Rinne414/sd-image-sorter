@@ -1239,6 +1239,8 @@ detector completes, the endpoint returns a non-2xx actionable error containing
 both failure causes. A clean run with zero detections remains a successful
 response with `warnings: []`.
 
+Optional `upright` (bool, default false): when true the image's EXIF orientation is applied first, so boxes, masks (including cached masks) and the reported `image_width`/`image_height` are in the upright frame a browser shows (the V4 editor sends it). Omitted keeps the file's raw pixel frame.
+
 #### POST /api/censor/preview
 Preview censoring.
 Opaque previews return JPEG data URLs. Sources with transparency return PNG data URLs so alpha survives; the MIME prefix always matches the encoded bytes.
@@ -1261,15 +1263,19 @@ Refine mask with SAM3.
 
 Optional `sam3_confidence` (float 0.0–1.0): rejects low-confidence refinements — applied as both the mask score threshold and the text-prompt presence gate. Omitted = legacy thresholds. Rejected boxes return `status: "fallback"` (bounding-box censor).
 
+Optional `upright` (bool, default false): when true the image's EXIF orientation is applied first, so boxes, masks (including cached masks) and the reported `image_width`/`image_height` are in the upright frame a browser shows (the V4 editor sends it). Omitted keeps the file's raw pixel frame.
+
 #### POST /api/censor/batch-refine-mask
 Refine multiple masks with SAM3.
 
-Accepts the same optional `sam3_confidence` at the batch level (the censor editor's confidence slider sends this); each item may override it with its own `sam3_confidence`.
+Accepts the same optional `sam3_confidence` at the batch level (the censor editor's confidence slider sends this); each item may override it with its own `sam3_confidence`. Optional batch-level `upright` (see `refine-mask`) applies to every item; an item may also set its own.
 
 #### POST /api/censor/segment-text
 Segment via text prompt with SAM3.
 
 Body: `image_id` (int), `text_prompt` (string), optional `presence_threshold` (float 0.0–1.0). The presence gate defaults to a looser explicit-text value, decoupled from the stricter 0.5 auto-detect gate, so deliberately-typed prompts are not silently rejected; pass `presence_threshold` to override (higher = stricter recall).
+
+Optional `upright` (bool, default false): when true the image's EXIF orientation is applied first, so boxes, masks (including cached masks) and the reported `image_width`/`image_height` are in the upright frame a browser shows (the V4 editor sends it). Omitted keeps the file's raw pixel frame.
 
 #### POST /api/censor/remove-background
 Remove the image background with SAM3 foreground detection.

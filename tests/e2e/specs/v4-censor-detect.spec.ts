@@ -23,6 +23,9 @@ const H = 180
 
 let ids: number[] = []
 let batchId = 0
+/** A JPEG stored 240 x 180 with EXIF orientation 6: shown upright it is 180 x 240. */
+let rotatedId = 0
+let rotatedBatch = 0
 
 function seedNoise(): number[] {
   const out = runBackendScript(`
@@ -54,6 +57,20 @@ with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
             (str(path), name, meta, ${W}, ${H}, path.stat().st_size, path.stat().st_size, path.stat().st_mtime_ns),
         )
         ids.append(cur.lastrowid)
+    data = bytes(rng.randrange(256) for _ in range(${W} * ${H} * 3))
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    path = (root / f"{prefix}rotated.jpg").resolve()
+    Image.frombytes("RGB", (${W}, ${H}), data).save(path, quality=92, exif=exif)
+    cur.execute(
+        """INSERT INTO images (path, filename, generator, prompt, negative_prompt, metadata_json,
+               width, height, file_size, source_size, source_mtime_ns, is_readable, metadata_status,
+               created_at, library_order_time, user_rating)
+           VALUES (?, ?, 'nai', 'v4cdettoken', 'lowres', ?, ?, ?, ?, ?, ?, 1, 'complete',
+               datetime('now'), datetime('now'), 0)""",
+        (str(path), path.name, meta, ${W}, ${H}, path.stat().st_size, path.stat().st_size, path.stat().st_mtime_ns),
+    )
+    ids.append(cur.lastrowid)
     conn.commit()
 print(" ".join(str(i) for i in ids))
 `)
@@ -76,8 +93,10 @@ print("ok")
 
 test.beforeAll(() => {
   cleanupDb()
-  ids = seedNoise()
-  expect(ids).toHaveLength(3)
+  const seeded = seedNoise()
+  expect(seeded).toHaveLength(4)
+  ids = seeded.slice(0, 3)
+  rotatedId = seeded[3] as number
 })
 
 test.afterAll(() => cleanupDb())
@@ -116,6 +135,8 @@ interface Stub {
   prepares: Record<string, unknown>[]
   /** An image whose detect answer waits until `release` is called. */
   hold: { id: number; release: () => void; wait: Promise<void> } | null
+  /** The picture size the detector reports, per image id (default: the seeded 240 x 180). */
+  sizes: Map<number, [number, number]>
 }
 
 function newStub(): Stub {
@@ -127,6 +148,7 @@ function newStub(): Stub {
     detects: [],
     prepares: [],
     hold: null,
+    sizes: new Map(),
   }
 }
 
@@ -173,8 +195,8 @@ async function stubDetection(page: Page, stub: Stub): Promise<void> {
         combined_mask: stub.mask?.url ?? null,
         combined_mask_ref: null,
         combined_mask_bounds: stub.mask?.bounds ?? null,
-        image_width: W,
-        image_height: H,
+        image_width: stub.sizes.get(body.image_id)?.[0] ?? W,
+        image_height: stub.sizes.get(body.image_id)?.[1] ?? H,
         geometry_mode: 'box',
         warnings: [],
       },
@@ -184,7 +206,7 @@ async function stubDetection(page: Page, stub: Stub): Promise<void> {
 
 // ---- page helpers ----
 
-async function openBatch(page: Page, theme: 'dark' | 'light' = 'dark'): Promise<void> {
+async function openBatch(page: Page, theme: 'dark' | 'light' = 'dark', id = batchId): Promise<void> {
   await page.addInitScript((th) => {
     if (sessionStorage.getItem('v4e2e-init-cdet')) return
     sessionStorage.setItem('v4e2e-init-cdet', '1')
@@ -192,7 +214,7 @@ async function openBatch(page: Page, theme: 'dark' | 'light' = 'dark'): Promise<
     localStorage.setItem('sd-v4-theme', th)
     for (const key of Object.keys(localStorage)) if (key.startsWith('sd-v4-censor-')) localStorage.removeItem(key)
   }, theme)
-  const res = await page.goto(`/v4/#/batch/${batchId}`, { waitUntil: 'domcontentloaded' })
+  const res = await page.goto(`/v4/#/batch/${id}`, { waitUntil: 'domcontentloaded' })
   expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
   await expect(page.getByTestId('censor-editor')).toBeVisible()
   await expect(page.getByTestId('censor-canvas')).toBeVisible()
@@ -343,7 +365,8 @@ test('detect all runs as a job: stop after the first, a failure is named, go on 
   await expect(stripItem(page, 2)).toHaveAttribute('data-review', 'waiting')
   expect(stub.detects.map((d) => d.image_id)).toEqual([a, b, c, c])
   // every request named the detector, the confidence, the targets
-  expect(stub.detects[0]).toMatchObject({ model_type: 'nudenet', confidence_threshold: 0.5, exposed_only: true, target_classes: ['breasts', 'pussy', 'dick', 'anus', 'buttocks'] })
+  expect(stub.detects[0]).toMatchObject({ model_type: 'nudenet', confidence_threshold: 0.5, exposed_only: true, target_classes: ['breasts', 'pussy', 'dick', 'anus', 'buttocks'], upright: true })
+  expect(stub.detects.every((d) => d.upright === true)).toBe(true)
   await page.getByTestId('censor-tab-detect').click()
   await expect(all).toHaveText('Detect the 3 waiting again')
 })
@@ -579,7 +602,8 @@ test('SAM3 refine reshapes the detected box and text segmentation adds one area 
       r.readAsDataURL(blob)
     })
   })
-  const refines: { items: { box: number[] }[] }[] = []
+  const refines: { items: { box: number[] }[]; upright?: boolean }[] = []
+  const segments: { upright?: boolean }[] = []
   await page.route('**/api/censor/batch-refine-mask', async (route) => {
     const body = route.request().postDataJSON() as { items: { image_id: number; box: number[] }[] }
     refines.push(body)
@@ -590,13 +614,17 @@ test('SAM3 refine reshapes the detected box and text segmentation adds one area 
       mask: square,
       mask_ref: null,
       mask_bounds: [item.box[0], item.box[1], (item.box[0] as number) + 10, (item.box[1] as number) + 10],
+      image_width: W,
+      image_height: H,
     }))
     await route.fulfill({ json: { status: 'ok', total: results.length, completed: results.length, results, errors: [] } })
   })
   await page.route('**/api/censor/segment-text', async (route) => {
-    const { text_prompt } = route.request().postDataJSON() as { text_prompt: string }
+    const body = route.request().postDataJSON() as { text_prompt: string; upright?: boolean }
+    segments.push(body)
+    const { text_prompt } = body
     if (text_prompt !== 'tattoo') return route.fulfill({ json: { status: 'no_match', message: 'nothing', mask: null } })
-    await route.fulfill({ json: { status: 'ok', mask: square, mask_ref: null, mask_bounds: [5, 5, 15, 15], text_prompt } })
+    await route.fulfill({ json: { status: 'ok', mask: square, mask_ref: null, mask_bounds: [5, 5, 15, 15], image_width: W, image_height: H, text_prompt } })
   })
   await openBatch(page)
   const c = ids[2] as number
@@ -613,6 +641,7 @@ test('SAM3 refine reshapes the detected box and text segmentation adds one area 
   await expect.poll(() => refines.length).toBe(1)
   // the image as detect all saved it: one box (the detection made while the model was missing was never left, so not saved)
   expect(refines[0]?.items.map((i) => i.box)).toEqual([[100, 40, 160, 100]])
+  expect(refines[0]?.upright).toBe(true)
   // the box became the 10 x 10 mask SAM3 gave: its corner censored, the rest of the old box back to the original
   await expect.poll(async () => changedIn((await pixels(page, c, false))!, [120, 64, 160, 100])).toBe(0)
   expect(changedIn((await pixels(page, c, false))!, [100, 40, 110, 50])).toBeGreaterThan(50)
@@ -620,6 +649,7 @@ test('SAM3 refine reshapes the detected box and text segmentation adds one area 
   await page.getByTestId('censor-sam3-words').fill('tattoo, logo')
   await page.getByTestId('censor-sam3-segment').click()
   await expect(page.getByText('Nothing matched: logo')).toBeVisible()
+  expect(segments.map((s) => s.upright)).toEqual([true, true])
   await page.getByTestId('censor-tab-review').click()
   await expect(page.getByTestId('censor-review-region')).toHaveCount(2)
   await expect(page.getByTestId('censor-review-region').nth(1)).toContainText('tattoo')
@@ -634,6 +664,37 @@ test('SAM3 refine reshapes the detected box and text segmentation adds one area 
   const copy = (await pixels(page, c, true))!
   expect(Array.from({ length: 140 }, (_, i) => px(copy.b, 50 + i, 160).join())).toEqual(strokeRow)
   expect(changedIn(copy, [5, 5, 15, 15])).toBeGreaterThan(50)
+})
+
+test('a rotated JPEG is drawn upright; an answer measured on another frame is refused, the right one applied', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  const created = await page.request.post('/api/batches', { data: { kind: 'pixiv', name: `${NAME} rotated`, image_ids: [rotatedId] } })
+  const batch = (await created.json()).batch as { id: number; revision: number }
+  rotatedBatch = batch.id
+  await page.request.patch(`/api/batches/${rotatedBatch}`, { data: { revision: batch.revision, current_step: 'censor' } })
+  const stub = newStub()
+  await stubDetection(page, stub)
+  await openBatch(page, 'dark', rotatedBatch)
+  const canvas = page.getByTestId('censor-canvas')
+  // the browser applies the EXIF orientation: the picture is 180 wide, 240 high
+  await expect.poll(() => canvas.evaluate((el: HTMLCanvasElement) => `${el.width}x${el.height}`)).toBe(`${H}x${W}`)
+
+  // an answer for the file's raw frame (a backend that ignored `upright`): nothing is applied
+  stub.found.set(rotatedId, [{ box: [10, 10, 120, 60], cls: 'breasts', confidence: 0.9 }])
+  stub.sizes.set(rotatedId, [W, H])
+  await focusEditor(page)
+  await page.keyboard.press('d')
+  await expect(page.getByText(`The detector measured this picture as ${W}×${H}, but it shows as ${H}×${W}; the result was not used.`, { exact: false })).toBeVisible()
+  expect(stub.detects.at(-1)).toMatchObject({ image_id: rotatedId, upright: true })
+  await expect(stripItem(page, 0)).toHaveAttribute('data-state', 'clean')
+  await expect(stripItem(page, 0)).not.toHaveAttribute('data-review', /.+/)
+
+  // measured upright: applied, waiting for review
+  stub.sizes.set(rotatedId, [H, W])
+  await page.keyboard.press('d')
+  await expect(stripItem(page, 0)).toHaveAttribute('data-review', 'waiting')
+  await page.getByTestId('censor-tab-review').click()
+  await expect(page.getByTestId('censor-review-region')).toHaveCount(1)
 })
 
 test('the detect and review tabs fit every desktop size', async ({ page }) => {

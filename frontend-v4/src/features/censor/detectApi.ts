@@ -1,21 +1,24 @@
 import { api, unwrap } from '../../api/client'
 import { tr } from '../jobs/jobs'
-import {
-  bitmapFromRgba,
-  maskShapeOf,
-  regionsFromDetections,
-  textDetector,
-  type MaskBitmap,
-  type MaskShape,
-  type RawDetection,
-} from './detection'
-import type { DetectorId, Target } from './detectSettings'
-import { newOpId, type CensorStyle, type RegionOp, type RegionShape } from './ops'
+import { bitmapFromRgba, maskShapeOf, regionsFromDetections, textDetector, type MaskBitmap, type RawDetection } from './detection'
+import { detectBody, frameMismatch, refineBody, segmentBody, type DetectPlan, type Size } from './detectRequests'
+import { newOpId, type Box, type CensorStyle, type RegionOp, type RegionShape } from './ops'
 
 // The detection endpoints: /api/censor/models, /detect, /batch-refine-mask,
 // /segment-text, and the mask cache. Masks arrive as a PNG cropped to their
 // bounds, inline (a data URL) or by reference; either way they are decoded
-// here into one bit per pixel.
+// here into one bit per pixel. Every answer must be measured on the picture
+// the editor shows (same size); otherwise nothing of it is used.
+
+export type { DetectPlan, Size } from './detectRequests'
+
+/** The answer was measured on a picture of another size than the one on screen. */
+export class FrameMismatchError extends Error {}
+
+function checkFrame(answer: { image_width?: unknown; image_height?: unknown }, picture: Size): void {
+  const mismatch = frameMismatch(answer, picture)
+  if (mismatch) throw new FrameMismatchError(tr('censor.detect.sizeMismatch', mismatch))
+}
 
 export interface LegacyFile {
   path: string
@@ -49,6 +52,8 @@ interface MaskPayload {
   mask?: string | null
   mask_ref?: string | null
   mask_bounds?: unknown
+  image_width?: unknown
+  image_height?: unknown
 }
 
 async function decodeMask(p: MaskPayload): Promise<MaskBitmap | null> {
@@ -70,20 +75,6 @@ async function decodeMask(p: MaskPayload): Promise<MaskBitmap | null> {
   }
 }
 
-/** What one detect run asks for. */
-export interface DetectPlan {
-  detector: DetectorId
-  modelPath: string
-  /** null: every class the model knows. */
-  targets: Target[] | null
-  confidence: number
-  maskShape: MaskShape
-  /** SAM3 words (SAM3 detector only). */
-  words: string[]
-  style: CensorStyle
-  block: number
-}
-
 interface DetectAnswer {
   detections?: RawDetection[]
   combined_mask?: string | null
@@ -102,18 +93,10 @@ export interface DetectResult {
 /** Requests name the batch's library, so a run still going after a library switch reads the right images. */
 const inLibrary = (library: string) => ({ headers: { 'X-SD-Library-Id': library } })
 
-export async function detectImage(imageId: number, plan: DetectPlan, library: string): Promise<DetectResult> {
-  const body = {
-    image_id: imageId,
-    model_path: plan.modelPath,
-    model_type: plan.detector,
-    confidence_threshold: plan.confidence,
-    // Only exposed parts: a covered chest is not something to censor.
-    exposed_only: true,
-    target_classes: plan.targets,
-    ...(plan.detector === 'sam3' && plan.words.length > 0 ? { text_prompts: plan.words } : {}),
-  }
+export async function detectImage(imageId: number, plan: DetectPlan, library: string, picture: Size): Promise<DetectResult> {
+  const body = detectBody(imageId, plan)
   const res = unwrap<DetectAnswer>(await api.POST('/api/censor/detect', { body, ...inLibrary(library) }))
+  checkFrame(res, picture)
   const detections = Array.isArray(res.detections) ? res.detections : []
   const precise = plan.maskShape === 'precise' && detections.length > 0
   const mask = precise
@@ -125,9 +108,8 @@ export async function detectImage(imageId: number, plan: DetectPlan, library: st
     block: plan.block,
     maskShape: plan.maskShape,
     confidence: plan.confidence,
-    // Boxes are clipped to the image; without its size they are only clipped when painted.
-    width: res.image_width || Infinity,
-    height: res.image_height || Infinity,
+    width: picture.width,
+    height: picture.height,
   }
   const warnings = Array.isArray(res.warnings) ? res.warnings.filter((w): w is string => typeof w === 'string' && w.trim() !== '') : []
   return { regions: regionsFromDetections(detections, options, mask), warnings }
@@ -149,13 +131,18 @@ export interface RefineResult {
 /** SAM3 masks for the regions' boxes, by region id. */
 export async function refineRegions(
   imageId: number,
-  regions: readonly (RegionOp & { box: [number, number, number, number] })[],
+  regions: readonly (RegionOp & { box: Box })[],
   confidence: number,
   library: string,
+  picture: Size,
 ): Promise<RefineResult> {
-  const items = regions.map((r) => ({ image_id: imageId, box: r.box.map((v) => Math.round(v)) }))
-  const body = { items, sam3_confidence: confidence }
+  const body = refineBody(
+    imageId,
+    regions.map((r) => r.box),
+    confidence,
+  )
   const res = unwrap<RefineAnswer>(await api.POST('/api/censor/batch-refine-mask', { body, ...inLibrary(library) }))
+  for (const result of res.results ?? []) if (result.status === 'ok') checkFrame(result, picture)
   const shapes = new Map<string, RegionShape>()
   let kept = 0
   for (const result of res.results ?? []) {
@@ -175,10 +162,18 @@ interface SegmentAnswer extends MaskPayload {
 }
 
 /** SAM3 finds what `word` describes; null when nothing matched. */
-export async function segmentWord(imageId: number, word: string, style: CensorStyle, block: number, library: string): Promise<RegionOp | null> {
-  const body = { image_id: imageId, text_prompt: word }
+export async function segmentWord(
+  imageId: number,
+  word: string,
+  style: CensorStyle,
+  block: number,
+  library: string,
+  picture: Size,
+): Promise<RegionOp | null> {
+  const body = segmentBody(imageId, word)
   const res = unwrap<SegmentAnswer>(await api.POST('/api/censor/segment-text', { body, ...inLibrary(library) }))
   if (res.status !== 'ok') return null
+  checkFrame(res, picture)
   const bitmap = await decodeMask(res)
   const shape = bitmap ? maskShapeOf(bitmap) : null
   if (!shape) return null
