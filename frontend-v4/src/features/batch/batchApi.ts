@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { create } from 'zustand'
 import { api, ApiError, unwrap } from '../../api/client'
 import { queryClient } from '../../api/queryClient'
 import type { components } from '../../api/schema'
@@ -123,59 +124,132 @@ export async function addToBatch(batchId: number, imageIds: number[]): Promise<A
   }
 }
 
-/** Put removed items back where they were, with their names and step state. */
-async function undoRemove(batchId: number, before: number[], removed: BatchItem[]): Promise<void> {
+// Changes to one batch run one after another: batch patches (each with the
+// revision the previous one produced, so fast step clicks and Alt+arrows never
+// conflict), taking items out and putting them back. No two of them can race
+// each other's answer into the cache.
+const queues = new Map<number, { chain: Promise<unknown>; waiting: number }>()
+
+function enqueue<T>(id: number, task: () => Promise<T>): Promise<T> {
+  const slot = queues.get(id) ?? { chain: Promise.resolve(), waiting: 0 }
+  slot.waiting += 1
+  queues.set(id, slot)
+  const result = slot.chain.then(task)
+  const settled = result.then(
+    () => undefined,
+    () => undefined,
+  )
+  slot.chain = settled.finally(() => {
+    slot.waiting -= 1
+    if (slot.waiting === 0) queues.delete(id)
+  })
+  return result
+}
+
+/** Images on their way out of a batch ("batchId:imageId"): asking again for one of them does nothing. */
+export const useRemoving = create<{ keys: ReadonlySet<string> }>(() => ({ keys: new Set<string>() }))
+export const removingKey = (batchId: number, imageId: number) => `${batchId}:${imageId}`
+
+function markRemoving(keys: string[], on: boolean): void {
+  const next = new Set(useRemoving.getState().keys)
+  for (const key of keys) {
+    if (on) next.add(key)
+    else next.delete(key)
+  }
+  useRemoving.setState({ keys: next })
+}
+
+/**
+ * Take items out of a batch (never out of the library); the toast can undo it.
+ * An image already on its way out is skipped, so a repeated key or a double
+ * click removes it once and offers one undo.
+ */
+export async function removeFromBatch(batch: Batch, imageIds: number[]): Promise<boolean> {
+  const busy = useRemoving.getState().keys
+  const ids = [...new Set(imageIds)].filter((id) => !busy.has(removingKey(batch.id, id)))
+  if (ids.length === 0) return false
+  const keys = ids.map((id) => removingKey(batch.id, id))
+  markRemoving(keys, true)
+  try {
+    return await enqueue(batch.id, () => takeOut(batch, ids))
+  } finally {
+    markRemoving(keys, false)
+  }
+}
+
+async function takeOut(fallback: Batch, imageIds: number[]): Promise<boolean> {
+  // The order right before this removal (after earlier queued changes) is what undo restores.
+  const batch = queryClient.getQueryData<Batch>(batchKey(libraryId(), fallback.id)) ?? fallback
+  const before = batch.items.map((item) => item.image_id)
+  let gone: Set<number>
+  try {
+    const res = unwrap<{ batch: Batch; removed_image_ids: number[] }>(
+      await api.DELETE('/api/batches/{batch_id}/items', { params: { path: { batch_id: batch.id } }, body: { image_ids: imageIds } }),
+    )
+    store(res.batch)
+    gone = new Set(res.removed_image_ids)
+  } catch (error) {
+    return fail(error) ?? false
+  }
+  const removed = batch.items.filter((item) => gone.has(item.image_id))
+  const first = removed[0]
+  if (!first) return false
+  const lostCensor = removed.some((item) => item.has_censored)
+  const text = removed.length === 1 ? tr('batch.removedOne', { name: first.filename }) : tr('batch.removedMany', { n: removed.length })
+  toast(lostCensor ? `${text} ${tr('batch.removedCensorLost')}` : text, 'info', {
+    label: tr('toast.undo'),
+    run: () => void enqueue(batch.id, () => putBack(batch.id, before, removed)),
+  })
+  return true
+}
+
+/** Put removed items back where they were, then their names and step state; the batch is read once at the end. */
+async function putBack(batchId: number, before: number[], removed: BatchItem[]): Promise<void> {
   const path = { batch_id: batchId }
+  let batch: Batch
   try {
     const ids = removed.map((item) => item.image_id)
     const added = unwrap<{ batch: Batch }>(await api.POST('/api/batches/{batch_id}/items', { params: { path }, body: { image_ids: ids } }))
     const order = restoreOrder(before, added.batch.items.map((item) => item.image_id))
-    let batch = unwrap<Batch>(await api.PUT('/api/batches/{batch_id}/items/order', { params: { path }, body: { image_ids: order } }))
-    for (const item of removed.filter((i) => i.output_name !== null || i.item_state !== null)) {
+    batch = unwrap<Batch>(await api.PUT('/api/batches/{batch_id}/items/order', { params: { path }, body: { image_ids: order } }))
+  } catch (error) {
+    void queryClient.invalidateQueries({ queryKey: batchKey(libraryId(), batchId) })
+    fail(error)
+    return
+  }
+  const withState = removed.filter((item) => item.output_name !== null || item.item_state !== null)
+  const lost = await restoreItemState(batchId, withState)
+  if (withState.length > 0) {
+    try {
+      batch = unwrap<Batch>(await api.GET('/api/batches/{batch_id}', { params: { path } }))
+    } catch {
+      void queryClient.invalidateQueries({ queryKey: batchKey(libraryId(), batchId) })
+    }
+  }
+  store(batch)
+  if (lost.length > 0) {
+    const names = lost.map((name) => tr('batch.undoLostName', { name })).join(tr('batch.listSep'))
+    toast(tr('batch.undoLost', { names }), 'error')
+  }
+}
+
+/** Give put-back items their export name and step state again; returns the file names that did not get them. */
+async function restoreItemState(batchId: number, items: BatchItem[]): Promise<string[]> {
+  const lost: string[] = []
+  for (const item of items) {
+    try {
       unwrap(
         await api.PATCH('/api/batches/{batch_id}/items/{image_id}', {
           params: { path: { batch_id: batchId, image_id: item.image_id } },
           body: { output_name: item.output_name, item_state: item.item_state },
         }),
       )
-      batch = unwrap<Batch>(await api.GET('/api/batches/{batch_id}', { params: { path } }))
+    } catch {
+      lost.push(item.filename)
     }
-    store(batch)
-  } catch (error) {
-    void queryClient.invalidateQueries({ queryKey: batchKey(libraryId(), batchId) })
-    fail(error)
   }
+  return lost
 }
-
-/** Take items out of a batch (never out of the library); the toast can undo it. */
-export async function removeFromBatch(batch: Batch, imageIds: number[]): Promise<boolean> {
-  const gone = new Set(imageIds)
-  const removed = batch.items.filter((item) => gone.has(item.image_id))
-  if (removed.length === 0) return false
-  const before = batch.items.map((item) => item.image_id)
-  try {
-    const res = unwrap<{ batch: Batch }>(
-      await api.DELETE('/api/batches/{batch_id}/items', { params: { path: { batch_id: batch.id } }, body: { image_ids: imageIds } }),
-    )
-    store(res.batch)
-  } catch (error) {
-    return fail(error) ?? false
-  }
-  const first = removed[0] as BatchItem
-  const lostCensor = removed.some((item) => item.has_censored)
-  const text =
-    removed.length === 1 ? tr('batch.removedOne', { name: first.filename }) : tr('batch.removedMany', { n: removed.length })
-  toast(lostCensor ? `${text} ${tr('batch.removedCensorLost')}` : text, 'info', {
-    label: tr('toast.undo'),
-    run: () => void undoRemove(batch.id, before, removed),
-  })
-  return true
-}
-
-// Changes to one batch run one after another, each with the revision the
-// previous one produced, so fast edits (step clicks, Alt+arrows) never
-// conflict with each other. The cache shows every change at once.
-const queues = new Map<number, { chain: Promise<unknown>; waiting: number }>()
 
 function applyLocally(batch: Batch, changes: PatchChanges): Batch {
   const next = { ...batch }
@@ -212,15 +286,7 @@ async function sendPatch(id: number, changes: PatchChanges, fallbackRevision: nu
 /** Change a batch's name, steps, settings, current step or archive state. */
 export function patchBatch(id: number, changes: PatchChanges, fallbackRevision: number | null = null): Promise<Batch | null> {
   queryClient.setQueryData<Batch>(batchKey(libraryId(), id), (b) => (b ? applyLocally(b, changes) : b))
-  const slot = queues.get(id) ?? { chain: Promise.resolve(), waiting: 0 }
-  slot.waiting += 1
-  queues.set(id, slot)
-  const result = slot.chain.then(() => sendPatch(id, changes, fallbackRevision))
-  slot.chain = result.finally(() => {
-    slot.waiting -= 1
-    if (slot.waiting === 0) queues.delete(id)
-  })
-  return result
+  return enqueue(id, () => sendPatch(id, changes, fallbackRevision))
 }
 
 export async function deleteBatch(batch: { id: number; name: string }): Promise<boolean> {

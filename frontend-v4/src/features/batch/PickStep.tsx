@@ -8,7 +8,7 @@ import { useApp } from '../../state/store'
 import { Icon } from '../../ui/Icon'
 import { layerCount } from '../../ui/layers'
 import { Lightbox } from '../lightbox/Lightbox'
-import { removeFromBatch } from './batchApi'
+import { removeFromBatch, removingKey, useRemoving } from './batchApi'
 import { moveCursor } from './batchLogic'
 import { stepLabel } from './labels'
 import styles from './PickStep.module.css'
@@ -67,6 +67,7 @@ export function PickStep({ batch, next, onNext }: Props) {
   const width = useWidth(scrollRef)
   const [cursor, setCursor] = useState(items.length > 0 ? 0 : -1)
   const lightboxId = useApp((s) => s.lightboxId)
+  const removing = useRemoving((s) => s.keys)
   const summaries = useMemo(() => items.map(asSummary), [items])
 
   const inner = Math.max(0, width - 2 * PAD)
@@ -115,7 +116,10 @@ export function PickStep({ batch, next, onNext }: Props) {
       const item = items[at]
       if (e.key.startsWith('Arrow') || e.key === 'Home' || e.key === 'End') moveTo(moveCursor(at, items.length, cols, e.key))
       else if (e.key === 'Enter' && item) s.openLightbox(item.image_id)
-      else if (e.key === 'Delete' && item) remove(at)
+      // A held Delete key repeats: only the first press takes the image out.
+      else if (e.key === 'Delete' && item) {
+        if (!e.repeat) remove(at)
+      }
       else return
       e.preventDefault()
     }
@@ -152,6 +156,7 @@ export function PickStep({ batch, next, onNext }: Props) {
             {virtualizer.getVirtualItems().map((row) =>
               items.slice(row.index * cols, row.index * cols + cols).map((item, c) => {
                 const index = row.index * cols + c
+                const pending = removing.has(removingKey(batch.id, item.image_id))
                 return (
                   <div
                     key={item.image_id}
@@ -159,6 +164,7 @@ export function PickStep({ batch, next, onNext }: Props) {
                     role="option"
                     aria-selected={index === at}
                     data-cursor={index === at || undefined}
+                    data-pending={pending || undefined}
                     data-testid="pick-tile"
                     data-id={item.image_id}
                     title={item.filename}
@@ -173,12 +179,14 @@ export function PickStep({ batch, next, onNext }: Props) {
                         type="button"
                         className={styles.remove}
                         tabIndex={-1}
+                        disabled={pending}
                         aria-label={t('batch.pick.remove', { name: item.filename })}
                         title={t('batch.pick.remove', { name: item.filename })}
                         onClick={(e) => {
                           e.stopPropagation()
                           remove(index)
                         }}
+                        onDoubleClick={(e) => e.stopPropagation()}
                       >
                         <Icon name="close" size={12} />
                       </button>

@@ -136,3 +136,9 @@
   font-size: var(--fs-1);
   line-height: 18px;
 }
+
+/* On its way out of the batch: dimmed, and its remove button does nothing more. */
+.tile[data-pending] {
+  opacity: 0.45;
+  pointer-events: none;
+}

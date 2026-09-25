@@ -7,6 +7,7 @@ import {
   moveStep,
   moveStepTo,
   restoreOrder,
+  templateSettings,
   stepState,
   timeAgo,
   toggleStep,
@@ -95,6 +96,15 @@ describe('undoing a removal', () => {
 
   test('items added meanwhile stay at the end; items gone meanwhile are dropped', () => {
     expect(restoreOrder([1, 3, 5, 7], [1, 7, 9, 3])).toEqual([1, 3, 7, 9])
+  })
+})
+
+describe('template settings', () => {
+  test('keep the batch settings except where this batch came from', () => {
+    const settings = { name_template: '{batch}_{n:02}', source_collection_id: 4, metadata_option: 'strip' }
+    expect(templateSettings(settings)).toEqual({ name_template: '{batch}_{n:02}', metadata_option: 'strip' })
+    expect(settings.source_collection_id).toBe(4)
+    expect(templateSettings({})).toEqual({})
   })
 })
 

@@ -62,6 +62,14 @@ export function defaultBatchName(base: string, date: Date, lang: Lang, taken: re
   return `${stem} (${n})`
 }
 
+/** Settings that describe one batch only (where it came from), never carried into a template. */
+const PER_BATCH_SETTINGS = ['source_collection_id']
+
+/** A batch's settings as a template keeps them. */
+export function templateSettings(settings: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(settings).filter(([key]) => !PER_BATCH_SETTINGS.includes(key)))
+}
+
 /**
  * The order after an undo put removed items back (the server appends them):
  * everything in its old place, anything added meanwhile at the end.

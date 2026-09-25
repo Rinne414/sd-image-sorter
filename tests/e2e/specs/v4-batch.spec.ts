@@ -251,6 +251,93 @@ test('add more from the library through the adding banner', async ({ page }) => 
   expect((await tileIds(page)).at(-1)).toBe(id)
 })
 
+test('a held Delete and a double click on × take an image out once; undo puts the order back exactly', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openV4(page, `#/batch/${batchId}`)
+  await expect(page.getByTestId('pick-tile')).toHaveCount(4)
+  const original = await tileIds(page)
+  let deletes = 0
+  page.on('request', (req) => {
+    if (req.method() === 'DELETE' && /\/api\/batches\/\d+\/items$/.test(req.url())) deletes++
+  })
+  // Hold each removal on its way to the server so the repeats arrive while it is still pending.
+  await page.route(/\/api\/batches\/\d+\/items$/, async (route) => {
+    if (route.request().method() === 'DELETE') await new Promise((resolve) => setTimeout(resolve, 600))
+    await route.continue()
+  })
+  const toasts = page.getByRole('status').getByText(/out of the batch/)
+  const undo = page.getByRole('status').getByRole('button', { name: 'Undo' })
+
+  // Delete held down (key repeat), then pressed again while the first removal is on its way
+  await page.getByTestId('pick-tile').nth(1).click()
+  await page.keyboard.down('Delete')
+  await page.keyboard.down('Delete')
+  await page.keyboard.down('Delete')
+  await page.keyboard.up('Delete')
+  await page.keyboard.press('Delete')
+  await expect.soft(page.getByTestId('pick-tile').nth(1), 'the tile shows it is on its way out').toHaveAttribute('data-pending', 'true')
+  await expect(toasts).toHaveCount(1)
+  await page.waitForTimeout(900)
+  expect(deletes).toBe(1)
+  await expect(page.getByTestId('pick-tile')).toHaveCount(3)
+  await expect(toasts).toHaveCount(1)
+  await expect(undo).toHaveCount(1)
+  await undo.click()
+  await expect.poll(() => tileIds(page)).toEqual(original)
+  expect((await apiJson<ApiBatch>(page, `/api/batches/${batchId}`)).items.map((item) => item.image_id)).toEqual(original)
+
+  // a double click on one image's ×
+  await page.getByTestId('pick-tile').nth(2).getByRole('button').dblclick()
+  await expect(toasts).toHaveCount(1)
+  await page.waitForTimeout(900)
+  expect(deletes).toBe(2)
+  await expect(page.getByTestId('pick-tile')).toHaveCount(3)
+  await expect(page.getByTestId('lightbox')).toHaveCount(0)
+  await expect(undo).toHaveCount(1)
+  await undo.click()
+  await expect.poll(() => tileIds(page)).toEqual(original)
+  expect((await apiJson<ApiBatch>(page, `/api/batches/${batchId}`)).items.map((item) => item.image_id)).toEqual(original)
+})
+
+test('a change made elsewhere: the next rail edit is refused, the batch reloads and the page says so', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openV4(page, `#/batch/${batchId}`)
+  await expect(page.getByTestId('batch-name')).toHaveText(`${NAME} renamed`)
+  // another tab renames the batch: its revision moves on behind this page's back
+  const seen = await apiJson<ApiBatch & { revision: number }>(page, `/api/batches/${batchId}`)
+  const elsewhere = await page.request.patch(`/api/batches/${batchId}`, { data: { revision: seen.revision, name: `${NAME} renamed elsewhere` } })
+  expect(elsewhere.ok()).toBe(true)
+
+  let conflicts = 0
+  page.on('response', (res) => {
+    if (res.request().method() === 'PATCH' && res.status() === 409) conflicts++
+  })
+  await page.getByTestId('rail-edit').click()
+  const orderBox = page.getByRole('checkbox', { name: 'Switch "Order" on or off' })
+  await expect(orderBox).not.toBeChecked()
+  await orderBox.click()
+  await expect(page.getByRole('status')).toContainText('This batch was just changed somewhere else, so it was reloaded.')
+  expect(conflicts).toBe(1)
+  // the page now shows the batch as it is: the other tab's name, not the refused step change
+  await expect(page.getByTestId('batch-name')).toHaveText(`${NAME} renamed elsewhere`)
+  await expect(orderBox).not.toBeChecked()
+  const now = await apiJson<ApiBatch & { revision: number }>(page, `/api/batches/${batchId}`)
+  expect(now.steps.find((step) => step.id === 'order')?.enabled).toBe(false)
+
+  // the edit works once it is made again
+  await orderBox.click()
+  await expect(orderBox).toBeChecked()
+  await expect.poll(async () => (await apiJson<ApiBatch>(page, `/api/batches/${batchId}`)).steps.find((step) => step.id === 'order')?.enabled).toBe(true)
+  await orderBox.click()
+  await expect.poll(async () => (await apiJson<ApiBatch>(page, `/api/batches/${batchId}`)).steps.find((step) => step.id === 'order')?.enabled).toBe(false)
+  await page.getByTestId('rail-edit').click()
+
+  // the later tests look for the old name
+  const last = await apiJson<ApiBatch & { revision: number }>(page, `/api/batches/${batchId}`)
+  const back = await page.request.patch(`/api/batches/${batchId}`, { data: { revision: last.revision, name: `${NAME} renamed` } })
+  expect(back.ok()).toBe(true)
+})
+
 test('Home lists the batch where it was left and opens it', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   await openV4(page, '#/home')

@@ -7,7 +7,7 @@ import { useToasts } from '../../ui/toasts'
 import { tr } from '../jobs/jobs'
 import { createBatch, deleteBatch, saveTemplate, useBatches, useBatchTemplates } from './batchApi'
 import { useBatchDialog, type BatchDialog } from './dialogStore'
-import { defaultBatchName, enabledSteps } from './batchLogic'
+import { defaultBatchName, enabledSteps, templateSettings } from './batchLogic'
 import styles from './BatchDialogs.module.css'
 import { kindLabel, stepLabel } from './labels'
 
@@ -149,7 +149,7 @@ function TemplateDialog({ batch, onClose }: { batch: Batch; onClose: () => void 
   const go = async () => {
     if (!name.trim() || busy) return
     setBusy(true)
-    const saved = await saveTemplate(batch.kind, name, batch.steps, {})
+    const saved = await saveTemplate(batch.kind, name, batch.steps, templateSettings(batch.settings))
     setBusy(false)
     if (saved) onClose()
   }
