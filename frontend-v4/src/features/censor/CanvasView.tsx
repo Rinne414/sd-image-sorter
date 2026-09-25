@@ -4,9 +4,11 @@ import { isNoAdjust } from './adjust'
 import { useAdjustDraft } from './adjustDraft'
 import styles from './CanvasView.module.css'
 import { ChangesOverlay } from './ChangesOverlay'
+import { FastPreview } from './FastPreview'
+import { downscale, FAST_PREVIEW_PIXELS, FAST_PREVIEW_TARGET, LARGE_PICTURE_PIXELS, memoryEstimateGb, SETTLE_MS, useSettled } from './largePicture'
 import { cloneOffsetFor, cloneSourceOf, setCloneSource, useCloneSource } from './clone'
 import { appendBase, appendManual, farEnough, newOpId, roundPoint, type Op, type StrokeOp } from './ops'
-import { createPainter, createScratch, newBaseCache, renderInto, type BaseCache, type Painter, type Scratch } from './paint'
+import { createPainter, createScratch, newBaseCache, renderInto, renderOps, type BaseCache, type Painter, type Scratch } from './paint'
 import { useCensorPanel } from './panel'
 import { publishPixels } from './pixels'
 import { cloneRaster, type Raster, type Rect } from './raster'
@@ -59,6 +61,18 @@ function useLoaded(imageId: number): Load {
   return load.id === imageId ? load.load : { state: 'loading' }
 }
 
+/**
+ * The picture without the filter being tried, made small, for the fast preview
+ * of a big picture: from the pixels on screen when they have no preview in
+ * them, else rendered once from the ops (kept while the ops stay the same).
+ */
+function smallComposite(ready: Loaded, ops: Op[], onScreen: Op[] | null, cache: { current: { ops: Op[]; raster: Raster } | null }): Raster {
+  if (cache.current?.ops === ops) return cache.current.raster
+  const full = onScreen === ops ? ready.result : renderOps(ready.original, ops)
+  cache.current = { ops, raster: downscale(full, FAST_PREVIEW_TARGET) }
+  return cache.current.raster
+}
+
 /** The clone stamp's sample point: the source, or (once a stroke fixed the offset) the pointer plus the offset. */
 function placeCloneMark(mark: HTMLDivElement | null, imageId: number, vx: number, vy: number): void {
   const clone = cloneSourceOf(imageId)
@@ -100,9 +114,16 @@ export function CanvasView({ imageId, ops, onCommit }: Props) {
   const tab = useCensorPanel((s) => s.tab)
   const showChanges = useCensorPanel((s) => s.showChanges)
   const draft = useAdjustDraft((s) => s.values)
-  const preview = tab === 'adjust' && !isNoAdjust(draft) ? draft : null
-  const shown = useMemo(() => (preview ? appendBase(ops, { type: 'adjust', id: 'preview', values: preview }) : ops), [ops, preview])
   const ready = load.state === 'ready' ? load : null
+  const pixels = ready ? ready.original.width * ready.original.height : 0
+  const preview = tab === 'adjust' && !isNoAdjust(draft) ? draft : null
+  // A big picture renders the full-size preview only once the slider rests; meanwhile a small copy shows it.
+  const resting = useSettled(preview, pixels >= FAST_PREVIEW_PIXELS ? SETTLE_MS : 0)
+  // Without a preview (none yet, or just applied) there is nothing to wait for.
+  const settled = preview ? resting : null
+  const shown = useMemo(() => (settled ? appendBase(ops, { type: 'adjust', id: 'preview', values: settled }) : ops), [ops, settled])
+  const small = useRef<{ ops: Op[]; raster: Raster } | null>(null)
+  const [largeSeen, setLargeSeen] = useState(false)
 
   // Draw the picture: fully when the image arrives or the list changed from outside (undo, redo, reset, a preview).
   useLayoutEffect(() => {
@@ -232,7 +253,7 @@ export function CanvasView({ imageId, ops, onCommit }: Props) {
     e.currentTarget.dataset.cursor = cursor
     if (d?.kind !== 'stroke' || !d.stroke.touched) return
     const next = appendManual(ops, { ...d.stroke.op, points: [...d.stroke.op.points] })
-    rendered.current = preview ? appendBase(next, { type: 'adjust', id: 'preview', values: preview }) : next
+    rendered.current = settled ? appendBase(next, { type: 'adjust', id: 'preview', values: settled }) : next
     if (ready) publishPixels(imageId, ready.result, ready.original)
     onCommit(next)
   }
@@ -269,7 +290,18 @@ export function CanvasView({ imageId, ops, onCommit }: Props) {
         data-pixelated={view.z >= 2 || undefined}
         data-testid="censor-canvas"
       />
+      {ready && preview && preview !== settled && (
+        <FastPreview small={smallComposite(ready, ops, rendered.current, small)} values={preview} fullWidth={ready.result.width} view={view} />
+      )}
       {ready && showChanges && <ChangesOverlay imageId={imageId} style={style} />}
+      {ready && pixels > LARGE_PICTURE_PIXELS && !largeSeen && (
+        <p className={styles.large} role="status" data-testid="censor-large-warning" onPointerDown={(e) => e.stopPropagation()}>
+          {t('censor.large.warning', { mp: Math.round(pixels / 1e6), gb: memoryEstimateGb(pixels) })}
+          <button type="button" className="btn btn-ghost" onClick={() => setLargeSeen(true)}>
+            {t('censor.large.dismiss')}
+          </button>
+        </p>
+      )}
       {ready && tab === 'review' && <RegionOverlay ops={ops} width={ready.result.width} height={ready.result.height} zoom={view.z} style={style} />}
       {ready && cloning && source && <div ref={markRef} className={styles.cloneMark} aria-hidden data-testid="censor-clone-source" />}
       {ready && cloning && !source && (

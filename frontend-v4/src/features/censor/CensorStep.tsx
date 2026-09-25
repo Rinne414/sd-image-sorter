@@ -128,7 +128,7 @@ function runKey(action: KeyAction, { batchId, item, index, go, review }: KeyCont
     case 'fit':
       return useCanvasView.getState().fit()
     case 'save':
-      return void saveAll(batchId)
+      return void saveAll(batchId, null, true)
     case 'go':
       return go(index + action.delta)
     case 'detect':
@@ -169,7 +169,9 @@ function EditorBar({ batch, item, index, edit, next, onNext, onGo, onRename, fin
   const t = useT()
   const n = batch.items.length
   const status = itemStatus(item, edit)
-  const text = t(STATUS_TEXT[status], { reason: edit?.error ?? '' })
+  // A failure retrying cannot fix is not retried on leave: the bar says so and offers "Retry".
+  const stuck = status === 'error' && !!edit?.blocked
+  const text = t(stuck ? 'censor.status.errorFinal' : STATUS_TEXT[status], { reason: edit?.error ?? '' })
 
   return (
     <div className={styles.bar}>
@@ -199,8 +201,8 @@ function EditorBar({ batch, item, index, edit, next, onNext, onGo, onRename, fin
         {text}
       </span>
       {(status === 'dirty' || status === 'error') && (
-        <button type="button" className="btn" onClick={() => void saveAll(batch.id)} title={t('censor.saveNowTip')} data-testid="censor-save">
-          {t('censor.saveNow')}
+        <button type="button" className="btn" onClick={() => void saveAll(batch.id, null, true)} title={t('censor.saveNowTip')} data-testid="censor-save">
+          {t(stuck ? 'censor.retry' : 'censor.saveNow')}
         </button>
       )}
       <span className={styles.gap} />

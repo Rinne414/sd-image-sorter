@@ -20,6 +20,8 @@ export interface ImageEdit {
   saving: boolean
   /** A save was asked for while one was running: run another when it ends. */
   again: boolean
+  /** The last save failed in a way retrying cannot fix: only an explicit retry saves again. */
+  blocked: boolean
 }
 
 export type ItemStatus = 'clean' | 'dirty' | 'saving' | 'saved' | 'error'
@@ -40,7 +42,7 @@ export function initialEdit(item: BatchItem): ImageEdit {
   const ops = parseOps(item.item_state)
   const reviewed = parseReviewed(item.item_state)
   const saved = !needsCopy(ops, reviewed) || item.has_censored ? ops : null
-  return { ops, saved, reviewed, savedReviewed: reviewed, history: EMPTY_HISTORY, error: null, saving: false, again: false }
+  return { ops, saved, reviewed, savedReviewed: reviewed, history: EMPTY_HISTORY, error: null, saving: false, again: false, blocked: false }
 }
 
 export function isDirty(edit: ImageEdit): boolean {
@@ -162,11 +164,11 @@ function step(batchId: number, imageId: number, move: typeof undo): boolean {
 export const undoEdit = (batchId: number, imageId: number) => step(batchId, imageId, undo)
 export const redoEdit = (batchId: number, imageId: number) => step(batchId, imageId, redo)
 
-/** Image ids of the batch whose edits are not on the server yet. */
-export function unsavedIds(batchId: number): number[] {
+/** Image ids of the batch whose edits are not on the server yet; `withBlocked`: also those that only an explicit retry saves. */
+export function unsavedIds(batchId: number, withBlocked = false): number[] {
   const prefix = `${batchId}:`
   return Object.entries(useCensorSession.getState().edits)
-    .filter(([key, edit]) => key.startsWith(prefix) && isDirty(edit))
+    .filter(([key, edit]) => key.startsWith(prefix) && isDirty(edit) && (withBlocked || !edit.blocked))
     .map(([key]) => Number(key.slice(prefix.length)))
 }
 

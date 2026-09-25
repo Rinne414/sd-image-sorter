@@ -120,7 +120,9 @@ function recordWrites(page: Page): string[] {
     if (req.method() === 'GET' || !url.pathname.startsWith('/api/batches/')) return
     // The export-name preview (shown in the editor bar) is a POST that writes nothing.
     if (url.pathname.endsWith('/export/names')) return
-    writes.push(`${req.method()} ${url.pathname}${req.postData() ? ' +body' : ''}`)
+    // The copy is a multipart upload: its body is not shown to Playwright, its content type is.
+    const multipart = (req.headers()['content-type'] ?? '').startsWith('multipart/form-data')
+    writes.push(`${req.method()} ${url.pathname}${req.postData() || multipart ? ' +body' : ''}`)
   })
   return writes
 }
@@ -237,7 +239,7 @@ test('paint, leave the image, and the saved copy differs only where painted; und
   const saved = await apiItem(page, ids[0] as number)
   expect(saved.has_censored).toBe(true)
   expect(saved.item_state?.censor?.ops).toHaveLength(1)
-  expect(writes).toEqual([`PUT /api/batches/${batchId}/items/${ids[0]}/censored +body`])
+  expect(writes).toEqual([`PUT /api/batches/${batchId}/items/${ids[0]}/censored/file +body`])
   // the second image has no edits and no copy
   await expect(stripItem(page, 1)).toHaveAttribute('data-state', 'clean')
   expect((await page.request.get(`/api/batches/${batchId}/items/${ids[1]}/censored`)).status()).toBe(404)
@@ -322,7 +324,7 @@ test('a failed save shows on the item with its reason and is retried on the next
   await page.setViewportSize({ width: 1366, height: 768 })
   await openBatch(page)
   await expect(page.getByTestId('censor-position')).toHaveText('2 / 2')
-  const failing = /\/api\/batches\/\d+\/items\/\d+\/censored$/
+  const failing = /\/api\/batches\/\d+\/items\/\d+\/censored\/file$/
   // the save fails once
   await page.route(
     failing,
@@ -333,14 +335,14 @@ test('a failed save shows on the item with its reason and is retried on the next
   await paint(page, STROKE)
   await page.keyboard.press('ArrowLeft')
   await expect(stripItem(page, 1)).toHaveAttribute('data-state', 'error')
-  await expect(stripItem(page, 1)).toHaveAttribute('title', /disk full \(test\)/)
+  await expect(stripItem(page, 1)).toHaveAttribute('title', /the server failed \(500\)/)
   await expect(page.getByTestId('censor-strip-failed')).toHaveText('1 failed to save')
   const item = await apiItem(page, ids[1] as number)
   expect(item.has_censored).toBe(false)
   expect(item.item_state?.censor).toBeUndefined()
   // still unsaved: leaving the image it failed on does not count it as censored
   await page.keyboard.press('ArrowRight')
-  await expect(page.getByTestId('censor-status')).toContainText('Save failed: disk full (test).')
+  await expect(page.getByTestId('censor-status')).toContainText('Save failed: the server failed (500). Tried again')
   await page.keyboard.press('ArrowLeft')
   await expect(stripItem(page, 1)).toHaveAttribute('data-state', 'saved')
   await expect(page.getByTestId('censor-strip-failed')).toHaveCount(0)
@@ -348,8 +350,38 @@ test('a failed save shows on the item with its reason and is retried on the next
   const retried = await apiItem(page, ids[1] as number)
   expect(retried.has_censored).toBe(true)
   expect(retried.item_state?.censor?.ops).toHaveLength(1)
-  const copy = `PUT /api/batches/${batchId}/items/${ids[1]}/censored +body`
+  const copy = `PUT /api/batches/${batchId}/items/${ids[1]}/censored/file +body`
   expect(writes).toEqual([copy, copy])
+})
+
+test('a save refused as too large is not retried on every leave; Retry sends it again', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openBatch(page)
+  await stripItem(page, 1).click()
+  await expect(page.getByTestId('censor-position')).toHaveText('2 / 2')
+  await expect.poll(() => page.getByTestId('censor-canvas').evaluate((c: HTMLCanvasElement) => !c.hidden && c.width > 0)).toBe(true)
+  await page.route(
+    /\/api\/batches\/\d+\/items\/\d+\/censored\/file$/,
+    (route) => route.fulfill({ status: 413, json: { error: 'The picture has 400,000,000 pixels (test)' } }),
+    { times: 1 },
+  )
+  const writes = recordWrites(page)
+  await paint(page, [[30, 150], [90, 150]])
+  await page.keyboard.press('ArrowLeft')
+  await expect(stripItem(page, 1)).toHaveAttribute('data-state', 'error')
+  await page.keyboard.press('ArrowRight')
+  const status = page.getByTestId('censor-status')
+  await expect(status).toContainText('the picture has more pixels than a censored copy may have')
+  await expect(status).toContainText('Not retried by itself')
+  // leaving again does not upload again
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('ArrowRight')
+  await expect(page.getByTestId('censor-position')).toHaveText('2 / 2')
+  expect(writes).toHaveLength(1)
+  await page.getByTestId('censor-save').click()
+  await expect(stripItem(page, 1)).toHaveAttribute('data-state', 'saved')
+  expect(writes).toHaveLength(2)
+  await expect(page.getByTestId('censor-save')).toHaveCount(0)
 })
 
 test('an unsaved edit makes closing the tab ask first', async ({ page }) => {

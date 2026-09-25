@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BatchItem } from '../../api/types'
 import type { Op, StrokeOp } from './ops'
-import { ItemGoneError, runSave, saveOutcome, type WriteOps } from './saveFlow'
+import { ItemGoneError, runSave, SaveFailedError, saveOutcome, type WriteOps } from './saveFlow'
 import { changeOps, editOf, itemStatus, setReviewed, syncItems, unsavedIds, useCensorSession } from './session'
 
 const BATCH = 3
@@ -151,6 +151,24 @@ describe('saving one image', () => {
     // the same mark again changes nothing
     setReviewed(BATCH, item(), true)
     expect(unsavedIds(BATCH)).toEqual([])
+  })
+
+  it('a failure that retrying cannot fix (too large, refused data) stops the automatic retries until asked', async () => {
+    changeOps(BATCH, item(), [stroke('a')])
+    const write = vi.fn<WriteOps>().mockRejectedValueOnce(new SaveFailedError('too large (test)', true)).mockResolvedValueOnce(undefined)
+    expect(await save(write)).toBe(false)
+    expect(editOf(BATCH, IMAGE)).toMatchObject({ error: 'too large (test)', blocked: true })
+    // leaving the image does not try again; an explicit retry does
+    expect(unsavedIds(BATCH)).toEqual([])
+    expect(unsavedIds(BATCH, true)).toEqual([IMAGE])
+    expect(await save(write)).toBe(true)
+    expect(editOf(BATCH, IMAGE)).toMatchObject({ error: null, blocked: false })
+    // an ordinary failure (the server hiccuped) keeps retrying on leave
+    changeOps(BATCH, item(), [stroke('a'), stroke('b')])
+    const flaky = vi.fn<WriteOps>().mockRejectedValueOnce(new SaveFailedError('server 500 (test)', false))
+    expect(await save(flaky)).toBe(false)
+    expect(editOf(BATCH, IMAGE)?.blocked).toBe(false)
+    expect(unsavedIds(BATCH)).toEqual([IMAGE])
   })
 
   it('an item that no longer exists is forgotten, not retried', async () => {

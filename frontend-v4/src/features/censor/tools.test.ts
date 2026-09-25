@@ -14,6 +14,7 @@ import {
   type StrokeOp,
 } from './ops'
 import { colorStats, histogramPeak } from './histogram'
+import { downscale, memoryEstimateGb } from './largePicture'
 import { newBaseCache, renderInto, renderOps } from './paint'
 import { createRaster, type Raster } from './raster'
 
@@ -140,6 +141,33 @@ describe('adjust filters', () => {
   it('the same values give the same bytes every time (preview = replay = saved copy)', () => {
     const v = { ...NO_ADJUST, brightness: 10, contrast: 20, saturation: 30, hue: 45, blur: 2, sharpen: 40, temperature: -10, vignette: 30 }
     expect(Array.from(adjustRaster(gradient(), v).data)).toEqual(Array.from(adjustRaster(gradient(), v).data))
+  })
+})
+
+describe('big pictures', () => {
+  it('the small copy for the fast preview keeps the shape and samples the picture', () => {
+    const original = gradient()
+    const small = downscale(original, 300)
+    expect(small.width * small.height).toBeLessThanOrEqual(320)
+    expect(small.width / small.height).toBeCloseTo(W / H, 1)
+    // each small pixel is the picture's pixel at the centre of its block
+    const sx = Math.floor((0.5 * W) / small.width)
+    const sy = Math.floor((0.5 * H) / small.height)
+    expect(px(small, 0, 0)).toEqual(px(original, sx, sy))
+    // never larger than the picture
+    expect(downscale(original, 10_000)).toMatchObject({ width: W, height: H })
+    expect(memoryEstimateGb(45_000_000)).toBe(2)
+  })
+
+  it('what is applied (and saved) is the full-size render the settled preview shows, byte for byte', () => {
+    const original = gradient()
+    const values = { ...NO_ADJUST, brightness: 30, vignette: 40 }
+    const strokes: Op[] = [stroke({ id: 's', style: 'white', points: [5, 5, 30, 20] })]
+    const settledPreview = renderOps(original, appendBase(strokes, { type: 'adjust', id: 'preview', values }))
+    const applied = renderOps(original, appendBase(strokes, { type: 'adjust', id: 'a1', values: { ...values } }))
+    expect(Array.from(applied.data)).toEqual(Array.from(settledPreview.data))
+    // and it is not the small copy's pixels scaled up: the saved copy has the picture's own size
+    expect(applied.width).toBe(W)
   })
 })
 

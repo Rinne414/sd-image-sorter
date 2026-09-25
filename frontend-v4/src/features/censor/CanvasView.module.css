@@ -60,6 +60,39 @@
   display: block;
 }
 
+/* A big picture's filter preview on a small copy while the slider moves (scaled up over the canvas). */
+.fast {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+/* "Large picture" warning along the bottom of the picture area: says, never blocks. */
+.large {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 32px);
+  margin: 0;
+  padding: 4px 4px 4px 12px;
+  transform: translateX(-50%);
+  background: var(--tile-caption-bg);
+  color: var(--on-image);
+  font-size: var(--fs-2);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+}
+
+.large :global(.btn) {
+  height: 24px;
+  color: var(--on-image);
+}
+
 /* "Show changes": the differing pixels in marker red, over the picture, never saved. */
 .changes {
   position: absolute;

@@ -7,13 +7,16 @@ import { batchKey } from '../batch/batchApi'
 import { withCensorState, type Op, type SavedCensorState } from './ops'
 import { renderOps } from './paint'
 import { createRaster, type Raster } from './raster'
-import { ItemGoneError, runSave } from './saveFlow'
+import { failureKind, isFinal, type SaveFailure } from './saveErrors'
+import { ItemGoneError, runSave, SaveFailedError } from './saveFlow'
 import { libraryOf, needsCopy, unsavedIds } from './session'
 
 // Loading originals and saving censored copies. A copy is saved from a fresh
 // replay of the ops on the original (the same bytes the editor shows), sent
 // together with the ops (the item's state) so reopening the batch can edit
 // them again. An image counts as censored only after that request succeeded.
+// The copy travels as PNG bytes in a multipart upload (no base64 string), so
+// pictures of any size fit and memory stays near one copy of the pixels.
 
 const ORIGINALS_KEPT = 3
 const originals = new Map<number, Promise<Raster>>()
@@ -45,18 +48,43 @@ export function loadOriginal(imageId: number): Promise<Raster> {
   return pending
 }
 
-export async function encodePng(raster: Raster): Promise<string> {
+export async function encodePng(raster: Raster): Promise<Blob> {
   const canvas = new OffscreenCanvas(raster.width, raster.height)
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error(tr('censor.noCanvas'))
   ctx.putImageData(new ImageData(raster.data, raster.width, raster.height), 0, 0)
-  const blob = await canvas.convertToBlob({ type: 'image/png' })
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(reader.error ?? new Error(tr('censor.noCanvas')))
-    reader.readAsDataURL(blob)
+  return canvas.convertToBlob({ type: 'image/png' })
+}
+
+const FAILURE_TEXT: Record<SaveFailure, 'censor.saveErr.tooLarge' | 'censor.saveErr.invalid' | 'censor.saveErr.network' | 'censor.saveErr.server'> = {
+  tooLarge: 'censor.saveErr.tooLarge',
+  invalid: 'censor.saveErr.invalid',
+  network: 'censor.saveErr.network',
+  server: 'censor.saveErr.server',
+}
+
+/** The failure in the user's language; `final` when retrying the same way cannot help. */
+function saveFailure(error: unknown): SaveFailedError {
+  const kind = failureKind(error)
+  const status = (error as { status?: number }).status ?? 0
+  return new SaveFailedError(tr(FAILURE_TEXT[kind], { status }), isFinal(kind))
+}
+
+/** PUT …/censored/file: the copy and the item state, as one write on the server. */
+async function uploadCopy(batchId: number, imageId: number, png: Blob, state: Record<string, unknown> | null): Promise<BatchItem> {
+  const form = new FormData()
+  form.append('file', png, `${imageId}.png`)
+  form.append('item_state', JSON.stringify(state))
+  const res = await fetch(`/api/batches/${batchId}/items/${imageId}/censored/file`, {
+    method: 'PUT',
+    headers: { 'X-SD-Library-Id': libraryFor(batchId) },
+    body: form,
   })
+  const body: unknown = await res.json().catch(() => null)
+  if (res.ok) return body as BatchItem
+  const { error, detail, code } = (body ?? {}) as { error?: unknown; detail?: unknown; code?: unknown }
+  const message = typeof error === 'string' ? error : typeof detail === 'string' ? detail : res.statusText
+  throw new ApiError(res.status, message, typeof code === 'string' ? code : null, body)
 }
 
 // A batch belongs to one library: its saves name that library explicitly, so
@@ -113,10 +141,10 @@ async function writeCopy(batchId: number, imageId: number, ops: Op[], reviewed: 
     }
     const rendered = renderOps(await loadOriginal(imageId), ops)
     const censor = censorState(item, ops, reviewed, rendered)
-    const body = { image_data: await encodePng(rendered), item_state: stateBody(withCensorState(state, censor)) }
-    storeItem(batchId, unwrap<BatchItem>(await api.PUT('/api/batches/{batch_id}/items/{image_id}/censored', { ...itemRequest(batchId, imageId), body })))
+    const png = await encodePng(rendered)
+    storeItem(batchId, await uploadCopy(batchId, imageId, png, stateBody(withCensorState(state, censor))))
   } catch (error) {
-    throw gone(error) ? new ItemGoneError((error as Error).message) : error
+    throw gone(error) ? new ItemGoneError((error as Error).message) : saveFailure(error)
   } finally {
     void queryClient.invalidateQueries({ queryKey: ['batches'] })
   }
@@ -135,9 +163,11 @@ export function saveImage(batchId: number, imageId: number, force = false): Prom
 
 /**
  * Save every changed image of the batch: the one being left and earlier ones
- * that failed. `except` is the image being opened, which is saved when it is left.
+ * that failed. `except` is the image being opened, which is saved when it is
+ * left. `retry` (Ctrl+S, "Retry"): also images whose last failure stopped the
+ * automatic retries.
  */
-export function saveAll(batchId: number, except: number | null = null): Promise<boolean[]> {
-  const ids = unsavedIds(batchId).filter((imageId) => imageId !== except)
+export function saveAll(batchId: number, except: number | null = null, retry = false): Promise<boolean[]> {
+  const ids = unsavedIds(batchId, retry).filter((imageId) => imageId !== except)
   return Promise.all(ids.map((imageId) => saveImage(batchId, imageId)))
 }

@@ -1105,6 +1105,9 @@ Set one item's `output_name` (a file name without extension that overrides the e
 #### PUT /api/batches/{batch_id}/items/{image_id}/censored
 Save the item's censored working copy. Body: `{ "image_data": "data:image/png;base64,...", "item_state"?: {} }` (same decoding and limits as the censor editor's save: 40 MB, 40 megapixels; `400` for invalid data, `413` when too large). The copy is written as PNG **without any metadata**, replacing an earlier copy. Optional `item_state` works like the item PATCH (absent keeps the state, `null` clears it) and is written **together with the copy**: the copy is staged first and swapped in inside the database transaction that records it and the state, so either both change or neither does (a failure keeps the previous copy and the previous state). The V4 censor editor sends its ops this way. Returns the item (`has_censored: true`, `censored_at`, `item_state`).
 
+#### PUT /api/batches/{batch_id}/items/{image_id}/censored/file
+The same save as a binary upload, for pictures of any size (the V4 censor editor uses this). `multipart/form-data` with a `file` part (the PNG or lossless WebP bytes, no base64) and an optional `item_state` part (JSON text: an object, or `null` to clear; absent keeps the state; up to 64 MB). Same one-write rule as the JSON PUT (staged copy swapped in inside the transaction, rollback on failure) and the copy is stored as PNG without metadata. There is no 40 MB / 40 MP cap: only Pillow's decompression-bomb limit (`Image.MAX_IMAGE_PIXELS`) refuses a picture, with `413` naming its pixel count. `400` when the part is missing, not a PNG/WebP picture, or `item_state` is not a JSON object or `null`. Returns the item.
+
 #### GET /api/batches/{batch_id}/items/{image_id}/censored
 Serve the item's censored working copy (`image/png`, `Cache-Control: no-store`); `404 batch_censored_copy_not_found` when there is none.
 

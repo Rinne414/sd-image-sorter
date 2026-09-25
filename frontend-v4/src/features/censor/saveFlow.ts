@@ -4,12 +4,22 @@ import { editOf, forgetEdit, isDirty, keyOf, patchEdit, type ImageEdit } from '.
 // What saving does to one image's edit, apart from the network so it can be
 // tested. The image counts as saved only after `write` succeeded (the copy
 // and its ops travel in one request); a failure keeps it unsaved with the
-// reason, and the next leave tries again; a save asked for while one runs
+// reason, and the next leave tries again (unless the failure was final: too
+// large or refused, which only an explicit retry tries again); a save asked for while one runs
 // runs once more afterwards with the newest ops, and whoever asked for it
 // gets the outcome of that later save.
 
 /** The item or its batch no longer exists: there is nothing left to save to. */
 export class ItemGoneError extends Error {}
+
+/** A save failure with a message for the user; `final`: trying again the same way cannot help (too large, refused). */
+export class SaveFailedError extends Error {
+  readonly final: boolean
+  constructor(message: string, final: boolean) {
+    super(message)
+    this.final = final
+  }
+}
 
 /**
  * Make the server hold exactly these ops and review mark: the copy and the
@@ -52,14 +62,15 @@ async function saveOnce(batchId: number, imageId: number, edit: ImageEdit, write
   let ok = false
   try {
     await write(ops, reviewed)
-    patchEdit(batchId, imageId, { saved: ops, savedReviewed: reviewed, error: null })
+    patchEdit(batchId, imageId, { saved: ops, savedReviewed: reviewed, error: null, blocked: false })
     ok = true
   } catch (error) {
     if (error instanceof ItemGoneError) {
       forgetEdit(batchId, imageId)
       return false
     }
-    patchEdit(batchId, imageId, { error: (error as Error).message || options.unknownReason })
+    const blocked = error instanceof SaveFailedError && error.final
+    patchEdit(batchId, imageId, { error: (error as Error).message || options.unknownReason, blocked })
   } finally {
     patchEdit(batchId, imageId, { saving: false })
   }
