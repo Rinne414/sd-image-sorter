@@ -121,7 +121,7 @@ Object.assign(window.V321Integration, {
         }
         this._syncLocalModelSummary();
         if (tab === 'nl') {
-            const source = document.querySelector('input[name="tagger-nl-source"]:checked')?.value || 'toriigate';
+            const source = document.querySelector('input[name="tagger-nl-source"]:checked')?.value || 'vlm';
             this._syncNlWorkflow(source);
         }
         this._syncModalActionsForTab(tab);
@@ -424,6 +424,19 @@ Object.assign(window.V321Integration, {
             return;
         }
         startBtn.addEventListener('click', (e) => {
+            // The Natural Language tab's ToriiGate choice runs in Smart Tag.
+            // It must never fall through to the dropdown below, which lands on
+            // 'vlm' because ToriiGate is not in the tagger list.
+            const nlSource = this.activeTaggerTab === 'nl'
+                ? (document.querySelector('input[name="tagger-nl-source"]:checked')?.value || 'vlm')
+                : null;
+            if (nlSource === 'toriigate') {
+                e.stopPropagation();
+                e.preventDefault();
+                this._openSmartTagFromTagger({ toriigate: true });
+                return;
+            }
+
             // vlmActive is owned by the dropdown value, NOT by the active tab.
             // The Natural Language tab can have either ToriiGate or VLM
             // selected; only VLM should route to the VLM batch endpoint.

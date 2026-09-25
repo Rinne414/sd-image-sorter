@@ -143,22 +143,45 @@ Object.assign(window.V321Integration, {
     _bindSmartTabOnce() {
         if (this._smartTabBound) return;
         this._smartTabBound = true;
+        document.getElementById('btn-tagger-nl-torii-smart')
+            ?.addEventListener('click', () => this._openSmartTagFromTagger({ toriigate: true }));
         const goBtn = document.getElementById('btn-tagger-smart-go');
         if (!goBtn) return;
-        goBtn.addEventListener('click', () => {
-            const armed = window.GalleryToolbar?.consumeTagSelectionIds?.() || null;
-            if (typeof window.hideModal === 'function') {
-                try { window.hideModal('tag-modal'); } catch (_e) {}
+        goBtn.addEventListener('click', () => this._openSmartTagFromTagger());
+    },
+
+    /** Close the tagger and open Smart Tag on the armed Gallery selection.
+     *  `toriigate` preselects a ToriiGate-only caption run: ToriiGate is a
+     *  captioner the gallery tagger cannot run, so the Natural Language tab
+     *  hands its ToriiGate choice over here. */
+    _openSmartTagFromTagger({ toriigate = false } = {}) {
+        const armed = window.GalleryToolbar?.consumeTagSelectionIds?.() || null;
+        if (typeof window.hideModal === 'function') {
+            try { window.hideModal('tag-modal'); } catch (_e) {}
+        }
+        // Defer so the tagger modal's close animation finishes first.
+        setTimeout(async () => {
+            if (armed && armed.length && typeof window.SmartTag?.openScoped === 'function') {
+                await window.SmartTag.openScoped({ imageIds: armed });
+            } else if (typeof window.SmartTag?.open === 'function') {
+                await window.SmartTag.open();
             }
-            // Defer so the tagger modal's close animation finishes first.
-            setTimeout(() => {
-                if (armed && armed.length && typeof window.SmartTag?.openScoped === 'function') {
-                    window.SmartTag.openScoped({ imageIds: armed });
-                } else if (typeof window.SmartTag?.open === 'function') {
-                    window.SmartTag.open();
+            if (!toriigate) return;
+            const setChecked = (id, checked) => {
+                const box = document.getElementById(id);
+                if (box && box.checked !== checked) {
+                    box.checked = checked;
+                    box.dispatchEvent(new Event('change', { bubbles: true }));
                 }
-            }, 120);
-        });
+            };
+            setChecked('smart-tag-enable-wd14', false);
+            setChecked('smart-tag-enable-vlm', true);
+            const mode = document.getElementById('smart-tag-nl-mode');
+            if (mode && mode.value !== 'toriigate') {
+                mode.value = 'toriigate';
+                mode.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        }, 120);
     },
 
     /** Refresh the 智能一趟 launch panel's scope line from the armed Gallery
@@ -272,7 +295,7 @@ Object.assign(window.V321Integration, {
      */
     _applyNlSubSource() {
         const checked = document.querySelector('input[name="tagger-nl-source"]:checked');
-        const source = checked?.value || 'toriigate';
+        const source = checked?.value || 'vlm';
         const select = document.getElementById('tag-model-select');
 
         const toriiCard = document.getElementById('tagger-nl-toriigate-card');
@@ -343,14 +366,17 @@ Object.assign(window.V321Integration, {
                 title.setAttribute('data-i18n', 'tagger.nlToriiTitle');
                 title.textContent = i18n('tagger.nlToriiTitle', 'ToriiGate (local model)');
             }
+            // ToriiGate runs in Smart Tag (the gallery tagger cannot run a
+            // captioner), and the card and button say so.
             if (hint) {
-                hint.setAttribute('data-i18n', 'tagger.nlToriiHint');
-                hint.textContent = i18n('tagger.nlToriiHint', 'Large local captioner. Needs a one-time ~9.6 GB BF16 download from Model Center.');
+                hint.setAttribute('data-i18n', 'tagger.nlToriiViaSmartTag');
+                hint.textContent = i18n('tagger.nlToriiViaSmartTag',
+                    'ToriiGate runs in Smart Tag: the button opens Smart Tag with these images and ToriiGate chosen. It needs a one-time ~9.6 GB download from Model Center.');
             }
             if (vlmStatus) vlmStatus.style.display = 'none';
             if (startBtn && !startBtn.disabled) {
                 startBtn.dataset.i18nLocked = '1';
-                startBtn.textContent = i18n('modal.tagStart', 'Start Tagging');
+                startBtn.textContent = i18n('tagger.nlToriiStart', 'Run in Smart Tag');
             }
         }
     },
@@ -425,10 +451,10 @@ Object.assign(window.V321Integration, {
             const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
             if (tab === 'nl') {
                 startBtn.dataset.i18nLocked = '1';
-                const source = document.querySelector('input[name="tagger-nl-source"]:checked')?.value || 'toriigate';
+                const source = document.querySelector('input[name="tagger-nl-source"]:checked')?.value || 'vlm';
                 startBtn.textContent = source === 'vlm'
                     ? i18n('vlm.utilityStart', 'Caption')
-                    : i18n('modal.tagStart', 'Start Tagging');
+                    : i18n('tagger.nlToriiStart', 'Run in Smart Tag');
             } else {
                 delete startBtn.dataset.i18nLocked;
                 startBtn.textContent = i18n('modal.tagStart', 'Start Tagging');

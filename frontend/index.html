@@ -6201,14 +6201,17 @@
                     </div>
                 </div>
 
-                <!-- Natural Language tab: sub-toggle to pick between local ToriiGate and remote VLM API -->
+                <!-- Natural Language tab: sub-toggle between local ToriiGate and remote VLM API.
+                     The gallery tagger cannot run ToriiGate (a captioner), so the only
+                     card shown here is VLM API and it is the default; ToriiGate is
+                     reached through Smart Tag (#btn-tagger-nl-torii-smart). -->
                 <div class="tagger-nl-subtoggle tagger-nl-source-inputs" data-tagger-shows="nl" role="radiogroup" aria-label="Natural Language source" style="display:none">
                     <label class="segmented-option">
-                        <input type="radio" name="tagger-nl-source" value="toriigate" checked>
+                        <input type="radio" name="tagger-nl-source" value="toriigate">
                         <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-package"/></svg></span> <span data-i18n="tagger.nlSourceTorii">ToriiGate (local)</span>
                     </label>
                     <label class="segmented-option">
-                        <input type="radio" name="tagger-nl-source" value="vlm">
+                        <input type="radio" name="tagger-nl-source" value="vlm" checked>
                         <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-cloud"/></svg></span> <span data-i18n="tagger.nlSourceVlm">VLM API (Cloud / Ollama)</span>
                     </label>
                 </div>
@@ -6239,6 +6242,11 @@
                     <div class="tagger-model-choice-list" id="tag-model-choice-list" role="radiogroup" aria-labelledby="tag-model-select-label"></div>
                     <small class="helper-text" id="tag-model-help" aria-live="polite">Balanced default. Good if you are not sure.</small>
                     <button type="button" class="model-pick-help-link" data-action="open-model-guidance"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg> <span data-i18n="models.whichToPick">Which model should I pick?</span></button>
+                </div>
+
+                <div class="tagger-nl-torii-route" data-tagger-shows="nl" style="display:none">
+                    <span class="tagger-nl-torii-route-hint" data-i18n="tagger.nlToriiRouteHint">Want the local ToriiGate captioner instead? It runs in Smart Tag.</span>
+                    <button type="button" class="btn btn-small btn-secondary" id="btn-tagger-nl-torii-smart" data-i18n="tagger.nlToriiRouteButton">Open Smart Tag with ToriiGate</button>
                 </div>
 
                 <div class="tagger-nl-workflow-card tagger-nl-status-card" id="tagger-nl-workflow-card" data-tagger-shows="nl" style="display:none">
