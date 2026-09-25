@@ -60,21 +60,31 @@ export async function deleteLibrary(id: string): Promise<boolean> {
 /** Move images into another library, in as many requests as it takes. */
 export async function moveToLibrary(ids: number[], target: string): Promise<number | null> {
   let moved = 0
-  try {
-    for (let start = 0; start < ids.length; start += MOVE_BATCH) {
-      const res = unwrap<{ moved?: number }>(
-        await api.POST('/api/libraries/move-images', { body: { image_ids: ids.slice(start, start + MOVE_BATCH), target_library_id: target } }),
-      )
-      moved += res.moved ?? 0
-    }
+  // Each batch that went through leaves the picks at once, so a later failure
+  // cannot leave images of another library in this library's selection.
+  const leave = (batch: number[]) => {
     const s = useApp.getState()
-    const gone = new Set(ids)
+    const gone = new Set(batch)
     s.setSelection(s.selection.filter((id) => !gone.has(id)))
     if (s.inspectedId !== null && gone.has(s.inspectedId)) s.inspect(null)
+  }
+  try {
+    for (let start = 0; start < ids.length; start += MOVE_BATCH) {
+      const batch = ids.slice(start, start + MOVE_BATCH)
+      const res = unwrap<{ moved?: number }>(
+        await api.POST('/api/libraries/move-images', { body: { image_ids: batch, target_library_id: target } }),
+      )
+      moved += res.moved ?? 0
+      leave(batch)
+    }
     refresh()
     return moved
   } catch (error) {
     refresh()
+    if (moved > 0) {
+      useToasts.getState().push(tr('libraries.movePartial', { n: moved, reason: (error as Error).message }), 'error')
+      return null
+    }
     return fail(error)
   }
 }

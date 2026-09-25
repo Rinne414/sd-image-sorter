@@ -14,6 +14,8 @@ async function postStart(kind: FileJobKind, ids: number[], destination: string |
           body: { image_ids: ids, destination_folder: destination ?? '', operation: kind },
         }),
       )
+    // `background` is required by the request schema but ignored by the /start
+    // endpoints, which always run as a job; false keeps the body honest.
     case 'trash':
       return unwrap(
         await api.POST('/api/images/delete-selected/start', {

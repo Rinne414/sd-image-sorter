@@ -27,8 +27,10 @@ export interface JobProgress {
   alreadyGone: number
   /** tag only: the most common tags of the run. */
   topTags: { tag: string; count: number }[]
-  /** install only: the model is on disk but the app must restart to use all of it. */
+  /** install only: the model cannot be used until the app restarts. */
   needsRestart: boolean
+  /** install only: usable now, but a restart unlocks all of it (e.g. the GPU runtime was repaired). */
+  restartAdvised: boolean
   /** reconnect only: found files that match several missing records and wait for the user. */
   toReview: number
   /** scan only: finding and adding files, then reading their generation details. */
@@ -143,8 +145,9 @@ function readInstall(base: JobProgress, raw: Raw, ctx: ReadContext): JobProgress
   const status = str(result.status)
   const message = str(result.message) || str(result.error)
   if (status === 'error') return { ...base, status: 'error', unit: 'bytes', message }
-  const needsRestart = result.restart_recommended === true || status === 'needs_restart'
-  return { ...base, status: 'done', unit: 'bytes', needsRestart, message }
+  const needsRestart = status === 'needs_restart'
+  const restartAdvised = !needsRestart && result.restart_recommended === true
+  return { ...base, status: 'done', unit: 'bytes', needsRestart, restartAdvised, message }
 }
 
 export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext = {}): JobProgress {
@@ -161,6 +164,7 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
     alreadyGone: 0,
     topTags: [],
     needsRestart: false,
+    restartAdvised: false,
     toReview: 0,
     phase: null,
     updated: 0,

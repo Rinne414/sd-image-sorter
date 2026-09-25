@@ -44,8 +44,12 @@ export async function applyBulk(form: BulkForm, ids: number[]): Promise<boolean>
   }
 }
 
+/** Undo requests in flight, so a double click sends one. */
+const undoing = new Set<string>()
+
 async function undo(job: Job): Promise<void> {
-  if (!job.undo || job.undo.done) return
+  if (!job.undo || job.undo.done || undoing.has(job.undo.opId)) return
+  undoing.add(job.undo.opId)
   try {
     const res = unwrap<{ restored?: number; skipped_conflicts?: unknown[] }>(
       await api.POST('/api/tags/bulk/undo/{op_id}', { params: { path: { op_id: job.undo.opId } }, body: { force: false } }),
@@ -59,6 +63,8 @@ async function undo(job: Job): Promise<void> {
     useToasts.getState().push(text, 'info')
   } catch (error) {
     useToasts.getState().push(tr('error.generic', { reason: (error as Error).message }), 'error')
+  } finally {
+    undoing.delete(job.undo.opId)
   }
 }
 

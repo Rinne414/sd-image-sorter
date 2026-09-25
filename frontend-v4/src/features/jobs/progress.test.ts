@@ -101,8 +101,12 @@ describe('readProgress', () => {
     const ok = { active: false, prepare_result: { active: false, model_id: 'wd14', status: 'ok', message: 'ready' } }
     expect(readProgress('install', ok, { modelId: 'wd14' })).toMatchObject({ status: 'done', needsRestart: false })
 
-    const restart = { prepare_result: { active: false, model_id: 'wd14', status: 'ok', restart_recommended: true, message: 'restart' } }
-    expect(readProgress('install', restart, { modelId: 'wd14' })).toMatchObject({ status: 'done', needsRestart: true })
+    // Recommended (e.g. the GPU runtime was repaired): usable now, fully after a restart.
+    const advised = { prepare_result: { active: false, model_id: 'wd14', status: 'ok', restart_recommended: true, message: 'restart' } }
+    expect(readProgress('install', advised, { modelId: 'wd14' })).toMatchObject({ status: 'done', needsRestart: false, restartAdvised: true })
+    // Required: not usable until the app restarts.
+    const required = { prepare_result: { active: false, model_id: 'toriigate', status: 'needs_restart', message: 'restart' } }
+    expect(readProgress('install', required, { modelId: 'toriigate' })).toMatchObject({ status: 'done', needsRestart: true })
 
     const failed = { prepare_result: { active: false, model_id: 'wd14', status: 'error', message: '', error: 'HTTP 403' } }
     expect(readProgress('install', failed, { modelId: 'wd14' })).toMatchObject({ status: 'error', message: 'HTTP 403' })

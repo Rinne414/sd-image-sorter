@@ -138,7 +138,9 @@ function JobRow({ job }: { job: Job }) {
           {t('jobs.topTags', { tags: p.topTags.slice(0, 6).map((x) => `${x.tag} ×${x.count}`).join(' · ') })}
         </p>
       )}
-      {finished && p.needsRestart && <p className={styles.warnNote}>{t('jobs.needsRestart')}</p>}
+      {finished && (p.needsRestart || p.restartAdvised) && (
+        <p className={styles.warnNote}>{t(p.needsRestart ? 'jobs.mustRestartNote' : 'jobs.needsRestart')}</p>
+      )}
       {listed.length > 0 && (
         <ul className={styles.failures}>
           {listed.map((f, i) => (

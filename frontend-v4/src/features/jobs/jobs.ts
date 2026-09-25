@@ -128,6 +128,7 @@ export function startingProgress(total: number, status: JobProgress['status'] = 
     alreadyGone: 0,
     topTags: [],
     needsRestart: false,
+    restartAdvised: false,
     toReview: 0,
     phase: null,
     updated: 0,
@@ -307,6 +308,12 @@ function finish(job: Job): void {
 
   const failedSomething = p.failedCount > 0 || p.status === 'error'
   const show = { label: tr('jobs.show'), run: () => useJobs.getState().setDrawerOpen(true) }
+  // A model that cannot be used before a restart must not start the work waiting for it.
+  const blocked = p.status === 'done' && p.needsRestart
+  if (blocked && job.then) {
+    useToasts.getState().push(tr('jobs.mustRestart', { name: job.label ?? '' }), 'error', show)
+    return
+  }
   // A download that leads straight into other work speaks through that work.
   if (!(job.then && p.status === 'done')) {
     const undo = job.undo && onUndo ? { label: tr('toast.undo'), run: () => void onUndo?.(job) } : undefined
