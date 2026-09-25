@@ -614,3 +614,115 @@ test('review approve fails loud when kept regions cannot be baked (never-fallbac
   await expect(rows).toHaveCount(2)
   await expect(page.locator('#btn-review-approve')).toBeEnabled()
 })
+
+// ---------------------------------------------------------------------------
+// Manual edits survive AI detection. Detection used to redraw from the
+// original (full-size canvas) or replace the operation list (large images),
+// so strokes made before it silently disappeared — even when it found nothing.
+// ---------------------------------------------------------------------------
+
+/** Draw a short red pen stroke across the canvas center via real mouse events. */
+async function paintPenStrokeAtCenter(page: Page) {
+  await page.locator('.tool-btn-v2[data-tool="pen"]').click()
+  const canvasId = await page.evaluate(() => (window as any).__CENSOR_STATE__.activeCanvasId)
+  const box = await page.locator(`#${canvasId}`).boundingBox()
+  expect(box).not.toBeNull()
+  const cx = box!.x + box!.width / 2
+  const cy = box!.y + box!.height / 2
+  await page.mouse.move(cx, cy)
+  await page.mouse.down()
+  await page.mouse.move(cx + 3, cy, { steps: 2 })
+  await page.mouse.up()
+}
+
+async function isCenterRed(page: Page) {
+  const [r, g, b] = await activePixel(page, 32, 32)
+  return r > 200 && g < 80 && b < 80
+}
+
+/** Detect returns whatever `boxes.current` holds, so one test can re-run it. */
+async function stubDetectBoxes(page: Page, boxes: { current: number[][] }) {
+  await page.route('**/api/censor/detect', async (route) => {
+    await route.fulfill({
+      json: {
+        status: 'ok',
+        image_id: IMAGES[0].id,
+        model_type: 'nudenet',
+        detections: boxes.current.map((box) => ({ box, label: 'exposed_breasts', confidence: 0.9, source: 'nudenet' })),
+        warnings: [],
+      },
+    })
+  })
+}
+
+test('auto-detect keeps manual strokes; a re-run replaces only its own earlier result', async ({ page }) => {
+  await stubCensorBackend(page)
+  const boxes = { current: [[36, 36, 60, 60]] }
+  await stubDetectBoxes(page, boxes)
+  await seedCensorQueue(page)
+  await page.selectOption('#censor-style', 'black_bar')
+
+  await paintPenStrokeAtCenter(page)
+  await expect.poll(() => isCenterRed(page)).toBe(true)
+
+  await page.locator('#btn-auto-detect-current').click()
+  await expect.poll(() => isPixelBlack(page, 48, 48)).toBe(true)
+  expect(await isCenterRed(page)).toBe(true)
+
+  // Different settings, different region: the first auto result goes, the
+  // manual stroke stays.
+  boxes.current = [[2, 40, 14, 60]]
+  await page.locator('#btn-auto-detect-current').click()
+  await expect.poll(() => isPixelBlack(page, 8, 50)).toBe(true)
+  expect(await isPixelBlack(page, 48, 48)).toBe(false)
+  expect(await isCenterRed(page)).toBe(true)
+})
+
+test('auto-detect that finds nothing leaves manual strokes alone', async ({ page }) => {
+  await stubCensorBackend(page)
+  await stubDetectBoxes(page, { current: [] })
+  await seedCensorQueue(page)
+
+  await paintPenStrokeAtCenter(page)
+  await expect.poll(() => isCenterRed(page)).toBe(true)
+
+  await page.locator('#btn-auto-detect-current').click()
+  await expect(
+    page.locator('#toast-container .toast', { hasText: 'No matching regions found' }).first()
+  ).toBeVisible()
+  expect(await isCenterRed(page)).toBe(true)
+  expect(await page.evaluate((id) => {
+    const item = (window as any).__CENSOR_STATE__.queue.find((entry: any) => entry.id === id)
+    return Boolean(item.currentDataUrl) && item.isProcessed !== false
+  }, IMAGES[0].id)).toBe(true)
+})
+
+test('large images (edit operations): auto-detect adds its operation after the manual ones', async ({ page }) => {
+  await page.addInitScript(() => {
+    ;(window as any).__SD_SORTER_TEST_FLAGS__ = { censorLowMemoryPixelThreshold: 1 }
+  })
+  await stubCensorBackend(page)
+  const boxes = { current: [[36, 36, 60, 60]] }
+  await stubDetectBoxes(page, boxes)
+  await seedCensorQueue(page)
+  expect(await page.evaluate(() => (window as any).__CENSOR_STATE__.proxyEditMode)).toBe(true)
+  await page.selectOption('#censor-style', 'black_bar')
+
+  await paintPenStrokeAtCenter(page)
+  const kinds = () => page.evaluate((id) => {
+    const item = (window as any).__CENSOR_STATE__.queue.find((entry: any) => entry.id === id)
+    return (item.editOperations || []).map((op: any) => op.kind)
+  }, IMAGES[0].id)
+  await expect.poll(kinds).toEqual(['stroke'])
+
+  await page.locator('#btn-auto-detect-current').click()
+  await expect.poll(kinds).toEqual(['stroke', 'geometry_effect'])
+
+  // A re-run swaps the auto operation; one with no hits removes it.
+  boxes.current = [[2, 40, 14, 60]]
+  await page.locator('#btn-auto-detect-current').click()
+  await expect.poll(kinds).toEqual(['stroke', 'geometry_effect'])
+  boxes.current = []
+  await page.locator('#btn-auto-detect-current').click()
+  await expect.poll(kinds).toEqual(['stroke'])
+})

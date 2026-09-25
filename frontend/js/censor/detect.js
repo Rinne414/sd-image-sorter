@@ -362,14 +362,18 @@ async function applyDetectedRegionsToItem(item, regions, data = {}) {
     const shouldUseMask = Boolean(combinedMaskSource.mask || combinedMaskSource.mask_ref) && maskRegions.length > 0;
     const shouldUseBoxes = boxRegions.length > 0;
 
+    // Manual edits made before detection stay. Only detection's own earlier
+    // result is replaced, so re-running with other settings still works.
     if (shouldUseProxyEditMode(item)) {
+        const manualOperations = (item.editOperations || []).filter((operation) => !operation?.autoDetected);
         if (shouldUseMask || shouldUseBoxes) {
-            item.editOperations = [{
+            item.editOperations = [...manualOperations, {
                 kind: 'geometry_effect',
                 style: CensorState.style,
                 block_size: Number(CensorState.blockSize || 16),
                 blur_radius: Math.max(1, Math.round(CensorState.blockSize / 2)),
                 regions,
+                autoDetected: true,
             }];
             item.currentDataUrl = null;
             item.isProcessed = true;
@@ -380,19 +384,28 @@ async function applyDetectedRegionsToItem(item, regions, data = {}) {
                 await renderProxyPreviewDataForItem(item);
             }
         } else {
-            item.editOperations = [];
-            item.previewDataUrl = null;
+            const hasManualEdits = manualOperations.length > 0;
+            item.editOperations = manualOperations;
             item.currentDataUrl = null;
-            item.isProcessed = false;
-            item.isModified = false;
+            item.isProcessed = hasManualEdits;
+            item.isModified = hasManualEdits;
             if (item.id === CensorState.activeId) {
                 await loadCanvasImage(item.id);
                 reloadedActiveItem = true;
+            } else if (hasManualEdits) {
+                await renderProxyPreviewDataForItem(item);
+            } else {
+                item.previewDataUrl = null;
             }
         }
     } else {
-        // Apply to a temporary canvas to generate DataURL
-        const img = await loadImage(item.originalUrl);
+        // Draw on top of the current edits. When nothing changed since the
+        // last detection, start from the state under that result instead.
+        const lastAuto = item.autoDetection;
+        const baseDataUrl = lastAuto && lastAuto.resultDataUrl === item.currentDataUrl
+            ? lastAuto.baseDataUrl
+            : (item.currentDataUrl || null);
+        const img = await loadImage(baseDataUrl || item.originalUrl);
         const cvs = document.createElement('canvas');
         cvs.width = img.width;
         cvs.height = img.height;
@@ -410,9 +423,11 @@ async function applyDetectedRegionsToItem(item, regions, data = {}) {
         if (shouldUseMask || shouldUseBoxes) {
             item.currentDataUrl = cvs.toDataURL('image/png');
             item.isProcessed = true;
+            item.autoDetection = { baseDataUrl, resultDataUrl: item.currentDataUrl };
         } else {
-            item.currentDataUrl = null;
-            item.isProcessed = false;
+            item.currentDataUrl = baseDataUrl;
+            item.isProcessed = Boolean(baseDataUrl);
+            item.autoDetection = null;
         }
         item.previewDataUrl = null;
     }
@@ -425,11 +440,8 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
         let reloadedActiveItem = false;
         const plan = executionPlan || await resolveQuickAutoCensorExecutionPlan({ silent });
         if (!plan?.ok) {
+            // Nothing ran, so the image keeps whatever edits it already has.
             item.regions = [];
-            item.currentDataUrl = null;
-            item.previewDataUrl = null;
-            item.editOperations = [];
-            item.isProcessed = false;
             // Silent (batch) callers rely on batchStatus for an honest summary —
             // a detector that never started is a failure, not a success.
             if (silent) {
