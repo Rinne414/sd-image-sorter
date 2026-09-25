@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useFavorites, useFolders, useGenerators, useLibraries, useLibraryHealth, useMissingCount } from '../../api/queries'
 import { useT, type MessageKey } from '../../i18n'
 import { generatorName, shortFolder } from '../../lib/format'
 import { useApp } from '../../state/store'
 import styles from './Rail.module.css'
 import { Icon } from '../../ui/Icon'
+import { useClickOutside, useLayer } from '../../ui/layers'
 
 interface Props {
   /** Prompt text woven faintly behind the library name. */
@@ -100,24 +101,8 @@ function LibraryLabel({ name, count, texture }: { name: string; count: number | 
   const libraryId = useApp((s) => s.libraryId)
   const ref = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (!open) return
-    const close = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
-    }
-    const esc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation()
-        setOpen(false)
-      }
-    }
-    window.addEventListener('pointerdown', close, true)
-    window.addEventListener('keydown', esc, true)
-    return () => {
-      window.removeEventListener('pointerdown', close, true)
-      window.removeEventListener('keydown', esc, true)
-    }
-  }, [open])
+  useLayer(open, () => setOpen(false))
+  useClickOutside(ref, open, () => setOpen(false))
 
   return (
     <div className={styles.label} ref={ref}>

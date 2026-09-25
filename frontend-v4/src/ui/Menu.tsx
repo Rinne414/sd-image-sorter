@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import styles from './Menu.module.css'
 import { Icon } from './Icon'
+import { useClickOutside, useLayer } from './layers'
 
 export interface MenuItem {
   id: string
@@ -24,24 +25,8 @@ export function Menu({ label, items, title, align = 'left' }: Props) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation()
-        setOpen(false)
-      }
-    }
-    window.addEventListener('pointerdown', onDown, true)
-    window.addEventListener('keydown', onKey, true)
-    return () => {
-      window.removeEventListener('pointerdown', onDown, true)
-      window.removeEventListener('keydown', onKey, true)
-    }
-  }, [open])
+  useLayer(open, () => setOpen(false))
+  useClickOutside(ref, open, () => setOpen(false))
 
   return (
     <div className={styles.wrap} ref={ref}>

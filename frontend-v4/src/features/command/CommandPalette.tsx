@@ -5,6 +5,7 @@ import { translate, useLang, useT, type MessageKey, type Params } from '../../i1
 import { copyText } from '../../lib/format'
 import { useApp } from '../../state/store'
 import { useTheme } from '../../theme'
+import { useLayer } from '../../ui/layers'
 import styles from './CommandPalette.module.css'
 
 interface Command {
@@ -37,6 +38,7 @@ function Palette() {
   const [q, setQ] = useState('')
   const [active, setActive] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  useLayer(true, () => setOpen(false))
 
   const commands = useMemo<Command[]>(() => {
     const s = useApp.getState()
@@ -116,10 +118,6 @@ function Palette() {
             } else if (e.key === 'Enter') {
               run(shown[active])
               e.preventDefault()
-            } else if (e.key === 'Escape') {
-              setOpen(false)
-              e.preventDefault()
-              e.stopPropagation()
             }
           }}
         />

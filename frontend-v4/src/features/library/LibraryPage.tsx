@@ -12,6 +12,7 @@ import styles from './LibraryPage.module.css'
 import { QueryBar } from './QueryBar'
 import { Rail } from './Rail'
 import { Icon } from '../../ui/Icon'
+import { layerCount } from '../../ui/layers'
 
 export function LibraryPage() {
   const t = useT()
@@ -58,7 +59,8 @@ export function LibraryPage() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const s = useApp.getState()
-      if (s.lightboxId !== null || s.paletteOpen || s.page !== 'library') return
+      // Anything floating (lightbox, palette, a menu) owns the keyboard.
+      if (layerCount() > 0 || s.page !== 'library') return
       if (isTypingTarget(e.target)) return
       const g = galleryRef.current
       const id = s.inspectedId

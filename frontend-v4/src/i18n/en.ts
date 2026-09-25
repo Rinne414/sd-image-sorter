@@ -5,7 +5,7 @@ export const en: Record<MessageKey, string> = {
   'nav.home': 'Home',
   'nav.library': 'Library',
   'nav.batch': 'Batches',
-  'nav.sort': 'Sort',
+  'nav.sort': 'Organize',
   'nav.command': 'Find a feature or command',
   'nav.backToV3': 'Back to V3.5',
   'nav.language': '中文',
@@ -114,7 +114,7 @@ export const en: Record<MessageKey, string> = {
   'palette.cmd.goHome': 'Home',
   'palette.cmd.goLibrary': 'Library',
   'palette.cmd.goBatch': 'Batches',
-  'palette.cmd.goSort': 'Sort',
+  'palette.cmd.goSort': 'Organize',
   'palette.cmd.toggleCard': 'Show or hide the generation card',
   'palette.cmd.toggleRail': 'Show or hide the left panel',
   'palette.cmd.masonry': 'Masonry layout',
@@ -130,7 +130,7 @@ export const en: Record<MessageKey, string> = {
   'planned.batch.title': 'Batches',
   'planned.batch.body':
     'A set of images you are working on: ordered, saved, and ready to pick up again. A step list on the left comes with two templates, Pixiv upload and dataset. Turn steps on or off, reorder them, or save your own template.',
-  'planned.sort.title': 'Sort',
+  'planned.sort.title': 'Organize',
   'planned.sort.body':
     'Move images into real folders: WASD by hand, automatic rules, or dealing into zones. All three live on one page and share one set of filters.',
   'planned.home.title': 'Home',

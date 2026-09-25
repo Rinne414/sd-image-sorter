@@ -9,6 +9,7 @@ import { useApp } from '../../state/store'
 import { GenerationCard } from '../card/GenerationCard'
 import { Stars } from '../card/Stars'
 import { Icon } from '../../ui/Icon'
+import { useLayer } from '../../ui/layers'
 import styles from './Lightbox.module.css'
 
 const STRIP_RADIUS = 14
@@ -45,6 +46,9 @@ export function Lightbox({ images, total, hasMore, fetchMore }: Props) {
   const [loadedId, setLoadedId] = useState<number | null>(null)
   const stripRef = useRef<HTMLDivElement>(null)
 
+  // The lightbox is a layer: Esc closes it, and it steps aside for anything opened on top.
+  const isTop = useLayer(id !== null, close)
+
   const index = images.findIndex((img) => img.id === id)
   const current = index >= 0 ? images[index] : undefined
 
@@ -60,14 +64,13 @@ export function Lightbox({ images, total, hasMore, fetchMore }: Props) {
   useEffect(() => {
     if (id === null) return
     const onKey = (e: KeyboardEvent) => {
-      if (isTypingTarget(e.target) || useApp.getState().paletteOpen) return
+      if (isTypingTarget(e.target) || !isTop()) return
       const state = useApp.getState()
       const cur = state.lightboxId
       if (cur === null) return
       const key = e.key
       let handled = true
-      if (key === 'Escape') close()
-      else if (key === 'ArrowRight' || key === 'ArrowDown') go(1)
+      if (key === 'ArrowRight' || key === 'ArrowDown') go(1)
       else if (key === 'ArrowLeft' || key === 'ArrowUp') go(-1)
       else if (key === 'Home' && images[0]) open(images[0].id)
       else if (key === 'End') {
