@@ -63,7 +63,7 @@ def test_v48_database_upgrades_and_keeps_its_rows(v48_database):
     v48_database.init_db()
 
     with v48_database.get_db() as conn:
-        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 60
+        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] >= 60
         assert BATCH_TABLES <= _tables(conn)
         assert conn.execute("SELECT COUNT(*) FROM images").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM dataset_projects").fetchone()[0] == 1

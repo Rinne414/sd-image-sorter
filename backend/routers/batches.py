@@ -3,15 +3,18 @@
 Every route is scoped by the request's library (``X-SD-Library-Id``). The
 Pixiv export uses censored copies automatically, strips generation data by
 default and refuses (409) instead of silently exporting an uncensored original.
+A dataset batch is a view of its Dataset Maker project: its name and archive
+state are the project's, and its images are edited through the project.
 """
 
 from __future__ import annotations
 
 from typing import Any, Literal, NoReturn, Optional
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 
+import db_batch_datasets as batch_dataset_db
 import db_batches as batch_db
 from services import batch_export_service, batch_service
 from services.batch_models import (
@@ -80,6 +83,15 @@ def _not_found(error: batch_db.BatchError) -> Optional[HTTPException]:
                 "image_id": error.image_id,
             },
         )
+    if isinstance(error, batch_dataset_db.BatchDatasetProjectNotFoundError):
+        return HTTPException(
+            404,
+            {
+                "code": "dataset_project_not_found",
+                "message": "Dataset project was not found.",
+                "project_id": error.project_id,
+            },
+        )
     return None
 
 
@@ -107,6 +119,38 @@ def _conflict(error: batch_db.BatchError) -> Optional[HTTPException]:
         )
     if isinstance(error, batch_service.BatchValidationError):
         return HTTPException(422, {"code": "batch_invalid", "message": str(error)})
+    return _dataset_conflict(error)
+
+
+def _dataset_conflict(error: batch_db.BatchError) -> Optional[HTTPException]:
+    if isinstance(error, batch_db.BatchDatasetItemsInProjectError):
+        return HTTPException(
+            409,
+            {
+                "code": "dataset_batch_items_in_project",
+                "message": "A dataset batch's images are edited through its dataset "
+                "project (PUT /api/dataset/projects/{id}).",
+                "batch_id": error.batch_id,
+            },
+        )
+    if isinstance(error, batch_dataset_db.BatchDatasetNameConflictError):
+        return HTTPException(
+            409,
+            {
+                "code": "dataset_project_name_conflict",
+                "message": "An active Dataset project already uses this name.",
+                "name": error.name,
+            },
+        )
+    if isinstance(error, batch_dataset_db.BatchDatasetOrphanedError):
+        return HTTPException(
+            409,
+            {
+                "code": "dataset_batch_orphaned",
+                "message": str(error),
+                "batch_id": error.batch_id,
+            },
+        )
     return None
 
 
@@ -187,11 +231,15 @@ def get_batches(
 
 
 @router.post("", status_code=201, summary="Create a batch")
-def post_batch(request: BatchCreateRequest) -> dict[str, Any]:
+def post_batch(request: BatchCreateRequest, response: Response) -> dict[str, Any]:
     try:
-        return batch_service.create_batch(request)
+        body, created = batch_service.create_batch(request)
     except batch_db.BatchError as error:
         _raise_http_error(error)
+    if not created:
+        # Linking a dataset project again returns its existing batch.
+        response.status_code = 200
+    return body
 
 
 @router.get("/{batch_id}", summary="Get a batch with its items in order")

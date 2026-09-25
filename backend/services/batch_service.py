@@ -15,8 +15,9 @@ from typing import Any
 from fastapi import HTTPException
 from PIL import Image, UnidentifiedImageError
 
+import db_batch_datasets as batch_dataset_db
 import db_batches as batch_db
-from services import batch_workdir
+from services import batch_dataset_service, batch_workdir
 from services.batch_models import (
     BatchCensoredCopyRequest,
     BatchCensoredDiscardRequest,
@@ -80,7 +81,7 @@ def _batch_response(
 ) -> dict[str, Any]:
     batch_id = int(row["id"])
     items = [_item_response(batch_id, item) for item in item_rows]
-    return {
+    response = {
         "id": batch_id,
         "library_id": row["library_id"],
         "kind": row["kind"],
@@ -95,8 +96,16 @@ def _batch_response(
         "updated_at": row["updated_at"],
         "item_count": len(items),
         "censored_count": sum(1 for item in items if item["has_censored"]),
+        "cover_image_ids": row["cover_image_ids"],
+        "project_revision": row["project_revision"],
+        "orphaned": row["orphaned"],
         "items": items,
     }
+    if row["kind"] == "dataset":
+        # Its images live in the project (read with GET /api/dataset/projects/{id}).
+        response["item_count"] = row["item_count"]
+        response["censored_count"] = 0
+    return response
 
 
 def _prune_working_files(batch_id: int, item_ids: list[int]) -> None:
@@ -104,15 +113,24 @@ def _prune_working_files(batch_id: int, item_ids: list[int]) -> None:
 
 
 def list_batches(include_archived: bool, kind: str | None) -> dict[str, Any]:
-    return {"batches": batch_db.list_batches(include_archived, kind)}
+    unlinked = (
+        batch_dataset_db.list_unlinked_projects(include_archived)
+        if kind in (None, "dataset")
+        else []
+    )
+    return {
+        "batches": batch_db.list_batches(include_archived, kind),
+        "unlinked_dataset_projects": unlinked,
+    }
 
 
 def get_batch(batch_id: int) -> dict[str, Any]:
-    row, items = batch_db.read_batch(batch_id)
+    row, items = batch_db.read_batch_view(batch_id)
     return _batch_response(row, items)
 
 
-def create_batch(request: BatchCreateRequest) -> dict[str, Any]:
+def _batch_shell(request: BatchCreateRequest) -> dict[str, Any]:
+    """Steps, settings and first step of a new batch row: template or built-in."""
     if request.template_id is not None:
         template = batch_db.read_template(request.template_id)
         if template["kind"] != request.kind:
@@ -125,24 +143,47 @@ def create_batch(request: BatchCreateRequest) -> dict[str, Any]:
     else:
         steps = builtin_steps()[request.kind]
         settings_json = "{}"
-    batch_id, skipped = batch_db.create_batch(
-        request.kind,
-        request.name.strip(),
-        json.dumps(steps),
-        settings_json,
-        steps[0]["id"] if steps else None,
-        list(request.image_ids),
-    )
-    # A restored older database can hand out an id whose folder is still on
-    # disk. Its files are inert (no row points at them), so a failed cleanup
-    # must not fail the create.
-    try:
-        batch_workdir.remove_batch_folder(batch_id)
-    except OSError:
-        logger.warning(
-            "Stale working folder for new batch %s remains", batch_id, exc_info=True
+    return {
+        "steps_json": json.dumps(steps),
+        "settings_json": settings_json,
+        "current_step": steps[0]["id"] if steps else None,
+    }
+
+
+def create_batch(request: BatchCreateRequest) -> tuple[dict[str, Any], bool]:
+    """Return the response and whether a batch was created.
+
+    ``False`` only when a dataset project that already has its batch is
+    linked again: that batch is returned unchanged.
+    """
+    shell = _batch_shell(request)
+    if request.kind == "dataset":
+        batch_id, skipped, created = batch_dataset_service.create_dataset_batch(
+            request, shell
         )
-    return {"batch": get_batch(batch_id), "skipped_image_ids": skipped}
+    else:
+        batch_id, skipped = batch_db.create_batch(
+            request.kind,
+            (request.name or "").strip(),
+            shell["steps_json"],
+            shell["settings_json"],
+            shell["current_step"],
+            list(request.image_ids),
+        )
+        created = True
+    if created:
+        # A restored older database can hand out an id whose folder is still
+        # on disk. Its files are inert (no row points at them), so a failed
+        # cleanup must not fail the create.
+        try:
+            batch_workdir.remove_batch_folder(batch_id)
+        except OSError:
+            logger.warning(
+                "Stale working folder for new batch %s remains",
+                batch_id,
+                exc_info=True,
+            )
+    return {"batch": get_batch(batch_id), "skipped_image_ids": skipped}, created
 
 
 def _patch_changes(row: dict[str, Any], request: BatchPatchRequest) -> dict[str, Any]:
@@ -173,7 +214,13 @@ def _patch_changes(row: dict[str, Any], request: BatchPatchRequest) -> dict[str,
 
 def patch_batch(batch_id: int, request: BatchPatchRequest) -> dict[str, Any]:
     row, _items = batch_db.read_batch(batch_id)
-    batch_db.update_batch(batch_id, request.revision, _patch_changes(row, request))
+    changes = _patch_changes(row, request)
+    if row["kind"] == "dataset":
+        # Name and archive state belong to the project: changed in the same
+        # transaction as the batch row.
+        batch_dataset_db.update_dataset_batch(batch_id, request.revision, changes)
+    else:
+        batch_db.update_batch(batch_id, request.revision, changes)
     return get_batch(batch_id)
 
 

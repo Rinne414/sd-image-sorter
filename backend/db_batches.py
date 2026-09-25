@@ -4,11 +4,14 @@ Every query is pinned to the request's library (``X-SD-Library-Id``): a batch
 or template of another library behaves exactly like one that does not exist.
 ``revision`` guards the batch row's own fields (name, steps, settings, current
 step, archive state); item operations validate themselves and only touch
-``updated_at``.
+``updated_at``. A dataset batch is a view of its ``dataset_projects`` row (D26):
+reads show the project's name, archive state and items, and the dataset
+writes live in ``db_batch_datasets``.
 """
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from typing import Any, Callable
 
@@ -71,6 +74,15 @@ class BatchItemsMismatchError(BatchError):
         super().__init__("The ordered ids do not match the batch's current items")
 
 
+class BatchDatasetItemsInProjectError(BatchError):
+    def __init__(self, batch_id: int):
+        self.batch_id = batch_id
+        super().__init__(
+            f"Batch {batch_id} is a dataset batch: its images, folder images and "
+            "order live in its dataset project"
+        )
+
+
 def _begin_write(conn: sqlite3.Connection) -> None:
     conn.execute("BEGIN IMMEDIATE")
 
@@ -89,6 +101,13 @@ def _batch_row(conn: sqlite3.Connection, batch_id: int) -> sqlite3.Row:
     if row is None:
         raise BatchNotFoundError(batch_id)
     return row
+
+
+def _require_own_items(row: sqlite3.Row) -> None:
+    """``batch_items`` cannot hold folder images (FK to ``images``), so a
+    dataset batch keeps every item in its project and never uses this table."""
+    if row["kind"] == "dataset":
+        raise BatchDatasetItemsInProjectError(int(row["id"]))
 
 
 def _touch(conn: sqlite3.Connection, batch_id: int) -> None:
@@ -177,12 +196,67 @@ def read_batch(batch_id: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         return dict(_batch_row(conn, batch_id)), _item_rows(conn, batch_id)
 
 
+def read_batch_view(
+    batch_id: int,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """The batch row as the user sees it (a dataset batch shows its project)."""
+    with get_db() as conn:
+        row = dict(_batch_row(conn, batch_id))
+        items = _item_rows(conn, batch_id)
+        project_ids = (
+            [int(row["dataset_project_id"])] if row["dataset_project_id"] else []
+        )
+        projects = project_summaries(conn, project_ids)
+    row["cover_image_ids"] = [int(item["image_id"]) for item in items][
+        :COVER_IMAGE_COUNT
+    ]
+    return with_project(row, projects), items
+
+
+def with_project(
+    row: dict[str, Any], projects: dict[int, dict[str, Any]]
+) -> dict[str, Any]:
+    """A dataset batch shows its project's name, archive state, items and covers.
+
+    The project is the single source of truth (V3.5 edits it too). Once V3.5
+    deletes it, the FK clears the link and the batch is ``orphaned``: it keeps
+    its last known name and has no items.
+    """
+    view = {**row, "project_revision": None, "orphaned": False}
+    if row["kind"] != "dataset":
+        return view
+    project_id = row["dataset_project_id"]
+    project = projects.get(int(project_id)) if project_id else None
+    if project is None:
+        return {**view, "orphaned": True, "item_count": 0, "cover_image_ids": []}
+    return {
+        **view,
+        "name": project["name"],
+        "archived_at": project["archived_at"],
+        "updated_at": max(row["updated_at"], project["updated_at"]),
+        "project_revision": int(project["revision"]),
+        "item_count": int(project["item_count"]),
+        "censored_count": 0,
+        "cover_image_ids": project["cover_image_ids"],
+    }
+
+
+def _source_collection_id(settings_json: str) -> int | None:
+    """The V3.5 collection a custom batch was made from (D19), if any."""
+    try:
+        value = json.loads(settings_json).get("source_collection_id")
+    except (ValueError, AttributeError):
+        return None
+    return value if type(value) is int else None
+
+
 def list_batches(include_archived: bool, kind: str | None) -> list[dict[str, Any]]:
     lib_sql, lib_params = current_library_sql("b.library_id")
     clauses = [lib_sql]
     params: list[Any] = list(lib_params)
     if not include_archived:
-        clauses.append("b.archived_at IS NULL")
+        # A dataset batch's archive state is its project's (filtered below).
+        clauses.append("(b.kind = 'dataset' OR b.archived_at IS NULL)")
     if kind:
         clauses.append("b.kind = ?")
         params.append(kind)
@@ -190,22 +264,86 @@ def list_batches(include_archived: bool, kind: str | None) -> list[dict[str, Any
         rows = conn.execute(
             f"""
             SELECT b.id, b.kind, b.name, b.current_step, b.revision, b.archived_at,
-                   b.created_at, b.updated_at,
+                   b.created_at, b.updated_at, b.dataset_project_id, b.settings_json,
                    COUNT(bi.image_id) AS item_count,
                    COALESCE(SUM(CASE WHEN bi.censored_path IS NOT NULL THEN 1 ELSE 0 END), 0)
                        AS censored_count
             FROM batches b LEFT JOIN batch_items bi ON bi.batch_id = b.id
             WHERE {" AND ".join(clauses)}
             GROUP BY b.id
-            ORDER BY b.updated_at DESC, b.id DESC
             """,
             params,
         ).fetchall()
         summaries = [dict(row) for row in rows]
         covers = _cover_ids(conn, [int(row["id"]) for row in summaries])
+        projects = project_summaries(
+            conn,
+            [
+                int(row["dataset_project_id"])
+                for row in summaries
+                if row["dataset_project_id"]
+            ],
+        )
+    views = []
     for summary in summaries:
         summary["cover_image_ids"] = covers.get(int(summary["id"]), [])
+        summary["source_collection_id"] = _source_collection_id(
+            summary.pop("settings_json")
+        )
+        view = with_project(summary, projects)
+        if include_archived or view["archived_at"] is None:
+            views.append(view)
+    views.sort(key=lambda view: (view["updated_at"], view["id"]), reverse=True)
+    return views
+
+
+def project_summaries(
+    conn: sqlite3.Connection, project_ids: list[int]
+) -> dict[int, dict[str, Any]]:
+    """Name, revision, archive state, item count and covers of this library's projects."""
+    lib_sql, lib_params = current_library_sql("p.library_id")
+    summaries: dict[int, dict[str, Any]] = {}
+    for chunk in _chunks(project_ids):
+        placeholders = ",".join("?" for _ in chunk)
+        rows = conn.execute(
+            f"""
+            SELECT p.id, p.name, p.revision, p.archived_at, p.created_at, p.updated_at,
+                   (SELECT COUNT(*) FROM dataset_project_items i
+                    WHERE i.project_id = p.id) AS item_count
+            FROM dataset_projects p
+            WHERE p.id IN ({placeholders}) AND {lib_sql}
+            """,
+            (*chunk, *lib_params),
+        ).fetchall()
+        summaries.update({int(row["id"]): dict(row) for row in rows})
+    covers = _project_cover_ids(conn, list(summaries))
+    for project_id, summary in summaries.items():
+        summary["cover_image_ids"] = covers.get(project_id, [])
     return summaries
+
+
+def _project_cover_ids(
+    conn: sqlite3.Connection, project_ids: list[int]
+) -> dict[int, list[int]]:
+    """First Library images of each project in order; folder images have no id."""
+    covers: dict[int, list[int]] = {}
+    for chunk in _chunks(project_ids):
+        placeholders = ",".join("?" for _ in chunk)
+        rows = conn.execute(
+            f"""
+            SELECT project_id, image_id FROM (
+                SELECT project_id, image_id, ROW_NUMBER() OVER (
+                    PARTITION BY project_id ORDER BY position
+                ) AS rn
+                FROM dataset_project_items
+                WHERE project_id IN ({placeholders}) AND image_id IS NOT NULL
+            ) WHERE rn <= ? ORDER BY project_id, rn
+            """,
+            (*chunk, COVER_IMAGE_COUNT),
+        ).fetchall()
+        for row in rows:
+            covers.setdefault(int(row[0]), []).append(int(row[1]))
+    return covers
 
 
 def _cover_ids(conn: sqlite3.Connection, batch_ids: list[int]) -> dict[int, list[int]]:
@@ -261,6 +399,18 @@ def create_batch(
 
 def update_batch(batch_id: int, expected_revision: int, fields: dict[str, Any]) -> None:
     """Compare-and-set the batch row's own fields (name, steps, settings...)."""
+    with get_db() as conn:
+        _begin_write(conn)
+        _update_batch_row(conn, batch_id, expected_revision, fields)
+
+
+def _update_batch_row(
+    conn: sqlite3.Connection,
+    batch_id: int,
+    expected_revision: int,
+    fields: dict[str, Any],
+) -> None:
+    """The compare-and-set of ``update_batch`` inside the caller's transaction."""
     allowed = {"name", "steps_json", "settings_json", "current_step", "archived"}
     unknown = set(fields) - allowed
     if unknown:
@@ -276,30 +426,39 @@ def update_batch(batch_id: int, expected_revision: int, fields: dict[str, Any]) 
             f"archived_at = {_NOW}" if fields["archived"] else "archived_at = NULL"
         )
     assignments.extend(["revision = revision + 1", f"updated_at = {_NOW}"])
-    with get_db() as conn:
-        _begin_write(conn)
-        row = _batch_row(conn, batch_id)
-        cursor = conn.execute(
-            f"UPDATE batches SET {', '.join(assignments)} WHERE id = ? AND revision = ?",
-            (*params, batch_id, expected_revision),
+    row = _batch_row(conn, batch_id)
+    cursor = conn.execute(
+        f"UPDATE batches SET {', '.join(assignments)} WHERE id = ? AND revision = ?",
+        (*params, batch_id, expected_revision),
+    )
+    if cursor.rowcount != 1:
+        raise BatchRevisionConflictError(
+            batch_id, expected_revision, int(row["revision"])
         )
-        if cursor.rowcount != 1:
-            raise BatchRevisionConflictError(
-                batch_id, expected_revision, int(row["revision"])
-            )
 
 
 def delete_batch(batch_id: int) -> None:
+    """Delete the batch; a dataset batch takes its project with it (D30).
+
+    The project cascade removes its items, folder-image references and every
+    caption subject, revision and head. Library rows and image files (Library
+    or folder) are never touched.
+    """
     with get_db() as conn:
         _begin_write(conn)
-        _batch_row(conn, batch_id)
+        row = _batch_row(conn, batch_id)
         conn.execute("DELETE FROM batches WHERE id = ?", (batch_id,))
+        if row["dataset_project_id"] is not None:
+            conn.execute(
+                "DELETE FROM dataset_projects WHERE id = ?",
+                (int(row["dataset_project_id"]),),
+            )
 
 
 def add_items(batch_id: int, image_ids: list[int]) -> tuple[list[int], list[int]]:
     with get_db() as conn:
         _begin_write(conn)
-        _batch_row(conn, batch_id)
+        _require_own_items(_batch_row(conn, batch_id))
         added, skipped = _append_items(conn, batch_id, image_ids)
         _touch(conn, batch_id)
         return added, skipped
@@ -308,7 +467,7 @@ def add_items(batch_id: int, image_ids: list[int]) -> tuple[list[int], list[int]
 def remove_items(batch_id: int, image_ids: list[int]) -> tuple[list[int], list[int]]:
     with get_db() as conn:
         _begin_write(conn)
-        _batch_row(conn, batch_id)
+        _require_own_items(_batch_row(conn, batch_id))
         current = _item_ids(conn, batch_id)
         present = set(current)
         requested = list(dict.fromkeys(image_ids))
@@ -327,7 +486,7 @@ def remove_items(batch_id: int, image_ids: list[int]) -> tuple[list[int], list[i
 def reorder_items(batch_id: int, ordered_ids: list[int]) -> None:
     with get_db() as conn:
         _begin_write(conn)
-        _batch_row(conn, batch_id)
+        _require_own_items(_batch_row(conn, batch_id))
         current = set(_item_ids(conn, batch_id))
         requested = set(ordered_ids)
         if requested != current:

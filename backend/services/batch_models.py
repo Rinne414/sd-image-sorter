@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from routers.publish import PublishWatermarkSettings
 
@@ -29,12 +29,34 @@ def _unique_step_ids(steps: list[BatchStep]) -> list[BatchStep]:
 
 
 class BatchCreateRequest(BaseModel):
+    """A new batch, or (``dataset_project_id``) the batch of an existing dataset project.
+
+    A linked batch takes its name and images from the project, so ``name`` and
+    ``image_ids`` are refused with a ``dataset_project_id``; ``name`` is
+    required otherwise.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
     kind: BatchKind
-    name: BatchName
+    name: BatchName | None = None
     template_id: PositiveId | None = None
     image_ids: list[PositiveId] = Field(default_factory=list)
+    dataset_project_id: PositiveId | None = None
+
+    @model_validator(mode="after")
+    def _name_or_project(self) -> "BatchCreateRequest":
+        if self.dataset_project_id is None:
+            if self.name is None:
+                raise ValueError("name is required")
+            return self
+        if self.kind != "dataset":
+            raise ValueError("dataset_project_id needs kind 'dataset'")
+        if self.name is not None or self.image_ids:
+            raise ValueError(
+                "a linked dataset batch takes its name and images from the project"
+            )
+        return self
 
 
 class BatchPatchRequest(BaseModel):
