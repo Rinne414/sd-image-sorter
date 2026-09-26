@@ -14,6 +14,7 @@ import { copyAndSay, openImageFolder } from '../library/fileActions'
 import { useSimilarDialogs } from '../similar/dialogs'
 import { showLikeImage } from '../similar/similarStore'
 import { sortImages } from '../sort/sortStore'
+import { identifyArtists } from '../tools/artist/identify'
 import { sendToTool } from '../tools/handoff'
 import { sendTargets } from '../tools/registry'
 import { bulkActions, imageActions, type ImageAction, type ImageFacts } from './actions'
@@ -49,6 +50,7 @@ export function useBulkActions(ids: number[]): ImageAction[] {
           addToBatch: (batch, list) => void addPicksTo(batch, list),
           compare: (a, b) => useSimilarDialogs.getState().openCompare(a, b),
           score: (list) => void scoreImages(list),
+          identifyArtist: (list) => void identifyArtists(list),
           sort: (list) => sortImages({ kind: 'picks', ids: [...list] }),
           sendToTool: (tool, list) => sendToTool(tool, list),
         },

@@ -80,6 +80,9 @@ class IdentifyBatchRequest(ArtistModelConfig):
     image_ids: List[int] = Field(..., min_length=1, max_length=ARTIST_BATCH_IMAGE_LIMIT)
     threshold: float = Field(ARTIST_THRESHOLD_DEFAULT, ge=0.0, le=1.0)
     top_k: int = Field(5, ge=1, le=20)
+    # Leave out images that already have an artist result (a row in
+    # artist_predictions). Off by default, so existing callers re-run everything.
+    skip_existing: bool = False
 
 
 class IdentifyResponse(BaseModel):
@@ -270,6 +273,10 @@ Start batch artist identification for multiple images.
 
 Runs in background. Poll progress with `/api/artists/batch-progress` endpoint.
 Results are stored in the artist_predictions table.
+
+With `skip_existing`, images that already have a result are left out first;
+`skipped` says how many. When every image is skipped nothing starts
+(`started` is false, `total` is 0).
     """,
     responses={
         200: {
@@ -278,7 +285,9 @@ Results are stored in the artist_predictions table.
                 "application/json": {
                     "example": {
                         "message": "Batch identification started",
-                        "total": 100
+                        "total": 100,
+                        "skipped": 0,
+                        "started": True
                     }
                 }
             }
@@ -312,19 +321,33 @@ async def identify_batch(
     Note:
         Only one batch can run at a time.
     """
+    image_ids = list(request.image_ids)
+    skipped = 0
+    if request.skip_existing:
+        existing = await run_in_threadpool(service.ids_with_predictions, image_ids)
+        image_ids = [image_id for image_id in image_ids if image_id not in existing]
+        skipped = len(request.image_ids) - len(image_ids)
+
     with _batch_start_lock:
         # Check-and-start under one lock so two concurrent requests cannot
         # both observe "not running" and start twice (same single-lock start
         # pattern as routers/colors.py start_analysis).
         if service.is_batch_running():
             raise HTTPException(status_code=409, detail="Batch identification already in progress")
+        if not image_ids:
+            return {
+                "message": "Every image already has an artist result",
+                "total": 0,
+                "skipped": skipped,
+                "started": False,
+            }
 
-        service.start_batch_progress(total=len(request.image_ids))
+        service.start_batch_progress(total=len(image_ids))
 
     # Start background task
     background_tasks.add_task(
         _run_batch_identification,
-        request.image_ids,
+        image_ids,
         request.threshold,
         request.top_k,
         request.model_source,
@@ -334,7 +357,9 @@ async def identify_batch(
 
     return {
         "message": "Batch identification started",
-        "total": len(request.image_ids),
+        "total": len(image_ids),
+        "skipped": skipped,
+        "started": True,
     }
 
 
@@ -372,9 +397,18 @@ async def cancel_batch(service: ArtistService = Depends(get_artist_service)):
 
 
 @router.get("/batch-progress", response_model=BatchProgress)
-async def get_batch_progress(service: ArtistService = Depends(get_artist_service)):
+async def get_batch_progress(
+    include_results: bool = Query(
+        default=True,
+        description="False leaves out the per-image result list (it grows with every image of the run)",
+    ),
+    service: ArtistService = Depends(get_artist_service),
+):
     """Get the current batch identification progress."""
-    return BatchProgress(**service.get_batch_progress())
+    progress = service.get_batch_progress()
+    if not include_results:
+        progress["results"] = []
+    return BatchProgress(**progress)
 
 
 @router.get("/models", response_model=List[ModelInfo])

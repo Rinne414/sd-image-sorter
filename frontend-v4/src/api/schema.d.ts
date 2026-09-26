@@ -3322,6 +3322,10 @@ export interface paths {
          *
          *     Runs in background. Poll progress with `/api/artists/batch-progress` endpoint.
          *     Results are stored in the artist_predictions table.
+         *
+         *     With `skip_existing`, images that already have a result are left out first;
+         *     `skipped` says how many. When every image is skipped nothing starts
+         *     (`started` is false, `total` is 0).
          */
         post: operations["identify_batch_api_artists_identify_batch_post"];
         delete?: never;
@@ -9304,6 +9308,11 @@ export interface components {
              * @default 5
              */
             top_k: number;
+            /**
+             * Skip Existing
+             * @default false
+             */
+            skip_existing: boolean;
         };
         /** IdentifyRequest */
         IdentifyRequest: {
@@ -16964,7 +16973,9 @@ export interface operations {
                     /**
                      * @example {
                      *       "message": "Batch identification started",
-                     *       "total": 100
+                     *       "total": 100,
+                     *       "skipped": 0,
+                     *       "started": true
                      *     }
                      */
                     "application/json": unknown;
@@ -17010,7 +17021,10 @@ export interface operations {
     };
     get_batch_progress_api_artists_batch_progress_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description False leaves out the per-image result list (it grows with every image of the run) */
+                include_results?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -17024,6 +17038,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BatchProgress"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

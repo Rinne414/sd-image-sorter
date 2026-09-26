@@ -521,6 +521,21 @@ class ArtistService:
             "results": results,
         }
 
+    def ids_with_predictions(self, image_ids: List[int]) -> set:
+        """The ids among ``image_ids`` that already have an artist result."""
+        found: set = set()
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            for start in range(0, len(image_ids), ARTIST_IMAGE_LOOKUP_CHUNK_SIZE):
+                chunk_ids = image_ids[start:start + ARTIST_IMAGE_LOOKUP_CHUNK_SIZE]
+                placeholders = ",".join("?" * len(chunk_ids))
+                cursor.execute(
+                    f"SELECT image_id FROM artist_predictions WHERE image_id IN ({placeholders})",
+                    chunk_ids,
+                )
+                found.update(int(row[0]) for row in cursor.fetchall())
+        return found
+
     def get_stats(self) -> Dict[str, Any]:
         with db.get_db() as conn:
             cursor = conn.cursor()

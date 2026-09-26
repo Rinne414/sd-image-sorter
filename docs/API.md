@@ -1490,12 +1490,16 @@ Start batch identification.
 | `image_ids` | int[] | required | List of image IDs |
 | `threshold` | float | 0.03 | Extra confidence floor; tightens only |
 | `top_k` | int | 5 | Number of predictions per image |
+| `skip_existing` | bool | false | Leave out images that already have an artist result (a row in `artist_predictions`) |
+
+The response has `message`, `total` (images the run will identify), `skipped` (images left out by `skip_existing`; 0 otherwise) and `started`. When `skip_existing` leaves nothing to do, nothing starts: `started` is false and `total` is 0.
 
 Each `results[]` entry carries `artist`, `confidence`, `confidence_level`, and `candidate_artist`.
 
 #### GET /api/artists/batch-progress
 Get identification progress.
 The response includes step-oriented status fields such as `message`, `current_item`, `started_at`, and `updated_at` for frontend diagnostics.
+`?include_results=false` leaves `results` empty: the list grows with every image of the run, so a poll that only needs the counts should not carry it.
 
 #### GET /api/artists/models
 List artist models.

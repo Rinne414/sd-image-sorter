@@ -20,7 +20,7 @@ const t = (key: string, params?: Record<string, string | number>) =>
   params ? `${key}(${Object.entries(params).map(([k, v]) => `${k}=${v}`).join(',')})` : key
 
 function bulkOps(): BulkOps {
-  return { rate: vi.fn(), favorite: vi.fn(), dialog: vi.fn(), censor: vi.fn(), newBatch: vi.fn(), addToBatch: vi.fn(), compare: vi.fn(), score: vi.fn(), sort: vi.fn(), sendToTool: vi.fn() }
+  return { rate: vi.fn(), favorite: vi.fn(), dialog: vi.fn(), censor: vi.fn(), newBatch: vi.fn(), addToBatch: vi.fn(), compare: vi.fn(), score: vi.fn(), identifyArtist: vi.fn(), sort: vi.fn(), sendToTool: vi.fn() }
 }
 
 function imageOps(): ImageOps {
@@ -56,7 +56,9 @@ describe('bulk actions', () => {
   it('the selection bar gets batch, rate, favourite, tag and move up front, the rest under More', () => {
     const list = bulkActions({ ids: [1], favorited: false, batches: [], templates: [], ops: bulkOps() })
     expect(ids(list.filter((a) => a.bar === 'main'))).toEqual(['batch', 'rate', 'favorite', 'tag', 'move'])
-    expect(ids(list.filter((a) => a.bar === 'more'))).toEqual(['censor', 'copy', 'edit-tags', 'aesthetic', 'export', 'move-library', 'remove', 'trash'])
+    expect(ids(list.filter((a) => a.bar === 'more'))).toEqual(['censor', 'copy', 'edit-tags', 'analyze', 'export', 'move-library', 'remove', 'trash'])
+    // the AI reads share one submenu, so the right-click menu still fits 768 px
+    expect(ids(list.find((a) => a.id === 'analyze')?.children ?? [])).toEqual(['aesthetic', 'artist'])
   })
 
   it('every action applies to the ids it was built for', () => {
@@ -73,6 +75,7 @@ describe('bulk actions', () => {
     expect(ops.newBatch).toHaveBeenCalledWith('custom', [4, 8], template)
     expect(ops.addToBatch).toHaveBeenCalledWith(batch, [4, 8])
     expect(ops.score).toHaveBeenCalledWith([4, 8])
+    expect(ops.identifyArtist).toHaveBeenCalledWith([4, 8])
     expect(ops.sort).toHaveBeenCalledWith([4, 8])
     for (const d of ['tag', 'edit-tags', 'export', 'move-library', 'copy', 'remove']) expect(ops.dialog).toHaveBeenCalledWith(d, [4, 8])
   })

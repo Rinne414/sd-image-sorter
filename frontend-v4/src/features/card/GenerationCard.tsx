@@ -24,6 +24,7 @@ import { copyAndSay, openImageFolder } from '../library/fileActions'
 import { menuItemsOf } from '../selection/actions'
 import { useImageActions } from '../selection/actionOps'
 import { showLikeImage } from '../similar/similarStore'
+import { IdentifyButton } from '../tools/artist/IdentifyButton'
 import { sendToTool } from '../tools/handoff'
 import { useTT } from '../tools/toolText'
 
@@ -194,6 +195,7 @@ function CardBody({ id, variant }: { id: number; variant: 'panel' | 'overlay' })
         )}
         {image && <CopyMenu id={id} />}
         {variant === 'panel' && image && <OpenInReader id={id} />}
+        {variant === 'panel' && image && <IdentifyButton id={id} />}
         {variant === 'panel' && (
           <button type="button" className="btn btn-ghost" onClick={() => void reparse(id)} title={t('card.reparseHint')}>
             {t('card.reparse')}

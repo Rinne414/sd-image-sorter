@@ -14,6 +14,7 @@ import { driveDatasetExport } from './datasetExportDriver'
 import { adoptReparse, driveReparse } from './reparseDriver' // reparse/reread
 import { adoptSortRules, driveSortRules } from './sortRulesDriver' // sortrules/sortundo
 import { driveOllama, ollamaAdoption } from './ollamaDriver' // ollama
+import { adoptArtist, driveArtist } from './artistDriver' // artist
 import { queuedKey } from './queued'
 
 // Every long job the user started (or that was already running when V4
@@ -65,6 +66,7 @@ type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors'
   | 'reparse' | 'reread'
   | 'sortrules' | 'sortundo' // sortrules/sortundo
   | 'ollama'
+  | 'artist' // artist
 
 // Censor work over a batch (detecting, SAM3 refining, filters) runs one at a time.
 const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind === 'refine' || kind === 'adjust' ? 'detect' : kind)
@@ -169,6 +171,7 @@ const DRIVERS: Record<Queue, Driver> = {
   sortrules: driveSortRules, // sortrules
   sortundo: driveSortRules, // sortundo (the same batch-move slot)
   ollama: driveOllama, // ollama: an Ollama model download (it cannot be stopped)
+  artist: driveArtist, // artist: style identification (the backend runs one batch at a time)
 }
 
 export const canStop = (kind: JobKind) => DRIVERS[queueOf(kind)].cancel !== null
@@ -325,6 +328,7 @@ export async function adoptRunningJobs(): Promise<void> {
     adopt('reparse', adoptReparse), // reparse/reread
     adopt('sortrules', adoptSortRules), // sortrules/sortundo
     adopt('ollama', ollamaAdoption), // ollama
+    adopt('artist', adoptArtist), // artist
     adopt('install', (raw) => {
       const result = (raw.prepare_result ?? {}) as Record<string, unknown>
       if (result.active !== true || typeof result.model_id !== 'string') return null
@@ -377,6 +381,7 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   sortrules: ['images', 'image', 'folders', 'image-count', 'library-health', 'missing-summary'], // sortrules
   sortundo: ['images', 'image', 'folders', 'image-count', 'library-health', 'missing-summary'], // sortundo
   ollama: ['vlm-local-models'], // ollama: the AI services page lists what Ollama has
+  artist: ['artist-stats', 'artist-images', 'images', 'image-count'], // artist: the style tool's numbers and lists, an artist: search
 }
 
 let onUndo: ((job: Job) => Promise<void>) | null = null
@@ -452,6 +457,7 @@ const RUNNING: Record<JobKind, MessageKey> = {
   sortrules: 'sort.rules.job.running', // sortrules
   sortundo: 'sort.rules.job.undoing', // sortundo
   ollama: 'jobs.running.install', // ollama: "Downloading <model>"
+  artist: 'tools.artist.job.running', // artist
 }
 
 const DONE: Record<JobKind, MessageKey> = {
@@ -481,6 +487,7 @@ const DONE: Record<JobKind, MessageKey> = {
   sortrules: 'sort.rules.job.done', // sortrules
   sortundo: 'sort.rules.job.undone', // sortundo
   ollama: 'jobs.done.install', // ollama: "<model> is ready"
+  artist: 'tools.artist.job.done', // artist
 }
 
 /** One line that says what happened (or is happening) to this job. */

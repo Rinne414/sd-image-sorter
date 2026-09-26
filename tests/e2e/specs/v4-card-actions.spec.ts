@@ -29,8 +29,10 @@ const BULK_PREFIX = 'v4cactbulk-'
 const BULK_COUNT = 300
 const BULK_DIR = 'v4-cact-bulk'
 
-/** Every action the selection bar offers for two picks: its buttons and its More menu. */
-const BAR_ACTIONS = ['batch', 'rate', 'favorite', 'tag', 'move', 'censor', 'copy', 'sort', 'edit-tags', 'aesthetic', 'export', 'move-library', 'compare', 'remove', 'trash']
+/** Every action the selection bar offers for two picks: its buttons and its More menu (a submenu's items spelled out). */
+const BAR_ACTIONS = ['batch', 'rate', 'favorite', 'tag', 'move', 'censor', 'copy', 'sort', 'edit-tags', 'aesthetic', 'artist', 'export', 'move-library', 'compare', 'send-artist', 'send-privacy', 'remove', 'trash']
+/** Items that sit in a submenu of the right-click menu: AI 分析 ▸ and 送到工具 ▸. */
+const IN_SUBMENU: Record<string, string> = { aesthetic: 'analyze', artist: 'analyze', 'send-artist': 'send-to', 'send-privacy': 'send-to' }
 
 test.beforeAll(() => {
   seedImages({ prefix: PREFIX, token: TOKEN, count: COUNT, dir: DIR })
@@ -164,7 +166,7 @@ test('right-click on a pick offers the selection bar\'s actions; on another card
   const menu = page.getByTestId('card-menu')
   await expect(menu).toContainText('Acts on the 2 picked images')
   const items = await menuItems(page)
-  for (const id of BAR_ACTIONS) expect(items, id).toContain(id)
+  for (const id of BAR_ACTIONS) expect(items, id).toContain(IN_SUBMENU[id] ?? id)
   // the danger group comes last, under its own divider, and says again what it acts on
   expect(items.slice(-2)).toEqual(['remove', 'trash'])
   const lastGroup = menu.locator(':scope > [role="group"]').last()

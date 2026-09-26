@@ -7,6 +7,7 @@ import { readReparse } from './reparseJob' // reparse/reread
 import { readSortRules } from './sortRulesJob' // sortrules/sortundo: sort by condition and its undo
 import { readScanExtras, type ScanExtras } from './scanExtras' // scan: stall + other library
 import { readOllama } from './ollamaJob' // ollama: an Ollama model download, read in ollamaJob.ts
+import { readArtist } from './artistJob' // artist: style identification, read in artistJob.ts
 // Reads the backend's progress payloads for long jobs into one shape.
 // move/copy: GET /api/move/progress · trash: GET /api/images/delete-selected/progress
 // · remove: GET /api/images/remove-selected/progress · tag: GET /api/tag/progress
@@ -53,6 +54,7 @@ export type JobKind =
   | 'sortrules' // sortrules: a sort-by-condition run (GET /api/batch-move/progress)
   | 'sortundo' // sortundo: undoing a sort-by-condition run
   | 'ollama' // ollama: an Ollama model download (GET /api/vlm/local-models/pull/progress)
+  | 'artist' // artist: style identification (GET /api/artists/batch-progress)
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
 
 export interface JobFailure {
@@ -331,6 +333,8 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
       return readSortRules(base, raw, ctx.runToken) // sortrules/sortundo
     case 'ollama': // ollama
       return readOllama(base, raw, ctx.ollamaModel) // ollama
+    case 'artist': // artist
+      return readArtist(base, raw, prev) // artist
   }
 }
 
