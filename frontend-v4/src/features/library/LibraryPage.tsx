@@ -4,6 +4,7 @@ import { useT } from '../../i18n'
 import { useApp } from '../../state/store'
 import { AddingBanner } from '../batch/AddingBanner'
 import { GenerationCard } from '../card/GenerationCard'
+import { SortNotice } from '../info/SortNotice'
 import { Lightbox } from '../lightbox/Lightbox'
 import { SelectionBar } from '../selection/SelectionBar'
 import { SimilarBanner } from '../similar/SimilarBanner'
@@ -73,6 +74,7 @@ export function LibraryPage() {
       <main className={styles.main}>
         <QueryBar total={total} inputRef={inputRef} />
         {adding && <AddingBanner target={adding} />}
+        {!similar && <SortNotice params={params} />}
         {similar && <SimilarBanner query={similar} count={images.length} loading={shown.loading} error={shown.error} retry={shown.retry} />}
         <div className={styles.gridArea}>
           {!similar && shown.error ? (

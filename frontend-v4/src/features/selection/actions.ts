@@ -64,6 +64,8 @@ export interface BulkOps {
   newBatch: (kind: BatchKind, ids: number[], template: BatchTemplate | null) => void
   addToBatch: (batch: BatchSummary, ids: number[]) => void
   compare: (a: number, b: number) => void
+  /** Aesthetic scoring, as a job. */
+  score: (ids: number[]) => void
 }
 
 export interface BulkInput {
@@ -140,6 +142,7 @@ export function bulkActions(input: BulkInput): ImageAction[] {
     { id: 'censor', section: 'work', bar: 'more', label: k('sel.censor'), palette: k('palette.cmd.censorPicks'), run: () => ops.censor(ids) },
     { id: 'copy', section: 'files', bar: 'more', label: k('sel.copy'), palette: k('palette.cmd.copy'), run: dialog('copy') },
     { id: 'edit-tags', section: 'work', bar: 'more', label: k('sel.editTags'), palette: k('palette.cmd.editTags'), run: dialog('edit-tags') },
+    { id: 'aesthetic', section: 'work', bar: 'more', label: k('info.aes.scorePicks'), palette: k('info.aes.scorePicksPalette'), run: () => ops.score(ids) },
     { id: 'export', section: 'files', bar: 'more', label: k('sel.exportData'), palette: k('palette.cmd.exportData'), run: dialog('export') },
     { id: 'move-library', section: 'files', bar: 'more', label: k('sel.moveLibrary'), palette: k('palette.cmd.moveLibrary'), run: dialog('move-library') },
     ...compareAction(ids, ops),

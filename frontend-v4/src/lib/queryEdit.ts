@@ -44,3 +44,19 @@ export function valueOf(parts: Part[], key: string): string | null {
 export function hasPart(parts: Part[], match: PartMatch): boolean {
   return parts.some(match)
 }
+
+/** A value as one token: quoted when it has spaces; quotes inside it are dropped. */
+export function tokenValue(value: string): string {
+  const clean = value.replace(/"/g, '').replace(/\s+/g, ' ').trim()
+  return /\s/.test(clean) ? `"${clean}"` : clean
+}
+
+/**
+ * Show only images with this checkpoint or LoRA: every earlier filter of that
+ * kind (kept or excluded) goes, the rest of the query stays. Replacing rather
+ * than adding matters: two filters of one kind mean "either", so adding would
+ * widen the result instead of narrowing it.
+ */
+export function onlyWith(text: string, key: 'checkpoint' | 'lora', value: string): string {
+  return replaceTokens(text, isAnyOf(isKey(key), isKey(`-${key}`)), [`${key}:${tokenValue(value)}`])
+}

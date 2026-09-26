@@ -1,0 +1,42 @@
+/* A quiet strip over the grid: a chore, not an error. */
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 4px 8px 4px 16px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--line);
+  box-shadow: inset 3px 0 0 var(--line-strong);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+/* A printed link, as in the library status. */
+.link {
+  margin-left: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-2);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+
+.link:hover:not(:disabled) {
+  text-decoration-color: var(--text);
+}
+
+.link:disabled {
+  color: var(--muted);
+  text-decoration: none;
+}

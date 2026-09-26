@@ -9,6 +9,7 @@ import { isFinished, readProgress, type JobKind, type JobProgress, type ReadCont
 import { driveSmartTag } from './smartTagDriver'
 import { drivePurity, drivePurityDownload } from './purityDriver'
 import { driveMasks } from './maskDriver'
+import { adoptAesthetic, driveAesthetic } from './aestheticDriver'
 
 // Every long job the user started (or that was already running when V4
 // opened) lives here until dismissed. The backend runs one job per queue
@@ -54,6 +55,7 @@ type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors'
   | 'smarttag'
   | 'purity' | 'purityget'
   | 'masks'
+  | 'aesthetic'
 
 // Censor work over a batch (detecting, SAM3 refining, filters) runs one at a time.
 const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind === 'refine' || kind === 'adjust' ? 'detect' : kind)
@@ -147,6 +149,7 @@ const DRIVERS: Record<Queue, Driver> = {
   purity: drivePurity,
   purityget: drivePurityDownload,
   masks: driveMasks,
+  aesthetic: driveAesthetic,
 }
 
 export const canStop = (kind: JobKind) => DRIVERS[queueOf(kind)].cancel !== null
@@ -299,6 +302,7 @@ export async function adoptRunningJobs(): Promise<void> {
     }),
     adopt('embed', (raw) => (raw.running === true ? { kind: 'embed', progress: readProgress('embed', raw) } : null)),
     adoptDuplicateScan(),
+    adopt('aesthetic', adoptAesthetic),
     adopt('install', (raw) => {
       const result = (raw.prepare_result ?? {}) as Record<string, unknown>
       if (result.active !== true || typeof result.model_id !== 'string') return null
@@ -344,6 +348,7 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   purity: [],
   purityget: ['purity-status'],
   masks: ['mask-status'],
+  aesthetic: ['images', 'image', 'image-count', 'library-health'],
 }
 
 let onUndo: ((job: Job) => Promise<void>) | null = null
@@ -412,6 +417,7 @@ const RUNNING: Record<JobKind, MessageKey> = {
   purity: 'dataset.check.purity.running',
   purityget: 'dataset.check.purity.downloading',
   masks: 'dataset.masks.job.running',
+  aesthetic: 'info.aes.job.running',
 }
 
 const DONE: Record<JobKind, MessageKey> = {
@@ -434,6 +440,7 @@ const DONE: Record<JobKind, MessageKey> = {
   purity: 'dataset.check.purity.done',
   purityget: 'dataset.check.purity.downloaded',
   masks: 'dataset.masks.job.done',
+  aesthetic: 'info.aes.job.done',
 }
 
 /** One line that says what happened (or is happening) to this job. */

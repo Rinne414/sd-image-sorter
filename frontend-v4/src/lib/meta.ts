@@ -35,6 +35,8 @@ const KNOWN = new Set([
   'denoising_strength',
   'model',
   'model_hash',
+  // shown beside each LoRA on the card (imageInfo.ts)
+  'lora_details',
 ])
 
 function str(v: unknown): string | null {

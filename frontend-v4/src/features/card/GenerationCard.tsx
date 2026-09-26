@@ -4,7 +4,8 @@ import { useCategories, useFavorites, useImageDetail, useSetRating, useToggleFav
 import type { ImageTag, TagCategory } from '../../api/types'
 import { useT, type MessageKey } from '../../i18n'
 import { copyText, fileSize, generatorCode } from '../../lib/format'
-import { readGeneration, shortModelName, toParameterText, type GenerationInfo } from '../../lib/meta'
+import { formatScore, readImageInfo } from '../../lib/imageInfo'
+import { readGeneration, type GenerationInfo } from '../../lib/meta'
 import { parentFolder, tailOfPath } from '../../lib/paths'
 import { promptTagKeys, segmentPrompt, tagKey } from '../../lib/prompt'
 import { useApp } from '../../state/store'
@@ -12,9 +13,15 @@ import styles from './Card.module.css'
 import { PromptText } from './PromptText'
 import { Stars } from './Stars'
 import { Icon } from '../../ui/Icon'
+import { Menu } from '../../ui/Menu'
 import { TagInput } from '../../ui/TagInput'
 import { addTags, removeTag, reparse, saveCaptions } from './cardEdits'
+import { CopyButton, Section } from './CardParts'
+import { CivitaiResources, Facts, NoParamsNote, OtherModels, PromptNodes, SidecarCaption, useI2iLabel } from '../info/CardInfo'
+import { ColorSection } from '../info/ColorSection'
 import { copyAndSay, openImageFolder } from '../library/fileActions'
+import { menuItemsOf } from '../selection/actions'
+import { useImageActions } from '../selection/actionOps'
 import { showLikeImage } from '../similar/similarStore'
 
 const TAGS_SHOWN = 24
@@ -59,6 +66,8 @@ function CardBody({ id, variant }: { id: number; variant: 'panel' | 'overlay' })
   const image = detail.data?.image
   const tags = useMemo(() => sortTags(detail.data?.tags ?? []), [detail.data])
   const gen = useMemo(() => (image ? readGeneration(image) : null), [image])
+  const info = useMemo(() => (image ? readImageInfo({ ...image, model_hash: image.model_hash ?? null }) : null), [image])
+  const i2i = useI2iLabel(info)
   const promptSegments = useMemo(() => segmentPrompt(image?.prompt ?? ''), [image?.prompt])
   const keys = useMemo(() => {
     const all = promptTagKeys(promptSegments)
@@ -78,10 +87,11 @@ function CardBody({ id, variant }: { id: number; variant: 'panel' | 'overlay' })
 
   const isFav = favorites.data?.ids.has(id) ?? false
   const stars = image?.user_rating ?? 0
+  const edge = { gen, generator: image?.generator ?? null, rating: tags.rating, score: image?.aesthetic_score ?? null, i2i }
 
   return (
     <aside className={styles.card} data-variant={variant} data-testid="generation-card">
-      {variant === 'panel' && <Frame id={id} gen={gen} generator={image?.generator ?? null} rating={tags.rating} />}
+      {variant === 'panel' && <Frame id={id} edge={edge} />}
 
       {variant === 'panel' && (
       <div className={styles.titleRow}>
@@ -105,7 +115,7 @@ function CardBody({ id, variant }: { id: number; variant: 'panel' | 'overlay' })
 
       {variant === 'panel' && image?.path && <FileRow id={id} path={image.path} />}
 
-      {image && !image.prompt && !gen?.characters.length && <p className={styles.muted}>{t('card.noPrompt')}</p>}
+      {image && !image.prompt && !gen?.characters.length && <NoParamsNote generator={image.generator} />}
 
       {image?.prompt && (
         <Section label={t('card.prompt')} copy={image.prompt}>
@@ -130,32 +140,11 @@ function CardBody({ id, variant }: { id: number; variant: 'panel' | 'overlay' })
         </Section>
       )}
 
-      {gen && (gen.model || gen.loras.length > 0) && (
-        <div className={styles.models}>
-          {gen.model && (
-            <div className={styles.modelRow}>
-              <span className={styles.label}>{t('card.model')}</span>
-              <span className={styles.modelName} title={gen.model}>
-                {shortModelName(gen.model)}
-              </span>
-            </div>
-          )}
-          {gen.loras.length > 0 && (
-            <div className={styles.modelRow}>
-              <span className={styles.label}>{t('card.loras')}</span>
-              <span className={styles.loras}>
-                {gen.loras.map((l) => (
-                  <span key={l} className={styles.lora} title={l}>
-                    {shortModelName(l)}
-                  </span>
-                ))}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
+      {image && info && <Facts id={id} image={image} gen={gen} info={info} />}
 
-      {variant === 'overlay' && gen && <EdgeCodes gen={gen} generator={image?.generator ?? null} rating={tags.rating} inline />}
+      {variant === 'overlay' && gen && <EdgeCodes {...edge} inline />}
+
+      {info && info.civitai.length > 0 && <CivitaiResources list={info.civitai} />}
 
       {(tags.general.length > 0 || variant === 'panel') && (
         <TagList id={id} tags={tags.general} categories={categories.data} editable={variant === 'panel'} />
@@ -170,6 +159,14 @@ function CardBody({ id, variant }: { id: number; variant: 'panel' | 'overlay' })
           editable={variant === 'panel'}
         />
       )}
+
+      {image?.sidecar_caption?.trim() && <SidecarCaption text={image.sidecar_caption.trim()} />}
+
+      {image && <ColorSection id={id} image={image} />}
+
+      {info && info.nodes.length > 0 && <PromptNodes nodes={info.nodes} />}
+
+      {info && info.otherModels.length > 0 && <OtherModels groups={info.otherModels} />}
 
       {gen && gen.extra.length > 0 && (
         <details className={styles.extra}>
@@ -199,9 +196,7 @@ function CardBody({ id, variant }: { id: number; variant: 'panel' | 'overlay' })
             {t('sim.find.similar')}
           </button>
         )}
-        {image && gen && (
-          <CopyButton text={toParameterText(image.prompt, image.negative_prompt, gen)} label={t('card.copyAll')} />
-        )}
+        {image && <CopyMenu id={id} />}
         {variant === 'panel' && (
           <button type="button" className="btn btn-ghost" onClick={() => void reparse(id)} title={t('card.reparseHint')}>
             {t('card.reparse')}
@@ -264,22 +259,22 @@ function sortTags(tags: ImageTag[]): { general: ImageTag[]; rating: string | nul
   return { general, rating }
 }
 
-function Frame({
-  id,
-  gen,
-  generator,
-  rating,
-}: {
-  id: number
+/** What the film edge prints: the key parameters, plus the img2img marker and the aesthetic score. */
+interface EdgeFacts {
   gen: GenerationInfo | null
   generator: string | null
-  rating: string | null
-}) {
+  rating?: string | null
+  score?: number | null
+  /** The img2img marker's words, when the image was made from another. */
+  i2i?: string | null
+}
+
+function Frame({ id, edge }: { id: number; edge: EdgeFacts }) {
   const [bigLoaded, setBigLoaded] = useState<number | null>(null)
   const openLightbox = useApp((s) => s.openLightbox)
   return (
     <figure className={styles.frame}>
-      <EdgeCodes gen={gen} generator={generator} rating={rating} part="top" />
+      <EdgeCodes {...edge} part="top" />
       <div className={styles.window} onDoubleClick={() => openLightbox(id)}>
         <img className={styles.under} src={thumbnailUrl(id, 384)} alt="" draggable={false} />
         <img
@@ -292,25 +287,13 @@ function Frame({
           onLoad={() => setBigLoaded(id)}
         />
       </div>
-      <EdgeCodes gen={gen} generator={generator} rating={rating} part="bottom" />
+      <EdgeCodes {...edge} part="bottom" />
     </figure>
   )
 }
 
 /** Parameters printed on the film edge; click a code to copy its value. */
-function EdgeCodes({
-  gen,
-  generator,
-  rating,
-  part,
-  inline,
-}: {
-  gen: GenerationInfo | null
-  generator: string | null
-  rating?: string | null
-  part?: 'top' | 'bottom'
-  inline?: boolean
-}) {
+function EdgeCodes({ gen, generator, rating, score, i2i, part, inline }: EdgeFacts & { part?: 'top' | 'bottom'; inline?: boolean }) {
   const t = useT()
   // [label, what is shown, what gets copied]
   type Code = [string, string, string]
@@ -322,12 +305,15 @@ function EdgeCodes({
     code('', gen?.steps, gen?.steps ? t('edge.steps', { n: gen.steps }) : undefined),
     code('CFG', gen?.cfg),
     code('', gen?.denoise, gen?.denoise ? t('edge.denoise', { n: gen.denoise }) : undefined),
+    code('', i2i),
   ]
+  const shownScore = formatScore(score)
   const bottom = [
     code('', gen?.sampler),
     code('', gen?.scheduler),
     code('', gen?.size),
     code('', rating, ratingKey ? t(ratingKey) : undefined),
+    code('', shownScore, shownScore ? t('info.aes.edge', { score: shownScore }) : undefined),
     code('', generatorCode(generator)),
   ]
   const rows = inline ? [...top, ...bottom] : part === 'top' ? top : bottom
@@ -350,29 +336,6 @@ function EdgeCodes({
         ))}
       </span>
     </div>
-  )
-}
-
-function Section({
-  label,
-  copy,
-  action,
-  children,
-}: {
-  label: string
-  copy?: string
-  action?: React.ReactNode
-  children: React.ReactNode
-}) {
-  return (
-    <section className={styles.section}>
-      <header className={styles.sectionHead}>
-        <span className={styles.label}>{label}</span>
-        {action}
-        {copy !== undefined && <CopyButton text={copy} compact />}
-      </header>
-      {children}
-    </section>
   )
 }
 
@@ -452,11 +415,22 @@ function Negative({ text }: { text: string }) {
   const t = useT()
   const [open, setOpen] = useState(false)
   return (
-    <button type="button" className={styles.negative} data-open={open || undefined} onClick={() => setOpen(!open)}>
-      <span className={styles.label}>{t('card.negative')}</span>
-      <span className={styles.negText}>{text}</span>
-    </button>
+    <div className={styles.negativeRow}>
+      <button type="button" className={styles.negative} data-open={open || undefined} onClick={() => setOpen(!open)}>
+        <span className={styles.label}>{t('card.negative')}</span>
+        <span className={styles.negText}>{text}</span>
+      </button>
+      <CopyButton text={text} compact testId="card-copy-negative" />
+    </div>
   )
+}
+
+/** Every "copy part of this image" choice, the same list as the right-click menu's Copy. */
+function CopyMenu({ id }: { id: number }) {
+  const t = useT()
+  const copy = useImageActions(id).find((a) => a.id === 'copy')
+  if (!copy?.children?.length) return null
+  return <Menu label={t('card.copy')} items={menuItemsOf(t, copy.children)} up align="right" testId="card-copy-menu" />
 }
 
 function TagList({
@@ -517,28 +491,5 @@ function TagList({
         />
       )}
     </section>
-  )
-}
-
-function CopyButton({ text, label, compact }: { text: string; label?: string; compact?: boolean }) {
-  const t = useT()
-  const [done, setDone] = useState(false)
-  const onClick = async () => {
-    if (await copyText(text)) {
-      setDone(true)
-      window.setTimeout(() => setDone(false), 1200)
-    }
-  }
-  if (compact) {
-    return (
-      <button type="button" className={styles.copy} onClick={() => void onClick()} title={t('card.copy')}>
-        {done ? t('card.copied') : <Icon name="copy" size={14} />}
-      </button>
-    )
-  }
-  return (
-    <button type="button" className="btn" onClick={() => void onClick()}>
-      {done ? t('card.copied') : label}
-    </button>
   )
 }

@@ -13,6 +13,7 @@ import { lightboxKey, type LightboxKey } from '../library/keys'
 import { Icon } from '../../ui/Icon'
 import { useLayer } from '../../ui/layers'
 import styles from './Lightbox.module.css'
+import { useZoom } from './useZoom'
 
 const STRIP_RADIUS = 14
 const INFO_KEY = 'sd-v4-lightbox-info'
@@ -52,15 +53,30 @@ export function Lightbox({ images, total, hasMore, fetchMore, pickable = true, f
   // The detail is fetched for the generation card anyway; lists that carry no rating read it from there.
   const detail = useImageDetail(id)
   const [info, setInfo] = useState(readInfoPref)
-  const [actual, setActual] = useState(false)
   const [loadedId, setLoadedId] = useState<number | null>(null)
   const stripRef = useRef<HTMLDivElement>(null)
+  const stageRef = useRef<HTMLDivElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const fullRef = useRef<HTMLImageElement>(null)
 
   // The lightbox is a layer: Esc closes it, and it steps aside for anything opened on top.
   const isTop = useLayer(id !== null, close)
 
   const index = images.findIndex((img) => img.id === id)
   const current = index >= 0 ? images[index] : undefined
+  const zoom = useZoom({
+    id,
+    stageRef,
+    wrapRef,
+    // The loaded picture knows its pixels; until then the index does.
+    natural: () => {
+      const full = fullRef.current
+      if (full && full.naturalWidth > 0 && loadedId === id) return { w: full.naturalWidth, h: full.naturalHeight }
+      const w = current?.width ?? detail.data?.image.width
+      const h = current?.height ?? detail.data?.image.height
+      return w && h ? { w, h } : null
+    },
+  })
   // Outside the loaded pages (a random pick): step through the result on the server instead.
   const outside = index < 0 && at !== null
 
@@ -73,7 +89,6 @@ export function Lightbox({ images, total, hasMore, fetchMore, pickable = true, f
     if (heading.current !== offset) return
     heading.current = null
     if (!hit) return
-    setActual(false)
     if (images.some((img) => img.id === hit.id)) open(hit.id)
     else openAt(hit.id, offset)
   }
@@ -85,10 +100,7 @@ export function Lightbox({ images, total, hasMore, fetchMore, pickable = true, f
       return
     }
     const next = images[index + delta]
-    if (next) {
-      setActual(false)
-      open(next.id)
-    }
+    if (next) open(next.id)
     if (delta > 0 && index + delta >= images.length - 5 && hasMore) fetchMore()
   }
 
@@ -120,7 +132,7 @@ export function Lightbox({ images, total, hasMore, fetchMore, pickable = true, f
         toggleInfo()
         return true
       case 'zoom':
-        setActual((a) => !a)
+        zoom.toggle()
         return true
     }
   }
@@ -215,8 +227,14 @@ export function Lightbox({ images, total, hasMore, fetchMore, pickable = true, f
             {picked ? t('lightbox.picked') : t('lightbox.pick')} <kbd>Space</kbd>
           </button>
         )}
-        <button type="button" className="btn" aria-pressed={actual} onClick={() => setActual(!actual)}>
-          {actual ? t('lightbox.fit') : t('lightbox.actual')} <kbd>Z</kbd>
+        {zoom.percent !== null && (
+          <span className={`${styles.zoom} mono`} title={`${t('info.zoom.level', { n: zoom.percent })}
+${t('info.zoom.hint')}`} data-testid="lightbox-zoom">
+            {zoom.percent}%
+          </span>
+        )}
+        <button type="button" className="btn" aria-pressed={zoom.zoomed} onClick={() => zoom.toggle()} data-testid="lightbox-zoom-toggle">
+          {zoom.zoomed ? t('lightbox.fit') : t('lightbox.actual')} <kbd>Z</kbd>
         </button>
         <button type="button" className="btn" aria-pressed={info} onClick={toggleInfo}>
           {t('lightbox.info')} <kbd>I</kbd>
@@ -227,14 +245,28 @@ export function Lightbox({ images, total, hasMore, fetchMore, pickable = true, f
       </header>
 
       <div className={styles.body}>
-        <div className={styles.stage} data-actual={actual || undefined} onClick={(e) => e.target === e.currentTarget && close()}>
+        <div
+          ref={stageRef}
+          className={styles.stage}
+          data-zoomed={zoom.zoomed || undefined}
+          data-dragging={zoom.dragging || undefined}
+          onClick={(e) => e.target === e.currentTarget && close()}
+        >
           <button type="button" className={`${styles.nav} ${styles.prev}`} onClick={() => go(-1)} disabled={atStart} aria-label={t('lightbox.prev')}>
             <Icon name="left" size={28} />
           </button>
-          <div className={styles.imgWrap} onClick={() => setActual(!actual)}>
+          <div
+            ref={wrapRef}
+            className={styles.imgWrap}
+            style={zoom.zoomed ? { transform: `translate(${zoom.view.x}px, ${zoom.view.y}px) scale(${zoom.view.scale})` } : undefined}
+            title={t('info.zoom.hint')}
+            data-testid="lightbox-image"
+            {...zoom.handlers}
+          >
             {/* The thumbnail holds the frame until the full image is ready: no black flash. */}
             <img className={styles.under} src={thumbnailUrl(id, 384)} alt="" draggable={false} />
             <img
+              ref={fullRef}
               key={id}
               className={styles.full}
               data-ready={loadedId === id || undefined}

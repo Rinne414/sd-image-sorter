@@ -9,6 +9,7 @@ import { addPicksTo, recentBatches } from '../batch/addPicks'
 import { useBatches, useBatchTemplates } from '../batch/batchApi'
 import { askNewBatch } from '../batch/dialogStore'
 import { quickCensor } from '../censor/quickCensor'
+import { scoreImages } from '../info/aesthetic'
 import { copyAndSay, openImageFolder } from '../library/fileActions'
 import { useSimilarDialogs } from '../similar/dialogs'
 import { showLikeImage } from '../similar/similarStore'
@@ -43,6 +44,7 @@ export function useBulkActions(ids: number[]): ImageAction[] {
           newBatch: (kind, list, template) => askNewBatch(kind, list, 'selection', template),
           addToBatch: (batch, list) => void addPicksTo(batch, list),
           compare: (a, b) => useSimilarDialogs.getState().openCompare(a, b),
+          score: (list) => void scoreImages(list),
         },
       }),
     [ids, favorited, batches.data, templates.data, rate, favorite],

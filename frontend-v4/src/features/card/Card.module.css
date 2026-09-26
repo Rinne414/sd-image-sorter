@@ -332,11 +332,20 @@
   display: none;
 }
 
+/* The negative prompt folds to one line; its copy button sits beside it. */
+.negativeRow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
 .negative {
   display: flex;
+  flex: 1;
+  min-width: 0;
   gap: 10px;
   align-items: baseline;
-  width: 100%;
   padding: 0;
   border: 0;
   background: none;
@@ -386,46 +395,6 @@
   border: 1px solid var(--accent-line);
   font-size: var(--fs-1);
   font-weight: 700;
-  border-radius: var(--radius);
-}
-
-.models {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.modelRow {
-  display: grid;
-  grid-template-columns: 44px 1fr;
-  gap: 8px;
-  align-items: baseline;
-  min-width: 0;
-}
-
-.modelName {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text);
-}
-
-.loras {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  min-width: 0;
-}
-
-.lora {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--fs-2);
-  padding: 1px 7px;
-  color: var(--ai);
-  border: 1px solid color-mix(in srgb, var(--ai) 38%, transparent);
   border-radius: var(--radius);
 }
 

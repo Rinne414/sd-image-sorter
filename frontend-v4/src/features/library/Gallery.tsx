@@ -4,6 +4,7 @@ import { thumbnailUrl } from '../../api/client'
 import type { ImageSummary } from '../../api/types'
 import { useT } from '../../i18n'
 import { generatorCode, isTypingTarget } from '../../lib/format'
+import { formatScore } from '../../lib/imageInfo'
 import { useApp, type Layout, type TileSize } from '../../state/store'
 import { Icon } from '../../ui/Icon'
 import { PickMark } from '../../ui/PickMark'
@@ -263,6 +264,7 @@ interface TileProps {
 const Tile = memo(function Tile(p: TileProps) {
   const t = useT()
   const stars = p.img.user_rating ?? 0
+  const aesthetic = formatScore(p.img.aesthetic_score)
   const heartLabel = p.favorite ? t('card.unfavorite') : t('card.favorite')
   return (
     <div
@@ -296,6 +298,11 @@ const Tile = memo(function Tile(p: TileProps) {
           </span>
         ) : (
           <span className="mono">{generatorCode(p.img.generator)}</span>
+        )}
+        {aesthetic && (
+          <span className="mono" data-testid="tile-aesthetic">
+            {t('info.aes.edge', { score: aesthetic })}
+          </span>
         )}
         {stars > 0 && (
           <span className={styles.stars}>

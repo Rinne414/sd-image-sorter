@@ -1,6 +1,7 @@
 import { readSmartTag, type SmartTagContext } from './smartTagJob'
 import { readPurity, readPurityDownload } from './purityJob'
 import { readMasks } from './maskJob'
+import { readAesthetic } from './aestheticJob'
 // Reads the backend's progress payloads for long jobs into one shape.
 // move/copy: GET /api/move/progress · trash: GET /api/images/delete-selected/progress
 // · remove: GET /api/images/remove-selected/progress · tag: GET /api/tag/progress
@@ -11,6 +12,7 @@ import { readMasks } from './maskJob'
 // · smarttag: GET /api/smart-tag/progress (a dataset batch's tag step), read in smartTagJob.ts.
 // · purity/purityget: character purity (CCIP) analysis and its model download, read in purityJob.ts.
 // · masks: GET /api/bulk-jobs/{id} (auto-masking a dataset's Library images), read in maskJob.ts.
+// · aesthetic: GET /api/aesthetic/progress, or this page's run over picked images, read in aestheticJob.ts.
 
 /**
  * tags: a bulk tag edit, finished when it is recorded (kept for its undo).
@@ -37,6 +39,7 @@ export type JobKind =
   | 'purity'
   | 'purityget'
   | 'masks'
+  | 'aesthetic'
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
 
 export interface JobFailure {
@@ -279,6 +282,8 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
       return readPurityDownload(base, raw)
     case 'masks':
       return readMasks(base, raw, ctx.maskJobId)
+    case 'aesthetic':
+      return readAesthetic(base, raw)
   }
 }
 

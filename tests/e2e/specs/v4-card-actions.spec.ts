@@ -30,7 +30,7 @@ const BULK_COUNT = 300
 const BULK_DIR = 'v4-cact-bulk'
 
 /** Every action the selection bar offers for two picks: its buttons and its More menu. */
-const BAR_ACTIONS = ['batch', 'rate', 'favorite', 'tag', 'move', 'censor', 'copy', 'edit-tags', 'export', 'move-library', 'compare', 'remove', 'trash']
+const BAR_ACTIONS = ['batch', 'rate', 'favorite', 'tag', 'move', 'censor', 'copy', 'edit-tags', 'aesthetic', 'export', 'move-library', 'compare', 'remove', 'trash']
 
 test.beforeAll(() => {
   seedImages({ prefix: PREFIX, token: TOKEN, count: COUNT, dir: DIR })

@@ -45,6 +45,13 @@ export interface ImageDetail extends ImageSummary {
   nl_caption: string | null
   sidecar_caption: string | null
   tagged_at: string | null
+  model_hash?: string | null
+  /** Colour analysis (null until analysed): JSON [{hex, pct}], 0-255 averages, warm/cool/neutral, histogram shape. */
+  dominant_colors?: string | null
+  avg_brightness?: number | null
+  color_saturation?: number | null
+  color_temperature?: string | null
+  brightness_distribution?: string | null
 }
 
 export interface ImageDetailResponse {

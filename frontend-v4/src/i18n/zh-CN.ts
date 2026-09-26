@@ -3,11 +3,13 @@ import { zhCNDataset } from './zh-CN.dataset'
 import { zhCNPublish } from './zh-CN.publish'
 import { zhCNLibrary } from './zh-CN.library'
 import { zhCNSimilar } from './zh-CN.similar'
+import { zhCNInfo } from './zh-CN.info'
 
 export const zhCN = {
   ...zhCNPublish,
   ...zhCNLibrary,
   ...zhCNSimilar,
+  ...zhCNInfo,
   ...zhCNDataset,
   'app.name': 'SD Image Sorter',
   'nav.home': '首页',

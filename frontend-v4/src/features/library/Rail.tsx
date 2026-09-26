@@ -16,6 +16,7 @@ import { Icon } from '../../ui/Icon'
 import { useClickOutside, useLayer } from '../../ui/layers'
 import { useRailSections, type RailSectionId } from './railSections'
 import { useSimilarStatus } from '../similar/status'
+import { scoreLibrary } from '../info/aesthetic'
 
 interface Props {
   /** Prompt text woven faintly behind the library name. */
@@ -259,6 +260,7 @@ function Status() {
   const colors = useColorsMissing()
   const showFor = useSelectionDialog((s) => s.showFor)
   const analysing = useJobs((s) => s.jobs.some((j) => j.kind === 'colors' && !isFinished(j.progress.status)))
+  const scoring = useJobs((s) => s.jobs.some((j) => j.kind === 'aesthetic' && !isFinished(j.progress.status)))
   const similar = useSimilarStatus()
   if (!health.data) return null
   const c = health.data.issue_counts
@@ -273,6 +275,12 @@ function Status() {
       n: colors.data?.missing ?? 0,
       quiet: true,
       action: { label: analysing ? t('status.analysing') : t('status.analyse'), run: () => void startColorAnalysis(), busy: analysing },
+    },
+    {
+      key: 'info.aes.missing',
+      n: c.missing_aesthetic ?? 0,
+      quiet: true,
+      action: { label: scoring ? t('info.aes.scoring') : t('info.aes.scoreAll'), run: () => void scoreLibrary(), busy: scoring },
     },
     ...similar,
   ]

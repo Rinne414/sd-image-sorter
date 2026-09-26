@@ -55,6 +55,15 @@
   flex: 1;
 }
 
+/* Zoom as a share of the picture's own size. */
+.zoom {
+  min-width: 4ch;
+  text-align: right;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
 .heart {
   display: grid;
   border: 0;
@@ -89,6 +98,7 @@
   inset: 12px 64px;
   display: grid;
   cursor: zoom-in;
+  transform-origin: center;
 }
 
 .under,
@@ -101,28 +111,14 @@
   object-fit: contain;
 }
 
-/* Actual size: the stage scrolls and the picture keeps its own pixels. */
-.stage[data-actual] {
-  overflow: auto;
+/* Zoomed (wheel, click or Z): the picture is scaled and moved as one; drag to pan, click to fit. */
+.stage[data-zoomed] .imgWrap {
+  cursor: grab;
+  touch-action: none;
 }
 
-.stage[data-actual] .imgWrap {
-  position: static;
-  display: block;
-  width: max-content;
-  margin: 0 auto;
-  cursor: zoom-out;
-}
-
-.stage[data-actual] .under {
-  display: none;
-}
-
-.stage[data-actual] .full {
-  width: auto;
-  height: auto;
-  max-width: none;
-  opacity: 1;
+.stage[data-dragging] .imgWrap {
+  cursor: grabbing;
 }
 
 .full {

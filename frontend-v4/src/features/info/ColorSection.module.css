@@ -1,0 +1,140 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* RGB / split / luma: a small segmented switch. */
+.modes {
+  display: inline-flex;
+  align-self: flex-start;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.modes button {
+  height: 22px;
+  padding: 0 9px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: var(--fs-1);
+}
+
+.modes button + button {
+  border-left: 1px solid var(--line);
+}
+
+.modes button:hover {
+  color: var(--text);
+}
+
+.modes button[aria-pressed="true"] {
+  color: var(--text);
+  background: var(--wash-strong);
+}
+
+.histogram {
+  display: block;
+  width: 100%;
+  height: 64px;
+  background: var(--stage);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.r {
+  fill: var(--hist-r);
+}
+
+.g {
+  fill: var(--hist-g);
+}
+
+.b {
+  fill: var(--hist-b);
+}
+
+.lumaFaint {
+  fill: var(--wash-strong);
+}
+
+.luma {
+  fill: color-mix(in srgb, var(--text-2) 55%, transparent);
+}
+
+.lineR,
+.lineG,
+.lineB {
+  fill: none;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.lineR {
+  stroke: var(--hist-r);
+}
+
+.lineG {
+  stroke: var(--hist-g);
+}
+
+.lineB {
+  stroke: var(--hist-b);
+}
+
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 4px;
+}
+
+.swatch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  border-radius: var(--radius);
+}
+
+.swatch:hover {
+  color: var(--text);
+  background: var(--wash-hover);
+}
+
+.dot {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+}
+
+.pct {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--fs-1);
+}
+
+.stats {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.unanalysed {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.unanalysed p {
+  flex: 1;
+}
