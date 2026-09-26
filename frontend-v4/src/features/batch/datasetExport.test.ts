@@ -168,7 +168,7 @@ describe('the request body', () => {
     project: { id: 7, revision: 3 },
     send: [lib(1), lib(2), dir('C:\\a\\z.png')],
     heads: new Map([['lib:2', { revisionId: 55 }]]),
-    options: { nl_sidecar: false, dedupe_implications: false },
+    options: { nl_sidecar: false, dedupe_implications: false, json_sidecar: false },
     choices: { skipBlocked: false, allowEmpty: false },
     ...over,
   })
@@ -198,6 +198,7 @@ describe('the request body', () => {
         'C:\\a\\z.png': { kind: 'dynamic_source' },
       },
     })
+    if (body.content_mode !== 'template') throw new Error('a caption body')
     expect(body.caption_transforms).toEqual({ prepend: ['mychar', 'masterpiece'], remove: ['watermark'], remove_categories: ['character'] })
     expect(body.template_options.trigger).toBe(body.trigger)
     // Nothing V4-only unless chosen: the body is the one V3.5 sends.
@@ -207,17 +208,17 @@ describe('the request body', () => {
   test('the chosen options ride along; beside the originals writes copies of nothing', () => {
     const beside = withFormat(plain, 'beside', contracts).settings
     const body = exportBody(
-      input({ settings: beside, options: { nl_sidecar: true, dedupe_implications: true }, choices: { skipBlocked: true, allowEmpty: true } }),
+      input({ settings: beside, options: { nl_sidecar: true, dedupe_implications: true, json_sidecar: false }, choices: { skipBlocked: true, allowEmpty: true } }),
     )
     expect(body).toMatchObject({ output_mode: 'beside_image', output_folder: '', image_op: 'copy', nl_sidecar: true, dedupe_implications: true, skip_blocked_items: true, allow_empty_captions: true })
   })
 
   test('the V4 options live in the batch row and keep what else is there', () => {
     const settings = { dataset: { training_purpose: 'style', export: { other: 1 } }, x: 2 }
-    const next = writeV4Options(settings, { nl_sidecar: true, dedupe_implications: false })
-    expect(readV4Options(next)).toEqual({ nl_sidecar: true, dedupe_implications: false })
-    expect(next).toEqual({ dataset: { training_purpose: 'style', export: { other: 1, nl_sidecar: true, dedupe_implications: false } }, x: 2 })
-    expect(readV4Options({})).toEqual({ nl_sidecar: false, dedupe_implications: false })
+    const next = writeV4Options(settings, { nl_sidecar: true, dedupe_implications: false, json_sidecar: false })
+    expect(readV4Options(next)).toEqual({ nl_sidecar: true, dedupe_implications: false, json_sidecar: false })
+    expect(next).toEqual({ dataset: { training_purpose: 'style', export: { other: 1, nl_sidecar: true, dedupe_implications: false, json_sidecar: false } }, x: 2 })
+    expect(readV4Options({})).toEqual({ nl_sidecar: false, dedupe_implications: false, json_sidecar: false })
   })
 })
 
@@ -258,5 +259,46 @@ describe('the check report', () => {
     expect(refusedKey("does not match: key='C:\\\\Users\\\\me\\\\a b.png', project_id=7")).toBe('dir:C:/Users/me/a b.png')
     expect(refusedKey('key="C:\\\\it\'s.png", x')).toBe("dir:C:/it's.png")
     expect(refusedKey('Job failed due to an internal error')).toBeNull()
+  })
+})
+
+describe('a .json per image instead of the caption .txt (V3.5 content mode "json")', () => {
+  const input = (settings: ProjectSettings, json: boolean, nl = false): BodyInput => ({
+    settings,
+    batchSettings: { dataset: { training_purpose: 'character', remove_categories: ['character'] } },
+    project: { id: 7, revision: 3 },
+    send: [lib(1), lib(2), dir('C:\a\z.png')],
+    heads: new Map([['lib:2', { revisionId: 55 }]]),
+    options: { nl_sidecar: nl, dedupe_implications: false, json_sidecar: json },
+    choices: { skipBlocked: false, allowEmpty: false },
+  })
+
+  test('a plain folder or beside the originals: the json content mode, with the batch blacklist and the naming trigger', () => {
+    for (const settings of [plain, withFormat(plain, 'beside', contracts).settings]) {
+      const body = exportBody(input(settings, true, true))
+      expect(body).toMatchObject({ content_mode: 'json', image_ids: [1, 2], image_paths: ['C:\a\z.png'], blacklist: ['watermark'], trigger: 'mychar', naming_pattern: '{trigger}_{index:03d}' })
+      // the .json is the image's own data: no caption revisions, rules or common tags ride along (they would replace or break it),
+      // and there is no caption to split into _nl.txt
+      for (const key of ['annotation_selections', 'dataset_project_id', 'dataset_project_revision', 'caption_transforms', 'template_options', 'nl_sidecar']) expect(body).not.toHaveProperty(key)
+      expect(body.common_tags).toEqual([])
+    }
+  })
+
+  test('kohya and Anima exports never change: the choice is ignored for a verified package', () => {
+    const anima = withFormat(plain, 'anima', contracts).settings
+    for (const settings of [kohya, anima]) expect(exportBody(input(settings, true))).toEqual(exportBody(input(settings, false)))
+  })
+
+  test('the option says why it is off for a package, and a package with it on is named before the check', () => {
+    expect(optionBlock('json', kohya, 0)).toBe('package')
+    expect(optionBlock('json', plain, 0)).toBeNull()
+    expect(exportProblems(kohya, 2, 0, false, true)).toEqual(['jsonPackage'])
+    expect(exportProblems(plain, 2, 0, false, true)).toEqual([])
+  })
+
+  test('the choice is kept in the batch row with the other V4 options', () => {
+    const next = writeV4Options({ dataset: { export: { nl_sidecar: true } } }, { nl_sidecar: false, dedupe_implications: false, json_sidecar: true })
+    expect(readV4Options(next).json_sidecar).toBe(true)
+    expect(readV4Options({ dataset: { export: { json_sidecar: 'yes' } } }).json_sidecar).toBe(false)
   })
 })

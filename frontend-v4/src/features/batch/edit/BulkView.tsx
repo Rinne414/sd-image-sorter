@@ -16,6 +16,7 @@ import { isOwnEmpty, splitTags, tagKey } from './captionContent'
 import { hasDuplicateTags, tagFrequency, type BulkOp, type TagRow } from './captionOps'
 import type { CaptionSession } from './captionSession'
 import { FrequencyTable, type RowActions } from './FrequencyTable'
+import { withBlacklistedTag, withCommonTag } from './tagLists'
 import { styledTag, styleOf } from './tagStyle'
 import { traitMarks } from './tagInsights'
 
@@ -57,6 +58,7 @@ export function BulkView({ batch, form, entries, heads, selected, onSelect, sess
   const [missed, setMissed] = useState<Missed | null>(null)
   const entryMap = useMemo(() => new Map(entries.map((e) => [e.key, e])), [entries])
   const blacklisted = useMemo(() => new Set(splitList(form.blacklist).map(tagKey)), [form.blacklist])
+  const common = useMemo(() => new Set(splitList(form.commonTags).map(tagKey)), [form.commonTags])
   const scopeLabel = selected.size > 0 ? t('dataset.bulk.scopeSelected', { n: keys.length }) : t('dataset.bulk.scopeAll', { n: keys.length })
 
   const run = useCallback(
@@ -75,7 +77,8 @@ export function BulkView({ batch, form, entries, heads, selected, onSelect, sess
 
   const actions: RowActions = {
     remove: (row) => void run({ kind: 'remove', tags: [row.tag] }, t('dataset.bulk.labelRemove', { tags: row.tag })),
-    blacklist: (row, add) => void setBlacklisted(batch.id, row, add),
+    blacklist: (row, add) => void saveProjectSettings(batch.id, (current) => withBlacklistedTag(current, row.tag, add)),
+    common: (row, add) => void saveProjectSettings(batch.id, (current) => withCommonTag(current, row.tag, add, style)),
     locate: (row) => onSelect(row.keys),
     findMissed: (row) => void findMissed(row, entries, contents, setMissed),
   }
@@ -88,6 +91,7 @@ export function BulkView({ batch, form, entries, heads, selected, onSelect, sess
         scopeSize={keys.length}
         categories={categories.data}
         blacklisted={blacklisted}
+        common={common}
         traits={traits ? traitMarks(rows, keys.length) : null}
         busy={busy || loading}
         actions={actions}
@@ -116,14 +120,6 @@ export function BulkView({ batch, form, entries, heads, selected, onSelect, sess
       </aside>
     </>
   )
-}
-
-async function setBlacklisted(batchId: number, row: TagRow, add: boolean): Promise<void> {
-  await saveProjectSettings(batchId, (current) => {
-    const list = current.caption_render.blacklist
-    const next = add ? [...list.filter((tag) => tagKey(tag) !== row.key), row.tag] : list.filter((tag) => tagKey(tag) !== row.key)
-    return { ...current, caption_render: { ...current.caption_render, blacklist: next } }
-  })
 }
 
 async function findMissed(

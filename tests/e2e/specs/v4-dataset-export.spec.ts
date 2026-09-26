@@ -329,6 +329,56 @@ test('a plain folder with the _nl.txt twin and dropped parent tags; the result o
   await expect(page.getByTestId('ds-nl-on')).toBeChecked()
 })
 
+test('a .json per image instead of the caption .txt (V3.5 content mode "json"): each written .json carries the image data', async ({ page }) => {
+  const out = path.join(path.dirname(OUT), 'json')
+  fs.mkdirSync(out, { recursive: true })
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openExport(page)
+  // a verified package takes .txt captions only, and says so
+  await page.getByTestId('ds-format-kohya').check()
+  await expect(page.getByTestId('ds-json-on')).toBeDisabled()
+  await expect(page.getByTestId('ds-json-why')).toContainText('Plain folder')
+  await page.getByTestId('ds-format-folder').check()
+  await page.getByTestId('ds-json-on').check()
+  // no caption, so no _nl.txt either (it was on since the test above)
+  await expect(page.getByTestId('ds-nl-why')).toContainText('no _nl.txt')
+  await chooseFolder(page, out)
+  await expect(page.getByTestId('ds-writes')).toHaveText('Writes 5 image + .json pairs')
+
+  await page.getByTestId('ds-export-run').click()
+  const result = page.getByTestId('ds-export-result')
+  await expect(result).toBeVisible({ timeout: 60_000 })
+  await expect(result).toHaveAttribute('data-status', 'ok')
+
+  const files = fs.readdirSync(out).sort()
+  expect(files.filter((f) => f.endsWith('.png'))).toHaveLength(5)
+  expect(files.filter((f) => f.endsWith('.txt'))).toEqual([])
+  // one .json beside each copied image (the export's own manifest .json is not one of them)
+  const docs = files.filter((f) => f.endsWith('.json') && files.includes(f.replace(/\.json$/, '.png'))).map((f) => JSON.parse(fs.readFileSync(path.join(out, f), 'utf8')) as Record<string, unknown>)
+  expect(docs).toHaveLength(5)
+  // V3.5's fields, no more and no fewer
+  const FIELDS = ['ai_caption', 'checkpoint', 'filename', 'generation_params', 'generator', 'height', 'id', 'negative_prompt', 'prompt', 'tags', 'width']
+  for (const doc of docs) expect(Object.keys(doc).sort()).toEqual(FIELDS)
+  const library = docs.filter((doc) => ids.includes(doc.id as number))
+  expect(library.map((doc) => doc.id).sort()).toEqual([...ids].sort())
+  for (const doc of library) {
+    expect(String(doc.filename)).toMatch(new RegExp(`^${PREFIX}`))
+    expect(doc.tags).toEqual(expect.arrayContaining(['1girl', 'silver hair', 'cat ears']))
+    expect(typeof doc.width).toBe('number')
+    expect(typeof doc.generation_params).toBe('object')
+  }
+  // the Library's data: the caption edited in this batch is not in any of them
+  for (const doc of docs) expect(JSON.stringify(doc)).not.toContain(EDITED)
+  expect(docs.find((doc) => doc.filename === 'local-a.png'), 'the folder image gets one too').toBeTruthy()
+
+  // back to .txt captions for the tests after this one
+  await result.getByTestId('ds-result-again').click()
+  await page.getByTestId('ds-json-on').uncheck()
+  await expect(page.getByTestId('ds-json-on')).not.toBeChecked()
+  const saved = async () => (await apiJson<{ settings: { dataset?: { export?: { json_sidecar?: boolean } } } }>(page, `/api/batches/${batchId}`)).body.settings.dataset?.export?.json_sidecar
+  await expect.poll(saved).toBe(false)
+})
+
 test('an unreadable original stops the check and nothing is written; the user skips it and the rest is exported', async ({ page }) => {
   // the fourth Library image's file is broken on disk (same size class, no picture)
   runBackendScript(`

@@ -75,10 +75,10 @@ export function withExportPart(current: ProjectSettings, from: ProjectSettings):
 }
 
 /** The options of the export form that a format or another option can rule out. */
-export type OptionKey = 'crop' | 'bucket' | 'watermark' | 'masks' | 'nl' | 'move'
+export type OptionKey = 'crop' | 'bucket' | 'watermark' | 'masks' | 'nl' | 'move' | 'json'
 
 /** Why an option cannot be used now. */
-export type OptionBlock = 'package' | 'beside' | 'move' | 'folderImages' | 'copyNeeded'
+export type OptionBlock = 'package' | 'beside' | 'move' | 'folderImages' | 'copyNeeded' | 'json'
 
 const isPackage = (s: ProjectSettings) => s.trainer.config !== 'none'
 const moves = (s: ProjectSettings) => s.output.image_op === 'move'
@@ -109,6 +109,7 @@ export function optionBlock(key: OptionKey, s: ProjectSettings, folderImages: nu
     case 'masks':
       return moves(s) && s.output.mode === 'folder' ? 'move' : null
     case 'nl':
+    case 'json':
       return isPackage(s) ? 'package' : null
     case 'move':
       return moveBlock(s)
@@ -131,9 +132,10 @@ export type ExportProblem =
   | 'watermarkRegion'
   | 'maskMove'
   | 'nlPackage'
+  | 'jsonPackage'
 
 /** Everything that stops this export before it is checked, in the order the form shows it. */
-export function exportProblems(s: ProjectSettings, send: number, folderImages: number, nl: boolean): ExportProblem[] {
+export function exportProblems(s: ProjectSettings, send: number, folderImages: number, nl: boolean, json = false): ExportProblem[] {
   const out: ExportProblem[] = []
   if (send === 0) out.push('noImages')
   if (s.output.mode === 'folder' && !s.output.folder.trim()) out.push('noFolder')
@@ -146,6 +148,7 @@ export function exportProblems(s: ProjectSettings, send: number, folderImages: n
   if (s.watermark_removal?.enabled && !(s.watermark_removal.regions ?? []).length) out.push('watermarkRegion')
   if (s.trainer.mask_export !== 'none' && moves(s) && s.output.mode === 'folder') out.push('maskMove')
   if (nl && isPackage(s)) out.push('nlPackage')
+  if (json && isPackage(s)) out.push('jsonPackage')
   return out
 }
 
@@ -186,6 +189,8 @@ export function stepsEstimate(images: number, repeats: number, batch: number, ep
 export interface V4Options {
   nl_sidecar: boolean
   dedupe_implications: boolean
+  /** A .json of the image's details instead of the caption .txt (V3.5's "json" content mode); plain folder or beside only. */
+  json_sidecar: boolean
 }
 
 function exportPart(settings: Record<string, unknown>): Record<string, unknown> {
@@ -195,7 +200,7 @@ function exportPart(settings: Record<string, unknown>): Record<string, unknown> 
 
 export function readV4Options(settings: Record<string, unknown>): V4Options {
   const part = exportPart(settings)
-  return { nl_sidecar: part.nl_sidecar === true, dedupe_implications: part.dedupe_implications === true }
+  return { nl_sidecar: part.nl_sidecar === true, dedupe_implications: part.dedupe_implications === true, json_sidecar: part.json_sidecar === true }
 }
 
 export function writeV4Options(settings: Record<string, unknown>, value: V4Options): Record<string, unknown> {
@@ -261,7 +266,7 @@ function captionPart(input: BodyInput) {
   const form = formFromSettings(input.settings, readBatchDataset(input.batchSettings))
   const options = templateOptions(form)
   return {
-    content_mode: 'template',
+    content_mode: 'template' as const,
     trigger: options.trigger,
     prefix: form.prefix,
     template_options: options,
@@ -276,6 +281,26 @@ function captionPart(input: BodyInput) {
 }
 
 /**
+ * The .json half: V3.5's "json" content mode, one `<name>.json` per image with
+ * its prompt, negative prompt, AI caption, tags (the batch blacklist applied),
+ * checkpoint, size and generation settings, as the Library has them. It carries
+ * no caption revisions, rules or common tags: the backend would put an edited
+ * caption in place of the JSON (and refuses revisions for this mode), and the
+ * comma rules would cut the JSON apart. The trigger stays for the file names.
+ */
+function jsonPart(input: BodyInput) {
+  const form = formFromSettings(input.settings, readBatchDataset(input.batchSettings))
+  return {
+    content_mode: 'json' as const,
+    trigger: form.trigger.trim(),
+    prefix: '',
+    blacklist: templateOptions(form).blacklist,
+    common_tags: [] as string[],
+    normalize_tag_underscores: form.normalizeUnderscores,
+  }
+}
+
+/**
  * The one body POST /api/dataset/readiness/start checks and
  * /api/dataset/export/start then writes (with the check's proof added):
  * the same body twice, or the backend refuses the export.
@@ -286,7 +311,9 @@ export function exportBody(input: BodyInput) {
   const ids = input.send.flatMap((e) => (e.imageId !== null ? [e.imageId] : []))
   const paths = input.send.flatMap((e) => (e.imageId === null && e.path !== null ? [e.path] : []))
   const trigger = formFromSettings(s, readBatchDataset(input.batchSettings)).trigger.trim()
-  return {
+  // (a verified package takes .txt captions only: the choice is ignored there, and the form says so)
+  const json = input.options.json_sidecar && !isPackage(s)
+  const files = {
     image_ids: ids,
     image_paths: paths,
     output_folder: beside ? '' : s.output.folder.trim(),
@@ -294,7 +321,6 @@ export function exportBody(input: BodyInput) {
     naming_pattern: namingPattern(s.naming, trigger),
     image_op: beside || s.trainer.config !== 'none' ? 'copy' : s.output.image_op,
     overwrite_policy: s.output.overwrite_policy,
-    ...captionPart(input),
     mask_export: s.trainer.mask_export,
     subject_crop: s.subject_crop ?? CROP_OFF,
     bucket_resize: s.bucket_resize ?? BUCKET_OFF,
@@ -305,11 +331,13 @@ export function exportBody(input: BodyInput) {
     trainer_resolution: s.trainer.resolution,
     trainer_keep_tokens: s.trainer.keep_tokens,
     // Chosen options only: an export without them sends what V3.5 sends.
-    ...(input.options.nl_sidecar ? { nl_sidecar: true } : {}),
+    ...(input.options.nl_sidecar && !json ? { nl_sidecar: true } : {}),
     ...(input.options.dedupe_implications ? { dedupe_implications: true } : {}),
     ...(input.choices.skipBlocked ? { skip_blocked_items: true } : {}),
     ...(input.choices.allowEmpty ? { allow_empty_captions: true } : {}),
   }
+  // (two shapes: the caption body V3.5 sends, or the .json one without any caption source)
+  return json ? { ...files, ...jsonPart(input) } : { ...files, ...captionPart(input) }
 }
 
 export type ExportBody = ReturnType<typeof exportBody>

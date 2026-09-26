@@ -10,6 +10,7 @@ export const BLOCK_KEY: Record<OptionBlock, MessageKey> = {
   move: 'dataset.export.block.move',
   folderImages: 'dataset.export.block.folderImages',
   copyNeeded: 'dataset.export.block.copyNeeded',
+  json: 'dataset.export.block.nlJson',
 }
 
 export const PROBLEM_KEY: Record<ExportProblem, MessageKey> = {
@@ -31,6 +32,7 @@ export const PROBLEM_KEY: Record<ExportProblem, MessageKey> = {
   watermarkRegion: 'dataset.export.problem.watermarkRegion',
   maskMove: 'dataset.export.block.move',
   nlPackage: 'dataset.export.block.nlPackage',
+  jsonPackage: 'dataset.export.block.jsonPackage',
 }
 
 export const LEFT_OUT_KEY: Record<LeftOutReason, MessageKey> = {

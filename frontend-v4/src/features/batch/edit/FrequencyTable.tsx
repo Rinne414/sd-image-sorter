@@ -13,6 +13,7 @@ const ROW_H = 38
 export interface RowActions {
   remove: (row: TagRow) => void
   blacklist: (row: TagRow, add: boolean) => void
+  common: (row: TagRow, add: boolean) => void
   locate: (row: TagRow) => void
   findMissed: (row: TagRow) => void
 }
@@ -22,6 +23,8 @@ interface Props {
   scopeSize: number
   categories: ReadonlyMap<string, TagCategory> | undefined
   blacklisted: ReadonlySet<string>
+  /** The batch's common tags (tag keys). */
+  common: ReadonlySet<string>
   traits: ReadonlyMap<string, TraitMark> | null
   busy: boolean
   actions: RowActions
@@ -31,7 +34,7 @@ interface Props {
 }
 
 /** Every tag the captions in scope use, how many have it, and what can be done with it. */
-export function FrequencyTable({ rows, scopeSize, categories, blacklisted, traits, busy, actions, canFindMissed, children }: Props) {
+export function FrequencyTable({ rows, scopeSize, categories, blacklisted, common, traits, busy, actions, canFindMissed, children }: Props) {
   const t = useT()
   const [filter, setFilter] = useState('')
   const [onlyTraits, setOnlyTraits] = useState(false)
@@ -79,6 +82,7 @@ export function FrequencyTable({ rows, scopeSize, categories, blacklisted, trait
                   scopeSize={scopeSize}
                   category={categories?.get(promptKey(row.tag)) ?? 'unknown'}
                   listed={blacklisted.has(row.key)}
+                  inCommon={common.has(row.key)}
                   trait={traits?.get(row.key)}
                   busy={busy}
                   actions={actions}
@@ -99,13 +103,14 @@ interface RowProps {
   scopeSize: number
   category: string
   listed: boolean
+  inCommon: boolean
   trait: TraitMark | undefined
   busy: boolean
   actions: RowActions
   canFindMissed: boolean
 }
 
-function Row({ row, top, scopeSize, category, listed, trait, busy, actions, canFindMissed }: RowProps) {
+function Row({ row, top, scopeSize, category, listed, inCommon, trait, busy, actions, canFindMissed }: RowProps) {
   const t = useT()
   const share = scopeSize > 0 ? row.count / scopeSize : 0
   return (
@@ -130,6 +135,17 @@ function Row({ row, top, scopeSize, category, listed, trait, busy, actions, canF
         </button>
         <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => actions.blacklist(row, !listed)} data-testid="freq-blacklist">
           {listed ? t('dataset.freq.unlist') : t('dataset.freq.blacklist')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          disabled={busy}
+          aria-pressed={inCommon}
+          title={inCommon ? t('dataset.freq.uncommonHint') : t('dataset.freq.commonHint')}
+          onClick={() => actions.common(row, !inCommon)}
+          data-testid="freq-common"
+        >
+          {inCommon ? t('dataset.freq.uncommon') : t('dataset.freq.common')}
         </button>
         <button type="button" className="btn btn-ghost" onClick={() => actions.locate(row)} data-testid="freq-locate">
           {t('dataset.freq.locate')}

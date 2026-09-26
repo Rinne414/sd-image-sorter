@@ -36,11 +36,14 @@ function Count({ label, value, tone, testId }: { label: string; value: string; t
 }
 
 /** What the export writes, in one line. */
-function Writes({ s, n, nl }: { s: ProjectSettings; n: number; nl: boolean }) {
+function Writes({ s, n, nl, json }: { s: ProjectSettings; n: number; nl: boolean; json: boolean }) {
   const t = useT()
   const format = formatOf(s)
-  const parts = [t(`dataset.export.writes.${format}` as MessageKey, { n, repeats: s.trainer.repeats, keep: s.trainer.keep_tokens })]
-  if (nl) parts.push(t('dataset.export.writes.nl', { n }))
+  // (a .json per image for a plain folder or beside the originals; a package ignores the choice)
+  const asJson = json && (format === 'folder' || format === 'beside')
+  const key = asJson ? (format === 'folder' ? 'dataset.export.writes.folderJson' : 'dataset.export.writes.besideJson') : (`dataset.export.writes.${format}` as MessageKey)
+  const parts = [t(key, { n, repeats: s.trainer.repeats, keep: s.trainer.keep_tokens })]
+  if (nl && !asJson) parts.push(t('dataset.export.writes.nl', { n }))
   if (s.trainer.mask_export !== 'none') parts.push(t('dataset.export.writes.masks'))
   return (
     <p className={styles.sample} data-testid="ds-writes">
@@ -139,7 +142,7 @@ export function DatasetPreflight({ batch, o, s, entries, remove, onOpen }: Props
   const heads = useProjectHeads(o.view)
   const { send, leftOut } = useMemo(() => splitEntries(entries, new Set(refused ?? [])), [entries, refused])
   const folderImages = send.filter((e) => e.imageId === null).length
-  const problems = exportProblems(s, send.length, folderImages, o.v4.nl_sidecar)
+  const problems = exportProblems(s, send.length, folderImages, o.v4.nl_sidecar, o.v4.json_sidecar)
   const edited = heads.data ? send.filter((e) => heads.data.get(e.key)?.revisionId !== undefined).length : null
   const format = formatOf(s)
   const running = run?.state === 'running'
@@ -155,7 +158,7 @@ export function DatasetPreflight({ batch, o, s, entries, remove, onOpen }: Props
         <Count label={t('dataset.export.count.edited')} value={edited === null ? '…' : String(edited)} testId="ds-count-edited" />
         {format !== 'beside' && <Count label={t('dataset.export.count.steps')} value={steps.toLocaleString()} testId="ds-count-steps" />}
       </dl>
-      <Writes s={s} n={send.length} nl={o.v4.nl_sidecar} />
+      <Writes s={s} n={send.length} nl={o.v4.nl_sidecar} json={o.v4.json_sidecar} />
       {!s.caption_render.trigger.trim() && <p className={styles.note} data-tone="warn">{t('dataset.export.noTrigger')}</p>}
       {leftOut.length > 0 && <LeftOutBox batch={batch} leftOut={leftOut} remove={remove} />}
       {run?.state === 'blocked' && (

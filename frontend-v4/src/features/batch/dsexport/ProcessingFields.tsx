@@ -86,7 +86,24 @@ export function ProcessingFields({ o, s, folderImages }: { o: ExportOptions; s: 
       </section>
       <section className={pix.group}>
         <h3 className={pix.groupTitle}>{t('dataset.export.captions')}</h3>
-        <Option label={t('dataset.export.nl')} checked={o.v4.nl_sidecar} block={optionBlock('nl', s, folderImages)} why="dataset.export.block.nlPackage" onChange={(on) => o.setV4({ nl_sidecar: on })} testId="ds-nl" />
+        <Option
+          label={t('dataset.export.json')}
+          checked={o.v4.json_sidecar}
+          block={optionBlock('json', s, folderImages)}
+          why="dataset.export.block.jsonPackage"
+          onChange={(on) => o.setV4({ json_sidecar: on })}
+          testId="ds-json"
+        >
+          <p className={styles.note}>{t('dataset.export.jsonNote')}</p>
+        </Option>
+        <Option
+          label={t('dataset.export.nl')}
+          checked={o.v4.nl_sidecar}
+          block={optionBlock('nl', s, folderImages) ?? (o.v4.json_sidecar ? 'json' : null)}
+          why={optionBlock('nl', s, folderImages) ? 'dataset.export.block.nlPackage' : undefined}
+          onChange={(on) => o.setV4({ nl_sidecar: on })}
+          testId="ds-nl"
+        />
         <Option label={t('dataset.export.dedupe')} checked={o.v4.dedupe_implications} block={null} onChange={(on) => o.setV4({ dedupe_implications: on })} testId="ds-dedupe" />
       </section>
     </>

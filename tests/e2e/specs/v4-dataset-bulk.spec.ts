@@ -166,6 +166,9 @@ async function finalCaptions(page: Page): Promise<Map<number, string>> {
   return new Map(res.body.items.map((i) => [i.image_id, i.caption]))
 }
 
+/** The batch's items as a PUT sends them (all Library images, in order). */
+const libraryItems = () => ids.map((id) => ({ item_type: 'library', image_id: id, keep_as_saved: true }))
+
 const row = (page: Page, tag: string) => page.locator(`[data-testid="freq-row"][data-tag="${tag}"]`)
 
 async function openBulk(page: Page): Promise<void> {
@@ -299,6 +302,46 @@ test('the frequency table: character trait hints, blacklist, pick, and tags the 
   const now = await heads(page)
   for (const id of ids.slice(COUNT - 5)) expect(now.get(id)?.active_revision?.content.booru_caption).toContain('blush')
   expect(libraryTags(), 'found tags go into captions only').toBe(tagsBefore)
+})
+
+test('+ common tags from the frequency table: written the batch way, off the blacklist, no caption touched; − takes it out', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openBulk(page)
+  const captionsBefore = await heads(page)
+  const common = async () => (await project(page)).settings.caption_render.common_tags as string[]
+
+  // outdoors is on the blacklist since the test above: a tag is on one list at a time
+  await row(page, 'outdoors').getByTestId('freq-common').click()
+  await expect.poll(common).toEqual(['outdoors'])
+  expect((await project(page)).settings.caption_render.blacklist).not.toContain('outdoors')
+  await expect(row(page, 'outdoors').getByTestId('freq-common')).toHaveAttribute('aria-pressed', 'true')
+  await expect(row(page, 'outdoors').getByTestId('freq-common')).toHaveText('− Common tags')
+  await expect(row(page, 'outdoors').getByTestId('freq-blacklist')).toHaveText('Blacklist')
+
+  // this batch writes spaces: "silver hair"; a batch that keeps underscores gets "silver_hair"
+  await row(page, 'silver hair').getByTestId('freq-common').click()
+  await expect.poll(common).toEqual(['outdoors', 'silver hair'])
+  const p = await project(page)
+  const underscores = { ...p.settings, caption_render: { ...p.settings.caption_render, common_tags: ['outdoors'], normalize_tag_underscores: false } }
+  expect((await apiJson(page, `/api/dataset/projects/${projectId}`, { method: 'PUT', body: { expected_revision: p.revision, name: p.name, items: libraryItems(), settings: underscores } })).status).toBe(200)
+  // (changed behind the app's back: a reload reads the new revision, as the app asks after a conflict)
+  await page.reload()
+  await openBulk(page)
+  await row(page, 'silver hair').getByTestId('freq-common').click()
+  await expect.poll(common).toEqual(['outdoors', 'silver_hair'])
+
+  // − takes it out again; the captions themselves never changed
+  await row(page, 'silver hair').getByTestId('freq-common').click()
+  await row(page, 'outdoors').getByTestId('freq-common').click()
+  await expect.poll(common).toEqual([])
+  await expect(row(page, 'outdoors').getByTestId('freq-common')).toHaveText('+ Common tags')
+  const after = await heads(page)
+  for (const id of ids) expect(after.get(id)?.active_revision?.id).toBe(captionsBefore.get(id)?.active_revision?.id)
+
+  // back to spaces for the tests after this one
+  const q = await project(page)
+  const spaces = { ...q.settings, caption_render: { ...q.settings.caption_render, normalize_tag_underscores: true } }
+  expect((await apiJson(page, `/api/dataset/projects/${projectId}`, { method: 'PUT', body: { expected_revision: q.revision, name: q.name, items: libraryItems(), settings: spaces } })).status).toBe(200)
 })
 
 for (const viewport of VIEWPORTS) {
