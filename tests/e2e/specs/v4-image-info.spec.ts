@@ -238,6 +238,27 @@ test('a click on the model or a LoRA filters the library, from the card and from
   await expect(page.getByTestId('tile')).toHaveAttribute('title', name(1))
 })
 
+test('right-click › Filter by this model filters the library by that image\'s checkpoint (V3.5 #112)', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await stubAesthetic(page)
+  await openLibrary(page, TOKEN, COUNT)
+  const input = page.getByTestId('query-input')
+
+  // an image with no model has no such entry
+  await tile(page, 2).click({ button: 'right' })
+  const menu = page.getByTestId('card-menu')
+  await expect(menu.getByRole('menuitem', { name: 'Copy', exact: true })).toBeVisible()
+  await expect(menu.getByRole('menuitem', { name: 'Filter by this model' })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+
+  await tile(page, 0).click({ button: 'right' })
+  await menu.getByRole('menuitem', { name: 'Filter by this model' }).click()
+  await expect(menu).toHaveCount(0)
+  await expect(input).toHaveValue(`${TOKEN} checkpoint:v4info_model_alpha`)
+  await expect(page.getByTestId('result-count')).toHaveText('1 images')
+  await expect(page.getByTestId('tile')).toHaveAttribute('title', name(0))
+})
+
 test('colours: histogram views and main colours; an unanalysed image is analysed on the spot', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await stubAesthetic(page)

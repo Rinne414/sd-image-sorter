@@ -184,6 +184,8 @@ async function stubAi(page: Page, vlm: 'configured' | 'none', run: StubRun = { f
     await route.fulfill({ json: { job_id: `e2e-st-${starts.length}`, status: 'running', total: 0 } })
   })
   await page.route('**/api/smart-tag/progress**', (route) => {
+    // nothing started yet: no run to report (V4 adopts a run it finds going)
+    if (starts.length === 0) return route.fulfill({ json: { status: 'idle', active: false, pipeline_queue: { total_queued: 0, queued: [] } } })
     const last = starts.at(-1) ?? {}
     const n = ((last.image_ids as number[]) ?? []).length + ((last.image_paths as string[]) ?? []).length
     return route.fulfill({
@@ -354,6 +356,31 @@ test('a run still going when the page reloads writes its folder results once it 
   }
 })
 
+test('a start refused because the AI lock outlived its job offers a restart', async ({ page }) => {
+  await stubAi(page, 'none')
+  await page.route('**/api/smart-tag/start', (route) =>
+    route.fulfill({
+      status: 409,
+      json: { error: 'busy', type: 'AiRuntimeBusyError', status_code: 409, reason: 'stale_lock_holder_gone', blocker: { label: 'wd14-tagger-load', stuck: true }, waited_seconds: 0 },
+    }),
+  )
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openTagStep(page)
+  await page.getByTestId('tag-start').click()
+  const toast = page.locator('[data-tone="error"]').filter({ hasText: 'Waiting will not help' })
+  await expect(toast.getByRole('button', { name: 'Restart app…' })).toBeVisible()
+})
+
+test('without a VLM service the describer says so and links to Settings › AI services', async ({ page }) => {
+  await stubAi(page, 'none')
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openTagStep(page)
+  await expect(page.getByTestId('tag-describer')).toContainText('No VLM service is set up yet')
+  await page.getByTestId('tag-describe-setup').click()
+  await expect(page).toHaveURL(/#\/settings\/ai$/)
+  await expect(page.getByTestId('ai-services')).toBeVisible()
+})
+
 test('the tagger off: a description-only run keeps the tags, and append joins the new words to the old', async ({ page }) => {
   const starts = await stubAi(page, 'none', { finished: () => true, booru: '', nl: 'A second look at the room.' })
   await page.setViewportSize({ width: 1366, height: 768 })
@@ -395,6 +422,84 @@ test('the tagger off: a description-only run keeps the tags, and append joins th
   }
   await page.getByTestId('jobs-button').click()
   await expect(page.getByTestId('jobs-drawer').getByTestId('job').first()).toContainText('Described 5')
+})
+
+test('a batch run that started out queued survives a reload and still writes its folder results', async ({ page }) => {
+  await stubAi(page, 'none')
+  let phase: 'waiting' | 'running' | 'done' = 'waiting'
+  let sent = 0
+  let paths: string[] = []
+  await page.route('**/api/smart-tag/start', async (route: Route) => {
+    const body = route.request().postDataJSON() as Record<string, unknown>
+    paths = (body.image_paths as string[]) ?? []
+    sent = ((body.image_ids as number[]) ?? []).length + paths.length
+    await route.fulfill({ json: { status: 'queued', pipeline_queued: true, queue_id: 'q9', queue_position: 1 } })
+  })
+  await page.route('**/api/smart-tag/progress**', (route) => {
+    if (phase === 'waiting') {
+      return route.fulfill({ json: { status: 'idle', active: false, pipeline_queue: { total_queued: 1, queued: [{ queue_id: 'q9', kind: 'smart', position: 1 }] } } })
+    }
+    const done = phase === 'done'
+    return route.fulfill({
+      json: {
+        job_id: 'e2e-q9', active: !done, status: done ? 'completed' : 'running', total: sent, processed: done ? sent : 1,
+        succeeded: done ? sent : 0, failed: 0, errors: [], pipeline_queue: { total_queued: 0, queued: [] },
+      },
+    })
+  })
+  await page.route('**/api/smart-tag/results**', (route) =>
+    route.fulfill({ json: { results: paths.map((p) => ({ path: p, caption: '', booru_text: '1girl, queued_tag', nl_text: '' })), has_more: false, limit: 1000 } }),
+  )
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openTagStep(page)
+  await page.getByTestId('tag-retag').check()
+  await page.getByTestId('tag-start').click()
+  await expect(page.getByTestId('tag-report-state')).toHaveText('Running; its progress is in Jobs.')
+  const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('sd-v4-dataset-tag-runs') ?? '[]'))
+  expect(kept).toEqual([expect.objectContaining({ batchId, jobId: null, queueId: 'q9' })])
+
+  // the page reloads while the run still waits; it starts and ends later
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('tag-step')).toBeVisible()
+  await page.getByTestId('jobs-button').click()
+  await expect(page.getByTestId('jobs-drawer').getByTestId('job').first()).toContainText('Queued')
+  await page.keyboard.press('Escape')
+  // it starts: the drawer finds its job id once it left the queue
+  phase = 'running'
+  await page.getByTestId('jobs-button').click()
+  const job = page.getByTestId('jobs-drawer').getByTestId('job').first()
+  await expect(job).toContainText('Tagging 5', { timeout: 10_000 })
+  await expect(job).not.toContainText('Queued')
+  await page.keyboard.press('Escape')
+  phase = 'done'
+  await expect(page.getByTestId('tag-report-state')).toContainText('2 folder images got their results as captions', { timeout: 15_000 })
+  const written = await heads(page)
+  for (const file of folderFiles) {
+    const head = written.find((h) => h.item.item_type === 'local' && sameFile(h.item.path, file))
+    expect(head?.active_revision?.content.booru_caption).toBe('1girl, queued_tag')
+  }
+  expect(await page.evaluate(() => localStorage.getItem('sd-v4-dataset-tag-runs'))).toBe('[]')
+})
+
+test('a Smart Tag run started elsewhere (V3.5) joins the Jobs drawer and ends there', async ({ page }) => {
+  await stubAi(page, 'none')
+  let over = false
+  await page.route('**/api/smart-tag/progress**', (route) =>
+    route.fulfill({
+      json: {
+        job_id: 'v35-run', active: !over, status: over ? 'completed' : 'running', total: 12, processed: over ? 12 : 5,
+        succeeded: over ? 12 : 5, failed: 0, errors: [], settings: { enable_wd14: false }, pipeline_queue: { total_queued: 0, queued: [] },
+      },
+    }),
+  )
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openV4(page, '#/library')
+  await page.getByTestId('jobs-button').click()
+  const job = page.getByTestId('jobs-drawer').getByTestId('job').first()
+  // it only describes (the tagger was off), and the drawer says so
+  await expect(job).toContainText('Describing 12')
+  over = true
+  await expect(job).toContainText('Described 12', { timeout: 15_000 })
 })
 
 test('new thresholds from the stored scores: a dry run says what changes, then the Library tags change', async ({ page }) => {

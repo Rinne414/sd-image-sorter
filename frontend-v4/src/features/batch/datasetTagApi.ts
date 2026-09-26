@@ -9,6 +9,7 @@ import { useToasts } from '../../ui/toasts'
 import { installAllThen, type InstallTarget } from '../jobs/installJob'
 import { isQueueBusy, tr } from '../jobs/jobs'
 import { busyText } from '../jobs/busyText'
+import { pushRefusal } from '../jobs/refusalToast'
 import type { MergeStrategy } from '../tagging/tagOptions'
 import { readiness, taggerInfo, type ModelCard, type TaggerInfo } from '../tagging/taggers'
 import { projectKey } from './datasetApi'
@@ -42,7 +43,7 @@ function toast(text: string, tone: 'info' | 'error' = 'info'): void {
   useToasts.getState().push(text, tone)
 }
 
-/** The VLM set up in V3.5 (read only here; it is set up in V3.5's VLM settings). */
+/** The VLM service set up in Settings › AI services (shared with V3.5), as the tag step's describer reads it. */
 export interface VlmStatus {
   configured: boolean
   /** Runs on this computer (loopback), so calls cost nothing. */
@@ -298,7 +299,7 @@ async function applyResults(batch: Batch, jobId: string, model: string, merge: M
     setRun(batch.id, { writing: false })
     toast(tr('error.generic', { reason: (error as Error).message }), 'error')
   } finally {
-    forgetRun(jobId)
+    forgetRun(batch.id)
     refreshBatch(batch.id)
   }
 }
@@ -318,7 +319,8 @@ async function startRun(batch: Batch, body: ReturnType<typeof smartTagBody>, cou
     const merge = body.merge_strategy
     const describeOnly = !body.enable_wd14
     setRun(batch.id, { jobId: res.job_id ?? null, ranKeys, finished: false, written: 0, keptResults: [], failed: 0, writing: false, describeOnly })
-    if (res.job_id) rememberRun({ batchId: batch.id, jobId: res.job_id, model, ranKeys, merge, describeOnly })
+    // A queued run has no job id yet: its place in the queue finds it again after a reload.
+    if (res.job_id || res.queue_id) rememberRun({ batchId: batch.id, jobId: res.job_id ?? null, queueId: res.queue_id ?? null, model, ranKeys, merge, describeOnly })
     trackSmartTagJob({
       count,
       jobId: res.job_id ?? null,
@@ -330,7 +332,7 @@ async function startRun(batch: Batch, body: ReturnType<typeof smartTagBody>, cou
     return true
   } catch (error) {
     const busy = error instanceof ApiError && error.status === 409
-    toast(busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message }), 'error')
+    pushRefusal(busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message }), error)
     return false
   }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { isFinished, readProgress } from './progress'
-import { startedJobId } from './smartTagJob'
+import { queuedRunNow, smartTagAdoption, startedJobId } from './smartTagJob'
 
 describe('a Smart Tag run in the drawer', () => {
   test('waiting in the AI queue behind other work: queued, with nothing counted yet', () => {
@@ -50,5 +50,39 @@ describe('a Smart Tag run in the drawer', () => {
     expect(startedJobId({ job_id: 's7', active: true, pipeline_queue: queue([]) }, 'q3')).toBe('s7')
     // between runs: nothing active yet
     expect(startedJobId({ status: 'idle', active: false, pipeline_queue: queue([]) }, 'q3')).toBeNull()
+  })
+})
+
+describe('a Smart Tag run started before V4 looked (a reload, V3.5, another tab)', () => {
+  const queue = (ids: string[]) => ({ total_queued: ids.length, queued: ids.map((queue_id) => ({ queue_id, kind: 'smart' })) })
+
+  test('a running one is followed by its job id; a run that only describes says so', () => {
+    const raw = { job_id: 'v35', active: true, status: 'running', total: 10, processed: 3, settings: { enable_wd14: true }, pipeline_queue: queue([]) }
+    expect(smartTagAdoption(raw)).toEqual({ ctx: { smartTag: { jobId: 'v35' } }, describeOnly: false })
+    expect(smartTagAdoption({ ...raw, settings: { enable_wd14: false } })).toEqual({ ctx: { smartTag: { jobId: 'v35' } }, describeOnly: true })
+    expect(smartTagAdoption({ ...raw, status: 'cancelling' })?.ctx.smartTag.jobId).toBe('v35')
+  })
+
+  test('nothing to follow: idle, finished, or only waiting in the queue (its size is not known)', () => {
+    expect(smartTagAdoption({ status: 'idle', active: false, pipeline_queue: queue(['q4']) })).toBeNull()
+    expect(smartTagAdoption({ job_id: 'old', active: false, status: 'completed' })).toBeNull()
+    expect(smartTagAdoption(null)).toBeNull()
+  })
+})
+
+describe('a batch tag run that started out queued, after a reload', () => {
+  const queue = (ids: string[]) => ({ total_queued: ids.length, queued: ids.map((queue_id) => ({ queue_id, kind: 'smart' })) })
+
+  test('still in the queue: it keeps waiting', () => {
+    expect(queuedRunNow('q9', 4, { job_id: 'other', active: true, total: 20, pipeline_queue: queue(['q9']) })).toEqual({ state: 'waiting' })
+  })
+
+  test('it left the queue and the active run is its size: that run is ours', () => {
+    expect(queuedRunNow('q9', 4, { job_id: 's12', active: true, status: 'running', total: 4, pipeline_queue: queue([]) })).toEqual({ state: 'running', jobId: 's12' })
+  })
+
+  test('the active run is another size, or none is active: it cannot be told apart any more', () => {
+    expect(queuedRunNow('q9', 4, { job_id: 'v35', active: true, status: 'running', total: 30, pipeline_queue: queue([]) })).toEqual({ state: 'unknown' })
+    expect(queuedRunNow('q9', 4, { status: 'idle', active: false, pipeline_queue: queue([]) })).toEqual({ state: 'unknown' })
   })
 })

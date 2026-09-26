@@ -149,7 +149,7 @@ export const enDataset: Record<keyof typeof zhCNDataset, string> = {
   'dataset.tag.describeVlm': 'VLM service',
   'dataset.tag.vlmPaid': 'Uses the configured {name}; one call per image, which may be billed per call',
   'dataset.tag.vlmLocal': 'Uses the configured {name}; it runs on this computer, so it costs nothing',
-  'dataset.tag.vlmMissing': 'No VLM service is set up: fill in its address and key in Settings › AI services first',
+  'dataset.tag.vlmMissing': 'No VLM service is set up yet; it can be chosen once it is',
   'dataset.tag.florence2Note': 'Runs on this computer, short descriptions · {state}',
   'dataset.tag.toriigateNote': 'Runs on this computer, detailed descriptions, needs a lot of VRAM · {state}',
   'dataset.tag.toriiLength': 'ToriiGate description length',

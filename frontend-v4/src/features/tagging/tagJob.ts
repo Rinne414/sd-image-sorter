@@ -7,6 +7,7 @@ import { trackSmartTagJob } from '../batch/trackSmartTag'
 import { busyText } from '../jobs/busyText'
 import { installAllThen } from '../jobs/installJob'
 import { addJob, isQueueBusy, startingProgress, tr } from '../jobs/jobs'
+import { pushRefusal } from '../jobs/refusalToast'
 import { tagRunBase } from '../jobs/progress'
 import { readiness, taggerInfo, type ModelCard, type TaggerInfo } from './taggers'
 import { customLabel, customPathProblem, isCustom, librarySmartTagBody, tagStartBody, type CustomPathProblem, type RunChoice, type TagOptions } from './tagOptions'
@@ -30,7 +31,7 @@ export interface StartResult {
 
 const fail = (error: unknown): StartResult => {
   const busy = error instanceof ApiError && error.status === 409
-  useToasts.getState().push(busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message }), 'error')
+  pushRefusal(busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message }), error)
   return { ok: false }
 }
 

@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../i18n'
 import type { JobFailure, JobProgress, JobStatus } from './progress'
 
 // Reads a Smart Tag run (a dataset batch's tag step) for the Jobs drawer:
@@ -33,6 +34,36 @@ const STATUS: Record<string, JobStatus> = {
 
 const waitingIn = (raw: Raw, queueId: string | undefined) =>
   queueId !== undefined && rows(obj(raw.pipeline_queue).queued).some((q) => str(q.queue_id) === queueId)
+
+/** A run with the tagger off only describes: the drawer says so instead of "tagging". */
+export const DESCRIBE_WORDS: { running: MessageKey; done: MessageKey } = { running: 'dataset.job.describing', done: 'dataset.job.described' }
+
+const LIVE = new Set(['queued', 'running', 'cancelling'])
+
+/**
+ * A Smart Tag run that was going before V4 looked (a reload, V3.5, another
+ * tab): the drawer follows it by its job id. A run only waiting in the AI
+ * queue is left alone: the queue does not say how many images it holds.
+ */
+export function smartTagAdoption(payload: unknown): { ctx: { smartTag: SmartTagContext & { jobId: string } }; describeOnly: boolean } | null {
+  const raw = obj(payload)
+  const jobId = str(raw.job_id)
+  if (raw.active !== true || !jobId || !LIVE.has(str(raw.status))) return null
+  return { ctx: { smartTag: { jobId } }, describeOnly: obj(raw.settings).enable_wd14 === false }
+}
+
+/**
+ * A remembered batch run that started out queued, read again after a reload
+ * (GET /api/smart-tag/progress without a job id). While it waits it is still
+ * in the queue. Once it left, the backend does not say which run it became:
+ * the active run is taken as ours only if it holds as many images as we sent.
+ */
+export function queuedRunNow(queueId: string, count: number, payload: unknown): { state: 'waiting' } | { state: 'running'; jobId: string } | { state: 'unknown' } {
+  const raw = obj(payload)
+  if (waitingIn(raw, queueId)) return { state: 'waiting' }
+  const started = startedJobId(raw, queueId)
+  return started && num(raw.total) === count ? { state: 'running', jobId: started } : { state: 'unknown' }
+}
 
 /** A queued run has started once it left the queue: the active run is then ours. */
 export function startedJobId(payload: unknown, queueId: string | undefined): string | null {

@@ -189,6 +189,9 @@ test('a refused AI start says who holds it or that a restart is needed; other re
     await start.click()
     await expect.poll(() => stub.answered.length).toBe(i + 1)
     await expect(page.getByText(text)).toBeVisible()
+    // only the refusal that waiting cannot fix offers a restart (which asks first)
+    const restart = page.locator('[data-tone="error"]').filter({ hasText: text }).getByRole('button', { name: 'Restart app…' })
+    await expect(restart).toHaveCount(i === 1 ? 1 : 0)
     // a refusal is fresher than the 6 s idle poll: the chip looks again at once
     const refused = stub.answered[i]!
     await expect.poll(() => stub.aiHits.some((at) => at >= refused && at - refused < 1500), { timeout: 3000 }).toBe(true)

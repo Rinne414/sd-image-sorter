@@ -219,6 +219,8 @@ export interface ImageOps {
   openFolder: (id: number) => void
   /** near: only images that are nearly the same. */
   findSimilar: (id: number, near: boolean) => void
+  /** Show the library's images made with this checkpoint (as the card's model name does). */
+  filterByModel: (model: string) => void
 }
 
 export interface ImageFacts {
@@ -228,6 +230,8 @@ export interface ImageFacts {
   tags: string[]
   /** A1111-style parameter block, when the image has generation details. */
   parameters: string | null
+  /** The checkpoint it was made with, when the library can filter by it. */
+  model: string | null
 }
 
 export interface ImageInput {
@@ -290,12 +294,20 @@ function copyMenu(path: string | null, facts: ImageFacts | null, groups: Grouped
   return { id: 'copy', section: 'copy', label: k('card.copy'), children }
 }
 
+/** "Filter by this model" (V3.5's right-click entry), only when the image names a checkpoint. */
+function modelFilter(facts: ImageFacts | null, ops: ImageOps): ImageAction[] {
+  const model = facts?.model
+  if (!model) return []
+  return [{ id: 'filter-model', section: 'find', label: k('lib.menu.filterModel'), palette: k('lib.palette.filterModel'), run: () => ops.filterByModel(model) }]
+}
+
 export function imageActions({ id, picked, path, facts, groups, ops }: ImageInput): ImageAction[] {
   return [
     { id: 'open', section: 'image', hint: 'Enter', label: k('card.openFull'), palette: k('palette.cmd.openFull'), run: () => ops.open(id) },
     { id: 'pick', section: 'image', hint: 'Space', label: k(picked ? 'lib.menu.unpick' : 'lib.menu.pick'), run: () => ops.togglePick(id) },
     { id: 'similar', section: 'find', label: k('sim.find.similar'), palette: k('sim.find.similarPalette'), run: () => ops.findSimilar(id, false) },
     { id: 'near', section: 'find', label: k('sim.find.near'), palette: k('sim.find.nearPalette'), run: () => ops.findSimilar(id, true) },
+    ...modelFilter(facts, ops),
     copyMenu(path, facts, groups, ops),
     { id: 'open-folder', section: 'file', label: k('lib.file.openFolder'), run: () => ops.openFolder(id) },
   ]

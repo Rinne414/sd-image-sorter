@@ -24,7 +24,7 @@ function bulkOps(): BulkOps {
 }
 
 function imageOps(): ImageOps {
-  return { open: vi.fn(), togglePick: vi.fn(), copy: vi.fn(), openFolder: vi.fn(), findSimilar: vi.fn() }
+  return { open: vi.fn(), togglePick: vi.fn(), copy: vi.fn(), openFolder: vi.fn(), findSimilar: vi.fn(), filterByModel: vi.fn() }
 }
 
 const batch = { id: 7, name: 'Summer', kind: 'pixiv' } as BatchSummary
@@ -163,6 +163,7 @@ describe('image actions', () => {
     negative: 'lowres',
     tags: ['1girl', 'smile', 'school uniform', 'masterpiece'],
     parameters: '1girl, smile\nNegative prompt: lowres\nSteps: 28',
+    model: null,
   }
   const categories: Record<string, 'character' | 'expression' | 'outfit' | 'quality'> = {
     '1girl': 'character',
@@ -203,12 +204,23 @@ describe('image actions', () => {
     expect(paletteText(t, rows.find((r) => r.id === 'copy-group-pose')!)).toBe('lib.palette.copyGroup(group=lib.copy.group.pose)')
   })
 
+  it('an image whose model is known offers to filter the library by it (V3.5 #112)', () => {
+    const ops = imageOps()
+    const list = imageActions({ id: 9, picked: false, path: null, facts: { ...facts, model: 'animagineXL_v31.safetensors' }, groups, ops })
+    expect(ids(list)).toEqual(['open', 'pick', 'similar', 'near', 'filter-model', 'copy', 'open-folder'])
+    const filter = find(list, 'filter-model')
+    expect(say(t, filter.label)).toBe('lib.menu.filterModel')
+    expect(paletteText(t, filter)).toBe('lib.palette.filterModel')
+    filter.run?.()
+    expect(ops.filterByModel).toHaveBeenCalledWith('animagineXL_v31.safetensors')
+  })
+
   it('while the details load the copy entries wait; missing parts are not offered', () => {
     const loading = imageActions({ id: 9, picked: false, path: null, facts: null, groups: null, ops: imageOps() })
     const waiting = find(loading, 'copy').children ?? []
     expect(ids(waiting)).toEqual(['copy-loading'])
     expect(waiting[0]?.disabled).toBe(true)
-    const bare = imageActions({ id: 9, picked: false, path: 'a.png', facts: { prompt: null, negative: null, tags: [], parameters: null }, groups: null, ops: imageOps() })
+    const bare = imageActions({ id: 9, picked: false, path: 'a.png', facts: { prompt: null, negative: null, tags: [], parameters: null, model: null }, groups: null, ops: imageOps() })
     expect(ids(find(bare, 'copy').children ?? [])).toEqual(['copy-path'])
   })
 })

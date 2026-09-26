@@ -6,6 +6,8 @@ export const zhCNLibrary = {
   'lib.menu.picks': '作用于已选的 {n} 张',
   'lib.menu.thisImage': '这张图',
   'lib.menu.pick': '挑选',
+  'lib.palette.filterModel': '按这张图的模型筛选图库',
+  'lib.menu.filterModel': '按这个模型筛选',
   'lib.menu.unpick': '取消挑选',
   'lib.menu.loading': '正在读取…',
 

@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useCategories, useFavorites, useImageDetail, useSetRating, useToggleFavorite } from '../../api/queries'
 import type { ImageDetailResponse } from '../../api/types'
+import { modelFilterValue } from '../../lib/imageInfo'
 import { readGeneration, toParameterText } from '../../lib/meta'
 import { segmentPrompt, tagKey } from '../../lib/prompt'
 import { groupTags } from '../../lib/tagGroups'
@@ -10,6 +11,7 @@ import { useBatches, useBatchTemplates } from '../batch/batchApi'
 import { askNewBatch } from '../batch/dialogStore'
 import { quickCensor } from '../censor/quickCensor'
 import { scoreImages } from '../info/aesthetic'
+import { filterByModel } from '../info/modelFilter'
 import { copyAndSay, openImageFolder } from '../library/fileActions'
 import { useSimilarDialogs } from '../similar/dialogs'
 import { showLikeImage } from '../similar/similarStore'
@@ -73,11 +75,14 @@ function copyableTags(detail: ImageDetailResponse): string[] {
 function factsOf(detail: ImageDetailResponse | undefined): ImageFacts | null {
   if (!detail) return null
   const image = detail.image
+  const gen = readGeneration(image)
+  const model = gen?.model ?? null
   return {
     prompt: image.prompt,
     negative: image.negative_prompt,
     tags: copyableTags(detail),
-    parameters: image.prompt ? toParameterText(image.prompt, image.negative_prompt, readGeneration(image)) : null,
+    parameters: image.prompt ? toParameterText(image.prompt, image.negative_prompt, gen) : null,
+    model: model && modelFilterValue(model) ? model : null,
   }
 }
 
@@ -108,6 +113,7 @@ export function useImageActions(id: number | null): ImageAction[] {
         copy: (value, what) => void copyAndSay(value, what),
         openFolder: (x) => void openImageFolder(x),
         findSimilar: (x, near) => showLikeImage(x, name || `#${x}`, near),
+        filterByModel: (model) => filterByModel('checkpoint', model),
       },
     })
   }, [id, picked, path, name, facts, groups])

@@ -2,11 +2,10 @@ import { create } from 'zustand'
 import { api, unwrap } from '../../api/client'
 import { queryClient } from '../../api/queryClient'
 import { translate, useLang, type MessageKey, type Params } from '../../i18n'
-import { tailOfPath } from '../../lib/paths'
 import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
 import { asScanSource, installRunOf, isFinished, readProgress, scanIdentity, type JobKind, type JobProgress, type ReadContext } from './progress'
-import { driveSmartTag } from './smartTagDriver'
+import { adoptSmartTag, driveSmartTag } from './smartTagDriver'
 import { drivePurity, drivePurityDownload } from './purityDriver'
 import { driveMasks } from './maskDriver'
 import { adoptAesthetic, driveAesthetic } from './aestheticDriver'
@@ -15,11 +14,13 @@ import { adoptReparse, driveReparse } from './reparseDriver' // reparse/reread
 import { adoptSortRules, driveSortRules } from './sortRulesDriver' // sortrules/sortundo
 import { driveOllama, ollamaAdoption } from './ollamaDriver' // ollama
 import { adoptArtist, driveArtist } from './artistDriver' // artist
-import { queuedKey } from './queued'
+import { jobHeadline } from './headline'
 
 // Every long job the user started (or that was already running when V4
 // opened) lives here until dismissed. The backend runs one job per queue
 // (move and copy share one), so progress is polled per queue.
+
+export { jobHeadline } from './headline'
 
 export interface Job {
   id: string
@@ -331,6 +332,7 @@ export async function adoptRunningJobs(): Promise<void> {
     adopt('sortrules', adoptSortRules), // sortrules/sortundo
     adopt('ollama', ollamaAdoption), // ollama
     adopt('artist', adoptArtist), // artist
+    adopt('smarttag', adoptSmartTag),
     adopt('install', (raw) => {
       const result = (raw.prepare_result ?? {}) as Record<string, unknown>
       if (result.active !== true || typeof result.model_id !== 'string') return null
@@ -430,94 +432,4 @@ function finish(job: Job): void {
     useToasts.getState().push(jobHeadline(job), failedSomething ? 'error' : 'info', failedSomething ? show : undo)
   }
   if (p.status === 'done') void job.then?.(job)
-}
-
-const RUNNING: Record<JobKind, MessageKey> = {
-  move: 'jobs.running.move',
-  copy: 'jobs.running.copy',
-  trash: 'jobs.running.trash',
-  remove: 'jobs.running.remove',
-  tag: 'jobs.running.tag',
-  install: 'jobs.running.install',
-  tags: 'jobs.done.tags',
-  colors: 'jobs.running.colors',
-  reconnect: 'jobs.running.reconnect',
-  scan: 'jobs.running.scan',
-  detect: 'jobs.running.detect',
-  refine: 'jobs.running.refine',
-  adjust: 'jobs.running.adjust',
-  embed: 'sim.job.running.embed',
-  dupscan: 'sim.job.running.dupscan',
-  smarttag: 'dataset.job.running',
-  purity: 'dataset.check.purity.running',
-  purityget: 'dataset.check.purity.downloading',
-  masks: 'dataset.masks.job.running',
-  aesthetic: 'info.aes.job.running',
-  dsexport: 'dataset.export.job.running',
-  reparse: 'status.reparse.running',
-  reread: 'status.reread.running',
-  sortrules: 'sort.rules.job.running', // sortrules
-  sortundo: 'sort.rules.job.undoing', // sortundo
-  ollama: 'jobs.running.install', // ollama: "Downloading <model>"
-  artist: 'tools.artist.job.running', // artist
-}
-
-const DONE: Record<JobKind, MessageKey> = {
-  move: 'jobs.done.move',
-  copy: 'jobs.done.copy',
-  trash: 'jobs.done.trash',
-  remove: 'jobs.done.remove',
-  tag: 'jobs.done.tag',
-  install: 'jobs.done.install',
-  tags: 'jobs.done.tags',
-  colors: 'jobs.done.colors',
-  reconnect: 'jobs.done.reconnect',
-  scan: 'jobs.done.scan',
-  detect: 'jobs.done.detect',
-  refine: 'jobs.done.refine',
-  adjust: 'jobs.done.adjust',
-  embed: 'sim.job.done.embed',
-  dupscan: 'sim.job.done.dupscan',
-  smarttag: 'dataset.job.done',
-  purity: 'dataset.check.purity.done',
-  purityget: 'dataset.check.purity.downloaded',
-  masks: 'dataset.masks.job.done',
-  aesthetic: 'info.aes.job.done',
-  dsexport: 'dataset.export.job.done',
-  reparse: 'status.reparse.done',
-  reread: 'status.reread.done',
-  sortrules: 'sort.rules.job.done', // sortrules
-  sortundo: 'sort.rules.job.undone', // sortundo
-  ollama: 'jobs.done.install', // ollama: "<model> is ready"
-  artist: 'tools.artist.job.done', // artist
-}
-
-/** One line that says what happened (or is happening) to this job. */
-export function jobHeadline(job: Job): string {
-  const p = job.progress
-  const params = { n: p.total || job.count, name: job.label ?? '' }
-  const running = job.words?.running ?? RUNNING[job.kind]
-  switch (p.status) {
-    case 'queued':
-      return tr(queuedKey(job.kind), { what: tr(running, params) })
-    case 'running':
-      return tr(running, params)
-    case 'cancelling':
-      return `${tr(running, params)} · ${tr('jobs.stopping')}`
-    case 'cancelled':
-      return tr('jobs.stopped', { done: p.current, total: p.total || job.count })
-    case 'error':
-      return p.lost ? tr('jobs.installLost', params) : tr('jobs.error', { reason: p.message || '?' })
-    case 'idle':
-      return tr('jobs.reset')
-    case 'done': {
-      // Chinese joins the destination without a space; English carries its own.
-      let text = tr(job.words?.done ?? DONE[job.kind], { n: p.succeeded, name: job.label ?? '' })
-      if (job.destination && (job.kind === 'move' || job.kind === 'copy')) text += tr('jobs.to', { path: tailOfPath(job.destination, 40) })
-      if (p.updated) text += tr('jobs.updatedSuffix', { n: p.updated })
-      if (p.failedCount) text += tr('jobs.failedSuffix', { n: p.failedCount })
-      if (p.alreadyGone) text += tr('jobs.alreadyGone', { n: p.alreadyGone })
-      return text
-    }
-  }
 }

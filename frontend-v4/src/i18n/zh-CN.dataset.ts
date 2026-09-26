@@ -150,7 +150,7 @@ export const zhCNDataset = {
   'dataset.tag.describeVlm': 'VLM 服务',
   'dataset.tag.vlmPaid': '用已设置的 {name}；每张图调用一次，可能按次收费',
   'dataset.tag.vlmLocal': '用已设置的 {name}；在这台电脑上运行，不收费',
-  'dataset.tag.vlmMissing': '还没设置 VLM 服务：先到「设置 › AI 服务」填好地址和密钥，才能选',
+  'dataset.tag.vlmMissing': '还没设置 VLM 服务，设置好才能选',
   'dataset.tag.florence2Note': '在这台电脑上运行，描述较短 · {state}',
   'dataset.tag.toriigateNote': '在这台电脑上运行，描述详细，要大显存 · {state}',
   'dataset.tag.toriiLength': 'ToriiGate 描述长度',

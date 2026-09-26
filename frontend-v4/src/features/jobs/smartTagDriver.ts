@@ -1,6 +1,7 @@
 import { api, unwrap } from '../../api/client'
 import type { Job } from './jobs'
-import { startedJobId } from './smartTagJob'
+import { readProgress } from './progress'
+import { DESCRIBE_WORDS, smartTagAdoption, startedJobId } from './smartTagJob'
 
 // Polls and stops a Smart Tag run for the Jobs drawer (read by smartTagJob.ts).
 
@@ -9,6 +10,14 @@ const found = new Map<string, string>()
 
 /** A run's job id: given at the start, or found once it left the queue. */
 export const smartTagJobId = (job: Pick<Job, 'id' | 'ctx'>): string | undefined => job.ctx.smartTag?.jobId ?? found.get(job.id)
+
+/** A Smart Tag run already going when V4 looked (V3.5, another tab, before a reload), for the drawer. */
+export function adoptSmartTag(raw: Record<string, unknown>) {
+  const plan = smartTagAdoption(raw)
+  if (!plan) return null
+  const progress = readProgress('smarttag', raw, plan.ctx)
+  return { kind: 'smarttag' as const, progress, ctx: plan.ctx, count: progress.total, ...(plan.describeOnly ? { words: DESCRIBE_WORDS } : {}) }
+}
 
 /** The Jobs drawer's driver for Smart Tag runs. */
 export const driveSmartTag = {

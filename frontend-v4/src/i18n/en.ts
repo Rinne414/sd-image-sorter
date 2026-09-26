@@ -361,6 +361,7 @@ export const en: Record<MessageKey, string> = {
   'jobs.done.remove': 'Removed {n} from library',
   'jobs.done.tag': 'Tagged {n}',
   'jobs.done.install': '{name} is ready',
+  'jobs.done.installRestart': '{name} is installed; restart the app to use it',
   'jobs.done.tags': 'Tags edited on {n}',
   'jobs.done.colors': 'Colour analysis done for {n}',
   'jobs.done.reconnect': 'Found {n} again',
