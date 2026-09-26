@@ -13,6 +13,7 @@ import { zhCNSignals } from './zh-CN.signals'
 import { zhCNPixai } from './zh-CN.pixai'
 import { zhCNReader } from './zh-CN.reader'
 import { zhCNModels } from './zh-CN.models'
+import { zhCNPrivacy } from './zh-CN.privacy'
 
 export const zhCN = {
   ...zhCNPublish,
@@ -29,6 +30,7 @@ export const zhCN = {
   ...zhCNPixai,
   ...zhCNReader,
   ...zhCNModels,
+  ...zhCNPrivacy,
   'app.name': 'SD Image Sorter',
   'nav.home': '首页',
   'nav.library': '图库',

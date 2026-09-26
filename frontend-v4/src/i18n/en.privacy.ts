@@ -1,0 +1,98 @@
+import type { zhCNPrivacy } from './zh-CN.privacy'
+
+// English for 隐私混淆 (Privacy scramble); must have every key of zh-CN.privacy.ts.
+export const enPrivacy: Record<keyof typeof zhCNPrivacy, string> = {
+  // bringing images in
+  'privacy.lead': 'Drop the images you want to share anywhere on this page, or paste them with Ctrl+V; many at once is fine.',
+  'privacy.hint': 'Library images: pick them, then More → Send to tool → Privacy scramble, or right-click one. Images are processed only in this computer’s browser and are never uploaded anywhere.',
+  'privacy.dropHere': 'Release to add them to the queue',
+  'privacy.pick': 'Choose images…',
+
+  // what it does, and how
+  'privacy.what': 'It scrambles the pixels: what you share looks like noise, and the receiver restores it with the same mode and password. The generation details (prompt and settings) stay in the image, encrypted, and come back on restore; you can also leave them out.',
+  'privacy.mode': 'Mode',
+  'privacy.mode.standard': 'Standard (Big Tomato compatible)',
+  'privacy.mode.standard.hint': 'Can take a password. The receiver restores it on the Big Tomato site or in this tool with the same password.',
+  'privacy.mode.simple': 'Simple (Small Tomato compatible)',
+  'privacy.mode.simple.hint': 'No password, always the same scramble. Downloads are saved as JPEG for Small Tomato.',
+  'privacy.mode.standard.short': 'Standard',
+  'privacy.mode.simple.short': 'Simple',
+  'privacy.password': 'Password',
+  'privacy.passwordPlaceholder': 'optional',
+  'privacy.passwordHint': 'Empty means a fixed scramble. For the Big Tomato site to restore it too, use 4 digits, such as 0512.',
+  'privacy.passwordOffSite': 'Not 4 digits: this tool can restore it, the Big Tomato site cannot.',
+  'privacy.keepInfo': 'Keep generation details',
+  'privacy.keepInfo.hint': 'The prompt and settings go into the result encrypted and come back on restore. Off: the result carries no generation details at all.',
+  'privacy.jpegNote': 'Simple mode downloads a .jpg: JPEG cannot hold the generation details and loses a little quality. When the receiver needs the details, use Copy or drag the result out (both are PNG), or use Standard mode.',
+  'privacy.advanced': 'Advanced',
+  'privacy.legacyInfo': 'Old PNG Info algorithm',
+  'privacy.legacyInfo.hint': 'Only when the receiver uses an old tool and the restored details come out garbled. Protect and restore with the same setting.',
+  'privacy.runningLocked': 'Settings are locked until the run finishes.',
+
+  // the queue and the run
+  'privacy.queue': 'Queue',
+  'privacy.count': '{n} images',
+  'privacy.protectAll': 'Protect all',
+  'privacy.protectAll.hint': 'Scramble every image in the queue with the settings on the left. Each run starts from the original, so pressing it twice still scrambles once.',
+  'privacy.restoreAll': 'Restore all',
+  'privacy.restoreAll.hint': 'Restore the scrambled images in the queue: use the mode and password they were protected with, or the result stays noise.',
+  'privacy.downloadAll': 'Download all (.zip)',
+  'privacy.downloadAll.hint': 'Download the processed images as one ZIP; Simple-mode images are .jpg.',
+  'privacy.zipping': 'Packing…',
+  'privacy.clear': 'Clear queue',
+  'privacy.stop': 'Cancel',
+  'privacy.running.encode': 'Protecting {done}/{total}…',
+  'privacy.running.decode': 'Restoring {done}/{total}…',
+  'privacy.stopping': 'Stopping…',
+  'privacy.summary.encode': 'Protected {done}/{total} images',
+  'privacy.summary.decode': 'Restored {done}/{total} images',
+  'privacy.summary.failed': '{main}; {n} failed, the reason is under each image',
+  'privacy.summary.stopped': 'Cancelled after {done}/{total} images',
+  'privacy.hugeCount': '{n} images are over 40 MP: they will be processed, but slowly and with a lot of memory.',
+
+  // one image in the queue
+  'privacy.item.name': 'File name for downloads',
+  'privacy.item.source': 'Original',
+  'privacy.item.result': 'Result',
+  'privacy.item.noResult': 'Not processed yet',
+  'privacy.item.noPreview': 'The browser cannot show this image',
+  'privacy.item.waiting': 'Waiting',
+  'privacy.item.working': 'Working…',
+  'privacy.item.encoded': 'Protected · {mode}',
+  'privacy.item.decoded': 'Restored · {mode}',
+  'privacy.item.carried': 'carries its generation details',
+  'privacy.item.failed': 'Failed: {reason}',
+  'privacy.item.fromLibrary': 'Library',
+  'privacy.item.huge': 'Very large ({mp} MP): it will be slow and use a lot of memory.',
+  'privacy.item.copy': 'Copy',
+  'privacy.item.copy.hint': 'Copy the result to the clipboard (PNG, with its generation details)',
+  'privacy.item.download': 'Download',
+  'privacy.item.remove': 'Remove',
+  'privacy.item.processFirst': 'Process this image first',
+  'privacy.item.dragOut': 'You can drag the result straight into a chat app or a web page',
+  'privacy.item.open': 'View large',
+
+  // problems
+  'privacy.err.decode': 'The browser cannot read this image (unsupported format or a damaged file)',
+  'privacy.err.tooSmall': 'This image is smaller than the border the password removes: wrong mode or password?',
+  'privacy.err.encode': 'Could not make the result ({detail})',
+  'privacy.err.library': 'Could not read this library image ({detail})',
+
+  // messages
+  'privacy.added': 'Added {n} images',
+  'privacy.addedFromLibrary': 'Added {n} images from the library, not processed yet: press Protect all to start.',
+  'privacy.libraryGone': '{n} images are no longer in this library and were not added.',
+  'privacy.noImages': 'There are no images among these files.',
+  'privacy.copied': 'Result copied (PNG)',
+  'privacy.copyFailed': 'Could not copy: {reason}',
+  'privacy.copyUnsupported': 'This browser cannot copy images directly; use Download.',
+  'privacy.downloadFailed': 'Could not download: {reason}',
+  'privacy.zipDone': 'Packed {n} images',
+  'privacy.zipFailed': 'Could not pack them: {reason}',
+  'privacy.noResults': 'No processed images to download yet.',
+
+  // the large preview
+  'privacy.preview.show': 'Show',
+  'privacy.preview.copy': 'Copy result',
+  'privacy.preview.download': 'Download result',
+}

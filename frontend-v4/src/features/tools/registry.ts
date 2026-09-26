@@ -27,7 +27,7 @@ export const TOOLS: readonly ToolEntry[] = [
   { id: 'promptlab', label: 'tools.promptlab', what: 'tools.promptlab.what', accepts: 'one', ready: false },
   { id: 'artist', label: 'tools.artist', what: 'tools.artist.what', accepts: 'many', ready: false },
   { id: 'lexicon', label: 'tools.lexicon', what: 'tools.lexicon.what', accepts: null, ready: false },
-  { id: 'privacy', label: 'tools.privacy', what: 'tools.privacy.what', accepts: 'many', ready: false },
+  { id: 'privacy', label: 'tools.privacy', what: 'tools.privacy.what', accepts: 'many', ready: true, page: lazy(() => import('./privacy/PrivacyPage').then((m) => ({ default: m.PrivacyPage }))) },
 ]
 
 export function toolById(id: ToolId, tools: readonly ToolEntry[] = TOOLS): ToolEntry {

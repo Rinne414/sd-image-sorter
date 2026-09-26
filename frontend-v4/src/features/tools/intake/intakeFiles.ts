@@ -2,9 +2,10 @@ import { ApiError } from '../../../api/client'
 import { useApp } from '../../../state/store'
 import type { ParseResult } from '../reader/readerAdapter'
 
-// One image into a tool: dropped anywhere on its page, chosen with the file
-// picker, or pasted. The file is read by POST /api/parse-image, which also
-// keeps a copy for 24 hours (`source_temp_path`) that saving and tagging use.
+// Images into a tool: dropped anywhere on its page, chosen with the file
+// picker, or pasted (the Reader and Reverse prompt take one, Privacy many). The
+// Reader's file is read by POST /api/parse-image, which also keeps a copy for
+// 24 hours (`source_temp_path`) that saving and tagging use.
 
 /** How an image came in; a pasted one has usually lost its generation details. */
 export type IntakeOrigin = 'drop' | 'pick' | 'paste'
@@ -13,19 +14,30 @@ const IMAGE_NAME = /\.(png|jpe?g|webp|bmp|gif|avif|tiff?)$/i
 
 export const isImageFile = (f: File): boolean => f.type.startsWith('image/') || IMAGE_NAME.test(f.name)
 
-/** The first image among these files (a drop or the picker can hand over several). */
-export function firstImage(files: Iterable<File> | ArrayLike<File> | null | undefined): File | null {
-  if (!files) return null
-  for (const f of Array.from(files)) if (isImageFile(f)) return f
-  return null
+/** A drag that carries a tool's own result (Privacy's scrambled image): never taken back in as a new file. */
+export const TOOL_RESULT_DRAG = 'application/x-sd-tool-result'
+
+/** The images among these files, in order (a drop, the picker or a paste can hand over several). */
+export function imagesOf(files: Iterable<File> | ArrayLike<File> | null | undefined): File[] {
+  return files ? Array.from(files).filter(isImageFile) : []
 }
 
-/** The image a paste carries, named so the Reader can say where it came from. */
+/** The first image among these files. */
+export function firstImage(files: Iterable<File> | ArrayLike<File> | null | undefined): File | null {
+  return imagesOf(files)[0] ?? null
+}
+
+/** The images a paste carries, each named so a tool can say where it came from. */
+export function pastedImages(data: DataTransfer | null): File[] {
+  if (!data) return []
+  let files = imagesOf(data.files)
+  if (!files.length) files = imagesOf([...data.items].flatMap((i) => (i.kind === 'file' ? [i.getAsFile()] : [])).filter((f): f is File => !!f))
+  return files.map((file) => (file.name ? file : new File([file], 'clipboard.png', { type: file.type || 'image/png' })))
+}
+
+/** The image a paste carries (the first, when it carries several). */
 export function pastedImage(data: DataTransfer | null): File | null {
-  if (!data) return null
-  const file = firstImage(data.files) ?? firstImage([...data.items].flatMap((i) => (i.kind === 'file' ? [i.getAsFile()] : [])).filter((f): f is File => !!f))
-  if (!file) return null
-  return file.name ? file : new File([file], 'clipboard.png', { type: file.type || 'image/png' })
+  return pastedImages(data)[0] ?? null
 }
 
 /** The clipboard's image, read by the Paste button (the browser may ask first); null when it holds none. */
