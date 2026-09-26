@@ -270,6 +270,17 @@ export function FilterPanel({ text, onChange }: Props) {
             <button type="button" className="btn" onClick={save} disabled={!name.trim() || !text.trim()}>
               {t('filter.save')}
             </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                setOpen(false)
+                useApp.getState().openTool('lexicon')
+              }}
+              data-testid="filter-open-lexicon"
+            >
+              {t('tools.lexicon.browse')}
+            </button>
             <span className={styles.gap} />
             <button type="button" className="btn btn-ghost" onClick={() => onChange('')} disabled={!text.trim()}>
               {t('filter.clear')}

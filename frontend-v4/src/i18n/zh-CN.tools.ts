@@ -18,6 +18,7 @@ export const zhCNTools = {
   'tools.artist.job.done': '已识别画风：{n} 张',
   'tools.lexicon': '词库',
   'tools.lexicon.what': '图库里所有的标签、提示词、LoRA 和模型，按次数或名字排序，点一下就放进图库搜索。',
+  'tools.lexicon.browse': '浏览词库…',
   'tools.privacy': '隐私混淆',
   'tools.privacy.what': '把图片的像素打乱后再分享（兼容大番茄和小番茄），收到的人能还原；生成信息可以加密保留。',
   'tools.censor': '打码…',

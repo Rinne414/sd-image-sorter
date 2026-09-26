@@ -26,7 +26,7 @@ export const TOOLS: readonly ToolEntry[] = [
   { id: 'reverse', label: 'tools.reverse', what: 'tools.reverse.what', accepts: 'one', ready: true, page: lazy(() => import('./reverse/ReversePage').then((m) => ({ default: m.ReversePage }))) },
   { id: 'promptlab', label: 'tools.promptlab', what: 'tools.promptlab.what', accepts: 'one', ready: true, page: lazy(() => import('./promptlab/PromptLabPage').then((m) => ({ default: m.PromptLabPage }))) },
   { id: 'artist', label: 'tools.artist', what: 'tools.artist.what', accepts: 'many', ready: true, page: lazy(() => import('./artist/ArtistPage').then((m) => ({ default: m.ArtistPage }))) },
-  { id: 'lexicon', label: 'tools.lexicon', what: 'tools.lexicon.what', accepts: null, ready: false },
+  { id: 'lexicon', label: 'tools.lexicon', what: 'tools.lexicon.what', accepts: null, ready: true, page: lazy(() => import('./lexicon/LexiconPage').then((m) => ({ default: m.LexiconPage }))) },
   { id: 'privacy', label: 'tools.privacy', what: 'tools.privacy.what', accepts: 'many', ready: true, page: lazy(() => import('./privacy/PrivacyPage').then((m) => ({ default: m.PrivacyPage }))) },
 ]
 

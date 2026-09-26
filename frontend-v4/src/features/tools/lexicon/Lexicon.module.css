@@ -1,0 +1,321 @@
+/* 词库: the list on the left (tabs, find, order, category, rows); the library search on the right. */
+.page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(280px, calc(22 * var(--vw)), 400px);
+  height: 100%;
+  min-height: 0;
+}
+
+.main {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ---- tabs and controls ---- */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 24px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font-size: var(--fs-4);
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--text);
+  background: var(--wash-hover);
+}
+
+.tab[aria-selected="true"] {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 12px 24px;
+}
+
+.field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.label {
+  font-size: var(--fs-1);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.input,
+.select {
+  height: 30px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-3);
+  border-radius: var(--radius);
+}
+
+.input {
+  width: clamp(220px, calc(22 * var(--vw)), 420px);
+}
+
+.input:focus,
+.select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.sort {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.sortButton {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  background: var(--bg);
+  color: var(--text-2);
+  font-size: var(--fs-3);
+  white-space: nowrap;
+}
+
+.sortButton + .sortButton {
+  border-left: 1px solid var(--line-strong);
+}
+
+.sortButton[aria-pressed="true"] {
+  background: var(--wash-strong);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.total {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
+/* ---- the list ---- */
+.head,
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px minmax(60px, 180px) 72px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 24px;
+}
+
+.head[data-plain],
+.row[data-plain] {
+  grid-template-columns: minmax(0, 1fr) minmax(60px, 180px) 72px;
+}
+
+.head {
+  height: 28px;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  letter-spacing: 0.06em;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.headCount {
+  text-align: right;
+}
+
+.scroller {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.row[data-on] {
+  background: var(--wash-strong);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.entry {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c, var(--text));
+  font-size: var(--fs-3);
+  text-align: left;
+}
+
+.entry:hover .entryName,
+.entry:focus-visible .entryName {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.entry:focus-visible {
+  outline: none;
+}
+
+.entryName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catSelect {
+  height: 24px;
+  min-width: 0;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--c, var(--text-2));
+  font-size: var(--fs-2);
+  border-radius: var(--radius);
+}
+
+.catSelect:hover,
+.catSelect:focus {
+  border-color: var(--line-strong);
+  outline: none;
+}
+
+.catSelect option {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.catPlain {
+  color: var(--c, var(--text-2));
+  font-size: var(--fs-2);
+}
+
+.bar {
+  display: block;
+  height: 6px;
+  background: var(--wash);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  background: var(--accent-line);
+}
+
+.count {
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.empty {
+  margin: 0;
+  padding: 18px 24px;
+  color: var(--muted);
+  font-size: var(--fs-3);
+  line-height: 1.6;
+}
+
+.problem {
+  margin: 0;
+  padding: 18px 24px;
+  color: var(--danger);
+}
+
+/* ---- the library search ---- */
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 24px 40px 18px;
+  background: var(--surface-1);
+  border-left: 1px solid var(--line);
+}
+
+.what {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+  line-height: 1.65;
+  border-left: 2px solid var(--accent);
+  background: var(--wash);
+}
+
+.sideTitle {
+  margin: 6px 0 0;
+  color: var(--text);
+  font-size: var(--fs-4);
+  font-weight: 600;
+}
+
+.queryText {
+  margin: 0;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: var(--fs-3);
+  line-height: 1.6;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.55;
+}
+
+.countLine {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

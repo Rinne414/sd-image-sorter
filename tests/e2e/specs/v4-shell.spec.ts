@@ -143,9 +143,10 @@ test('Tools menu: keyboard, Esc closes only the menu, tool pages, back', async (
   const toolPage = page.getByTestId('tool-page')
   await expect(toolPage.getByRole('heading', { level: 1 })).toHaveText('Reverse prompt')
   await expect(page.getByTestId('reverse-page')).toBeVisible()
-  // a tool not built in V4 yet says so and points to V3.5
+  // every tool is built in V4 now: none says it is still being built
   await page.goto('/v4/#/tools/lexicon')
-  await expect(page.getByTestId('tool-planned')).toContainText('still being built')
+  await expect(page.getByTestId('lexicon-page')).toBeVisible()
+  await expect(page.getByTestId('tool-planned')).toHaveCount(0)
   await page.goto('/v4/#/tools/reverse')
   await expect(button).toHaveAttribute('aria-current', 'page')
   await expect(topTabs(page).and(page.locator('[aria-current="page"]'))).toHaveCount(0)

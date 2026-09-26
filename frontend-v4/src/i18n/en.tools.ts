@@ -18,6 +18,7 @@ export const enTools: Record<keyof typeof zhCNTools, string> = {
   'tools.artist.job.done': 'Style identified: {n} images',
   'tools.lexicon': 'Tag & prompt library',
   'tools.lexicon.what': 'Every tag, prompt, LoRA and model in your library, by count or by name; one click puts it into the library search.',
+  'tools.lexicon.browse': 'Browse the tag & prompt library…',
   'tools.privacy': 'Privacy scramble',
   'tools.privacy.what': 'Scramble an image’s pixels before sharing (compatible with Big and Small Tomato); the receiver can restore it, and the generation details can travel encrypted.',
   'tools.censor': 'Censor…',
