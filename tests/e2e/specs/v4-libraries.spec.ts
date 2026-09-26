@@ -96,3 +96,51 @@ test('create, move picks in, rename and delete a library', async ({ page }) => {
   // the main library cannot be deleted
   await expect(dialog.getByTestId('library-row').filter({ hasText: 'Main library' }).getByRole('button', { name: 'Delete library…' })).toHaveCount(0)
 })
+
+/** Open V4 on the library page with this library stored as the open one (once per page). */
+async function openWithStoredLibrary(page: Page, libraryId: string, lang: 'en' | 'zh-CN') {
+  await page.addInitScript(
+    ([id, l]) => {
+      if (sessionStorage.getItem('v4lib-stored')) return
+      sessionStorage.setItem('v4lib-stored', '1')
+      localStorage.setItem('sd-image-sorter-lang', l)
+      localStorage.setItem('sd-v4-update-autocheck', '0')
+      localStorage.setItem('sd-library-workspace-v1', JSON.stringify({ v: 2, currentId: id }))
+    },
+    [libraryId, lang] as const,
+  )
+  const res = await page.goto('/v4/#/library', { waitUntil: 'domcontentloaded' })
+  expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
+}
+
+const storedLibrary = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getItem('sd-library-workspace-v1') || '{}').currentId)
+
+test('6b-fix2: the open library deleted in another window: back in this one, V4 moves to one that exists, says so, and names main from then on', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  const made = await page.request.post('/api/libraries', { data: { name: 'V4 e2e gone' } })
+  expect(made.ok()).toBe(true)
+  const gone: string = (await made.json()).library.id
+  await openWithStoredLibrary(page, gone, 'en')
+  const rail = page.getByTestId('library-switch')
+  await expect(rail).toContainText('V4 e2e gone')
+
+  // another window (a second V4 tab, or V3.5) deletes it
+  expect((await page.request.delete(`/api/libraries/${encodeURIComponent(gone)}`)).ok()).toBe(true)
+  // coming back to this window reads the list again; the first gallery request after it names main
+  const next = page.waitForRequest((r) => new URL(r.url()).pathname === '/api/images')
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+  await expect(page.getByText('The library that was open is gone (perhaps deleted in another window or in V3.5). Now showing “Main library”.')).toBeVisible()
+  expect((await next).headers()['x-sd-library-id']).toBe('main')
+  await expect(rail).toContainText('Main library')
+  expect(await storedLibrary(page)).toBe('main')
+})
+
+test('6b-fix2: a stale library stored at launch: V4 opens one that exists and says so, in Chinese too', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  const next = page.waitForRequest((r) => new URL(r.url()).pathname === '/api/images' && r.headers()['x-sd-library-id'] === 'main')
+  await openWithStoredLibrary(page, 'lib_never_existed', 'zh-CN')
+  await expect(page.getByText('之前打开的图库已经不在了（可能在别的窗口或旧版界面里删掉了），现在打开的是「主图库」。')).toBeVisible()
+  await next
+  await expect(page.getByTestId('library-switch')).toContainText('主图库')
+  expect(await storedLibrary(page)).toBe('main')
+})

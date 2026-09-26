@@ -99,6 +99,7 @@ export const zhCN = {
   'libraries.movePartial': '移过去 {n} 张后出错：{reason}。已移过去的已经不在这里了。',
   'libraries.moveNote': '它们会离开这个图库，标签和评分跟着走；文件不动。',
   'libraries.noOther': '还没有其他图库。先在左栏的图库名称里新建一个。',
+  'libraries.gone': '之前打开的图库已经不在了（可能在别的窗口或旧版界面里删掉了），现在打开的是「{name}」。',
   'status.colorsMissing': '{n} 张还没做色彩分析',
   'status.analyse': '开始分析',
   'status.analysing': '分析中…',

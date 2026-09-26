@@ -7,6 +7,7 @@ import { JobsRunner } from '../features/jobs/JobsRunner'
 import { startAutoRefresh } from '../features/library/autoRefreshRun'
 import { DropImport } from '../features/import/DropImport'
 import { useLibraryArrival } from '../features/libraries/useArrival'
+import { useLibraryExists } from '../features/libraries/useLibraryExists'
 import { SelectionDialogs } from '../features/selection/SelectionDialogs'
 import { appKey } from '../features/library/keys'
 import { LibraryPage } from '../features/library/LibraryPage'
@@ -39,6 +40,8 @@ export function App() {
 
   // Coming from V3.5: open the library it had open.
   useLibraryArrival()
+  // After it: a library deleted elsewhere (or a stale stored id) is left for one that exists.
+  useLibraryExists()
 
   // Ctrl K opens the palette from anywhere, even while typing.
   useEffect(() => {

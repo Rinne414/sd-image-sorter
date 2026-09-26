@@ -99,6 +99,7 @@ export const en: Record<MessageKey, string> = {
   'libraries.movePartial': 'Moved {n}, then failed: {reason}. The ones moved are no longer here.',
   'libraries.moveNote': 'They leave this library with their tags and ratings; files do not move.',
   'libraries.noOther': 'There is no other library yet. Create one from the library name in the left column.',
+  'libraries.gone': 'The library that was open is gone (perhaps deleted in another window or in V3.5). Now showing “{name}”.',
   'status.colorsMissing': '{n} without colour analysis yet',
   'status.analyse': 'Analyse',
   'status.analysing': 'Analysing…',
