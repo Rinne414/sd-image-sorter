@@ -78,17 +78,19 @@ test('settings tabs are addresses: clicking, typing the address, unknown tab, ba
   await expect(page.getByTestId('disk-settings')).toBeVisible()
   await expect(page.getByTestId('settings-planned')).toHaveCount(0)
 
-  // every other tab: its address, one honest line, and the way to V3.5 (no controls that do nothing)
-  for (const [id, name] of [['ai', 'AI services']] as const) {
-    await page.getByTestId(`settings-tab-${id}`).click()
-    await expect(page).toHaveURL(new RegExp(`#/settings/${id}$`))
-    await expect(page.getByTestId(`settings-tab-${id}`)).toHaveAttribute('aria-current', 'page')
-    await expect(page.getByRole('heading', { level: 2 })).toHaveText(name)
-    const planned = page.getByTestId('settings-planned')
-    await expect(planned).toContainText('still being built')
-    await expect(planned.getByRole('link', { name: 'Back to V3.5' })).toHaveAttribute('href', '/')
-    await expect(planned.locator('input, select, textarea')).toHaveCount(0)
-  }
+  // AI services is built too (slice 5f, v4-ai-services.spec.ts), so no tab is a placeholder any more
+  // (its reads are answered here: the settings may hold a real key, and Ollama is not probed)
+  await page.route('**/api/vlm/settings', (route) => route.fulfill({ json: {} }))
+  await page.route('**/api/vlm/presets', (route) => route.fulfill({ json: { presets: {} } }))
+  await page.route('**/api/vlm/local-models/recommended', (route) =>
+    route.fulfill({ json: { ollama_installed: false, ollama_running: false, install_instructions: null, models: [], local_models: [] } }),
+  )
+  await page.getByTestId('settings-tab-ai').click()
+  await expect(page).toHaveURL(/#\/settings\/ai$/)
+  await expect(page.getByTestId('settings-tab-ai')).toHaveAttribute('aria-current', 'page')
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText('AI services')
+  await expect(page.getByTestId('ai-services')).toBeVisible()
+  await expect(page.getByTestId('settings-planned')).toHaveCount(0)
 
   // the address opens a tab; an unknown tab opens Appearance
   await page.goto('/v4/#/settings/models')

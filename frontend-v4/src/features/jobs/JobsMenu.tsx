@@ -297,8 +297,9 @@ function StuckReset({ job }: { job: Job }) {
 
 const MB = 1024 * 1024
 
-function amount(current: number, total: number, unit: 'images' | 'bytes'): string {
+function amount(current: number, total: number, unit: 'images' | 'bytes' | 'percent'): string {
   if (unit === 'images') return `${current.toLocaleString()} / ${total.toLocaleString()}`
+  if (unit === 'percent') return `${current}%` // ollama
   const mb = (b: number) => Math.round(b / MB).toLocaleString()
   return total > 0 ? `${mb(current)} / ${mb(total)} MB` : `${mb(current)} MB`
 }

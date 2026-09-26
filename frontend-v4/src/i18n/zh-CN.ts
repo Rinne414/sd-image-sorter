@@ -16,6 +16,7 @@ import { zhCNModels } from './zh-CN.models'
 import { zhCNPrivacy } from './zh-CN.privacy'
 import { zhCNLibrarySettings } from './zh-CN.library-settings'
 import { zhCNPromptLab } from './zh-CN.promptlab'
+import { zhCNAi } from './zh-CN.ai'
 
 export const zhCN = {
   ...zhCNPublish,
@@ -35,6 +36,7 @@ export const zhCN = {
   ...zhCNPrivacy,
   ...zhCNLibrarySettings,
   ...zhCNPromptLab,
+  ...zhCNAi,
   'app.name': 'SD Image Sorter',
   'nav.home': '首页',
   'nav.library': '图库',

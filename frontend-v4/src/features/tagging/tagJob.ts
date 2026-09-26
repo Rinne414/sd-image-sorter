@@ -2,9 +2,10 @@ import { api, ApiError, unwrap } from '../../api/client'
 import { fetchModelStatus } from '../../api/queries'
 import { queryClient } from '../../api/queryClient'
 import { useToasts } from '../../ui/toasts'
+import { trackSmartTagJob } from '../batch/trackSmartTag'
 import { busyText } from '../jobs/busyText'
 import { installThen } from '../jobs/installJob'
-import { addJob, startingProgress, tr } from '../jobs/jobs'
+import { addJob, isQueueBusy, startingProgress, tr } from '../jobs/jobs'
 import { tagRunBase } from '../jobs/progress'
 import { readiness, taggerInfo, type ModelCard } from './taggers'
 
@@ -72,8 +73,55 @@ async function startTagJob(ids: number[] | null, o: TagOptions, count: number): 
   }
 }
 
-/** Tag `ids` with the chosen tagger, downloading it first when it is not on disk. */
-export async function startTagging(ids: number[] | null, o: TagOptions, count: number): Promise<boolean> {
+/**
+ * Tagging the picks and describing them runs as one Smart Tag run (the dataset
+ * tag step's): the tagger's tags plus a description by the VLM service set up
+ * in Settings › AI services, written to the library images. Every pick is
+ * tagged again, as the panel says. Smart Tag has no drop list.
+ */
+export function describedTagBody(ids: number[], o: TagOptions) {
+  return {
+    image_ids: ids,
+    image_paths: [],
+    training_purpose: 'general',
+    trigger_word: '',
+    merge_strategy: 'replace',
+    auto_strip_noise: true,
+    skip_existing: false,
+    enable_wd14: true,
+    enable_vlm: true,
+    tagger_model: o.model,
+    use_gpu: o.useGpu,
+    ...(o.threshold !== null ? { general_threshold: o.threshold } : {}),
+    ...(o.characterThreshold !== null ? { character_threshold: o.characterThreshold } : {}),
+    max_tags_per_image: o.maxTags,
+    natural_language_mode: 'vlm',
+    vlm_grounding: true,
+  }
+}
+
+async function startDescribedJob(ids: number[], o: TagOptions): Promise<boolean> {
+  // one Smart Tag run is followed at a time (its Stop stops the running one)
+  if (isQueueBusy('smarttag')) {
+    useToasts.getState().push(tr('jobs.busy'), 'error')
+    return false
+  }
+  try {
+    const res = unwrap<{ job_id?: string; queue_id?: string; status?: string }>(await api.POST('/api/smart-tag/start', { body: describedTagBody(ids, o) as never }))
+    const queued = res.status === 'queued'
+    trackSmartTagJob({ count: ids.length, jobId: res.job_id ?? null, queueId: res.queue_id ?? null, queued, then: () => undefined })
+    if (queued) useToasts.getState().push(tr('signals.tag.queued', { n: ids.length }), 'info')
+    return true
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+/**
+ * Tag `ids` with the chosen tagger, downloading it first when it is not on disk.
+ * `describe`: also write a description of each pick (picks only; the caller said how many calls).
+ */
+export async function startTagging(ids: number[] | null, o: TagOptions, count: number, describe = false): Promise<boolean> {
   const info = taggerInfo(o.model)
   let cards: ModelCard[] | undefined
   try {
@@ -86,8 +134,9 @@ export async function startTagging(ids: number[] | null, o: TagOptions, count: n
     useToasts.getState().push(tr('tagging.needsRestart', { name: info.label }), 'error')
     return false
   }
-  if (state === 'ready') return startTagJob(ids, o, count)
-  return installThen(info, () => void startTagJob(ids, o, count))
+  const run = () => (describe && ids ? startDescribedJob(ids, o) : startTagJob(ids, o, count))
+  if (state === 'ready') return run()
+  return installThen(info, () => void run())
 }
 
 const OPTIONS_KEY = 'sd-v4-tag-options'

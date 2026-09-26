@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useModelStatus, useTaggerModels } from '../../api/queries'
 import { useT } from '../../i18n'
 import { Dialog } from '../../ui/Dialog'
+import { DescribeOption, useDescriber } from '../settings/ai/DescribeOption'
+import { useAT } from '../settings/ai/aiText'
 import { ModelGuideLink } from '../settings/models/ModelGuideLink'
 import { GpuNotice, useTagStartPlan } from './GpuNotice'
 import styles from './TagDialog.module.css'
@@ -36,7 +38,13 @@ export function TagDialog({ ids, count, onClose }: Props) {
   const [blacklistText, setBlacklistText] = useState('')
   const [starting, setStarting] = useState(false)
   const [wasReset, setWasReset] = useState(false)
+  // a description costs a call per image: off each time the panel opens
+  const [describe, setDescribe] = useState(false)
   const plan = useTagStartPlan()
+  const at = useAT()
+  const describer = useDescriber()
+  // picks only: the untagged run has no list of images to describe
+  const describing = describe && ids !== null && describer?.ready === true
 
   const list = (models.data?.models ?? []).filter((m) => isTagger(m.name) && !m.disabled)
 
@@ -79,7 +87,7 @@ export function TagDialog({ ids, count, onClose }: Props) {
     const options = { ...o, blacklist: splitTags(blacklistText) }
     saveTagOptions(options)
     setStarting(true)
-    const ok = await startTagging(ids, options, count)
+    const ok = await startTagging(ids, options, count, describing)
     setStarting(false)
     if (ok) onClose()
   }
@@ -101,9 +109,11 @@ export function TagDialog({ ids, count, onClose }: Props) {
   const startLabel =
     state === 'download' || state === 'check'
       ? t('tagging.downloadAndStart', { n })
-      : plan.mode === 'queue'
-        ? t('signals.tag.queueStart', { n })
-        : t('tagging.start', { n })
+      : describing
+        ? at('ai.tag.start', { n })
+        : plan.mode === 'queue'
+          ? t('signals.tag.queueStart', { n })
+          : t('tagging.start', { n })
 
   const footer = (
     <>
@@ -156,6 +166,9 @@ export function TagDialog({ ids, count, onClose }: Props) {
           )
         })}
       </div>
+      {ids && describer && o && (
+        <DescribeOption vlm={describer} count={n} checked={describe} onChange={setDescribe} dropsTags={splitTags(blacklistText).length > 0} onSetup={onClose} />
+      )}
 
       {o && current && (
         <details

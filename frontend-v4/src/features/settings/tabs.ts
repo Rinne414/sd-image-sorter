@@ -28,7 +28,7 @@ export const SETTINGS_PAGES: readonly SettingsTabEntry[] = [
     what: 'settings.what.models',
     page: lazy(() => import('./models/ModelCenterTab').then((m) => ({ default: m.ModelCenterTab }))),
   },
-  { id: 'ai', label: 'settings.tab.ai', what: 'settings.what.ai' },
+  { id: 'ai', label: 'settings.tab.ai', what: 'settings.what.ai', page: lazy(() => import('./ai/AiTab').then((m) => ({ default: m.AiTab }))) },
   { id: 'disk', label: 'settings.tab.disk', what: 'settings.what.disk', page: lazy(() => import('./disk/DiskTab').then((m) => ({ default: m.DiskTab }))) },
   {
     id: 'about',

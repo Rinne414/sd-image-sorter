@@ -6,6 +6,7 @@ import { readDatasetExport } from './datasetExportJob'
 import { readReparse } from './reparseJob' // reparse/reread
 import { readSortRules } from './sortRulesJob' // sortrules/sortundo: sort by condition and its undo
 import { readScanExtras, type ScanExtras } from './scanExtras' // scan: stall + other library
+import { readOllama } from './ollamaJob' // ollama: an Ollama model download, read in ollamaJob.ts
 // Reads the backend's progress payloads for long jobs into one shape.
 // move/copy: GET /api/move/progress · trash: GET /api/images/delete-selected/progress
 // · remove: GET /api/images/remove-selected/progress · tag: GET /api/tag/progress
@@ -51,6 +52,7 @@ export type JobKind =
   | 'reread'
   | 'sortrules' // sortrules: a sort-by-condition run (GET /api/batch-move/progress)
   | 'sortundo' // sortundo: undoing a sort-by-condition run
+  | 'ollama' // ollama: an Ollama model download (GET /api/vlm/local-models/pull/progress)
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
 
 export interface JobFailure {
@@ -64,7 +66,7 @@ export interface JobProgress {
   current: number
   total: number
   /** What current/total count. */
-  unit: 'images' | 'bytes'
+  unit: 'images' | 'bytes' | 'percent' // ollama: a pull reports only a percentage
   succeeded: number
   failedCount: number
   failures: JobFailure[]
@@ -115,6 +117,7 @@ export interface ReadContext {
   maskJobId?: string // masks: the auto-mask bulk job we started
   reparseJobId?: string // reparse/reread: the metadata repair bulk job we started
   runToken?: string // sortrules/sortundo: the batch-move run we started
+  ollamaModel?: string // ollama: the model we asked Ollama to pull
 }
 
 const KNOWN: ReadonlySet<string> = new Set(['running', 'cancelling', 'done', 'cancelled', 'error', 'idle'])
@@ -326,6 +329,8 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
     case 'sortrules': // sortrules/sortundo
     case 'sortundo': // sortrules/sortundo
       return readSortRules(base, raw, ctx.runToken) // sortrules/sortundo
+    case 'ollama': // ollama
+      return readOllama(base, raw, ctx.ollamaModel) // ollama
   }
 }
 

@@ -13,6 +13,7 @@ import { adoptAesthetic, driveAesthetic } from './aestheticDriver'
 import { driveDatasetExport } from './datasetExportDriver'
 import { adoptReparse, driveReparse } from './reparseDriver' // reparse/reread
 import { adoptSortRules, driveSortRules } from './sortRulesDriver' // sortrules/sortundo
+import { driveOllama, ollamaAdoption } from './ollamaDriver' // ollama
 import { queuedKey } from './queued'
 
 // Every long job the user started (or that was already running when V4
@@ -63,6 +64,7 @@ type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors'
   | 'dsexport'
   | 'reparse' | 'reread'
   | 'sortrules' | 'sortundo' // sortrules/sortundo
+  | 'ollama'
 
 // Censor work over a batch (detecting, SAM3 refining, filters) runs one at a time.
 const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind === 'refine' || kind === 'adjust' ? 'detect' : kind)
@@ -166,6 +168,7 @@ const DRIVERS: Record<Queue, Driver> = {
   reread: driveReparse, // reparse/reread share the backend's one slot (409 while either runs)
   sortrules: driveSortRules, // sortrules
   sortundo: driveSortRules, // sortundo (the same batch-move slot)
+  ollama: driveOllama, // ollama: an Ollama model download (it cannot be stopped)
 }
 
 export const canStop = (kind: JobKind) => DRIVERS[queueOf(kind)].cancel !== null
@@ -321,6 +324,7 @@ export async function adoptRunningJobs(): Promise<void> {
     adopt('aesthetic', adoptAesthetic),
     adopt('reparse', adoptReparse), // reparse/reread
     adopt('sortrules', adoptSortRules), // sortrules/sortundo
+    adopt('ollama', ollamaAdoption), // ollama
     adopt('install', (raw) => {
       const result = (raw.prepare_result ?? {}) as Record<string, unknown>
       if (result.active !== true || typeof result.model_id !== 'string') return null
@@ -372,6 +376,7 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   reread: ['images', 'image', 'image-count', 'library-health', 'missing-summary', 'missing-groups'], // reread: a file that no longer opens joins the missing files
   sortrules: ['images', 'image', 'folders', 'image-count', 'library-health', 'missing-summary'], // sortrules
   sortundo: ['images', 'image', 'folders', 'image-count', 'library-health', 'missing-summary'], // sortundo
+  ollama: ['vlm-local-models'], // ollama: the AI services page lists what Ollama has
 }
 
 let onUndo: ((job: Job) => Promise<void>) | null = null
@@ -446,6 +451,7 @@ const RUNNING: Record<JobKind, MessageKey> = {
   reread: 'status.reread.running',
   sortrules: 'sort.rules.job.running', // sortrules
   sortundo: 'sort.rules.job.undoing', // sortundo
+  ollama: 'jobs.running.install', // ollama: "Downloading <model>"
 }
 
 const DONE: Record<JobKind, MessageKey> = {
@@ -474,6 +480,7 @@ const DONE: Record<JobKind, MessageKey> = {
   reread: 'status.reread.done',
   sortrules: 'sort.rules.job.done', // sortrules
   sortundo: 'sort.rules.job.undone', // sortundo
+  ollama: 'jobs.done.install', // ollama: "<model> is ready"
 }
 
 /** One line that says what happened (or is happening) to this job. */

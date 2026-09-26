@@ -1,0 +1,519 @@
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 760px;
+}
+
+.state {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.state[data-tone="error"] {
+  color: var(--danger);
+}
+
+.lead {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.hint {
+  margin: 6px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+
+/* What is in force now, set apart like the stamp on a form. */
+.now {
+  margin: 12px 0 0;
+  padding: 7px 12px;
+  border-left: 2px solid var(--line-strong);
+  background: var(--wash);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.now[data-tone="ready"] {
+  border-left-color: var(--ok);
+}
+
+.now[data-tone="missing"] {
+  border-left-color: var(--warn);
+}
+
+.group {
+  margin-top: 22px;
+}
+
+.groupTitle {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  font-weight: 400;
+  letter-spacing: 0.06em;
+}
+
+/* The heading over a list of models. */
+.listTitle {
+  margin: 20px 0 8px;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  font-weight: 400;
+  letter-spacing: 0.06em;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  margin-top: 14px;
+}
+
+.field:first-child {
+  margin-top: 0;
+}
+
+.label {
+  color: var(--text);
+  font-size: var(--fs-2);
+  font-weight: 600;
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-3);
+  border-radius: var(--radius);
+}
+
+.input,
+.select {
+  height: 30px;
+  padding: 0 9px;
+}
+
+.textarea {
+  min-height: 76px;
+  padding: 7px 9px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.inline > .input,
+.inline > .select {
+  flex: 1;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.check input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/* Output: three choices side by side, the chosen one printed in ink. */
+.choices {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  width: max-content;
+}
+
+.choice {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 14px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.choice + .choice {
+  border-left: 1px solid var(--line-strong);
+}
+
+.choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.choice[data-checked] {
+  background: var(--wash-strong);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.choice:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* The models the service listed: a strip of names to pick from. */
+.models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 168px;
+  margin-top: 8px;
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  background: var(--surface-1);
+  border-radius: var(--radius);
+}
+
+.filter {
+  margin-top: 8px;
+}
+
+.modelPick {
+  height: 24px;
+  max-width: 100%;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: var(--radius);
+}
+
+.modelPick:hover {
+  border-color: var(--muted);
+}
+
+.modelPick[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.numbers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 12px 18px;
+}
+
+.numbers .field {
+  margin-top: 0;
+}
+
+.number {
+  width: 100%;
+}
+
+/* Folded parts (advanced, proxy, Vertex): a thin frame, the title always showing. */
+.fold {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.fold > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 12px;
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fold[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.foldBody {
+  padding: 12px 12px 14px;
+}
+
+.badge {
+  padding: 0 5px;
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+  font-size: var(--fs-1);
+  font-weight: 400;
+  line-height: 16px;
+  border-radius: var(--radius);
+}
+
+/* Save and test stay reachable while a long form scrolls. The settings pane
+   keeps 64px of padding at its bottom (SettingsPage.module.css .content); the
+   bar reaches through it to sit on the pane's edge. */
+.actions {
+  position: sticky;
+  bottom: -64px;
+  z-index: 1;
+  margin: 22px -8px 0;
+  padding: 10px 8px;
+  border-top: 1px solid var(--line);
+  background: var(--stage);
+}
+
+.actionRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+/* What the last save or test said, beside the buttons. */
+.barNote {
+  flex: 1 1 260px;
+  min-width: 0;
+  margin: 0;
+  color: var(--ok);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.barNote[data-tone="error"] {
+  color: var(--danger);
+}
+
+.barNote[data-tone="info"] {
+  color: var(--text-2);
+}
+
+.unsaved {
+  color: var(--warn);
+  font-size: var(--fs-2);
+}
+
+.note {
+  margin: 8px 0 0;
+  color: var(--ok);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.note[data-tone="error"] {
+  color: var(--danger);
+}
+
+.note[data-tone="info"] {
+  color: var(--text-2);
+}
+
+/* Local Ollama: the models as ruled rows, actions on the right. */
+.ollamaState {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 12px;
+}
+
+.ollamaState p {
+  margin: 0;
+}
+
+.link {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line-strong);
+}
+
+.link:hover {
+  text-decoration-color: var(--text);
+}
+
+.list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.itemText {
+  min-width: 0;
+}
+
+.itemName {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.itemId {
+  color: var(--muted);
+  font-size: var(--fs-2);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.itemNote {
+  margin: 2px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.tag {
+  font-size: var(--fs-1);
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.tag[data-kind="ok"] {
+  color: var(--ok);
+}
+
+.tag[data-kind="use"] {
+  color: var(--accent);
+}
+
+.itemActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pulling {
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.dialogText {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.warn {
+  padding: 8px 12px;
+  border-left: 2px solid var(--warn);
+  background: var(--wash);
+}
+
+/* The API chat log: each call like a transcript entry. */
+.log {
+  max-height: 440px;
+  margin-top: 10px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  background: var(--surface-1);
+  border-radius: var(--radius);
+}
+
+.event {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.event:last-child {
+  border-bottom: 0;
+}
+
+.eventHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0 0 6px;
+}
+
+.phase {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.phase[data-phase="response"] {
+  color: var(--ai);
+}
+
+.phase[data-phase="error"] {
+  color: var(--danger);
+}
+
+.eventMeta {
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  overflow-wrap: anywhere;
+}
+
+.eventField {
+  margin: 6px 0 0;
+}
+
+.eventLabel {
+  display: block;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  letter-spacing: 0.04em;
+}
+
+.eventField pre {
+  margin: 2px 0 0;
+  max-height: 180px;
+  overflow: auto;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
