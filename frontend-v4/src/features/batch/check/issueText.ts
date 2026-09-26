@@ -14,6 +14,7 @@ export const ISSUE_TEXT: Record<IssueKind, { title: MessageKey; detail: MessageK
   small: { title: 'dataset.check.small', detail: 'dataset.check.small.detail' },
   low_aesthetic: { title: 'dataset.check.lowAesthetic', detail: 'dataset.check.lowAesthetic.detail' },
   too_long: { title: 'dataset.check.tooLong', detail: 'dataset.check.tooLong.detail' },
+  tag_style: { title: 'dataset.check.tagStyle', detail: 'dataset.check.tagStyle.detail' },
   character_outlier: { title: 'dataset.check.outlier', detail: 'dataset.check.outlier.detail' },
   fullbody: { title: 'dataset.check.fullbody', detail: 'dataset.check.fullbody.detail' },
   rating_conflict: { title: 'dataset.check.ratingConflict', detail: 'dataset.check.ratingConflict.detail' },

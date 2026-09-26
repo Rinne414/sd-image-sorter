@@ -726,4 +726,11 @@ export const zhCNDataset = {
   'dataset.export.done.colCaption': 'caption',
   'dataset.export.done.colFrom': '来自',
   'dataset.export.done.moreRows': '一共 {n} 张，这里只列前面一部分；全部在输出文件夹里。',
+  'dataset.bulk.style': '统一标签写法',
+  'dataset.bulk.labelStyle': '统一标签写法',
+  'dataset.bulk.styleSpaces': '这个批次的模板把下划线写成空格（blue sky）；加进来的标签也这样写。score_ 开头的和颜文字（^_^）不变。',
+  'dataset.bulk.styleUnderscores': '这个批次的模板保留下划线（blue_sky）；加进来的标签也这样写。颜文字（^_^）不变。',
+  'dataset.check.tagStyle': '{n} 张改过的 caption 里有另一种标签写法',
+  'dataset.check.tagStyle.detail': '同一个标签写成两种样子（如 blue_sky 和 blue sky），训练器会当成两个不同的词。统一成这个批次模板的写法，一步就能撤销。',
+  'dataset.check.unifyStyle': '统一标签写法（{n} 张）',
 } as const

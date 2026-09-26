@@ -17,6 +17,8 @@ export interface IssueActions {
   /** Training masks: edit one, or mask these automatically. */
   mask: (key: string) => void
   autoMask: (keys: readonly string[]) => void
+  /** Rewrite these edited captions' tags the way the batch writes them (one undoable change). */
+  unifyStyle: (keys: readonly string[]) => void
 }
 
 const REMOVE: ReadonlySet<IssueKind> = new Set(['file_changed', 'file_missing', 'unreadable', 'empty_caption', 'small', 'low_aesthetic', 'character_outlier'])
@@ -31,7 +33,7 @@ const PICK: ReadonlySet<IssueKind> = new Set([
   'rating_missing',
   'duplicates',
 ])
-const OPEN: ReadonlySet<IssueKind> = new Set(['empty_caption', 'too_long', 'trigger_coverage'])
+const OPEN: ReadonlySet<IssueKind> = new Set(['empty_caption', 'too_long', 'trigger_coverage', 'tag_style'])
 const SETTINGS: ReadonlySet<IssueKind> = new Set(['trigger_missing', 'trigger_collision', 'trigger_coverage', 'too_long', 'rating_conflict', 'rating_missing'])
 /** Their images have no caption to edit (the file is gone or changed). */
 const LOCKED: ReadonlySet<IssueKind> = new Set(['file_changed', 'file_missing', 'unreadable'])
@@ -97,6 +99,11 @@ function IssueButtons({ issue, actions }: { issue: CheckIssue; actions: IssueAct
     kind === 'no_mask' && (
       <button key="mask" type="button" className="btn" onClick={() => actions.mask(keys[0] as string)} data-testid="check-edit-mask">
         {t('dataset.check.editMasks')}
+      </button>
+    ),
+    kind === 'tag_style' && (
+      <button key="style" type="button" className="btn" onClick={() => actions.unifyStyle(keys)} data-testid="check-unify-style">
+        {t('dataset.check.unifyStyle', { n })}
       </button>
     ),
     kind === 'file_changed' && (

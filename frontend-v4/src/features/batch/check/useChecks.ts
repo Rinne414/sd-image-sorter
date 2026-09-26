@@ -4,7 +4,7 @@ import { useBatchProject } from '../datasetApi'
 import { formFromSettings, readBatchDataset } from '../datasetSettings'
 import { useProjectHeads } from '../datasetTagApi'
 import type { Entry } from '../entries'
-import { captionIssues } from './captionChecks'
+import { captionIssues, tagStyleIssues } from './captionChecks'
 import { checkScope, sentKeys, useAudit, useFinalCaptions, useFolderAesthetic, useHealth, useReviewQueue } from './checkApi'
 import { auditIssues, healthIssues, keyIndex, maskIssues, mergeIssues, projectIssues, purityIssues, reviewIssues, type CheckIssue } from './checkIssues'
 import { useMaskStatus } from '../masks/maskApi'
@@ -60,6 +60,7 @@ export function useChecks(batch: Batch, entries: readonly Entry[], o: CheckOptio
       [
         projectIssues(entries),
         finals.data && form ? captionIssues(finals.data.captions, form) : [],
+        heads.data && form ? tagStyleIssues(heads.data, form.normalizeUnderscores) : [],
         review.data ? reviewIssues(review.data, index) : [],
         audit.data ? auditIssues(audit.data, index) : [],
         aesthetic.data ? auditIssues(aesthetic.data, index) : [],
@@ -69,7 +70,7 @@ export function useChecks(batch: Batch, entries: readonly Entry[], o: CheckOptio
       ],
       entries.map((e) => e.key),
     )
-  }, [entries, finals.data, form, review.data, audit.data, aesthetic.data, health.data, purity, ratings, masks.data, scope.ids, exportsMasks])
+  }, [entries, finals.data, heads.data, form, review.data, audit.data, aesthetic.data, health.data, purity, ratings, masks.data, scope.ids, exportsMasks])
 
   const summary = audit.data?.summary
   const auditWarning = summary?.near_duplicate_error ? 'phashError' : summary?.near_duplicate_check_limited ? 'phashLimited' : null

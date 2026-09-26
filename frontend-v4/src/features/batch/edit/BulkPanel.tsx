@@ -5,12 +5,15 @@ import type { CaptionContent } from '../datasetTag'
 import styles from './Bulk.module.css'
 import { CAPTION_TYPES, splitTags, type CaptionType } from './captionContent'
 import { CATEGORY_ORDER, findPattern, planOp, type BulkOp, type CategoryOf, type FindMode, type FindTarget, type Position } from './captionOps'
+import { styledList, type TagStyle } from './tagStyle'
 
 export interface BulkContext {
   contents: ReadonlyMap<string, CaptionContent>
   /** The images an operation changes: the selection, or every image. */
   keys: readonly string[]
   categoryOf: CategoryOf
+  /** How the batch template writes tags: added and replacing tags are written so too. */
+  style: TagStyle
   busy: boolean
   run: (op: BulkOp, label: string) => void
 }
@@ -47,7 +50,7 @@ function AddRemove({ ctx }: { ctx: BulkContext }) {
   const [position, setPosition] = useState<Position>('back')
   const tags = splitTags(text)
   const list = tags.join(', ')
-  const add: BulkOp | null = tags.length ? { kind: 'add', tags, position } : null
+  const add: BulkOp | null = tags.length ? { kind: 'add', tags: styledList(text, ctx.style), position } : null
   const remove: BulkOp | null = tags.length ? { kind: 'remove', tags } : null
   return (
     <Section title={t('dataset.bulk.tagsTitle')}>
@@ -77,7 +80,9 @@ function FindReplace({ ctx }: { ctx: BulkContext }) {
   const [ignoreCase, setIgnoreCase] = useState(false)
   const pattern = findPattern(find, mode, ignoreCase)
   const problem = pattern && !(pattern instanceof RegExp) ? pattern.error : null
-  const op: BulkOp | null = find && !problem ? { kind: 'replace', find, replace, mode, target: mode === 'tag' ? 'tags' : target, ignoreCase } : null
+  // A whole tag is replaced by tags written the batch's way; text and patterns are the user's own.
+  const written = mode === 'tag' ? styledList(replace, ctx.style).join(', ') : replace
+  const op: BulkOp | null = find && !problem ? { kind: 'replace', find, replace: written, mode, target: mode === 'tag' ? 'tags' : target, ignoreCase } : null
   return (
     <Section title={t('dataset.bulk.findTitle')}>
       <div className={styles.row2}>
@@ -118,7 +123,9 @@ function Cleanup({ ctx }: { ctx: BulkContext }) {
       <div className={styles.actions}>
         <Apply ctx={ctx} op={{ kind: 'dedupe' }} label={t('dataset.bulk.labelDedupe')} text={t('dataset.bulk.dedupe')} testId="bulk-dedupe" />
         <Apply ctx={ctx} op={{ kind: 'sortByCategory', order: CATEGORY_ORDER }} label={t('dataset.bulk.labelSort')} text={t('dataset.bulk.sort')} testId="bulk-sort" />
+        <Apply ctx={ctx} op={{ kind: 'style', style: ctx.style }} label={t('dataset.bulk.labelStyle')} text={t('dataset.bulk.style')} testId="bulk-unify-style" />
       </div>
+      <p className={styles.muted}>{t(ctx.style === 'spaces' ? 'dataset.bulk.styleSpaces' : 'dataset.bulk.styleUnderscores')}</p>
       <p className={styles.muted}>{t('dataset.bulk.sortOrder', { order })}</p>
       <div className={styles.cats} role="group" aria-label={t('dataset.bulk.catsLabel')}>
         {CATEGORIES.map((c) => (

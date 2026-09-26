@@ -1,5 +1,6 @@
 import type { CaptionContent } from '../datasetTag'
 import { joinTags, sameContent, splitTags, tagKey, type CaptionType } from './captionContent'
+import { withTagStyle, type TagStyle } from './tagStyle'
 
 // Changes made to many captions at once, as pure functions. Tags are split
 // and compared the way the backend's caption transforms do (commas and line
@@ -18,6 +19,7 @@ export type BulkOp =
   | { kind: 'removeCategories'; categories: string[] }
   | { kind: 'sortByCategory'; order: readonly string[] }
   | { kind: 'type'; type: CaptionType }
+  | { kind: 'style'; style: TagStyle }
 
 /** The category of a tag (the 14 of /api/prompts/categorize); unknown when not known. */
 export type CategoryOf = (tag: string) => string
@@ -125,6 +127,8 @@ export function applyOp(content: CaptionContent, op: BulkOp, categoryOf: Categor
       return sortByCategory(content, op.order, categoryOf)
     case 'type':
       return { ...content, caption_type: op.type }
+    case 'style':
+      return withTagStyle(content, op.style)
   }
 }
 

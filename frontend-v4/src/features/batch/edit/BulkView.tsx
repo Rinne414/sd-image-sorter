@@ -16,6 +16,7 @@ import { isOwnEmpty, splitTags, tagKey } from './captionContent'
 import { hasDuplicateTags, tagFrequency, type BulkOp, type TagRow } from './captionOps'
 import type { CaptionSession } from './captionSession'
 import { FrequencyTable, type RowActions } from './FrequencyTable'
+import { styledTag, styleOf } from './tagStyle'
 import { traitMarks } from './tagInsights'
 
 interface Props {
@@ -69,7 +70,8 @@ export function BulkView({ batch, form, entries, heads, selected, onSelect, sess
     },
     [batch, session, keys, contents, entryMap, categoryOf],
   )
-  const ctx: BulkContext = useMemo(() => ({ contents, keys, categoryOf, busy, run: (op, label) => void run(op, label) }), [contents, keys, categoryOf, busy, run])
+  const style = styleOf(form.normalizeUnderscores)
+  const ctx: BulkContext = useMemo(() => ({ contents, keys, categoryOf, style, busy, run: (op, label) => void run(op, label) }), [contents, keys, categoryOf, style, busy, run])
 
   const actions: RowActions = {
     remove: (row) => void run({ kind: 'remove', tags: [row.tag] }, t('dataset.bulk.labelRemove', { tags: row.tag })),
@@ -97,7 +99,7 @@ export function BulkView({ batch, form, entries, heads, selected, onSelect, sess
           </button>
           {traits && <span className={styles.muted}>{t('dataset.freq.traitsLead')}</span>}
         </div>
-        {missed && <MissedBox missed={missed} busy={busy} onAdd={() => void run({ kind: 'add', tags: [missed.row.tag], position: 'back' }, t('dataset.bulk.labelAdd', { tags: missed.row.tag }), missed.keys).then(() => setMissed(null))} onSelect={() => onSelect(missed.keys)} onClose={() => setMissed(null)} />}
+        {missed && <MissedBox missed={missed} busy={busy} onAdd={() => void run({ kind: 'add', tags: [styledTag(missed.row.tag, style)], position: 'back' }, t('dataset.bulk.labelAdd', { tags: missed.row.tag }), missed.keys).then(() => setMissed(null))} onSelect={() => onSelect(missed.keys)} onClose={() => setMissed(null)} />}
         {loading && <p className={styles.muted}>{t('dataset.bulk.loading', { n: entries.length })}</p>}
       </FrequencyTable>
       <aside className={styles.panel} aria-label={t('dataset.bulk.title')} data-testid="bulk-panel">

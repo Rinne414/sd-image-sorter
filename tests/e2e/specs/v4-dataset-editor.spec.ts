@@ -232,7 +232,7 @@ test('three captions edited (a chip, the tag field, words with Ctrl+Enter, the t
   await expect(panel(page)).toHaveAttribute('data-key', `lib:${ids[1]}`)
   await page.getByTestId('edit-tag-input').fill('e2e_added')
   await page.getByTestId('edit-tag-input').press('Enter')
-  await expect(chip(page, 'e2e_added')).toBeVisible()
+  await expect(chip(page, 'e2e added')).toBeVisible()
   await saved(page)
 
   // words typed, then Ctrl+Enter from inside the box moves on (and the words are saved)
@@ -247,9 +247,9 @@ test('three captions edited (a chip, the tag field, words with Ctrl+Enter, the t
   await expect.poll(async () => (await heads(page)).filter((h) => h.active_revision?.author_class === 'user').length).toBe(3)
   const second = await headOf(page, ids[1]!)
   expect(second?.active_revision?.content).toMatchObject({ nl_caption: 'A girl in a field.' })
-  expect(second?.active_revision?.content.booru_caption).toContain('e2e_added')
+  expect(second?.active_revision?.content.booru_caption).toContain('e2e added')
   expect((await headOf(page, ids[2]!))?.active_revision?.content.caption_type).toBe('both')
-  expect(libraryTags(ids[1]!), 'the batch caption never writes the Library').not.toContain('e2e_added')
+  expect(libraryTags(ids[1]!), 'the batch caption never writes the Library').not.toContain('e2e added')
   expect(libraryTags(ids[0]!)).toContain('watermark')
 
   // a reload shows the saved captions
@@ -259,7 +259,7 @@ test('three captions edited (a chip, the tag field, words with Ctrl+Enter, the t
   await expect(chip(page, 'long hair')).toBeVisible()
   await expect(chip(page, 'watermark')).toHaveCount(0)
   await page.keyboard.press('d')
-  await expect(chip(page, 'e2e_added')).toBeVisible()
+  await expect(chip(page, 'e2e added')).toBeVisible()
   await expect(page.getByTestId('edit-nl')).toHaveValue('A girl in a field.')
   await page.keyboard.press('d')
   await expect(page.getByTestId('edit-type-both')).toHaveAttribute('aria-checked', 'true')
@@ -275,7 +275,7 @@ test('the export preview renders the revision, under the batch rules (a new blac
   const item = (id: number) => page.locator(`[data-testid="preview-item"][data-id="${id}"]`).getByTestId('preview-caption')
   await expect(item(ids[0]!)).toContainText(TRIGGER)
   await expect(item(ids[0]!)).not.toContainText('watermark')
-  await expect(item(ids[1]!)).toContainText('e2e_added')
+  await expect(item(ids[1]!)).toContainText('e2e added')
   await expect(item(ids[2]!)).toContainText('smile')
 
   // the same request the export sends: the revision, by its id
@@ -296,7 +296,7 @@ test('the export preview renders the revision, under the batch rules (a new blac
   })
   expect(direct.status).toBe(200)
   expect(direct.body.items[0]?.caption.split(', ')[0]).toBe(TRIGGER)
-  expect(direct.body.items[0]?.caption).toContain('e2e_added')
+  expect(direct.body.items[0]?.caption).toContain('e2e added')
 
   // a blacklist added now takes the tag out of a hand-edited caption too
   await expect(item(ids[0]!)).toContainText('smile')
@@ -342,7 +342,7 @@ test('a caption changed elsewhere meanwhile is read again, the user is told, and
   await openEditStep(page)
   await page.keyboard.press('d')
   await expect(panel(page)).toHaveAttribute('data-key', `lib:${ids[1]}`)
-  await expect(chip(page, 'e2e_added')).toBeVisible()
+  await expect(chip(page, 'e2e added')).toBeVisible()
 
   // V3.5 (or an AI run) writes a revision while the editor shows the older one
   const p = await project(page)
@@ -358,7 +358,7 @@ test('a caption changed elsewhere meanwhile is read again, the user is told, and
   })
   expect(write.status).toBe(201)
 
-  await chip(page, 'e2e_added').getByRole('button', { name: 'Remove tag e2e_added' }).click()
+  await chip(page, 'e2e added').getByRole('button', { name: 'Remove tag e2e added' }).click()
   await expect(page.getByTestId('edit-conflict')).toContainText('changed elsewhere')
   await expect(chip(page, 'from_elsewhere')).toBeVisible()
   expect((await headOf(page, ids[1]!))?.active_revision?.content.booru_caption).toBe('from_elsewhere')
@@ -367,7 +367,7 @@ test('a caption changed elsewhere meanwhile is read again, the user is told, and
   await saved(page)
   const mine = (await headOf(page, ids[1]!))?.active_revision?.content
   expect(mine?.booru_caption).toContain('long hair')
-  expect(mine?.booru_caption).not.toContain('e2e_added')
+  expect(mine?.booru_caption).not.toContain('e2e added')
   expect(mine?.booru_caption).not.toContain('from_elsewhere')
 })
 
@@ -382,13 +382,13 @@ test('TIPO and the Chinese reading aid only suggest; tag info shows what the app
   await page.getByTestId('edit-tipo-open').click()
   await page.getByTestId('edit-tipo-run').click()
   await expect(page.getByTestId('edit-tipo-pick')).toHaveCount(2)
-  await expect(chip(page, 'e2e_tipo_tag')).toHaveCount(0)
+  await expect(chip(page, 'e2e tipo tag')).toHaveCount(0)
   await page.getByTestId('edit-tipo-pick').first().check()
   await page.getByTestId('edit-tipo-add').click()
-  await expect(chip(page, 'e2e_tipo_tag')).toBeVisible()
-  await expect(chip(page, 'e2e_tipo_other')).toHaveCount(0)
+  await expect(chip(page, 'e2e tipo tag')).toBeVisible()
+  await expect(chip(page, 'e2e tipo other')).toHaveCount(0)
   await saved(page)
-  expect(libraryTags(ids[2]!)).not.toContain('e2e_tipo_tag')
+  expect(libraryTags(ids[2]!)).not.toContain('e2e tipo tag')
 
   await page.getByTestId('edit-zh').selectOption('web')
   await expect(chip(page, 'smile')).toContainText('中smile')
@@ -412,9 +412,9 @@ test('X takes the image out (the toast undoes it); A/D/X do nothing on the Libra
   await page.getByTestId('edit-tag-input').fill('e2e_ctrl')
   await page.getByTestId('edit-tag-input').press('Control+Shift+Enter')
   await expect(panel(page)).toHaveAttribute('data-key', `lib:${ids[2]}`)
-  await expect.poll(async () => (await heads(page)).find((h) => h.item.item_type === 'local')?.active_revision?.content.booru_caption).toBe('1girl, forest, e2e_ctrl')
+  await expect.poll(async () => (await heads(page)).find((h) => h.item.item_type === 'local')?.active_revision?.content.booru_caption).toBe('1girl, forest, e2e ctrl')
   await page.keyboard.press('d')
-  await expect(chip(page, 'e2e_ctrl')).toBeVisible()
+  await expect(chip(page, 'e2e ctrl')).toBeVisible()
   await page.keyboard.press('x')
   await expect.poll(async () => (await project(page)).items.length).toBe(3)
   await expect(panel(page)).toHaveAttribute('data-key', `lib:${ids[2]}`)

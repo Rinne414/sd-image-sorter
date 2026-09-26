@@ -18,6 +18,7 @@ export type IssueKind =
   | 'small'
   | 'low_aesthetic'
   | 'too_long'
+  | 'tag_style'
   | 'character_outlier'
   | 'fullbody'
   | 'rating_conflict'
@@ -72,6 +73,7 @@ const SEVERITY: Record<IssueKind, Severity> = {
   small: 'medium',
   low_aesthetic: 'medium',
   too_long: 'medium',
+  tag_style: 'medium',
   character_outlier: 'medium',
   fullbody: 'medium',
   rating_conflict: 'medium',

@@ -2,6 +2,8 @@ import { captionTransforms } from '../captionRules'
 import type { DatasetForm, TargetModel } from '../datasetSettings'
 import { splitTags, tagKey } from '../edit/captionContent'
 import { ownEmpty } from '../edit/marks'
+import { offStyleTags, styleOf } from '../edit/tagStyle'
+import type { CaptionContent } from '../datasetTag'
 import { issue, type CheckIssue, type TagPair } from './checkIssues'
 
 // What the final captions (as the export writes them) say: empty ones, ones
@@ -130,4 +132,22 @@ export function captionIssues(finals: ReadonlyMap<string, string>, form: Dataset
     ...(pairs.length ? [issue('cooccur', 'captions', { pairs })] : []),
     ...(rare.length ? [issue('rare_tags', 'captions', { tags: rare })] : []),
   ]
+}
+
+/**
+ * Edited captions with tags written another way than the batch template
+ * writes them (`blue_sky` beside rendered `blue sky`): the trainer reads the
+ * two spellings as two different words. The note is one such tag.
+ */
+export function tagStyleIssues(heads: ReadonlyMap<string, { content?: CaptionContent }>, normalizeUnderscores: boolean): CheckIssue[] {
+  const style = styleOf(normalizeUnderscores)
+  const keys: string[] = []
+  const notes: Record<string, string> = {}
+  for (const [key, head] of heads) {
+    const off = head.content ? offStyleTags(head.content.booru_caption, style) : []
+    if (off.length === 0) continue
+    keys.push(key)
+    notes[key] = off[0] as string
+  }
+  return keys.length ? [issue('tag_style', 'captions', { keys, notes })] : []
 }

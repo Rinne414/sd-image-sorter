@@ -4,6 +4,8 @@ import type { Batch } from '../../../api/types'
 import { useT } from '../../../i18n'
 import { useApp } from '../../../state/store'
 import { projectKey, readdEntries } from '../datasetApi'
+import { runBulk } from '../edit/bulkRun'
+import { styleOf } from '../edit/tagStyle'
 import { captionHolder } from '../edit/useCaptionSession'
 import { stepLabel } from '../labels'
 import { setSettingsPanel } from '../settingsPanel'
@@ -77,6 +79,12 @@ export function CheckStep({ batch, next, onNext }: Props) {
       if (id !== null) openMaskEditor(scope.ids, id)
     },
     autoMask: (keys) => autoMaskImages(keys.map(idOf).filter((id): id is number => id !== null)),
+    unifyStyle: (keys) => {
+      if (!form) return
+      const op = { kind: 'style', style: styleOf(form.normalizeUnderscores) } as const
+      // Only edited captions are off style: never-edited ones are rendered the batch's way.
+      void runBulk(batch, captionHolder(batch.id).session, { label: t('dataset.bulk.labelStyle'), op, keys, initial: new Map(), entries: byKey, categoryOf: () => 'unknown' })
+    },
   }
 
   const body =

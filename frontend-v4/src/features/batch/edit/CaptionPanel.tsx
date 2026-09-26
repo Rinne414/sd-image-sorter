@@ -24,6 +24,7 @@ import styles from './CaptionPanel.module.css'
 import type { CaptionSession, ItemState } from './captionSession'
 import { TagChips, TagInfoBox, type ChipFacts } from './TagChips'
 import { TipoPanel } from './TipoPanel'
+import { styledTag, styleOf, withTagStyle } from './tagStyle'
 import { useTagZh, type ZhSource } from './tagAids'
 
 const TYPE_LABEL: Record<CaptionType, MessageKey> = {
@@ -79,6 +80,9 @@ export function CaptionEditor({ form, entry, item, session, locked, zhSource, vo
   const zh = useTagZh(tags, zhSource)
   const facts: ChipFacts = { categories: categories.data, confidence, zh: zh.data, dropped: droppedTags(tags, form, categories.data) }
   const edit = (change: (c: CaptionContent) => CaptionContent) => !locked && session.edit(entry.key, change)
+  // Tags go in the way the batch template writes them, so an edited caption reads like the rendered ones.
+  const style = styleOf(form.normalizeUnderscores)
+  const addTags = (picked: readonly string[]) => edit((c) => withTags(c, picked.map((tag) => styledTag(tag, style))).content)
   const over = form.maxTags > 0 && tagCount(content) > form.maxTags
 
   return (
@@ -106,6 +110,7 @@ export function CaptionEditor({ form, entry, item, session, locked, zhSource, vo
             aria-label={t('dataset.edit.tags')}
             spellCheck={false}
             onChange={(e) => edit((c) => withBooruText(c, e.target.value))}
+            onBlur={() => edit((c) => withTagStyle(c, style))}
             data-testid="edit-booru-text"
           />
         ) : (
@@ -118,7 +123,7 @@ export function CaptionEditor({ form, entry, item, session, locked, zhSource, vo
             vocabulary="global"
             preferred={vocabulary}
             onSubmit={(added) => {
-              edit((c) => withTags(c, added).content)
+              addTags(added)
               return true
             }}
             testId="edit-tag-input"
@@ -135,7 +140,7 @@ export function CaptionEditor({ form, entry, item, session, locked, zhSource, vo
             tags={tags}
             imageId={entry.imageId}
             disabled={locked}
-            onAdd={(picked) => edit((c) => withTags(c, picked).content)}
+            onAdd={addTags}
             onClose={() => setTipo(false)}
           />
         )}

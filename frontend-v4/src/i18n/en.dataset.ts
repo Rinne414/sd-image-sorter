@@ -725,4 +725,11 @@ export const enDataset: Record<keyof typeof zhCNDataset, string> = {
   'dataset.export.done.colCaption': 'Caption',
   'dataset.export.done.colFrom': 'From',
   'dataset.export.done.moreRows': '{n} in all; only the first are listed here, all are in the folder.',
+  'dataset.bulk.style': 'Write tags one way',
+  'dataset.bulk.labelStyle': 'write tags one way',
+  'dataset.bulk.styleSpaces': 'The template of this batch writes underscores as spaces (blue sky), and added tags are written so too. score_ tags and emoticons (^_^) stay as they are.',
+  'dataset.bulk.styleUnderscores': 'The template of this batch keeps underscores (blue_sky), and added tags are written so too. Emoticons (^_^) stay as they are.',
+  'dataset.check.tagStyle': '{n} edited captions spell some tags another way',
+  'dataset.check.tagStyle.detail': 'One tag in two spellings (blue_sky and blue sky) is two different words to the trainer. Write them the way the template of this batch does; one step undoes it.',
+  'dataset.check.unifyStyle': 'Write tags one way ({n})',
 }
