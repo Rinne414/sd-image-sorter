@@ -20,7 +20,9 @@ const DIR = 'v4-lexicon'
 const LIBRARY = 'v4lex-lib'
 
 /**
- * tags: v4lex_common on 00-03, v4lex_pair on 00-01, v4lex:colon on 04
+ * tags: v4lex_common on 00-03, v4lex_pair on 00-01, v4lex:colon on 04, and
+ *   solo on 05: a tag the "v4lex" find hides, so "3 of N shown" holds on a
+ *   clean database (it used to lean on tag rows other specs left behind)
  * prompt words: "v4lex word" on 00-02 (plus the seed's own words on all six)
  * LoRAs: v4lex_style on 00-02, "v4lex v2" on 03
  * models: "v4lex alpha" on 00-01, v4lex_beta on 02
@@ -33,7 +35,7 @@ with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
     conn.execute("INSERT OR IGNORE INTO libraries (id, name, is_default) VALUES (?, 'V4 e2e lexicon', 0)", (${JSON.stringify(LIBRARY)},))
     conn.execute("UPDATE images SET library_id = ? WHERE filename LIKE ?", (${JSON.stringify(LIBRARY)}, prefix + "%"))
     ids = [r[0] for r in conn.execute("SELECT id FROM images WHERE filename LIKE ? AND filename NOT LIKE ? ORDER BY filename", (prefix + "%", prefix + "cache%"))]
-    tags = {0: ["v4lex_common", "v4lex_pair"], 1: ["v4lex_common", "v4lex_pair"], 2: ["v4lex_common"], 3: ["v4lex_common"], 4: ["v4lex:colon"]}
+    tags = {0: ["v4lex_common", "v4lex_pair"], 1: ["v4lex_common", "v4lex_pair"], 2: ["v4lex_common"], 3: ["v4lex_common"], 4: ["v4lex:colon"], 5: ["solo"]}
     for i, names in tags.items():
         for tag in names:
             conn.execute("INSERT INTO tags (image_id, tag, confidence, source) VALUES (?, ?, 0.9, 'e2e')", (ids[i], tag))
