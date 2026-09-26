@@ -374,3 +374,28 @@ test('each is removable; a changed file can be re-added as it is now; the Librar
   await expect.poll(() => libraryIn(page)).toEqual([ids[0]])
   expect(libraryCount(), 'taking images out of a batch never removes them from the Library').toBe(4)
 })
+
+test('a check that did not finish is never read as "no issues": the heading counts it and points to Try again', async ({ page }) => {
+  await stubPurity(page)
+  // what the removals above left has no issues; the health report answers empty twice (the app asks once more by itself)
+  let reports = 0
+  await page.route('**/api/tags/consistency/report', (route) => {
+    reports += 1
+    return reports <= 2 ? route.fulfill({ status: 204, body: '' }) : route.continue()
+  })
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openCheck(page)
+  const health = page.locator('[data-testid="check-source"][data-source="health"]')
+  await expect(health).toHaveAttribute('data-status', 'failed', { timeout: 20_000 })
+  await expect(page.locator('[data-testid="check-source"][data-status="checking"]')).toHaveCount(0, { timeout: 20_000 })
+  const heading = page.getByTestId('check-issues').getByRole('heading', { level: 2 })
+  await expect(heading).not.toHaveText('No issues found')
+  await expect(heading).toHaveText('Unfinished checks: 1')
+  await expect(page.getByTestId('check-unfinished')).toContainText('Try again')
+
+  // once it answers and finds nothing, "no issues" is true and the note goes
+  await health.getByRole('button', { name: 'Try again' }).click()
+  await expect(health).toHaveAttribute('data-status', 'done', { timeout: 20_000 })
+  await expect(heading).toHaveText('No issues found')
+  await expect(page.getByTestId('check-unfinished')).toHaveCount(0)
+})

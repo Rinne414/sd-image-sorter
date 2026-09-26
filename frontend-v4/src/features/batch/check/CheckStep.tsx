@@ -13,6 +13,7 @@ import { StepBar } from '../StepBar'
 import { useBatchEntries } from '../useBatchEntries'
 import { ruleTagKeys } from './captionChecks'
 import { ChecksPanel } from './ChecksPanel'
+import { checkHeading } from './checkHeading'
 import { loadCheckOptions, saveCheckOptions, type CheckOptions } from './checkOptions'
 import styles from './CheckStep.module.css'
 import { IssueCard, type IssueActions } from './IssueCard'
@@ -50,6 +51,7 @@ export function CheckStep({ batch, next, onNext }: Props) {
     [finals, form, scope.ids, scope.folderCount],
   )
   const checking = sources.some((s) => s.status === 'checking')
+  const heading = checkHeading(issues.length, sources)
   const library = useApp((s) => s.libraryId)
   // The project is read again too: whether a folder image's file changed is found when it is read.
   const again = () => {
@@ -108,9 +110,12 @@ export function CheckStep({ batch, next, onNext }: Props) {
           <PurityCard batch={batch} ids={scope.ids} folderCount={scope.folderCount} />
         </div>
         <section className={styles.issues} aria-label={t('dataset.check.issuesTitle')} data-testid="check-issues">
-          <h2 className={styles.issuesTitle}>
-            {issues.length === 0 ? (checking ? t('dataset.check.stillChecking') : t('dataset.check.noIssues')) : t('dataset.check.issueCount', { n: issues.length })}
-          </h2>
+          <h2 className={styles.issuesTitle}>{t(heading.title, { n: heading.n })}</h2>
+          {heading.incomplete && (
+            <p className={styles.unchecked} data-testid="check-unfinished">
+              {t('dataset.check.unfinished')}
+            </p>
+          )}
           {unchecked > 0 && (
             <p className={styles.unchecked} data-testid="check-unchecked">
               {t('dataset.check.unchecked', { n: unchecked })}{' '}

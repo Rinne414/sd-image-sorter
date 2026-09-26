@@ -444,6 +444,8 @@ export const zhCNDataset = {
   'dataset.check.issuesTitle': '问题',
   'dataset.check.stillChecking': '正在检查…',
   'dataset.check.noIssues': '没有发现问题',
+  'dataset.check.unfinishedTitle': '有 {n} 项检查没做完',
+  'dataset.check.unfinished': '结果不完整：左边写着「失败」的检查没做完，点旁边的「重试」再查一次。',
   'dataset.check.issueCount': '{n} 个问题',
   'dataset.check.readded': '已按现在的文件重新加入 {n} 张',
   'dataset.check.purity.running': '正在检查角色纯度：{n} 张',

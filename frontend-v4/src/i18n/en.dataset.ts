@@ -443,6 +443,8 @@ export const enDataset: Record<keyof typeof zhCNDataset, string> = {
   'dataset.check.issuesTitle': 'Issues',
   'dataset.check.stillChecking': 'Checking…',
   'dataset.check.noIssues': 'No issues found',
+  'dataset.check.unfinishedTitle': 'Unfinished checks: {n}',
+  'dataset.check.unfinished': 'The result is incomplete: the checks marked “Failed” on the left did not finish. Click Try again next to them.',
   'dataset.check.issueCount': '{n} issues',
   'dataset.check.readded': 'Re-added {n} as the files are now',
   'dataset.check.purity.running': 'Checking character purity: {n} images',
