@@ -53,6 +53,7 @@ if exist "%ROOT_DIR%\python\python.exe" (
     set "PYTHON_CMD=%ROOT_DIR%\python\python.exe"
     set "PYTHON_DIR=%ROOT_DIR%\python"
     set "PATH=!PYTHON_DIR!;!PYTHON_DIR!\Scripts;!PYTHON_DIR!\Lib\site-packages;%PATH%"
+    set "PYTHONNOUSERSITE=1"
     echo [OK] Using embedded Python: !PYTHON_CMD!
     goto :found_python
 )

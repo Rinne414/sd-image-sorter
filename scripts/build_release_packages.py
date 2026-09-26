@@ -717,6 +717,9 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             "REM -- Put embedded Python and its Scripts on PATH so DLLs and\n"
             "REM    compiled extensions (numpy, pillow, onnxruntime) resolve.\n"
             "set \"PATH=!PYTHON_DIR!;!PYTHON_DIR!\\Scripts;!PYTHON_DIR!\\Lib\\site-packages;%PATH%\"\n"
+            "REM -- Use only this Python's own packages, never the user's site-packages\n"
+            "REM    under AppData (they could fill in or shadow a pinned package).\n"
+            "set \"PYTHONNOUSERSITE=1\"\n"
             "\n"
             "echo [OK] Using embedded Python: !PYTHON_CMD!\n"
             "\n"
@@ -1059,6 +1062,9 @@ fi
 # Make pip-installed entry points runnable without LD_LIBRARY_PATH dance.
 # python-build-standalone uses RPATH so the interpreter finds its own libs.
 export PATH="$PYTHON_DIR/bin:$PATH"
+# Use only this Python's own packages, never the user's ~/.local site-packages
+# (they could fill in or shadow a pinned package).
+export PYTHONNOUSERSITE=1
 
 echo "[OK] Using bundled Python: $PYTHON_CMD"
 "$PYTHON_CMD" --version

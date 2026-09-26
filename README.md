@@ -310,6 +310,9 @@ run.bat
 > [!TIP]
 > Windows 便携版自带 Python 3.12。源码 / Linux 用户只要装 Python 3.12 或 3.13 都可以——v3.2.2 起 lockfile 同时锁了两个版本（3.12 走 numpy 1.x，3.13 走 numpy 2.x）。默认只安装轻量核心依赖；CLIP / NudeNet / YOLO / SAM3 / 美学评分 / 画师识别等重型 AI 运行库会在你点击 Feature Setup 的 Prepare / Download 后按需安装。若界面提示已安装 Python 包，请重启应用后再使用该功能。
 
+> [!NOTE]
+> 从源码运行时，新界面 V4（`/v4/`）需要 [Node.js](https://nodejs.org/)：装好后 `run.bat` / `run.sh` 会自动构建。下载的发布包已自带构建好的 V4，不需要 Node.js。没有 Node.js 时 V3.5（`/`）照常可用。
+
 ## 下载与运行说明
 
 
@@ -707,6 +710,9 @@ cd sd-image-sorter
 
 > [!TIP]
 > macOS users can run `./run.sh` directly. Apple Silicon and Intel Macs both support the core gallery, organization, and ONNX features. General Torch-backed AI requires **macOS 14+ on Apple Silicon**; SAM3 remains NVIDIA CUDA-only and is unavailable on macOS. Intel or older macOS is rejected before an unsafe legacy Torch install while the core app remains usable.
+
+> [!NOTE]
+> From source, the new V4 interface (`/v4/`) needs [Node.js](https://nodejs.org/): once it is installed, `run.bat` / `run.sh` build V4 automatically. Release packages ship V4 already built and need no Node.js. Without Node.js, V3.5 at `/` still works.
 
 
 ### What Works Immediately vs. What Needs Setup?

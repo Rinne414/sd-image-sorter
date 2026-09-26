@@ -72,4 +72,11 @@ def test_unbuilt_v4_explains_how_to_build(tmp_path):
     client = _client(tmp_path / "missing-dist")
     res = client.get("/v4/")
     assert res.status_code == 503
-    assert "npm run build" in res.text
+    assert "charset=utf-8" in res.headers["content-type"]
+    # Both languages: the launchers build V4 once Node.js is installed, and
+    # V3.5 at / never needs it.
+    for text in ("Node.js", "run.bat", "run.sh", "npm run build", "V3.5"):
+        assert text in res.text
+    for text in ("自动构建", "打开 /"):
+        assert text in res.text
+    assert "automatically" in res.text

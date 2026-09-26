@@ -2158,3 +2158,38 @@ def test_lazy_release_qa_fails_when_the_v4_index_loads_no_built_script():
 
     with pytest.raises(module.LazyQaError, match="no built script"):
         module.assert_frontend_v4_build(set(files), _v4_reader(files), package_kind="linux")
+
+
+def _first_line_index(text: str, prefix: str) -> int:
+    lines = text.splitlines()
+    return next(index for index, line in enumerate(lines) if line.lstrip().startswith(prefix))
+
+
+def test_portable_launchers_never_read_the_users_own_site_packages(tmp_path):
+    """The bundled Python must use only its own packages. Without this, Python
+    also imports from %APPDATA%\\Python\\PythonXY\\site-packages (Windows) or
+    ~/.local/lib/pythonX.Y/site-packages (Linux), so a user-level install could
+    fill in or shadow a package. Checked on embedded 3.11.9 and 3.12.8: the
+    variable is honoured despite the ._pth file, and child processes inherit it."""
+    release_builder = load_release_builder()
+    (tmp_path / "win").mkdir()
+    (tmp_path / "linux").mkdir()
+
+    bat = release_builder.write_portable_launcher(tmp_path / "win").read_text(encoding="utf-8")
+    bat_lines = bat.splitlines()
+    bat_setting = bat_lines.index('set "PYTHONNOUSERSITE=1"')
+    assert bat_setting < _first_line_index(bat, '"!PYTHON_CMD!"')
+
+    sh = release_builder.write_linux_portable_launcher(tmp_path / "linux").read_text(encoding="utf-8")
+    sh_lines = sh.splitlines()
+    sh_setting = sh_lines.index("export PYTHONNOUSERSITE=1")
+    assert sh_setting < _first_line_index(sh, '"$PYTHON_CMD"')
+
+
+@pytest.mark.parametrize("launcher", ["fix.bat", "update.bat"])
+def test_rescue_launchers_keep_portable_python_off_user_site_packages(launcher):
+    text = (ROOT / launcher).read_text(encoding="utf-8")
+    start = text.index('if exist "%ROOT_DIR%\\python\\python.exe" (')
+    portable_branch = text[start : text.index("goto :found_python", start)]
+
+    assert 'set "PYTHONNOUSERSITE=1"' in portable_branch
