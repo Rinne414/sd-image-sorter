@@ -88,7 +88,8 @@ export function jobHeadline(job: Job): string {
     case 'cancelled':
       return tr('jobs.stopped', { done: p.current, total: p.total || job.count })
     case 'error':
-      return p.lost ? tr('jobs.installLost', params) : tr('jobs.error', { reason: p.message || '?' })
+      if (p.lost) return tr(job.kind === 'install' ? 'jobs.installLost' : 'dataset.job.lost', params)
+      return tr('jobs.error', { reason: p.message || '?' })
     case 'idle':
       return tr('jobs.reset')
     case 'done': {

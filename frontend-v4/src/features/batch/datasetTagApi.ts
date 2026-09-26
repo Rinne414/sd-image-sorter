@@ -169,6 +169,8 @@ export interface TagRun {
   writing: boolean
   /** The tagger was off: the run only described. */
   describeOnly: boolean
+  /** It ended while no page watched and the backend no longer knows how: run the step again. */
+  lost?: boolean
 }
 
 /** The last tag run of each batch, for the step to report on. */
@@ -309,22 +311,28 @@ export async function resumeTagRun(batch: Batch): Promise<void> {
   const run = pendingRun(batch.id)
   if (!run || useTagRuns.getState().runs[batch.id]) return
   setRun(batch.id, { jobId: run.jobId, ranKeys: run.ranKeys, describeOnly: run.describeOnly === true })
-  await resumeRun(run, (r) => applyResults(batch, r.jobId, r.model, r.merge ?? 'replace'))
+  await resumeRun(
+    run,
+    (r) => applyResults(batch, r.jobId, r.model, r.merge ?? 'replace'),
+    () => setRun(batch.id, { lost: true }),
+  )
 }
 
 async function startRun(batch: Batch, body: ReturnType<typeof smartTagBody>, count: number, model: string): Promise<boolean> {
   try {
-    const res = unwrap<{ job_id?: string; queue_id?: string; status?: string }>(await api.POST('/api/smart-tag/start', { body: body as never }))
+    const res = unwrap<{ job_id?: string; queue_id?: string; enqueued_at?: string; status?: string }>(await api.POST('/api/smart-tag/start', { body: body as never }))
     const ranKeys = [...body.image_ids.map(libraryKey), ...body.image_paths.map(folderKey)]
     const merge = body.merge_strategy
     const describeOnly = !body.enable_wd14
-    setRun(batch.id, { jobId: res.job_id ?? null, ranKeys, finished: false, written: 0, keptResults: [], failed: 0, writing: false, describeOnly })
+    setRun(batch.id, { jobId: res.job_id ?? null, ranKeys, finished: false, written: 0, keptResults: [], failed: 0, writing: false, describeOnly, lost: false })
     // A queued run has no job id yet: its place in the queue finds it again after a reload.
-    if (res.job_id || res.queue_id) rememberRun({ batchId: batch.id, jobId: res.job_id ?? null, queueId: res.queue_id ?? null, model, ranKeys, merge, describeOnly })
+    const enqueuedAt = res.enqueued_at ?? null
+    if (res.job_id || res.queue_id) rememberRun({ batchId: batch.id, jobId: res.job_id ?? null, queueId: res.queue_id ?? null, enqueuedAt, model, ranKeys, merge, describeOnly })
     trackSmartTagJob({
       count,
       jobId: res.job_id ?? null,
       queueId: res.queue_id ?? null,
+      enqueuedAt,
       queued: res.status === 'queued',
       describeOnly,
       then: (jobId) => applyResults(batch, jobId, model, merge),

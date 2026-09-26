@@ -23,8 +23,11 @@ export function adoptSmartTag(raw: Record<string, unknown>) {
 export const driveSmartTag = {
   poll: async (job?: Job): Promise<unknown> => {
     const jobId = job ? smartTagJobId(job) : undefined
-    const raw = unwrap(await api.GET('/api/smart-tag/progress', { params: { query: jobId ? { job_id: jobId } : {} } }))
-    const started = job && !jobId ? startedJobId(raw, job.ctx.smartTag?.queueId) : null
+    const queueId = job?.ctx.smartTag?.queueId
+    // A run still without a job id is asked for by its queue place: the backend names the job it became.
+    const query = jobId ? { job_id: jobId } : queueId ? { queue_id: queueId } : {}
+    const raw = unwrap(await api.GET('/api/smart-tag/progress', { params: { query } }))
+    const started = job && !jobId ? startedJobId(raw, queueId, job.ctx.smartTag?.enqueuedAt) : null
     if (job && started) found.set(job.id, started)
     return raw
   },

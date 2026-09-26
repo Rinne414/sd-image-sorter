@@ -424,39 +424,77 @@ test('the tagger off: a description-only run keeps the tags, and append joins th
   await expect(page.getByTestId('jobs-drawer').getByTestId('job').first()).toContainText('Described 5')
 })
 
-test('a batch run that started out queued survives a reload and still writes its folder results', async ({ page }) => {
+type QueuePhase = 'waiting' | 'running' | 'done' | 'gone'
+
+const ENQUEUED_AT = '2026-09-27T01:02:03+00:00'
+
+/**
+ * A Smart Tag run queued behind other AI work at place q9, answered as the
+ * backend does: by its queue place (`?queue_id=`, also after it ended), by
+ * job id, or (neither) the active run. `gone`: the backend no longer knows q9.
+ */
+async function stubQueuedRun(page: Page, phase: () => QueuePhase, booru: string): Promise<{ results: () => number }> {
   await stubAi(page, 'none')
-  let phase: 'waiting' | 'running' | 'done' = 'waiting'
   let sent = 0
   let paths: string[] = []
+  let results = 0
   await page.route('**/api/smart-tag/start', async (route: Route) => {
     const body = route.request().postDataJSON() as Record<string, unknown>
     paths = (body.image_paths as string[]) ?? []
     sent = ((body.image_ids as number[]) ?? []).length + paths.length
-    await route.fulfill({ json: { status: 'queued', pipeline_queued: true, queue_id: 'q9', queue_position: 1 } })
+    await route.fulfill({ json: { status: 'queued', pipeline_queued: true, queue_id: 'q9', enqueued_at: ENQUEUED_AT, queue_position: 1 } })
   })
   await page.route('**/api/smart-tag/progress**', (route) => {
-    if (phase === 'waiting') {
-      return route.fulfill({ json: { status: 'idle', active: false, pipeline_queue: { total_queued: 1, queued: [{ queue_id: 'q9', kind: 'smart', position: 1 }] } } })
+    const query = new URL(route.request().url()).searchParams
+    const now = phase()
+    const done = now === 'done'
+    const empty = { total_queued: 0, queued: [] }
+    const waiting = { total_queued: 1, queued: [{ queue_id: 'q9', kind: 'smart', position: 1, enqueued_at: ENQUEUED_AT }] }
+    const job = {
+      job_id: 'e2e-q9', active: !done, status: done ? 'completed' : 'running', total: sent, processed: done ? sent : 1, succeeded: done ? sent : 0,
+      failed: 0, errors: [], settings: { queue_id: 'q9', queue_enqueued_at: ENQUEUED_AT }, pipeline_queue: empty,
     }
-    const done = phase === 'done'
-    return route.fulfill({
-      json: {
-        job_id: 'e2e-q9', active: !done, status: done ? 'completed' : 'running', total: sent, processed: done ? sent : 1,
-        succeeded: done ? sent : 0, failed: 0, errors: [], pipeline_queue: { total_queued: 0, queued: [] },
-      },
-    })
+    if (query.get('queue_id') === 'q9') {
+      if (now === 'gone') return route.fulfill({ json: { status: 'unknown', active: false, found: false, queue_id: 'q9', pipeline_queue: empty } })
+      if (now === 'waiting') return route.fulfill({ json: { status: 'queued', active: false, found: true, queue_id: 'q9', pipeline_queue: waiting } })
+      return route.fulfill({ json: { ...job, found: true, queue_id: 'q9' } })
+    }
+    const started = now === 'running' || done
+    if (query.get('job_id') === 'e2e-q9' && started) return route.fulfill({ json: job })
+    if (!query.has('job_id') && now === 'running') return route.fulfill({ json: job })
+    return route.fulfill({ json: { status: 'idle', active: false, pipeline_queue: now === 'waiting' ? waiting : empty } })
   })
-  await page.route('**/api/smart-tag/results**', (route) =>
-    route.fulfill({ json: { results: paths.map((p) => ({ path: p, caption: '', booru_text: '1girl, queued_tag', nl_text: '' })), has_more: false, limit: 1000 } }),
-  )
+  await page.route('**/api/smart-tag/results**', (route) => {
+    results += 1
+    return route.fulfill({ json: { results: paths.map((p) => ({ path: p, caption: '', booru_text: booru, nl_text: '' })), has_more: false, limit: 1000 } })
+  })
+  return { results: () => results }
+}
+
+/** Start the tag step on every image: the run is queued, and the page keeps its queue place. */
+async function startQueued(page: Page): Promise<void> {
   await page.setViewportSize({ width: 1366, height: 768 })
   await openTagStep(page)
   await page.getByTestId('tag-retag').check()
   await page.getByTestId('tag-start').click()
   await expect(page.getByTestId('tag-report-state')).toHaveText('Running; its progress is in Jobs.')
   const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('sd-v4-dataset-tag-runs') ?? '[]'))
-  expect(kept).toEqual([expect.objectContaining({ batchId, jobId: null, queueId: 'q9' })])
+  expect(kept).toEqual([expect.objectContaining({ batchId, jobId: null, queueId: 'q9', enqueuedAt: ENQUEUED_AT })])
+}
+
+async function expectFolderCaptions(page: Page, booru: string): Promise<void> {
+  const written = await heads(page)
+  for (const file of folderFiles) {
+    const head = written.find((h) => h.item.item_type === 'local' && sameFile(h.item.path, file))
+    expect(head?.active_revision).toMatchObject({ author_class: 'ai', source: 'wd14' })
+    expect(head?.active_revision?.content.booru_caption).toBe(booru)
+  }
+}
+
+test('a batch run that started out queued survives a reload and still writes its folder results', async ({ page }) => {
+  let phase: QueuePhase = 'waiting'
+  await stubQueuedRun(page, () => phase, '1girl, queued_tag')
+  await startQueued(page)
 
   // the page reloads while the run still waits; it starts and ends later
   await page.reload({ waitUntil: 'domcontentloaded' })
@@ -464,7 +502,7 @@ test('a batch run that started out queued survives a reload and still writes its
   await page.getByTestId('jobs-button').click()
   await expect(page.getByTestId('jobs-drawer').getByTestId('job').first()).toContainText('Queued')
   await page.keyboard.press('Escape')
-  // it starts: the drawer finds its job id once it left the queue
+  // it starts: asked for by its queue place, the backend names the job it became
   phase = 'running'
   await page.getByTestId('jobs-button').click()
   const job = page.getByTestId('jobs-drawer').getByTestId('job').first()
@@ -473,12 +511,42 @@ test('a batch run that started out queued survives a reload and still writes its
   await page.keyboard.press('Escape')
   phase = 'done'
   await expect(page.getByTestId('tag-report-state')).toContainText('2 folder images got their results as captions', { timeout: 15_000 })
-  const written = await heads(page)
-  for (const file of folderFiles) {
-    const head = written.find((h) => h.item.item_type === 'local' && sameFile(h.item.path, file))
-    expect(head?.active_revision?.content.booru_caption).toBe('1girl, queued_tag')
-  }
+  await expectFolderCaptions(page, '1girl, queued_tag')
   expect(await page.evaluate(() => localStorage.getItem('sd-v4-dataset-tag-runs'))).toBe('[]')
+})
+
+test('a queued batch run that started and ended while no page watched still writes its folder results', async ({ page }) => {
+  let phase: QueuePhase = 'waiting'
+  await stubQueuedRun(page, () => phase, '1girl, away_tag')
+  await startQueued(page)
+
+  // the page goes away; meanwhile the run leaves the queue, runs and ends
+  await page.goto('/api/libraries', { waitUntil: 'domcontentloaded' })
+  phase = 'done'
+  await openTagStep(page)
+  await expect(page.getByTestId('tag-report-state')).toContainText('2 folder images got their results as captions', { timeout: 15_000 })
+  await expectFolderCaptions(page, '1girl, away_tag')
+  expect(await page.evaluate(() => localStorage.getItem('sd-v4-dataset-tag-runs'))).toBe('[]')
+})
+
+test('a queued batch run the backend no longer knows ends with a plain message, never a guess', async ({ page }) => {
+  let phase: QueuePhase = 'waiting'
+  const stub = await stubQueuedRun(page, () => phase, '1girl, never_written')
+  await startQueued(page)
+
+  // the page goes away; when it comes back the backend has forgotten place q9 (it restarted)
+  await page.goto('/api/libraries', { waitUntil: 'domcontentloaded' })
+  phase = 'gone'
+  await openTagStep(page)
+  await expect(page.getByTestId('tag-report-state')).toHaveText(
+    "We couldn't find how this run ended (the app may have restarted since), so the folder images' results were not written. Run the step again.",
+    { timeout: 15_000 },
+  )
+  expect(await page.evaluate(() => localStorage.getItem('sd-v4-dataset-tag-runs'))).toBe('[]')
+  expect(stub.results()).toBe(0)
+  await expectFolderCaptions(page, '1girl, away_tag')
+  // the step can run again at once
+  await expect(page.getByTestId('tag-start')).toBeEnabled()
 })
 
 test('a Smart Tag run started elsewhere (V3.5) joins the Jobs drawer and ends there', async ({ page }) => {

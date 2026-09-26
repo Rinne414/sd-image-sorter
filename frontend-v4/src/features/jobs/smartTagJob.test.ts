@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { isFinished, readProgress } from './progress'
-import { queuedRunNow, smartTagAdoption, startedJobId } from './smartTagJob'
+import { queuedRunAnswer, smartTagAdoption, startedJobId } from './smartTagJob'
 
 describe('a Smart Tag run in the drawer', () => {
   test('waiting in the AI queue behind other work: queued, with nothing counted yet', () => {
@@ -44,12 +44,22 @@ describe('a Smart Tag run in the drawer', () => {
     expect(readProgress('smarttag', null, ctx).status).toBe('error')
   })
 
-  test('a queued run is ours once it left the queue and a run is active', () => {
+  test('a queued run is the job the backend says was started from its queue place', () => {
     const queue = (ids: string[]) => ({ total_queued: ids.length, queued: ids.map((queue_id) => ({ queue_id })) })
-    expect(startedJobId({ job_id: 'other', active: true, pipeline_queue: queue(['q3']) }, 'q3')).toBeNull()
-    expect(startedJobId({ job_id: 's7', active: true, pipeline_queue: queue([]) }, 'q3')).toBe('s7')
-    // between runs: nothing active yet
-    expect(startedJobId({ status: 'idle', active: false, pipeline_queue: queue([]) }, 'q3')).toBeNull()
+    const job = (settings: Record<string, unknown>) => ({ job_id: 's7', active: true, status: 'running', settings, pipeline_queue: queue([]) })
+    expect(startedJobId({ status: 'queued', found: true, queue_id: 'q3', pipeline_queue: queue(['q3']) }, 'q3')).toBeNull()
+    expect(startedJobId(job({ queue_id: 'q3', queue_enqueued_at: 'T1' }), 'q3', 'T1')).toBe('s7')
+    // finished before the drawer looked: still ours
+    expect(startedJobId({ ...job({ queue_id: 'q3' }), active: false, status: 'completed' }, 'q3')).toBe('s7')
+    // another run, or the same place taken again after the app restarted
+    expect(startedJobId(job({ queue_id: 'q4' }), 'q3')).toBeNull()
+    expect(startedJobId(job({}), 'q3')).toBeNull()
+    expect(startedJobId(job({ queue_id: 'q3', queue_enqueued_at: 'T2' }), 'q3', 'T1')).toBeNull()
+  })
+
+  test('asked for by its queue place and no longer known: how it ended is lost, never guessed', () => {
+    const p = readProgress('smarttag', { status: 'unknown', found: false, queue_id: 'q3', active: false }, { smartTag: { queueId: 'q3' } })
+    expect(p).toMatchObject({ status: 'error', lost: true })
   })
 })
 
@@ -70,19 +80,31 @@ describe('a Smart Tag run started before V4 looked (a reload, V3.5, another tab)
   })
 })
 
-describe('a batch tag run that started out queued, after a reload', () => {
+describe('a batch tag run that started out queued, looked up by its queue place after a reload', () => {
   const queue = (ids: string[]) => ({ total_queued: ids.length, queued: ids.map((queue_id) => ({ queue_id, kind: 'smart' })) })
-
-  test('still in the queue: it keeps waiting', () => {
-    expect(queuedRunNow('q9', 4, { job_id: 'other', active: true, total: 20, pipeline_queue: queue(['q9']) })).toEqual({ state: 'waiting' })
+  const job = (status: string, extra: Record<string, unknown> = {}) => ({
+    job_id: 's12', status, active: status === 'running', found: true, queue_id: 'q9', total: 4,
+    settings: { queue_id: 'q9', queue_enqueued_at: 'T1' }, pipeline_queue: queue([]), ...extra,
   })
 
-  test('it left the queue and the active run is its size: that run is ours', () => {
-    expect(queuedRunNow('q9', 4, { job_id: 's12', active: true, status: 'running', total: 4, pipeline_queue: queue([]) })).toEqual({ state: 'running', jobId: 's12' })
+  test('still waiting in the queue', () => {
+    expect(queuedRunAnswer({ status: 'queued', found: true, queue_id: 'q9', pipeline_queue: queue(['q9']) }, 'q9', 'T1')).toEqual({ state: 'waiting' })
   })
 
-  test('the active run is another size, or none is active: it cannot be told apart any more', () => {
-    expect(queuedRunNow('q9', 4, { job_id: 'v35', active: true, status: 'running', total: 30, pipeline_queue: queue([]) })).toEqual({ state: 'unknown' })
-    expect(queuedRunNow('q9', 4, { status: 'idle', active: false, pipeline_queue: queue([]) })).toEqual({ state: 'unknown' })
+  test('running, or finished while no page watched: the job it became', () => {
+    expect(queuedRunAnswer(job('running'), 'q9', 'T1')).toEqual({ state: 'running', jobId: 's12' })
+    expect(queuedRunAnswer(job('completed'), 'q9', 'T1')).toEqual({ state: 'done', jobId: 's12' })
+    expect(queuedRunAnswer(job('warning'), 'q9', 'T1')).toEqual({ state: 'done', jobId: 's12' })
+  })
+
+  test('stopped, failed, or could not start: it ended without results', () => {
+    expect(queuedRunAnswer(job('cancelled'), 'q9', 'T1')).toEqual({ state: 'ended' })
+    expect(queuedRunAnswer(job('failed'), 'q9', 'T1')).toEqual({ state: 'ended' })
+    expect(queuedRunAnswer({ status: 'failed', found: true, queue_id: 'q9', message: 'x', pipeline_queue: queue([]) }, 'q9', 'T1')).toEqual({ state: 'ended' })
+  })
+
+  test('the backend no longer knows it, or the place now names another run: lost', () => {
+    expect(queuedRunAnswer({ status: 'unknown', found: false, queue_id: 'q9', pipeline_queue: queue([]) }, 'q9', 'T1')).toEqual({ state: 'lost' })
+    expect(queuedRunAnswer(job('completed', { settings: { queue_id: 'q9', queue_enqueued_at: 'T5' } }), 'q9', 'T1')).toEqual({ state: 'lost' })
   })
 })

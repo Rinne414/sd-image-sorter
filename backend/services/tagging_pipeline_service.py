@@ -536,14 +536,48 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
                 )
             return GalleryMutationActivity(state="idle", jobs=(), detail="")
 
-    def get_smart_tag_progress(self, job_id: Optional[str] = None) -> Dict[str, Any]:
+    def get_smart_tag_progress(
+        self, job_id: Optional[str] = None, queue_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         queue_info = self.queue_snapshot(KIND_SMART)  # before status; see get_gallery_progress
+        if queue_id and not job_id:
+            return self._smart_progress_by_queue_id(queue_id, queue_info)
         job = smart_tag_service.get_job(job_id) if job_id else smart_tag_service.get_active_job()
         if job is None:
             snapshot: Dict[str, Any] = {"status": "idle", "active": False}
         else:
             snapshot = job.snapshot()
             snapshot["active"] = job.status in SMART_ACTIVE_STATUSES
+        out = _with_owner(snapshot, KIND_SMART)
+        out["pipeline_queue"] = queue_info
+        return out
+
+    def _smart_progress_by_queue_id(self, queue_id: str, queue_info: Dict[str, Any]) -> Dict[str, Any]:
+        """A run found by the AI-queue place it was queued at (additive; V4).
+
+        The job started from that entry (running or kept after it ended), or
+        ``status: "queued"`` while the entry still waits, or ``"failed"`` when
+        it could not start. ``found: false`` when the backend no longer knows
+        the entry (it restarted, or the finished job was dropped).
+        """
+        job = smart_tag_service.get_job_by_queue_id(queue_id)
+        start_error = queue_info.get("last_start_error")
+        if job is not None:
+            snapshot: Dict[str, Any] = job.snapshot()
+            snapshot["active"] = job.status in SMART_ACTIVE_STATUSES
+        elif any(item.get("queue_id") == queue_id for item in queue_info.get("queued", [])):
+            snapshot = {"status": "queued", "active": False}
+        elif isinstance(start_error, dict) and start_error.get("queue_id") == queue_id:
+            snapshot = {"status": "failed", "active": False, "message": str(start_error.get("error") or "")}
+        else:
+            snapshot = {
+                "status": "unknown",
+                "active": False,
+                "found": False,
+                "message": "This queued Smart Tag run is no longer known (the app restarted or its result was dropped).",
+            }
+        snapshot.setdefault("found", True)
+        snapshot["queue_id"] = queue_id
         out = _with_owner(snapshot, KIND_SMART)
         out["pipeline_queue"] = queue_info
         return out
@@ -707,7 +741,11 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
                 raise RuntimeError("Gallery tagging service unavailable for the queued start")
             entry.legacy_service.start_tagging(entry.payload, _ThreadLaunchBackgroundTasks())
         elif entry.kind == KIND_SMART:
-            smart_tag_service.start_smart_tag_job(entry.payload)
+            snapshot = smart_tag_service.start_smart_tag_job(entry.payload)
+            job_id = snapshot.get("job_id") if isinstance(snapshot, dict) else None
+            if job_id:
+                # The page that queued it finds the run again by its queue place.
+                smart_tag_service.note_queue_entry(job_id, entry.queue_id, entry.enqueued_at)
         elif entry.kind == KIND_VLM:
             _start_queued_vlm_batch(entry)
         else:  # pragma: no cover - defensive
@@ -730,6 +768,7 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
                     "pipeline_queued": True,
                     "duplicate": True,
                     "queue_id": last.queue_id,
+                    "enqueued_at": last.enqueued_at,
                     "queue_position": len(self._queue),
                     "queue_length": len(self._queue),
                     "message": DUPLICATE_QUEUED_MESSAGE,
@@ -756,6 +795,7 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
                 "status": "queued",
                 "pipeline_queued": True,
                 "queue_id": entry.queue_id,
+                "enqueued_at": entry.enqueued_at,
                 "queue_position": position,
                 "queue_length": position,
                 "message": QUEUED_MESSAGE,

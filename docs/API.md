@@ -781,7 +781,7 @@ Get available tagger models and runtime guidance. Each model item includes defau
 #### POST /api/tag/start
 Start background tagging (alias for POST /api/tag).
 
-**AI job queue (v3.4.2):** gallery tagging, Smart Tag, and VLM caption batches share one runtime. Starting any of them while another AI job is running no longer returns 409 — the job is enqueued (FIFO) and auto-starts when the current job finishes (including after an error or cancel). The start endpoint then returns `{"status": "queued", "pipeline_queued": true, "queue_id": "qN", "queue_position": N, "queue_length": N, "message": ..., "pipeline_owner": ..., "pipeline_mode": ...}` instead of the started-now shape. Re-submitting an identical request while it is already last in the queue returns the same shape with `"duplicate": true` instead of enqueueing twice. The queue is in-memory and does not survive a server restart. 409 is still returned for the fail-closed case (a sibling job's status could not be determined) and for validation errors. Each kind's cancel endpoint also removes that kind's queued entries (`removed_queued` count in the response).
+**AI job queue (v3.4.2):** gallery tagging, Smart Tag, and VLM caption batches share one runtime. Starting any of them while another AI job is running no longer returns 409 — the job is enqueued (FIFO) and auto-starts when the current job finishes (including after an error or cancel). The start endpoint then returns `{"status": "queued", "pipeline_queued": true, "queue_id": "qN", "enqueued_at": "<ISO time>", "queue_position": N, "queue_length": N, "message": ..., "pipeline_owner": ..., "pipeline_mode": ...}` instead of the started-now shape. Re-submitting an identical request while it is already last in the queue returns the same shape with `"duplicate": true` instead of enqueueing twice. The queue is saved to disk and restored when the server starts again; a `queue_id` can be reused after a restart, so a client that remembers a queued entry also compares `enqueued_at`. 409 is still returned for the fail-closed case (a sibling job's status could not be determined) and for validation errors. Each kind's cancel endpoint also removes that kind's queued entries (`removed_queued` count in the response).
 
 #### POST /api/tag
 Start background tagging.
@@ -2138,6 +2138,19 @@ a failure-free run ends as `completed`. Snapshots include `total`, `processed`, 
 For DB-backed images, caption fields, tag rows, and raw tag-score rows commit in
 one SQLite transaction. A failed append read or write is reported as an image
 failure and leaves all prior rows unchanged.
+
+`queue_id` (optional query param, additive; V4 slice 6m2): the run queued at that
+AI-queue place (`queue_id` from the queued `POST /api/smart-tag/start` answer, which
+also carries the entry's `enqueued_at`). A job started from a queue entry records it
+as `settings.queue_id` and `settings.queue_enqueued_at`. The answer is that job's
+snapshot while it runs and after it ended, for as long as the backend keeps finished
+Smart Tag jobs (the newest few); `{"status": "queued"}` while the entry still waits;
+`{"status": "failed", "message"}` when it could not start; and
+`{"status": "unknown", "found": false}` when the backend no longer knows the entry
+(it restarted, or the finished job was dropped). Every answer by `queue_id` carries
+`found` and `queue_id`. A queue id can name another entry after the backend restarts: compare
+`settings.queue_enqueued_at` with the `enqueued_at` you were given. Without
+`queue_id` nothing changes (V3.5 never sends it).
 
 #### GET /api/smart-tag/results
 

@@ -9,6 +9,8 @@ export interface SmartTagTrack {
   count: number
   jobId: string | null
   queueId: string | null
+  /** When the queue place was taken (queue places start again after the app restarts). */
+  enqueuedAt?: string | null
   queued: boolean
   /** The tagger is off: the drawer says it describes, not tags. */
   describeOnly?: boolean
@@ -20,7 +22,7 @@ export function trackSmartTagJob(t: SmartTagTrack): void {
   addJob({
     kind: 'smarttag',
     count: t.count,
-    ctx: { smartTag: { jobId: t.jobId ?? undefined, queueId: t.queueId ?? undefined } },
+    ctx: { smartTag: { jobId: t.jobId ?? undefined, queueId: t.queueId ?? undefined, enqueuedAt: t.enqueuedAt ?? undefined } },
     progress: startingProgress(t.count, t.queued ? 'queued' : 'running'),
     ...(t.describeOnly ? { words: DESCRIBE_WORDS } : {}),
     then: (job) => {

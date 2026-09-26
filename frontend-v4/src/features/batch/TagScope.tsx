@@ -98,7 +98,15 @@ export function RunReport({ batch, entries, scope, model, running }: ReportProps
   if (!run) return null
   const ran = new Set(run.ranKeys)
   const edited = scope.userEdited.filter((key) => ran.has(key))
-  const state = run.writing ? t('dataset.tag.writing') : run.finished ? doneText(t, entries, ran, run.written, run.describeOnly) : running ? t('dataset.tag.inProgress') : t('dataset.tag.ended')
+  const state = run.writing
+    ? t('dataset.tag.writing')
+    : run.finished
+      ? doneText(t, entries, ran, run.written, run.describeOnly)
+      : run.lost
+        ? t('dataset.tag.lost')
+        : running
+          ? t('dataset.tag.inProgress')
+          : t('dataset.tag.ended')
 
   const replace = async () => {
     setReplacing(true)

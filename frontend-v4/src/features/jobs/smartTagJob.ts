@@ -3,7 +3,8 @@ import type { JobFailure, JobProgress, JobStatus } from './progress'
 
 // Reads a Smart Tag run (a dataset batch's tag step) for the Jobs drawer:
 // GET /api/smart-tag/progress. The backend may queue a run behind other AI
-// work; such a run gets its job id when it starts. Pure: smartTagDriver.ts polls.
+// work; such a run gets its job id when it starts, and is asked for by its
+// queue place (?queue_id=) until then. Pure: smartTagDriver.ts polls.
 
 /** What the drawer knows about one Smart Tag run. */
 export interface SmartTagContext {
@@ -11,6 +12,8 @@ export interface SmartTagContext {
   jobId?: string
   /** Our place in the AI queue while the run waits. */
   queueId?: string
+  /** When that place was taken: queue places start again after the app restarts. */
+  enqueuedAt?: string
 }
 
 type Raw = Record<string, unknown>
@@ -52,24 +55,31 @@ export function smartTagAdoption(payload: unknown): { ctx: { smartTag: SmartTagC
   return { ctx: { smartTag: { jobId } }, describeOnly: obj(raw.settings).enable_wd14 === false }
 }
 
-/**
- * A remembered batch run that started out queued, read again after a reload
- * (GET /api/smart-tag/progress without a job id). While it waits it is still
- * in the queue. Once it left, the backend does not say which run it became:
- * the active run is taken as ours only if it holds as many images as we sent.
- */
-export function queuedRunNow(queueId: string, count: number, payload: unknown): { state: 'waiting' } | { state: 'running'; jobId: string } | { state: 'unknown' } {
-  const raw = obj(payload)
-  if (waitingIn(raw, queueId)) return { state: 'waiting' }
-  const started = startedJobId(raw, queueId)
-  return started && num(raw.total) === count ? { state: 'running', jobId: started } : { state: 'unknown' }
+/** The answer is about another run that got the same queue place after the app restarted. */
+const otherRun = (raw: Raw, enqueuedAt: string | undefined) => {
+  const at = str(obj(raw.settings).queue_enqueued_at)
+  return enqueuedAt !== undefined && at !== '' && at !== enqueuedAt
 }
 
-/** A queued run has started once it left the queue: the active run is then ours. */
-export function startedJobId(payload: unknown, queueId: string | undefined): string | null {
+/** The job a queued run became: the backend names the queue place a job was started from. */
+export function startedJobId(payload: unknown, queueId: string | undefined, enqueuedAt?: string): string | null {
   const raw = obj(payload)
-  if (waitingIn(raw, queueId) || raw.active !== true) return null
-  return str(raw.job_id) || null
+  const jobId = str(raw.job_id)
+  if (!jobId || queueId === undefined || str(obj(raw.settings).queue_id) !== queueId || otherRun(raw, enqueuedAt)) return null
+  return jobId
+}
+
+/** A queued run looked up by its queue place (GET /api/smart-tag/progress?queue_id=), after a reload. */
+export type QueuedRunAnswer = { state: 'waiting' } | { state: 'running' | 'done'; jobId: string } | { state: 'ended' } | { state: 'lost' }
+
+export function queuedRunAnswer(payload: unknown, queueId: string, enqueuedAt?: string): QueuedRunAnswer {
+  const raw = obj(payload)
+  if (raw.found === false || otherRun(raw, enqueuedAt)) return { state: 'lost' }
+  const jobId = startedJobId(raw, queueId, enqueuedAt)
+  const status = STATUS[str(raw.status)]
+  if (!jobId) return status === 'queued' ? { state: 'waiting' } : status === 'error' ? { state: 'ended' } : { state: 'lost' }
+  if (status === 'done') return { state: 'done', jobId }
+  return status === 'queued' || status === 'running' || str(raw.status) === 'cancelling' ? { state: 'running', jobId } : { state: 'ended' }
 }
 
 /** Library images are named by id in the errors, folder images by path. */
@@ -84,6 +94,10 @@ function failures(list: unknown): JobFailure[] {
 /** Smart Tag names its own states; a run still waiting in the AI queue has no job yet. */
 export function readSmartTag(base: JobProgress, raw: Raw, ctx: SmartTagContext = {}): JobProgress {
   if (ctx.jobId === undefined && waitingIn(raw, ctx.queueId)) return { ...base, status: 'queued', current: 0, total: 0, currentItem: null, message: '' }
+  // Asked for by its queue place, and the backend no longer knows it (it restarted): how it ended is lost.
+  if (ctx.jobId === undefined && ctx.queueId !== undefined && (raw.found === false || otherRun(raw, ctx.enqueuedAt))) {
+    return { ...base, status: 'error', current: 0, total: 0, currentItem: null, message: '', lost: true }
+  }
   if (ctx.jobId !== undefined && str(raw.job_id) !== ctx.jobId && str(raw.status) !== 'idle') return { ...base, status: 'error' }
   const status = STATUS[str(raw.status)] ?? 'error'
   const failed = failures(raw.errors)

@@ -116,6 +116,7 @@ def start(
 @router.get("/progress")
 def progress(
     job_id: Optional[str] = None,
+    queue_id: Optional[str] = None,
     pipeline: TaggingPipelineService = Depends(get_tagging_pipeline_service),
 ) -> Dict[str, Any]:
     """Return the snapshot for either ``job_id`` or the active job.
@@ -123,7 +124,12 @@ def progress(
     If neither matches we return ``{"status": "idle"}`` so the frontend
     can treat the response as the canonical "no run is active" signal
     without a 404 round-trip.
+
+    ``queue_id`` (additive): the run queued at that AI-queue place, also
+    after it ended, with ``found: false`` when it is no longer known.
     """
+    if queue_id and not job_id:
+        return pipeline.get_smart_tag_progress(queue_id=queue_id)
     return pipeline.get_smart_tag_progress(job_id)
 
 

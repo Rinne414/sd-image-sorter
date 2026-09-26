@@ -80,7 +80,7 @@ export interface JobProgress {
   needsRestart: boolean
   /** install only: usable now, but a restart unlocks all of it (e.g. the GPU runtime was repaired). */
   restartAdvised: boolean
-  /** install only: the backend no longer knows how this download ended (it restarted, or many downloads ended since). */
+  /** install and smarttag: the backend no longer knows how this download or queued run ended (it restarted, or many ended since). */
   lost?: boolean
   /** reconnect only: found files that match several missing records and wait for the user. */
   toReview: number

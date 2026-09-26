@@ -3,7 +3,7 @@ import type { MergeStrategy } from '../tagging/tagOptions'
 import { isQueueBusy, patchJob, useJobs, type Job } from '../jobs/jobs'
 import { isFinished, readProgress } from '../jobs/progress'
 import { smartTagJobId } from '../jobs/smartTagDriver'
-import { queuedRunNow } from '../jobs/smartTagJob'
+import { queuedRunAnswer } from '../jobs/smartTagJob'
 import { trackSmartTagJob } from './trackSmartTag'
 
 // A tag run outlives a reload: its job id (or, while it waits in the AI
@@ -18,6 +18,8 @@ export interface PendingRun {
   jobId: string | null
   /** Its place in the AI queue, for a run that started out queued. */
   queueId?: string | null
+  /** When that place was taken (queue places start again after the app restarts). */
+  enqueuedAt?: string | null
   model: string
   ranKeys: string[]
   /** How its folder results join the captions (absent in runs kept before it existed: replace). */
@@ -68,10 +70,11 @@ type Finish = (run: StartedRun) => Promise<void>
 /**
  * A run this page no longer follows (the page was reloaded): hand its end to
  * `finish` whether it is still waiting, running, finished meanwhile, or
- * already picked up by the Jobs drawer. A run that failed or is gone is forgotten.
+ * already picked up by the Jobs drawer. A run that failed or is gone is
+ * forgotten; one the backend no longer knows at all goes to `lost`.
  */
-export async function resumeRun(run: PendingRun, finish: Finish): Promise<void> {
-  if (run.jobId === null) return resumeQueued(run, finish)
+export async function resumeRun(run: PendingRun, finish: Finish, lost: () => void = () => undefined): Promise<void> {
+  if (run.jobId === null) return resumeQueued(run, finish, lost)
   const started: StartedRun = { ...run, jobId: run.jobId }
   const then = () => finish(started)
   if (followLive(started.jobId, then, run.batchId)) return
@@ -96,18 +99,36 @@ function followLive(jobId: string, then: () => void | Promise<void>, batchId: nu
   return true
 }
 
-/** A run remembered while it waited in the AI queue: find it again by its place there. */
-async function resumeQueued(run: PendingRun, finish: Finish): Promise<void> {
+/**
+ * A run remembered while it waited in the AI queue: the backend names the job
+ * it became by its queue place (also once it ended while no page watched).
+ */
+async function resumeQueued(run: PendingRun, finish: Finish, lost: () => void): Promise<void> {
   const count = run.ranKeys.length
   const queueId = run.queueId ?? ''
+  const enqueuedAt = run.enqueuedAt ?? undefined
   const live = useJobs.getState().jobs.find((j) => j.kind === 'smarttag' && j.ctx.smartTag?.queueId === queueId && !isFinished(j.progress.status))
   if (live) return void patchJob(live.id, { then: (job: Job) => endOf(job, run, finish) })
   try {
-    const now = queuedRunNow(queueId, count, unwrap(await api.GET('/api/smart-tag/progress')))
-    if (now.state === 'unknown') return forgetRun(run.batchId)
+    const raw = unwrap(await api.GET('/api/smart-tag/progress', { params: { query: { queue_id: queueId } } }))
+    const now = queuedRunAnswer(raw, queueId, enqueuedAt)
+    if (now.state === 'lost') {
+      forgetRun(run.batchId)
+      return lost()
+    }
+    if (now.state === 'ended') return forgetRun(run.batchId)
+    if (now.state === 'done') return void finish({ ...run, jobId: now.jobId })
     const started = now.state === 'running' ? now.jobId : null
     if (started && followLive(started, () => finish({ ...run, jobId: started }), run.batchId)) return
-    trackSmartTagJob({ count, jobId: started, queueId: started ? null : queueId, queued: !started, describeOnly: run.describeOnly, then: (jobId) => finish({ ...run, jobId }) })
+    trackSmartTagJob({
+      count,
+      jobId: started,
+      queueId: started ? null : queueId,
+      enqueuedAt: run.enqueuedAt ?? null,
+      queued: !started,
+      describeOnly: run.describeOnly,
+      then: (jobId) => finish({ ...run, jobId }),
+    })
   } catch {
     // unreachable for now: the next visit tries again
   }

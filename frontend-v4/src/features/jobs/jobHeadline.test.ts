@@ -27,3 +27,17 @@ describe('an install that ended', () => {
     expect(jobHeadline(install(done({ needsRestart: true })))).toBe('ToriiGate 装好了，要重启程序才能用')
   })
 })
+
+describe('a queued Smart Tag run the backend no longer knows', () => {
+  const lost = (): Job => ({
+    id: 'smarttag-1', kind: 'smarttag', count: 4, destination: null, ids: [], adopted: false, pollErrors: 0, ctx: { smartTag: { queueId: 'q9' } }, label: null,
+    progress: done({ status: 'error', current: 0, total: 0, succeeded: 0, unit: 'images', lost: true }),
+  })
+
+  test('says how it ended is unknown and to run the step again, never a made-up error', () => {
+    useLang.setState({ lang: 'en' })
+    expect(jobHeadline(lost())).toBe("4 images: we couldn't find how this run ended (the app may have restarted since). Run the batch's AI tagging step again.")
+    useLang.setState({ lang: 'zh-CN' })
+    expect(jobHeadline(lost())).toBe('4 张：找不到这次运行是怎么结束的（程序可能中途重启过）。请在批次里再运行一次「AI 打标」这一步。')
+  })
+})

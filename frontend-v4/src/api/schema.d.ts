@@ -5161,6 +5161,9 @@ export interface paths {
          *     If neither matches we return ``{"status": "idle"}`` so the frontend
          *     can treat the response as the canonical "no run is active" signal
          *     without a 404 round-trip.
+         *
+         *     ``queue_id`` (additive): the run queued at that AI-queue place, also
+         *     after it ended, with ``found: false`` when it is no longer known.
          */
         get: operations["progress_api_smart_tag_progress_get"];
         put?: never;
@@ -19917,6 +19920,7 @@ export interface operations {
         parameters: {
             query?: {
                 job_id?: string | null;
+                queue_id?: string | null;
             };
             header?: never;
             path?: never;
