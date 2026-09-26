@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { adoptRunningJobs, pollJobs, useJobs } from './jobs'
 import { isFinished } from './progress'
+import { watchTitle } from './titleBadge'
 
 const POLL_MS = 600
 
@@ -21,6 +22,9 @@ export function JobsRunner() {
     const timer = window.setInterval(() => void pollJobs(), POLL_MS)
     return () => window.clearInterval(timer)
   }, [active])
+
+  // A job that ends while the tab is in the background shows in the tab title.
+  useEffect(() => watchTitle((listener) => useJobs.subscribe((s, prev) => listener(s.jobs, prev.jobs))), [])
 
   return null
 }

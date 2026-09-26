@@ -137,12 +137,14 @@ function moveFailures(raw: Raw): JobFailure[] {
   })
 }
 
-function readTag(base: JobProgress, raw: Raw, ctx: ReadContext): JobProgress {
+function readTag(base: JobProgress, raw: Raw, ctx: ReadContext, prev?: JobProgress): JobProgress { // signals: prev
   if (ctx.baseRunId !== undefined && num(raw.run_id) <= ctx.baseRunId) {
     // The backend still shows an earlier run: ours is queued or just starting.
     const queued = num(obj(raw.pipeline_queue).total_queued) > 0
     return { ...base, status: queued ? 'queued' : 'running', current: 0, total: 0, currentItem: null, message: '' }
   }
+  // signals: a later run on screen means ours ended between two looks (the next queued run starts within a second); what was last seen is all there is
+  if (ctx.baseRunId !== undefined && prev && num(raw.run_id) > ctx.baseRunId + 1) return { ...prev, status: 'done', currentItem: null, message: '' }
   const topTags = rows(obj(raw.last_run_stats).top_tags)
     .map((r) => ({ tag: str(r.tag), count: num(r.count) }))
     .filter((t) => t.tag)
@@ -237,7 +239,7 @@ function readInstall(base: JobProgress, raw: Raw, ctx: ReadContext): JobProgress
   return { ...base, status: 'done', unit: 'bytes', needsRestart, restartAdvised, message }
 }
 
-export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext = {}): JobProgress {
+export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext = {}, prev?: JobProgress): JobProgress { // signals: prev = the job's last reading
   const raw = obj(payload)
   const status = str(raw.status)
   const base: JobProgress = {
@@ -271,7 +273,7 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
     case 'remove':
       return { ...base, succeeded: num(raw.removed), alreadyGone: Array.isArray(raw.missing_ids) ? raw.missing_ids.length : 0 }
     case 'tag':
-      return readTag(base, raw, ctx)
+      return readTag(base, raw, ctx, prev) // signals
     case 'install':
       return readInstall(base, raw, ctx)
     case 'tags':
@@ -312,6 +314,9 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
       return readSortRules(base, raw, ctx.runToken) // sortrules/sortundo
   }
 }
+
+/** signals: the base for a Library tagging run we start (from GET /api/tag/progress just before): it comes after the run on screen and every Library run waiting in the AI queue. */
+export const tagRunBase = (before: Record<string, unknown>): number => num(before.run_id) + rows(obj(before.pipeline_queue).queued).length // signals
 
 export function isFinished(status: JobStatus): boolean {
   return status === 'done' || status === 'cancelled' || status === 'error' || status === 'idle'

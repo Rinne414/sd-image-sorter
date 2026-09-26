@@ -13,6 +13,9 @@ import { resetStuck, useStalled } from './stuckReset'
 import { ImportNextSteps, ScanStallCard } from '../import/ImportJobParts'
 import { useSelectionDialog } from '../selection/dialogs'
 import { openFolderPath } from '../library/fileActions'
+import { useBulkActions } from '../selection/actionOps'
+import { menuItemsOf } from '../selection/actions'
+import { tagNextSteps } from './nextSteps'
 
 /** Failures listed per job; the rest are counted. */
 const MAX_LISTED = 20
@@ -186,6 +189,7 @@ function JobRow({ job }: { job: Job }) {
         </button>
       )}
       <ImportNextSteps job={job} onLeave={() => setOpen(false)} />
+      <TagNextSteps job={job} onLeave={() => setOpen(false)} />
       {job.undo && (
         <button type="button" className="btn" onClick={() => void undoJob(job)} disabled={job.undo.done}>
           {job.undo.done ? t('jobs.undone') : t('jobs.undo')}
@@ -202,6 +206,68 @@ function JobRow({ job }: { job: Job }) {
         </button>
       )}
     </li>
+  )
+}
+
+/** After a tagging run of ours on picked images: pick them, add them to a batch, or edit their tags. */
+function TagNextSteps({ job, onLeave }: { job: Job; onLeave: () => void }) {
+  const ids = tagNextSteps(job)
+  return ids ? <TagNextButtons ids={ids} onLeave={onLeave} /> : null
+}
+
+function TagNextButtons({ ids, onLeave }: { ids: number[]; onLeave: () => void }) {
+  const t = useT()
+  const [batchOpen, setBatchOpen] = useState(false)
+  const batch = useBulkActions(ids).find((a) => a.id === 'batch')
+  // Listed in the row rather than as a pop-up menu: the drawer scrolls and would cut one off.
+  const batchItems = batch ? menuItemsOf(t, batch.children ?? []) : []
+  const pick = () => {
+    const s = useApp.getState()
+    s.setPage('library')
+    s.setSelection(ids)
+    onLeave()
+  }
+  return (
+    <div className={styles.next} data-testid="tag-next">
+      <button type="button" className="btn" onClick={pick}>
+        {t('signals.next.pick', { n: ids.length })}
+      </button>
+      {batchItems.length > 0 && (
+        <button type="button" className="btn" aria-expanded={batchOpen} onClick={() => setBatchOpen(!batchOpen)}>
+          {t('batch.menu.label')}
+          <Icon name="caret" size={13} />
+        </button>
+      )}
+      <button
+        type="button"
+        className="btn"
+        onClick={() => {
+          onLeave()
+          useSelectionDialog.getState().showFor('edit-tags', ids, ids.length)
+        }}
+      >
+        {t('signals.next.editTags')}
+      </button>
+      {batchOpen && (
+        <ul className={styles.nextList} aria-label={t('batch.menu.label')}>
+          {batchItems.map((item, i) => (
+            <li key={item.id}>
+              {item.group && item.group !== batchItems[i - 1]?.group && <span className={styles.nextGroup}>{item.group}</span>}
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  onLeave()
+                  item.onSelect()
+                }}
+              >
+                {item.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }
 

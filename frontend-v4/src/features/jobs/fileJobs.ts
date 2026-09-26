@@ -1,6 +1,7 @@
 import { api, ApiError, unwrap } from '../../api/client'
 import { useToasts } from '../../ui/toasts'
 import { addJob, isQueueBusy, startingProgress, tr } from './jobs'
+import { busyText } from './busyText'
 import { readProgress } from './progress'
 
 export type FileJobKind = 'move' | 'copy' | 'trash' | 'remove'
@@ -46,7 +47,7 @@ export async function startFileJob(kind: FileJobKind, ids: number[], destination
     return true
   } catch (error) {
     const busy = error instanceof ApiError && error.status === 409
-    const text = busy ? tr('jobs.busy') : tr('error.generic', { reason: (error as Error).message })
+    const text = busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message })
     useToasts.getState().push(text, 'error')
     return false
   }

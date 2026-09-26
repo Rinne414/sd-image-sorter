@@ -6,6 +6,7 @@ import { useToasts } from '../../ui/toasts'
 import { isPageRunActive, startPageRun } from '../jobs/aestheticDriver'
 import { installThen } from '../jobs/installJob'
 import { addJob, isQueueBusy, startingProgress, tr } from '../jobs/jobs'
+import { busyText } from '../jobs/busyText'
 import { readProgress } from '../jobs/progress'
 import { matchingIds } from '../selection/invert'
 import type { ModelCard } from '../tagging/taggers'
@@ -58,7 +59,7 @@ export async function scoreImages(ids: readonly number[]): Promise<boolean> {
 
 function failed(error: unknown): void {
   if (error instanceof ApiError && error.status === 503) toast(tr('info.aes.unavailable', { reason: error.message }), 'error')
-  else if (error instanceof ApiError && error.status === 409) toast(tr('jobs.busy'), 'error')
+  else if (error instanceof ApiError && error.status === 409) toast(busyText(error), 'error')
   else toast(tr('error.generic', { reason: (error as Error).message }), 'error')
 }
 

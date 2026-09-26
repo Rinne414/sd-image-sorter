@@ -2,8 +2,10 @@ import { api, ApiError, unwrap } from '../../api/client'
 import { fetchModelStatus } from '../../api/queries'
 import { queryClient } from '../../api/queryClient'
 import { useToasts } from '../../ui/toasts'
+import { busyText } from '../jobs/busyText'
 import { installThen } from '../jobs/installJob'
-import { addJob, isQueueBusy, startingProgress, tr } from '../jobs/jobs'
+import { addJob, startingProgress, tr } from '../jobs/jobs'
+import { tagRunBase } from '../jobs/progress'
 import { readiness, taggerInfo, type ModelCard } from './taggers'
 
 export interface TagOptions {
@@ -20,19 +22,20 @@ export interface TagOptions {
 
 const fail = (error: unknown) => {
   const busy = error instanceof ApiError && error.status === 409
-  useToasts.getState().push(busy ? tr('jobs.busy') : tr('error.generic', { reason: (error as Error).message }), 'error')
+  useToasts.getState().push(busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message }), 'error')
   return false
 }
 
+/**
+ * A run started while another tagging run is running or waiting is queued by
+ * the backend (never two on the GPU at once); the drawer follows each run by
+ * its number, so several can wait in line.
+ */
 async function startTagJob(ids: number[] | null, o: TagOptions, count: number): Promise<boolean> {
-  if (isQueueBusy('tag')) {
-    useToasts.getState().push(tr('jobs.busy'), 'error')
-    return false
-  }
   try {
-    // The run the backend shows now is not ours; ours is any later one.
-    const before = unwrap<{ run_id?: number }>(await api.GET('/api/tag/progress'))
-    const res = unwrap<{ status?: string }>(
+    // Ours comes after the run on screen and every Library run already waiting.
+    const before = unwrap<Record<string, unknown>>(await api.GET('/api/tag/progress'))
+    const res = unwrap<{ status?: string; duplicate?: boolean }>(
       await api.POST('/api/tag/start', {
         body: {
           // No ids: the backend tags every image that has no tags yet.
@@ -48,13 +51,21 @@ async function startTagJob(ids: number[] | null, o: TagOptions, count: number): 
         },
       }),
     )
+    // The same run sent twice while it waits is kept once.
+    if (res.duplicate === true) {
+      useToasts.getState().push(tr('signals.tag.duplicate'), 'info')
+      return true
+    }
+    const queued = res.status === 'queued'
     addJob({
       kind: 'tag',
       count,
       ids: ids ?? [],
-      ctx: { baseRunId: before.run_id ?? 0 },
-      progress: startingProgress(count, res.status === 'queued' ? 'queued' : 'running'),
+      label: taggerInfo(o.model).label,
+      ctx: { baseRunId: tagRunBase(before) },
+      progress: startingProgress(count, queued ? 'queued' : 'running'),
     })
+    if (queued) useToasts.getState().push(tr('signals.tag.queued', { n: count }), 'info')
     return true
   } catch (error) {
     return fail(error)
@@ -113,6 +124,24 @@ export function saveTagOptions(o: TagOptions): void {
     localStorage.setItem(OPTIONS_KEY, JSON.stringify(next))
   } catch {
     // storage blocked: the choices just won't be remembered
+  }
+}
+
+/** Something is remembered (the tag panel then offers to forget it). */
+export function hasStoredTagOptions(): boolean {
+  try {
+    return localStorage.getItem(OPTIONS_KEY) !== null
+  } catch {
+    return false
+  }
+}
+
+/** Forget every remembered choice: the next run starts from the defaults. Only V4 keeps these. */
+export function clearTagOptions(): void {
+  try {
+    localStorage.removeItem(OPTIONS_KEY)
+  } catch {
+    // storage blocked: nothing was remembered either
   }
 }
 

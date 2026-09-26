@@ -4,6 +4,7 @@ import type { ImageSummary } from '../../api/types'
 import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
 import { addJob, isQueueBusy, startingProgress, tr } from '../jobs/jobs'
+import { busyText } from '../jobs/busyText'
 import { withExisting, type DupGroup, type DupPage } from './duplicates'
 import { mergeRanked, readHits, type Hit, type RankedImage } from './ranking'
 import { queryKeyOf, type SimilarQuery } from './similarStore'
@@ -170,7 +171,7 @@ export async function compareScore(a: number, b: number): Promise<number> {
 
 const failed = (error: unknown) => {
   const busy = error instanceof ApiError && error.status === 409
-  useToasts.getState().push(busy ? tr('jobs.busy') : tr('error.generic', { reason: (error as Error).message }), 'error')
+  useToasts.getState().push(busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message }), 'error')
   return false
 }
 

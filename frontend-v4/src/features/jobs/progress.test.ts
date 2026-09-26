@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { isFinished, readProgress } from './progress'
+import { isFinished, readProgress, tagRunBase } from './progress'
 
 describe('readProgress', () => {
   test('move while running: counts, current file, the last errors with names', () => {
@@ -83,6 +83,20 @@ describe('readProgress', () => {
       { tag: '1girl', count: 2 },
       { tag: 'solo', count: 1 },
     ])
+  })
+
+  test('tag: a later run on screen means ours ended between two looks; it ends with what was last seen', () => {
+    const seen = readProgress('tag', { status: 'running', run_id: 5, current: 9, total: 10, tagged: 9, errors: 0 }, { baseRunId: 4 })
+    const later = { status: 'running', run_id: 6, current: 0, total: 40, tagged: 0, errors: 0, message: 'Preparing tagger...' }
+    expect(readProgress('tag', later, { baseRunId: 4 }, seen)).toMatchObject({ status: 'done', current: 9, total: 10, succeeded: 9 })
+    // an adopted run (base = its run - 1) ends the same way
+    expect(readProgress('tag', later, { baseRunId: 3 }, seen).status).toBe('done')
+  })
+
+  test('tag: the run we start comes after every gallery run already running or waiting', () => {
+    expect(tagRunBase({ status: 'done', run_id: 7 })).toBe(7)
+    expect(tagRunBase({ status: 'running', run_id: 7, pipeline_queue: { total_queued: 3, queued: [{ queue_id: 'q1' }, { queue_id: 'q2' }] } })).toBe(9)
+    expect(tagRunBase({})).toBe(0)
   })
 
   test('install: bytes while downloading, then the settled result for our model', () => {

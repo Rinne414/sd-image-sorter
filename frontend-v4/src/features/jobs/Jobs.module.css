@@ -197,3 +197,36 @@
   gap: 6px;
   justify-items: start;
 }
+
+/* A finished run's next steps (a tagging run: pick, add to a batch, edit tags). */
+.next {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.nextList {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 4px 0 0;
+  list-style: none;
+  display: grid;
+  gap: 2px;
+  border-top: 1px dashed var(--line);
+}
+
+.nextList li {
+  display: grid;
+  justify-items: start;
+}
+
+.nextList .btn {
+  height: 26px;
+  padding: 0 8px;
+}
+
+.nextGroup {
+  padding: 4px 8px 0;
+  color: var(--muted);
+  font-size: var(--fs-1);
+}

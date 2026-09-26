@@ -147,3 +147,30 @@
 .check input {
   accent-color: var(--accent);
 }
+
+/* The AI is in use: this run waits in line (tagging ahead) or takes turns (other AI work). */
+.gpu {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  color: var(--text-2);
+  background: var(--wash);
+  box-shadow: inset 2px 0 0 var(--ai);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+
+.gpu[data-mode="share"] {
+  box-shadow: inset 2px 0 0 var(--warn);
+}
+
+.footStart {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+}
+
+.resetDone {
+  color: var(--ok);
+  font-size: var(--fs-2);
+}

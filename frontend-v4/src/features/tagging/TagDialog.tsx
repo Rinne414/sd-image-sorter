@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { useModelStatus, useTaggerModels } from '../../api/queries'
 import { useT } from '../../i18n'
 import { Dialog } from '../../ui/Dialog'
+import { GpuNotice, useTagStartPlan } from './GpuNotice'
 import styles from './TagDialog.module.css'
-import { loadTagOptions, rememberedThresholds, saveTagOptions, startTagging, type TagOptions } from './tagJob'
+import { clearTagOptions, hasStoredTagOptions, loadTagOptions, rememberedThresholds, saveTagOptions, startTagging, type TagOptions } from './tagJob'
 import { isTagger, readiness, taggerInfo, type Readiness, type TaggerInfo } from './taggers'
 
 interface Props {
@@ -33,6 +34,8 @@ export function TagDialog({ ids, count, onClose }: Props) {
   const [o, setO] = useState<TagOptions | null>(null)
   const [blacklistText, setBlacklistText] = useState('')
   const [starting, setStarting] = useState(false)
+  const [wasReset, setWasReset] = useState(false)
+  const plan = useTagStartPlan()
 
   const list = (models.data?.models ?? []).filter((m) => isTagger(m.name) && !m.disabled)
 
@@ -55,7 +58,20 @@ export function TagDialog({ ids, count, onClose }: Props) {
     if (!o) return
     const r = rememberedThresholds(model)
     setO({ ...o, model, threshold: r.general, characterThreshold: r.character })
+    setWasReset(false)
   }
+
+  // Forget every remembered choice (V4 only): the panel shows the defaults at once.
+  const reset = () => {
+    if (!models.data) return
+    clearTagOptions()
+    setO(loadTagOptions(models.data.default))
+    setBlacklistText('')
+    setWasReset(true)
+  }
+  const atDefaults =
+    !!o && o.model === models.data?.default && o.threshold === null && o.characterThreshold === null && o.useGpu && o.maxTags === 0 && blacklistText.trim() === ''
+  const canReset = !!o && (hasStoredTagOptions() || !atDefaults)
 
   const go = async () => {
     if (!o) return
@@ -84,10 +100,20 @@ export function TagDialog({ ids, count, onClose }: Props) {
   const startLabel =
     state === 'download' || state === 'check'
       ? t('tagging.downloadAndStart', { n })
-      : t('tagging.start', { n })
+      : plan.mode === 'queue'
+        ? t('signals.tag.queueStart', { n })
+        : t('tagging.start', { n })
 
   const footer = (
     <>
+      <span className={styles.footStart}>
+        <button type="button" className="btn btn-ghost" onClick={reset} disabled={!canReset} title={t('signals.tag.resetTitle')}>
+          {t('signals.tag.reset')}
+        </button>
+        <span className={styles.resetDone} role="status">
+          {wasReset && !canReset ? t('signals.tag.resetDone') : ''}
+        </span>
+      </span>
       <button type="button" className="btn btn-ghost" onClick={onClose}>
         {t('common.cancel')}
       </button>
@@ -102,6 +128,7 @@ export function TagDialog({ ids, count, onClose }: Props) {
       <p className={styles.lead}>{ids ? t('tagging.retagAll', { n }) : t('tagging.untaggedLead')}</p>
       {models.isError && <p className={styles.error}>{t('error.generic', { reason: models.error.message })}</p>}
       {models.isPending && <p className={styles.lead}>{t('picker.loading')}</p>}
+      <GpuNotice plan={plan} />
       <div className={styles.list} role="radiogroup" aria-label={t('tagging.tagger')}>
         {list.map((m) => {
           const inf = taggerInfo(m.name)

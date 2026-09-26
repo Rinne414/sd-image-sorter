@@ -8,6 +8,7 @@ import { enBrowse } from './en.browse'
 import { enSort } from './en.sort'
 import { enSettings } from './en.settings'
 import { enTools } from './en.tools'
+import { enSignals } from './en.signals'
 import type { MessageKey } from './zh-CN'
 
 export const en: Record<MessageKey, string> = {
@@ -21,6 +22,7 @@ export const en: Record<MessageKey, string> = {
   ...enSort,
   ...enSettings,
   ...enTools,
+  ...enSignals,
   'app.name': 'SD Image Sorter',
   'nav.home': 'Home',
   'nav.library': 'Library',

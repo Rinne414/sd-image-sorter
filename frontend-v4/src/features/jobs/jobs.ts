@@ -240,7 +240,7 @@ let lastLiveRefresh = 0
 async function pollOne(job: Job): Promise<void> {
   try {
     const driver = DRIVERS[queueOf(job.kind)]
-    const progress = readProgress(job.kind, await driver.poll(job), job.ctx)
+    const progress = readProgress(job.kind, await driver.poll(job), job.ctx, job.progress) // signals: the last reading, for a run that ended between two looks
     patchJob(job.id, { progress, pollErrors: 0 })
     if (driver.liveKeys && progress.succeeded > job.progress.succeeded && Date.now() - lastLiveRefresh > LIVE_REFRESH_MS) {
       lastLiveRefresh = Date.now()

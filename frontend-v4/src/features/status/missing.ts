@@ -5,6 +5,7 @@ import { queryClient } from '../../api/queryClient'
 import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
 import { addJob, isQueueBusy, startingProgress, tr } from '../jobs/jobs'
+import { busyText } from '../jobs/busyText'
 
 // Records whose files are gone: grouped by the folder they claim, found
 // again under another folder (a job), reviewed when a found file matches
@@ -105,7 +106,7 @@ function refresh(): void {
 
 const failToast = (error: unknown) => {
   const busy = error instanceof ApiError && error.status === 409
-  useToasts.getState().push(busy ? tr('jobs.busy') : tr('error.generic', { reason: (error as Error).message }), 'error')
+  useToasts.getState().push(busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message }), 'error')
   return false
 }
 

@@ -1,6 +1,7 @@
 import { api, ApiError, unwrap } from '../../api/client'
 import { useToasts } from '../../ui/toasts'
 import { addJob, isQueueBusy, startingProgress, tr } from './jobs'
+import { busyText } from './busyText'
 
 // First use of a model: download it as a job in the Jobs drawer, then run the
 // work that needed it. Shared by tagging and censor detection.
@@ -15,7 +16,7 @@ export interface InstallTarget {
 
 const fail = (error: unknown) => {
   const busy = error instanceof ApiError && error.status === 409
-  useToasts.getState().push(busy ? tr('jobs.busy') : tr('error.generic', { reason: (error as Error).message }), 'error')
+  useToasts.getState().push(busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message }), 'error')
   return false
 }
 

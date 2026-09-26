@@ -1,0 +1,166 @@
+/*
+ * The chip's room in the top bar. Its size never counts toward the bar's
+ * minimum width (inline-size containment), so on a small laptop it gives way
+ * (the name shortens, before anything else in the bar does) instead of
+ * pushing the bar past the window; the chip sits at the room's right end.
+ */
+.wrap {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  flex: 0 4 clamp(150px, 18vw, 360px);
+  min-width: 112px;
+  contain: inline-size;
+}
+
+/* The chip: "AI" in model blue, which model holds it, how long. Only there while busy. */
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 10px 0 6px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+  border-radius: var(--radius);
+  box-shadow: inset 2px 0 0 var(--ai);
+}
+
+.chip:hover {
+  background: var(--wash-hover);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.chip[data-stuck] {
+  box-shadow: inset 2px 0 0 var(--warn);
+}
+
+.mark {
+  flex: none;
+  padding: 0 4px;
+  color: var(--ai);
+  border: 1px solid currentColor;
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  line-height: 15px;
+  border-radius: var(--radius);
+}
+
+.chip[data-stuck] .mark {
+  color: var(--warn);
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.device {
+  color: var(--muted);
+  font-size: var(--fs-1);
+}
+
+.clock {
+  flex: none;
+  color: var(--text-2);
+}
+
+.more {
+  color: var(--muted);
+}
+
+.stuck {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(360px, calc(100 * var(--vw) - 32px));
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  padding: 12px 14px 14px;
+  background: var(--surface-2);
+  box-shadow: var(--shadow-float);
+  border-radius: var(--radius-lg);
+  animation: drop var(--t-med) var(--ease);
+}
+
+@keyframes drop {
+  from {
+    opacity: 0;
+    translate: 0 -6px;
+  }
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-4);
+  font-weight: 600;
+}
+
+.list {
+  justify-self: stretch;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.row {
+  display: grid;
+  gap: 2px;
+  padding: 6px 0 6px 10px;
+  box-shadow: inset 2px 0 0 var(--ai);
+}
+
+.row[data-stuck] {
+  box-shadow: inset 2px 0 0 var(--warn);
+}
+
+.rowHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.rowName {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.warn {
+  margin: 0;
+  color: var(--warn);
+  font-size: var(--fs-2);
+}
+
+.foot {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}

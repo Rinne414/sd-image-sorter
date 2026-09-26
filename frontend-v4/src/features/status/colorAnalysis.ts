@@ -4,6 +4,7 @@ import { queryClient } from '../../api/queryClient'
 import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
 import { addJob, isQueueBusy, startingProgress, tr, type Job } from '../jobs/jobs'
+import { busyText } from '../jobs/busyText'
 
 /** The most one run takes (the backend refuses more); runs follow each other until none are left. */
 const MAX_PER_RUN = 50_000
@@ -39,7 +40,7 @@ export async function startColorAnalysis(): Promise<boolean> {
     return true
   } catch (error) {
     const busy = error instanceof ApiError && error.status === 409
-    useToasts.getState().push(busy ? tr('jobs.busy') : tr('error.generic', { reason: (error as Error).message }), 'error')
+    useToasts.getState().push(busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message }), 'error')
     return false
   }
 }

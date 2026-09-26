@@ -8,6 +8,7 @@ import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
 import { installAllThen, type InstallTarget } from '../jobs/installJob'
 import { isQueueBusy, tr } from '../jobs/jobs'
+import { busyText } from '../jobs/busyText'
 import { readiness, taggerInfo, type ModelCard, type TaggerInfo } from '../tagging/taggers'
 import { projectKey } from './datasetApi'
 import { folderKey, libraryKey } from './datasetItems'
@@ -323,7 +324,7 @@ async function startRun(batch: Batch, body: ReturnType<typeof smartTagBody>, cou
     return true
   } catch (error) {
     const busy = error instanceof ApiError && error.status === 409
-    toast(busy ? tr('jobs.busy') : tr('error.generic', { reason: (error as Error).message }), 'error')
+    toast(busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message }), 'error')
     return false
   }
 }
