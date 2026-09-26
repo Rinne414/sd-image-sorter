@@ -21,7 +21,7 @@ export const SETTINGS_PAGES: readonly SettingsTabEntry[] = [
     what: 'settings.what.appearance',
     page: lazy(() => import('./AppearanceTab').then((m) => ({ default: m.AppearanceTab }))),
   },
-  { id: 'library', label: 'settings.tab.library', what: 'settings.what.library' },
+  { id: 'library', label: 'settings.tab.library', what: 'settings.what.library', page: lazy(() => import('./library/LibraryTab').then((m) => ({ default: m.LibraryTab }))) },
   {
     id: 'models',
     label: 'settings.tab.models',
@@ -29,7 +29,7 @@ export const SETTINGS_PAGES: readonly SettingsTabEntry[] = [
     page: lazy(() => import('./models/ModelCenterTab').then((m) => ({ default: m.ModelCenterTab }))),
   },
   { id: 'ai', label: 'settings.tab.ai', what: 'settings.what.ai' },
-  { id: 'disk', label: 'settings.tab.disk', what: 'settings.what.disk' },
+  { id: 'disk', label: 'settings.tab.disk', what: 'settings.what.disk', page: lazy(() => import('./disk/DiskTab').then((m) => ({ default: m.DiskTab }))) },
   {
     id: 'about',
     label: 'settings.tab.about',

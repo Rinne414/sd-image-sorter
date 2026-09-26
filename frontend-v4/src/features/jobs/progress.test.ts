@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { isFinished, readProgress, tagRunBase } from './progress'
+import { isFinished, readProgress, scanIdentity, tagRunBase } from './progress'
 
 describe('readProgress', () => {
   test('move while running: counts, current file, the last errors with names', () => {
@@ -179,6 +179,12 @@ describe('readProgress', () => {
 
   test('scan: another run on the backend is not ours', () => {
     expect(readProgress('scan', { run_id: 10, status: 'running' }, { runId: 9 }).status).toBe('idle')
+  })
+
+  test('scan: stopping names the run and where it came from (a rescan or the idle check is not a manual import)', () => {
+    expect(scanIdentity({ runId: 9 })).toEqual({ run_id: 9, source: 'manual' })
+    expect(scanIdentity({ runId: 4, scanSource: 'library_rescan' })).toEqual({ run_id: 4, source: 'library_rescan' })
+    expect(scanIdentity({ scanSource: 'library_auto_refresh' })).toEqual({ run_id: 0, source: 'library_auto_refresh' })
   })
 
   test('detect and refine (run in this page): counts, the image being worked on, failures by name', () => {

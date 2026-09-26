@@ -1,0 +1,209 @@
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 860px;
+  min-width: 0;
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-top: 12px;
+}
+
+.count {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.count[data-missing] {
+  color: var(--warn);
+}
+
+.state {
+  margin: 12px 0 0;
+  color: var(--text-2);
+}
+
+.state[data-tone="error"] {
+  color: var(--danger);
+}
+
+/* The source folders: a ruled ledger, long lists scroll inside it. */
+.roots {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 460px;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.root {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 9px 2px 9px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.root:last-child {
+  border-bottom: 0;
+}
+
+.rootText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rootPath {
+  color: var(--text);
+  font-size: var(--fs-2);
+  overflow-wrap: anywhere;
+}
+
+.root[data-missing] .rootPath {
+  color: var(--muted);
+}
+
+.rootMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  color: var(--muted);
+  font-size: var(--fs-1);
+}
+
+.missing {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.rootActions {
+  display: flex;
+  gap: 4px;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.check input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* The one irreversible thing on the page: set apart at the bottom, behind a danger rule. */
+.danger {
+  margin-top: 8px;
+  padding: 16px 18px 18px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--danger);
+  border-radius: var(--radius);
+}
+
+.dangerTitle {
+  margin: 0 0 8px;
+  color: var(--danger);
+  font-size: var(--fs-4);
+  font-weight: 600;
+}
+
+.busy {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--warn);
+  background: var(--wash);
+}
+
+.busy p {
+  margin: 0;
+  color: var(--text);
+}
+
+.dialogText {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  line-height: 1.6;
+}
+
+.dialogText p {
+  margin: 0;
+}
+
+.strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.choice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  cursor: pointer;
+}
+
+.choice input {
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+}
+
+.choice span:last-child {
+  grid-column: 2;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.file {
+  color: var(--muted);
+  font-size: var(--fs-2);
+  overflow-wrap: anywhere;
+}
+
+.lead {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.hint {
+  margin: 8px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}

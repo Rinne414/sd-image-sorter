@@ -13,6 +13,7 @@ import { enPixai } from './en.pixai'
 import { enReader } from './en.reader'
 import { enModels } from './en.models'
 import { enPrivacy } from './en.privacy'
+import { enLibrarySettings } from './en.library-settings'
 import type { MessageKey } from './zh-CN'
 
 export const en: Record<MessageKey, string> = {
@@ -31,6 +32,7 @@ export const en: Record<MessageKey, string> = {
   ...enReader,
   ...enModels,
   ...enPrivacy,
+  ...enLibrarySettings,
   'app.name': 'SD Image Sorter',
   'nav.home': 'Home',
   'nav.library': 'Library',

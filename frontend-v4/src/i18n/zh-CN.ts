@@ -14,6 +14,7 @@ import { zhCNPixai } from './zh-CN.pixai'
 import { zhCNReader } from './zh-CN.reader'
 import { zhCNModels } from './zh-CN.models'
 import { zhCNPrivacy } from './zh-CN.privacy'
+import { zhCNLibrarySettings } from './zh-CN.library-settings'
 
 export const zhCN = {
   ...zhCNPublish,
@@ -31,6 +32,7 @@ export const zhCN = {
   ...zhCNReader,
   ...zhCNModels,
   ...zhCNPrivacy,
+  ...zhCNLibrarySettings,
   'app.name': 'SD Image Sorter',
   'nav.home': '首页',
   'nav.library': '图库',

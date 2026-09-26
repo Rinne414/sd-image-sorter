@@ -1,0 +1,215 @@
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 860px;
+  min-width: 0;
+}
+
+.state {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.state[data-tone="error"] {
+  color: var(--danger);
+}
+
+.lead {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.total {
+  margin: 0;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.hint {
+  margin: 8px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+
+.path {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  overflow-wrap: anywhere;
+}
+
+/* Name, size, then the folder under it: a ruled table of what takes space. */
+.list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.item[data-plain] {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.item input {
+  margin: 0;
+  accent-color: var(--accent);
+  align-self: center;
+}
+
+.itemName {
+  color: var(--text);
+}
+
+.itemSize {
+  color: var(--text);
+  text-align: right;
+}
+
+.itemSize[data-unknown] {
+  color: var(--warn);
+}
+
+.itemPath {
+  grid-column: 2 / -1;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  overflow-wrap: anywhere;
+}
+
+.item[data-plain] .itemPath {
+  grid-column: 1 / -1;
+}
+
+.here {
+  margin-left: 8px;
+  color: var(--accent);
+  font-size: var(--fs-1);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.field label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.number {
+  width: 120px;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-3);
+  border-radius: var(--radius);
+}
+
+.number:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.number[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.unit {
+  color: var(--muted);
+}
+
+.note {
+  margin: 10px 0 0;
+  color: var(--ok);
+  font-size: var(--fs-2);
+}
+
+.note[data-tone="error"] {
+  color: var(--danger);
+}
+
+/* Kept folders and the runtime rebuild fold away: rarely needed, never next to the everyday buttons. */
+.fold {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.fold summary {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+.fold[open] summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.foldTitle {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.foldNote {
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.foldBody {
+  padding: 12px 12px 14px;
+}
+
+.foldBody .list {
+  margin-top: 8px;
+}
+
+.subTitle {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: var(--fs-3);
+  font-weight: 600;
+}
+
+.status {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.status[data-pending] {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.dialogText {
+  margin: 0;
+  line-height: 1.6;
+}

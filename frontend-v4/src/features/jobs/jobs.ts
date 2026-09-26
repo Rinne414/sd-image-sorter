@@ -5,7 +5,7 @@ import { translate, useLang, type MessageKey, type Params } from '../../i18n'
 import { tailOfPath } from '../../lib/paths'
 import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
-import { isFinished, readProgress, type JobKind, type JobProgress, type ReadContext } from './progress'
+import { asScanSource, isFinished, readProgress, scanIdentity, type JobKind, type JobProgress, type ReadContext } from './progress'
 import { driveSmartTag } from './smartTagDriver'
 import { drivePurity, drivePurityDownload } from './purityDriver'
 import { driveMasks } from './maskDriver'
@@ -125,8 +125,12 @@ const DRIVERS: Record<Queue, Driver> = {
   },
   scan: {
     poll: async () => unwrap(await api.GET('/api/scan/progress')),
-    cancel: async (job) => unwrap(await api.POST('/api/scan/cancel', { body: { run_id: job.ctx.runId ?? 0, source: 'manual' } })),
-    settle: async (job) => unwrap(await api.POST('/api/scan/acknowledge', { body: { run_id: job.ctx.runId ?? 0, source: 'manual' } })),
+    // A rescan or an idle check is stopped under its own source; only a manual import is confirmed.
+    cancel: async (job) => unwrap(await api.POST('/api/scan/cancel', { body: scanIdentity(job.ctx) })),
+    settle: async (job) =>
+      job.ctx.scanSource && job.ctx.scanSource !== 'manual'
+        ? null
+        : unwrap(await api.POST('/api/scan/acknowledge', { body: { run_id: job.ctx.runId ?? 0, source: 'manual' } })),
     liveKeys: ['images', 'generators', 'folders', 'libraries'],
   },
   // Bulk tag edits finish inside their request; they are never polled.
@@ -309,7 +313,7 @@ export async function adoptRunningJobs(): Promise<void> {
     }),
     adopt('scan', (raw) => {
       if (!['starting', 'running', 'cancelling'].includes(String(raw.status))) return null
-      const ctx = { runId: Number(raw.run_id ?? 0) }
+      const ctx = { runId: Number(raw.run_id ?? 0), scanSource: asScanSource(raw.source) }
       return { kind: 'scan', progress: readProgress('scan', raw, ctx), ctx }
     }),
     adopt('embed', (raw) => (raw.running === true ? { kind: 'embed', progress: readProgress('embed', raw) } : null)),

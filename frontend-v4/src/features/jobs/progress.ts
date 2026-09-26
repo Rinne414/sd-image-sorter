@@ -90,6 +90,13 @@ export interface JobProgress {
   message: string
 }
 
+/** Who started a scan (the backend's names). */
+export type ScanSource = 'manual' | 'library_rescan' | 'library_auto_refresh'
+
+const SCAN_SOURCES: ReadonlySet<string> = new Set(['manual', 'library_rescan', 'library_auto_refresh'])
+
+export const asScanSource = (v: unknown): ScanSource => (typeof v === 'string' && SCAN_SOURCES.has(v) ? (v as ScanSource) : 'manual')
+
 /** What a reader needs to know about the job it reads for. */
 export interface ReadContext {
   /** tag: the run id the backend had before we started; older or equal runs are not ours. */
@@ -98,6 +105,8 @@ export interface ReadContext {
   modelId?: string
   /** scan: the run we started; any other run on the backend is not ours. */
   runId?: number
+  /** scan: who started the run (manual, library_rescan, library_auto_refresh); stopping one must name it. */
+  scanSource?: ScanSource
   /** dupscan: the bulk job the backend gave us. */
   bulkJobId?: string
   /** smarttag: our run's job id and its place in the AI queue. */
@@ -167,6 +176,11 @@ function readColors(base: JobProgress, raw: Raw): JobProgress {
     currentItem: str(raw.current_image) || null,
     message: '',
   }
+}
+
+/** The identity the backend asks for to stop or confirm a scan (an import is `manual`). */
+export function scanIdentity(ctx: ReadContext): { run_id: number; source: ScanSource } {
+  return { run_id: ctx.runId ?? 0, source: ctx.scanSource ?? 'manual' }
 }
 
 function readScan(base: JobProgress, raw: Raw, ctx: ReadContext): JobProgress {

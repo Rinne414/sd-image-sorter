@@ -68,9 +68,18 @@ test('settings tabs are addresses: clicking, typing the address, unknown tab, ba
   await page.getByTestId('settings-tab-models').click()
   await expect(page.getByTestId('model-center')).toBeVisible()
   await expect(page.getByTestId('settings-planned')).toHaveCount(0)
+  // Library and Disk & cache are built too (slice 5e, v4-settings-library.spec.ts)
+  // (cleaning and the runtime rebuild must never reach the test server: a rebuild marker rebuilds the shared venv)
+  await page.route(/\/api\/disk\/(cleanup|runtime\/rebuild-core)/, (route) => route.fulfill({ status: 500, json: { error: 'not in this test' } }))
+  await page.getByTestId('settings-tab-library').click()
+  await expect(page.getByTestId('library-settings')).toBeVisible()
+  await expect(page.getByTestId('settings-planned')).toHaveCount(0)
+  await page.getByTestId('settings-tab-disk').click()
+  await expect(page.getByTestId('disk-settings')).toBeVisible()
+  await expect(page.getByTestId('settings-planned')).toHaveCount(0)
 
   // every other tab: its address, one honest line, and the way to V3.5 (no controls that do nothing)
-  for (const [id, name] of [['library', 'Library'], ['ai', 'AI services'], ['disk', 'Disk & cache']] as const) {
+  for (const [id, name] of [['ai', 'AI services']] as const) {
     await page.getByTestId(`settings-tab-${id}`).click()
     await expect(page).toHaveURL(new RegExp(`#/settings/${id}$`))
     await expect(page.getByTestId(`settings-tab-${id}`)).toHaveAttribute('aria-current', 'page')

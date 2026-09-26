@@ -4,6 +4,7 @@ import { BatchPage } from '../features/batch/BatchPage'
 import { CommandPalette } from '../features/command/CommandPalette'
 import { HomePage } from '../features/home/HomePage'
 import { JobsRunner } from '../features/jobs/JobsRunner'
+import { startAutoRefresh } from '../features/library/autoRefreshRun'
 import { DropImport } from '../features/import/DropImport'
 import { SelectionDialogs } from '../features/selection/SelectionDialogs'
 import { appKey } from '../features/library/keys'
@@ -31,6 +32,9 @@ export function App() {
   useEffect(() => {
     document.documentElement.lang = lang
   }, [lang])
+
+  // Settings › Library › checking the source folders for new images while idle (off unless switched on).
+  useEffect(() => startAutoRefresh(), [])
 
   // Ctrl K opens the palette from anywhere, even while typing.
   useEffect(() => {
