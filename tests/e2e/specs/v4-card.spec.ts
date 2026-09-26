@@ -69,7 +69,8 @@ test('tags: add with suggestions, remove and undo; captions; read again', async 
   await tiles.nth(1).click()
   const second = (await tiles.nth(1).getAttribute('data-id'))!
   await input.fill('v4 card b')
-  await expect(card.getByRole('option', { name: /v4 card beta/ })).toBeVisible()
+  // the list floats over the page (it is never cut off by the card's scrolling)
+  await expect(page.getByTestId('tag-suggest').getByRole('option', { name: /v4 card beta/ })).toBeVisible()
   await input.press('Enter')
   await expect(input).toHaveValue('v4 card beta, ')
   await input.press('Enter')

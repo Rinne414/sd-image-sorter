@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 import { cleanupImages, dbPath, pageOverflow, runBackendScript, seedImages, VIEWPORTS } from '../fixtures/v4-seed'
+import { expectSuggestions, stubTagSuggest, suggestList } from '../fixtures/v4-suggest'
 
 /**
  * V4 dataset settings (slice 3c): one strip per dataset batch; the final
@@ -217,6 +218,49 @@ test('a trigger typed and then left with Esc still counts', async ({ page }) => 
   const settings = await v35(page)
   expect(settings.caption_render.trigger).toBe('dsxesc')
   expect(settings.caption_render.blacklist).toContain('dsxnew')
+})
+
+test("common tags and the blacklist suggest tags as they are typed, in the batch template's tag style; Esc closes only the list", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await stubTagSuggest(page)
+  await openV4(page, `#/batch/${batchId}`)
+  await page.getByTestId('dataset-settings-open').click()
+  const panel = page.getByTestId('dataset-settings-panel')
+  const common = page.getByTestId('dataset-common')
+  const before = await common.inputValue()
+
+  // the template writes spaces (the default): the vocabulary's long_hair goes in as long hair
+  await common.fill('')
+  await common.pressSequentially('masterpiece, lon')
+  await expectSuggestions(page, ['long hair', 'long sleeves'])
+  await common.press('Enter')
+  await expect(common).toHaveValue('masterpiece, long hair, ')
+
+  // Esc closes the list; the panel and the typing stay
+  await common.pressSequentially('wat')
+  await expectSuggestions(page, ['watermark', 'water'])
+  await page.keyboard.press('Escape')
+  await expect(suggestList(page)).toHaveCount(0)
+  await expect(panel).toBeVisible()
+  await expect(common).toHaveValue('masterpiece, long hair, wat')
+  await common.fill(before)
+
+  // with the underscore option off the template keeps underscores, and so does a suggested tag
+  const advanced = page.getByTestId('dataset-settings-form').locator('details')
+  if ((await advanced.getAttribute('open')) === null) await advanced.locator('summary').click()
+  const underscores = page.getByLabel('Replace underscores in tags with spaces (score_* kept)')
+  await underscores.uncheck()
+  const blacklist = page.getByTestId('dataset-blacklist')
+  const listed = await blacklist.inputValue()
+  await blacklist.focus()
+  await blacklist.press('ControlOrMeta+End')
+  await blacklist.pressSequentially(', blu')
+  await expectSuggestions(page, ['blue_sky'])
+  await blacklist.press('Tab')
+  await expect(blacklist).toHaveValue(`${listed}, blue_sky, `)
+  await blacklist.fill(listed)
+  await underscores.check()
+  await saved(page)
 })
 
 for (const viewport of VIEWPORTS) {

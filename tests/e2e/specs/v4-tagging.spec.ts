@@ -5,6 +5,7 @@ import path from 'node:path'
 import { expect, test, type Page, type Route } from '@playwright/test'
 
 import { cleanupImages, dbPath, openLibrary, pageOverflow, runBackendScript, seedImages, tmpRoot, VIEWPORTS } from '../fixtures/v4-seed'
+import { expectSuggestions, stubTagSuggest, suggestList } from '../fixtures/v4-suggest'
 
 /**
  * V4 "Tag…" for the picks: the tagger panel, first-use download, and the
@@ -546,4 +547,32 @@ test('describing one image from its right-click menu writes its description and 
     await vlm.close()
     readRow(['cur.execute("DELETE FROM tags WHERE image_id = ?", (image_id,))', 'conn.commit()'].join('\n'))
   }
+})
+
+test('the tags to drop are suggested as they are typed, and Esc closes only the list', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openLibrary(page, TOKEN, COUNT)
+  const stub: TagStub = { started: [], startStatus: 'started', runningPolls: 1, holdQueue: false }
+  await stubTagging(page, stub)
+  await stubTagSuggest(page)
+  await pickTwo(page)
+  const dialog = await openTagDialog(page)
+  await openAdvanced(dialog)
+  const drop = dialog.getByLabel('Drop these tags while tagging')
+  await drop.fill('')
+  await drop.pressSequentially('signature, wat')
+  await expectSuggestions(page, ['watermark', 'water'])
+  await drop.press('Enter')
+  await expect(drop).toHaveValue('signature, watermark, ')
+
+  await drop.pressSequentially('lo')
+  await expectSuggestions(page, ['long hair', 'long sleeves', 'looking at viewer'])
+  await page.keyboard.press('Escape')
+  await expect(suggestList(page)).toHaveCount(0)
+  await expect(dialog).toBeVisible()
+  await drop.press('Backspace')
+  await drop.press('Backspace')
+  await dialog.getByRole('button', { name: 'Tag 2' }).click()
+  await expect.poll(() => stub.started.length).toBe(1)
+  expect(stub.started[0]).toMatchObject({ pre_tag_blacklist: ['signature', 'watermark'] })
 })

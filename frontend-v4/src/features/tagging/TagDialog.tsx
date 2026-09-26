@@ -3,7 +3,9 @@ import { useModelStatus, useTaggerModels, type TaggerModel } from '../../api/que
 import { useT } from '../../i18n'
 import { useApp } from '../../state/store'
 import { Dialog } from '../../ui/Dialog'
+import { TagField } from '../../ui/TagField'
 import { describerCard } from '../batch/datasetTagApi'
+import { displayTag } from '../batch/edit/tagStyle'
 import { AdvancedFields, DescriberFields, MergeField, TaggerSwitch, type DescriberService } from '../batch/TagOptions'
 import { useDescriber } from '../settings/ai/aiApi'
 import { useAT } from '../settings/ai/aiText'
@@ -199,7 +201,8 @@ export function TagDialog({ ids, count, onClose, mode = 'tag' }: Props) {
           <AdvancedFields o={o} set={edit} current={current} smart={smart}>
             <label className={`${styles.field} ${styles.wideField}`}>
               <span>{t('tagging.blacklist')}</span>
-              <input type="text" value={blacklistText} placeholder="watermark, signature" spellCheck={false} onChange={(e) => setBlacklistText(e.target.value)} />
+              {/* The tagger's vocabulary, written as library tags are (the backend ignores underscores here). */}
+              <TagField value={blacklistText} placeholder="watermark, signature" onChange={setBlacklistText} write={displayTag} testId="tag-blacklist" />
               <small className={styles.warn}>{t('tagging.blacklistWarn')}</small>
             </label>
           </AdvancedFields>

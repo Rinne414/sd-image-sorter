@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 import { markModelsReady } from '../fixtures/model-status'
 import { cleanupImages, dbPath, pageOverflow, runBackendScript, seedImages, VIEWPORTS } from '../fixtures/v4-seed'
+import { expectSuggestions, stubTagSuggest, suggestList } from '../fixtures/v4-suggest'
 
 /**
  * V4 Prompt Lab (提示词助手) on the real backend, in a library of its own so
@@ -459,6 +460,78 @@ test('Stats "Use in Random" fills a slot; a written prompt finds its images in t
   await page.getByTestId('pl-result').getByRole('button', { name: 'Find in library' }).click()
   await expect(page.getByTestId('query-input')).toHaveValue(`prompt:${TOKEN} prompt:1girl`)
   await expect(page.getByTestId('result-count')).toHaveText('7 images')
+})
+
+test('tags are suggested in Build, the rules, the tag sets and the fixed words; Esc closes only the list', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await stubTagSuggest(page)
+  await openAt(page, '#/tools/promptlab', 'build')
+
+  // writing a prompt completes only the word under the caret, in the prompt's own tag style
+  const prompt = page.getByTestId('pl-build-prompt')
+  await prompt.fill('')
+  await prompt.pressSequentially('masterpiece, (lon')
+  await expectSuggestions(page, ['long hair', 'long sleeves'])
+  await prompt.press('Enter')
+  await expect(prompt).toHaveValue('masterpiece, (long hair')
+  await prompt.pressSequentially(':1.2), hatsu')
+  await expectSuggestions(page, ['hatsune miku', 'hatsune miku (append)'])
+  await prompt.press('ArrowDown')
+  await prompt.press('Enter')
+  await expect(prompt).toHaveValue('masterpiece, (long hair:1.2), hatsune miku (append)')
+  // Esc closes the list and nothing else
+  await prompt.pressSequentially(', wat')
+  await expectSuggestions(page, ['watermark', 'water'])
+  await page.keyboard.press('Escape')
+  await expect(suggestList(page)).toHaveCount(0)
+  await expect(page.getByTestId('promptlab-page')).toHaveAttribute('data-mode', 'build')
+  await expect(prompt).toHaveValue('masterpiece, (long hair:1.2), hatsune miku (append), wat')
+  // a negative prompt written with underscores gets underscores
+  const negative = page.getByTestId('pl-build-negative')
+  await negative.fill('')
+  await negative.pressSequentially('bad_anatomy, blu')
+  await expectSuggestions(page, ['blue_sky'])
+  await negative.press('Tab')
+  await expect(negative).toHaveValue('bad_anatomy, blue_sky')
+  await page.getByTestId('pl-build-clear').click()
+
+  // a new exclusion rule: its tag lists suggest; Esc closes the list, then the dialog
+  await page.getByTestId('pl-mode-random').click()
+  await page.getByTestId('pl-rule-new').click()
+  const ruleDialog = page.getByTestId('pl-rule-dialog')
+  const when = ruleDialog.getByTestId('pl-rule-when')
+  await when.pressSequentially('lon')
+  await expectSuggestions(page, ['long hair', 'long sleeves'])
+  await when.press('Tab')
+  await expect(when).toHaveValue('long hair, ')
+  await when.pressSequentially('wat')
+  await expectSuggestions(page, ['watermark', 'water'])
+  await page.keyboard.press('Escape')
+  await expect(suggestList(page)).toHaveCount(0)
+  await expect(ruleDialog).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(ruleDialog).toHaveCount(0)
+
+  // a new tag set's tags
+  await page.getByTestId('pl-set-new').click()
+  const setDialog = page.getByTestId('pl-set-dialog')
+  const tags = setDialog.getByTestId('pl-set-tags')
+  await tags.pressSequentially('smile, blu')
+  await expectSuggestions(page, ['blue sky'])
+  await tags.press('Enter')
+  await expect(tags).toHaveValue('smile, blue sky, ')
+  await expect(setDialog).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(setDialog).toHaveCount(0)
+
+  // the words always put first
+  const prepend = page.getByTestId('pl-prepend')
+  await prepend.fill('')
+  await prepend.pressSequentially('hatsu')
+  await expectSuggestions(page, ['hatsune miku', 'hatsune miku (append)'])
+  await prepend.press('Enter')
+  await expect(prepend).toHaveValue('hatsune miku, ')
+  await prepend.fill('')
 })
 
 for (const viewport of VIEWPORTS) {

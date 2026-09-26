@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { findLoadedImage } from '../../api/loaded'
 import { useT, type MessageKey } from '../../i18n'
 import { Dialog } from '../../ui/Dialog'
+import { TagField } from '../../ui/TagField'
+import { displayTag } from '../batch/edit/tagStyle'
 import { bulkRequest, summarize, type BulkForm, type BulkOp, type Summary } from './bulkTags'
 import { applyBulk, postBulk } from './tagEdit'
 import styles from './TagEditDialog.module.css'
@@ -101,12 +103,17 @@ export function TagEditDialog({ ids, onClose }: Props) {
         {(form.op === 'add' || form.op === 'remove') && (
           <label className={styles.field}>
             <span>{t(form.op === 'add' ? 'tagedit.tagsToAdd' : 'tagedit.tagsToRemove')}</span>
-            <input
+            {/* Adding offers the vocabulary (a character brings its series), written as library tags are;
+                removing offers the library's own tags as they are stored. */}
+            <TagField
               autoFocus
               value={form.tags}
               placeholder="smile, long hair"
-              spellCheck={false}
-              onChange={(e) => set({ tags: e.target.value })}
+              onChange={(tags) => set({ tags })}
+              vocabulary={form.op === 'add' ? 'global' : 'library'}
+              write={form.op === 'add' ? displayTag : undefined}
+              series={form.op === 'add'}
+              testId="tagedit-tags"
             />
           </label>
         )}
@@ -114,14 +121,21 @@ export function TagEditDialog({ ids, onClose }: Props) {
           <div className={styles.pair}>
             <label className={styles.field}>
               <span>{t('tagedit.find')}</span>
-              <input autoFocus value={form.find} spellCheck={false} onChange={(e) => set({ find: e.target.value })} />
+              <TagField autoFocus mode="single" vocabulary="library" value={form.find} onChange={(find) => set({ find })} testId="tagedit-find" />
             </label>
             <span className={styles.arrow} aria-hidden>
               →
             </span>
             <label className={styles.field}>
               <span>{t('tagedit.replace')}</span>
-              <input value={form.replace} spellCheck={false} placeholder={t('tagedit.replaceEmpty')} onChange={(e) => set({ replace: e.target.value })} />
+              <TagField
+                mode="single"
+                value={form.replace}
+                placeholder={t('tagedit.replaceEmpty')}
+                onChange={(replace) => set({ replace })}
+                write={displayTag}
+                testId="tagedit-replace"
+              />
             </label>
           </div>
         )}

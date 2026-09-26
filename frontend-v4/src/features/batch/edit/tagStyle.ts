@@ -66,3 +66,22 @@ export function withTagStyle(content: CaptionContent, style: TagStyle): CaptionC
   if (offStyleTags(content.booru_caption, style).length === 0) return content
   return { ...content, booru_caption: joinTags(styledList(content.booru_caption, style)) }
 }
+
+/** A tag inside a prompt without its brackets and weight: `(long_hair:1.2)` -> `long_hair`. */
+const bare = (tag: string) => tag.replace(/[()[\]{}]/g, '').replace(/:[\d.\s]*$/, '').trim()
+
+/**
+ * How the tags already in a text with no setting of its own (a prompt) are
+ * written: underscores when more of them join words with `_` than with
+ * spaces, spaces otherwise. `score_` tags and emoticons say nothing either way.
+ */
+export function styleOfText(text: string): TagStyle {
+  let underscored = 0
+  let spaced = 0
+  for (const tag of splitTags(text).map(bare)) {
+    if (isKaomojiTag(tag) || KEEP_PREFIXES.some((prefix) => tag.startsWith(prefix))) continue
+    if (/\w_\w/.test(tag)) underscored += 1
+    else if (/\w \w/.test(tag)) spaced += 1
+  }
+  return underscored > spaced ? 'underscores' : 'spaces'
+}

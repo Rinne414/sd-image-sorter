@@ -4,6 +4,7 @@ import { thumbnailUrl } from '../../../api/urls'
 import { formatScore } from '../../../lib/imageInfo'
 import { shortModelName } from '../../../lib/meta'
 import { useApp } from '../../../state/store'
+import { TagField } from '../../../ui/TagField'
 import { CopyButton } from '../../card/CardParts'
 import { arrangeByGroup, cleanTags, lookupKey, splitPrompt } from './buildCleanup'
 import { clearBuild, openBuildImage, replacePrompt, setNegative, setPrompt, useBuild, type BuildOrigin, type DraftFrom } from './buildStore'
@@ -12,6 +13,7 @@ import { fetchCategories } from './labApi'
 import { plt, usePL, type PlKey } from './plText'
 import styles from './PromptLab.module.css'
 import { RecipeBlock } from './RecipeBlock'
+import { writeLike } from './tagWriting'
 
 // 构建: one image's prompt (or a draft) to edit, sort by tag group, clean up
 // and copy.
@@ -122,11 +124,12 @@ function Editor() {
         </label>
         <CopyButton text={prompt} compact testId="pl-build-copy" />
       </header>
-      <textarea id="pl-build-prompt" className={styles.textarea} rows={8} value={prompt} onChange={(e) => setPrompt(e.target.value)} spellCheck={false} data-testid="pl-build-prompt" />
+      {/* Writing a prompt: only the word under the caret is completed (V3.5's insert mode). */}
+      <TagField id="pl-build-prompt" className={styles.textarea} rows={8} mode="insert" value={prompt} onChange={setPrompt} write={writeLike(prompt)} testId="pl-build-prompt" />
       <label className={styles.subLabel} htmlFor="pl-build-negative">
         {t('pl.build.negative')}
       </label>
-      <textarea id="pl-build-negative" className={styles.textarea} rows={3} value={negative} onChange={(e) => setNegative(e.target.value)} spellCheck={false} data-testid="pl-build-negative" />
+      <TagField id="pl-build-negative" className={styles.textarea} rows={3} mode="insert" value={negative} onChange={setNegative} write={writeLike(negative)} testId="pl-build-negative" />
       <div className={styles.runRow}>
         <CopyButton text={prompt} label={t('pl.build.copy')} testId="pl-build-copy-prompt" />
         <CopyButton text={all} label={t('pl.build.copyAll')} testId="pl-build-copy-all" />

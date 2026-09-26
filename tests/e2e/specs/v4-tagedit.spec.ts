@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 import { cleanupImages, openLibrary, pageOverflow, seedImages, VIEWPORTS } from '../fixtures/v4-seed'
+import { activeSuggestion, expectSuggestions, stubTagSuggest, suggestList } from '../fixtures/v4-suggest'
 
 /**
  * V4 "Edit tags…" for the picks: dry run before writing, apply, undo from
@@ -118,4 +119,70 @@ test('find and replace renames; remove says when nothing matches', async ({ page
   await dialog.getByLabel('Tags to remove').fill('v4 new')
   await dialog.getByRole('button', { name: 'Apply to 2' }).click()
   await expect.poll(() => tagsOf(page, ids[0]!)).not.toContain('v4 new')
+})
+
+test('tags are suggested as they are typed: ↓↑ go round, Enter or Tab take one, a character brings its series, Esc closes only the list', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await stubTagSuggest(page)
+  await openLibrary(page, TOKEN, COUNT)
+  await pickTwo(page)
+  const dialog = await openEditor(page)
+  const add = dialog.getByLabel('Tags to add')
+
+  // the vocabulary's spelling is written as library tags are (spaces)
+  await add.pressSequentially('smile, hatsu')
+  await expectSuggestions(page, ['hatsune miku', 'hatsune miku (append)'])
+  await expect(activeSuggestion(page)).toContainText('hatsune miku初音未来')
+  await add.press('ArrowDown')
+  await expect(activeSuggestion(page)).toContainText('hatsune miku (append)')
+  await add.press('ArrowDown')
+  await expect(activeSuggestion(page)).toContainText('hatsune miku初音未来')
+  await add.press('ArrowUp')
+  await expect(activeSuggestion(page)).toContainText('hatsune miku (append)')
+  await add.press('ArrowUp')
+  await add.press('Enter')
+  await expect(add).toHaveValue('smile, hatsune miku, vocaloid, ')
+  await expect(suggestList(page)).toHaveCount(0)
+  await expect(dialog.getByTestId('tagedit-preview')).toContainText('+ vocaloid')
+
+  // Esc closes the list and leaves the dialog and the typing alone
+  await add.pressSequentially('long')
+  await expectSuggestions(page, ['long hair', 'long sleeves'])
+  await page.keyboard.press('Escape')
+  await expect(suggestList(page)).toHaveCount(0)
+  await expect(dialog).toBeVisible()
+  await expect(add).toHaveValue('smile, hatsune miku, vocaloid, long')
+  // typing opens it again; Tab takes the highlighted tag
+  await add.press('Backspace')
+  await expectSuggestions(page, ['long hair', 'long sleeves'])
+  await add.press('Tab')
+  await expect(add).toHaveValue('smile, hatsune miku, vocaloid, long hair, ')
+  await expect(add).toBeFocused()
+
+  // removing offers the library's tags as they are stored
+  await dialog.getByRole('button', { name: 'Remove', exact: true }).click()
+  const remove = dialog.getByLabel('Tags to remove')
+  await remove.fill('')
+  await remove.pressSequentially('v4 st')
+  await expectSuggestions(page, ['v4 stored tag', 'v4 stored_under'])
+  await remove.press('ArrowDown')
+  await remove.press('Enter')
+  await expect(remove).toHaveValue('v4 stored_under, ')
+
+  // find and replace take one tag each: no comma is added
+  await dialog.getByRole('button', { name: 'Find and replace', exact: true }).click()
+  const find = dialog.getByLabel('Find this tag')
+  await find.pressSequentially('v4 st')
+  await expectSuggestions(page, ['v4 stored tag', 'v4 stored_under'])
+  await find.press('Enter')
+  await expect(find).toHaveValue('v4 stored tag')
+  const replace = dialog.getByLabel('Replace with')
+  await replace.pressSequentially('blue')
+  await expectSuggestions(page, ['blue sky'])
+  await replace.press('Enter')
+  await expect(replace).toHaveValue('blue sky')
+
+  // with no list open, Esc closes the dialog as before
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
 })

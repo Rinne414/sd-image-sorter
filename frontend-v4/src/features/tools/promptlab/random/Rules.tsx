@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useT } from '../../../../i18n'
 import { Dialog } from '../../../../ui/Dialog'
+import { TagField } from '../../../../ui/TagField'
 import { useToasts } from '../../../../ui/toasts'
 import { tr } from '../../../jobs/jobs'
 import { plt, usePL } from '../plText'
+import { writeLike } from '../tagWriting'
 import { useRuleName } from './labels'
 import styles from './Random.module.css'
 import { createRule, deleteRule, isOwn, type NewRule } from './randomApi'
@@ -56,11 +58,11 @@ function NewRuleDialog({ onClose }: { onClose: () => void }) {
         </label>
         <label className={styles.field}>
           <span className={styles.subLabel}>{p('pl.rnd.ruleWhen')}</span>
-          <input className={styles.input} value={when} onChange={(e) => setWhen(e.target.value)} spellCheck={false} data-testid="pl-rule-when" />
+          <TagField className={styles.input} value={when} onChange={setWhen} write={writeLike(when)} testId="pl-rule-when" />
         </label>
         <label className={styles.field}>
           <span className={styles.subLabel}>{p('pl.rnd.ruleNot')}</span>
-          <input className={styles.input} value={not} onChange={(e) => setNot(e.target.value)} spellCheck={false} data-testid="pl-rule-not" />
+          <TagField className={styles.input} value={not} onChange={setNot} write={writeLike(not)} testId="pl-rule-not" />
         </label>
         <label className={styles.field}>
           <span className={styles.subLabel}>{p('pl.rnd.description')}</span>

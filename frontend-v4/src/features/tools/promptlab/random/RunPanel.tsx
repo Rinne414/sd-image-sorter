@@ -2,6 +2,7 @@ import { useCategories } from '../../../../api/queries'
 import { copyText } from '../../../../lib/format'
 import { promptTagKeys, segmentPrompt } from '../../../../lib/prompt'
 import { useApp } from '../../../../state/store'
+import { TagField } from '../../../../ui/TagField'
 import { useToasts } from '../../../../ui/toasts'
 import { CopyButton } from '../../../card/CardParts'
 import { PromptText } from '../../../card/PromptText'
@@ -10,6 +11,7 @@ import { startDraft } from '../buildStore'
 import { showInLibrary } from '../libraryActions'
 import { withPromptWords } from '../libraryLinks'
 import { usePL, type PlKey } from '../plText'
+import { writeLike } from '../tagWriting'
 import type { TagSet } from '../types'
 import type { Quality } from './generateBody'
 import { useRuleName, useSetName } from './labels'
@@ -97,11 +99,11 @@ function Options() {
       <div className={styles.affixes}>
         <label className={styles.field}>
           <span className={styles.subLabel}>{p('pl.rnd.prepend')}</span>
-          <input className={styles.input} value={s.prepend} onChange={(e) => setRandom({ prepend: e.target.value })} spellCheck={false} data-testid="pl-prepend" />
+          <TagField className={styles.input} value={s.prepend} onChange={(prepend) => setRandom({ prepend })} write={writeLike(s.prepend)} testId="pl-prepend" />
         </label>
         <label className={styles.field}>
           <span className={styles.subLabel}>{p('pl.rnd.append')}</span>
-          <input className={styles.input} value={s.append} onChange={(e) => setRandom({ append: e.target.value })} spellCheck={false} data-testid="pl-append" />
+          <TagField className={styles.input} value={s.append} onChange={(append) => setRandom({ append })} write={writeLike(s.append)} testId="pl-append" />
         </label>
       </div>
       <p className={styles.muted}>{p('pl.rnd.affixHint')}</p>

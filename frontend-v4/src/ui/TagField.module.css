@@ -1,0 +1,47 @@
+/* The suggestion list floats over everything but toasts (dialogs are 70),
+   placed by TagField next to its field. */
+.list {
+  position: fixed;
+  z-index: 80;
+  margin: 0;
+  padding: 3px;
+  overflow-y: auto;
+  list-style: none;
+  background: var(--surface-2);
+  box-shadow: var(--shadow-float);
+  border-radius: var(--radius-lg);
+}
+
+.list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.list li[aria-selected="true"],
+.list li:hover {
+  background: var(--wash-hover);
+  color: var(--text);
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.count {
+  flex: none;
+  color: var(--muted);
+}
+
+.zh {
+  margin-left: 6px;
+  color: var(--muted);
+}

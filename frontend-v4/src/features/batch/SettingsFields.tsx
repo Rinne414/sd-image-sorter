@@ -1,5 +1,6 @@
 import { useState, type RefObject } from 'react'
 import { useT, type MessageKey } from '../../i18n'
+import { TagField } from '../../ui/TagField'
 import { defaultTemplate, templateIsOwn, withTargetModel, type TemplatePreset } from './captionRules'
 import {
   CATEGORIES,
@@ -16,6 +17,7 @@ import {
   type TriggerProblem,
 } from './datasetSettings'
 import styles from './DatasetSettings.module.css'
+import { styledTag, styleOf } from './edit/tagStyle'
 import type { useDatasetSettings } from './useDatasetSettings'
 
 const QUALITY_TAGS = ['masterpiece', 'best quality']
@@ -43,6 +45,8 @@ export function SettingsFields({ s, form, presets, variables, triggerRef }: Prop
   const edit = s.edit
   const hasQuality = QUALITY_TAGS.every((q) => splitList(form.commonTags).some((tag) => tag.toLowerCase().replace(/_/g, ' ') === q))
   const oldOnList = s.savedTrigger !== '' && form.trigger !== s.savedTrigger && splitList(form.blacklist).includes(s.savedTrigger)
+  // A suggested tag is written the way this batch's template writes tags (3h-fix).
+  const writeTag = (tag: string) => styledTag(tag, styleOf(form.normalizeUnderscores))
 
   return (
     <div className={styles.form} data-testid="dataset-settings-form">
@@ -127,7 +131,7 @@ export function SettingsFields({ s, form, presets, variables, triggerRef }: Prop
 
       <label className={styles.field}>
         <span>{t('dataset.set.common')}</span>
-        <textarea value={form.commonTags} rows={2} onChange={(e) => edit((f) => ({ ...f, commonTags: e.target.value }))} data-testid="dataset-common" />
+        <TagField value={form.commonTags} rows={2} onChange={(commonTags) => edit((f) => ({ ...f, commonTags }))} write={writeTag} testId="dataset-common" />
         <span className={styles.row}>
           <span className={styles.hint}>{t('dataset.set.commonHint')}</span>
           {!hasQuality && (
@@ -140,7 +144,7 @@ export function SettingsFields({ s, form, presets, variables, triggerRef }: Prop
 
       <label className={styles.field}>
         <span>{t('dataset.set.blacklist')}</span>
-        <textarea value={form.blacklist} rows={2} onChange={(e) => edit((f) => ({ ...f, blacklist: e.target.value }))} data-testid="dataset-blacklist" />
+        <TagField value={form.blacklist} rows={2} onChange={(blacklist) => edit((f) => ({ ...f, blacklist }))} write={writeTag} testId="dataset-blacklist" />
         <p className={styles.hint}>{t('dataset.set.blacklistHint')}</p>
       </label>
 

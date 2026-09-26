@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 import type { CaptionContent } from '../datasetTag'
 import { tagStyleIssues } from '../check/captionChecks'
 import { applyOp, planOp } from './captionOps'
-import { displayTag, isKaomojiTag, offStyleTags, styledList, styledTag, styleOf, withTagStyle } from './tagStyle'
+import { displayTag, isKaomojiTag, offStyleTags, styledList, styledTag, styleOf, styleOfText, withTagStyle } from './tagStyle'
 
 const content = (booru: string): CaptionContent => ({ content_version: 1, booru_caption: booru, nl_caption: '', caption_type: 'booru' })
 const unknown = () => 'unknown'
@@ -74,5 +74,18 @@ describe('the bulk operation and the check', () => {
     expect(found?.notes).toEqual({ 'lib:1': 'blue_sky', 'lib:3': 'hair_ribbon' })
     expect(tagStyleIssues(new Map([['lib:2', { content: content('hair ribbon') }]]), true)).toEqual([])
     expect(tagStyleIssues(heads, false)[0]?.keys).toEqual(['lib:2'])
+  })
+})
+
+describe('the tag style of text that has no setting for it (a prompt)', () => {
+  test('underscores when more of its tags join words with _ than with spaces; spaces otherwise', () => {
+    expect(styleOfText('long_hair, blue_eyes, smile')).toBe('underscores')
+    expect(styleOfText('long hair, blue_eyes, school uniform')).toBe('spaces')
+    expect(styleOfText('(long_hair:1.2), {blue_eyes}, [red sky]')).toBe('underscores')
+    expect(styleOfText('')).toBe('spaces')
+  })
+
+  test('score_ tags and emoticons say nothing about it', () => {
+    expect(styleOfText('score_9, score_8_up, ^_^, o_o, long hair')).toBe('spaces')
   })
 })

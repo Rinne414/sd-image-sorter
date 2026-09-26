@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useT } from '../../../../i18n'
 import { Dialog } from '../../../../ui/Dialog'
+import { TagField } from '../../../../ui/TagField'
 import { useToasts } from '../../../../ui/toasts'
 import { tr } from '../../../jobs/jobs'
 import { plt, usePL } from '../plText'
+import { writeLike } from '../tagWriting'
 import type { TagSet } from '../types'
 import { useCategoryLabel, useSetName } from './labels'
 import styles from './Random.module.css'
@@ -65,7 +67,7 @@ function NewSetDialog({ categories, onClose }: { categories: string[]; onClose: 
         </label>
         <label className={styles.field}>
           <span className={styles.subLabel}>{p('pl.rnd.setTags')}</span>
-          <textarea className={styles.textarea} rows={3} value={tags} onChange={(e) => setTags(e.target.value)} spellCheck={false} data-testid="pl-set-tags" />
+          <TagField className={styles.textarea} rows={3} value={tags} onChange={setTags} write={writeLike(tags)} testId="pl-set-tags" />
         </label>
         <button type="button" className={styles.textButton} onClick={() => setTags(slotTags(useRandom.getState().slots).join(', '))} data-testid="pl-set-from-slots">
           {p('pl.rnd.setFromSlots')}
