@@ -77,7 +77,11 @@ export function insertTag(value: string, token: Token, tags: readonly string[], 
   if (mode === 'single') return { value: text, caret: text.length }
   const before = value.slice(0, token.start)
   const after = value.slice(token.end)
-  if (mode === 'insert' || (mode === 'caption' && !standsAlone(before, after))) return { value: before + text + after, caret: before.length + text.length }
+  // Inside a sentence only the word itself changes: a series that came with a character stays out.
+  if (mode === 'insert' || (mode === 'caption' && !standsAlone(before, after))) {
+    const word = tags[0] ?? ''
+    return { value: before + word + after, caret: before.length + word.length }
+  }
   const lead = before && !SPACE.test(before.at(-1) ?? '') ? ' ' : ''
   const rest = after.trim() === '' ? '' : after
   // The list goes on after this tag: its own separator is kept; at the end ", " waits for the next tag.

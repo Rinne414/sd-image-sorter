@@ -149,4 +149,11 @@ describe('a caption written as text: the word at the caret', () => {
     const first = 'lon standing'
     expect(insertTag(first, tokenAt(first, 3, 'caption'), ['long hair'], 'caption').value).toBe('long hair standing')
   })
+
+  test('a character taken as a whole tag brings its series; inside a sentence it comes alone', () => {
+    const alone = 'smile, hatsu'
+    expect(insertTag(alone, tokenAt(alone, 12, 'caption'), ['hatsune miku', 'vocaloid'], 'caption').value).toBe('smile, hatsune miku, vocaloid, ')
+    const prose = 'a photo of hatsu singing'
+    expect(insertTag(prose, tokenAt(prose, 16, 'caption'), ['hatsune miku', 'vocaloid'], 'caption')).toEqual({ value: 'a photo of hatsune miku singing', caret: 23 })
+  })
 })

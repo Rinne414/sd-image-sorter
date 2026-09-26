@@ -14,7 +14,9 @@ import { PromptText } from './PromptText'
 import { Stars } from './Stars'
 import { Icon } from '../../ui/Icon'
 import { Menu } from '../../ui/Menu'
+import { TagField } from '../../ui/TagField'
 import { TagInput } from '../../ui/TagInput'
+import { displayTag } from '../batch/edit/tagStyle'
 import { addTags, removeTag, reparse, saveCaptions } from './cardEdits'
 import { CopyButton, Section } from './CardParts'
 import { EdgeCodes, type EdgeFacts } from './sections/FilmEdge'
@@ -319,7 +321,8 @@ function CaptionSection({ id, ai, nl, editable }: { id: number; ai: string | nul
         </label>
         <label className={styles.captionField}>
           <span>{t('card.aiCaption')}</span>
-          <textarea value={aiText} rows={2} onChange={(e) => setAiText(e.target.value)} />
+          {/* V3.5 suggested tags here too: the word at the caret, written as library tags are (spaces). */}
+          <TagField mode="caption" rows={2} value={aiText} onChange={setAiText} write={displayTag} series testId="card-ai-caption" />
         </label>
         <div className={styles.captionActions}>
           <button type="button" className="btn btn-ghost" onClick={() => setEditing(false)}>
