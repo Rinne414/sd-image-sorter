@@ -30,9 +30,9 @@ const BULK_COUNT = 300
 const BULK_DIR = 'v4-cact-bulk'
 
 /** Every action the selection bar offers for two picks: its buttons and its More menu (a submenu's items spelled out). */
-const BAR_ACTIONS = ['batch', 'rate', 'favorite', 'tag', 'move', 'censor', 'copy', 'sort', 'edit-tags', 'aesthetic', 'artist', 'export', 'move-library', 'compare', 'send-artist', 'send-privacy', 'remove', 'trash']
+const BAR_ACTIONS = ['batch', 'rate', 'favorite', 'tag', 'move', 'censor', 'copy', 'sort', 'edit-tags', 'aesthetic', 'artist', 'describe', 'export', 'move-library', 'compare', 'send-artist', 'send-privacy', 'remove', 'trash']
 /** Items that sit in a submenu of the right-click menu: AI 分析 ▸ and 送到工具 ▸. */
-const IN_SUBMENU: Record<string, string> = { aesthetic: 'analyze', artist: 'analyze', 'send-artist': 'send-to', 'send-privacy': 'send-to' }
+const IN_SUBMENU: Record<string, string> = { aesthetic: 'analyze', artist: 'analyze', describe: 'analyze', 'send-artist': 'send-to', 'send-privacy': 'send-to' }
 
 test.beforeAll(() => {
   seedImages({ prefix: PREFIX, token: TOKEN, count: COUNT, dir: DIR })

@@ -4,7 +4,7 @@ import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
 import { jobHeadline, tr, useJobs, type Job } from '../jobs/jobs'
 import { isTagger } from '../tagging/taggers'
-import { loadTagOptions, startTagging } from '../tagging/tagJob'
+import { loadTagOptions, startTagging, TAG_ONLY } from '../tagging/tagJob'
 
 // What follows a finished import: say what came in and offer to look at just
 // that; move images another library holds into this one; and, when the user
@@ -46,7 +46,7 @@ async function tagUntagged(count: number): Promise<void> {
     const last = loadTagOptions(models.default)
     const known = models.models.some((m) => m.name === last.model && isTagger(m.name) && !m.disabled)
     const options = known ? last : { ...last, model: models.default, threshold: null, characterThreshold: null }
-    await startTagging(null, options, count)
+    await startTagging(null, options, count, TAG_ONLY)
   } catch (error) {
     useToasts.getState().push(tr('error.generic', { reason: (error as Error).message }), 'error')
   }

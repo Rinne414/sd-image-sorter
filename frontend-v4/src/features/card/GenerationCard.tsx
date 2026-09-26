@@ -23,6 +23,7 @@ import { ColorSection } from '../info/ColorSection'
 import { copyAndSay, openImageFolder } from '../library/fileActions'
 import { menuItemsOf } from '../selection/actions'
 import { useImageActions } from '../selection/actionOps'
+import { useSelectionDialog } from '../selection/dialogs'
 import { showLikeImage } from '../similar/similarStore'
 import { IdentifyButton } from '../tools/artist/IdentifyButton'
 import { sendToTool } from '../tools/handoff'
@@ -332,10 +333,16 @@ function CaptionSection({ id, ai, nl, editable }: { id: number; ai: string | nul
     )
   }
 
+  // A description by AI (the tag panel, tagging off): the tags stay as they are.
   const edit = editable ? (
-    <button type="button" className={styles.more} onClick={() => setEditing(true)}>
-      {shown ? t('card.editCaption') : t('card.addCaption')}
-    </button>
+    <>
+      <button type="button" className={styles.more} onClick={() => useSelectionDialog.getState().showFor('describe', [id], 1)} data-testid="card-describe">
+        {t('dataset.tag.describeOne')}
+      </button>
+      <button type="button" className={styles.more} onClick={() => setEditing(true)}>
+        {shown ? t('card.editCaption') : t('card.addCaption')}
+      </button>
+    </>
   ) : undefined
   return (
     <Section label={t('card.caption')} copy={shown ? shown : undefined} action={edit}>

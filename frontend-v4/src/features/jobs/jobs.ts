@@ -39,6 +39,8 @@ export interface Job {
   then?: (job: Job) => void | Promise<void>
   /** A bulk tag edit that can be undone once. */
   undo?: { opId: string; done: boolean }
+  /** Its own words instead of its kind's (a Smart Tag run that only describes). */
+  words?: { running: MessageKey; done: MessageKey }
 }
 
 interface JobsState {
@@ -494,13 +496,14 @@ const DONE: Record<JobKind, MessageKey> = {
 export function jobHeadline(job: Job): string {
   const p = job.progress
   const params = { n: p.total || job.count, name: job.label ?? '' }
+  const running = job.words?.running ?? RUNNING[job.kind]
   switch (p.status) {
     case 'queued':
-      return tr(queuedKey(job.kind), { what: tr(RUNNING[job.kind], params) })
+      return tr(queuedKey(job.kind), { what: tr(running, params) })
     case 'running':
-      return tr(RUNNING[job.kind], params)
+      return tr(running, params)
     case 'cancelling':
-      return `${tr(RUNNING[job.kind], params)} · ${tr('jobs.stopping')}`
+      return `${tr(running, params)} · ${tr('jobs.stopping')}`
     case 'cancelled':
       return tr('jobs.stopped', { done: p.current, total: p.total || job.count })
     case 'error':
@@ -509,7 +512,7 @@ export function jobHeadline(job: Job): string {
       return tr('jobs.reset')
     case 'done': {
       // Chinese joins the destination without a space; English carries its own.
-      let text = tr(DONE[job.kind], { n: p.succeeded, name: job.label ?? '' })
+      let text = tr(job.words?.done ?? DONE[job.kind], { n: p.succeeded, name: job.label ?? '' })
       if (job.destination && (job.kind === 'move' || job.kind === 'copy')) text += tr('jobs.to', { path: tailOfPath(job.destination, 40) })
       if (p.updated) text += tr('jobs.updatedSuffix', { n: p.updated })
       if (p.failedCount) text += tr('jobs.failedSuffix', { n: p.failedCount })

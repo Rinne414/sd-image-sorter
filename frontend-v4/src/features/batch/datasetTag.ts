@@ -1,3 +1,4 @@
+import { smartThresholds, type MergeStrategy } from '../tagging/tagOptions'
 import { MODEL_PROFILES } from './captionRules'
 import { folderKey, libraryKey } from './datasetItems'
 import type { Purpose, TargetModel } from './datasetSettings'
@@ -30,6 +31,13 @@ export interface TagStepOptions {
   grounding: boolean
   /** Also run on images that were tagged before (their Library tags are replaced). */
   retagExisting: boolean
+  /** The booru tagger runs; off = a description-only run that leaves the tags alone. */
+  tagger: boolean
+  copyrightThreshold: number | null
+  /** Drop quality, score and meta tags (masterpiece, score_9 ...). */
+  autoStripNoise: boolean
+  /** What happens to a caption or description an image already has. */
+  mergeStrategy: MergeStrategy
 }
 
 export type SmartTagPurpose = 'general' | 'style' | 'character' | 'concept'
@@ -125,27 +133,25 @@ export function vlmCalls(scope: TagScope, describer: Describer): number {
 export function smartTagBody(o: TagStepOptions, scope: TagScope, purpose: Purpose | null, targetModel: TargetModel) {
   const describe = o.describer !== 'off'
   const profile = o.describer === 'vlm' ? MODEL_PROFILES[targetModel].captionProfile : null
-  const thresholds = {
-    ...(o.threshold !== null ? { general_threshold: o.threshold } : {}),
-    ...(o.characterThreshold !== null ? { character_threshold: o.characterThreshold } : {}),
-  }
+  // With the tagger off nothing is tagged: no thresholds, no second tagger.
+  const thresholds = o.tagger ? smartThresholds(o) : {}
   return {
     image_ids: scope.ids,
     image_paths: scope.paths,
     training_purpose: smartTagPurpose(purpose),
     trigger_word: '',
-    merge_strategy: 'replace',
-    auto_strip_noise: true,
+    merge_strategy: o.mergeStrategy,
+    auto_strip_noise: o.autoStripNoise,
     skip_existing: !o.retagExisting,
-    enable_wd14: true,
+    enable_wd14: o.tagger,
     enable_vlm: describe,
-    tagger_model: o.model,
+    tagger_model: o.tagger ? o.model : '',
     use_gpu: o.useGpu,
     ...thresholds,
-    max_tags_per_image: o.maxTags,
+    max_tags_per_image: o.tagger ? o.maxTags : 0,
     natural_language_mode: o.describer === 'off' ? 'vlm' : o.describer,
     ...(profile ? { caption_profile: profile } : {}),
-    taggers: o.secondModel ? [{ model: o.model, ...thresholds }, { model: o.secondModel }] : [],
+    taggers: o.tagger && o.secondModel ? [{ model: o.model, ...thresholds }, { model: o.secondModel }] : [],
     consensus_min: o.agreement === 'both' ? 2 : 1,
     toriigate_caption_length: o.toriiLength,
     vlm_grounding: o.grounding,
@@ -177,6 +183,24 @@ export function resultContent(row: SmartTagResult): CaptionContent {
 /** A result with tags is the tagger's; one with only a description is the describer's. */
 export const resultSource = (row: SmartTagResult): 'wd14' | 'vlm' => (row.booru_text.trim() ? 'wd14' : 'vlm')
 
+/** One part of a caption after a run (V3.5's rule): an empty result keeps what was there; append joins. */
+function mergeChannel(existing: string, incoming: string, separator: string, merge: MergeStrategy): string {
+  if (!incoming) return existing
+  if (merge === 'replace' || !existing || existing === incoming) return incoming
+  return `${existing}${separator}${incoming}`
+}
+
+/** The caption a result leaves on an image that had `had` (tags and words are merged separately). */
+export function mergedContent(had: CaptionContent | undefined, row: SmartTagResult, merge: MergeStrategy): CaptionContent {
+  const fresh = resultContent(row)
+  const booru = mergeChannel(had?.booru_caption.trim() ?? '', fresh.booru_caption, ', ', merge)
+  const nl = mergeChannel(had?.nl_caption.trim() ?? '', fresh.nl_caption, ' ', merge)
+  return { content_version: 1, booru_caption: booru, nl_caption: nl, caption_type: booru && nl ? 'both' : nl ? 'nl' : 'booru' }
+}
+
+const sameContent = (a: CaptionContent | undefined, b: CaptionContent) =>
+  !!a && a.booru_caption.trim() === b.booru_caption && a.nl_caption.trim() === b.nl_caption
+
 export interface RevisionToWrite {
   path: string
   content: CaptionContent
@@ -185,12 +209,14 @@ export interface RevisionToWrite {
 }
 
 /**
- * The folder images' results as caption revisions. An image whose caption
- * the user edited keeps it (listed in `kept`); an empty result writes nothing.
+ * The folder images' results as caption revisions, merged into the caption
+ * each image had (`merge`). An image whose caption the user edited keeps it
+ * (listed in `kept`); an empty or unchanged result writes nothing.
  */
 export function revisionsFromResults(
   rows: readonly SmartTagResult[],
   heads: ReadonlyMap<string, HeadInfo>,
+  merge: MergeStrategy = 'replace',
 ): { write: RevisionToWrite[]; kept: string[]; empty: number } {
   const write: RevisionToWrite[] = []
   const kept: string[] = []
@@ -201,11 +227,13 @@ export function revisionsFromResults(
       kept.push(row.path)
       continue
     }
-    const content = resultContent(row)
-    if (!content.booru_caption && !content.nl_caption) {
+    if (!row.booru_text.trim() && !row.nl_text.trim()) {
       empty += 1
       continue
     }
+    const content = mergedContent(head?.content, row, merge)
+    // Appending what the caption already says changes nothing: no new revision.
+    if (sameContent(head?.content, content)) continue
     write.push({ path: row.path, content, source: resultSource(row), generation: head?.generation ?? 0 })
   }
   return { write, kept, empty }

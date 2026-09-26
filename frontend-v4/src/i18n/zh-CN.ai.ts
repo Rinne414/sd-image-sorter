@@ -192,9 +192,6 @@ export const zhCNAi = {
   'ai.log.tokens': '{n} tokens',
 
   // the tag panel
-  'ai.tag.describe': '同时写自然语言描述',
-  'ai.tag.describeHint': '用 AI 服务里设置的 {name} 给每张图写一段描述。',
   'ai.tag.blacklistOff': '写描述时走数据集的打标流程，「打标时直接丢掉这些标签」这次不生效。',
-  'ai.tag.setup': '想同时写自然语言描述？先设置 AI 服务',
   'ai.tag.start': '打标签并写描述（{n} 张）',
 }

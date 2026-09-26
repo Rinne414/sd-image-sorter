@@ -9,6 +9,7 @@ import { useToasts } from '../../ui/toasts'
 import { installAllThen, type InstallTarget } from '../jobs/installJob'
 import { isQueueBusy, tr } from '../jobs/jobs'
 import { busyText } from '../jobs/busyText'
+import type { MergeStrategy } from '../tagging/tagOptions'
 import { readiness, taggerInfo, type ModelCard, type TaggerInfo } from '../tagging/taggers'
 import { projectKey } from './datasetApi'
 import { folderKey, libraryKey } from './datasetItems'
@@ -143,7 +144,7 @@ async function modelsToPrepare(o: TagStepOptions): Promise<{ install: InstallTar
   } catch {
     cards = undefined
   }
-  const infos = [o.model, o.secondModel].filter((m): m is string => !!m).map(taggerInfo)
+  const infos = o.tagger ? [o.model, o.secondModel].filter((m): m is string => !!m).map(taggerInfo) : []
   if (o.describer === 'florence2' || o.describer === 'toriigate') infos.push(DESCRIBER_CARDS[o.describer])
   const state = infos.map((info) => [info, readiness(info, cards)] as const)
   return {
@@ -165,6 +166,8 @@ export interface TagRun {
   /** Caption writes that failed. */
   failed: number
   writing: boolean
+  /** The tagger was off: the run only described. */
+  describeOnly: boolean
 }
 
 /** The last tag run of each batch, for the step to report on. */
@@ -172,7 +175,7 @@ export const useTagRuns = create<{ runs: Record<number, TagRun> }>(() => ({ runs
 
 function setRun(batchId: number, patch: Partial<TagRun>): void {
   useTagRuns.setState((s) => {
-    const old = s.runs[batchId] ?? { jobId: null, ranKeys: [], finished: false, written: 0, keptResults: [], failed: 0, writing: false }
+    const old = s.runs[batchId] ?? { jobId: null, ranKeys: [], finished: false, written: 0, keptResults: [], failed: 0, writing: false, describeOnly: false }
     return { runs: { ...s.runs, [batchId]: { ...old, ...patch } } }
   })
 }
@@ -274,13 +277,13 @@ export async function syncAiCaptions(batch: Batch, model: string): Promise<void>
   }
 }
 
-/** After a run: the folder images' results become AI caption revisions; a user's edit stays. */
-async function applyResults(batch: Batch, jobId: string, model: string): Promise<void> {
+/** After a run: the folder images' results join their captions as AI revisions; a user's edit stays. */
+async function applyResults(batch: Batch, jobId: string, model: string, merge: MergeStrategy): Promise<void> {
   setRun(batch.id, { jobId, writing: true })
   try {
     const view = await readView(batch.id)
     const [rows, heads] = await Promise.all([allResults(jobId), fetchHeads(view)])
-    const plan = revisionsFromResults(rows, heads)
+    const plan = revisionsFromResults(rows, heads, merge)
     let written = 0
     let failed = 0
     for (const r of plan.write) {
@@ -304,22 +307,25 @@ async function applyResults(batch: Batch, jobId: string, model: string): Promise
 export async function resumeTagRun(batch: Batch): Promise<void> {
   const run = pendingRun(batch.id)
   if (!run || useTagRuns.getState().runs[batch.id]) return
-  setRun(batch.id, { jobId: run.jobId, ranKeys: run.ranKeys })
-  await resumeRun(run, (r) => applyResults(batch, r.jobId, r.model))
+  setRun(batch.id, { jobId: run.jobId, ranKeys: run.ranKeys, describeOnly: run.describeOnly === true })
+  await resumeRun(run, (r) => applyResults(batch, r.jobId, r.model, r.merge ?? 'replace'))
 }
 
 async function startRun(batch: Batch, body: ReturnType<typeof smartTagBody>, count: number, model: string): Promise<boolean> {
   try {
     const res = unwrap<{ job_id?: string; queue_id?: string; status?: string }>(await api.POST('/api/smart-tag/start', { body: body as never }))
     const ranKeys = [...body.image_ids.map(libraryKey), ...body.image_paths.map(folderKey)]
-    setRun(batch.id, { jobId: res.job_id ?? null, ranKeys, finished: false, written: 0, keptResults: [], failed: 0, writing: false })
-    if (res.job_id) rememberRun({ batchId: batch.id, jobId: res.job_id, model, ranKeys })
+    const merge = body.merge_strategy
+    const describeOnly = !body.enable_wd14
+    setRun(batch.id, { jobId: res.job_id ?? null, ranKeys, finished: false, written: 0, keptResults: [], failed: 0, writing: false, describeOnly })
+    if (res.job_id) rememberRun({ batchId: batch.id, jobId: res.job_id, model, ranKeys, merge, describeOnly })
     trackSmartTagJob({
       count,
       jobId: res.job_id ?? null,
       queueId: res.queue_id ?? null,
       queued: res.status === 'queued',
-      then: (jobId) => applyResults(batch, jobId, model),
+      describeOnly,
+      then: (jobId) => applyResults(batch, jobId, model, merge),
     })
     return true
   } catch (error) {

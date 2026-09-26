@@ -183,9 +183,6 @@ export const enAi: Record<keyof typeof zhCNAi, string> = {
   'ai.log.ms': '{n} ms',
   'ai.log.tokens': '{n} tokens',
 
-  'ai.tag.describe': 'Also write a natural-language description',
-  'ai.tag.describeHint': 'The {name} set up in AI services writes a description of each image.',
   'ai.tag.blacklistOff': 'Describing runs the dataset tagging flow, so "Drop these tags while tagging" does not apply this time.',
-  'ai.tag.setup': 'Want descriptions too? Set up an AI service first',
   'ai.tag.start': 'Tag and describe {n}',
 }

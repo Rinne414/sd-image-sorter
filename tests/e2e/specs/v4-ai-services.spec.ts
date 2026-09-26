@@ -469,7 +469,7 @@ async function tagTwo(page: Page) {
   await expect(page.getByTestId('selection-bar')).toContainText('2 picked')
   await page.getByTestId('selection-bar').getByRole('button', { name: 'Tag…' }).click()
   const dialog = page.getByTestId('tag-dialog')
-  await expect(dialog.getByRole('radiogroup')).toBeVisible()
+  await expect(dialog.getByRole('radiogroup', { name: 'Tagger' })).toBeVisible()
   return dialog
 }
 
@@ -482,7 +482,7 @@ test('tag panel: a description only once a service is set up, the call count sai
   // nothing set up: no option, only the way to set one up
   let dialog = await tagTwo(page)
   await expect(dialog.getByTestId('tag-describe-setup')).toBeVisible()
-  await expect(dialog.getByTestId('tag-describe-check')).toHaveCount(0)
+  await expect(dialog.locator('input[name="describer"][value="vlm"]')).toBeDisabled()
   await dialog.getByTestId('tag-describe-setup').click()
   await expect(page).toHaveURL(/#\/settings\/ai$/)
   await expect(page.getByTestId('tag-dialog')).toHaveCount(0)
@@ -491,7 +491,7 @@ test('tag panel: a description only once a service is set up, the call count sai
   // a cloud service: off by default; ticked, it says the count and that it may charge
   vlm.stored = { ...CLOUD }
   dialog = await tagTwo(page)
-  const check = dialog.getByTestId('tag-describe-check')
+  const check = dialog.locator('input[name="describer"][value="vlm"]')
   await expect(check).not.toBeChecked()
   await expect(dialog.getByTestId('tag-describe-calls')).toHaveCount(0)
   await expect(dialog.getByRole('button', { name: 'Tag 2' })).toBeVisible()
@@ -519,7 +519,7 @@ test('tag panel: a description only once a service is set up, the call count sai
 
   // opened again: off again; left off, it is the plain tag run
   dialog = await tagTwo(page)
-  await expect(dialog.getByTestId('tag-describe-check')).not.toBeChecked()
+  await expect(dialog.locator('input[name="describer"][value="vlm"]')).not.toBeChecked()
   await dialog.getByRole('button', { name: 'Tag 2' }).click()
   await expect.poll(() => runs.tagStarts.length).toBe(1)
   expect(runs.smartStarts).toHaveLength(1)
@@ -527,7 +527,7 @@ test('tag panel: a description only once a service is set up, the call count sai
   // Ollama on this computer: it says the calls cost nothing
   vlm.stored = { endpoint: 'http://localhost:11434/v1', model: 'qwen2.5-vl:7b' }
   dialog = await tagTwo(page)
-  await dialog.getByTestId('tag-describe-check').check()
+  await dialog.locator('input[name="describer"][value="vlm"]').check()
   await expect(dialog.getByTestId('tag-describe-calls')).toHaveText('Calls qwen2.5-vl:7b 2 times; it runs on this computer, so it costs nothing.')
 })
 

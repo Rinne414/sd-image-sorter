@@ -55,6 +55,10 @@ const options: TagStepOptions = {
   toriiLength: 'detailed',
   grounding: true,
   retagExisting: false,
+  tagger: true,
+  copyrightThreshold: null,
+  autoStripNoise: true,
+  mergeStrategy: 'replace',
 }
 
 describe('which images a tag run takes', () => {
@@ -95,6 +99,21 @@ describe('the Smart Tag request', () => {
     })
     expect(smartTagBody({ ...options, retagExisting: true }, scope, null, '').skip_existing).toBe(false)
     expect('general_threshold' in smartTagBody(options, scope, null, '')).toBe(false)
+  })
+
+  test('the new options reach the body: copyright threshold, noise, merge; V3.5 defaults otherwise', () => {
+    const plain = smartTagBody(options, scope, null, '')
+    expect(plain).toMatchObject({ enable_wd14: true, merge_strategy: 'replace', auto_strip_noise: true })
+    expect('copyright_threshold' in plain).toBe(false)
+    const set = smartTagBody({ ...options, copyrightThreshold: 0.4, autoStripNoise: false, mergeStrategy: 'append', secondModel: 'camie-tagger-v2' }, scope, null, '')
+    expect(set).toMatchObject({ copyright_threshold: 0.4, auto_strip_noise: false, merge_strategy: 'append' })
+    expect(set.taggers[0]).toMatchObject({ model: 'wd-swinv2-tagger-v3', copyright_threshold: 0.4 })
+  })
+
+  test('the tagger off: a description-only run with no second tagger and no thresholds', () => {
+    const body = smartTagBody({ ...options, tagger: false, describer: 'toriigate', secondModel: 'camie-tagger-v2', copyrightThreshold: 0.4 }, scope, null, '')
+    expect(body).toMatchObject({ enable_wd14: false, enable_vlm: true, natural_language_mode: 'toriigate', taggers: [], tagger_model: '' })
+    for (const key of ['general_threshold', 'character_threshold', 'copyright_threshold']) expect(key in body).toBe(false)
   })
 
   test('the caption profile comes from the base model, and only for VLM descriptions', () => {
@@ -150,6 +169,36 @@ describe('folder results become AI caption revisions', () => {
     ])
     expect(kept).toEqual(['D:/set/c.png'])
     expect(empty).toBe(1)
+  })
+
+  test('a channel the run left empty keeps what the caption had (a description-only run keeps the tags)', () => {
+    const had = new Map<string, HeadInfo>([
+      [folderKey('D:/set/a.png'), { generation: 3, author: 'ai', content: { content_version: 1, booru_caption: '1girl, smile', nl_caption: 'Old words.', caption_type: 'both' } }],
+    ])
+    const { write } = revisionsFromResults([{ path: 'D:/set/a.png', caption: '', booru_text: '', nl_text: 'New words.' }], had)
+    expect(write[0]).toMatchObject({
+      content: { booru_caption: '1girl, smile', nl_caption: 'New words.', caption_type: 'both' },
+      source: 'vlm',
+      generation: 3,
+    })
+  })
+
+  test('append keeps the old text and adds the new, as V3.5 does', () => {
+    const had = new Map<string, HeadInfo>([
+      [folderKey('D:/set/a.png'), { generation: 3, author: 'ai', content: { content_version: 1, booru_caption: '1girl', nl_caption: 'Old words.', caption_type: 'both' } }],
+      [folderKey('D:/set/b.png'), { generation: 1, author: 'ai', content: { content_version: 1, booru_caption: 'same', nl_caption: '', caption_type: 'booru' } }],
+    ])
+    const { write } = revisionsFromResults(
+      [
+        { path: 'D:/set/a.png', caption: '', booru_text: 'smile', nl_text: 'New words.' },
+        { path: 'D:/set/b.png', caption: '', booru_text: 'same', nl_text: '' },
+      ],
+      had,
+      'append',
+    )
+    expect(write.map((w) => w.content)).toEqual([
+      { content_version: 1, booru_caption: '1girl, smile', nl_caption: 'Old words. New words.', caption_type: 'both' },
+    ])
   })
 
   test('heads are keyed like the entries', () => {

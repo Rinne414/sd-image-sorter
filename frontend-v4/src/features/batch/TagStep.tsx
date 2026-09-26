@@ -4,8 +4,9 @@ import type { Batch } from '../../api/types'
 import { useT } from '../../i18n'
 import { isFinished } from '../jobs/progress'
 import { useJobs } from '../jobs/jobs'
-import { loadTagOptions, saveTagOptions } from '../tagging/tagJob'
+import { loadTagOptions, saveTagOptions } from '../tagging/tagOptions'
 import { isTagger } from '../tagging/taggers'
+import { useApp } from '../../state/store'
 import { useBatchProject } from './datasetApi'
 import { formFromSettings, readBatchDataset } from './datasetSettings'
 import { tagScope, type TagStepOptions } from './datasetTag'
@@ -32,6 +33,7 @@ function initialOptions(fallbackModel: string, known: (name: string) => boolean)
     model: ok ? saved.model : fallbackModel,
     threshold: ok ? saved.threshold : null,
     characterThreshold: ok ? saved.characterThreshold : null,
+    copyrightThreshold: ok ? saved.copyrightThreshold : null,
     maxTags: saved.maxTags,
     useGpu: saved.useGpu,
     secondModel: null,
@@ -40,7 +42,22 @@ function initialOptions(fallbackModel: string, known: (name: string) => boolean)
     toriiLength: 'detailed',
     grounding: true,
     retagExisting: false,
+    tagger: true,
+    autoStripNoise: saved.autoStripNoise,
+    mergeStrategy: saved.mergeStrategy,
   }
+}
+
+/** The step's choices as the tag panel remembers them (the drop list and a custom file stay as they were). */
+function remember(o: TagStepOptions): void {
+  const kept = { ...loadTagOptions(o.model), autoStripNoise: o.autoStripNoise, mergeStrategy: o.mergeStrategy }
+  // With the tagger off its choices were not in use: they stay as remembered.
+  if (!o.tagger) {
+    saveTagOptions(kept)
+    return
+  }
+  const { model, threshold, characterThreshold, copyrightThreshold, useGpu, maxTags } = o
+  saveTagOptions({ ...kept, model, threshold, characterThreshold, copyrightThreshold, useGpu, maxTags })
 }
 
 const useRunning = () => useJobs((s) => s.jobs.some((j) => j.kind === 'smarttag' && !isFinished(j.progress.status)))
@@ -53,7 +70,8 @@ export function TagStep({ batch, next, onNext }: Props) {
   const heads = useProjectHeads(view)
   const taggers = useTaggerModels()
   const status = useModelStatus()
-  const vlm = useVlmStatus()
+  const vlmStatus = useVlmStatus().data
+  const vlm = vlmStatus && { ready: vlmStatus.configured, local: vlmStatus.local, label: vlmStatus.label }
   const running = useRunning()
   const [o, setO] = useState<TagStepOptions | null>(null)
   const [starting, setStarting] = useState(false)
@@ -80,7 +98,7 @@ export function TagStep({ batch, next, onNext }: Props) {
 
   const start = async () => {
     if (!o || !scope || !view) return
-    saveTagOptions({ model: o.model, threshold: o.threshold, characterThreshold: o.characterThreshold, useGpu: o.useGpu, maxTags: o.maxTags, blacklist })
+    remember(o)
     const form = formFromSettings(view.project.settings, readBatchDataset(batch.settings))
     setStarting(true)
     await startDatasetTagging(batch, o, scope, form.purpose, form.targetModel)
@@ -103,10 +121,10 @@ export function TagStep({ batch, next, onNext }: Props) {
           <div className={styles.layout}>
             <div className={styles.column}>
               <TaggerFields o={o} set={setO} models={models} cards={status.data?.models} />
-              <DescriberFields o={o} set={setO} cards={status.data?.models} vlm={vlm.data} />
+              <DescriberFields o={o} set={setO} cards={status.data?.models} vlm={vlm} taggerOn={o.tagger} onSetup={() => useApp.getState().openSettings('ai')} />
             </div>
             <div className={styles.column}>
-              <ScopeBox o={o} set={setO} scope={scope} vlm={vlm.data} busy={starting || running} running={running} onStart={() => void start()} />
+              <ScopeBox o={o} set={setO} scope={scope} vlm={vlm} busy={starting || running} running={running} onStart={() => void start()} />
               <RunReport batch={batch} entries={entries} scope={scope} model={o.model} running={running} />
               <RethresholdPanel
                 ids={libraryIds}

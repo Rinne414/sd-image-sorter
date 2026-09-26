@@ -3,15 +3,16 @@ import type { Batch } from '../../api/types'
 import { useT } from '../../i18n'
 import { useJobs } from '../jobs/jobs'
 import { vlmCalls, type TagScope, type TagStepOptions } from './datasetTag'
-import { replaceEditedCaptions, useTagRuns, type VlmStatus } from './datasetTagApi'
+import { replaceEditedCaptions, useTagRuns } from './datasetTagApi'
 import type { Entry } from './entries'
+import { MergeField, type DescriberService } from './TagOptions'
 import styles from './TagStep.module.css'
 
 interface ScopeProps {
   o: TagStepOptions
   set: (o: TagStepOptions) => void
   scope: TagScope
-  vlm: VlmStatus | undefined
+  vlm: DescriberService | undefined
   busy: boolean
   running: boolean
   onStart: () => void
@@ -23,6 +24,9 @@ export function ScopeBox({ o, set, scope, vlm, busy, running, onStart }: ScopePr
   const sent = scope.ids.length + scope.paths.length
   const calls = vlmCalls(scope, o.describer)
   const done = scope.tagged + scope.folderDone
+  // The tagger off and no describer: the run would do nothing.
+  const idle = !o.tagger && o.describer === 'off'
+  const startKey = o.tagger ? 'dataset.tag.start' : 'dataset.tag.startDescribe'
   return (
     <section className={styles.block} aria-labelledby="tag-scope" data-testid="tag-scope">
       <h3 id="tag-scope" className={styles.blockTitle}>
@@ -36,9 +40,10 @@ export function ScopeBox({ o, set, scope, vlm, busy, running, onStart }: ScopePr
       {done > 0 && (
         <label className={styles.check}>
           <input type="checkbox" checked={o.retagExisting} onChange={(e) => set({ ...o, retagExisting: e.target.checked })} data-testid="tag-retag" />
-          {t('dataset.tag.retag', { n: done })}
+          {t(o.tagger ? 'dataset.tag.retag' : 'dataset.tag.redescribe', { n: done })}
         </label>
       )}
+      <MergeField value={o.mergeStrategy} set={(mergeStrategy) => set({ ...o, mergeStrategy })} tagsReplaced={o.tagger} />
       {scope.userEdited.length > 0 && <p className={styles.hint}>{t('dataset.tag.edited', { n: scope.userEdited.length })}</p>}
       <p className={styles.total} data-testid="tag-total">
         {sent > 0 ? t('dataset.tag.total', { n: sent }) : t('dataset.tag.nothing')}
@@ -48,9 +53,14 @@ export function ScopeBox({ o, set, scope, vlm, busy, running, onStart }: ScopePr
           {t(vlm?.local ? 'dataset.tag.callsLocal' : 'dataset.tag.callsPaid', { n: calls, name: vlm?.label ?? '' })}
         </p>
       )}
+      {idle && (
+        <p className={styles.warn} role="status" data-testid="tag-idle">
+          {t('dataset.tag.pickOne')}
+        </p>
+      )}
       <div className={styles.actions}>
-        <button type="button" className="btn btn-primary" disabled={busy || sent === 0} onClick={onStart} data-testid="tag-start">
-          {running ? t('dataset.tag.running') : t('dataset.tag.start', { n: sent })}
+        <button type="button" className="btn btn-primary" disabled={busy || sent === 0 || idle} onClick={onStart} data-testid="tag-start">
+          {running ? t('dataset.tag.running') : t(startKey, { n: sent })}
         </button>
         {running && (
           <button type="button" className="btn btn-ghost" onClick={() => useJobs.getState().setDrawerOpen(true)}>
@@ -63,12 +73,13 @@ export function ScopeBox({ o, set, scope, vlm, busy, running, onStart }: ScopePr
 }
 
 /** What a finished run changed: Library tags, folder captions, or both. */
-function doneText(t: ReturnType<typeof useT>, entries: readonly Entry[], ran: ReadonlySet<string>, written: number): string {
+function doneText(t: ReturnType<typeof useT>, entries: readonly Entry[], ran: ReadonlySet<string>, written: number, described: boolean): string {
   const sent = entries.filter((e) => ran.has(e.key))
   const library = sent.some((e) => e.imageId !== null)
   const folder = sent.some((e) => e.imageId === null)
-  if (library && folder) return t('dataset.tag.done', { n: written })
-  return folder ? t('dataset.tag.doneFolder', { n: written }) : t('dataset.tag.doneLibrary')
+  if (library && folder) return t(described ? 'dataset.tag.doneDescribed' : 'dataset.tag.done', { n: written })
+  if (folder) return t('dataset.tag.doneFolder', { n: written })
+  return t(described ? 'dataset.tag.doneLibraryDescribed' : 'dataset.tag.doneLibrary')
 }
 
 interface ReportProps {
@@ -87,7 +98,7 @@ export function RunReport({ batch, entries, scope, model, running }: ReportProps
   if (!run) return null
   const ran = new Set(run.ranKeys)
   const edited = scope.userEdited.filter((key) => ran.has(key))
-  const state = run.writing ? t('dataset.tag.writing') : run.finished ? doneText(t, entries, ran, run.written) : running ? t('dataset.tag.inProgress') : t('dataset.tag.ended')
+  const state = run.writing ? t('dataset.tag.writing') : run.finished ? doneText(t, entries, ran, run.written, run.describeOnly) : running ? t('dataset.tag.inProgress') : t('dataset.tag.ended')
 
   const replace = async () => {
     setReplacing(true)

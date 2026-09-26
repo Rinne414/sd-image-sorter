@@ -51,7 +51,7 @@ export const zhCNSignals = {
   'signals.tag.queued': '已排队：{n} 张，前面的打标签结束后自动开始。在「工作」里能看到。',
   'signals.tag.duplicate': '同样的打标签已经在排队了，没有再加一次。',
   'signals.tag.reset': '恢复默认',
-  'signals.tag.resetTitle': '忘掉记住的打标器、阈值、显卡开关、丢弃列表和标签上限（只影响 V4）',
+  'signals.tag.resetTitle': '忘掉记住的打标器、阈值、显卡开关、丢弃列表、标签上限、噪音标签开关、写入方式和自定义模型路径（只影响 V4）',
   'signals.tag.resetDone': '已恢复默认',
 
   'signals.next.pick': '在图库里选中这 {n} 张',

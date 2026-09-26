@@ -81,6 +81,12 @@
   border-color: var(--accent);
 }
 
+.field small {
+  color: var(--muted);
+  font-size: var(--fs-1);
+  line-height: 1.4;
+}
+
 .field input[type='range'] {
   width: 100%;
   accent-color: var(--accent);
@@ -125,6 +131,12 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px 16px;
   align-items: end;
+}
+
+/* The tagger switch and, when it is off, what that means. */
+.switch {
+  display: grid;
+  gap: 4px;
 }
 
 .check {
@@ -229,4 +241,19 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
+}
+
+/* A way out of the panel (to set up a service), worded as a link. */
+.link {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: var(--fs-2);
+  cursor: pointer;
+}
+
+.link:hover {
+  text-decoration: underline;
 }

@@ -17,7 +17,7 @@
 
 .row {
   display: grid;
-  grid-template-columns: 18px 170px minmax(0, 1fr) auto;
+  grid-template-columns: 18px 184px minmax(0, 1fr) auto;
   gap: 4px 10px;
   align-items: baseline;
   padding: 8px 12px 8px 10px;
@@ -84,17 +84,59 @@
   margin-top: 12px;
 }
 
-.advanced summary {
-  width: fit-content;
-  color: var(--text-2);
-  cursor: pointer;
+/* The user's own ONNX file: its family, then the two paths. */
+.custom {
+  display: grid;
+  grid-template-columns: minmax(0, 200px) minmax(0, 1fr);
+  gap: 10px 16px;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
 }
 
-.fields {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px 16px;
-  margin-top: 10px;
+.custom .field:not(:first-child) {
+  grid-column: 2;
+}
+
+.custom .field:first-child {
+  grid-row: span 2;
+  align-content: start;
+}
+
+.custom .error {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.describe {
+  margin-top: 12px;
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}
+
+.calls,
+.warnLine {
+  margin: 0;
+  color: var(--warn);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}
+
+/* Why Start cannot be pressed yet. */
+.reason {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  color: var(--text-2);
+  background: var(--wash);
+  box-shadow: inset 2px 0 0 var(--warn);
+  font-size: var(--fs-2);
+  line-height: 1.5;
 }
 
 .field {
@@ -104,7 +146,8 @@
   color: var(--muted);
 }
 
-.field input {
+.field input,
+.field select {
   height: 28px;
   padding: 0 8px;
   border: 1px solid var(--line-strong);
@@ -114,7 +157,8 @@
   border-radius: var(--radius);
 }
 
-.field input:focus {
+.field input:focus,
+.field select:focus {
   outline: none;
   border-color: var(--accent);
 }
@@ -128,24 +172,17 @@
   grid-column: 1 / -1;
 }
 
-.wideField input {
+.wideField input,
+.field select {
   font-family: var(--font-ui);
+}
+
+.field input[aria-invalid] {
+  border-color: var(--danger);
 }
 
 .field small.warn {
   color: var(--warn);
-}
-
-.check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-2);
-  font-size: var(--fs-2);
-}
-
-.check input {
-  accent-color: var(--accent);
 }
 
 /* The AI is in use: this run waits in line (tagging ahead) or takes turns (other AI work). */

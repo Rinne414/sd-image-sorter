@@ -58,7 +58,7 @@ describe('bulk actions', () => {
     expect(ids(list.filter((a) => a.bar === 'main'))).toEqual(['batch', 'rate', 'favorite', 'tag', 'move'])
     expect(ids(list.filter((a) => a.bar === 'more'))).toEqual(['censor', 'copy', 'edit-tags', 'analyze', 'export', 'move-library', 'remove', 'trash'])
     // the AI reads share one submenu, so the right-click menu still fits 768 px
-    expect(ids(list.find((a) => a.id === 'analyze')?.children ?? [])).toEqual(['aesthetic', 'artist'])
+    expect(ids(list.find((a) => a.id === 'analyze')?.children ?? [])).toEqual(['aesthetic', 'artist', 'describe'])
   })
 
   it('every action applies to the ids it was built for', () => {
@@ -67,6 +67,7 @@ describe('bulk actions', () => {
     for (const a of runnable(list)) a.run?.()
     expect(ops.dialog).toHaveBeenCalledWith('move', [4, 8])
     expect(ops.dialog).toHaveBeenCalledWith('trash', [4, 8])
+    expect(ops.dialog).toHaveBeenCalledWith('describe', [4, 8])
     expect(ops.censor).toHaveBeenCalledWith([4, 8])
     expect(ops.favorite).toHaveBeenCalledWith([4, 8], true)
     expect(ops.rate).toHaveBeenCalledWith([4, 8], 5)

@@ -9,6 +9,8 @@ export interface SmartTagTrack {
   jobId: string | null
   queueId: string | null
   queued: boolean
+  /** The tagger is off: the drawer says it describes, not tags. */
+  describeOnly?: boolean
   /** Runs once the run ended well, with its job id. */
   then: (jobId: string) => void | Promise<void>
 }
@@ -19,6 +21,7 @@ export function trackSmartTagJob(t: SmartTagTrack): void {
     count: t.count,
     ctx: { smartTag: { jobId: t.jobId ?? undefined, queueId: t.queueId ?? undefined } },
     progress: startingProgress(t.count, t.queued ? 'queued' : 'running'),
+    ...(t.describeOnly ? { words: { running: 'dataset.job.describing', done: 'dataset.job.described' } as const } : {}),
     then: (job) => {
       // A queued run learns its job id while it is polled: read the job as it is now.
       const latest = useJobs.getState().jobs.find((j) => j.id === job.id) ?? job

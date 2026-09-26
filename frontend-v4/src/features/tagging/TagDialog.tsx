@@ -1,26 +1,40 @@
 import { useEffect, useState } from 'react'
-import { useModelStatus, useTaggerModels } from '../../api/queries'
+import { useModelStatus, useTaggerModels, type TaggerModel } from '../../api/queries'
 import { useT } from '../../i18n'
+import { useApp } from '../../state/store'
 import { Dialog } from '../../ui/Dialog'
-import { DescribeOption, useDescriber } from '../settings/ai/DescribeOption'
+import { describerCard } from '../batch/datasetTagApi'
+import { AdvancedFields, DescriberFields, MergeField, TaggerSwitch, type DescriberService } from '../batch/TagOptions'
+import { useDescriber } from '../settings/ai/aiApi'
 import { useAT } from '../settings/ai/aiText'
 import { ModelGuideLink } from '../settings/models/ModelGuideLink'
+import { CustomModelFields } from './CustomModelFields'
 import { GpuNotice, useTagStartPlan } from './GpuNotice'
 import styles from './TagDialog.module.css'
-import { clearTagOptions, hasStoredTagOptions, loadTagOptions, rememberedThresholds, saveTagOptions, startTagging, type TagOptions } from './tagJob'
-import { isTagger, readiness, taggerInfo, type Readiness, type TaggerInfo } from './taggers'
+import { startTagging } from './tagJob'
+import { TaggerList } from './TaggerList'
+import {
+  clearTagOptions,
+  CUSTOM_MODEL,
+  CUSTOM_PROFILE_MODEL,
+  hasStoredTagOptions,
+  isCustom,
+  loadTagOptions,
+  rememberedThresholds,
+  saveTagOptions,
+  type CustomPathProblem,
+  type RunChoice,
+  type TagOptions,
+} from './tagOptions'
+import { isTagger, readiness, taggerInfo, type ModelCard } from './taggers'
 
 interface Props {
   /** null: every image that has no tags yet (the backend picks them). */
   ids: number[] | null
   count: number
   onClose: () => void
-}
-
-const parseUnit = (text: string): number | null => {
-  if (text.trim() === '') return null
-  const n = Number(text)
-  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : null
+  /** 'describe': opened to write descriptions only (the tagger starts off). */
+  mode?: 'tag' | 'describe'
 }
 
 const splitTags = (text: string) =>
@@ -29,45 +43,82 @@ const splitTags = (text: string) =>
     .map((s) => s.trim())
     .filter(Boolean)
 
-/** One panel for tagging the picks: which tagger, then (rarely) the advanced knobs. */
-export function TagDialog({ ids, count, onClose }: Props) {
+const atDefaults = (o: TagOptions, fallback: string, blacklistText: string) =>
+  o.model === fallback &&
+  o.threshold === null &&
+  o.characterThreshold === null &&
+  o.copyrightThreshold === null &&
+  o.useGpu &&
+  o.maxTags === 0 &&
+  o.autoStripNoise &&
+  o.mergeStrategy === 'replace' &&
+  o.custom.modelPath === '' &&
+  o.custom.tagsPath === '' &&
+  o.custom.profile === 'wd14' &&
+  blacklistText.trim() === ''
+
+/** Why Start cannot be pressed yet, in the panel's words (null: it can). */
+function blockReason(o: TagOptions, run: RunChoice): 'dataset.tag.pickOne' | 'dataset.tag.customNoDescribe' | 'dataset.tag.customPathNeeded' | null {
+  if (!run.tagger && run.describer === 'off') return 'dataset.tag.pickOne'
+  if (run.tagger && isCustom(o) && run.describer !== 'off') return 'dataset.tag.customNoDescribe'
+  if (run.tagger && isCustom(o) && o.custom.modelPath.trim() === '') return 'dataset.tag.customPathNeeded'
+  return null
+}
+
+/** Something this run uses must be downloaded first. */
+function needsDownload(o: TagOptions, run: RunChoice, cards: ModelCard[] | undefined): boolean {
+  if (!cards) return false
+  const tagger = run.tagger && !isCustom(o) ? readiness(taggerInfo(o.model), cards) : 'ready'
+  const describer = run.describer === 'florence2' || run.describer === 'toriigate' ? readiness(describerCard(run.describer), cards) : 'ready'
+  return [tagger, describer].some((r) => r === 'download' || r === 'check')
+}
+
+/** One panel for tagging the picks and/or describing them; the advanced knobs fold away. */
+export function TagDialog({ ids, count, onClose, mode = 'tag' }: Props) {
   const t = useT()
+  const at = useAT()
   const models = useTaggerModels()
   const status = useModelStatus()
+  const describer = useDescriber()
+  const plan = useTagStartPlan()
   const [o, setO] = useState<TagOptions | null>(null)
   const [blacklistText, setBlacklistText] = useState('')
+  // What this run does is never remembered: the entry point decides (the untagged run always tags).
+  const [run, setRun] = useState<RunChoice>({ tagger: mode === 'tag' || ids === null, describer: 'off', toriiLength: 'detailed', grounding: true })
   const [starting, setStarting] = useState(false)
   const [wasReset, setWasReset] = useState(false)
-  // a description costs a call per image: off each time the panel opens
-  const [describe, setDescribe] = useState(false)
-  const plan = useTagStartPlan()
-  const at = useAT()
-  const describer = useDescriber()
-  // picks only: the untagged run has no list of images to describe
-  const describing = describe && ids !== null && describer?.ready === true
+  const [problem, setProblem] = useState<CustomPathProblem | null>(null)
 
   const list = (models.data?.models ?? []).filter((m) => isTagger(m.name) && !m.disabled)
 
   useEffect(() => {
     if (o || !models.data) return
     const loaded = loadTagOptions(models.data.default)
-    const known = models.data.models.some((m) => m.name === loaded.model && isTagger(m.name) && !m.disabled)
-    setO(known ? loaded : { ...loaded, model: models.data.default, threshold: null, characterThreshold: null })
+    const known = loaded.model === CUSTOM_MODEL || models.data.models.some((m) => m.name === loaded.model && isTagger(m.name) && !m.disabled)
+    setO(known ? loaded : { ...loaded, model: models.data.default, threshold: null, characterThreshold: null, copyrightThreshold: null })
     setBlacklistText(loaded.blacklist.join(', '))
   }, [models.data, o])
 
   const n = count
-  const current = list.find((m) => m.name === o?.model)
-  const info = o ? taggerInfo(o.model) : null
-  // Until the status arrives (it takes about a second) nothing is claimed about downloads.
-  const statusKnown = status.isSuccess
-  const state: Readiness | null = info && statusKnown ? readiness(info, status.data.models) : null
+  const custom = !!o && isCustom(o)
+  const current: TaggerModel | undefined = o ? list.find((m) => m.name === (custom ? CUSTOM_PROFILE_MODEL[o.custom.profile] : o.model)) : undefined
+  const smart = ids !== null && (run.describer !== 'off' || !run.tagger)
+  const reason = o ? blockReason(o, run) : null
+  const cards = status.data?.models
+  const restart = !!o && run.tagger && !custom && status.isSuccess && readiness(taggerInfo(o.model), cards) === 'restart'
 
+  const edit = (patch: Partial<TagOptions>) => {
+    if (o) setO({ ...o, ...patch })
+  }
+  const editCustom = (value: TagOptions['custom']) => {
+    edit({ custom: value })
+    setProblem(null)
+  }
   const pick = (model: string) => {
-    if (!o) return
     const r = rememberedThresholds(model)
-    setO({ ...o, model, threshold: r.general, characterThreshold: r.character })
+    edit({ model, threshold: r.general, characterThreshold: r.character, copyrightThreshold: r.copyright })
     setWasReset(false)
+    setProblem(null)
   }
 
   // Forget every remembered choice (V4 only): the panel shows the defaults at once.
@@ -76,44 +127,29 @@ export function TagDialog({ ids, count, onClose }: Props) {
     clearTagOptions()
     setO(loadTagOptions(models.data.default))
     setBlacklistText('')
+    setProblem(null)
     setWasReset(true)
   }
-  const atDefaults =
-    !!o && o.model === models.data?.default && o.threshold === null && o.characterThreshold === null && o.useGpu && o.maxTags === 0 && blacklistText.trim() === ''
-  const canReset = !!o && (hasStoredTagOptions() || !atDefaults)
+  const canReset = !!o && (hasStoredTagOptions() || !atDefaults(o, models.data?.default ?? '', blacklistText))
 
   const go = async () => {
     if (!o) return
     const options = { ...o, blacklist: splitTags(blacklistText) }
     saveTagOptions(options)
     setStarting(true)
-    const ok = await startTagging(ids, options, count, describing)
+    setProblem(null)
+    const res = await startTagging(ids, options, count, run)
     setStarting(false)
-    if (ok) onClose()
+    if (res.ok) onClose()
+    else if (res.problem) setProblem(res.problem)
   }
 
-  const stateText = (r: Readiness, inf: TaggerInfo) => {
-    if (!statusKnown) return t('tagging.checking')
-    switch (r) {
-      case 'ready':
-        return t('tagging.ready')
-      case 'download':
-        return inf.sizeHint ? t('tagging.download', { size: inf.sizeHint }) : t('tagging.downloadUnknown')
-      case 'check':
-        return t('tagging.check')
-      case 'restart':
-        return t('tagging.restart')
-    }
-  }
-
-  const startLabel =
-    state === 'download' || state === 'check'
-      ? t('tagging.downloadAndStart', { n })
-      : describing
-        ? at('ai.tag.start', { n })
-        : plan.mode === 'queue'
-          ? t('signals.tag.queueStart', { n })
-          : t('tagging.start', { n })
+  const startLabel = (() => {
+    if (o && needsDownload(o, run, cards)) return t(run.tagger ? 'tagging.downloadAndStart' : 'dataset.tag.downloadAndDescribe', { n })
+    if (!run.tagger) return t('dataset.tag.startDescribe', { n })
+    if (run.describer !== 'off') return at('ai.tag.start', { n })
+    return plan.mode === 'queue' ? t('signals.tag.queueStart', { n }) : t('tagging.start', { n })
+  })()
 
   const footer = (
     <>
@@ -128,114 +164,85 @@ export function TagDialog({ ids, count, onClose }: Props) {
       <button type="button" className="btn btn-ghost" onClick={onClose}>
         {t('common.cancel')}
       </button>
-      <button type="button" className="btn btn-primary" onClick={() => void go()} disabled={!o || !current || state === 'restart' || starting}>
+      <button type="button" className="btn btn-primary" onClick={() => void go()} disabled={!o || (run.tagger && !custom && !current) || restart || starting || reason !== null} title={reason ? t(reason) : undefined}>
         {startLabel}
       </button>
     </>
   )
 
+  const title = !run.tagger ? t('dataset.tag.describeTitle', { n }) : t(ids ? 'tagging.title' : 'tagging.titleUntagged', { n })
+
   return (
-    <Dialog title={t(ids ? 'tagging.title' : 'tagging.titleUntagged', { n })} onClose={onClose} footer={footer} testId="tag-dialog" wide>
-      <p className={styles.lead}>{ids ? t('tagging.retagAll', { n }) : t('tagging.untaggedLead')}</p>
+    <Dialog title={title} onClose={onClose} footer={footer} testId="tag-dialog" wide>
+      {run.tagger && <p className={styles.lead}>{ids ? t('tagging.retagAll', { n }) : t('tagging.untaggedLead')}</p>}
       {models.isError && <p className={styles.error}>{t('error.generic', { reason: models.error.message })}</p>}
       {models.isPending && <p className={styles.lead}>{t('picker.loading')}</p>}
       <GpuNotice plan={plan} />
-      <ModelGuideLink card="wd14" onGo={onClose} />
-      <div className={styles.list} role="radiogroup" aria-label={t('tagging.tagger')}>
-        {list.map((m) => {
-          const inf = taggerInfo(m.name)
-          const r = readiness(inf, status.data?.models)
-          const checked = o?.model === m.name
-          return (
-            <label key={m.name} className={styles.row} data-checked={checked || undefined}>
-              <input type="radio" name="tagger" checked={checked} onChange={() => pick(m.name)} />
-              <span className={styles.name}>
-                {inf.label}
-                {m.recommended && <span className={styles.badge}>{t('tagging.recommended')}</span>}
-                {!m.recommended && inf.familyPick && (
-                  <span className={styles.badge} data-kind="family">
-                    {t(inf.familyPick)}
-                  </span>
-                )}
-              </span>
-              <span className={styles.note}>{t(inf.note)}</span>
-              <span className={styles.state} data-state={statusKnown ? r : 'checking'}>
-                {stateText(r, inf)}
-              </span>
-            </label>
-          )
-        })}
-      </div>
-      {ids && describer && o && (
-        <DescribeOption vlm={describer} count={n} checked={describe} onChange={setDescribe} dropsTags={splitTags(blacklistText).length > 0} onSetup={onClose} />
+      {ids && <TaggerSwitch on={run.tagger} set={(tagger) => setRun({ ...run, tagger })} />}
+      {run.tagger && (
+        <>
+          <ModelGuideLink card="wd14" onGo={onClose} />
+          <TaggerList list={list} chosen={o?.model ?? null} cards={cards} statusKnown={status.isSuccess} onPick={pick} />
+          {o && custom && <CustomModelFields value={o.custom} set={editCustom} problem={problem} />}
+        </>
       )}
-
-      {o && current && (
-        <details
-          className={styles.advanced}
-          onToggle={(e) => {
-            if (e.currentTarget.open) e.currentTarget.scrollIntoView({ block: 'nearest' })
-          }}
-        >
-          <summary>{t('tagging.advanced')}</summary>
-          <div className={styles.fields}>
-            <label className={styles.field}>
-              <span>{t('tagging.threshold')}</span>
-              <input
-                type="number"
-                min={0}
-                max={1}
-                step={0.01}
-                value={o.threshold ?? ''}
-                placeholder={String(current.default_threshold)}
-                onChange={(e) => setO({ ...o, threshold: parseUnit(e.target.value) })}
-              />
-              <small>{t('tagging.thresholdHint', { n: current.default_threshold })}</small>
-            </label>
-            <label className={styles.field}>
-              <span>{t('tagging.characterThreshold')}</span>
-              <input
-                type="number"
-                min={0}
-                max={1}
-                step={0.01}
-                value={o.characterThreshold ?? ''}
-                placeholder={String(current.default_character_threshold)}
-                onChange={(e) => setO({ ...o, characterThreshold: parseUnit(e.target.value) })}
-              />
-              <small>{t('tagging.thresholdHint', { n: current.default_character_threshold })}</small>
-            </label>
-            <label className={styles.field}>
-              <span>{t('tagging.maxTags')}</span>
-              <input
-                type="number"
-                min={0}
-                max={2000}
-                step={1}
-                value={o.maxTags || ''}
-                placeholder={t('tagging.maxTagsNone')}
-                onChange={(e) => setO({ ...o, maxTags: Math.max(0, Math.min(2000, Math.round(Number(e.target.value) || 0))) })}
-              />
-              <small>{t('tagging.maxTagsHint', { n: current.default_max_tags_per_image })}</small>
-            </label>
-            <label className={styles.check}>
-              <input type="checkbox" checked={o.useGpu} onChange={(e) => setO({ ...o, useGpu: e.target.checked })} />
-              <span>{t('tagging.useGpu')}</span>
-            </label>
+      {ids && o && (
+        <DescribeArea o={o} run={run} setRun={setRun} cards={cards} vlm={describer} count={n} blacklist={splitTags(blacklistText).length > 0} locked={run.tagger && custom} onSetup={onClose} edit={edit} />
+      )}
+      {reason && (
+        <p className={styles.reason} role="status" data-testid="tag-reason">
+          {t(reason)}
+        </p>
+      )}
+      {o && run.tagger && (current || custom) && (
+        <div className={styles.advanced}>
+          <AdvancedFields o={o} set={edit} current={current} smart={smart}>
             <label className={`${styles.field} ${styles.wideField}`}>
               <span>{t('tagging.blacklist')}</span>
-              <input
-                type="text"
-                value={blacklistText}
-                placeholder="watermark, signature"
-                spellCheck={false}
-                onChange={(e) => setBlacklistText(e.target.value)}
-              />
+              <input type="text" value={blacklistText} placeholder="watermark, signature" spellCheck={false} onChange={(e) => setBlacklistText(e.target.value)} />
               <small className={styles.warn}>{t('tagging.blacklistWarn')}</small>
             </label>
-          </div>
-        </details>
+          </AdvancedFields>
+        </div>
       )}
     </Dialog>
+  )
+}
+
+interface DescribeProps {
+  o: TagOptions
+  run: RunChoice
+  setRun: (run: RunChoice) => void
+  cards: ModelCard[] | undefined
+  vlm: DescriberService | null
+  count: number
+  /** The panel has tags to drop, which a Smart Tag run cannot do. */
+  blacklist: boolean
+  locked: boolean
+  onSetup: () => void
+  edit: (patch: Partial<TagOptions>) => void
+}
+
+/** Who describes the picks, what it costs, and what happens to descriptions they already have. */
+function DescribeArea({ o, run, setRun, cards, vlm, count, blacklist, locked, onSetup, edit }: DescribeProps) {
+  const t = useT()
+  const at = useAT()
+  const describing = run.describer !== 'off'
+  const setup = () => {
+    onSetup()
+    useApp.getState().openSettings('ai')
+  }
+  return (
+    <div className={styles.describe} data-testid="tag-describe">
+      <DescriberFields o={run} set={setRun} cards={cards} vlm={vlm} taggerOn={run.tagger} locked={locked} onSetup={setup}>
+        {run.describer === 'vlm' && vlm?.ready && (
+          <p className={vlm.local ? styles.hint : styles.calls} role="status" data-testid="tag-describe-calls">
+            {t(vlm.local ? 'dataset.tag.callsLocal' : 'dataset.tag.callsPaid', { n: count, name: vlm.label })}
+          </p>
+        )}
+        {describing && <MergeField value={o.mergeStrategy} set={(mergeStrategy) => edit({ mergeStrategy })} tagsReplaced={run.tagger} />}
+        {describing && run.tagger && blacklist && <p className={styles.warnLine}>{at('ai.tag.blacklistOff')}</p>}
+      </DescriberFields>
+    </div>
   )
 }

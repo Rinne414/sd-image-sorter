@@ -1,4 +1,5 @@
 import { api, unwrap } from '../../api/client'
+import type { MergeStrategy } from '../tagging/tagOptions'
 import { isQueueBusy, patchJob, useJobs } from '../jobs/jobs'
 import { isFinished, readProgress } from '../jobs/progress'
 import { smartTagJobId } from '../jobs/smartTagDriver'
@@ -14,6 +15,10 @@ export interface PendingRun {
   jobId: string
   model: string
   ranKeys: string[]
+  /** How its folder results join the captions (absent in runs kept before it existed: replace). */
+  merge?: MergeStrategy
+  /** The tagger was off: it only described. */
+  describeOnly?: boolean
 }
 
 const isPending = (v: unknown): v is PendingRun => {

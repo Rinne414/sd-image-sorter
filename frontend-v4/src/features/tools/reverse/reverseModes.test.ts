@@ -14,7 +14,18 @@ import {
 } from './reverseModes'
 import type { TagOptions } from '../../tagging/tagJob'
 
-const tagger: TagOptions = { model: 'pixai-tagger-v1.0', threshold: 0.4, characterThreshold: null, useGpu: false, blacklist: ['watermark'], maxTags: 0 }
+const tagger: TagOptions = {
+  model: 'pixai-tagger-v1.0',
+  threshold: 0.4,
+  characterThreshold: null,
+  copyrightThreshold: null,
+  useGpu: false,
+  blacklist: ['watermark'],
+  maxTags: 0,
+  autoStripNoise: true,
+  mergeStrategy: 'replace',
+  custom: { profile: 'wd14', modelPath: '', tagsPath: '' },
+}
 
 describe('the three ways to work out a prompt', () => {
   it('are tagger, vision model, and tags handed to the vision model', () => {

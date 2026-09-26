@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api, unwrap } from '../../../api/client'
 import { queryClient } from '../../../api/queryClient'
 import type { ChatEvent, LocalModels, Preset, ProbeResult, TestResult, VlmSettings } from './types'
-import type { SaveBody } from './vlmForm'
+import { vlmReadiness, type SaveBody, type VlmReadiness } from './vlmForm'
 
 // What Settings › AI services reads and writes (/api/vlm/*). The settings are
 // shared with V3.5; the key and the service account never come back.
@@ -18,6 +18,12 @@ export function useVlmSettings() {
     queryFn: async ({ signal }) => unwrap<VlmSettings>(await api.GET('/api/vlm/settings', { signal })),
     staleTime: 30_000,
   })
+}
+
+/** The VLM service as the tag panel needs it: null until the settings are read (or when they cannot be). */
+export function useDescriber(): VlmReadiness | null {
+  const settings = useVlmSettings()
+  return settings.data ? vlmReadiness(settings.data) : null
 }
 
 export function usePresets() {

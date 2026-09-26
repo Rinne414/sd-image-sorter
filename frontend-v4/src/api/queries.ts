@@ -274,6 +274,8 @@ export interface TaggerModel {
   disabled: boolean
   default_threshold: number
   default_character_threshold: number
+  /** null: copyright tags use the general threshold. */
+  default_copyright_threshold?: number | null
   default_max_tags_per_image: number
   recommended: boolean
 }

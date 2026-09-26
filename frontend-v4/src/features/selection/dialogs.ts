@@ -6,7 +6,20 @@ import { useApp } from '../../state/store'
 // copied when the dialog opens, so a refresh underneath cannot change what
 // the confirmed action applies to.
 
-export type SelectionDialog = 'move' | 'copy' | 'remove' | 'trash' | 'tag' | 'edit-tags' | 'export' | 'missing' | 'import' | 'libraries' | 'new-library' | 'move-library'
+export type SelectionDialog =
+  | 'move'
+  | 'copy'
+  | 'remove'
+  | 'trash'
+  | 'tag'
+  | 'describe'
+  | 'edit-tags'
+  | 'export'
+  | 'missing'
+  | 'import'
+  | 'libraries'
+  | 'new-library'
+  | 'move-library'
 
 interface DialogState {
   open: SelectionDialog | null

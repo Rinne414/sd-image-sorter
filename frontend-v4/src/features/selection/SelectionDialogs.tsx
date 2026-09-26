@@ -25,6 +25,7 @@ export function SelectionDialogs() {
   if (open === 'import') return <ImportDialog onClose={close} />
   if (open === 'libraries' || open === 'new-library') return <LibrariesDialog creating={open === 'new-library'} onClose={close} />
   if (!ids) return null
+  if (open === 'describe') return <TagDialog ids={ids} count={count} onClose={close} mode="describe" />
   if (open === 'move' || open === 'copy') return <FolderPicker operation={open} ids={ids} onClose={close} />
   if (open === 'move-library') return <MoveToLibraryDialog ids={ids} onClose={close} />
   if (open === 'edit-tags') return <TagEditDialog ids={ids} onClose={close} />

@@ -145,7 +145,13 @@ def _handle_caption_result(
     try:
         result = _assemble_result_dict(partial, nl_text, image_id, req)
         if image_id > 0:
-            _persist_result(image_id, result, req.merge_strategy)
+            # No booru tagger ran: write the description only, keep the tags (D53).
+            _persist_result(
+                image_id,
+                result,
+                req.merge_strategy,
+                describe_only=not req.enable_wd14,
+            )
         else:
             _append_caption_result(
                 job,

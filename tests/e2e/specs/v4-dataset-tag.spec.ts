@@ -152,6 +152,8 @@ interface StubRun {
   /** The run is over (it is running until then). */
   finished: () => boolean
   booru: string
+  /** The description each folder result carries (default: the red room). */
+  nl?: string
 }
 
 /** Smart Tag, the model cards and the VLM settings, stubbed; the start bodies are kept. */
@@ -201,7 +203,7 @@ async function stubAi(page: Page, vlm: 'configured' | 'none', run: StubRun = { f
   })
   await page.route('**/api/smart-tag/results**', (route) => {
     const paths = ((starts.at(-1)?.image_paths as string[]) ?? [])
-    const results = paths.map((p) => ({ path: p, caption: '', booru_text: run.booru, nl_text: 'A girl stands in a red room.' }))
+    const results = paths.map((p) => ({ path: p, caption: '', booru_text: run.booru, nl_text: run.nl ?? 'A girl stands in a red room.' }))
     return route.fulfill({ json: { results, has_more: false, limit: 1000 } })
   })
   await page.route('**/api/smart-tag/cancel', (route) => route.fulfill({ json: { status: 'cancelled' } }))
@@ -352,6 +354,49 @@ test('a run still going when the page reloads writes its folder results once it 
   }
 })
 
+test('the tagger off: a description-only run keeps the tags, and append joins the new words to the old', async ({ page }) => {
+  const starts = await stubAi(page, 'none', { finished: () => true, booru: '', nl: 'A second look at the room.' })
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openTagStep(page)
+
+  await page.getByTestId('tag-tagger-on').uncheck()
+  await expect(page.getByTestId('tag-tagger-off')).toHaveText('No tagging this time: the images keep the tags they have; only descriptions are written.')
+  await expect(page.getByTestId('tag-model')).toHaveCount(0)
+  // nothing to do yet: Start says why it waits
+  await expect(page.getByTestId('tag-idle')).toHaveText('Choose tagging, a description, or both to start.')
+  await expect(page.getByTestId('tag-start')).toBeDisabled()
+  await page.locator('input[name="describer"][value="florence2"]').check()
+  await expect(page.getByTestId('tag-idle')).toHaveCount(0)
+
+  await page.getByTestId('tag-retag').check()
+  await expect(page.getByTestId('tag-scope')).toContainText('Describe the 3 that already have tags or a caption too (their tags stay)')
+  await page.getByTestId('tag-merge').selectOption('append')
+  await expect(page.getByTestId('tag-start')).toHaveText('Describe 5')
+  await page.getByTestId('tag-start').click()
+  await expect.poll(() => starts.length).toBe(1)
+  expect(starts[0]).toMatchObject({
+    enable_wd14: false,
+    enable_vlm: true,
+    natural_language_mode: 'florence2',
+    merge_strategy: 'append',
+    auto_strip_noise: true,
+    tagger_model: '',
+    taggers: [],
+    skip_existing: false,
+  })
+
+  await expect(page.getByTestId('tag-report-state')).toContainText('kept their tags', { timeout: 15_000 })
+  // the folder captions keep their tags; the new words follow the old ones
+  const written = await heads(page)
+  for (const file of folderFiles) {
+    const head = written.find((h) => h.item.item_type === 'local' && sameFile(h.item.path, file))
+    expect(head?.active_revision).toMatchObject({ author_class: 'ai', source: 'vlm' })
+    expect(head?.active_revision?.content).toMatchObject({ booru_caption: '1girl, resumed_tag', nl_caption: 'A girl stands in a red room. A second look at the room.' })
+  }
+  await page.getByTestId('jobs-button').click()
+  await expect(page.getByTestId('jobs-drawer').getByTestId('job').first()).toContainText('Described 5')
+})
+
 test('new thresholds from the stored scores: a dry run says what changes, then the Library tags change', async ({ page }) => {
   await stubAi(page, 'none')
   await page.setViewportSize({ width: 1366, height: 768 })
@@ -387,6 +432,12 @@ for (const viewport of VIEWPORTS) {
     for (const id of ['tag-model', 'tag-describer', 'tag-start']) {
       await expect(page.getByTestId(id)).toBeInViewport()
     }
+    // 高级设置 open (the copyright threshold and noise switch show) keeps Start in reach
+    const advanced = page.getByTestId('tag-advanced')
+    if ((await advanced.getAttribute('open')) === null) await advanced.locator('summary').click()
+    await expect(page.getByTestId('tag-strip-noise')).toBeVisible()
+    await expect(page.getByTestId('tag-start')).toBeInViewport()
+    await page.screenshot({ path: `test-results/v4-dataset-tag-options-${viewport.width}.png` })
     expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
     const scroller = page.getByTestId('tag-step')
     expect(await scroller.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0)

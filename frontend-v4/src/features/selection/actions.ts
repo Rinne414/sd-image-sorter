@@ -179,6 +179,7 @@ function analyzeAction(ids: number[], ops: BulkOps): ImageAction {
     children: [
       { id: 'aesthetic', section, label: k('info.aes.scorePicks'), palette: k('info.aes.scorePicksPalette'), run: () => ops.score(ids) },
       { id: 'artist', section, label: k('tools.artist.identify'), palette: k('tools.artist.identifyPalette'), run: () => ops.identifyArtist(ids) },
+      { id: 'describe', section, label: k('dataset.tag.describeAction'), palette: k('dataset.tag.describePalette'), run: () => ops.dialog('describe', ids) },
     ],
   }
 }
