@@ -334,6 +334,48 @@ test('Ctrl K: every tool, every settings tab, the zoom, and each page\'s help', 
   await expect(sheet.locator('kbd', { hasText: 'Ctrl+K' })).toBeVisible()
 })
 
+test('back to V3.5 (slice 6b): About and Ctrl K carry the open library; coming back with ?library= opens it and the page V4 was left from', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  const made = await page.request.post('/api/libraries', { data: { name: `v4shell switch ${Date.now()}` } })
+  expect(made.ok()).toBe(true)
+  const other: string = (await made.json()).library.id
+  // V3.5 is stood in for: only where the links lead is under test here (its side is app-switch.spec.ts)
+  await page.route((url) => url.pathname === '/', (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>V3.5</title>' }))
+  try {
+    await openAt(page, '#/settings/about', { lang: 'zh-CN' })
+    const back = page.getByTestId('about-back-v35')
+    await expect(back).toHaveText('回到旧版界面（V3.5）')
+    await expect(back).toHaveAttribute('href', '/?library=main')
+    await expect(back).toBeInViewport({ ratio: 1 })
+    await back.click()
+    await expect(page).toHaveURL(/\/\?library=main$/)
+
+    // V3.5 sends the user back in another library: V4 opens it, and the About page it was left from
+    await page.goto(`/v4/?library=${other}`)
+    await expect(page).toHaveURL(/\/v4\/#\/settings\/about$/)
+    await expect(back).toHaveAttribute('href', `/?library=${other}`)
+    await expect(page.locator('header').getByRole('link', { name: '回到 V3.5' })).toHaveAttribute('href', `/?library=${other}`)
+
+    // an id this backend does not know: V4 keeps its own library, says nothing
+    await page.goto('/v4/?library=no-such-library#/settings/about')
+    await expect(page).toHaveURL(/\/v4\/#\/settings\/about$/)
+    await expect(back).toHaveAttribute('href', `/?library=${other}`)
+    await expect(page.locator('[aria-live="polite"] > [data-tone]')).toHaveCount(0)
+
+    // Ctrl K: found in either language, goes back with the library
+    await page.keyboard.press('Control+k')
+    await page.keyboard.type('旧版界面')
+    await expect(page.getByTestId('palette').getByRole('option').first()).toHaveText('回到旧版界面（V3.5）')
+    await page.keyboard.press('Control+a')
+    await page.keyboard.type('old interface')
+    await expect(page.getByTestId('palette').getByRole('option').first()).toHaveText('回到旧版界面（V3.5）')
+    await page.keyboard.press('Enter')
+    await expect(page).toHaveURL(new RegExp(`/\\?library=${other}$`))
+  } finally {
+    await page.request.delete(`/api/libraries/${encodeURIComponent(other)}`)
+  }
+})
+
 for (const viewport of VIEWPORTS) {
   test(`top bar fits at ${viewport.width} in both languages, with room for the busy chip and update hint`, async ({ page }) => {
     await page.setViewportSize(viewport)

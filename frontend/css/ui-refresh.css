@@ -10270,6 +10270,10 @@ html.lang-zh #view-censor .queue-action-btn span {
     justify-content: flex-start;
     border-radius: 10px;
 }
+/* "Try the new interface (V4)" is a link that looks like its neighbours. */
+.nav-tools-link {
+    text-decoration: none;
+}
 .nav-tools-badge {
     margin-left: auto;
     font-size: var(--fs-footnote);

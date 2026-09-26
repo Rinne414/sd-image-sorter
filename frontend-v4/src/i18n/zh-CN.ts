@@ -446,7 +446,7 @@ export const zhCN = {
   'palette.cmd.onlyFavorites': '只看收藏',
   'palette.cmd.clearFilters': '清空所有筛选',
   'palette.cmd.openFull': '看大图',
-  'palette.cmd.backToV3': '回到 V3.5',
+  'palette.cmd.backToV3': '回到旧版界面（V3.5）',
   'palette.group.selection': '选中的图',
   'palette.cmd.move': '把选中的图移动到…',
   'palette.cmd.copy': '把选中的图复制到…',

@@ -1,4 +1,5 @@
 import { useT, type MessageKey } from '../i18n'
+import { rememberRoute, v35Href } from '../state/arrival'
 import { useApp, type Page } from '../state/store'
 import { useTheme, type ThemeMode } from '../theme'
 import { Icon } from '../ui/Icon'
@@ -32,6 +33,7 @@ export function TopBar() {
   const setPage = useApp((s) => s.setPage)
   const setPaletteOpen = useApp((s) => s.setPaletteOpen)
   const openSettings = useApp((s) => s.openSettings)
+  const libraryId = useApp((s) => s.libraryId)
   const mode = useTheme((s) => s.mode)
   const theme = useTheme((s) => s.theme)
   const cycleTheme = useTheme((s) => s.cycle)
@@ -101,7 +103,7 @@ export function TopBar() {
       >
         <Icon name={theme === 'dark' ? 'moon' : 'sun'} />
       </button>
-      <a className="btn btn-ghost" href="/">
+      <a className="btn btn-ghost" href={v35Href(libraryId)} onClick={rememberRoute}>
         {t('nav.backToV3')}
       </a>
     </header>

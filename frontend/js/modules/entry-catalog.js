@@ -93,6 +93,7 @@
                 { icon: '🖌️', nameKey: 'nav.artist', name: 'Style Finder', descKey: 'catalog.artist', desc: 'Identify artists with a similar style', run: () => goView('artist') },
                 { icon: '📦', nameKey: 'entry.tileModels', name: 'Model Center', descKey: 'catalog.models', desc: 'Download and manage the AI models used by tagging, similarity, artist, censor, and captions', run: () => openSettingsTab('models') },
                 { icon: '⚙️', nameKey: 'settings.tabGeneral', name: 'Settings', descKey: 'catalog.settings', desc: 'Sound, entry page, UI scale, language, disk cache, updates', run: () => openSettingsTab('general') },
+                { icon: '#i-monitor', nameKey: 'nav.tryV4', name: 'Try the new interface (V4)', descKey: 'catalog.tryV4', desc: 'The same library and data in the new interface; its Settings › About brings you back', run: () => window.AppSwitch?.goToV4() },
             ],
         },
     ];

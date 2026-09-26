@@ -1,4 +1,6 @@
 import { useT } from '../../../i18n'
+import { rememberRoute, v35Href } from '../../../state/arrival'
+import { useApp } from '../../../state/store'
 import styles from './About.module.css'
 import { useAppStats } from './aboutApi'
 import { Section } from './Section'
@@ -7,7 +9,7 @@ import { SystemSection } from './SystemSection'
 import { UpdateSection } from './UpdateSection'
 import { webLink } from './updateState'
 
-/** Settings › About & updates: version, updates, privacy, this computer, support. */
+/** Settings › About & updates: version (and the way back to V3.5), updates, privacy, this computer, support. */
 export function AboutTab() {
   return (
     <div className={styles.sections}>
@@ -23,6 +25,7 @@ export function AboutTab() {
 function VersionSection() {
   const t = useT()
   const stats = useAppStats()
+  const libraryId = useApp((s) => s.libraryId)
   const version = stats.data?.app_version
   const home = webLink(stats.data?.github_url)
   return (
@@ -35,13 +38,17 @@ function VersionSection() {
         <span className={`${styles.badge} mono`}>V4</span>
       </p>
       <p className={styles.hint}>{t('about.version.v4')}</p>
-      {home && (
-        <p className={styles.hint}>
+      {/* One line for both links: the update's Install button below stays on a 768 px screen. */}
+      <p className={`${styles.hint} ${styles.links}`}>
+        <a className={styles.link} href={v35Href(libraryId)} onClick={rememberRoute} data-testid="about-back-v35">
+          {t('about.version.backToV35')}
+        </a>
+        {home && (
           <a className={styles.link} href={home} target="_blank" rel="noopener noreferrer">
             {t('about.version.home')} ↗
           </a>
-        </p>
-      )}
+        )}
+      </p>
     </Section>
   )
 }

@@ -3,6 +3,8 @@ import type { BatchKind } from '../api/types'
 import { parseBrowseStore, recallBrowse, rememberBrowse, type BrowseState, type Scope } from '../lib/browseMemory'
 import { isMainPage, parseRoute, routeHash, type MainPage, type Page, type Route, type SettingsTab, type ToolId } from '../lib/route'
 import { isSortBase, type SortBase } from '../lib/sort'
+// First: arriving from V3.5 rewrites the address (drops ?library=, reopens the page V4 was left from).
+import './arrival'
 
 export type { MainPage, Page, SettingsTab, ToolId }
 export type Layout = 'masonry' | 'grid'

@@ -77,7 +77,8 @@ export const enSettings: Record<keyof typeof zhCNSettings, string> = {
 
   'about.version.title': 'Version',
   'about.version.loading': 'Reading the version…',
-  'about.version.v4': 'You are using the new V4 interface (preview). “Back to V3.5” in the top bar switches to the old one; both use the same library.',
+  'about.version.v4': 'You are using the new V4 interface (preview); the old interface (V3.5) uses the same library and data.',
+  'about.version.backToV35': 'Back to the old interface (V3.5)',
   'about.version.home': 'Project page',
   'about.update.title': 'Updates',
   'about.update.unchecked': 'Not checked for a new version yet.',

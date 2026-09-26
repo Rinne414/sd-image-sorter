@@ -59,6 +59,12 @@
   text-decoration-color: var(--text);
 }
 
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 24px;
+}
+
 .version {
   display: flex;
   align-items: baseline;

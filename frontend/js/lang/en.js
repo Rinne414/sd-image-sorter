@@ -122,6 +122,8 @@ window.I18nLang_en = {
     'nav.navigation': 'Navigation',
     'nav.moreTools': 'More Tools',
     'nav.more': 'More',
+    'nav.tryV4': 'Try the new interface (V4)',
+    'nav.tryV4Title': 'Open the new interface (V4) in the same library. Its Settings › About brings you back.',
     'nav.tools': 'Tools',
     'rail.backToEntry': 'Back to the mission entry page',
     'gallerySearch.placeholder': 'tag:silver_hair score>=7 -tag:blurry free text…',
@@ -1773,7 +1775,7 @@ window.I18nLang_en = {
     'artist.progressPrimary': 'Artist ID',
     'artist.identifyingSelected': 'Identifying {count} selected image(s)...',
     'artist.clearConfirmTitle': 'Clear Artist Predictions',
-    'artist.clearConfirmMessage': 'Clear all artist predictions? This cannot be undone.',
+    'artist.clearConfirmMessage': 'Clear the artist predictions of the current library? Other libraries are not affected. This cannot be undone.',
     'artist.clearDataFailed': 'Failed to clear data',
 
     // ========================
@@ -5055,6 +5057,7 @@ window.I18nLang_en = {
     'catalog.artist': 'Identify artists with a similar style',
     'catalog.models': 'Download and manage the AI models used by tagging, similarity, artist, censor, and captions',
     'catalog.settings': 'Sound, entry page, UI scale, language, disk cache, updates',
+    'catalog.tryV4': 'The same library and data in the new interface; its Settings › About brings you back',
     'settings.entryTitle': 'Entry page',
     'settings.entryBody': 'Show the mission entry at launch (off = straight to the Library)',
     'settings.entryOn': 'On',

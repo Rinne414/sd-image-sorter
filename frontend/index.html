@@ -542,6 +542,13 @@
                                 <span class="tab-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg></span>
                                 <span class="tab-text" data-i18n="navCustom.open">Customize tabs</span>
                             </button>
+                            <!-- The new interface (V4). A real link: modules/app-switch.js
+                                 keeps its href on the current library. -->
+                            <a class="nav-tab nav-tools-item nav-tools-link" id="nav-tools-v4" href="/v4/"
+                               data-i18n-title="nav.tryV4Title" title="Open the new interface (V4) in the same library. Its Settings › About brings you back.">
+                                <span class="tab-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg></span>
+                                <span class="tab-text" data-i18n="nav.tryV4">Try the new interface (V4)</span>
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -8281,6 +8288,7 @@
     <script src="/static/js/modules/settings-tabs.js"></script>
     <script src="/static/js/modules/nav-missions.js"></script>
     <script src="/static/js/modules/entry-catalog.js"></script>
+    <script src="/static/js/modules/app-switch.js"></script>
     <script src="/static/js/modules/trait-pruner.js"></script>
     <!-- separation-console family: verbatim decomposition of the 1,155-line
          modules/separation-console.js IIFE (the SEP-1 per-tag curation

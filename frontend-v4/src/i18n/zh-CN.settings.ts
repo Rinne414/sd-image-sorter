@@ -79,7 +79,8 @@ export const zhCNSettings = {
   // Settings › About & updates, the top bar's new-version hint, restarting
   'about.version.title': '版本',
   'about.version.loading': '正在读取版本…',
-  'about.version.v4': '你正在用 V4 新界面（预览）。顶栏的「回到 V3.5」换回原来的界面，两边用同一个图库。',
+  'about.version.v4': '你正在用 V4 新界面（预览），和旧版界面（V3.5）用同一个图库和数据。',
+  'about.version.backToV35': '回到旧版界面（V3.5）',
   'about.version.home': '项目主页',
   'about.update.title': '更新',
   'about.update.unchecked': '还没检查过有没有新版本。',

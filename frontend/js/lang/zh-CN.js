@@ -124,6 +124,8 @@ window.I18nLang_zhCN = {
     'nav.navigation': '导航',
     'nav.moreTools': '更多工具',
     'nav.more': '更多',
+    'nav.tryV4': '试用新版界面（V4）',
+    'nav.tryV4Title': '在同一个图库里打开新版界面（V4）。新版的“设置 › 关于”可以回到这里。',
     'nav.tools': '工具',
     'rail.backToEntry': '回到任务入口页',
     'gallerySearch.placeholder': 'tag:silver_hair score>=7 -tag:blurry 自由文本…',
@@ -1951,7 +1953,7 @@ window.I18nLang_zhCN = {
     'artist.progressPrimary': '画师识别',
     'artist.identifyingSelected': '正在识别 {count} 张已选图片...',
     'artist.clearConfirmTitle': '清空画师识别结果',
-    'artist.clearConfirmMessage': '要清空全部画师识别结果吗？此操作无法撤销。',
+    'artist.clearConfirmMessage': '要清空当前图库的画师识别结果吗？其他图库不受影响。此操作无法撤销。',
     'artist.clearDataFailed': '清空数据失败',
 
     // ========================
@@ -5052,6 +5054,7 @@ window.I18nLang_zhCN = {
     'catalog.artist': '识别画风相近的画师',
     'catalog.models': '下载和管理打标、相似图、画师识别、打码和描述所用的 AI 模型',
     'catalog.settings': '声音、入口页、缩放、语言、磁盘缓存、更新',
+    'catalog.tryV4': '同一个图库和数据，换成新版界面；新版的“设置 › 关于”可以回到这里',
     'settings.entryTitle': '入口页',
     'settings.entryBody': '启动时先显示任务入口（关闭则直接进图片库）',
     'settings.entryOn': '开',

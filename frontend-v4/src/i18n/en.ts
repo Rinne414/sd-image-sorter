@@ -446,7 +446,7 @@ export const en: Record<MessageKey, string> = {
   'palette.cmd.onlyFavorites': 'Only favorites',
   'palette.cmd.clearFilters': 'Clear all filters',
   'palette.cmd.openFull': 'Open large',
-  'palette.cmd.backToV3': 'Back to V3.5',
+  'palette.cmd.backToV3': 'Back to the old interface (V3.5)',
   'palette.group.selection': 'Picks',
   'palette.cmd.move': 'Move picks to…',
   'palette.cmd.copy': 'Copy picks to…',
