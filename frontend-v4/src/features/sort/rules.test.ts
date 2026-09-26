@@ -89,6 +89,12 @@ describe('the run as the progress tells it', () => {
     expect(knownReason("another file named '3.png' is already in 'src'. Move or rename it, then undo again.")).toEqual({ key: 'occupied', folder: 'src' })
     expect(knownReason('Permission denied')).toBeNull()
   })
+
+  it('words what an undo says about a file the run stopped on (a power cut mid-file)', () => {
+    expect(knownReason('The run stopped before this file moved; it is still in its original place')).toEqual({ key: 'stoppedBefore' })
+    expect(knownReason("The run stopped part-way through this file; check the disk: 'keep' and its old place")).toEqual({ key: 'stoppedCheck', folder: 'keep' })
+    expect(knownReason("The run stopped while copying this file; check 'keep' for a copy, which was kept")).toEqual({ key: 'stoppedCopy', folder: 'keep' })
+  })
 })
 
 describe('the last run, remembered per library', () => {

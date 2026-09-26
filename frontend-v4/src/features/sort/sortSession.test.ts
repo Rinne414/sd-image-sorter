@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   answered,
+  awaitsLibraryOk,
+  crossLibraryKey,
   failed,
   INITIAL_STATE,
   isFinished,
+  isOtherLibrary,
   press,
   readSession,
   requestFor,
@@ -91,6 +94,37 @@ describe('reading the saved session (restore after a reload)', () => {
     expect(v.folders).toEqual({ w: 'D:/keep' })
     expect(v.collections).toEqual({ s: 7 })
     expect(v.counts).toEqual({ w: 2 })
+  })
+})
+
+describe('a sort whose images belong to another library', () => {
+  const at = (over: Record<string, unknown>) => readSession(current(over)) as SessionView
+
+  it('reads the library and whether the images come from several', () => {
+    expect(at({ library_id: 'other', library_mixed: false })).toMatchObject({ libraryId: 'other', libraryMixed: false })
+    expect(at({ library_id: null, library_mixed: true })).toMatchObject({ libraryId: null, libraryMixed: true })
+    // An older backend says nothing about either.
+    expect(at({})).toMatchObject({ libraryId: null, libraryMixed: false })
+  })
+
+  it('counts as another library when it is not the open one, or spans several', () => {
+    expect(isOtherLibrary(at({ library_id: 'other' }), 'main')).toBe(true)
+    expect(isOtherLibrary(at({ library_id: 'main' }), 'main')).toBe(false)
+    expect(isOtherLibrary(at({ library_id: null, library_mixed: true }), 'main')).toBe(true)
+    expect(isOtherLibrary(at({}), 'main')).toBe(false)
+  })
+
+  it('holds the keys until the user says to keep sorting there, for that sort and open library only', () => {
+    const other = at({ library_id: 'other' })
+    expect(awaitsLibraryOk(other, 'main', null)).toBe(true)
+    const ok = crossLibraryKey(other, 'main')
+    expect(awaitsLibraryOk(other, 'main', ok)).toBe(false)
+    // Still the same sort after a few keys.
+    expect(awaitsLibraryOk({ ...other, index: 2 }, 'main', ok)).toBe(false)
+    // Another open library, or another sort, asks again.
+    expect(awaitsLibraryOk(other, 'third', ok)).toBe(true)
+    expect(awaitsLibraryOk(at({ library_id: 'other', image_ids: [21, 22], total: 2 }), 'main', ok)).toBe(true)
+    expect(awaitsLibraryOk(at({ library_id: 'main' }), 'main', null)).toBe(false)
   })
 })
 

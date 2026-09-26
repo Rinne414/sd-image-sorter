@@ -232,10 +232,14 @@ test('cooldown ignores a key that comes too soon, the sound plays when on, focus
   expect(await page.evaluate(() => (window as unknown as { __pips: number }).__pips)).toBe(2)
 })
 
-test('a sort that belongs to another library says so on the page and on Home', async ({ page }) => {
+test('a sort of another library waits for a yes before any key acts, and Home and Ctrl K name the library', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   const created = await (await page.request.post('/api/libraries', { data: { name: OTHER_LIBRARY } })).json()
   const otherId: string = created.library.id
+  const actions: string[] = []
+  page.on('request', (r) => {
+    if (r.url().includes('/api/sort/action')) actions.push(r.url())
+  })
   try {
     await openLibrary(page, TOKEN, COUNT)
     await pick(page, 2)
@@ -246,10 +250,39 @@ test('a sort that belongs to another library says so on the page and on Home', a
 
     await page.evaluate((id) => localStorage.setItem('sd-library-workspace-v1', JSON.stringify({ v: 2, currentId: id })), otherId)
     await page.reload()
-    await expect(page.getByTestId('sort-other-library')).toContainText('belong to the library')
+    const banner = page.getByTestId('sort-other-library')
+    const ok = page.getByTestId('sort-other-library-ok')
+    await expect(banner).toContainText('belong to the library “Main library”')
+    await expect(banner).toContainText('Until you confirm')
+    await expect(ok).toBeInViewport({ ratio: 1 })
+
+    // Before the yes, a key, a click and undo send nothing and move nothing.
+    await page.keyboard.press('k')
+    await expect(page.getByTestId('sort-status')).toContainText('belong to another library')
+    await page.getByTestId('sort-keep').click()
+    await page.keyboard.press('Backspace')
+    await page.waitForTimeout(400)
+    expect(actions).toEqual([])
+    await expect(page.getByTestId('sort-pos')).toHaveText('Image 1 of 2')
+    await expect(page.getByTestId('sort-kept')).toHaveText('0')
+
+    await ok.click()
+    await expect(ok).toHaveCount(0)
+    await expect(banner).toContainText('Confirmed')
     await press(page, 'k', 'Image 2 of 2')
+    expect(actions).toHaveLength(1)
+
+    // Only for this page's sort: after a reload it asks again.
+    await page.reload()
+    await expect(ok).toBeVisible()
+
+    await page.keyboard.press('Control+k')
+    await page.getByTestId('palette').locator('input').fill('continue the last sort')
+    await expect(page.getByTestId('palette').getByRole('option').first()).toHaveText(/Continue the last sort \(library “Main library”\)/)
+    await page.keyboard.press('Escape')
     await page.goto('/v4/#/home')
-    await expect(page.getByTestId('home-sort')).toContainText('belong to the library')
+    await expect(page.getByTestId('home-sort')).toContainText('belong to the library “Main library”')
+    expect(actions).toHaveLength(1)
   } finally {
     await page.evaluate(() => localStorage.setItem('sd-library-workspace-v1', JSON.stringify({ v: 2, currentId: 'main' })))
     await page.request.delete(`/api/libraries/${otherId}`)

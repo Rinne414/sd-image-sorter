@@ -9,7 +9,7 @@ import { GenerationCard } from '../card/GenerationCard'
 import { SortConfirm } from './SortConfirm'
 import { perMinute, round } from './sortModes'
 import { useSortPrefs } from './sortPrefs'
-import { leftToSort, type LastAction, type SessionView, type SortError, type SortImage } from './sortSession'
+import { awaitsLibraryOk, isOpen, isOtherLibrary, leftToSort, type LastAction, type SessionView, type SortError, type SortImage } from './sortSession'
 import styles from './SortStage.module.css'
 import { useSort } from './sortStore'
 import { releaseButtonFocus, useSortKeys } from './useSortKeys'
@@ -74,10 +74,12 @@ function lastText(t: Translate, last: LastAction, view: SessionView): string {
   }
 }
 
-function errorText(t: Translate, error: SortError, cooldownMs: number): string {
+/** Why the last key did nothing. */
+export function errorText(t: Translate, error: SortError, cooldownMs: number): string {
   if (error.kind === 'unset') return t('sort.error.unset', { key: error.slot.toUpperCase() })
   if (error.kind === 'nothing') return t('sort.error.nothing')
   if (error.kind === 'cooldown') return t('sort.error.cooldown', { ms: cooldownMs })
+  if (error.kind === 'otherLibrary') return t('sort.error.otherLibrary')
   return t('sort.error.failed', { reason: error.reason })
 }
 
@@ -97,25 +99,47 @@ export function StatusLine({ view }: { view: SessionView }) {
   )
 }
 
-/** The name of the library the sort belongs to, when it is not the one open now. */
-export function useOtherLibrary(view: SessionView): string | null {
+export interface OtherLibrary {
+  /** Which library, as a phrase ("library “Photos”", "several libraries"). */
+  where: string
+  /** The sentence saying the images are not in the library open now. */
+  sentence: string
+}
+
+/** Where the sort's images live, when that is not (only) the library open now. */
+export function useOtherLibrary(view: SessionView | null): OtherLibrary | null {
   const t = useT()
   const current = useApp((s) => s.libraryId)
   const libraries = useLibraries()
-  if (!view.libraryId || view.libraryId === current) return null
+  if (!view || !isOtherLibrary(view, current)) return null
+  if (view.libraryMixed || !view.libraryId) return { where: t('sort.library.mixed'), sentence: t('sort.otherLibrary.mixed') }
   const lib = libraries.data?.libraries.find((l) => l.id === view.libraryId)
-  if (!lib) return view.libraryId
-  return lib.is_default && lib.name === 'Main library' ? t('rail.mainLibrary') : lib.name
+  const name = !lib ? view.libraryId : lib.is_default && lib.name === 'Main library' ? t('rail.mainLibrary') : lib.name
+  return { where: t('sort.library.named', { name }), sentence: t('sort.otherLibrary', { name }) }
 }
 
-export function OtherLibraryNote({ view }: { view: SessionView }) {
+/**
+ * Over a sort of another library's images: keys and buttons leave them alone
+ * until the user says to keep sorting them (for this sort only); then a note.
+ */
+export function OtherLibraryBanner({ view }: { view: SessionView }) {
   const t = useT()
-  const name = useOtherLibrary(view)
-  if (!name) return null
+  const other = useOtherLibrary(view)
+  const current = useApp((s) => s.libraryId)
+  const held = useSort((s) => isOpen(s.session) && awaitsLibraryOk(s.session, current, s.libraryOk))
+  if (!other) return null
   return (
-    <p className={styles.notice} role="note" data-testid="sort-other-library">
-      {t('sort.otherLibrary', { name })}
-    </p>
+    <div className={styles.banner} role="region" aria-label={other.sentence} data-held={held || undefined} data-testid="sort-other-library">
+      <span className={styles.bannerText}>
+        <strong>{other.sentence}</strong>
+        <span>{t(held ? 'sort.otherLibrary.held' : 'sort.otherLibrary.confirmed')}</span>
+      </span>
+      {held && (
+        <button type="button" className="btn btn-primary" onClick={() => useSort.getState().allowOtherLibrary()} data-testid="sort-other-library-ok">
+          {t('sort.otherLibrary.confirm')}
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -233,7 +257,7 @@ export function Stage({ view, image, infoId, children, keys, dialogs }: StagePro
       <div className={styles.progress} aria-hidden>
         <span style={{ width: `${progress}%` }} />
       </div>
-      <OtherLibraryNote view={view} />
+      <OtherLibraryBanner view={view} />
       <div className={styles.middle} data-info={info || undefined}>
         <div className={styles.frame}>
           {children}

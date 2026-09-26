@@ -140,7 +140,14 @@ export function readRun(payload: unknown, token: string): RunState {
 export const isRunning = (run: RunState) => run.status === 'running' || run.status === 'cancelling'
 
 /** Backend reasons an undo gives, by the words the page shows instead. */
-export type ReasonKey = 'movedAgain' | 'notInLibrary' | 'copyChanged' | 'copyIndexed' | 'occupied'
+export type ReasonKey = 'movedAgain' | 'notInLibrary' | 'copyChanged' | 'copyIndexed' | 'occupied' | 'stoppedBefore' | 'stoppedCheck' | 'stoppedCopy'
+
+/** Reasons that name a folder: the pattern that finds it. */
+const WITH_FOLDER: [ReasonKey, RegExp][] = [
+  ['occupied', /another file named '.*' is already in '(.*)'/],
+  ['stoppedCheck', /^The run stopped part-way through this file; check the disk: '(.*)'/],
+  ['stoppedCopy', /^The run stopped while copying this file; check '(.*)' for a copy/],
+]
 
 /** A backend reason the page can word itself (with the folder it names), or null to show it as sent. */
 export function knownReason(reason: string): { key: ReasonKey; folder?: string } | null {
@@ -148,6 +155,10 @@ export function knownReason(reason: string): { key: ReasonKey; folder?: string }
   if (reason.startsWith('It is no longer in the library')) return { key: 'notInLibrary' }
   if (reason.startsWith('The copy was changed since')) return { key: 'copyChanged' }
   if (reason.startsWith('The copy has been imported')) return { key: 'copyIndexed' }
-  const occupied = /another file named '.*' is already in '(.*)'/.exec(reason)
-  return occupied ? { key: 'occupied', folder: occupied[1] } : null
+  if (reason.startsWith('The run stopped before this file moved')) return { key: 'stoppedBefore' }
+  for (const [key, pattern] of WITH_FOLDER) {
+    const found = pattern.exec(reason)
+    if (found) return { key, folder: found[1] }
+  }
+  return null
 }

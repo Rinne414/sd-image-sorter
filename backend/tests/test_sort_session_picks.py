@@ -173,3 +173,47 @@ def test_every_answer_names_the_library_the_sorted_images_belong_to(sort_client,
     kept = sort_client.post("/api/sort/action?action=keep").json()
     assert kept["library_id"] == "other"
     assert kept["decision"] == "keep"
+
+
+def test_a_session_whose_images_span_libraries_is_reported_as_mixed(sort_client, tmp_path):
+    db = sort_client.test_db
+    src = tmp_path / "src"
+    src.mkdir()
+    ids = [_add_image(db, src, f"{n}.png") for n in range(60)]
+    started = sort_client.post("/api/sort/start", json={"image_ids": ids, "mode": "cull"})
+    assert started.status_code == 200
+    current = sort_client.get("/api/sort/current").json()
+    assert current["library_id"] == "main"
+    assert current["library_mixed"] is False
+
+    # Far past the first few dozen, one image now lives in another library.
+    with db.get_db() as conn:
+        conn.execute("UPDATE images SET library_id = 'other' WHERE id = ?", (ids[-1],))
+
+    current = sort_client.get("/api/sort/current").json()
+    assert current["library_id"] is None
+    assert current["library_mixed"] is True
+    kept = sort_client.post("/api/sort/action?action=keep").json()
+    assert kept["library_mixed"] is True
+
+
+def test_the_library_of_a_session_is_found_for_any_number_of_images(test_db):
+    from services.sorting_service import SortingService
+
+    ids = [
+        test_db.add_image(path=f"/nowhere/{n}.png", filename=f"{n}.png", metadata_json="{}")
+        for n in range(1500)
+    ]
+    service = SortingService()
+    service._sort_session["image_ids"] = ids
+    assert service._get_sort_session_flags()["library_id"] == "main"
+
+    with test_db.get_db() as conn:
+        conn.execute("UPDATE images SET library_id = 'other'")
+    flags = service._get_sort_session_flags()
+    assert (flags["library_id"], flags["library_mixed"]) == ("other", False)
+
+    with test_db.get_db() as conn:
+        conn.execute("UPDATE images SET library_id = 'main' WHERE id = ?", (ids[1400],))
+    flags = service._get_sort_session_flags()
+    assert (flags["library_id"], flags["library_mixed"]) == (None, True)

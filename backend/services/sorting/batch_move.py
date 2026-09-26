@@ -403,6 +403,9 @@ class BatchMoveMixin:
                                         )
                                         if target_folder != destination_folder:
                                             os.makedirs(target_folder, exist_ok=True)
+                                        # On disk before the file is touched, so a power cut
+                                        # mid-file still leaves undo something to go on.
+                                        step = journal.intend(image["id"], source_path, target_folder)
                                         result = self._apply_file_operation(
                                             operation=operation,
                                             image_id=image["id"],
@@ -412,7 +415,7 @@ class BatchMoveMixin:
                                         # Only a file whose new place is known can be put back later.
                                         new_path = (result or {}).get("new_path")
                                         if new_path:
-                                            journal.record(image["id"], source_path, new_path)
+                                            journal.record(image["id"], source_path, new_path, step)
                                         moved += 1
                                     except Exception as e:
                                         # Same descriptor gallery move and

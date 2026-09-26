@@ -21,14 +21,46 @@
   transition: width var(--t-fast) var(--ease);
 }
 
-.notice {
+/* The images belong to another library: until the user says to go on, the keys wait. */
+.banner {
+  display: flex;
   flex-shrink: 0;
-  margin: 0;
-  padding: 6px 16px;
-  color: var(--warn);
-  font-size: var(--fs-3);
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 6px 12px 6px 16px;
   background: var(--surface-1);
   border-bottom: 1px solid var(--line);
+  box-shadow: inset 3px 0 0 var(--line);
+}
+
+.banner[data-held] {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+
+.bannerText {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.bannerText strong {
+  color: var(--text);
+  font-size: var(--fs-3);
+  font-weight: 600;
+}
+
+.banner[data-held] .bannerText strong {
+  color: var(--warn);
+}
+
+.banner button {
+  flex: none;
 }
 
 .pace {

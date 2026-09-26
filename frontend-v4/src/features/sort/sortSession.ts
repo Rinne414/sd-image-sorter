@@ -50,8 +50,10 @@ export interface SessionView {
   /** Position of the image that is up (A/B: of B); `total` once every image is done. */
   index: number
   image: SortImage | null
-  /** The library the images belong to (the one saved session is shared by all). */
+  /** The library the images belong to (the one saved session is shared by all); null when unknown or `libraryMixed`. */
   libraryId: string | null
+  /** The images come from more than one library. */
+  libraryMixed: boolean
   folders: SlotMap<string>
   /** Slots V3.5 pointed at a collection: the key adds the image there and no file moves. */
   collections: SlotMap<number>
@@ -82,6 +84,8 @@ export type SortError =
   | { kind: 'failed'; reason: string }
   | { kind: 'nothing' }
   | { kind: 'cooldown' }
+  /** The images belong to another library and the user has not said to keep sorting them. */
+  | { kind: 'otherLibrary' }
 
 export interface SortState {
   /** null until the backend answered; 'none' when no session is saved. */
@@ -150,6 +154,7 @@ function readFlags(p: Record<string, unknown>, prev: SessionView | null) {
     canUndo: typeof p.undo_available === 'boolean' ? p.undo_available : (prev?.canUndo ?? false),
     canRedo: typeof p.redo_available === 'boolean' ? p.redo_available : (prev?.canRedo ?? false),
     libraryId: 'library_id' in p ? text(p.library_id) : (prev?.libraryId ?? null),
+    libraryMixed: typeof p.library_mixed === 'boolean' ? p.library_mixed : (prev?.libraryMixed ?? false),
   }
 }
 
@@ -201,6 +206,21 @@ export const isOpen = (s: SortState['session']): s is SessionView => s !== null 
 /** An unfinished session a new one would replace (any mode). */
 export function unfinished(s: SortState['session']): SessionView | null {
   return isOpen(s) && !isFinished(s) ? s : null
+}
+
+/** The sort's images are not (only) in the library open now. */
+export function isOtherLibrary(view: SessionView, openLibrary: string): boolean {
+  return view.libraryMixed || (view.libraryId !== null && view.libraryId !== openLibrary)
+}
+
+/** What "keep sorting the other library's images" was said about: this sort, seen from this open library. */
+export function crossLibraryKey(view: SessionView, openLibrary: string): string {
+  return JSON.stringify([view.mode, view.total, view.ids[0] ?? null, view.libraryId, view.libraryMixed, openLibrary])
+}
+
+/** Keys and buttons wait while the sort belongs to another library and the user has not said to go on (`ok`: what they said it about). */
+export function awaitsLibraryOk(view: SessionView, openLibrary: string, ok: string | null): boolean {
+  return isOtherLibrary(view, openLibrary) && ok !== crossLibraryKey(view, openLibrary)
 }
 
 /** Slots with somewhere to send an image. */

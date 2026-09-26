@@ -94,7 +94,7 @@ function RecentSort({ view }: { view: SessionView }) {
       <div className={styles.cardInfo}>
         <span className={styles.cardName}>{title}</span>
         <span className={styles.cardMeta}>{line}</span>
-        {other && <span className={styles.cardWhen}>{t('sort.otherLibrary', { name: other })}</span>}
+        {other && <span className={styles.cardWhen}>{other.sentence}</span>}
       </div>
       <button type="button" className="btn btn-primary" onClick={continueSort} data-testid="home-sort-continue">
         {t('home.resume')}

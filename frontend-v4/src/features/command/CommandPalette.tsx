@@ -22,6 +22,7 @@ import { useSimilarDialogs } from '../similar/dialogs'
 import { pickImageFile } from '../similar/imageSearch'
 import { startIndexing } from '../similar/similarApi'
 import { useSimilar } from '../similar/similarStore'
+import { useOtherLibrary } from '../sort/StageParts'
 import { continueSort, sortImages, useSortPending } from '../sort/sortStore'
 import { useStatusDialogs } from '../status/dialogs'
 import { useUiScale } from '../settings/uiScaleStore'
@@ -79,6 +80,7 @@ function Palette() {
   const bulk = useBulkActions(picks)
   const single = useImageActions(inspectedId)
   const sortPending = useSortPending()
+  const sortElsewhere = useOtherLibrary(sortPending)?.where ?? null
   const [q, setQ] = useState('')
   const [active, setActive] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -123,7 +125,10 @@ function Palette() {
     list.push(mk('build-index', 'palette.group.library', 'sim.palette.buildIndex', () => void withClip(() => void startIndexing())))
     if (s.page === 'library') list.push(mk('invert', 'palette.group.library', 'lib.palette.invert', () => void invertPicks(currentLibraryParams()), 'Ctrl+I'))
     if (s.page === 'library') list.push(mk('sort-filter', 'palette.group.library', 'sort.palette.filter', () => sortImages({ kind: 'filter' })))
-    if (sortPending) list.push(mk('sort-continue', 'palette.group.go', 'sort.palette.continue', () => continueSort()))
+    if (sortPending) {
+      const key = sortElsewhere ? 'sort.palette.continueOther' : 'sort.palette.continue'
+      list.push(mk('sort-continue', 'palette.group.go', key, () => continueSort(), undefined, { where: sortElsewhere ?? '' }))
+    }
     list.push(mk('import', 'palette.group.library', 'palette.cmd.import', () => useSelectionDialog.getState().showFor('import', null, 1)))
     list.push(mk('libraries', 'palette.group.library', 'palette.cmd.libraries', () => useSelectionDialog.getState().showFor('libraries', null, 1)))
     if (useJobs.getState().jobs.length > 0) {
@@ -141,7 +146,7 @@ function Palette() {
     list.push(...shellCommands(lang, SHELL_OPS))
     list.push(mk('shortcuts', 'lib.palette.groupHelp', 'lib.palette.shortcuts', () => useShortcutSheet.getState().open(s.page)))
     return list
-  }, [lang, libraries.data, batches.data, picks, bulk, single, sortPending])
+  }, [lang, libraries.data, batches.data, picks, bulk, single, sortPending, sortElsewhere])
 
   const shown = commands.filter((c) => matches(c, q))
   // The pointer can leave `active` on a row the typed filter just removed: the first row stands in until it resets.

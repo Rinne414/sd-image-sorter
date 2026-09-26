@@ -5,7 +5,10 @@ Runs in the batch-move slot (one at a time, same progress and cancel), with
 and a copy the run made is removed, but only while the file is still what the
 run left behind: moved again since, the original place taken by another file,
 a copy edited since, or the image gone from the library are each reported
-with the reason and left alone. A finished undo marks the run as undone.
+with the reason and left alone. A file the run began on but never recorded as
+done (a power cut in between) is settled by looking at the disk: it goes back
+only when it is at the destination and not at its old place. A finished undo
+marks the run as undone.
 """
 
 from __future__ import annotations
@@ -30,12 +33,22 @@ MOVED_AGAIN = "It was moved again since; left where it is now"
 NOT_IN_LIBRARY = "It is no longer in the library; left where it is"
 COPY_CHANGED = "The copy was changed since; kept"
 COPY_INDEXED = "The copy has been imported into the library since; kept"
+# A file the run began on but never recorded as done.
+STOPPED_BEFORE = (
+    "The run stopped before this file moved; it is still in its original place"
+)
+STOPPED_CHECK = "The run stopped part-way through this file; check the disk: '{folder}' and its old place"
+STOPPED_COPY = "The run stopped while copying this file; check '{folder}' for a copy, which was kept"
 
 
 def _same_path(a: Optional[str], b: Optional[str]) -> bool:
     if not a or not b:
         return False
     return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
+
+
+def _stopped(reason: str, entry: Dict[str, Any]) -> str:
+    return reason.format(folder=os.path.basename(entry.get("destination") or ""))
 
 
 class BatchMoveUndoMixin:
@@ -62,6 +75,50 @@ class BatchMoveUndoMixin:
         ) as exc:  # FileOperationError, or the database refusing the path
             return normalize_reported_cause(str(exc)) or "Could not move it back"
         return None
+
+    def _undo_interrupted_move(self, entry: Dict[str, Any]) -> Optional[str]:
+        """A move the run began but never recorded as done: back only if it left the source for the destination."""
+        image = db.get_image_by_id(int(entry["image_id"]))
+        if not image:
+            return NOT_IN_LIBRARY
+        source = entry["source"]
+        listed = self._resolve_image_path(image.get("path") or "")
+        in_destination = bool(listed) and _same_path(
+            os.path.dirname(listed), entry.get("destination")
+        )
+        if listed and not in_destination and not _same_path(listed, source):
+            return MOVED_AGAIN
+        moved_to = self._interrupted_target(entry, listed if in_destination else None)
+        at_source = os.path.exists(source)
+        if moved_to is None and at_source:
+            return STOPPED_BEFORE
+        if moved_to is None or at_source:
+            return _stopped(STOPPED_CHECK, entry)
+        try:
+            self._restore_file_to_original_path(int(image["id"]), moved_to, source)
+        except Exception as exc:  # FileOperationError, or the database refusing the path
+            return normalize_reported_cause(str(exc)) or "Could not move it back"
+        return None
+
+    @staticmethod
+    def _interrupted_target(
+        entry: Dict[str, Any], listed: Optional[str]
+    ) -> Optional[str]:
+        """The run's file in the destination (where the library lists it, or under its own name), when its size says it is."""
+        own_name = os.path.join(
+            entry.get("destination") or "", os.path.basename(entry["source"])
+        )
+        for path in (listed, own_name):
+            if path and os.path.isfile(path) and os.path.getsize(path) == entry.get("size"):
+                return path
+        return None
+
+    def _undo_entry(self, entry: Dict[str, Any], copy: bool) -> Optional[str]:
+        """Undo one file of the run; the reason it stays, or None when it is undone."""
+        if move_journal.is_interrupted(entry):
+            # A copy cut short cannot be told from a file that was there before: it stays.
+            return _stopped(STOPPED_COPY, entry) if copy else self._undo_interrupted_move(entry)
+        return self._undo_copied_file(entry) if copy else self._undo_moved_file(entry)
 
     @staticmethod
     def _undo_copied_file(entry: Dict[str, Any]) -> Optional[str]:
@@ -177,10 +234,8 @@ class BatchMoveUndoMixin:
                     run_id, "cancelled", done - 1, total, restored, errors
                 )
                 return
-            reason = (
-                self._undo_copied_file(entry) if copy else self._undo_moved_file(entry)
-            )
-            name = os.path.basename(entry.get("target") or "")
+            reason = self._undo_entry(entry, copy)
+            name = os.path.basename(entry.get("target") or entry.get("source") or "")
             if reason:
                 errors.append(
                     {

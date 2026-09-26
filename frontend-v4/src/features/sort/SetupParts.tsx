@@ -231,7 +231,7 @@ export function ResumeCard({ view, onContinue }: { view: SessionView; onContinue
         <span className={styles.optionHint}>
           {title} · {line}
         </span>
-        {other && <span className={styles.warnLine}>{t('sort.otherLibrary', { name: other })}</span>}
+        {other && <span className={styles.warnLine}>{other.sentence}</span>}
       </div>
       <button type="button" className="btn btn-primary" onClick={onContinue} data-testid="sort-continue">
         {t('sort.resume.continue')}

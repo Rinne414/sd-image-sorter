@@ -3,10 +3,11 @@ import { useT } from '../../i18n'
 import { useApp } from '../../state/store'
 import { openFolderPath } from '../library/fileActions'
 import { FolderLabel } from './SetupParts'
+import { useSortPrefs } from './sortPrefs'
 import { summary, type SessionView } from './sortSession'
 import styles from './SortPage.module.css'
 import { useSort } from './sortStore'
-import { FocusTop, OtherLibraryNote } from './StageParts'
+import { errorText, FocusTop, OtherLibraryBanner } from './StageParts'
 import { releaseButtonFocus, useSortKeys } from './useSortKeys'
 
 interface FrameProps {
@@ -21,6 +22,7 @@ export function SummaryFrame({ view, title, body, children }: FrameProps) {
   const t = useT()
   const busy = useSort((s) => s.sending)
   const error = useSort((s) => s.error)
+  const cooldownMs = useSortPrefs((s) => s.cooldownMs)
   useSortKeys(view.mode, useContext(FocusTop))
 
   const leave = async (to: 'library' | 'setup') => {
@@ -35,11 +37,11 @@ export function SummaryFrame({ view, title, body, children }: FrameProps) {
         <p className={styles.lede} data-testid="sort-summary-body">
           {body}
         </p>
-        <OtherLibraryNote view={view} />
+        <OtherLibraryBanner view={view} />
         {children}
         {error && (
-          <p className={styles.error} role="alert">
-            {error.kind === 'failed' ? t('sort.error.failed', { reason: error.reason }) : t('sort.error.nothing')}
+          <p className={styles.error} role="alert" data-testid="sort-summary-error">
+            {errorText(t, error, cooldownMs)}
           </p>
         )}
         <div className={styles.doneActions}>

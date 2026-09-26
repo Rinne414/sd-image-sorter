@@ -9,6 +9,8 @@ import { tooSoon } from './sortModes'
 import { useSortPrefs } from './sortPrefs'
 import {
   answered,
+  awaitsLibraryOk,
+  crossLibraryKey,
   failed,
   INITIAL_STATE,
   isForward,
@@ -46,8 +48,12 @@ interface SortStore extends SortState {
   bumped: number
   /** When recent images were decided (for the pace shown in the header). */
   stamps: number[]
+  /** The sort of another library the user said to keep sorting (`crossLibraryKey`); only in memory, so for this sort only. */
+  libraryOk: string | null
   load: () => Promise<void>
   press: (action: SortAction) => void
+  /** "Keep sorting the other library's images": keys and buttons act on them from now on. */
+  allowOtherLibrary: () => void
   start: (ids: number[], setup: SortSetup, replace: boolean) => Promise<StartResult>
   end: () => Promise<boolean>
   openSetup: (source: SortSource | null) => void
@@ -103,6 +109,7 @@ export const useSort = create<SortStore>((set, get) => {
     lastPressAt: null,
     bumped: 0,
     stamps: [],
+    libraryOk: null,
 
     load: async () => {
       try {
@@ -117,6 +124,10 @@ export const useSort = create<SortStore>((set, get) => {
       const { cooldownMs, sound } = useSortPrefs.getState()
       const now = Date.now()
       const before = get()
+      if (isOpen(before.session) && awaitsLibraryOk(before.session, useApp.getState().libraryId, before.libraryOk)) {
+        set({ error: { kind: 'otherLibrary' }, bumped: before.bumped + 1 })
+        return
+      }
       if (isForward(action) && tooSoon(before.lastPressAt, now, cooldownMs)) {
         set({ error: { kind: 'cooldown' }, bumped: before.bumped + 1 })
         return
@@ -128,6 +139,12 @@ export const useSort = create<SortStore>((set, get) => {
       void pump()
     },
 
+    allowOtherLibrary: () => {
+      const view = get().session
+      if (!isOpen(view)) return
+      set((cur) => ({ libraryOk: crossLibraryKey(view, useApp.getState().libraryId), error: cur.error?.kind === 'otherLibrary' ? null : cur.error }))
+    },
+
     start: async (ids, setup, replace) => {
       try {
         await startSession(startBody(ids, setup, replace))
@@ -135,7 +152,7 @@ export const useSort = create<SortStore>((set, get) => {
         if (error instanceof ApiError && error.status === 409) return 'conflict'
         return { error: (error as Error).message }
       }
-      set({ ...INITIAL_STATE, setupOpen: false, source: null, stamps: [], lastPressAt: null })
+      set({ ...INITIAL_STATE, setupOpen: false, source: null, stamps: [], lastPressAt: null, libraryOk: null })
       await get().load()
       return 'ok'
     },
@@ -147,7 +164,7 @@ export const useSort = create<SortStore>((set, get) => {
         set({ error: { kind: 'failed', reason: (error as Error).message } })
         return false
       }
-      set({ ...INITIAL_STATE, session: 'none', setupOpen: true, stamps: [] })
+      set({ ...INITIAL_STATE, session: 'none', setupOpen: true, stamps: [], libraryOk: null })
       return true
     },
 
