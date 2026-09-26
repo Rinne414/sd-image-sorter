@@ -189,7 +189,7 @@ export const zhCNAi = {
   'ai.log.raw': '原始回复',
   'ai.log.errorText': '错误',
   'ai.log.ms': '{n} 毫秒',
-  'ai.log.tokens': '{n} tokens',
+  'ai.log.tokens': '{n} 个 token',
 
   // the tag panel
   'ai.tag.blacklistOff': '写描述时走数据集的打标流程，「打标时直接丢掉这些标签」这次不生效。',
