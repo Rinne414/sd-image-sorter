@@ -6,12 +6,14 @@ import { readPurity, readPurityDownload } from './purityJob'
 // · install: GET /api/models/download-progress · colors: GET /api/colors/progress
 // · reconnect: GET /api/images/reconnect-missing/progress · scan: GET /api/scan/progress
 // · detect/refine/adjust: censor work over a batch run by this page (features/censor/detectAll.ts).
+// · embed: GET /api/similarity/progress · dupscan: GET /api/bulk-jobs/{id} (the duplicate scan).
 // · smarttag: GET /api/smart-tag/progress (a dataset batch's tag step), read in smartTagJob.ts.
 // · purity/purityget: character purity (CCIP) analysis and its model download, read in purityJob.ts.
 
 /**
  * tags: a bulk tag edit, finished when it is recorded (kept for its undo).
  * detect/refine/adjust: censor detection, SAM3 refining or filters over a batch, run in this page.
+ * embed: building the similarity index (CLIP embeddings). dupscan: the whole-library duplicate scan.
  */
 export type JobKind =
   | 'move'
@@ -27,6 +29,8 @@ export type JobKind =
   | 'detect'
   | 'refine'
   | 'adjust'
+  | 'embed'
+  | 'dupscan'
   | 'smarttag'
   | 'purity'
   | 'purityget'
@@ -73,6 +77,8 @@ export interface ReadContext {
   modelId?: string
   /** scan: the run we started; any other run on the backend is not ours. */
   runId?: number
+  /** dupscan: the bulk job the backend gave us. */
+  bulkJobId?: string
   /** smarttag: our run's job id and its place in the AI queue. */
   smartTag?: SmartTagContext
   purityJobId?: string // purity: the character purity analysis job we started
@@ -154,6 +160,35 @@ function readScan(base: JobProgress, raw: Raw, ctx: ReadContext): JobProgress {
   }
 }
 
+const EMBED_ENDED: Record<string, JobStatus> = { done: 'done', idle: 'done', cancelled: 'cancelled', error: 'error' }
+
+/** The similarity index reports a running flag and a step name. */
+function readEmbed(base: JobProgress, raw: Raw): JobProgress {
+  const step = str(raw.step)
+  const status: JobStatus = raw.running === true ? 'running' : (EMBED_ENDED[step] ?? 'error')
+  return {
+    ...base,
+    status,
+    current: num(raw.processed),
+    total: num(raw.total),
+    succeeded: num(raw.embedded),
+    failedCount: num(raw.errors) + num(raw.failed),
+  }
+}
+
+/** The duplicate scan runs as a bulk job, counted 0-100. */
+function readBulk(base: JobProgress, raw: Raw, ctx: ReadContext): JobProgress {
+  if (ctx.bulkJobId !== undefined && str(raw.job_id) !== ctx.bulkJobId) return { ...base, status: 'error' }
+  const status = str(raw.status)
+  return {
+    ...base,
+    status: status === 'queued' ? 'queued' : base.status,
+    current: num(raw.processed),
+    total: num(raw.total),
+    failedCount: num(raw.error_count),
+  }
+}
+
 function readInstall(base: JobProgress, raw: Raw, ctx: ReadContext): JobProgress {
   const result = obj(raw.prepare_result)
   const downloading = raw.active === true || result.active === true
@@ -228,6 +263,10 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
       const failures = namedErrors(raw.failed)
       return { ...base, succeeded: num(raw.succeeded), failures, failedCount: failures.length }
     }
+    case 'embed':
+      return readEmbed(base, raw)
+    case 'dupscan':
+      return readBulk(base, raw, ctx)
     case 'smarttag':
       return readSmartTag(base, raw, ctx.smartTag)
     case 'purity':

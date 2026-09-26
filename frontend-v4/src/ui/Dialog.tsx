@@ -13,7 +13,8 @@ interface Props {
   testId?: string
   /** Focused when the dialog opens; the first focusable element otherwise. */
   initialFocus?: RefObject<HTMLElement | null>
-  wide?: boolean
+  /** true: room for a table; 'x': room for rows of pictures (a review). */
+  wide?: boolean | 'x'
 }
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select, textarea, [href], [tabindex]:not([tabindex="-1"])'
@@ -55,7 +56,7 @@ export function Dialog({ title, onClose, children, footer, testId, initialFocus,
       <div
         ref={panelRef}
         className={styles.panel}
-        data-wide={wide || undefined}
+        data-wide={wide === 'x' ? 'x' : wide || undefined}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

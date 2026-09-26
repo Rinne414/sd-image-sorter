@@ -115,8 +115,18 @@
   background-repeat: no-repeat;
 }
 
-.tile[data-inspected] .edge {
+.tile[data-inspected] .edge,
+.tile[data-scored] .edge {
   opacity: 1;
+}
+
+/* Likeness to what was searched; near-duplicates in the accent. */
+.score {
+  letter-spacing: 0.04em;
+}
+
+.score[data-near] {
+  color: var(--accent);
 }
 
 .more {

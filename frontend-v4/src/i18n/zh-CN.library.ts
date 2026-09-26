@@ -68,7 +68,7 @@ export const zhCNLibrary = {
   'lib.keys.favorite': '收藏 / 取消收藏',
   'lib.keys.pickLoaded': '挑选已加载的全部图片',
   'lib.keys.invert': '反选当前筛选',
-  'lib.keys.clearPicks': '取消全部挑选',
+  'lib.keys.clearPicks': '取消全部挑选；没有挑选时离开按相似排列',
   'lib.keys.remove': '把选中的图从图库移除…',
   'lib.keys.menu': '打开这张图的菜单',
   'lib.keys.prevNext': '上一张 / 下一张',

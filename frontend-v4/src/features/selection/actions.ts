@@ -16,7 +16,7 @@ import type { SelectionDialog } from './dialogs'
  */
 export type Msg = { key: MessageKey; params?: Params; keyParams?: Record<string, MessageKey> } | { text: string }
 
-export type ActionSection = 'image' | 'mark' | 'work' | 'files' | 'copy' | 'file' | 'danger'
+export type ActionSection = 'image' | 'find' | 'mark' | 'work' | 'files' | 'copy' | 'file' | 'danger'
 
 export interface ImageAction {
   id: string
@@ -37,7 +37,7 @@ export interface ImageAction {
 }
 
 /** Section order in the right-click menu; the danger group always comes last. */
-export const SECTION_ORDER: readonly ActionSection[] = ['image', 'mark', 'work', 'files', 'copy', 'file', 'danger']
+export const SECTION_ORDER: readonly ActionSection[] = ['image', 'find', 'mark', 'work', 'files', 'copy', 'file', 'danger']
 
 export interface ActionTarget {
   ids: number[]
@@ -63,6 +63,7 @@ export interface BulkOps {
   censor: (ids: number[]) => void
   newBatch: (kind: BatchKind, ids: number[], template: BatchTemplate | null) => void
   addToBatch: (batch: BatchSummary, ids: number[]) => void
+  compare: (a: number, b: number) => void
 }
 
 export interface BulkInput {
@@ -141,9 +142,17 @@ export function bulkActions(input: BulkInput): ImageAction[] {
     { id: 'edit-tags', section: 'work', bar: 'more', label: k('sel.editTags'), palette: k('palette.cmd.editTags'), run: dialog('edit-tags') },
     { id: 'export', section: 'files', bar: 'more', label: k('sel.exportData'), palette: k('palette.cmd.exportData'), run: dialog('export') },
     { id: 'move-library', section: 'files', bar: 'more', label: k('sel.moveLibrary'), palette: k('palette.cmd.moveLibrary'), run: dialog('move-library') },
+    ...compareAction(ids, ops),
     { id: 'remove', section: 'danger', bar: 'more', danger: true, hint: 'Del', label: k('sel.remove'), palette: k('palette.cmd.remove'), run: dialog('remove') },
     { id: 'trash', section: 'danger', bar: 'more', danger: true, label: k('sel.trash'), palette: k('palette.cmd.trash'), run: dialog('trash') },
   ]
+}
+
+/** "Compare these two" exists only when exactly two images are the target. */
+function compareAction(ids: number[], ops: BulkOps): ImageAction[] {
+  const [a, b] = ids
+  if (ids.length !== 2 || a === undefined || b === undefined) return []
+  return [{ id: 'compare', section: 'work', bar: 'more', label: k('sim.compare'), palette: k('sim.comparePalette'), run: () => ops.compare(a, b) }]
 }
 
 // ---- actions on the one image under the pointer (or the inspected one) ----
@@ -153,6 +162,8 @@ export interface ImageOps {
   togglePick: (id: number) => void
   copy: (value: string, what: Msg) => void
   openFolder: (id: number) => void
+  /** near: only images that are nearly the same. */
+  findSimilar: (id: number, near: boolean) => void
 }
 
 export interface ImageFacts {
@@ -185,55 +196,53 @@ const GROUP_LABEL: Record<TagGroupId, MessageKey> = {
   unclassified: 'lib.copy.group.unclassified',
 }
 
-function copyByCategory(tags: string[], groups: GroupedTags | null, copy: ImageOps['copy']): ImageAction {
-  const loading: ImageAction = { id: 'copy-group-loading', section: 'copy', label: k('lib.menu.loading'), disabled: true }
-  const byGroup = TAG_GROUPS.map<ImageAction>(({ id }) => {
-    const list = groups?.[id] ?? []
-    return {
-      id: `copy-group-${id}`,
-      section: 'copy',
-      label: k(GROUP_LABEL[id]),
-      palette: { key: 'lib.palette.copyGroup', keyParams: { group: GROUP_LABEL[id] } },
-      hint: String(list.length),
-      disabled: list.length === 0,
-      run: () => copy(list.join(', '), k(GROUP_LABEL[id])),
-    }
-  })
-  return {
-    id: 'copy-by-category',
-    section: 'copy',
-    label: k('lib.copy.byCategory'),
-    children: [
-      { id: 'copy-group-all', section: 'copy', label: k('lib.copy.allTags'), hint: String(tags.length), run: () => copy(tags.join(', '), k('lib.copy.tags')) },
-      ...(groups ? byGroup : [loading]),
-    ],
-  }
+/** The tag groups, under their own heading inside "Copy". */
+function byCategory(tags: string[], groups: GroupedTags | null, copy: ImageOps['copy']): ImageAction[] {
+  const group = k('lib.copy.byCategory')
+  const all: ImageAction = { id: 'copy-group-all', section: 'copy', group, label: k('lib.copy.allTags'), hint: String(tags.length), run: () => copy(tags.join(', '), k('lib.copy.tags')) }
+  if (!groups) return [all, { id: 'copy-group-loading', section: 'copy', group, label: k('lib.menu.loading'), disabled: true }]
+  return [
+    all,
+    ...TAG_GROUPS.map<ImageAction>(({ id }) => {
+      const list = groups[id]
+      return {
+        id: `copy-group-${id}`,
+        section: 'copy',
+        group,
+        label: k(GROUP_LABEL[id]),
+        palette: { key: 'lib.palette.copyGroup', keyParams: { group: GROUP_LABEL[id] } },
+        hint: String(list.length),
+        disabled: list.length === 0,
+        run: () => copy(list.join(', '), k(GROUP_LABEL[id])),
+      }
+    }),
+  ]
 }
 
-function copyActions(facts: ImageFacts | null, groups: GroupedTags | null, ops: ImageOps): ImageAction[] {
-  if (!facts) return [{ id: 'copy-loading', section: 'copy', label: k('lib.menu.loading'), disabled: true }]
-  const out: ImageAction[] = []
-  const copy = (id: string, label: MessageKey, value: string | null) => {
-    if (value) out.push({ id, section: 'copy', label: k(label), run: () => ops.copy(value, k(label)) })
+/** Everything that copies part of the image, as one "Copy" submenu (the menu stays short enough for a laptop). */
+function copyMenu(path: string | null, facts: ImageFacts | null, groups: GroupedTags | null, ops: ImageOps): ImageAction {
+  const children: ImageAction[] = []
+  const copy = (id: string, label: MessageKey, value: string | null, what: MessageKey = label) => {
+    if (value) children.push({ id, section: 'copy', label: k(label), run: () => ops.copy(value, k(what)) })
   }
-  copy('copy-prompt', 'lib.copy.prompt', facts.prompt)
-  copy('copy-negative', 'lib.copy.negative', facts.negative)
-  if (facts.tags.length > 0) {
-    out.push({ id: 'copy-tags', section: 'copy', label: k('lib.copy.tags'), run: () => ops.copy(facts.tags.join(', '), k('lib.copy.tags')) })
-    out.push(copyByCategory(facts.tags, groups, ops.copy))
-  }
-  copy('copy-parameters', 'card.copyAll', facts.parameters)
-  return out
+  if (!facts) children.push({ id: 'copy-loading', section: 'copy', label: k('lib.menu.loading'), disabled: true })
+  copy('copy-prompt', 'lib.copy.prompt', facts?.prompt ?? null)
+  copy('copy-negative', 'lib.copy.negative', facts?.negative ?? null)
+  if (facts?.tags.length) copy('copy-tags', 'lib.copy.tags', facts.tags.join(', '))
+  copy('copy-parameters', 'card.copyAll', facts?.parameters ?? null)
+  copy('copy-path', 'lib.file.copyPath', path, 'lib.file.path')
+  if (facts?.tags.length) children.push(...byCategory(facts.tags, groups, ops.copy))
+  return { id: 'copy', section: 'copy', label: k('card.copy'), children }
 }
 
 export function imageActions({ id, picked, path, facts, groups, ops }: ImageInput): ImageAction[] {
-  const file: ImageAction[] = [{ id: 'open-folder', section: 'file', label: k('lib.file.openFolder'), run: () => ops.openFolder(id) }]
-  if (path) file.push({ id: 'copy-path', section: 'file', label: k('lib.file.copyPath'), run: () => ops.copy(path, k('lib.file.path')) })
   return [
     { id: 'open', section: 'image', hint: 'Enter', label: k('card.openFull'), palette: k('palette.cmd.openFull'), run: () => ops.open(id) },
     { id: 'pick', section: 'image', hint: 'Space', label: k(picked ? 'lib.menu.unpick' : 'lib.menu.pick'), run: () => ops.togglePick(id) },
-    ...copyActions(facts, groups, ops),
-    ...file,
+    { id: 'similar', section: 'find', label: k('sim.find.similar'), palette: k('sim.find.similarPalette'), run: () => ops.findSimilar(id, false) },
+    { id: 'near', section: 'find', label: k('sim.find.near'), palette: k('sim.find.nearPalette'), run: () => ops.findSimilar(id, true) },
+    copyMenu(path, facts, groups, ops),
+    { id: 'open-folder', section: 'file', label: k('lib.file.openFolder'), run: () => ops.openFolder(id) },
   ]
 }
 
@@ -299,7 +308,7 @@ function runsOf(actions: readonly ImageAction[], sections: readonly ActionSectio
 export function cardMenu(target: ActionTarget, bulk: readonly ImageAction[], single: readonly ImageAction[], filename: string): MenuPlan {
   if (!target.picks) return { header: text(filename), groups: runsOf([...single, ...bulk], SECTION_ORDER) }
   const picks = k('lib.menu.picks', { n: target.ids.length })
-  const [first, ...rest] = runsOf(single, ['image', 'copy', 'file'])
+  const [first, ...rest] = runsOf(single, ['image', 'find', 'copy', 'file'])
   const own = first ? [{ heading: k('lib.menu.thisImage'), actions: first.actions }, ...rest] : rest
   const danger = bulk.filter((a) => a.section === 'danger')
   return {

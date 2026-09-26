@@ -1,0 +1,62 @@
+/* Sits between the query bar and the grid while the grid is ranked by likeness. */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 10px 6px 16px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--line);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.bannerMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 14px;
+}
+
+.bannerTitle {
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.bannerCount {
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.bannerNote {
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.bannerError {
+  color: var(--danger);
+  font-size: var(--fs-2);
+}
+
+/* A printed link, as in the library status. */
+.link {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+
+.link:hover {
+  color: var(--text);
+  text-decoration-color: var(--text-2);
+}

@@ -59,7 +59,8 @@
 }
 
 .clearIcon,
-.terse {
+.terse,
+.narrowOnly {
   display: none;
 }
 
@@ -76,5 +77,18 @@
 
   .terse {
     display: inline;
+  }
+
+  /* The bar's Invert is a .btn, which sets its own display: outrank it. */
+  .bar .invert {
+    display: none;
+  }
+
+  /* Invert, moved into More: its own row above the image actions. */
+  .narrowOnly {
+    display: list-item;
+    margin-bottom: 4px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--line);
   }
 }

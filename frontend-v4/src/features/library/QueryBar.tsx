@@ -10,6 +10,9 @@ import { useClickOutside, useLayer } from '../../ui/layers'
 import { Menu } from '../../ui/Menu'
 import styles from './QueryBar.module.css'
 import { FilterPanel } from './FilterPanel'
+import { SemanticInput } from './SemanticInput'
+import { pickImageFile, useImageDrop } from '../similar/imageSearch'
+import { useSimilar } from '../similar/similarStore'
 
 const APPLY_DELAY_MS = 300
 const RATING_NAMES: Record<string, MessageKey> = {
@@ -45,6 +48,8 @@ export function QueryBar({ total, inputRef }: Props) {
   const toggleCard = useApp((s) => s.toggleCard)
   const railOpen = useApp((s) => s.railOpen)
   const toggleRail = useApp((s) => s.toggleRail)
+  const semantic = useSimilar((s) => s.semantic)
+  const drop = useImageDrop()
   const [draft, setDraft] = useState(queryText)
   const [caret, setCaret] = useState(0)
   const [focused, setFocused] = useState(false)
@@ -106,8 +111,16 @@ export function QueryBar({ total, inputRef }: Props) {
 
   const removePart = (part: Part) => setText(withoutToken(parsed.tokens, part.token), true)
 
+  const toggleSemantic = () => {
+    const s = useSimilar.getState()
+    if (s.semantic && s.query?.kind === 'text') s.clear()
+    s.setSemantic(!s.semantic)
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }
+
   return (
-    <div className={styles.bar}>
+    <div className={styles.bar} {...drop.props} data-dropping={drop.over || undefined} data-testid="query-bar">
+      {drop.over && <div className={styles.dropHint}>{t('sim.dropHint')}</div>}
       {!railOpen && (
         <button
           type="button"
@@ -120,82 +133,107 @@ export function QueryBar({ total, inputRef }: Props) {
           <Icon name="right" size={14} />
         </button>
       )}
-      <div className={styles.field}>
-        <span className={styles.glyph} aria-hidden>
-          <Icon name="search" size={15} />
-        </span>
-        <input
-          ref={inputRef}
-          className={styles.input}
-          value={draft}
-          placeholder={t('query.placeholder')}
-          spellCheck={false}
-          autoComplete="off"
-          role="combobox"
-          aria-expanded={suggestOpen}
-          aria-controls="query-suggest"
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
-          onChange={(e) => {
-            setCaret(e.target.selectionStart ?? e.target.value.length)
-            setText(e.target.value, false)
-          }}
-          onKeyDown={(e) => {
-            if (suggestOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-              e.preventDefault()
-              setActive((a) => (e.key === 'ArrowDown' ? Math.min(options.length - 1, a + 1) : Math.max(0, a - 1)))
-              return
-            }
-            if (suggestOpen && (e.key === 'Enter' || e.key === 'Tab')) {
-              const option = options[active]
-              if (option) {
+      {semantic ? (
+        <SemanticInput key="semantic" inputRef={inputRef} />
+      ) : (
+        <div className={styles.field}>
+          <span className={styles.glyph} aria-hidden>
+            <Icon name="search" size={15} />
+          </span>
+          <input
+            ref={inputRef}
+            className={styles.input}
+            value={draft}
+            placeholder={t('query.placeholder')}
+            spellCheck={false}
+            autoComplete="off"
+            role="combobox"
+            aria-expanded={suggestOpen}
+            aria-controls="query-suggest"
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
+            onChange={(e) => {
+              setCaret(e.target.selectionStart ?? e.target.value.length)
+              setText(e.target.value, false)
+            }}
+            onKeyDown={(e) => {
+              if (suggestOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
                 e.preventDefault()
-                accept(option)
+                setActive((a) => (e.key === 'ArrowDown' ? Math.min(options.length - 1, a + 1) : Math.max(0, a - 1)))
                 return
               }
-            }
-            if (e.key === 'Enter') apply(draft, true)
-            if (e.key === 'Escape') {
-              e.stopPropagation()
-              if (draft) setText('', true)
-              else e.currentTarget.blur()
-            }
-          }}
-          aria-label={t('query.placeholder')}
-          data-testid="query-input"
-        />
-        {suggestOpen && (
-          <ul id="query-suggest" className={styles.suggest} role="listbox" data-testid="query-suggest">
-            {options.map((o, i) => (
-              <li key={o.value}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={i === active}
-                  className={styles.suggestRow}
-                  // mousedown, so the input keeps focus and the caret position
-                  onMouseDown={(e) => {
-                    e.preventDefault()
-                    accept(o)
-                  }}
-                  onMouseEnter={() => setActive(i)}
-                >
-                  <span className={styles.suggestValue}>{o.value}</span>
-                  {o.count !== undefined && <span className={`${styles.suggestCount} mono`}>{o.count.toLocaleString()}</span>}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {parsed.parts.length > 0 && (
-          <div className={styles.chips} data-testid="query-chips">
-            {parsed.parts.map((part, i) => (
-              <Chip key={`${part.token}-${i}`} part={part} onRemove={() => removePart(part)} />
-            ))}
-          </div>
-        )}
-      </div>
+              if (suggestOpen && (e.key === 'Enter' || e.key === 'Tab')) {
+                const option = options[active]
+                if (option) {
+                  e.preventDefault()
+                  accept(option)
+                  return
+                }
+              }
+              if (e.key === 'Enter') apply(draft, true)
+              if (e.key === 'Escape') {
+                e.stopPropagation()
+                if (draft) setText('', true)
+                else e.currentTarget.blur()
+              }
+            }}
+            aria-label={t('query.placeholder')}
+            data-testid="query-input"
+          />
+          {suggestOpen && (
+            <ul id="query-suggest" className={styles.suggest} role="listbox" data-testid="query-suggest">
+              {options.map((o, i) => (
+                <li key={o.value}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={i === active}
+                    className={styles.suggestRow}
+                    // mousedown, so the input keeps focus and the caret position
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      accept(o)
+                    }}
+                    onMouseEnter={() => setActive(i)}
+                  >
+                    <span className={styles.suggestValue}>{o.value}</span>
+                    {o.count !== undefined && <span className={`${styles.suggestCount} mono`}>{o.count.toLocaleString()}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {parsed.parts.length > 0 && (
+            <div className={styles.chips} data-testid="query-chips">
+              {parsed.parts.map((part, i) => (
+                <Chip key={`${part.token}-${i}`} part={part} onRemove={() => removePart(part)} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <button
+        type="button"
+        className="btn"
+        aria-pressed={semantic}
+        onClick={toggleSemantic}
+        title={t('sim.semanticTitle')}
+        data-testid="semantic-toggle"
+      >
+        {t('sim.semantic')}
+      </button>
+      <button
+        type="button"
+        className="btn btn-icon"
+        onClick={pickImageFile}
+        title={t('sim.byImageTitle')}
+        aria-label={t('sim.byImage')}
+        data-testid="search-by-image"
+      >
+        <Icon name="image" size={15} />
+      </button>
 
       <FilterPanel text={draft} onChange={(next) => setText(next, true)} />
       <SyntaxHelp onExample={(ex) => setText(draft ? `${draft.trimEnd()} ${ex}` : ex, true)} />

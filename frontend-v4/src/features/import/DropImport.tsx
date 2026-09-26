@@ -17,6 +17,9 @@ const SAMPLE_FILES = 5
 // A view that takes file drops itself (a dataset batch) has claimed them: stand aside.
 const hasFiles = (e: DragEvent) => !fileDropsClaimed() && !!e.dataTransfer && [...e.dataTransfer.types].includes('Files')
 
+/** Over an element that takes file drops itself (data-own-drop, e.g. search by image). */
+const inOwnZone = (e: DragEvent) => e.target instanceof Element && e.target.closest('[data-own-drop]') !== null
+
 function readSample(dir: FileSystemDirectoryEntry): Promise<{ name: string; size: number }[]> {
   return new Promise((resolve) => {
     dir.createReader().readEntries(
@@ -50,6 +53,7 @@ export function DropImport() {
   const t = useT()
   const lang = useLang((s) => s.lang)
   const [over, setOver] = useState(false)
+  const [inZone, setInZone] = useState(false)
   const [files, setFiles] = useState<File[] | null>(null)
   const [busy, setBusy] = useState(false)
   const depth = useRef(0)
@@ -66,13 +70,18 @@ export function DropImport() {
       if (depth.current === 0) setOver(false)
     }
     const overFn = (e: DragEvent) => {
-      if (hasFiles(e)) e.preventDefault()
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      setInZone(inOwnZone(e))
     }
     const drop = (e: DragEvent) => {
       if (!hasFiles(e) || !e.dataTransfer) return
-      e.preventDefault()
       depth.current = 0
       setOver(false)
+      setInZone(false)
+      // A zone that takes the drop itself has handled it: not an import.
+      if (e.defaultPrevented || inOwnZone(e)) return
+      e.preventDefault()
       const items = [...e.dataTransfer.items]
       const dirs = items.map((i) => i.webkitGetAsEntry?.()).filter((en): en is FileSystemDirectoryEntry => !!en && en.isDirectory)
       if (dirs[0]) {
@@ -123,7 +132,7 @@ export function DropImport() {
 
   return (
     <>
-      {over && (
+      {over && !inZone && (
         <div className={styles.overlay} aria-hidden data-testid="drop-overlay">
           <p className={styles.text}>{t('drop.hint')}</p>
         </div>

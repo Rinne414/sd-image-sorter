@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { api, unwrap } from '../api/client'
 import { useT, type MessageKey } from '../i18n'
 import { folderNameProblem, joinFolder, tailOfPath, type FolderNameProblem } from '../lib/paths'
@@ -78,8 +78,11 @@ export function FolderChooser({
 
   // Where the user went (or started typing) beats where the dialog meant to open:
   // the opening folder can take a second to list, and its answer must not
-  // overwrite a path the user is typing.
+  // overwrite a path the user is typing. When it lands while the path box has
+  // the focus it arrives selected, like an address bar, so the next key
+  // replaces it instead of being glued onto its end.
   const userMoved = useRef(false)
+  const selectLanded = useRef(false)
 
   const browse = useCallback(async (path: string, opening = false): Promise<boolean> => {
     const req = ++request.current
@@ -90,6 +93,7 @@ export function FolderChooser({
       if (req !== request.current || (opening && userMoved.current)) return true
       setListing(res)
       setTyped(res.current)
+      if (opening && document.activeElement === pathRef.current) selectLanded.current = true
       setChild(null)
       setNaming(false)
       return true
@@ -105,6 +109,12 @@ export function FolderChooser({
     userMoved.current = true
     void browse(path)
   }
+
+  useLayoutEffect(() => {
+    if (!selectLanded.current) return
+    selectLanded.current = false
+    if (document.activeElement === pathRef.current) pathRef.current?.select()
+  }, [typed])
 
   useEffect(() => {
     if (userMoved.current) return

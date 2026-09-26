@@ -10,6 +10,8 @@ import { useBatches, useBatchTemplates } from '../batch/batchApi'
 import { askNewBatch } from '../batch/dialogStore'
 import { quickCensor } from '../censor/quickCensor'
 import { copyAndSay, openImageFolder } from '../library/fileActions'
+import { useSimilarDialogs } from '../similar/dialogs'
+import { showLikeImage } from '../similar/similarStore'
 import { bulkActions, imageActions, type ImageAction, type ImageFacts } from './actions'
 import { useSelectionDialog } from './dialogs'
 
@@ -40,6 +42,7 @@ export function useBulkActions(ids: number[]): ImageAction[] {
           censor: (list) => void quickCensor(list),
           newBatch: (kind, list, template) => askNewBatch(kind, list, 'selection', template),
           addToBatch: (batch, list) => void addPicksTo(batch, list),
+          compare: (a, b) => useSimilarDialogs.getState().openCompare(a, b),
         },
       }),
     [ids, favorited, batches.data, templates.data, rate, favorite],
@@ -80,6 +83,7 @@ export function useImageActions(id: number | null): ImageAction[] {
     return groupTags(facts.tags, (tag) => map.get(tagKey(tag)))
   }, [facts, categories.data])
   const path = detail.data?.image.path ?? null
+  const name = detail.data?.image.filename ?? ''
   return useMemo(() => {
     if (id === null) return []
     return imageActions({
@@ -93,7 +97,8 @@ export function useImageActions(id: number | null): ImageAction[] {
         togglePick: (x) => useApp.getState().togglePick(x),
         copy: (value, what) => void copyAndSay(value, what),
         openFolder: (x) => void openImageFolder(x),
+        findSimilar: (x, near) => showLikeImage(x, name || `#${x}`, near),
       },
     })
-  }, [id, picked, path, facts, groups])
+  }, [id, picked, path, name, facts, groups])
 }

@@ -15,6 +15,7 @@ import { Icon } from '../../ui/Icon'
 import { TagInput } from '../../ui/TagInput'
 import { addTags, removeTag, reparse, saveCaptions } from './cardEdits'
 import { copyAndSay, openImageFolder } from '../library/fileActions'
+import { showLikeImage } from '../similar/similarStore'
 
 const TAGS_SHOWN = 24
 
@@ -191,6 +192,11 @@ function CardBody({ id, variant }: { id: number; variant: 'panel' | 'overlay' })
         {variant === 'panel' && (
           <button type="button" className="btn btn-primary" onClick={() => openLightbox(id)}>
             {t('card.openFull')} <kbd>Enter</kbd>
+          </button>
+        )}
+        {variant === 'panel' && image && (
+          <button type="button" className="btn" onClick={() => showLikeImage(id, image.filename, false)} data-testid="card-find-similar">
+            {t('sim.find.similar')}
           </button>
         )}
         {image && gen && (

@@ -6,13 +6,15 @@ import { useApp } from '../../state/store'
 import { layerCount } from '../../ui/layers'
 import { useSelectionDialog } from '../selection/dialogs'
 import { invertPicks } from '../selection/invert'
+import { useSimilar } from '../similar/similarStore'
 import { showCardMenuAtTile, useCardMenu } from './CardMenu'
 import type { GalleryHandle } from './Gallery'
 import { libraryKey, type LibraryKey } from './keys'
 
 interface Deps {
   images: ImageSummary[]
-  params: ImageQueryParams
+  /** null while the grid is ranked by likeness: there is no filter to invert within. */
+  params: ImageQueryParams | null
   gallery: RefObject<GalleryHandle | null>
   search: RefObject<HTMLInputElement | null>
   rate: (id: number, stars: number) => void
@@ -34,8 +36,9 @@ function run(action: LibraryKey, d: Deps): boolean {
       if (id !== null) s.togglePick(id)
       return true
     case 'escape':
-      if (!s.selection.length) return false
-      s.clearSelection()
+      if (s.selection.length) s.clearSelection()
+      else if (useSimilar.getState().query) useSimilar.getState().clear()
+      else return false
       return true
     case 'search':
       d.search.current?.focus()
@@ -51,6 +54,7 @@ function run(action: LibraryKey, d: Deps): boolean {
       s.setSelection(d.images.map((img) => img.id))
       return true
     case 'invert':
+      if (!d.params) return false
       void invertPicks(d.params)
       return true
     case 'rate':

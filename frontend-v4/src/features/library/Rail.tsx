@@ -15,6 +15,7 @@ import styles from './Rail.module.css'
 import { Icon } from '../../ui/Icon'
 import { useClickOutside, useLayer } from '../../ui/layers'
 import { useRailSections, type RailSectionId } from './railSections'
+import { useSimilarStatus } from '../similar/status'
 
 interface Props {
   /** Prompt text woven faintly behind the library name. */
@@ -258,6 +259,7 @@ function Status() {
   const colors = useColorsMissing()
   const showFor = useSelectionDialog((s) => s.showFor)
   const analysing = useJobs((s) => s.jobs.some((j) => j.kind === 'colors' && !isFinished(j.progress.status)))
+  const similar = useSimilarStatus()
   if (!health.data) return null
   const c = health.data.issue_counts
   const untagged = c.untagged ?? 0
@@ -272,6 +274,7 @@ function Status() {
       quiet: true,
       action: { label: analysing ? t('status.analysing') : t('status.analyse'), run: () => void startColorAnalysis(), busy: analysing },
     },
+    ...similar,
   ]
   const shown = rows.filter((r) => r.n > 0)
   return (

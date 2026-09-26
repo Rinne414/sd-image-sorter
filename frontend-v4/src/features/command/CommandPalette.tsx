@@ -17,6 +17,11 @@ import { paletteText, runnable, type ImageAction } from '../selection/actions'
 import { useBulkActions, useImageActions } from '../selection/actionOps'
 import { useSelectionDialog } from '../selection/dialogs'
 import { invertPicks } from '../selection/invert'
+import { withClip } from '../similar/clip'
+import { useSimilarDialogs } from '../similar/dialogs'
+import { pickImageFile } from '../similar/imageSearch'
+import { startIndexing } from '../similar/similarApi'
+import { useSimilar } from '../similar/similarStore'
 import styles from './CommandPalette.module.css'
 
 interface Command {
@@ -46,6 +51,14 @@ function fromAction(action: ImageAction, group: MessageKey, prefix: string, lang
     run: () => action.run?.(),
     ...(action.hint ? { hint: action.hint } : {}),
   }
+}
+
+/** Turn the query bar to "by meaning" and put the caret in it. */
+function searchByMeaning(): void {
+  const s = useApp.getState()
+  if (s.page !== 'library') s.setPage('library')
+  useSimilar.getState().setSemantic(true)
+  requestAnimationFrame(() => document.querySelector<HTMLInputElement>('[data-testid="semantic-input"]')?.focus())
 }
 
 export function CommandPalette() {
@@ -108,6 +121,10 @@ function Palette() {
       list.push(mk(`lib-${lib.id}`, 'palette.group.library', 'palette.cmd.switchTo', () => s.setLibrary(lib.id), undefined, { name }))
     }
     list.push(mk('random', 'palette.group.library', 'lib.palette.random', () => void openRandom()))
+    list.push(mk('semantic', 'palette.group.library', 'sim.palette.semantic', () => searchByMeaning()))
+    list.push(mk('by-image', 'palette.group.library', 'sim.palette.byImage', pickImageFile))
+    list.push(mk('duplicates', 'palette.group.library', 'sim.palette.duplicates', () => useSimilarDialogs.getState().setDuplicates(true)))
+    list.push(mk('build-index', 'palette.group.library', 'sim.palette.buildIndex', () => void withClip(() => void startIndexing())))
     if (s.page === 'library') list.push(mk('invert', 'palette.group.library', 'lib.palette.invert', () => void invertPicks(currentLibraryParams()), 'Ctrl+I'))
     list.push(mk('import', 'palette.group.library', 'palette.cmd.import', () => useSelectionDialog.getState().showFor('import', null, 1)))
     list.push(mk('libraries', 'palette.group.library', 'palette.cmd.libraries', () => useSelectionDialog.getState().showFor('libraries', null, 1)))

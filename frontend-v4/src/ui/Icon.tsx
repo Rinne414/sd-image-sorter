@@ -19,6 +19,7 @@ export type IconName =
   | 'undo'
   | 'redo'
   | 'fit'
+  | 'image'
 
 const STAR =
   '8,1.6 9.6,5.8 14.2,6 10.6,8.9 11.8,13.3 8,10.8 4.2,13.3 5.4,8.9 1.8,6 6.4,5.8'
@@ -170,6 +171,15 @@ export function Icon({ name, size = 16, filled = false, className, title }: Prop
         <svg {...common}>
           {t}
           <path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" />
+        </svg>
+      )
+    case 'image':
+      return (
+        <svg {...common}>
+          {t}
+          <rect x="2" y="2.8" width="12" height="10.4" rx="1" />
+          <circle cx="10.6" cy="5.9" r="1.1" />
+          <path d="m2.4 11.4 3.7-3.9 2.6 2.7 1.6-1.6 3.3 3.2" />
         </svg>
       )
   }

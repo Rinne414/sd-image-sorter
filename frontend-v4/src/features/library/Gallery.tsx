@@ -7,6 +7,7 @@ import { generatorCode, isTypingTarget } from '../../lib/format'
 import { useApp, type Layout, type TileSize } from '../../state/store'
 import { Icon } from '../../ui/Icon'
 import { PickMark } from '../../ui/PickMark'
+import { NEAR_DUPLICATE, percent } from '../similar/ranking'
 import { useCardMenu } from './CardMenu'
 import { dragPayload, INTERNAL_DRAG } from './drag'
 import styles from './Gallery.module.css'
@@ -28,6 +29,8 @@ interface Props {
   onReady?: (handle: GalleryHandle) => void
   /** Old results still on screen while new ones load: dimmed, not clickable. */
   stale?: boolean
+  /** Likeness per image, shown on each tile while the grid is ranked by it. */
+  scores?: ReadonlyMap<number, number> | undefined
 }
 
 function useElementWidth(ref: React.RefObject<HTMLElement | null>): number {
@@ -67,7 +70,7 @@ function useRefuseCardDropsInFields(): void {
   }, [])
 }
 
-export function Gallery({ images, hasMore, isFetchingMore, fetchMore, favorites, onFavorite, onReady, stale }: Props) {
+export function Gallery({ images, hasMore, isFetchingMore, fetchMore, favorites, onFavorite, onReady, stale, scores }: Props) {
   const t = useT()
   const scrollRef = useRef<HTMLDivElement>(null)
   const width = useElementWidth(scrollRef)
@@ -225,6 +228,7 @@ export function Gallery({ images, hasMore, isFetchingMore, fetchMore, favorites,
               inspected={img.id === inspectedId}
               pick={pickOrder.get(img.id) ?? 0}
               favorite={favorites.has(img.id)}
+              score={scores?.get(img.id)}
               onClick={onTileClick}
               onDouble={onTileDouble}
               onMenu={onTileMenu}
@@ -249,6 +253,7 @@ interface TileProps {
   inspected: boolean
   pick: number
   favorite: boolean
+  score: number | undefined
   onClick: (e: MouseEvent, id: number) => void
   onDouble: (id: number) => void
   onMenu: (e: MouseEvent, id: number) => void
@@ -264,6 +269,7 @@ const Tile = memo(function Tile(p: TileProps) {
       className={styles.tile}
       data-inspected={p.inspected || undefined}
       data-picked={p.pick > 0 || undefined}
+      data-scored={p.score !== undefined || undefined}
       data-testid="tile"
       data-id={p.img.id}
       style={{ transform: `translate(${p.left}px, ${p.top}px)`, width: p.width, height: p.height }}
@@ -284,7 +290,13 @@ const Tile = memo(function Tile(p: TileProps) {
         draggable={false}
       />
       <div className={styles.edge}>
-        <span className="mono">{generatorCode(p.img.generator)}</span>
+        {p.score !== undefined ? (
+          <span className={`${styles.score} mono`} data-near={p.score >= NEAR_DUPLICATE || undefined} data-testid="tile-score">
+            {percent(p.score)}
+          </span>
+        ) : (
+          <span className="mono">{generatorCode(p.img.generator)}</span>
+        )}
         {stars > 0 && (
           <span className={styles.stars}>
             <Icon name="star" filled size={11} />

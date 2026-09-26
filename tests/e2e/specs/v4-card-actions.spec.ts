@@ -29,8 +29,8 @@ const BULK_PREFIX = 'v4cactbulk-'
 const BULK_COUNT = 300
 const BULK_DIR = 'v4-cact-bulk'
 
-/** Every action the selection bar offers for picks: its buttons and its More menu. */
-const BAR_ACTIONS = ['batch', 'rate', 'favorite', 'tag', 'move', 'censor', 'copy', 'edit-tags', 'export', 'move-library', 'remove', 'trash']
+/** Every action the selection bar offers for two picks: its buttons and its More menu. */
+const BAR_ACTIONS = ['batch', 'rate', 'favorite', 'tag', 'move', 'censor', 'copy', 'edit-tags', 'export', 'move-library', 'compare', 'remove', 'trash']
 
 test.beforeAll(() => {
   seedImages({ prefix: PREFIX, token: TOKEN, count: COUNT, dir: DIR })
@@ -48,10 +48,13 @@ async function pathOf(page: Page, id: string): Promise<string> {
   return page.evaluate(async (x) => (await (await fetch(`/api/images/${x}`)).json()).image.path, id)
 }
 
-/**
- * Click and wait for the saved favourite. (The ids endpoint cannot be read back here:
- * it resolves favourites through image_path_identities, which the seed does not write.)
- */
+/** The library's favourites as the backend reads them back. */
+async function favoriteIds(page: Page): Promise<number[]> {
+  const res = await page.request.get('/api/collections/favorites/ids', { headers: { 'X-SD-Library-Id': 'main' } })
+  return ((await res.json()) as { image_ids: number[] }).image_ids
+}
+
+/** Click and wait for the saved favourite. */
 async function clickAndSave(page: Page, click: () => Promise<void>): Promise<{ sent: unknown; saved: unknown }> {
   const response = page.waitForResponse((r) => r.url().endsWith('/api/collections/favorites') && r.request().method() === 'POST')
   await click()
@@ -68,7 +71,22 @@ async function barActions(page: Page): Promise<string[]> {
   await bar.getByRole('button', { name: 'More' }).click()
   ids.push(...(await page.getByRole('menu').locator('[data-item]').evaluateAll((els) => els.map((el) => el.getAttribute('data-item') ?? ''))))
   await page.keyboard.press('Escape')
-  return ids
+  // Invert is about the picks, not the images: the bar has it, the card menu does not
+  return ids.filter((id) => id !== 'invert')
+}
+
+/** Invert sits on the bar when it is wide, at the top of More when it is narrow; exactly one shows. */
+async function expectInvertReachable(page: Page) {
+  const bar = page.getByTestId('selection-bar')
+  if (await bar.getByTestId('invert-picks').isVisible()) {
+    await expect(bar.getByTestId('invert-picks')).toBeInViewport({ ratio: 1 })
+    await bar.getByRole('button', { name: 'More' }).click()
+    await expect(page.getByRole('menu').locator('[data-item="invert"]')).toBeHidden()
+  } else {
+    await bar.getByRole('button', { name: 'More' }).click()
+    await expect(page.getByRole('menu').locator('[data-item="invert"]')).toBeInViewport({ ratio: 1 })
+  }
+  await page.keyboard.press('Escape')
 }
 
 /** The right-click menu's own entries (not its submenus), in order. */
@@ -98,7 +116,7 @@ for (const viewport of VIEWPORTS) {
       await tiles.nth(0).click({ modifiers: ['Control'] })
       await tiles.nth(1).click({ modifiers: ['Control'] })
       const bar = page.getByTestId('selection-bar')
-      await expect(bar.getByTestId('invert-picks')).toBeInViewport({ ratio: 1 })
+      await expectInvertReachable(page)
       expect(await bar.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0)
 
       // right-click near the bottom-right corner: the menu flips to stay on screen
@@ -207,7 +225,9 @@ test('copy path and open the folder from the menu, the card and the big image', 
   const file = await pathOf(page, id)
 
   await tile.click({ button: 'right' })
-  await page.getByTestId('card-menu').getByRole('menuitem', { name: 'Copy path' }).click()
+  // the copy entries sit in one "Copy" submenu
+  await page.getByTestId('card-menu').getByRole('menuitem', { name: 'Copy', exact: true }).click()
+  await page.locator('[data-ctx-sub]').getByRole('menuitem', { name: 'Copy path' }).click()
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(file)
   await expect(page.getByText(`Copied: Path`)).toBeVisible()
 
@@ -319,6 +339,7 @@ test('the tile heart: offered on hover, stays while favourited, never opens the 
   const on = await clickAndSave(page, () => heart.click())
   expect(on).toEqual({ sent: { image_id: id, favorited: true }, saved: { favorited: true } })
   await expect(heart).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(() => favoriteIds(page)).toContain(id)
   // the click did not inspect or open the tile
   await expect(tile).not.toHaveAttribute('data-inspected', 'true')
   await expect(page.getByTestId('lightbox')).toHaveCount(0)
@@ -329,6 +350,7 @@ test('the tile heart: offered on hover, stays while favourited, never opens the 
   const off = await clickAndSave(page, () => heart.click())
   expect(off).toEqual({ sent: { image_id: id, favorited: false }, saved: { favorited: false } })
   await expect(heart).toHaveAttribute('aria-pressed', 'false')
+  await expect.poll(() => favoriteIds(page)).not.toContain(id)
 })
 
 test('invert within the filter: the bar button, Ctrl+I and Ctrl K', async ({ page }) => {
@@ -352,6 +374,14 @@ test('invert within the filter: the bar button, Ctrl+I and Ctrl K', async ({ pag
   await page.keyboard.type('invert')
   await page.keyboard.press('Enter')
   await expect(bar).toContainText(`${COUNT - 2} picked`)
+
+  // on a narrow bar (1366 with both side columns) it sits at the top of More
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await expect(bar.getByTestId('invert-picks')).toBeHidden()
+  await bar.getByRole('button', { name: 'More' }).click()
+  await page.getByRole('menu').locator('[data-item="invert"]').click()
+  await expect(bar).toContainText('2 picked')
+  expect(await bar.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0)
 })
 
 test('random: opens an image beyond the loaded page and steps on through the result', async ({ page }) => {
@@ -405,6 +435,8 @@ test('the rail: a collapse button, folding sections, both remembered after a rel
   await page.setViewportSize({ width: 1366, height: 768 })
   await openLibrary(page, TOKEN, COUNT)
   const rail = page.getByRole('navigation', { name: 'Library' })
+  // the seed made the server drop its cached generator list, so the seeded source shows
+  await expect(rail.getByRole('button', { name: /^NovelAI/ })).toBeVisible()
 
   // fold Folders: its list goes, and stays gone after a reload
   const folders = rail.getByRole('button', { name: 'Folders' })

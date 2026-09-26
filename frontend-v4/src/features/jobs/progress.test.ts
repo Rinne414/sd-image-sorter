@@ -186,6 +186,37 @@ describe('readProgress', () => {
     expect(readProgress('detect', null).status).toBe('error')
   })
 
+  test('similarity index: a running flag and a step, not a status word', () => {
+    const running = readProgress('embed', { running: true, step: 'embedding', total: 40, processed: 12, embedded: 11, errors: 1, current_item: 'a.png' })
+    expect(running).toMatchObject({ status: 'running', current: 12, total: 40, succeeded: 11, failedCount: 1, currentItem: 'a.png' })
+    // loading the model is part of the run
+    expect(readProgress('embed', { running: true, step: 'loading_model', total: 40 }).status).toBe('running')
+    const done = readProgress('embed', { running: false, step: 'done', total: 40, processed: 40, embedded: 38, errors: 0, failed: 2 })
+    expect(done).toMatchObject({ status: 'done', current: 40, succeeded: 38, failedCount: 2 })
+    expect(readProgress('embed', { running: false, step: 'cancelled', total: 40, processed: 9 }).status).toBe('cancelled')
+    expect(readProgress('embed', { running: false, step: 'error', message: 'CLIP could not load' })).toMatchObject({
+      status: 'error',
+      message: 'CLIP could not load',
+    })
+    // nothing was waiting: done, with nothing to do
+    expect(readProgress('embed', { running: false, step: 'idle', total: 0 })).toMatchObject({ status: 'done', total: 0 })
+    expect(readProgress('embed', null).status).toBe('error')
+  })
+
+  test('duplicate scan: the bulk job for our id, in percent', () => {
+    const ctx = { bulkJobId: 'j1' }
+    const running = readProgress('dupscan', { job_id: 'j1', status: 'running', processed: 40, total: 100, message: 'Searching neighbors' }, ctx)
+    expect(running).toMatchObject({ status: 'running', current: 40, total: 100, message: 'Searching neighbors' })
+    expect(readProgress('dupscan', { job_id: 'j1', status: 'queued', processed: 0, total: 100 }, ctx).status).toBe('queued')
+    const done = readProgress('dupscan', { job_id: 'j1', status: 'done', processed: 100, total: 100, result: {} }, ctx)
+    expect(done).toMatchObject({ status: 'done', current: 100 })
+    const failed = readProgress('dupscan', { job_id: 'j1', status: 'error', message: 'no embeddings', error_count: 1 }, ctx)
+    expect(failed).toMatchObject({ status: 'error', message: 'no embeddings' })
+    expect(readProgress('dupscan', { job_id: 'j1', status: 'cancelled' }, ctx).status).toBe('cancelled')
+    // someone else's job is not ours
+    expect(readProgress('dupscan', { job_id: 'other', status: 'running' }, ctx).status).toBe('error')
+  })
+
   test('unknown or reset states never look like success', () => {
     expect(readProgress('move', { status: 'idle' }).status).toBe('idle')
     expect(readProgress('move', { status: 'exploded' }).status).toBe('error')

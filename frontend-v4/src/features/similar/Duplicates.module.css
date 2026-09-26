@@ -1,0 +1,173 @@
+.muted {
+  margin: 8px 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.error {
+  margin: 8px 0;
+  color: var(--danger);
+  font-size: var(--fs-2);
+}
+
+.coverage {
+  margin: 0 0 8px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.link {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+
+.link:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.link:disabled {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+/* How alike counts, and the scan button, on one line. */
+.scan {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.scan > p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.thresholds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: var(--fs-2);
+  color: var(--text-2);
+}
+
+.thresholds legend {
+  float: left;
+  margin-right: 12px;
+  color: var(--muted);
+}
+
+.thresholds label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.applyAll {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 12px;
+}
+
+.groups {
+  display: grid;
+  gap: 14px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.group {
+  padding: 10px 0 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.members {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+/* One image of a group; the kept one carries the accent edge. */
+.member {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.member[data-kept] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.member img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  background: var(--stage);
+}
+
+.keep {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text);
+  font-size: var(--fs-2);
+}
+
+.badge {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: var(--fs-1);
+}
+
+.facts {
+  display: flex;
+  gap: 8px;
+  color: var(--muted);
+  font-size: var(--fs-1);
+}
+
+.stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--marker);
+}
+
+.filename {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+  font-size: var(--fs-1);
+}

@@ -9,6 +9,8 @@ import { SelectionDialogs } from '../features/selection/SelectionDialogs'
 import { appKey } from '../features/library/keys'
 import { LibraryPage } from '../features/library/LibraryPage'
 import { ShortcutSheet } from '../features/library/ShortcutSheet'
+import { CompareDialog } from '../features/similar/CompareDialog'
+import { DuplicatesDialog } from '../features/similar/DuplicatesDialog'
 import { useLang } from '../i18n'
 import { useApp } from '../state/store'
 import styles from './App.module.css'
@@ -48,6 +50,8 @@ export function App() {
       </div>
       <CommandPalette />
       <ShortcutSheet />
+      <CompareDialog />
+      <DuplicatesDialog />
       <JobsRunner />
       <DropImport />
       <SelectionDialogs />

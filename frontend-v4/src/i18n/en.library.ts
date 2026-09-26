@@ -67,7 +67,7 @@ export const enLibrary: Record<keyof typeof zhCNLibrary, string> = {
   'lib.keys.favorite': 'Favorite / unfavorite',
   'lib.keys.pickLoaded': 'Pick every loaded image',
   'lib.keys.invert': 'Invert the picks in this filter',
-  'lib.keys.clearPicks': 'Clear the picks',
+  'lib.keys.clearPicks': 'Clear the picks; with none, leave the ranking by likeness',
   'lib.keys.remove': 'Remove the picks from the library…',
   'lib.keys.menu': 'Open this image\'s menu',
   'lib.keys.prevNext': 'Previous / next image',

@@ -49,7 +49,7 @@ export const useJobs = create<JobsState>((set, get) => ({
   clearFinished: () => set({ jobs: get().jobs.filter((j) => !isFinished(j.progress.status)) }),
 }))
 
-type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors' | 'reconnect' | 'scan' | 'detect'
+type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors' | 'reconnect' | 'scan' | 'detect' | 'embed' | 'dupscan'
   | 'smarttag'
   | 'purity' | 'purityget'
 
@@ -73,7 +73,8 @@ export function setDetectSource(source: LocalJobSource): void {
 }
 
 interface Driver {
-  poll: () => Promise<unknown>
+  /** `job` is absent when looking for a job that was already running. */
+  poll: (job?: Job) => Promise<unknown>
   /** null: the backend cannot stop this kind of job. */
   cancel: ((job: Job) => Promise<unknown>) | null
   /** After the job ends (an import clears its finished run so the next one may start). */
@@ -126,6 +127,19 @@ const DRIVERS: Record<Queue, Driver> = {
   detect: {
     poll: async () => detectSource?.snapshot() ?? null,
     cancel: async () => detectSource?.cancel(),
+  },
+  embed: {
+    poll: async () => unwrap(await api.GET('/api/similarity/progress')),
+    cancel: async () => unwrap(await api.POST('/api/similarity/cancel')),
+  },
+  // The duplicate scan is a bulk job; its id comes back when it starts.
+  dupscan: {
+    poll: async (job) => {
+      const id = job?.ctx.bulkJobId ?? ''
+      return unwrap(await api.GET('/api/bulk-jobs/{job_id}', { params: { path: { job_id: id } } }))
+    },
+    cancel: async (job) =>
+      unwrap(await api.POST('/api/bulk-jobs/{job_id}/cancel', { params: { path: { job_id: job.ctx.bulkJobId ?? '' } } })),
   },
   smarttag: driveSmartTag,
   purity: drivePurity,
@@ -208,7 +222,7 @@ let lastLiveRefresh = 0
 async function pollOne(job: Job): Promise<void> {
   try {
     const driver = DRIVERS[queueOf(job.kind)]
-    const progress = readProgress(job.kind, await driver.poll(), job.ctx)
+    const progress = readProgress(job.kind, await driver.poll(job), job.ctx)
     patchJob(job.id, { progress, pollErrors: 0 })
     if (driver.liveKeys && progress.succeeded > job.progress.succeeded && Date.now() - lastLiveRefresh > LIVE_REFRESH_MS) {
       lastLiveRefresh = Date.now()
@@ -280,6 +294,8 @@ export async function adoptRunningJobs(): Promise<void> {
       const ctx = { runId: Number(raw.run_id ?? 0) }
       return { kind: 'scan', progress: readProgress('scan', raw, ctx), ctx }
     }),
+    adopt('embed', (raw) => (raw.running === true ? { kind: 'embed', progress: readProgress('embed', raw) } : null)),
+    adoptDuplicateScan(),
     adopt('install', (raw) => {
       const result = (raw.prepare_result ?? {}) as Record<string, unknown>
       if (result.active !== true || typeof result.model_id !== 'string') return null
@@ -289,9 +305,21 @@ export async function adoptRunningJobs(): Promise<void> {
   ])
 }
 
+/** A duplicate scan the backend is still running (it keeps its bulk job id for us). */
+async function adoptDuplicateScan(): Promise<void> {
+  try {
+    const raw = unwrap<{ active?: boolean; job_id?: string | null; job?: unknown }>(await api.GET('/api/duplicates/scan-status'))
+    if (!raw.active || !raw.job_id || isQueueBusy('dupscan')) return
+    const ctx = { bulkJobId: raw.job_id }
+    addJob({ kind: 'dupscan', progress: readProgress('dupscan', raw.job, ctx), ctx, adopted: true })
+  } catch {
+    // the app is still starting or unreachable: nothing to adopt
+  }
+}
+
 // What each job changes in the library. Copies are not indexed, so they change
 // nothing; removed or trashed images are not re-read (they are gone).
-const GONE_KEYS = ['images', 'folders', 'generators', 'image-count', 'library-health', 'missing-summary', 'favorites', 'libraries']
+const GONE_KEYS = ['images', 'folders', 'generators', 'image-count', 'library-health', 'missing-summary', 'favorites', 'libraries', 'duplicates', 'similar', 'similarity-stats']
 const REFRESH_KEYS: Record<JobKind, string[]> = {
   move: ['images', 'image', 'folders', 'image-count', 'library-health', 'missing-summary'],
   copy: [],
@@ -307,6 +335,8 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   detect: [],
   refine: [],
   adjust: [],
+  embed: ['similarity-stats', 'similar'],
+  dupscan: ['duplicates'],
   smarttag: ['images', 'image', 'suggest', 'image-count', 'library-health', 'batch-project', 'batch-heads', 'dataset-preview'],
   purity: [],
   purityget: ['purity-status'],
@@ -372,6 +402,8 @@ const RUNNING: Record<JobKind, MessageKey> = {
   detect: 'jobs.running.detect',
   refine: 'jobs.running.refine',
   adjust: 'jobs.running.adjust',
+  embed: 'sim.job.running.embed',
+  dupscan: 'sim.job.running.dupscan',
   smarttag: 'dataset.job.running',
   purity: 'dataset.check.purity.running',
   purityget: 'dataset.check.purity.downloading',
@@ -391,6 +423,8 @@ const DONE: Record<JobKind, MessageKey> = {
   detect: 'jobs.done.detect',
   refine: 'jobs.done.refine',
   adjust: 'jobs.done.adjust',
+  embed: 'sim.job.done.embed',
+  dupscan: 'sim.job.done.dupscan',
   smarttag: 'dataset.job.done',
   purity: 'dataset.check.purity.done',
   purityget: 'dataset.check.purity.downloaded',

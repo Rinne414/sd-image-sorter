@@ -14,6 +14,8 @@ import { expect, type Page } from '@playwright/test'
 export const repoRoot = path.resolve(__dirname, '..', '..', '..')
 export const tmpRoot = path.join(repoRoot, '.tmp')
 export const dbPath = process.env.SD_IMAGE_SORTER_DB_PATH || path.join(repoRoot, 'data', 'images.db')
+/** The backend under test (same rule as playwright.config.ts). */
+const serverBase = process.env.BASE_URL || `http://127.0.0.1:${process.env.PW_WEB_SERVER_PORT || process.env.SD_IMAGE_SORTER_PORT || '19087'}`
 
 export const VIEWPORTS = [
   { width: 1366, height: 768 },
@@ -44,12 +46,19 @@ export interface SeedSpec {
   dir: string
 }
 
-/** Write `count` small PNGs and their rows. Minutes-apart times keep "newest" order stable. */
+/**
+ * Write `count` small PNGs and their rows. Minutes-apart times keep "newest" order stable.
+ * Each row gets its path identity like a real import (favourites resolve through it on
+ * Windows). The server caches library facets (the generator list) for a minute; a
+ * throwaway row removed through its own API makes it drop them, so the rail sees the seed.
+ */
 export function seedImages(spec: SeedSpec): void {
   runBackendScript(`
-import json, shutil, sqlite3
+import json, shutil, sqlite3, sys, urllib.request
 from pathlib import Path
 from PIL import Image
+sys.path.insert(0, str(Path(${JSON.stringify(repoRoot)}) / "backend"))
+from utils.source_paths import indexed_image_path_casefold
 
 root = Path(${JSON.stringify(tmpRoot)}) / ${JSON.stringify(spec.dir)}
 shutil.rmtree(root, ignore_errors=True)
@@ -78,9 +87,31 @@ with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
              path.stat().st_mtime_ns, f"-{i} minutes", f"-{i} minutes"),
         )
         image_id = cur.lastrowid
+        cur.execute(
+            "INSERT INTO image_path_identities (image_id, path_key) VALUES (?, ?) "
+            "ON CONFLICT(image_id) DO UPDATE SET path_key = excluded.path_key",
+            (image_id, indexed_image_path_casefold(str(path))),
+        )
         for word in (token, "1girl", "silver hair", "smile"):
             cur.execute("INSERT OR IGNORE INTO image_prompt_tokens (image_id, token) VALUES (?, ?)", (image_id, word))
+    sentinel_name = f"{prefix}cache-sentinel.png"
+    cur.execute(
+        "INSERT INTO images (path, filename, generator, prompt, is_readable, metadata_status, created_at) "
+        "VALUES (?, ?, 'nai', '', 1, 'complete', datetime('now'))",
+        (str(root / sentinel_name), sentinel_name),
+    )
+    sentinel = cur.lastrowid
     conn.commit()
+request = urllib.request.Request(
+    ${JSON.stringify(serverBase)} + "/api/images/remove-selected",
+    data=json.dumps({"image_ids": [sentinel], "background": False}).encode(),
+    headers={"Content-Type": "application/json", "X-SD-Library-Id": "main"},
+    method="POST",
+)
+try:
+    urllib.request.urlopen(request, timeout=15).read()
+except Exception as exc:
+    print(f"warning: the server kept its cached facets: {exc}", file=sys.stderr)
 print("ok")
 `)
 }

@@ -1,0 +1,130 @@
+/* Two images side by side, same height, on the stage colour. */
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.side {
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.image {
+  width: 100%;
+  height: min(38vh, 420px);
+  object-fit: contain;
+  background: var(--stage);
+  border-radius: var(--radius);
+}
+
+.side figcaption {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.clip {
+  margin: 12px 0 0;
+  color: var(--accent);
+  font-size: var(--fs-3);
+}
+
+.section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.head h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  font-weight: 600;
+}
+
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: var(--fs-2);
+}
+
+.table th {
+  width: 110px;
+  padding: 3px 8px 3px 0;
+  color: var(--text-2);
+  font-weight: 500;
+  text-align: left;
+  vertical-align: top;
+}
+
+.table td {
+  padding: 3px 8px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+/* Differences read first; identical rows (shown on request) are quiet. */
+.table tr:not([data-same]) td {
+  background: var(--accent-soft);
+}
+
+.table tr[data-same] td {
+  color: var(--muted);
+}
+
+.tagCols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.only {
+  margin: 0 0 4px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.link {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+
+.link:hover {
+  color: var(--text);
+}

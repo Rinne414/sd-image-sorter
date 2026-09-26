@@ -24,6 +24,10 @@
   width: min(720px, calc(100vw - 48px));
 }
 
+.panel[data-wide='x'] {
+  width: min(1120px, calc(100vw - 48px));
+}
+
 @keyframes drop {
   from {
     opacity: 0;

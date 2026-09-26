@@ -14,8 +14,8 @@ import { invertPicks, matchingIds } from './invert'
 import styles from './SelectionBar.module.css'
 
 interface Props {
-  /** The gallery's current filter, used to pick every match on the server. */
-  params: ImageQueryParams
+  /** The gallery's current filter, used to pick every match on the server; null when the grid is not a filter (ranked by likeness). */
+  params: ImageQueryParams | null
   total: number | null
   images: ImageSummary[]
   hasMore: boolean
@@ -42,9 +42,10 @@ export function SelectionBar({ params, total, images, hasMore }: Props) {
   const picked = new Set(selection)
   const everyLoadedPicked = images.length > 0 && images.every((img) => picked.has(img.id))
   const allMatchesPicked = (covered?.key === key && selection.length >= covered.size) || (!hasMore && everyLoadedPicked)
-  const offerAll = total !== null && total > 0 && !allMatchesPicked
+  const offerAll = params !== null && total !== null && total > 0 && !allMatchesPicked
 
   const selectAll = async () => {
+    if (!params) return
     setBusy('all')
     try {
       const ids = await matchingIds(params)
@@ -61,6 +62,7 @@ export function SelectionBar({ params, total, images, hasMore }: Props) {
   }
 
   const invert = async () => {
+    if (!params) return
     setBusy('invert')
     await invertPicks(params)
     setCovered(null)
@@ -69,7 +71,13 @@ export function SelectionBar({ params, total, images, hasMore }: Props) {
 
   const main = actions.filter((a) => a.bar === 'main')
   const more = actions.filter((a) => a.bar === 'more')
-  const moreItems: MenuItem[] = menuItemsOf(t, more).map((item, i) => (item.danger && !more[i - 1]?.danger ? { ...item, divider: true } : item))
+  // A narrow bar (a small laptop with both side columns open) has no room for
+  // Invert next to "select all": it moves to the top of More there.
+  const invertItem: MenuItem = { id: 'invert', label: t('lib.sel.invert'), hint: 'Ctrl+I', onSelect: () => void invert(), className: styles.narrowOnly }
+  const moreItems: MenuItem[] = [
+    ...(params ? [invertItem] : []),
+    ...menuItemsOf(t, more).map((item, i) => (item.danger && !more[i - 1]?.danger ? { ...item, divider: true } : item)),
+  ]
 
   return (
     <div className={styles.bar} role="toolbar" aria-label={t('sel.count', { n: selection.length })} data-testid="selection-bar">
@@ -93,16 +101,18 @@ export function SelectionBar({ params, total, images, hasMore }: Props) {
           )}
         </button>
       )}
-      <button
-        type="button"
-        className={`btn btn-ghost ${styles.all}`}
-        onClick={() => void invert()}
-        disabled={busy !== null}
-        title={t('lib.sel.invertTitle')}
-        data-testid="invert-picks"
-      >
-        {busy === 'invert' ? t('lib.sel.inverting') : t('lib.sel.invert')}
-      </button>
+      {params && (
+        <button
+          type="button"
+          className={`btn btn-ghost ${styles.all} ${styles.invert}`}
+          onClick={() => void invert()}
+          disabled={busy !== null}
+          title={t('lib.sel.invertTitle')}
+          data-testid="invert-picks"
+        >
+          {busy === 'invert' ? t('lib.sel.inverting') : t('lib.sel.invert')}
+        </button>
+      )}
       <span className={styles.rule} aria-hidden />
       {main.map((action) => (
         <BarAction key={action.id} action={action} />

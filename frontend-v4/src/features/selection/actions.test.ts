@@ -19,11 +19,11 @@ const t = (key: string, params?: Record<string, string | number>) =>
   params ? `${key}(${Object.entries(params).map(([k, v]) => `${k}=${v}`).join(',')})` : key
 
 function bulkOps(): BulkOps {
-  return { rate: vi.fn(), favorite: vi.fn(), dialog: vi.fn(), censor: vi.fn(), newBatch: vi.fn(), addToBatch: vi.fn() }
+  return { rate: vi.fn(), favorite: vi.fn(), dialog: vi.fn(), censor: vi.fn(), newBatch: vi.fn(), addToBatch: vi.fn(), compare: vi.fn() }
 }
 
 function imageOps(): ImageOps {
-  return { open: vi.fn(), togglePick: vi.fn(), copy: vi.fn(), openFolder: vi.fn() }
+  return { open: vi.fn(), togglePick: vi.fn(), copy: vi.fn(), openFolder: vi.fn(), findSimilar: vi.fn() }
 }
 
 const batch = { id: 7, name: 'Summer', kind: 'pixiv' } as BatchSummary
@@ -74,6 +74,19 @@ describe('bulk actions', () => {
     for (const d of ['tag', 'edit-tags', 'export', 'move-library', 'copy', 'remove']) expect(ops.dialog).toHaveBeenCalledWith(d, [4, 8])
   })
 
+  it('compare exists only for exactly two images, and compares those two', () => {
+    const ops = bulkOps()
+    expect(ids(bulkActions({ ids: [1], favorited: false, batches: [], templates: [], ops }))).not.toContain('compare')
+    expect(ids(bulkActions({ ids: [1, 2, 3], favorited: false, batches: [], templates: [], ops }))).not.toContain('compare')
+    const two = bulkActions({ ids: [7, 3], favorited: false, batches: [], templates: [], ops })
+    const compare = find(two, 'compare')
+    expect(compare.bar).toBe('more')
+    compare.run?.()
+    expect(ops.compare).toHaveBeenCalledWith(7, 3)
+    // still before the danger group
+    expect(ids(bySection(two)).slice(-2)).toEqual(['remove', 'trash'])
+  })
+
   it('favourite takes them out when every one already is a favourite', () => {
     const ops = bulkOps()
     const fav = find(bulkActions({ ids: [1], favorited: true, batches: [], templates: [], ops }), 'favorite')
@@ -120,9 +133,15 @@ describe('image actions', () => {
   it('opens, picks, copies each part, opens the folder and copies the path', () => {
     const ops = imageOps()
     const list = imageActions({ id: 9, picked: false, path: 'D:\\out\\a.png', facts, groups, ops })
-    expect(ids(list)).toEqual(['open', 'pick', 'copy-prompt', 'copy-negative', 'copy-tags', 'copy-by-category', 'copy-parameters', 'open-folder', 'copy-path'])
+    expect(ids(list)).toEqual(['open', 'pick', 'similar', 'near', 'copy', 'open-folder'])
+    // "Copy" holds each part of the image, then the tag groups under their own heading
+    const copyItems = find(list, 'copy').children ?? []
+    expect(ids(copyItems.filter((c) => !c.group))).toEqual(['copy-prompt', 'copy-negative', 'copy-tags', 'copy-parameters', 'copy-path'])
+    expect(copyItems.find((c) => c.group)?.id).toBe('copy-group-all')
     for (const a of runnable(list)) a.run?.()
     expect(ops.open).toHaveBeenCalledWith(9)
+    expect(ops.findSimilar).toHaveBeenCalledWith(9, false)
+    expect(ops.findSimilar).toHaveBeenCalledWith(9, true)
     expect(ops.togglePick).toHaveBeenCalledWith(9)
     expect(ops.openFolder).toHaveBeenCalledWith(9)
     expect(ops.copy).toHaveBeenCalledWith('lowres', { key: 'lib.copy.negative' })
@@ -133,8 +152,8 @@ describe('image actions', () => {
 
   it('by category: every group with its count; empty groups cannot be chosen', () => {
     const list = imageActions({ id: 9, picked: true, path: null, facts, groups, ops: imageOps() })
-    const byCat = find(list, 'copy-by-category')
-    const rows = byCat.children ?? []
+    const rows = (find(list, 'copy').children ?? []).filter((c) => c.group)
+    expect(say(t, rows[0]!.group!)).toBe('lib.copy.byCategory')
     expect(rows[0]).toMatchObject({ id: 'copy-group-all', hint: '4' })
     expect(rows.find((r) => r.id === 'copy-group-appearance')).toMatchObject({ hint: '2', disabled: false })
     expect(rows.find((r) => r.id === 'copy-group-scenery')).toMatchObject({ hint: '0', disabled: true })
@@ -144,10 +163,11 @@ describe('image actions', () => {
 
   it('while the details load the copy entries wait; missing parts are not offered', () => {
     const loading = imageActions({ id: 9, picked: false, path: null, facts: null, groups: null, ops: imageOps() })
-    expect(find(loading, 'copy-loading').disabled).toBe(true)
-    expect(ids(loading)).not.toContain('copy-path')
+    const waiting = find(loading, 'copy').children ?? []
+    expect(ids(waiting)).toEqual(['copy-loading'])
+    expect(waiting[0]?.disabled).toBe(true)
     const bare = imageActions({ id: 9, picked: false, path: 'a.png', facts: { prompt: null, negative: null, tags: [], parameters: null }, groups: null, ops: imageOps() })
-    expect(ids(bare)).toEqual(['open', 'pick', 'open-folder', 'copy-path'])
+    expect(ids(find(bare, 'copy').children ?? [])).toEqual(['copy-path'])
   })
 })
 
@@ -166,6 +186,9 @@ describe('the right-click menu', () => {
     // the clicked image's own entries have their own heading
     const own = plan.groups.find((g) => g.heading && say(t, g.heading) === 'lib.menu.thisImage')
     expect(ids(own!.actions)).toEqual(['open', 'pick'])
+    // finding similar images stays with the clicked image, right under it
+    const after = plan.groups[plan.groups.indexOf(own!) + 1]!
+    expect(ids(after.actions)).toEqual(['similar', 'near'])
   })
 
   it('on an unpicked card it names the file and keeps danger last', () => {

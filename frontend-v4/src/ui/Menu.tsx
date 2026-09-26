@@ -15,6 +15,8 @@ export interface MenuItem {
   danger?: boolean
   /** Group heading shown above the first item of each group. */
   group?: string
+  /** Class for the item's row, e.g. to show it only when its bar is narrow. */
+  className?: string
 }
 
 interface Props {
@@ -90,7 +92,7 @@ function MenuRow({ item, heading, first, children }: { item: MenuItem; heading: 
           {heading}
         </li>
       )}
-      <li data-divider={(item.divider && !heading) || undefined} data-danger={item.danger || undefined}>
+      <li className={item.className} data-divider={(item.divider && !heading) || undefined} data-danger={item.danger || undefined}>
         {children}
       </li>
     </>
