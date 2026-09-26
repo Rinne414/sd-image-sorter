@@ -554,6 +554,7 @@ def test_all_five_release_archives_use_packaged_release_notes(monkeypatch, tmp_p
     monkeypatch.setattr(release_builder, "BOOTSTRAP_DOWNLOAD_ROOT", staging_root / "_downloads")
     monkeypatch.setattr(release_builder, "find_seven_zip", lambda: None)
     monkeypatch.setattr(release_builder, "copy_project", copy_minimal_project)
+    monkeypatch.setattr(release_builder, "build_frontend_v4", lambda: None)
     monkeypatch.setattr(release_builder, "prepare_embedded_python", lambda stage_dir: None)
     monkeypatch.setattr(
         release_builder,
@@ -1761,6 +1762,7 @@ def _lazy_release_common_archive_names():
         "sd-image-sorter/frontend/index.html",
         "sd-image-sorter/frontend/js/app.js",
         "sd-image-sorter/frontend/js/gallery.js",
+        "sd-image-sorter/frontend-v4/dist/index.html",
         "sd-image-sorter/update/package-manifest.json",
     }
 
@@ -1896,3 +1898,263 @@ def test_lazy_release_qa_uses_windows_node_for_windows_python(monkeypatch):
 
     assert node.lower().endswith("node.exe")
     assert str(captured["candidates"][0]).endswith("node.exe")
+
+
+# --- V4 interface (/v4/) in every package ------------------------------------
+
+V4_INDEX_HTML = (
+    "<!doctype html><html><head>"
+    '<script type="module" crossorigin src="/v4/assets/index-AbC12345.js"></script>'
+    '<link rel="modulepreload" crossorigin href="/v4/assets/client-QwE_4567.js">'
+    '<link rel="stylesheet" crossorigin href="/v4/assets/index-DeF-6789.css">'
+    '</head><body><div id="root"></div></body></html>\n'
+)
+V4_ENTRY_JS = (
+    'import{a as e}from"./client-QwE_4567.js";'
+    'const m=["assets/Lazy-XyZ98765.js","assets/Lazy-Css11111.css"];'
+    "const p=()=>import(`./Lazy-XyZ98765.js`);\n"
+    "//# sourceMappingURL=index-AbC12345.js.map\n"
+)
+V4_DIST_FILES = {
+    "frontend-v4/dist/index.html": V4_INDEX_HTML,
+    "frontend-v4/dist/assets/index-AbC12345.js": V4_ENTRY_JS,
+    "frontend-v4/dist/assets/index-AbC12345.js.map": '{"sourcesContent":["source"]}',
+    "frontend-v4/dist/assets/client-QwE_4567.js": "export const a=1;\n",
+    "frontend-v4/dist/assets/index-DeF-6789.css": "body{}\n",
+    "frontend-v4/dist/assets/Lazy-XyZ98765.js": "export default 1;\n",
+    "frontend-v4/dist/assets/Lazy-Css11111.css": ".x{}\n",
+}
+V4_DEV_FILES = {
+    "frontend-v4/.gitignore": "node_modules/\n",
+    "frontend-v4/index.html": '<script type="module" src="/src/main.tsx"></script>\n',
+    "frontend-v4/package.json": "{}\n",
+    "frontend-v4/package-lock.json": "{}\n",
+    "frontend-v4/tsconfig.json": "{}\n",
+    "frontend-v4/vite.config.ts": "export default {}\n",
+    "frontend-v4/src/main.tsx": "export {}\n",
+    "frontend-v4/src/features/gallery/Grid.tsx": "export {}\n",
+    "frontend-v4/node_modules/vite/package.json": "{}\n",
+    "frontend-v4/node_modules/.package-lock.json": "{}\n",
+}
+V4_SHIPPED_PATHS = sorted(path for path in V4_DIST_FILES if not path.endswith(".map"))
+
+
+def _write_tree(root: Path, files: dict[str, str]) -> None:
+    for relative_path, content in files.items():
+        target = root / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+
+
+def test_release_copy_ships_only_the_built_v4_interface(monkeypatch, tmp_path):
+    release_builder = load_release_builder()
+    fake_root = tmp_path / "repo"
+    stage_root = tmp_path / "stage"
+    _write_tree(fake_root, {"backend/main.py": "pass\n", **V4_DIST_FILES, **V4_DEV_FILES})
+    monkeypatch.setattr(release_builder, "ROOT", fake_root)
+
+    release_builder.copy_project(stage_root)
+
+    shipped = sorted(
+        path.relative_to(stage_root).as_posix()
+        for path in (stage_root / "frontend-v4").rglob("*")
+        if path.is_file()
+    )
+    assert shipped == V4_SHIPPED_PATHS
+
+
+def test_package_manifest_manages_every_shipped_v4_file(tmp_path):
+    release_builder = load_release_builder()
+    _write_tree(tmp_path, {path: V4_DIST_FILES[path] for path in V4_SHIPPED_PATHS})
+
+    manifest_path = release_builder.write_package_manifest(tmp_path, "9.9.9")
+    managed_paths = set(json.loads(manifest_path.read_text(encoding="utf-8"))["managed_paths"])
+
+    assert set(V4_SHIPPED_PATHS) <= managed_paths
+
+
+def _fake_npm(monkeypatch, release_builder, *, writes_index=True, which="C:/node/npm.cmd"):
+    calls = []
+
+    def fake_run(command, cwd=None, check=False, **_kwargs):
+        calls.append((list(command), Path(cwd)))
+        if list(command[1:]) == ["run", "build"] and writes_index:
+            index = Path(cwd) / "dist" / "index.html"
+            index.parent.mkdir(parents=True, exist_ok=True)
+            index.write_text(V4_INDEX_HTML, encoding="utf-8")
+        return release_builder.subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(release_builder.shutil, "which", lambda name: which if name == "npm" else None)
+    monkeypatch.setattr(release_builder.subprocess, "run", fake_run)
+    return calls
+
+
+def test_build_frontend_v4_installs_from_the_lockfile_then_builds(monkeypatch, tmp_path):
+    release_builder = load_release_builder()
+    fake_root = tmp_path / "repo"
+    (fake_root / "frontend-v4").mkdir(parents=True)
+    monkeypatch.setattr(release_builder, "ROOT", fake_root)
+    calls = _fake_npm(monkeypatch, release_builder)
+
+    dist = release_builder.build_frontend_v4()
+
+    frontend = fake_root / "frontend-v4"
+    assert calls == [
+        (["C:/node/npm.cmd", "ci"], frontend),
+        (["C:/node/npm.cmd", "run", "build"], frontend),
+    ]
+    assert dist == frontend / "dist"
+
+
+def test_build_frontend_v4_refuses_to_release_without_npm(monkeypatch, tmp_path):
+    release_builder = load_release_builder()
+    monkeypatch.setattr(release_builder, "ROOT", tmp_path)
+    calls = _fake_npm(monkeypatch, release_builder, which=None)
+
+    with pytest.raises(RuntimeError, match="Node.js"):
+        release_builder.build_frontend_v4()
+    assert calls == []
+
+
+def test_build_frontend_v4_refuses_a_build_without_index_html(monkeypatch, tmp_path):
+    release_builder = load_release_builder()
+    (tmp_path / "frontend-v4").mkdir()
+    monkeypatch.setattr(release_builder, "ROOT", tmp_path)
+    _fake_npm(monkeypatch, release_builder, writes_index=False)
+
+    with pytest.raises(RuntimeError, match="index.html"):
+        release_builder.build_frontend_v4()
+
+
+def _fake_release_project(root: Path, version: str) -> None:
+    _write_tree(
+        root,
+        {
+            "backend/main.py": "pass\n",
+            "backend/config.py": "pass\n",
+            "backend/services/service_provider.py": "pass\n",
+            "frontend/index.html": "<html></html>\n",
+            "frontend/js/app.js": "\n",
+            "frontend/js/gallery.js": "\n",
+            "run.bat": "@echo off\n",
+            "run.sh": "#!/bin/bash\n",
+            f"docs/RELEASE_NOTES_v{version}.md": "## v9.9.9 -- Test\n\nSummary.\n\n## Checksums\n\n| a | b |\n",
+            **V4_DIST_FILES,
+            **V4_DEV_FILES,
+        },
+    )
+
+
+def _archive_names_and_manifest(release_builder, archive_path: Path) -> tuple[set[str], dict]:
+    if archive_path.suffix == ".zip":
+        with release_builder.ZipFile(archive_path) as archive:
+            names = {name.replace("\\", "/") for name in archive.namelist()}
+            return names, json.loads(archive.read("update/package-manifest.json"))
+    with tarfile.open(archive_path, "r:gz") as archive:
+        names = {name.removeprefix("sd-image-sorter/") for name in archive.getnames()}
+        manifest_file = archive.extractfile("sd-image-sorter/update/package-manifest.json")
+        assert manifest_file is not None
+        return names, json.loads(manifest_file.read())
+
+
+def test_every_release_archive_carries_the_built_v4_interface(monkeypatch, tmp_path):
+    release_builder = load_release_builder()
+    qa = _load_lazy_release_qa_module("lazy_release_qa_v4_archives_for_test")
+    fake_root = tmp_path / "repo"
+    artifact_root = tmp_path / "artifacts"
+    version = "9.9.9"
+    _fake_release_project(fake_root, version)
+    order = []
+
+    def fake_windows_python(stage_dir):
+        order.append("stage")
+        _write_tree(stage_dir, {"python/python.exe": "exe\n"})
+        release_builder.write_portable_launcher(stage_dir)
+
+    def fake_linux_python(stage_dir, arch):
+        _write_tree(stage_dir, {"python/bin/python3": "elf\n"})
+
+    monkeypatch.setattr(release_builder, "ROOT", fake_root)
+    monkeypatch.setattr(release_builder, "ARTIFACT_ROOT", artifact_root)
+    monkeypatch.setattr(release_builder, "STAGING_ROOT", artifact_root / "staging")
+    monkeypatch.setattr(release_builder, "BOOTSTRAP_DOWNLOAD_ROOT", artifact_root / "staging" / "_downloads")
+    monkeypatch.setattr(release_builder, "find_seven_zip", lambda: None)
+    monkeypatch.setattr(release_builder, "build_frontend_v4", lambda: order.append("build"))
+    monkeypatch.setattr(release_builder, "prepare_embedded_python", fake_windows_python)
+    monkeypatch.setattr(release_builder, "prepare_bundled_linux_python", fake_linux_python)
+
+    assets = release_builder.build_release_assets(version, 1900)
+
+    assert order[:2] == ["build", "stage"]
+    archives = [path for path in assets if not path.name.endswith(".json")]
+    assert len(archives) == 5
+    for archive_path in archives:
+        names, manifest = _archive_names_and_manifest(release_builder, archive_path)
+        v4_files = sorted(name for name in names if name.startswith("frontend-v4/") and "." in name.rsplit("/", 1)[-1])
+        assert v4_files == V4_SHIPPED_PATHS, archive_path.name
+        assert set(V4_SHIPPED_PATHS) <= set(manifest["managed_paths"]), archive_path.name
+
+    qa.check_release_packages(artifact_root, version)
+
+
+def _v4_reader(files: dict[str, str]):
+    return lambda path: files[path]
+
+
+def test_lazy_release_qa_requires_the_v4_index_in_every_package_kind():
+    module = _load_lazy_release_qa_module("lazy_release_qa_v4_index_for_test")
+    extras = {
+        "windows-portable": {"run.bat", "run.sh", "run-portable.bat", "python/python.exe"},
+        "app-patch": {"run.bat", "run.sh", "run-portable.bat"},
+        "linux": {"run.sh"},
+        "linux-portable": {"run.sh", "run-portable.sh", "python/bin/python3"},
+    }
+    for kind, extra in extras.items():
+        names = (_lazy_release_common_archive_names() - {"sd-image-sorter/frontend-v4/dist/index.html"}) | extra
+        with pytest.raises(module.LazyQaError, match="frontend-v4/dist/index.html"):
+            module.assert_archive_contents(names, package_kind=kind)
+
+
+@pytest.mark.parametrize(
+    "dev_path",
+    ["frontend-v4/src/main.tsx", "frontend-v4/node_modules/vite/package.json"],
+)
+def test_lazy_release_qa_rejects_v4_sources_and_node_modules(dev_path):
+    module = _load_lazy_release_qa_module("lazy_release_qa_v4_dev_for_test")
+    names = _lazy_release_common_archive_names() | {"run.sh", dev_path}
+
+    with pytest.raises(module.LazyQaError, match="forbidden"):
+        module.assert_archive_contents(names, package_kind="linux")
+
+
+def test_lazy_release_qa_accepts_a_v4_build_with_every_loaded_asset():
+    module = _load_lazy_release_qa_module("lazy_release_qa_v4_ok_for_test")
+    files = {path: V4_DIST_FILES[path] for path in V4_SHIPPED_PATHS}
+
+    module.assert_frontend_v4_build(set(files), _v4_reader(files), package_kind="app-patch")
+
+
+@pytest.mark.parametrize(
+    "missing",
+    [
+        "frontend-v4/dist/assets/index-AbC12345.js",
+        "frontend-v4/dist/assets/index-DeF-6789.css",
+        "frontend-v4/dist/assets/client-QwE_4567.js",
+        "frontend-v4/dist/assets/Lazy-XyZ98765.js",
+        "frontend-v4/dist/assets/Lazy-Css11111.css",
+    ],
+)
+def test_lazy_release_qa_fails_when_a_loaded_v4_asset_is_missing(missing):
+    module = _load_lazy_release_qa_module("lazy_release_qa_v4_missing_for_test")
+    files = {path: V4_DIST_FILES[path] for path in V4_SHIPPED_PATHS if path != missing}
+
+    with pytest.raises(module.LazyQaError, match=missing):
+        module.assert_frontend_v4_build(set(files), _v4_reader(files), package_kind="app-patch")
+
+
+def test_lazy_release_qa_fails_when_the_v4_index_loads_no_built_script():
+    module = _load_lazy_release_qa_module("lazy_release_qa_v4_dev_index_for_test")
+    files = {"frontend-v4/dist/index.html": V4_DEV_FILES["frontend-v4/index.html"]}
+
+    with pytest.raises(module.LazyQaError, match="no built script"):
+        module.assert_frontend_v4_build(set(files), _v4_reader(files), package_kind="linux")
