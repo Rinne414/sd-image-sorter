@@ -1,5 +1,6 @@
 import type { BatchKind, BatchSummary, BatchTemplate } from '../../api/types'
 import type { MessageKey, Params } from '../../i18n'
+import type { ToolId } from '../../lib/route'
 import { TAG_GROUPS, type GroupedTags, type TagGroupId } from '../../lib/tagGroups'
 import type { MenuItem } from '../../ui/Menu'
 import { BATCH_KINDS } from '../batch/labels'
@@ -68,6 +69,14 @@ export interface BulkOps {
   score: (ids: number[]) => void
   /** Open the Sort tab with these images. */
   sort: (ids: number[]) => void
+  /** Hand them to a tool and open it. */
+  sendToTool: (tool: ToolId, ids: number[]) => void
+}
+
+/** A tool "Send to tool" offers (tools/registry.ts decides which take these images). */
+export interface ToolTarget {
+  id: ToolId
+  label: MessageKey
 }
 
 export interface BulkInput {
@@ -77,6 +86,8 @@ export interface BulkInput {
   /** Recent batches offered in "Add to batch". */
   batches: readonly BatchSummary[]
   templates: readonly BatchTemplate[]
+  /** Tools that take these images; none: no "Send to tool". */
+  tools?: readonly ToolTarget[]
   ops: BulkOps
 }
 
@@ -149,6 +160,7 @@ export function bulkActions(input: BulkInput): ImageAction[] {
     { id: 'export', section: 'files', bar: 'more', label: k('sel.exportData'), palette: k('palette.cmd.exportData'), run: dialog('export') },
     { id: 'move-library', section: 'files', bar: 'more', label: k('sel.moveLibrary'), palette: k('palette.cmd.moveLibrary'), run: dialog('move-library') },
     ...compareAction(ids, ops),
+    ...sendToAction(input),
     { id: 'remove', section: 'danger', bar: 'more', danger: true, hint: 'Del', label: k('sel.remove'), palette: k('palette.cmd.remove'), run: dialog('remove') },
     { id: 'trash', section: 'danger', bar: 'more', danger: true, label: k('sel.trash'), palette: k('palette.cmd.trash'), run: dialog('trash') },
   ]
@@ -165,6 +177,19 @@ function compareAction(ids: number[], ops: BulkOps): ImageAction[] {
   const [a, b] = ids
   if (ids.length !== 2 || a === undefined || b === undefined) return []
   return [{ id: 'compare', section: 'work', bar: 'more', label: k('sim.compare'), palette: k('sim.comparePalette'), run: () => ops.compare(a, b) }]
+}
+
+/** "Send to tool ▸": one entry per tool that takes these images. */
+function sendToAction({ ids, tools = [], ops }: BulkInput): ImageAction[] {
+  if (tools.length === 0) return []
+  const children = tools.map<ImageAction>((tool) => ({
+    id: `send-${tool.id}`,
+    section: 'work',
+    label: k(tool.label),
+    palette: { key: 'tools.palette.send', keyParams: { tool: tool.label } },
+    run: () => ops.sendToTool(tool.id, ids),
+  }))
+  return [{ id: 'send-to', section: 'work', bar: 'more', label: k('tools.sendTo'), children }]
 }
 
 // ---- actions on the one image under the pointer (or the inspected one) ----
@@ -283,16 +308,25 @@ export function runnable(actions: readonly ImageAction[]): ImageAction[] {
   return actions.flatMap((a) => (a.children ? runnable(a.children) : a.run && !a.disabled ? [a] : []))
 }
 
-/** A submenu's actions as items of the shared Menu (group headings kept). */
+/**
+ * Actions as items of the shared Menu (group headings kept). The Menu has no
+ * submenus: an action with children becomes its children, under its label as
+ * their heading ("Send to tool" in the selection bar's More).
+ */
 export function menuItemsOf(t: Translate, actions: readonly ImageAction[]): MenuItem[] {
-  return actions.map((a) => ({
-    id: a.id,
-    label: say(t, a.label),
-    onSelect: () => a.run?.(),
-    ...(a.hint ? { hint: a.hint } : {}),
-    ...(a.group ? { group: say(t, a.group) } : {}),
-    ...(a.danger ? { danger: true } : {}),
-  }))
+  return actions.flatMap((a): MenuItem[] => {
+    if (a.children) return menuItemsOf(t, a.children).map((item) => ({ ...item, group: say(t, a.label) }))
+    return [
+      {
+        id: a.id,
+        label: say(t, a.label),
+        onSelect: () => a.run?.(),
+        ...(a.hint ? { hint: a.hint } : {}),
+        ...(a.group ? { group: say(t, a.group) } : {}),
+        ...(a.danger ? { danger: true } : {}),
+      },
+    ]
+  })
 }
 
 // ---- the right-click menu ----

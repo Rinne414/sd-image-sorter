@@ -1,9 +1,12 @@
-import { useLang, useT, type MessageKey } from '../i18n'
+import { useT, type MessageKey } from '../i18n'
 import { useApp, type Page } from '../state/store'
 import { useTheme, type ThemeMode } from '../theme'
 import { Icon } from '../ui/Icon'
+import { AiBusyChip } from '../features/jobs/AiBusyChip'
 import { JobsMenu } from '../features/jobs/JobsMenu'
 import { useSelectionDialog } from '../features/selection/dialogs'
+import { UpdateHint } from '../features/settings/about/UpdateHint'
+import { ToolsMenu } from '../features/tools/ToolsMenu'
 import styles from './TopBar.module.css'
 
 const TABS: [Page, MessageKey][] = [
@@ -18,13 +21,17 @@ const THEME_LABEL: Record<ThemeMode, MessageKey> = {
   system: 'theme.system',
 }
 
+/**
+ * Logo, the three tabs, then: AI busy and a new version (only when there is
+ * one), jobs, import, Ctrl K, Tools, Settings, theme, back to V3.5. On the
+ * settings and tools pages no tab is lit; ⚙ or Tools is.
+ */
 export function TopBar() {
   const t = useT()
   const page = useApp((s) => s.page)
   const setPage = useApp((s) => s.setPage)
   const setPaletteOpen = useApp((s) => s.setPaletteOpen)
-  const lang = useLang((s) => s.lang)
-  const setLang = useLang((s) => s.setLang)
+  const openSettings = useApp((s) => s.openSettings)
   const mode = useTheme((s) => s.mode)
   const theme = useTheme((s) => s.theme)
   const cycleTheme = useTheme((s) => s.cycle)
@@ -56,6 +63,8 @@ export function TopBar() {
 
       <span className={styles.gap} />
 
+      <AiBusyChip />
+      <UpdateHint />
       <JobsMenu />
       <button
         type="button"
@@ -70,6 +79,18 @@ export function TopBar() {
         <span className={styles.commandText}>{t('nav.command')}</span>
         <kbd>Ctrl K</kbd>
       </button>
+      <ToolsMenu />
+      <button
+        type="button"
+        className="btn btn-ghost btn-icon"
+        onClick={() => openSettings()}
+        aria-current={page === 'settings' ? 'page' : undefined}
+        title={t('settings.gear')}
+        aria-label={t('settings.title')}
+        data-testid="settings-button"
+      >
+        <Icon name="gear" />
+      </button>
       <button
         type="button"
         className="btn btn-ghost btn-icon"
@@ -79,9 +100,6 @@ export function TopBar() {
         data-testid="theme-toggle"
       >
         <Icon name={theme === 'dark' ? 'moon' : 'sun'} />
-      </button>
-      <button type="button" className="btn btn-ghost" onClick={() => setLang(lang === 'zh-CN' ? 'en' : 'zh-CN')}>
-        {t('nav.language')}
       </button>
       <a className="btn btn-ghost" href="/">
         {t('nav.backToV3')}

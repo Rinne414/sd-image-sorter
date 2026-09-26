@@ -16,7 +16,7 @@
   list-style: none;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  max-height: min(44vh, 400px);
+  max-height: min(44 * var(--vh), 400px);
   overflow-y: auto;
 }
 

@@ -14,7 +14,7 @@
 
 .image {
   width: 100%;
-  height: min(38vh, 420px);
+  height: min(38 * var(--vh), 420px);
   object-fit: contain;
   background: var(--stage);
   border-radius: var(--radius);

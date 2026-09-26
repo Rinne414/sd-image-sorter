@@ -166,6 +166,12 @@
   --radius-lg: 3px;
 
   /* layout */
+  /* One percent of the window in the page's own px. Under the interface zoom
+     (Settings › Appearance) vh/vw are zoomed too, so heights tied to the
+     window use calc(N * var(--vh)) instead of Nvh. --ui-zoom is set on
+     <html> by index.html and lib/uiScale. */
+  --vh: calc(1vh / var(--ui-zoom, 1));
+  --vw: calc(1vw / var(--ui-zoom, 1));
   --topbar-h: 46px;
   --rail-w: 232px;
   --card-w: 380px;

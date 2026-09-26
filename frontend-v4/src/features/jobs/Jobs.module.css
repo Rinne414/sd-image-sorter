@@ -39,8 +39,8 @@
   z-index: 40;
   top: calc(var(--topbar-h) + 4px);
   right: 8px;
-  width: min(var(--card-w), calc(100vw - 32px));
-  max-height: calc(100vh - var(--topbar-h) - 20px);
+  width: min(var(--card-w), calc(100 * var(--vw) - 32px));
+  max-height: calc(100 * var(--vh) - var(--topbar-h) - 20px);
   display: flex;
   flex-direction: column;
   background: var(--surface-2);

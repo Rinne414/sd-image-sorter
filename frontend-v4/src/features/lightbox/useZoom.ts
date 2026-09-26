@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type RefObject } from 'react'
+import { toPagePx } from '../../lib/uiScale'
 import { FIT, fittedSize, isFit, panBy, percentOfOriginal, toggleZoom, wheelFactor, zoomAt, type Frame, type Point, type Size, type View } from './zoom'
 
 // The big image's zoom: the wheel zooms around the pointer (past the original
@@ -43,7 +44,8 @@ export function useZoom({ id, stageRef, wrapRef, natural }: Options) {
 
   const pointOf = (e: { clientX: number; clientY: number }): Point => {
     const r = stageRef.current?.getBoundingClientRect()
-    return r ? { x: e.clientX - (r.left + r.width / 2), y: e.clientY - (r.top + r.height / 2) } : { x: 0, y: 0 }
+    // page px, like the frame sizes (screen px differ under the interface zoom)
+    return r ? { x: toPagePx(e.clientX - (r.left + r.width / 2)), y: toPagePx(e.clientY - (r.top + r.height / 2)) } : { x: 0, y: 0 }
   }
 
   const set = (next: View) => setState({ id, view: next })
@@ -88,7 +90,7 @@ export function useZoom({ id, stageRef, wrapRef, natural }: Options) {
       if (!d.moved) setDragging(true)
       drag.current = { x: e.clientX, y: e.clientY, moved: true }
       const f = frame()
-      if (f) set(panBy(viewRef.current, dx, dy, f))
+      if (f) set(panBy(viewRef.current, toPagePx(dx), toPagePx(dy), f))
     },
     onPointerUp: () => {
       if (drag.current?.moved) swallowClick.current = true

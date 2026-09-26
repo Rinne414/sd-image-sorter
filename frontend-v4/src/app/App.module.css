@@ -1,7 +1,7 @@
 .app {
   display: grid;
   grid-template-rows: var(--topbar-h) minmax(0, 1fr);
-  height: 100vh;
+  height: calc(100 * var(--vh));
   min-width: 1280px;
 }
 

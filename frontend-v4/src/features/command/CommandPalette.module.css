@@ -5,13 +5,13 @@
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  padding-top: 14vh;
+  padding-top: calc(14 * var(--vh));
   background: var(--scrim);
 }
 
 .palette {
-  width: min(600px, calc(100vw - 48px));
-  max-height: 64vh;
+  width: min(600px, calc(100 * var(--vw) - 48px));
+  max-height: calc(64 * var(--vh));
   display: flex;
   flex-direction: column;
   background: var(--surface-2);

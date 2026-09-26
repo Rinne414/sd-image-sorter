@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { toPagePx } from '../lib/uiScale'
 import styles from './ContextMenu.module.css'
 import { Icon } from './Icon'
 import { useClickOutside, useLayer } from './layers'
@@ -42,11 +43,16 @@ const EDGE = 8
 const ITEM = '[role="menuitem"]:not([disabled])'
 const HOVER_CLOSE_MS = 220
 
-/** Keep a box of this size inside the window, preferring below-right of (x, y). */
+/**
+ * Keep a box of this size inside the window, preferring below-right of (x, y).
+ * x, y and flipX are screen px (a pointer, an element's box); w, h and the
+ * result are page px, which differ under the interface zoom.
+ */
 function place(x: number, y: number, w: number, h: number, flipX = 0): { left: number; top: number } {
-  let left = x
-  if (left + w > innerWidth - EDGE) left = flipX ? flipX - w : innerWidth - EDGE - w
-  const top = Math.min(y, innerHeight - EDGE - h)
+  const [px, py, pw, ph, pflip] = [x, y, innerWidth, innerHeight, flipX].map(toPagePx) as [number, number, number, number, number]
+  let left = px
+  if (left + w > pw - EDGE) left = flipX ? pflip - w : pw - EDGE - w
+  const top = Math.min(py, ph - EDGE - h)
   return { left: Math.max(EDGE, left), top: Math.max(EDGE, top) }
 }
 
@@ -72,7 +78,7 @@ function moveFocus(root: HTMLElement | null, key: string): boolean {
 
 export function ContextMenu({ x, y, label, header, groups, onClose, focusFirst = false, testId }: Props) {
   const ref = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState({ left: x, top: y })
+  const [pos, setPos] = useState(() => ({ left: toPagePx(x), top: toPagePx(y) }))
   const [sub, setSub] = useState<{ item: CtxItem; anchor: DOMRect } | null>(null)
   const closeTimer = useRef<number | undefined>(undefined)
   useLayer(true, onClose)
@@ -236,7 +242,7 @@ function SubMenu({
   onHold: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState({ left: anchor.right, top: anchor.top - 4 })
+  const [pos, setPos] = useState(() => ({ left: toPagePx(anchor.right), top: toPagePx(anchor.top - 4) }))
   // Its own layer: Esc closes the submenu and leaves the menu open.
   useLayer(true, () => onClose(true))
 

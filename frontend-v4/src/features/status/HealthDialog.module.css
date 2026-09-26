@@ -229,7 +229,7 @@
 }
 
 .rows {
-  max-height: min(34vh, 300px);
+  max-height: min(34 * var(--vh), 300px);
   overflow-y: auto;
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { imageFileUrl } from '../../../api/urls'
+import { pointIn, toPagePx } from '../../../lib/uiScale'
 import { farEnough, roundPoint } from '../../censor/ops'
 import { createPainter, createScratch, type Painter } from '../../censor/paint'
 import { createRaster, type Raster, type Rect } from '../../censor/raster'
@@ -99,8 +100,7 @@ export function MaskCanvas({ imageId, width, height, state, tool, size, panKey, 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
       if (e.ctrlKey || e.metaKey) {
-        const box = el.getBoundingClientRect()
-        zoom(Math.min(ZOOM_STEP, Math.max(1 / ZOOM_STEP, Math.exp(-e.deltaY * 0.002))), e.clientX - box.left, e.clientY - box.top)
+        zoom(Math.min(ZOOM_STEP, Math.max(1 / ZOOM_STEP, Math.exp(-e.deltaY * 0.002))), ...pointIn(el, e))
       } else pan(e.shiftKey ? -e.deltaY : -e.deltaX, e.shiftKey ? 0 : -e.deltaY)
     }
     el.addEventListener('wheel', onWheel, { passive: false })
@@ -113,9 +113,10 @@ export function MaskCanvas({ imageId, width, height, state, tool, size, panKey, 
     return rect !== null
   }
 
+  /** The pointer inside the viewport, in page px (the view's own units, also under the interface zoom). */
   const local = (e: { clientX: number; clientY: number }): [number, number] => {
-    const box = viewportRef.current?.getBoundingClientRect()
-    return box ? [e.clientX - box.left, e.clientY - box.top] : [0, 0]
+    const el = viewportRef.current
+    return el ? pointIn(el, e) : [0, 0]
   }
 
   const imagePoint = (e: { clientX: number; clientY: number }): [number, number] => {
@@ -146,7 +147,7 @@ export function MaskCanvas({ imageId, width, height, state, tool, size, panKey, 
     if (ring) ring.style.transform = `translate(${local(e)[0]}px, ${local(e)[1]}px) translate(-50%, -50%)`
     const d = drag.current
     if (d?.kind === 'pan') {
-      pan(e.clientX - d.x, e.clientY - d.y)
+      pan(toPagePx(e.clientX - d.x), toPagePx(e.clientY - d.y))
       drag.current = { kind: 'pan', x: e.clientX, y: e.clientY }
     } else if (d?.kind === 'stroke') {
       const added: number[] = []

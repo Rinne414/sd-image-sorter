@@ -6,6 +6,7 @@ import {
   bySection,
   cardMenu,
   imageActions,
+  menuItemsOf,
   menuTarget,
   paletteText,
   runnable,
@@ -19,7 +20,7 @@ const t = (key: string, params?: Record<string, string | number>) =>
   params ? `${key}(${Object.entries(params).map(([k, v]) => `${k}=${v}`).join(',')})` : key
 
 function bulkOps(): BulkOps {
-  return { rate: vi.fn(), favorite: vi.fn(), dialog: vi.fn(), censor: vi.fn(), newBatch: vi.fn(), addToBatch: vi.fn(), compare: vi.fn(), score: vi.fn(), sort: vi.fn() }
+  return { rate: vi.fn(), favorite: vi.fn(), dialog: vi.fn(), censor: vi.fn(), newBatch: vi.fn(), addToBatch: vi.fn(), compare: vi.fn(), score: vi.fn(), sort: vi.fn(), sendToTool: vi.fn() }
 }
 
 function imageOps(): ImageOps {
@@ -112,6 +113,32 @@ describe('bulk actions', () => {
     expect(ids(sorted.slice(-2))).toEqual(['remove', 'trash'])
     expect(sorted.slice(-2).every((a) => a.danger)).toBe(true)
     expect(sorted.slice(0, -2).some((a) => a.danger)).toBe(false)
+  })
+
+  it('"send to tool" lists the tools it is given, right before the danger group, and hands them the ids', () => {
+    const ops = bulkOps()
+    const tools = [
+      { id: 'reader' as const, label: 'tools.reader' as const },
+      { id: 'artist' as const, label: 'tools.artist' as const },
+    ]
+    const list = bulkActions({ ids: [4, 8], favorited: false, batches: [], templates: [], tools, ops })
+    const send = find(list, 'send-to')
+    expect(send.bar).toBe('more')
+    expect(say(t, send.label)).toBe('tools.sendTo')
+    expect(ids(send.children ?? [])).toEqual(['send-reader', 'send-artist'])
+    expect(send.section).toBe('work')
+    expect(ids(list.filter((a) => a.bar === 'more')).slice(-3)).toEqual(['send-to', 'remove', 'trash'])
+    expect(paletteText(t, find(list, 'send-artist'))).toBe('tools.palette.send(tool=tools.artist)')
+    find(list, 'send-reader').run?.()
+    expect(ops.sendToTool).toHaveBeenCalledWith('reader', [4, 8])
+    // the selection bar's More has no submenus: the tools sit under their own heading
+    const items = menuItemsOf(t, list.filter((a) => a.bar === 'more'))
+    expect(items.filter((i) => i.group === 'tools.sendTo').map((i) => i.label)).toEqual(['tools.reader', 'tools.artist'])
+    expect(items.at(-2)).toMatchObject({ id: 'remove', danger: true })
+    expect(items.at(-2)?.group).toBeUndefined()
+    // no tool to offer: no entry at all
+    expect(ids(bulkActions({ ids: [4], favorited: false, batches: [], templates: [], tools: [], ops }))).not.toContain('send-to')
+    expect(ids(bulkActions({ ids: [4], favorited: false, batches: [], templates: [], ops }))).not.toContain('send-to')
   })
 
   it('Ctrl K reads the children with their own wording', () => {

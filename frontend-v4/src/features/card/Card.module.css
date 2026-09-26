@@ -125,7 +125,7 @@
   position: relative;
   display: grid;
   place-items: center;
-  height: min(42vh, 460px);
+  height: min(42 * var(--vh), 460px);
   background: var(--stage);
   cursor: zoom-in;
 }

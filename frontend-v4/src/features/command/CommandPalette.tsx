@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLibraries } from '../../api/queries'
-import { translate, useLang, useT, type MessageKey, type Params } from '../../i18n'
+import { translate, useLang, useT, type Lang, type MessageKey, type Params } from '../../i18n'
 import { useApp } from '../../state/store'
 import { useTheme } from '../../theme'
 import { useLayer } from '../../ui/layers'
@@ -24,21 +24,10 @@ import { startIndexing } from '../similar/similarApi'
 import { useSimilar } from '../similar/similarStore'
 import { continueSort, sortImages, useSortPending } from '../sort/sortStore'
 import { useStatusDialogs } from '../status/dialogs'
+import { useUiScale } from '../settings/uiScaleStore'
+import { command, matches, type Command } from './commands'
 import styles from './CommandPalette.module.css'
-
-interface Command {
-  id: string
-  group: MessageKey
-  label: string
-  /** Both languages, so either one finds it. */
-  haystack: string
-  hint?: string
-  run: () => void
-}
-
-function both(key: MessageKey, params?: Params): string {
-  return `${translate('zh-CN', key, params)} ${translate('en', key, params)}`.toLowerCase()
-}
+import { shellCommands, type ShellOps } from './shellCommands'
 
 const zh = (key: MessageKey, params?: Params) => translate('zh-CN', key, params)
 const en = (key: MessageKey, params?: Params) => translate('en', key, params)
@@ -53,6 +42,15 @@ function fromAction(action: ImageAction, group: MessageKey, prefix: string, lang
     run: () => action.run?.(),
     ...(action.hint ? { hint: action.hint } : {}),
   }
+}
+
+/** What the shell's commands do (settings, tools, language, zoom, help). */
+const SHELL_OPS: ShellOps = {
+  openTool: (tool) => useApp.getState().openTool(tool),
+  openSettings: (tab) => useApp.getState().openSettings(tab),
+  setLang: (lang: Lang) => useLang.getState().setLang(lang),
+  setScale: (setting) => useUiScale.getState().setSetting(setting),
+  openHelp: (page) => useShortcutSheet.getState().open(page),
 }
 
 /** Turn the query bar to "by meaning" and put the caret in it. */
@@ -88,14 +86,8 @@ function Palette() {
 
   const commands = useMemo<Command[]>(() => {
     const s = useApp.getState()
-    const mk = (id: string, group: MessageKey, key: MessageKey, run: () => void, hint?: string, params?: Params): Command => ({
-      id,
-      group,
-      label: translate(lang, key, params),
-      haystack: both(key, params),
-      run,
-      ...(hint ? { hint } : {}),
-    })
+    const mk = (id: string, group: MessageKey, key: MessageKey, run: () => void, hint?: string, params?: Params): Command =>
+      command(lang, id, group, key, run, hint, params)
     const list: Command[] = [
       mk('go-library', 'palette.group.go', 'palette.cmd.goLibrary', () => s.setPage('library')),
       mk('go-batch', 'palette.group.go', 'palette.cmd.goBatch', () => s.setPage('batch')),
@@ -146,12 +138,12 @@ function Palette() {
     // The same list as the selection bar and the right-click menu.
     if (picks.length > 0) for (const a of runnable(bulk)) list.push(fromAction(a, 'palette.group.selection', 'sel', lang))
     for (const a of runnable(single)) list.push(fromAction(a, 'palette.group.image', 'img', lang))
-    list.push(mk('shortcuts', 'lib.palette.groupHelp', 'lib.palette.shortcuts', () => useShortcutSheet.getState().setOpen(true)))
+    list.push(...shellCommands(lang, SHELL_OPS))
+    list.push(mk('shortcuts', 'lib.palette.groupHelp', 'lib.palette.shortcuts', () => useShortcutSheet.getState().open(s.page)))
     return list
   }, [lang, libraries.data, batches.data, picks, bulk, single, sortPending])
 
-  const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean)
-  const shown = commands.filter((c) => terms.every((term) => c.haystack.includes(term)))
+  const shown = commands.filter((c) => matches(c, q))
   // The pointer can leave `active` on a row the typed filter just removed: the first row stands in until it resets.
   const current = active < shown.length ? active : 0
 

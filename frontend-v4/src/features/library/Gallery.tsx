@@ -5,6 +5,7 @@ import type { ImageSummary } from '../../api/types'
 import { useT, type MessageKey, type Params } from '../../i18n'
 import { generatorCode, isTypingTarget } from '../../lib/format'
 import { formatScore } from '../../lib/imageInfo'
+import { uiZoom } from '../../lib/uiScale'
 import { useApp, type Layout, type TileSize } from '../../state/store'
 import { Icon } from '../../ui/Icon'
 import { PickMark } from '../../ui/PickMark'
@@ -101,7 +102,8 @@ export function Gallery({ images, total, scrollKey, hasMore, isFetchingMore, fet
   const target = TILE_TARGET[tileSize]
   const lanes = Math.max(1, Math.floor((inner + GAP) / (target + GAP)))
   const colW = lanes > 0 ? (inner - GAP * (lanes - 1)) / lanes : target
-  const thumbSize = layout === 'grid' && colW * devicePixelRatio <= 256 ? 256 : 384
+  // Screen pixels per tile: the interface zoom enlarges tiles like a denser screen does.
+  const thumbSize = layout === 'grid' && colW * devicePixelRatio * uiZoom() <= 256 ? 256 : 384
 
   const imagesRef = useRef(images)
   imagesRef.current = images

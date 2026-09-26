@@ -402,7 +402,7 @@
 /* ---- the exact files, before an export that leaves images out or uses originals ---- */
 
 .confirmList {
-  max-height: 44vh;
+  max-height: calc(44 * var(--vh));
   margin: 0 0 10px;
   padding: 0;
   overflow-y: auto;

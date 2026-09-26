@@ -1,9 +1,10 @@
 import { create } from 'zustand'
 import type { BatchKind } from '../api/types'
 import { parseBrowseStore, recallBrowse, rememberBrowse, type BrowseState, type Scope } from '../lib/browseMemory'
+import { isMainPage, parseRoute, routeHash, type MainPage, type Page, type Route, type SettingsTab, type ToolId } from '../lib/route'
 import { isSortBase, type SortBase } from '../lib/sort'
 
-export type Page = 'home' | 'library' | 'batch' | 'sort'
+export type { MainPage, Page, SettingsTab, ToolId }
 export type Layout = 'masonry' | 'grid'
 export type TileSize = 's' | 'm' | 'l'
 export type { Scope }
@@ -49,19 +50,38 @@ function writeJson(key: string, value: unknown): void {
   }
 }
 
-/** Page and open batch from the address: #/library, #/batch, #/batch/12, #/home, #/sort. */
-function routeFromHash(): { page: Page; batchId: number | null } {
-  const h = location.hash.replace(/^#\/?/, '')
-  const batch = /^batch\/(\d+)$/.exec(h)
-  if (batch) return { page: 'batch', batchId: Number(batch[1]) }
-  const page: Page = h === 'home' || h === 'batch' || h === 'sort' ? h : 'library'
-  return { page, batchId: null }
-}
-
-function writeHash(page: Page, batchId: number | null): void {
-  const hash = page === 'batch' && batchId !== null ? `#/batch/${batchId}` : `#/${page}`
+function writeHash(route: Route): void {
+  const hash = routeHash(route)
   if (location.hash !== hash) history.replaceState(null, '', hash)
 }
+
+/** Where "← back" on the settings and tools pages returns to. */
+interface Back {
+  page: MainPage
+  batchId: number | null
+}
+
+type RouteState = Pick<AppState, 'page' | 'batchId' | 'settingsTab' | 'toolId' | 'back'>
+
+/**
+ * The state a route shows. Going from a main page to settings or a tool
+ * remembers that page for "back"; the tab and tool not on screen keep their
+ * last value, so ⚙ opens the tab used last.
+ */
+function stateFor(route: Route, from: RouteState): RouteState {
+  const back = isMainPage(from.page) ? { page: from.page, batchId: from.batchId } : from.back
+  if (route.page === 'settings') return { ...from, page: 'settings', batchId: null, settingsTab: route.tab, back }
+  if (route.page === 'tools') return { ...from, page: 'tools', batchId: null, toolId: route.tool, back }
+  return { ...from, page: route.page, batchId: route.batchId }
+}
+
+const initialRoute = stateFor(parseRoute(location.hash), {
+  page: 'library',
+  batchId: null,
+  settingsTab: 'appearance',
+  toolId: 'reader',
+  back: { page: 'library', batchId: null },
+})
 
 /** Picking in the library for a batch: an existing one, or a new one made from the picks. */
 export type AddTarget = { batchId: number } | { kind: BatchKind }
@@ -84,9 +104,19 @@ interface AppState extends Prefs {
   paletteOpen: boolean
   /** The batch open on the Batch page (null: the list). */
   batchId: number | null
+  /** The Settings page's tab (kept while elsewhere: ⚙ reopens it). */
+  settingsTab: SettingsTab
+  /** The tool on the Tools page. */
+  toolId: ToolId
+  /** The main page the settings and tools pages go back to. */
+  back: Back
   adding: AddTarget | null
 
   setPage: (page: Page) => void
+  openSettings: (tab?: SettingsTab) => void
+  openTool: (tool: ToolId) => void
+  /** Leave settings or a tool for the page it was opened from. */
+  goBack: () => void
   setLibrary: (id: string) => void
   setQueryText: (text: string) => void
   setScope: (patch: Partial<Scope>) => void
@@ -154,18 +184,23 @@ export const useApp = create<AppState>((set, get) => ({
   lightboxId: null,
   lightboxAt: null,
   paletteOpen: false,
-  ...routeFromHash(),
+  ...initialRoute,
   adding: null,
 
   setPage: (page) => {
     // The Batch tab opens the list; a batch opens through openBatch.
-    writeHash(page, null)
-    set({ page, batchId: null, lightboxId: null })
+    const s = get()
+    const route: Route = page === 'settings' ? { page, tab: s.settingsTab } : page === 'tools' ? { page, tool: s.toolId } : { page, batchId: null }
+    go(route)
   },
+  openSettings: (tab) => go({ page: 'settings', tab: tab ?? get().settingsTab }),
+  openTool: (tool) => go({ page: 'tools', tool }),
+  goBack: () => go(get().back),
   setLibrary: (id) => {
     writeJson(LIBRARY_KEY, { v: 2, currentId: id })
     // That library's own last search, not the one from the library we leave.
     const browse = recallBrowse(readBrowse(), id)
+    const back = get().back.page === 'batch' ? { page: 'batch' as const, batchId: null } : get().back
     set({
       libraryId: id,
       queryText: browse.queryText,
@@ -174,9 +209,10 @@ export const useApp = create<AppState>((set, get) => ({
       selection: [],
       selectionAnchor: null,
       batchId: null,
+      back,
       adding: null,
     })
-    if (get().page === 'batch') writeHash('batch', null)
+    if (get().page === 'batch') writeHash({ page: 'batch', batchId: null })
   },
   setQueryText: (queryText) => {
     set({ queryText })
@@ -229,11 +265,14 @@ export const useApp = create<AppState>((set, get) => ({
   openLightboxAt: (lightboxId, lightboxAt) => set({ lightboxId, lightboxAt, inspectedId: lightboxId }),
   closeLightbox: () => set({ lightboxId: null, lightboxAt: null }),
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
-  openBatch: (batchId) => {
-    writeHash('batch', batchId)
-    set({ page: 'batch', batchId, lightboxId: null })
-  },
+  openBatch: (batchId) => go({ page: 'batch', batchId }),
   setAdding: (adding) => set({ adding }),
 }))
 
-window.addEventListener('hashchange', () => useApp.setState({ ...routeFromHash(), lightboxId: null }))
+/** Show a route and write it into the address. */
+function go(route: Route): void {
+  writeHash(route)
+  useApp.setState((s) => ({ ...stateFor(route, s), lightboxId: null }))
+}
+
+window.addEventListener('hashchange', () => useApp.setState((s) => ({ ...stateFor(parseRoute(location.hash), s), lightboxId: null })))

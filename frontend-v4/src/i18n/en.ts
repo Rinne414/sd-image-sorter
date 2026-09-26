@@ -6,6 +6,8 @@ import { enInfo } from './en.info'
 import { enStatus } from './en.status'
 import { enBrowse } from './en.browse'
 import { enSort } from './en.sort'
+import { enSettings } from './en.settings'
+import { enTools } from './en.tools'
 import type { MessageKey } from './zh-CN'
 
 export const en: Record<MessageKey, string> = {
@@ -17,6 +19,8 @@ export const en: Record<MessageKey, string> = {
   ...enStatus,
   ...enBrowse,
   ...enSort,
+  ...enSettings,
+  ...enTools,
   'app.name': 'SD Image Sorter',
   'nav.home': 'Home',
   'nav.library': 'Library',
@@ -24,7 +28,6 @@ export const en: Record<MessageKey, string> = {
   'nav.sort': 'Organize',
   'nav.command': 'Find a feature or command',
   'nav.backToV3': 'Back to V3.5',
-  'nav.language': '中文',
 
   'rail.images': '{n} images',
   'rail.mainLibrary': 'Main library',

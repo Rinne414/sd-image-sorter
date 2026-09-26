@@ -170,7 +170,7 @@
   top: 46px;
   left: 12px;
   width: min(760px, calc(100% - 24px));
-  max-height: min(70vh, 640px);
+  max-height: min(70 * var(--vh), 640px);
   overflow-y: auto;
   padding: 14px 16px;
   background: var(--surface-2);

@@ -32,7 +32,7 @@
   display: grid;
   grid-template-columns: 180px minmax(0, 1fr);
   gap: 10px;
-  height: min(300px, 40vh);
+  height: min(300px, 40 * var(--vh));
 }
 
 .places {

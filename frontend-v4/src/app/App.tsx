@@ -13,6 +13,10 @@ import { CompareDialog } from '../features/similar/CompareDialog'
 import { DuplicatesDialog } from '../features/similar/DuplicatesDialog'
 import { SortPage } from '../features/sort/SortPage'
 import { HealthDialog } from '../features/status/HealthDialog'
+import { SettingsPage } from '../features/settings/SettingsPage'
+// Keeps the interface zoom in step with the window (auto) from the first render.
+import '../features/settings/uiScaleStore'
+import { ToolPage } from '../features/tools/ToolPage'
 import { useLang } from '../i18n'
 import { useApp } from '../state/store'
 import styles from './App.module.css'
@@ -48,6 +52,8 @@ export function App() {
         {page === 'batch' && <BatchPage />}
         {page === 'sort' && <SortPage />}
         {page === 'home' && <HomePage />}
+        {page === 'settings' && <SettingsPage />}
+        {page === 'tools' && <ToolPage />}
       </div>
       <CommandPalette />
       <ShortcutSheet />

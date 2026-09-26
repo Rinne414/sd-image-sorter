@@ -7,6 +7,8 @@ import { zhCNInfo } from './zh-CN.info'
 import { zhCNStatus } from './zh-CN.status'
 import { zhCNBrowse } from './zh-CN.browse'
 import { zhCNSort } from './zh-CN.sort'
+import { zhCNSettings } from './zh-CN.settings'
+import { zhCNTools } from './zh-CN.tools'
 
 export const zhCN = {
   ...zhCNPublish,
@@ -17,6 +19,8 @@ export const zhCN = {
   ...zhCNStatus,
   ...zhCNBrowse,
   ...zhCNSort,
+  ...zhCNSettings,
+  ...zhCNTools,
   'app.name': 'SD Image Sorter',
   'nav.home': '首页',
   'nav.library': '图库',
@@ -24,7 +28,6 @@ export const zhCN = {
   'nav.sort': '分拣',
   'nav.command': '找功能或指令',
   'nav.backToV3': '回到 V3.5',
-  'nav.language': 'English',
 
   'rail.images': '{n} 张',
   'rail.mainLibrary': '主图库',

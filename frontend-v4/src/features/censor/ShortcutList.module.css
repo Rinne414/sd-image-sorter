@@ -12,8 +12,8 @@
   grid-template-columns: repeat(2, minmax(270px, 1fr));
   gap: 12px 28px;
   width: max-content;
-  max-width: min(640px, calc(100vw - 32px));
-  max-height: calc(100vh - 140px);
+  max-width: min(640px, calc(100 * var(--vw) - 32px));
+  max-height: calc(100 * var(--vh) - 140px);
   overflow-y: auto;
   padding: 14px 16px;
   background: var(--surface-2);

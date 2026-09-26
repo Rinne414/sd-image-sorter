@@ -106,9 +106,12 @@
 
 .command {
   display: flex;
+  flex: 0 1 auto;
   align-items: center;
   gap: 8px;
-  width: clamp(210px, 22vw, 320px);
+  /* gives way first when the busy chip, the update hint and jobs all show */
+  width: clamp(210px, 22 * var(--vw), 320px);
+  min-width: 150px;
   height: 30px;
   margin-right: 4px;
   padding: 0 7px 0 10px;
@@ -129,4 +132,11 @@
 .command:hover {
   border-color: var(--line-strong);
   color: var(--muted);
+}
+
+/* ⚙ and Tools stand in for the tabs on their own pages. */
+.bar :global(.btn)[aria-current="page"] {
+  border-color: var(--text-2);
+  background: var(--wash-strong);
+  color: var(--text);
 }

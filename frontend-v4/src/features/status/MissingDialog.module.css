@@ -27,7 +27,7 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  max-height: min(40vh, 360px);
+  max-height: min(40 * var(--vh), 360px);
   overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: var(--radius);

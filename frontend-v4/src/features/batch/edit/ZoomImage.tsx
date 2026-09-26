@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { useT } from '../../../i18n'
+import { toPagePx } from '../../../lib/uiScale'
 import { Icon } from '../../../ui/Icon'
 import styles from './EditStep.module.css'
 
@@ -65,8 +66,8 @@ export function ZoomImage({ src, missing, testId }: Props) {
   const onMove = (e: PointerEvent) => {
     const el = frame.current
     if (!drag.current || !el) return
-    el.scrollLeft = drag.current.left - (e.clientX - drag.current.x)
-    el.scrollTop = drag.current.top - (e.clientY - drag.current.y)
+    el.scrollLeft = drag.current.left - toPagePx(e.clientX - drag.current.x)
+    el.scrollTop = drag.current.top - toPagePx(e.clientY - drag.current.y)
   }
 
   return (

@@ -1,57 +1,69 @@
 import { create } from 'zustand'
-import { useT, type MessageKey } from '../../i18n'
+import { useT } from '../../i18n'
+import type { Page } from '../../lib/route'
 import { Dialog } from '../../ui/Dialog'
-import { SHORTCUT_GROUPS, SHORTCUTS } from './keys'
+import { helpTopic, type HelpGroup } from '../command/helpTopics'
 import styles from './ShortcutSheet.module.css'
 
-// Ctrl K › 快捷键: every key the library and the big image answer to, from
-// the same table keys.ts maps keys with, so the sheet cannot go out of date.
+// Ctrl K › 说明 / 快捷键: what a page is for and every key it answers to, from
+// the same tables the key handlers are tested against (command/helpTopics.ts),
+// so the sheet cannot go out of date.
 
-export const useShortcutSheet = create<{ open: boolean; setOpen: (open: boolean) => void }>((set) => ({
-  open: false,
-  setOpen: (open) => set({ open }),
+interface SheetState {
+  /** The page whose help is open (null: closed). */
+  topic: Page | null
+  open: (topic: Page) => void
+  close: () => void
+}
+
+export const useShortcutSheet = create<SheetState>((set) => ({
+  topic: null,
+  open: (topic) => set({ topic }),
+  close: () => set({ topic: null }),
 }))
 
-/** Mouse gestures are words, so they are translated; key names are shown as printed on the key. */
-const GESTURE: Record<string, MessageKey> = {
-  ctrlClick: 'lib.keys.gesture.ctrlClick',
-  shiftClick: 'lib.keys.gesture.shiftClick',
-  rightClick: 'lib.keys.gesture.rightClick',
-  doubleClick: 'lib.keys.gesture.doubleClick',
-  drag: 'lib.keys.gesture.drag',
-}
-
 export function ShortcutSheet() {
-  const open = useShortcutSheet((s) => s.open)
-  if (!open) return null
-  return <Sheet />
+  const topic = useShortcutSheet((s) => s.topic)
+  if (!topic) return null
+  return <Sheet page={topic} />
 }
 
-function Sheet() {
+function Sheet({ page }: { page: Page }) {
   const t = useT()
-  const setOpen = useShortcutSheet((s) => s.setOpen)
+  const close = useShortcutSheet((s) => s.close)
+  const topic = helpTopic(page)
+  const onlyApp = topic.groups.length === 1 && topic.groups[0]?.id === 'app'
   return (
-    <Dialog title={t('lib.keys.title')} onClose={() => setOpen(false)} testId="shortcut-sheet" wide>
+    <Dialog title={t('help.title', { page: t(topic.name) })} onClose={close} testId="shortcut-sheet" wide>
+      <p className={styles.purpose} data-testid="help-purpose">
+        {t(topic.purpose)}
+      </p>
+      {onlyApp && <p className={styles.none}>{t('help.noKeys')}</p>}
       <div className={styles.grid}>
-        {SHORTCUT_GROUPS.map((group) => (
-          <section key={group.id} className={styles.group}>
-            <h3>{t(group.label)}</h3>
-            <dl>
-              {SHORTCUTS.filter((s) => s.group === group.id).map((s) => (
-                <div key={`${s.keys.join()}-${s.label}`} className={styles.row}>
-                  <dt>
-                    {s.keys.map((k) => {
-                      const gesture = s.pointer ? GESTURE[k] : undefined
-                      return <kbd key={k}>{gesture ? t(gesture) : k}</kbd>
-                    })}
-                  </dt>
-                  <dd>{t(s.label)}</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
+        {topic.groups.map((group) => (
+          <Group key={group.id} group={group} />
         ))}
       </div>
     </Dialog>
+  )
+}
+
+function Group({ group }: { group: HelpGroup }) {
+  const t = useT()
+  return (
+    <section className={styles.group}>
+      <h3>{group.part ? t(group.label, { group: t(group.part) }) : t(group.label)}</h3>
+      <dl>
+        {group.rows.map((row) => (
+          <div key={`${row.keys.join()}-${row.label}-${row.note ?? ''}`} className={styles.row}>
+            <dt>{row.gesture ? <kbd>{t(row.gesture)}</kbd> : row.keys.map((k) => <kbd key={k}>{k}</kbd>)}</dt>
+            <dd>
+              {t(row.label)}
+              {row.note && <span className={styles.note}> {t(row.note)}</span>}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   )
 }

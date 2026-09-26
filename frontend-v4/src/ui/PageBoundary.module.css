@@ -1,0 +1,15 @@
+.failed {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 560px;
+  padding: 18px 20px;
+  border-left: 2px solid var(--danger);
+  background: var(--wash);
+}
+
+.failed p {
+  margin: 0;
+  color: var(--text);
+}

@@ -5,13 +5,13 @@
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  padding-top: 12vh;
+  padding-top: calc(12 * var(--vh));
   background: var(--scrim);
 }
 
 .panel {
-  width: min(460px, calc(100vw - 48px));
-  max-height: calc(100vh - 12vh - 32px);
+  width: min(460px, calc(100 * var(--vw) - 48px));
+  max-height: calc(100 * var(--vh) - 12 * var(--vh) - 32px);
   display: flex;
   flex-direction: column;
   background: var(--surface-2);
@@ -21,11 +21,11 @@
 }
 
 .panel[data-wide] {
-  width: min(720px, calc(100vw - 48px));
+  width: min(720px, calc(100 * var(--vw) - 48px));
 }
 
 .panel[data-wide='x'] {
-  width: min(1120px, calc(100vw - 48px));
+  width: min(1120px, calc(100 * var(--vw) - 48px));
 }
 
 @keyframes drop {

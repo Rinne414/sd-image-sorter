@@ -76,7 +76,7 @@ export function SelectionBar({ params, total, images, hasMore }: Props) {
   const invertItem: MenuItem = { id: 'invert', label: t('lib.sel.invert'), hint: 'Ctrl+I', onSelect: () => void invert(), className: styles.narrowOnly }
   const moreItems: MenuItem[] = [
     ...(params ? [invertItem] : []),
-    ...menuItemsOf(t, more).map((item, i) => (item.danger && !more[i - 1]?.danger ? { ...item, divider: true } : item)),
+    ...menuItemsOf(t, more).map((item, i, items) => (item.danger && !items[i - 1]?.danger ? { ...item, divider: true } : item)),
   ]
 
   return (

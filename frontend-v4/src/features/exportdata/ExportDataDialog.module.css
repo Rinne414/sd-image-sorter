@@ -59,7 +59,7 @@
 
 .text {
   width: 100%;
-  height: min(40vh, 380px);
+  height: min(40 * var(--vh), 380px);
   padding: 8px 10px;
   resize: vertical;
   border: 1px solid var(--line);

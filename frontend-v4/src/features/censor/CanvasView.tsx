@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useT } from '../../i18n'
+import { pointIn, toPagePx } from '../../lib/uiScale'
 import { isNoAdjust } from './adjust'
 import { useAdjustDraft } from './adjustDraft'
 import styles from './CanvasView.module.css'
@@ -158,8 +159,7 @@ export function CanvasView({ imageId, ops, onCommit }: Props) {
       e.preventDefault()
       const v = useCanvasView.getState()
       if (e.ctrlKey || e.metaKey) {
-        const box = el.getBoundingClientRect()
-        v.zoomBy(Math.min(ZOOM_STEP, Math.max(1 / ZOOM_STEP, Math.exp(-e.deltaY * 0.002))), e.clientX - box.left, e.clientY - box.top)
+        v.zoomBy(Math.min(ZOOM_STEP, Math.max(1 / ZOOM_STEP, Math.exp(-e.deltaY * 0.002))), ...pointIn(el, e))
       } else {
         v.panBy(e.shiftKey ? -e.deltaY : -e.deltaX, e.shiftKey ? 0 : -e.deltaY)
       }
@@ -177,19 +177,20 @@ export function CanvasView({ imageId, ops, onCommit }: Props) {
     return rect !== null
   }
 
-  const local = (e: { clientX: number; clientY: number }) => {
-    const box = viewportRef.current?.getBoundingClientRect()
-    return box ? [e.clientX - box.left, e.clientY - box.top] : [0, 0]
+  /** The pointer inside the viewport, in page px (the view's own units, also under the interface zoom). */
+  const local = (e: { clientX: number; clientY: number }): [number, number] => {
+    const el = viewportRef.current
+    return el ? pointIn(el, e) : [0, 0]
   }
 
   const imagePoint = (e: { clientX: number; clientY: number }): [number, number] => {
     const [vx, vy] = local(e)
-    const [x, y] = toImage(useCanvasView.getState(), vx as number, vy as number)
+    const [x, y] = toImage(useCanvasView.getState(), vx, vy)
     return [roundPoint(x), roundPoint(y)]
   }
 
   const moveRing = (e: ReactPointerEvent) => {
-    const [vx, vy] = local(e) as [number, number]
+    const [vx, vy] = local(e)
     const ring = ringRef.current
     if (ring) ring.style.transform = `translate(${vx}px, ${vy}px) translate(-50%, -50%)`
     placeCloneMark(markRef.current, imageId, vx, vy)
@@ -230,7 +231,7 @@ export function CanvasView({ imageId, ops, onCommit }: Props) {
     moveRing(e)
     const d = drag.current
     if (d?.kind === 'pan') {
-      useCanvasView.getState().panBy(e.clientX - d.x, e.clientY - d.y)
+      useCanvasView.getState().panBy(toPagePx(e.clientX - d.x), toPagePx(e.clientY - d.y))
       drag.current = { kind: 'pan', x: e.clientX, y: e.clientY }
     } else if (d?.kind === 'stroke') {
       const { op, painter } = d.stroke

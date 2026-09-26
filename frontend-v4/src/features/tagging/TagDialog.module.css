@@ -11,7 +11,7 @@
   display: grid;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  max-height: min(340px, 42vh);
+  max-height: min(340px, 42 * var(--vh));
   overflow-y: auto;
 }
 

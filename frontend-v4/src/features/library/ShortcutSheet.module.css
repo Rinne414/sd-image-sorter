@@ -1,3 +1,21 @@
+/* What the page is for, above its keys. */
+.purpose {
+  margin: 0 0 16px;
+  max-width: 78ch;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.none {
+  margin: 0 0 12px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.note {
+  color: var(--muted);
+}
+
 /* Two columns of key groups, like the censor editor's list. */
 .grid {
   display: grid;

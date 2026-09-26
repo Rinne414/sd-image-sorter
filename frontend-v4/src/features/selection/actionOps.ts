@@ -14,6 +14,8 @@ import { copyAndSay, openImageFolder } from '../library/fileActions'
 import { useSimilarDialogs } from '../similar/dialogs'
 import { showLikeImage } from '../similar/similarStore'
 import { sortImages } from '../sort/sortStore'
+import { sendToTool } from '../tools/handoff'
+import { sendTargets } from '../tools/registry'
 import { bulkActions, imageActions, type ImageAction, type ImageFacts } from './actions'
 import { useSelectionDialog } from './dialogs'
 
@@ -37,6 +39,7 @@ export function useBulkActions(ids: number[]): ImageAction[] {
         favorited,
         batches: recentBatches(batches.data),
         templates: templates.data?.templates ?? [],
+        tools: sendTargets(ids.length),
         ops: {
           rate: (list, stars) => rate({ ids: list, stars }),
           favorite: (list, on) => favorite({ ids: list, favorited: on }),
@@ -47,6 +50,7 @@ export function useBulkActions(ids: number[]): ImageAction[] {
           compare: (a, b) => useSimilarDialogs.getState().openCompare(a, b),
           score: (list) => void scoreImages(list),
           sort: (list) => sortImages({ kind: 'picks', ids: [...list] }),
+          sendToTool: (tool, list) => sendToTool(tool, list),
         },
       }),
     [ids, favorited, batches.data, templates.data, rate, favorite],
