@@ -501,11 +501,11 @@ class SortSessionMixin:
                             **self._get_sort_session_flags(),
                         }
                 elif redone_action == "collect":
-                    # v3.3.1: re-add the membership reference (no file move).
+                    # v3.3.1: re-add the membership reference (no file move);
+                    # V4: a Favorites key favorites again.
                     collection_id = redo_entry.get("collection_id")
                     try:
-                        if collection_id is not None and target_id is not None:
-                            db.set_collection_membership(int(collection_id), int(target_id), True)
+                        self._redo_collect_action(redo_entry)
                     except Exception as e:
                         logger.error(
                             "Redo collect failed for image %s into collection %s: %s",
@@ -658,7 +658,7 @@ class SortSessionMixin:
                         **self._get_sort_session_flags(),
                     }
                 try:
-                    db.set_collection_membership(int(collection_id), current["id"], True)
+                    added = self._collect_image(int(collection_id), current["id"])
                 except ValueError as e:
                     logger.error(
                         "Collect failed for image %d into collection %s: %s",
@@ -689,6 +689,9 @@ class SortSessionMixin:
                     "image_id": current["id"],
                     "collection_id": int(collection_id),
                     "folder_key": folder_key,
+                    # V4: undo takes out only what this key added.
+                    "favorites": added["favorites"],
+                    "was_member": added["was_member"],
                 })
             elif action == "skip":
                 self._sort_session["redo_stack"] = []

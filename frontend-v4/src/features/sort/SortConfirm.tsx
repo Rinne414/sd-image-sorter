@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { useT } from '../../i18n'
 import { Dialog } from '../../ui/Dialog'
 import styles from './SortPage.module.css'
@@ -10,10 +10,12 @@ interface Props {
   cancelLabel?: string
   onConfirm: () => Promise<unknown>
   onClose: () => void
+  /** More to read under the body (a list). */
+  children?: ReactNode
 }
 
 /** Dropping a sort's undo history is asked first; the safe choice has the focus. */
-export function SortConfirm({ title, body, confirmLabel, cancelLabel, onConfirm, onClose }: Props) {
+export function SortConfirm({ title, body, confirmLabel, cancelLabel, onConfirm, onClose, children }: Props) {
   const t = useT()
   const cancelRef = useRef<HTMLButtonElement>(null)
   const [busy, setBusy] = useState(false)
@@ -41,6 +43,7 @@ export function SortConfirm({ title, body, confirmLabel, cancelLabel, onConfirm,
       }
     >
       <p className={styles.confirmBody}>{body}</p>
+      {children}
     </Dialog>
   )
 }

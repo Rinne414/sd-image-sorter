@@ -26,7 +26,7 @@ const src = (name: string) => path.join(tmpRoot, DIR, name)
 
 test.beforeAll(() => {
   fs.rmSync(path.join(tmpRoot, DEST), { recursive: true, force: true })
-  for (const d of ['by-condition', 'copies', 'fit']) fs.mkdirSync(destOf(d), { recursive: true })
+  for (const d of ['by-condition', 'copies', 'fit', 'rule-a', 'rule-b']) fs.mkdirSync(destOf(d), { recursive: true })
 })
 
 test.beforeEach(async ({ page }) => {
@@ -176,6 +176,68 @@ test('a preset keeps the condition, the folder and the split', async ({ page }) 
   await expect(page.getByTestId('sort-condition-input')).toHaveValue(TOKEN)
   await expect(page.getByTestId('sort-split-rating')).toBeChecked()
   await expect(page.getByTestId('sort-rule-dest')).toContainText('by-condition')
+})
+
+test('several rules sort into their own folders in one run, first match wins; one undo puts every image back', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openLibrary(page, TOKEN, COUNT)
+  await toRules(page)
+  // rule 1: the wide ones (frames 1, 2, 5); rule 2: every seeded image, so it gets what rule 1 left (0, 3, 4)
+  await page.getByTestId('sort-condition-input').fill(`${TOKEN} width>=80`)
+  await expect(page.getByTestId('sort-condition-count')).toHaveText('3 match')
+  await chooseDestination(page, destOf('rule-a'))
+  await page.getByTestId('sort-rule-add').click()
+  const second = page.getByTestId('sort-more-rule')
+  await expect(second).toHaveCount(1)
+  await second.getByTestId('sort-more-condition-input').fill(TOKEN)
+  await expect(second.getByTestId('sort-more-condition-count')).toHaveText(`${COUNT} match`)
+  await expect(page.getByTestId('sort-start')).toBeDisabled()
+  await second.getByTestId('sort-more-choose').click()
+  const picker = page.getByTestId('sort-folder-picker')
+  await picker.getByTestId('folder-path').fill(destOf('rule-b'))
+  await picker.getByTestId('folder-path').press('Enter')
+  await expect(picker.getByTestId('folder-target')).toContainText('rule-b')
+  await picker.getByRole('button', { name: 'Use this folder' }).click()
+  await expect(page.getByTestId('sort-start')).toHaveText('Sort by 2 rules…')
+  await expect(page.getByTestId('sort-start')).toBeInViewport({ ratio: 1 })
+  expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
+
+  await page.getByTestId('sort-start').click()
+  const plan = page.getByTestId('sort-rules-plan')
+  await expect(plan.getByTestId('sort-rules-plan-row')).toHaveCount(2)
+  await expect(plan.getByTestId('sort-rules-plan-row').nth(0)).toHaveAttribute('data-count', '3')
+  await expect(plan.getByTestId('sort-rules-plan-row').nth(1)).toHaveAttribute('data-count', '3')
+  await expect(plan.getByTestId('sort-rules-plan-row').nth(0)).toContainText('Rule 1: 3 images')
+  await page.getByTestId('sort-confirm').getByRole('button', { name: 'Move 6 images' }).click()
+
+  await expect(run(page)).toHaveAttribute('data-status', 'done')
+  await expect(page.getByTestId('sort-rules-headline')).toHaveText('Moved 6 images by 2 rules.')
+  await expect(page.getByTestId('sort-rules-group')).toHaveCount(2)
+  const name = (i: number) => `${PREFIX}${String(i).padStart(2, '0')}.png`
+  for (const i of [1, 2, 5]) expect(fs.existsSync(path.join(destOf('rule-a'), name(i))), name(i)).toBe(true)
+  for (const i of [0, 3, 4]) expect(fs.existsSync(path.join(destOf('rule-b'), name(i))), name(i)).toBe(true)
+  for (let i = 0; i < COUNT; i++) expect(fs.existsSync(src(name(i)))).toBe(false)
+  // one run: one job in the drawer
+  await page.getByTestId('jobs-button').click()
+  await expect(page.getByTestId('jobs-drawer')).toContainText('Sorted 6 images by condition')
+  await page.keyboard.press('Escape')
+
+  await page.getByTestId('sort-rules-undo').click()
+  await expect(run(page)).toHaveAttribute('data-kind', 'undo')
+  await expect(run(page)).toHaveAttribute('data-status', 'done')
+  await expect(page.getByTestId('sort-rules-headline')).toHaveText('Undone: 6 images are back where they were.')
+  for (let i = 0; i < COUNT; i++) expect(fs.existsSync(src(name(i))), name(i)).toBe(true)
+
+  // the rules are kept in a preset, the added one too
+  await page.getByTestId('sort-rules-again').click()
+  await page.getByTestId('sort-preset-save').click()
+  await page.getByTestId('sort-preset-name').fill('Two rules')
+  await page.getByTestId('sort-preset-confirm').click()
+  await page.getByTestId('sort-more-remove').click()
+  await expect(page.getByTestId('sort-more-rule')).toHaveCount(0)
+  await page.getByTestId('sort-presets').locator('[data-preset="Two rules"]').getByRole('button', { name: /^Two rules/ }).click()
+  await expect(page.getByTestId('sort-more-rule')).toHaveCount(1)
+  await expect(page.getByTestId('sort-more-condition-input')).toHaveValue(TOKEN)
 })
 
 for (const viewport of VIEWPORTS) {

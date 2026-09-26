@@ -143,9 +143,23 @@ interface SlotsProps {
   setup: SortSetup
   onChoose: (slot: SlotKey) => void
   onClear: (slot: SlotKey) => void
+  onFavorites: (slot: SlotKey) => void
 }
 
-export function SlotRows({ setup, onChoose, onClear }: SlotsProps) {
+/** A key that adds to Favorites: that it does, and that the file stays where it is. */
+function FavoritesLabel() {
+  const t = useT()
+  const label = t('rail.favorites')
+  const note = t('sort.slot.addsNote')
+  return (
+    <span className={styles.folder} title={`${label} · ${note}`} data-testid="sort-slot-favorites">
+      <span className={styles.folderName}>{label}</span>
+      <span className={styles.folderParent}>{note}</span>
+    </span>
+  )
+}
+
+export function SlotRows({ setup, onChoose, onClear, onFavorites }: SlotsProps) {
   const t = useT()
   return (
     <fieldset className={styles.group} data-testid="sort-slots">
@@ -153,19 +167,30 @@ export function SlotRows({ setup, onChoose, onClear }: SlotsProps) {
       <ul className={styles.slotList}>
         {SLOT_KEYS.map((slot) => {
           const path = setup.folders[slot] ?? null
+          const favorites = setup.favorites.includes(slot)
           const key = slot.toUpperCase()
           return (
             <li key={slot} className={styles.slotRow} data-slot={slot}>
               <kbd className={styles.cap}>{key}</kbd>
-              {path ? <FolderLabel path={path} /> : <span className={styles.unset}>{t('sort.slot.unset')}</span>}
+              {path ? <FolderLabel path={path} /> : favorites ? <FavoritesLabel /> : <span className={styles.unset}>{t('sort.slot.unset')}</span>}
               <button type="button" className="btn" onClick={() => onChoose(slot)} data-testid={`sort-choose-${slot}`}>
                 {t(path ? 'sort.slot.change' : 'sort.slot.choose')}
               </button>
               <button
                 type="button"
+                className="btn"
+                onClick={() => onFavorites(slot)}
+                disabled={favorites}
+                title={t('sort.slot.toFavoritesTip', { key })}
+                data-testid={`sort-favorites-${slot}`}
+              >
+                {t('sort.slot.toFavorites')}
+              </button>
+              <button
+                type="button"
                 className="btn btn-ghost btn-icon"
                 onClick={() => onClear(slot)}
-                disabled={!path}
+                disabled={!path && !favorites}
                 aria-label={t('sort.slot.clear', { key })}
                 title={t('sort.slot.clear', { key })}
               >

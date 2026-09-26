@@ -60,7 +60,8 @@ interface SortStore extends SortState {
    * the user said to keep sorting them.
    */
   mayAct: () => boolean
-  start: (ids: number[], setup: SortSetup, replace: boolean) => Promise<StartResult>
+  /** `favoritesId`: the Favorites collection, for keys that add to Favorites. */
+  start: (ids: number[], setup: SortSetup, replace: boolean, favoritesId: number | null) => Promise<StartResult>
   end: () => Promise<boolean>
   openSetup: (source: SortSource | null) => void
   resume: () => void
@@ -158,9 +159,9 @@ export const useSort = create<SortStore>((set, get) => {
       set((cur) => ({ libraryOk: crossLibraryKey(view, useApp.getState().libraryId), error: cur.error?.kind === 'otherLibrary' ? null : cur.error }))
     },
 
-    start: async (ids, setup, replace) => {
+    start: async (ids, setup, replace, favoritesId) => {
       try {
-        await startSession(startBody(ids, setup, replace))
+        await startSession(startBody(ids, setup, replace, favoritesId))
       } catch (error) {
         if (error instanceof ApiError && error.status === 409) return 'conflict'
         return { error: (error as Error).message }

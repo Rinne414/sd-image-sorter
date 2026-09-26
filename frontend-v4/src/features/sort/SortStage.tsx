@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useT } from '../../i18n'
-import { folderName, parentFolder } from '../../lib/paths'
+import { parentFolder } from '../../lib/paths'
 import { useApp } from '../../state/store'
 import { Icon } from '../../ui/Icon'
 import { loadSetup, saveSetup, withFolder } from './savedSetup'
+import { useTargetName } from './keyTargets'
 import { SlotFolderDialog } from './SlotFolderDialog'
-import { SLOT_KEYS, upNow, type SessionView, type SlotKey, type SortImage } from './sortSession'
+import { SLOT_KEYS, slotTarget, upNow, type SessionView, type SlotKey, type SortImage } from './sortSession'
 import styles from './SortStage.module.css'
 import { useSort } from './sortStore'
 import { closeThen, Picture, Stage, useLit } from './StageParts'
@@ -49,12 +50,16 @@ interface SlotProps {
 /** One key: click it like pressing it; a key without a folder asks for one. */
 function SlotButton({ slot, view, lit, onChoose }: SlotProps) {
   const t = useT()
+  const namer = useTargetName()
   const key = slot.toUpperCase()
-  const folder = view.folders[slot] ?? null
-  const collection = view.collections[slot] ?? null
-  const usable = folder !== null || collection !== null
-  const name = folder ? folderName(folder) : collection ? `#${collection}` : t('sort.slot.unset')
-  const label = usable ? t('sort.slot.send', { key, folder: folder ?? name }) : t('sort.slot.pickFolder', { key })
+  const target = slotTarget(view, slot, namer.favoritesId)
+  const usable = target !== null
+  const name = namer.name(target)
+  const label = !target
+    ? t('sort.slot.pickFolder', { key })
+    : target.kind === 'folder'
+      ? t('sort.slot.send', { key, folder: target.path })
+      : t('sort.slot.addTo', { key, name })
   return (
     <div className={styles.slotWrap} data-lit={lit || undefined} data-unset={!usable || undefined} data-count={view.counts[slot] ?? 0}>
       <button
@@ -64,12 +69,13 @@ function SlotButton({ slot, view, lit, onChoose }: SlotProps) {
         title={label}
         aria-label={label}
         data-testid={`sort-slot-${slot}`}
+        data-target={target?.kind}
       >
         <kbd className={styles.cap}>{key}</kbd>
         <span className={styles.slotName}>{name}</span>
         {usable && <span className={`${styles.slotCount} mono`}>{view.counts[slot] ?? 0}</span>}
       </button>
-      {usable && collection === null && (
+      {target?.kind === 'folder' && (
         <button
           type="button"
           className={styles.slotEdit}

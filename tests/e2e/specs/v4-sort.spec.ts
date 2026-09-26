@@ -253,6 +253,60 @@ test('a new sort over an unfinished one asks first; Home and the setup offer to 
   await expect(page.getByTestId('sort-resume')).toHaveCount(0)
 })
 
+const LIB = { 'X-SD-Library-Id': 'main' }
+
+async function favoriteIds(page: Page): Promise<number[]> {
+  return ((await (await page.request.get('/api/collections/favorites/ids', { headers: LIB })).json()) as { image_ids: number[] }).image_ids
+}
+
+test('a key can add the image to Favorites instead of moving its file; undo takes out only what the key added', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await page.addInitScript((folder) => {
+    if (sessionStorage.getItem('v4sort-setup')) return
+    sessionStorage.setItem('v4sort-setup', '1')
+    localStorage.setItem('sd-v4-sort-setup:main', JSON.stringify({ folders: { s: folder }, operation: 'move' }))
+  }, destOf('copies'))
+  await openLibrary(page, FILTER_TOKEN, FILTER_COUNT)
+  const { ids, names } = await pick(page, 2)
+  const [first, second] = ids.map(Number) as [number, number]
+  // the second picture is a favorite already
+  expect((await page.request.post('/api/collections/favorites', { data: { image_id: second, favorited: true }, headers: LIB })).ok()).toBe(true)
+  await page.getByTestId('selection-bar').getByRole('button', { name: 'More' }).click()
+  await page.getByRole('menuitem', { name: 'Sort into folders…' }).click()
+
+  await page.getByTestId('sort-favorites-w').click()
+  const row = page.getByTestId('sort-slots').locator('[data-slot="w"]')
+  await expect(row.getByTestId('sort-slot-favorites')).toBeVisible()
+  await expect(row).toContainText('Favorites')
+  await expect(page.getByTestId('sort-favorites-w')).toBeDisabled()
+  await page.getByTestId('sort-start').click()
+
+  await expect(page.getByTestId('sort-slot-w')).toContainText('Favorites')
+  await press(page, 'w', 'Image 2 of 2')
+  await expect(page.getByTestId('sort-status')).toHaveText('Added to Favorites (W)')
+  // the heart's own list shows it, and no file moved even with "move" chosen
+  expect(await favoriteIds(page)).toContain(first)
+  expect(fs.existsSync(path.join(tmpRoot, FILTER_DIR, names[0]!))).toBe(true)
+  await page.keyboard.press('w')
+  await expect(page.getByTestId('sort-summary-body')).toBeVisible()
+
+  // undo the second: it was a favorite before the key, so it stays one
+  await page.keyboard.press('Backspace')
+  await expect(page.getByTestId('sort-pos')).toHaveText('Image 2 of 2')
+  expect(await favoriteIds(page)).toContain(second)
+  // undo the first: the key added it, so it goes
+  await page.keyboard.press('Backspace')
+  await expect(page.getByTestId('sort-pos')).toHaveText('Image 1 of 2')
+  await expect.poll(() => favoriteIds(page)).not.toContain(first)
+  expect(await favoriteIds(page)).toContain(second)
+
+  // the next sort in this library starts with W on Favorites again
+  await page.getByTestId('sort-new').click()
+  await expect(page.getByTestId('sort-slots').locator('[data-slot="w"]')).toContainText('Favorites')
+  expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
+  expect((await page.request.post('/api/collections/favorites', { data: { image_id: second, favorited: false }, headers: LIB })).ok()).toBe(true)
+})
+
 for (const viewport of VIEWPORTS) {
   test(`setup, session and summary fit at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport)

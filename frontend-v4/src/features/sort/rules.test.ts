@@ -110,12 +110,23 @@ describe('the last run, remembered per library', () => {
   afterEach(() => vi.unstubAllGlobals())
 
   it('restores the run of this library only, and forgets it on request', () => {
-    const record: RunRecord = { token: TOKEN, operation: 'copy', destination: 'D:/out', splitBy: 'generator', total: 4, phase: 'sort', open: true }
+    const record: RunRecord = { token: TOKEN, operation: 'copy', destination: 'D:/out', splitBy: 'generator', total: 4, phase: 'sort', open: true, groups: [] }
     saveRecord('main', record)
     expect(loadRecord('main')).toEqual(record)
     expect(loadRecord('other')).toBeNull()
     saveRecord('main', null)
     expect(loadRecord('main')).toBeNull()
+  })
+
+  it('keeps where each rule of a run by several rules went, and reads an older record as one rule', () => {
+    const groups = [
+      { destination: 'D:/nai', splitBy: 'none' as const, count: 3 },
+      { destination: 'D:/best', splitBy: 'rating' as const, count: 1 },
+    ]
+    saveRecord('main', { token: TOKEN, operation: 'move', destination: 'D:/nai', splitBy: 'none', total: 4, phase: 'sort', open: true, groups })
+    expect(loadRecord('main')?.groups).toEqual(groups)
+    store.set('sd-v4-sort-rules-run:main', JSON.stringify({ token: TOKEN, operation: 'move', groups: [{ destination: 'D:/x' }, 5] }))
+    expect(loadRecord('main')?.groups).toEqual([])
   })
 
   it('refuses a record without a proper run token', () => {

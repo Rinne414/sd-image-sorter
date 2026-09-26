@@ -206,7 +206,7 @@
 
 .slotRow {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 10px;
   padding: 6px 6px 6px 8px;
@@ -284,6 +284,29 @@
 .confirmBody {
   margin: 0;
   line-height: 1.6;
+}
+
+/* A run by several rules: one line per rule under the title. */
+.runGroups {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.runGroups li {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.runGroups .mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---- the finished summary ---- */

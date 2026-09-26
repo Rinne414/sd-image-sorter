@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import { api, ApiError, unwrap } from '../../api/client'
 import { addJob, isQueueBusy, startingProgress, tr } from '../jobs/jobs'
 import { loadRecord, runBody, saveRecord, type RunRecord } from './rules'
+import { groupsBody, type RuleGroup } from './ruleSet'
 import type { SortSetup } from './savedSetup'
 
 // Starts a sort-by-condition run and its undo (both background runs of the
@@ -56,7 +57,39 @@ export async function startRulesRun(ids: number[], setup: SortSetup): Promise<st
   if (!answer.run_token || total === 0) return tr('sort.start.empty')
   const destination = setup.rule.destination ?? ''
   addJob({ kind: 'sortrules', count: total, destination, ids, ctx: { runToken: answer.run_token }, progress: startingProgress(total) })
-  useRules.getState().set({ token: answer.run_token, operation: setup.operation, destination, splitBy: setup.rule.splitBy, total, phase: 'sort', open: true })
+  useRules.getState().set({ token: answer.run_token, operation: setup.operation, destination, splitBy: setup.rule.splitBy, total, phase: 'sort', open: true, groups: [] })
+  return null
+}
+
+/**
+ * Start one run over several rules' images, each group into its own rule's
+ * folder (one Jobs entry, one undo); null when it runs, else why it did not start.
+ */
+export async function startRulesGroups(groups: readonly RuleGroup[], setup: SortSetup): Promise<string | null> {
+  if (isQueueBusy('sortrules') || isQueueBusy('sortundo')) return tr('sort.rules.busy')
+  const body = groupsBody(groups, setup.operation)
+  let answer: { run_token?: string; total?: number; count?: number }
+  try {
+    answer = unwrap(await api.POST('/api/batch-move', { body }))
+  } catch (error) {
+    return tr('sort.start.failed', { reason: reasonOf(error) })
+  }
+  const total = answer.total ?? answer.count ?? 0
+  if (!answer.run_token || total === 0) return tr('sort.start.empty')
+  const used = groups.filter((g) => g.ids.length > 0)
+  const first = used[0]?.rule
+  const destination = first?.destination ?? ''
+  addJob({ kind: 'sortrules', count: total, destination, ids: body.image_ids, ctx: { runToken: answer.run_token }, progress: startingProgress(total) })
+  useRules.getState().set({
+    token: answer.run_token,
+    operation: setup.operation,
+    destination,
+    splitBy: first?.splitBy ?? 'none',
+    total,
+    phase: 'sort',
+    open: true,
+    groups: used.map((g) => ({ destination: g.rule.destination ?? '', splitBy: g.rule.splitBy, count: g.ids.length })),
+  })
   return null
 }
 

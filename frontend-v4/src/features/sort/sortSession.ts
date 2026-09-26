@@ -228,6 +228,17 @@ export function usableSlots(view: Pick<SessionView, 'folders' | 'collections'>):
   return SLOT_KEYS.filter((k) => view.folders[k] || view.collections[k])
 }
 
+/** What a key sends an image to during the sort. */
+export type KeyTarget = { kind: 'folder'; path: string } | { kind: 'favorites' } | { kind: 'collection'; id: number }
+
+/** What a key points at: a collection key on `favoritesId` (the built-in Favorites) is Favorites. */
+export function slotTarget(view: Pick<SessionView, 'folders' | 'collections'>, slot: SlotKey, favoritesId: number | null): KeyTarget | null {
+  const collection = view.collections[slot]
+  if (collection) return collection === favoritesId ? { kind: 'favorites' } : { kind: 'collection', id: collection }
+  const path = view.folders[slot]
+  return path ? { kind: 'folder', path } : null
+}
+
 const FORWARD: Record<SortMode, SortAction['kind'][]> = {
   slot: ['slot', 'skip'],
   bracket: ['pick', 'skip'],

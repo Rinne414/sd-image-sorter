@@ -13,19 +13,29 @@ export const SETUP_MODES: readonly SetupMode[] = ['slot', 'bracket', 'cull', 'ru
 export interface SortSetup {
   mode: SetupMode
   folders: SlotMap<string>
+  /**
+   * Keys that add the image to Favorites instead of moving it (such a key has
+   * no folder). The file stays where it is; the key's undo takes it out again.
+   */
+  favorites: SlotKey[]
   operation: FileOperation
   /** Sort by condition: what matches, where it goes, how it splits. */
   rule: RuleSetup
+  /** Sort by condition: further rules, tried in order after the first (ruleSet.ts). */
+  more: RuleSetup[]
 }
 
-export const EMPTY_SETUP: SortSetup = { mode: 'slot', folders: {}, operation: 'move', rule: EMPTY_RULE }
+export const EMPTY_SETUP: SortSetup = { mode: 'slot', folders: {}, favorites: [], operation: 'move', rule: EMPTY_RULE, more: [] }
 
 const keyOf = (libraryId: string) => `sd-v4-sort-setup:${libraryId}`
+
+/** Stored Favorites keys: known keys only, each once, in key order. */
+const cleanFavorites = (raw: unknown): SlotKey[] => (Array.isArray(raw) ? SLOT_KEYS.filter((k) => raw.includes(k)) : [])
 
 /** A stored setup made safe: unknown keys, empty paths and junk values dropped. */
 export function cleanSetup(raw: unknown): SortSetup {
   if (!raw || typeof raw !== 'object') return EMPTY_SETUP
-  const { mode, folders, operation, rule } = raw as { mode?: unknown; folders?: unknown; operation?: unknown; rule?: unknown }
+  const { mode, folders, favorites, operation, rule, more } = raw as Record<string, unknown>
   const clean: SlotMap<string> = {}
   for (const k of SLOT_KEYS) {
     const path = (folders as Record<string, unknown> | undefined)?.[k]
@@ -34,8 +44,11 @@ export function cleanSetup(raw: unknown): SortSetup {
   return {
     mode: SETUP_MODES.includes(mode as SetupMode) ? (mode as SetupMode) : 'slot',
     folders: clean,
+    favorites: cleanFavorites(favorites),
     operation: operation === 'copy' ? 'copy' : 'move',
     rule: cleanRule(rule),
+    // A setup or preset from before several rules has none added.
+    more: Array.isArray(more) ? more.filter((r) => r && typeof r === 'object').map(cleanRule) : [],
   }
 }
 
@@ -56,15 +69,24 @@ export function saveSetup(libraryId: string, setup: SortSetup): void {
   }
 }
 
-/** The setup with one key's folder set (or cleared with null). */
+/** The setup with one key's folder set (or the key cleared with null); the key no longer adds to Favorites. */
 export function withFolder(setup: SortSetup, slot: SlotKey, path: string | null): SortSetup {
   const folders = { ...setup.folders }
   if (path) folders[slot] = path
   else delete folders[slot]
-  return { ...setup, folders }
+  return { ...setup, folders, favorites: setup.favorites.filter((k) => k !== slot) }
 }
 
-export const hasFolder = (setup: SortSetup): boolean => SLOT_KEYS.some((k) => !!setup.folders[k])
+/** The setup with one key adding to Favorites (and no longer moving into a folder). */
+export function withFavorites(setup: SortSetup, slot: SlotKey): SortSetup {
+  const folders = { ...setup.folders }
+  delete folders[slot]
+  return { ...setup, folders, favorites: SLOT_KEYS.filter((k) => k === slot || setup.favorites.includes(k)) }
+}
+
+/** Some key has somewhere to send an image (a folder or Favorites). */
+export const hasFolder = (setup: SortSetup): boolean => SLOT_KEYS.some((k) => !!setup.folders[k] || setup.favorites.includes(k))
+
 
 /** Fewest images each way to sort needs: A/B compares two at least. */
 export const MIN_IMAGES: Record<SetupMode, number> = { slot: 1, bracket: 2, cull: 1, rules: 1 }
@@ -75,14 +97,19 @@ export function setupReady(setup: SortSetup): boolean {
   return setup.mode !== 'rules' || !!setup.rule.destination
 }
 
-/** Body of POST /api/sort/start for these images. A/B and keep/reject never touch files. */
-export function startBody(ids: number[], setup: SortSetup, replace: boolean) {
+/**
+ * Body of POST /api/sort/start for these images. A/B and keep/reject never
+ * touch files. A Favorites key is a collection key on the Favorites
+ * collection (`favoritesId`); the backend favorites the image as the heart does.
+ */
+export function startBody(ids: number[], setup: SortSetup, replace: boolean, favoritesId: number | null = null) {
   // Sort by condition never starts a session; a setup in that mode starts none.
   const mode: SortMode = setup.mode === 'rules' ? 'slot' : setup.mode
   const slot = mode === 'slot'
   return {
     image_ids: ids,
     folders: slot ? (Object.fromEntries(SLOT_KEYS.flatMap((k) => (setup.folders[k] ? [[k, setup.folders[k]]] : []))) as Record<string, string>) : {},
+    collection_slots: slot && favoritesId !== null ? Object.fromEntries(setup.favorites.map((k) => [k, favoritesId])) : {},
     operation_mode: slot ? setup.operation : 'copy',
     replace_existing: replace,
     mode,

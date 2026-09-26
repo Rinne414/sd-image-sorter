@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react'
 import { findLoadedImage } from '../../api/loaded'
-import { useImageCount } from '../../api/queries'
+import { useFavorites, useImageCount } from '../../api/queries'
 import { useT } from '../../i18n'
 import { parentFolder } from '../../lib/paths'
 import { useApp } from '../../state/store'
 import { currentLibraryParams } from '../library/params'
 import { matchingIds } from '../selection/invert'
 import { rememberDestination } from '../selection/dialogs'
-import { loadSetup, MIN_IMAGES, saveSetup, setupReady, withFolder, type SortSetup as Setup } from './savedSetup'
+import { loadSetup, MIN_IMAGES, saveSetup, setupReady, withFavorites, withFolder, type SortSetup as Setup } from './savedSetup'
 import { PresetBar } from './PresetBar'
 import { RulesBody } from './RulesBody'
 import { LastRunCard } from './RulesParts'
@@ -68,6 +68,9 @@ export function SortSetup() {
   const [confirming, setConfirming] = useState(false)
   const [notice, setNotice] = useState<Notice>(null)
   const [starting, setStarting] = useState(false)
+  // A key on Favorites is a collection key on the Favorites collection: its id is needed to start.
+  const favoritesId = useFavorites().data?.collectionId ?? null
+  const favoritesReady = setup.favorites.length === 0 || favoritesId !== null
   const count = choice === 'picks' ? picks.length : filterCount
   const sourceFolder = useMemo(() => {
     const img = choice === 'picks' && picks[0] !== undefined ? findLoadedImage(picks[0]) : null
@@ -89,7 +92,7 @@ export function SortSetup() {
       return t('sort.start.failed', { reason: (error as Error).message })
     }
     if (ids.length < MIN_IMAGES[setup.mode]) return t(setup.mode === 'bracket' ? 'sort.start.needTwo' : 'sort.start.empty')
-    const result = await useSort.getState().start(ids, setup, replace)
+    const result = await useSort.getState().start(ids, setup, replace, favoritesId)
     if (result === 'conflict') return 'conflict'
     if (result !== 'ok') return t('sort.start.failed', { reason: result.error })
     if (setup.mode === 'slot') for (const path of Object.values(setup.folders)) if (path) rememberDestination(path)
@@ -111,7 +114,7 @@ export function SortSetup() {
   }
 
   const enough = count === null || count >= MIN_IMAGES[setup.mode]
-  const canStart = setupReady(setup) && enough && !starting
+  const canStart = setupReady(setup) && enough && favoritesReady && !starting
 
   return (
     <section className={styles.page} data-testid="sort-setup">
@@ -141,7 +144,12 @@ export function SortSetup() {
           </div>
           <div className={styles.column}>
             {setup.mode === 'slot' ? (
-              <SlotRows setup={setup} onChoose={setChoosing} onClear={(slot) => update(withFolder(setup, slot, null))} />
+              <SlotRows
+                setup={setup}
+                onChoose={setChoosing}
+                onClear={(slot) => update(withFolder(setup, slot, null))}
+                onFavorites={(slot) => update(withFavorites(setup, slot))}
+              />
             ) : (
               <HowTo mode={setup.mode} />
             )}

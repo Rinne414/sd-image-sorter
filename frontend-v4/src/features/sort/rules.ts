@@ -57,6 +57,13 @@ export function runBody(ids: number[], rule: RuleSetup, operation: FileOperation
 
 export type RunPhase = 'sort' | 'undo' | 'undone'
 
+/** One rule of a run by several rules: where its images went, and how many. */
+export interface RunGroup {
+  destination: string
+  splitBy: SplitBy
+  count: number
+}
+
 export interface RunRecord {
   token: string
   operation: FileOperation
@@ -66,9 +73,20 @@ export interface RunRecord {
   phase: RunPhase
   /** The Sort tab shows this run (its progress, then its summary). */
   open: boolean
+  /** A run by several rules: each rule's folder and count, in rule order (empty for one rule). */
+  groups: RunGroup[]
 }
 
 const recordKey = (libraryId: string) => `sd-v4-sort-rules-run:${libraryId}`
+
+function readGroups(raw: unknown): RunGroup[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((g: unknown) => {
+    const o = g && typeof g === 'object' ? (g as Record<string, unknown>) : null
+    if (!o || typeof o.destination !== 'string' || typeof o.count !== 'number') return []
+    return [{ destination: o.destination, splitBy: cleanRule({ splitBy: o.splitBy }).splitBy, count: o.count }]
+  })
+}
 
 export function loadRecord(libraryId: string): RunRecord | null {
   try {
@@ -82,6 +100,7 @@ export function loadRecord(libraryId: string): RunRecord | null {
       total: typeof raw.total === 'number' ? raw.total : 0,
       phase: raw.phase === 'undo' || raw.phase === 'undone' ? raw.phase : 'sort',
       open: raw.open === true,
+      groups: readGroups(raw.groups),
     }
   } catch {
     return null

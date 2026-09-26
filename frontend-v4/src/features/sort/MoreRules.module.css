@@ -1,0 +1,124 @@
+/* Sort by condition's further rules, under the first rule's setup. */
+.more {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+/* Beside Start, at the far end of its row. */
+.add {
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* With several rules the page grows: Start stays at the bottom of the window. */
+.stickyStart {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  padding-bottom: 14px;
+  background: var(--stage);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-1);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hint {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+
+.list {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.number {
+  padding-top: 7px;
+  color: var(--accent);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: 16px;
+  align-items: start;
+  min-width: 0;
+}
+
+/* The shared condition field indents under a radio; here it sits in its column. */
+.body > [data-testid='sort-more-condition'] {
+  margin: 0;
+}
+
+.dest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+  min-height: 32px;
+}
+
+.unset {
+  color: var(--muted);
+  font-size: var(--fs-3);
+}
+
+.split {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.split select {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-3);
+  border-radius: var(--radius);
+}
+
+.split select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* The confirmation's list: one line per rule. */
+.plan {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-3);
+  line-height: 1.6;
+}

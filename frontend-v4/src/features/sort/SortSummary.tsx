@@ -2,9 +2,10 @@ import { useContext, type ReactNode } from 'react'
 import { useT } from '../../i18n'
 import { useApp } from '../../state/store'
 import { openFolderPath } from '../library/fileActions'
+import { useTargetName } from './keyTargets'
 import { FolderLabel } from './SetupParts'
 import { useSortPrefs } from './sortPrefs'
-import { summary, type SessionView } from './sortSession'
+import { slotTarget, summary, type SessionView } from './sortSession'
 import styles from './SortPage.module.css'
 import { useSort } from './sortStore'
 import { errorText, FocusTop, OtherLibraryBanner } from './StageParts'
@@ -65,6 +66,7 @@ export function SummaryFrame({ view, title, body, children }: FrameProps) {
 /** Every image has been judged: which folder got how many. Backspace still undoes the last one. */
 export function SortSummary({ view }: { view: SessionView }) {
   const t = useT()
+  const namer = useTargetName()
   const { rows, sent } = summary(view)
   const body = t(view.operation === 'copy' ? 'sort.done.bodyCopy' : 'sort.done.body', { total: view.total, sent, skipped: view.skipped })
   return (
@@ -73,7 +75,13 @@ export function SortSummary({ view }: { view: SessionView }) {
         {rows.map(({ slot, folder, collection, count }) => (
           <li key={slot} className={styles.doneRow} data-slot={slot} data-count={count}>
             <kbd className={styles.cap}>{slot.toUpperCase()}</kbd>
-            {folder ? <FolderLabel path={folder} /> : <span className={styles.unset}>{t('sort.slot.collection', { id: collection ?? 0 })}</span>}
+            {folder ? (
+              <FolderLabel path={folder} />
+            ) : (
+              <span className={styles.unset}>
+                {slotTarget(view, slot, namer.favoritesId)?.kind === 'favorites' ? t('rail.favorites') : t('sort.slot.collection', { id: collection ?? 0 })}
+              </span>
+            )}
             <span className={`${styles.doneCount} mono`}>{t('sort.count', { n: count })}</span>
             {folder ? (
               <button type="button" className="btn" onClick={() => void openFolderPath(folder)} disabled={count === 0}>

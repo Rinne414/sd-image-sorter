@@ -909,6 +909,8 @@ Reset stuck background move progress.
 #### POST /api/batch-move
 Move all images matching filters. JSON filter payloads accept `prompt_match_mode` (`exact` or `contains`, default `exact`) alongside `prompts`. A body with `image_ids` moves exactly those images of the current library instead (V4 sends the picks, or every match of its search resolved by `POST /api/images/selection-ids`); no filter is needed then. Every run answers with a `run_token` and records what it moved or copied, so it can be undone; the progress carries the same `run_token`, `run_kind` (`sort` or `undo`) and `error_items` (every failure, the first 200; `error_items_total` counts them all).
 
+V4 sort by several rules: an optional `groups` list (`[{"image_ids": [...], "destination_folder": "...", "split_by": null | "generator" | "checkpoint" | "rating"}]`) sorts each group's images into its own folder and split, all in ONE run (one `run_token`, one progress, one undo that puts every group back). An image listed in more than one group goes with the first; ids that are not images of the current library are left out. When `groups` is given, the top-level `image_ids`, `destination_folder` and `split_by` do not pick images or folders (send the first group's folder, which the run's record names), no filter is needed, and every group folder is checked before anything moves (400 for one that cannot be used). The start answer then also carries `groups`, how many groups it sorts into. A request without `groups` is unchanged.
+
 #### GET /api/batch-move/progress
 Get batch move progress.
 
@@ -928,7 +930,7 @@ Start manual sort session. Preferred clients send a JSON body with `generators`,
 Get current sort image. Every session answer (here and from `/api/sort/action`) carries `slot_counts`, the images sent to each slot key, and `library_id`, the library the session's images belong to (the one saved session is shared by every library; null without a session), plus `library_mixed`: true when the images belong to more than one library (then `library_id` is null). Every image of the session counts. A finished session still answers with `done: true` plus its `index`, `total`, `image_ids`, `folders`, `operation_mode` and counts, so the summary survives a reload.
 
 #### POST /api/sort/action
-Perform `move`, `skip`, or `undo`.
+Perform `move`, `skip`, or `undo`. `collect` adds the image to the collection its key points at, by reference (no file moves); a key on the built-in Favorites collection favorites the image the way the heart does (path-anchored, it shows in `/api/collections/favorites/ids`). Undoing a `collect` takes out only what that key added: an image that was already a favorite, or already in the collection, stays (the history entry records `was_member`; entries saved before it undo as before). `redo` adds it again the same way.
 
 #### POST /api/sort/set-folders
 Set manual sort folders.

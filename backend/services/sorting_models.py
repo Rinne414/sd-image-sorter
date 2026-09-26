@@ -424,6 +424,33 @@ class SortFilterRequest(BaseModel):
 VALID_BATCH_MOVE_SPLIT_BY = frozenset({"", "none", "generator", "checkpoint", "rating"})
 
 
+def _normalize_split_by(value: Optional[str]) -> Optional[str]:
+    """None / "" / "none" = flat; generator | checkpoint | rating = one child folder per value."""
+    if value is None:
+        return None
+    normalized = str(value).strip().lower()
+    if normalized not in VALID_BATCH_MOVE_SPLIT_BY:
+        raise ValueError("split_by must be one of: none, generator, checkpoint, rating")
+    if normalized in {"", "none"}:
+        return None
+    return normalized
+
+
+class BatchMoveGroup(BaseModel):
+    """V4: one rule of a sort by several rules: these images into this folder."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    image_ids: List[int] = Field(..., min_length=1, max_length=5_000_000)
+    destination_folder: str = Field(..., max_length=PATH_MAX_LENGTH)
+    split_by: Optional[str] = Field(default=None, max_length=32)
+
+    @field_validator("split_by")
+    @classmethod
+    def validate_split_by(cls, v: Optional[str]) -> Optional[str]:
+        return _normalize_split_by(v)
+
+
 class BatchMoveRequest(SortFilterRequest):
     """Request model for batch move operations."""
 
@@ -435,6 +462,11 @@ class BatchMoveRequest(SortFilterRequest):
     # V4: move exactly these images (the picks, or every match of a V4 search
     # the page resolved); when given, the filter fields above are not used.
     image_ids: Optional[List[int]] = Field(default=None, min_length=1, max_length=5_000_000)
+    # V4 sort by several rules: each group's images go into its own folder
+    # (and split), all in ONE run with one token and one undo. An image in
+    # more than one group goes with the first. When given, the fields above
+    # that pick images or a folder are not used.
+    groups: Optional[List[BatchMoveGroup]] = Field(default=None, min_length=1)
 
     @field_validator("operation")
     @classmethod
@@ -446,21 +478,12 @@ class BatchMoveRequest(SortFilterRequest):
     @field_validator("split_by")
     @classmethod
     def validate_split_by(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return None
-        normalized = str(v).strip().lower()
-        if normalized not in VALID_BATCH_MOVE_SPLIT_BY:
-            raise ValueError(
-                "split_by must be one of: none, generator, checkpoint, rating"
-            )
-        if normalized in {"", "none"}:
-            return None
-        return normalized
+        return _normalize_split_by(v)
 
     @model_validator(mode="after")
     def require_at_least_one_filter(self) -> "BatchMoveRequest":
         """Refuse whole-library moves unless the caller supplies a real filter."""
-        if self.image_ids:
+        if self.image_ids or self.groups:
             return self
 
         # SortFilterRequest fields that, if any of them is set, indicate the

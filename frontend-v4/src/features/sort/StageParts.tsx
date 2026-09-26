@@ -6,10 +6,11 @@ import { folderName } from '../../lib/paths'
 import { useApp } from '../../state/store'
 import { Icon } from '../../ui/Icon'
 import { GenerationCard } from '../card/GenerationCard'
+import { useTargetName } from './keyTargets'
 import { SortConfirm } from './SortConfirm'
 import { perMinute, round } from './sortModes'
 import { useSortPrefs } from './sortPrefs'
-import { awaitsLibraryOk, isOpen, isOtherLibrary, leftToSort, type LastAction, type SessionView, type SortError, type SortImage } from './sortSession'
+import { awaitsLibraryOk, isOpen, isOtherLibrary, leftToSort, slotTarget, type LastAction, type SessionView, type SortError, type SortImage } from './sortSession'
 import styles from './SortStage.module.css'
 import { useSort } from './sortStore'
 import { releaseButtonFocus, useSortKeys } from './useSortKeys'
@@ -51,7 +52,7 @@ export function closeThen(close: () => void): void {
   requestAnimationFrame(releaseButtonFocus)
 }
 
-function lastText(t: Translate, last: LastAction, view: SessionView): string {
+function lastText(t: Translate, last: LastAction, view: SessionView, namer: ReturnType<typeof useTargetName>): string {
   switch (last.kind) {
     case 'skip':
       return t('sort.last.skipped')
@@ -67,7 +68,11 @@ function lastText(t: Translate, last: LastAction, view: SessionView): string {
       return t(last.what === 'skip' ? 'sort.last.undoneSkip' : last.what === 'slot' ? 'sort.last.undone' : 'sort.last.undoneOther')
     case 'slot': {
       const key = last.slot.toUpperCase()
-      if (last.collect) return t('sort.last.collected', { key })
+      if (last.collect) {
+        // A collection V3.5 set keeps its old wording; Favorites is named.
+        const target = slotTarget(view, last.slot, namer.favoritesId)
+        return target?.kind === 'favorites' ? t('sort.last.added', { key, name: namer.name(target) }) : t('sort.last.collected', { key })
+      }
       const folder = folderName(view.folders[last.slot] ?? '')
       return t(view.operation === 'copy' ? 'sort.last.copied' : 'sort.last.moved', { key, folder })
     }
@@ -91,7 +96,8 @@ export function StatusLine({ view }: { view: SessionView }) {
   const last = useSort((s) => s.last)
   const error = useSort((s) => s.error)
   const cooldownMs = useSortPrefs((s) => s.cooldownMs)
-  const text = error ? errorText(t, error, cooldownMs) : last ? lastText(t, last, view) : t(HINT[view.mode])
+  const namer = useTargetName()
+  const text = error ? errorText(t, error, cooldownMs) : last ? lastText(t, last, view, namer) : t(HINT[view.mode])
   return (
     <p className={styles.status} data-tone={error ? 'error' : undefined} role={error ? 'alert' : 'status'} data-testid="sort-status">
       {text}

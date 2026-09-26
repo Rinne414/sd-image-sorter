@@ -6641,6 +6641,18 @@ export interface components {
             upright: boolean;
         };
         /**
+         * BatchMoveGroup
+         * @description V4: one rule of a sort by several rules: these images into this folder.
+         */
+        BatchMoveGroup: {
+            /** Image Ids */
+            image_ids: number[];
+            /** Destination Folder */
+            destination_folder: string;
+            /** Split By */
+            split_by?: string | null;
+        };
+        /**
          * BatchMoveRequest
          * @description Request model for batch move operations.
          */
@@ -6732,6 +6744,8 @@ export interface components {
             split_by?: string | null;
             /** Image Ids */
             image_ids?: number[] | null;
+            /** Groups */
+            groups?: components["schemas"]["BatchMoveGroup"][] | null;
         };
         /**
          * BatchMoveUndoRequest

@@ -22,14 +22,17 @@ interface ConditionProps {
   query: string
   count: number | null
   onQuery: (query: string) => void
+  /** Said instead of the count (a condition inside the picks has none to show). */
+  note?: string
+  testId?: string
 }
 
 /** The condition, typed in the library's search language or picked in its filter panel. */
-export function ConditionField({ query, count, onQuery }: ConditionProps) {
+export function ConditionField({ query, count, onQuery, note, testId = 'sort-condition' }: ConditionProps) {
   const t = useT()
   const unread = parseSearch(query).parts.flatMap((p) => (p.kind === 'warn' ? [p.raw] : []))
   return (
-    <div className={styles.condition} data-testid="sort-condition">
+    <div className={styles.condition} data-testid={testId}>
       <div className={styles.conditionRow}>
         <input
           className={styles.conditionInput}
@@ -38,12 +41,12 @@ export function ConditionField({ query, count, onQuery }: ConditionProps) {
           aria-label={t('sort.rules.conditionLabel')}
           spellCheck={false}
           onChange={(e) => onQuery(e.target.value)}
-          data-testid="sort-condition-input"
+          data-testid={`${testId}-input`}
         />
         <FilterPanel text={query} onChange={onQuery} />
       </div>
-      <p className={isEverything(query) ? styles.warnLine : styles.optionHint} data-testid="sort-condition-count">
-        {isEverything(query) ? t('sort.rules.everything') : count === null ? t('sort.rules.counting') : t('sort.rules.matches', { n: count })}
+      <p className={!note && isEverything(query) ? styles.warnLine : styles.optionHint} data-testid={`${testId}-count`}>
+        {note ?? (isEverything(query) ? t('sort.rules.everything') : count === null ? t('sort.rules.counting') : t('sort.rules.matches', { n: count }))}
       </p>
       {unread.map((raw) => (
         <p key={raw} className={styles.warnLine} role="alert">
@@ -111,15 +114,17 @@ interface DestProps {
   rule: RuleSetup
   sourceFolder: string | null
   onRule: (rule: RuleSetup) => void
+  /** Instead of "Into which folder" (the first of several rules says so). */
+  legend?: string
 }
 
 /** Where the images go, and how they split into subfolders there. */
-export function DestinationPicker({ rule, sourceFolder, onRule }: DestProps) {
+export function DestinationPicker({ rule, sourceFolder, onRule, legend }: DestProps) {
   const t = useT()
   const [choosing, setChoosing] = useState(false)
   return (
     <fieldset className={styles.group} data-testid="sort-rule-dest">
-      <legend className={styles.section}>{t('sort.rules.dest')}</legend>
+      <legend className={styles.section}>{legend ?? t('sort.rules.dest')}</legend>
       <div className={styles.destRow}>
         {rule.destination ? <FolderLabel path={rule.destination} /> : <span className={styles.unset}>{t('sort.rules.destNone')}</span>}
         <button type="button" className="btn" onClick={() => setChoosing(true)} data-testid="sort-rule-choose">
@@ -157,7 +162,12 @@ export function DestinationPicker({ rule, sourceFolder, onRule }: DestProps) {
 export function LastRunCard({ record, onView }: { record: RunRecord; onView: () => void }) {
   const t = useT()
   const op = t(record.operation === 'copy' ? 'sort.rules.op.copied' : 'sort.rules.op.moved')
-  const text = record.phase === 'undone' ? t('sort.rules.lastUndone') : t('sort.rules.last', { op, n: record.total, folder: record.destination })
+  const text =
+    record.phase === 'undone'
+      ? t('sort.rules.lastUndone')
+      : record.groups.length > 1
+        ? t('sort.rules.lastRules', { op, n: record.total, rules: record.groups.length })
+        : t('sort.rules.last', { op, n: record.total, folder: record.destination })
   return (
     <div className={styles.resume} data-testid="sort-rules-last">
       <div className={styles.resumeText}>

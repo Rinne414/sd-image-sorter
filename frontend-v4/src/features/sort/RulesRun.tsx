@@ -69,6 +69,7 @@ function headline(t: Translate, record: RunRecord, run: RunState): string {
   const op = t(copy ? 'sort.rules.op.copying' : 'sort.rules.op.moving')
   if (isRunning(run)) return t('sort.rules.running', { op, at: run.current, total: run.total })
   if (run.status === 'cancelled') return t('sort.rules.stopped', { op: t(copy ? 'sort.rules.op.copied' : 'sort.rules.op.moved'), n: run.succeeded, total: run.total })
+  if (record.groups.length > 1) return t(copy ? 'sort.rules.doneCopyRules' : 'sort.rules.doneMoveRules', { n: run.succeeded, rules: record.groups.length })
   return t(copy ? 'sort.rules.doneCopy' : 'sort.rules.doneMove', { n: run.succeeded, folder })
 }
 
@@ -104,10 +105,14 @@ export function RulesRun({ record }: { record: RunRecord }) {
     <section className={styles.page} data-testid="sort-rules-run" data-kind={run?.kind} data-status={run?.status}>
       <div className={styles.sheet}>
         <h1 className={styles.title}>{t('sort.rules.title')}</h1>
-        <p className={`${styles.optionHint} mono`} title={record.destination}>
-          {tailOfPath(record.destination, 90)}
-          {split}
-        </p>
+        {record.groups.length > 1 ? (
+          <RunGroups record={record} />
+        ) : (
+          <p className={`${styles.optionHint} mono`} title={record.destination}>
+            {tailOfPath(record.destination, 90)}
+            {split}
+          </p>
+        )}
         {run && (
           <>
             <p className={styles.lede} data-testid="sort-rules-headline">
@@ -144,9 +149,11 @@ export function RulesRun({ record }: { record: RunRecord }) {
                   {t('sort.rules.undo')}
                 </button>
               )}
-              <button type="button" className="btn" onClick={() => void openFolderPath(record.destination)} data-testid="sort-rules-open">
-                {t('sort.rules.openFolder')}
-              </button>
+              {record.groups.length <= 1 && (
+                <button type="button" className="btn" onClick={() => void openFolderPath(record.destination)} data-testid="sort-rules-open">
+                  {t('sort.rules.openFolder')}
+                </button>
+              )}
             </>
           )}
           <span className={styles.gap} />
@@ -159,5 +166,27 @@ export function RulesRun({ record }: { record: RunRecord }) {
         </div>
       </div>
     </section>
+  )
+}
+
+/** A run by several rules: each rule's folder and count, with its folder one click away. */
+function RunGroups({ record }: { record: RunRecord }) {
+  const t = useT()
+  return (
+    <ol className={styles.runGroups} data-testid="sort-rules-groups">
+      {record.groups.map((g, i) => (
+        <li key={i} data-testid="sort-rules-group">
+          <span className={styles.optionHint}>{t('sort.rules.ruleN', { n: i + 1 })}</span>
+          <span className="mono" title={g.destination}>
+            {tailOfPath(g.destination, 70)}
+            {g.splitBy === 'none' ? '' : ` · ${splitName(t, g.splitBy)}`}
+          </span>
+          <span className={styles.optionHint}>{t('sort.rules.groupCount', { n: g.count })}</span>
+          <button type="button" className="btn btn-ghost" onClick={() => void openFolderPath(g.destination)}>
+            {t('sort.rules.openFolder')}
+          </button>
+        </li>
+      ))}
+    </ol>
   )
 }
