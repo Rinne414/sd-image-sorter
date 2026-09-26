@@ -5,7 +5,7 @@ import { convertPrompt, type PromptFormat } from '../../../lib/promptFormat'
 import { promptTagKeys, segmentPrompt, tagKey } from '../../../lib/prompt'
 import { groupTags } from '../../../lib/tagGroups'
 import { CivitaiResources, OtherModels, PromptNodes, SidecarCaption } from '../../info/CardInfo'
-import { ColorBody, PixelHistogram } from '../../info/ColorSection'
+import { ColorBody, PixelHistogram, PixelPalette } from '../../info/ColorSection'
 import colorStyles from '../../info/ColorSection.module.css'
 import { useTT } from '../toolText'
 import { Fold, setFold, useFoldOpen } from './Fold'
@@ -88,6 +88,7 @@ export function ReaderInfo({ view, detail, pixels, pasted, editor }: Props) {
         {detail ? <ColorBody id={detail.image.id} image={detail.image} /> : pixels && (
           <div className={colorStyles.body}>
             <PixelHistogram src={pixels.src} cacheKey={['reader-bins', pixels.key]} />
+            <PixelPalette src={pixels.src} cacheKey={['reader-palette', pixels.key]} />
             <p className={styles.muted}>{t('reader.colorsUpload')}</p>
           </div>
         )}

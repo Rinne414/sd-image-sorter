@@ -33,6 +33,10 @@ export const enReader: Record<keyof typeof zhCNReader, string> = {
   'reader.copy.settings': 'Copy parameters',
   'reader.copy.sd': 'Copy as SD text',
   'reader.copy.all': 'Copy everything',
+  'reader.copy.byPurpose': 'Copy for a purpose',
+  'reader.copy.poseScene': 'Pose + scene',
+  'reader.copy.trainingCaption': 'Clean training caption',
+  'reader.copy.noQuality': 'Prompt without quality and meta',
 
   'reader.characters': 'Character prompts',
   'reader.characterAt': 'at x {x} · y {y}',
@@ -58,7 +62,7 @@ export const enReader: Record<keyof typeof zhCNReader, string> = {
   'reader.findHint': 'Find library images that carry all these tags (replaces the tag conditions already in the search bar)',
   'reader.found': 'Finding library images with the {n} "{group}" tags',
   'reader.colors': 'Colours',
-  'reader.colorsUpload': 'Main colours and brightness are stored for library images only; this is the image’s histogram.',
+  'reader.colorsUpload': 'The main colours are measured here from the picture and not stored; brightness, tone and the rest are stored for library images only.',
 
   'reader.edit': 'Edit generation details',
   'reader.edit.prompt': 'Prompt',

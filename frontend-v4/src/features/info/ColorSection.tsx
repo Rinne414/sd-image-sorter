@@ -11,6 +11,7 @@ import { createRaster } from '../censor/raster'
 import cardStyles from '../card/Card.module.css'
 import { binsPeak, channelBins, histogramLine, readColorFacts, type Bins, type ColorFacts, type HistMode } from './colors'
 import styles from './ColorSection.module.css'
+import { PALETTE_SAMPLE, paletteOf, type Swatch } from './palette'
 
 // "Colours" on the generation card: the histogram of the image (measured from
 // its thumbnail) and its stored colour analysis, the data the colour filters
@@ -23,12 +24,13 @@ const SAMPLE = 128
 const W = 256
 const H = 64
 
-async function loadBins(src: string): Promise<Bins> {
+/** The picture drawn at most `size` px on its long side, as RGBA pixels. */
+async function samplePixels(src: string, size: number): Promise<{ w: number; h: number; data: Uint8ClampedArray<ArrayBuffer> }> {
   const img = new Image()
   img.decoding = 'async'
   img.src = src
   await img.decode()
-  const scale = Math.min(1, SAMPLE / Math.max(img.naturalWidth, img.naturalHeight))
+  const scale = Math.min(1, size / Math.max(img.naturalWidth, img.naturalHeight))
   const w = Math.max(1, Math.round(img.naturalWidth * scale))
   const h = Math.max(1, Math.round(img.naturalHeight * scale))
   const canvas = document.createElement('canvas')
@@ -37,7 +39,12 @@ async function loadBins(src: string): Promise<Bins> {
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) throw new Error('no 2d canvas')
   ctx.drawImage(img, 0, 0, w, h)
-  return channelBins(createRaster(w, h, ctx.getImageData(0, 0, w, h).data))
+  return { w, h, data: ctx.getImageData(0, 0, w, h).data }
+}
+
+async function loadBins(src: string): Promise<Bins> {
+  const { w, h, data } = await samplePixels(src, SAMPLE)
+  return channelBins(createRaster(w, h, data))
 }
 
 export function ColorSection({ id, image }: { id: number; image: ImageDetail }) {
@@ -123,6 +130,32 @@ const TEMPERATURE: Record<NonNullable<ColorFacts['temperature']>, MessageKey> = 
   neutral: 'info.color.temp.neutral',
 }
 
+/** Main colours measured in the browser, for a picture with no stored analysis (a file brought into the Reader). */
+export function PixelPalette({ src, cacheKey }: { src: string; cacheKey: readonly unknown[] }) {
+  const t = useT()
+  const palette = useQuery({ queryKey: cacheKey, queryFn: async () => paletteOf((await samplePixels(src, PALETTE_SAMPLE)).data), staleTime: Infinity, retry: false })
+  if (palette.isError) return <p className={cardStyles.muted}>{t('info.color.pixelsFailed')}</p>
+  return palette.data ? <Swatches colors={palette.data} /> : null
+}
+
+/** The main colours; a click copies one's hex. */
+function Swatches({ colors }: { colors: readonly Swatch[] }) {
+  const t = useT()
+  if (colors.length === 0) return null
+  return (
+    <div className={styles.swatches} aria-label={t('info.color.main')} data-testid="card-swatches">
+      {colors.map((c) => (
+        <button key={c.hex} type="button" className={styles.swatch} onClick={() => void copyAndSay(c.hex, { text: c.hex })} title={t('info.color.copyHex', { hex: c.hex })}>
+          {/* The picture's own colour: data, not a design colour. */}
+          <span className={styles.dot} style={{ background: c.hex }} />
+          <span className="mono">{c.hex}</span>
+          <span className={`${styles.pct} mono`}>{Math.round(c.pct)}%</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function Facts({ facts }: { facts: ColorFacts }) {
   const t = useT()
   const stats = [
@@ -133,18 +166,7 @@ function Facts({ facts }: { facts: ColorFacts }) {
   ].filter((s): s is string => !!s)
   return (
     <>
-      {facts.colors.length > 0 && (
-        <div className={styles.swatches} aria-label={t('info.color.main')} data-testid="card-swatches">
-          {facts.colors.map((c) => (
-            <button key={c.hex} type="button" className={styles.swatch} onClick={() => void copyAndSay(c.hex, { text: c.hex })} title={t('info.color.copyHex', { hex: c.hex })}>
-              {/* The picture's own colour: data, not a design colour. */}
-              <span className={styles.dot} style={{ background: c.hex }} />
-              <span className="mono">{c.hex}</span>
-              <span className={`${styles.pct} mono`}>{Math.round(c.pct)}%</span>
-            </button>
-          ))}
-        </div>
-      )}
+      <Swatches colors={facts.colors} />
       <p className={styles.stats}>{stats.join(' · ')}</p>
     </>
   )

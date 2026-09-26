@@ -300,6 +300,101 @@ test('overwriting the library copy asks first, updates the card, and can be undo
   await expect(page.locator('figure').getByRole('button', { name: /^SEED\s*123456789$/ })).toBeVisible()
 })
 
+/** An A1111 file whose tags fall in every group (with the categories stubbed below), on a flat #C87850 picture. */
+const PURPOSE = path.join(SAMPLES, 'v4reader-purpose.png')
+const PURPOSE_CATEGORIES: Record<string, string> = {
+  masterpiece: 'quality',
+  'best quality': 'quality',
+  '1girl': 'character',
+  'blue eyes': 'body',
+  'school uniform': 'outfit',
+  sitting: 'pose',
+  'from side': 'angle',
+  classroom: 'background',
+  watercolor: 'style',
+}
+
+function writePurposeSample(): void {
+  runBackendScript(`
+from PIL import Image
+from PIL.PngImagePlugin import PngInfo
+info = PngInfo()
+info.add_text("parameters", "masterpiece, best quality, 1girl, blue eyes, school uniform, sitting, from side, classroom, watercolor, holding cup\\nNegative prompt: lowres\\nSteps: 20, Sampler: Euler, CFG scale: 7, Seed: 5, Size: 64x64")
+Image.new("RGB", (64, 64), (200, 120, 80)).save(${JSON.stringify(PURPOSE)}, pnginfo=info)
+print("ok")
+`)
+}
+
+test("copy for a purpose: pose + scene, a clean training caption, the prompt without quality/meta (V3.5's rules)", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  writePurposeSample()
+  await page.route('**/api/prompts/categorize', async (route) => {
+    const keys = route.request().postDataJSON() as string[]
+    await route.fulfill({ json: { results: keys.map((tag) => ({ tag, category: PURPOSE_CATEGORIES[tag] ?? 'unknown' })) } })
+  })
+  await openReader(page)
+  await dropFile(page, PURPOSE, 'image/png')
+  await expect(page.getByTestId('reader-group-unclassified')).toContainText('holding cup')
+
+  const copied = async (name: RegExp) => {
+    await page.getByTestId('reader-copy-menu').click()
+    await page.getByRole('menuitem', { name }).click()
+    return page.evaluate(() => navigator.clipboard.readText())
+  }
+  expect(await copied(/^Pose \+ scene/)).toBe('sitting, from side, classroom')
+  expect(await copied(/^Clean training caption/)).toBe('1girl, blue eyes, school uniform, sitting, from side, classroom, watercolor')
+  expect(await copied(/^Prompt without quality and meta/)).toBe('1girl, blue eyes, school uniform, sitting, from side, classroom, watercolor, holding cup')
+})
+
+test('a dropped file gets its main colours too, measured from its pixels', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  writePurposeSample()
+  await openReader(page)
+  await dropFile(page, PURPOSE, 'image/png')
+  const colours = page.getByTestId('reader-colors')
+  await colours.getByRole('button', { name: /Colours/ }).click()
+  await expect(colours.getByTestId('card-histogram')).toBeVisible()
+  await expect(colours.getByTestId('card-swatches').getByRole('button')).toHaveCount(1)
+  await expect(colours.getByTestId('card-swatches')).toContainText('#C87850')
+  await expect(colours.getByTestId('card-swatches')).toContainText('100%')
+})
+
+test('the details column keeps its place on the next image; the one before stays until the next is read', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openReader(page)
+  await dropFile(page, sample('comfyui'), 'image/png')
+  await expect(page.getByTestId('card-nodes')).toBeVisible()
+  const info = page.getByTestId('reader-info')
+  const place = await info.evaluate((el) => {
+    const max = el.scrollHeight - el.clientHeight
+    el.scrollTop = Math.round(max * 0.6)
+    el.dispatchEvent(new Event('scroll'))
+    return { top: el.scrollTop, ratio: el.scrollTop / max }
+  })
+  expect(place.top, 'the column scrolls at 1366x768').toBeGreaterThan(0)
+
+  // hold the next read for a moment: the details before stay, faded, and the column does not jump
+  let release: () => void = () => {}
+  const held = new Promise<void>((resolve) => (release = resolve))
+  await page.route('**/api/parse-image', async (route) => {
+    await held
+    await route.continue()
+  })
+  await page.getByTestId('intake-file').setInputFiles(sample('a1111'))
+  await expect(info).toHaveAttribute('data-stale', 'true')
+  await expect(page.getByTestId('reader-prompt')).toContainText('v4reader comfy prompt')
+  expect(await info.evaluate((el) => el.scrollTop)).toBe(place.top)
+  release()
+  await expect(page.getByTestId('reader-prompt')).toContainText('v4reader webui prompt')
+  await expect(info).not.toHaveAttribute('data-stale', 'true')
+  const expected = await info.evaluate((el, p) => {
+    const max = el.scrollHeight - el.clientHeight
+    return max > 0 ? Math.min(max, Math.max(p.top, p.ratio * max)) : 0
+  }, place)
+  await expect.poll(() => info.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
+  expect(Math.abs((await info.evaluate((el) => el.scrollTop)) - expected)).toBeLessThanOrEqual(2)
+})
+
 test('fits the desktop sizes with nothing cut off', async ({ page }) => {
   await openReader(page)
   for (const vp of VIEWPORTS) {

@@ -1,22 +1,10 @@
 import { useT } from '../../i18n'
 import { EMPTY_SCOPE, isBrowsingAll } from '../../lib/browseMemory'
+import { usesColorFilter } from '../../lib/colorFilter'
 import { useApp } from '../../state/store'
 import { useSelectionDialog } from '../selection/dialogs'
 import { startColorAnalysis, useColorsMissing } from '../status/colorAnalysis'
 import styles from './LibraryPage.module.css'
-
-/** Filters that only see images with colour analysis. */
-const COLOR_KEYS = [
-  'color_hues',
-  'exclude_color_hues',
-  'exclude_colors',
-  'color_temperature',
-  'brightness_distribution',
-  'brightness_min',
-  'brightness_max',
-  'min_saturation',
-  'max_saturation',
-]
 
 /**
  * An empty grid says which kind of empty it is: a library with no images yet
@@ -41,7 +29,7 @@ export function EmptyResult({ params }: { params: Record<string, unknown> }) {
     )
   }
 
-  const missingColors = COLOR_KEYS.some((k) => k in params) ? (colors.data?.missing ?? 0) : 0
+  const missingColors = usesColorFilter(params) ? (colors.data?.missing ?? 0) : 0
   const clear = () => {
     const s = useApp.getState()
     s.setScope(EMPTY_SCOPE)

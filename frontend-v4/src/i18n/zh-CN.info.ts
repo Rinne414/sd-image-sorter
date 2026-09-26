@@ -30,6 +30,8 @@ export const zhCNInfo = {
   'info.sort.aesAction': '给这 {n} 张评分',
   'info.sort.colorMissing': '图库里还有 {n} 张没做色彩分析：按亮度、饱和度或亮度分布排序时排在最后。',
   'info.sort.dismiss': '不再提示这次排序',
+  'info.filter.colorMissing': '图库里还有 {n} 张没做色彩分析，这次颜色筛选没有算进它们。',
+  'info.filter.dismiss': '不再提示这次筛选',
 
   'info.i2i.label': '图生图',
   'info.i2i.kind.img2img': '图生图',

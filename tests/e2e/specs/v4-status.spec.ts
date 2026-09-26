@@ -1,11 +1,11 @@
 import { expect, test, type Page } from '@playwright/test'
 
-import { cleanupImages, openLibrary, seedImages } from '../fixtures/v4-seed'
+import { cleanupImages, dbPath, openLibrary, runBackendScript, seedImages } from '../fixtures/v4-seed'
 
 /**
  * V4 library status rows that carry their own fix: tag the untagged images,
- * run colour analysis until none are left, and a colour search with no
- * results that says why. Tagging and colour analysis are stubbed; the colour
+ * run colour analysis until none are left, a colour search with no results
+ * that says why, and one with results that says how many it left out. Tagging and colour analysis are stubbed; the colour
  * search runs on the real backend.
  *
  * Needs the V4 build: `cd frontend-v4 && npm ci && npm run build`.
@@ -115,4 +115,34 @@ test('a colour search that finds nothing says why and offers the analysis', asyn
   await expect(hint).toContainText('5 images have no colour analysis yet')
   await page.getByRole('button', { name: 'Analyse colours now' }).click()
   await expect.poll(() => colors.analyses).toBe(1)
+})
+
+test('a colour search that finds some says how many images it left out, with the analysis as a link', async ({ page }) => {
+  runBackendScript(`
+import sqlite3
+with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
+    conn.execute("UPDATE images SET color_temperature = 'warm' WHERE filename LIKE ?", (${JSON.stringify(PREFIX + '%')},))
+    conn.commit()
+print("ok")
+`)
+  const colors: ColorStub = { missing: [5, 0], analyses: 0, running: false }
+  await stubStatus(page, 0, colors)
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openLibrary(page, TOKEN, COUNT)
+
+  const input = page.getByTestId('query-input')
+  await input.fill(`${TOKEN} color:warm`)
+  await input.press('Enter')
+  await expect(page.getByTestId('result-count')).toHaveText(`${COUNT} images`)
+  const note = page.getByTestId('color-filter-note')
+  await expect(note).toContainText('5 images in the library have no colour analysis yet, so this colour filter left them out.')
+  await expect(note.getByTestId('color-analyse-link')).toBeInViewport()
+  await note.getByTestId('color-analyse-link').click()
+  await expect.poll(() => colors.analyses).toBe(1)
+
+  // no colour filter, no note
+  await input.fill(TOKEN)
+  await input.press('Enter')
+  await expect(page.getByTestId('result-count')).toHaveText(`${COUNT} images`)
+  await expect(note).toHaveCount(0)
 })

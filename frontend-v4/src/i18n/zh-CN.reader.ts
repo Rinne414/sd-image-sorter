@@ -36,6 +36,10 @@ export const zhCNReader = {
   'reader.copy.settings': '复制参数',
   'reader.copy.sd': '复制成 SD 文本',
   'reader.copy.all': '全部复制',
+  'reader.copy.byPurpose': '按用途复制',
+  'reader.copy.poseScene': '姿势 + 场景',
+  'reader.copy.trainingCaption': '干净的训练 caption',
+  'reader.copy.noQuality': '去掉质量与元信息的提示词',
 
   // characters, models, parameters, tags
   'reader.characters': '角色提示词',
@@ -62,7 +66,7 @@ export const zhCNReader = {
   'reader.findHint': '在图库里找同时带有这些标签的图（会替换搜索栏里原有的标签条件）',
   'reader.found': '图库里正在找带有「{group}」这 {n} 个标签的图',
   'reader.colors': '颜色分布',
-  'reader.colorsUpload': '主色和亮度分析只对图库里的图保存；这里是这张图的直方图。',
+  'reader.colorsUpload': '主要颜色是在这里从这张图算出来的，没有保存；亮度、色温等分析只对图库里的图保存。',
 
   // the editor
   'reader.edit': '编辑生成信息',

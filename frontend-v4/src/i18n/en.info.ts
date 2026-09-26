@@ -28,6 +28,8 @@ export const enInfo: Record<keyof typeof zhCNInfo, string> = {
   'info.sort.aesAction': 'Score these {n}',
   'info.sort.colorMissing': '{n} images in the library have no colour analysis: they sort last by brightness, saturation or brightness spread.',
   'info.sort.dismiss': 'Hide for this sort',
+  'info.filter.colorMissing': '{n} images in the library have no colour analysis yet, so this colour filter left them out.',
+  'info.filter.dismiss': 'Hide for this filter',
 
   'info.i2i.label': 'img2img',
   'info.i2i.kind.img2img': 'img2img',

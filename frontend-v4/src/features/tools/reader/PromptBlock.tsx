@@ -2,7 +2,7 @@ import type { TagCategory } from '../../../api/types'
 import { useT } from '../../../i18n'
 import { toParameterText } from '../../../lib/meta'
 import type { PromptFormat } from '../../../lib/promptFormat'
-import { TAG_GROUPS, type GroupedTags } from '../../../lib/tagGroups'
+import { PURPOSE_PRESETS, purposeTags, TAG_GROUPS, type GroupedTags, type PurposeId } from '../../../lib/tagGroups'
 import { Menu, type MenuItem } from '../../../ui/Menu'
 import { CopyButton } from '../../card/CardParts'
 import { PromptText } from '../../card/PromptText'
@@ -44,7 +44,13 @@ function FormatSwitch({ value, onChange }: { value: PromptFormat; onChange: (f: 
   )
 }
 
-/** "Copy ▾": the prompt, negative, settings, SD text, everything, and the tags by category. */
+const PURPOSE_LABEL: Record<PurposeId, ToolKey> = {
+  poseScene: 'reader.copy.poseScene',
+  trainingCaption: 'reader.copy.trainingCaption',
+  noQuality: 'reader.copy.noQuality',
+}
+
+/** "Copy ▾": the prompt, negative, settings, SD text, everything, the tags by category, and V3.5's presets for a purpose. */
 function CopyMenu({ view, shown, tags, groups }: { view: ReaderView; shown: ShownPrompt; tags: string[]; groups: GroupedTags | null }) {
   const t = useT()
   const r = useTT()
@@ -65,6 +71,13 @@ function CopyMenu({ view, shown, tags, groups }: { view: ReaderView; shown: Show
       const list = groups?.[id] ?? []
       add(`group-${id}`, t(GROUP_LABEL[id]), list.join(', '), { hint: String(list.length) })
     }
+  }
+  if (groups) {
+    PURPOSE_PRESETS.forEach(({ id }, i) => {
+      const list = purposeTags(groups, id)
+      const head = i === 0 ? { group: r('reader.copy.byPurpose'), divider: true } : {}
+      add(`purpose-${id}`, r(PURPOSE_LABEL[id]), list.join(', '), { hint: String(list.length), ...head })
+    })
   }
   return <Menu label={t('card.copy')} items={items} align="right" testId="reader-copy-menu" />
 }

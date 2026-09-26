@@ -159,6 +159,11 @@
   padding-top: 14px;
 }
 
+/* The next image is being read: the one before stays, faded, so the column keeps its place. */
+.info[data-stale] {
+  opacity: 0.55;
+}
+
 /* Card pieces reused here (Civitai, nodes, other models, caption file) get the same rhythm as the folds. */
 .info > section:not(.fold),
 .info > details {

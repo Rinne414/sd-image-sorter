@@ -32,3 +32,37 @@ export function groupTags(tags: readonly string[], categoryOf: (tag: string) => 
   }
   return out
 }
+
+export type PurposeId = 'poseScene' | 'trainingCaption' | 'noQuality'
+
+/**
+ * V3.5's copy-for-a-purpose presets that no single group gives
+ * (tag-category-copy.js PURPOSE_PRESETS): the groups each one joins, in order.
+ */
+export const PURPOSE_PRESETS: { id: PurposeId; groups: readonly TagGroupId[] }[] = [
+  { id: 'poseScene', groups: ['pose', 'scenery'] },
+  { id: 'trainingCaption', groups: ['appearance', 'clothing', 'pose', 'scenery', 'style'] },
+  { id: 'noQuality', groups: ['appearance', 'clothing', 'pose', 'scenery', 'style', 'unclassified'] },
+]
+
+/** A tag as V3.5 copied it: trimmed, without surrounding quotes, single spaces. */
+const cleanTag = (tag: string) =>
+  tag
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .replace(/\s+/g, ' ')
+
+/** The tags a preset copies: its groups' tags in group order, cleaned, each once (any case). */
+export function purposeTags(grouped: GroupedTags, id: PurposeId): string[] {
+  const preset = PURPOSE_PRESETS.find((p) => p.id === id)
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const group of preset?.groups ?? []) {
+    for (const tag of grouped[group].map(cleanTag)) {
+      if (!tag || seen.has(tag.toLowerCase())) continue
+      seen.add(tag.toLowerCase())
+      out.push(tag)
+    }
+  }
+  return out
+}
