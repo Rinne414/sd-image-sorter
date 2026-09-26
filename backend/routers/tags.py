@@ -518,16 +518,12 @@ async def get_tagger_models(
 
 
 @router.get("/tag/scope-count")
-def get_tag_scope_count(retag_all: bool = Query(False)):
-    """How many images a whole-library tagging run would process.
-
-    Mirrors the worker's own selection: untagged readable images, or every
-    readable image with ``retag_all``. The tag modal shows it before a run.
-    """
-    import database as db
-
-    count = db.count_all_image_ids() if retag_all else db.count_untagged_image_ids()
-    return {"count": int(count), "retag_all": bool(retag_all)}
+def get_tag_scope_count(
+    retag_all: bool = Query(False),
+    service: TaggingService = Depends(get_tagging_service),
+):
+    """How many images a whole-library tagging run would process."""
+    return service.get_scope_count(retag_all=retag_all)
 
 
 @router.get("/tag/progress")
