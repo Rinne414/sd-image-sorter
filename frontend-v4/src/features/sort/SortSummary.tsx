@@ -1,3 +1,4 @@
+import { useContext, type ReactNode } from 'react'
 import { useT } from '../../i18n'
 import { useApp } from '../../state/store'
 import { openFolderPath } from '../library/fileActions'
@@ -5,15 +6,22 @@ import { FolderLabel } from './SetupParts'
 import { summary, type SessionView } from './sortSession'
 import styles from './SortPage.module.css'
 import { useSort } from './sortStore'
+import { FocusTop, OtherLibraryNote } from './StageParts'
 import { releaseButtonFocus, useSortKeys } from './useSortKeys'
 
-/** Every image has been judged: where they went, and what next. Backspace still undoes the last one. */
-export function SortSummary({ view }: { view: SessionView }) {
+interface FrameProps {
+  view: SessionView
+  title: string
+  body: string
+  children: ReactNode
+}
+
+/** The page every finished sort shows: what happened, then undo, sort again, or back to the library. */
+export function SummaryFrame({ view, title, body, children }: FrameProps) {
   const t = useT()
   const busy = useSort((s) => s.sending)
   const error = useSort((s) => s.error)
-  const { rows, sent } = summary(view)
-  useSortKeys()
+  useSortKeys(view.mode, useContext(FocusTop))
 
   const leave = async (to: 'library' | 'setup') => {
     const ok = await useSort.getState().end()
@@ -21,34 +29,14 @@ export function SortSummary({ view }: { view: SessionView }) {
   }
 
   return (
-    <section className={styles.page} data-testid="sort-summary" onClick={releaseButtonFocus}>
+    <section className={styles.page} data-testid="sort-summary" data-mode={view.mode} onClick={releaseButtonFocus}>
       <div className={styles.sheet}>
-        <h1 className={styles.title}>{t('sort.done.title')}</h1>
+        <h1 className={styles.title}>{title}</h1>
         <p className={styles.lede} data-testid="sort-summary-body">
-          {t(view.operation === 'copy' ? 'sort.done.bodyCopy' : 'sort.done.body', { total: view.total, sent, skipped: view.skipped })}
+          {body}
         </p>
-        <ul className={styles.doneList}>
-          {rows.map(({ slot, folder, collection, count }) => (
-            <li key={slot} className={styles.doneRow} data-slot={slot} data-count={count}>
-              <kbd className={styles.cap}>{slot.toUpperCase()}</kbd>
-              {folder ? <FolderLabel path={folder} /> : <span className={styles.unset}>{t('sort.slot.collection', { id: collection ?? 0 })}</span>}
-              <span className={`${styles.doneCount} mono`}>{t('sort.count', { n: count })}</span>
-              {folder ? (
-                <button type="button" className="btn" onClick={() => void openFolderPath(folder)} disabled={count === 0}>
-                  {t('sort.done.open')}
-                </button>
-              ) : (
-                <span />
-              )}
-            </li>
-          ))}
-          <li className={styles.doneRow}>
-            <kbd className={styles.cap}>{t('sort.spaceKey')}</kbd>
-            <span className={styles.unset}>{t('sort.done.skipped')}</span>
-            <span className={`${styles.doneCount} mono`}>{t('sort.count', { n: view.skipped })}</span>
-            <span />
-          </li>
-        </ul>
+        <OtherLibraryNote view={view} />
+        {children}
         {error && (
           <p className={styles.error} role="alert">
             {error.kind === 'failed' ? t('sort.error.failed', { reason: error.reason }) : t('sort.error.nothing')}
@@ -69,5 +57,38 @@ export function SortSummary({ view }: { view: SessionView }) {
         </div>
       </div>
     </section>
+  )
+}
+
+/** Every image has been judged: which folder got how many. Backspace still undoes the last one. */
+export function SortSummary({ view }: { view: SessionView }) {
+  const t = useT()
+  const { rows, sent } = summary(view)
+  const body = t(view.operation === 'copy' ? 'sort.done.bodyCopy' : 'sort.done.body', { total: view.total, sent, skipped: view.skipped })
+  return (
+    <SummaryFrame view={view} title={t('sort.done.title')} body={body}>
+      <ul className={styles.doneList}>
+        {rows.map(({ slot, folder, collection, count }) => (
+          <li key={slot} className={styles.doneRow} data-slot={slot} data-count={count}>
+            <kbd className={styles.cap}>{slot.toUpperCase()}</kbd>
+            {folder ? <FolderLabel path={folder} /> : <span className={styles.unset}>{t('sort.slot.collection', { id: collection ?? 0 })}</span>}
+            <span className={`${styles.doneCount} mono`}>{t('sort.count', { n: count })}</span>
+            {folder ? (
+              <button type="button" className="btn" onClick={() => void openFolderPath(folder)} disabled={count === 0}>
+                {t('sort.done.open')}
+              </button>
+            ) : (
+              <span />
+            )}
+          </li>
+        ))}
+        <li className={styles.doneRow}>
+          <kbd className={styles.cap}>{t('sort.spaceKey')}</kbd>
+          <span className={styles.unset}>{t('sort.done.skipped')}</span>
+          <span className={`${styles.doneCount} mono`}>{t('sort.count', { n: view.skipped })}</span>
+          <span />
+        </li>
+      </ul>
+    </SummaryFrame>
   )
 }

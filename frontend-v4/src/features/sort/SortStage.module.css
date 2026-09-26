@@ -1,14 +1,63 @@
 /* A sort in progress: the picture fills what the keys and the film strip leave. */
 
 .stage {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+  display: flex;
+  flex-direction: column;
   height: 100%;
   background: var(--stage);
 }
 
+/* How far through: a thin line under the header. */
+.progress {
+  flex-shrink: 0;
+  height: 2px;
+  background: var(--line);
+}
+
+.progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--t-fast) var(--ease);
+}
+
+.notice {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 6px 16px;
+  color: var(--warn);
+  font-size: var(--fs-3);
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--line);
+}
+
+.pace {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
+/* The picture(s), and the details column beside them when it is open. */
+.middle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+
+.middle[data-info] {
+  grid-template-columns: minmax(0, 1fr) var(--card-w);
+}
+
+.middle > aside {
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .head {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 8px;
   height: 46px;
@@ -61,6 +110,22 @@
   overflow: hidden;
 }
 
+/* A key that came too soon: the frame flinches once. */
+.bump {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 2px solid var(--warn);
+  opacity: 0;
+  animation: bump 260ms var(--ease);
+}
+
+@keyframes bump {
+  30% {
+    opacity: 1;
+  }
+}
+
 .picture {
   position: absolute;
   inset: 14px 24px 6px;
@@ -87,6 +152,7 @@
 }
 
 .status {
+  flex-shrink: 0;
   margin: 0;
   padding: 4px 16px 8px;
   overflow: hidden;
@@ -105,6 +171,7 @@
 
 .slots {
   display: grid;
+  flex-shrink: 0;
   grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 0.8fr);
   gap: 8px;
   padding: 0 16px 12px;
@@ -206,6 +273,7 @@
 
 .strip {
   display: flex;
+  flex-shrink: 0;
   gap: 6px;
   height: 92px;
   padding: 14px 12px;
@@ -233,4 +301,185 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* ---- A/B and keep / reject: three choices in a row ---- */
+
+.choices {
+  display: grid;
+  flex-shrink: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 12px;
+}
+
+.choice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 12px 0 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--text);
+  text-align: left;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+
+.choice:hover {
+  background: var(--surface-2);
+  border-color: var(--muted);
+}
+
+.choice[data-lit] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.choice[data-side='keep'] .slotCount {
+  color: var(--ok);
+}
+
+.choice[data-side='reject'] .slotCount {
+  color: var(--danger);
+}
+
+/* The other keys that do the same. */
+.keysAlso {
+  color: var(--muted);
+  font-size: var(--fs-2);
+  letter-spacing: 0.08em;
+}
+
+.zoomToggle {
+  height: 52px;
+}
+
+/* ---- A/B: the pair ---- */
+
+.duel {
+  position: absolute;
+  inset: 10px 16px 4px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+}
+
+.side {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+}
+
+.sideHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  font-size: var(--fs-3);
+}
+
+.side[data-side='a'] .sideHead strong {
+  color: var(--accent);
+}
+
+.held {
+  flex-shrink: 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.sideName {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidePicture {
+  position: relative;
+  display: block;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--film);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.sidePicture:hover {
+  border-color: var(--muted);
+}
+
+.sidePicture[data-zoom] {
+  cursor: zoom-in;
+}
+
+.zoomLayer {
+  position: absolute;
+  inset: 0;
+  display: grid;
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-height: 18px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.fact {
+  white-space: nowrap;
+}
+
+/* Only what differs, under both pictures. */
+.diff {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 6px 10px;
+  font-size: var(--fs-2);
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.diffLabel {
+  color: var(--muted);
+  letter-spacing: 0.08em;
+}
+
+.diffChip {
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.diffChip b {
+  margin-right: 4px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.diffNone {
+  color: var(--text-2);
+}
+
+.diffSame {
+  color: var(--muted);
 }

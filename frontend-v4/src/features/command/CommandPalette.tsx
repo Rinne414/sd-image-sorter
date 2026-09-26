@@ -152,6 +152,8 @@ function Palette() {
 
   const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean)
   const shown = commands.filter((c) => terms.every((term) => c.haystack.includes(term)))
+  // The pointer can leave `active` on a row the typed filter just removed: the first row stands in until it resets.
+  const current = active < shown.length ? active : 0
 
   useEffect(() => inputRef.current?.focus(), [])
   useEffect(() => setActive(0), [q])
@@ -181,7 +183,7 @@ function Palette() {
               setActive((a) => Math.max(0, a - 1))
               e.preventDefault()
             } else if (e.key === 'Enter') {
-              run(shown[active])
+              run(shown[current])
               e.preventDefault()
             }
           }}
@@ -197,7 +199,7 @@ function Palette() {
                 <button
                   type="button"
                   role="option"
-                  aria-selected={i === active}
+                  aria-selected={i === current}
                   className={styles.row}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => run(cmd)}

@@ -914,7 +914,7 @@ Reset stuck batch move progress.
 Start manual sort session. Preferred clients send a JSON body with `generators`, `tags`, `ratings`, `checkpoints`, `loras`, `prompts`, `prompt_match_mode`, `artist`, `search`, size/aesthetic filters, `folders`, `operation_mode`, and `replace_existing`; this avoids URL/query-length limits for large filter scopes. Legacy query-string parameters remain supported, including `prompt_match_mode=exact|contains`. If an unfinished session exists, the default response is HTTP 409; pass `replace_existing=true` only after the user explicitly chooses to discard saved progress. A body with `image_ids` sorts exactly those images in that order (V4 starts from the picks, or from every match of the gallery filter resolved by `POST /api/images/selection-ids`); the filter fields are then not used, and ids that are not readable images of the current library are dropped.
 
 #### GET /api/sort/current
-Get current sort image. Every session answer (here and from `/api/sort/action`) carries `slot_counts`, the images sent to each slot key. A finished session still answers with `done: true` plus its `index`, `total`, `image_ids`, `folders`, `operation_mode` and counts, so the summary survives a reload.
+Get current sort image. Every session answer (here and from `/api/sort/action`) carries `slot_counts`, the images sent to each slot key, and `library_id`, the library the session's images belong to (the one saved session is shared by every library; null without a session). A finished session still answers with `done: true` plus its `index`, `total`, `image_ids`, `folders`, `operation_mode` and counts, so the summary survives a reload.
 
 #### POST /api/sort/action
 Perform `move`, `skip`, or `undo`.

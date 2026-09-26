@@ -26,7 +26,7 @@
 }
 
 .lede {
-  margin: 6px 0 18px;
+  margin: 6px 0 14px;
   color: var(--text-2);
   font-size: var(--fs-4);
 }
@@ -97,7 +97,15 @@
 /* ---- how to sort ---- */
 
 .modes {
-  margin: 0 0 20px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin: 0 0 16px;
+}
+
+.modes .note {
+  margin: 0;
 }
 
 .modeRow {
@@ -316,4 +324,236 @@
 
 .gap {
   flex: 1;
+}
+
+/* ---- focus mode: the sort over the whole window, top bar included ---- */
+
+.focus {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  background: var(--stage);
+}
+
+.focus > section {
+  height: 100%;
+}
+
+/* ---- presets ---- */
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 0 0 12px;
+}
+
+.presetsLabel {
+  margin-right: 4px;
+  font-size: var(--fs-1);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.preset {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+}
+
+.presetLoad {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-3);
+}
+
+.presetLoad:hover {
+  background: var(--wash-hover);
+}
+
+.presetMode {
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.presetDelete {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+}
+
+.presetDelete:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.nameField {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+}
+
+.nameField input {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-1);
+  color: var(--text);
+  font-size: var(--fs-4);
+  border-radius: var(--radius);
+}
+
+/* ---- A/B and keep / reject in the setup ---- */
+
+.how {
+  min-width: 0;
+  padding: 14px 16px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.howBody {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-4);
+  line-height: 1.7;
+}
+
+.range {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+/* Keys and sound: one line under the columns. */
+.optionsRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  margin-top: 18px;
+}
+
+.inlineOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: var(--fs-3);
+  cursor: pointer;
+}
+
+.inlineOption input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.range input {
+  width: 160px;
+  accent-color: var(--accent);
+}
+
+.warnLine {
+  color: var(--warn);
+  font-size: var(--fs-2);
+}
+
+/* ---- the finished A/B and keep / reject ---- */
+
+.winner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 20px;
+  align-items: center;
+  padding: 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.winnerImage {
+  width: 240px;
+  height: 240px;
+  object-fit: contain;
+  background: var(--film);
+}
+
+.winnerInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.winnerInfo .section {
+  margin: 0;
+}
+
+.winnerName {
+  overflow: hidden;
+  font-size: var(--fs-5);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.group2 {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--fs-4);
+}
+
+.thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.thumbs img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  background: var(--film);
+}
+
+.more {
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: var(--fs-3);
 }

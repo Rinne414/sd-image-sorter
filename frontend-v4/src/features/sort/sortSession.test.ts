@@ -4,7 +4,6 @@ import {
   failed,
   INITIAL_STATE,
   isFinished,
-  keyAction,
   press,
   readSession,
   requestFor,
@@ -17,6 +16,7 @@ import {
   type SortState,
 } from './sortSession'
 import { EMPTY_SETUP, hasFolder, loadSetup, saveSetup, startBody, withFolder } from './savedSetup'
+import { keyAction } from './sortModes'
 
 const current = (over: Record<string, unknown> = {}) => ({
   image: { id: 11, filename: 'a.png', path: 'C:/in/a.png' },
@@ -81,8 +81,8 @@ describe('reading the saved session (restore after a reload)', () => {
 
   it('shows the image the session order says is up, with details only when they are its own', () => {
     const v = readSession(current({ index: 1, image: { id: 12, filename: 'b.png', path: 'C:/in/b.png' } })) as SessionView
-    expect(upNow(v)).toEqual({ id: 12, image: { id: 12, filename: 'b.png', path: 'C:/in/b.png' } })
-    expect(upNow({ ...v, image: { id: 11, filename: 'a.png', path: '' } })).toEqual({ id: 12, image: null })
+    expect(upNow(v)).toMatchObject({ id: 12, image: { id: 12, filename: 'b.png', path: 'C:/in/b.png' } })
+    expect(upNow({ ...v, image: { ...v.image!, id: 11 } })).toEqual({ id: 12, image: null })
     expect(upNow({ ...v, index: 3 })).toBeNull()
   })
 
@@ -238,7 +238,7 @@ describe('the setup, remembered per library', () => {
   it('restores the folders and move/copy of the same library only', () => {
     const setup = withFolder(withFolder({ ...EMPTY_SETUP, operation: 'copy' }, 'w', 'D:/keep'), 'd', 'D:/trash')
     saveSetup('main', setup)
-    expect(loadSetup('main')).toEqual({ folders: { w: 'D:/keep', d: 'D:/trash' }, operation: 'copy' })
+    expect(loadSetup('main')).toEqual({ mode: 'slot', folders: { w: 'D:/keep', d: 'D:/trash' }, operation: 'copy' })
     expect(loadSetup('other')).toEqual(EMPTY_SETUP)
   })
 
@@ -246,7 +246,7 @@ describe('the setup, remembered per library', () => {
     store.set('sd-v4-sort-setup:main', '{not json')
     expect(loadSetup('main')).toEqual(EMPTY_SETUP)
     store.set('sd-v4-sort-setup:main', JSON.stringify({ folders: { w: 5, a: 'D:/a', q: 'D:/q' }, operation: 'teleport' }))
-    expect(loadSetup('main')).toEqual({ folders: { a: 'D:/a' }, operation: 'move' })
+    expect(loadSetup('main')).toEqual({ mode: 'slot', folders: { a: 'D:/a' }, operation: 'move' })
     const cleared = withFolder(loadSetup('main'), 'a', null)
     expect(cleared.folders).toEqual({})
     expect(hasFolder(cleared)).toBe(false)

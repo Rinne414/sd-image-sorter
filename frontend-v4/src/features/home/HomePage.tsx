@@ -6,7 +6,9 @@ import { useBatches } from '../batch/batchApi'
 import { timeAgo } from '../batch/batchLogic'
 import { Covers } from '../batch/Covers'
 import { kindLabel, stepLabel } from '../batch/labels'
-import { summary, usableSlots, type SessionView } from '../sort/sortSession'
+import { describeSession } from '../sort/SetupParts'
+import type { SessionView } from '../sort/sortSession'
+import { useOtherLibrary } from '../sort/StageParts'
 import { continueSort, newSort, useSortPending } from '../sort/sortStore'
 import styles from './HomePage.module.css'
 
@@ -84,14 +86,15 @@ function RecentBatch({ batch }: { batch: BatchSummary }) {
 /** The unfinished WASD sort: the next images as its cover, how far it got. */
 function RecentSort({ view }: { view: SessionView }) {
   const t = useT()
-  const { sent } = summary(view)
-  const op = t(view.operation === 'copy' ? 'sort.copying' : 'sort.moving')
+  const { title, line } = describeSession(t, view)
+  const other = useOtherLibrary(view)
   return (
     <li className={styles.card} data-testid="home-sort">
       <Covers ids={view.ids.slice(view.index, view.index + 3)} />
       <div className={styles.cardInfo}>
-        <span className={styles.cardName}>{t('sort.home.name', { at: view.index + 1, total: view.total })}</span>
-        <span className={styles.cardMeta}>{t('sort.home.meta', { op, n: usableSlots(view).length, sent })}</span>
+        <span className={styles.cardName}>{title}</span>
+        <span className={styles.cardMeta}>{line}</span>
+        {other && <span className={styles.cardWhen}>{t('sort.otherLibrary', { name: other })}</span>}
       </div>
       <button type="button" className="btn btn-primary" onClick={continueSort} data-testid="home-sort-continue">
         {t('home.resume')}

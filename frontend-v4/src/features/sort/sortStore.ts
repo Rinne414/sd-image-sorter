@@ -3,14 +3,20 @@ import { create } from 'zustand'
 import { ApiError } from '../../api/client'
 import { queryClient } from '../../api/queryClient'
 import { useApp } from '../../state/store'
+import { startBody, type SortSetup } from './savedSetup'
 import { clearSession, fetchSession, sendAction, setFolders, startSession } from './sortApi'
+import { tooSoon } from './sortModes'
+import { useSortPrefs } from './sortPrefs'
 import {
   answered,
   failed,
   INITIAL_STATE,
+  isForward,
   isOpen,
+  isRefusal,
   press as pressKey,
   readSession,
+  reloaded,
   requestFor,
   takeNext,
   unfinished,
@@ -19,7 +25,7 @@ import {
   type SortAction,
   type SortState,
 } from './sortSession'
-import { startBody, type SortSetup } from './savedSetup'
+import { pip } from './sound'
 
 // The Sort tab's live state: the saved session (from the backend), the keys
 // waiting to be sent, and whether the page shows the setup or the session.
@@ -34,6 +40,12 @@ interface SortStore extends SortState {
   setupOpen: boolean
   /** Images handed over by "Sort these…" or "Sort every match"; null: the setup offers what the library has. */
   source: SortSource | null
+  /** When the last key that counted was pressed (for the cooldown). */
+  lastPressAt: number | null
+  /** Goes up each time a key is ignored for coming too soon, so the picture can flinch. */
+  bumped: number
+  /** When recent images were decided (for the pace shown in the header). */
+  stamps: number[]
   load: () => Promise<void>
   press: (action: SortAction) => void
   start: (ids: number[], setup: SortSetup, replace: boolean) => Promise<StartResult>
@@ -45,13 +57,27 @@ interface SortStore extends SortState {
 
 // What moving files changes in the library (copies are not indexed).
 const MOVED_KEYS = ['images', 'image', 'folders', 'image-count', 'library-health', 'missing-summary']
+/** Decisions kept for the pace (a minute's worth at any speed a person sorts). */
+const STAMPS_KEPT = 120
 
-function refreshLibrary(action: SortAction, moved: boolean): void {
-  if (action.kind === 'skip' || !moved) return
+function refreshLibrary(action: SortAction, view: SessionView): void {
+  const moves = view.mode === 'slot' && view.operation === 'move'
+  if (action.kind === 'skip' || !moves) return
   for (const key of MOVED_KEYS) void queryClient.invalidateQueries({ queryKey: [key] })
 }
 
 export const useSort = create<SortStore>((set, get) => {
+  /** One action out and its answer in. A/B and keep/reject answer with flags only, so their session is read again. */
+  const send = async (view: SessionView, action: SortAction): Promise<void> => {
+    const payload = await sendAction(requestFor(view, action))
+    if (view.mode === 'slot' || isRefusal(payload)) {
+      set((cur) => answered(cur, action, payload))
+      return
+    }
+    const current = await fetchSession()
+    set((cur) => reloaded(cur, action, payload, current))
+  }
+
   /** Send queued keys one at a time, in order. */
   const pump = async (): Promise<void> => {
     const state = get()
@@ -60,9 +86,10 @@ export const useSort = create<SortStore>((set, get) => {
     const view = state.session
     set(next.state)
     try {
-      const payload = await sendAction(requestFor(view, next.action))
-      set((cur) => answered(cur, next.action, payload))
-      refreshLibrary(next.action, view.operation === 'move')
+      await send(view, next.action)
+      refreshLibrary(next.action, view)
+      const error = get().error
+      if (isForward(next.action) && (error === null || error.kind === 'cooldown')) set((cur) => ({ stamps: [...cur.stamps, Date.now()].slice(-STAMPS_KEPT) }))
     } catch (error) {
       set((cur) => failed(cur, (error as Error).message))
     }
@@ -73,6 +100,9 @@ export const useSort = create<SortStore>((set, get) => {
     ...INITIAL_STATE,
     setupOpen: false,
     source: null,
+    lastPressAt: null,
+    bumped: 0,
+    stamps: [],
 
     load: async () => {
       try {
@@ -84,7 +114,17 @@ export const useSort = create<SortStore>((set, get) => {
     },
 
     press: (action) => {
-      set((cur) => pressKey(cur, action))
+      const { cooldownMs, sound } = useSortPrefs.getState()
+      const now = Date.now()
+      const before = get()
+      if (isForward(action) && tooSoon(before.lastPressAt, now, cooldownMs)) {
+        set({ error: { kind: 'cooldown' }, bumped: before.bumped + 1 })
+        return
+      }
+      const after = pressKey(before, action)
+      const accepted = after.queue.length > before.queue.length
+      set({ ...after, lastPressAt: accepted && isForward(action) ? now : before.lastPressAt })
+      if (accepted && sound && isForward(action) && action.kind !== 'skip') pip()
       void pump()
     },
 
@@ -95,7 +135,7 @@ export const useSort = create<SortStore>((set, get) => {
         if (error instanceof ApiError && error.status === 409) return 'conflict'
         return { error: (error as Error).message }
       }
-      set({ ...INITIAL_STATE, setupOpen: false, source: null })
+      set({ ...INITIAL_STATE, setupOpen: false, source: null, stamps: [], lastPressAt: null })
       await get().load()
       return 'ok'
     },
@@ -107,7 +147,7 @@ export const useSort = create<SortStore>((set, get) => {
         set({ error: { kind: 'failed', reason: (error as Error).message } })
         return false
       }
-      set({ ...INITIAL_STATE, session: 'none', setupOpen: true })
+      set({ ...INITIAL_STATE, session: 'none', setupOpen: true, stamps: [] })
       return true
     },
 
@@ -148,7 +188,7 @@ export function continueSort(): void {
 }
 
 /**
- * The unfinished WASD sort, for "Continue" on Home and in Ctrl K. Asks the
+ * The unfinished sort, for "Continue" on Home and in Ctrl K. Asks the
  * backend on mount when `refresh` (V3.5 may have moved on) or when nothing is known yet.
  */
 export function useSortPending(refresh = false): SessionView | null {
@@ -157,6 +197,5 @@ export function useSortPending(refresh = false): SessionView | null {
     const s = useSort.getState()
     if (refresh || s.session === null) void s.load()
   }, [refresh])
-  const view = unfinished(session)
-  return view && view.mode === 'slot' ? view : null
+  return unfinished(session)
 }

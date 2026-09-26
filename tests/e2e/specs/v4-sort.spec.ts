@@ -231,7 +231,7 @@ test('a new sort over an unfinished one asks first; Home and the setup offer to 
   await expect(card).toContainText('image 2 of 3')
   await expect(card.getByRole('button', { name: 'Continue' })).toBeInViewport({ ratio: 1 })
   await page.getByTestId('home-start-sort').click()
-  await expect(page.getByTestId('sort-resume')).toContainText('Image 2 of 3')
+  await expect(page.getByTestId('sort-resume')).toContainText('image 2 of 3')
 
   await page.getByTestId('sort-start').click()
   const confirm = page.getByTestId('sort-confirm')

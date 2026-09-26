@@ -153,3 +153,23 @@ def test_finished_session_still_reports_its_summary(sort_client, tmp_path):
     assert summary["undo_available"] is True
     assert (src / "0.png").exists()
     assert (keep / "0.png").exists()
+
+
+def test_every_answer_names_the_library_the_sorted_images_belong_to(sort_client, tmp_path):
+    db = sort_client.test_db
+    src = tmp_path / "src"
+    src.mkdir()
+    ids = [_add_image(db, src, f"{n}.png") for n in range(2)]
+    with db.get_db() as conn:
+        conn.execute("UPDATE images SET library_id = 'other' WHERE id IN (?, ?)", tuple(ids))
+
+    assert sort_client.get("/api/sort/current").json()["library_id"] is None
+
+    other = {"X-SD-Library-Id": "other"}
+    started = sort_client.post("/api/sort/start", json={"image_ids": ids, "mode": "cull"}, headers=other)
+    assert started.status_code == 200
+    # Asked from another library, the session still says where its images live.
+    assert sort_client.get("/api/sort/current").json()["library_id"] == "other"
+    kept = sort_client.post("/api/sort/action?action=keep").json()
+    assert kept["library_id"] == "other"
+    assert kept["decision"] == "keep"

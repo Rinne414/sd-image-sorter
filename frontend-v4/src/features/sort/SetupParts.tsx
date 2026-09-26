@@ -1,7 +1,10 @@
 import { useT, type MessageKey } from '../../i18n'
 import { folderName, parentFolder, tailOfPath } from '../../lib/paths'
 import { Icon } from '../../ui/Icon'
-import { SLOT_KEYS, usableSlots, type SessionView, type SlotKey } from './sortSession'
+import { round } from './sortModes'
+import { COOLDOWN_MAX_MS, COOLDOWN_MIN_MS, COOLDOWN_STEP_MS, useSortPrefs } from './sortPrefs'
+import { decided, SLOT_KEYS, SORT_MODES, summary, usableSlots, type SessionView, type SlotKey, type SortMode } from './sortSession'
+import { useOtherLibrary } from './StageParts'
 import type { SortSetup } from './savedSetup'
 import styles from './SortPage.module.css'
 
@@ -22,27 +25,83 @@ export function FolderLabel({ path }: { path: string }) {
   )
 }
 
-const LATER_MODES: MessageKey[] = ['sort.mode.bracket', 'sort.mode.cull', 'sort.mode.rules']
+export const MODE_NAME: Record<SortMode, MessageKey> = { slot: 'sort.mode.slots', bracket: 'sort.mode.bracket', cull: 'sort.mode.cull' }
+const MODE_TEST: Record<SortMode, string> = { slot: 'sort-mode-slots', bracket: 'sort-mode-bracket', cull: 'sort-mode-cull' }
 
-/** Only "keys to folders" works yet; the others say so instead of pretending. */
-export function ModeSwitch() {
+/** The three ways to sort; "by rules" is still being built and says so instead of pretending. */
+export function ModeSwitch({ mode, onMode }: { mode: SortMode; onMode: (mode: SortMode) => void }) {
   const t = useT()
   return (
     <div className={styles.modes}>
       <div className={styles.modeRow} role="radiogroup" aria-label={t('sort.mode.label')}>
-        <button type="button" role="radio" aria-checked="true" className={styles.mode} data-testid="sort-mode-slots">
-          {t('sort.mode.slots')} <span className="mono">WASD</span>
-        </button>
-        {LATER_MODES.map((key) => (
-          <button key={key} type="button" role="radio" aria-checked="false" className={styles.mode} disabled title={t('sort.mode.later')}>
-            {t(key)}
+        {SORT_MODES.map((m) => (
+          <button key={m} type="button" role="radio" aria-checked={mode === m} className={styles.mode} onClick={() => onMode(m)} data-testid={MODE_TEST[m]}>
+            {t(MODE_NAME[m])}
+            {m === 'slot' && <span className="mono"> WASD</span>}
           </button>
         ))}
+        <button type="button" role="radio" aria-checked="false" className={styles.mode} disabled title={t('sort.mode.later')}>
+          {t('sort.mode.rules')}
+        </button>
       </div>
       <p className={styles.note}>{t('sort.mode.later')}</p>
     </div>
   )
 }
+
+/** A/B and keep/reject have no folders to set: how their keys work, instead. */
+export function HowTo({ mode }: { mode: 'bracket' | 'cull' }) {
+  const t = useT()
+  return (
+    <section className={styles.how} data-testid="sort-how">
+      <h2 className={styles.section}>{t(mode === 'bracket' ? 'sort.how.bracket.title' : 'sort.how.cull.title')}</h2>
+      <p className={styles.howBody}>{t(mode === 'bracket' ? 'sort.how.bracket.body' : 'sort.how.cull.body')}</p>
+      <p className={styles.note}>{t('sort.how.keys')}</p>
+    </section>
+  )
+}
+
+/** Key cooldown, the sound and focus mode: kept for every sort, on this computer. */
+export function OptionsPanel() {
+  const t = useT()
+  const prefs = useSortPrefs()
+  const on = prefs.cooldownMs > 0
+  return (
+    <div className={styles.optionsRow} role="group" aria-label={t('sort.opt.title')} data-testid="sort-options">
+      <span className={styles.presetsLabel}>{t('sort.opt.title')}</span>
+      <label className={styles.inlineOption} title={t('sort.opt.cooldownHint')}>
+        <input type="checkbox" checked={on} onChange={() => prefs.setCooldown(on ? 0 : DEFAULT_COOLDOWN_MS)} data-testid="sort-cooldown" />
+        {t('sort.opt.cooldown')}
+      </label>
+      {on && (
+        <span className={styles.range}>
+          <input
+            type="range"
+            min={COOLDOWN_MIN_MS}
+            max={COOLDOWN_MAX_MS}
+            step={COOLDOWN_STEP_MS}
+            value={prefs.cooldownMs}
+            onChange={(e) => prefs.setCooldown(Number(e.target.value))}
+            aria-label={t('sort.opt.cooldown')}
+            data-testid="sort-cooldown-ms"
+          />
+          <span className="mono">{t('sort.opt.cooldownMs', { ms: prefs.cooldownMs })}</span>
+        </span>
+      )}
+      <label className={styles.inlineOption}>
+        <input type="checkbox" checked={prefs.sound} onChange={() => prefs.setSound(!prefs.sound)} data-testid="sort-sound-option" />
+        {t('sort.opt.sound')}
+      </label>
+      <label className={styles.inlineOption} title={t('sort.focusHint')}>
+        <input type="checkbox" checked={prefs.focus} onChange={() => prefs.setFocus(!prefs.focus)} data-testid="sort-focus-option" />
+        {t('sort.opt.focus')}
+      </label>
+    </div>
+  )
+}
+
+/** The cooldown a first tick of the box turns on. */
+const DEFAULT_COOLDOWN_MS = 300
 
 export type SourceChoice = 'picks' | 'filter'
 
@@ -149,30 +208,33 @@ export function OperationPicker({ setup, onChange }: OperationProps) {
   )
 }
 
-const MODE_NAME: Record<SessionView['mode'], MessageKey> = { slot: 'sort.mode.slots', bracket: 'sort.mode.bracket', cull: 'sort.mode.cull' }
+type Translate = ReturnType<typeof useT>
 
-/** The unfinished sort: continue it here, or in V3.5 when V4 cannot run its mode yet. */
-export function ResumeCard({ view, onContinue }: { view: SessionView; onContinue: () => void }) {
-  const t = useT()
+/** A sort in one line, for Home and the setup: where it is, and what it does. */
+export function describeSession(t: Translate, view: SessionView): { title: string; line: string } {
   const at = Math.min(view.index + 1, view.total)
-  if (view.mode !== 'slot') {
-    return (
-      <div className={styles.resume} data-testid="sort-resume">
-        <p className={styles.resumeText}>{t('sort.resume.otherMode', { mode: t(MODE_NAME[view.mode]), at, total: view.total })}</p>
-        <a className="btn" href="/">
-          {t('sort.resume.openV3')}
-        </a>
-      </div>
-    )
+  if (view.mode === 'bracket') return { title: t('sort.home.nameBracket', round(view.index, view.total)), line: t('sort.home.metaBracket') }
+  if (view.mode === 'cull') {
+    const { keep, reject } = decided(view)
+    return { title: t('sort.home.nameCull', { at, total: view.total }), line: t('sort.home.metaCull', { kept: keep.length, rejected: reject.length }) }
   }
   const op = t(view.operation === 'copy' ? 'sort.copying' : 'sort.moving')
+  return { title: t('sort.home.name', { at, total: view.total }), line: t('sort.home.meta', { op, n: usableSlots(view).length, sent: summary(view).sent }) }
+}
+
+/** The unfinished sort, any way: continue it. Says so when its images belong to another library. */
+export function ResumeCard({ view, onContinue }: { view: SessionView; onContinue: () => void }) {
+  const t = useT()
+  const { title, line } = describeSession(t, view)
+  const other = useOtherLibrary(view)
   return (
     <div className={styles.resume} data-testid="sort-resume">
       <div className={styles.resumeText}>
         <strong>{t('sort.resume.title')}</strong>
         <span className={styles.optionHint}>
-          {t('sort.resume.body', { at, total: view.total, op, n: usableSlots(view).length })}
+          {title} · {line}
         </span>
+        {other && <span className={styles.warnLine}>{t('sort.otherLibrary', { name: other })}</span>}
       </div>
       <button type="button" className="btn btn-primary" onClick={onContinue} data-testid="sort-continue">
         {t('sort.resume.continue')}

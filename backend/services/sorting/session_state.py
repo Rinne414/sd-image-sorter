@@ -195,7 +195,26 @@ class SessionStateMixin:
             "undo_available": bool(active_history),
             "redo_available": bool(active_redo),
             "restore_failure": self._sort_session.get("restore_failure"),
+            "library_id": self._sort_session_library_id(),
         }
+
+    def _sort_session_library_id(self) -> Optional[str]:
+        """The library the session's images belong to (None without a session).
+
+        The one saved session is shared by every library and by V3.5, so the
+        V4 page compares this with the library it has open and says so when
+        they differ.
+        """
+        ids = [int(i) for i in (self._sort_session.get("image_ids") or [])[:50]]
+        if not ids:
+            return None
+        placeholders = ",".join("?" * len(ids))
+        with db.get_db() as conn:
+            row = conn.execute(
+                f"SELECT library_id FROM images WHERE id IN ({placeholders}) LIMIT 1",
+                ids,
+            ).fetchone()
+        return str(row[0]) if row and row[0] is not None else None
 
     def _filter_sort_actions(
         self,
