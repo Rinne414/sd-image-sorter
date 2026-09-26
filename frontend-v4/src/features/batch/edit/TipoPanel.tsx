@@ -12,6 +12,9 @@ interface Props {
   disabled: boolean
   onAdd: (tags: string[]) => void
   onClose: () => void
+  /** What the ticked tags are added to, when it is not a caption (Reverse prompt's draft). */
+  lead?: string
+  noTags?: string
 }
 
 type Ask = { state: 'idle' } | { state: 'busy' } | { state: 'done'; proposals: TipoProposal[] } | { state: 'failed'; reason: string }
@@ -21,7 +24,7 @@ type Ask = { state: 'idle' } | { state: 'busy' } | { state: 'done'; proposals: T
  * user ticks what goes into this caption. A model that is not on disk yet is
  * named with its size first; the first run downloads it.
  */
-export function TipoPanel({ tags, imageId, disabled, onAdd, onClose }: Props) {
+export function TipoPanel({ tags, imageId, disabled, onAdd, onClose, lead, noTags }: Props) {
   const t = useT()
   const status = useModelStatus()
   const [model, setModel] = useState<TipoModel>(loadTipoModel)
@@ -49,7 +52,7 @@ export function TipoPanel({ tags, imageId, disabled, onAdd, onClose }: Props) {
           <Icon name="close" size={12} />
         </button>
       </header>
-      <p className={styles.muted}>{t('dataset.edit.tipoLead')}</p>
+      <p className={styles.muted}>{lead ?? t('dataset.edit.tipoLead')}</p>
       <div className={styles.toolRow}>
         <select
           className={styles.select}
@@ -72,7 +75,7 @@ export function TipoPanel({ tags, imageId, disabled, onAdd, onClose }: Props) {
         </button>
       </div>
       {!installed && status.data && <p className={styles.warnText}>{t('dataset.edit.tipoNotInstalled', { size })}</p>}
-      {tags.length === 0 && <p className={styles.muted}>{t('dataset.edit.tipoNoTags')}</p>}
+      {tags.length === 0 && <p className={styles.muted}>{noTags ?? t('dataset.edit.tipoNoTags')}</p>}
       <TipoResult ask={ask} picked={picked} toggle={toggle} />
       {ask.state === 'done' && ask.proposals.length > 0 && (
         <button type="button" className="btn btn-primary" disabled={disabled || picked.size === 0} onClick={() => onAdd([...picked])} data-testid="edit-tipo-add">

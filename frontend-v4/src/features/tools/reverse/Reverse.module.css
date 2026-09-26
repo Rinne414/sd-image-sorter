@@ -1,0 +1,279 @@
+/* 反推提示词: the picture on the left, the record, the run, the guess and the draft on the right. */
+.page {
+  position: relative;
+  display: grid;
+  grid-template-columns: clamp(360px, calc(38 * var(--vw)), 820px) minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.page:not([data-has-image]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.side {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  background: var(--surface-1);
+  border-left: 1px solid var(--line);
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 880px;
+  padding: 16px 24px 56px 22px;
+}
+
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+
+.problem {
+  margin: 0;
+  color: var(--danger);
+  line-height: 1.6;
+}
+
+.warn {
+  margin: 0;
+  padding: 8px 10px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+  border-left: 2px solid var(--warn);
+  background: var(--wash);
+}
+
+.subLabel {
+  font-size: var(--fs-1);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.textButton {
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.textButton:hover:not(:disabled) {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.textButton:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+/* ---- the two answers ---- */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+
+/* A record is what really made the picture (ink); a guess is a model's output (cyanotype). */
+.card[data-provenance="recorded"] {
+  border-left-color: var(--text-2);
+}
+
+.card[data-provenance="inferred"] {
+  border-left-color: var(--ai);
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+.badge {
+  font-size: var(--fs-2);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.badge[data-provenance="inferred"] {
+  color: var(--ai);
+}
+
+.meta {
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  overflow-wrap: anywhere;
+}
+
+.cardTools {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.note,
+.compare {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+
+.compare {
+  padding-left: 8px;
+  border-left: 2px solid var(--warn);
+}
+
+.text {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-4);
+  line-height: 1.62;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.negative {
+  color: var(--text-2);
+  font-size: var(--fs-3);
+}
+
+.noRecord {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--text-2);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+}
+
+/* ---- how, what for, and the run ---- */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.modes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.modes legend {
+  margin-bottom: 4px;
+  padding: 0;
+}
+
+.mode {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.mode input {
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+}
+
+.mode > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.mode[data-off] .modeName {
+  color: var(--muted);
+}
+
+.modeName {
+  color: var(--text);
+}
+
+.modeHint {
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.target {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.target select {
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-3);
+  border-radius: var(--radius);
+}
+
+.target select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.runRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+
+.status {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+/* ---- the draft ---- */
+.draft {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.draftText {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-3);
+  line-height: 1.6;
+  resize: vertical;
+  border-radius: var(--radius);
+}
+
+.draftText:focus {
+  outline: none;
+  border-color: var(--accent);
+}

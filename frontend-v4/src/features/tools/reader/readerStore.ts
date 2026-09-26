@@ -1,43 +1,22 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
-import { create } from 'zustand'
 import { useImageDetail } from '../../../api/queries'
 import type { ImageDetailResponse } from '../../../api/types'
-import { parseUpload, type IntakeOrigin } from '../intake/intakeFiles'
+import { parseUpload } from '../intake/intakeFiles'
+import { createSourceStore, type ImageSource } from '../intake/sourceStore'
 import { fromDetail, fromParse, readRecord, type ParseResult, type ReaderView } from './readerAdapter'
 
-// The image on the Reader: a file brought in (kept until another replaces it,
-// also while the user is on another page), or a library image read from the
-// database by id.
+// The image on the Reader (intake/sourceStore.ts): a file brought in, or a
+// library image read from the database by id.
 
-export type ReaderSource =
-  | { kind: 'library'; id: number }
-  | { kind: 'upload'; file: File; url: string; origin: IntakeOrigin; seq: number }
+export type ReaderSource = ImageSource
 
-export const useReader = create<{ source: ReaderSource | null }>(() => ({ source: null }))
+const reader = createSourceStore()
 
-let uploads = 0
-
-function replace(next: ReaderSource | null): void {
-  const prev = useReader.getState().source
-  if (prev?.kind === 'upload') URL.revokeObjectURL(prev.url)
-  useReader.setState({ source: next })
-}
-
-export function openUpload(file: File, origin: IntakeOrigin): void {
-  uploads += 1
-  replace({ kind: 'upload', file, url: URL.createObjectURL(file), origin, seq: uploads })
-}
-
-export function openLibraryImage(id: number): void {
-  const prev = useReader.getState().source
-  if (prev?.kind === 'library' && prev.id === id) return
-  replace({ kind: 'library', id })
-}
-
-export function clearReader(): void {
-  replace(null)
-}
+export const useReader = reader.useSource
+export const openUpload = reader.openUpload
+export const openLibraryImage = reader.openLibraryImage
+export const clearReader = reader.clear
 
 /** The shown image read, whichever way it came in. */
 export interface ReaderData {
