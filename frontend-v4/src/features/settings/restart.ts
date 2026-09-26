@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { api, unwrap } from '../../api/client'
 import { translate, useLang, type MessageKey, type Params } from '../../i18n'
 import { useToasts } from '../../ui/toasts'
-import { waitForNewBoot, type BootDeps } from './restartWait'
+import { askWhenBusy, waitForNewBoot, type AskAction, type BootDeps } from './restartWait'
 
 // Restarting the app and installing an update, shared by About & updates and
 // (later) the Model Center. Both end the same way: a full-screen "restarting"
@@ -11,8 +11,8 @@ import { waitForNewBoot, type BootDeps } from './restartWait'
 
 export type RestartScreen =
   | { kind: 'none' }
-  /** "Restart?": `jobs` null for the plain question, else the jobs a restart would stop. */
-  | { kind: 'ask'; jobs: string[] | null }
+  /** "Restart?" or "Install now?": `jobs` null for the plain question, else the jobs it would stop. */
+  | { kind: 'ask'; jobs: string[] | null; action: AskAction }
   | { kind: 'wait'; what: 'download' | 'update' | 'restart'; latest: string }
   | { kind: 'slow' }
   | { kind: 'unsupported' }
@@ -41,11 +41,11 @@ const show = (screen: RestartScreen) => useRestart.setState({ screen })
 const say = (key: MessageKey, params?: Params) => translate(useLang.getState().lang, key, params)
 const toastError = (text: string) => useToasts.getState().push(text, 'error')
 
-function ask(jobs: string[] | null): Promise<boolean> {
+function ask(jobs: string[] | null, action: AskAction = 'restart'): Promise<boolean> {
   pending?.(false)
   return new Promise((resolve) => {
     pending = resolve
-    show({ kind: 'ask', jobs })
+    show({ kind: 'ask', jobs, action })
   })
 }
 
@@ -87,12 +87,8 @@ export type RestartOutcome = 'restarting' | 'declined' | 'unsupported' | 'failed
 export async function restartApp({ reason = 'user', askFirst = true }: { reason?: string; askFirst?: boolean } = {}): Promise<RestartOutcome> {
   if (askFirst && !(await ask(null))) return 'declined'
   try {
-    let result = await postRestart(reason, false)
-    if (result.status === 'busy') {
-      const jobs = Array.isArray(result.jobs) ? result.jobs.map(String) : []
-      if (!(await ask(jobs))) return 'declined'
-      result = await postRestart(reason, true)
-    }
+    const result = await askWhenBusy((check) => postRestart(reason, !check), (jobs) => ask(jobs))
+    if (!result) return 'declined'
     if (result.status !== 'scheduled') {
       show({ kind: 'unsupported' })
       return 'unsupported'
@@ -105,17 +101,30 @@ export async function restartApp({ reason = 'user', askFirst = true }: { reason?
   }
 }
 
-export type InstallOutcome = 'installing' | 'upToDate' | 'failed'
+export type InstallOutcome = 'installing' | 'upToDate' | 'declined' | 'failed'
+
+async function postApply(checkBusy: boolean): Promise<{ status?: string }> {
+  const body = { force_check: true, relaunch: true, check_busy: checkBusy }
+  return unwrap<{ status?: string }>(await api.POST('/api/updates/apply', { body }))
+}
 
 /**
  * Download and install `latest` (the user confirmed it). The request itself
  * downloads the package, so the "downloading" screen shows from the start.
+ * Jobs running anywhere (another tab, V3.5) make the backend answer "busy"
+ * before it downloads anything, and the user decides whether to install anyway.
  */
 export async function installUpdate(latest: string): Promise<InstallOutcome> {
-  show({ kind: 'wait', what: 'download', latest })
+  const downloading = () => show({ kind: 'wait', what: 'download', latest })
+  downloading()
   const before = await bootId().catch(() => null)
   try {
-    const result = unwrap<{ status?: string }>(await api.POST('/api/updates/apply', { body: { force_check: true, relaunch: true } }))
+    const result = await askWhenBusy(postApply, async (jobs) => {
+      const go = await ask(jobs, 'install')
+      if (go) downloading()
+      return go
+    })
+    if (!result) return 'declined'
     if (result.status !== 'scheduled') {
       show({ kind: 'none' })
       if (result.status === 'up_to_date') useToasts.getState().push(say('about.install.upToDate'))

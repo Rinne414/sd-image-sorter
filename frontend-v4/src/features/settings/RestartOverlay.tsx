@@ -5,25 +5,26 @@ import { Dialog } from '../../ui/Dialog'
 import { useLayer } from '../../ui/layers'
 import { useRestart, type RestartScreen } from './restart'
 import styles from './RestartOverlay.module.css'
-import { busyJobsText } from './restartWait'
+import { askKeys, busyJobsText, type AskAction } from './restartWait'
 
-/** The question before a restart, and the full screen while the app restarts or updates. */
+/** The question before a restart or an install, and the full screen while the app restarts or updates. */
 export function RestartOverlay() {
   const screen = useRestart((s) => s.screen)
   if (screen.kind === 'none') return null
-  if (screen.kind === 'ask') return <AskRestart jobs={screen.jobs} />
+  if (screen.kind === 'ask') return <AskRestart jobs={screen.jobs} action={screen.action} />
   return <FullScreen screen={screen} />
 }
 
-function AskRestart({ jobs }: { jobs: string[] | null }) {
+function AskRestart({ jobs, action }: { jobs: string[] | null; action: AskAction }) {
   const t = useT()
   const lang = useLang((s) => s.lang)
   const answer = useRestart((s) => s.answer)
   const cancelRef = useRef<HTMLButtonElement>(null)
   const busy = jobs !== null
+  const keys = askKeys(action, busy)
   return (
     <Dialog
-      title={t(busy ? 'restart.busy.title' : 'restart.ask.title')}
+      title={t(keys.title)}
       onClose={() => answer(false)}
       testId="restart-ask"
       initialFocus={cancelRef}
@@ -33,12 +34,12 @@ function AskRestart({ jobs }: { jobs: string[] | null }) {
             {t('common.cancel')}
           </button>
           <button type="button" className={busy ? 'btn btn-danger' : 'btn btn-primary'} onClick={() => answer(true)} data-testid="restart-go">
-            {t(busy ? 'restart.busy.ok' : 'restart.ask.ok')}
+            {t(keys.ok)}
           </button>
         </>
       }
     >
-      <p className={styles.askBody}>{busy ? t('restart.busy.body', { jobs: busyJobsText(jobs, t, lang) }) : t('restart.ask.body')}</p>
+      <p className={styles.askBody}>{t(keys.body, { jobs: busyJobsText(jobs, t, lang) })}</p>
     </Dialog>
   )
 }

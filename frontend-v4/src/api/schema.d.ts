@@ -3520,7 +3520,7 @@ export interface paths {
         post?: never;
         /**
          * Clear Predictions
-         * @description Clear all artist predictions.
+         * @description Clear the artist predictions of the current library's images.
          */
         delete: operations["clear_predictions_api_artists_clear_delete"];
         options?: never;
@@ -3949,6 +3949,10 @@ export interface paths {
         /**
          * Apply Update
          * @description Download and stage the latest update, then shut down so the worker can patch files.
+         *
+         *     Installing stops whatever is running. With ``check_busy`` it first answers
+         *     ``busy`` with the running jobs, like ``/restart``, before anything is
+         *     downloaded, and the page asks the user.
          */
         post: operations["apply_update_api_updates_apply_post"];
         delete?: never;
@@ -6400,6 +6404,11 @@ export interface components {
              * @default true
              */
             relaunch: boolean;
+            /**
+             * Check Busy
+             * @default false
+             */
+            check_busy: boolean;
         };
         /** ArtistImageListResponse */
         ArtistImageListResponse: {

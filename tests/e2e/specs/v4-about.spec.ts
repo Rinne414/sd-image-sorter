@@ -7,7 +7,8 @@ import { pageOverflow, VIEWPORTS } from '../fixtures/v4-seed'
  * V4 About & updates (slice 5c): the version, an update check that never says
  * "latest" before it knows, the new-version hint in the top bar (after the one
  * check half a minute after start, which can be switched off), the install
- * confirm that says what it replaces, the full screen that reloads once the
+ * confirm that says what it replaces, the question when the backend says jobs
+ * run elsewhere (slice 5z-fix), the full screen that reloads once the
  * server comes back with a new boot id (and says what to do after three
  * minutes), restarting with the running jobs named, the update proxy, copying
  * diagnostics, opening the log folder and the detailed log.
@@ -73,6 +74,8 @@ interface Stub {
   proxyPosts: Json[]
   channelDeletes: number
   applyPosts: Json[]
+  /** What POST /api/updates/apply answers, in turn (the last one repeats); empty: scheduled. */
+  applyAnswers: Json[]
   restartPosts: Json[]
   /** What POST /api/updates/restart answers, in turn (the last one repeats). */
   restartAnswers: Json[]
@@ -89,6 +92,7 @@ function newStub(fields: Partial<Stub> = {}): Stub {
     proxyPosts: [],
     channelDeletes: 0,
     applyPosts: [],
+    applyAnswers: [],
     restartPosts: [],
     restartAnswers: [{ status: 'scheduled', boot_id: 'boot-A' }],
     bootIds: ['boot-A'],
@@ -120,7 +124,8 @@ async function stubAll(page: Page, stub: Stub) {
   })
   await page.route('**/api/updates/apply', (route: Route) => {
     stub.applyPosts.push(route.request().postDataJSON() as Json)
-    return route.fulfill({ json: { ...stub.status, status: 'scheduled', restart_required: true } })
+    const turn = Math.min(stub.applyPosts.length - 1, stub.applyAnswers.length - 1)
+    return route.fulfill({ json: stub.applyAnswers[turn] ?? { ...stub.status, status: 'scheduled', restart_required: true } })
   })
   await page.route('**/api/updates/restart', (route: Route) => {
     stub.restartPosts.push(route.request().postDataJSON() as Json)
@@ -321,7 +326,7 @@ test('install: the confirm says what it downloads, replaces and leaves alone; th
   const screen = page.getByTestId('restart-screen')
   await expect(screen).toBeVisible()
   await expect(screen).toContainText('Installing the update and restarting…')
-  expect(stub.applyPosts).toEqual([{ force_check: true, relaunch: true }])
+  expect(stub.applyPosts).toEqual([{ force_check: true, relaunch: true, check_busy: true }])
 
   // a new server: the page reloads by itself (a look during the reload itself counts as "not yet")
   const stillBefore = () =>
@@ -329,6 +334,54 @@ test('install: the confirm says what it downloads, replaces and leaves alone; th
   await expect.poll(stillBefore, { timeout: 15_000 }).toBe(false)
   await expect(page.getByTestId('settings-page')).toBeVisible()
   await expect(page.getByTestId('restart-screen')).toHaveCount(0)
+})
+
+test('install while jobs run elsewhere (another tab, V3.5): the backend names them, cancel sends nothing more, "Install anyway" installs', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  const busy = { status: 'busy', jobs: ['scan', 'model_setup'], boot_id: 'boot-A' }
+  const stub = newStub({ status: NEWER, applyAnswers: [busy, busy, { status: 'scheduled', restart_required: true }] })
+  await stubAll(page, stub)
+  await openAt(page, '#/settings/about')
+  await page.getByTestId('update-check').click()
+
+  // nothing runs in this tab, so the confirm itself warns about nothing
+  await page.getByTestId('update-install').click()
+  await expect(page.getByTestId('install-dialog').getByTestId('install-jobs')).toHaveCount(0)
+  await page.getByTestId('install-go').click()
+
+  const ask = page.getByTestId('restart-ask')
+  await expect(ask.getByRole('heading')).toHaveText('Install now?')
+  await expect(ask).toContainText('Still running: a folder scan, a model download. Installing stops it; you can start it again afterwards.')
+  await expect(ask.getByTestId('restart-go')).toHaveText('Install anyway')
+  await expect(ask.getByRole('button', { name: 'Cancel' })).toBeFocused()
+  await expect(page.getByTestId('restart-screen')).toHaveCount(0)
+  expect(stub.applyPosts).toEqual([{ force_check: true, relaunch: true, check_busy: true }])
+
+  // cancel: nothing more is sent and the page is usable again
+  await ask.getByRole('button', { name: 'Cancel' }).click()
+  await expect(ask).toHaveCount(0)
+  await expect(page.getByTestId('restart-screen')).toHaveCount(0)
+  await expect(page.getByTestId('update-install')).toBeInViewport({ ratio: 1 })
+  await page.waitForTimeout(500)
+  expect(stub.applyPosts).toHaveLength(1)
+
+  // in Chinese: asked again, installed anyway with the check off
+  await page.evaluate(() => localStorage.setItem('sd-image-sorter-lang', 'zh-CN'))
+  await page.reload()
+  await page.getByTestId('update-check').click()
+  await page.getByTestId('update-install').click()
+  await page.getByTestId('install-go').click()
+  await expect(ask.getByRole('heading')).toHaveText('现在安装吗？')
+  await expect(ask).toContainText('还在进行：文件夹扫描、模型下载。安装会中断它，装好后可以再开始。')
+  await expect(ask.getByTestId('restart-go')).toHaveText('仍要安装')
+  await ask.getByTestId('restart-go').click()
+  await expect(ask).toHaveCount(0)
+  await expect(page.getByTestId('restart-screen')).toContainText('正在安装更新并重启…')
+  expect(stub.applyPosts).toEqual([
+    { force_check: true, relaunch: true, check_busy: true },
+    { force_check: true, relaunch: true, check_busy: true },
+    { force_check: true, relaunch: true, check_busy: false },
+  ])
 })
 
 test('restart asks first, names the running jobs, restarts anyway on request, and says what to do after three minutes', async ({ page }) => {
