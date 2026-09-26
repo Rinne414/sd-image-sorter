@@ -10,7 +10,9 @@ import { dbPath, pageOverflow, repoRoot, runBackendScript, tmpRoot, VIEWPORTS } 
  * V4 Settings › Library and Settings › Disk & cache (slice 5e), on the real
  * backend and an isolated library of its own: the source folders (a real
  * rescan as a job, removing a folder that is gone), the tag backup (a real
- * export, then an import that says first how many images it can change), the
+ * export of this library only, then an import that says first how many images
+ * it can change and afterwards why it skipped the rest, never touching another
+ * library or guessing between same-named images), the
  * danger zone (import in the way named and stopped; the counts; Cancel
  * focused; the library really emptied), the idle check for new images, and
  * the disk page (real sizes, the thumbnail limit including 0).
@@ -27,6 +29,8 @@ test.describe.configure({ mode: 'serial' })
 
 const LIB = 'lib_v4e2e_libset'
 const LIB_NAME = 'V4 e2e settings'
+/** A second library: a tag backup made or imported in LIB must never touch it. */
+const OTHER = 'lib_v4e2e_libset_other'
 const PREFIX = 'v4libset-'
 const TAG = 'v4libset_tag'
 const DIR = 'v4-libset'
@@ -40,9 +44,10 @@ function dropTestLibrary(): void {
 import shutil, sqlite3
 from pathlib import Path
 with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
-    conn.execute("DELETE FROM images WHERE library_id = ?", (${JSON.stringify(LIB)},))
-    conn.execute("DELETE FROM library_roots WHERE library_id = ?", (${JSON.stringify(LIB)},))
-    conn.execute("DELETE FROM libraries WHERE id = ?", (${JSON.stringify(LIB)},))
+    for lib in (${JSON.stringify(LIB)}, ${JSON.stringify(OTHER)}):
+        conn.execute("DELETE FROM images WHERE library_id = ?", (lib,))
+        conn.execute("DELETE FROM library_roots WHERE library_id = ?", (lib,))
+        conn.execute("DELETE FROM libraries WHERE id = ?", (lib,))
     conn.execute("DELETE FROM favorite_paths WHERE path_key LIKE ?", ("%${PREFIX}%",))
     conn.commit()
 shutil.rmtree(Path(${JSON.stringify(path.join(tmpRoot, DIR))}), ignore_errors=True)
@@ -94,12 +99,46 @@ print("ok")
 `)
 }
 
-function countInDb(sql: string): number {
+/**
+ * Images a tag backup must not reach or guess between: two of LIB's sharing one
+ * file name, and a tagged one in OTHER. Removed with {@link dropStrangers}.
+ */
+function seedStrangers(): void {
+  runBackendScript(`
+import sqlite3
+with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
+    conn.execute("INSERT OR IGNORE INTO libraries (id, name, is_default) VALUES (?, 'V4 e2e other', 0)", (${JSON.stringify(OTHER)},))
+    rows = [("twin-a", "${PREFIX}twin.png", ${JSON.stringify(LIB)}, None), ("twin-b", "${PREFIX}twin.png", ${JSON.stringify(LIB)}, None), ("other", "${PREFIX}other.png", ${JSON.stringify(OTHER)}, 1)]
+    for folder, name, lib, tagged in rows:
+        cur = conn.execute("INSERT INTO images (path, filename, library_id, is_readable, metadata_status, created_at, tagged_at) VALUES (?, ?, ?, 1, 'complete', datetime('now'), CASE WHEN ? THEN datetime('now') END)", (f"/nowhere/{folder}/{name}", name, lib, tagged))
+        if tagged:
+            conn.execute("INSERT INTO tags (image_id, tag, confidence, source) VALUES (?, 'its_own_tag', 0.9, 'manual')", (cur.lastrowid,))
+    conn.commit()
+print("ok")
+`)
+}
+
+/** Take the strangers away again (and drop the server's cached counts). */
+function dropStrangers(): void {
+  runBackendScript(`
+import sqlite3
+with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
+    ids = [r[0] for r in conn.execute("SELECT id FROM images WHERE filename IN (?, ?)", ("${PREFIX}twin.png", "${PREFIX}other.png"))]
+    conn.executemany("DELETE FROM tags WHERE image_id = ?", [(i,) for i in ids])
+    conn.executemany("DELETE FROM images WHERE id = ?", [(i,) for i in ids])
+    conn.execute("DELETE FROM libraries WHERE id = ?", (${JSON.stringify(OTHER)},))
+    conn.commit()
+print("ok")
+`)
+  onOurImages('')
+}
+
+function countInDb(sql: string, lib = LIB): number {
   return Number(
     runBackendScript(`
 import sqlite3
 with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
-    print(conn.execute(${JSON.stringify(sql)}, (${JSON.stringify(LIB)},)).fetchone()[0])
+    print(conn.execute(${JSON.stringify(sql)}, (${JSON.stringify(lib)},)).fetchone()[0])
 `),
   )
 }
@@ -196,31 +235,60 @@ test('source folders: the live one first, a rescan runs as a job and brings its 
   expect(countInDb(`SELECT COUNT(*) FROM images WHERE library_id = ?`)).toBe(COUNT)
 })
 
-test('tag backup: a real export, then an import that says first how many images it can change', async ({ page }) => {
+test('tag backup: a real export of this library only, then an import that says first how many images it can change and afterwards why it skipped the rest', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   onOurImages(`UPDATE images SET tagged_at = datetime('now') WHERE id = {id}; INSERT INTO tags (image_id, tag, confidence, source) VALUES ({id}, '${TAG}', 0.9, 'manual')`)
+  seedStrangers()
   await openAt(page, '#/settings/library')
 
   const downloading = page.waitForEvent('download')
   await page.getByTestId('tags-export').click()
   const download = await downloading
   expect(download.suggestedFilename()).toMatch(/^sd-image-sorter-tags-.+\.json$/)
-  const exported = JSON.parse(fs.readFileSync(await download.path(), 'utf8')) as { images: { filename: string; tags: { tag: string }[] }[] }
-  const ours = exported.images.filter((i) => i.filename.startsWith(PREFIX))
-  expect(ours.map((i) => i.filename).sort()).toEqual([0, 1, 2, 3].map((i) => `${PREFIX}0${i}.png`))
-  expect(ours.every((i) => i.tags.some((t) => t.tag === TAG))).toBe(true)
-  await expect(page.getByText(/^Exported the tags of \d+ images$/)).toBeVisible()
+  type Exported = { count: number; images: { path: string; filename: string; tags: { tag: string }[] }[] }
+  const exported = JSON.parse(fs.readFileSync(await download.path(), 'utf8')) as Exported
+  // only this library's tagged images: the other library's tagged image is not in the file
+  expect(exported.count).toBe(COUNT)
+  expect(exported.images.map((i) => i.filename).sort()).toEqual([0, 1, 2, 3].map((i) => `${PREFIX}0${i}.png`))
+  expect(exported.images.every((i) => i.tags.some((t) => t.tag === TAG))).toBe(true)
+  await expect(page.getByText(`Exported the tags of ${COUNT} images`)).toBeVisible()
 
-  // the tags are lost; the backup brings them back (plus one empty entry the file also holds)
+  // the tags are lost; the backup brings them back. The file also holds an empty entry, one image listed twice,
+  // one whose file name only the other library has, and one whose file name two images here share.
   onOurImages(`DELETE FROM tags WHERE image_id = {id}; UPDATE images SET tagged_at = NULL WHERE id = {id}`)
-  const file = JSON.stringify({ version: '1.0', count: ours.length + 1, images: [...ours, { path: '/nowhere/empty.png', filename: 'empty.png', tags: [] }] })
+  const entry = (folder: string, name: string) => ({ path: `/nowhere/moved/${folder}/${name}`, filename: name, tags: [{ tag: TAG, confidence: 0.9 }] })
+  const images = [
+    ...exported.images,
+    exported.images[0],
+    entry('elsewhere', `${PREFIX}other.png`),
+    entry('elsewhere', `${PREFIX}twin.png`),
+    { path: '/nowhere/empty.png', filename: 'empty.png', tags: [] },
+  ]
+  const file = JSON.stringify({ version: '1.0', count: images.length, images })
   await page.getByTestId('tags-import-file').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(file) })
   const dialog = page.getByTestId('tags-import-dialog')
-  await expect(dialog.getByTestId('tags-import-counts')).toHaveText(`The file holds ${COUNT + 1} images: ${COUNT} with tags or a description; 1 are empty and are skipped.`)
+  await expect(dialog.getByTestId('tags-import-counts')).toHaveText(`The file holds ${COUNT + 4} images: ${COUNT + 3} with tags or a description; 1 are empty and are skipped.`)
+  await expect(dialog).toContainText('Images of this library are matched by path, then by file name.')
   await expect(dialog.getByRole('radio', { name: 'Only fill in images that have no tags yet' })).toBeChecked()
   await dialog.getByTestId('tags-import-ok').click()
-  await expect(page.getByText(`Imported the tags of ${COUNT} images, skipped 0`)).toBeVisible()
+
+  // what it did, and why it skipped the rest; it stays until closed
+  const result = dialog.getByTestId('tags-import-result')
+  await expect(result).toContainText(`Imported the tags of ${COUNT} images, skipped 3`)
+  await expect(result.locator('li')).toHaveText([
+    '1 not found in this library: neither the path nor the file name matches',
+    '1 have a file name that several images in this library share; it is unclear which one is meant, so they were not imported',
+    '1 are listed more than once in the file and were imported once',
+  ])
+  await expect(dialog.getByTestId('tags-import-close')).toBeFocused()
   expect(countInDb(`SELECT COUNT(*) FROM tags t JOIN images i ON i.id = t.image_id WHERE i.library_id = ? AND t.tag = '${TAG}'`)).toBe(COUNT)
+  // the twins were not guessed between, and the other library kept its own tags
+  expect(countInDb(`SELECT COUNT(*) FROM images WHERE library_id = ? AND filename = '${PREFIX}twin.png' AND tagged_at IS NOT NULL`)).toBe(0)
+  expect(countInDb(`SELECT COUNT(*) FROM tags t JOIN images i ON i.id = t.image_id WHERE i.library_id = ? AND t.tag = '${TAG}'`, OTHER)).toBe(0)
+  expect(countInDb(`SELECT COUNT(*) FROM tags t JOIN images i ON i.id = t.image_id WHERE i.library_id = ? AND t.tag = 'its_own_tag'`, OTHER)).toBe(1)
+  await dialog.getByTestId('tags-import-close').click()
+  await expect(dialog).toHaveCount(0)
+  dropStrangers()
 
   // a file that is not JSON is refused before anything is sent
   await page.getByTestId('tags-import-file').setInputFiles({ name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('{oops') })

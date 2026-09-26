@@ -40,7 +40,7 @@ export const zhCNLibrarySettings = {
 
   // 图库 › 标签备份
   'libset.tags.title': '标签备份',
-  'libset.tags.hint': '把打过标签的图的标签和 AI 描述存成一个 JSON 文件，重建图库或换电脑后再导入。导出包含所有图库里打过标签的图。',
+  'libset.tags.hint': '把这个图库里打过标签的图的标签和 AI 描述存成一个 JSON 文件，重建图库或换电脑后再导入。其他图库的图不在文件里；导入也只写进这个图库。',
   'libset.tags.export': '导出标签',
   'libset.tags.exporting': '正在导出…',
   'libset.tags.exported': '已导出 {n} 张图的标签',
@@ -51,13 +51,17 @@ export const zhCNLibrarySettings = {
   'libset.import.file': '文件：{name}',
   'libset.import.counts': '文件里有 {total} 张图：{usable} 张带标签或描述，{empty} 张是空的，会跳过。',
   'libset.import.nothing': '文件里没有可导入的标签。',
-  'libset.import.match': '按路径对上已有的图，对不上时按文件名；都对不上的跳过。',
+  'libset.import.match': '在这个图库里按路径对上已有的图，对不上时按文件名；都对不上的，和文件名对上好几张图的，都跳过。',
   'libset.import.fill': '只补还没打标签的图',
   'libset.import.fillHint': '已经有标签的图不动。',
   'libset.import.replace': '也替换已有的标签',
   'libset.import.replaceHint': '对上的已打标签的图，现有标签换成文件里的。',
   'libset.import.ok': '导入 {n} 张的标签',
   'libset.import.done': '导入了 {imported} 张图的标签，跳过 {skipped} 张',
+  'libset.import.why.not_found': '{n} 张在这个图库里对不上：路径和文件名都没找到',
+  'libset.import.why.ambiguous': '{n} 张的文件名对上了这个图库里好几张图，分不清是哪张，没有导入',
+  'libset.import.why.already_tagged': '{n} 张已经有标签，没有动',
+  'libset.import.why.duplicate': '{n} 条在文件里重复出现，只导入了一次',
 
   // 图库 › 最底下：清空索引
   'libset.clear.title': '清空这个图库的索引',

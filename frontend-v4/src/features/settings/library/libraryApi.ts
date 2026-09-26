@@ -82,7 +82,7 @@ export async function removeRoot(root: LibraryRoot): Promise<boolean> {
   }
 }
 
-/** Download every tagged image's tags as JSON (the same file V3.5 writes). */
+/** Download the tags of this library's tagged images as JSON (the same file V3.5 writes). */
 export async function exportTags(): Promise<void> {
   try {
     const data = unwrap<TagExport>(await api.GET('/api/tags/export'))
@@ -101,15 +101,15 @@ export async function exportTags(): Promise<void> {
   }
 }
 
-export async function importTags(images: Record<string, unknown>[], overwrite: boolean): Promise<boolean> {
+/** Import into this library only; what was imported and skipped (and why) comes back for the dialog to show. */
+export async function importTags(images: Record<string, unknown>[], overwrite: boolean): Promise<TagImportResult | null> {
   try {
     const res = unwrap<TagImportResult>(await api.POST('/api/tags/import', { body: { images, overwrite } }))
     for (const key of ['images', 'image', 'suggest', 'image-count', 'library-health']) void queryClient.invalidateQueries({ queryKey: [key] })
-    useToasts.getState().push(lt('libset.import.done', { imported: res.imported, skipped: res.skipped }), 'info')
-    return true
+    return res
   } catch (error) {
     useToasts.getState().push(tr('error.generic', { reason: (error as Error).message }), 'error')
-    return false
+    return null
   }
 }
 

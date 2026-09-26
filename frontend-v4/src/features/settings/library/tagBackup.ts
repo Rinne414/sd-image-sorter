@@ -3,6 +3,8 @@
 // Mirrors services/tagging/library_io.py `import_tags`: an entry counts when it
 // has a tag with a non-blank name or a non-blank AI description.
 
+import type { TagImportResult } from './types'
+
 type Entry = Record<string, unknown>
 
 export type TagFile =
@@ -18,6 +20,15 @@ function hasTag(tags: unknown): boolean {
 function isUsable(entry: unknown): entry is Entry {
   if (!isEntry(entry)) return false
   return hasTag(entry.tags) || String(entry.ai_caption ?? '').trim() !== ''
+}
+
+export type SkipReason = 'not_found' | 'ambiguous' | 'already_tagged' | 'duplicate'
+
+const REASONS: SkipReason[] = ['not_found', 'ambiguous', 'already_tagged', 'duplicate']
+
+/** Why an import skipped what it skipped: the reasons that skipped anything, in the order they are listed. */
+export function skipReasons(result: TagImportResult): { reason: SkipReason; n: number }[] {
+  return REASONS.map((reason) => ({ reason, n: result[reason] })).filter((r) => r.n > 0)
 }
 
 export function readTagFile(text: string): TagFile {

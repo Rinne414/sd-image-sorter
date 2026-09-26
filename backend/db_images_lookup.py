@@ -216,8 +216,14 @@ def count_images_missing_color_data() -> int:
         return int(row[0] if row else 0)
 
 
-def get_image_by_path(path: str) -> Optional[Dict[str, Any]]:
-    """Get a single image by any equivalent indexed path representation."""
+def get_image_by_path(path: str, *, current_library_only: bool = False) -> Optional[Dict[str, Any]]:
+    """Get a single image by any equivalent indexed path representation.
+
+    ``current_library_only`` limits the match to the request's library. The
+    same path shape can be indexed in two libraries (``D:/a.png`` in one,
+    ``d:/a.png`` in another), and a write scoped to one library must not land
+    on the other library's row.
+    """
     if not path:
         return None
 
@@ -228,6 +234,10 @@ def get_image_by_path(path: str) -> Optional[Dict[str, Any]]:
     with get_db() as conn:
         cursor = conn.cursor()
         clause, params = _path_query_match_clause(candidates)
+        if current_library_only:
+            lib_sql, lib_params = _library_clause()
+            clause = f"({clause}) AND {lib_sql}"
+            params = [*params, *lib_params]
         cursor.execute(
             f"SELECT {_IMAGE_COLUMNS_BARE} FROM images WHERE {clause}",
             params,

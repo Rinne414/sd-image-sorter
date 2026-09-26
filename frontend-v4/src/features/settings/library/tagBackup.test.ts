@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { readTagFile } from './tagBackup'
+import { readTagFile, skipReasons } from './tagBackup'
 
 const file = (images: unknown) => JSON.stringify({ version: '1.0', count: 3, images })
 
@@ -33,5 +33,22 @@ describe('readTagFile', () => {
     expect(readTagFile('[1, 2]')).toEqual({ ok: false, reason: 'shape' })
     expect(readTagFile('{"images": {}}')).toEqual({ ok: false, reason: 'shape' })
     expect(readTagFile('null')).toEqual({ ok: false, reason: 'shape' })
+  })
+})
+
+describe('skipReasons', () => {
+  const result = { imported: 3, skipped: 0, not_found: 0, ambiguous: 0, already_tagged: 0, duplicate: 0 }
+
+  test('lists only the reasons that skipped something, in a fixed order', () => {
+    expect(skipReasons({ ...result, skipped: 6, duplicate: 1, not_found: 2, already_tagged: 3 })).toEqual([
+      { reason: 'not_found', n: 2 },
+      { reason: 'already_tagged', n: 3 },
+      { reason: 'duplicate', n: 1 },
+    ])
+    expect(skipReasons({ ...result, skipped: 1, ambiguous: 1 })).toEqual([{ reason: 'ambiguous', n: 1 }])
+  })
+
+  test('nothing skipped: nothing to explain', () => {
+    expect(skipReasons(result)).toEqual([])
   })
 })

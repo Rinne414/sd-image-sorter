@@ -3,14 +3,22 @@ import { useT } from '../../../i18n'
 import { Dialog } from '../../../ui/Dialog'
 import { useToasts } from '../../../ui/toasts'
 import { Section } from '../about/Section'
-import { useLT } from '../libraryText'
+import { useLT, type LibKey } from '../libraryText'
 import { exportTags, importTags } from './libraryApi'
 import styles from './LibrarySettings.module.css'
-import { readTagFile, type TagFile } from './tagBackup'
+import { readTagFile, skipReasons, type SkipReason, type TagFile } from './tagBackup'
+import type { TagImportResult } from './types'
 
 type ReadFile = Extract<TagFile, { ok: true }> & { name: string }
 
-/** Tag backup: every tagged image's tags and AI description to a JSON file, and back (saying first how many it can change). */
+const WHY: Record<SkipReason, LibKey> = {
+  not_found: 'libset.import.why.not_found',
+  ambiguous: 'libset.import.why.ambiguous',
+  already_tagged: 'libset.import.why.already_tagged',
+  duplicate: 'libset.import.why.duplicate',
+}
+
+/** Tag backup: this library's tagged images' tags and AI description to a JSON file, and back (saying first how many it can change, then what it did). */
 export function TagBackupSection() {
   const t = useLT()
   const input = useRef<HTMLInputElement>(null)
@@ -57,13 +65,15 @@ function ImportDialog({ file, onClose }: { file: ReadFile; onClose: () => void }
   const tm = useT()
   const [overwrite, setOverwrite] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<TagImportResult | null>(null)
 
   const go = async () => {
     setBusy(true)
-    const ok = await importTags(file.images, overwrite)
+    setResult(await importTags(file.images, overwrite))
     setBusy(false)
-    if (ok) onClose()
   }
+
+  if (result) return <ImportResult result={result} onClose={onClose} />
 
   const footer = (
     <>
@@ -97,6 +107,36 @@ function ImportDialog({ file, onClose }: { file: ReadFile; onClose: () => void }
               <span>{t('libset.import.replaceHint')}</span>
             </label>
           </fieldset>
+        )}
+      </div>
+    </Dialog>
+  )
+}
+
+/** What the import did: how many images got the file's tags, and why the rest did not. */
+function ImportResult({ result, onClose }: { result: TagImportResult; onClose: () => void }) {
+  const t = useLT()
+  const tm = useT()
+  const close = useRef<HTMLButtonElement>(null)
+  const reasons = skipReasons(result)
+  const footer = (
+    <button ref={close} type="button" className="btn btn-primary" onClick={onClose} data-testid="tags-import-close">
+      {tm('common.close')}
+    </button>
+  )
+
+  return (
+    <Dialog title={t('libset.import.title')} onClose={onClose} footer={footer} testId="tags-import-dialog" initialFocus={close}>
+      <div className={styles.dialogText} data-testid="tags-import-result">
+        <p className={styles.strong}>{t('libset.import.done', { imported: result.imported, skipped: result.skipped })}</p>
+        {reasons.length > 0 && (
+          <ul className={styles.reasons}>
+            {reasons.map(({ reason, n }) => (
+              <li key={reason} data-reason={reason}>
+                {t(WHY[reason], { n })}
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </Dialog>

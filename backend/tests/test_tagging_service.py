@@ -555,7 +555,14 @@ def test_import_tags_overwrite_uses_shared_batch_writer_and_refreshes_tag_cache(
         )
     )
 
-    assert result == {"imported": 1, "skipped": 0}
+    assert result == {
+        "imported": 1,
+        "skipped": 0,
+        "not_found": 0,
+        "ambiguous": 0,
+        "already_tagged": 0,
+        "duplicate": 0,
+    }
 
     tags_after = db.get_image_tags(image_id)
     # Imported rows carry source='manual' so pipeline re-tags never clobber them.
@@ -593,7 +600,14 @@ def test_import_and_export_tags_preserves_ai_caption(test_db, tmp_path: Path):
         )
     )
 
-    assert result == {"imported": 1, "skipped": 0}
+    assert result == {
+        "imported": 1,
+        "skipped": 0,
+        "not_found": 0,
+        "ambiguous": 0,
+        "already_tagged": 0,
+        "duplicate": 0,
+    }
     assert db.get_image_by_id(image_id)["ai_caption"] == "a natural language caption for LoRA training"
 
     exported = service.export_tags()
@@ -625,7 +639,14 @@ def test_import_tags_skips_duplicate_rows_for_same_image_when_not_overwriting(te
         )
     )
 
-    assert result == {"imported": 1, "skipped": 1}
+    assert result == {
+        "imported": 1,
+        "skipped": 1,
+        "not_found": 0,
+        "ambiguous": 0,
+        "already_tagged": 0,
+        "duplicate": 1,
+    }
     assert db.get_image_tags(image_id) == [
         {"tag": "first_tag", "confidence": 0.6, "source": "manual", "category": None}
     ]

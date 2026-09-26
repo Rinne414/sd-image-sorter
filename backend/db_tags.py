@@ -287,6 +287,25 @@ def sync_sidecar_tags_in_cursor(
     _sync_ai_rating(cursor, image_id)
 
 
+# Run after every committed tag write (add_tags and tag_update_transaction,
+# which every tag writer goes through). Caches above the db layer register
+# here: the library-health report (services.sorting_service) counts untagged
+# images from tagged_at, and this module cannot import that service.
+_tag_write_listeners: List[Callable[[], None]] = []
+
+
+def on_tag_write(listener: Callable[[], None]) -> None:
+    """Call ``listener`` after every committed tag write (registered once)."""
+    if listener not in _tag_write_listeners:
+        _tag_write_listeners.append(listener)
+
+
+def _after_tag_write() -> None:
+    _invalidate_tags_cache()
+    for listener in _tag_write_listeners:
+        listener()
+
+
 def _has_tagger_rows(cursor: sqlite3.Cursor, image_id: int) -> bool:
     row = cursor.execute(
         "SELECT 1 FROM tags WHERE image_id = ? AND source = 'tagger' LIMIT 1",
@@ -339,7 +358,7 @@ def add_tags(
         _clear_orphaned_writer_provenance(cursor, image_id)
         _sync_ai_rating(cursor, image_id)
         _mark_image_tagged(cursor, image_id, content_fingerprint)
-    _invalidate_tags_cache()
+    _after_tag_write()
 
 
 def _apply_tag_updates(
@@ -445,7 +464,7 @@ def tag_update_transaction(
             )
 
         yield write_updates
-    _invalidate_tags_cache()
+    _after_tag_write()
 
 
 def add_tags_batch(

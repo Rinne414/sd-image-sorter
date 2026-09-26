@@ -162,6 +162,16 @@
   font-size: var(--fs-2);
 }
 
+/* Why an import skipped what it skipped: one line per reason. */
+.reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text);
+}
+
 .choices {
   display: flex;
   flex-direction: column;
