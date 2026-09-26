@@ -152,7 +152,6 @@ export const enModels: Record<keyof typeof zhCNModels, string> = {
   'mc.queue.show': 'Show jobs',
   'mc.queue.done': 'The chosen models are downloaded ({n}).',
   'mc.queue.mixed': 'Downloaded {ok} of {n}; did not work: {failed}. Try those again on their cards.',
-  'mc.queue.paused': '{name} installed its runtime and needs an app restart to go on. After the restart the downloads continue by themselves ({n} in all).',
   'mc.queue.resumed': 'The downloads left before the restart ({n}) continue now.',
   'mc.queue.blocked': 'The downloads stopped; the rest ({n}) is kept in the Model Center to “Continue downloading” later.',
 

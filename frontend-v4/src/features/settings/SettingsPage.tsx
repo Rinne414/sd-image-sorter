@@ -2,7 +2,6 @@ import { useT } from '../../i18n'
 import { useApp } from '../../state/store'
 import { PageBoundary } from '../../ui/PageBoundary'
 import { PageHead } from '../../ui/PageHead'
-import { PlannedTool } from '../tools/PlannedTool'
 import styles from './SettingsPage.module.css'
 import { SETTINGS_PAGES, settingsTab } from './tabs'
 import { useBack } from './useBack'
@@ -41,13 +40,9 @@ export function SettingsPage() {
           <h2 id="settings-tab-title" className={styles.tabTitle}>
             {t(tab.label)}
           </h2>
-          {Page ? (
-            <PageBoundary key={current}>
-              <Page />
-            </PageBoundary>
-          ) : (
-            <PlannedTool what={tab.what} note="settings.planned" testId="settings-planned" />
-          )}
+          <PageBoundary key={current}>
+            <Page />
+          </PageBoundary>
         </main>
       </div>
     </section>

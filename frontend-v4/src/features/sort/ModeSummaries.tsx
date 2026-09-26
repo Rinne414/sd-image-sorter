@@ -7,6 +7,7 @@ import { facts } from './sortModes'
 import { decided, type SessionView } from './sortSession'
 import styles from './SortPage.module.css'
 import { SummaryFrame } from './SortSummary'
+import { useSort } from './sortStore'
 
 // The finished A/B showdown and keep/reject: nothing moved, so the summary is
 // where the result is used — favourite it, or pick it in the library, where
@@ -15,15 +16,16 @@ import { SummaryFrame } from './SortSummary'
 /** Thumbnails shown for a group before "+N". */
 const GROUP_THUMBS = 12
 
-/** Pick these in the library and go there, the first one shown on the card. */
+/** Pick these in the library and go there, the first one shown on the card (not before a yes for another library's sort). */
 function pickInLibrary(ids: number[]): void {
+  if (!useSort.getState().mayAct()) return
   const s = useApp.getState()
   s.setSelection(ids)
   if (ids[0] !== undefined) s.inspect(ids[0])
   s.setPage('library')
 }
 
-/** Favourite (or unfavourite) these; says which it will do. */
+/** Favourite (or unfavourite) these; says which it will do (not before a yes for another library's sort). */
 function FavoriteButton({ ids, label, testId }: { ids: number[]; label: MessageKey; testId: string }) {
   const t = useT()
   const favorites = useFavorites()
@@ -31,7 +33,7 @@ function FavoriteButton({ ids, label, testId }: { ids: number[]; label: MessageK
   const favIds = favorites.data?.ids
   const all = ids.length > 0 && !!favIds && ids.every((id) => favIds.has(id))
   return (
-    <button type="button" className="btn" aria-pressed={all} onClick={() => toggle.mutate({ ids, favorited: !all })} disabled={ids.length === 0 || toggle.isPending} data-testid={testId}>
+    <button type="button" className="btn" aria-pressed={all} onClick={() => useSort.getState().mayAct() && toggle.mutate({ ids, favorited: !all })} disabled={ids.length === 0 || toggle.isPending} data-testid={testId}>
       {all ? t('sort.done.favorited') : t(label)}
     </button>
   )

@@ -313,6 +313,29 @@ test('the page: counts, what works now, the download source, and cards that say 
   expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
 })
 
+test('a start refused because the AI lock outlived its job offers a restart, which asks first', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  const stub = newStub({})
+  await stubAll(page, stub)
+  await page.route('**/api/models/prepare', (route: Route) =>
+    route.fulfill({
+      status: 409,
+      json: { error: 'busy', type: 'AiRuntimeBusyError', status_code: 409, reason: 'stale_lock_holder_gone', blocker: { label: 'wd14-tagger-load', stuck: true }, waited_seconds: 0 },
+    }),
+  )
+  await openAt(page, '#/settings/models')
+  await cardOf(page, 'clip').getByTestId('model-prepare').click()
+  const toast = page.locator('[data-tone="error"]').filter({ hasText: 'Waiting will not help' })
+  await expect(toast).toBeVisible()
+  await toast.getByRole('button', { name: 'Restart app…' }).click()
+  // the same restart as About's: it asks first, and nothing is posted before the yes
+  await expect(page.getByTestId('restart-ask')).toBeVisible()
+  expect(stub.restartPosts).toEqual([])
+  await page.getByTestId('restart-ask').getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.getByTestId('restart-ask')).toHaveCount(0)
+  expect(stub.restartPosts).toEqual([])
+})
+
 test('getting one model ready: a download in the drawer, then the card is ready; manual install copies and opens its folder', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
@@ -408,6 +431,8 @@ test('a model that needs a restart pauses the run; "Restart now and continue" re
   const banner = page.getByTestId('model-banner')
   await expect(banner).toHaveAttribute('data-kind', 'restart')
   await expect(banner).toContainText('After the restart, downloading continues by itself (3 left).')
+  // one toast about it (the download's), not a second one from the Model Center
+  await expect(page.locator('[data-tone]').filter({ hasText: 'NudeNet' })).toHaveCount(1)
   expect(stub.prepares).toEqual([{ model_id: 'censor-nudenet', variant: null }])
   await expect(cardOf(page, 'censor-nudenet').getByTestId('model-status')).toHaveText('Restart needed')
   await expect(page.getByTestId('model-count-restart')).toHaveText('1')

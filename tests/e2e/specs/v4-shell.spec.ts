@@ -57,28 +57,24 @@ test('settings tabs are addresses: clicking, typing the address, unknown tab, ba
   await expect(page.getByTestId('settings-button')).toHaveAttribute('aria-current', 'page')
   await expect(topTabs(page).and(page.locator('[aria-current="page"]'))).toHaveCount(0)
 
-  // About & updates is built (slice 5c, v4-about.spec.ts): its page, not the placeholder
+  // About & updates (v4-about.spec.ts)
   // (its hardware probe would touch the GPU: answered here)
   await page.route('**/api/system-info', (route) => route.fulfill({ json: { system_info: { gpu_name: 'Test GPU', torch_cuda_available: true } } }))
   await page.getByTestId('settings-tab-about').click()
   await expect(page).toHaveURL(/#\/settings\/about$/)
   await expect(page.getByTestId('about-update')).toBeVisible()
-  await expect(page.getByTestId('settings-planned')).toHaveCount(0)
   // the Model Center is built too (slice 5d, v4-models.spec.ts)
   await page.getByTestId('settings-tab-models').click()
   await expect(page.getByTestId('model-center')).toBeVisible()
-  await expect(page.getByTestId('settings-planned')).toHaveCount(0)
   // Library and Disk & cache are built too (slice 5e, v4-settings-library.spec.ts)
   // (cleaning and the runtime rebuild must never reach the test server: a rebuild marker rebuilds the shared venv)
   await page.route(/\/api\/disk\/(cleanup|runtime\/rebuild-core)/, (route) => route.fulfill({ status: 500, json: { error: 'not in this test' } }))
   await page.getByTestId('settings-tab-library').click()
   await expect(page.getByTestId('library-settings')).toBeVisible()
-  await expect(page.getByTestId('settings-planned')).toHaveCount(0)
   await page.getByTestId('settings-tab-disk').click()
   await expect(page.getByTestId('disk-settings')).toBeVisible()
-  await expect(page.getByTestId('settings-planned')).toHaveCount(0)
 
-  // AI services is built too (slice 5f, v4-ai-services.spec.ts), so no tab is a placeholder any more
+  // AI services (v4-ai-services.spec.ts)
   // (its reads are answered here: the settings may hold a real key, and Ollama is not probed)
   await page.route('**/api/vlm/settings', (route) => route.fulfill({ json: {} }))
   await page.route('**/api/vlm/presets', (route) => route.fulfill({ json: { presets: {} } }))
@@ -90,7 +86,6 @@ test('settings tabs are addresses: clicking, typing the address, unknown tab, ba
   await expect(page.getByTestId('settings-tab-ai')).toHaveAttribute('aria-current', 'page')
   await expect(page.getByRole('heading', { level: 2 })).toHaveText('AI services')
   await expect(page.getByTestId('ai-services')).toBeVisible()
-  await expect(page.getByTestId('settings-planned')).toHaveCount(0)
 
   // the address opens a tab; an unknown tab opens Appearance
   await page.goto('/v4/#/settings/models')
@@ -143,10 +138,8 @@ test('Tools menu: keyboard, Esc closes only the menu, tool pages, back', async (
   const toolPage = page.getByTestId('tool-page')
   await expect(toolPage.getByRole('heading', { level: 1 })).toHaveText('Reverse prompt')
   await expect(page.getByTestId('reverse-page')).toBeVisible()
-  // every tool is built in V4 now: none says it is still being built
   await page.goto('/v4/#/tools/lexicon')
   await expect(page.getByTestId('lexicon-page')).toBeVisible()
-  await expect(page.getByTestId('tool-planned')).toHaveCount(0)
   await page.goto('/v4/#/tools/reverse')
   await expect(button).toHaveAttribute('aria-current', 'page')
   await expect(topTabs(page).and(page.locator('[aria-current="page"]'))).toHaveCount(0)
@@ -332,6 +325,60 @@ test('Ctrl K: every tool, every settings tab, the zoom, and each page\'s help', 
   await run('说明 设置')
   await expect(sheet).toContainText('这一页没有自己的快捷键')
   await expect(sheet.locator('kbd', { hasText: 'Ctrl+K' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(sheet).toHaveCount(0)
+
+  // 6d: check for updates opens About & updates with a fresh check; restart asks first (nothing is posted before the yes)
+  const checks: string[] = []
+  const restarts: string[] = []
+  await page.route('**/api/updates/status**', (route) => {
+    checks.push(route.request().url())
+    return route.fulfill({ json: { current_version: '3.5.1', latest_version: '3.5.1', has_update: false } })
+  })
+  await page.route('**/api/system-info', (route) => route.fulfill({ json: { system_info: {} } }))
+  await page.route('**/api/updates/restart', (route) => {
+    restarts.push(route.request().url())
+    return route.fulfill({ json: { status: 'scheduled' } })
+  })
+  await run('检查更新')
+  await expect(page).toHaveURL(/#\/settings\/about$/)
+  await expect.poll(() => checks.some((u) => u.includes('force=true'))).toBe(true)
+  await run('重启')
+  const ask = page.getByTestId('restart-ask')
+  await expect(ask).toBeVisible()
+  await ask.getByRole('button', { name: '取消' }).click()
+  await expect(ask).toHaveCount(0)
+  expect(restarts).toEqual([])
+})
+
+test('6d: a dialog with no chosen first focus starts on its first real control, never the header ×', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openAt(page, '#/library', { lang: 'en' })
+  await expect(page.getByTestId('tile').first()).toBeVisible()
+  const focusIn = (testId: string) =>
+    page.evaluate((id) => {
+      const a = document.activeElement as HTMLElement | null
+      return { inside: !!a?.closest(`[data-testid="${id}"]`), label: a?.getAttribute('aria-label') ?? null, tabIndex: a?.tabIndex ?? null }
+    }, testId)
+
+  await page.keyboard.press('Control+k')
+  await page.keyboard.type('manage libraries')
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('libraries-dialog')).toBeVisible()
+  const libs = await focusIn('libraries-dialog')
+  expect(libs.inside).toBe(true)
+  expect(libs.label).not.toBe('Close')
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('libraries-dialog')).toHaveCount(0)
+
+  // a sheet with nothing to press takes the focus itself
+  await page.keyboard.press('Control+k')
+  await page.keyboard.type('help library')
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('shortcut-sheet')).toBeVisible()
+  const sheet = await focusIn('shortcut-sheet')
+  expect(sheet.inside).toBe(true)
+  expect(sheet.label).not.toBe('Close')
 })
 
 test('back to V3.5 (slice 6b): About and Ctrl K carry the open library; coming back with ?library= opens it and the page V4 was left from', async ({ page }) => {

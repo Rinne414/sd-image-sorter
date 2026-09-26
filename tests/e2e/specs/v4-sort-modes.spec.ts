@@ -289,6 +289,47 @@ test('a sort of another library waits for a yes before any key acts, and Home an
   }
 })
 
+test("the summary of another library's sort: favourite and pick wait for the same yes the keys do", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  const created = await (await page.request.post('/api/libraries', { data: { name: `${OTHER_LIBRARY} summary` } })).json()
+  const otherId: string = created.library.id
+  const favoriteWrites: string[] = []
+  page.on('request', (r) => {
+    if (r.method() !== 'GET' && r.url().includes('/api/collections/favorites')) favoriteWrites.push(r.url())
+  })
+  try {
+    await page.request.delete('/api/sort/session')
+    await openLibrary(page, TOKEN, COUNT)
+    await pick(page, 2)
+    await sortPicks(page, 'cull')
+    await page.getByTestId('sort-start').click()
+    await expect(page.getByTestId('sort-pos')).toHaveText('Image 1 of 2')
+    await press(page, 'k', 'Image 2 of 2')
+    await page.keyboard.press('k')
+    await expect(page.getByTestId('sort-summary-body')).toHaveText('2 images: 2 kept, 0 rejected, 0 skipped.')
+
+    await page.evaluate((id) => localStorage.setItem('sd-library-workspace-v1', JSON.stringify({ v: 2, currentId: id })), otherId)
+    await page.reload()
+    const ok = page.getByTestId('sort-other-library-ok')
+    await expect(ok).toBeVisible()
+    const kept = page.getByTestId('sort-kept-group')
+    await kept.getByTestId('sort-kept-group-favorite').click()
+    await expect(page.getByTestId('sort-summary-error')).toContainText('belong to another library')
+    await kept.getByTestId('sort-kept-group-pick').click()
+    await page.waitForTimeout(300)
+    expect(favoriteWrites).toEqual([])
+    await expect(page.getByTestId('sort-summary')).toBeVisible()
+
+    await ok.click()
+    await kept.getByTestId('sort-kept-group-pick').click()
+    await expect(page.getByTestId('selection-bar')).toContainText('2 picked')
+  } finally {
+    await page.evaluate(() => localStorage.setItem('sd-library-workspace-v1', JSON.stringify({ v: 2, currentId: 'main' })))
+    await page.request.delete('/api/sort/session')
+    await page.request.delete(`/api/libraries/${otherId}`)
+  }
+})
+
 for (const viewport of VIEWPORTS) {
   test(`A/B and keep / reject fit at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport)

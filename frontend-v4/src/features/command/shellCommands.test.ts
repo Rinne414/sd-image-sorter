@@ -4,7 +4,7 @@ import { matches } from './commands'
 import { shellCommands, type ShellOps } from './shellCommands'
 
 function ops(): ShellOps {
-  return { openTool: vi.fn(), openSettings: vi.fn(), setLang: vi.fn(), setScale: vi.fn(), openHelp: vi.fn() }
+  return { openTool: vi.fn(), openSettings: vi.fn(), setLang: vi.fn(), setScale: vi.fn(), openHelp: vi.fn(), checkUpdates: vi.fn(), restart: vi.fn() }
 }
 
 const find = (query: string, lang: 'zh-CN' | 'en' = 'zh-CN', o = ops()) => shellCommands(lang, o).filter((c) => matches(c, query))
@@ -72,5 +72,22 @@ describe('palette: tools, settings, language, zoom and help', () => {
     expect(o.openTool).toHaveBeenCalledWith('promptlab')
     find('磁盘', 'en', o)[0]?.run()
     expect(o.openSettings).toHaveBeenCalledWith('disk')
+  })
+})
+
+describe('palette: updates and restart', () => {
+  it('checks for updates and restarts the app, found in either language', () => {
+    for (const [query, lang] of [['检查更新', 'zh-CN'], ['check for updates', 'zh-CN'], ['update', 'en']] as const) {
+      const o = ops()
+      const hits = find(query, lang, o)
+      expect(hits.map((c) => c.id), query).toContain('check-updates')
+      hits.find((c) => c.id === 'check-updates')?.run()
+      expect(o.checkUpdates).toHaveBeenCalledTimes(1)
+    }
+    for (const [query, lang] of [['重启', 'zh-CN'], ['restart', 'en']] as const) {
+      const o = ops()
+      find(query, lang, o).find((c) => c.id === 'restart')?.run()
+      expect(o.restart, query).toHaveBeenCalledTimes(1)
+    }
   })
 })

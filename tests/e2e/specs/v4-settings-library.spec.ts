@@ -236,6 +236,39 @@ test('source folders: the live one first, a rescan runs as a job and brings its 
   expect(countInDb(`SELECT COUNT(*) FROM images WHERE library_id = ?`)).toBe(COUNT)
 })
 
+test('every folder that is gone goes at once, after a confirm that counts and lists them; the live one stays', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  runBackendScript(`
+import sqlite3, sys
+from pathlib import Path
+sys.path.insert(0, str(Path(${JSON.stringify(repoRoot)}) / "backend"))
+from utils.source_paths import indexed_image_path_match_key
+with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
+    for name in ("gone-a", "gone-b", "gone-c"):
+        p = (Path(${JSON.stringify(GONE)}) / name).resolve().as_posix()
+        conn.execute(
+            "INSERT INTO library_roots (path, path_key, library_id, enabled, added_at) VALUES (?, ?, ?, 1, datetime('now'))",
+            (p, indexed_image_path_match_key(p), ${JSON.stringify(LIB)}),
+        )
+    conn.commit()
+print("ok")
+`)
+  await openAt(page, '#/settings/library')
+  await expect(page.getByTestId('roots-summary')).toHaveText('Folders: 4, 3 of them not found')
+  await page.getByTestId('roots-remove-missing').click()
+  const dialog = page.getByTestId('roots-remove-missing-dialog')
+  await expect(dialog).toContainText('Stop using the missing folders as sources (3)?')
+  await expect(dialog.getByTestId('roots-remove-missing-list').locator('li')).toHaveCount(3)
+  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()
+  await dialog.getByTestId('roots-remove-missing-ok').click()
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByText('Missing source folders removed: 3')).toBeVisible()
+  await expect(rows(page)).toHaveCount(1)
+  await expect(page.getByTestId('roots-summary')).toHaveText('Folders: 1')
+  await expect(page.getByTestId('roots-remove-missing')).toHaveCount(0)
+  expect(countInDb(`SELECT COUNT(*) FROM images WHERE library_id = ?`)).toBe(COUNT)
+})
+
 test('tag backup: a real export of this library only, then an import that says first how many images it can change and afterwards why it skipped the rest', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   onOurImages(`UPDATE images SET tagged_at = datetime('now') WHERE id = {id}; INSERT INTO tags (image_id, tag, confidence, source) VALUES ({id}, '${TAG}', 0.9, 'manual')`)

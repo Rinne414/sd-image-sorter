@@ -2,6 +2,7 @@ import { api, ApiError, unwrap } from '../../api/client'
 import { useToasts } from '../../ui/toasts'
 import { addJob, isQueueBusy, startingProgress, tr, useJobs, type Job } from './jobs'
 import { busyText } from './busyText'
+import { pushRefusal } from './refusalToast'
 import { installRunOf, isFinished, type JobProgress } from './progress'
 
 // First use of a model: download it as a job in the Jobs drawer, then run the
@@ -21,7 +22,7 @@ export interface InstallTarget {
 
 const fail = (error: unknown) => {
   const busy = error instanceof ApiError && error.status === 409
-  useToasts.getState().push(busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message }), 'error')
+  pushRefusal(busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message }), error)
   return null
 }
 

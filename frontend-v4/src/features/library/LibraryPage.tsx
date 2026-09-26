@@ -110,7 +110,7 @@ export function LibraryPage() {
             />
           )}
           {selection.length > 0 && (
-            <SelectionBar params={similar ? null : params} total={total} images={images} hasMore={shown.hasMore} />
+            <SelectionBar params={similar ? null : params} total={total} about={shown.totalAbout} images={images} hasMore={shown.hasMore} />
           )}
         </div>
       </main>
@@ -118,6 +118,7 @@ export function LibraryPage() {
       <Lightbox
         images={images}
         total={total ?? images.length}
+        totalAbout={shown.totalAbout}
         hasMore={shown.hasMore}
         fetchMore={shown.fetchMore}
         {...(similar ? {} : { fetchAt })}

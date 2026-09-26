@@ -10,7 +10,7 @@ import { addJob, isQueueBusy, startingProgress, tr, useJobs } from '../../jobs/j
 import { asScanSource } from '../../jobs/progress'
 import { lt } from '../libraryText'
 import { readBusy, type BusyWork } from './clearIndex'
-import { rootName } from './roots'
+import { removalSummary, rootName } from './roots'
 import type { LibraryRoot, LibraryRootsResponse, TagExport, TagImportResult } from './types'
 
 // What Settings › Library reads and writes: the source folders, the tag
@@ -80,6 +80,31 @@ export async function removeRoot(root: LibraryRoot): Promise<boolean> {
     useToasts.getState().push(tr('error.generic', { reason: (error as Error).message }), 'error')
     return false
   }
+}
+
+async function deleteRoot(root: LibraryRoot): Promise<boolean> {
+  try {
+    unwrap(await api.DELETE('/api/library-roots/{root_id}', { params: { path: { root_id: root.id } } }))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Stop using every one of these folders as a source (the folders that are
+ * gone), one after another; one toast says how many went and names any that
+ * could not be removed.
+ */
+export async function removeRoots(roots: readonly LibraryRoot[]): Promise<boolean> {
+  const results: { root: LibraryRoot; ok: boolean }[] = []
+  for (const root of roots) results.push({ root, ok: await deleteRoot(root) })
+  refreshRoots()
+  void queryClient.invalidateQueries({ queryKey: ['folders'] })
+  const { removed, failed } = removalSummary(results)
+  if (failed.length === 0) useToasts.getState().push(lt('libset.removeMissing.done', { n: removed }), 'info')
+  else useToasts.getState().push(lt('libset.removeMissing.partly', { n: removed, names: failed.join(lt('libset.listSep')) }), 'error')
+  return failed.length === 0
 }
 
 /** Download the tags of this library's tagged images as JSON (the same file V3.5 writes). */

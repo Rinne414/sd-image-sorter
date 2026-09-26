@@ -9,8 +9,9 @@ import { mt } from './modelText'
 
 // The Model Center's downloads of several models: one after another in the
 // Jobs drawer, what is left kept in `sd-v4-model-resume` until done. A model
-// that needs a restart pauses the run; "Restart now and continue" restarts
-// with the list marked, and the next start carries on by itself.
+// that needs a restart pauses the run (the restart banner says so);
+// "Restart now and continue" restarts with the list marked, and the next
+// start carries on by itself.
 
 interface QueueView {
   running: boolean
@@ -49,10 +50,10 @@ export async function downloadModels(targets: readonly InstallTarget[]): Promise
         useModelQueue.setState({ index, label: target.label })
         saveResume({ items: targets.slice(index), restart: false, bootId: null })
       },
-      onRestart: async (rest, target) => {
+      // The download's own toast has already spoken; the restart banner above the cards says the rest.
+      onRestart: async (rest) => {
         saveResume({ items: rest, restart: true, bootId: await currentBoot() })
         useModelQueue.setState({ bannerHidden: false })
-        toast(mt('mc.queue.paused', { name: target.label, n: rest.length }), 'error')
       },
       onBlocked: (rest) => {
         saveResume({ items: rest, restart: false, bootId: null })

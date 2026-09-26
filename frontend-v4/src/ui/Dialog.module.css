@@ -20,6 +20,11 @@
   animation: drop var(--t-med) var(--ease);
 }
 
+/* Focused itself only when it has nothing to press: no ring for that. */
+.panel:focus {
+  outline: none;
+}
+
 .panel[data-wide] {
   width: min(720px, calc(100 * var(--vw) - 48px));
 }

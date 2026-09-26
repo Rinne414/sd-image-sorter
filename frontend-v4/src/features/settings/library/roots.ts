@@ -6,6 +6,16 @@ export function rootsSummary(roots: readonly LibraryRoot[]): { folders: number; 
   return { folders: roots.length, missing: roots.filter((r) => r.exists === false).length }
 }
 
+/** The folders that are gone from the disk, in the list order. */
+export function missingRoots(roots: readonly LibraryRoot[]): LibraryRoot[] {
+  return roots.filter((r) => r.exists === false)
+}
+
+/** After removing several: how many went, and the names of the ones that could not be removed. */
+export function removalSummary(results: readonly { root: LibraryRoot; ok: boolean }[]): { removed: number; failed: string[] } {
+  return { removed: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).map((r) => rootName(r.root.path)) }
+}
+
 /** Folders that are still there first (in the backend's order, newest first), then the ones that are gone. */
 export function orderRoots(roots: readonly LibraryRoot[]): LibraryRoot[] {
   return [...roots.filter((r) => r.exists !== false), ...roots.filter((r) => r.exists === false)]

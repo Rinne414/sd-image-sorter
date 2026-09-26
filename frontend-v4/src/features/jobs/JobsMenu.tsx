@@ -8,6 +8,7 @@ import { useClickOutside, useLayer } from '../../ui/layers'
 import { useToasts } from '../../ui/toasts'
 import { canStop, jobHeadline, stopJob, undoJob, useJobs, type Job } from './jobs'
 import styles from './Jobs.module.css'
+import { buttonSummary } from './jobsSummary'
 import { isFinished } from './progress'
 import { resetStuck, useStalled } from './stuckReset'
 import { ImportNextSteps, ScanStallCard } from '../import/ImportJobParts'
@@ -33,8 +34,7 @@ export function JobsMenu() {
 
   if (!jobs.length) return null
   const running = jobs.filter((j) => !isFinished(j.progress.status))
-  const current = running.reduce((n, j) => n + j.progress.current, 0)
-  const total = running.reduce((n, j) => n + (j.progress.total || j.count), 0)
+  const summary = buttonSummary(jobs)
   // An import that has shown no progress for a while counts as trouble too.
   const troubled = jobs.some((j) => j.progress.failedCount > 0 || j.progress.status === 'error' || !!j.progress.scan?.stall)
 
@@ -49,12 +49,12 @@ export function JobsMenu() {
         data-testid="jobs-button"
       >
         {t('jobs.button')}
-        <span className={`${styles.buttonCount} mono`} data-trouble={troubled || undefined}>
-          {running.length ? `${current}/${total}` : jobs.length}
+        <span className={`${styles.buttonCount} mono`} data-trouble={troubled || undefined} data-testid="jobs-button-count">
+          {summary.text}
         </span>
-        {running.length > 0 && (
+        {summary.fraction !== null && (
           <span className={styles.buttonMeter} aria-hidden>
-            <span style={{ width: `${total ? (current / total) * 100 : 0}%` }} />
+            <span style={{ width: `${summary.fraction * 100}%` }} />
           </span>
         )}
       </button>

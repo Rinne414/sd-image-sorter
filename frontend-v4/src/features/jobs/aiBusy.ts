@@ -34,6 +34,8 @@ export interface TagRunState {
   total: number
   /** Library tagging runs waiting in the AI queue. */
   queued: number
+  /** The tagger the run uses (the progress's `model`); null when it says none. */
+  model: string | null
 }
 
 type Raw = Record<string, unknown>
@@ -63,6 +65,7 @@ export function readTagRun(raw: unknown): TagRunState {
     current: num(r.current),
     total: num(r.total),
     queued: rows(obj(r.pipeline_queue).queued).length,
+    model: str(r.model) || null,
   }
 }
 
@@ -180,7 +183,8 @@ function runHolder(run: TagRunState, jobs: readonly Job[]): Observed {
   return {
     key: `run:${run.runId}`,
     work: 'tag',
-    model: job?.label ?? null,
+    // A run started elsewhere (V3.5, another window) has no drawer job: the progress names its tagger.
+    model: job?.label ?? (run.model ? taggerInfo(run.model).label : null),
     loading: false,
     device: run.device,
     stuck: false,

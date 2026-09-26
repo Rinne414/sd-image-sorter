@@ -20,6 +20,32 @@
   font-weight: 600;
 }
 
+.barActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* The folders a "remove every missing folder" would take, listed in its confirmation. */
+.gone {
+  margin: 12px 0 0;
+  padding: 6px 0;
+  list-style: none;
+  max-height: 260px;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.gone li {
+  overflow: hidden;
+  padding: 3px 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .count[data-missing] {
   color: var(--warn);
 }

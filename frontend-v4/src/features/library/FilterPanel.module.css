@@ -13,14 +13,10 @@
   border-radius: var(--radius);
 }
 
-/* Anchored to the whole query bar, like the syntax help. */
+/* Under the 筛选 button wherever it is; its place and size come from filterPanelPlace.ts. */
 .panel {
-  position: absolute;
+  position: fixed;
   z-index: 30;
-  top: 46px;
-  left: 12px;
-  width: min(720px, calc(100% - 24px));
-  max-height: min(72 * var(--vh), 620px);
   overflow-y: auto;
   padding: 14px 16px 12px;
   background: var(--surface-2);

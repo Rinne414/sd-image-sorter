@@ -57,7 +57,7 @@ describe('reading the two sources', () => {
 
   test('the tagging run: running or stopping, on which device, how far, and the gallery runs waiting', () => {
     const r = readTagRun({ status: 'running', run_id: 8, current: 30, total: 120, runtime_backend_actual: 'gpu', pipeline_queue: { total_queued: 3, queued: [{ queue_id: 'q1' }] } })
-    expect(r).toEqual({ runId: 8, running: true, device: 'gpu', current: 30, total: 120, queued: 1 })
+    expect(r).toEqual({ runId: 8, running: true, device: 'gpu', current: 30, total: 120, queued: 1, model: null })
     expect(readTagRun({ status: 'cancelling', run_id: 2, runtime_backend_target: 'cpu' })).toMatchObject({ running: true, device: 'cpu' })
     expect(readTagRun({ status: 'done', run_id: 8 }).running).toBe(false)
   })
@@ -104,6 +104,16 @@ describe('who holds the AI', () => {
     expect(obs).toHaveLength(2)
     expect(obs[0]).toMatchObject({ key: 'run:8', work: 'tag', model: 'PixAI v1.0', device: 'gpu', progress: { current: 3, total: 10 }, jobId: ours.id })
     expect(obs[1]).toMatchObject({ key: 'lease:censor', model: 'YOLO', loading: false, stuck: true, seconds: 9, jobId: null })
+  })
+
+  test('a run started elsewhere (V3.5, another window) is named by the tagger the progress reports', () => {
+    expect(readTagRun({ status: 'running', run_id: 3, model: 'wd-swinv2-tagger-v3' }).model).toBe('wd-swinv2-tagger-v3')
+    expect(readTagRun({ status: 'running', run_id: 3, model: '' }).model).toBeNull()
+    expect(observe(null, run(8, { model: 'wd-swinv2-tagger-v3' }), [])[0]).toMatchObject({ model: 'WD SwinV2 v3', jobId: null })
+    expect(observe(null, run(8, { model: 'my-own-tagger' }), [])[0]).toMatchObject({ model: 'my-own-tagger' })
+    // a drawer job's own label still wins
+    const ours = job({ kind: 'tag', label: 'PixAI v1.0', ctx: { baseRunId: 7 } })
+    expect(observe(null, run(8, { model: 'wd-swinv2-tagger-v3' }), [ours])[0]).toMatchObject({ model: 'PixAI v1.0' })
   })
 
   test('a run that is not the one a drawer job waits for is not given that job', () => {

@@ -8,6 +8,7 @@ import { createRaster, type Raster } from '../../censor/raster'
 import { installThen } from '../../jobs/installJob'
 import { addJob, isQueueBusy, startingProgress, tr } from '../../jobs/jobs'
 import { busyText } from '../../jobs/busyText'
+import { pushRefusal } from '../../jobs/refusalToast'
 
 // Training masks: one grey PNG per Library image on the backend (white =
 // trained, black = left out; no mask = the whole picture). Folder images
@@ -153,6 +154,6 @@ export async function startAutoMaskAll(ids: readonly number[], engine: MaskEngin
     })
   } catch (error) {
     const busy = error instanceof ApiError && error.status === 409
-    useToasts.getState().push(busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message }), 'error')
+    pushRefusal(busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message }), error)
   }
 }

@@ -17,12 +17,14 @@ interface Props {
   /** The gallery's current filter, used to pick every match on the server; null when the grid is not a filter (ranked by likeness). */
   params: ImageQueryParams | null
   total: number | null
+  /** The total is the backend's estimate (lib/resultTotal.ts): said with "about". */
+  about?: boolean
   images: ImageSummary[]
   hasMore: boolean
 }
 
 /** Docked under the grid while anything is picked: what can be done to the picks. */
-export function SelectionBar({ params, total, images, hasMore }: Props) {
+export function SelectionBar({ params, total, about = false, images, hasMore }: Props) {
   const t = useT()
   const selection = useApp((s) => s.selection)
   const clear = useApp((s) => s.clearSelection)
@@ -88,15 +90,15 @@ export function SelectionBar({ params, total, images, hasMore }: Props) {
           className={`btn btn-ghost ${styles.all}`}
           onClick={() => void selectAll()}
           disabled={busy !== null}
-          title={t('sel.selectAll', { n: total })}
+          title={t(about ? 'sel.selectAllAbout' : 'sel.selectAll', { n: total })}
           data-testid="select-all-matching"
         >
           {busy === 'all' ? (
             t('sel.selecting')
           ) : (
             <>
-              <span className={styles.wordy}>{t('sel.selectAll', { n: total })}</span>
-              <span className={styles.terse}>{t('sel.selectAllShort', { n: total })}</span>
+              <span className={styles.wordy}>{t(about ? 'sel.selectAllAbout' : 'sel.selectAll', { n: total })}</span>
+              <span className={styles.terse}>{t(about ? 'sel.selectAllShortAbout' : 'sel.selectAllShort', { n: total })}</span>
             </>
           )}
         </button>

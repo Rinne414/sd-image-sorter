@@ -86,7 +86,7 @@ export function useTagInfo(tag: string | null) {
 
 // ---- Chinese reading aid ----------------------------------------------------
 
-/** Who translates: a free web service (China-friendly chain first), or the VLM set up in V3.5. */
+/** Who translates: a free web service (China-friendly chain first), or the vision model set up in Settings › AI services. */
 export type ZhSource = 'off' | 'web' | 'vlm'
 
 const ZH_KEY = 'sd-v4-caption-zh'

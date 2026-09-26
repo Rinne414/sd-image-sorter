@@ -26,6 +26,8 @@ import { useSimilar } from '../similar/similarStore'
 import { useOtherLibrary } from '../sort/StageParts'
 import { continueSort, sortImages, useSortPending } from '../sort/sortStore'
 import { useStatusDialogs } from '../status/dialogs'
+import { useUpdates } from '../settings/about/updateStore'
+import { restartApp } from '../settings/restart'
 import { useUiScale } from '../settings/uiScaleStore'
 import { command, matches, type Command } from './commands'
 import styles from './CommandPalette.module.css'
@@ -53,6 +55,11 @@ const SHELL_OPS: ShellOps = {
   setLang: (lang: Lang) => useLang.getState().setLang(lang),
   setScale: (setting) => useUiScale.getState().setSetting(setting),
   openHelp: (page) => useShortcutSheet.getState().open(page),
+  checkUpdates: () => {
+    useApp.getState().openSettings('about')
+    void useUpdates.getState().check(true)
+  },
+  restart: () => void restartApp(),
 }
 
 /** Turn the query bar to "by meaning" and put the caret in it. */

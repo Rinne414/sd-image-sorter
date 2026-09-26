@@ -1,12 +1,14 @@
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { useT, type MessageKey } from '../../i18n'
 import { isAnyOf, isKey, replaceTokens, toggleToken, valueOf, hasPart } from '../../lib/queryEdit'
 import { HUE_VALUES, parseSearch, type Part } from '../../lib/searchQuery'
+import { uiZoom } from '../../lib/uiScale'
 import { useSavedSearches } from '../../state/savedSearches'
 import { useApp } from '../../state/store'
 import { useClickOutside, useLayer } from '../../ui/layers'
 import { useToasts } from '../../ui/toasts'
 import { FilterMatchRows } from './FilterMatchRows'
+import { panelPlace, type PanelPlace } from './filterPanelPlace'
 import styles from './FilterPanel.module.css'
 
 interface Props {
@@ -36,12 +38,36 @@ const HUE_SWATCH: Record<string, string> = {
   gray: '#8d8a85',
 }
 
+/** Where the open panel goes: under the button, on screen; again when the window changes or anything scrolls. */
+function usePanelPlace(open: boolean, button: React.RefObject<HTMLButtonElement | null>): PanelPlace | null {
+  const [place, setPlace] = useState<PanelPlace | null>(null)
+  useLayoutEffect(() => {
+    if (!open) return
+    const measure = () => {
+      const box = button.current?.getBoundingClientRect()
+      if (!box) return
+      const z = uiZoom()
+      setPlace(panelPlace({ left: box.left / z, right: box.right / z, bottom: box.bottom / z }, { width: window.innerWidth / z, height: window.innerHeight / z }))
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    window.addEventListener('scroll', measure, true)
+    return () => {
+      window.removeEventListener('resize', measure)
+      window.removeEventListener('scroll', measure, true)
+    }
+  }, [open, button])
+  return open ? place : null
+}
+
 /** Structured filters. Every choice is written into the query line above. */
 export function FilterPanel({ text, onChange }: Props) {
   const t = useT()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const ref = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const place = usePanelPlace(open, buttonRef)
   const libraryId = useApp((s) => s.libraryId)
   const addSaved = useSavedSearches((s) => s.add)
   useLayer(open, () => setOpen(false))
@@ -95,6 +121,7 @@ export function FilterPanel({ text, onChange }: Props) {
   return (
     <div className={styles.wrap} ref={ref}>
       <button
+        ref={buttonRef}
         type="button"
         className="btn"
         aria-expanded={open}
@@ -105,7 +132,13 @@ export function FilterPanel({ text, onChange }: Props) {
         {active > 0 && <span className={`${styles.badge} mono`}>{active}</span>}
       </button>
       {open && (
-        <div className={styles.panel} role="dialog" aria-label={t('filter.button')} data-testid="filter-panel">
+        <div
+          className={styles.panel}
+          style={place ?? { visibility: 'hidden' }}
+          role="dialog"
+          aria-label={t('filter.button')}
+          data-testid="filter-panel"
+        >
           <p className={styles.hint}>{t('filter.hint')}</p>
           <dl className={styles.rows}>
             <FilterMatchRows text={text} onChange={onChange} />

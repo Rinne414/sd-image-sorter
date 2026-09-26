@@ -25,6 +25,14 @@ export const zhCNLibrarySettings = {
   'libset.remove.body': '「{path}」里已经导入的 {n} 张图留在图库里，文件也不动；只是以后不再重新扫描它，空闲时也不检查它。想加回来，再导入这个文件夹一次就行。',
   'libset.remove.ok': '移除来源',
   'libset.remove.done': '已移除来源 {name}',
+  'libset.removeMissing.button': '移除找不到的 {n} 个…',
+  'libset.removeMissing.title': '不再把这 {n} 个找不到的文件夹当来源？',
+  'libset.removeMissing.body': '下面 {n} 个文件夹在硬盘上已经找不到了。移除后不再重新扫描它们；已经导入的 {images} 张图留在图库里，文件也不动。',
+  'libset.removeMissing.ok': '移除这 {n} 个来源',
+  'libset.removeMissing.working': '正在移除…',
+  'libset.removeMissing.done': '已移除 {n} 个找不到的来源文件夹',
+  'libset.removeMissing.partly': '移除了 {n} 个；这几个没能移除：{names}',
+  'libset.listSep': '、',
 
   // 图库 › 空闲时自动检查新图
   'libset.auto.title': '空闲时自动检查新图',

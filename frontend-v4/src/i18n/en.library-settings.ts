@@ -24,6 +24,14 @@ export const enLibrarySettings: Record<keyof typeof zhCNLibrarySettings, string>
   'libset.remove.body': 'The {n} images already imported from “{path}” stay in the library and the files stay on disk; the folder is just no longer rescanned or checked while idle. Import the folder again to add it back.',
   'libset.remove.ok': 'Remove source',
   'libset.remove.done': 'Removed source {name}',
+  'libset.removeMissing.button': 'Remove missing ({n})…',
+  'libset.removeMissing.title': 'Stop using the missing folders as sources ({n})?',
+  'libset.removeMissing.body': 'These folders are no longer on the disk ({n}). They will not be rescanned any more; the images already imported from them ({images}) stay in the library, and no file is touched.',
+  'libset.removeMissing.ok': 'Remove them ({n})',
+  'libset.removeMissing.working': 'Removing…',
+  'libset.removeMissing.done': 'Missing source folders removed: {n}',
+  'libset.removeMissing.partly': 'Removed: {n}. These could not be removed: {names}',
+  'libset.listSep': ', ',
 
   // Library › Checking for new images while idle
   'libset.auto.title': 'Check for new images while idle',

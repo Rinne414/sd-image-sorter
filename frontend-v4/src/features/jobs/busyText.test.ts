@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { explainBusy } from './busyText'
+import { explainBusy, isStaleLock } from './busyText'
 import { zhCN } from '../../i18n/zh-CN'
 import { en } from '../../i18n/en'
 
@@ -61,5 +61,14 @@ describe('explainBusy', () => {
   test('a 409 that is not about the AI is left to the caller (a queue of the same kind is busy)', () => {
     expect(explainBusy({ detail: 'Tagging already in progress' }, tEn)).toBeNull()
     expect(explainBusy(null, tEn)).toBeNull()
+  })
+})
+
+describe('a lock whose holder is gone', () => {
+  test('is told apart from a busy AI, so the refusal can offer a restart', () => {
+    expect(isStaleLock({ body: refused('stale_lock_holder_gone', { label: 'wd14-tagger-load' }) })).toBe(true)
+    expect(isStaleLock({ body: refused('busy', { label: 'aesthetic' }) })).toBe(false)
+    expect(isStaleLock({ body: { error: 'x' } })).toBe(false)
+    expect(isStaleLock(new Error('x'))).toBe(false)
   })
 })

@@ -165,6 +165,8 @@ export const en: Record<MessageKey, string> = {
   'sel.trash': 'Move to Trash…',
   'sel.selectAll': 'Select all {n} matches',
   'sel.selectAllShort': 'All {n}',
+  'sel.selectAllAbout': 'Select all matches (about {n})',
+  'sel.selectAllShortAbout': 'All (about {n})',
   'sel.selecting': 'Selecting…',
   'sel.selectAllFailed': 'Couldn\'t select every match: {reason}',
 
@@ -427,6 +429,7 @@ export const en: Record<MessageKey, string> = {
   'lightbox.fit': 'Fit to window',
   'lightbox.actual': 'Actual size',
   'lightbox.position': '{i} / {n}',
+  'lightbox.positionAbout': '{i} / about {n}',
   'lightbox.picked': 'Picked',
   'lightbox.pick': 'Pick',
 
@@ -460,6 +463,8 @@ export const en: Record<MessageKey, string> = {
   'palette.cmd.moveLibrary': 'Move picks to another library…',
   'palette.cmd.import': 'Import a folder…',
   'palette.cmd.libraries': 'Manage libraries…',
+  'palette.cmd.checkUpdates': 'Check for updates',
+  'palette.cmd.restart': 'Restart the app…',
   'palette.cmd.jobs': 'Open jobs',
   'palette.hint': '↑↓ to choose, Enter to run, Esc to close',
 

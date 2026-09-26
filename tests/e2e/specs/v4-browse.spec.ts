@@ -266,6 +266,40 @@ test('"any of" tags and "prompt contains": search line, chips and the filter pan
   expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
 })
 
+/** Where the open filter panel sits against its 筛选 button, in screen px. */
+async function panelAgainstButton(page: Page, scope: string) {
+  return page.evaluate((sel) => {
+    const button = document.querySelector(`${sel} [data-testid="filter-button"]`)!.getBoundingClientRect()
+    const panel = document.querySelector('[data-testid="filter-panel"]')!.getBoundingClientRect()
+    return { gap: panel.top - button.bottom, dx: panel.left - button.left, right: panel.right, bottom: panel.bottom, vw: innerWidth, vh: innerHeight }
+  }, scope)
+}
+
+test('6d: the library is exactly the window high at 1366x768, and the filter panel opens under its button there and in Sort › rules', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openLibrary(page, TOKEN, COUNT)
+  await grid(page).waitFor()
+  expect(await page.evaluate(() => document.documentElement.scrollHeight - document.documentElement.clientHeight)).toBe(0)
+
+  await page.getByTestId('filter-button').click()
+  const lib = await panelAgainstButton(page, 'body')
+  expect(lib.gap).toBeGreaterThanOrEqual(0)
+  expect(lib.gap).toBeLessThanOrEqual(10)
+  expect(lib.dx).toBeLessThanOrEqual(0)
+  expect(lib.right).toBeLessThanOrEqual(lib.vw)
+  await page.keyboard.press('Escape')
+
+  await page.goto('/v4/#/sort')
+  await page.getByTestId('sort-mode-rules').click()
+  await page.getByTestId('sort-condition').getByTestId('filter-button').click()
+  const sort = await panelAgainstButton(page, '[data-testid="sort-condition"]')
+  expect(sort.gap).toBeGreaterThanOrEqual(0)
+  expect(sort.gap).toBeLessThanOrEqual(10)
+  expect(sort.dx).toBeLessThanOrEqual(0)
+  expect(sort.right).toBeLessThanOrEqual(sort.vw)
+  expect(sort.bottom).toBeLessThanOrEqual(sort.vh)
+})
+
 test('6e: a whole-word prompt count the backend can only estimate says "about" until every page is here', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   await openLibrary(page, TOKEN, COUNT)
@@ -274,8 +308,17 @@ test('6e: a whole-word prompt count the backend can only estimate says "about" u
   await input.fill(`${TOKEN} prompt:1girl`)
   await input.press('Enter')
   await expect(count(page)).toHaveText('about 300 images')
-  // the rest loads as the grid scrolls to its end: now it is a count
+  // the selection bar's "select all" and the lightbox say "about" too
   await grid(page).waitFor()
+  const first = page.getByTestId('tile').first()
+  await first.click({ modifiers: ['Control'] })
+  await expect(page.getByTestId('select-all-matching')).toContainText('about 300')
+  await first.dblclick()
+  await expect(page.getByTestId('lightbox')).toContainText('1 / about 300')
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('lightbox')).toHaveCount(0)
+  await page.getByTestId('selection-bar').getByRole('button', { name: 'Clear picks' }).click()
+  // the rest loads as the grid scrolls to its end: now it is a count
   const scroller = page.getByTestId('gallery-scroller')
   await expect
     .poll(async () => {

@@ -25,6 +25,12 @@ export function explainBusy(body: unknown, t: Translate): string | null {
   return blocker?.stuck === true ? text + t('signals.busy.stuck') : text
 }
 
+/** A refusal because the AI lock outlived the job that took it: only a restart clears that. */
+export function isStaleLock(error: unknown): boolean {
+  const body = obj(error && typeof error === 'object' ? (error as { body?: unknown }).body : null)
+  return body?.type === 'AiRuntimeBusyError' && body.reason === 'stale_lock_holder_gone'
+}
+
 let onRefused: (() => void) | null = null
 
 /** A refusal is fresher news than any poll: the AI-busy chip registers here to look again (and pick up work started elsewhere). */

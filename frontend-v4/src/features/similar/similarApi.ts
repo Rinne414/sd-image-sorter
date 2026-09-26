@@ -5,6 +5,7 @@ import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
 import { addJob, isQueueBusy, startingProgress, tr } from '../jobs/jobs'
 import { busyText } from '../jobs/busyText'
+import { pushRefusal } from '../jobs/refusalToast'
 import { withExisting, type DupGroup, type DupPage } from './duplicates'
 import { pairQuery, readPairs, withoutGone, type PairsReply } from './pairs'
 import { mergeRanked, readHits, type Hit, type RankedImage } from './ranking'
@@ -211,7 +212,7 @@ export async function compareScore(a: number, b: number): Promise<number> {
 
 const failed = (error: unknown) => {
   const busy = error instanceof ApiError && error.status === 409
-  useToasts.getState().push(busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message }), 'error')
+  pushRefusal(busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message }), error)
   return false
 }
 

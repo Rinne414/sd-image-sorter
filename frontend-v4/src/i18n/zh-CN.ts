@@ -165,6 +165,8 @@ export const zhCN = {
   'sel.trash': '移到回收站…',
   'sel.selectAll': '全选符合的 {n} 张',
   'sel.selectAllShort': '全选 {n}',
+  'sel.selectAllAbout': '全选符合的约 {n} 张',
+  'sel.selectAllShortAbout': '全选约 {n}',
   'sel.selecting': '正在选取…',
   'sel.selectAllFailed': '没能选中全部：{reason}',
 
@@ -427,6 +429,7 @@ export const zhCN = {
   'lightbox.fit': '适合窗口',
   'lightbox.actual': '原始大小',
   'lightbox.position': '{i} / {n}',
+  'lightbox.positionAbout': '{i} / 约 {n}',
   'lightbox.picked': '已挑选',
   'lightbox.pick': '挑选',
 
@@ -461,6 +464,8 @@ export const zhCN = {
   'palette.cmd.import': '导入一个文件夹…',
   'palette.cmd.libraries': '管理图库…',
   'palette.cmd.jobs': '打开工作列表',
+  'palette.cmd.checkUpdates': '检查更新',
+  'palette.cmd.restart': '重启程序（重新启动）…',
   'palette.hint': '↑↓ 选择，Enter 执行，Esc 关闭',
 
   'planned.openV3': '在 V3.5 里打开',

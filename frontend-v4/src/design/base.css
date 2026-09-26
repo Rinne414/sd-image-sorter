@@ -155,10 +155,15 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
+/* Read aloud, never seen. The -1px margin keeps its 1px box inside the page:
+   left at the end of the content, it made the page 1px taller than the window. */
 .visually-hidden {
   position: absolute !important;
   width: 1px;
   height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;

@@ -1,6 +1,5 @@
-/* The filter panel's popover anchors to this box, under the bar. */
+/* The filter row and its notes, under a step's bar. */
 .wrap {
-  position: relative;
   flex: none;
   border-bottom: 1px solid var(--line);
   background: var(--bg);

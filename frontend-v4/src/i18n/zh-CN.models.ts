@@ -161,7 +161,6 @@ export const zhCNModels = {
   'mc.queue.show': '查看工作',
   'mc.queue.done': '所选的 {n} 个模型都下载好了。',
   'mc.queue.mixed': '下载好 {ok}/{n} 个；没成功：{failed}。可以在对应的卡片上再试。',
-  'mc.queue.paused': '{name} 装好了运行组件，要重启 app 后才能继续。重启后会自动接着下载（共 {n} 个）。',
   'mc.queue.resumed': '重启前还剩 {n} 个模型，现在接着下载。',
   'mc.queue.blocked': '下载停下了，剩下的 {n} 个留在模型中心，可以之后「继续下载」。',
 

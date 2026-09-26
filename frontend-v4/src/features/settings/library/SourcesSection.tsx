@@ -4,9 +4,9 @@ import { Dialog } from '../../../ui/Dialog'
 import { useSelectionDialog } from '../../selection/dialogs'
 import { Section } from '../about/Section'
 import { useLT } from '../libraryText'
-import { removeRoot, rescanRoot, useLibraryRoots } from './libraryApi'
+import { removeRoot, removeRoots, rescanRoot, useLibraryRoots } from './libraryApi'
 import styles from './LibrarySettings.module.css'
-import { orderRoots, rootsSummary, scannedAt } from './roots'
+import { missingRoots, orderRoots, rootsSummary, scannedAt } from './roots'
 import type { LibraryRoot } from './types'
 
 /** The folders this library imports from: rescan one (a job), or stop using one as a source. */
@@ -14,6 +14,7 @@ export function SourcesSection() {
   const t = useLT()
   const roots = useLibraryRoots()
   const [removing, setRemoving] = useState<LibraryRoot | null>(null)
+  const [removingMissing, setRemovingMissing] = useState(false)
   const list = orderRoots(roots.data ?? [])
   const { folders, missing } = rootsSummary(list)
 
@@ -24,9 +25,16 @@ export function SourcesSection() {
         <span className={styles.count} data-missing={missing > 0 || undefined} data-testid="roots-summary">
           {roots.data ? (missing > 0 ? t('libset.sources.summaryMissing', { folders, missing }) : t('libset.sources.summary', { folders })) : ''}
         </span>
-        <button type="button" className="btn" onClick={() => useSelectionDialog.getState().showFor('import', null, 1)} data-testid="roots-add">
-          {t('libset.sources.add')}
-        </button>
+        <span className={styles.barActions}>
+          {missing > 0 && (
+            <button type="button" className="btn" onClick={() => setRemovingMissing(true)} data-testid="roots-remove-missing">
+              {t('libset.removeMissing.button', { n: missing })}
+            </button>
+          )}
+          <button type="button" className="btn" onClick={() => useSelectionDialog.getState().showFor('import', null, 1)} data-testid="roots-add">
+            {t('libset.sources.add')}
+          </button>
+        </span>
       </div>
       {roots.isPending && <p className={styles.state}>{t('libset.sources.loading')}</p>}
       {roots.isError && (
@@ -46,6 +54,7 @@ export function SourcesSection() {
         </ul>
       )}
       {removing && <RemoveDialog root={removing} onClose={() => setRemoving(null)} />}
+      {removingMissing && <RemoveMissingDialog roots={missingRoots(list)} onClose={() => setRemovingMissing(false)} />}
     </Section>
   )
 }
@@ -118,6 +127,46 @@ function RemoveDialog({ root, onClose }: { root: LibraryRoot; onClose: () => voi
   return (
     <Dialog title={t('libset.remove.title')} onClose={onClose} footer={footer} testId="root-remove-dialog" initialFocus={cancelRef}>
       <p className={styles.lead}>{t('libset.remove.body', { path: root.path, n: root.image_count })}</p>
+    </Dialog>
+  )
+}
+
+/** Every folder that is gone, at once: the count and each path, focus on Cancel. Images and files stay. */
+function RemoveMissingDialog({ roots, onClose }: { roots: readonly LibraryRoot[]; onClose: () => void }) {
+  const t = useLT()
+  const tm = useT()
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  const [busy, setBusy] = useState(false)
+  const images = roots.reduce((n, r) => n + r.image_count, 0)
+
+  const go = async () => {
+    setBusy(true)
+    await removeRoots(roots)
+    setBusy(false)
+    onClose()
+  }
+
+  const footer = (
+    <>
+      <button ref={cancelRef} type="button" className="btn btn-ghost" onClick={onClose}>
+        {tm('common.cancel')}
+      </button>
+      <button type="button" className="btn btn-primary" onClick={() => void go()} disabled={busy || roots.length === 0} data-testid="roots-remove-missing-ok">
+        {busy ? t('libset.removeMissing.working') : t('libset.removeMissing.ok', { n: roots.length })}
+      </button>
+    </>
+  )
+
+  return (
+    <Dialog title={t('libset.removeMissing.title', { n: roots.length })} onClose={onClose} footer={footer} testId="roots-remove-missing-dialog" initialFocus={cancelRef}>
+      <p className={styles.lead}>{t('libset.removeMissing.body', { n: roots.length, images })}</p>
+      <ul className={styles.gone} data-testid="roots-remove-missing-list">
+        {roots.map((root) => (
+          <li key={root.id} className="mono" title={root.path}>
+            {root.path}
+          </li>
+        ))}
+      </ul>
     </Dialog>
   )
 }

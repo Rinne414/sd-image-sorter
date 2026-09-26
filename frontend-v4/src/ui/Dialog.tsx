@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode, type RefO
 import { createPortal } from 'react-dom'
 import { useT } from '../i18n'
 import styles from './Dialog.module.css'
+import { firstFocusable } from './dialogFocus'
 import { Icon } from './Icon'
 import { useLayer } from './layers'
 
@@ -11,7 +12,7 @@ interface Props {
   children: ReactNode
   footer?: ReactNode
   testId?: string
-  /** Focused when the dialog opens; the first focusable element otherwise. */
+  /** Focused when the dialog opens; the first control Tab reaches otherwise (never the header ×). */
   initialFocus?: RefObject<HTMLElement | null>
   /** true: room for a table; 'x': room for rows of pictures (a review). */
   wide?: boolean | 'x'
@@ -31,14 +32,16 @@ export function Dialog({ title, onClose, children, footer, testId, initialFocus,
 
   useEffect(() => {
     const before = document.activeElement as HTMLElement | null
-    const target = initialFocus?.current ?? panelRef.current?.querySelector<HTMLElement>(FOCUSABLE)
+    const all = [...(panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])]
+    // A dialog with nothing to press (a sheet to read) takes the focus itself, so Tab and Esc stay with it.
+    const target = initialFocus?.current ?? firstFocusable(all) ?? panelRef.current
     target?.focus()
     return () => before?.focus?.()
   }, [initialFocus])
 
   const trapTab = (e: KeyboardEvent) => {
     if (e.key !== 'Tab' || !panelRef.current) return
-    const items = [...panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.offsetParent !== null)
+    const items = [...panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.offsetParent !== null && el.tabIndex >= 0)
     const first = items[0]
     const last = items.at(-1)
     if (!first || !last) return
@@ -61,6 +64,7 @@ export function Dialog({ title, onClose, children, footer, testId, initialFocus,
         aria-modal="true"
         aria-labelledby={titleId}
         data-testid={testId}
+        tabIndex={-1}
         onKeyDown={trapTab}
       >
         <header className={styles.head}>

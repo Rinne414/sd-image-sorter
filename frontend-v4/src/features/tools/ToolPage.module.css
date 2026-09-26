@@ -6,12 +6,6 @@
   background: var(--stage);
 }
 
-.content {
-  min-height: 0;
-  overflow-y: auto;
-  padding: 28px 40px 64px;
-}
-
 .tool {
   min-height: 0;
   overflow: hidden;

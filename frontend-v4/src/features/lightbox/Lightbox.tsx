@@ -21,6 +21,8 @@ const INFO_KEY = 'sd-v4-lightbox-info'
 interface Props {
   images: ImageSummary[]
   total: number
+  /** The total is the backend's estimate (lib/resultTotal.ts): said with "about". */
+  totalAbout?: boolean
   hasMore: boolean
   fetchMore: () => void
   /** Space and the Pick button add to the library's picks; off where that makes no sense (a batch). */
@@ -40,7 +42,7 @@ function readInfoPref(): boolean {
 }
 
 /** One image up close. The film strip below keeps the neighbours in reach. */
-export function Lightbox({ images, total, hasMore, fetchMore, pickable = true, fetchAt, owner = 'page' }: Props) {
+export function Lightbox({ images, total, totalAbout = false, hasMore, fetchMore, pickable = true, fetchAt, owner = 'page' }: Props) {
   const t = useT()
   // Another owner's big image is not this lightbox's to show.
   const id = useApp((s) => (s.lightboxOwner === owner ? s.lightboxId : null))
@@ -195,7 +197,7 @@ export function Lightbox({ images, total, hasMore, fetchMore, pickable = true, f
       data-info={info || undefined}
     >
       <header className={styles.bar}>
-        {position !== null && <span className={`${styles.pos} mono`}>{t('lightbox.position', { i: position, n: total })}</span>}
+        {position !== null && <span className={`${styles.pos} mono`}>{t(totalAbout ? 'lightbox.positionAbout' : 'lightbox.position', { i: position, n: total })}</span>}
         <span className={`${styles.name} mono`} title={path ?? undefined}>
           {current?.filename ?? detail.data?.image.filename}
         </span>

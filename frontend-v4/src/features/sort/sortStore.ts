@@ -54,6 +54,12 @@ interface SortStore extends SortState {
   press: (action: SortAction) => void
   /** "Keep sorting the other library's images": keys and buttons act on them from now on. */
   allowOtherLibrary: () => void
+  /**
+   * Before a button acts on the sort's images (the summary's favourite and
+   * pick): false, with the same "another library" refusal a key gets, until
+   * the user said to keep sorting them.
+   */
+  mayAct: () => boolean
   start: (ids: number[], setup: SortSetup, replace: boolean) => Promise<StartResult>
   end: () => Promise<boolean>
   openSetup: (source: SortSource | null) => void
@@ -137,6 +143,13 @@ export const useSort = create<SortStore>((set, get) => {
       set({ ...after, lastPressAt: accepted && isForward(action) ? now : before.lastPressAt })
       if (accepted && sound && isForward(action) && action.kind !== 'skip') pip()
       void pump()
+    },
+
+    mayAct: () => {
+      const cur = get()
+      if (!isOpen(cur.session) || !awaitsLibraryOk(cur.session, useApp.getState().libraryId, cur.libraryOk)) return true
+      set({ error: { kind: 'otherLibrary' }, bumped: cur.bumped + 1 })
+      return false
     },
 
     allowOtherLibrary: () => {

@@ -7,7 +7,8 @@ import { composed, command, type Command } from './commands'
 import { HELP_PAGES, helpTopic } from './helpTopics'
 
 // Ctrl K entries for the shell: every tool, every settings tab, the language,
-// the interface zoom, and the help of every page. Pure: what they do comes in
+// the interface zoom, checking for updates, restarting the app, and the help
+// of every page. Pure: what they do comes in
 // through `ops`, so the list can be tested in both languages.
 
 export interface ShellOps {
@@ -16,6 +17,10 @@ export interface ShellOps {
   setLang: (lang: Lang) => void
   setScale: (setting: ScaleSetting) => void
   openHelp: (page: Page) => void
+  /** Ask for the latest version now, and show About & updates with the answer. */
+  checkUpdates: () => void
+  /** Restart the app (it asks first, and names running work). */
+  restart: () => void
 }
 
 export function shellCommands(lang: Lang, ops: ShellOps): Command[] {
@@ -33,6 +38,8 @@ export function shellCommands(lang: Lang, ops: ShellOps): Command[] {
     const text = (l: Lang) => translate(l, 'settings.palette.scale', { value: setting === 'auto' ? translate(l, 'settings.scale.auto') : percent(setting) })
     list.push(composed(lang, `scale-${setting}`, 'palette.group.settings', text, () => ops.setScale(setting)))
   }
+  list.push(command(lang, 'check-updates', 'palette.group.settings', 'palette.cmd.checkUpdates', () => ops.checkUpdates()))
+  list.push(command(lang, 'restart', 'palette.group.settings', 'palette.cmd.restart', () => ops.restart()))
   for (const page of HELP_PAGES) {
     const text = (l: Lang) => translate(l, 'help.palette.page', { page: translate(l, helpTopic(page).name) })
     list.push(composed(lang, `help-${page}`, 'lib.palette.groupHelp', text, () => ops.openHelp(page)))

@@ -4,6 +4,7 @@ import { api, ApiError, unwrap } from '../../../api/client'
 import { useToasts } from '../../../ui/toasts'
 import { addJob, isQueueBusy, startingProgress, tr } from '../../jobs/jobs'
 import { busyText } from '../../jobs/busyText'
+import { pushRefusal } from '../../jobs/refusalToast'
 import type { PurityResult } from './checkIssues'
 
 // Character purity (CCIP): is every Library image of the batch the same
@@ -38,7 +39,7 @@ export const usePurityResults = create<{ byBatch: Record<number, PurityOutcome |
 
 const toastError = (error: unknown) => {
   const busy = error instanceof ApiError && error.status === 409
-  useToasts.getState().push(busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message }), 'error')
+  pushRefusal(busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message }), error)
 }
 
 async function keepResult(batchId: number, jobId: string, ids: number[]): Promise<void> {
