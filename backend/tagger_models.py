@@ -135,6 +135,39 @@ TAGGER_MODELS: dict = {
         "supports_rating": False,
         "rating_fallback_mode": "derive_from_tags"
     },
+    "pixai-tagger-v1.0": {
+        # Community ONNX export (noaione, Apache-2.0) of the official
+        # pixai-labs/pixai-tagger-v1.0@9fe10ad (Apache-2.0). Fed the official
+        # input tensor it reproduces the official PyTorch model on 120 real
+        # images (tag-set Jaccard 0.9996; .plans/pixai-v1/fidelity_summary.json).
+        # The graph is fixed at batch 1 x 3 x 1008 x 1008 and returns logits.
+        # 30,877 tags: general, character, copyright, style (stored as artist),
+        # meta, rating. Thresholds are the official per-category best values;
+        # style tags use the general threshold (official 0.15).
+        "writer_family": "pixai",
+        "repo_id": "noaione/pixai-tagger-v1.0-onnx",
+        "revision": "68e8f4f02dd56a5f40c1b7474489fa0f599dec34",
+        "model_file": "model.onnx",
+        "tags_file": "tags.json",
+        "external_data_files": ["model.onnx.data"],
+        "runtime_safety_tier": "heavy",
+        "metadata_format": "pixai_v1",
+        "input_layout": "nchw",
+        "input_normalization": "minus_one_to_one",
+        # Official RescalePadProcessor: float bilinear (antialiased) resize to
+        # fit, centred on black padding, then [-1, 1]. The 8-bit bicubic
+        # letterbox changed 7% of tags (Jaccard 0.933).
+        "resize_mode": "rescale_pad",
+        "pad_color": [0, 0, 0],
+        "image_size": 1008,
+        "output_index": 0,
+        "output_activation": "sigmoid",
+        "default_threshold": 0.17,
+        "default_character_threshold": 0.27,
+        "default_copyright_threshold": 0.24,
+        "default_max_tags_per_image": 80,
+        "supports_rating": True,
+    },
     "toriigate-0.5": {
         "repo_id": "Minthy/ToriiGate-0.5",
         # ToriiGate downloads via snapshot_download in toriigate_tagger.py

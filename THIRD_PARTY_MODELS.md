@@ -24,6 +24,7 @@ in `models/aesthetic/` at the project root.
 |---|---|---|---|
 | Default tagging | `SmilingWolf/wd-swinv2-tagger-v3` | Model Manager | WD14 ONNX + `selected_tags.csv`; the default revision is pinned. |
 | Other WD14 taggers | EVA02, ConvNeXt, ViT, ViT-Large | Model Manager | Existing optional catalog entries; no weights are shipped. |
+| PixAI Tagger v1.0 | `noaione/pixai-tagger-v1.0-onnx` (ONNX export of `pixai-labs/pixai-tagger-v1.0`) | Model Manager (WD14 card) | Both Apache-2.0; commit-pinned; ~2 GB; official 1008 px RescalePad preprocessing and per-category thresholds. |
 | Modern optional tagger | `cella110n/cl_tagger_v2` (`v2_00`) | Explicit opt-in Model Manager download | Gated Hugging Face repository; the user must accept the terms and configure access. |
 | Natural-language captioning | `florence-community/Florence-2-base` | Model Manager | Commit-pinned native Transformers checkpoint; all processor/tokenizer files are required. |
 | Censor detection | NudeNet, legacy YOLO, SAM3 | Model Manager / existing source paths | Detector semantics stay separate from matting. |
@@ -39,6 +40,8 @@ The downloader fails explicitly if any required file is absent or zero bytes.
 The following companion files are part of the runtime contract:
 
 - WD14: `model.onnx` and `selected_tags.csv`.
+- PixAI Tagger v1.0: `model.onnx`, its external `model.onnx.data`, and
+  `tags.json`.
 - Florence-2 Base: `model.safetensors`, `config.json`, generation and
   processor configuration, merges/vocabulary, and all tokenizer JSON files.
 - Lucida: `model.safetensors`, `config.json`, `BiRefNet_config.py`, and

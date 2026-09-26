@@ -55,6 +55,8 @@ const TAGGER_MODEL_ALIASES = {
     'camie': 'camie-tagger-v2',
     'camie v2': 'camie-tagger-v2',
     'pixai': 'pixai-tagger-v0.9',
+    'pixai v1': 'pixai-tagger-v1.0',
+    'pixai v1.0': 'pixai-tagger-v1.0',
 };
 
 const TAGGER_MODEL_I18N_PREFIXES = {
@@ -65,6 +67,7 @@ const TAGGER_MODEL_I18N_PREFIXES = {
     'wd-vit-large-tagger-v3': 'tagger.model.wdVitLarge',
     'camie-tagger-v2': 'tagger.model.camieV2',
     'pixai-tagger-v0.9': 'tagger.model.pixaiV09',
+    'pixai-tagger-v1.0': 'tagger.model.pixaiV10',
     'toriigate-0.5': 'tagger.model.toriigate05',
 };
 

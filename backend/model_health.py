@@ -498,11 +498,19 @@ def get_model_health() -> Dict[str, Any]:
                     "available": not missing_files,
                 }
                 for model_name, config in TAGGER_MODELS.items()
-                if str(config.get("writer_family") or "").strip().lower() == "wd14"
+                # Every model the WD14 card can prepare: the WD14 ONNX runtime
+                # (WD14 family, Camie, PixAI). OppaiOracle, CL Tagger v2 and
+                # the ToriiGate captioner have their own cards.
+                if str(config.get("runtime_backend") or "wd14").strip().lower() == "wd14"
+                and not config.get("captioner_only")
                 for missing_files in (
                     missing_model_artifacts(
                         _tagger_model_root(config) / model_name,
-                        (config["model_file"], config["tags_file"]),
+                        (
+                            config["model_file"],
+                            config["tags_file"],
+                            *(config.get("external_data_files") or ()),
+                        ),
                     ),
                 )
             ],

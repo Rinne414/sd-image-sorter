@@ -74,7 +74,7 @@
 | 对比维度 | SD Image Sorter | Allusion | TagStudio | DigiKam | Hydrus |
 |---------|----------------|----------|-----------|---------|--------|
 | **SD 元数据** | 原生支持 ComfyUI/NAI/WebUI/Forge | PNG Parameters 检视 | ❌ | ❌ | ❌ |
-| **AI 自动打标** | 9 个本地打标模型 + ToriiGate 描述器 | ❌ | ❌ | 仅人脸识别 | 需插件 |
+| **AI 自动打标** | 10 个本地打标模型 + ToriiGate 描述器 | ❌ | ❌ | 仅人脸识别 | 需插件 |
 | **VLM 描述** | OpenAI 兼容 / Anthropic / Gemini | ❌ | ❌ | ❌ | ❌ |
 | **CLIP 相似搜索** | ✅ | ❌ | ❌ | ❌ | ✅（第三方） |
 | **键盘分拣** | WASD 四向 + 多模式 | ❌ | ❌ | ❌ | ❌ |
@@ -127,7 +127,7 @@ Eagle、Billfish 是通用素材库，不列入这张 SD 工作流细表。详�
 - 内置 WD14 系列标签模型，支持批量自动打标
 - 支持 general / character 双阈值
 - 自动判定 General / Sensitive / Questionable / Explicit
-- 支持 EVA02、SwinV2、ConvNeXt、ViT、ViT-Large、Camie、PixAI、OppaiOracle、CL Tagger v2；ToriiGate 只做自然语言描述，不算打标器
+- 支持 EVA02、SwinV2、ConvNeXt、ViT、ViT-Large、Camie、PixAI v0.9 / v1.0、OppaiOracle、CL Tagger v2；ToriiGate 只做自然语言描述，不算打标器
 - 后台持续打标，右下角进度跟踪，不会卡死整个界面
 - **后台任务队列**：统一管理 tagging、相似度、美学评分、画师识别等任务，实时进度跟踪
 
@@ -405,7 +405,7 @@ run.bat
 |:--|:--|
 | 轻量 | `wd-vit-tagger-v3` |
 | 均衡 | `wd-swinv2-tagger-v3` / `wd-convnext-tagger-v3` / `wd-vit-large-tagger-v3` |
-| 重型 | `wd-eva02-large-tagger-v3` / `camie-tagger-v2` / `pixai-tagger-v0.9` / `oppai-oracle-v1.1` / `cl-tagger-v2` |
+| 重型 | `wd-eva02-large-tagger-v3` / `camie-tagger-v2` / `pixai-tagger-v0.9` / `pixai-tagger-v1.0` / `oppai-oracle-v1.1` / `cl-tagger-v2` |
 | VLM | `toriigate-0.5` |
 | 自定义 ONNX | `custom` |
 
@@ -443,6 +443,9 @@ run.bat
 说明：
 - `ToriiGate` 不是 WD14 ONNX 模型，而是多模态 VLM。它的风险等级明显更高，所以现在强制 `chunk = 1`。
 - 之前 UI 里如果出现过 `32` 之类的值，那只是旧的通用显示逻辑，不代表 `ToriiGate` 真会按 32 跑。
+- 输入图比 448 px 大的模型，GPU 上限按输入面积缩小：`pixai-tagger-v1.0` 读 1008 px，上限约为同级模型的 1/5（最少 1）；它的 ONNX 本身也固定每次一张图。
+- 每个 GPU 批次跑完后，打标会按这一批的计算时间休息一小段，让 GPU 大约 85% 的时间在工作，而不是一直满载。用环境变量 `SD_IMAGE_SORTER_GPU_DUTY_CYCLE` 调整（如 `0.7` 或 `70` 表示 70%；`1` 或 `off` 关闭）。
+- 同一时间只有一个打标模型留在 GPU 上：换模型或多模型 Smart Tag 会先释放上一个模型的显存。
 
 ### 3. CPU 规则
 
@@ -504,6 +507,7 @@ run.bat
 | wd-eva02-large-tagger-v3 | ~1.2 GB | 更高质量打标 |
 | camie-tagger-v2 | ~1.3 GB | 更新标签空间 |
 | pixai-tagger-v0.9 | ~1.2 GB | 更新标签空间 |
+| pixai-tagger-v1.0 | ~2 GB | 角色、作品和画师画风（1008 px） |
 | CLIP ViT-B/32 vision + text | ~600 MB | 相似图搜索（FastEmbed 成对估计） |
 | wenaka_yolov8s-seg | ~46 MB | 打码检测 |
 | NudeNet 320n | ~12 MB | 打码检测 |
@@ -540,6 +544,7 @@ sd-image-sorter/
 | [SmilingWolf](https://huggingface.co/SmilingWolf) | WD14 Tagger 系列模型 |
 | [Camie](https://huggingface.co/Camais03/camie-tagger-v2) | Camie Tagger v2 模型 |
 | [PixAI](https://huggingface.co/pixai-labs/pixai-tagger-v0.9) | PixAI Tagger v0.9 模型 |
+| [PixAI](https://huggingface.co/pixai-labs/pixai-tagger-v1.0) / [noaione](https://huggingface.co/noaione/pixai-tagger-v1.0-onnx) | PixAI Tagger v1.0 模型与 ONNX 导出（Apache-2.0） |
 | [OppaiOracle](https://huggingface.co/Grio43/OppaiOracle) | OppaiOracle v1.1 打标模型 |
 | [CL Tagger v2](https://huggingface.co/cella110n/cl_tagger_v2) | CL Tagger v2 打标模型（需接受 Hub 条款） |
 | [ToriiGate](https://huggingface.co/Minthy/ToriiGate-0.5) | ToriiGate 多模态 VLM Tagger |
@@ -568,7 +573,7 @@ License: [MIT](LICENSE)
 
 **SD Image Sorter** is a local-first web app for people who generate too many Stable Diffusion images and are tired of losing track of them.
 
-It scans folders, reads SD metadata, tags images with 9 local taggers (WD14 family, Camie, PixAI, OppaiOracle, CL Tagger v2) plus the ToriiGate captioner, finds similar images with CLIP, sorts images with keyboard-speed workflows, and provides an AI-assisted censor editor for batch-safe sharing.
+It scans folders, reads SD metadata, tags images with 10 local taggers (WD14 family, Camie, PixAI v0.9 / v1.0, OppaiOracle, CL Tagger v2) plus the ToriiGate captioner, finds similar images with CLIP, sorts images with keyboard-speed workflows, and provides an AI-assisted censor editor for batch-safe sharing.
 
 ### Why SD Image Sorter?
 
@@ -581,7 +586,7 @@ Unlike general-purpose image managers that treat AI-generated images like photos
 | Feature | SD Image Sorter | Allusion | TagStudio | DigiKam | Hydrus |
 |---------|----------------|----------|-----------|---------|--------|
 | **SD Metadata** | Native ComfyUI/NAI/WebUI/Forge | PNG Parameters view | ❌ | ❌ | ❌ |
-| **AI Auto-Tagging** | 9 local taggers + ToriiGate captioner | ❌ | ❌ | Face detect only | Via plugins |
+| **AI Auto-Tagging** | 10 local taggers + ToriiGate captioner | ❌ | ❌ | Face detect only | Via plugins |
 | **VLM Captioning** | OpenAI-compat / Anthropic / Gemini | ❌ | ❌ | ❌ | ❌ |
 | **CLIP Similarity** | ✅ | ❌ | ❌ | ❌ | ✅ (third-party) |
 | **Keyboard Sorting** | WASD 4-way + multi-mode | ❌ | ❌ | ❌ | ❌ |
@@ -612,7 +617,7 @@ Eagle and Billfish are general asset managers and are not in this SD-workflow ta
 
 - **Gallery built for SD workflows**: ComfyUI, NovelAI, WebUI / A1111, Forge metadata support
 - **Library Roots & Folder Tree**: Define multiple library root folders, sidebar folder tree navigation
-- **AI Tagging**: 9 local taggers (WD14 family, Camie, PixAI, OppaiOracle, CL Tagger v2) plus ToriiGate captioner; rating prediction, background jobs, adjustable thresholds
+- **AI Tagging**: 10 local taggers (WD14 family, Camie, PixAI v0.9 / v1.0, OppaiOracle, CL Tagger v2) plus ToriiGate captioner; rating prediction, background jobs, adjustable thresholds
 - **Background Job Queue**: Unified queue for tagging, similarity, aesthetic, artist ID with live progress tracking
 - **Fast sorting**: Auto-Separate plus addictive `W / A / S / D` manual sorting
 - **Manual Sort Multi-Mode**: Slot Mode (4-way), Bracket Mode (tournament ranking), Cull Mode (keep/delete)
@@ -740,7 +745,7 @@ The backend enforces the final runtime chunk cap. The UI may show a larger manua
 |:--|:--|
 | Light | `wd-vit-tagger-v3` |
 | Balanced | `wd-swinv2-tagger-v3` / `wd-convnext-tagger-v3` / `wd-vit-large-tagger-v3` |
-| Heavy | `wd-eva02-large-tagger-v3` / `camie-tagger-v2` / `pixai-tagger-v0.9` / `oppai-oracle-v1.1` / `cl-tagger-v2` |
+| Heavy | `wd-eva02-large-tagger-v3` / `camie-tagger-v2` / `pixai-tagger-v0.9` / `pixai-tagger-v1.0` / `oppai-oracle-v1.1` / `cl-tagger-v2` |
 | VLM | `toriigate-0.5` |
 | Custom ONNX | `custom` |
 
@@ -774,6 +779,10 @@ ToriiGate:
 | Model | Max chunk |
 |:--|:--|
 | `toriigate-0.5` | always fixed to `1` |
+
+- Models that read images larger than 448 px get a GPU cap scaled by the input area: `pixai-tagger-v1.0` reads 1008 px, so its cap is about 1/5 of its tier's (never below 1); its ONNX graph also runs one image per call.
+- After every GPU batch the tagger rests for a share of that batch's compute time, so the GPU is busy about 85% of the time instead of running flat out. Set `SD_IMAGE_SORTER_GPU_DUTY_CYCLE` to change it (`0.7` or `70` = 70%; `1` or `off` disables it).
+- Only one tagger model stays on the GPU at a time: switching models or a multi-tagger Smart Tag run releases the previous model's VRAM first.
 
 #### CPU caps
 
@@ -825,6 +834,7 @@ Practical rule:
 | [SmilingWolf](https://huggingface.co/SmilingWolf) | WD14 Tagger models |
 | [Camie](https://huggingface.co/Camais03/camie-tagger-v2) | Camie Tagger v2 model |
 | [PixAI](https://huggingface.co/pixai-labs/pixai-tagger-v0.9) | PixAI Tagger v0.9 model |
+| [PixAI](https://huggingface.co/pixai-labs/pixai-tagger-v1.0) / [noaione](https://huggingface.co/noaione/pixai-tagger-v1.0-onnx) | PixAI Tagger v1.0 model and ONNX export (Apache-2.0) |
 | [OppaiOracle](https://huggingface.co/Grio43/OppaiOracle) | OppaiOracle v1.1 tagger |
 | [CL Tagger v2](https://huggingface.co/cella110n/cl_tagger_v2) | CL Tagger v2 (gated Hub terms) |
 | [ToriiGate](https://huggingface.co/Minthy/ToriiGate-0.5) | ToriiGate multimodal VLM tagger |

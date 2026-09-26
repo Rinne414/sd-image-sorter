@@ -61,9 +61,10 @@ def test_marketing_tagger_count_matches_the_catalog():
     assert "7 models" not in readme
     assert "7 个模型" not in readme
     assert "7 models" not in why
-    assert "10 local tagger" not in readme
-    assert "10 个本地打标" not in readme
-    assert "10 local tagger" not in why
+    for stale in (tagger_count - 1, tagger_count + 1):
+        assert f"{stale} local tagger" not in readme
+        assert f"{stale} 个本地打标" not in readme
+        assert f"{stale} local tagger" not in why
     assert f"{tagger_count} local tagger" in why
     assert f"{tagger_count} 个本地打标" in readme
     assert f"{tagger_count} local tagger" in readme

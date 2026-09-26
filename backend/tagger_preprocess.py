@@ -123,6 +123,9 @@ class _PreprocessMixin:
         else:
             image = image.convert("RGB")
 
+        if self._resize_mode == "rescale_pad":
+            return self._rescale_pad(image)
+
         if self._resize_mode == "stretch":
             processed_image = image.resize((width, height), Image.Resampling.BILINEAR)
         else:
@@ -160,3 +163,30 @@ class _PreprocessMixin:
         if self._input_layout == "nchw":
             img_array = np.transpose(img_array, (2, 0, 1))
         return img_array
+
+    def _rescale_pad(self, image: Image.Image) -> np.ndarray:
+        """PixAI v1.0's official RescalePad on an RGB image.
+
+        The official processor resizes the float [0, 1] tensor (bilinear,
+        antialiased) and pads with 0 before normalising. Resizing each channel
+        as a 32-bit float image reproduces that tensor (max abs difference
+        1.4e-4 on 40 real images); resizing the 8-bit image first is one
+        quantisation step off everywhere. Returns [-1, 1] values, padding -1.
+        """
+        width, height = self._input_hw
+        ratio = min(width / max(1, image.size[0]), height / max(1, image.size[1]))
+        new_w = int(image.size[0] * ratio)
+        new_h = int(image.size[1] * ratio)
+        left = (width - new_w) // 2
+        top = (height - new_h) // 2
+        pixels = np.asarray(image, dtype=np.float32) / 255.0
+        canvas = np.zeros((3, height, width), dtype=np.float32)
+        for channel in range(3):
+            plane = Image.fromarray(np.ascontiguousarray(pixels[:, :, channel]))
+            if (new_w, new_h) != image.size:
+                plane = plane.resize((new_w, new_h), Image.Resampling.BILINEAR)
+            canvas[channel, top : top + new_h, left : left + new_w] = np.asarray(plane)
+        canvas = (canvas - 0.5) / 0.5
+        if self._input_layout != "nchw":
+            canvas = np.transpose(canvas, (1, 2, 0))
+        return np.ascontiguousarray(canvas, dtype=np.float32)
