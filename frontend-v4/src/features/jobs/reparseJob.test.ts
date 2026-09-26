@@ -2,8 +2,8 @@ import { describe, expect, test } from 'vitest'
 import { isFinished, readProgress } from './progress'
 
 describe('recovering missing text in the drawer', () => {
-  test('starting (queued for a moment) and running both read as running', () => {
-    expect(readProgress('reparse', { job_id: 'r1', status: 'queued', total: 0, processed: 0 }, { reparseJobId: 'r1' }).status).toBe('running')
+  test('queued until it starts, then running over the images it walks', () => {
+    expect(readProgress('reparse', { job_id: 'r1', status: 'queued', total: 0, processed: 0 }, { reparseJobId: 'r1' }).status).toBe('queued')
     const p = readProgress('reparse', { job_id: 'r1', status: 'running', total: 400, processed: 100, result: {} }, { reparseJobId: 'r1' })
     expect(p).toMatchObject({ status: 'running', current: 100, total: 400 })
   })

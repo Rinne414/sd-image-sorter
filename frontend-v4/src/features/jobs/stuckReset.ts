@@ -6,15 +6,24 @@ import { canResetStuck, isStalled, nextStall, type ResetKind } from './stuck'
 
 // Clears a file job stranded in "stopping" (see stuck.ts). Only on the user's click.
 
-async function postReset(kind: ResetKind): Promise<unknown> {
+/** True when the backend cleared the job. */
+async function postReset(kind: ResetKind): Promise<boolean> {
   switch (kind) {
     case 'move':
     case 'copy':
-      return unwrap(await api.POST('/api/move/reset'))
+      unwrap(await api.POST('/api/move/reset'))
+      return true
     case 'trash':
-      return unwrap(await api.POST('/api/images/delete-selected/reset'))
+      unwrap(await api.POST('/api/images/delete-selected/reset'))
+      return true
     case 'remove':
-      return unwrap(await api.POST('/api/images/remove-selected/reset'))
+      unwrap(await api.POST('/api/images/remove-selected/reset'))
+      return true
+    case 'scan': {
+      // An import answers 200 either way; only "reset" means it was cleared.
+      const res = unwrap<{ status?: string }>(await api.POST('/api/scan/reset'))
+      return res.status === 'reset'
+    }
   }
 }
 
@@ -24,8 +33,7 @@ export type ResetOutcome = 'cleared' | 'running' | 'failed'
 export async function resetStuck(kind: JobKind): Promise<{ outcome: ResetOutcome; reason?: string }> {
   if (!canResetStuck(kind)) return { outcome: 'failed' }
   try {
-    await postReset(kind)
-    return { outcome: 'cleared' }
+    return { outcome: (await postReset(kind)) ? 'cleared' : 'running' }
   } catch (error) {
     if (error instanceof ApiError && error.status === 409) return { outcome: 'running' }
     return { outcome: 'failed', reason: (error as Error).message }

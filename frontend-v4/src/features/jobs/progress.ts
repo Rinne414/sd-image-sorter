@@ -4,6 +4,7 @@ import { readMasks } from './maskJob'
 import { readAesthetic } from './aestheticJob'
 import { readDatasetExport } from './datasetExportJob'
 import { readReparse } from './reparseJob' // reparse/reread
+import { readScanExtras, type ScanExtras } from './scanExtras' // scan: stall + other library
 // Reads the backend's progress payloads for long jobs into one shape.
 // move/copy: GET /api/move/progress · trash: GET /api/images/delete-selected/progress
 // · remove: GET /api/images/remove-selected/progress · tag: GET /api/tag/progress
@@ -78,6 +79,10 @@ export interface JobProgress {
   phase: 'files' | 'details' | null
   /** scan only: images already in the library whose details were read again. */
   updated: number
+  /** scan only: no visible progress for a while; images left to another library. */
+  scan?: ScanExtras
+  /** reconnect only: found files already in the library under another record. */
+  alreadyIndexed?: number
   currentItem: string | null
   message: string
 }
@@ -172,6 +177,7 @@ function readScan(base: JobProgress, raw: Raw, ctx: ReadContext): JobProgress {
     succeeded: num(raw.new),
     updated: num(raw.updated),
     failedCount: num(raw.errors),
+    scan: readScanExtras(raw),
   }
 }
 
@@ -269,7 +275,7 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
     case 'colors':
       return readColors(base, raw)
     case 'reconnect':
-      return { ...base, succeeded: num(raw.matched), failedCount: num(raw.errors), toReview: num(raw.review_pending_total) }
+      return { ...base, succeeded: num(raw.matched), failedCount: num(raw.errors), toReview: num(raw.review_pending_total), alreadyIndexed: num(raw.conflicts) }
     case 'scan':
       return readScan(base, raw, ctx)
     case 'detect':

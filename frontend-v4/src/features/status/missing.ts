@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { create } from 'zustand'
 import { api, ApiError, unwrap } from '../../api/client'
 import { queryClient } from '../../api/queryClient'
 import { useApp } from '../../state/store'
@@ -65,6 +66,37 @@ export function useRepairReviews() {
   })
 }
 
+/** A found file that is already in the library under another record (the old one is a duplicate). */
+export interface AlreadyIndexed {
+  old_image_id: number
+  filename: string
+  old_path: string | null
+  existing_path: string | null
+}
+
+/** The last search's files that were already in the library (the backend lists the first ten). */
+export function useAlreadyIndexed() {
+  const libraryId = useApp((s) => s.libraryId)
+  const removed = useRemovedOld((s) => s.ids)
+  const query = useQuery({
+    queryKey: ['reconnect-result', libraryId],
+    queryFn: async ({ signal }) => {
+      const raw = unwrap<{ status?: string; conflicts?: number; result?: { conflict_samples?: AlreadyIndexed[] } }>(
+        await api.GET('/api/images/reconnect-missing/progress', { signal }),
+      )
+      if (raw.status !== 'done') return { total: 0, samples: [] as AlreadyIndexed[] }
+      return { total: raw.conflicts ?? 0, samples: (raw.result?.conflict_samples ?? []).filter((s) => typeof s.old_image_id === 'number') }
+    },
+    staleTime: 0,
+  })
+  const samples = (query.data?.samples ?? []).filter((s) => !removed.has(s.old_image_id))
+  const gone = (query.data?.samples.length ?? 0) - samples.length
+  return { samples, total: Math.max(0, (query.data?.total ?? 0) - gone) }
+}
+
+/** Old records removed here since the search (the search result itself is not rerun). */
+const useRemovedOld = create<{ ids: ReadonlySet<number> }>(() => ({ ids: new Set<number>() }))
+
 const REFRESH = ['images', 'image', 'missing-summary', 'missing-groups', 'repair-candidates', 'library-health', 'folders', 'generators', 'libraries']
 
 function refresh(): void {
@@ -102,6 +134,33 @@ export async function clearMissing(location: string): Promise<boolean> {
       return false
     }
     useToasts.getState().push(tr('missing.cleared', { n: res.removed ?? 0 }), 'info')
+    return true
+  } catch (error) {
+    return failToast(error)
+  }
+}
+
+/** Drop every reachable place's missing records; unreachable places are kept (the backend refuses them). */
+export async function clearAllMissing(): Promise<boolean> {
+  try {
+    const res = unwrap<{ removed?: number; skipped_unreachable?: number }>(await api.POST('/api/images/missing/clear', { body: {} }))
+    refresh()
+    const n = res.removed ?? 0
+    const kept = res.skipped_unreachable ?? 0
+    useToasts.getState().push(kept ? tr('missing.clearedKept', { n, b: kept }) : tr('missing.cleared', { n }), 'info')
+    return true
+  } catch (error) {
+    return failToast(error)
+  }
+}
+
+/** Remove old records whose file is already in the library under another record. Files are not touched. */
+export async function removeOldRecords(ids: number[]): Promise<boolean> {
+  try {
+    const res = unwrap<{ removed?: number }>(await api.POST('/api/images/remove-selected', { body: { image_ids: ids, background: false } }))
+    useRemovedOld.setState((s) => ({ ids: new Set([...s.ids, ...ids]) }))
+    refresh()
+    useToasts.getState().push(tr('missing.already.removed', { n: res.removed ?? 0 }), 'info')
     return true
   } catch (error) {
     return failToast(error)

@@ -17,8 +17,8 @@ describe('a job stuck while stopping', () => {
     expect(isStalled(1000, 1000 + STALL_MS)).toBe(true)
   })
 
-  test('only the file queues can be reset from the drawer', () => {
-    expect(['move', 'copy', 'trash', 'remove'].every((k) => canResetStuck(k as never))).toBe(true)
+  test('only the file queues and an import can be reset from the drawer', () => {
+    expect(['move', 'copy', 'trash', 'remove', 'scan'].every((k) => canResetStuck(k as never))).toBe(true)
     expect(canResetStuck('tag')).toBe(false)
     expect(canResetStuck('reparse')).toBe(false)
   })

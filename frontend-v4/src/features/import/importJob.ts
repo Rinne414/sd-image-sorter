@@ -2,6 +2,7 @@ import { api, ApiError, unwrap } from '../../api/client'
 import { tailOfPath } from '../../lib/paths'
 import { useToasts } from '../../ui/toasts'
 import { addJob, isQueueBusy, startingProgress, tr } from '../jobs/jobs'
+import { afterImport } from './afterImport'
 
 export interface ImportOptions {
   recursive: boolean
@@ -11,6 +12,8 @@ export interface ImportOptions {
   cleanupMissing: boolean
   /** Check every file instead of trusting size and date (slower). */
   verifyFiles: boolean
+  /** Afterwards, tag every untagged image with the last tagging settings. */
+  tagAfter: boolean
 }
 
 // Shared with V3.5 (same origin), so both apps offer the same recent folders.
@@ -41,8 +44,9 @@ const TERMINAL = new Set(['done', 'cancelled', 'error'])
 /**
  * Import (scan) `folder`. A finished manual import the other app never
  * acknowledged would block a new one, so it is acknowledged first.
+ * `untagged`: how many images the library has untagged now (for tag-after-import).
  */
-export async function startImport(folder: string, o: ImportOptions): Promise<boolean> {
+export async function startImport(folder: string, o: ImportOptions, untagged = 0): Promise<boolean> {
   if (isQueueBusy('scan')) {
     useToasts.getState().push(tr('jobs.busy'), 'error')
     return false
@@ -70,6 +74,7 @@ export async function startImport(folder: string, o: ImportOptions): Promise<boo
       label: tailOfPath(folder, 36),
       ctx: { runId: res.run_id },
       progress: { ...startingProgress(0), phase: 'files' },
+      then: (job) => afterImport(job, o.tagAfter, untagged),
     })
     return true
   } catch (error) {

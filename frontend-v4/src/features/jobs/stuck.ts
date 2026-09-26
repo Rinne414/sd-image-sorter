@@ -19,8 +19,8 @@ export function nextStall(since: number | null, status: JobStatus, now: number):
 
 export const isStalled = (since: number | null, now: number) => since !== null && now - since >= STALL_MS
 
-export type ResetKind = 'move' | 'copy' | 'trash' | 'remove'
+export type ResetKind = 'move' | 'copy' | 'trash' | 'remove' | 'scan'
 
-const RESETTABLE: ReadonlySet<JobKind> = new Set<ResetKind>(['move', 'copy', 'trash', 'remove'])
+const RESETTABLE: ReadonlySet<JobKind> = new Set<ResetKind>(['move', 'copy', 'trash', 'remove', 'scan'])
 
 export const canResetStuck = (kind: JobKind): kind is ResetKind => RESETTABLE.has(kind)

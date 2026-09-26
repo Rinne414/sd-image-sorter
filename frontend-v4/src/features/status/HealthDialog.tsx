@@ -9,7 +9,7 @@ import { nextSteps, verdict, type Step, type StepKind } from './health'
 import styles from './HealthDialog.module.css'
 import { Breakdown, Duplicates, Folders, Samples } from './HealthSections'
 import { startRepair } from './reparse'
-import { useRunning } from './statusRows'
+import { usePendingFix, useRunning } from './statusRows'
 
 /** The library report: opened from the rail status or Ctrl K. */
 export function HealthDialog() {
@@ -119,6 +119,7 @@ function useFix(onClose: () => void, onShowNames: () => void): (step: Step) => F
   const t = useT()
   const recovering = useRunning('reparse')
   const rereading = useRunning('reread')
+  const pending = usePendingFix()
   const leaveFor = (dialog: 'missing' | 'tag' | 'import', n: number) => () => {
     onClose()
     useSelectionDialog.getState().showFor(dialog, null, n)
@@ -126,7 +127,13 @@ function useFix(onClose: () => void, onShowNames: () => void): (step: Step) => F
   return (step) => {
     switch (step.kind) {
       case 'pending':
-        return null
+        return {
+          label: pending.label,
+          run: () => {
+            onClose()
+            pending.run()
+          },
+        }
       case 'missing':
         return { label: t('status.fix.missing'), run: leaveFor('missing', step.n) }
       case 'readErrors':

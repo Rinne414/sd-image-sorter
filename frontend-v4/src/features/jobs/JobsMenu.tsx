@@ -10,6 +10,7 @@ import { canStop, jobHeadline, stopJob, undoJob, useJobs, type Job } from './job
 import styles from './Jobs.module.css'
 import { isFinished } from './progress'
 import { resetStuck, useStalled } from './stuckReset'
+import { ImportNextSteps, ScanStallCard } from '../import/ImportJobParts'
 import { useSelectionDialog } from '../selection/dialogs'
 import { openFolderPath } from '../library/fileActions'
 
@@ -31,7 +32,8 @@ export function JobsMenu() {
   const running = jobs.filter((j) => !isFinished(j.progress.status))
   const current = running.reduce((n, j) => n + j.progress.current, 0)
   const total = running.reduce((n, j) => n + (j.progress.total || j.count), 0)
-  const troubled = jobs.some((j) => j.progress.failedCount > 0 || j.progress.status === 'error')
+  // An import that has shown no progress for a while counts as trouble too.
+  const troubled = jobs.some((j) => j.progress.failedCount > 0 || j.progress.status === 'error' || !!j.progress.scan?.stall)
 
   return (
     <div className={styles.wrap} ref={ref}>
@@ -136,6 +138,7 @@ function JobRow({ job }: { job: Job }) {
               </button>
             )}
           </div>
+          <ScanStallCard job={job} />
           <StuckReset job={job} />
         </>
       )}
@@ -170,6 +173,19 @@ function JobRow({ job }: { job: Job }) {
           {t('jobs.review', { n: p.toReview })}
         </button>
       )}
+      {finished && (p.alreadyIndexed ?? 0) > 0 && (
+        <button
+          type="button"
+          className="btn"
+          onClick={() => {
+            setOpen(false)
+            useSelectionDialog.getState().showFor('missing', null, 1)
+          }}
+        >
+          {t('missing.already.open', { n: p.alreadyIndexed ?? 0 })}
+        </button>
+      )}
+      <ImportNextSteps job={job} onLeave={() => setOpen(false)} />
       {job.undo && (
         <button type="button" className="btn" onClick={() => void undoJob(job)} disabled={job.undo.done}>
           {job.undo.done ? t('jobs.undone') : t('jobs.undo')}

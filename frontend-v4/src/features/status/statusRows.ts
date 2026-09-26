@@ -24,6 +24,18 @@ export function useRunning(kind: JobKind): boolean {
   return useJobs((s) => s.jobs.some((j) => j.kind === kind && !isFinished(j.progress.status)))
 }
 
+/**
+ * Images still waiting for their generation details: an import is reading
+ * them (see its progress), or one stopped before it finished (import the
+ * folder again and they are read).
+ */
+export function usePendingFix(): { label: string; run: () => void } {
+  const t = useT()
+  const importing = useRunning('scan')
+  if (importing) return { label: t('status.fix.progress'), run: () => useJobs.getState().setDrawerOpen(true) }
+  return { label: t('status.fix.reimportShort'), run: () => useSelectionDialog.getState().showFor('import', null, 1) }
+}
+
 /** The rows to show, in order; `null` until the report has loaded. */
 export function useStatusRows(): StatusRow[] | null {
   const t = useT()
@@ -38,6 +50,7 @@ export function useStatusRows(): StatusRow[] | null {
   const recovering = useRunning('reparse')
   const rereading = useRunning('reread')
   const similar = useSimilarStatus()
+  const pendingFix = usePendingFix()
   if (!health.data) return null
   const c = health.data.issue_counts
   const untagged = c.untagged ?? 0
@@ -47,6 +60,7 @@ export function useStatusRows(): StatusRow[] | null {
   const readErrors = readErrorsOnly(health.data)
   const missingText = c.missing_text ?? 0
   return [
+    { key: 'status.pending', n: c.metadata_pending ?? 0, quiet: true, action: pendingFix },
     { key: 'rail.untagged', n: untagged, action: { label: t('sel.tag'), run: () => showFor('tag', null, untagged) } },
     { key: 'rail.missing', n: missingN, action: handleMissing },
     // Unreadable rows the summary has not counted yet (it refreshes on its own clock).

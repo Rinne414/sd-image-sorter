@@ -12,6 +12,7 @@ import { driveMasks } from './maskDriver'
 import { adoptAesthetic, driveAesthetic } from './aestheticDriver'
 import { driveDatasetExport } from './datasetExportDriver'
 import { adoptReparse, driveReparse } from './reparseDriver' // reparse/reread
+import { queuedKey } from './queued'
 
 // Every long job the user started (or that was already running when V4
 // opened) lives here until dismissed. The backend runs one job per queue
@@ -345,7 +346,7 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   tags: ['images', 'image', 'suggest', 'image-count', 'library-health'],
   colors: ['images', 'image', 'image-count', 'colors-missing'],
   scan: ['images', 'image', 'generators', 'folders', 'libraries', 'library-health', 'missing-summary', 'missing-groups', 'colors-missing', 'image-count'],
-  reconnect: ['images', 'image', 'missing-summary', 'missing-groups', 'repair-candidates', 'library-health', 'folders'],
+  reconnect: ['images', 'image', 'missing-summary', 'missing-groups', 'repair-candidates', 'library-health', 'folders', 'reconnect-result'],
   // Each image's result is saved (and the batch refreshed) as it arrives.
   detect: [],
   refine: [],
@@ -466,7 +467,7 @@ export function jobHeadline(job: Job): string {
   const params = { n: p.total || job.count, name: job.label ?? '' }
   switch (p.status) {
     case 'queued':
-      return tr('jobs.queued', { what: tr(RUNNING[job.kind], params) })
+      return tr(queuedKey(job.kind), { what: tr(RUNNING[job.kind], params) })
     case 'running':
       return tr(RUNNING[job.kind], params)
     case 'cancelling':

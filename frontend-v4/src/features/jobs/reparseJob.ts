@@ -17,8 +17,7 @@ export function readReparse(base: JobProgress, raw: Raw, jobId?: string): JobPro
   const reread = str(result.scope) === 'metadata_error'
   return {
     ...base,
-    // Queued only until its background task starts ("queued" reads as waiting for tagging).
-    status: str(raw.status) === 'queued' ? 'running' : base.status,
+    status: str(raw.status) === 'queued' ? 'queued' : base.status,
     current: num(raw.processed),
     total: num(raw.total),
     // A caption found beside an image is text found, as much as a prompt is.

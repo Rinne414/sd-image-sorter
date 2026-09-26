@@ -516,6 +516,10 @@ class ScanMixin:
                         samples,
                     )
 
+                # The library status caches its report for a minute; the new
+                # images must count in it as soon as the import reads as done.
+                _svc().invalidate_library_health_cache()
+
                 self._set_scan_progress_if_current(
                     run_id,
                     {

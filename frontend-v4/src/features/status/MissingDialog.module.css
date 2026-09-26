@@ -132,3 +132,49 @@
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* The found file beside the records it may belong to. */
+.reviewBody {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.preview {
+  flex: none;
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  background: var(--surface-3);
+  border-radius: var(--radius);
+}
+
+.reviewMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.pathLine {
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  overflow-wrap: anywhere;
+}
+
+.after {
+  margin-top: 8px;
+}
+
+.warn {
+  margin: 0 0 8px;
+  color: var(--warn);
+  line-height: 1.6;
+}
+
+/* Clearing everything sits last, under a rule, away from the everyday actions. */
+.danger {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}

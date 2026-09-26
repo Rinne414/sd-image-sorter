@@ -1,0 +1,51 @@
+/* An import that shows no progress: a warning card inside its drawer row. */
+.card {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--warn);
+  border-radius: var(--radius);
+  background: var(--wash);
+}
+
+.title {
+  margin: 0;
+  color: var(--warn);
+  font-size: var(--fs-3);
+  font-weight: 600;
+}
+
+.body {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 10px;
+  margin: 0;
+  font-size: var(--fs-2);
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions,
+.next {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
