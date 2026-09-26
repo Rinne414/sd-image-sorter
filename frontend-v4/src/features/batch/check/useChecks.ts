@@ -6,7 +6,8 @@ import { useProjectHeads } from '../datasetTagApi'
 import type { Entry } from '../entries'
 import { captionIssues } from './captionChecks'
 import { checkScope, sentKeys, useAudit, useFinalCaptions, useFolderAesthetic, useHealth, useReviewQueue } from './checkApi'
-import { auditIssues, healthIssues, keyIndex, mergeIssues, projectIssues, purityIssues, reviewIssues, type CheckIssue } from './checkIssues'
+import { auditIssues, healthIssues, keyIndex, maskIssues, mergeIssues, projectIssues, purityIssues, reviewIssues, type CheckIssue } from './checkIssues'
+import { useMaskStatus } from '../masks/maskApi'
 import type { CheckOptions } from './checkOptions'
 import { usePurityResults } from './purityRun'
 
@@ -49,7 +50,9 @@ export function useChecks(batch: Batch, entries: readonly Entry[], o: CheckOptio
   const aesthetic = useFolderAesthetic(batch, entries, o, run)
   const health = useHealth(batch, entries, form, finals.data, run)
   const purity = usePurityResults((s) => s.byBatch[batch.id])
-  const scope = checkScope(entries)
+  const scope = useMemo(() => checkScope(entries), [entries])
+  const masks = useMaskStatus(scope.ids)
+  const exportsMasks = !!view && view.project.settings.trainer.mask_export !== 'none'
 
   const issues: CheckIssue[] = useMemo(() => {
     const index = keyIndex(entries)
@@ -62,10 +65,11 @@ export function useChecks(batch: Batch, entries: readonly Entry[], o: CheckOptio
         aesthetic.data ? auditIssues(aesthetic.data, index) : [],
         health.data ? healthIssues(health.data, index, { ratingsInCaptions: ratings }) : [],
         purity ? purityIssues(purity, index) : [],
+        masks.data ? maskIssues(masks.data, scope.ids, index, exportsMasks) : [],
       ],
       entries.map((e) => e.key),
     )
-  }, [entries, finals.data, form, review.data, audit.data, aesthetic.data, health.data, purity, ratings])
+  }, [entries, finals.data, form, review.data, audit.data, aesthetic.data, health.data, purity, ratings, masks.data, scope.ids, exportsMasks])
 
   const summary = audit.data?.summary
   const auditWarning = summary?.near_duplicate_error ? 'phashError' : summary?.near_duplicate_check_limited ? 'phashLimited' : null

@@ -8,6 +8,7 @@ import { useToasts } from '../../ui/toasts'
 import { isFinished, readProgress, type JobKind, type JobProgress, type ReadContext } from './progress'
 import { driveSmartTag } from './smartTagDriver'
 import { drivePurity, drivePurityDownload } from './purityDriver'
+import { driveMasks } from './maskDriver'
 
 // Every long job the user started (or that was already running when V4
 // opened) lives here until dismissed. The backend runs one job per queue
@@ -52,6 +53,7 @@ export const useJobs = create<JobsState>((set, get) => ({
 type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors' | 'reconnect' | 'scan' | 'detect' | 'embed' | 'dupscan'
   | 'smarttag'
   | 'purity' | 'purityget'
+  | 'masks'
 
 // Censor work over a batch (detecting, SAM3 refining, filters) runs one at a time.
 const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind === 'refine' || kind === 'adjust' ? 'detect' : kind)
@@ -144,6 +146,7 @@ const DRIVERS: Record<Queue, Driver> = {
   smarttag: driveSmartTag,
   purity: drivePurity,
   purityget: drivePurityDownload,
+  masks: driveMasks,
 }
 
 export const canStop = (kind: JobKind) => DRIVERS[queueOf(kind)].cancel !== null
@@ -340,6 +343,7 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   smarttag: ['images', 'image', 'suggest', 'image-count', 'library-health', 'batch-project', 'batch-heads', 'dataset-preview'],
   purity: [],
   purityget: ['purity-status'],
+  masks: ['mask-status'],
 }
 
 let onUndo: ((job: Job) => Promise<void>) | null = null
@@ -407,6 +411,7 @@ const RUNNING: Record<JobKind, MessageKey> = {
   smarttag: 'dataset.job.running',
   purity: 'dataset.check.purity.running',
   purityget: 'dataset.check.purity.downloading',
+  masks: 'dataset.masks.job.running',
 }
 
 const DONE: Record<JobKind, MessageKey> = {
@@ -428,6 +433,7 @@ const DONE: Record<JobKind, MessageKey> = {
   smarttag: 'dataset.job.done',
   purity: 'dataset.check.purity.done',
   purityget: 'dataset.check.purity.downloaded',
+  masks: 'dataset.masks.job.done',
 }
 
 /** One line that says what happened (or is happening) to this job. */

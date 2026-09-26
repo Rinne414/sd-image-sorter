@@ -24,10 +24,11 @@ export type IssueKind =
   | 'rating_missing'
   | 'rare_tags'
   | 'cooccur'
+  | 'no_mask'
   | 'health_other'
 
 export type Severity = 'high' | 'medium' | 'low'
-export type IssueSource = 'project' | 'captions' | 'review' | 'audit' | 'health' | 'purity'
+export type IssueSource = 'project' | 'captions' | 'review' | 'audit' | 'health' | 'purity' | 'masks'
 
 export interface TagPair {
   a: string
@@ -77,6 +78,7 @@ const SEVERITY: Record<IssueKind, Severity> = {
   rating_missing: 'low',
   rare_tags: 'low',
   cooccur: 'low',
+  no_mask: 'low',
   health_other: 'low',
 }
 
@@ -284,6 +286,19 @@ export function purityIssues(result: PurityResult, index: KeyIndex): CheckIssue[
     notes[key] = item.distance.toFixed(2)
   }
   return keys.length ? [issue('character_outlier', 'purity', { keys, notes })] : []
+}
+
+// ---- training masks ----------------------------------------------------------------------
+
+/**
+ * Library images without a training mask. Only said once masks are in use:
+ * the export writes them, or some image already has one (a batch that never
+ * uses masks trains every picture whole, which is fine).
+ */
+export function maskIssues(masked: ReadonlySet<number>, ids: readonly number[], index: KeyIndex, exporting: boolean): CheckIssue[] {
+  if (!exporting && masked.size === 0) return []
+  const keys = ids.filter((id) => !masked.has(id)).map((id) => lookup(index, id, null)).filter(present)
+  return keys.length ? [issue('no_mask', 'masks', { keys })] : []
 }
 
 // ---- merging -------------------------------------------------------------------------------

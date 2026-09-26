@@ -14,6 +14,9 @@ export interface IssueActions {
   pick: (keys: readonly string[]) => void
   open: (key: string) => void
   settings: () => void
+  /** Training masks: edit one, or mask these automatically. */
+  mask: (key: string) => void
+  autoMask: (keys: readonly string[]) => void
 }
 
 const REMOVE: ReadonlySet<IssueKind> = new Set(['file_changed', 'file_missing', 'unreadable', 'empty_caption', 'small', 'low_aesthetic', 'character_outlier'])
@@ -70,7 +73,7 @@ export function IssueCard({ issue, entries, actions, scope }: Props) {
           ))}
         </div>
       ) : (
-        n > 0 && <Thumbs keys={issue.keys} entries={entries} notes={notes} onOpen={openable ? actions.open : undefined} />
+        n > 0 && <Thumbs keys={issue.keys} entries={entries} notes={notes} onOpen={issue.kind === 'no_mask' ? actions.mask : openable ? actions.open : undefined} />
       )}
       {issue.pairs && <Pairs pairs={issue.pairs} scope={scope} onTag={toggleTag} onPick={actions.pick} />}
       {issue.tags && <TagChips tags={issue.tags} onTag={toggleTag} active={tag} />}
@@ -86,6 +89,16 @@ function IssueButtons({ issue, actions }: { issue: CheckIssue; actions: IssueAct
   const n = keys.length
   const extras = issue.groups?.flatMap((g) => g.slice(1)) ?? []
   const buttons = [
+    kind === 'no_mask' && (
+      <button key="auto" type="button" className="btn" onClick={() => actions.autoMask(keys)} data-testid="check-auto-mask">
+        {t('dataset.check.autoMask', { n })}
+      </button>
+    ),
+    kind === 'no_mask' && (
+      <button key="mask" type="button" className="btn" onClick={() => actions.mask(keys[0] as string)} data-testid="check-edit-mask">
+        {t('dataset.check.editMasks')}
+      </button>
+    ),
     kind === 'file_changed' && (
       <button key="readd" type="button" className="btn" onClick={() => actions.readd(keys)} data-testid="check-readd">
         {t('dataset.check.readd', { n })}

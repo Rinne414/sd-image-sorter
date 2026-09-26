@@ -20,6 +20,7 @@ export const ISSUE_TEXT: Record<IssueKind, { title: MessageKey; detail: MessageK
   rating_missing: { title: 'dataset.check.ratingMissing', detail: 'dataset.check.ratingMissing.detail' },
   rare_tags: { title: 'dataset.check.rareTags', detail: 'dataset.check.rareTags.detail' },
   cooccur: { title: 'dataset.check.cooccur', detail: 'dataset.check.cooccur.detail' },
+  no_mask: { title: 'dataset.check.noMask', detail: 'dataset.check.noMask.detail' },
   health_other: { title: 'dataset.check.other', detail: 'dataset.check.other' },
 }
 

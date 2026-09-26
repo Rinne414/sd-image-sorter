@@ -6,6 +6,7 @@ import {
   auditIssues,
   healthIssues,
   keyIndex,
+  maskIssues,
   mergeIssues,
   projectIssues,
   purityIssues,
@@ -135,6 +136,15 @@ describe('each source says what it found, by entry key', () => {
   it('character purity names the outliers with their distance', () => {
     const found = purityIssues({ items: [{ image_id: 1, distance: 0.41, outlier: true }, { image_id: 2, distance: 0.05, outlier: false }] }, keys)
     expect(found[0]).toMatchObject({ kind: 'character_outlier', keys: ['lib:1'], notes: { 'lib:1': '0.41' } })
+  })
+})
+
+describe('training masks', () => {
+  it('images without a mask are named once masks are in use: some image has one, or the export writes them', () => {
+    expect(maskIssues(new Set(), [1, 2, 3], keys, false)).toEqual([])
+    expect(maskIssues(new Set([2]), [1, 2, 3], keys, false)[0]).toMatchObject({ kind: 'no_mask', severity: 'low', keys: ['lib:1', 'lib:3'] })
+    expect(maskIssues(new Set(), [1, 2], keys, true)[0]?.keys).toEqual(['lib:1', 'lib:2'])
+    expect(maskIssues(new Set([1, 2]), [1, 2], keys, true)).toEqual([])
   })
 })
 

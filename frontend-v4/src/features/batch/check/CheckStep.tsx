@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { queryClient } from '../../../api/queryClient'
 import type { Batch } from '../../../api/types'
 import { useT } from '../../../i18n'
@@ -15,6 +15,8 @@ import { loadCheckOptions, saveCheckOptions, type CheckOptions } from './checkOp
 import styles from './CheckStep.module.css'
 import { IssueCard, type IssueActions } from './IssueCard'
 import { PurityCard } from './PurityCard'
+import { autoMaskImages, MaskCard } from '../masks/MaskCard'
+import { MaskEditor, openMaskEditor, useMaskEditor } from '../masks/MaskEditor'
 import type { TagDetailScope } from './TagDetail'
 import { useChecks } from './useChecks'
 
@@ -36,7 +38,11 @@ export function CheckStep({ batch, next, onNext }: Props) {
   const [options, setOptions] = useState<CheckOptions>(loadCheckOptions)
   const [run, setRun] = useState(0)
   const { issues, sources, form, finals, scope, unchecked } = useChecks(batch, entries, options, run)
+  // The mask editor belongs to this step: leaving the step closes it.
+  useEffect(() => () => useMaskEditor.setState({ open: null }), [])
   const byKey = useMemo(() => new Map(entries.map((e) => [e.key, e])), [entries])
+  const names = useMemo(() => new Map(entries.flatMap((e) => (e.imageId === null ? [] : [[e.imageId, e.filename] as const]))), [entries])
+  const idOf = (key: string) => byKey.get(key)?.imageId ?? null
   const tagScope: TagDetailScope = useMemo(
     () => ({ finals: finals?.captions ?? new Map(), skip: form ? ruleTagKeys(form) : new Set(), libraryIds: scope.ids, folderCount: scope.folderCount }),
     [finals, form, scope.ids, scope.folderCount],
@@ -66,6 +72,11 @@ export function CheckStep({ batch, next, onNext }: Props) {
     pick: (keys) => toEditor('bulk', keys),
     open: (key) => toEditor('one', [key]),
     settings: () => setSettingsPanel(true),
+    mask: (key) => {
+      const id = idOf(key)
+      if (id !== null) openMaskEditor(scope.ids, id)
+    },
+    autoMask: (keys) => autoMaskImages(keys.map(idOf).filter((id): id is number => id !== null)),
   }
 
   const body =
@@ -85,6 +96,7 @@ export function CheckStep({ batch, next, onNext }: Props) {
             total={entries.length}
             onSettings={() => setSettingsPanel(true)}
           />
+          <MaskCard ids={scope.ids} folderCount={scope.folderCount} />
           <PurityCard batch={batch} ids={scope.ids} folderCount={scope.folderCount} />
         </div>
         <section className={styles.issues} aria-label={t('dataset.check.issuesTitle')} data-testid="check-issues">
@@ -119,6 +131,7 @@ export function CheckStep({ batch, next, onNext }: Props) {
         )}
       </StepBar>
       <div className={styles.scroller}>{body}</div>
+      <MaskEditor names={names} />
     </section>
   )
 }

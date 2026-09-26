@@ -1,5 +1,6 @@
 import { readSmartTag, type SmartTagContext } from './smartTagJob'
 import { readPurity, readPurityDownload } from './purityJob'
+import { readMasks } from './maskJob'
 // Reads the backend's progress payloads for long jobs into one shape.
 // move/copy: GET /api/move/progress · trash: GET /api/images/delete-selected/progress
 // · remove: GET /api/images/remove-selected/progress · tag: GET /api/tag/progress
@@ -9,6 +10,7 @@ import { readPurity, readPurityDownload } from './purityJob'
 // · embed: GET /api/similarity/progress · dupscan: GET /api/bulk-jobs/{id} (the duplicate scan).
 // · smarttag: GET /api/smart-tag/progress (a dataset batch's tag step), read in smartTagJob.ts.
 // · purity/purityget: character purity (CCIP) analysis and its model download, read in purityJob.ts.
+// · masks: GET /api/bulk-jobs/{id} (auto-masking a dataset's Library images), read in maskJob.ts.
 
 /**
  * tags: a bulk tag edit, finished when it is recorded (kept for its undo).
@@ -34,6 +36,7 @@ export type JobKind =
   | 'smarttag'
   | 'purity'
   | 'purityget'
+  | 'masks'
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
 
 export interface JobFailure {
@@ -82,6 +85,7 @@ export interface ReadContext {
   /** smarttag: our run's job id and its place in the AI queue. */
   smartTag?: SmartTagContext
   purityJobId?: string // purity: the character purity analysis job we started
+  maskJobId?: string // masks: the auto-mask bulk job we started
 }
 
 const KNOWN: ReadonlySet<string> = new Set(['running', 'cancelling', 'done', 'cancelled', 'error', 'idle'])
@@ -273,6 +277,8 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
       return readPurity(base, raw, ctx.purityJobId)
     case 'purityget':
       return readPurityDownload(base, raw)
+    case 'masks':
+      return readMasks(base, raw, ctx.maskJobId)
   }
 }
 
