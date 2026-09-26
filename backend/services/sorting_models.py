@@ -432,6 +432,9 @@ class BatchMoveRequest(SortFilterRequest):
     # B3-②: optional subfolder split under destination_folder.
     # "" / "none" = flat; generator | checkpoint | rating = one child folder per value.
     split_by: Optional[str] = Field(default=None, max_length=32)
+    # V4: move exactly these images (the picks, or every match of a V4 search
+    # the page resolved); when given, the filter fields above are not used.
+    image_ids: Optional[List[int]] = Field(default=None, min_length=1, max_length=5_000_000)
 
     @field_validator("operation")
     @classmethod
@@ -457,6 +460,8 @@ class BatchMoveRequest(SortFilterRequest):
     @model_validator(mode="after")
     def require_at_least_one_filter(self) -> "BatchMoveRequest":
         """Refuse whole-library moves unless the caller supplies a real filter."""
+        if self.image_ids:
+            return self
 
         # SortFilterRequest fields that, if any of them is set, indicate the
         # caller actually intended a filter-scoped move.
@@ -520,6 +525,12 @@ class BatchMoveRequest(SortFilterRequest):
         return self
 
 
+class BatchMoveUndoRequest(BaseModel):
+    """Undo one batch move/copy run, named by the token its start answered with."""
+
+    run_token: str = Field(..., pattern=r"^[0-9a-f]{32}$")
+
+
 class ManualSortStartRequest(SortFilterRequest):
     """Request model for starting manual sort without query-string size limits."""
 
@@ -578,6 +589,7 @@ class BrowseFolderRequest(BaseModel):
 
 __all__ = [
     "BatchMoveRequest",
+    "BatchMoveUndoRequest",
     "BrowseFolderRequest",
     "DIMENSION_MAX",
     "DIMENSION_MIN",

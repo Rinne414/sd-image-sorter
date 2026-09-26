@@ -506,9 +506,17 @@ class SortingStateMixin:
 
 
     def get_batch_move_progress(self) -> Dict[str, Any]:
-        """Get the current batch move progress."""
+        """Get the current batch move progress.
+
+        V4 adds the run's ``run_token`` and ``run_kind`` (sort / undo) and
+        ``error_items``: every failure of the run (the first 200), not only the
+        last three in ``recent_errors``.
+        """
         with self._batch_move_lock:
-            return self._batch_move_progress.copy()
+            progress = self._batch_move_progress.copy()
+            extra = dict(getattr(self, "_batch_move_extra", {}))
+            items = list(getattr(self, "_batch_move_error_items", []))
+        return {**progress, **extra, "error_items": items[:200], "error_items_total": len(items)}
 
     def reset_batch_move_progress(self) -> Dict[str, Any]:
         """Reset a stuck batch-move task back to idle (refused while running).

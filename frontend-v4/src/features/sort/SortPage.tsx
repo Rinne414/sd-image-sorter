@@ -5,6 +5,8 @@ import { useLayer } from '../../ui/layers'
 import { CullStage } from './CullStage'
 import { DuelStage } from './DuelStage'
 import { CullSummary, DuelSummary } from './ModeSummaries'
+import { RulesRun } from './RulesRun'
+import { useRulesRecord } from './rulesActions'
 import { useSortPrefs } from './sortPrefs'
 import { isFinished, isOpen, type SessionView } from './sortSession'
 import styles from './SortPage.module.css'
@@ -22,11 +24,13 @@ export function SortPage() {
   const session = useSort((s) => s.session)
   const setupOpen = useSort((s) => s.setupOpen)
   const libraryId = useApp((s) => s.libraryId)
+  const rulesRun = useRulesRecord(libraryId)
 
   useEffect(() => {
     void useSort.getState().load()
   }, [])
 
+  if (rulesRun?.open) return <RulesRun key={rulesRun.token} record={rulesRun} />
   if (session === null) return <section className={styles.page} aria-busy="true" data-testid="sort-loading" />
   if (setupOpen || !isOpen(session)) return <SortSetup key={libraryId} />
   return <FocusFrame>{sessionView(session)}</FocusFrame>

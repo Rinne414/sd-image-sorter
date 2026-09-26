@@ -68,8 +68,8 @@ export function deletePreset(libraryId: string, name: string): SortPreset[] {
 
 /** The setup part of a preset (what loading it restores). */
 export function presetSetup(preset: SortPreset): SortSetup {
-  const { mode, folders, operation } = preset
-  return { mode, folders, operation }
+  const { mode, folders, operation, rule } = preset
+  return { mode, folders, operation, rule }
 }
 
 function clampCooldown(ms: number): number {

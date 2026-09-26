@@ -14,6 +14,7 @@ import {
   tooSoon,
   zoomOrigin,
 } from './sortModes'
+import { EMPTY_RULE } from './rules'
 import { clampCooldown, deletePreset, loadPresets, presetSetup, savePreset } from './sortPrefs'
 import {
   decided,
@@ -277,12 +278,12 @@ describe('setups and presets', () => {
   })
 
   it('saves, replaces in place, lists per library and deletes presets', () => {
-    savePreset('main', 'daily', { mode: 'slot', folders: { w: 'D:/keep' }, operation: 'copy' })
-    savePreset('main', 'cull', { mode: 'cull', folders: {}, operation: 'move' })
-    savePreset('main', ' daily ', { mode: 'slot', folders: { a: 'D:/later' }, operation: 'move' })
+    savePreset('main', 'daily', { mode: 'slot', folders: { w: 'D:/keep' }, operation: 'copy', rule: EMPTY_RULE })
+    savePreset('main', 'cull', { mode: 'cull', folders: {}, operation: 'move', rule: EMPTY_RULE })
+    savePreset('main', ' daily ', { mode: 'slot', folders: { a: 'D:/later' }, operation: 'move', rule: EMPTY_RULE })
     const list = loadPresets('main')
     expect(list.map((p) => p.name)).toEqual(['daily', 'cull'])
-    expect(presetSetup(list[0]!)).toEqual({ mode: 'slot', folders: { a: 'D:/later' }, operation: 'move' })
+    expect(presetSetup(list[0]!)).toEqual({ mode: 'slot', folders: { a: 'D:/later' }, operation: 'move', rule: EMPTY_RULE })
     expect(loadPresets('other')).toEqual([])
     expect(deletePreset('main', 'daily').map((p) => p.name)).toEqual(['cull'])
   })
@@ -291,6 +292,6 @@ describe('setups and presets', () => {
     store.set('sd-v4-sort-presets:main', '{nope')
     expect(loadPresets('main')).toEqual([])
     store.set('sd-v4-sort-presets:main', JSON.stringify([{ name: '' }, { name: 'ok', mode: 'teleport', folders: { q: 1 } }, 7]))
-    expect(loadPresets('main')).toEqual([{ name: 'ok', mode: 'slot', folders: {}, operation: 'move' }])
+    expect(loadPresets('main')).toEqual([{ name: 'ok', mode: 'slot', folders: {}, operation: 'move', rule: EMPTY_RULE }])
   })
 })

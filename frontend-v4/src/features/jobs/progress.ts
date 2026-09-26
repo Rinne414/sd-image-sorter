@@ -4,6 +4,7 @@ import { readMasks } from './maskJob'
 import { readAesthetic } from './aestheticJob'
 import { readDatasetExport } from './datasetExportJob'
 import { readReparse } from './reparseJob' // reparse/reread
+import { readSortRules } from './sortRulesJob' // sortrules/sortundo: sort by condition and its undo
 import { readScanExtras, type ScanExtras } from './scanExtras' // scan: stall + other library
 // Reads the backend's progress payloads for long jobs into one shape.
 // move/copy: GET /api/move/progress · trash: GET /api/images/delete-selected/progress
@@ -48,6 +49,8 @@ export type JobKind =
   | 'dsexport'
   | 'reparse'
   | 'reread'
+  | 'sortrules' // sortrules: a sort-by-condition run (GET /api/batch-move/progress)
+  | 'sortundo' // sortundo: undoing a sort-by-condition run
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
 
 export interface JobFailure {
@@ -102,6 +105,7 @@ export interface ReadContext {
   purityJobId?: string // purity: the character purity analysis job we started
   maskJobId?: string // masks: the auto-mask bulk job we started
   reparseJobId?: string // reparse/reread: the metadata repair bulk job we started
+  runToken?: string // sortrules/sortundo: the batch-move run we started
 }
 
 const KNOWN: ReadonlySet<string> = new Set(['running', 'cancelling', 'done', 'cancelled', 'error', 'idle'])
@@ -303,6 +307,9 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
     case 'reparse': // reparse/reread
     case 'reread':
       return readReparse(base, raw, ctx.reparseJobId) // reparse/reread
+    case 'sortrules': // sortrules/sortundo
+    case 'sortundo': // sortrules/sortundo
+      return readSortRules(base, raw, ctx.runToken) // sortrules/sortundo
   }
 }
 

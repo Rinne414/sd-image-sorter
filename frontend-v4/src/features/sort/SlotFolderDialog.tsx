@@ -12,10 +12,12 @@ interface Props {
   sourceFolder: string | null
   onChoose: (path: string) => Promise<boolean>
   onClose: () => void
+  /** Instead of "Folder for images sent with W" (sort by condition has no keys). */
+  title?: string
 }
 
 /** Choose the folder behind one key; the folders moved or sorted into lately are one click away. */
-export function SlotFolderDialog({ slot, current, sourceFolder, onChoose, onClose }: Props) {
+export function SlotFolderDialog({ slot, current, sourceFolder, onChoose, onClose, title }: Props) {
   const t = useT()
   const recent = useMemo(recentDestinations, [])
   const key = slot.toUpperCase()
@@ -28,7 +30,7 @@ export function SlotFolderDialog({ slot, current, sourceFolder, onChoose, onClos
 
   return (
     <FolderChooser
-      title={t('sort.slot.chooseTitle', { key })}
+      title={title ?? t('sort.slot.chooseTitle', { key })}
       confirmLabel={t('sort.slot.use')}
       start={current ?? recent[0] ?? sourceFolder}
       shortcuts={[

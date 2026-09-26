@@ -12,6 +12,7 @@ import { driveMasks } from './maskDriver'
 import { adoptAesthetic, driveAesthetic } from './aestheticDriver'
 import { driveDatasetExport } from './datasetExportDriver'
 import { adoptReparse, driveReparse } from './reparseDriver' // reparse/reread
+import { adoptSortRules, driveSortRules } from './sortRulesDriver' // sortrules/sortundo
 import { queuedKey } from './queued'
 
 // Every long job the user started (or that was already running when V4
@@ -61,6 +62,7 @@ type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors'
   | 'aesthetic'
   | 'dsexport'
   | 'reparse' | 'reread'
+  | 'sortrules' | 'sortundo' // sortrules/sortundo
 
 // Censor work over a batch (detecting, SAM3 refining, filters) runs one at a time.
 const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind === 'refine' || kind === 'adjust' ? 'detect' : kind)
@@ -158,6 +160,8 @@ const DRIVERS: Record<Queue, Driver> = {
   dsexport: driveDatasetExport,
   reparse: driveReparse,
   reread: driveReparse, // reparse/reread share the backend's one slot (409 while either runs)
+  sortrules: driveSortRules, // sortrules
+  sortundo: driveSortRules, // sortundo (the same batch-move slot)
 }
 
 export const canStop = (kind: JobKind) => DRIVERS[queueOf(kind)].cancel !== null
@@ -312,6 +316,7 @@ export async function adoptRunningJobs(): Promise<void> {
     adoptDuplicateScan(),
     adopt('aesthetic', adoptAesthetic),
     adopt('reparse', adoptReparse), // reparse/reread
+    adopt('sortrules', adoptSortRules), // sortrules/sortundo
     adopt('install', (raw) => {
       const result = (raw.prepare_result ?? {}) as Record<string, unknown>
       if (result.active !== true || typeof result.model_id !== 'string') return null
@@ -361,6 +366,8 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   dsexport: ['images', 'image', 'batch-project'],
   reparse: ['images', 'image', 'image-count', 'library-health'],
   reread: ['images', 'image', 'image-count', 'library-health', 'missing-summary', 'missing-groups'], // reread: a file that no longer opens joins the missing files
+  sortrules: ['images', 'image', 'folders', 'image-count', 'library-health', 'missing-summary'], // sortrules
+  sortundo: ['images', 'image', 'folders', 'image-count', 'library-health', 'missing-summary'], // sortundo
 }
 
 let onUndo: ((job: Job) => Promise<void>) | null = null
@@ -433,6 +440,8 @@ const RUNNING: Record<JobKind, MessageKey> = {
   dsexport: 'dataset.export.job.running',
   reparse: 'status.reparse.running',
   reread: 'status.reread.running',
+  sortrules: 'sort.rules.job.running', // sortrules
+  sortundo: 'sort.rules.job.undoing', // sortundo
 }
 
 const DONE: Record<JobKind, MessageKey> = {
@@ -459,6 +468,8 @@ const DONE: Record<JobKind, MessageKey> = {
   dsexport: 'dataset.export.job.done',
   reparse: 'status.reparse.done',
   reread: 'status.reread.done',
+  sortrules: 'sort.rules.job.done', // sortrules
+  sortundo: 'sort.rules.job.undone', // sortundo
 }
 
 /** One line that says what happened (or is happening) to this job. */

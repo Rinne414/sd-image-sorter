@@ -899,7 +899,7 @@ Cooperatively cancel an in-flight background move/copy. The worker checks the ca
 Reset stuck background move progress.
 
 #### POST /api/batch-move
-Move all images matching filters. JSON filter payloads accept `prompt_match_mode` (`exact` or `contains`, default `exact`) alongside `prompts`.
+Move all images matching filters. JSON filter payloads accept `prompt_match_mode` (`exact` or `contains`, default `exact`) alongside `prompts`. A body with `image_ids` moves exactly those images of the current library instead (V4 sends the picks, or every match of its search resolved by `POST /api/images/selection-ids`); no filter is needed then. Every run answers with a `run_token` and records what it moved or copied, so it can be undone; the progress carries the same `run_token`, `run_kind` (`sort` or `undo`) and `error_items` (every failure, the first 200; `error_items_total` counts them all).
 
 #### GET /api/batch-move/progress
 Get batch move progress.
@@ -909,6 +909,9 @@ Cooperatively cancel an in-flight batch move/copy. The worker checks the cancel 
 
 #### POST /api/batch-move/reset
 Reset stuck batch move progress.
+
+#### POST /api/batch-move/undo
+Undo a finished batch move/copy run: body `{"run_token": "<32 hex>"}`. Runs in the batch-move slot (same progress and cancel; 409 while another run is busy) with `run_kind: "undo"`. Each moved file goes back to where it came from and each copy the run made is removed, but only while it is still what the run left behind; a file moved again since, an original place now taken by another file, a copy changed since or imported into the library, and an image no longer in the library are left alone and listed in `error_items` with the reason. 404 for an unknown run, 409 for a run already undone.
 
 #### POST /api/sort/start
 Start manual sort session. Preferred clients send a JSON body with `generators`, `tags`, `ratings`, `checkpoints`, `loras`, `prompts`, `prompt_match_mode`, `artist`, `search`, size/aesthetic filters, `folders`, `operation_mode`, and `replace_existing`; this avoids URL/query-length limits for large filter scopes. Legacy query-string parameters remain supported, including `prompt_match_mode=exact|contains`. If an unfinished session exists, the default response is HTTP 409; pass `replace_existing=true` only after the user explicitly chooses to discard saved progress. A body with `image_ids` sorts exactly those images in that order (V4 starts from the picks, or from every match of the gallery filter resolved by `POST /api/images/selection-ids`); the filter fields are then not used, and ids that are not readable images of the current library are dropped.

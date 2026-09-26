@@ -3,9 +3,9 @@ import { folderName, parentFolder, tailOfPath } from '../../lib/paths'
 import { Icon } from '../../ui/Icon'
 import { round } from './sortModes'
 import { COOLDOWN_MAX_MS, COOLDOWN_MIN_MS, COOLDOWN_STEP_MS, useSortPrefs } from './sortPrefs'
-import { decided, SLOT_KEYS, SORT_MODES, summary, usableSlots, type SessionView, type SlotKey, type SortMode } from './sortSession'
+import { decided, SLOT_KEYS, summary, usableSlots, type SessionView, type SlotKey } from './sortSession'
 import { useOtherLibrary } from './StageParts'
-import type { SortSetup } from './savedSetup'
+import { SETUP_MODES, type SetupMode, type SortSetup } from './savedSetup'
 import styles from './SortPage.module.css'
 
 // The pieces of the Sort tab's setup: how to sort, what to sort, where each
@@ -25,26 +25,23 @@ export function FolderLabel({ path }: { path: string }) {
   )
 }
 
-export const MODE_NAME: Record<SortMode, MessageKey> = { slot: 'sort.mode.slots', bracket: 'sort.mode.bracket', cull: 'sort.mode.cull' }
-const MODE_TEST: Record<SortMode, string> = { slot: 'sort-mode-slots', bracket: 'sort-mode-bracket', cull: 'sort-mode-cull' }
+export const MODE_NAME: Record<SetupMode, MessageKey> = { slot: 'sort.mode.slots', bracket: 'sort.mode.bracket', cull: 'sort.mode.cull', rules: 'sort.mode.rules' }
+const MODE_TEST: Record<SetupMode, string> = { slot: 'sort-mode-slots', bracket: 'sort-mode-bracket', cull: 'sort-mode-cull', rules: 'sort-mode-rules' }
 
-/** The three ways to sort; "by rules" is still being built and says so instead of pretending. */
-export function ModeSwitch({ mode, onMode }: { mode: SortMode; onMode: (mode: SortMode) => void }) {
+/** The four ways to sort: three one image (or pair) at a time, and by condition all at once. */
+export function ModeSwitch({ mode, onMode }: { mode: SetupMode; onMode: (mode: SetupMode) => void }) {
   const t = useT()
   return (
     <div className={styles.modes}>
       <div className={styles.modeRow} role="radiogroup" aria-label={t('sort.mode.label')}>
-        {SORT_MODES.map((m) => (
+        {SETUP_MODES.map((m) => (
           <button key={m} type="button" role="radio" aria-checked={mode === m} className={styles.mode} onClick={() => onMode(m)} data-testid={MODE_TEST[m]}>
             {t(MODE_NAME[m])}
             {m === 'slot' && <span className="mono"> WASD</span>}
           </button>
         ))}
-        <button type="button" role="radio" aria-checked="false" className={styles.mode} disabled title={t('sort.mode.later')}>
-          {t('sort.mode.rules')}
-        </button>
       </div>
-      <p className={styles.note}>{t('sort.mode.later')}</p>
+      {mode === 'rules' && <p className={styles.note}>{t('sort.mode.rulesHint')}</p>}
     </div>
   )
 }

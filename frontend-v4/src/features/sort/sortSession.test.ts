@@ -238,7 +238,7 @@ describe('the setup, remembered per library', () => {
   it('restores the folders and move/copy of the same library only', () => {
     const setup = withFolder(withFolder({ ...EMPTY_SETUP, operation: 'copy' }, 'w', 'D:/keep'), 'd', 'D:/trash')
     saveSetup('main', setup)
-    expect(loadSetup('main')).toEqual({ mode: 'slot', folders: { w: 'D:/keep', d: 'D:/trash' }, operation: 'copy' })
+    expect(loadSetup('main')).toMatchObject({ mode: 'slot', folders: { w: 'D:/keep', d: 'D:/trash' }, operation: 'copy' })
     expect(loadSetup('other')).toEqual(EMPTY_SETUP)
   })
 
@@ -246,7 +246,7 @@ describe('the setup, remembered per library', () => {
     store.set('sd-v4-sort-setup:main', '{not json')
     expect(loadSetup('main')).toEqual(EMPTY_SETUP)
     store.set('sd-v4-sort-setup:main', JSON.stringify({ folders: { w: 5, a: 'D:/a', q: 'D:/q' }, operation: 'teleport' }))
-    expect(loadSetup('main')).toEqual({ mode: 'slot', folders: { a: 'D:/a' }, operation: 'move' })
+    expect(loadSetup('main')).toMatchObject({ mode: 'slot', folders: { a: 'D:/a' }, operation: 'move' })
     const cleared = withFolder(loadSetup('main'), 'a', null)
     expect(cleared.folders).toEqual({})
     expect(hasFolder(cleared)).toBe(false)

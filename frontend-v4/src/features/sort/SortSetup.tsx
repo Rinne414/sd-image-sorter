@@ -9,6 +9,9 @@ import { matchingIds } from '../selection/invert'
 import { rememberDestination } from '../selection/dialogs'
 import { loadSetup, MIN_IMAGES, saveSetup, setupReady, withFolder, type SortSetup as Setup } from './savedSetup'
 import { PresetBar } from './PresetBar'
+import { RulesBody } from './RulesBody'
+import { LastRunCard } from './RulesParts'
+import { useRules, useRulesRecord } from './rulesActions'
 import { HowTo, ModeSwitch, OperationPicker, OptionsPanel, ResumeCard, SlotRows, SourcePicker, type SourceChoice } from './SetupParts'
 import { SlotFolderDialog } from './SlotFolderDialog'
 import { SortConfirm } from './SortConfirm'
@@ -57,6 +60,7 @@ export function SortSetup() {
   const t = useT()
   const libraryId = useApp((s) => s.libraryId)
   const pending = unfinished(useSort((s) => s.session))
+  const lastRun = useRulesRecord(libraryId)
   const { picks, params, filterCount, filterText, initial } = useSources()
   const [setup, setSetup] = useState<Setup>(() => loadSetup(libraryId))
   const [choice, setChoice] = useState<SourceChoice>(initial)
@@ -117,6 +121,11 @@ export function SortSetup() {
         {pending && <ResumeCard view={pending} onContinue={() => useSort.getState().resume()} />}
         <PresetBar libraryId={libraryId} setup={setup} onLoad={update} />
         <ModeSwitch mode={setup.mode} onMode={(mode) => update({ ...setup, mode })} />
+        {setup.mode === 'rules' && lastRun && !lastRun.open && <LastRunCard record={lastRun} onView={() => useRules.getState().set({ ...lastRun, open: true })} />}
+        {setup.mode === 'rules' ? (
+          <RulesBody setup={setup} update={update} picks={picks} sourceFolder={sourceFolder} />
+        ) : (
+          <>
         <div className={styles.columns}>
           <div className={styles.column}>
             <SourcePicker picks={picks.length} filterCount={filterCount} filterText={filterText} choice={choice} onChoice={setChoice} />
@@ -147,6 +156,8 @@ export function SortSetup() {
             {notice ? notice.text : readyHint(t, setup, count)}
           </p>
         </div>
+          </>
+        )}
       </div>
       {choosing && (
         <SlotFolderDialog

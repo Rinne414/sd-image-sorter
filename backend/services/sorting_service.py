@@ -29,6 +29,7 @@ from services import entry_stats_service
 from services.state_compat import MutableStateProxy
 from services.sorting_models import (
     BatchMoveRequest,
+    BatchMoveUndoRequest,
     BrowseFolderRequest,
     FOLDER_KEY_MAX_LENGTH,
     FolderConfig,
@@ -84,6 +85,7 @@ from utils.source_paths import resolve_existing_indexed_image_path
 # longer calls them (seam + re-export surface) — F401 is ignored for this
 # file in pyproject.toml, same as the database.py facade.
 from services.sorting.batch_move import BatchMoveMixin
+from services.sorting.batch_move_undo import BatchMoveUndoMixin
 from services.sorting.library import LibraryMixin
 from services.sorting.move import MoveMixin
 from services.sorting.scan import ScanMixin
@@ -197,6 +199,7 @@ class SortingService(
     ScanMixin,
     MoveMixin,
     BatchMoveMixin,
+    BatchMoveUndoMixin,
     SessionStateMixin,
     SortSessionMixin,
     WorkbenchMixin,

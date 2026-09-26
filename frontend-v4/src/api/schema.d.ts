@@ -2169,6 +2169,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/batch-move/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo Batch Move
+         * @description Undo a finished batch move/copy run (V4 sort by condition), in the background.
+         */
+        post: operations["undo_batch_move_api_batch_move_undo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sort/start": {
         parameters: {
             query?: never;
@@ -6590,6 +6610,16 @@ export interface components {
             operation: string;
             /** Split By */
             split_by?: string | null;
+            /** Image Ids */
+            image_ids?: number[] | null;
+        };
+        /**
+         * BatchMoveUndoRequest
+         * @description Undo one batch move/copy run, named by the token its start answered with.
+         */
+        BatchMoveUndoRequest: {
+            /** Run Token */
+            run_token: string;
         };
         /**
          * BatchPatchRequest
@@ -14971,6 +15001,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    undo_batch_move_api_batch_move_undo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchMoveUndoRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
