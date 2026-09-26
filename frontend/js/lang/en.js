@@ -3357,7 +3357,7 @@ window.I18nLang_en = {
     'tagger.model.pixaiV09.safeModeNote': 'Rating is filled from a fallback, so library workflows still work.',
     'tagger.model.pixaiV10.summary': 'PixAI v1.0: 30,877 tags with characters, series and artist styles, read at 1008 px.',
     'tagger.model.pixaiV10.bestFor': 'Characters, series and artist styles with a modern tag space',
-    'tagger.model.pixaiV10.runtimeNote': 'Heavy: about 2 GB download, one image per GPU call. Much slower on CPU.',
+    'tagger.model.pixaiV10.runtimeNote': 'Heavy: ~2 GB download, ~7.5 GB GPU memory, about 0.5 s per image on an RTX 3090. Much slower on CPU.',
     'tagger.model.pixaiV10.safeModeNote': 'The app lowers its GPU batch for the large input and rests the GPU between images.',
     'tagger.model.toriigate05.summary': 'Large multimodal captioner for natural-language descriptions of anime images.',
     'tagger.model.toriigate05.bestFor': 'Local NL captions / difficult anime image understanding',

@@ -138,7 +138,7 @@ TAGGER_MODEL_HINTS = {
         "gpu_default": True,
         "gpu_confirmation_required": False,
         "gpu_locked": False,
-        "runtime_note": "Adaptive runtime at batch 1. On CPU it is much slower than the 448 px taggers.",
+        "runtime_note": "One image per GPU call, about 7.5 GB of GPU memory and about 0.5 s per image on an RTX 3090 (v0.9: about 0.1 s). On CPU it is much slower.",
         "quality_score": 4,
         "speed_score": 1,
         "stability_score": 3,
