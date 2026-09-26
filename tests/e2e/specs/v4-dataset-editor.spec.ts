@@ -2,6 +2,7 @@ import path from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 
 import { cleanupImages, dbPath, pageOverflow, runBackendScript, seedImages, tmpRoot, VIEWPORTS } from '../fixtures/v4-seed'
+import { expectSuggestions, stubTagSuggest, suggestList } from '../fixtures/v4-suggest'
 
 /**
  * V4 dataset edit step (slice 3e): one caption editor. Chips, the tag field,
@@ -446,6 +447,48 @@ test('the delete confirmation says how many hand-edited captions go with the bat
   await expect(dialog.getByTestId('dataset-delete-edited')).toHaveText('This includes 4 captions you edited by hand, with their history.')
   await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()
   await dialog.getByRole('button', { name: 'Cancel' }).click()
+})
+
+test('the caption as text suggests the word at the caret: a whole tag joins the list, a word in a sentence changes alone; Esc closes only the list', async ({ page }) => {
+  await stubAids(page)
+  await stubTagSuggest(page)
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openEditStep(page)
+  await page.getByTestId('edit-as-text').click()
+  const text = page.getByTestId('edit-booru-text')
+  const before = await text.inputValue()
+
+  // a word that starts a tag of the list: the tag goes in, in the template's style, and ", " waits
+  await text.fill('smile')
+  await text.pressSequentially(', lon')
+  await expectSuggestions(page, ['long hair', 'long sleeves'])
+  await text.press('Enter')
+  await expect(text).toHaveValue('smile, long hair, ')
+
+  // a word inside a sentence: only that word changes
+  await text.pressSequentially('a girl with blu')
+  await expectSuggestions(page, ['blue sky'])
+  await text.press('Tab')
+  await expect(text).toHaveValue('smile, long hair, a girl with blue sky')
+  await text.fill('smile, a girl with wa standing, red')
+  await text.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(21, 21))
+  await text.pressSequentially('t')
+  await expectSuggestions(page, ['watermark', 'water'])
+  await text.press('ArrowDown')
+  await text.press('Enter')
+  await expect(text).toHaveValue('smile, a girl with water standing, red')
+
+  // Esc closes the list; the editor stays as it was
+  await text.pressSequentially(' ha')
+  await expectSuggestions(page, ['hatsune miku', 'hatsune miku (append)'])
+  await page.keyboard.press('Escape')
+  await expect(suggestList(page)).toHaveCount(0)
+  await expect(text).toBeVisible()
+  await expect(text).toHaveValue('smile, a girl with water ha standing, red')
+
+  await text.fill(before)
+  await text.blur()
+  await saved(page)
 })
 
 for (const viewport of VIEWPORTS) {

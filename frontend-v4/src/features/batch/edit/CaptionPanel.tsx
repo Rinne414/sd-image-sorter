@@ -4,6 +4,7 @@ import type { TagCategory } from '../../../api/types'
 import { useT, type MessageKey } from '../../../i18n'
 import { tagKey as promptKey } from '../../../lib/prompt'
 import { Icon } from '../../../ui/Icon'
+import { TagField } from '../../../ui/TagField'
 import { TagInput } from '../../../ui/TagInput'
 import { splitList, type DatasetForm } from '../datasetSettings'
 import type { CaptionContent } from '../datasetTag'
@@ -102,16 +103,19 @@ export function CaptionEditor({ form, entry, item, session, locked, zhSource, vo
         </header>
         {over && <p className={styles.warnText}>{t('dataset.edit.overMax', { n: tags.length, max: form.maxTags })}</p>}
         {asText ? (
-          <textarea
+          // The word at the caret is suggested (V3.5's caption box); sentences around it stay as written.
+          <TagField
+            mode="caption"
             className={styles.textarea}
             value={content.booru_caption}
             rows={5}
             disabled={locked}
-            aria-label={t('dataset.edit.tags')}
-            spellCheck={false}
-            onChange={(e) => edit((c) => withBooruText(c, e.target.value))}
+            label={t('dataset.edit.tags')}
+            preferred={vocabulary}
+            write={(tag) => styledTag(tag, style)}
+            onChange={(text) => edit((c) => withBooruText(c, text))}
             onBlur={() => edit((c) => withTagStyle(c, style))}
-            data-testid="edit-booru-text"
+            testId="edit-booru-text"
           />
         ) : (
           <TagChips tags={tags} facts={facts} disabled={locked} selected={selected} onSelect={setSelected} onRemove={(tag) => edit((c) => withoutTag(c, tag))} />

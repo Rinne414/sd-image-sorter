@@ -123,3 +123,30 @@ describe('where the list goes', () => {
     expect(placeList({ left: 0, top: 150, bottom: 178, width: 300 }, small)).toMatchObject({ top: 180, maxHeight: 212 })
   })
 })
+
+describe('a caption written as text: the word at the caret', () => {
+  test('the word under the caret is asked for, never the words around it', () => {
+    expect(tokenAt('1girl, a girl with lon', 22, 'caption')).toEqual({ text: 'lon', start: 19, end: 22 })
+    expect(tokenAt('smile, lo', 9, 'caption')).toEqual({ text: 'lo', start: 7, end: 9 })
+    expect(tokenAt('smile, long_ha', 14, 'caption')).toEqual({ text: 'long_ha', start: 7, end: 14 })
+  })
+
+  test('a word that is a whole tag of the list: the tag goes in and ", " waits for the next one', () => {
+    const value = 'smile, lo'
+    expect(insertTag(value, tokenAt(value, 9, 'caption'), ['long hair'], 'caption')).toEqual({ value: 'smile, long hair, ', caret: 18 })
+    const middle = 'smile, lo, red'
+    expect(insertTag(middle, tokenAt(middle, 9, 'caption'), ['long hair'], 'caption')).toEqual({ value: 'smile, long hair, red', caret: 16 })
+    expect(insertTag('smile,lo', tokenAt('smile,lo', 8, 'caption'), ['long hair'], 'caption').value).toBe('smile, long hair, ')
+    const lines = 'smile\nlo'
+    expect(insertTag(lines, tokenAt(lines, 8, 'caption'), ['long hair'], 'caption').value).toBe('smile\nlong hair, ')
+  })
+
+  test('a word inside a sentence: only the word changes; the words and commas around it stay as they were', () => {
+    const value = '1girl, a girl with lon standing, smile'
+    expect(insertTag(value, tokenAt(value, 22, 'caption'), ['long hair'], 'caption')).toEqual({ value: '1girl, a girl with long hair standing, smile', caret: 28 })
+    const end = 'a girl with lon'
+    expect(insertTag(end, tokenAt(end, 15, 'caption'), ['long hair'], 'caption')).toEqual({ value: 'a girl with long hair', caret: 21 })
+    const first = 'lon standing'
+    expect(insertTag(first, tokenAt(first, 3, 'caption'), ['long hair'], 'caption').value).toBe('long hair standing')
+  })
+})

@@ -7,8 +7,11 @@
  * list: tags separated by commas or lines (", " follows a taken tag).
  * single: the field holds one tag. insert: free prompt text, where only the
  * word under the caret is completed and nothing is added around it.
+ * caption: a caption written as text, tags and maybe sentences: the word
+ * under the caret is completed; when that word is a whole tag of the list it
+ * is taken like a list tag, inside a sentence nothing around it changes.
  */
-export type TagFieldMode = 'list' | 'single' | 'insert'
+export type TagFieldMode = 'list' | 'single' | 'insert' | 'caption'
 
 /** library: tags already in the library. global: the library plus the danbooru vocabulary and its Chinese / Japanese aliases. */
 export type Vocabulary = 'library' | 'global'
@@ -41,7 +44,7 @@ export const fold = (tag: string): string => tag.replace(/_/g, ' ').trim().toLow
 
 /** The tag at the caret: from the separator before it to the one after it. */
 export function tokenAt(value: string, caret: number, mode: TagFieldMode): Token {
-  const brk = mode === 'insert' ? INSERT_BREAK : LIST_BREAK
+  const brk = mode === 'insert' || mode === 'caption' ? INSERT_BREAK : LIST_BREAK
   let start = 0
   let end = value.length
   if (mode !== 'single') {
@@ -62,13 +65,19 @@ export function wantsSuggestions(text: string, vocabulary: Vocabulary): boolean 
   return text.length >= 2 || (vocabulary === 'global' && hasCjk(text))
 }
 
+/** Nothing but spaces between the word and the list's separators on both sides: the word is a whole tag. */
+function standsAlone(before: string, after: string): boolean {
+  const since = before.slice(Math.max(before.lastIndexOf(','), before.lastIndexOf('，'), before.lastIndexOf('\n')) + 1)
+  return since.trim() === '' && /^\s*(?:[,，\n]|$)/.test(after)
+}
+
 /** The field after taking `tags` (a tag, maybe with its series) for the token. */
 export function insertTag(value: string, token: Token, tags: readonly string[], mode: TagFieldMode): { value: string; caret: number } {
   const text = tags.join(', ')
   if (mode === 'single') return { value: text, caret: text.length }
   const before = value.slice(0, token.start)
   const after = value.slice(token.end)
-  if (mode === 'insert') return { value: before + text + after, caret: before.length + text.length }
+  if (mode === 'insert' || (mode === 'caption' && !standsAlone(before, after))) return { value: before + text + after, caret: before.length + text.length }
   const lead = before && !SPACE.test(before.at(-1) ?? '') ? ' ' : ''
   const rest = after.trim() === '' ? '' : after
   // The list goes on after this tag: its own separator is kept; at the end ", " waits for the next tag.
