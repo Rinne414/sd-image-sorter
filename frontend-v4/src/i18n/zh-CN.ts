@@ -5,6 +5,7 @@ import { zhCNLibrary } from './zh-CN.library'
 import { zhCNSimilar } from './zh-CN.similar'
 import { zhCNInfo } from './zh-CN.info'
 import { zhCNStatus } from './zh-CN.status'
+import { zhCNBrowse } from './zh-CN.browse'
 import { zhCNSort } from './zh-CN.sort'
 
 export const zhCN = {
@@ -14,6 +15,7 @@ export const zhCN = {
   ...zhCNInfo,
   ...zhCNDataset,
   ...zhCNStatus,
+  ...zhCNBrowse,
   ...zhCNSort,
   'app.name': 'SD Image Sorter',
   'nav.home': '首页',
@@ -123,7 +125,6 @@ export const zhCN = {
   'grid.count': '{n} 张',
   'grid.loading': '正在加载…',
   'grid.empty': '没有符合的图片',
-  'grid.emptyHint': '换个关键词，或清空左栏的来源和文件夹。',
   'grid.error': '图片列表加载失败：{reason}',
   'grid.retry': '重试',
 

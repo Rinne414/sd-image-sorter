@@ -69,26 +69,57 @@ function run(action: LibraryKey, d: Deps): boolean {
   }
 }
 
+const CONTROL = 'button, a[href], summary, [role="button"], [role="link"], [role="tab"], [role="checkbox"], [role="switch"], [role="radio"]'
+
+/**
+ * A control the keyboard moved to (Tab, the skip link): Enter and Space press
+ * it. Focus a mouse click left on a button (a rail row, a card button) does
+ * not count, so there Enter still opens the inspected image and Space picks
+ * it. (:focus-visible cannot tell: a keydown turns it on for the focused
+ * element before this handler runs.)
+ */
+function pressesControl(action: LibraryKey, target: EventTarget | null, keyboardFocused: EventTarget | null): boolean {
+  if (action.type !== 'open' && action.type !== 'pick') return false
+  return target instanceof HTMLElement && target === keyboardFocused && target.matches(CONTROL)
+}
+
 /** The library's keys (keys.ts). The lightbox, the palette and menus take over while open. */
 export function useLibraryKeys(deps: Deps): void {
   const ref = useRef(deps)
   ref.current = deps
 
   useEffect(() => {
+    let lastInput: 'key' | 'pointer' = 'pointer'
+    let keyboardFocused: EventTarget | null = null
+    const onAnyKey = () => {
+      lastInput = 'key'
+    }
+    const onPointer = () => {
+      lastInput = 'pointer'
+    }
+    const onFocus = (e: FocusEvent) => {
+      keyboardFocused = lastInput === 'key' ? e.target : null
+    }
     const onKey = (e: KeyboardEvent) => {
       // Anything floating (lightbox, palette, a menu) owns the keyboard.
       if (layerCount() > 0 || useApp.getState().page !== 'library') return
       if (isTypingTarget(e.target)) return
       const action = libraryKey(e)
-      if (action && run(action, ref.current)) e.preventDefault()
+      if (action && !pressesControl(action, e.target, keyboardFocused) && run(action, ref.current)) e.preventDefault()
     }
     // The menu key also fires the browser's own menu; ours is already open.
     const onContextMenu = (e: MouseEvent) => {
       if (useCardMenu.getState().open) e.preventDefault()
     }
+    window.addEventListener('keydown', onAnyKey, true)
+    window.addEventListener('pointerdown', onPointer, true)
+    window.addEventListener('focusin', onFocus, true)
     window.addEventListener('keydown', onKey)
     window.addEventListener('contextmenu', onContextMenu)
     return () => {
+      window.removeEventListener('keydown', onAnyKey, true)
+      window.removeEventListener('pointerdown', onPointer, true)
+      window.removeEventListener('focusin', onFocus, true)
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('contextmenu', onContextMenu)
     }

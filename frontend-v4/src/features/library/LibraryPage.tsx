@@ -8,8 +8,8 @@ import { SortNotice } from '../info/SortNotice'
 import { Lightbox } from '../lightbox/Lightbox'
 import { SelectionBar } from '../selection/SelectionBar'
 import { SimilarBanner } from '../similar/SimilarBanner'
-import { startColorAnalysis, useColorsMissing } from '../status/colorAnalysis'
 import { CardMenu } from './CardMenu'
+import { EmptyResult } from './EmptyResult'
 import { Gallery, type GalleryHandle } from './Gallery'
 import styles from './LibraryPage.module.css'
 import { libraryParams } from './params'
@@ -21,6 +21,7 @@ import { useShownImages } from './useShownImages'
 
 export function LibraryPage() {
   const t = useT()
+  const libraryId = useApp((s) => s.libraryId)
   const queryText = useApp((s) => s.queryText)
   const scope = useApp((s) => s.scope)
   const sort = useApp((s) => s.sort)
@@ -40,8 +41,9 @@ export function LibraryPage() {
     [queryText, scope, sort, sortReverse, favoritesCollectionId],
   )
   const shown = useShownImages(params)
-  const colors = useColorsMissing()
   const { images, total, similar } = shown
+  // Come back to the same place for this search; a random order has no place.
+  const scrollKey = similar || params.sort_by === 'random' ? undefined : shown.gridKey
 
   const first = images[0]
   const textureDetail = useImageDetail(inspectedId ?? first?.id ?? null)
@@ -89,23 +91,14 @@ export function LibraryPage() {
               <p>{t('sim.banner.empty')}</p>
             </div>
           ) : shown.empty ? (
-            <div className={styles.notice}>
-              <p className={styles.noticeTitle}>{t('grid.empty')}</p>
-              {usesColorData(params) && (colors.data?.missing ?? 0) > 0 ? (
-                <>
-                  <p data-testid="color-hint">{t('status.colorHint', { n: colors.data?.missing ?? 0 })}</p>
-                  <button type="button" className="btn" onClick={() => void startColorAnalysis()}>
-                    {t('status.colorHintAction')}
-                  </button>
-                </>
-              ) : (
-                <p>{t('grid.emptyHint')}</p>
-              )}
-            </div>
+            <EmptyResult params={params} />
           ) : (
             <Gallery
-              key={shown.gridKey}
+              // another library with the same search is another grid (its own scroll place)
+              key={`${libraryId}|${shown.gridKey}`}
               images={images}
+              total={total}
+              scrollKey={scrollKey}
               hasMore={shown.hasMore}
               isFetchingMore={shown.fetchingMore}
               fetchMore={shown.fetchMore}
@@ -132,21 +125,4 @@ export function LibraryPage() {
       <CardMenu />
     </div>
   )
-}
-
-/** Filters that only see images with colour analysis. */
-const COLOR_KEYS = [
-  'color_hues',
-  'exclude_color_hues',
-  'exclude_colors',
-  'color_temperature',
-  'brightness_distribution',
-  'brightness_min',
-  'brightness_max',
-  'min_saturation',
-  'max_saturation',
-]
-
-function usesColorData(params: Record<string, unknown>): boolean {
-  return COLOR_KEYS.some((k) => k in params)
 }

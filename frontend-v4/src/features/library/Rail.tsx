@@ -8,11 +8,12 @@ import { useSelectionDialog } from '../selection/dialogs'
 import { useStatusDialogs } from '../status/dialogs'
 import { useStatusRows, type StatusRow } from '../status/statusRows'
 import { useT } from '../../i18n'
-import { generatorName, shortFolder } from '../../lib/format'
+import { generatorName } from '../../lib/format'
 import { useApp } from '../../state/store'
 import styles from './Rail.module.css'
 import { Icon } from '../../ui/Icon'
 import { useClickOutside, useLayer } from '../../ui/layers'
+import { FolderTree } from './FolderTree'
 import { useRailSections, type RailSectionId } from './railSections'
 
 interface Props {
@@ -76,17 +77,7 @@ export function Rail({ texture }: Props) {
 
         {folders.data && folders.data.length > 0 && (
           <Section id="folders" title={t('rail.folders')}>
-            <ul className={styles.list}>
-              {folders.data.map((f) => (
-                <Row
-                  key={f}
-                  active={scope.folder === f}
-                  label={shortFolder(f)}
-                  title={f}
-                  onClick={() => setScope({ folder: scope.folder === f ? null : f })}
-                />
-              ))}
-            </ul>
+            <FolderTree folders={folders.data} />
           </Section>
         )}
       </div>

@@ -8,3 +8,15 @@
 .body {
   min-height: 0;
 }
+
+/* Switching page fades the new one in instead of cutting (reduced motion: instant). */
+.body > * {
+  /* no fill: once done the page is left with no opacity layer at all */
+  animation: page-in var(--t-med) var(--ease);
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+  }
+}

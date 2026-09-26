@@ -60,3 +60,68 @@ export function tokenValue(value: string): string {
 export function onlyWith(text: string, key: 'checkpoint' | 'lora', value: string): string {
   return replaceTokens(text, isAnyOf(isKey(key), isKey(`-${key}`)), [`${key}:${tokenValue(value)}`])
 }
+
+export type TagMode = 'and' | 'or'
+export type PromptMode = 'exact' | 'contains'
+
+/** The one filter a token sets, when it sets exactly one. */
+function onlyPart(token: string): { part: Part; tags: string[] } | null {
+  const q = parseSearch(token)
+  const part = q.parts[0]
+  return q.parts.length === 1 && part?.kind === 'filter' ? { part, tags: q.tags } : null
+}
+
+/** The tags a token requires (tag:a, tag:a|b), or null for any other token. */
+function requiredTags(token: string): string[] | null {
+  const found = onlyPart(token)
+  return found?.part.kind === 'filter' && found.part.key === 'tag' ? found.tags : null
+}
+
+/**
+ * Tag match mode as the panel writes it: 'or' folds every required tag into
+ * one tag:a|b|c (where the first one was); 'and' splits lists into tag:a tag:b.
+ */
+export function setTagMode(text: string, mode: TagMode): string {
+  const tokens = parseSearch(text).tokens
+  const found = tokens.map(requiredTags)
+  const values = [...new Set(found.flatMap((v) => v ?? []))]
+  const first = found.findIndex((v) => v !== null)
+  const seen = new Set<string>()
+  const out = tokens.flatMap((token, i) => {
+    const tags = found[i]
+    if (!tags) return [token]
+    if (mode === 'or') return i === first ? [`tag:${tokenValue(values.join('|'))}`] : []
+    const fresh = tags.filter((t) => !seen.has(t))
+    fresh.forEach((t) => seen.add(t))
+    return fresh.map((t) => `tag:${tokenValue(t)}`)
+  })
+  return out.join(' ')
+}
+
+/** Add required tags (skipping ones already there) in the mode the panel shows. */
+export function addTags(text: string, tags: string[], mode: TagMode): string {
+  const have = new Set(parseSearch(text).tokens.flatMap((t) => requiredTags(t) ?? []))
+  const fresh = [...new Set(tags.map((t) => t.trim()).filter(Boolean))].filter((t) => !have.has(t))
+  const added = [text.trim(), ...fresh.map((t) => `tag:${tokenValue(t)}`)].filter(Boolean).join(' ')
+  return mode === 'or' ? setTagMode(added, 'or') : added
+}
+
+function promptToken(value: string, negated: boolean, mode: PromptMode): string {
+  return `${negated ? '-' : ''}prompt:${tokenValue(mode === 'contains' ? `*${value}*` : value)}`
+}
+
+/** Prompt match mode: 'contains' stars every prompt term (kept or excluded), 'exact' drops the stars. */
+export function setPromptMode(text: string, mode: PromptMode): string {
+  return parseSearch(text)
+    .tokens.map((token) => {
+      const found = onlyPart(token)
+      if (found?.part.kind !== 'filter' || (found.part.key !== 'prompt' && found.part.key !== '-prompt')) return token
+      return promptToken(found.part.value, found.part.key === '-prompt', mode)
+    })
+    .join(' ')
+}
+
+export function addPrompt(text: string, words: string, mode: PromptMode): string {
+  const clean = words.replace(/\*/g, '').trim()
+  return clean ? [text.trim(), promptToken(clean, false, mode)].filter(Boolean).join(' ') : text
+}

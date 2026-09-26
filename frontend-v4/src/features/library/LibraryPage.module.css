@@ -47,6 +47,11 @@
   margin: 0;
 }
 
+.noticeActions {
+  display: flex;
+  gap: 8px;
+}
+
 .noticeTitle {
   font-size: var(--fs-5);
   color: var(--text);

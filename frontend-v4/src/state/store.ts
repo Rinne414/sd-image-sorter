@@ -1,14 +1,18 @@
 import { create } from 'zustand'
 import type { BatchKind } from '../api/types'
+import { parseBrowseStore, recallBrowse, rememberBrowse, type BrowseState, type Scope } from '../lib/browseMemory'
 import { isSortBase, type SortBase } from '../lib/sort'
 
 export type Page = 'home' | 'library' | 'batch' | 'sort'
 export type Layout = 'masonry' | 'grid'
 export type TileSize = 's' | 'm' | 'l'
+export type { Scope }
 
 // Shared with V3.5 (same origin), so both apps open the same library.
 const LIBRARY_KEY = 'sd-library-workspace-v1'
 const PREFS_KEY = 'sd-v4-prefs'
+/** Each library's last search line and rail scope (lib/browseMemory.ts). */
+const BROWSE_KEY = 'sd-v4-browse'
 
 interface Prefs {
   layout: Layout
@@ -61,12 +65,6 @@ function writeHash(page: Page, batchId: number | null): void {
 
 /** Picking in the library for a batch: an existing one, or a new one made from the picks. */
 export type AddTarget = { batchId: number } | { kind: BatchKind }
-
-export interface Scope {
-  generators: string[]
-  folder: string | null
-  favorites: boolean
-}
 
 interface AppState extends Prefs {
   page: Page
@@ -126,6 +124,20 @@ function loadPrefs(): Prefs {
 const prefs = loadPrefs()
 const storedLibrary = readJson<{ currentId: string }>(LIBRARY_KEY).currentId ?? 'main'
 
+function readBrowse() {
+  try {
+    return parseBrowseStore(localStorage.getItem(BROWSE_KEY))
+  } catch {
+    return {}
+  }
+}
+
+function saveBrowse(libraryId: string, state: BrowseState): void {
+  writeJson(BROWSE_KEY, rememberBrowse(readBrowse(), libraryId, state))
+}
+
+const storedBrowse = recallBrowse(readBrowse(), storedLibrary)
+
 function savePrefs(state: Prefs): void {
   const { layout, tileSize, cardOpen, railOpen, sort, sortReverse } = state
   writeJson(PREFS_KEY, { layout, tileSize, cardOpen, railOpen, sort, sortReverse })
@@ -134,8 +146,8 @@ function savePrefs(state: Prefs): void {
 export const useApp = create<AppState>((set, get) => ({
   ...prefs,
   libraryId: storedLibrary,
-  queryText: '',
-  scope: { generators: [], folder: null, favorites: false },
+  queryText: storedBrowse.queryText,
+  scope: storedBrowse.scope,
   inspectedId: null,
   selection: [],
   selectionAnchor: null,
@@ -152,9 +164,12 @@ export const useApp = create<AppState>((set, get) => ({
   },
   setLibrary: (id) => {
     writeJson(LIBRARY_KEY, { v: 2, currentId: id })
+    // That library's own last search, not the one from the library we leave.
+    const browse = recallBrowse(readBrowse(), id)
     set({
       libraryId: id,
-      scope: { generators: [], folder: null, favorites: false },
+      queryText: browse.queryText,
+      scope: browse.scope,
       inspectedId: null,
       selection: [],
       selectionAnchor: null,
@@ -163,8 +178,15 @@ export const useApp = create<AppState>((set, get) => ({
     })
     if (get().page === 'batch') writeHash('batch', null)
   },
-  setQueryText: (queryText) => set({ queryText }),
-  setScope: (patch) => set({ scope: { ...get().scope, ...patch } }),
+  setQueryText: (queryText) => {
+    set({ queryText })
+    saveBrowse(get().libraryId, { queryText, scope: get().scope })
+  },
+  setScope: (patch) => {
+    const scope = { ...get().scope, ...patch }
+    set({ scope })
+    saveBrowse(get().libraryId, { queryText: get().queryText, scope })
+  },
   setSort: (sort) => {
     set({ sort })
     savePrefs(get())

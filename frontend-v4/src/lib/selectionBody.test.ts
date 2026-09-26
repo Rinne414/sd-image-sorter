@@ -7,6 +7,7 @@ const EVERY_PARAM = {
   sort_by: 'newest',
   search: 'silver hair',
   tags: 'a,b',
+  tag_mode: 'or',
   exclude_tags: 'c',
   checkpoints: 'model_a',
   exclude_checkpoints: 'model_b',
@@ -14,6 +15,7 @@ const EVERY_PARAM = {
   exclude_loras: 'lora_b',
   prompts: 'smile',
   exclude_prompts: 'frown',
+  prompt_match_mode: 'contains',
   generators: 'nai,comfyui',
   exclude_generators: 'webui',
   ratings: 'general',
@@ -52,6 +54,7 @@ describe('toSelectionBody', () => {
       sortBy: 'newest',
       search: 'silver hair',
       tags: ['a', 'b'],
+      tagMode: 'or',
       excludeTags: ['c'],
       checkpoints: ['model_a'],
       excludeCheckpoints: ['model_b'],
@@ -59,6 +62,7 @@ describe('toSelectionBody', () => {
       excludeLoras: ['lora_b'],
       prompts: ['smile'],
       excludePrompts: ['frown'],
+      promptMatchMode: 'contains',
       generators: ['nai', 'comfyui'],
       excludeGenerators: ['webui'],
       ratings: ['general'],
@@ -114,5 +118,18 @@ describe('toSelectionBody', () => {
 
   test('empty list items are dropped', () => {
     expect(toSelectionBody({ sort_by: 'newest', tags: 'a,,b,' })).toEqual({ sortBy: 'newest', tags: ['a', 'b'] })
+  })
+})
+
+describe('the match modes reach the every-match endpoints', () => {
+  test('tag_mode and prompt_match_mode map to tagMode and promptMatchMode', () => {
+    const params = toImageParams(parseSearch('tag:a|b prompt:*hair*'), { generators: [], folder: null, favoritesCollectionId: null }, 'newest')
+    expect(toSelectionBody(params)).toEqual({
+      sortBy: 'newest',
+      tags: ['a', 'b'],
+      tagMode: 'or',
+      prompts: ['hair'],
+      promptMatchMode: 'contains',
+    })
   })
 })

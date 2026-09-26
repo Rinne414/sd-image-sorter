@@ -47,6 +47,11 @@ svg {
   outline-offset: 2px;
 }
 
+/* The skip link parks focus on the page's main area; the next Tab shows where. */
+main:focus-visible {
+  outline: none;
+}
+
 ::selection {
   background: var(--accent-soft);
 }

@@ -6,6 +6,7 @@ import { useSavedSearches } from '../../state/savedSearches'
 import { useApp } from '../../state/store'
 import { useClickOutside, useLayer } from '../../ui/layers'
 import { useToasts } from '../../ui/toasts'
+import { FilterMatchRows } from './FilterMatchRows'
 import styles from './FilterPanel.module.css'
 
 interface Props {
@@ -107,6 +108,7 @@ export function FilterPanel({ text, onChange }: Props) {
         <div className={styles.panel} role="dialog" aria-label={t('filter.button')} data-testid="filter-panel">
           <p className={styles.hint}>{t('filter.hint')}</p>
           <dl className={styles.rows}>
+            <FilterMatchRows text={text} onChange={onChange} />
             <Row label={t('filter.rating')}>
               <div className={styles.choices}>
                 {(['general', 'sensitive', 'questionable', 'explicit'] as const).map((r) => (

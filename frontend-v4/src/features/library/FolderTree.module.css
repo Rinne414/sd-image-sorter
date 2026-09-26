@@ -1,0 +1,53 @@
+/* One folder: a caret that opens its subfolders, then the row that chooses it. */
+.line {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.toggle {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  transition: rotate var(--t-fast) var(--ease);
+}
+
+button.toggle:hover {
+  color: var(--text);
+}
+
+.toggle[aria-expanded='false'] {
+  rotate: -90deg;
+}
+
+/* two classes: wins over the rail's .row whatever order the sheets load in */
+.line .row {
+  flex: 1;
+  min-width: 0;
+  gap: 0;
+  padding-left: 4px;
+}
+
+/* A folded chain gives up its leading folders first, its last folder last. */
+.head {
+  flex: 0 1000 auto;
+  min-width: 1ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.tail {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

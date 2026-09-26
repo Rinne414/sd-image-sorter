@@ -21,6 +21,8 @@ const RATING_NAMES: Record<string, MessageKey> = {
   questionable: 'rating.questionable',
   explicit: 'rating.explicit',
 }
+/** Chip operators that are words (≥ ≤ = show as they are). */
+const OP_NAMES: Record<string, MessageKey> = { any: 'qop.any', contains: 'qop.contains' }
 
 interface Props {
   total: number | null
@@ -74,8 +76,15 @@ export function QueryBar({ total, inputRef }: Props) {
 
   const apply = (text: string, now = false) => {
     window.clearTimeout(timer.current)
-    if (now) setQueryText(text)
-    else timer.current = window.setTimeout(() => setQueryText(text), APPLY_DELAY_MS)
+    if (now) {
+      setQueryText(text)
+      return
+    }
+    // Typed just before switching library: the text belongs to the old one.
+    const library = useApp.getState().libraryId
+    timer.current = window.setTimeout(() => {
+      if (useApp.getState().libraryId === library) setQueryText(text)
+    }, APPLY_DELAY_MS)
   }
 
   const parsed = useMemo(() => parseSearch(draft), [draft])
@@ -299,7 +308,7 @@ function Chip({ part, onRemove }: { part: Part; onRemove: () => void }) {
         {t(`qkey.${key}` as MessageKey)}
       </span>
       <span>
-        {part.kind === 'filter' && part.op ? `${part.op} ` : ''}
+        {part.kind === 'filter' && part.op ? `${OP_NAMES[part.op] ? t(OP_NAMES[part.op]!) : part.op} ` : ''}
         {value}
       </span>
       <Icon name="close" size={11} />

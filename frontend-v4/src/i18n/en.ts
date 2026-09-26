@@ -4,6 +4,7 @@ import { enLibrary } from './en.library'
 import { enSimilar } from './en.similar'
 import { enInfo } from './en.info'
 import { enStatus } from './en.status'
+import { enBrowse } from './en.browse'
 import { enSort } from './en.sort'
 import type { MessageKey } from './zh-CN'
 
@@ -14,6 +15,7 @@ export const en: Record<MessageKey, string> = {
   ...enInfo,
   ...enDataset,
   ...enStatus,
+  ...enBrowse,
   ...enSort,
   'app.name': 'SD Image Sorter',
   'nav.home': 'Home',
@@ -123,7 +125,6 @@ export const en: Record<MessageKey, string> = {
   'grid.count': '{n} images',
   'grid.loading': 'Loading…',
   'grid.empty': 'No images match',
-  'grid.emptyHint': 'Try other words, or clear the source and folder on the left.',
   'grid.error': "Couldn't load images: {reason}",
   'grid.retry': 'Retry',
 

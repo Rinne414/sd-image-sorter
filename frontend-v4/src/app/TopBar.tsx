@@ -31,6 +31,9 @@ export function TopBar() {
 
   return (
     <header className={styles.bar}>
+      <button type="button" className={styles.skip} onClick={skipToContent} data-testid="skip-link">
+        {t('browse.skip')}
+      </button>
       <button type="button" className={styles.brand} onClick={() => setPage('home')} aria-label={t('nav.home')} title={t('nav.home')}>
         <FrameMark />
         <span className={styles.brandName}>SD Image Sorter</span>
@@ -85,6 +88,17 @@ export function TopBar() {
       </a>
     </header>
   )
+}
+
+/**
+ * Past the top bar to the page's own content. A button, not a #link: the
+ * address hash is the app's route.
+ */
+function skipToContent(): void {
+  const target = document.querySelector<HTMLElement>('main') ?? document.querySelector<HTMLElement>('header + *')
+  if (!target) return
+  if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1')
+  target.focus()
 }
 
 /** A single frame of film with its sprocket holes: the app's mark. */

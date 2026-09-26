@@ -87,6 +87,35 @@
   font-weight: 600;
 }
 
+/* Tags / prompt: a word field, then its match mode. */
+.matchRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.matchInput {
+  flex: 0 1 260px;
+  min-width: 160px;
+}
+
+.wordInput {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px dashed var(--line-strong);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-2);
+  border-radius: var(--radius);
+}
+
+.wordInput:focus {
+  outline: none;
+  border-style: solid;
+  border-color: var(--accent);
+}
+
 .swatches {
   display: inline-flex;
   gap: 4px;

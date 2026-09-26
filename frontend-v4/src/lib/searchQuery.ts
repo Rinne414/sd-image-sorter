@@ -7,6 +7,11 @@
 //   key:a..b           numeric range
 //   -key:value         exclude (tag, generator, rating, checkpoint, lora,
 //                      prompt, color)
+//   tag:a|b|c          any of these tags (the backend has one tag mode for
+//                      the whole query, so it works as the only required tag
+//                      condition; next to other required tags it warns)
+//   prompt:*text*      prompt contains the text anywhere (one mode for every
+//                      prompt term, so each prompt chip then says "contains")
 //   "quoted value"     values with spaces
 //   contains(text)     same as free text
 //   ★4 / ☆4            V4 shorthand for stars>=4
@@ -112,14 +117,16 @@ const NEGATABLE = new Set<QueryKey>(['tag', 'checkpoint', 'lora', 'prompt', 'gen
 
 export type WarnReason =
   | 'number' | 'date' | 'size' | 'generator' | 'rating' | 'aspect' | 'color' | 'light'
-  | 'notNegatable' | 'starsMinOnly' | 'has' | 'no'
+  | 'notNegatable' | 'starsMinOnly' | 'has' | 'no' | 'anyTagAlone'
 
 /** One line of the search-syntax help; descriptions live in the language packs. */
 export const SYNTAX_ROWS: { syntax: string; example: string; key: string }[] = [
   { syntax: 'free text', example: 'silver hair', key: 'free' },
   { syntax: 'tag:VALUE', example: 'tag:silver_hair', key: 'tag' },
+  { syntax: 'tag:A|B', example: 'tag:cat_ears|fox_ears', key: 'tagAny' },
   { syntax: '-tag:VALUE', example: '-tag:blurry', key: 'negate' },
   { syntax: 'prompt:VALUE', example: 'prompt:"long hair"', key: 'prompt' },
+  { syntax: 'prompt:*TEXT*', example: 'prompt:*hair*', key: 'promptContains' },
   { syntax: 'checkpoint:VALUE', example: 'model:noobai', key: 'checkpoint' },
   { syntax: 'lora:VALUE', example: 'lora:detailer', key: 'lora' },
   { syntax: 'generator:VALUE', example: 'gen:nai', key: 'generator' },
@@ -193,6 +200,16 @@ export interface ParsedQuery {
   scalars: Scalars
   freeText: string[]
   parts: Part[]
+  /** 'or': `tags` is an any-of list (tag:a|b). */
+  tagMode: 'and' | 'or'
+  /** 'contains': every prompt term matches inside longer text (prompt:*x*). */
+  promptMatch: 'exact' | 'contains'
+}
+
+/** A tag:a|b token, waiting to learn whether it is the only required tag condition. */
+interface AnyTagGroup {
+  values: string[]
+  part: number
 }
 
 function empty(tokens: string[]): ParsedQuery {
@@ -202,6 +219,7 @@ function empty(tokens: string[]): ParsedQuery {
     prompts: [], excludePrompts: [], generators: [], excludeGenerators: [], ratings: [], excludeRatings: [],
     excludeColors: [], colorHues: [], excludeColorHues: [],
     scalars: {}, freeText: [], parts: [],
+    tagMode: 'and', promptMatch: 'exact',
   }
 }
 
@@ -273,11 +291,30 @@ const NUMERIC_FIELDS: Partial<Record<QueryKey, NumericField>> = {
 export function parseSearch(raw: string, today: Date = new Date()): ParsedQuery {
   const tokens = splitTokens(raw)
   const r = empty(tokens)
-  tokens.forEach((token, i) => handleToken(r, token, i, today))
+  const groups: AnyTagGroup[] = []
+  tokens.forEach((token, i) => handleToken(r, token, i, today, groups))
+  applyAnyTags(r, groups)
+  if (r.promptMatch === 'contains') {
+    r.parts = r.parts.map((p) => (p.kind === 'filter' && (p.key === 'prompt' || p.key === '-prompt') ? { ...p, op: 'contains' } : p))
+  }
   return r
 }
 
-function handleToken(r: ParsedQuery, token: string, index: number, today: Date): void {
+/** One any-of list alone applies; next to other required tags it cannot, and says so. */
+function applyAnyTags(r: ParsedQuery, groups: AnyTagGroup[]): void {
+  const only = groups[0]
+  if (groups.length === 1 && only && r.tags.length === 0) {
+    r.tags.push(...only.values)
+    r.tagMode = 'or'
+    return
+  }
+  for (const g of groups) {
+    const token = r.parts[g.part]?.token ?? 0
+    r.parts[g.part] = { kind: 'warn', raw: r.tokens[token] ?? '', reason: 'anyTagAlone', hint: '', token }
+  }
+}
+
+function handleToken(r: ParsedQuery, token: string, index: number, today: Date, groups: AnyTagGroup[]): void {
   const filter = (key: string, op: string, value: string) => r.parts.push({ kind: 'filter', key, op, value, token: index })
   const warn = (reason: WarnReason, hint = '') => r.parts.push({ kind: 'warn', raw: token, reason, hint, token: index })
   const free = (text: string) => {
@@ -379,18 +416,37 @@ function handleToken(r: ParsedQuery, token: string, index: number, today: Date):
   }
 
   switch (key) {
-    case 'tag':
-      list(r.tags, r.excludeTags, 'tag', value)
+    case 'tag': {
+      const values = value.split('|').map((v) => v.trim()).filter(Boolean)
+      if (values.length === 0) {
+        free(stripQuotes(token))
+        return
+      }
+      if (values.length > 1 && !negated) {
+        groups.push({ values, part: r.parts.length })
+        filter('tag', 'any', values.join(' | '))
+        return
+      }
+      ;(negated ? r.excludeTags : r.tags).push(...values)
+      filter(negated ? '-tag' : 'tag', '', values.join(' | '))
       return
+    }
     case 'checkpoint':
       list(r.checkpoints, r.excludeCheckpoints, 'checkpoint', value)
       return
     case 'lora':
       list(r.loras, r.excludeLoras, 'lora', value)
       return
-    case 'prompt':
-      list(r.prompts, r.excludePrompts, 'prompt', value)
+    case 'prompt': {
+      const clean = value.replace(/\*/g, '').trim()
+      if (!clean) {
+        free(stripQuotes(token))
+        return
+      }
+      if (clean !== value) r.promptMatch = 'contains'
+      list(r.prompts, r.excludePrompts, 'prompt', clean)
       return
+    }
     case 'generator': {
       const lower = value.toLowerCase()
       const gen = GENERATOR_ALIASES[lower] ?? lower
@@ -593,6 +649,7 @@ export function toImageParams(q: ParsedQuery, scope: ScopeFilter, sortBy: string
   }
   put('search', q.freeText.join(' ').trim())
   put('tags', csv(q.tags))
+  if (q.tagMode === 'or' && q.tags.length) put('tag_mode', 'or')
   put('exclude_tags', csv(q.excludeTags))
   put('checkpoints', csv(q.checkpoints))
   put('exclude_checkpoints', csv(q.excludeCheckpoints))
@@ -600,6 +657,7 @@ export function toImageParams(q: ParsedQuery, scope: ScopeFilter, sortBy: string
   put('exclude_loras', csv(q.excludeLoras))
   put('prompts', csv(q.prompts))
   put('exclude_prompts', csv(q.excludePrompts))
+  if (q.promptMatch === 'contains' && (q.prompts.length || q.excludePrompts.length)) put('prompt_match_mode', 'contains')
   put('generators', csv([...scope.generators, ...q.generators]))
   put('exclude_generators', csv(q.excludeGenerators))
   put('ratings', csv(q.ratings))
@@ -661,8 +719,15 @@ export function suggestionContext(text: string, caret: number): SuggestContext |
   if (!m) return null
   const key = KEY_ALIASES[m[1]!.trim().toLowerCase()] ?? KEY_ALIASES[m[1]!.trim()]
   if (!key) return null
-  const prefix = stripQuotes(m[3] ?? '')
-  const valueStart = start + lead + m[1]!.length + m[2]!.length
+  let prefix = stripQuotes(m[3] ?? '')
+  let valueStart = start + lead + m[1]!.length + m[2]!.length
+  // tag:a|b completes the tag after the last |; prompt:*x completes x
+  const cut = key === 'tag' ? prefix.lastIndexOf('|') + 1 : key === 'prompt' ? (prefix.match(/^\*+/)?.[0].length ?? 0) : 0
+  if (cut > 0) {
+    valueStart += cut + ((m[3] ?? '').startsWith('"') ? 1 : 0)
+    prefix = prefix.slice(cut)
+  }
+  if (key === 'prompt') prefix = prefix.replace(/\*+$/, '')
   const endpoint = AUTOCOMPLETE_KEYS[key]
   if (endpoint) return prefix ? { source: 'library', endpoint, key, prefix, valueStart, tokenEnd: end } : null
   const values = ENUM_SUGGESTIONS[key]

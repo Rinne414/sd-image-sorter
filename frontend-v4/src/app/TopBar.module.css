@@ -1,4 +1,5 @@
 .bar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -6,6 +7,26 @@
   padding: 0 10px 0 12px;
   background: var(--bg);
   border-bottom: 1px solid var(--line);
+}
+
+/* Keyboard users' first stop: hidden until it has focus, then over the brand. */
+.skip {
+  position: absolute;
+  z-index: 60;
+  top: 6px;
+  left: 8px;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  background: var(--ink-button);
+  color: var(--on-ink-button);
+  font-weight: 600;
+  border-radius: var(--radius);
+  translate: 0 -200%;
+}
+
+.skip:focus-visible {
+  translate: 0 0;
 }
 
 .brand {

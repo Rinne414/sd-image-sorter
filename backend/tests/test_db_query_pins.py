@@ -678,10 +678,12 @@ class TestQueryMutatingFilters:
         assert p == ["a", "b"]
 
     def test_tag_filter_or_mode_uses_single_in_join(self):
+        # A distinct image set, so an image with two of the tags is one row.
         q, p = _apply_tag_filter("SELECT x FROM images i", ["a", "b"], [], "or")
         assert q == (
             "SELECT x FROM images i"
-            " INNER JOIN tags _tor ON i.id = _tor.image_id AND _tor.tag IN (?,?)"
+            " INNER JOIN (SELECT DISTINCT image_id FROM tags WHERE tag IN (?,?)) _tor"
+            " ON i.id = _tor.image_id"
         )
         assert p == ["a", "b"]
 

@@ -133,3 +133,71 @@ describe('suggestionContext', () => {
     expect(suggestionContext('silver hair', 6)).toBeNull()
   })
 })
+
+describe('any of these tags (tag:a|b)', () => {
+  test('one list of tags joined by | matches images with at least one of them', () => {
+    const q = parseSearch('silver tag:cat_ears|fox_ears')
+    expect(q.tagMode).toBe('or')
+    expect(toImageParams(q, scope, 'newest')).toEqual({ sort_by: 'newest', search: 'silver', tags: 'cat_ears,fox_ears', tag_mode: 'or' })
+    expect(q.parts[1]).toMatchObject({ kind: 'filter', key: 'tag', op: 'any', value: 'cat_ears | fox_ears' })
+  })
+
+  test('without | every tag is required, and nothing extra is sent', () => {
+    const q = parseSearch('tag:a tag:b')
+    expect(q.tagMode).toBe('and')
+    expect(toImageParams(q, scope, 'newest')).toEqual({ sort_by: 'newest', tags: 'a,b' })
+    // one value left after dropping empty pieces is a plain tag
+    expect(toImageParams(parseSearch('tag:a|'), scope, 'newest')).toEqual({ sort_by: 'newest', tags: 'a' })
+  })
+
+  test('mixed with other required tags it cannot apply: it warns, the required tags still filter', () => {
+    const q = parseSearch('tag:1girl tag:cat_ears|fox_ears')
+    expect(q.parts[1]).toMatchObject({ kind: 'warn', reason: 'anyTagAlone', token: 1 })
+    expect(toImageParams(q, scope, 'newest')).toEqual({ sort_by: 'newest', tags: '1girl' })
+    const two = parseSearch('tag:a|b tag:c|d')
+    expect(two.parts.map((p) => p.kind)).toEqual(['warn', 'warn'])
+    expect(toImageParams(two, scope, 'newest')).toEqual({ sort_by: 'newest' })
+  })
+
+  test('excluding a list excludes each tag in it; aliases and quotes work', () => {
+    expect(params('-tag:blurry|lowres')).toEqual({ sort_by: 'newest', exclude_tags: 'blurry,lowres' })
+    expect(params('标签:"long hair|cat"')).toEqual({ sort_by: 'newest', tags: 'long hair,cat', tag_mode: 'or' })
+    expect(params('-tag:x|y tag:a|b')).toEqual({ sort_by: 'newest', exclude_tags: 'x,y', tags: 'a,b', tag_mode: 'or' })
+  })
+})
+
+describe('prompt contains (prompt:*text*)', () => {
+  test('a star marks "contains": the words may sit inside longer prompt text', () => {
+    const q = parseSearch('prompt:*hair*')
+    expect(q.promptMatch).toBe('contains')
+    expect(toImageParams(q, scope, 'newest')).toEqual({ sort_by: 'newest', prompts: 'hair', prompt_match_mode: 'contains' })
+    expect(q.parts[0]).toMatchObject({ kind: 'filter', key: 'prompt', op: 'contains', value: 'hair' })
+  })
+
+  test('the backend has one mode, so every prompt term shows and uses "contains"', () => {
+    const q = parseSearch('prompt:"*long hair*" prompt:smile -prompt:blur*')
+    expect(toImageParams(q, scope, 'newest')).toEqual({
+      sort_by: 'newest',
+      prompts: 'long hair,smile',
+      exclude_prompts: 'blur',
+      prompt_match_mode: 'contains',
+    })
+    expect(q.parts.map((p) => (p.kind === 'filter' ? `${p.key}/${p.op}` : p.kind))).toEqual(['prompt/contains', 'prompt/contains', '-prompt/contains'])
+  })
+
+  test('without a star prompt terms stay exact and send no mode; a bare star is text', () => {
+    expect(params('prompt:smile')).toEqual({ sort_by: 'newest', prompts: 'smile' })
+    expect(parseSearch('prompt:smile').promptMatch).toBe('exact')
+    expect(params('prompt:**')).toEqual({ sort_by: 'newest', search: 'prompt:**' })
+  })
+})
+
+describe('suggestions inside the new forms', () => {
+  test('after | only the tag being typed is completed', () => {
+    expect(suggestionContext('tag:cat_ears|fo', 15)).toMatchObject({ endpoint: 'tags', prefix: 'fo', valueStart: 13 })
+  })
+
+  test('a leading star is not part of what is looked up', () => {
+    expect(suggestionContext('prompt:*ha', 10)).toMatchObject({ endpoint: 'prompts', prefix: 'ha', valueStart: 8 })
+  })
+})

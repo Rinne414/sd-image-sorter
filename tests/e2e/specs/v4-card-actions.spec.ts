@@ -439,7 +439,8 @@ test('the rail: a collapse button, folding sections, both remembered after a rel
   await expect(rail.getByRole('button', { name: /^NovelAI/ })).toBeVisible()
 
   // fold Folders: its list goes, and stays gone after a reload
-  const folders = rail.getByRole('button', { name: 'Folders' })
+  // exact: the folder tree's open/close buttons are named "<folder>: folders inside"
+  const folders = rail.getByRole('button', { name: 'Folders', exact: true })
   const folderRow = rail.getByRole('button', { name: /v4-cact$/ })
   await expect(folders).toHaveAttribute('aria-expanded', 'true')
   await expect(folderRow).toBeVisible()

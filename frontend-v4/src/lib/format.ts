@@ -48,12 +48,6 @@ export function generatorCode(id: string | null): string {
   }
 }
 
-/** Last two path segments, the part people recognise. */
-export function shortFolder(path: string): string {
-  const parts = path.split(/[\\/]/).filter(Boolean)
-  return parts.slice(-2).join(' / ')
-}
-
 export function fileSize(bytes: number | null): string {
   if (!bytes) return ''
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`

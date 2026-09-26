@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { isAnyOf, isKey, onlyWith, replaceTokens, toggleToken, valueOf } from './queryEdit'
+import { addPrompt, addTags, isAnyOf, isKey, onlyWith, replaceTokens, setPromptMode, setTagMode, toggleToken, valueOf } from './queryEdit'
 import { parseSearch } from './searchQuery'
 
 describe('query editing', () => {
@@ -43,5 +43,31 @@ describe('filter by one model or LoRA (clicked on the card)', () => {
 
   test('a stray quote in a name cannot break the query', () => {
     expect(parseSearch(onlyWith('', 'lora', 'my "best" lora')).loras).toEqual(['my best lora'])
+  })
+})
+
+describe('match modes written by the filter panel', () => {
+  test('tags: "any" folds every required tag into one list, "all" splits it back', () => {
+    const any = setTagMode('silver tag:a -tag:x tag:b', 'or')
+    expect(any).toBe('silver tag:a|b -tag:x')
+    expect(setTagMode(any, 'and')).toBe('silver tag:a tag:b -tag:x')
+    // a mixed line that warned becomes one list
+    expect(setTagMode('tag:1girl tag:cat|fox', 'or')).toBe('tag:1girl|cat|fox')
+    expect(setTagMode('tag:"long hair" tag:cat', 'or')).toBe('tag:"long hair|cat"')
+  })
+
+  test('tags: adding keeps the mode the line is in, and skips ones already there', () => {
+    expect(addTags('x', ['a', 'b'], 'and')).toBe('x tag:a tag:b')
+    expect(addTags('x tag:a', ['a', 'c'], 'and')).toBe('x tag:a tag:c')
+    expect(addTags('tag:a|b', ['c'], 'or')).toBe('tag:a|b|c')
+    expect(addTags('', ['long hair', 'cat'], 'or')).toBe('tag:"long hair|cat"')
+  })
+
+  test('prompt: "contains" stars every term, "exact" removes the stars', () => {
+    const on = setPromptMode('prompt:smile -prompt:"long hair" silver', 'contains')
+    expect(on).toBe('prompt:*smile* -prompt:"*long hair*" silver')
+    expect(setPromptMode(on, 'exact')).toBe('prompt:smile -prompt:"long hair" silver')
+    expect(addPrompt('x', 'blue eyes', 'contains')).toBe('x prompt:"*blue eyes*"')
+    expect(addPrompt('x', 'smile', 'exact')).toBe('x prompt:smile')
   })
 })

@@ -2,7 +2,7 @@ import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual'
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent } from 'react'
 import { thumbnailUrl } from '../../api/client'
 import type { ImageSummary } from '../../api/types'
-import { useT } from '../../i18n'
+import { useT, type MessageKey, type Params } from '../../i18n'
 import { generatorCode, isTypingTarget } from '../../lib/format'
 import { formatScore } from '../../lib/imageInfo'
 import { useApp, type Layout, type TileSize } from '../../state/store'
@@ -12,6 +12,7 @@ import { NEAR_DUPLICATE, percent } from '../similar/ranking'
 import { useCardMenu } from './CardMenu'
 import { dragPayload, INTERNAL_DRAG } from './drag'
 import styles from './Gallery.module.css'
+import { useScrollMemory } from './useScrollMemory'
 
 const TILE_TARGET: Record<TileSize, number> = { s: 170, m: 236, l: 330 }
 const GAP = 6
@@ -22,6 +23,10 @@ export interface GalleryHandle {
 
 interface Props {
   images: ImageSummary[]
+  /** Size of the whole result, for "image 3 of 120"; null when unknown (a ranking). */
+  total: number | null
+  /** The search to come back to after a reload or another tab; undefined: none. */
+  scrollKey?: string | undefined
   hasMore: boolean
   isFetchingMore: boolean
   fetchMore: () => void
@@ -71,7 +76,19 @@ function useRefuseCardDropsInFields(): void {
   }, [])
 }
 
-export function Gallery({ images, hasMore, isFetchingMore, fetchMore, favorites, onFavorite, onReady, stale, scores }: Props) {
+type Translate = (key: MessageKey, params?: Params) => string
+
+/** What a screen reader says for a tile: its place in the result, name, stars, marks. */
+function tileLabel(t: Translate, img: ImageSummary, n: number, total: number | null, favorite: boolean, picked: boolean): string {
+  const name = img.filename ?? ''
+  const parts = [total === null ? t('browse.tile.labelOpen', { n, name }) : t('browse.tile.label', { n, total, name })]
+  if (img.user_rating) parts.push(t('browse.tile.stars', { n: img.user_rating }))
+  if (favorite) parts.push(t('browse.tile.favorite'))
+  if (picked) parts.push(t('browse.tile.picked'))
+  return parts.join(t('browse.tile.sep'))
+}
+
+export function Gallery({ images, total, scrollKey, hasMore, isFetchingMore, fetchMore, favorites, onFavorite, onReady, stale, scores }: Props) {
   const t = useT()
   const scrollRef = useRef<HTMLDivElement>(null)
   const width = useElementWidth(scrollRef)
@@ -104,6 +121,8 @@ export function Gallery({ images, hasMore, isFetchingMore, fetchMore, favorites,
   useEffect(() => {
     virtualizer.measure()
   }, [virtualizer, lanes, colW, layout])
+
+  useScrollMemory({ scrollRef, virtualizer, images, scrollKey, ready: width > 0, hasMore, isFetchingMore, fetchMore })
 
   const items = virtualizer.getVirtualItems()
   const lastIndex = items.at(-1)?.index ?? 0
@@ -209,41 +228,60 @@ export function Gallery({ images, hasMore, isFetchingMore, fetchMore, favorites,
   useRefuseCardDropsInFields()
 
   const pickOrder = new Map(selection.map((id, i) => [id, i + 1]))
+  // Keys move the inspected image without moving focus; say where it is now.
+  const inspectedIndex = inspectedId === null ? -1 : images.findIndex((img) => img.id === inspectedId)
+  const inspected = inspectedIndex >= 0 ? images[inspectedIndex] : undefined
+  const announcement = inspected
+    ? tileLabel(t, inspected, inspectedIndex + 1, total, favorites.has(inspected.id), pickOrder.has(inspected.id))
+    : ''
 
   return (
-    <div ref={scrollRef} className={styles.scroller} data-testid="gallery-scroller" aria-busy={stale || undefined}>
-      <div className={styles.canvas} style={{ height: virtualizer.getTotalSize() }}>
-        {items.map((item) => {
-          const img = images[item.index]
-          if (!img) return null
-          return (
-            <Tile
-              key={item.key}
-              img={img}
-              left={GAP + item.lane * (colW + GAP)}
-              top={item.start}
-              width={colW}
-              height={item.size}
-              thumbSize={thumbSize}
-              cover={layout === 'grid'}
-              inspected={img.id === inspectedId}
-              pick={pickOrder.get(img.id) ?? 0}
-              favorite={favorites.has(img.id)}
-              score={scores?.get(img.id)}
-              onClick={onTileClick}
-              onDouble={onTileDouble}
-              onMenu={onTileMenu}
-              onFavorite={onFavorite}
-            />
-          )
-        })}
+    <>
+      <div ref={scrollRef} className={styles.scroller} data-testid="gallery-scroller" aria-busy={stale || undefined}>
+        <div className={styles.canvas} style={{ height: virtualizer.getTotalSize() }} role="list" aria-label={t('browse.grid.label')}>
+          {items.map((item) => {
+            const img = images[item.index]
+            if (!img) return null
+            return (
+              <Tile
+                key={item.key}
+                label={tileLabel(t, img, item.index + 1, total, favorites.has(img.id), pickOrder.has(img.id))}
+                position={item.index + 1}
+                setSize={total ?? -1}
+                img={img}
+                left={GAP + item.lane * (colW + GAP)}
+                top={item.start}
+                width={colW}
+                height={item.size}
+                thumbSize={thumbSize}
+                cover={layout === 'grid'}
+                inspected={img.id === inspectedId}
+                pick={pickOrder.get(img.id) ?? 0}
+                favorite={favorites.has(img.id)}
+                score={scores?.get(img.id)}
+                onClick={onTileClick}
+                onDouble={onTileDouble}
+                onMenu={onTileMenu}
+                onFavorite={onFavorite}
+              />
+            )
+          })}
+        </div>
+        {isFetchingMore && <div className={styles.more}>{t('grid.loading')}</div>}
       </div>
-      {isFetchingMore && <div className={styles.more}>{t('grid.loading')}</div>}
-    </div>
+      <div className="visually-hidden" aria-live="polite" aria-atomic="true" data-testid="grid-announce">
+        {announcement}
+      </div>
+    </>
   )
 }
 
 interface TileProps {
+  /** Spoken name: position, file name, stars, marks. */
+  label: string
+  /** 1-based place in the result, and its size (-1: unknown), for screen readers. */
+  position: number
+  setSize: number
   img: ImageSummary
   left: number
   top: number
@@ -269,6 +307,11 @@ const Tile = memo(function Tile(p: TileProps) {
   return (
     <div
       className={styles.tile}
+      role="listitem"
+      aria-label={p.label}
+      aria-posinset={p.position}
+      aria-setsize={p.setSize}
+      aria-current={p.inspected || undefined}
       data-inspected={p.inspected || undefined}
       data-picked={p.pick > 0 || undefined}
       data-scored={p.score !== undefined || undefined}
