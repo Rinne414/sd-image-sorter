@@ -1,13 +1,15 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { api, ApiError, unwrap } from '../../api/client'
-import type { ImageSummary } from '../../api/types'
+import type { CollectionRow, ImageSummary } from '../../api/types'
 import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
 import { addJob, isQueueBusy, startingProgress, tr } from '../jobs/jobs'
 import { busyText } from '../jobs/busyText'
 import { withExisting, type DupGroup, type DupPage } from './duplicates'
+import { pairQuery, readPairs, withoutGone, type PairsReply } from './pairs'
 import { mergeRanked, readHits, type Hit, type RankedImage } from './ranking'
-import { queryKeyOf, type SimilarQuery } from './similarStore'
+import { hitFloor, nearQuery, textBody, uploadSearch, usesThreshold, type SearchOptions } from './searchRequest'
+import { queryKeyOf, useSimilar, type SimilarQuery } from './similarStore'
 
 // The similarity and duplicate endpoints, and the jobs that fill them. The
 // ranked endpoints give ids; POST /api/images/by-ids turns them into gallery
@@ -45,47 +47,52 @@ interface RankedPage {
   nextOffset: number | null
 }
 
-async function rankedHits(q: SimilarQuery, offset: number): Promise<{ hits: Hit[]; hasMore: boolean }> {
+async function rankedHits(q: SimilarQuery, o: SearchOptions, offset: number): Promise<{ hits: Hit[]; hasMore: boolean }> {
   if (q.kind === 'text') {
-    const res = await post<{ results?: unknown; has_more?: boolean }>(
-      '/api/similarity/search-text',
-      JSON.stringify({ query: q.text, limit: RANK_PAGE, offset, threshold: 0 }),
-    )
+    const res = await post<{ results?: unknown; has_more?: boolean }>('/api/similarity/search-text', JSON.stringify(textBody(q.text, RANK_PAGE, offset, o)))
     return { hits: readHits(res.results), hasMore: res.has_more === true }
   }
   if (q.kind === 'upload') {
     const form = new FormData()
     form.append('file', q.file, q.file.name)
-    const res = await post<{ results?: unknown; has_more?: boolean }>(
-      `/api/similarity/search-upload?limit=${RANK_PAGE}&offset=${offset}&threshold=0`,
-      form,
-      false,
-    )
+    const res = await post<{ results?: unknown; has_more?: boolean }>(`/api/similarity/search-upload?${uploadSearch(RANK_PAGE, offset, o)}`, form, false)
     return { hits: readHits(res.results), hasMore: res.has_more === true }
   }
   const res = unwrap<{ results?: unknown }>(
-    await api.GET('/api/similarity/near/{image_id}', { params: { path: { image_id: q.id }, query: { limit: NEAR_LIMIT } } }),
+    await api.GET('/api/similarity/near/{image_id}', { params: { path: { image_id: q.id }, query: nearQuery(NEAR_LIMIT, o) } }),
   )
   return { hits: readHits(res.results), hasMore: false }
 }
 
-async function fetchRanked(q: SimilarQuery, offset: number): Promise<RankedPage> {
-  const { hits, hasMore } = await rankedHits(q, offset)
+async function fetchRanked(q: SimilarQuery, o: SearchOptions, offset: number): Promise<RankedPage> {
+  const { hits, hasMore } = await rankedHits(q, o, offset)
   const rows = await imagesByIds(hits.map((h) => h.id))
-  const images = mergeRanked(hits, rows, q.kind === 'image' && q.near)
+  const images = mergeRanked(hits, rows, hitFloor(q, o))
   return { images, nextOffset: hasMore ? offset + hits.length : null }
 }
 
-/** The images ranked for a query, page by page. */
+/** The images ranked for a query, page by page, under the panel's threshold and scope. */
 export function useRankedImages(q: SimilarQuery | null) {
   const libraryId = useApp((s) => s.libraryId)
+  const options = useSimilar((s) => s.options)
+  const threshold = q && usesThreshold(q) ? options.threshold : null
   return useInfiniteQuery({
-    queryKey: ['similar', libraryId, q ? queryKeyOf(q) : null],
+    queryKey: ['similar', libraryId, q ? queryKeyOf(q) : null, threshold, options.collectionId],
     enabled: q !== null,
     initialPageParam: 0,
-    queryFn: ({ pageParam }) => fetchRanked(q as SimilarQuery, pageParam),
+    queryFn: ({ pageParam }) => fetchRanked(q as SimilarQuery, options, pageParam),
     getNextPageParam: (last) => last.nextOffset ?? undefined,
     retry: false,
+    staleTime: 60_000,
+  })
+}
+
+/** The collections a search can be limited to (Favorites among them), for this library. */
+export function useScopeCollections() {
+  const libraryId = useApp((s) => s.libraryId)
+  return useQuery({
+    queryKey: ['similar-scopes', libraryId],
+    queryFn: async ({ signal }) => unwrap<{ collections: CollectionRow[] }>(await api.GET('/api/collections', { signal })).collections,
     staleTime: 60_000,
   })
 }
@@ -146,6 +153,39 @@ export function useDuplicateReview(enabled = true) {
     enabled,
     initialPageParam: 0,
     queryFn: ({ pageParam }) => reviewPage(pageParam),
+    getNextPageParam: (last) => last.nextOffset ?? undefined,
+    staleTime: 30_000,
+  })
+}
+
+export interface PairsPage extends PairsReply {
+  /** Gallery rows of the pairs' images (the lightbox shows them). */
+  rows: ImageSummary[]
+  nextOffset: number | null
+}
+
+async function rowsOf(ids: readonly number[]): Promise<ImageSummary[]> {
+  const rows: ImageSummary[] = []
+  for (let i = 0; i < ids.length; i += ID_CHUNK) rows.push(...(await imagesByIds(ids.slice(i, i + ID_CHUNK))))
+  return rows
+}
+
+async function pairsPage(threshold: number, offset: number): Promise<PairsPage> {
+  const reply = readPairs(unwrap(await api.GET('/api/similarity/duplicates', { params: { query: pairQuery(threshold, offset) } })))
+  const rows = await rowsOf([...new Set(reply.pairs.flatMap((p) => [p.a.id, p.b.id]))])
+  const pairs = withoutGone(reply.pairs, new Set(rows.map((r) => r.id)))
+  return { ...reply, pairs, rows, nextOffset: reply.hasMore ? offset + reply.pairs.length : null }
+}
+
+/** V3.5's pair finder at a threshold (null: not asked yet), page by page, without pairs whose images are gone. */
+export function useSimilarPairs(threshold: number | null) {
+  const libraryId = useApp((s) => s.libraryId)
+  return useInfiniteQuery({
+    // under 'duplicates': removing images refreshes it (jobs GONE_KEYS)
+    queryKey: ['duplicates', libraryId, 'pairs', threshold],
+    enabled: threshold !== null,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => pairsPage(threshold as number, pageParam),
     getNextPageParam: (last) => last.nextOffset ?? undefined,
     staleTime: 30_000,
   })

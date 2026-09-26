@@ -1,7 +1,8 @@
-// Duplicate review: the last scan's groups, each with one image to keep.
-// The scan suggests a keeper (best rating, aesthetic, resolution, file
-// size); the user may pick another. Everything not kept is what "remove the
-// others" acts on. Pure, so what gets removed is tested.
+// Duplicate review: the last scan's groups. The scan suggests one keeper
+// (best rating, aesthetic, resolution, file size); every other image starts
+// ticked for the trash, as in V3.5. The user may tick and untick any, so two
+// or more can be kept, but never none: the tick that would leave a group with
+// nothing kept is refused. Pure, so what gets removed is tested.
 
 export interface DupMember {
   id: number
@@ -48,16 +49,38 @@ export interface DupPage {
 /** Scan sensitivity, strictest first (V3.5's three settings). */
 export const THRESHOLDS = [0.98, 0.95, 0.9] as const
 
-/** The keeper of a group: the user's choice when it is still a member, else the suggestion, else the first. */
-export function keeperOf(group: DupGroup, chosen: number | undefined): number {
-  if (chosen !== undefined && group.members.some((m) => m.id === chosen)) return chosen
+/** The keeper the scan suggests (else the first member). */
+function suggestedKeeper(group: DupGroup): number {
   return (group.members.find((m) => m.suggested_keep) ?? group.members[0])?.id ?? -1
 }
 
-/** Everything in the group except its keeper. */
-export function othersOf(group: DupGroup, chosen: number | undefined): number[] {
-  const keep = keeperOf(group, chosen)
-  return group.members.filter((m) => m.id !== keep).map((m) => m.id)
+/**
+ * The members ticked for the trash: the user's ticks (members only), else all
+ * but the suggested keeper. Never all of them: ticks saved before members went
+ * away leave the suggested keeper out.
+ */
+export function marksOf(group: DupGroup, ticks: ReadonlySet<number> | undefined): number[] {
+  const ids = group.members.map((m) => m.id)
+  const keeper = suggestedKeeper(group)
+  if (!ticks) return ids.filter((id) => id !== keeper)
+  const marked = ids.filter((id) => ticks.has(id))
+  return marked.length < ids.length ? marked : marked.filter((id) => id !== keeper)
+}
+
+/** Whether this member can be ticked: it is in the group and not the last one kept. */
+export function canMark(group: DupGroup, ticks: ReadonlySet<number> | undefined, id: number): boolean {
+  const marked = marksOf(group, ticks)
+  if (!group.members.some((m) => m.id === id)) return false
+  return marked.includes(id) || marked.length + 1 < group.members.length
+}
+
+/** Tick or untick one member; a tick that would leave nothing kept changes nothing. */
+export function toggleMark(group: DupGroup, ticks: ReadonlySet<number> | undefined, id: number): ReadonlySet<number> {
+  const marked = new Set(marksOf(group, ticks))
+  if (marked.has(id)) marked.delete(id)
+  else if (canMark(group, ticks, id)) marked.add(id)
+  else return ticks ?? new Set(marksOf(group, undefined))
+  return marked
 }
 
 /**
@@ -70,12 +93,12 @@ export function withExisting(groups: readonly DupGroup[], existing: ReadonlySet<
     .filter((g) => g.members.length > 1)
 }
 
-/** Bytes the others of these groups take up. */
-export function reclaimable(groups: readonly DupGroup[], chosen: ReadonlyMap<number, number>): number {
+/** Bytes the ticked images of these groups take up. */
+export function reclaimable(groups: readonly DupGroup[], ticks: ReadonlyMap<number, ReadonlySet<number>>): number {
   let bytes = 0
   for (const g of groups) {
-    const keep = keeperOf(g, chosen.get(g.group_id))
-    for (const m of g.members) if (m.id !== keep) bytes += m.file_size ?? 0
+    const marked = new Set(marksOf(g, ticks.get(g.group_id)))
+    for (const m of g.members) if (marked.has(m.id)) bytes += m.file_size ?? 0
   }
   return bytes
 }

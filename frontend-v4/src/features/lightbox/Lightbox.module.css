@@ -8,6 +8,11 @@
   animation: fade var(--t-med) var(--ease);
 }
 
+/* A dialog's lightbox (the duplicates review) opens over the dialog. */
+.overDialog {
+  z-index: 75;
+}
+
 @keyframes fade {
   from {
     opacity: 0;

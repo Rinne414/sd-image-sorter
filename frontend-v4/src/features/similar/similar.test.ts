@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ImageDetailResponse, ImageSummary } from '../../api/types'
 import { compareDetails, diffTags } from './compare'
-import { keeperOf, othersOf, reclaimable, withExisting, type DupGroup } from './duplicates'
+import { canMark, marksOf, reclaimable, toggleMark, withExisting, type DupGroup } from './duplicates'
 import { mergeRanked, percent, readHits } from './ranking'
 
 const row = (id: number): ImageSummary => ({
@@ -38,7 +38,7 @@ describe('ranked results', () => {
     ])
   })
 
-  it('near-duplicates only: at or above 0.9', () => {
+  it('keeps only scores at or above the floor (near-duplicates: 0.9)', () => {
     const out = mergeRanked(
       [
         { id: 1, similarity: 0.95 },
@@ -46,7 +46,7 @@ describe('ranked results', () => {
         { id: 3, similarity: 0.89 },
       ],
       [row(1), row(2), row(3)],
-      true,
+      0.9,
     )
     expect(out.map((r) => r.id)).toEqual([1, 2])
   })
@@ -120,17 +120,34 @@ const member = (id: number, keep = false, size = 10) => ({
 describe('duplicate groups', () => {
   const group: DupGroup = { group_id: 0, similarity: 0.97, members: [member(5, true), member(6), member(7)] }
 
-  it('keeps the suggestion unless the user picked another member', () => {
-    expect(keeperOf(group, undefined)).toBe(5)
-    expect(othersOf(group, undefined)).toEqual([6, 7])
-    expect(keeperOf(group, 7)).toBe(7)
-    expect(othersOf(group, 7)).toEqual([5, 6])
-    // a choice that is no longer in the group falls back to the suggestion
-    expect(keeperOf(group, 99)).toBe(5)
+  it('marks every image but the suggested keeper for the trash until the user ticks otherwise', () => {
+    expect(marksOf(group, undefined)).toEqual([6, 7])
+    expect(marksOf(group, new Set([7]))).toEqual([7])
+    // two kept: only the rest go
+    expect(marksOf(group, new Set([6]))).toEqual([6])
+    expect(marksOf(group, new Set())).toEqual([])
   })
 
-  it('never lists the keeper among what gets removed', () => {
-    for (const choice of [undefined, 5, 6, 7]) expect(othersOf(group, choice)).not.toContain(keeperOf(group, choice))
+  it('never leaves a group with nothing kept', () => {
+    // ticking the last kept image is refused
+    const ticks = new Set([6, 7])
+    expect(canMark(group, ticks, 5)).toBe(false)
+    expect(toggleMark(group, ticks, 5)).toEqual(ticks)
+    // any other tick or untick goes through
+    expect(canMark(group, ticks, 6)).toBe(true)
+    expect(toggleMark(group, ticks, 6)).toEqual(new Set([7]))
+    expect(toggleMark(group, new Set([7]), 5)).toEqual(new Set([7, 5]))
+    // ticks saved before members went away still keep one (the suggested keeper)
+    const shrunk: DupGroup = { ...group, members: [member(5, true), member(7)] }
+    expect(marksOf(shrunk, new Set([5, 7]))).toEqual([7])
+    for (const t of [undefined, new Set<number>(), new Set([5, 6]), new Set([5, 6, 7])]) {
+      expect(marksOf(group, t).length).toBeLessThan(group.members.length)
+    }
+  })
+
+  it('only marks members of the group', () => {
+    expect(marksOf(group, new Set([6, 99]))).toEqual([6])
+    expect(canMark(group, new Set(), 99)).toBe(false)
   })
 
   it('drops members that are gone and groups left with one image', () => {
@@ -140,9 +157,10 @@ describe('duplicate groups', () => {
     expect(out[0]!.members.map((m) => m.id)).toEqual([5, 7])
   })
 
-  it('counts the bytes the others take', () => {
+  it('counts the bytes of what is marked', () => {
     const g2: DupGroup = { group_id: 1, similarity: 0.99, members: [member(8, true, 100), member(9, false, 40)] }
     expect(reclaimable([group, g2], new Map())).toBe(20 + 40)
-    expect(reclaimable([group, g2], new Map([[1, 9]]))).toBe(20 + 100)
+    expect(reclaimable([group, g2], new Map([[1, new Set([8])]]))).toBe(20 + 100)
+    expect(reclaimable([group, g2], new Map([[0, new Set<number>()]]))).toBe(40)
   })
 })

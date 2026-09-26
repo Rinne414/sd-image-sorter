@@ -27,6 +27,8 @@ interface Props {
   pickable?: boolean
   /** The image at a position in the whole result, for one opened outside the loaded pages (a random pick). */
   fetchAt?: (offset: number) => Promise<ImageSummary | null>
+  /** Whose lightbox this is: the page's own, or a dialog's (store `lightboxOwner`). */
+  owner?: string
 }
 
 function readInfoPref(): boolean {
@@ -38,14 +40,17 @@ function readInfoPref(): boolean {
 }
 
 /** One image up close. The film strip below keeps the neighbours in reach. */
-export function Lightbox({ images, total, hasMore, fetchMore, pickable = true, fetchAt }: Props) {
+export function Lightbox({ images, total, hasMore, fetchMore, pickable = true, fetchAt, owner = 'page' }: Props) {
   const t = useT()
-  const id = useApp((s) => s.lightboxId)
+  // Another owner's big image is not this lightbox's to show.
+  const id = useApp((s) => (s.lightboxOwner === owner ? s.lightboxId : null))
   const at = useApp((s) => s.lightboxAt)
   const selection = useApp((s) => s.selection)
   const close = useApp((s) => s.closeLightbox)
-  const open = useApp((s) => s.openLightbox)
-  const openAt = useApp((s) => s.openLightboxAt)
+  const openAny = useApp((s) => s.openLightbox)
+  const openAtAny = useApp((s) => s.openLightboxAt)
+  const open = (next: number) => openAny(next, owner)
+  const openAt = (next: number, offset: number) => openAtAny(next, offset, owner)
   const togglePick = useApp((s) => s.togglePick)
   const favorites = useFavorites()
   const setRating = useSetRating()
@@ -182,7 +187,13 @@ export function Lightbox({ images, total, hasMore, fetchMore, pickable = true, f
   const atEnd = index >= 0 ? index >= images.length - 1 && !hasMore : !outside || !fetchAt || (at ?? 0) >= total - 1
 
   return createPortal(
-    <div className={styles.overlay} role="dialog" aria-modal="true" data-testid="lightbox" data-info={info || undefined}>
+    <div
+      className={owner === 'page' ? styles.overlay : `${styles.overlay} ${styles.overDialog}`}
+      role="dialog"
+      aria-modal="true"
+      data-testid="lightbox"
+      data-info={info || undefined}
+    >
       <header className={styles.bar}>
         {position !== null && <span className={`${styles.pos} mono`}>{t('lightbox.position', { i: position, n: total })}</span>}
         <span className={`${styles.name} mono`} title={path ?? undefined}>

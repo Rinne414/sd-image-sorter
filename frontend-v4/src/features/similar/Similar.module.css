@@ -60,3 +60,46 @@
   color: var(--text);
   text-decoration-color: var(--text-2);
 }
+
+/* Threshold and scope, after the title: small, printed like the rail's labels. */
+.tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 14px;
+}
+
+.tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
+.tool input[type='range'] {
+  width: 120px;
+  accent-color: var(--accent);
+}
+
+.toolValue {
+  min-width: 34px;
+  color: var(--text);
+}
+
+.select {
+  height: 28px;
+  max-width: 200px;
+  padding: 0 6px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-2);
+  border-radius: var(--radius);
+}
+
+.select:focus {
+  outline: none;
+  border-color: var(--accent);
+}

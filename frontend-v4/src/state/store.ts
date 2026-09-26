@@ -102,6 +102,11 @@ interface AppState extends Prefs {
    * pages (a random pick); null when it is one of the loaded images.
    */
   lightboxAt: number | null
+  /**
+   * Which lightbox shows the big image: 'page' (the page's own) or a dialog's
+   * (the duplicates review opens its images over itself).
+   */
+  lightboxOwner: string
   paletteOpen: boolean
   /** The batch open on the Batch page (null: the list). */
   batchId: number | null
@@ -134,9 +139,9 @@ interface AppState extends Prefs {
   selectRange: (ids: number[]) => void
   setSelection: (ids: number[]) => void
   clearSelection: () => void
-  openLightbox: (id: number) => void
+  openLightbox: (id: number, owner?: string) => void
   /** Open an image that may lie outside the loaded pages, at `at` in the result. */
-  openLightboxAt: (id: number, at: number) => void
+  openLightboxAt: (id: number, at: number, owner?: string) => void
   closeLightbox: () => void
   setPaletteOpen: (open: boolean) => void
   openBatch: (id: number) => void
@@ -198,6 +203,7 @@ export const useApp = create<AppState>((set, get) => ({
   selectionAnchor: null,
   lightboxId: null,
   lightboxAt: null,
+  lightboxOwner: 'page',
   paletteOpen: false,
   ...initialRoute,
   adding: null,
@@ -284,8 +290,11 @@ export const useApp = create<AppState>((set, get) => ({
   },
   setSelection: (ids) => set({ selection: [...ids], selectionAnchor: ids.at(-1) ?? null }),
   clearSelection: () => set({ selection: [], selectionAnchor: null }),
-  openLightbox: (lightboxId) => set({ lightboxId, lightboxAt: null, inspectedId: lightboxId }),
-  openLightboxAt: (lightboxId, lightboxAt) => set({ lightboxId, lightboxAt, inspectedId: lightboxId }),
+  // A dialog's lightbox leaves the page's inspected image alone.
+  openLightbox: (lightboxId, owner = 'page') =>
+    set({ lightboxId, lightboxAt: null, lightboxOwner: owner, ...(owner === 'page' ? { inspectedId: lightboxId } : {}) }),
+  openLightboxAt: (lightboxId, lightboxAt, owner = 'page') =>
+    set({ lightboxId, lightboxAt, lightboxOwner: owner, ...(owner === 'page' ? { inspectedId: lightboxId } : {}) }),
   closeLightbox: () => set({ lightboxId: null, lightboxAt: null }),
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
   openBatch: (batchId) => go({ page: 'batch', batchId }),

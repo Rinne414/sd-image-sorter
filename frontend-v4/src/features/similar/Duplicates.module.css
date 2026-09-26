@@ -113,7 +113,7 @@
   gap: 10px;
 }
 
-/* One image of a group; the kept one carries the accent edge. */
+/* One image of a group; the kept ones carry the accent edge. */
 .member {
   display: grid;
   gap: 4px;
@@ -121,7 +121,6 @@
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  cursor: pointer;
 }
 
 .member[data-kept] {
@@ -129,7 +128,22 @@
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
+/* The thumbnail opens the image full size. */
+.thumb {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+.thumb:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .member img {
+  display: block;
   width: 100%;
   aspect-ratio: 1;
   object-fit: contain;
@@ -142,6 +156,28 @@
   gap: 5px;
   color: var(--text);
   font-size: var(--fs-2);
+}
+
+.mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.mark:has(input:disabled) {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.mark input {
+  margin: 0;
+  accent-color: var(--danger);
+}
+
+.kept {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .badge {
@@ -170,4 +206,108 @@
   white-space: nowrap;
   color: var(--text-2);
   font-size: var(--fs-1);
+}
+
+/* Grouped cleanup or similar pairs: two tabs, printed like the settings tabs. */
+.modes {
+  display: flex;
+  gap: 18px;
+  margin: 4px 0 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.mode {
+  padding: 6px 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+}
+
+.mode:hover {
+  color: var(--text);
+}
+
+.mode[aria-selected='true'] {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.pairThreshold {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.pairThreshold input {
+  width: 200px;
+  accent-color: var(--accent);
+}
+
+.warn {
+  color: var(--warn);
+  font-size: var(--fs-2);
+}
+
+.pairs {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One pair: the two images, and how alike they are between them. */
+.pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.pairSide {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.pairSide .thumb {
+  grid-row: span 2;
+}
+
+.pairSide img {
+  display: block;
+  width: 120px;
+  aspect-ratio: 1;
+  object-fit: contain;
+  background: var(--stage);
+}
+
+.pairScore {
+  color: var(--text);
+  font-size: var(--fs-3);
+}
+
+.pairActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 4px 12px;
+}
+
+.pairActions .link {
+  margin-left: 0;
+}
+
+.danger {
+  color: var(--danger);
 }

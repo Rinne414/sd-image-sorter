@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { useApp } from '../../state/store'
+import { DEFAULT_THRESHOLD, type SearchOptions } from './searchRequest'
 
 // "Find a different way": the library can show images ranked by likeness
 // instead of by the filter — to a sentence (semantic search), to an image of
@@ -15,17 +16,22 @@ interface SimilarState {
   query: SimilarQuery | null
   /** The query bar searches by meaning instead of by the filter language. */
   semantic: boolean
+  /** Threshold and scope of the searches (kept for the session, as in V3.5). */
+  options: SearchOptions
   show: (query: SimilarQuery) => void
   clear: () => void
   setSemantic: (on: boolean) => void
+  setOptions: (patch: Partial<SearchOptions>) => void
 }
 
-export const useSimilar = create<SimilarState>((set) => ({
+export const useSimilar = create<SimilarState>((set, get) => ({
   query: null,
   semantic: false,
+  options: { threshold: DEFAULT_THRESHOLD, collectionId: null },
   show: (query) => set({ query }),
   clear: () => set({ query: null }),
   setSemantic: (semantic) => set({ semantic }),
+  setOptions: (patch) => set({ options: { ...get().options, ...patch } }),
 }))
 
 let uploads = 0
@@ -42,9 +48,11 @@ export function showLikeImage(id: number, name: string, near: boolean): void {
   useSimilar.getState().show({ kind: 'image', id, name, near })
 }
 
-// Ranked results belong to one library.
+// Ranked results and collections belong to one library.
 useApp.subscribe((s, prev) => {
-  if (s.libraryId !== prev.libraryId) useSimilar.getState().clear()
+  if (s.libraryId === prev.libraryId) return
+  useSimilar.getState().clear()
+  useSimilar.getState().setOptions({ collectionId: null })
 })
 
 /** A stable cache key for a query (a file is known by its upload token). */

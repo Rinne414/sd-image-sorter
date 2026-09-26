@@ -2,6 +2,7 @@ import { ApiError } from '../../api/client'
 import { useT } from '../../i18n'
 import { Icon } from '../../ui/Icon'
 import { withClip } from './clip'
+import { SearchTools } from './SearchTools'
 import { startIndexing, useIndexStats } from './similarApi'
 import { useSimilar, type SimilarQuery } from './similarStore'
 import styles from './Similar.module.css'
@@ -21,7 +22,7 @@ function useTitle(query: SimilarQuery): string {
   return t(query.near ? 'sim.banner.near' : 'sim.banner.image', { name: query.name })
 }
 
-/** Over the grid while it shows images ranked by likeness: what they are like, and the way back. */
+/** Over the grid while it shows images ranked by likeness: what they are like, the threshold and scope, and the way back. */
 export function SimilarBanner({ query, count, loading, error, retry }: Props) {
   const t = useT()
   const title = useTitle(query)
@@ -62,6 +63,7 @@ export function SimilarBanner({ query, count, loading, error, retry }: Props) {
           </span>
         )}
       </div>
+      <SearchTools query={query} />
       <button type="button" className="btn btn-ghost" onClick={() => useSimilar.getState().clear()} data-testid="similar-back">
         <Icon name="close" size={13} />
         {t('sim.banner.back')}

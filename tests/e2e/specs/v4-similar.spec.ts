@@ -2,7 +2,8 @@ import path from 'node:path'
 
 import { expect, test, type Page, type Route } from '@playwright/test'
 
-import { cleanupImages, openLibrary, pageOverflow, seedImages, tmpRoot, VIEWPORTS } from '../fixtures/v4-seed'
+import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
+import { cleanupImages, dbPath, openLibrary, pageOverflow, runBackendScript, seedImages, tmpRoot, VIEWPORTS } from '../fixtures/v4-seed'
 
 /**
  * V4 find similar: search by meaning in the query bar, search by an image
@@ -122,7 +123,7 @@ for (const viewport of VIEWPORTS) {
       const dups = page.getByTestId('duplicates-dialog')
       await expect(dups).toBeInViewport()
       await expect(dups.getByTestId('duplicate-group')).toHaveCount(1)
-      await expect(dups.getByTestId('duplicates-trash-others')).toBeInViewport()
+      await expect(dups.getByTestId('duplicates-trash-marked')).toBeInViewport()
       expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
       await page.keyboard.press('Escape')
       await page.getByTestId('semantic-toggle').click()
@@ -242,7 +243,7 @@ test('search by image: pick a file, or drop one on the query bar (the import dia
   await expect(page.getByTestId('drop-overlay')).toHaveCount(0)
   await page.evaluate(() => (window as unknown as { __fireDrop: () => void }).__fireDrop())
   await expect(banner).toContainText('Similar to dropped.png')
-  expect(uploads).toHaveLength(2)
+  await expect.poll(() => uploads.length).toBe(2)
   await expect(page.getByTestId('drop-dialog')).toHaveCount(0)
 })
 
@@ -339,7 +340,7 @@ test('compare two picks: CLIP likeness, the parameters and tags that differ', as
   await expect(page.getByRole('menu').locator('[data-item="compare"]')).toHaveCount(0)
 })
 
-test('duplicates: the status offers the review; keep one, the rest go to Trash after the confirm', async ({ page }) => {
+test('duplicates: tick what goes, keep two or more but never none, open full size; the ticked go to Trash after the confirm', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   const ids = await idsOf(page)
   await stubStats(page)
@@ -360,11 +361,11 @@ test('duplicates: the status offers the review; keep one, the rest go to Trash a
   let trashed: { image_ids: number[]; confirm_delete_files: boolean } | null = null
   await page.route('**/api/images/delete-selected/start', (r) => {
     trashed = r.request().postDataJSON()
-    return json(r, { status: 'started', total: 2, operation: 'delete' })
+    return json(r, { status: 'started', total: 1, operation: 'delete' })
   })
   // idle until our job starts, so the start-up check finds nothing running
   await page.route('**/api/images/delete-selected/progress', (r) =>
-    json(r, trashed ? { status: 'running', current: 0, total: 2, deleted: 0, errors: 0, failed: [] } : { status: 'idle', current: 0, total: 0 }),
+    json(r, trashed ? { status: 'running', current: 0, total: 1, deleted: 0, errors: 0, failed: [] } : { status: 'idle', current: 0, total: 0 }),
   )
 
   await openLibrary(page, TOKEN, COUNT)
@@ -374,20 +375,112 @@ test('duplicates: the status offers the review; keep one, the rest go to Trash a
   const dialog = page.getByTestId('duplicates-dialog')
   await expect(dialog.getByTestId('duplicates-coverage')).toContainText(`${COUNT} of ${COUNT} images are in the index`)
   const group = dialog.getByTestId('duplicate-group')
-  await expect(group.getByTestId('duplicate-keep')).toHaveCount(3)
-  await expect(group.locator(`[data-testid="duplicate-keep"][data-id="${ids[0]}"]`)).toBeChecked()
+  const mark = (i: number) => group.locator(`[data-testid="duplicate-mark"][data-id="${ids[i]}"]`)
+  await expect(group.getByTestId('duplicate-mark')).toHaveCount(3)
+  // as V3.5: all but the suggested keeper start ticked
+  await expect(mark(0)).not.toBeChecked()
+  await expect(mark(1)).toBeChecked()
+  await expect(mark(2)).toBeChecked()
+  const trashMarked = group.getByTestId('duplicates-trash-marked')
+  await expect(trashMarked).toHaveText('Move the 2 ticked to Trash…')
 
-  // keep the second one instead
-  await group.locator(`[data-testid="duplicate-keep"][data-id="${ids[1]}"]`).check()
-  const trashOthers = group.getByTestId('duplicates-trash-others')
-  await expect(trashOthers).toHaveText('Move the other 2 to Trash…')
-  await trashOthers.click()
+  // never none kept: with the second and third ticked, the last kept one cannot be ticked
+  await expect(mark(0)).toBeDisabled()
+  // keep two: untick the second, only the third goes
+  await mark(1).uncheck()
+  await expect(mark(0)).toBeEnabled()
+  await expect(trashMarked).toHaveText('Move the 1 ticked to Trash…')
+
+  // full size from the dialog, over it; Esc closes only the big image
+  await group.locator(`[data-testid="duplicate-view"][data-id="${ids[1]}"]`).click()
+  const lightbox = page.getByTestId('lightbox')
+  await expect(lightbox).toBeVisible()
+  await expect(lightbox).toContainText(name(1))
+  await expect(page.getByTestId('lightbox')).toHaveCount(1)
+  await page.keyboard.press('Escape')
+  await expect(lightbox).toHaveCount(0)
+  await expect(dialog).toBeVisible()
+
+  await trashMarked.click()
   const confirm = page.getByTestId('confirm-dialog')
   await expect(confirm).toBeVisible()
   await expect(confirm.getByRole('button', { name: 'Cancel' })).toBeFocused()
-  await confirm.getByRole('button', { name: 'Move 2 to Trash' }).click()
-  await expect.poll(() => trashed?.image_ids.slice().sort()).toEqual([ids[0], ids[2]].sort())
+  await confirm.getByRole('button', { name: 'Move 1 to Trash' }).click()
+  await expect.poll(() => trashed?.image_ids).toEqual([ids[2]])
   expect(trashed!.confirm_delete_files).toBe(true)
+})
+
+test('threshold and scope: the threshold reaches the search, near-duplicates keep 90 %, Favorites limits the results', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  const ids = await idsOf(page)
+  await stubClip(page, true)
+  await stubStats(page)
+  const FAVORITES = 777
+  await page.route('**/api/collections', (r) =>
+    json(r, { collections: [{ id: FAVORITES, slug: 'favorites', name: 'Favorites', folder_path: null, created_at: null, item_count: 2 }, { id: 778, slug: 'set-a', name: 'Set A', folder_path: null, created_at: null, item_count: 1 }] }),
+  )
+  const near: URL[] = []
+  // the whole library, or only the favourites (ids 4 and 5) when the search is limited to them
+  await page.route('**/api/similarity/near/**', (r) => {
+    const url = new URL(r.request().url())
+    near.push(url)
+    const all = [
+      { id: ids[4], similarity: 0.96 },
+      { id: ids[2], similarity: 0.91 },
+      { id: ids[5], similarity: 0.6 },
+      { id: ids[3], similarity: 0.4 },
+    ]
+    const favourite = new Set([ids[4], ids[5]])
+    return json(r, { results: url.searchParams.get('collection_id') === String(FAVORITES) ? all.filter((h) => favourite.has(h.id)) : all })
+  })
+  const uploads: URL[] = []
+  await page.route('**/api/similarity/search-upload?**', (r) => {
+    uploads.push(new URL(r.request().url()))
+    return json(r, { results: [{ id: ids[2], similarity: 0.93 }], has_more: false })
+  })
+
+  await openLibrary(page, TOKEN, COUNT)
+  const tiles = page.getByTestId('tile')
+  const banner = page.getByTestId('similar-banner')
+  await tiles.nth(0).click({ button: 'right' })
+  await page.getByTestId('card-menu').getByRole('menuitem', { name: 'Find similar' }).click()
+  // V3.5's 50 %: the 40 % one is left out
+  const threshold = banner.getByTestId('similar-threshold')
+  await expect(threshold).toHaveValue('0.5')
+  await expect.poll(() => tileIds(page)).toEqual([ids[4], ids[2], ids[5]])
+
+  // a higher threshold
+  await threshold.fill('0.9')
+  await expect(banner).toContainText('90%')
+  await expect.poll(() => tileIds(page)).toEqual([ids[4], ids[2]])
+
+  // only the favourites: the search asks for that collection, and only they come back
+  const scope = banner.getByTestId('similar-scope')
+  await expect(scope.locator('option')).toHaveText(['Whole library', 'Favorites', 'Set A'])
+  await scope.selectOption({ label: 'Favorites' })
+  await expect.poll(() => near.at(-1)?.searchParams.get('collection_id')).toBe(String(FAVORITES))
+  await expect.poll(() => tileIds(page)).toEqual([ids[4]])
+  await threshold.fill('0.5')
+  await expect.poll(() => tileIds(page)).toEqual([ids[4], ids[5]])
+
+  // near-duplicates keep their own 90 %; the threshold is not offered there
+  await page.getByTestId('similar-back').click()
+  await tiles.nth(0).click({ button: 'right' })
+  await page.getByTestId('card-menu').getByRole('menuitem', { name: 'Find near-duplicates' }).click()
+  await expect(banner).toContainText('Near-duplicates of')
+  await expect(banner.getByTestId('similar-threshold')).toHaveCount(0)
+  await expect.poll(() => tileIds(page)).toEqual([ids[4]])
+  await page.getByTestId('similar-back').click()
+
+  // by file: the threshold and the scope go with the request
+  const chooser = page.waitForEvent('filechooser')
+  await page.getByTestId('search-by-image').click()
+  await (await chooser).setFiles(file(4))
+  await expect(banner).toContainText(`Similar to ${name(4)}`)
+  await expect.poll(() => uploads.at(-1)?.searchParams.get('threshold')).toBe('0.5')
+  expect(uploads.at(-1)?.searchParams.get('collection_id')).toBe(String(FAVORITES))
+  await banner.getByTestId('similar-threshold').fill('0.75')
+  await expect.poll(() => uploads.at(-1)?.searchParams.get('threshold')).toBe('0.75')
 })
 
 test('the similarity index and the duplicate scan run as jobs', async ({ page }) => {
@@ -466,4 +559,120 @@ test('the similarity index and the duplicate scan run as jobs', async ({ page })
   await expect.poll(() => scanBody).toEqual({ threshold: 0.95 })
   await expect(dialog.getByTestId('duplicate-group')).toHaveCount(1, { timeout: 10_000 })
   await expect(dialog.getByTestId('duplicates-scan')).toHaveText('Scan again')
+})
+
+/**
+ * Similar pairs on the real backend: four images with stored embeddings in a
+ * library of their own. Cosines: p0-p1 0.99, p0-p2 0.70, p1-p2 0.693; p3 is
+ * alike to none. At 60 % the pairs come most alike first; at 95 % one.
+ */
+const PAIRS_LIBRARY = 'v4simpairs_lib'
+const PAIRS_DIR = 'v4-sim-pairs'
+
+function seedPairs(): number[] {
+  const out = runBackendScript(`
+import json, math, shutil, sqlite3
+from pathlib import Path
+import numpy as np
+from PIL import Image
+root = Path(${JSON.stringify(tmpRoot)}) / ${JSON.stringify(PAIRS_DIR)}
+shutil.rmtree(root, ignore_errors=True)
+root.mkdir(parents=True, exist_ok=True)
+e = lambda *xs: np.array(list(xs) + [0.0] * (8 - len(xs)), dtype=np.float32)
+vectors = [e(1.0), e(0.99, math.sqrt(1 - 0.99 ** 2)), e(0.7, 0.0, math.sqrt(1 - 0.49)), e(0.0, 0.0, 0.0, 1.0)]
+ids = []
+with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
+    conn.execute("INSERT OR IGNORE INTO libraries (id, name, is_default) VALUES (?, 'V4 e2e pairs', 0)", (${JSON.stringify(PAIRS_LIBRARY)},))
+    for i, vec in enumerate(vectors):
+        name = f"v4simpair-p{i}.png"
+        path = (root / name).resolve()
+        Image.new("RGB", (64, 64), (60 * i, 120, 90)).save(path)
+        cur = conn.execute(
+            "INSERT INTO images (path, filename, generator, width, height, file_size, is_readable, metadata_status, created_at, library_id, embedding) "
+            "VALUES (?, ?, 'unknown', 64, 64, ?, 1, 'complete', CURRENT_TIMESTAMP, ?, ?)",
+            (str(path), name, path.stat().st_size, ${JSON.stringify(PAIRS_LIBRARY)}, vec.tobytes()),
+        )
+        ids.append(cur.lastrowid)
+    conn.commit()
+print(json.dumps(ids))
+`)
+  return JSON.parse(out.split('\n').at(-1) ?? '[]') as number[]
+}
+
+function dropPairs(): void {
+  runBackendScript(`
+${PY_DELETE_IMAGES}
+import shutil, sqlite3
+from pathlib import Path
+with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
+    delete_images(conn, "library_id = ?", (${JSON.stringify(PAIRS_LIBRARY)},))
+    conn.execute("DELETE FROM libraries WHERE id = ?", (${JSON.stringify(PAIRS_LIBRARY)},))
+    conn.commit()
+shutil.rmtree(Path(${JSON.stringify(tmpRoot)}) / ${JSON.stringify(PAIRS_DIR)}, ignore_errors=True)
+print("ok")
+`)
+}
+
+test('similar pairs: 60 % lists the pairs most alike first, opens full size, and one goes to Trash after the confirm', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  dropPairs()
+  const p = seedPairs()
+  try {
+    let trashed: { image_ids: number[] } | null = null
+    await page.route('**/api/images/delete-selected/start', (r) => {
+      trashed = r.request().postDataJSON()
+      return json(r, { status: 'started', total: 1, operation: 'delete' })
+    })
+    await page.route('**/api/images/delete-selected/progress', (r) =>
+      json(r, trashed ? { status: 'running', current: 0, total: 1, deleted: 0, errors: 0, failed: [] } : { status: 'idle', current: 0, total: 0 }),
+    )
+    await page.addInitScript((library) => {
+      if (sessionStorage.getItem('v4simpairs-init')) return
+      sessionStorage.setItem('v4simpairs-init', '1')
+      localStorage.setItem('sd-image-sorter-lang', 'en')
+      localStorage.setItem('sd-v4-update-autocheck', '0')
+      localStorage.setItem('sd-library-workspace-v1', JSON.stringify({ v: 2, currentId: library }))
+    }, PAIRS_LIBRARY)
+    await page.goto('/v4/#/library', { waitUntil: 'domcontentloaded' })
+    await page.keyboard.press('Control+k')
+    await page.keyboard.type('duplicate')
+    await page.keyboard.press('Enter')
+    const dialog = page.getByTestId('duplicates-dialog')
+    await dialog.getByTestId('duplicates-mode-pairs').click()
+
+    // V3.5's default is 95 %: one pair
+    const threshold = dialog.getByTestId('pairs-threshold')
+    await expect(threshold).toHaveValue('0.95')
+    await dialog.getByTestId('pairs-find').click()
+    const pairs = dialog.getByTestId('similar-pair')
+    const pairIds = () => pairs.evaluateAll((els) => els.map((el) => (el.getAttribute('data-ids') ?? '').split(',').map(Number).sort((a, b) => a - b).join(',')))
+    await expect.poll(pairIds).toEqual([[p[0], p[1]].join(',')])
+    await expect(dialog.getByTestId('pairs-warn')).toHaveCount(0)
+
+    // 60 %: said to find many that are only alike, not blocked; most alike first
+    await threshold.fill('0.6')
+    await expect(dialog.getByTestId('pairs-warn')).toBeVisible()
+    await dialog.getByTestId('pairs-find').click()
+    await expect.poll(pairIds).toEqual([[p[0], p[1]], [p[0], p[2]], [p[1], p[2]]].map((x) => x.join(',')))
+    await expect(pairs.first()).toContainText('99.0%')
+    await expect(pairs.nth(1)).toContainText('70.0%')
+
+    // full size over the dialog; Esc closes only the big image
+    await pairs.nth(1).locator(`[data-testid="pair-view"][data-id="${p[2]}"]`).click()
+    const lightbox = page.getByTestId('lightbox')
+    await expect(lightbox).toContainText('v4simpair-p2.png')
+    await expect(lightbox).toHaveCount(1)
+    await page.keyboard.press('Escape')
+    await expect(lightbox).toHaveCount(0)
+    await expect(dialog).toBeVisible()
+
+    // one of a pair to Trash, through the confirm
+    await pairs.nth(1).locator(`[data-testid="pair-trash"][data-id="${p[2]}"]`).click()
+    const confirm = page.getByTestId('confirm-dialog')
+    await expect(confirm.getByRole('button', { name: 'Cancel' })).toBeFocused()
+    await confirm.getByRole('button', { name: 'Move 1 to Trash' }).click()
+    await expect.poll(() => trashed?.image_ids).toEqual([p[2]])
+  } finally {
+    dropPairs()
+  }
 })

@@ -13,13 +13,16 @@ export interface Hit {
 
 export type RankedImage = ImageSummary & { similarity: number }
 
-/** Rows in the order of the hits, each with its score; hits without a row (gone, other library) drop out. */
-export function mergeRanked(hits: readonly Hit[], rows: readonly ImageSummary[], nearOnly = false): RankedImage[] {
+/**
+ * Rows in the order of the hits, each with its score; hits below `floor` and
+ * hits without a row (gone, other library) drop out.
+ */
+export function mergeRanked(hits: readonly Hit[], rows: readonly ImageSummary[], floor = 0): RankedImage[] {
   const byId = new Map(rows.map((r) => [r.id, r]))
   const out: RankedImage[] = []
   const seen = new Set<number>()
   for (const hit of hits) {
-    if (seen.has(hit.id) || (nearOnly && hit.similarity < NEAR_DUPLICATE)) continue
+    if (seen.has(hit.id) || hit.similarity < floor) continue
     const row = byId.get(hit.id)
     if (!row) continue
     seen.add(hit.id)
