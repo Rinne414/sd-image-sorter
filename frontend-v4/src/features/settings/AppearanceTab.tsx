@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { useLang, useT, type Lang, type MessageKey } from '../../i18n'
+import type { StartPage } from '../../lib/route'
 import { percent, roomAt, SCALE_OPTIONS, type ScaleSetting } from '../../lib/uiScale'
+import { useApp } from '../../state/store'
 import { useTheme, type ThemeMode } from '../../theme'
 import styles from './AppearanceTab.module.css'
 import { useUiScale } from './uiScaleStore'
@@ -17,9 +19,17 @@ const LANGS: { value: Lang; label: MessageKey }[] = [
   { value: 'en', label: 'settings.lang.en' },
 ]
 
-type Section = 'theme' | 'lang' | 'scale'
+const START_PAGES: { value: StartPage; label: MessageKey }[] = [
+  { value: 'home', label: 'settings.start.home' },
+  { value: 'library', label: 'settings.start.library' },
+]
 
-/** Settings › Appearance: theme, language and interface zoom, each applied as soon as it is chosen. */
+type Section = 'theme' | 'lang' | 'scale' | 'start' | 'film'
+
+/**
+ * Settings › Appearance: theme, language, interface zoom, the page V4 opens
+ * on and the ★5 film on Home, each applied as soon as it is chosen.
+ */
 export function AppearanceTab() {
   const t = useT()
   const [saved, mark] = useSaved<Section>()
@@ -55,7 +65,48 @@ export function AppearanceTab() {
         <p className={styles.hint}>{t('settings.lang.hint')}</p>
       </Choice>
       <ScaleChoice saved={saved === 'scale'} onSaved={() => mark('scale')} />
+      <HomeChoices saved={saved} mark={mark} />
     </div>
+  )
+}
+
+/** The page a plain launch opens on, and whether Home shows the ★5 film (like V3.5's entry page settings). */
+function HomeChoices({ saved, mark }: { saved: Section | null; mark: (section: Section) => void }) {
+  const t = useT()
+  const startPage = useApp((s) => s.startPage)
+  const homeFilm = useApp((s) => s.homeFilm)
+  return (
+    <>
+      <Choice
+        name="start"
+        title={t('settings.start.title')}
+        saved={saved === 'start'}
+        options={START_PAGES.map((o) => ({ value: o.value, label: t(o.label) }))}
+        value={startPage}
+        onChange={(v) => {
+          useApp.getState().setStartPage(v)
+          mark('start')
+        }}
+      >
+        <p className={styles.hint}>{t('settings.start.hint')}</p>
+      </Choice>
+      <Choice
+        name="film"
+        title={t('settings.film.title')}
+        saved={saved === 'film'}
+        options={[
+          { value: 'on', label: t('settings.film.on') },
+          { value: 'off', label: t('settings.film.off') },
+        ]}
+        value={homeFilm ? 'on' : 'off'}
+        onChange={(v) => {
+          useApp.getState().setHomeFilm(v === 'on')
+          mark('film')
+        }}
+      >
+        <p className={styles.hint}>{t('settings.film.hint')}</p>
+      </Choice>
+    </>
   )
 }
 

@@ -1,12 +1,12 @@
 import { create } from 'zustand'
 import type { BatchKind } from '../api/types'
 import { parseBrowseStore, recallBrowse, rememberBrowse, type BrowseState, type Scope } from '../lib/browseMemory'
-import { isMainPage, parseRoute, routeHash, type MainPage, type Page, type Route, type SettingsTab, type ToolId } from '../lib/route'
+import { isMainPage, isStartPage, parseRoute, routeHash, startRoute, type MainPage, type Page, type Route, type SettingsTab, type StartPage, type ToolId } from '../lib/route'
 import { isSortBase, type SortBase } from '../lib/sort'
 // First: arriving from V3.5 rewrites the address (drops ?library=, reopens the page V4 was left from).
 import './arrival'
 
-export type { MainPage, Page, SettingsTab, ToolId }
+export type { MainPage, Page, SettingsTab, StartPage, ToolId }
 export type Layout = 'masonry' | 'grid'
 export type TileSize = 's' | 'm' | 'l'
 export type { Scope }
@@ -24,6 +24,10 @@ interface Prefs {
   railOpen: boolean
   sort: SortBase
   sortReverse: boolean
+  /** The page a plain launch opens on (Settings › Appearance). */
+  startPage: StartPage
+  /** Home shows the ★5 film strip (off while sharing the screen). */
+  homeFilm: boolean
 }
 
 const DEFAULT_PREFS: Prefs = {
@@ -33,6 +37,9 @@ const DEFAULT_PREFS: Prefs = {
   railOpen: true,
   sort: 'newest',
   sortReverse: false,
+  // V3.5 opens on its entry page at launch, with the ★5 cover art on.
+  startPage: 'home',
+  homeFilm: true,
 }
 
 function readJson<T>(key: string): Partial<T> {
@@ -77,14 +84,6 @@ function stateFor(route: Route, from: RouteState): RouteState {
   return { ...from, page: route.page, batchId: route.batchId }
 }
 
-const initialRoute = stateFor(parseRoute(location.hash), {
-  page: 'library',
-  batchId: null,
-  settingsTab: 'appearance',
-  toolId: 'reader',
-  back: { page: 'library', batchId: null },
-})
-
 /** Picking in the library for a batch: an existing one, or a new one made from the picks. */
 export type AddTarget = { batchId: number } | { kind: BatchKind }
 
@@ -128,6 +127,8 @@ interface AppState extends Prefs {
   setTileSize: (size: TileSize) => void
   toggleCard: () => void
   toggleRail: () => void
+  setStartPage: (startPage: StartPage) => void
+  setHomeFilm: (homeFilm: boolean) => void
   inspect: (id: number | null) => void
   togglePick: (id: number) => void
   selectRange: (ids: number[]) => void
@@ -150,10 +151,22 @@ function loadPrefs(): Prefs {
   if (isSortBase(raw)) prefs.sort = raw
   else if (raw === 'oldest') Object.assign(prefs, { sort: 'newest', sortReverse: true })
   else if (raw === 'name_asc') prefs.sort = 'name'
+  if (!isStartPage(prefs.startPage)) prefs.startPage = DEFAULT_PREFS.startPage
+  if (typeof prefs.homeFilm !== 'boolean') prefs.homeFilm = DEFAULT_PREFS.homeFilm
   return prefs
 }
 
 const prefs = loadPrefs()
+
+// A plain launch opens the start page; an address that names a page (or the
+// page V4 was left from, put back by ./arrival) opens that page.
+const initialRoute = stateFor(startRoute(location.hash, prefs.startPage), {
+  page: 'library',
+  batchId: null,
+  settingsTab: 'appearance',
+  toolId: 'reader',
+  back: { page: 'library', batchId: null },
+})
 const storedLibrary = readJson<{ currentId: string }>(LIBRARY_KEY).currentId ?? 'main'
 
 function readBrowse() {
@@ -171,8 +184,8 @@ function saveBrowse(libraryId: string, state: BrowseState): void {
 const storedBrowse = recallBrowse(readBrowse(), storedLibrary)
 
 function savePrefs(state: Prefs): void {
-  const { layout, tileSize, cardOpen, railOpen, sort, sortReverse } = state
-  writeJson(PREFS_KEY, { layout, tileSize, cardOpen, railOpen, sort, sortReverse })
+  const { layout, tileSize, cardOpen, railOpen, sort, sortReverse, startPage, homeFilm } = state
+  writeJson(PREFS_KEY, { layout, tileSize, cardOpen, railOpen, sort, sortReverse, startPage, homeFilm })
 }
 
 export const useApp = create<AppState>((set, get) => ({
@@ -247,6 +260,14 @@ export const useApp = create<AppState>((set, get) => ({
   },
   toggleRail: () => {
     set({ railOpen: !get().railOpen })
+    savePrefs(get())
+  },
+  setStartPage: (startPage) => {
+    set({ startPage })
+    savePrefs(get())
+  },
+  setHomeFilm: (homeFilm) => {
+    set({ homeFilm })
     savePrefs(get())
   },
   inspect: (inspectedId) => set({ inspectedId }),

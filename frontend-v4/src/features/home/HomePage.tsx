@@ -13,12 +13,26 @@ import { continueSort, newSort, useSortPending } from '../sort/sortStore'
 import { useSelectionDialog } from '../selection/dialogs'
 import { FilmStrip } from './FilmStrip'
 import styles from './HomePage.module.css'
-import { useFilm } from './useFilm'
+import { useFilm, type Film } from './useFilm'
 
 const CONTINUE_COUNT = 3
 
-/** Home: ★5 and the newest images on film, where you left off, and the three ways to start. */
+/**
+ * Home: ★5 and the newest images on film, where you left off, and the three
+ * ways to start. With the film switched off (Settings › Appearance, e.g. while
+ * sharing the screen) nothing is asked for it; the rest stays.
+ */
 export function HomePage() {
+  const homeFilm = useApp((s) => s.homeFilm)
+  return homeFilm ? <HomeWithFilm /> : <Home film={null} />
+}
+
+function HomeWithFilm() {
+  const film = useFilm()
+  return <Home film={film} />
+}
+
+function Home({ film }: { film: Film | null }) {
   const t = useT()
   const batches = useBatches()
   const libraries = useLibraries()
@@ -26,13 +40,14 @@ export function HomePage() {
   const library = libraries.data?.libraries.find((l) => l.id === libraryId)
   const recent = (batches.data ?? []).slice(0, CONTINUE_COUNT)
   const sort = useSortPending(true)
-  const film = useFilm()
   const libraryName = library?.is_default && library.name === 'Main library' ? t('rail.mainLibrary') : library?.name
+  // Without the film, the library's own count says it is empty.
+  const empty = film ? film.empty : library?.image_count === 0
 
   return (
     <section className={styles.page} data-testid="home">
       <h1 className="visually-hidden">{t('nav.home')}</h1>
-      {!film.empty && (
+      {film && !film.empty && (
         <div className={styles.filmRow}>
           <FilmStrip film={film} />
         </div>
@@ -43,7 +58,7 @@ export function HomePage() {
             {libraryName} · {t('rail.images', { n: library.image_count })}
           </p>
         )}
-        {film.empty && <EmptyLibrary />}
+        {empty && <EmptyLibrary />}
 
         <h2 className={styles.section}>{t('home.continue')}</h2>
         {batches.isSuccess && recent.length === 0 && !sort ? (

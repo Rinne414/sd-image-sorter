@@ -38,6 +38,23 @@ export function parseRoute(hash: string): Route {
   return { page, batchId: null }
 }
 
+/** The page a plain launch opens on (Settings › Appearance), like V3.5's entry page at launch. */
+export type StartPage = 'home' | 'library'
+
+export function isStartPage(value: unknown): value is StartPage {
+  return value === 'home' || value === 'library'
+}
+
+/** Whether the address names a page ("", "#" and "#/" do not). */
+export function namesPage(hash: string): boolean {
+  return hash.replace(/^#\/?/, '') !== ''
+}
+
+/** The route V4 opens on: the page the address names, else the start page. */
+export function startRoute(hash: string, start: StartPage): Route {
+  return namesPage(hash) ? parseRoute(hash) : { page: start, batchId: null }
+}
+
 export function routeHash(route: Route): string {
   if (route.page === 'settings') return `#/settings/${route.tab}`
   if (route.page === 'tools') return `#/tools/${route.tool}`

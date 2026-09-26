@@ -3,6 +3,8 @@
 // libraries it knows, and drops it from the address. Pure; state/arrival.ts
 // and features/libraries/useArrival.ts apply it.
 
+import { namesPage } from './route'
+
 const PARAM = 'library'
 
 /** The library a switch link carries, or null when it carries none. */
@@ -42,6 +44,5 @@ export function switchHref(path: string, libraryId: string): string {
 
 /** The page to open when coming back: the one V4 was left from, unless the address names one. */
 export function arrivalHash(hash: string, saved: string | null): string {
-  const named = hash.replace(/^#/, '') !== ''
-  return named || !saved ? hash : saved
+  return namesPage(hash) || !saved ? hash : saved
 }

@@ -39,6 +39,7 @@ describe('the page V4 opens on when coming back', () => {
   it('reopens the page it was left from when the address names none', () => {
     expect(arrivalHash('', '#/batch/3')).toBe('#/batch/3')
     expect(arrivalHash('#', '#/settings/about')).toBe('#/settings/about')
+    expect(arrivalHash('#/', '#/sort')).toBe('#/sort')
   })
 
   it('an address that names a page wins; nothing saved keeps the address', () => {

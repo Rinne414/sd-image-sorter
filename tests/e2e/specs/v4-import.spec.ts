@@ -39,6 +39,9 @@ async function openV4(page: Page) {
     localStorage.setItem('sd-image-sorter-lang', 'en')
     localStorage.setItem('sd-v4-theme', 'dark')
     localStorage.removeItem('sd-image-sorter-recent-folders')
+    // start in the library: a plain /v4/ opens the start page (Home by default)
+    const prefs = JSON.parse(localStorage.getItem('sd-v4-prefs') || '{}')
+    localStorage.setItem('sd-v4-prefs', JSON.stringify({ ...prefs, startPage: 'library' }))
   })
   await page.goto('/v4/', { waitUntil: 'domcontentloaded' })
 }
