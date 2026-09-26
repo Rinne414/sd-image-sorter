@@ -54,21 +54,34 @@ function codeOf(body: unknown): string | null {
   return typeof code === 'string' ? code : null
 }
 
-/** Unwrap an openapi-fetch result: return data or throw an ApiError with the server's reason. */
+/** Success statuses that carry no body by design (No Content, Reset Content). */
+const EMPTY_BY_DESIGN: ReadonlySet<number> = new Set([204, 205])
+
+const incomplete = () => translate(useLang.getState().lang, 'error.badAnswer')
+
+/**
+ * Unwrap an openapi-fetch result: return data or throw an ApiError with the
+ * server's reason. A success without a body (empty, or the JSON `null`) whose
+ * status does not say "no content" is an answer lost on the way (every backend
+ * route answers a body; only a 204 is empty on purpose): it fails with the plain
+ * "the server's answer was incomplete" instead of reaching a caller that reads
+ * its fields ("Cannot read properties of undefined").
+ */
 export function unwrap<T>(result: { data?: unknown; error?: unknown; response: Response }): T {
   if (result.error !== undefined || !result.response.ok) {
     const reason = detailOf(result.error) ?? result.response.statusText ?? 'request failed'
     throw new ApiError(result.response.status, reason, codeOf(result.error), result.error ?? null)
   }
+  if ((result.data === undefined || result.data === null) && !EMPTY_BY_DESIGN.has(result.response.status)) throw new Error(incomplete())
   return result.data as T
 }
 
 /**
- * `unwrap` for an answer whose fields are read: one without them (empty, `{}`,
+ * `unwrap` for an answer whose fields are read: one without them (a 204, `{}`,
  * cut off) fails with the plain "the server's answer was incomplete".
  */
 export function unwrapAnswer<T>(result: { data?: unknown; error?: unknown; response: Response }, has: (answer: Record<string, unknown>) => boolean): T {
-  return checkAnswer<T>(unwrap<unknown>(result), has, translate(useLang.getState().lang, 'error.badAnswer'))
+  return checkAnswer<T>(unwrap<unknown>(result), has, incomplete())
 }
 
 export { imageFileUrl, thumbnailUrl } from './urls'
