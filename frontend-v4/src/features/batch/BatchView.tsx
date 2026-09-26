@@ -9,6 +9,7 @@ import { currentAfterEdit, enabledSteps } from './batchLogic'
 import { SettingsStrip } from './SettingsStrip'
 import { useBatchDialog } from './dialogStore'
 import styles from './BatchView.module.css'
+import { CheckStep } from './check/CheckStep'
 import { EditStep } from './edit/EditStep'
 import { ExportStep } from './ExportStep'
 import { InlineName } from './InlineName'
@@ -124,6 +125,8 @@ function Loaded({ batch }: { batch: Batch }) {
             <TagStep batch={batch} next={next?.id ?? null} onNext={goTo} />
           ) : current === 'edit' && batch.kind === 'dataset' ? (
             <EditStep batch={batch} next={next?.id ?? null} onNext={goTo} />
+          ) : current === 'check' && batch.kind === 'dataset' ? (
+            <CheckStep batch={batch} next={next?.id ?? null} onNext={goTo} />
           ) : current === 'export' && batch.kind === 'pixiv' ? (
             <ExportStep batch={batch} onGo={goTo} />
           ) : (

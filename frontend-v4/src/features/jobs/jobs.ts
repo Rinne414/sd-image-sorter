@@ -7,6 +7,7 @@ import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
 import { isFinished, readProgress, type JobKind, type JobProgress, type ReadContext } from './progress'
 import { driveSmartTag } from './smartTagDriver'
+import { drivePurity, drivePurityDownload } from './purityDriver'
 
 // Every long job the user started (or that was already running when V4
 // opened) lives here until dismissed. The backend runs one job per queue
@@ -50,6 +51,7 @@ export const useJobs = create<JobsState>((set, get) => ({
 
 type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors' | 'reconnect' | 'scan' | 'detect'
   | 'smarttag'
+  | 'purity' | 'purityget'
 
 // Censor work over a batch (detecting, SAM3 refining, filters) runs one at a time.
 const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind === 'refine' || kind === 'adjust' ? 'detect' : kind)
@@ -126,6 +128,8 @@ const DRIVERS: Record<Queue, Driver> = {
     cancel: async () => detectSource?.cancel(),
   },
   smarttag: driveSmartTag,
+  purity: drivePurity,
+  purityget: drivePurityDownload,
 }
 
 export const canStop = (kind: JobKind) => DRIVERS[queueOf(kind)].cancel !== null
@@ -304,6 +308,8 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   refine: [],
   adjust: [],
   smarttag: ['images', 'image', 'suggest', 'image-count', 'library-health', 'batch-project', 'batch-heads', 'dataset-preview'],
+  purity: [],
+  purityget: ['purity-status'],
 }
 
 let onUndo: ((job: Job) => Promise<void>) | null = null
@@ -367,6 +373,8 @@ const RUNNING: Record<JobKind, MessageKey> = {
   refine: 'jobs.running.refine',
   adjust: 'jobs.running.adjust',
   smarttag: 'dataset.job.running',
+  purity: 'dataset.check.purity.running',
+  purityget: 'dataset.check.purity.downloading',
 }
 
 const DONE: Record<JobKind, MessageKey> = {
@@ -384,6 +392,8 @@ const DONE: Record<JobKind, MessageKey> = {
   refine: 'jobs.done.refine',
   adjust: 'jobs.done.adjust',
   smarttag: 'dataset.job.done',
+  purity: 'dataset.check.purity.done',
+  purityget: 'dataset.check.purity.downloaded',
 }
 
 /** One line that says what happened (or is happening) to this job. */

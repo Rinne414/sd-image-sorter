@@ -66,6 +66,18 @@ describe('the project PUT body', () => {
     expect(() => projectPutItems(saved, [L(3), F('D:/elsewhere/c.png')], surfaced)).toThrow(UnsurfacedFolderImage)
   })
 
+  test('a folder image whose file changed is sent as new when re-added; the others stay as saved', () => {
+    const saved = [lib(3), local('C:\\set\\a.png', 'changed'), local('C:\\set\\b.png')]
+
+    const items = projectPutItems(saved, saved.map(savedRef), new Set(), new Set([refKey(F('C:/set/a.png'))]))
+
+    expect(items).toEqual([
+      { item_type: 'library', image_id: 3, keep_as_saved: true },
+      { item_type: 'local', path: 'C:\\set\\a.png', keep_as_saved: false },
+      { item_type: 'local', path: 'C:\\set\\b.png', keep_as_saved: true },
+    ])
+  })
+
   test('a repeated entry is sent once, in its first place, however the path is spelled', () => {
     const saved = [local('C:\\set\\a.png')]
     const surfaced = new Set([pathKey('C:/new/x.png')])

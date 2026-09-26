@@ -50,8 +50,8 @@ function useListing(batch: Batch, view: BatchProjectView | undefined, form: Data
 }
 
 /** Images picked for a bulk change, in the order they were picked; Shift+click takes a range of the list. */
-function usePicking(shown: readonly Entry[]): Picking & { set: (keys: Iterable<string>) => void } {
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+function usePicking(shown: readonly Entry[], initial: readonly string[] | null): Picking & { set: (keys: Iterable<string>) => void } {
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set(initial ?? []))
   const [anchor, setAnchor] = useState<string | null>(null)
   const keys = shown.map((e) => e.key)
   const order = useMemo(() => new Map([...selected].map((key, i) => [key, i + 1])), [selected])
@@ -142,13 +142,15 @@ export function EditStep({ batch, next, onNext }: Props) {
   const [filter, setFilter] = useState<ListFilter>('all')
   const [picked, setPicked] = useState<string | null>(holder.current)
   const { heads, marks, shown, counts } = useListing(batch, view, form, entries, filter)
-  const picking = usePicking(shown)
+  const [asked] = useState(() => holder.picked)
+  const picking = usePicking(shown, asked)
   const current = entries.find((e) => e.key === picked) ?? shown[0] ?? entries[0] ?? null
   const keys = shown.map((e) => e.key)
 
   useEffect(() => {
     holder.current = current?.key ?? null
     holder.mode = mode
+    holder.picked = null
   }, [holder, current, mode])
 
   const pick = (key: string | null) => {

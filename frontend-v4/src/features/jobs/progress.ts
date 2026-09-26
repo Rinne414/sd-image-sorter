@@ -1,4 +1,5 @@
 import { readSmartTag, type SmartTagContext } from './smartTagJob'
+import { readPurity, readPurityDownload } from './purityJob'
 // Reads the backend's progress payloads for long jobs into one shape.
 // move/copy: GET /api/move/progress · trash: GET /api/images/delete-selected/progress
 // · remove: GET /api/images/remove-selected/progress · tag: GET /api/tag/progress
@@ -6,6 +7,7 @@ import { readSmartTag, type SmartTagContext } from './smartTagJob'
 // · reconnect: GET /api/images/reconnect-missing/progress · scan: GET /api/scan/progress
 // · detect/refine/adjust: censor work over a batch run by this page (features/censor/detectAll.ts).
 // · smarttag: GET /api/smart-tag/progress (a dataset batch's tag step), read in smartTagJob.ts.
+// · purity/purityget: character purity (CCIP) analysis and its model download, read in purityJob.ts.
 
 /**
  * tags: a bulk tag edit, finished when it is recorded (kept for its undo).
@@ -26,6 +28,8 @@ export type JobKind =
   | 'refine'
   | 'adjust'
   | 'smarttag'
+  | 'purity'
+  | 'purityget'
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
 
 export interface JobFailure {
@@ -71,6 +75,7 @@ export interface ReadContext {
   runId?: number
   /** smarttag: our run's job id and its place in the AI queue. */
   smartTag?: SmartTagContext
+  purityJobId?: string // purity: the character purity analysis job we started
 }
 
 const KNOWN: ReadonlySet<string> = new Set(['running', 'cancelling', 'done', 'cancelled', 'error', 'idle'])
@@ -225,6 +230,10 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
     }
     case 'smarttag':
       return readSmartTag(base, raw, ctx.smartTag)
+    case 'purity':
+      return readPurity(base, raw, ctx.purityJobId)
+    case 'purityget':
+      return readPurityDownload(base, raw)
   }
 }
 

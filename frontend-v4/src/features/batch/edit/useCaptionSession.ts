@@ -16,6 +16,8 @@ interface Holder {
   current: string | null
   /** One caption at a time, or many at once (the step comes back the way it was left). */
   mode: 'one' | 'bulk'
+  /** Images another step asked to have picked for a bulk change (taken once, when the step opens). */
+  picked: string[] | null
 }
 
 // One session per batch for the whole app visit: a save still waiting when
@@ -41,7 +43,7 @@ export function captionHolder(batchId: number): Holder {
       return entry ? restoreCaption(batchId, entry, revisionId, subjectId, generation) : gone()
     },
   })
-  const holder: Holder = { session, entries, current: null, mode: 'one' }
+  const holder: Holder = { session, entries, current: null, mode: 'one', picked: null }
   holders.set(batchId, holder)
   return holder
 }

@@ -126,11 +126,13 @@ type SettingsChange = (settings: ProjectSettings) => ProjectSettings
 /**
  * One PUT that turns the project's entries into `change(entries)` (and its
  * settings into `settingsChange(settings)`); errors are thrown to the caller.
+ * Folder images named in `rebind` are taken as their files are now.
  */
 async function writeOnce(
   batchId: number,
   change: (refs: EntryRef[]) => EntryRef[],
   settingsChange: SettingsChange = (s) => s,
+  rebind: ReadonlySet<string> = new Set(),
 ): Promise<WriteResult> {
   const view = await currentView(batchId)
   const { project } = view
@@ -142,7 +144,7 @@ async function writeOnce(
       body: {
         expected_revision: project.revision,
         name: project.name,
-        items: projectPutItems(project.items, after, surfaced),
+        items: projectPutItems(project.items, after, surfaced, rebind),
         settings: settingsChange(project.settings),
       },
     }),
@@ -252,7 +254,7 @@ export async function openProjectAsBatch(project: UnlinkedDatasetProject): Promi
 
 /** Rescan the folders these images are in, so the backend accepts them again (its permission lasts hours, not forever). */
 async function resurface(paths: readonly string[]): Promise<void> {
-  const folders = [...new Set(paths.map((path) => path.replace(/[\/][^\/]*$/, '')))]
+  const folders = [...new Set(paths.map((path) => path.replace(/[\\/][^\\/]*$/, '')))]
   for (const folder of folders) {
     try {
       unwrap(await api.POST('/api/dataset/folder-scan', { body: { folder_path: folder, recursive: false, include_thumbnails: false, limit: 1, offset: 0 } }))
@@ -308,4 +310,23 @@ export async function removeEntries(batchId: number, keys: readonly string[], na
   } finally {
     markRemoving(marks, false)
   }
+}
+
+/**
+ * Folder images whose file changed since they were added: take each file as
+ * it is now (the export refuses the old one). A caption edited for the old
+ * file does not follow it. The backend is shown the files again first.
+ */
+export async function readdEntries(batchId: number, keys: readonly string[]): Promise<boolean> {
+  const view = await currentView(batchId)
+  const wanted = new Set(keys)
+  const paths = view.project.items.flatMap((item) => (item.item_type === 'local' && wanted.has(refKey(savedRef(item))) ? [item.path] : []))
+  if (paths.length === 0) return false
+  markSurfaced(paths)
+  const res = await inQueue(batchId, async () => {
+    await resurface(paths)
+    return writeOnce(batchId, (refs) => refs, (s) => s, wanted)
+  })
+  if (res) toast(tr('dataset.check.readded', { n: paths.length }))
+  return res !== null
 }

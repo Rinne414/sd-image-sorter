@@ -41,11 +41,14 @@ export class UnsurfacedFolderImage extends Error {
  * identity and missing mark stay as they are); a new Library image goes by
  * id; a new folder image goes by path, and only when a scan or upload
  * surfaced it (`surfaced`, by pathKey). A repeated entry keeps its first place.
+ * A saved folder image named in `rebind` (by refKey) is sent as new: the
+ * project then takes its file as it is now (after it changed on disk).
  */
 export function projectPutItems(
   saved: readonly DatasetProjectItem[],
   next: readonly EntryRef[],
   surfaced: ReadonlySet<string>,
+  rebind: ReadonlySet<string> = new Set(),
 ): DatasetProjectItemRequest[] {
   const savedByKey = new Map(saved.map((item) => [refKey(savedRef(item)), item]))
   const seen = new Set<string>()
@@ -55,7 +58,9 @@ export function projectPutItems(
     if (seen.has(key)) continue
     seen.add(key)
     const kept = savedByKey.get(key)
-    if (kept) {
+    if (kept && kept.item_type === 'local' && rebind.has(key)) {
+      out.push({ item_type: 'local', path: kept.path, keep_as_saved: false })
+    } else if (kept) {
       out.push(
         kept.item_type === 'library'
           ? { item_type: 'library', image_id: kept.source_image_id, keep_as_saved: true }
