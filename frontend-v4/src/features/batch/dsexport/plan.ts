@@ -198,6 +198,9 @@ function exportPart(settings: Record<string, unknown>): Record<string, unknown> 
   return dataset.export && typeof dataset.export === 'object' ? (dataset.export as Record<string, unknown>) : {}
 }
 
+/** A .json per image instead of the caption .txt: chosen, and not a verified package (which takes .txt only). */
+export const writesJson = (s: ProjectSettings, options: V4Options): boolean => options.json_sidecar && !isPackage(s)
+
 export function readV4Options(settings: Record<string, unknown>): V4Options {
   const part = exportPart(settings)
   return { nl_sidecar: part.nl_sidecar === true, dedupe_implications: part.dedupe_implications === true, json_sidecar: part.json_sidecar === true }
@@ -312,7 +315,7 @@ export function exportBody(input: BodyInput) {
   const paths = input.send.flatMap((e) => (e.imageId === null && e.path !== null ? [e.path] : []))
   const trigger = formFromSettings(s, readBatchDataset(input.batchSettings)).trigger.trim()
   // (a verified package takes .txt captions only: the choice is ignored there, and the form says so)
-  const json = input.options.json_sidecar && !isPackage(s)
+  const json = writesJson(s, input.options)
   const files = {
     image_ids: ids,
     image_paths: paths,

@@ -9,7 +9,7 @@ import pix from '../ExportStep.module.css'
 import { CheckIssues } from './CheckIssues'
 import styles from './DatasetExport.module.css'
 import { checkAndExport, leaveOut, stopDsRun, useDsRuns, type DsRun } from './exportRun'
-import { exportProblems, formatOf, splitEntries, stepsEstimate, type Choices, type LeftOut } from './plan'
+import { exportProblems, formatOf, splitEntries, stepsEstimate, writesJson, type Choices, type LeftOut } from './plan'
 import { LEFT_OUT_KEY, PROBLEM_KEY } from './texts'
 import type { ExportOptions } from './useExportOptions'
 
@@ -39,11 +39,9 @@ function Count({ label, value, tone, testId }: { label: string; value: string; t
 function Writes({ s, n, nl, json }: { s: ProjectSettings; n: number; nl: boolean; json: boolean }) {
   const t = useT()
   const format = formatOf(s)
-  // (a .json per image for a plain folder or beside the originals; a package ignores the choice)
-  const asJson = json && (format === 'folder' || format === 'beside')
-  const key = asJson ? (format === 'folder' ? 'dataset.export.writes.folderJson' : 'dataset.export.writes.besideJson') : (`dataset.export.writes.${format}` as MessageKey)
+  const key = json ? (format === 'folder' ? 'dataset.export.writes.folderJson' : 'dataset.export.writes.besideJson') : (`dataset.export.writes.${format}` as MessageKey)
   const parts = [t(key, { n, repeats: s.trainer.repeats, keep: s.trainer.keep_tokens })]
-  if (nl && !asJson) parts.push(t('dataset.export.writes.nl', { n }))
+  if (nl && !json) parts.push(t('dataset.export.writes.nl', { n }))
   if (s.trainer.mask_export !== 'none') parts.push(t('dataset.export.writes.masks'))
   return (
     <p className={styles.sample} data-testid="ds-writes">
@@ -145,6 +143,8 @@ export function DatasetPreflight({ batch, o, s, entries, remove, onOpen }: Props
   const problems = exportProblems(s, send.length, folderImages, o.v4.nl_sidecar, o.v4.json_sidecar)
   const edited = heads.data ? send.filter((e) => heads.data.get(e.key)?.revisionId !== undefined).length : null
   const format = formatOf(s)
+  // A .json holds no caption: the caption-only lines (edited captions, the trigger) are left out.
+  const json = writesJson(s, o.v4)
   const running = run?.state === 'running'
   const choices = run?.state === 'blocked' ? run.choices : FIRST_RUN
   const steps = stepsEstimate(send.length, s.trainer.repeats, s.trainer.batch, s.planning.epochs)
@@ -155,11 +155,15 @@ export function DatasetPreflight({ batch, o, s, entries, remove, onOpen }: Props
       <dl className={pix.counts}>
         <Count label={t('dataset.export.count.send')} value={String(send.length)} testId="ds-count-send" />
         <Count label={t('dataset.export.count.left')} value={String(leftOut.length)} tone={leftOut.length ? 'warn' : undefined} testId="ds-count-left" />
-        <Count label={t('dataset.export.count.edited')} value={edited === null ? '…' : String(edited)} testId="ds-count-edited" />
+        {!json && <Count label={t('dataset.export.count.edited')} value={edited === null ? '…' : String(edited)} testId="ds-count-edited" />}
         {format !== 'beside' && <Count label={t('dataset.export.count.steps')} value={steps.toLocaleString()} testId="ds-count-steps" />}
       </dl>
-      <Writes s={s} n={send.length} nl={o.v4.nl_sidecar} json={o.v4.json_sidecar} />
-      {!s.caption_render.trigger.trim() && <p className={styles.note} data-tone="warn">{t('dataset.export.noTrigger')}</p>}
+      <Writes s={s} n={send.length} nl={o.v4.nl_sidecar} json={json} />
+      {!json && !s.caption_render.trigger.trim() && (
+        <p className={styles.note} data-tone="warn" data-testid="ds-no-trigger">
+          {t('dataset.export.noTrigger')}
+        </p>
+      )}
       {leftOut.length > 0 && <LeftOutBox batch={batch} leftOut={leftOut} remove={remove} />}
       {run?.state === 'blocked' && (
         <CheckIssues report={run.report} entries={entries} choices={run.choices} isPackage={s.trainer.config !== 'none'} onRemove={remove} onOpen={onOpen} onRerun={(c) => void checkAndExport(batch, c)} />

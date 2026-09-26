@@ -15,6 +15,7 @@ import {
   withExportPart,
   withFormat,
   writeV4Options,
+  writesJson,
   type BodyInput,
 } from './dsexport/plan'
 import { groupIssues, issueLabel, refusedKey, type ReadinessIssue } from './dsexport/report'
@@ -294,6 +295,14 @@ describe('a .json per image instead of the caption .txt (V3.5 content mode "json
     expect(optionBlock('json', plain, 0)).toBeNull()
     expect(exportProblems(kohya, 2, 0, false, true)).toEqual(['jsonPackage'])
     expect(exportProblems(plain, 2, 0, false, true)).toEqual([])
+  })
+
+  test('the preflight knows a .json export has no caption: only a plain folder or beside the originals writes one', () => {
+    const on = { nl_sidecar: false, dedupe_implications: false, json_sidecar: true }
+    expect(writesJson(plain, on)).toBe(true)
+    expect(writesJson(withFormat(plain, 'beside', contracts).settings, on)).toBe(true)
+    expect(writesJson(kohya, on)).toBe(false)
+    expect(writesJson(plain, { ...on, json_sidecar: false })).toBe(false)
   })
 
   test('the choice is kept in the batch row with the other V4 options', () => {

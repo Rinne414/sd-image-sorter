@@ -339,7 +339,10 @@ test('a .json per image instead of the caption .txt (V3.5 content mode "json"): 
   await expect(page.getByTestId('ds-json-on')).toBeDisabled()
   await expect(page.getByTestId('ds-json-why')).toContainText('Plain folder')
   await page.getByTestId('ds-format-folder').check()
+  await expect(page.getByTestId('ds-count-edited')).toBeVisible()
   await page.getByTestId('ds-json-on').check()
+  // a .json holds no caption: the preflight no longer counts edited captions
+  await expect(page.getByTestId('ds-count-edited')).toHaveCount(0)
   // no caption, so no _nl.txt either (it was on since the test above)
   await expect(page.getByTestId('ds-nl-why')).toContainText('no _nl.txt')
   await chooseFolder(page, out)
@@ -375,6 +378,7 @@ test('a .json per image instead of the caption .txt (V3.5 content mode "json"): 
   await result.getByTestId('ds-result-again').click()
   await page.getByTestId('ds-json-on').uncheck()
   await expect(page.getByTestId('ds-json-on')).not.toBeChecked()
+  await expect(page.getByTestId('ds-count-edited')).toBeVisible()
   const saved = async () => (await apiJson<{ settings: { dataset?: { export?: { json_sidecar?: boolean } } } }>(page, `/api/batches/${batchId}`)).body.settings.dataset?.export?.json_sidecar
   await expect.poll(saved).toBe(false)
 })
