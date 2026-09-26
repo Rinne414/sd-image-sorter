@@ -5062,6 +5062,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/annotations/projects/{project_id}/training-captions/revisions:batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Training Caption Revision Batch
+         * @description V4 bulk caption edits: every entry is written, or (any conflict) none.
+         */
+        post: operations["post_training_caption_revision_batch_api_annotations_projects__project_id__training_captions_revisions_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/smart-tag/start": {
         parameters: {
             query?: never;
@@ -5950,6 +5970,51 @@ export interface paths {
         get: operations["get_reparse_status_api_metadata_reparse_status_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/open-path": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open a folder in the file explorer
+         * @description Open an existing folder (for example an export destination) in the OS file explorer.
+         *
+         *     The path must be an existing directory; a file, a missing folder or a suspicious path is refused.
+         *     Supports Windows (explorer), macOS (open) and Linux (xdg-open). No shell is involved.
+         */
+        post: operations["open_path_api_open_path_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/images/by-ids": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gallery rows for a list of image ids
+         * @description Return the gallery's summary rows (size, generator, rating, ...) for the given
+         *     image ids, in the order given. Ids that no longer exist or belong to another
+         *     library are left out. At most 2000 ids per request.
+         */
+        post: operations["get_images_by_ids_api_images_by_ids_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9185,6 +9250,14 @@ export interface components {
             /** Nl Caption */
             nl_caption?: string | null;
         };
+        /** ImagesByIdsRequest */
+        ImagesByIdsRequest: {
+            /**
+             * Image Ids
+             * @description Image ids, in the order wanted
+             */
+            image_ids: number[];
+        };
         /** KohyaCapabilities */
         KohyaCapabilities: {
             /** Caption Extensions */
@@ -9612,6 +9685,14 @@ export interface components {
         OpenFolderRequest: {
             /** Image Id */
             image_id?: number | null;
+        };
+        /** OpenPathRequest */
+        OpenPathRequest: {
+            /**
+             * Path
+             * @description An existing folder on this computer
+             */
+            path: string;
         };
         /** PrepareModelRequest */
         PrepareModelRequest: {
@@ -11003,6 +11084,78 @@ export interface components {
             /** Trainers */
             trainers: (components["schemas"]["KohyaTrainerContract"] | components["schemas"]["AnimaTrainerContract"])[];
         };
+        /**
+         * TrainingCaptionAiProvenance
+         * @description Who wrote an AI revision: the tagger (wd14) or a describer (vlm).
+         */
+        TrainingCaptionAiProvenance: {
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "wd14" | "vlm";
+            /** Provider */
+            provider?: string | null;
+            /** Model */
+            model?: string | null;
+        };
+        /** TrainingCaptionBatchEntryRequest */
+        TrainingCaptionBatchEntryRequest: {
+            /** Subject */
+            subject: components["schemas"]["ProjectLibraryAnnotationSubject"] | components["schemas"]["ProjectLocalAnnotationSubject"];
+            /** Expected Head Generation */
+            expected_head_generation: number;
+            content?: components["schemas"]["TrainingCaptionContentV1"] | null;
+            /** Restore Revision Id */
+            restore_revision_id?: number | null;
+            /**
+             * Template Snapshot
+             * @default false
+             */
+            template_snapshot: boolean;
+        };
+        /**
+         * TrainingCaptionBatchItem
+         * @description What changed for one entry (same order as the request).
+         */
+        TrainingCaptionBatchItem: {
+            /** Subject Id */
+            subject_id: number;
+            /** Item */
+            item: components["schemas"]["ProjectLibraryAnnotationSubject"] | components["schemas"]["ProjectLocalAnnotationSubject"];
+            /** Generation */
+            generation: number;
+            /** Revision Id */
+            revision_id: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "manual" | "restore" | "legacy_snapshot";
+            /**
+             * Author Class
+             * @enum {string}
+             */
+            author_class: "user" | "ai" | "system" | "import";
+            /** Restored From Revision Id */
+            restored_from_revision_id: number | null;
+        };
+        /** TrainingCaptionBatchRequest */
+        TrainingCaptionBatchRequest: {
+            /** Expected Project Revision */
+            expected_project_revision: number;
+            /** Entries */
+            entries: components["schemas"]["TrainingCaptionBatchEntryRequest"][];
+        };
+        /** TrainingCaptionBatchResponse */
+        TrainingCaptionBatchResponse: {
+            /** Project Id */
+            project_id: number;
+            /** Written */
+            written: number;
+            /** Items */
+            items: components["schemas"]["TrainingCaptionBatchItem"][];
+        };
         /** TrainingCaptionContentV1 */
         TrainingCaptionContentV1: {
             /**
@@ -11072,6 +11225,7 @@ export interface components {
             /** Expected Head Generation */
             expected_head_generation: number;
             content: components["schemas"]["TrainingCaptionContentV1"];
+            ai_provenance?: components["schemas"]["TrainingCaptionAiProvenance"] | null;
         };
         /**
          * TraitCandidatesRequest
@@ -19420,6 +19574,41 @@ export interface operations {
             };
         };
     };
+    post_training_caption_revision_batch_api_annotations_projects__project_id__training_captions_revisions_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrainingCaptionBatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrainingCaptionBatchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     start_api_smart_tag_start_post: {
         parameters: {
             query?: never;
@@ -21224,6 +21413,101 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    open_path_api_open_path_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenPathRequest"];
+            };
+        };
+        responses: {
+            /** @description Folder opened */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "success": true,
+                     *       "path": "D:/exports/pixiv"
+                     *     }
+                     */
+                    "application/json": unknown;
+                };
+            };
+            /** @description Not a folder, or the path is not allowed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The folder does not exist */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The file explorer could not be started */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_images_by_ids_api_images_by_ids_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImagesByIdsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

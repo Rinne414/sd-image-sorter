@@ -14,6 +14,8 @@ interface Holder {
   entries: Map<string, Entry>
   /** The image the editor showed last, to come back to. */
   current: string | null
+  /** One caption at a time, or many at once (the step comes back the way it was left). */
+  mode: 'one' | 'bulk'
 }
 
 // One session per batch for the whole app visit: a save still waiting when
@@ -39,7 +41,7 @@ export function captionHolder(batchId: number): Holder {
       return entry ? restoreCaption(batchId, entry, revisionId, subjectId, generation) : gone()
     },
   })
-  const holder: Holder = { session, entries, current: null }
+  const holder: Holder = { session, entries, current: null, mode: 'one' }
   holders.set(batchId, holder)
   return holder
 }

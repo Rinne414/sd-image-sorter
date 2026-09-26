@@ -1,11 +1,15 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useEffect, useRef } from 'react'
 import { useT, type MessageKey } from '../../../i18n'
+import { PickMark } from '../../../ui/PickMark'
 import { entryThumb, type Entry } from '../entries'
 import styles from './EditStep.module.css'
 import { LIST_FILTERS, type ItemMarks, type ListFilter } from './marks'
 
 const ROW_H = 54
+
+/** A steady number per image, so its pick mark keeps its shape. */
+const seedOf = (key: string) => [...key].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7)
 
 const FILTER_LABEL: Record<ListFilter, MessageKey> = {
   all: 'dataset.edit.filterAll',
@@ -25,6 +29,35 @@ interface Props {
   /** The batch has no trigger word: say it once here, not on every image. */
   noTrigger: boolean
   onSettings: () => void
+  /** Bulk mode: a click picks images (Shift+click a range) instead of opening one. */
+  picking?: Picking
+}
+
+export interface Picking {
+  selected: ReadonlySet<string>
+  /** Place of each picked image in the order it was picked (for its mark). */
+  order: ReadonlyMap<string, number>
+  toggle: (key: string, range: boolean) => void
+  all: () => void
+  clear: () => void
+}
+
+function PickHead({ picking, shown }: { picking: Picking; shown: number }) {
+  const t = useT()
+  const n = picking.selected.size
+  return (
+    <div className={styles.pickHead} data-testid="edit-pick-head">
+      <span className={styles.pickCount}>{n > 0 ? t('dataset.selected', { n }) : t('dataset.bulk.noneSelected')}</span>
+      <button type="button" className={styles.linkButton} onClick={picking.all} disabled={shown === 0} data-testid="edit-pick-all">
+        {t('dataset.bulk.selectShown', { n: shown })}
+      </button>
+      {n > 0 && (
+        <button type="button" className={styles.linkButton} onClick={picking.clear} data-testid="edit-pick-clear">
+          {t('dataset.clearSelection')}
+        </button>
+      )}
+    </div>
+  )
 }
 
 function Marks({ marks }: { marks: ItemMarks | undefined }) {
@@ -41,7 +74,7 @@ function Marks({ marks }: { marks: ItemMarks | undefined }) {
 }
 
 /** The batch's images down the left, marked; the filters on top pick which ones A/D walk through. */
-export function ItemList({ shown, marks, counts, filter, onFilter, current, onPick, noTrigger, onSettings }: Props) {
+export function ItemList({ shown, marks, counts, filter, onFilter, current, onPick, noTrigger, onSettings, picking }: Props) {
   const t = useT()
   const scroller = useRef<HTMLDivElement>(null)
   const virtualizer = useVirtualizer({ count: shown.length, getScrollElement: () => scroller.current, estimateSize: () => ROW_H, overscan: 8 })
@@ -61,6 +94,7 @@ export function ItemList({ shown, marks, counts, filter, onFilter, current, onPi
           </button>
         ))}
       </div>
+      {picking && <PickHead picking={picking} shown={shown.length} />}
       {noTrigger && (
         <p className={styles.listNote} data-testid="edit-no-trigger">
           {t('dataset.edit.noTrigger')}{' '}
@@ -77,18 +111,23 @@ export function ItemList({ shown, marks, counts, filter, onFilter, current, onPi
             {virtualizer.getVirtualItems().map((row) => {
               const entry = shown[row.index] as Entry
               const thumb = entryThumb(entry, 128)
+              const picked = picking?.selected.has(entry.key) ?? false
               return (
                 <button
                   key={entry.key}
                   type="button"
                   className={styles.row}
                   style={{ transform: `translateY(${row.start}px)`, height: ROW_H }}
-                  aria-current={entry.key === current || undefined}
-                  onClick={() => onPick(entry.key)}
+                  aria-current={!picking && entry.key === current ? true : undefined}
+                  aria-pressed={picking ? picked : undefined}
+                  onClick={(e) => (picking ? picking.toggle(entry.key, e.shiftKey) : onPick(entry.key))}
                   data-testid="edit-item"
                   data-key={entry.key}
                 >
-                  <span className={styles.rowThumb}>{thumb && <img src={thumb} alt="" loading="lazy" decoding="async" draggable={false} />}</span>
+                  <span className={styles.rowThumb}>
+                    {thumb && <img src={thumb} alt="" loading="lazy" decoding="async" draggable={false} />}
+                    {picked && <PickMark seed={seedOf(entry.key)} order={picking?.order.get(entry.key) ?? 0} />}
+                  </span>
                   <span className={styles.rowText}>
                     <span className={`${styles.rowName} mono`} title={entry.filename}>
                       {entry.filename}

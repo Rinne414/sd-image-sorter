@@ -91,24 +91,54 @@ export function initialTemplate(template: string, hasCommonTags: boolean): strin
   return TAG_VAR.test(stripped) ? stripped : '{tags:filtered}'
 }
 
-/** What a Library image says in words: its description, or (as the template reads it) the older fused caption. */
-export interface StoredText {
-  nl_caption: string | null
-  ai_caption: string | null
-}
-
 /**
  * The caption a never-edited image starts from: its tags as the template
- * renders them with the batch rules off, its stored description, and the
- * type the template writes (words only, tags and words, or tags).
+ * renders them with the batch rules off, its stored description (the words
+ * the template's {nl_caption} reads: the description, else the older fused
+ * caption), and the type the template writes (words only, tags and words, or
+ * tags). A description the type does not write stays in its box, unused.
  */
-export function initialContent(renderedTags: string, stored: StoredText | null, template: string): CaptionContent {
+export function initialContent(renderedTags: string, words: string, template: string): CaptionContent {
   const usesNl = templateHasNl(template)
-  const own = stored?.nl_caption?.trim() ?? ''
-  const nl = own || (usesNl ? (stored?.ai_caption?.trim() ?? '') : '')
+  const nl = words.split(/\s+/).filter(Boolean).join(' ')
   const wordsOnly = usesNl && !TAG_VAR.test(template.replace(NL_VAR, ''))
   const type: CaptionType = usesNl && nl ? (wordsOnly ? 'nl' : 'both') : 'booru'
   return { content_version: 1, booru_caption: joinTags(splitTags(renderedTags)), nl_caption: nl, caption_type: type }
+}
+
+/** One preview row, as POST /api/dataset/export-preview answers it. */
+export interface PreviewRow {
+  image_id: number
+  abs_path: string
+  caption: string
+  error: string | null
+  skipped_reason: string | null
+}
+
+/** Where a preview row belongs among the entries (Library id, or the folder path in one spelling). */
+export const rowKey = (imageId: number, path: string | null): string => (imageId > 0 ? `id:${imageId}` : `path:${(path ?? '').replace(/\\/g, '/')}`)
+
+/**
+ * Fresh captions by entry key from two renders of the same images: the tags
+ * (template without its words) and the words (content mode nl_caption). An
+ * image either render skipped or failed is left out.
+ */
+export function contentsFromRows(
+  entries: readonly { key: string; imageId: number | null; path: string | null }[],
+  tagRows: readonly PreviewRow[],
+  wordRows: readonly PreviewRow[],
+  template: string,
+): Map<string, CaptionContent> {
+  const byRow = new Map(entries.map((e) => [rowKey(e.imageId ?? 0, e.path), e.key]))
+  const ok = (row: PreviewRow) => !row.error && !row.skipped_reason
+  const words = new Map(wordRows.filter(ok).map((row) => [rowKey(row.image_id, row.abs_path), row.caption]))
+  const out = new Map<string, CaptionContent>()
+  for (const row of tagRows) {
+    const at = rowKey(row.image_id, row.abs_path)
+    const key = byRow.get(at)
+    if (key && ok(row)) out.set(key, initialContent(row.caption, words.get(at) ?? '', template))
+  }
+  return out
 }
 
 /** How many tags the caption has (the batch's "max tags" only trims never-edited images). */

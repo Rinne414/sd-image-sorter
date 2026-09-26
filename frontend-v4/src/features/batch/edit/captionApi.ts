@@ -5,14 +5,14 @@ import type { Batch, BatchProjectView } from '../../../api/types'
 import type { MessageKey } from '../../../i18n'
 import { useApp } from '../../../state/store'
 import { tr } from '../../jobs/jobs'
-import { DEFAULT_TEMPLATE, previewBody } from '../captionRules'
+import { previewBody } from '../captionRules'
 import { projectKey } from '../datasetApi'
-import { pathKey } from '../datasetItems'
-import { splitList, type DatasetForm } from '../datasetSettings'
+import type { DatasetForm } from '../datasetSettings'
 import type { Author, CaptionContent, HeadInfo } from '../datasetTag'
 import { headInfo, headsKey, type HeadRow } from '../datasetTagApi'
 import type { Entry } from '../entries'
-import { initialContent, initialTemplate, type StoredText } from './captionContent'
+import { emptyContent, rowKey, type PreviewRow } from './captionContent'
+import { bareForm, PREVIEW_CHUNK, renderInitialContents } from './initialContents'
 import type { HeadSnapshot, SaveOutcome } from './captionSession'
 
 // The caption editor's requests. Saves and restores name the project
@@ -177,36 +177,13 @@ export function useCaptionHistory(batch: Batch, view: BatchProjectView | undefin
   })
 }
 
-interface PreviewRow {
-  image_id: number
-  abs_path: string
-  caption: string
-  error: string | null
-  skipped_reason: string | null
-}
-
 async function previewOne(body: unknown, signal?: AbortSignal): Promise<PreviewRow | null> {
   const res = unwrap<{ items: PreviewRow[] }>(await api.POST('/api/dataset/export-preview', { body: body as never, signal }))
   return res.items[0] ?? null
 }
 
-/** The batch rules switched off: what an image's own caption is rendered with. */
-export function bareForm(form: DatasetForm): DatasetForm {
-  const template = initialTemplate(form.template.trim() || DEFAULT_TEMPLATE, splitList(form.commonTags).length > 0)
-  return { ...form, trigger: '', commonTags: '', blacklist: '', removeCategories: [], template }
-}
-
-async function storedText(imageId: number, signal?: AbortSignal): Promise<StoredText> {
-  const detail = unwrap<{ image: StoredText }>(await api.GET('/api/images/{image_id}', { params: { path: { image_id: imageId } }, signal }))
-  return { nl_caption: detail.image.nl_caption ?? null, ai_caption: detail.image.ai_caption ?? null }
-}
-
 async function renderInitial(form: DatasetForm, entry: Entry, signal?: AbortSignal): Promise<CaptionContent> {
-  const [row, stored] = await Promise.all([
-    previewOne(previewBody(bareForm(form), [entry], 1), signal),
-    entry.imageId !== null ? storedText(entry.imageId, signal) : Promise.resolve(null),
-  ])
-  return initialContent(row?.caption ?? '', stored, form.template.trim() || DEFAULT_TEMPLATE)
+  return (await renderInitialContents(form, [entry], signal)).get(entry.key) ?? emptyContent()
 }
 
 const initialKey = (batchId: number, form: DatasetForm | null, entry: Entry | null) =>
@@ -228,12 +205,6 @@ export function fetchInitialContent(batchId: number, form: DatasetForm, entry: E
   return queryClient.fetchQuery({ queryKey: initialKey(batchId, form, entry), queryFn: ({ signal }) => renderInitial(form, entry, signal), staleTime: 0 })
 }
 
-/** Where a preview row belongs among the entries. */
-const rowKey = (imageId: number, path: string | null) => (imageId > 0 ? `id:${imageId}` : `path:${pathKey(path ?? '')}`)
-
-/** The backend renders at most this many captions per preview. */
-const CHUNK = 500
-
 /**
  * Every image's caption as the template renders it (what a never-edited
  * image exports), by entry key: the list uses it to mark captions with
@@ -248,8 +219,8 @@ export function useUneditedCaptions(batch: Batch, form: DatasetForm | null, entr
     queryFn: async ({ signal }) => {
       const byRow = new Map(entries.map((e) => [rowKey(e.imageId ?? 0, e.path), e.key]))
       const out = new Map<string, string>()
-      for (let i = 0; i < entries.length; i += CHUNK) {
-        const body = previewBody(form as DatasetForm, entries.slice(i, i + CHUNK), CHUNK)
+      for (let i = 0; i < entries.length; i += PREVIEW_CHUNK) {
+        const body = previewBody(form as DatasetForm, entries.slice(i, i + PREVIEW_CHUNK), PREVIEW_CHUNK)
         const res = unwrap<{ items: PreviewRow[] }>(await api.POST('/api/dataset/export-preview', { body: body as never, signal }))
         for (const row of res.items) {
           const key = byRow.get(rowKey(row.image_id, row.abs_path))

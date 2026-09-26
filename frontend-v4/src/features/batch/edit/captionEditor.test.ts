@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CaptionContent } from '../datasetTag'
 import {
   composeCaption,
+  contentsFromRows,
   initialContent,
   splitTags,
   initialTemplate,
@@ -9,7 +10,7 @@ import {
   withTags,
 } from './captionContent'
 import { createCaptionSession, NO_HEAD, type HeadSnapshot, type SaveOutcome } from './captionSession'
-import { afterRemoval, entryMarks, filterCounts, matches, stepKey } from './marks'
+import { afterRemoval, entryMarks, filterCounts, matches, stepKey, toggleSelection } from './marks'
 
 const content = (booru: string, nl = '', type: CaptionContent['caption_type'] = 'booru'): CaptionContent => ({
   content_version: 1,
@@ -27,21 +28,21 @@ const head = (generation: number, c: CaptionContent | null, revisionId = generat
 })
 
 describe('the caption a never-edited image starts from', () => {
-  it('takes the rendered tags and leaves the description out of a tags template', () => {
-    const start = initialContent('1girl,  long_hair ,smile', { nl_caption: 'A girl smiles.', ai_caption: null }, '{trigger}, {tags:filtered}, {append}')
+  it('takes the rendered tags; a description the template does not write stays in its box, unused', () => {
+    const start = initialContent('1girl,  long_hair ,smile', 'A girl smiles.', '{trigger}, {tags:filtered}, {append}')
     expect(start).toEqual(content('1girl, long_hair, smile', 'A girl smiles.', 'booru'))
   })
 
   it('writes tags then words for a template that has both (Anima)', () => {
     const anima = '{quality}, {safety}, {count}, {trigger}, {characters}, {copyright}, {artists:@}, {general}. {nl_caption}'
-    expect(initialContent('1girl, smile', { nl_caption: 'A girl smiles.', ai_caption: null }, anima).caption_type).toBe('both')
+    expect(initialContent('1girl, smile', 'A girl smiles.', anima).caption_type).toBe('both')
     expect(initialTemplate(anima, false)).toBe('{quality}, {safety}, {count}, {trigger}, {characters}, {copyright}, {artists:@}, {general}')
   })
 
-  it('writes only words for a words-only template (FLUX), and reads the older fused caption there', () => {
+  it('writes only words for a words-only template (FLUX), the words flattened to one line', () => {
     const flux = '{trigger}. {nl_caption}'
     expect(initialTemplate(flux, false)).toBe('{tags:filtered}')
-    expect(initialContent('1girl', { nl_caption: '', ai_caption: 'An old caption.' }, flux)).toEqual(content('1girl', 'An old caption.', 'nl'))
+    expect(initialContent('1girl', 'An old' + String.fromCharCode(10) + 'caption.', flux)).toEqual(content('1girl', 'An old caption.', 'nl'))
   })
 
   it('leaves the appended text out once common tags are set (the rule adds them)', () => {
@@ -50,8 +51,24 @@ describe('the caption a never-edited image starts from', () => {
   })
 
   it('is tags when there are no words (folder images, untagged descriptions)', () => {
-    expect(initialContent('1girl', null, '{trigger}. {nl_caption}').caption_type).toBe('booru')
-    expect(initialContent('', null, '{tags:filtered}')).toEqual(content(''))
+    expect(initialContent('1girl', '', '{trigger}. {nl_caption}').caption_type).toBe('booru')
+    expect(initialContent('', '', '{tags:filtered}')).toEqual(content(''))
+  })
+
+  it('builds many at once from the two renders (the tag step uses the same): the sentence goes to the words box, not the tags', () => {
+    const entries = [
+      { key: 'lib:4', imageId: 4, path: null },
+      { key: 'dir:D:/set/a.png', imageId: null, path: 'D:\\set\\a.png' },
+      { key: 'lib:5', imageId: 5, path: null },
+    ]
+    const row = (image_id: number, abs_path: string, caption: string, error: string | null = null) => ({ image_id, abs_path, caption, error, skipped_reason: null })
+    const tags = [row(4, '', '1girl, smile'), row(0, 'D:/set/a.png', 'forest'), row(5, '', '', 'unreadable')]
+    const words = [row(4, '', 'A girl smiles in the rain.'), row(0, 'D:/set/a.png', '')]
+    const fresh = contentsFromRows(entries, tags, words, '{trigger}. {nl_caption}')
+    expect(fresh.get('lib:4')).toEqual(content('1girl, smile', 'A girl smiles in the rain.', 'nl'))
+    expect(fresh.get('lib:4')?.booru_caption).not.toContain('rain')
+    expect(fresh.get('dir:D:/set/a.png')).toEqual(content('forest'))
+    expect(fresh.has('lib:5')).toBe(false)
   })
 })
 
@@ -263,5 +280,20 @@ describe('the image list marks and moves', () => {
     expect(stepKey(['a', 'b', 'c'], 'zz', -1)).toBe('a')
     expect(afterRemoval(['a', 'b', 'c'], 'c')).toBe('b')
     expect(afterRemoval(['a', 'b', 'c'], 'a')).toBe('b')
+  })
+})
+
+describe('picking images for a bulk change', () => {
+  const shown = ['a', 'b', 'c', 'd', 'e']
+  it('a click flips one; Shift+click sets the range from the last click to the new state', () => {
+    let sel = toggleSelection(shown, new Set(), null, 'b', false)
+    expect([...sel]).toEqual(['b'])
+    sel = toggleSelection(shown, sel, 'b', 'd', true)
+    expect([...sel].sort()).toEqual(['b', 'c', 'd'])
+    sel = toggleSelection(shown, sel, 'd', 'c', true)
+    expect([...sel].sort()).toEqual(['b'])
+    sel = toggleSelection(shown, new Set(['a', 'b', 'c']), 'a', 'b', false)
+    expect([...sel].sort()).toEqual(['a', 'c'])
+    expect([...toggleSelection(shown, new Set(['a', 'b', 'c', 'd']), 'a', 'c', true)].sort()).toEqual(['d'])
   })
 })

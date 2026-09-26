@@ -9,7 +9,6 @@ import { useToasts } from '../../ui/toasts'
 import { installAllThen, type InstallTarget } from '../jobs/installJob'
 import { isQueueBusy, tr } from '../jobs/jobs'
 import { readiness, taggerInfo, type ModelCard, type TaggerInfo } from '../tagging/taggers'
-import { previewBody } from './captionRules'
 import { projectKey } from './datasetApi'
 import { folderKey, libraryKey } from './datasetItems'
 import { formFromSettings, readBatchDataset, type Purpose, type TargetModel } from './datasetSettings'
@@ -27,6 +26,7 @@ import {
   type TagStepOptions,
 } from './datasetTag'
 import { entriesFromProject, type Entry } from './entries'
+import { renderInitialContents } from './edit/initialContents'
 import { trackSmartTagJob } from './trackSmartTag'
 import { forgetRun, pendingRun, rememberRun, resumeRun } from './tagRunResume'
 
@@ -231,24 +231,13 @@ const readView = (batchId: number) =>
     staleTime: 0,
   })
 
-/** The backend renders at most this many captions per preview. */
-const PREVIEW_CHUNK = 500
-
-/** Rendered captions for Library images with the batch rules off: what a fresh caption starts from. */
-async function freshLibraryContents(batch: Batch, view: BatchProjectView, entries: readonly Entry[]): Promise<Map<number, CaptionContent>> {
+/**
+ * Fresh captions (by entry key) for Library images, as the caption editor
+ * starts them: tags in the tag box, the stored description in the words box.
+ */
+async function freshLibraryContents(batch: Batch, view: BatchProjectView, entries: readonly Entry[]): Promise<Map<string, CaptionContent>> {
   const form = formFromSettings(view.project.settings, readBatchDataset(batch.settings))
-  const bare = { ...form, trigger: '', commonTags: '', blacklist: '', removeCategories: [] }
-  const out = new Map<number, CaptionContent>()
-  for (let i = 0; i < entries.length; i += PREVIEW_CHUNK) {
-    const chunk = entries.slice(i, i + PREVIEW_CHUNK)
-    const res = unwrap<{ items: { image_id: number; caption: string }[] }>(
-      await api.POST('/api/dataset/export-preview', { body: previewBody(bare, chunk, chunk.length) as never }),
-    )
-    for (const item of res.items) {
-      if (item.image_id > 0) out.set(item.image_id, { content_version: 1, booru_caption: item.caption, nl_caption: '', caption_type: 'booru' })
-    }
-  }
-  return out
+  return renderInitialContents(form, entries)
 }
 
 /**
@@ -263,7 +252,7 @@ async function refreshAiLibraryCaptions(batch: Batch, view: BatchProjectView, he
   let failed = 0
   for (const entry of stale) {
     const id = entry.imageId as number
-    const content = fresh.get(id)
+    const content = fresh.get(entry.key)
     if (!content?.booru_caption) continue
     const ok = await writeAiRevision(view, { item_type: 'library', image_id: id }, content, 'wd14', heads.get(entry.key)?.generation ?? 0, model)
     if (!ok) failed += 1
@@ -374,13 +363,13 @@ export async function replaceEditedCaptions(batch: Batch, entries: readonly Entr
     const wanted = new Set(keys)
     const chosen = entries.filter((e) => wanted.has(e.key))
     const library = chosen.filter((e) => e.imageId !== null)
-    const fresh = library.length ? await freshLibraryContents(batch, view, library) : new Map<number, CaptionContent>()
+    const fresh = library.length ? await freshLibraryContents(batch, view, library) : new Map<string, CaptionContent>()
     const kept = new Map((useTagRuns.getState().runs[batch.id]?.keptResults ?? []).map((row) => [headKey({ item_type: 'local', path: row.path }), row]))
     let failed = 0
     let written = 0
     for (const entry of chosen) {
       const row = entry.imageId === null ? kept.get(entry.key) : undefined
-      const content = entry.imageId !== null ? fresh.get(entry.imageId) : row ? resultContent(row) : undefined
+      const content = entry.imageId !== null ? fresh.get(entry.key) : row ? resultContent(row) : undefined
       if (!content || (!content.booru_caption && !content.nl_caption)) continue
       const subject: Subject = entry.imageId !== null ? { item_type: 'library', image_id: entry.imageId } : { item_type: 'local', path: entry.path ?? '' }
       const generation = heads.get(entry.key)?.generation ?? 0

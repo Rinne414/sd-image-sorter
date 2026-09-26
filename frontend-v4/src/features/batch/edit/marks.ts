@@ -66,3 +66,31 @@ export function afterRemoval(keys: readonly string[], key: string): string | nul
   if (at < 0) return keys[0] ?? null
   return keys[at + 1] ?? keys[at - 1] ?? null
 }
+
+/**
+ * The selection after a click on `key`: it flips alone, or (range, from the
+ * last clicked) every image between the two takes the clicked one's new state.
+ */
+export function toggleSelection(
+  shown: readonly string[],
+  selected: ReadonlySet<string>,
+  anchor: string | null,
+  key: string,
+  range: boolean,
+): Set<string> {
+  const next = new Set(selected)
+  const on = !selected.has(key)
+  const from = anchor === null ? -1 : shown.indexOf(anchor)
+  const to = shown.indexOf(key)
+  if (!range || from < 0 || to < 0) {
+    if (on) next.add(key)
+    else next.delete(key)
+    return next
+  }
+  const [lo, hi] = from < to ? [from, to] : [to, from]
+  for (const k of shown.slice(lo, hi + 1)) {
+    if (on) next.add(k)
+    else next.delete(k)
+  }
+  return next
+}
