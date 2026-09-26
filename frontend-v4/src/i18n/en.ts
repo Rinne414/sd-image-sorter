@@ -374,6 +374,7 @@ export const en: Record<MessageKey, string> = {
   'jobs.alreadyGone': ' ({n} were already gone)',
   'jobs.stopped': 'Stopped after {done} of {total}',
   'jobs.error': 'Stopped by an error: {reason}',
+  'jobs.installLost': 'The download of {name} was lost and how it ended is unknown (for example, the app restarted meanwhile). Download it again.',
   'jobs.show': 'Details',
   'jobs.undo': 'Undo this edit',
   'jobs.undone': 'Undone',

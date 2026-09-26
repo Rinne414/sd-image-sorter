@@ -374,6 +374,7 @@ export const zhCN = {
   'jobs.alreadyGone': '（{n} 张本来就不在）',
   'jobs.stopped': '已停止：完成 {done} / {total}',
   'jobs.error': '出错停下了：{reason}',
+  'jobs.installLost': '{name} 的下载丢失了，不知道结果（比如程序中途重启过）。请重新下载。',
   'jobs.show': '查看',
   'jobs.undo': '撤销这次改动',
   'jobs.undone': '已撤销',

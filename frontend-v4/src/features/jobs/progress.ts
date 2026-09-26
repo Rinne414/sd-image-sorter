@@ -80,6 +80,8 @@ export interface JobProgress {
   needsRestart: boolean
   /** install only: usable now, but a restart unlocks all of it (e.g. the GPU runtime was repaired). */
   restartAdvised: boolean
+  /** install only: the backend no longer knows how this download ended (it restarted, or many downloads ended since). */
+  lost?: boolean
   /** reconnect only: found files that match several missing records and wait for the user. */
   toReview: number
   /** scan only: finding and adding files, then reading their generation details. */
@@ -107,6 +109,8 @@ export interface ReadContext {
   baseRunId?: number
   /** install: the model card being prepared. */
   modelId?: string
+  /** install: the backend's run id for that prepare (POST /api/models/prepare); another live run means ours is over. */
+  installRun?: number
   /** scan: the run we started; any other run on the backend is not ours. */
   runId?: number
   /** scan: who started the run (manual, library_rescan, library_auto_refresh); stopping one must name it. */
@@ -235,27 +239,47 @@ function readBulk(base: JobProgress, raw: Raw, ctx: ReadContext): JobProgress {
   }
 }
 
-function readInstall(base: JobProgress, raw: Raw, ctx: ReadContext): JobProgress {
-  const result = obj(raw.prepare_result)
-  const downloading = raw.active === true || result.active === true
-  const settled = !downloading && str(result.model_id) === ctx.modelId && str(result.status) !== ''
-  if (!settled) {
-    return {
-      ...base,
-      status: 'running',
-      unit: 'bytes',
-      current: num(raw.downloaded),
-      total: num(raw.total),
-      currentItem: str(raw.filename) || null,
-      message: '',
-    }
-  }
+/** A model prepare still downloading: its bytes and file. */
+function installDownloading(base: JobProgress, raw: Raw): JobProgress {
+  return { ...base, status: 'running', unit: 'bytes', current: num(raw.downloaded), total: num(raw.total), currentItem: str(raw.filename) || null, message: '' }
+}
+
+/** How a finished model prepare ended (`result`: its prepare_result). */
+function installSettled(base: JobProgress, result: Raw): JobProgress {
   const status = str(result.status)
   const message = str(result.message) || str(result.error)
   if (status === 'error') return { ...base, status: 'error', unit: 'bytes', message }
   const needsRestart = status === 'needs_restart'
   const restartAdvised = !needsRestart && result.restart_recommended === true
   return { ...base, status: 'done', unit: 'bytes', needsRestart, restartAdvised, message }
+}
+
+/**
+ * install: the backend runs one prepare at a time and numbers them. While
+ * `prepare_result` is our run it says how far it is; once it is another run,
+ * ours is over and its result is kept by run id in `finished_prepares` (a tab
+ * following another tab's downloads can miss the hand-over). No result kept
+ * (the app restarted, or many downloads ended since): the download was lost.
+ */
+function readInstall(base: JobProgress, raw: Raw, ctx: ReadContext): JobProgress {
+  const live = obj(raw.prepare_result)
+  const run = ctx.installRun
+  if (run === undefined) return readInstallByModel(base, raw, live, ctx.modelId)
+  if (num(live.run_id) === run) return live.active === true ? installDownloading(base, raw) : installSettled(base, live)
+  const finished = obj(raw.finished_prepares)[String(run)]
+  if (finished) return installSettled(base, obj(finished))
+  return { ...base, status: 'error', unit: 'bytes', current: 0, total: 0, currentItem: null, message: '', lost: true }
+}
+
+/** An install job's run id from a backend answer (none from a backend before run ids). */
+export const installRunOf = (runId: unknown): Pick<ReadContext, 'installRun'> =>
+  typeof runId === 'number' && runId > 0 ? { installRun: runId } : {}
+
+/** A job without a run id (a backend from before run ids): its model's latest prepare, as before. */
+function readInstallByModel(base: JobProgress, raw: Raw, live: Raw, modelId: string | undefined): JobProgress {
+  const downloading = raw.active === true || live.active === true
+  const settled = !downloading && str(live.model_id) === modelId && str(live.status) !== ''
+  return settled ? installSettled(base, live) : installDownloading(base, raw)
 }
 
 export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext = {}, prev?: JobProgress): JobProgress { // signals: prev = the job's last reading

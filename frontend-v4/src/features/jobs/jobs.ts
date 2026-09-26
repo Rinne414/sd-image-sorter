@@ -5,7 +5,7 @@ import { translate, useLang, type MessageKey, type Params } from '../../i18n'
 import { tailOfPath } from '../../lib/paths'
 import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
-import { asScanSource, isFinished, readProgress, scanIdentity, type JobKind, type JobProgress, type ReadContext } from './progress'
+import { asScanSource, installRunOf, isFinished, readProgress, scanIdentity, type JobKind, type JobProgress, type ReadContext } from './progress'
 import { driveSmartTag } from './smartTagDriver'
 import { drivePurity, drivePurityDownload } from './purityDriver'
 import { driveMasks } from './maskDriver'
@@ -332,7 +332,7 @@ export async function adoptRunningJobs(): Promise<void> {
     adopt('install', (raw) => {
       const result = (raw.prepare_result ?? {}) as Record<string, unknown>
       if (result.active !== true || typeof result.model_id !== 'string') return null
-      const ctx = { modelId: result.model_id }
+      const ctx = { modelId: result.model_id, ...installRunOf(result.run_id) }
       return { kind: 'install', progress: readProgress('install', raw, ctx), ctx, label: result.model_id }
     }),
   ])
@@ -504,7 +504,7 @@ export function jobHeadline(job: Job): string {
     case 'cancelled':
       return tr('jobs.stopped', { done: p.current, total: p.total || job.count })
     case 'error':
-      return tr('jobs.error', { reason: p.message || '?' })
+      return p.lost ? tr('jobs.installLost', params) : tr('jobs.error', { reason: p.message || '?' })
     case 'idle':
       return tr('jobs.reset')
     case 'done': {

@@ -1160,7 +1160,7 @@ Get the current download mirror preference.
 Set the download mirror preference (auto, hf-mirror, modelscope).
 
 #### GET /api/models/download-progress
-Get active model download progress (bytes downloaded, total size).
+Get active model download progress (bytes downloaded, total size). `prepare_result` describes the latest prepare, with its `run_id` (0 when none ran since the app started). `finished_prepares` maps run ids (as strings) to the results of the last 32 finished prepares (the same fields as `prepare_result`, `active: false`), so a page that missed the moment its run handed over to the next one still learns how its own run ended; a run no longer listed there has to be treated as lost.
 
 #### GET /api/models/bulk-bundle
 Inventory of models available to the selectable bulk-download flow. Florence-2
@@ -1238,11 +1238,14 @@ The request returns immediately with HTTP 200:
 {
   "status": "downloading",
   "model_id": "sam3",
+  "run_id": 7,
   "message": "Download started in background."
 }
 ```
 
-Poll `GET /api/models/download-progress` and read `prepare_result` for completion, warnings, or actionable errors.
+Only one prepare runs at a time: while one runs, the answer names the running one (`model_id`, `run_id`, message `A download is already in progress.`) and starts nothing.
+
+Poll `GET /api/models/download-progress` and read `prepare_result` for completion, warnings, or actionable errors; once `prepare_result.run_id` is another run, read this run's result from `finished_prepares`.
 
 Structured errors can include:
 

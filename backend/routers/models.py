@@ -7,8 +7,11 @@ runtime/model assets are ready and trigger first-run downloads explicitly.
 from __future__ import annotations
 
 import asyncio
+import copy
+import itertools
 import logging
 import threading
+from collections import OrderedDict
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends
@@ -42,6 +45,8 @@ def _empty_prepare_result() -> Dict[str, Any]:
     # path.
     return {
         "active": False,
+        # Which started prepare this is (0: none since the app started).
+        "run_id": 0,
         "model_id": "",
         "status": "",
         "message": "",
@@ -59,6 +64,27 @@ def _empty_prepare_result() -> Dict[str, Any]:
 
 _prepare_result: Dict[str, Any] = _empty_prepare_result()
 _prepare_lock = threading.Lock()
+
+# Every started prepare gets the next run id; a page follows its download by it.
+_prepare_run_ids = itertools.count(1)
+
+# How many finished runs keep their result. A page that follows a download can
+# miss the moment its run hands over to the next one (another tab or V3.5
+# starts the next model at once); it then reads how its own run ended here, by
+# run id. Internal memory, not a limit on the user: a page is at most a few
+# runs behind, and one that finds no result says the download was lost.
+FINISHED_PREPARES_KEPT = 32
+_finished_prepares: "OrderedDict[int, Dict[str, Any]]" = OrderedDict()
+
+
+def _remember_finished_prepare(result: Dict[str, Any]) -> None:
+    """Keep a finished run's result by its run id. Call with ``_prepare_lock`` held."""
+    run_id = int(result.get("run_id") or 0)
+    if not run_id:
+        return
+    _finished_prepares[run_id] = {**copy.deepcopy(result), "active": False}
+    while len(_finished_prepares) > FINISHED_PREPARES_KEPT:
+        _finished_prepares.popitem(last=False)
 
 
 router = APIRouter(prefix="/api/models", tags=["models"])
@@ -93,6 +119,9 @@ async def get_download_progress():
     progress = get_download_progress()
     with _prepare_lock:
         progress["prepare_result"] = dict(_prepare_result)
+        progress["finished_prepares"] = {
+            str(run_id): dict(result) for run_id, result in _finished_prepares.items()
+        }
     return progress
 
 
@@ -478,6 +507,7 @@ def _run_prepare_blocking(service: ModelService, model_id: str, source: Optional
     finally:
         with _prepare_lock:
             _prepare_result["active"] = False
+            _remember_finished_prepare(_prepare_result)
 
 
 @router.post("/prepare")
@@ -491,13 +521,16 @@ async def prepare_model(
             return {
                 "status": "downloading",
                 "model_id": _prepare_result["model_id"],
+                "run_id": _prepare_result.get("run_id", 0),
                 "message": "A download is already in progress.",
             }
+        run_id = next(_prepare_run_ids)
         # Wipe any stale fields from the previous prepare so the UI does not
         # render last-run's success message against this run's model_id.
         _prepare_result = _empty_prepare_result()
         _prepare_result.update(
             active=True,
+            run_id=run_id,
             model_id=request.model_id,
             status="downloading",
             message="",
@@ -505,4 +538,9 @@ async def prepare_model(
         )
     loop = asyncio.get_running_loop()
     loop.run_in_executor(None, _run_prepare_blocking, service, request.model_id, request.source, request.variant)
-    return {"status": "downloading", "model_id": request.model_id, "message": "Download started in background."}
+    return {
+        "status": "downloading",
+        "model_id": request.model_id,
+        "run_id": run_id,
+        "message": "Download started in background.",
+    }

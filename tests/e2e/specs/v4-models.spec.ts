@@ -134,7 +134,10 @@ interface Stub {
   pollsPerDownload: number
   active: string | null
   polls: number
-  last: { model_id: string; status: string; restart_recommended: boolean }
+  /** The backend numbers prepares (run_id) and keeps each finished one's result by that number. */
+  run: number
+  finished: Record<string, Json>
+  last: { run_id: number; model_id: string; status: string; restart_recommended: boolean }
   restartPosts: Json[]
   bootIds: string[]
   bootHits: number
@@ -152,7 +155,9 @@ function newStub(fields: Partial<Stub> = {}): Stub {
     pollsPerDownload: 2,
     active: null,
     polls: 0,
-    last: { model_id: '', status: '', restart_recommended: false },
+    run: 0,
+    finished: {},
+    last: { run_id: 0, model_id: '', status: '', restart_recommended: false },
     restartPosts: [],
     bootIds: ['boot-A'],
     bootHits: 0,
@@ -169,9 +174,11 @@ function settle(stub: Stub): Json {
   const target = stub.cards.find((c) => c.id === id)
   if (target && outcome !== 'error') target.status = outcome === 'done' ? 'ready' : 'needs_restart'
   const status = outcome === 'needs_restart' ? 'needs_restart' : outcome
-  stub.last = { model_id: id, status, restart_recommended: outcome === 'needs_restart' }
+  stub.last = { run_id: stub.run, model_id: id, status, restart_recommended: outcome === 'needs_restart' }
   stub.active = null
-  return { active: false, prepare_result: { active: false, ...stub.last, message: outcome === 'error' ? 'Download failed.' : 'Ready.' } }
+  const result = { active: false, ...stub.last, message: outcome === 'error' ? 'Download failed.' : 'Ready.' }
+  stub.finished[String(stub.run)] = result
+  return { active: false, prepare_result: result, finished_prepares: stub.finished }
 }
 
 async function stubAll(page: Page, stub: Stub) {
@@ -201,20 +208,20 @@ async function stubAll(page: Page, stub: Stub) {
     stub.prepares.push(body)
     if (stub.active) {
       stub.overlapping.push(String(body.model_id))
-      return route.fulfill({ json: { status: 'downloading', model_id: stub.active, message: 'A download is already in progress.' } })
+      return route.fulfill({ json: { status: 'downloading', model_id: stub.active, run_id: stub.run, message: 'A download is already in progress.' } })
     }
     stub.active = String(body.model_id)
+    stub.run += 1
     stub.polls = 0
-    return route.fulfill({ json: { status: 'downloading', model_id: body.model_id, message: 'Download started in background.' } })
+    return route.fulfill({ json: { status: 'downloading', model_id: body.model_id, run_id: stub.run, message: 'Download started in background.' } })
   })
   await page.route('**/api/models/download-progress', (route: Route) => {
-    if (!stub.active) return route.fulfill({ json: { active: false, prepare_result: { active: false, ...stub.last } } })
+    if (!stub.active) return route.fulfill({ json: { active: false, prepare_result: { active: false, ...stub.last }, finished_prepares: stub.finished } })
     stub.polls += 1
     if (stub.polls > stub.pollsPerDownload) return route.fulfill({ json: settle(stub) })
     const downloaded = stub.polls * 100 * MB
-    return route.fulfill({
-      json: { active: true, downloaded, total: 400 * MB, filename: 'model.onnx', prepare_result: { active: true, model_id: stub.active, status: 'downloading' } },
-    })
+    const live = { active: true, run_id: stub.run, model_id: stub.active, status: 'downloading' }
+    return route.fulfill({ json: { active: true, downloaded, total: 400 * MB, filename: 'model.onnx', prepare_result: live, finished_prepares: stub.finished } })
   })
   await page.route('**/api/updates/**', (route: Route) => route.fulfill({ status: 500, json: { detail: 'unexpected update call in a test' } }))
   await page.route('**/api/updates/restart', (route: Route) => {
@@ -430,6 +437,48 @@ test('a model that needs a restart pauses the run; "Restart now and continue" re
   expect(stub.overlapping).toEqual([])
   await expect(page.getByTestId('model-banner')).toHaveCount(0)
   expect(await resumeList(page)).toBeNull()
+})
+
+test('a download followed from elsewhere ends with its own result when the next one already started; one the app forgot says it was lost', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await stubAll(page, newStub())
+  // another tab (or V3.5) runs the downloads; this page only follows them
+  const running = (run: number, model: string, file: string, doneMb: number, totalMb: number, finished: Json = {}) => ({
+    active: true,
+    downloaded: doneMb * MB,
+    total: totalMb * MB,
+    filename: file,
+    prepare_result: { active: true, run_id: run, model_id: model, status: 'downloading' },
+    finished_prepares: finished,
+  })
+  let answer: Json = running(5, 'clip', 'clip-vision.onnx', 100, 400)
+  await page.route('**/api/models/download-progress', (route: Route) => route.fulfill({ json: answer }))
+  await openAt(page, '#/settings/models')
+
+  await page.getByTestId('jobs-button').click()
+  const job = page.getByTestId('jobs-drawer').getByTestId('job')
+  await expect(job).toHaveCount(1)
+  await expect(job).toContainText('Downloading clip')
+  await expect(job).toContainText('clip-vision.onnx')
+
+  // the next model starts before this page looks again; CLIP's run had ended with an error
+  answer = running(6, 'artist', 'kaloscope.pth', 50, 2800, { '5': { active: false, run_id: 5, model_id: 'clip', status: 'error', message: '', error: 'HTTP 403' } })
+  await expect(job).toHaveAttribute('data-status', 'error')
+  await expect(job).toContainText('Stopped by an error: HTTP 403')
+  await expect(job).not.toContainText('kaloscope.pth')
+  await expect(job).toHaveCount(1)
+
+  // in Chinese, after a reload: a followed run whose result the app no longer keeps
+  answer = running(7, 'florence2', 'florence.safetensors', 10, 465)
+  await page.evaluate(() => localStorage.setItem('sd-image-sorter-lang', 'zh-CN'))
+  await page.reload()
+  await page.getByTestId('jobs-button').click()
+  await expect(job).toHaveCount(1)
+  await expect(job).toContainText('正在下载 florence2')
+  answer = running(40, 'lucida', 'lucida.safetensors', 1, 885)
+  await expect(job).toHaveAttribute('data-status', 'error')
+  await expect(job).toContainText('florence2 的下载丢失了，不知道结果（比如程序中途重启过）。请重新下载。')
+  await expect(job).not.toContainText('lucida')
 })
 
 test('a list left by a closed tab: the banner offers to continue or forget it', async ({ page }) => {

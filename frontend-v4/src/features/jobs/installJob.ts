@@ -2,7 +2,7 @@ import { api, ApiError, unwrap } from '../../api/client'
 import { useToasts } from '../../ui/toasts'
 import { addJob, isQueueBusy, startingProgress, tr, useJobs, type Job } from './jobs'
 import { busyText } from './busyText'
-import { isFinished, type JobProgress } from './progress'
+import { installRunOf, isFinished, type JobProgress } from './progress'
 
 // First use of a model: download it as a job in the Jobs drawer, then run the
 // work that needed it. Shared by tagging and censor detection. The Model
@@ -33,7 +33,7 @@ export async function startInstall(target: InstallTarget, then?: () => void): Pr
   }
   try {
     const body = { model_id: target.card, variant: target.variant, ...(target.source ? { source: target.source } : {}) }
-    const res = unwrap<{ model_id?: string }>(await api.POST('/api/models/prepare', { body }))
+    const res = unwrap<{ model_id?: string; run_id?: unknown }>(await api.POST('/api/models/prepare', { body }))
     if (res.model_id && res.model_id !== target.card) {
       useToasts.getState().push(tr('tagging.otherDownload', { name: res.model_id }), 'error')
       return null
@@ -41,7 +41,7 @@ export async function startInstall(target: InstallTarget, then?: () => void): Pr
     const job = addJob({
       kind: 'install',
       label: target.label,
-      ctx: { modelId: target.card },
+      ctx: { modelId: target.card, ...installRunOf(res.run_id) },
       progress: { ...startingProgress(0), unit: 'bytes' },
       then,
     })
