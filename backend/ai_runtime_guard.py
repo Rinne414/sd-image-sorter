@@ -14,8 +14,9 @@ import logging
 import os
 import threading
 import time
+import weakref
 from pathlib import Path
-from typing import Any, BinaryIO, Dict, List, Optional, Tuple
+from typing import Any, BinaryIO, Callable, Dict, List, Optional, Tuple
 
 from config import get_temp_dir
 
@@ -540,6 +541,77 @@ def exclusive_ai_runtime(
     return AiRuntimeLease(
         label, tier, priority=priority, timeout=timeout, vram_mb=vram_mb
     )
+
+
+# One resident GPU tagger session per process (decision D46). The lease above
+# serializes inference, but a loaded ONNX session keeps its VRAM between leases,
+# so switching models (or a multi-tagger Smart Tag run) used to leave the
+# previous model resident next to the new one. Every tagger that creates a GPU
+# session claims residency first; the claim releases the others. Owners are
+# held weakly: a tagger that was garbage-collected took its session with it.
+_gpu_residents_lock = threading.Lock()
+_gpu_residents: Dict[int, "weakref.WeakMethod"] = {}
+
+
+def _release_gpu_residents(exclude: Optional[int]) -> int:
+    with _gpu_residents_lock:
+        victims = [
+            (key, ref) for key, ref in _gpu_residents.items() if key != exclude
+        ]
+        for key, _ref in victims:
+            _gpu_residents.pop(key, None)
+    released = 0
+    for _key, ref in victims:
+        release = ref()
+        if release is None:
+            continue
+        try:
+            release()
+            released += 1
+        except Exception:  # noqa: BLE001 - a failed release must not block a load
+            logger.warning("Releasing a resident GPU model failed", exc_info=True)
+    return released
+
+
+def claim_gpu_residency(
+    owner: object, release: Callable[[], None], *, label: str = "gpu-model"
+) -> int:
+    """Release every other resident GPU session, then record ``owner``.
+
+    Runs inside the exclusive VRAM lease (reentrant for a caller that already
+    holds it) so an eviction never lands in the middle of another model's
+    inference. ``release`` must be a bound method of ``owner``. Returns how
+    many sessions were released.
+    """
+    with exclusive_ai_runtime(f"gpu-residency:{label}"):
+        released = _release_gpu_residents(exclude=id(owner))
+        with _gpu_residents_lock:
+            _gpu_residents[id(owner)] = weakref.WeakMethod(release)
+    if released:
+        logger.info("Released %d resident GPU model(s) before loading %s", released, label)
+    return released
+
+
+def forget_gpu_residency(owner: object) -> None:
+    """Drop ``owner`` from the resident set (its session was released)."""
+    with _gpu_residents_lock:
+        _gpu_residents.pop(id(owner), None)
+
+
+def release_gpu_residents() -> int:
+    """Release every resident GPU session in this process.
+
+    Used before a child process (the gallery tagging worker) loads its own
+    model, so the server's copy and the worker's copy never share the card.
+    """
+    with exclusive_ai_runtime("gpu-residency:release-all"):
+        return _release_gpu_residents(exclude=None)
+
+
+def gpu_resident_count() -> int:
+    """How many owners currently hold a resident GPU session (diagnostics, tests)."""
+    with _gpu_residents_lock:
+        return sum(1 for ref in _gpu_residents.values() if ref() is not None)
 
 
 def _ensure_lock_byte(handle: BinaryIO) -> None:

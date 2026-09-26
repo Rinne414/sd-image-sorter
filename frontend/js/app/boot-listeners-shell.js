@@ -391,24 +391,27 @@ function initBootListenersShell() {
         // array with its own localStorage key, so keyboard and slider fought
         // over --grid-item-size and never agreed after a reload.)
         document.addEventListener('keydown', (e) => {
+            if (e.key !== '[' && e.key !== ']') return;
             const activeEl = document.activeElement;
-            if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+            if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA'
+                || activeEl.tagName === 'SELECT' || activeEl.isContentEditable)) {
                 return;
             }
-            const modalOpen = document.querySelector('.modal.show, [role="dialog"][style*="display: block"]');
+            // Gallery only: Censor Edit uses [ ] for the brush size. Dialogs
+            // open with .visible (not .show) and own the keyboard.
+            if (!document.getElementById('view-gallery')?.classList.contains('active')) return;
+            const modalOpen = document.querySelector('.modal.visible, [role="dialog"][style*="display: block"]');
             if (modalOpen) return;
 
-            if (e.key === '[' || e.key === ']') {
-                e.preventDefault();
-                const currentSize = parseInt(gridSizeSlider.value, 10) || 200;
-                updateGridSize(e.key === '[' ? currentSize - 20 : currentSize + 20);
-                showToast(
-                    e.key === '['
-                        ? appT('gallery.thumbnailSizeDecreased', 'Thumbnail size decreased')
-                        : appT('gallery.thumbnailSizeIncreased', 'Thumbnail size increased'),
-                    'info'
-                );
-            }
+            e.preventDefault();
+            const currentSize = parseInt(gridSizeSlider.value, 10) || 200;
+            updateGridSize(e.key === '[' ? currentSize - 20 : currentSize + 20);
+            showToast(
+                e.key === '['
+                    ? appT('gallery.thumbnailSizeDecreased', 'Thumbnail size decreased')
+                    : appT('gallery.thumbnailSizeIncreased', 'Thumbnail size increased'),
+                'info'
+            );
         });
     }
 

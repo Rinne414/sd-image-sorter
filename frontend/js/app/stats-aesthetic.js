@@ -237,16 +237,20 @@ function refreshAestheticUi() {
 async function readAestheticStatus() {
     try {
         const status = await API.getAestheticStatus();
+        const toScore = Number(status?.to_score_count);
         return {
             available: Boolean(status?.available),
             message: status?.message || '',
             scored_count: Number(status?.scored_count || 0),
+            // Unscored library images: what Score Aesthetic will process.
+            to_score_count: Number.isFinite(toScore) ? toScore : null,
         };
     } catch (error) {
         return {
             available: false,
             message: formatUserError(error, appT('gallery.aestheticStatusFailed', 'Could not check aesthetic scoring status')),
             scored_count: 0,
+            to_score_count: null,
         };
     }
 }

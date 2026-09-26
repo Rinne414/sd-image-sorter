@@ -46,7 +46,14 @@ Object.assign(window.V321Integration, {
             }
             // Refresh preview when content mode changes
             // Clear manual edits since they were for the previous mode's format
+            const droppedEdits = this.editedCaptions.size;
             this.editedCaptions.clear();
+            if (droppedEdits > 0) {
+                this.markCaptionEditsChanged();
+                window.showToast?.(this._i18n('batchExport.captionEditsClearedForMode',
+                    'Caption edits for {count} image(s) were cleared: they were written for the previous content format.',
+                    { count: droppedEdits }).replace('{count}', String(droppedEdits)), 'warning');
+            }
             this.refreshPreview();
         };
         contentSelect.addEventListener('change', updateVis);

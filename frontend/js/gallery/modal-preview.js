@@ -305,6 +305,20 @@ ${String(value)}`)
             document.removeEventListener('keydown', this._modalKeydownHandler);
         }
         this._modalKeydownHandler = (e) => {
+            // Closed by ✕ or the backdrop: this listener is stale, and an arrow
+            // key in the gallery must not reopen the preview.
+            if (!document.getElementById('image-modal')?.classList.contains('visible')) {
+                document.removeEventListener('keydown', this._modalKeydownHandler);
+                this._modalKeydownHandler = null;
+                return;
+            }
+            // Typing in the tag or caption editor: arrows move the cursor;
+            // switching images would drop the unsaved edit.
+            const target = e.target;
+            if (target instanceof Element
+                && target.closest('input, textarea, select, [contenteditable="true"]')) {
+                return;
+            }
             if (e.key === 'ArrowLeft') {
                 e.preventDefault();
                 this.openAdjacentPreview(-1);

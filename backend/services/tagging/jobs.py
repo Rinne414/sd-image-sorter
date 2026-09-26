@@ -43,6 +43,31 @@ def _close_setup_progress_queue(progress_queue: object, run_id: int) -> None:
             )
 
 
+def _release_server_gpu_models(run_id: int) -> None:
+    """Free this process's resident GPU taggers before the worker loads its own.
+
+    The worker is a separate process, so the residency claim inside it cannot
+    see a model Smart Tag or single-image tagging left on the card here (D46).
+    Best effort: a failure is logged and the run still starts.
+    """
+    try:
+        from ai_runtime_guard import release_gpu_residents
+
+        released = release_gpu_residents()
+    except Exception as error:  # noqa: BLE001
+        logger.warning(
+            "Could not release resident GPU models before the tagging worker.",
+            extra={"run_id": run_id, "error_type": type(error).__name__},
+            exc_info=True,
+        )
+        return
+    if released:
+        logger.info(
+            "Released resident GPU models before the tagging worker.",
+            extra={"run_id": run_id, "released": released},
+        )
+
+
 class JobsMixin:
     """Job-supervision slice of TaggingService (assembled in services.tagging.service)."""
 
@@ -126,6 +151,8 @@ class JobsMixin:
         runtime_backend = str(
             TAGGER_MODELS.get(model_name, {}).get("runtime_backend", "wd14")
         ).lower()
+        if runtime_plan.get("effective_use_gpu"):
+            _release_server_gpu_models(run_id)
 
         try:
             with self._lock:

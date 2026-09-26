@@ -282,3 +282,30 @@ test('FB-3: thumbnail size also drives the waterfall layout', async ({ page }) =
   await page.locator('#grid-size-slider').fill('120')
   await expect.poll(() => countColumns(page), { timeout: 5000 }).toBeGreaterThan(columnsAtDefault)
 })
+
+// [ / ] resize Gallery thumbnails only while the Gallery is the open page and
+// no dialog is up. They used to fire everywhere: in Censor Edit, [ and ] also
+// set the brush size, so both changed and a thumbnail toast popped up. The
+// dialog check looked for .modal.show, but dialogs open with .visible.
+test('[ / ] leave the thumbnail size alone outside the Gallery and under a dialog', async ({ page }) => {
+  await openGalleryWithFixture(page)
+  const slider = page.locator('#grid-size-slider')
+  await expect(slider).toHaveValue('200')
+  const thumbToast = page.locator('#toast-container .toast', { hasText: /Thumbnail size/ })
+
+  await page.evaluate(() => (window as any).App.switchView('censor'))
+  await expect(page.locator('#view-censor')).toHaveClass(/active/)
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+  await page.keyboard.press(']')
+  await page.keyboard.press(']')
+  await expect(slider).toHaveValue('200')
+  await expect(thumbToast).toHaveCount(0)
+
+  await page.evaluate(() => (window as any).App.switchView('gallery'))
+  await page.evaluate(() => (window as any).showModal('scan-modal'))
+  await expect(page.locator('#scan-modal')).toHaveClass(/visible/)
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+  await page.keyboard.press('[')
+  await expect(slider).toHaveValue('200')
+  await expect(thumbToast).toHaveCount(0)
+})

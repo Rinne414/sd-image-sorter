@@ -101,6 +101,36 @@ def _already_tagged_ids(image_ids: List[int]) -> set:
     return db.get_image_ids_already_tagged(image_ids)
 
 
+def count_already_tagged(
+    image_ids: Iterable[int],
+    selection_token: Optional[str] = None,
+) -> Dict[str, int]:
+    """How many requested library images skip_existing would drop.
+
+    The Smart Tag dialog asks before a run, so the user chooses between
+    skipping those images (no tags, no caption, no trigger word) and
+    processing them. Path-only sources are never skipped, so never counted.
+    """
+    checked = 0
+    already_tagged = 0
+
+    def _count(id_chunk: Iterable[int]) -> None:
+        nonlocal checked, already_tagged
+        ids = [int(image_id) for image_id in id_chunk if int(image_id) > 0]
+        if ids:
+            checked += len(ids)
+            already_tagged += len(_already_tagged_ids(ids))
+
+    for id_chunk in _iter_chunks(list(image_ids or []), SMART_TAG_ID_CHUNK_SIZE):
+        _count(id_chunk)
+    if selection_token:
+        for id_chunk in iter_selection_token_id_chunks(
+            selection_token, chunk_size=SMART_TAG_ID_CHUNK_SIZE
+        ):
+            _count(id_chunk)
+    return {"checked": checked, "already_tagged": already_tagged}
+
+
 def _apply_skip_existing(
     sources: List[Tuple[str, int, str]],
     req: SmartTagRequest,

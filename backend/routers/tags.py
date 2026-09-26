@@ -517,6 +517,15 @@ async def get_tagger_models(
     return service.get_tagger_models()
 
 
+@router.get("/tag/scope-count")
+def get_tag_scope_count(
+    retag_all: bool = Query(False),
+    service: TaggingService = Depends(get_tagging_service),
+):
+    """How many images a whole-library tagging run would process."""
+    return service.get_scope_count(retag_all=retag_all)
+
+
 @router.get("/tag/progress")
 async def get_tag_progress(
     service: TaggingService = Depends(get_tagging_service),

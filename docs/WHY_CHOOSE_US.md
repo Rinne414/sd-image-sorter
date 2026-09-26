@@ -23,7 +23,7 @@ Unlike general-purpose image managers that treat AI-generated images like photos
 ### 2. AI-First Feature Set
 
 **SD Image Sorter:**
-- WD14 family auto-tagging (9 local taggers + ToriiGate captioner: ViT, ViT-Large, SwinV2, ConvNeXt, EVA02, Camie, PixAI, OppaiOracle, CL Tagger v2; ToriiGate is NL captioning)
+- WD14 family auto-tagging (10 local taggers + ToriiGate captioner: ViT, ViT-Large, SwinV2, ConvNeXt, EVA02, Camie, PixAI v0.9 / v1.0, OppaiOracle, CL Tagger v2; ToriiGate is NL captioning)
 - CLIP similarity search for finding duplicates and near-matches
 - VLM captioning via OpenAI-compatible (incl. Ollama), Anthropic, and Gemini (optional Vertex)
 - Prompt Helper: reverse-engineer prompts from your own library
@@ -115,7 +115,7 @@ Unlike general-purpose image managers that treat AI-generated images like photos
 | Feature | SD Image Sorter | Allusion | TagStudio | DigiKam | Hydrus |
 |---------|----------------|----------|-----------|---------|--------|
 | **SD Metadata** | Native ComfyUI/NAI/WebUI/Forge | PNG Parameters view | ❌ | ❌ | ❌ |
-| **AI Auto-Tagging** | 9 local taggers + ToriiGate captioner | ❌ | ❌ | Face detect only | Via plugins |
+| **AI Auto-Tagging** | 10 local taggers + ToriiGate captioner | ❌ | ❌ | Face detect only | Via plugins |
 | **VLM Captioning** | OpenAI-compat / Anthropic / Gemini | ❌ | ❌ | ❌ | ❌ |
 | **CLIP Similarity** | ✅ | ❌ | ❌ | ❌ | ✅ (third-party) |
 | **Keyboard Sorting** | WASD 4-way + multi-mode | ❌ | ❌ | ❌ | ❌ |

@@ -360,6 +360,24 @@ def _collect_system_info() -> Dict[str, Any]:
     return info
 
 
+# The GPU batch caps below were tuned on 448 px taggers. Activation memory
+# grows with the input area, so a model that reads larger images gets a
+# proportionally smaller cap (PixAI v1.0 at 1008 px: about 1/5). Smaller inputs
+# keep the 448 px cap rather than a larger one. Decision D46.
+BATCH_CAP_REFERENCE_SIZE = 448
+
+
+def gpu_input_area_scale(model_config: Dict[str, Any]) -> float:
+    """Factor (<= 1) applied to GPU batch caps for the model's input size."""
+    try:
+        size = int(model_config.get("image_size") or 0)
+    except (TypeError, ValueError):
+        size = 0
+    if size <= BATCH_CAP_REFERENCE_SIZE:
+        return 1.0
+    return (BATCH_CAP_REFERENCE_SIZE / size) ** 2
+
+
 def recommend_tagger_config(
     system_info: Dict[str, Any],
     model_name: Optional[str] = None,
@@ -486,7 +504,9 @@ def recommend_tagger_config(
             batch_size = 48
         else:
             batch_size = 64
-        batch_size = max(1, apply_gpu_model_cap(batch_size))
+        batch_size = max(
+            1, int(apply_gpu_model_cap(batch_size) * gpu_input_area_scale(model_config))
+        )
     else:
         # CPU / fallback runtimes: keep memory-pressure clamps, but do not waste
         # modern 32-64GB desktops with tiny queue chunks during huge library runs.
@@ -538,6 +558,11 @@ def recommend_tagger_config(
             parts.append("Moderate VRAM headroom. Auto runtime is using a balanced true batch size.")
         else:
             parts.append("Sufficient VRAM for aggressive batched GPU inference.")
+        if gpu_input_area_scale(model_config) < 1.0:
+            parts.append(
+                f"This model reads {int(model_config['image_size'])} px images, "
+                "so its GPU batch is scaled down to match."
+            )
     else:
         if system_info.get("onnxruntime_conflict"):
             parts.append(

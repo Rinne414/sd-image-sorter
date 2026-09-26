@@ -124,6 +124,20 @@ class _DownloadMixin:
                 revision=revision,
             )
 
+        # Weights stored beside model.onnx (ONNX external data, e.g. PixAI
+        # v1.0's model.onnx.data) must come from the same pinned revision.
+        external_files = tuple(config.get("external_data_files") or ())
+        for filename in external_files:
+            local_path = os.path.join(self.model_dir, self.model_name, filename)
+            if not self._validate_tag_file(local_path):
+                logger.info("Downloading model weights file %s...", filename)
+                self._download_with_fallback(
+                    repo_id=repo_id,
+                    filename=filename,
+                    local_dir=os.path.join(self.model_dir, self.model_name),
+                    revision=revision,
+                )
+
         local_root = Path(self.model_dir) / self.model_name
         missing = log_model_artifact_status(
             logger,
@@ -131,7 +145,7 @@ class _DownloadMixin:
             revision=revision,
             endpoint="local",
             model_dir=local_root,
-            required_files=(config["model_file"], config["tags_file"]),
+            required_files=(config["model_file"], config["tags_file"], *external_files),
         )
         if missing:
             raise RuntimeError(

@@ -25,6 +25,16 @@ class CensorPairsRequest(BaseModel):
 class PublishExportItem(BaseModel):
     image_id: int
     use_censored: bool = False
+    censored_path: Optional[str] = Field(
+        default=None,
+        max_length=4096,
+        description="Censored file handed over by the Censor page; used instead of pairing by name",
+    )
+    output_name: Optional[str] = Field(
+        default=None,
+        max_length=255,
+        description="File name given on the Censor page; the extension follows the exported file",
+    )
 
 
 class PublishWatermarkSettings(BaseModel):
@@ -59,6 +69,10 @@ class PublishExportRequest(BaseModel):
     censor_suffix: Optional[str] = None
     overwrite: bool = False
     watermark: PublishWatermarkSettings = Field(default_factory=PublishWatermarkSettings)
+    metadata_option: Literal["strip", "keep", "minimal"] = Field(
+        default="strip",
+        description="Generation info in the exported files: strip (default), keep the file as it is, or minimal",
+    )
 
 
 @router.post(
@@ -77,15 +91,36 @@ def resolve_censor_pairs(request: CensorPairsRequest):
 
 
 @router.post(
+    "/publish/staging-folder",
+    summary="Create a fresh folder for the Censor page's hand-over",
+    description="""
+Returns a new, empty folder under the app's data directory. The Censor page
+renders its censored results there and sends each file's path to the export
+as `censored_path`. Earlier hand-over folders are removed.
+    """,
+)
+def create_publish_staging_folder():
+    """Fresh staging folder for censored results headed to the publish set."""
+    try:
+        return publish_service.create_staging_folder()
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Could not create the staging folder: {exc}") from exc
+
+
+@router.post(
     "/publish/export",
     summary="Export an ordered publish set with sequential names",
     description="""
 Copies each item into `output_folder` as `{name_prefix}{NN}.{ext}` (numbering
-is positional: `start_index` + position, zero-padded to `pad_width`), keeping
-the source file's extension. Items with `use_censored: true` FAIL rather than
-silently exporting the uncensored original when no censored variant exists.
-Existing files are skipped unless `overwrite` is set. A non-empty
-`caption_text` is written to `caption.txt` in the same folder.
+is positional: `start_index` + position, zero-padded to `pad_width`), or as
+`{output_name}.{ext}` when the item carries a name, keeping the source file's
+extension. Items with `use_censored: true` use their `censored_path` when one
+is sent, otherwise the `{stem}{suffix}.*` pairing; they FAIL rather than
+silently exporting the uncensored original when no censored file exists.
+`metadata_option` defaults to `strip`: PNG text chunks, EXIF and XMP (prompt,
+model, seed) are removed. `keep` copies the file unchanged; `minimal` keeps
+only the color profile and DPI. Existing files are skipped unless `overwrite`
+is set. A non-empty `caption_text` is written to `caption.txt`.
     """,
 )
 def export_publish_set(request: PublishExportRequest):
@@ -101,6 +136,7 @@ def export_publish_set(request: PublishExportRequest):
             censor_suffix=request.censor_suffix,
             overwrite=request.overwrite,
             watermark=publish_service.TextWatermarkConfig(**request.watermark.model_dump()),
+            metadata_option=request.metadata_option,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

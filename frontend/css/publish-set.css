@@ -29,6 +29,10 @@
     cursor: pointer;
 }
 
+.pub-master-label[hidden] {
+    display: none;
+}
+
 .pub-empty {
     padding: 16px 6px;
     color: var(--text-secondary);
@@ -136,6 +140,14 @@
     color: var(--text-muted);
 }
 
+.pub-item-outname {
+    font-size: var(--fs-label);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* Original / Censored segmented toggle. */
 .pub-variant-toggle {
     display: inline-flex;
@@ -233,6 +245,50 @@
 
 .pub-suffix-field {
     flex: 0 0 150px;
+}
+
+.pub-metadata-field {
+    flex: 0 0 170px;
+}
+
+/* "These would go out uncensored" check, shown before anything is written. */
+.pub-uncensored-check {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: var(--radius-md, 10px);
+    border: 1px solid var(--warning, #DAAC35);
+    background: var(--surface-1, rgba(255, 255, 255, 0.03));
+}
+
+.pub-uncensored-check[hidden] {
+    display: none;
+}
+
+.pub-uncensored-title {
+    margin: 0;
+    font-weight: 600;
+    color: var(--warning, #DAAC35);
+}
+
+.pub-uncensored-list {
+    margin: 0;
+    padding-left: 18px;
+    max-height: 120px;
+    overflow-y: auto;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.pub-uncensored-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.pub-uncensored-actions [hidden] {
+    display: none;
 }
 
 .pub-overwrite-label {

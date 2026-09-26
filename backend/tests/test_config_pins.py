@@ -526,6 +526,7 @@ class TestTaggerModelsCatalog:
             "wd-vit-large-tagger-v3",
             "camie-tagger-v2",
             "pixai-tagger-v0.9",
+            "pixai-tagger-v1.0",
             "toriigate-0.5",
             "oppai-oracle-v1.1",
             "cl-tagger-v2",

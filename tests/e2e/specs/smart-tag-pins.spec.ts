@@ -109,6 +109,15 @@ async function installBaseMocks(page: Page): Promise<void> {
         ],
       }),
     }))
+  // Nothing already tagged by default, so Run starts without the skip question.
+  await page.route('**/api/smart-tag/tagged-count', (route) => {
+    const body = route.request().postDataJSON() as { image_ids?: number[] }
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ checked: body.image_ids?.length || 0, already_tagged: 0 }),
+    })
+  })
   // Idle progress: resumeActiveSmartTagJob() finds nothing to re-attach.
   await page.route('**/api/smart-tag/progress**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'idle' }) }))
@@ -1170,3 +1179,112 @@ test('the Ollama-required banner stays hidden with a configured cloud endpoint a
 
   await expect(page.locator('#smart-tag-ollama-warning')).toBeVisible()
 })
+
+// ---------------------------------------------------------------------------
+// Already-tagged images: said before the run, counted after it.
+// ---------------------------------------------------------------------------
+
+async function installAlreadyTaggedRun(page: Page, starts: any[]): Promise<void> {
+  await page.route('**/api/smart-tag/tagged-count', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ checked: 3, already_tagged: 2 }),
+    }))
+  await page.route('**/api/smart-tag/start', (route) => {
+    const payload = route.request().postDataJSON()
+    starts.push(payload)
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ job_id: 'pin-existing', status: 'running', active: true, total: 3 }),
+    })
+  })
+}
+
+test('with re-tag off, Run first says how many images already have tags and "process them too" re-tags them', async ({ page }) => {
+  const starts: any[] = []
+  await installAlreadyTaggedRun(page, starts)
+  await openScopedAndReady(page, [10, 11, 12])
+  await expect(page.locator('#smart-tag-retag-existing')).not.toBeChecked()
+
+  await page.locator('#btn-smart-tag-run').click()
+  const check = page.locator('#smart-tag-existing-check')
+  await expect(check).toBeInViewport()
+  await expect(page.locator('#smart-tag-existing-title')).toContainText('2')
+  await expect(page.locator('#btn-smart-tag-existing-skip')).toBeFocused()
+  expect(starts).toHaveLength(0)
+
+  await page.locator('#btn-smart-tag-existing-include').click()
+  await expect.poll(() => starts.length).toBe(1)
+  expect(starts[0].skip_existing).toBe(false)
+  await expect(check).toBeHidden()
+})
+
+test('choosing to skip keeps skip_existing, Cancel starts nothing, and the finish toast counts the skipped images', async ({ page }) => {
+  const starts: any[] = []
+  await installAlreadyTaggedRun(page, starts)
+  await page.route('**/api/smart-tag/progress**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        job_id: 'pin-existing',
+        status: 'completed',
+        active: false,
+        total: 3,
+        processed: 3,
+        succeeded: 1,
+        failed: 0,
+        skipped: 2,
+        settings: { merge_strategy: 'replace', enable_vlm: true, natural_language_mode: 'vlm' },
+      }),
+    }))
+  await openScopedAndReady(page, [10, 11, 12])
+
+  await page.locator('#btn-smart-tag-run').click()
+  await page.locator('#btn-smart-tag-existing-cancel').click()
+  await expect(page.locator('#smart-tag-existing-check')).toBeHidden()
+  expect(starts).toHaveLength(0)
+
+  await page.locator('#btn-smart-tag-run').click()
+  await page.locator('#btn-smart-tag-existing-skip').click()
+  await expect.poll(() => starts.length).toBe(1)
+  expect(starts[0].skip_existing).toBe(true)
+  await expect(page.locator('#toast-container [role="alert"].success')).toContainText('2 skipped (already had tags)')
+})
+
+for (const viewport of [
+  { width: 1366, height: 768 },
+  { width: 1920, height: 1080 },
+  { width: 2560, height: 1440 },
+]) {
+  test(`the already-tagged question and its buttons stay on screen at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport)
+    await installAlreadyTaggedRun(page, [])
+    await openScopedAndReady(page, [10, 11, 12])
+    await page.locator('#btn-smart-tag-run').click()
+    const buttons = ['#btn-smart-tag-existing-cancel', '#btn-smart-tag-existing-skip', '#btn-smart-tag-existing-include']
+    for (const id of buttons) {
+      await expect(page.locator(id)).toBeInViewport()
+    }
+    // In the viewport is not enough: the sticky action bar must not cover them.
+    const covered = await page.evaluate((ids) => ids.filter((id) => {
+      const button = document.querySelector(id) as HTMLElement
+      const box = button.getBoundingClientRect()
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+      return !(hit && (hit === button || button.contains(hit)))
+    }), buttons)
+    expect(covered).toEqual([])
+    const overflow = await page.evaluate(() => {
+      const content = document.querySelector('#smart-tag-modal .modal-content') as HTMLElement
+      return {
+        page: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        modal: content.scrollWidth - content.clientWidth,
+      }
+    })
+    expect(overflow.page).toBeLessThanOrEqual(0)
+    expect(overflow.modal).toBeLessThanOrEqual(0)
+    await page.screenshot({ path: `../../.tmp/v35-fix/smart-tag-existing-${viewport.width}x${viewport.height}.png` })
+  })
+}

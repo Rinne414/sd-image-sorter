@@ -113,10 +113,12 @@
                 });
             }
 
-            // Global Ctrl+V listener — only acts when the reader view is active
+            // Global Ctrl+V listener — only acts when the reader view is active.
+            // Views switch with the .active class; #view-reader keeps an inline
+            // display:none that CSS overrides, so it says nothing about visibility.
             document.addEventListener('paste', (e) => {
                 const readerView = document.getElementById('view-reader');
-                if (!readerView || readerView.style.display === 'none') return;
+                if (!readerView || !readerView.classList.contains('active')) return;
                 if (!this._isReaderToolActive()) return;
 
                 const target = e.target;

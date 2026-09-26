@@ -767,6 +767,26 @@
             : t('tagModal.scopeLibraryUntagged', 'This run tags the images in this library that have no AI tags yet.');
         if (clearBtn) clearBtn.hidden = true;
         note.hidden = false;
+        void fillLibraryScopeCount(text, retagAll);
+    }
+
+    // A whole-library run says how many images it will process before Start.
+    let scopeCountRequest = 0;
+    async function fillLibraryScopeCount(text, retagAll) {
+        const request = ++scopeCountRequest;
+        let count;
+        try {
+            const response = await fetch(`/api/tag/scope-count?retag_all=${retagAll ? 'true' : 'false'}`, { cache: 'no-store' });
+            if (!response.ok) return;
+            count = Number((await response.json())?.count);
+        } catch (_e) {
+            return; // the sentence without a number is still true
+        }
+        if (request !== scopeCountRequest || !Number.isFinite(count) || Array.isArray(armedTagIds)) return;
+        const shown = count.toLocaleString();
+        text.textContent = retagAll
+            ? t('tagModal.scopeLibraryAllCount', 'This run re-tags every image in this library, {count} in all; AI tags are replaced, tags you added by hand stay.').replace('{count}', shown)
+            : t('tagModal.scopeLibraryUntaggedCount', 'This run tags the {count} images in this library that have no AI tags yet.').replace('{count}', shown);
     }
 
     function disarmTagSelection() {

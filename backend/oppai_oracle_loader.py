@@ -17,6 +17,7 @@ logger keeps the original "oppai_oracle_tagger" channel.
 """
 
 import csv
+import gc
 import logging
 import os
 from pathlib import Path
@@ -25,6 +26,11 @@ from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 if TYPE_CHECKING:  # pragma: no cover - type-only
     import onnxruntime as ort  # type: ignore
 
+from ai_runtime_guard import (
+    claim_gpu_residency,
+    exclusive_ai_runtime,
+    forget_gpu_residency,
+)
 from config import TAGGER_MODELS
 from model_download_sources import (
     endpoint_label,
@@ -256,6 +262,19 @@ class _LoaderMixin:
         providers = self.session.get_providers()
         return "CUDAExecutionProvider" in providers or "DmlExecutionProvider" in providers
 
+    def release_session(self) -> None:
+        """Release the ONNX session (and its VRAM) until the next use.
+
+        ``load()`` rebuilds it through the ``_loaded`` flag. Smart Tag calls
+        this before a local captioner loads; the GPU residency claim calls it
+        when another tagger takes the card.
+        """
+        with exclusive_ai_runtime(f"tagger-release:{self.model_name}"):
+            self.session = None
+            self._loaded = False
+            gc.collect()
+        forget_gpu_residency(self)
+
     def set_session_refresh_interval(self, interval: int) -> None:
         self._session_refresh_interval = max(0, int(interval))
 
@@ -334,6 +353,9 @@ class _LoaderMixin:
         )
 
         sess_options = self._build_session_options(gpu_enabled=gpu_attempted)
+        if gpu_attempted:
+            # One GPU tagger session at a time (D46).
+            claim_gpu_residency(self, self.release_session, label=self.model_name)
         try:
             self.session = self._create_session(model_path, sess_options, providers)
         except RuntimeError as exc:

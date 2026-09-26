@@ -102,13 +102,18 @@ function prepareSpecForTagger(modelName) {
             confirmBytes: 2.7 * 1024 * 1024 * 1024,
         };
     }
-    const heavyWd14 = name === 'wd-eva02-large-tagger-v3';
+    // Download sizes of the WD14-card models larger than the ~446 MB default.
+    const largeWd14Gb = {
+        'wd-eva02-large-tagger-v3': 1.2,
+        'pixai-tagger-v0.9': 1.2,
+        'pixai-tagger-v1.0': 2.0,
+    }[name];
     return {
         modelId: 'wd14',
         variant: name,
         label: name,
-        sizeHint: heavyWd14 ? '~1.2 GB' : '~446 MB',
-        confirmBytes: heavyWd14 ? 1.2 * 1024 * 1024 * 1024 : 446 * 1024 * 1024,
+        sizeHint: largeWd14Gb ? `~${largeWd14Gb} GB` : '~446 MB',
+        confirmBytes: (largeWd14Gb ? largeWd14Gb * 1024 : 446) * 1024 * 1024,
     };
 }
 

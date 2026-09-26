@@ -29,6 +29,7 @@ from ai_runtime_guard import (
     exclusive_ai_runtime,
     looks_like_cuda_oom,
 )
+from gpu_duty_cycle import gpu_duty_cycle
 
 logger = logging.getLogger("oppai_oracle_tagger")
 
@@ -146,10 +147,12 @@ class _InferenceMixin:
     ) -> np.ndarray:
         assert self.session is not None
         try:
-            outputs = self.session.run(
-                ["probabilities"],
-                {"pixel_values": pixel_values, "padding_mask": padding_mask},
-            )
+            # D46: rest after each GPU batch so long runs do not peg the card.
+            with gpu_duty_cycle(self._session_uses_gpu()):
+                outputs = self.session.run(
+                    ["probabilities"],
+                    {"pixel_values": pixel_values, "padding_mask": padding_mask},
+                )
         except Exception as exc:
             # When the caller is doing GPU batch-size backoff it passes
             # ``allow_cpu_fallback=False`` so the OOM propagates and it can retry

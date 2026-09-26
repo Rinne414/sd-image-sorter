@@ -412,16 +412,17 @@ def test_worker_terminal_done_carries_last_run_stats_snapshot(
         "total_processed",
         "total_tagged",
         "total_errors",
+        "total_tag_count",
         "avg_tags_per_image",
         "top_tags",
     }
     assert stats["total_processed"] == 2
     assert stats["total_tagged"] == 2
     assert stats["total_errors"] == 0
-    # QUIRK (also pinned in test_tag_last_run_stats): despite its name,
-    # avg_tags_per_image is total_tagged / total_processed — the tagged-image
-    # RATIO (2/2 here), not the tag-row count per image.
-    assert stats["avg_tags_per_image"] == 1.0
+    # The stub writes 3 tag rows per image (e2e_fixture, the file stem and a
+    # rating), so the average is tags per image, not the tagged-image ratio.
+    assert stats["total_tag_count"] == 6
+    assert stats["avg_tags_per_image"] == 3.0
     top = {row["tag"]: row["count"] for row in stats["top_tags"]}
     assert top["e2e_fixture"] == 2
     # Only the terminal payload carries the stats key.

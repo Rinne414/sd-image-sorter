@@ -282,6 +282,7 @@ def _tagging_worker_run(
     )
     total_processed = 0
     total_tagged = 0
+    total_tag_count = 0  # tag rows written, for the average per image
     total_errors = 0
     total = 0
     gpu_fallback_announced = False
@@ -903,6 +904,7 @@ def _tagging_worker_run(
                                 }
                             tags_batch.append(entry)
                             total_tagged += 1
+                            total_tag_count += len(filtered_tags or [])
 
                         total_processed += 1
                         processed_in_batch += 1
@@ -958,6 +960,7 @@ def _tagging_worker_run(
                     total_tagged,
                     total_errors,
                     top_tags_counter,
+                    total_tag_count=total_tag_count,
                 ),
             )
             return
@@ -975,6 +978,7 @@ def _tagging_worker_run(
                 total_tagged,
                 total_errors,
                 top_tags_counter,
+                total_tag_count=total_tag_count,
             ),
         )
     except Exception as error:

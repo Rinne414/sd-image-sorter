@@ -377,3 +377,121 @@ test('_previewOptionsForContentMode branches template vs real content_mode', asy
   expect(typeof template.preset_id).toBe('string')
   expect('content_mode' in template).toBe(false)
 })
+
+// The NL tab defaulted to a hidden "ToriiGate (local)" choice while the only
+// card on screen was VLM API: ToriiGate is not in the tagger list, so the
+// select landed on 'vlm' and "Start Tagging" captioned through the remote
+// (possibly paid) API. Now the default is what the screen shows, and the
+// local ToriiGate is reached through Smart Tag, where it actually runs.
+async function openNlTab(page: Page): Promise<void> {
+  await openApp(page)
+  await page.evaluate(() => {
+    const w = window as any
+    w.__vlmBatchCalls = 0
+    w.VLMCaption.startBatchCaption = () => { w.__vlmBatchCalls += 1 }
+    w.showModal('tag-modal')
+    w.V321Integration.setTaggerTab('nl')
+  })
+}
+
+test('NL tab: the default is the VLM API card it shows, and Start says it captions', async ({ page }) => {
+  await openNlTab(page)
+  await expect(page.locator('input[name="tagger-nl-source"][value="vlm"]')).toBeChecked()
+  await expect(page.locator('#tag-model-choice-list .tagger-model-choice.is-selected'))
+    .toHaveAttribute('data-model-value', 'vlm')
+  await expect(page.locator('#btn-start-tag')).toHaveText('Caption')
+  await expect(page.locator('#tagger-tab-description')).not.toContainText('ToriiGate (local) or')
+
+  await page.locator('#btn-start-tag').click()
+  await expect.poll(() => page.evaluate(() => (window as any).__vlmBatchCalls)).toBe(1)
+  await expect(page.locator('#smart-tag-modal')).not.toHaveClass(/visible/)
+})
+
+test('NL tab: "Open Smart Tag with ToriiGate" opens Smart Tag set to ToriiGate and never calls the VLM API', async ({ page }) => {
+  await openNlTab(page)
+  const route = page.locator('#btn-tagger-nl-torii-smart')
+  await expect(route).toBeInViewport()
+  await route.click()
+
+  await expect(page.locator('#smart-tag-modal')).toHaveClass(/visible/)
+  await expect(page.locator('#tag-modal')).not.toHaveClass(/visible/)
+  expect(await page.evaluate(() => (window as any).__vlmBatchCalls)).toBe(0)
+  await expect(page.locator('#smart-tag-nl-mode')).toHaveValue('toriigate')
+  await expect(page.locator('#smart-tag-enable-vlm')).toBeChecked()
+  await expect(page.locator('#smart-tag-enable-wd14')).not.toBeChecked()
+})
+
+test('NL tab: a ToriiGate source never falls through to the VLM API', async ({ page }) => {
+  await openNlTab(page)
+  await page.evaluate(() => {
+    const radio = document.querySelector('input[name="tagger-nl-source"][value="toriigate"]') as HTMLInputElement
+    radio.checked = true
+    radio.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  const start = page.locator('#btn-start-tag')
+  await expect(start).toHaveText('Run in Smart Tag')
+  await start.click()
+  await expect(page.locator('#smart-tag-modal')).toHaveClass(/visible/)
+  expect(await page.evaluate(() => (window as any).__vlmBatchCalls)).toBe(0)
+  await expect(page.locator('#smart-tag-nl-mode')).toHaveValue('toriigate')
+})
+
+test('NL tab: the source card, the ToriiGate route and Start fit at desktop sizes', async ({ page }) => {
+  await openNlTab(page)
+  for (const viewport of [
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+    { width: 2560, height: 1440 },
+  ]) {
+    await page.setViewportSize(viewport)
+    const ids = ['#btn-start-tag', '#btn-tagger-nl-torii-smart']
+    for (const id of ids) {
+      await expect(page.locator(id)).toBeInViewport()
+    }
+    const problems = await page.evaluate((buttonIds) => ({
+      covered: buttonIds.filter((id) => {
+        const button = document.querySelector(id) as HTMLElement
+        const box = button.getBoundingClientRect()
+        const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+        return !(hit && (hit === button || button.contains(hit)))
+      }),
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    }), ids)
+    expect(problems).toEqual({ covered: [], overflow: 0 })
+    await page.screenshot({ path: `../../.tmp/v35-fix/nl-tab-${viewport.width}x${viewport.height}.png` })
+  }
+})
+
+// The export preview's caption edits lived in memory only: a reload or a
+// closed tab dropped them without a word unless the editor window happened
+// to be open. They are now kept until they are exported.
+test('export caption edits survive a reload until they are exported', async ({ page }) => {
+  await openApp(page)
+  await page.evaluate(() => {
+    const V = window.V321Integration as any
+    V._setPreviewCaption(101, 'hand-edited caption')
+    V._setNlEdit(101, 'A hand-edited sentence.')
+    V._setCaptionType(102, 'nl')
+  })
+
+  await page.reload()
+  await openApp(page)
+  // Restored once the export panel's first content-format pass has run.
+  await expect.poll(() => page.evaluate(() => {
+    const V = window.V321Integration as any
+    return {
+      caption: V.editedCaptions.get(101),
+      nl: V.editedNl.get(101),
+      type: V.captionTypes.get(102),
+    }
+  })).toEqual({ caption: 'hand-edited caption', nl: 'A hand-edited sentence.', type: 'nl' })
+  await expect(page.locator('#toast-container .toast', { hasText: /2 image/ }).first()).toBeVisible()
+
+  // Once exported they are not brought back again.
+  await page.evaluate(() => (window.V321Integration as any).markCaptionEditsExported())
+  await page.reload()
+  await openApp(page)
+  await page.waitForTimeout(500)
+  expect(await page.evaluate(() => (window.V321Integration as any).editedCaptions.size)).toBe(0)
+  expect(await page.evaluate(() => localStorage.getItem('sd-sorter-export-caption-edits'))).toBeNull()
+})

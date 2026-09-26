@@ -711,8 +711,11 @@ Return `{ "active", "job_id", "job" }` for the running metadata re-parse (if any
 #### POST /api/publish/censor-pairs
 Resolve censored variants for a publish set (v3.5.0). Body: `{ "image_ids": [int, ...], "censor_suffix": "_censored" }` (suffix optional, sanitized to `[A-Za-z0-9_-]`). For each image, probes `{stem}{suffix}.{png|jpg|jpeg|webp}` — first next to the original on disk (`censored_source: "disk"`), then anywhere in the library by exact filename, newest indexed copy first (`censored_source: "library"`). Response preserves request order (duplicates removed): `{ "pairs": [{ "image_id", "missing", "filename", "path", "width", "height", "file_size", "found", "censored_path", "censored_filename", "censored_source" }], "total", "found_count", "censor_suffix" }`. Unknown ids come back with `missing: true`.
 
+#### POST /api/publish/staging-folder
+Create a fresh, empty folder under the data directory (`publish-staging/<session>`) for the Censor page's hand-over to the publish set. The Censor page renders each censored queue item there through its own save endpoints, then sends every file's path to `/api/publish/export` as `censored_path`. Earlier hand-over folders are removed. Returns `{ "folder" }`; 500 when the folder cannot be created.
+
 #### POST /api/publish/export
-Export an ordered publish set with sequential platform-style names (v3.5.0). Body: `{ "items": [{ "image_id", "use_censored" }], "output_folder", "name_prefix": "", "start_index": 1, "pad_width": 1-4 (default 2), "caption_text": "", "censor_suffix": "_censored", "overwrite": false, "watermark": { "enabled": false, "text": "", "position": "bottom_right", "opacity": 80, "size_percent": 8, "margin_percent": 2, "color": "#FFFFFF" } }`. Item position defines the publish index: each file is copied to `{name_prefix}{number:0{pad}}{ext}` (source extension kept, e.g. `01.png`, `02.jpg`); numbering stays stable across retries because it is positional. Items requesting `use_censored` FAIL (per-item error) when no censored variant resolves — the uncensored original is never silently substituted. Existing files are skipped unless `overwrite`. When `watermark.enabled` is true, the selected source is rendered with the configured text into the export copy only; gallery and training sources are untouched. Non-empty `caption_text` is written to `caption.txt`. Output folder is validated against traversal and created if needed (400 on invalid). Returns `{ "success", "exported": [{ "index", "output_name", "image_id", "used_censored", "source_path" }], "skipped_existing", "errors", "caption_file", "output_folder" }`.
+Export an ordered publish set with sequential platform-style names (v3.5.0). Body: `{ "items": [{ "image_id", "use_censored", "censored_path"?, "output_name"? }], "metadata_option": "strip" | "keep" | "minimal" (default "strip"), "output_folder", "name_prefix": "", "start_index": 1, "pad_width": 1-4 (default 2), "caption_text": "", "censor_suffix": "_censored", "overwrite": false, "watermark": { "enabled": false, "text": "", "position": "bottom_right", "opacity": 80, "size_percent": 8, "margin_percent": 2, "color": "#FFFFFF" } }`. Item position defines the publish index: each file is copied to `{name_prefix}{number:0{pad}}{ext}` (source extension kept, e.g. `01.png`, `02.jpg`); numbering stays stable across retries because it is positional. An item's `output_name` (a name given on the Censor page) replaces the numbered name; its extension always follows the exported file, and a name used twice in one set fails that item. Items requesting `use_censored` export their `censored_path` when one is sent, otherwise the `{stem}{suffix}.*` pairing; they FAIL (per-item error) when no censored file resolves — the uncensored original is never silently substituted. `metadata_option` controls generation info: `strip` (default) re-encodes without PNG text chunks, EXIF or XMP, `minimal` keeps only the color profile and DPI, `keep` copies the file unchanged (with a watermark it re-encodes and carries the original's generation info over). Animated sources can only be exported with `keep` and no watermark. Existing files are skipped unless `overwrite`. When `watermark.enabled` is true, the selected source is rendered with the configured text into the export copy only; gallery and training sources are untouched. Non-empty `caption_text` is written to `caption.txt`. Output folder is validated against traversal and created if needed (400 on invalid). Returns `{ "success", "exported": [{ "index", "output_name", "image_id", "used_censored", "source_path", "metadata" }], "skipped_existing", "errors", "caption_file", "output_folder", "metadata_option" }`.
 
 #### GET /api/tags/suggest
 Type-ahead tag suggestions for autocomplete inputs (v3.5.0). Query params: `q=<partial token>`, `limit=<1..50, default 20>`. Merges the user's library tags (frequency-ranked, `source: "library"`) with the bundled danbooru vocabulary `backend/assets/danbooru_tags.csv` (popularity-ranked, alias-aware, `source: "danbooru"`). Each suggestion carries a 14-category `category` (same palette as Dataset Maker tag pills) and an optional `zh` display string. CJK queries fuzzy-match the bundled MIT Chinese/Japanese alias table (`backend/assets/danbooru_zh.csv`, derived from StoryAura/Danbooru-Dataset-csv); a user file at `data/danbooru_zh.csv` still overrides it. Returns `{ "suggestions": [{ "tag", "count", "source", "category", "zh", "copyright" }], "danbooru_loaded", "zh_loaded" }`. Character hits include the StoryAura series/copyright when known; accepting that suggestion in a comma-separated tag box also inserts the copyright token if it is not already present. Empty `q` returns the library's most frequent tags.
@@ -773,7 +776,7 @@ Get LoRA library. Optional query params: `q=<text>`, `limit=<n>`. Search runs ac
 Get the checkpoint (base model) library for the Library tab's Checkpoints facet. Returns `{ "checkpoints": [{ "name", "count" }], "total" }` aggregated across the full indexed library.
 
 #### GET /api/tagger/models
-Get available tagger models and runtime guidance. Each model item includes default thresholds, GPU/runtime guidance, and Custom profile metadata such as `custom_profile_supported`, `custom_metadata_format`, and `custom_tags_file_hint`. v3.5.0: each item also carries `captioner_only` — `true` marks caption-only models (ToriiGate) that stay in the catalog for Smart Tag and model downloads but are hidden from the gallery tagger dropdown and rejected by `/api/tag` with a 400. Florence-2 Base is a separate Smart Tag local captioner and is intentionally absent from this booru tagger endpoint. `cl-tagger-v2` is an optional gated booru tagger exposed here; its fixed revision is downloaded only after explicit user preparation from official Hugging Face and its weights are never bundled in portable releases.
+Get available tagger models and runtime guidance. Each model item includes default thresholds, GPU/runtime guidance, and Custom profile metadata such as `custom_profile_supported`, `custom_metadata_format`, and `custom_tags_file_hint`. v3.5.0: each item also carries `captioner_only` — `true` marks caption-only models (ToriiGate) that stay in the catalog for Smart Tag and model downloads but are hidden from the gallery tagger dropdown and rejected by `/api/tag` with a 400. Florence-2 Base is a separate Smart Tag local captioner and is intentionally absent from this booru tagger endpoint. `cl-tagger-v2` is an optional gated booru tagger exposed here; its fixed revision is downloaded only after explicit user preparation from official Hugging Face and its weights are never bundled in portable releases. `pixai-tagger-v1.0` (1008 px input, 30,877 tags) is prepared through the WD14 model card; GPU batch caps shrink with a model's input area relative to 448 px.
 
 #### POST /api/tag/start
 Start background tagging (alias for POST /api/tag).
@@ -796,6 +799,9 @@ Start background tagging.
 | `use_gpu` | bool | true | Request GPU runtime when available |
 | `allow_unsafe_acceleration` | bool | false | Reserved unsafe acceleration override |
 | `batch_size` | int \| null | null | Optional user override for runtime chunk size. If omitted, Custom ONNX starts conservatively |
+
+#### GET /api/tag/scope-count
+How many images a whole-library tagging run (no `image_ids`) would process in the current library: `?retag_all=false` (default) counts readable images with no AI tags yet, `?retag_all=true` counts every readable image. Returns `{ "count", "retag_all" }`. The tag modal shows it next to Start.
 
 #### GET /api/tag/progress
 Get tagging progress.
@@ -1547,7 +1553,7 @@ Generate obfuscation preview.
 ### Aesthetic
 
 #### GET /api/aesthetic/status
-Get aesthetic scorer availability and scored count.
+Get aesthetic scorer availability and scored count. Returns `{ "available", "message", "scored_count", "to_score_count" }`; `to_score_count` is how many images of the current library have no aesthetic score yet, i.e. what `POST /api/aesthetic/score-all` would process.
 
 #### POST /api/aesthetic/score/{image_id}
 Score a single image.
@@ -2131,6 +2137,10 @@ contains `path`, legacy `caption`, and independent `booru_text` / `nl_text` chan
 Missing, unreadable, malformed, schema-invalid, or truncated result stores return HTTP 500
 with the `job_id`, result path, and concrete cause. Clients preserve existing edits and
 must not render a success state when the page cannot be read.
+
+#### POST /api/smart-tag/tagged-count
+
+Count how many library images of a planned run already have tags (`tagged_at` set). Body: `{ "image_ids": [int, ...], "selection_token": "..." }` (both optional; path sources are never skipped, so they are not sent). Returns `{ "checked", "already_tagged" }`. With `skip_existing` on, `/start` drops those images entirely (no tags, no natural-language caption, no trigger word), so the Smart Tag dialog asks this first and lets the user skip or process them. 400 for an invalid selection token.
 
 #### POST /api/smart-tag/cancel
 

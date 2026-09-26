@@ -1332,6 +1332,16 @@
     display: none;
 }
 
+.tagger-nl-torii-route {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin: 4px 0 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
 .tagger-nl-workflow-card {
     display: none;
     grid-template-columns: minmax(0, auto) minmax(0, 1fr);

@@ -61,10 +61,12 @@ def aesthetic_status(service: AestheticService = Depends(get_aesthetic_service))
         # status, breaking the aesthetic settings panel for any user with a
         # damaged torch runtime.
         _log_router_warning_once("status", "Aesthetic predictor unavailable", exc)
+        fallback_status = service.get_status(lambda: False)
         return {
             "available": False,
             "message": "Aesthetic predictor dependencies are not installed or runtime is broken",
-            "scored_count": service.get_status(lambda: False)["scored_count"],
+            "scored_count": fallback_status["scored_count"],
+            "to_score_count": fallback_status["to_score_count"],
         }
 
 

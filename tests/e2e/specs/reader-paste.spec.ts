@@ -4,25 +4,19 @@ import { test, expect, type Page } from '../fixtures/click-ledger'
 const TINY_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgYAAAAAMAAWgmWQ0AAAAASUVORK5CYII='
 
+// Reach the Reader the way a user does: the top-bar tab. The view keeps its
+// inline display:none (CSS .view.active shows it), so a test that rewrote
+// style.display hid a paste listener that never fired for real users.
 async function openReaderView(page: Page) {
+  await page.addInitScript(() => {
+    localStorage.setItem('sd-sorter-entry-skip-session', '1')
+  })
   await page.goto('/')
   await page.waitForLoadState('domcontentloaded')
-
-  // Navigate via the main reader tab if present, otherwise reveal the view directly.
-  await page.evaluate(() => {
-    const view = document.getElementById('view-reader')
-    if (view) {
-      document.querySelectorAll('.view').forEach((node) => {
-        if (node !== view) {
-          ;(node as HTMLElement).style.display = 'none'
-        }
-      })
-      ;(view as HTMLElement).style.display = 'flex'
-      view.classList.add('active')
-    }
-    const panel = document.getElementById('reader-tool-panel-reader')
-    panel?.classList.add('active')
-  })
+  await page.locator('#nav-tab-reader').click()
+  await expect(page.locator('#view-reader')).toHaveClass(/active/)
+  await expect(page.locator('#reader-tool-panel-reader')).toHaveClass(/active/)
+  await expect(page.locator('#reader-paste-btn')).toBeInViewport()
 }
 
 test.describe('Image Reader — Paste from Clipboard', () => {

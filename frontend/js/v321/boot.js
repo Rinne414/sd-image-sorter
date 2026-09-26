@@ -10,7 +10,9 @@
 Object.assign(window.V321Integration, {
     init() {
         this.bindTaggerBackendSwitch();
-        this.bindExportPresetUI();
+        // Kept so saved caption edits are restored only after the export UI's
+        // first content-format pass (which clears captions) has run.
+        this._exportPresetUiReady = this.bindExportPresetUI();
         this.bindLivePreview();
         this.interceptCombinedExportClick();
         this.interceptTagSubmit();

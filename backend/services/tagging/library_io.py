@@ -251,3 +251,12 @@ class LibraryIOMixin:
             "images_fixed": fixed_count,
             "message": f"Cleaned up rating tags for {fixed_count} images",
         }
+
+    def get_scope_count(self, retag_all: bool = False) -> Dict[str, Any]:
+        """How many images a whole-library tagging run would process.
+
+        Mirrors the worker's own selection: untagged readable images, or every
+        readable image with ``retag_all``. The tag modal shows it before a run.
+        """
+        count = db.count_all_image_ids() if retag_all else db.count_untagged_image_ids()
+        return {"count": int(count), "retag_all": bool(retag_all)}

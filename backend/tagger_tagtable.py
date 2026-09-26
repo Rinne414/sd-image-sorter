@@ -17,6 +17,17 @@ from config import TAGGER_MODELS as MODELS
 
 logger = logging.getLogger("tagger")
 
+# PixAI v1.0 tags.json category -> the category rows are stored under.
+# Style tags are artist names; meta tags (highres, ...) keep their own name.
+_PIXAI_V1_GENERAL_OVERRIDES = {"style": "artist", "meta": "meta"}
+_PIXAI_V1_RATINGS = {
+    "rating:g": "general",
+    "rating:s": "sensitive",
+    "rating:q": "questionable",
+    "rating:e": "explicit",
+}
+_JSON_METADATA_FORMATS = {"camie_v2", "pixai_v1"}
+
 
 class _TagTableMixin:
     """Custom-path hard contract, ONNX file validation, WD14/camie tag tables."""
@@ -67,7 +78,9 @@ class _TagTableMixin:
             metadata_format = str(
                 model_config.get("metadata_format", "wd14_csv")
             ).lower()
-            allowed_tag_exts = {".json"} if metadata_format == "camie_v2" else {".csv"}
+            allowed_tag_exts = (
+                {".json"} if metadata_format in _JSON_METADATA_FORMATS else {".csv"}
+            )
             if self.tags_path:
                 if not os.path.exists(self.tags_path):
                     raise FileNotFoundError(
@@ -132,6 +145,10 @@ class _TagTableMixin:
         # tag name -> true category for tags that live in the general bucket
         # but aren't 'general' (camie's artist/meta/year entries).
         self._general_category_overrides = {}
+
+        if self._metadata_format == "pixai_v1":
+            self._load_pixai_v1_tags(tags_path)
+            return
 
         if self._metadata_format == "camie_v2" or tags_path.lower().endswith(".json"):
             with open(tags_path, "r", encoding="utf-8") as f:
@@ -203,3 +220,47 @@ class _TagTableMixin:
             elif category == 9:
                 self.rating_tags.append((row_idx, tag_name))
                 self.rating_indices[tag_name] = row_idx
+
+    def _load_pixai_v1_tags(self, tags_path: str) -> None:
+        """Load PixAI v1.0 ``tags.json``: ordered categories with offsets.
+
+        Model index = category offset + position in that category's list, the
+        same order as the official config.json ``tags``. A file whose counts
+        disagree with ``num_classes`` is rejected rather than shifting every tag.
+        """
+        with open(tags_path, "r", encoding="utf-8") as f:
+            metadata = json.load(f)
+        expected_total = int(metadata.get("num_classes") or 0)
+        for category in metadata.get("categories") or []:
+            name = str(category.get("name") or "").strip().lower()
+            offset = int(category.get("offset") or 0)
+            names = [str(tag) for tag in category.get("tags") or []]
+            if len(names) != int(category.get("count", len(names))):
+                raise ValueError(
+                    f"PixAI tag file {tags_path} lists {len(names)} {name} tags "
+                    f"but declares {category.get('count')}."
+                )
+            for position, tag_name in enumerate(names):
+                tag_idx = offset + position
+                self.tags.append(tag_name)
+                if name == "character":
+                    self.character_tags.append((tag_idx, tag_name))
+                elif name == "copyright":
+                    self.copyright_tags.append((tag_idx, tag_name))
+                elif name == "rating":
+                    rating = _PIXAI_V1_RATINGS.get(
+                        tag_name.lower(), tag_name.split(":", 1)[-1]
+                    )
+                    self.rating_tags.append((tag_idx, rating))
+                    self.rating_indices[rating] = tag_idx
+                else:
+                    self.general_tags.append((tag_idx, tag_name))
+                    if name in _PIXAI_V1_GENERAL_OVERRIDES:
+                        self._general_category_overrides[tag_name] = (
+                            _PIXAI_V1_GENERAL_OVERRIDES[name]
+                        )
+        if expected_total and len(self.tags) != expected_total:
+            raise ValueError(
+                f"PixAI tag file {tags_path} has {len(self.tags)} tags; the model "
+                f"expects {expected_total}."
+            )

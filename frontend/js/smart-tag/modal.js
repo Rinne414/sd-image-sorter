@@ -12,6 +12,8 @@
     async function openModal() {
         const modal = smartTag$('#smart-tag-modal');
         if (!modal) return;
+        // A question left open when the modal was closed (Esc) is void.
+        answerExistingChoice('cancel');
 
         // Refresh image-count summary every time we open.
         const sources = getDatasetSources();
@@ -72,6 +74,7 @@
             modal.classList.remove('visible');
             modal.setAttribute('aria-hidden', 'true');
         }
+        answerExistingChoice('cancel');
         stopProgressPolling();
         showProgress(false);
         setProgressUI({ percent: 0, text: '', preview: '' });

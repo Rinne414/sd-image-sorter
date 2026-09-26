@@ -9,18 +9,98 @@
  */
 Object.assign(window.V321Integration, {
 
-    /** DUR-1: the caption editor keeps edits in in-memory Maps only —
-     *  closing the tab while the modal is open with unsaved edits would
-     *  silently discard them. Prompt in that state (and only that state,
-     *  so the guard never nags outside the editor). */
+    /** DUR-1: export-preview caption edits (caption, NL sentence, caption
+     *  type) are kept until they are exported. They live in memory while the
+     *  page is open, are written to localStorage when it unloads and restored
+     *  on the next start, so a reload or a closed tab no longer drops them.
+     *  An export clears the saved copy (markCaptionEditsExported); when the
+     *  browser cannot store them, the page asks before leaving instead. */
+    CAPTION_EDITS_KEY: 'sd-sorter-export-caption-edits',
+    _captionEditsUnexported: false,
+
+    _hasCaptionEdits() {
+        return (this.editedCaptions?.size || 0) > 0
+            || (this.editedNl?.size || 0) > 0
+            || (this.captionTypes?.size || 0) > 0;
+    },
+
+    markCaptionEditsChanged() {
+        this._captionEditsUnexported = true;
+    },
+
+    markCaptionEditsExported() {
+        this._captionEditsUnexported = false;
+        try { localStorage.removeItem(this.CAPTION_EDITS_KEY); } catch (_e) { /* storage blocked */ }
+    },
+
+    _saveCaptionEdits() {
+        // Leaving before the saved edits were put back: keep them as they are.
+        if (this._captionEditsRestorePending) return;
+        if (!this._captionEditsUnexported || !this._hasCaptionEdits()) {
+            localStorage.removeItem(this.CAPTION_EDITS_KEY);
+            return;
+        }
+        localStorage.setItem(this.CAPTION_EDITS_KEY, JSON.stringify({
+            version: 1,
+            contentMode: document.getElementById('batch-export-content-mode')?.value || '',
+            captions: Object.fromEntries(this.editedCaptions),
+            nl: Object.fromEntries(this.editedNl),
+            types: Object.fromEntries(this.captionTypes),
+        }));
+    },
+
+    /** Put saved edits back; returns how many images they cover. */
+    restoreCaptionEdits() {
+        let saved = null;
+        try {
+            saved = JSON.parse(localStorage.getItem(this.CAPTION_EDITS_KEY) || 'null');
+        } catch (_e) {
+            return 0;
+        }
+        if (!saved || saved.version !== 1) return 0;
+        // The caption text was written for one content format; switching to it
+        // first (its change handler clears captions) keeps text and format together.
+        const select = document.getElementById('batch-export-content-mode');
+        const hasMode = select && Array.from(select.options).some((option) => option.value === saved.contentMode);
+        if (hasMode && select.value !== saved.contentMode) {
+            select.value = saved.contentMode;
+            select.dispatchEvent(new Event('change'));
+        }
+        const ids = new Set();
+        const fill = (target, entries, isValid) => {
+            for (const [key, value] of Object.entries(entries || {})) {
+                const id = Number(key);
+                if (!Number.isFinite(id) || id <= 0 || !isValid(value)) continue;
+                target.set(id, String(value));
+                ids.add(id);
+            }
+        };
+        fill(this.editedCaptions, saved.captions, (value) => typeof value === 'string');
+        fill(this.editedNl, saved.nl, (value) => typeof value === 'string');
+        fill(this.captionTypes, saved.types, (value) => value === 'nl' || value === 'both');
+        this._captionEditsUnexported = ids.size > 0;
+        return ids.size;
+    },
+
     bindCaptionEditorUnloadGuard() {
+        this._captionEditsRestorePending = true;
+        Promise.resolve(this._exportPresetUiReady).catch(() => {}).then(() => {
+            this._captionEditsRestorePending = false;
+            const restored = this.restoreCaptionEdits();
+            if (restored > 0) {
+                window.showToast?.(this._i18n('batchExport.captionEditsRestored',
+                    'Caption edits for {count} image(s) that were not exported yet are back; the next training-caption export uses them.',
+                    { count: restored }).replace('{count}', String(restored)), 'info');
+            }
+        });
         window.addEventListener('beforeunload', (e) => {
-            const editorOpen = document.getElementById('caption-editor-modal')?.classList.contains('visible');
-            const hasEdits = (this.editedCaptions?.size || 0) > 0
-                || (this.editedNl?.size || 0) > 0;
-            if (editorOpen && hasEdits) {
-                e.preventDefault();
-                e.returnValue = '';
+            try {
+                this._saveCaptionEdits();
+            } catch (_e) {
+                if (this._captionEditsUnexported && this._hasCaptionEdits()) {
+                    e.preventDefault();
+                    e.returnValue = '';
+                }
             }
         });
     },

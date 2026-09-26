@@ -659,9 +659,12 @@ def test_health_all_subsystems_unavailable_in_zero_model_state(monkeypatch, tmp_
     assert health["artist"]["available"] is False
 
 
-def test_health_wd14_installed_models_lists_wd14_family_only(
+def test_health_wd14_installed_models_lists_wd14_runtime_models_only(
     monkeypatch, tmp_path
 ):
+    """The WD14 card lists what its Prepare can fetch: every model on the WD14
+    ONNX runtime (WD14 family, Camie, PixAI). OppaiOracle, CL Tagger v2 and the
+    ToriiGate captioner have their own cards and stay out."""
     from config import TAGGER_MODELS
 
     _wire_clean_state(monkeypatch, tmp_path)
@@ -669,8 +672,12 @@ def test_health_wd14_installed_models_lists_wd14_family_only(
     wd14_names = {
         name
         for name, config in TAGGER_MODELS.items()
-        if str(config.get("writer_family") or "").strip().lower() == "wd14"
+        if str(config.get("runtime_backend") or "wd14").strip().lower() == "wd14"
+        and not config.get("captioner_only")
     }
+
+    assert {"camie-tagger-v2", "pixai-tagger-v0.9", "pixai-tagger-v1.0"} <= wd14_names
+    assert not {"oppai-oracle-v1.1", "cl-tagger-v2", "toriigate-0.5"} & wd14_names
 
     assert isinstance(wd14["installed_models"], list)
     assert {entry["name"] for entry in wd14["installed_models"]} == wd14_names

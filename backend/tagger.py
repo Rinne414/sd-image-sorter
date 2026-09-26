@@ -30,6 +30,7 @@ from config import (
 )
 from ai_runtime_guard import (
     PRIORITY_NORMAL,
+    claim_gpu_residency,
     exclusive_ai_runtime,
     looks_like_cuda_oom,
 )
@@ -332,14 +333,17 @@ class WD14Tagger(
 
         Double-checked locking: the common already-loaded case returns without
         taking the lock; the slow path serializes the one-time init so two
-        concurrent first-callers can't both load the model.
+        concurrent first-callers can't both load the model. Lock order is the
+        VRAM lease first, then ``_load_lock`` (release_session and the GPU
+        residency eviction take them in the same order).
         """
         if self._loaded:
             return
-        with self._load_lock:
-            if self._loaded:
-                return
-            self._load_locked()
+        with exclusive_ai_runtime(f"tagger-load:{self.model_name}"):
+            with self._load_lock:
+                if self._loaded:
+                    return
+                self._load_locked()
 
     def _load_locked(self):
         """Perform the one-time model + tag load. Caller must hold _load_lock."""
@@ -398,6 +402,11 @@ class WD14Tagger(
         else:
             logger.info(f"Using providers: {providers} (GPU disabled)")
         sess_options = self._build_session_options(gpu_enabled=session_uses_gpu)
+        if session_uses_gpu:
+            # One GPU tagger session at a time: free any other resident model
+            # (a previous singleton, another consensus tagger) before this one
+            # allocates its VRAM.
+            claim_gpu_residency(self, self.release_session, label=self.model_name)
 
         try:
             self.session = self._create_session(

@@ -6201,14 +6201,17 @@
                     </div>
                 </div>
 
-                <!-- Natural Language tab: sub-toggle to pick between local ToriiGate and remote VLM API -->
+                <!-- Natural Language tab: sub-toggle between local ToriiGate and remote VLM API.
+                     The gallery tagger cannot run ToriiGate (a captioner), so the only
+                     card shown here is VLM API and it is the default; ToriiGate is
+                     reached through Smart Tag (#btn-tagger-nl-torii-smart). -->
                 <div class="tagger-nl-subtoggle tagger-nl-source-inputs" data-tagger-shows="nl" role="radiogroup" aria-label="Natural Language source" style="display:none">
                     <label class="segmented-option">
-                        <input type="radio" name="tagger-nl-source" value="toriigate" checked>
+                        <input type="radio" name="tagger-nl-source" value="toriigate">
                         <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-package"/></svg></span> <span data-i18n="tagger.nlSourceTorii">ToriiGate (local)</span>
                     </label>
                     <label class="segmented-option">
-                        <input type="radio" name="tagger-nl-source" value="vlm">
+                        <input type="radio" name="tagger-nl-source" value="vlm" checked>
                         <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-cloud"/></svg></span> <span data-i18n="tagger.nlSourceVlm">VLM API (Cloud / Ollama)</span>
                     </label>
                 </div>
@@ -6239,6 +6242,11 @@
                     <div class="tagger-model-choice-list" id="tag-model-choice-list" role="radiogroup" aria-labelledby="tag-model-select-label"></div>
                     <small class="helper-text" id="tag-model-help" aria-live="polite">Balanced default. Good if you are not sure.</small>
                     <button type="button" class="model-pick-help-link" data-action="open-model-guidance"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg> <span data-i18n="models.whichToPick">Which model should I pick?</span></button>
+                </div>
+
+                <div class="tagger-nl-torii-route" data-tagger-shows="nl" style="display:none">
+                    <span class="tagger-nl-torii-route-hint" data-i18n="tagger.nlToriiRouteHint">Want the local ToriiGate captioner instead? It runs in Smart Tag.</span>
+                    <button type="button" class="btn btn-small btn-secondary" id="btn-tagger-nl-torii-smart" data-i18n="tagger.nlToriiRouteButton">Open Smart Tag with ToriiGate</button>
                 </div>
 
                 <div class="tagger-nl-workflow-card tagger-nl-status-card" id="tagger-nl-workflow-card" data-tagger-shows="nl" style="display:none">
@@ -6274,6 +6282,7 @@
                         <div class="tagger-aesthetic-status-copy">
                             <strong id="tagger-aesthetic-status-title" data-i18n="tagger.aestheticReady">Aesthetic scoring is ready on this machine.</strong>
                             <p class="tagger-aesthetic-status-hint" id="tagger-aesthetic-status-hint" data-i18n="tagger.tabAestheticDesc">CLIP + LAION scoring head, scores from 1 to 10.</p>
+                            <p class="tagger-aesthetic-status-hint" id="tagger-aesthetic-scope" hidden></p>
                         </div>
                     </div>
                     <div class="tagger-aesthetic-actions">
@@ -7025,6 +7034,10 @@
                         <input type="checkbox" id="pub-master-censored" checked>
                         <span data-i18n="pub.masterCensored">Use censored version where available</span>
                     </label>
+                    <label class="pub-master-label" id="pub-censor-names-label" hidden>
+                        <input type="checkbox" id="pub-use-censor-names" checked>
+                        <span data-i18n="pub.useCensorNames">Use the file names from Censor Edit</span>
+                    </label>
                     <button class="btn btn-ghost btn-small" id="btn-pub-repair" type="button" data-i18n="pub.repair">Re-pair</button>
                     <button class="btn btn-ghost btn-small" id="btn-pub-add-selection" type="button" data-i18n="pub.addSelection">Add gallery selection</button>
                     <span class="pub-toolbar-count" id="pub-count"></span>
@@ -7067,11 +7080,28 @@
                             <span data-i18n="pub.suffix">Censored suffix</span>
                             <input type="text" id="pub-suffix" class="input-field" value="_censored" autocomplete="off" spellcheck="false">
                         </label>
+                        <label class="pub-field pub-metadata-field">
+                            <span data-i18n="save.metadataHandling">Metadata / Generation Info</span>
+                            <select id="pub-metadata-option" class="input-field">
+                                <option value="strip" selected data-i18n="save.metadataStrip">Remove metadata</option>
+                                <option value="keep" data-i18n="save.metadataKeep">Keep original metadata</option>
+                                <option value="minimal" data-i18n="save.metadataMinimal">Keep basic info only</option>
+                            </select>
+                        </label>
                         <label class="pub-overwrite-label">
                             <input type="checkbox" id="pub-overwrite">
                             <span data-i18n="pub.overwrite">Overwrite existing files</span>
                         </label>
                         <button class="btn btn-primary" id="btn-pub-export" type="button" data-i18n="pub.export">Export set</button>
+                    </div>
+                    <div class="pub-uncensored-check" id="pub-uncensored-check" role="alertdialog" aria-labelledby="pub-uncensored-title" hidden>
+                        <p class="pub-uncensored-title" id="pub-uncensored-title"></p>
+                        <ul class="pub-uncensored-list" id="pub-uncensored-list"></ul>
+                        <div class="pub-uncensored-actions">
+                            <button class="btn btn-primary" id="btn-pub-uncensored-cancel" type="button" data-i18n="pub.uncensoredCancel">Cancel</button>
+                            <button class="btn btn-secondary" id="btn-pub-uncensored-skip" type="button" data-i18n="pub.uncensoredSkip">Leave these out</button>
+                            <button class="btn btn-ghost danger" id="btn-pub-uncensored-include" type="button" data-i18n="pub.uncensoredInclude">Export them uncensored</button>
+                        </div>
                     </div>
                     <details class="pub-watermark-panel" id="pub-watermark-panel">
                         <summary>
@@ -8519,6 +8549,18 @@
 
             <!-- Actions -->
             <div class="modal-actions smart-tag-actions">
+                <!-- Asked before a run when "re-tag" is off and some images already
+                     have tags; it lives in the sticky action bar so it is never
+                     scrolled out of view or covered by it. -->
+                <div class="smart-tag-existing-check" id="smart-tag-existing-check" role="alertdialog" aria-labelledby="smart-tag-existing-title" hidden>
+                    <p class="smart-tag-existing-title" id="smart-tag-existing-title"></p>
+                    <p class="form-help" data-i18n="smartTag.existingHelp">Skipped images get no tags, no natural-language caption and no trigger word.</p>
+                    <div class="smart-tag-existing-actions">
+                        <button class="btn btn-ghost" id="btn-smart-tag-existing-cancel" type="button" data-i18n="smartTag.cancel">Cancel</button>
+                        <button class="btn btn-secondary" id="btn-smart-tag-existing-skip" type="button"></button>
+                        <button class="btn btn-primary" id="btn-smart-tag-existing-include" type="button"></button>
+                    </div>
+                </div>
                 <button class="btn btn-ghost" id="btn-smart-tag-cancel-modal" data-i18n="smartTag.cancel">Cancel</button>
                 <button class="btn btn-danger" id="btn-smart-tag-cancel-job" hidden data-i18n="smartTag.cancelJob">Stop</button>
                 <button class="btn btn-primary" id="btn-smart-tag-run">

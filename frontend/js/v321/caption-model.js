@@ -46,6 +46,7 @@ Object.assign(window.V321Integration, {
         } else {
             this.editedCaptions.delete(id);
         }
+        this.markCaptionEditsChanged();
     },
 
     // ---- Aurora #25c: per-image caption type + NL sentence (CaptionCore) ----
@@ -74,6 +75,7 @@ Object.assign(window.V321Integration, {
         } else {
             this.editedNl.delete(id);
         }
+        this.markCaptionEditsChanged();
     },
 
     _getCaptionType(imageId) {
@@ -97,6 +99,7 @@ Object.assign(window.V321Integration, {
         } else {
             this.captionTypes.delete(id);
         }
+        this.markCaptionEditsChanged();
     },
 
     /** The NL compose only applies in template/tags modes (backend gate). */
