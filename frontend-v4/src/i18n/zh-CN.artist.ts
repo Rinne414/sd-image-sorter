@@ -96,11 +96,11 @@ export const zhCNArtist = {
 
   // clearing
   'artist.clear.title': '清空识别结果',
-  'artist.clear.lead': '删掉所有图库里每张图的画风识别结果，图片本身不动。',
+  'artist.clear.lead': '删掉这个图库里每张图的画风识别结果，图片本身不动；其他图库的结果留着。',
   'artist.clear.button': '清空全部结果…',
-  'artist.clear.confirm': '清空所有图库的画风识别结果（这个图库里有 {n} 张）？不能撤销，要重新识别才能找回。',
+  'artist.clear.confirm': '清空这个图库 {n} 张图的画风识别结果？不能撤销，要重新识别才能找回。',
   'artist.clear.go': '清空',
-  'artist.clear.done': '已清空画风识别结果',
+  'artist.clear.done': '已清空这个图库的画风识别结果',
   'artist.clear.failed': '没能清空：{reason}',
   'artist.clear.busy': '识别还在进行，先停止或等它结束，再清空。',
 

@@ -88,11 +88,11 @@ export const enArtist: Record<keyof typeof zhCNArtist, string> = {
   'artist.filtered': 'Library search: {query}',
 
   'artist.clear.title': 'Clear the results',
-  'artist.clear.lead': 'Removes the style result of every image in every library; the images themselves are not touched.',
+  'artist.clear.lead': 'Removes the style result of every image in this library; the images themselves are not touched, and other libraries keep theirs.',
   'artist.clear.button': 'Clear all results…',
-  'artist.clear.confirm': 'Clear the style results of every library ({n} images in this one)? This cannot be undone; they come back only by identifying again.',
+  'artist.clear.confirm': 'Clear the style results of the {n} images in this library? This cannot be undone; they come back only by identifying again.',
   'artist.clear.go': 'Clear',
-  'artist.clear.done': 'Style results cleared',
+  'artist.clear.done': 'This library’s style results cleared',
   'artist.clear.failed': 'Could not clear: {reason}',
   'artist.clear.busy': 'Identifying is still running; stop it or wait for it to end, then clear.',
 

@@ -54,7 +54,7 @@ export function ClearBlock({ locked }: { locked: boolean }) {
       <h3 className={styles.dangerTitle}>{t('artist.clear.title')}</h3>
       <p className={styles.hint}>{locked ? t('artist.clear.busy') : t('artist.clear.lead')}</p>
       <div className={styles.runRow}>
-        <button type="button" className="btn btn-danger" onClick={() => setAsking(true)} disabled={locked} data-testid="artist-clear-button">
+        <button type="button" className="btn btn-danger" onClick={() => setAsking(true)} disabled={locked || n === 0} data-testid="artist-clear-button">
           {t('artist.clear.button')}
         </button>
       </div>

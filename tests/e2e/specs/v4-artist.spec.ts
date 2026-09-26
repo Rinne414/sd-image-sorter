@@ -431,7 +431,7 @@ test('clearing asks first with Cancel focused, then removes every result', async
   await expect(page.getByTestId('artist-stat-confident')).toContainText('4')
   await page.getByTestId('artist-clear-button').click()
   const dialog = page.getByTestId('artist-clear-dialog')
-  await expect(dialog).toContainText('(6 images in this one)')
+  await expect(dialog).toContainText('the 6 images in this library')
   await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
@@ -439,7 +439,7 @@ test('clearing asks first with Cancel focused, then removes every result', async
 
   await page.getByTestId('artist-clear-button').click()
   await page.getByTestId('artist-clear-yes').click()
-  await expect(toast(page, 'Style results cleared')).toBeVisible()
+  await expect(toast(page, 'This library’s style results cleared')).toBeVisible()
   await expect(page.getByTestId('artist-stat-confident')).toContainText('0')
   await expect(page.getByTestId('artist-list-confident')).toContainText('No artists identified yet.')
 })

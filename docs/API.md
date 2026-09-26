@@ -1513,6 +1513,7 @@ Get artist stats. `undefined_count`, `low_confidence_count` and `confident_count
 
 #### GET /api/artists/images/{artist_name}
 List images associated with an artist prediction. Each entry carries a `confidence_level` derived from its stored confidence, so pre-tiering labels are still marked as suspect.
+Only images of the current library (`X-SD-Library-Id`) are listed and counted in `total`, the same scope as `GET /api/artists/stats`.
 
 #### GET /api/artists/list
 Get the loaded model's artist list. `vocabulary_loaded` is false (and `artists` empty) until a real label source is loaded.
@@ -1530,7 +1531,7 @@ Check whether specific artists exist in the loaded model's answer set.
 An artist that is absent can never be predicted, so every identification over their images will name somebody else.
 
 #### DELETE /api/artists/clear
-Clear artist predictions.
+Clear the artist predictions of the current library's images (`X-SD-Library-Id`); other libraries keep theirs. Returns `message` and `cleared` (rows removed). 409 while a batch runs.
 
 ### Obfuscation
 

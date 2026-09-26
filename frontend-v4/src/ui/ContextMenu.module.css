@@ -110,3 +110,21 @@
   display: grid;
   color: var(--muted);
 }
+
+/*
+ * A laptop screen (768 px tall or less): slightly tighter rows and dividers,
+ * so the longest menu (two picks: their actions, the clicked image's own and
+ * the danger group) fits without scrolling. Taller screens keep the rows above.
+ */
+@media (max-height: 800px) {
+  .item {
+    min-height: 25px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+  }
+
+  .group[data-divider] {
+    margin-top: 3px;
+    padding-top: 3px;
+  }
+}
