@@ -157,7 +157,7 @@ export const enReader: Record<keyof typeof zhCNReader, string> = {
   'reverse.cancelled': 'Cancelled.',
   'reverse.failed': 'Could not work out a prompt: {reason}',
   'reverse.noTags': 'The tagger found no tags above its threshold.',
-  'reverse.queueGone': 'This run was taken out of the queue (perhaps cancelled elsewhere) and did not start.',
+  'reverse.lost': "We couldn't find how this run ended (it may have been taken out of the queue, or the app restarted). Run it again.",
   'reverse.noPrompt': 'This image gave no prompt.',
   'reverse.taggerRestart': '{name} needs the app to restart before it can be used.',
   'reverse.downloadFailed': 'Could not start downloading {name}.',

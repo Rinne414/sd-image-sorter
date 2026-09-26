@@ -163,7 +163,7 @@ export const zhCNReader = {
   'reverse.cancelled': '已取消。',
   'reverse.failed': '没能推测出提示词：{reason}',
   'reverse.noTags': '打标器没有找到高于阈值的标签。',
-  'reverse.queueGone': '排队中的这次已被移出队列（可能在别处取消了），没有开始。',
+  'reverse.lost': '找不到这次运行是怎么结束的（可能被移出了队列，或者程序中途重启过）。请再运行一次。',
   'reverse.noPrompt': '这张图没有得出提示词。',
   'reverse.taggerRestart': '{name} 要重启程序后才能用。',
   'reverse.downloadFailed': '没能开始下载 {name}。',

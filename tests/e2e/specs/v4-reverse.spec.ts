@@ -154,8 +154,9 @@ test('tags then the vision model: waits its turn, sends the target model, shows 
   await page.setViewportSize({ width: 1920, height: 1080 })
   const s = await stubAi(page)
   await stubSmartTag(page, s, { status: 'queued', queue_id: 'q7', queue_position: 2 }, [
-    { active: true, job_id: 'someone-else', status: 'running', pipeline_queue: { queued: [{ queue_id: 'q7', kind: 'smart', position: 1 }] } },
-    { active: true, job_id: 'someone-else', status: 'running', pipeline_queue: { queued: [{ queue_id: 'q7', kind: 'smart', position: 1 }] } },
+    // asked by its queue place while it waits (someone else's run is going)
+    { status: 'queued', found: true, active: false, queue_id: 'q7', pipeline_queue: { queued: [{ queue_id: 'q7', kind: 'smart', position: 1 }] } },
+    { status: 'queued', found: true, active: false, queue_id: 'q7', pipeline_queue: { queued: [{ queue_id: 'q7', kind: 'smart', position: 1 }] } },
     // the backend names the queue place a job was started from (settings.queue_id)
     { active: true, job_id: 'j1', status: 'running', settings: { queue_id: 'q7' }, pipeline_queue: { queued: [] } },
     { active: false, job_id: 'j1', status: 'completed', processed: 1, total: 1, settings: { queue_id: 'q7' } },
@@ -181,10 +182,43 @@ test('tags then the vision model: waits its turn, sends the target model, shows 
   await expect(page.getByTestId('reverse-mode-grounded')).toBeChecked()
 })
 
+test('a queued run that starts and finishes between two polls still shows its result', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  const s = await stubAi(page)
+  await page.route('**/api/smart-tag/start', async (route) => {
+    s.starts.push(route.request())
+    await route.fulfill({ json: { status: 'queued', pipeline_queued: true, queue_id: 'q5', enqueued_at: '2026-09-27T06:00:00+00:00', queue_position: 1 } })
+  })
+  // The backend: asked by queue place it names the job the place became, also once it ended;
+  // asked with no place it names only the active run, and none is left active here.
+  const asked: string[] = []
+  let byPlace = 0
+  const ended = { job_id: 'j5', status: 'completed', active: false, processed: 1, total: 1, settings: { queue_id: 'q5', queue_enqueued_at: '2026-09-27T06:00:00+00:00' } }
+  await page.route('**/api/smart-tag/progress**', async (route) => {
+    const query = new URL(route.request().url()).searchParams
+    asked.push(query.toString())
+    if (query.get('queue_id') === 'q5') {
+      byPlace += 1
+      const waiting = { status: 'queued', found: true, active: false, queue_id: 'q5', pipeline_queue: { queued: [{ queue_id: 'q5', kind: 'smart', position: 1 }] } }
+      return route.fulfill({ json: byPlace === 1 ? waiting : { ...ended, found: true, queue_id: 'q5', pipeline_queue: { queued: [] } } })
+    }
+    if (query.get('job_id') === 'j5') return route.fulfill({ json: ended })
+    return route.fulfill({ json: { status: 'idle', active: false, pipeline_queue: { queued: [] } } })
+  })
+  await page.route('**/api/smart-tag/results**', (route) => route.fulfill({ json: { results: [{ caption: 'A quiet street after the rain.', booru_text: '1girl, rain' }], total: 1 } }))
+  await openReverse(page)
+  await page.getByTestId('intake-file').setInputFiles(NO_METADATA)
+  await page.getByTestId('reverse-mode-vlm').check()
+  await page.getByTestId('reverse-run-button').click()
+  await expect(page.getByTestId('reverse-inferred')).toContainText('A quiet street after the rain.', { timeout: 10_000 })
+  // it was asked for by its place: a poll with no place would only have found nothing active
+  expect(asked).toContain('queue_id=q5')
+})
+
 test('Cancel stops a running vision-model run, and a queued one only when its turn comes', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   const s = await stubAi(page)
-  const queued = { active: true, job_id: 'someone-else', status: 'running', pipeline_queue: { queued: [{ queue_id: 'q9', kind: 'smart', position: 1 }] } }
+  const queued = { status: 'queued', found: true, active: false, queue_id: 'q9', pipeline_queue: { queued: [{ queue_id: 'q9', kind: 'smart', position: 1 }] } }
   await stubSmartTag(page, s, { status: 'queued', queue_id: 'q9' }, [
     queued,
     queued,

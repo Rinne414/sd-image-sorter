@@ -1,6 +1,6 @@
 import { api, unwrap } from '../../../api/client'
 import type { TargetModel } from '../../batch/datasetSettings'
-import { startedJobId } from '../../jobs/smartTagJob'
+import { queuedRunAnswer } from '../../jobs/smartTagJob'
 import type { TagOptions } from '../../tagging/tagJob'
 import { tt } from '../toolText'
 import { captionOf, promptToTags, smartTagBody, tagSingleBody, tagsToPrompt, type ReverseMode } from './reverseModes'
@@ -31,8 +31,6 @@ type Raw = Record<string, unknown>
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
 const POLL_MS = 900
-/** Polls in a row that find our queued run neither waiting nor started: it was taken out of the queue. */
-const GONE_AFTER = 3
 const TERMINAL = new Set(['completed', 'done', 'warning', 'failed', 'error', 'cancelled', 'idle'])
 
 const wait = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
@@ -62,22 +60,19 @@ async function cancelActive(): Promise<void> {
 }
 
 /**
- * Poll until our job has finished. A run that waited in the queue gets its job
- * id when it starts. Cancel stops our job only: while it still waits, the
- * backend's cancel would stop whatever else is running, so it waits for its
- * turn and is stopped then.
+ * Poll until our job has finished. A run that waits in the AI queue is asked
+ * for by its queue place (?queue_id=) until it has a job id, so a run that
+ * started and ended between two polls is still found, and a place the backend
+ * no longer knows is said plainly. Cancel stops our job only: while it still
+ * waits, the backend's cancel would stop whatever else is running, so it waits
+ * for its turn and is stopped then.
  */
-/** Our queue entry is still in the AI queue. */
-function waiting(raw: Raw, queueId: string | undefined): boolean {
-  const queue = raw.pipeline_queue && typeof raw.pipeline_queue === 'object' ? (raw.pipeline_queue as Raw).queued : null
-  return Array.isArray(queue) && queue.some((q) => !!q && typeof q === 'object' && (q as Raw).queue_id === queueId)
-}
-
 async function follow(start: Raw, hooks: Hooks): Promise<{ jobId: string; last: Raw }> {
-  const queueId = str(start.queue_id) || undefined
+  const queueId = str(start.queue_id)
+  const enqueuedAt = str(start.enqueued_at) || undefined
   let jobId = str(start.job_id) || null
+  if (!jobId && !queueId) throw new Error(tt('reverse.lost'))
   let last = start
-  let gone = 0
   hooks.onPhase(jobId ? 'running' : 'queued')
   for (;;) {
     if (jobId && TERMINAL.has(str(last.status))) return { jobId, last }
@@ -87,21 +82,27 @@ async function follow(start: Raw, hooks: Hooks): Promise<{ jobId: string; last: 
       throw new Cancelled()
     }
     await wait(POLL_MS)
-    last = unwrap<Raw>(await api.GET('/api/smart-tag/progress', { params: { query: jobId ? { job_id: jobId } : {} } }))
+    last = unwrap<Raw>(await api.GET('/api/smart-tag/progress', { params: { query: jobId ? { job_id: jobId } : { queue_id: queueId } } }))
     if (!jobId) {
-      jobId = startedJobId(last, queueId)
+      jobId = jobOfPlace(last, queueId, enqueuedAt, hooks.signal)
       if (!jobId) {
-        gone = waiting(last, queueId) ? 0 : gone + 1
-        if (gone >= GONE_AFTER) {
-          if (hooks.signal.aborted) throw new Cancelled()
-          throw new Error(tt('reverse.queueGone'))
-        }
         hooks.onPhase(hooks.signal.aborted ? 'cancelling' : 'queued')
         continue
       }
     }
     if (!hooks.signal.aborted) hooks.onPhase('running')
   }
+}
+
+/** The job our queue place became, or null while it still waits; a place that ended without a job, or is unknown, throws. */
+function jobOfPlace(raw: Raw, queueId: string, enqueuedAt: string | undefined, signal: AbortSignal): string | null {
+  const now = queuedRunAnswer(raw, queueId, enqueuedAt)
+  if (now.state === 'waiting') return null
+  if (now.state === 'running' || now.state === 'done') return now.jobId
+  if (signal.aborted) throw new Cancelled()
+  if (now.state === 'lost') throw new Error(tt('reverse.lost'))
+  const errors = Array.isArray(raw.errors) ? (raw.errors as Raw[]) : []
+  throw new Error(str(raw.message) || str(errors[0]?.error) || str(raw.status))
 }
 
 /** The vision model, alone or given the tagger's tags. */
