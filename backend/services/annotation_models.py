@@ -81,6 +81,7 @@ class TrainingCaptionRevisionCreateRequest(TrainingCaptionHeadRequest):
     content: TrainingCaptionContentV1
     # V4: a revision written from AI results is recorded as such (author
     # "ai"), so a later AI run can tell it from a user's own edit.
+    # Client-asserted: trusted only because the app is local and single-user.
     ai_provenance: TrainingCaptionAiProvenance | None = None
 
 

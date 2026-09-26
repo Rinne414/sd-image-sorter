@@ -43,7 +43,7 @@ export const enDataset: Record<keyof typeof zhCNDataset, string> = {
   'dataset.delete.body': "This also deletes the batch's dataset project, which disappears from V3.5 too: the list and order of its {n} images, its training settings and any captions written for it.",
   'dataset.delete.uploads': 'It also deletes the files uploaded into this batch ({n}).',
   'dataset.delete.keeps': 'Library images and images in folders on your computer stay as they are. If you may need it again, archive it instead.',
-  'dataset.delete.unknown': 'The dataset project could not be read. Deleting also deletes its project; originals and folder images stay as they are.',
+  'dataset.delete.unknown': 'The dataset project could not be read, so it cannot be deleted now (deleting takes the project too, and the version must be seen first). Close this and try again.',
   'dataset.delete.orphanBody': "This batch's dataset project was deleted in V3.5; only the batch itself is deleted here.",
   'dataset.orphaned': 'Project deleted in V3.5',
   'dataset.orphanedView': 'The dataset project of "{name}" was deleted in V3.5. There is nothing left to work on in this batch; it can only be deleted.',

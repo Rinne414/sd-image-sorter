@@ -160,6 +160,17 @@ def _dataset_conflict(error: batch_db.BatchError) -> Optional[HTTPException]:
                 "batch_id": error.batch_id,
             },
         )
+    if isinstance(error, batch_db.BatchProjectRevisionRequiredError):
+        return HTTPException(
+            400,
+            {
+                "code": "dataset_project_revision_required",
+                "message": "Deleting a dataset batch deletes its project: send the "
+                "expected_project_revision the user confirmed.",
+                "batch_id": error.batch_id,
+                "project_id": error.project_id,
+            },
+        )
     if isinstance(error, batch_db.BatchProjectRevisionConflictError):
         return HTTPException(
             409,

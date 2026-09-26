@@ -94,6 +94,16 @@ class BatchProjectRevisionConflictError(BatchError):
         )
 
 
+class BatchProjectRevisionRequiredError(BatchError):
+    def __init__(self, batch_id: int, project_id: int):
+        self.batch_id = batch_id
+        self.project_id = project_id
+        super().__init__(
+            f"Batch {batch_id} deletes dataset project {project_id}: "
+            "expected_project_revision is required"
+        )
+
+
 def _begin_write(conn: sqlite3.Connection) -> None:
     conn.execute("BEGIN IMMEDIATE")
 
@@ -453,14 +463,17 @@ def delete_batch(batch_id: int, expected_project_revision: int | None = None) ->
 
     The project cascade removes its items, folder-image references and every
     caption subject, revision and head. Library rows and image files (Library
-    or folder) are never touched. With ``expected_project_revision`` a project
-    changed since the user confirmed (by V3.5, say) is not deleted.
+    or folder) are never touched. A batch that still has its project needs
+    ``expected_project_revision``: a project changed since the user confirmed
+    (by V3.5, say), or a request without the revision, deletes nothing.
     """
     with get_db() as conn:
         _begin_write(conn)
         row = _batch_row(conn, batch_id)
         project_id = row["dataset_project_id"]
-        if project_id is not None and expected_project_revision is not None:
+        if project_id is not None:
+            if expected_project_revision is None:
+                raise BatchProjectRevisionRequiredError(batch_id, int(project_id))
             _require_project_revision(conn, int(project_id), expected_project_revision)
         conn.execute("DELETE FROM batches WHERE id = ?", (batch_id,))
         if project_id is not None:

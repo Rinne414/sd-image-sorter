@@ -123,7 +123,7 @@ function DeleteDialog({ batch, onClose }: { batch: Extract<BatchDialog, { type: 
 
   const go = async () => {
     setBusy(true)
-    // A dataset batch deletes its project: only the version the user was shown.
+    // A dataset batch deletes its project: only the version the user was shown (the backend requires it).
     const ok = await deleteBatch(batch, dataset ? (facts.data?.project.revision ?? null) : null)
     setBusy(false)
     if (ok) onClose()
@@ -134,7 +134,7 @@ function DeleteDialog({ batch, onClose }: { batch: Extract<BatchDialog, { type: 
       <button ref={cancelRef} type="button" className="btn btn-ghost" onClick={onClose}>
         {t('common.cancel')}
       </button>
-      <button type="button" className="btn btn-danger" onClick={() => void go()} disabled={busy || (dataset && facts.isPending)} data-testid="batch-delete-ok">
+      <button type="button" className="btn btn-danger" onClick={() => void go()} disabled={busy || (dataset && !facts.data)} data-testid="batch-delete-ok">
         {t('batch.delete.ok')}
       </button>
     </>

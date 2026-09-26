@@ -44,7 +44,7 @@ export const zhCNDataset = {
   'dataset.delete.body': '会同时删除这个批次的数据集项目，V3.5 里也会消失：{n} 张图的清单和顺序、训练设置，以及写过的 caption。',
   'dataset.delete.uploads': '还会删除上传进这个批次的文件（{n} 个）。',
   'dataset.delete.keeps': '图库里的原图和电脑文件夹里的图片都不动。以后可能还要用，请改用「归档」。',
-  'dataset.delete.unknown': '读不到这个数据集项目的内容。删除会同时删除它的项目；原图和文件夹里的图片不动。',
+  'dataset.delete.unknown': '读不到这个数据集项目的内容，所以现在不能删除（删除会连同项目一起删，要先看清删的是哪个版本）。关掉再试一次。',
   'dataset.delete.orphanBody': '这个批次的数据集项目已在 V3.5 里删除，这里只删除批次本身。',
   'dataset.orphaned': '项目已在 V3.5 删除',
   'dataset.orphanedView': '「{name}」的数据集项目已在 V3.5 里删除，这个批次没有东西可做了，只能删除。',

@@ -155,7 +155,11 @@ def test_uploads_go_to_the_batch_folder_and_can_join_the_project(
     with test_db.get_db() as conn:
         assert conn.execute("SELECT COUNT(*) FROM images").fetchone()[0] == library_rows
 
-    assert test_client.delete(f"/api/batches/{batch['id']}").status_code == 200
+    revision = _view(test_client, batch["id"])["project"]["revision"]
+    deleted = test_client.delete(
+        f"/api/batches/{batch['id']}", params={"expected_project_revision": revision}
+    )
+    assert deleted.status_code == 200
     assert not uploads.exists()
 
 

@@ -33,6 +33,7 @@ class TrainingCaptionBatchEntryRequest(_StrictModel):
     restore_revision_id: PositiveStrictInt | None = None
     # With content: the batch template's caption for an image nobody had
     # edited (an undo putting it back), recorded as a system snapshot.
+    # Client-asserted: trusted only because the app is local and single-user.
     template_snapshot: bool = False
 
     @model_validator(mode="after")

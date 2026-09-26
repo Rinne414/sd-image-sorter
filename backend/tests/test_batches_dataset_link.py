@@ -431,7 +431,10 @@ def test_delete_removes_project_captions_and_owned_uploads_never_originals(
         == 1
     )
 
-    deleted = test_client.delete(f"/api/batches/{batch['id']}")
+    revision = test_client.get(f"/api/dataset/projects/{project_id}").json()["revision"]
+    deleted = test_client.delete(
+        f"/api/batches/{batch['id']}", params={"expected_project_revision": revision}
+    )
 
     assert deleted.status_code == 200, deleted.text
     assert deleted.json() == {"deleted": True, "batch_id": batch["id"]}
