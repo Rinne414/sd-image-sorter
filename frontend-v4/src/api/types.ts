@@ -197,14 +197,46 @@ export interface BatchTemplatesResponse {
   builtin_steps: Record<BatchKind, BatchStep[]>
 }
 
+/** GET /api/library-health. The parts after issue_counts feed the health report (features/status/health.ts). */
 export interface LibraryHealth {
   summary: {
     total_images: number
     readable_images: number
     tagged_percent: number
     actionable_count: number
+    metadata_ready_percent?: number
+    quality_score?: number
   }
   issue_counts: Record<string, number>
+  duplicate_filenames?: { groups: number; images: number; samples: { filename: string; count: number; total_size: number | null }[] }
+  top_folders?: HealthFolder[]
+  issue_samples?: HealthSample[]
+  recommendations?: { kind: string; severity: 'info' | 'warning'; count: number }[]
+}
+
+export interface HealthFolder {
+  folder: string
+  count: number
+  total_size: number | null
+  missing_text?: number
+  untagged?: number
+  unreadable?: number
+}
+
+/** A file the report lists for attention, with the columns that say why. */
+export interface HealthSample {
+  id: number
+  filename: string | null
+  path: string | null
+  generator: string | null
+  metadata_status: string | null
+  read_error: string | null
+  prompt: string | null
+  sidecar_caption: string | null
+  checkpoint_normalized: string | null
+  width: number | null
+  height: number | null
+  tagged_at: string | null
 }
 
 export interface MissingSummary {

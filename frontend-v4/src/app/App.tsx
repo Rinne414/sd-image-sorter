@@ -11,6 +11,7 @@ import { LibraryPage } from '../features/library/LibraryPage'
 import { ShortcutSheet } from '../features/library/ShortcutSheet'
 import { CompareDialog } from '../features/similar/CompareDialog'
 import { DuplicatesDialog } from '../features/similar/DuplicatesDialog'
+import { HealthDialog } from '../features/status/HealthDialog'
 import { useLang } from '../i18n'
 import { useApp } from '../state/store'
 import styles from './App.module.css'
@@ -52,6 +53,7 @@ export function App() {
       <ShortcutSheet />
       <CompareDialog />
       <DuplicatesDialog />
+      <HealthDialog />
       <JobsRunner />
       <DropImport />
       <SelectionDialogs />

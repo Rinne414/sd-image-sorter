@@ -1,13 +1,15 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { findLoadedImage } from '../../api/loaded'
 import { useT } from '../../i18n'
 import { tailOfPath } from '../../lib/paths'
 import { useApp } from '../../state/store'
 import { Icon } from '../../ui/Icon'
 import { useClickOutside, useLayer } from '../../ui/layers'
+import { useToasts } from '../../ui/toasts'
 import { canStop, jobHeadline, stopJob, undoJob, useJobs, type Job } from './jobs'
 import styles from './Jobs.module.css'
 import { isFinished } from './progress'
+import { resetStuck, useStalled } from './stuckReset'
 import { useSelectionDialog } from '../selection/dialogs'
 import { openFolderPath } from '../library/fileActions'
 
@@ -134,6 +136,7 @@ function JobRow({ job }: { job: Job }) {
               </button>
             )}
           </div>
+          <StuckReset job={job} />
         </>
       )}
       {finished && p.topTags.length > 0 && (
@@ -183,6 +186,30 @@ function JobRow({ job }: { job: Job }) {
         </button>
       )}
     </li>
+  )
+}
+
+/** Offered once a stop has hung past the stall window; the backend refuses it while the worker is alive. */
+function StuckReset({ job }: { job: Job }) {
+  const t = useT()
+  const stalled = useStalled(job)
+  const [busy, setBusy] = useState(false)
+  if (!stalled) return null
+  const reset = async () => {
+    setBusy(true)
+    const { outcome, reason } = await resetStuck(job.kind)
+    setBusy(false)
+    // Cleared: the next poll ends the job and says so.
+    if (outcome === 'running') useToasts.getState().push(t('status.stuck.stillRunning'), 'info')
+    if (outcome === 'failed') useToasts.getState().push(t('error.generic', { reason: reason ?? '?' }), 'error')
+  }
+  return (
+    <div className={styles.stuck} data-testid="job-stuck">
+      <p className={styles.warnNote}>{t('status.stuck.note')}</p>
+      <button type="button" className="btn" onClick={() => void reset()} disabled={busy}>
+        {t('status.stuck.reset')}
+      </button>
+    </div>
   )
 }
 

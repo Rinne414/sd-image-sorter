@@ -10,6 +10,7 @@ import { driveSmartTag } from './smartTagDriver'
 import { drivePurity, drivePurityDownload } from './purityDriver'
 import { driveMasks } from './maskDriver'
 import { adoptAesthetic, driveAesthetic } from './aestheticDriver'
+import { adoptReparse, driveReparse } from './reparseDriver' // reparse/reread
 
 // Every long job the user started (or that was already running when V4
 // opened) lives here until dismissed. The backend runs one job per queue
@@ -56,6 +57,7 @@ type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors'
   | 'purity' | 'purityget'
   | 'masks'
   | 'aesthetic'
+  | 'reparse' | 'reread'
 
 // Censor work over a batch (detecting, SAM3 refining, filters) runs one at a time.
 const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind === 'refine' || kind === 'adjust' ? 'detect' : kind)
@@ -150,6 +152,8 @@ const DRIVERS: Record<Queue, Driver> = {
   purityget: drivePurityDownload,
   masks: driveMasks,
   aesthetic: driveAesthetic,
+  reparse: driveReparse,
+  reread: driveReparse, // reparse/reread share the backend's one slot (409 while either runs)
 }
 
 export const canStop = (kind: JobKind) => DRIVERS[queueOf(kind)].cancel !== null
@@ -303,6 +307,7 @@ export async function adoptRunningJobs(): Promise<void> {
     adopt('embed', (raw) => (raw.running === true ? { kind: 'embed', progress: readProgress('embed', raw) } : null)),
     adoptDuplicateScan(),
     adopt('aesthetic', adoptAesthetic),
+    adopt('reparse', adoptReparse), // reparse/reread
     adopt('install', (raw) => {
       const result = (raw.prepare_result ?? {}) as Record<string, unknown>
       if (result.active !== true || typeof result.model_id !== 'string') return null
@@ -349,6 +354,8 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   purityget: ['purity-status'],
   masks: ['mask-status'],
   aesthetic: ['images', 'image', 'image-count', 'library-health'],
+  reparse: ['images', 'image', 'image-count', 'library-health'],
+  reread: ['images', 'image', 'image-count', 'library-health', 'missing-summary', 'missing-groups'], // reread: a file that no longer opens joins the missing files
 }
 
 let onUndo: ((job: Job) => Promise<void>) | null = null
@@ -418,6 +425,8 @@ const RUNNING: Record<JobKind, MessageKey> = {
   purityget: 'dataset.check.purity.downloading',
   masks: 'dataset.masks.job.running',
   aesthetic: 'info.aes.job.running',
+  reparse: 'status.reparse.running',
+  reread: 'status.reread.running',
 }
 
 const DONE: Record<JobKind, MessageKey> = {
@@ -441,6 +450,8 @@ const DONE: Record<JobKind, MessageKey> = {
   purityget: 'dataset.check.purity.downloaded',
   masks: 'dataset.masks.job.done',
   aesthetic: 'info.aes.job.done',
+  reparse: 'status.reparse.done',
+  reread: 'status.reread.done',
 }
 
 /** One line that says what happened (or is happening) to this job. */

@@ -276,6 +276,12 @@
   text-decoration-color: var(--text-2);
 }
 
+/* The way into the full library report, under the rows. */
+.report {
+  display: block;
+  margin: 6px 8px 0;
+}
+
 .fix:disabled {
   color: var(--muted);
   text-decoration: none;

@@ -4,6 +4,7 @@ import { zhCNPublish } from './zh-CN.publish'
 import { zhCNLibrary } from './zh-CN.library'
 import { zhCNSimilar } from './zh-CN.similar'
 import { zhCNInfo } from './zh-CN.info'
+import { zhCNStatus } from './zh-CN.status'
 
 export const zhCN = {
   ...zhCNPublish,
@@ -11,6 +12,7 @@ export const zhCN = {
   ...zhCNSimilar,
   ...zhCNInfo,
   ...zhCNDataset,
+  ...zhCNStatus,
   'app.name': 'SD Image Sorter',
   'nav.home': '首页',
   'nav.library': '图库',

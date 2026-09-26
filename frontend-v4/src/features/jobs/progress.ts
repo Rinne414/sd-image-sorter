@@ -2,6 +2,7 @@ import { readSmartTag, type SmartTagContext } from './smartTagJob'
 import { readPurity, readPurityDownload } from './purityJob'
 import { readMasks } from './maskJob'
 import { readAesthetic } from './aestheticJob'
+import { readReparse } from './reparseJob' // reparse/reread
 // Reads the backend's progress payloads for long jobs into one shape.
 // move/copy: GET /api/move/progress · trash: GET /api/images/delete-selected/progress
 // · remove: GET /api/images/remove-selected/progress · tag: GET /api/tag/progress
@@ -13,6 +14,7 @@ import { readAesthetic } from './aestheticJob'
 // · purity/purityget: character purity (CCIP) analysis and its model download, read in purityJob.ts.
 // · masks: GET /api/bulk-jobs/{id} (auto-masking a dataset's Library images), read in maskJob.ts.
 // · aesthetic: GET /api/aesthetic/progress, or this page's run over picked images, read in aestheticJob.ts.
+// · reparse/reread: GET /api/bulk-jobs/{id} (recover missing text / re-read failed details), read in reparseJob.ts.
 
 /**
  * tags: a bulk tag edit, finished when it is recorded (kept for its undo).
@@ -40,6 +42,8 @@ export type JobKind =
   | 'purityget'
   | 'masks'
   | 'aesthetic'
+  | 'reparse'
+  | 'reread'
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
 
 export interface JobFailure {
@@ -89,6 +93,7 @@ export interface ReadContext {
   smartTag?: SmartTagContext
   purityJobId?: string // purity: the character purity analysis job we started
   maskJobId?: string // masks: the auto-mask bulk job we started
+  reparseJobId?: string // reparse/reread: the metadata repair bulk job we started
 }
 
 const KNOWN: ReadonlySet<string> = new Set(['running', 'cancelling', 'done', 'cancelled', 'error', 'idle'])
@@ -284,6 +289,9 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
       return readMasks(base, raw, ctx.maskJobId)
     case 'aesthetic':
       return readAesthetic(base, raw)
+    case 'reparse': // reparse/reread
+    case 'reread':
+      return readReparse(base, raw, ctx.reparseJobId) // reparse/reread
   }
 }
 

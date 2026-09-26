@@ -3,20 +3,17 @@ import { useImageCount } from '../../api/queries'
 import { parseSearch, toImageParams } from '../../lib/searchQuery'
 import { useSavedSearches, type SavedSearch } from '../../state/savedSearches'
 import { useToasts } from '../../ui/toasts'
-import { useFavorites, useFolders, useGenerators, useLibraries, useLibraryHealth, useMissingCount } from '../../api/queries'
-import { useJobs } from '../jobs/jobs'
-import { isFinished } from '../jobs/progress'
+import { useFavorites, useFolders, useGenerators, useLibraries } from '../../api/queries'
 import { useSelectionDialog } from '../selection/dialogs'
-import { startColorAnalysis, useColorsMissing } from '../status/colorAnalysis'
-import { useT, type MessageKey } from '../../i18n'
+import { useStatusDialogs } from '../status/dialogs'
+import { useStatusRows, type StatusRow } from '../status/statusRows'
+import { useT } from '../../i18n'
 import { generatorName, shortFolder } from '../../lib/format'
 import { useApp } from '../../state/store'
 import styles from './Rail.module.css'
 import { Icon } from '../../ui/Icon'
 import { useClickOutside, useLayer } from '../../ui/layers'
 import { useRailSections, type RailSectionId } from './railSections'
-import { useSimilarStatus } from '../similar/status'
-import { scoreLibrary } from '../info/aesthetic'
 
 interface Props {
   /** Prompt text woven faintly behind the library name. */
@@ -244,46 +241,11 @@ function Row({ label, count, active, onClick, icon, iconClass, dim, title }: Row
   )
 }
 
-interface StatusRow {
-  key: MessageKey
-  n: number
-  /** Quiet rows are chores, not problems (colour analysis). */
-  quiet?: boolean
-  action?: { label: string; run: () => void; busy?: boolean }
-}
-
 /** Only speaks up when something needs attention, and offers the fix next to it. */
 function Status() {
   const t = useT()
-  const health = useLibraryHealth()
-  const missing = useMissingCount()
-  const colors = useColorsMissing()
-  const showFor = useSelectionDialog((s) => s.showFor)
-  const analysing = useJobs((s) => s.jobs.some((j) => j.kind === 'colors' && !isFinished(j.progress.status)))
-  const scoring = useJobs((s) => s.jobs.some((j) => j.kind === 'aesthetic' && !isFinished(j.progress.status)))
-  const similar = useSimilarStatus()
-  if (!health.data) return null
-  const c = health.data.issue_counts
-  const untagged = c.untagged ?? 0
-  const rows: StatusRow[] = [
-    { key: 'rail.untagged', n: untagged, action: { label: t('sel.tag'), run: () => showFor('tag', null, untagged) } },
-    { key: 'rail.unreadable', n: c.unreadable ?? 0 },
-    { key: 'rail.missing', n: missing.data ?? 0, action: { label: t('status.handleMissing'), run: () => showFor('missing', null, missing.data ?? 0) } },
-    { key: 'rail.metaError', n: c.metadata_error ?? 0 },
-    {
-      key: 'status.colorsMissing',
-      n: colors.data?.missing ?? 0,
-      quiet: true,
-      action: { label: analysing ? t('status.analysing') : t('status.analyse'), run: () => void startColorAnalysis(), busy: analysing },
-    },
-    {
-      key: 'info.aes.missing',
-      n: c.missing_aesthetic ?? 0,
-      quiet: true,
-      action: { label: scoring ? t('info.aes.scoring') : t('info.aes.scoreAll'), run: () => void scoreLibrary(), busy: scoring },
-    },
-    ...similar,
-  ]
+  const rows = useStatusRows()
+  if (!rows) return null
   const shown = rows.filter((r) => r.n > 0)
   return (
     <section className={styles.status} aria-label={t('rail.status')} data-testid="library-status">
@@ -294,6 +256,11 @@ function Status() {
 
 function StatusBody({ shown }: { shown: StatusRow[] }) {
   const t = useT()
+  const openReport = (
+    <button type="button" className={`${styles.fix} ${styles.report}`} onClick={() => useStatusDialogs.getState().setReport(true)} data-testid="status-report-open">
+      {t('status.report.open')}
+    </button>
+  )
   return (
     <Section id="status" title={t('rail.status')}>
       {shown.length === 0 ? (
@@ -312,6 +279,7 @@ function StatusBody({ shown }: { shown: StatusRow[] }) {
           ))}
         </ul>
       )}
+      {openReport}
     </Section>
   )
 }

@@ -190,3 +190,10 @@
 .job > button {
   align-self: flex-start;
 }
+
+/* A stop that hung: what it means, and the reset beside it. */
+.stuck {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}

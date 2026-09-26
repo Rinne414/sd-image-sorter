@@ -13,7 +13,7 @@ text is a ``.txt``/``.json`` tag list, without inventing a prompt for them.
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
-from services import metadata_repair_service
+from services import metadata_reread_service, metadata_repair_service
 from services.bulk_job_service import (
     BulkJobHandle,
     JOB_KIND_REPARSE_METADATA,
@@ -24,10 +24,17 @@ from services.bulk_job_service import (
 router = APIRouter(prefix="/api", tags=["metadata-repair"])
 
 
+SCOPE_MISSING_PROMPT = "missing_prompt"
+REPARSE_SCOPES = (SCOPE_MISSING_PROMPT, metadata_reread_service.SCOPE)
+
+
 class ReparseRequest(BaseModel):
     scope: str = Field(
-        default="missing_prompt",
-        description="Which rows to retry. Only 'missing_prompt' is supported.",
+        default=SCOPE_MISSING_PROMPT,
+        description=(
+            "Which rows to retry: 'missing_prompt' recovers missing text; "
+            "'metadata_error' re-reads the files whose generation details failed to read."
+        ),
     )
 
 
@@ -74,11 +81,17 @@ Two different recoveries are counted separately and never conflated:
 those land in `sidecar_caption` and deliberately leave `prompt` empty, because
 the image was not generated from that text. Other counts: still_missing /
 used_raw / used_file / missing_source.
+
+`scope: "metadata_error"` instead re-reads the file of every readable image
+whose generation details failed to read (`metadata_status = 'error'`), like the
+per-image re-read. Its result carries `scope` plus `fixed` / `still_error` /
+`unreadable` (the file no longer opens) / `gone` (the file vanished; untouched).
+Both scopes share the one-at-a-time slot.
     """,
 )
 def start_reparse(request: ReparseRequest, background_tasks: BackgroundTasks):
     """Kick off the background text-recovery job."""
-    if request.scope != "missing_prompt":
+    if request.scope not in REPARSE_SCOPES:
         raise HTTPException(status_code=422, detail="Unsupported scope")
     service = get_bulk_job_service()
     job_id = service.create_job(JOB_KIND_REPARSE_METADATA, message="Queued")
@@ -91,7 +104,17 @@ def start_reparse(request: ReparseRequest, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=409, detail="A metadata re-parse is already running")
 
     def _worker(handle: BulkJobHandle) -> None:
-        metadata_repair_service.run_reparse_job(handle)
+        try:
+            if request.scope == metadata_reread_service.SCOPE:
+                metadata_reread_service.run_reread_job(handle)
+            else:
+                metadata_repair_service.run_reparse_job(handle)
+        finally:
+            # The library status caches its report; drop it before the job
+            # reads as finished, so the refresh that follows sees the repair.
+            from services.sorting_service import invalidate_library_health_cache
+
+            invalidate_library_health_cache()
 
     def _run_job() -> None:
         try:

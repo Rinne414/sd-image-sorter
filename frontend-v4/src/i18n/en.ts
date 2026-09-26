@@ -3,6 +3,7 @@ import { enPublish } from './en.publish'
 import { enLibrary } from './en.library'
 import { enSimilar } from './en.similar'
 import { enInfo } from './en.info'
+import { enStatus } from './en.status'
 import type { MessageKey } from './zh-CN'
 
 export const en: Record<MessageKey, string> = {
@@ -11,6 +12,7 @@ export const en: Record<MessageKey, string> = {
   ...enSimilar,
   ...enInfo,
   ...enDataset,
+  ...enStatus,
   'app.name': 'SD Image Sorter',
   'nav.home': 'Home',
   'nav.library': 'Library',

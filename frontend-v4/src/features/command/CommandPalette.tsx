@@ -22,6 +22,7 @@ import { useSimilarDialogs } from '../similar/dialogs'
 import { pickImageFile } from '../similar/imageSearch'
 import { startIndexing } from '../similar/similarApi'
 import { useSimilar } from '../similar/similarStore'
+import { useStatusDialogs } from '../status/dialogs'
 import styles from './CommandPalette.module.css'
 
 interface Command {
@@ -124,6 +125,7 @@ function Palette() {
     list.push(mk('semantic', 'palette.group.library', 'sim.palette.semantic', () => searchByMeaning()))
     list.push(mk('by-image', 'palette.group.library', 'sim.palette.byImage', pickImageFile))
     list.push(mk('duplicates', 'palette.group.library', 'sim.palette.duplicates', () => useSimilarDialogs.getState().setDuplicates(true)))
+    list.push(mk('report', 'palette.group.library', 'status.report.palette', () => useStatusDialogs.getState().setReport(true)))
     list.push(mk('build-index', 'palette.group.library', 'sim.palette.buildIndex', () => void withClip(() => void startIndexing())))
     if (s.page === 'library') list.push(mk('invert', 'palette.group.library', 'lib.palette.invert', () => void invertPicks(currentLibraryParams()), 'Ctrl+I'))
     list.push(mk('import', 'palette.group.library', 'palette.cmd.import', () => useSelectionDialog.getState().showFor('import', null, 1)))

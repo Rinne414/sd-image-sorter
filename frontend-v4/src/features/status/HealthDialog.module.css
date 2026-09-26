@@ -1,0 +1,295 @@
+/* The library report: a score strip, what to do next, then the detail. */
+
+.note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}
+
+.warn {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--fs-2);
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: minmax(150px, 190px) minmax(200px, 1fr) auto;
+  align-items: center;
+  gap: 12px 28px;
+  padding: 4px 0 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.score {
+  display: grid;
+  gap: 4px;
+}
+
+.scoreLabel {
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.scoreValue {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.scoreValue strong {
+  color: var(--text);
+  font-size: var(--fs-7);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.outOf {
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.meter {
+  display: block;
+  height: 3px;
+  background: var(--line);
+}
+
+.meter > span {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+}
+
+.summary[data-verdict='watch'] .meter > span {
+  background: var(--warn);
+}
+
+.summary[data-verdict='risk'] .meter > span {
+  background: var(--danger);
+}
+
+.verdict {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.verdictTitle {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-5);
+  font-weight: 600;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(84px, auto));
+  gap: 0 20px;
+  margin: 0;
+}
+
+.kpi {
+  display: grid;
+  gap: 2px;
+}
+
+.kpi dt {
+  color: var(--muted);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
+.kpi dd {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-5);
+}
+
+.section {
+  margin-top: 16px;
+  min-width: 0;
+}
+
+.heading {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: var(--fs-3);
+  font-weight: 600;
+}
+
+.headingNote {
+  color: var(--muted);
+  font-size: var(--fs-2);
+  font-weight: 400;
+}
+
+.steps,
+.rows,
+.bars {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps,
+.rows {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.step:first-child,
+.row:first-child {
+  border-top: 0;
+}
+
+.stepMark {
+  align-self: stretch;
+  background: var(--line-strong);
+}
+
+.step[data-warn] .stepMark {
+  background: var(--warn);
+}
+
+.stepText {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+  line-height: 1.5;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 0 28px;
+}
+
+.stack {
+  min-width: 0;
+}
+
+.bars {
+  gap: 7px;
+}
+
+.bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 10px;
+  font-size: var(--fs-2);
+}
+
+.barLabel {
+  color: var(--text-2);
+  min-width: 0;
+}
+
+.bar[data-coverage] .barLabel {
+  color: var(--muted);
+}
+
+.tag {
+  margin-left: 6px;
+  color: var(--faint);
+}
+
+.barCount {
+  color: var(--text);
+}
+
+.barTrack {
+  grid-column: 1 / -1;
+  height: 3px;
+  background: var(--line);
+}
+
+.barTrack > span {
+  display: block;
+  height: 100%;
+  background: var(--warn);
+}
+
+.bar[data-coverage] .barTrack > span {
+  background: var(--muted);
+}
+
+.rows {
+  max-height: min(34vh, 300px);
+  overflow-y: auto;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-2);
+}
+
+.sample {
+  grid-template-columns: minmax(0, 1.1fr) auto auto minmax(0, 1fr) auto;
+}
+
+.rowMain {
+  display: grid;
+  min-width: 0;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMain > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rowDetail {
+  color: var(--muted);
+  font-family: inherit;
+}
+
+.rowNum {
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.reason {
+  color: var(--warn);
+  overflow-wrap: anywhere;
+}
+
+/* A fix printed as a link beside its row, as in the rail. */
+.fix {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+
+.fix:hover {
+  color: var(--text);
+  text-decoration-color: var(--text-2);
+}
