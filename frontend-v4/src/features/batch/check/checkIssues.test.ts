@@ -10,6 +10,7 @@ import {
   mergeIssues,
   projectIssues,
   purityIssues,
+  readAuditReport,
   reviewIssues,
   type AuditReport,
   type CheckIssue,
@@ -252,5 +253,24 @@ describe('merging the sources', () => {
     const severities = merged.map((i) => i.severity)
     expect(severities).toEqual([...severities].sort((a, b) => ['high', 'medium', 'low'].indexOf(a) - ['high', 'medium', 'low'].indexOf(b)))
     expect(byKind(merged, 'trigger_missing')[0]?.keys).toEqual([])
+  })
+})
+
+describe('an audit answer that is empty or not what the audit sends', () => {
+  it('is refused with a reason (the step shows it with Retry), never read as "no issues"', () => {
+    for (const raw of [undefined, null, {}, { items: 'x' }, { items: null }, 'text']) {
+      expect(() => readAuditReport(raw, 'the answer was incomplete'), JSON.stringify(raw)).toThrow('the answer was incomplete')
+    }
+  })
+
+  it('keeps a proper answer, and a missing duplicate list reads as none', () => {
+    const ok = readAuditReport<{ summary: unknown }>({ items: [{ image_id: 1, abs_path: '', width: 10, height: 10, flags: [] }], summary: { near_duplicate_failed: 0 } }, 'x')
+    expect(ok.items).toHaveLength(1)
+    expect(ok.duplicate_groups).toEqual([])
+    expect(ok.summary).toEqual({ near_duplicate_failed: 0 })
+  })
+
+  it('auditIssues itself does not throw on a report without items', () => {
+    expect(auditIssues({} as unknown as AuditReport, keyIndex([]))).toEqual([])
   })
 })

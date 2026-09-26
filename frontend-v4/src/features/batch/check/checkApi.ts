@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { api, unwrap } from '../../../api/client'
 import type { Batch, BatchProjectView } from '../../../api/types'
+import { translate, useLang } from '../../../i18n'
 import { useApp } from '../../../state/store'
 import { previewBody } from '../captionRules'
 import type { DatasetForm } from '../datasetSettings'
@@ -8,7 +9,7 @@ import type { HeadInfo } from '../datasetTag'
 import type { Entry } from '../entries'
 import { rowKey, type PreviewRow } from '../edit/captionContent'
 import { PREVIEW_CHUNK } from '../edit/initialContents'
-import type { AuditReport, HealthReport, ReviewIssueRow } from './checkIssues'
+import { readAuditReport, type AuditReport, type HealthReport, type ReviewIssueRow } from './checkIssues'
 import type { CheckOptions } from './checkOptions'
 
 // The check step's requests. Each source is its own query, so issues show as
@@ -129,6 +130,11 @@ export interface AuditAnswer extends AuditReport {
 /** The audit's cap on per-image rows; the whole batch fits under it. */
 const AUDIT_MAX_ITEMS = 50_000
 
+/** The audit's answer, or a readable failure when it came back empty or not the audit's (the source row offers Retry). */
+function readAudit(result: Parameters<typeof unwrap>[0]): AuditAnswer {
+  return readAuditReport<Pick<AuditAnswer, 'summary'>>(unwrap<unknown>(result), translate(useLang.getState().lang, 'error.badAnswer'))
+}
+
 /** Sizes read from disk and perceptual-hash near duplicates across every image (Library and folder). */
 export function useAudit(batch: Batch, entries: readonly Entry[], o: CheckOptions, run: number) {
   const library = useApp((s) => s.libraryId)
@@ -139,7 +145,7 @@ export function useAudit(batch: Batch, entries: readonly Entry[], o: CheckOption
     queryFn: async ({ signal }) => ({
       /** The images this run looked at (images added later are not in it until "Check again"). */
       sent: sentKeys(entries),
-      ...unwrap<AuditAnswer>(
+      ...readAudit(
         await api.POST('/api/dataset/audit', {
           body: {
             image_ids: ids,
@@ -168,7 +174,7 @@ export function useFolderAesthetic(batch: Batch, entries: readonly Entry[], o: C
     queryKey: ['check-audit-aesthetic', library, batch.id, run, o.minAesthetic],
     enabled: o.scoreFolders && o.minAesthetic > 0 && paths.length > 0,
     queryFn: async ({ signal }) =>
-      unwrap<AuditAnswer>(
+      readAudit(
         await api.POST('/api/dataset/audit', {
           body: { image_paths: paths, aesthetic_max: o.minAesthetic, enable_aesthetic: true, enable_phash: false, enable_untagged: false, item_limit: Math.min(AUDIT_MAX_ITEMS, paths.length) } as never,
           signal,

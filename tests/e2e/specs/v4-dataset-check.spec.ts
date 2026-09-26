@@ -277,6 +277,32 @@ test('every issue is listed: small, duplicates, empty caption, changed file; CCI
   }
 })
 
+test('an empty or broken audit answer says the check failed and offers Try again, instead of breaking the step', async ({ page }) => {
+  await stubPurity(page)
+  const pageErrors: string[] = []
+  page.on('pageerror', (e) => pageErrors.push(String(e)))
+  // first an empty 204, then {} (no image list; the app asks once more by itself), then the real audit
+  let audits = 0
+  await page.route('**/api/dataset/audit', (route) => {
+    audits += 1
+    if (audits === 1) return route.fulfill({ status: 204, body: '' })
+    if (audits === 2) return route.fulfill({ json: {} })
+    return route.continue()
+  })
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openCheck(page)
+  const audit = page.locator('[data-testid="check-source"][data-source="audit"]')
+  await expect(audit).toHaveAttribute('data-status', 'failed', { timeout: 20_000 })
+  await expect(audit).toContainText('incomplete')
+  await expect(page.getByTestId('check-step')).toBeVisible()
+  expect(audits).toBe(2)
+  await audit.getByRole('button', { name: 'Try again' }).click()
+  await expect(audit).toHaveAttribute('data-status', 'done', { timeout: 20_000 })
+  expect(audits).toBe(3)
+  await expect(issue(page, 'small')).toBeVisible()
+  expect(pageErrors).toEqual([])
+})
+
 test('open and pick lead into the edit step with those images', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   await openCheck(page)

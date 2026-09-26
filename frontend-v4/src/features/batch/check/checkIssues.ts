@@ -184,13 +184,24 @@ export interface AuditReport {
   duplicate_groups: { image_ids: number[]; abs_paths: string[] }[]
 }
 
+/**
+ * The audit's answer as the step reads it. An answer without its list of
+ * images (empty, cut off, not the audit's) is refused with `reason`, so the
+ * step says it failed and offers Retry instead of reading it as "no issues".
+ */
+export function readAuditReport<T extends object>(raw: unknown, reason: string): AuditReport & T {
+  const answer = raw && typeof raw === 'object' ? (raw as Partial<AuditReport> & T) : null
+  if (!answer || !Array.isArray(answer.items)) throw new Error(reason)
+  return { ...answer, items: answer.items, duplicate_groups: Array.isArray(answer.duplicate_groups) ? answer.duplicate_groups : [] }
+}
+
 export function auditIssues(report: AuditReport, index: KeyIndex): CheckIssue[] {
   const small: string[] = []
   const missing: string[] = []
   const low: string[] = []
   const notes: Record<string, string> = {}
   const scores: Record<string, string> = {}
-  for (const item of report.items) {
+  for (const item of Array.isArray(report.items) ? report.items : []) {
     const key = lookup(index, item.image_id, item.abs_path)
     if (!key) continue
     if (item.flags.includes('missing')) missing.push(key)
@@ -203,7 +214,7 @@ export function auditIssues(report: AuditReport, index: KeyIndex): CheckIssue[] 
       if (typeof item.aesthetic_score === 'number') scores[key] = item.aesthetic_score.toFixed(1)
     }
   }
-  const groups = report.duplicate_groups
+  const groups = (Array.isArray(report.duplicate_groups) ? report.duplicate_groups : [])
     .map((g) => [...new Set(g.image_ids.map((id, i) => lookup(index, id, g.abs_paths[i])).filter(present))])
     .filter((g) => g.length > 1)
   return [

@@ -594,6 +594,7 @@ export const zhCN = {
   'toast.undo': '撤销',
 
   'error.generic': '出错了：{reason}',
+  'error.badAnswer': '服务器的回答不完整（可能是它忙或者刚重启），请重试',
   'error.saveFailed': '没有存上：{reason}。已经恢复成原来的样子。',
   'toast.close': '关闭',
   'batch.kind.pixiv': 'Pixiv 投稿',

@@ -594,6 +594,7 @@ export const en: Record<MessageKey, string> = {
   'toast.undo': 'Undo',
 
   'error.generic': 'Something went wrong: {reason}',
+  'error.badAnswer': 'The server’s answer was incomplete (it may be busy or just restarted); try again',
   'error.saveFailed': "Couldn't save: {reason}. It's back to how it was.",
   'toast.close': 'Close',
   'batch.kind.pixiv': 'Pixiv post',
