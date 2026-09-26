@@ -78,3 +78,25 @@ test('formats preview in pick order; copy and download carry the whole text', as
   await page.getByRole('menuitem', { name: 'Export data…' }).click()
   await expect(page.getByTestId('export-dialog').getByRole('radio', { name: 'CSV table' })).toBeChecked()
 })
+
+test('an empty or broken export answer says so in plain words; Try again shows the preview', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  // an empty 204, then {} (no rows; the app asks once more by itself), then the real rows
+  let answers = 0
+  await page.route('**/api/images/export-data', (route) => {
+    answers += 1
+    if (answers === 1) return route.fulfill({ status: 204, body: '' })
+    if (answers === 2) return route.fulfill({ json: {} })
+    return route.continue()
+  })
+  await openLibrary(page, TOKEN, COUNT)
+  const dialog = await openExport(page)
+  const preview = dialog.getByTestId('export-preview')
+  await expect(preview).toHaveValue(/incomplete/, { timeout: 15_000 })
+  await expect(preview).not.toHaveValue(/Cannot read|undefined/)
+  expect(answers).toBe(2)
+  await dialog.getByRole('button', { name: 'Try again' }).click()
+  await expect(preview).toHaveValue(/frame 0/)
+  await expect(dialog.getByRole('button', { name: /^Download/ })).toBeEnabled()
+  await page.keyboard.press('Escape')
+})

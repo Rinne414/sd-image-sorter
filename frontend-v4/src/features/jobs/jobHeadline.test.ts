@@ -41,3 +41,15 @@ describe('a queued Smart Tag run the backend no longer knows', () => {
     expect(jobHeadline(lost())).toBe('4 张：找不到这次运行是怎么结束的（程序可能中途重启过）。请在批次里再运行一次「AI 打标」这一步。')
   })
 })
+
+describe('a move into a library folder listed with forward slashes (L:/…)', () => {
+  const moved = (destination: string): Job => ({
+    id: 'move-1', kind: 'move', count: 3, destination, ids: [], adopted: false, pollErrors: 0, ctx: {}, label: null, progress: done({ succeeded: 3, unit: 'images' }),
+  })
+
+  test('names the end of the folder, split on its own separator', () => {
+    useLang.setState({ lang: 'en' })
+    expect(jobHeadline(moved('L:/Pictures/AAA Reference/AAAwith prompt/NSFW/keep'))).toBe('Moved 3 to …/AAA Reference/AAAwith prompt/NSFW/keep')
+    expect(jobHeadline(moved('L:\\Pictures\\AAA Reference\\AAAwith prompt\\NSFW\\keep'))).toBe('Moved 3 to …\\AAA Reference\\AAAwith prompt\\NSFW\\keep')
+  })
+})

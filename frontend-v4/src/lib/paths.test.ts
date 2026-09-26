@@ -87,4 +87,11 @@ describe('each kind of path keeps its own separator', () => {
     expect(tailOfPath('L:/', 21)).toBe('L:/')
     expect(folderName('L:/')).toBe('L:')
   })
+
+  test('a drive root with a backslash (L:\\), as before', () => {
+    expect(parentFolder('L:\\')).toBeNull()
+    expect(joinFolder('L:\\', 'keep')).toBe('L:\\keep')
+    expect(tailOfPath('L:\\', 21)).toBe('L:\\')
+    expect(folderName('L:\\')).toBe('L:')
+  })
 })

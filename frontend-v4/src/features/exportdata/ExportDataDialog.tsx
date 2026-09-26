@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { api, unwrap } from '../../api/client'
+import { api, unwrapAnswer } from '../../api/client'
 import { useT, type MessageKey } from '../../i18n'
 import { copyText } from '../../lib/format'
 import { Dialog } from '../../ui/Dialog'
@@ -37,8 +37,9 @@ const MIME = { txt: 'text/plain;charset=utf-8', jsonl: 'application/x-ndjson;cha
 async function fetchRows(ids: number[], onProgress?: (done: number) => void): Promise<ExportImage[]> {
   const rows: ExportImage[] = []
   for (let start = 0; start < ids.length; start += PAGE) {
-    const res = unwrap<{ images: ExportImage[] }>(
+    const res = unwrapAnswer<{ images: ExportImage[] }>(
       await api.POST('/api/images/export-data', { body: { image_ids: ids.slice(start, start + PAGE), offset: 0, limit: PAGE } }),
+      (a) => Array.isArray(a.images),
     )
     rows.push(...res.images)
     onProgress?.(Math.min(ids.length, start + PAGE))
@@ -169,6 +170,11 @@ export function ExportDataDialog({ ids, onClose }: Props) {
             aria-label={t('export.preview')}
             spellCheck={false}
           />
+          {preview.isError && (
+            <button type="button" className={`btn btn-ghost ${styles.retry}`} onClick={() => void preview.refetch()} disabled={preview.isFetching} data-testid="export-retry">
+              {t('common.retry')}
+            </button>
+          )}
         </div>
       </div>
     </Dialog>

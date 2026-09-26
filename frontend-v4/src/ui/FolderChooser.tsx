@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { api, unwrap } from '../api/client'
+import { api, unwrapAnswer } from '../api/client'
 import { useT, type MessageKey } from '../i18n'
 import { folderNameProblem, joinFolder, tailOfPath, type FolderNameProblem } from '../lib/paths'
 import { Dialog } from './Dialog'
@@ -83,13 +83,18 @@ export function FolderChooser({
   // replaces it instead of being glued onto its end.
   const userMoved = useRef(false)
   const selectLanded = useRef(false)
+  // The folder last asked for (not the drive list an unreadable start falls back to): what Retry lists.
+  const wanted = useRef('')
 
   const browse = useCallback(async (path: string, opening = false): Promise<boolean> => {
     const req = ++request.current
     setLoading(true)
     setError(null)
     try {
-      const res = unwrap<Listing>(await api.POST('/api/browse-folder', { body: { path } }))
+      const res = unwrapAnswer<Listing>(
+        await api.POST('/api/browse-folder', { body: { path } }),
+        (a) => typeof a.current === 'string' && Array.isArray(a.subdirs),
+      )
       if (req !== request.current || (opening && userMoved.current)) return true
       setListing(res)
       setTyped(res.current)
@@ -107,6 +112,7 @@ export function FolderChooser({
 
   const go = (path: string) => {
     userMoved.current = true
+    wanted.current = path
     void browse(path)
   }
 
@@ -119,6 +125,7 @@ export function FolderChooser({
   useEffect(() => {
     if (userMoved.current) return
     const from = start ?? ''
+    wanted.current = from
     void browse(from, true).then((ok) => {
       if (!ok && from && !userMoved.current) void browse('', true)
     })
@@ -241,7 +248,10 @@ export function FolderChooser({
       </div>
       {error && (
         <p className={styles.error} role="alert">
-          {t('picker.error', { reason: error })}
+          {t('picker.error', { reason: error })}{' '}
+          <button type="button" className={styles.retry} onClick={() => void browse(wanted.current)} disabled={loading} data-testid="picker-retry">
+            {t('common.retry')}
+          </button>
         </p>
       )}
       <div className={styles.columns}>

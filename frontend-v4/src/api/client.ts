@@ -1,7 +1,9 @@
 import createClient from 'openapi-fetch'
 import type { paths } from './schema'
+import { translate, useLang } from '../i18n'
 import { debugMiddleware } from '../lib/debug'
 import { useApp } from '../state/store'
+import { checkAnswer } from './answer'
 
 // Typed requests: path + query params are checked against the backend's
 // OpenAPI schema (regenerate with `npm run gen:api`).
@@ -59,6 +61,14 @@ export function unwrap<T>(result: { data?: unknown; error?: unknown; response: R
     throw new ApiError(result.response.status, reason, codeOf(result.error), result.error ?? null)
   }
   return result.data as T
+}
+
+/**
+ * `unwrap` for an answer whose fields are read: one without them (empty, `{}`,
+ * cut off) fails with the plain "the server's answer was incomplete".
+ */
+export function unwrapAnswer<T>(result: { data?: unknown; error?: unknown; response: Response }, has: (answer: Record<string, unknown>) => boolean): T {
+  return checkAnswer<T>(unwrap<unknown>(result), has, translate(useLang.getState().lang, 'error.badAnswer'))
 }
 
 export { imageFileUrl, thumbnailUrl } from './urls'

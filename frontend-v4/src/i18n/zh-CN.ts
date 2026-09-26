@@ -293,6 +293,7 @@ export const zhCN = {
 
   'common.cancel': '取消',
   'common.close': '关闭',
+  'common.retry': '重试',
 
   'picker.titleMove': '移动 {n} 张图片',
   'picker.titleCopy': '复制 {n} 张图片',

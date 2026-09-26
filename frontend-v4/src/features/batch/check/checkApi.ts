@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { api, unwrap } from '../../../api/client'
+import { api, unwrap, unwrapAnswer } from '../../../api/client'
 import type { Batch, BatchProjectView } from '../../../api/types'
 import { translate, useLang } from '../../../i18n'
 import { useApp } from '../../../state/store'
@@ -197,7 +197,7 @@ export function useHealth(batch: Batch, entries: readonly Entry[], form: Dataset
     queryKey: ['check-health', library, batch.id, run, form?.trigger, form?.purpose, signature],
     enabled: !!form && !!finals && unique.length > 0,
     queryFn: async ({ signal }) =>
-      unwrap<HealthReport & { images_in_scope: number; images_truncated: boolean }>(
+      unwrapAnswer<HealthReport & { images_in_scope: number; images_truncated: boolean }>(
         await api.POST('/api/tags/consistency/report', {
           body: {
             image_ids: unique.map(([id]) => id),
@@ -207,6 +207,8 @@ export function useHealth(batch: Batch, entries: readonly Entry[], form: Dataset
           } as never,
           signal,
         }),
+        // (an answer without its findings fails plainly; the source row offers Retry)
+        (a) => Array.isArray(a.findings),
       ),
     placeholderData: keepPreviousData,
     staleTime: 60_000,

@@ -82,3 +82,25 @@ test('in the box while it lists: the start folder arrives selected, so typing re
   await input.press('Enter')
   await expect(page.getByTestId('folder-target')).toContainText(dest)
 })
+
+test('an empty or broken folder listing says so in plain words; Try again lists the start folder', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  // the start folder and the drive list it falls back to both answer empty, then {} (no folder list)
+  let blank = true
+  let answers = 0
+  await page.route('**/api/browse-folder', (route) => {
+    answers += 1
+    if (!blank) return route.continue()
+    return answers === 1 ? route.fulfill({ status: 204, body: '' }) : route.fulfill({ json: {} })
+  })
+  await openMoveDialog(page)
+  const dialog = page.getByTestId('folder-picker')
+  const alert = dialog.getByRole('alert')
+  await expect(alert).toContainText('incomplete')
+  await expect(alert).not.toContainText(/Cannot read|undefined/)
+  blank = false
+  await dialog.getByRole('button', { name: 'Try again' }).click()
+  await expect(dialog.getByRole('alert')).toHaveCount(0)
+  await expect(page.getByTestId('folder-path')).toHaveValue(path.join(tmpRoot, DIR))
+  await page.keyboard.press('Escape')
+})

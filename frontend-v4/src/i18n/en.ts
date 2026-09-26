@@ -293,6 +293,7 @@ export const en: Record<MessageKey, string> = {
 
   'common.cancel': 'Cancel',
   'common.close': 'Close',
+  'common.retry': 'Try again',
 
   'picker.titleMove': 'Move {n} images',
   'picker.titleCopy': 'Copy {n} images',

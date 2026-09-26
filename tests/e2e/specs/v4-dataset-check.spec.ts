@@ -303,6 +303,29 @@ test('an empty or broken audit answer says the check failed and offers Try again
   expect(pageErrors).toEqual([])
 })
 
+test('an empty or broken health answer says the check failed in plain words and offers Try again', async ({ page }) => {
+  await stubPurity(page)
+  // first an empty 204, then {} (no findings; the app asks once more by itself), then the real report
+  let reports = 0
+  await page.route('**/api/tags/consistency/report', (route) => {
+    reports += 1
+    if (reports === 1) return route.fulfill({ status: 204, body: '' })
+    if (reports === 2) return route.fulfill({ json: {} })
+    return route.continue()
+  })
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openCheck(page)
+  const health = page.locator('[data-testid="check-source"][data-source="health"]')
+  await expect(health).toHaveAttribute('data-status', 'failed', { timeout: 20_000 })
+  await expect(health).toContainText('incomplete')
+  // never react-query's own words ('["check-health",…] data is undefined')
+  await expect(health).not.toContainText('undefined')
+  expect(reports).toBe(2)
+  await health.getByRole('button', { name: 'Try again' }).click()
+  await expect(health).toHaveAttribute('data-status', 'done', { timeout: 20_000 })
+  expect(reports).toBe(3)
+})
+
 test('open and pick lead into the edit step with those images', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   await openCheck(page)

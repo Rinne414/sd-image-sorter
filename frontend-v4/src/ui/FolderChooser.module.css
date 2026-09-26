@@ -28,6 +28,17 @@
   overflow-wrap: anywhere;
 }
 
+.retry {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
 .columns {
   display: grid;
   grid-template-columns: 180px minmax(0, 1fr);
