@@ -114,6 +114,11 @@ function BatchRow({ batch }: { batch: BatchSummary }) {
             <button type="button" className={styles.fix} onClick={() => setRenaming(true)}>
               {t('batch.rename')}
             </button>
+            {batch.kind === 'dataset' && (
+              <button type="button" className={styles.fix} onClick={() => useBatchDialog.getState().show({ type: 'copy', batch })} data-testid="batch-copy">
+                {t('batch.copy.button')}
+              </button>
+            )}
             <button type="button" className={styles.fix} onClick={() => void patchBatch(batch.id, { archived: !archived }, batch.revision)}>
               {archived ? t('batch.unarchive') : t('batch.archive')}
             </button>

@@ -12,6 +12,7 @@ export type BatchDialog =
   | { type: 'create'; kind: BatchKind; template: BatchTemplate | null; imageIds: number[]; origin: CreateOrigin }
   | { type: 'delete'; batch: { id: number; name: string; item_count: number; kind: BatchKind; orphaned: boolean } }
   | { type: 'template'; batch: Batch }
+  | { type: 'copy'; batch: { id: number; name: string } }
 
 interface State {
   dialog: BatchDialog | null

@@ -114,6 +114,25 @@ export async function createBatch({ kind, name, templateId = null, imageIds = []
   }
 }
 
+/**
+ * A copy of a dataset batch under a new name ("Save as…"): the same images,
+ * order, settings and captions, as a new batch the original never shares with.
+ */
+export async function copyBatch(batchId: number, name: string): Promise<Batch | null> {
+  try {
+    const res = unwrap<{ batch: Batch }>(
+      await api.POST('/api/batches/{batch_id}/copy', { params: { path: { batch_id: batchId } }, body: { name: name.trim() } }),
+    )
+    return store(res.batch)
+  } catch (error) {
+    const code = error instanceof ApiError ? error.code : null
+    if (code === 'dataset_project_name_conflict') toast(tr('dataset.nameTaken', { name: name.trim() }), 'error')
+    else if (code === 'dataset_batch_copy_source_changed') toast(tr('batch.copy.changed'), 'error')
+    else return fail(error)
+    return null
+  }
+}
+
 export interface AddResult {
   batch: Batch
   added: number

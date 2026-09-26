@@ -62,6 +62,18 @@ export function defaultBatchName(base: string, date: Date, lang: Lang, taken: re
   return `${stem} (${n})`
 }
 
+/**
+ * The name a copy suggests: `stem`, then "(2)", "(3)" while a batch or project
+ * uses it. Compared in any case, as the backend compares dataset project names.
+ */
+export function copyName(stem: string, taken: readonly string[]): string {
+  const used = new Set(taken.map((name) => name.trim().toLowerCase()))
+  if (!used.has(stem.toLowerCase())) return stem
+  let n = 2
+  while (used.has(`${stem} (${n})`.toLowerCase())) n += 1
+  return `${stem} (${n})`
+}
+
 /** Settings that describe one batch only (where it came from), never carried into a template. */
 const PER_BATCH_SETTINGS = ['source_collection_id']
 

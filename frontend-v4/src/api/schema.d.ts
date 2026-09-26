@@ -5848,6 +5848,27 @@ export interface paths {
         patch: operations["patch_batch_api_batches__batch_id__patch"];
         trace?: never;
     };
+    "/api/batches/{batch_id}/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy a dataset batch under a new name (Save as…)
+         * @description A new dataset batch and project: same items, order, settings and captions
+         *     (as new rows that keep who wrote them); uploaded files are copied.
+         */
+        post: operations["post_batch_copy_api_batches__batch_id__copy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/batches/{batch_id}/project": {
         parameters: {
             query?: never;
@@ -6480,6 +6501,14 @@ export interface components {
             item_state?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * BatchCopyRequest
+         * @description A copy of a dataset batch ("Save as…") under a new name.
+         */
+        BatchCopyRequest: {
+            /** Name */
+            name: string;
         };
         /**
          * BatchCreateRequest
@@ -21254,6 +21283,43 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_batch_copy_api_batches__batch_id__copy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchCopyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -107,6 +107,11 @@ function Loaded({ batch }: { batch: Batch }) {
         <span className={`${styles.count} mono`} data-testid="batch-count">
           {t('rail.images', { n: batch.item_count })}
         </span>
+        {batch.kind === 'dataset' && (
+          <button type="button" className={`btn btn-ghost ${styles.copy}`} onClick={() => useBatchDialog.getState().show({ type: 'copy', batch })} data-testid="batch-copy">
+            {t('batch.copy.button')}
+          </button>
+        )}
       </header>
       {batch.kind === 'dataset' && <SettingsStrip batch={batch} />}
       <div className={styles.body}>

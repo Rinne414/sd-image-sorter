@@ -315,6 +315,67 @@ print("ok")
   await expect(view).toHaveAttribute('data-batch-id', String(first))
 })
 
+interface Head {
+  item: { item_type: string; image_id?: number }
+  active_revision: { author_class: string; source: string; content: { booru_caption: string } } | null
+}
+
+test('Save as makes a new dataset batch: the same images in order, the captions as its own; the original stays', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openV4(page, `#/batch/${batchId}`)
+  const original = await project(page)
+  const lib = original.items.find((i) => i.item_type === 'library')!
+  // a caption the tagger wrote on one Library image
+  const wrote = await apiJson(page, `/api/annotations/projects/${projectId}/training-captions/revisions`, {
+    method: 'POST',
+    body: {
+      expected_project_revision: original.revision,
+      expected_head_generation: 0,
+      subject: { item_type: 'library', image_id: lib.source_image_id },
+      content: { content_version: 1, booru_caption: '1girl, copied caption', nl_caption: '', caption_type: 'booru' },
+      ai_provenance: { source: 'wd14', model: 'wd-swinv2-tagger-v3' },
+    },
+  })
+  expect(wrote.status).toBe(201)
+
+  await page.getByTestId('batch-copy').click()
+  const dialog = page.getByTestId('batch-copy-dialog')
+  await expect(dialog.getByTestId('batch-copy-name')).toHaveValue(`${NAME} set (copy)`)
+  await expect(dialog).toContainText('AI-written ones stay AI-written')
+  await dialog.getByTestId('batch-copy-name').fill(`${NAME} second`)
+  await dialog.getByTestId('batch-copy-ok').click()
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByTestId('batch-name')).toHaveText(`${NAME} second`)
+  const copyId = Number(await page.getByTestId('batch-view').getAttribute('data-batch-id'))
+  expect(copyId).not.toBe(batchId)
+  const copyProjectId = (await apiJson<{ dataset_project_id: number }>(page, `/api/batches/${copyId}`)).body.dataset_project_id
+  const copied = await project(page, copyProjectId)
+  await expect(page.getByTestId('pick-tile')).toHaveCount(original.items.length)
+
+  // the same order; Library and folder images as they were; the dropped file is the copy's own
+  const keyOf = (item: ProjectItem) => (item.item_type === 'library' ? itemKey(item) : path.basename(item.path ?? ''))
+  expect(copied.items.map(keyOf)).toEqual(original.items.map(keyOf))
+  const droppedHere = copied.items.find((i) => (i.path ?? '').includes(`${FOLDER_DIR}-dropped`))!
+  const droppedThere = original.items.find((i) => (i.path ?? '').includes(`${FOLDER_DIR}-dropped`))!
+  expect(droppedHere.path).not.toBe(droppedThere.path)
+  expect(droppedHere.path).toMatch(new RegExp(`[\\\\/]batches[\\\\/]${copyId}[\\\\/]uploads[\\\\/]`))
+  const folderHere = copied.items.filter((i) => i.item_type === 'local' && !(i.path ?? '').includes('dropped')).map((i) => i.path)
+  const folderThere = original.items.filter((i) => i.item_type === 'local' && !(i.path ?? '').includes('dropped')).map((i) => i.path)
+  expect(folderHere).toEqual(folderThere)
+
+  // the caption came along and is still the tagger's
+  const heads = await apiJson<{ items: Head[] }>(page, `/api/annotations/projects/${copyProjectId}/training-captions/heads?expected_project_revision=${copied.revision}&limit=200`)
+  const head = heads.body.items.find((h) => h.item.image_id === lib.source_image_id)
+  expect(head?.active_revision?.content.booru_caption).toBe('1girl, copied caption')
+  expect(head?.active_revision?.author_class).toBe('ai')
+
+  // the original is as it was, and both are in the list
+  expect((await project(page)).items.map(itemKey)).toEqual(original.items.map(itemKey))
+  await openV4(page, '#/batch')
+  await expect(page.getByTestId('batch-row').filter({ hasText: `${NAME} second` })).toHaveCount(1)
+  await expect(page.getByTestId('batch-row').filter({ hasText: `${NAME} set` })).toHaveCount(1)
+})
+
 test('deleting a dataset batch says what goes, and refuses a project V3.5 changed after the confirmation opened', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   await openV4(page, '#/batch')

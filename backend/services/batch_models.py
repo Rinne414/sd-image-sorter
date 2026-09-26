@@ -59,6 +59,14 @@ class BatchCreateRequest(BaseModel):
         return self
 
 
+class BatchCopyRequest(BaseModel):
+    """A copy of a dataset batch ("Save as…") under a new name."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: BatchName
+
+
 class BatchPatchRequest(BaseModel):
     """Only the fields present are changed; ``current_step: null`` clears it."""
 

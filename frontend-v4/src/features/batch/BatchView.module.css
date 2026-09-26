@@ -55,6 +55,12 @@
   letter-spacing: 0.04em;
 }
 
+/* Save as… sits at the far end of the header, away from the name. */
+.copy {
+  flex: none;
+  margin-left: auto;
+}
+
 .body {
   display: grid;
   grid-template-columns: var(--rail-w) minmax(0, 1fr);

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import {
+  copyName,
   currentAfterEdit,
   defaultBatchName,
   enabledSteps,
@@ -141,5 +142,13 @@ describe('time ago', () => {
   test('a missing or broken time reads as nothing', () => {
     expect(timeAgo(null, 'en', now)).toBe('')
     expect(timeAgo('not a date', 'en', now)).toBe('')
+  })
+})
+
+describe('the name a copy (Save as…) suggests', () => {
+  test('the suggested name, or with (2), (3) when a batch or project already uses it, in any case', () => {
+    expect(copyName('Faces 副本', [])).toBe('Faces 副本')
+    expect(copyName('Faces (copy)', ['faces (COPY)'])).toBe('Faces (copy) (2)')
+    expect(copyName('Faces (copy)', ['Faces (copy)', 'Faces (copy) (2)'])).toBe('Faces (copy) (3)')
   })
 })

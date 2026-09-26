@@ -16,10 +16,16 @@ from fastapi.responses import FileResponse
 
 import db_batch_datasets as batch_dataset_db
 import db_batches as batch_db
-from services import batch_dataset_service, batch_export_service, batch_service
+from services import (
+    batch_dataset_copy,
+    batch_dataset_service,
+    batch_export_service,
+    batch_service,
+)
 from services.batch_models import (
     BatchCensoredCopyRequest,
     BatchCensoredDiscardRequest,
+    BatchCopyRequest,
     BatchCreateRequest,
     BatchExportNamesRequest,
     BatchExportRequest,
@@ -156,6 +162,15 @@ def _dataset_conflict(error: batch_db.BatchError) -> Optional[HTTPException]:
             409,
             {
                 "code": "batch_not_dataset",
+                "message": str(error),
+                "batch_id": error.batch_id,
+            },
+        )
+    if isinstance(error, batch_dataset_copy.BatchCopySourceChangedError):
+        return HTTPException(
+            409,
+            {
+                "code": "dataset_batch_copy_source_changed",
                 "message": str(error),
                 "batch_id": error.batch_id,
             },
@@ -304,6 +319,20 @@ def delete_batch(
 ) -> dict[str, Any]:
     try:
         return batch_service.delete_batch(batch_id, expected_project_revision)
+    except batch_db.BatchError as error:
+        _raise_http_error(error)
+
+
+@router.post(
+    "/{batch_id}/copy",
+    status_code=201,
+    summary="Copy a dataset batch under a new name (Save as…)",
+)
+def post_batch_copy(batch_id: int, request: BatchCopyRequest) -> dict[str, Any]:
+    """A new dataset batch and project: same items, order, settings and captions
+    (as new rows that keep who wrote them); uploaded files are copied."""
+    try:
+        return batch_dataset_copy.copy_dataset_batch(batch_id, request.name)
     except batch_db.BatchError as error:
         _raise_http_error(error)
 

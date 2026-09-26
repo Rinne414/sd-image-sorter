@@ -5,11 +5,11 @@ import { useApp } from '../../state/store'
 import { Dialog } from '../../ui/Dialog'
 import { useToasts } from '../../ui/toasts'
 import { tr } from '../jobs/jobs'
-import { createBatch, deleteBatch, saveTemplate, useBatches, useBatchTemplates } from './batchApi'
+import { copyBatch, createBatch, deleteBatch, saveTemplate, useBatches, useBatchTemplates } from './batchApi'
 import { DatasetDeleteBody, useDatasetDeleteFacts } from './DatasetDelete'
 import { useUnlinkedProjects } from './datasetApi'
 import { useBatchDialog, type BatchDialog } from './dialogStore'
-import { defaultBatchName, enabledSteps, templateSettings } from './batchLogic'
+import { copyName, defaultBatchName, enabledSteps, templateSettings } from './batchLogic'
 import styles from './BatchDialogs.module.css'
 import { kindLabel, stepLabel } from './labels'
 
@@ -22,6 +22,7 @@ export function BatchDialogs() {
   if (!dialog) return null
   if (dialog.type === 'create') return <CreateDialog dialog={dialog} onClose={close} />
   if (dialog.type === 'delete') return <DeleteDialog batch={dialog.batch} onClose={close} />
+  if (dialog.type === 'copy') return <CopyDialog batch={dialog.batch} onClose={close} />
   return <TemplateDialog batch={dialog.batch} onClose={close} />
 }
 
@@ -110,6 +111,65 @@ function CreateDialog({ dialog, onClose }: { dialog: Extract<BatchDialog, { type
       </label>
       <p className={styles.note}>{n > 0 ? t('batch.new.withPicks', { n }) : t('batch.new.empty')}</p>
       {steps.length > 0 && <StepsLine steps={steps} />}
+    </Dialog>
+  )
+}
+
+/** "Save as…" for a dataset batch: a new batch with the same images, settings and captions. */
+function CopyDialog({ batch, onClose }: { batch: { id: number; name: string }; onClose: () => void }) {
+  const t = useT()
+  const all = useBatches(true)
+  // The copy's name is its project's, which must not repeat any active project's (V3.5 ones too).
+  const unlinked = useUnlinkedProjects(true)
+  const stem = t('batch.copy.suggest', { name: batch.name })
+  const suggested = useMemo(() => copyName(stem, [...(all.data ?? []), ...(unlinked.data ?? [])].map((b) => b.name)), [stem, all.data, unlinked.data])
+  const [name, setName] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const value = name ?? suggested
+
+  const go = async () => {
+    if (!value.trim() || busy) return
+    setBusy(true)
+    const copy = await copyBatch(batch.id, value)
+    setBusy(false)
+    if (!copy) return
+    onClose()
+    useToasts.getState().push(tr('batch.copy.done', { name: copy.name }), 'info')
+    useApp.getState().openBatch(copy.id)
+  }
+
+  const footer = (
+    <>
+      <button type="button" className="btn btn-ghost" onClick={onClose}>
+        {t('common.cancel')}
+      </button>
+      <button type="button" className="btn btn-primary" onClick={() => void go()} disabled={!value.trim() || busy} data-testid="batch-copy-ok">
+        {t('batch.copy.ok')}
+      </button>
+    </>
+  )
+
+  return (
+    <Dialog title={t('batch.copy.title', { name: batch.name })} onClose={onClose} footer={footer} testId="batch-copy-dialog" initialFocus={inputRef}>
+      <label className={styles.field}>
+        <span>{t('batch.new.name')}</span>
+        <input
+          ref={inputRef}
+          value={value}
+          maxLength={NAME_MAX}
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              void go()
+            }
+          }}
+          data-testid="batch-copy-name"
+        />
+      </label>
+      <p className={styles.note}>{t('batch.copy.note')}</p>
     </Dialog>
   )
 }
