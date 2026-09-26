@@ -88,6 +88,7 @@ export const PICK_ROWS: readonly HelpRow[] = [
   { keys: ['Enter'], label: 'help.key.pickOpen' },
   { keys: ['Delete'], label: 'help.key.pickRemove' },
   { keys: ['Esc'], label: 'help.key.pickClear' },
+  { keys: ['Ctrl+Z'], label: 'help.key.orderUndo' },
 ]
 
 /** The sort page's keys per way of sorting (sort/sortModes.ts keyAction). */

@@ -1,23 +1,24 @@
-import { useEffect, useLayoutEffect, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import type { Batch } from '../../api/types'
-import { useT } from '../../i18n'
-import { isTypingTarget } from '../../lib/format'
-import { useApp } from '../../state/store'
-import { layerCount } from '../../ui/layers'
-import { moveCursor } from './batchLogic'
-import { entryThumb, type Entry } from './entries'
-import { ItemBadges, ItemImage } from './ItemImage'
+import { useT, type MessageKey } from '../../i18n'
+import { BatchFilterBar } from './BatchFilterBar'
 import { stepLabel } from './labels'
-import { dropIndex, moveTo, reorderTarget } from './orderLogic'
+import type { GroupMove } from './orderLogic'
+import { draggedKeys, movingKeys, orderMoves } from './orderMoves'
 import styles from './OrderStep.module.css'
+import { OrderTile } from './OrderTile'
+import { usePickKeys, useTileDrag } from './pickHooks'
+import { clickSelection, keepPresent, NO_PICKS, selectAll, type PickSelection } from './pickLogic'
 import { StepBar } from './StepBar'
+import { useStepView, useStepViews } from './stepView'
 import { useBatchEntries } from './useBatchEntries'
 
-interface Drag {
-  from: number
-  over: number
-  after: boolean
-}
+const MOVES: readonly { how: GroupMove; label: MessageKey }[] = [
+  { how: 'top', label: 'batch.order.top' },
+  { how: 'up', label: 'batch.order.up' },
+  { how: 'down', label: 'batch.order.down' },
+  { how: 'bottom', label: 'batch.order.bottom' },
+]
 
 /** Columns the grid currently lays out (for ↑/↓). */
 function useColumns(ref: React.RefObject<HTMLElement | null>): number {
@@ -40,117 +41,127 @@ interface Props {
   onNext: (step: string) => void
 }
 
-/** The posting order: large pictures as they will be posted; drag, or Alt + arrows / Home / End. */
+/**
+ * The posting order: large pictures as they will be posted. Click, Ctrl or
+ * Shift click select; the buttons, Alt + arrows / Home / End or a drag move
+ * the selection together (or the image under the cursor); Ctrl+Z undoes.
+ */
 export function OrderStep({ batch, next, onNext }: Props) {
   const t = useT()
   const source = useBatchEntries(batch)
-  const items = source.entries
+  const view = useStepView(batch.id, source.entries)
+  const shown = view.shown
+  const shownOrder = useMemo(() => shown.map((entry) => entry.key), [shown])
+  const positions = useMemo(() => new Map(source.entries.map((entry, i) => [entry.key, i])), [source.entries])
+  const stepRef = useRef<HTMLElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
   const cols = useColumns(gridRef)
-  const [cursor, setCursor] = useState(items.length > 0 ? 0 : -1)
-  const [drag, setDrag] = useState<Drag | null>(null)
+  const [cursor, setCursor] = useState(0)
+  const [picks, setPicks] = useState<PickSelection>(NO_PICKS)
   const [said, setSaid] = useState('')
-  const at = Math.min(cursor, items.length - 1)
-
-  const move = (from: number, to: number) => {
-    const keys = items.map((item) => item.key)
-    const reordered = moveTo(keys, from, to)
-    if (reordered === keys) return
-    const place = reordered.indexOf(keys[from] as string)
-    source.reorder(reordered)
-    setCursor(place)
-    setSaid(t('batch.order.moved', { name: items[from]?.filename ?? '', n: place + 1 }))
-  }
+  const canUndo = useStepViews((s) => (s.histories[view.key]?.length ?? 0) > 0)
+  const selection = useMemo(() => keepPresent(picks, shownOrder), [picks, shownOrder])
+  const at = shown.length === 0 ? -1 : Math.min(Math.max(cursor, 0), shown.length - 1)
+  const moves = orderMoves(source, view.key)
 
   useEffect(() => {
     gridRef.current?.querySelector<HTMLElement>(`[data-index="${at}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [at])
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const s = useApp.getState()
-      if (layerCount() > 0 || s.page !== 'batch' || isTypingTarget(e.target) || e.ctrlKey || e.metaKey) return
-      const target = e.target as Node
-      if (target !== document.body && !scrollRef.current?.contains(target)) return
-      if (e.altKey) {
-        const to = reorderTarget(e.key, at, items.length)
-        if (to === null) return
-        move(at, to)
-      } else if (e.key.startsWith('Arrow') || e.key === 'Home' || e.key === 'End') {
-        setCursor(moveCursor(at, items.length, cols, e.key))
-      } else return
-      e.preventDefault()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+  // The cursor follows the first moved image; the live region says where it went.
+  const settle = (order: readonly string[] | null, keys: ReadonlySet<string>) => {
+    if (!order) return
+    const first = order.find((key) => keys.has(key)) ?? ''
+    setCursor((view.shownSet ? order.filter((key) => view.shownSet?.has(key)) : order).indexOf(first))
+    const n = order.indexOf(first) + 1
+    const name = source.entries.find((entry) => entry.key === first)?.filename ?? ''
+    setSaid(keys.size === 1 ? t('batch.order.moved', { name, n }) : t('batch.order.movedGroup', { n: keys.size, first: n }))
+  }
+
+  const move = (how: GroupMove) => {
+    const keys = movingKeys(selection.keys, shownOrder[at])
+    settle(moves.move(keys, view.shownSet, how), keys)
+  }
+
+  const dropOn = (from: number, over: number, after: boolean) => {
+    const key = shownOrder[from]
+    const target = shownOrder[over]
+    if (key === undefined || target === undefined) return
+    const keys = draggedKeys(selection.keys, key)
+    settle(moves.drop(keys, target, after), keys)
+  }
+
+  const undo = () => setSaid(t(moves.undo() ? 'batch.order.undone' : 'batch.order.noUndo'))
+
+  usePickKeys({
+    areaRef: stepRef,
+    count: shown.length,
+    at,
+    cols,
+    hasSelection: selection.keys.size > 0,
+    moveCursorTo: setCursor,
+    reorder: move,
+    selectAll: () => setPicks(selectAll(shownOrder)),
+    clearSelection: () => setPicks(NO_PICKS),
+    undo,
   })
+  const drag = useTileDrag(dropOn, setCursor)
+  const carried = drag.drag ? draggedKeys(selection.keys, shownOrder[drag.drag.from] ?? '') : null
 
-  const over = (e: DragEvent<HTMLDivElement>, index: number) => {
-    if (!drag) return
-    e.preventDefault()
-    const box = e.currentTarget.getBoundingClientRect()
-    const after = e.clientX > box.left + box.width / 2
-    if (drag.over !== index || drag.after !== after) setDrag({ ...drag, over: index, after })
+  const click = (index: number, e: MouseEvent) => {
+    setCursor(index)
+    setPicks(clickSelection(selection, shownOrder, index, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey }))
   }
 
-  const drop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    if (drag) move(drag.from, dropIndex(drag.from, drag.over, drag.after))
-    setDrag(null)
-  }
-
+  const picked = selection.keys.size
+  const cannotMove = at < 0 || source.entries.length < 2
   return (
-    <section className={styles.step} data-testid="order-step">
-      <StepBar count={t('batch.pick.count', { n: items.length })} hint={t('batch.order.keys')}>
+    <section ref={stepRef} className={styles.step} data-testid="order-step">
+      <StepBar count={t('batch.pick.count', { n: source.entries.length })} hint={picked > 0 ? t('batch.order.selected', { n: picked }) : t('batch.order.keys')}>
+        {MOVES.map((m) => (
+          <button key={m.how} type="button" className="btn" disabled={cannotMove} onClick={() => move(m.how)} data-testid={`order-${m.how}`}>
+            {t(m.label)}
+          </button>
+        ))}
+        <button type="button" className="btn btn-ghost" disabled={!canUndo} onClick={undo} title={t('batch.order.undoTip')} data-testid="order-undo">
+          {t('batch.order.undo')}
+        </button>
         {next && (
           <button type="button" className="btn btn-primary" onClick={() => onNext(next)} data-testid="step-next">
             {t('batch.panel.next', { step: stepLabel(next, t) })}
           </button>
         )}
       </StepBar>
-      <div ref={scrollRef} className={styles.scroller} tabIndex={0} role="listbox" aria-label={t('batch.order.label')} data-testid="order-grid">
-        {items.length === 0 ? (
-          <p className={styles.empty}>{t('batch.order.empty')}</p>
+      <BatchFilterBar
+        view={view}
+        total={source.entries.length}
+        hasFolderImages={source.entries.some((entry) => entry.ref.kind === 'folder')}
+        hiddenNote={t('batch.order.hiddenNote')}
+        onSelectMatches={(keys) => setPicks({ keys, anchor: null })}
+      />
+      <div className={styles.scroller} tabIndex={0} role="listbox" aria-multiselectable aria-label={t('batch.order.label')} data-testid="order-grid">
+        {shown.length === 0 ? (
+          <p className={styles.empty}>{source.entries.length === 0 ? t('batch.order.empty') : t('batch.filter.noneShown', { text: view.name.trim() })}</p>
         ) : (
           <div ref={gridRef} className={styles.grid}>
-            {items.map((item, index) => (
-              <div
-                key={item.key}
-                className={styles.tile}
-                role="option"
-                aria-selected={index === at}
-                data-index={index}
-                data-cursor={index === at || undefined}
-                data-dragging={drag?.from === index || undefined}
-                data-drop={drag && drag.over === index && drag.from !== index ? (drag.after ? 'after' : 'before') : undefined}
-                data-testid="order-tile"
-                data-id={item.imageId ?? undefined}
-                data-key={item.key}
-                title={item.filename}
-                draggable
-                onClick={() => setCursor(index)}
-                onDragStart={(e) => {
-                  e.dataTransfer.effectAllowed = 'move'
-                  e.dataTransfer.setData('text/plain', item.key)
-                  setCursor(index)
-                  setDrag({ from: index, over: index, after: false })
-                }}
-                onDragOver={(e) => over(e, index)}
-                onDrop={drop}
-                onDragEnd={() => setDrag(null)}
-              >
-                <div className={styles.frame}>
-                  <EntryImage batch={batch} entry={item} />
-                  <span className={`${styles.number} mono`} data-testid="order-number">
-                    {index + 1}
-                  </span>
-                </div>
-                <div className={styles.meta}>
-                  <span className={`${styles.caption} mono`}>{item.filename}</span>
-                  {item.item && <ItemBadges item={item.item} />}
-                </div>
-              </div>
+            {shown.map((entry, index) => (
+              <OrderTile
+                key={entry.key}
+                batch={batch}
+                entry={entry}
+                index={index}
+                position={positions.get(entry.key) ?? index}
+                cursor={index === at}
+                selected={selection.keys.has(entry.key)}
+                dim={view.matches.keys !== null && !view.matches.keys.has(entry.key)}
+                dragging={carried?.has(entry.key) ?? false}
+                drop={carried?.has(entry.key) ? undefined : drag.sideOf(index)}
+                onClick={click}
+                onDragStart={(i, e) => drag.start(i, shownOrder[i] ?? '', e)}
+                onDragOver={drag.over}
+                onDrop={drag.drop}
+                onDragEnd={drag.end}
+              />
             ))}
           </div>
         )}
@@ -160,11 +171,4 @@ export function OrderStep({ batch, next, onNext }: Props) {
       </p>
     </section>
   )
-}
-
-/** A Pixiv or custom item as it will be posted (censored copy); a dataset image as it is. */
-function EntryImage({ batch, entry }: { batch: Batch; entry: Entry }) {
-  if (entry.item) return <ItemImage batch={batch} item={entry.item} size={512} />
-  const src = entryThumb(entry, 512)
-  return <div className={styles.plain}>{src && <img src={src} alt="" loading="lazy" decoding="async" draggable={false} />}</div>
 }

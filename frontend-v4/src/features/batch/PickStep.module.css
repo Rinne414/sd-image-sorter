@@ -154,7 +154,13 @@
   pointer-events: none;
 }
 
-/* Reordering by drag: where it will land, and the one being carried. */
+/* A condition is set and this image does not match it (a selection ring stays clear). */
+.tile[data-dim] .frame img,
+.tile[data-dim] .captionRow {
+  opacity: 0.35;
+}
+
+/* Reordering by drag: where it will land, and the ones being carried. */
 .tile[data-dragging] {
   opacity: 0.5;
 }

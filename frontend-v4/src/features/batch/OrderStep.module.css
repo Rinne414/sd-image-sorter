@@ -55,6 +55,22 @@
   box-shadow: 0 0 0 2px var(--accent);
 }
 
+/* Selected to move together: the china-marker ring over the picture (the cursor keeps its own). */
+.tile[data-selected] .frame::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 0 3px var(--marker);
+  border-radius: var(--radius);
+  pointer-events: none;
+}
+
+/* A condition is set and this picture does not match it (a selection ring stays clear). */
+.tile[data-dim] .frame img,
+.tile[data-dim] .meta {
+  opacity: 0.35;
+}
+
 /* Where a dragged picture will land: a rule in the gap before or after this one. */
 .tile[data-drop]::after {
   content: "";

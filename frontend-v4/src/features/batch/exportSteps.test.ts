@@ -14,7 +14,7 @@ import {
   type ExportSettings,
 } from './exportSettings'
 import { cleanOverride, duplicateIds, insertToken, nameBlock, type NamePreview } from './names'
-import { applyOrder, dropIndex, moveTo, reorderTarget } from './orderLogic'
+import { applyOrder } from './orderLogic'
 import { firstToFix, preflight, readiness, withServerMissing } from './preflight'
 
 function item(id: number, hasCensored: boolean, reviewed?: boolean | null): BatchItem {
@@ -33,31 +33,6 @@ function item(id: number, hasCensored: boolean, reviewed?: boolean | null): Batc
 }
 
 describe('order', () => {
-  it('moves one entry and leaves the input alone', () => {
-    const ids = [1, 2, 3, 4]
-    expect(moveTo(ids, 0, 2)).toEqual([2, 3, 1, 4])
-    expect(moveTo(ids, 3, 0)).toEqual([4, 1, 2, 3])
-    expect(ids).toEqual([1, 2, 3, 4])
-  })
-
-  it('returns the same list when nothing moves and clamps the target', () => {
-    const ids = [1, 2, 3]
-    expect(moveTo(ids, 1, 1)).toBe(ids)
-    expect(moveTo(ids, 5, 0)).toBe(ids)
-    expect(moveTo(ids, 0, 99)).toEqual([2, 3, 1])
-  })
-
-  it('maps Alt + arrows, Home and End to a place', () => {
-    expect(reorderTarget('ArrowUp', 2, 5)).toBe(1)
-    expect(reorderTarget('ArrowLeft', 0, 5)).toBe(0)
-    expect(reorderTarget('ArrowDown', 2, 5)).toBe(3)
-    expect(reorderTarget('ArrowRight', 4, 5)).toBe(4)
-    expect(reorderTarget('Home', 3, 5)).toBe(0)
-    expect(reorderTarget('End', 1, 5)).toBe(4)
-    expect(reorderTarget('Enter', 1, 5)).toBeNull()
-    expect(reorderTarget('Home', -1, 5)).toBeNull()
-  })
-
   it('puts items in a new order, renumbered, extra items last', () => {
     const items = [item(1, false), item(2, false), item(3, false), item(4, false)].map((it, i) => ({ ...it, position: i }))
     const next = applyOrder(items, [3, 1, 2])
@@ -65,18 +40,6 @@ describe('order', () => {
     expect(next.map((i) => i.position)).toEqual([0, 1, 2, 3])
     expect(items.map((i) => i.image_id)).toEqual([1, 2, 3, 4])
     expect(next[3]).toBe(items[3])
-  })
-
-  it('drops before or after the image under the pointer', () => {
-    // [a b c d]: a dropped on c's left half lands between b and c.
-    expect(dropIndex(0, 2, false)).toBe(1)
-    expect(dropIndex(0, 2, true)).toBe(2)
-    // d dropped on a's left half becomes first.
-    expect(dropIndex(3, 0, false)).toBe(0)
-    expect(dropIndex(3, 0, true)).toBe(1)
-    // Dropped on itself: stays.
-    expect(dropIndex(1, 1, false)).toBe(1)
-    expect(dropIndex(1, 1, true)).toBe(1)
   })
 })
 

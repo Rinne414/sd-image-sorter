@@ -9,12 +9,16 @@ export type DropSide = 'before' | 'after'
 interface Props {
   entry: Entry
   index: number
+  /** Its place in the batch, from 0 (the name filter may hide images before it). */
+  position: number
   x: number
   y: number
   width: number
   cursor: boolean
   selected: boolean
   pending: boolean
+  /** A condition is set and this image does not match it. */
+  dim: boolean
   drop: DropSide | undefined
   dragging: boolean
   onClick: (index: number, e: MouseEvent) => void
@@ -41,6 +45,7 @@ export function PickTile(p: Props) {
       data-cursor={p.cursor || undefined}
       data-selected={p.selected || undefined}
       data-pending={p.pending || undefined}
+      data-dim={p.dim || undefined}
       data-drop={p.drop}
       data-dragging={p.dragging || undefined}
       data-testid="pick-tile"
@@ -63,7 +68,7 @@ export function PickTile(p: Props) {
         ) : (
           <span className={styles.gone}>{t('dataset.fileGone')}</span>
         )}
-        <span className={`${styles.order} mono`}>{p.index + 1}</span>
+        <span className={`${styles.order} mono`}>{p.position + 1}</span>
         <button
           type="button"
           className={styles.remove}

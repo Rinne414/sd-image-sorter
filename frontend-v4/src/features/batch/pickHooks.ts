@@ -3,44 +3,55 @@ import { isTypingTarget } from '../../lib/format'
 import { useApp } from '../../state/store'
 import { layerCount } from '../../ui/layers'
 import { moveCursor } from './batchLogic'
-import { dropIndex, reorderTarget } from './orderLogic'
+import { groupMove, type GroupMove } from './orderLogic'
 
 export interface PickKeyActions {
-  scrollRef: RefObject<HTMLElement | null>
+  /** Keys count while the focus is in here (or nowhere). */
+  areaRef: RefObject<HTMLElement | null>
   count: number
   at: number
   cols: number
   hasSelection: boolean
   moveCursorTo: (index: number) => void
-  reorder: (from: number, to: number) => void
-  open: () => void
-  remove: () => void
+  reorder: (how: GroupMove) => void
   selectAll: () => void
   clearSelection: () => void
+  open?: () => void
+  remove?: () => void
+  undo?: () => void
+}
+
+/** Ctrl + a key: Ctrl+A selects all, Ctrl+Z undoes where the step can. Whether it was handled. */
+function ctrlKey(e: KeyboardEvent, a: PickKeyActions): boolean {
+  const key = e.key.toLowerCase()
+  if (key === 'a' && a.count > 0) a.selectAll()
+  else if (key === 'z' && !e.shiftKey && a.undo) a.undo()
+  else return false
+  return true
 }
 
 /**
- * The pick grid's keys, while nothing else has the focus: arrows move,
- * Alt + arrows / Home / End reorder, Ctrl+A selects all, Enter opens,
- * Delete removes (a held key only once), Esc drops the selection.
+ * A batch grid's keys, while nothing else has the focus: arrows move,
+ * Alt + arrows / Home / End move the selection (or the image under the
+ * cursor), Ctrl+A selects all, Enter opens, Delete removes (a held key only
+ * once), Esc drops the selection, Ctrl+Z undoes a reorder where offered.
  */
 export function usePickKeys(a: PickKeyActions): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (layerCount() > 0 || useApp.getState().page !== 'batch' || isTypingTarget(e.target) || e.metaKey) return
       const target = e.target as Node
-      if (target !== document.body && !a.scrollRef.current?.contains(target)) return
+      if (target !== document.body && !a.areaRef.current?.contains(target)) return
       const nav = e.key.startsWith('Arrow') || e.key === 'Home' || e.key === 'End'
       if (e.ctrlKey) {
-        if (e.key.toLowerCase() !== 'a' || a.count === 0) return
-        a.selectAll()
+        if (!ctrlKey(e, a)) return
       } else if (e.altKey) {
-        const to = reorderTarget(e.key, a.at, a.count)
-        if (to === null) return
-        a.reorder(a.at, to)
+        const how = groupMove(e.key)
+        if (how === null || a.at < 0) return
+        a.reorder(how)
       } else if (nav) a.moveCursorTo(moveCursor(a.at, a.count, a.cols, e.key))
-      else if (e.key === 'Enter' && a.at >= 0) a.open()
-      else if (e.key === 'Delete') {
+      else if (e.key === 'Enter' && a.at >= 0 && a.open) a.open()
+      else if (e.key === 'Delete' && a.remove) {
         if (!e.repeat) a.remove()
       } else if (e.key === 'Escape' && a.hasSelection) a.clearSelection()
       else return
@@ -57,8 +68,8 @@ interface Drag {
   after: boolean
 }
 
-/** Reordering tiles by dragging one onto another's left or right half. */
-export function useTileDrag(onMove: (from: number, to: number) => void, onPick: (index: number) => void) {
+/** Reordering tiles by dragging one (and the selection it belongs to) onto another's left or right half. */
+export function useTileDrag(onDrop: (from: number, over: number, after: boolean) => void, onPick: (index: number) => void) {
   const [drag, setDrag] = useState<Drag | null>(null)
 
   const start = (index: number, key: string, e: DragEvent<HTMLDivElement>) => {
@@ -79,7 +90,7 @@ export function useTileDrag(onMove: (from: number, to: number) => void, onPick: 
   const drop = (e: DragEvent<HTMLDivElement>) => {
     if (!drag) return
     e.preventDefault()
-    onMove(drag.from, dropIndex(drag.from, drag.over, drag.after))
+    onDrop(drag.from, drag.over, drag.after)
     setDrag(null)
   }
 

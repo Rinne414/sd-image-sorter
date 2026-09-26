@@ -14,6 +14,9 @@ import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
  * "next"), export: blocked with the missing one listed, "leave out" writes
  * two files with the right names and no generation data whose pixels are the
  * censored copies; "export originals" needs a second confirm and still strips.
+ * A second batch of six orders several selected images together (buttons,
+ * drag, Ctrl+Z back to the saved order) and filters them by name and by a
+ * library condition.
  *
  * Needs the V4 build: `cd frontend-v4 && npm ci && npm run build`.
  */
@@ -27,10 +30,13 @@ const OUT = path.join(tmpRoot, DIR, 'out')
 const MARKER = 'secret_prompt_marker_7f3a'
 
 let ids: number[] = []
+/** Three more images (d, e, f; d and f made by ComfyUI) for the six-image order batch. */
+let more: number[] = []
 let batchId = 0
+let orderBatchId = 0
 const nameOf: Record<number, string> = {}
 
-/** a.png, b.png (PNG text chunks + EXIF + XMP), c.jpg (EXIF UserComment + XMP); censored PNGs of a and c. */
+/** a.png, b.png (PNG text chunks + EXIF + XMP), c.jpg (EXIF UserComment + XMP); censored PNGs of a and c; then d, e, f PNGs. */
 function seed(): number[] {
   const out = runBackendScript(`
 ${PY_DELETE_IMAGES}
@@ -47,7 +53,11 @@ files = [
     write_png_with_generation_data(root / f"{prefix}a.png", 1),
     write_png_with_generation_data(root / f"{prefix}b.png", 2),
     write_jpeg_with_generation_data(root / f"{prefix}c.jpg", 3),
+    write_png_with_generation_data(root / f"{prefix}d.png", 4),
+    write_png_with_generation_data(root / f"{prefix}e.png", 5),
+    write_png_with_generation_data(root / f"{prefix}f.png", 6),
 ]
+generators = ["nai", "nai", "nai", "comfyui", "nai", "comfyui"]
 for name, seed in (("a", 1), ("c", 3)):
     censored = gradient_image(seed)
     censored.paste((0, 0, 0), (2, 2, 38, 28))
@@ -57,13 +67,13 @@ with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("DELETE FROM batches WHERE name LIKE ?", (${JSON.stringify(NAME + '%')},))
     delete_images(conn, "filename LIKE ?", (prefix + "%",))
-    for path in files:
+    for path, generator in zip(files, generators):
         path = path.resolve()
         cur = conn.execute(
             """INSERT INTO images (path, filename, generator, prompt, metadata_json, width, height, file_size,
                    source_size, source_mtime_ns, is_readable, metadata_status, created_at, library_order_time, user_rating)
-               VALUES (?, ?, 'nai', 'v4pxetoken', '{}', 40, 30, ?, ?, ?, 1, 'complete', datetime('now'), datetime('now'), 0)""",
-            (str(path), path.name, path.stat().st_size, path.stat().st_size, path.stat().st_mtime_ns),
+               VALUES (?, ?, ?, 'v4pxetoken', '{}', 40, 30, ?, ?, ?, 1, 'complete', datetime('now'), datetime('now'), 0)""",
+            (str(path), path.name, generator, path.stat().st_size, path.stat().st_size, path.stat().st_mtime_ns),
         )
         ids.append(cur.lastrowid)
     conn.commit()
@@ -144,7 +154,7 @@ function watchErrors(page: Page): string[] {
   return errors
 }
 
-async function openBatch(page: Page): Promise<void> {
+async function openBatch(page: Page, id = batchId): Promise<void> {
   await page.addInitScript(() => {
     if (sessionStorage.getItem('v4e2e-init-pxe')) return
     sessionStorage.setItem('v4e2e-init-pxe', '1')
@@ -152,13 +162,13 @@ async function openBatch(page: Page): Promise<void> {
     localStorage.setItem('sd-v4-theme', 'dark')
     localStorage.removeItem('sd-v4-pixiv-export')
   })
-  const res = await page.goto(`/v4/#/batch/${batchId}`, { waitUntil: 'domcontentloaded' })
+  const res = await page.goto(`/v4/#/batch/${id}`, { waitUntil: 'domcontentloaded' })
   expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
   await expect(page.getByTestId('batch-view')).toBeVisible()
 }
 
-async function apiOrder(page: Page): Promise<number[]> {
-  const batch = (await (await page.request.get(`/api/batches/${batchId}`)).json()) as { items: { image_id: number }[] }
+async function apiOrder(page: Page, id = batchId): Promise<number[]> {
+  const batch = (await (await page.request.get(`/api/batches/${id}`)).json()) as { items: { image_id: number }[] }
   return batch.items.map((item) => item.image_id)
 }
 
@@ -168,8 +178,10 @@ async function tileIds(page: Page): Promise<number[]> {
 
 test.beforeAll(() => {
   cleanup()
-  ids = seed()
-  expect(ids).toHaveLength(3)
+  const seeded = seed()
+  expect(seeded).toHaveLength(6)
+  ids = seeded.slice(0, 3)
+  more = seeded.slice(3)
   ;['a.png', 'b.png', 'c.jpg'].forEach((file, i) => (nameOf[ids[i] as number] = `${PREFIX}${file}`))
 })
 
@@ -409,5 +421,100 @@ test('export originals: the confirmation lists every final name (focus on Cancel
   ])
   expect(orig?.original).toBe(0)
   expect(censoredA?.censored).toBe(0)
+  expect(errors).toEqual([])
+})
+
+const orderTile = (page: Page, id: number) => page.locator(`[data-testid="order-tile"][data-id="${id}"]`)
+const railStep = (page: Page, id: string) => page.locator(`[data-testid="rail-step"][data-step-id="${id}"]`)
+
+test('order: three selected move to the front together and stay after a reload; a drag carries the selection; Ctrl+Z saves the order back', async ({ page }) => {
+  const errors = watchErrors(page)
+  await page.setViewportSize({ width: 1366, height: 768 })
+  const [a, b, c] = ids as [number, number, number]
+  const [d, e, f] = more as [number, number, number]
+  const created = await page.request.post('/api/batches', { data: { kind: 'pixiv', name: `${NAME} Order`, image_ids: [a, b, c, d, e, f] } })
+  expect(created.status()).toBe(201)
+  const made = (await created.json()).batch as { id: number; revision: number }
+  orderBatchId = made.id
+  expect((await page.request.patch(`/api/batches/${orderBatchId}`, { data: { revision: made.revision, current_step: 'order' } })).ok()).toBe(true)
+  await openBatch(page, orderBatchId)
+  await expect(page.getByTestId('order-tile')).toHaveCount(6)
+
+  // Ctrl+click f, b, d: they go to the front in their batch order
+  for (const id of [f, b, d]) await orderTile(page, id).click({ modifiers: ['Control'] })
+  await expect(page.locator('[data-testid="order-tile"][data-selected]')).toHaveCount(3)
+  await page.getByTestId('order-top').click()
+  const front = [b, d, f, a, c, e]
+  await expect.poll(() => tileIds(page)).toEqual(front)
+  await expect.poll(() => apiOrder(page, orderBatchId)).toEqual(front)
+  await expect(page.getByTestId('order-number')).toHaveText(['1', '2', '3', '4', '5', '6'])
+
+  // dragging one of the three carries all three, dropped after c
+  const box = await orderTile(page, c).boundingBox()
+  if (!box) throw new Error('no tile box')
+  await orderTile(page, f).dragTo(orderTile(page, c), { targetPosition: { x: box.width - 10, y: box.height / 2 } })
+  const dragged = [a, c, b, d, f, e]
+  await expect.poll(() => tileIds(page)).toEqual(dragged)
+  await expect.poll(() => apiOrder(page, orderBatchId)).toEqual(dragged)
+
+  // Ctrl+Z puts the saved order back, not only the view
+  await expect(page.getByTestId('order-undo')).toBeEnabled()
+  await page.keyboard.press('Control+z')
+  await expect.poll(() => tileIds(page)).toEqual(front)
+  await expect.poll(() => apiOrder(page, orderBatchId)).toEqual(front)
+
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('order-tile')).toHaveCount(6)
+  await expect.poll(() => tileIds(page)).toEqual(front)
+  expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
+  await expect(page.getByTestId('step-next')).toBeInViewport()
+  expect(errors).toEqual([])
+})
+
+test('filters: the name filter narrows Order, Pick and Censor, moves while filtered skip hidden images, a condition selects its matches', async ({ page }) => {
+  const errors = watchErrors(page)
+  await page.setViewportSize({ width: 1366, height: 768 })
+  const [a, b, c] = ids as [number, number, number]
+  const [d, e, f] = more as [number, number, number]
+  await openBatch(page, orderBatchId)
+  await expect.poll(() => tileIds(page)).toEqual([b, d, f, a, c, e])
+
+  await page.getByTestId('batch-name-filter').fill('.png')
+  await expect.poll(() => tileIds(page)).toEqual([b, d, f, a, e])
+  // the numbers stay the posting places
+  await expect(page.getByTestId('order-number')).toHaveText(['1', '2', '3', '4', '6'])
+  await expect(page.getByTestId('batch-name-shown')).toHaveText('Showing 5 of 6')
+  await expect(page.getByTestId('batch-hidden-note')).toBeVisible()
+  // e sits after the hidden c: "Earlier" swaps it with a, c keeps its place
+  await orderTile(page, e).click()
+  await page.getByTestId('order-up').click()
+  await expect.poll(() => apiOrder(page, orderBatchId)).toEqual([b, d, f, e, c, a])
+
+  await railStep(page, 'pick').click()
+  await expect(page.getByTestId('pick-tile')).toHaveCount(5)
+  await expect(page.getByTestId('batch-name-filter')).toHaveValue('.png')
+  await railStep(page, 'censor').click()
+  await expect(page.getByTestId('censor-strip-filter')).toHaveValue('.png')
+  await expect(page.getByTestId('censor-strip-item')).toHaveCount(5)
+  await page.getByTestId('censor-strip-filter').fill('jpg')
+  await expect(page.getByTestId('censor-strip-item')).toHaveCount(1)
+  await expect(page.getByTestId('censor-strip-item')).toHaveAttribute('data-id', String(c))
+
+  await railStep(page, 'order').click()
+  await expect.poll(() => tileIds(page)).toEqual([c])
+  await page.getByTestId('batch-filter-clear').click()
+  await expect(page.getByTestId('order-tile')).toHaveCount(6)
+
+  // a library condition: the two made by ComfyUI
+  await page.getByTestId('batch-condition').fill('gen:comfyui')
+  await expect(page.getByTestId('batch-condition-count')).toHaveText('2 matching')
+  await expect(page.locator('[data-testid="order-tile"][data-dim]')).toHaveCount(4)
+  await page.getByTestId('batch-select-matches').click()
+  const selected = () => page.locator('[data-testid="order-tile"][data-selected]').evaluateAll((els) => els.map((el) => Number(el.getAttribute('data-id'))))
+  await expect.poll(selected).toEqual([d, f])
+  await page.getByTestId('order-bottom').click()
+  await expect.poll(() => apiOrder(page, orderBatchId)).toEqual([b, e, c, a, d, f])
+
+  expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
   expect(errors).toEqual([])
 })

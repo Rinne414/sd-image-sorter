@@ -1,0 +1,74 @@
+/* The filter panel's popover anchors to this box, under the bar. */
+.wrap {
+  position: relative;
+  flex: none;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 42px;
+  padding: 0 12px 0 16px;
+  white-space: nowrap;
+}
+
+.name,
+.condition {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-1);
+  color: var(--text);
+  font-size: var(--fs-3);
+  border-radius: var(--radius);
+}
+
+.name {
+  flex: 0 1 220px;
+  min-width: 120px;
+}
+
+.condition {
+  flex: 1 1 280px;
+  min-width: 160px;
+  max-width: 720px;
+  font-family: var(--font-mono);
+}
+
+.name:focus,
+.condition:focus {
+  border-color: var(--accent-line);
+  outline: none;
+}
+
+.note,
+.error {
+  flex: none;
+  font-size: var(--fs-2);
+}
+
+.note {
+  color: var(--muted);
+}
+
+.error {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--danger);
+}
+
+.line {
+  margin: 0;
+  padding: 0 16px 8px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.line[role='alert'] {
+  color: var(--warn);
+}

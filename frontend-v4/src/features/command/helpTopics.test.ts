@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { en } from '../../i18n/en'
 import { zhCN } from '../../i18n/zh-CN'
 import { moveCursor } from '../batch/batchLogic'
-import { reorderTarget } from '../batch/orderLogic'
+import { groupMove } from '../batch/orderLogic'
 import { keyAction, type KeyLike } from '../sort/sortModes'
 import type { SortMode } from '../sort/sortSession'
 import { HELP_PAGES, helpTopic, PICK_ROWS, SORT_ROWS, type HelpRow } from './helpTopics'
@@ -82,7 +82,7 @@ describe('help topics', () => {
     for (const printed of reorder?.keys ?? []) {
       const e = press(printed)
       expect(e.altKey, printed).toBe(true)
-      expect(reorderTarget(e.key, 1, 3), printed).not.toBeNull()
+      expect(groupMove(e.key), printed).not.toBeNull()
     }
   })
 
