@@ -30,10 +30,12 @@ export const enPublish: Record<keyof typeof zhCNPublish, string> = {
   'batch.filter.conditionLabel': 'Condition (library search syntax)',
   'batch.filter.counting': 'Searching…',
   'batch.filter.matches': '{n} matching',
+  'batch.filter.matchesHidden': '{n} matching; hidden by the name filter and not selected: {hidden}',
   'batch.filter.failed': 'Could not search: {reason}',
   'batch.filter.selectMatches': 'Select matching',
+  'batch.filter.selectMatchesN': 'Select the {n} matching',
   'batch.filter.clear': 'Clear filters',
-  'batch.filter.folderNote': 'Folder images are not in the library, so conditions only match library images.',
+  'batch.filter.outside': 'Not in the library: {n} (folder images). The condition does not apply to them; they count as neither matching nor not matching.',
 
   'batch.name.hint': 'File names follow the rule below; click a name to give one image its own',
   'batch.name.template': 'Naming rule',

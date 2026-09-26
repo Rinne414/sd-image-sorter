@@ -1,14 +1,13 @@
 import { useT } from '../../i18n'
 import { parseSearch } from '../../lib/searchQuery'
 import { FilterPanel } from '../library/FilterPanel'
+import { visibleMatches } from './batchFilter'
 import styles from './BatchFilterBar.module.css'
 import { useStepViews, type StepView } from './stepView'
 
 interface Props {
   view: StepView
   total: number
-  /** The batch has folder images, which no library condition can match. */
-  hasFolderImages: boolean
   /** A line under the bar while the name filter hides images (the Order step says how moves work then). */
   hiddenNote?: string
   onSelectMatches: (keys: ReadonlySet<string>) => void
@@ -18,7 +17,7 @@ interface Props {
  * Narrowing a batch's images: a file-name filter (only the view changes) and
  * a condition in the library's search language, whose matches can be selected.
  */
-export function BatchFilterBar({ view, total, hasFolderImages, hiddenNote, onSelectMatches }: Props) {
+export function BatchFilterBar({ view, total, hiddenNote, onSelectMatches }: Props) {
   const t = useT()
   const { key, name, condition, matches } = view
   const setName = (text: string) => useStepViews.getState().setName(key, text)
@@ -26,13 +25,16 @@ export function BatchFilterBar({ view, total, hasFolderImages, hiddenNote, onSel
   const unread = parseSearch(condition).parts.flatMap((p) => (p.kind === 'warn' ? [p.raw] : []))
   const found = matches.keys
   const filtering = name.trim() !== ''
+  const picking = found ? visibleMatches(found, view.shownSet) : null
+  const hiddenMatches = found && picking ? found.size - picking.size : 0
+  const conditionSet = condition.trim() !== ''
 
   const status = matches.error
     ? t('batch.filter.failed', { reason: matches.error })
     : matches.searching
       ? t('batch.filter.counting')
       : found
-        ? t('batch.filter.matches', { n: found.size })
+        ? t(hiddenMatches > 0 ? 'batch.filter.matchesHidden' : 'batch.filter.matches', { n: found.size, hidden: hiddenMatches })
         : null
 
   return (
@@ -71,13 +73,13 @@ export function BatchFilterBar({ view, total, hasFolderImages, hiddenNote, onSel
         <button
           type="button"
           className="btn"
-          disabled={!found || found.size === 0 || matches.searching}
-          onClick={() => found && onSelectMatches(found)}
+          disabled={!picking || picking.size === 0 || matches.searching}
+          onClick={() => picking && onSelectMatches(picking)}
           data-testid="batch-select-matches"
         >
-          {t('batch.filter.selectMatches')}
+          {picking && !matches.searching ? t('batch.filter.selectMatchesN', { n: picking.size }) : t('batch.filter.selectMatches')}
         </button>
-        {(filtering || condition.trim() !== '') && (
+        {(filtering || conditionSet) && (
           <button
             type="button"
             className="btn btn-ghost"
@@ -96,7 +98,11 @@ export function BatchFilterBar({ view, total, hasFolderImages, hiddenNote, onSel
           {t('query.warning', { token: raw })}
         </p>
       ))}
-      {found && hasFolderImages && <p className={styles.line}>{t('batch.filter.folderNote')}</p>}
+      {conditionSet && matches.outside > 0 && (
+        <p className={styles.line} data-testid="batch-condition-outside">
+          {t('batch.filter.outside', { n: matches.outside })}
+        </p>
+      )}
       {filtering && hiddenNote && (
         <p className={styles.line} data-testid="batch-hidden-note">
           {hiddenNote}

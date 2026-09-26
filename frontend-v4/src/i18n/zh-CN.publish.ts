@@ -30,10 +30,12 @@ export const zhCNPublish = {
   'batch.filter.conditionLabel': '条件（图库的搜索写法）',
   'batch.filter.counting': '正在查找…',
   'batch.filter.matches': '{n} 张符合',
+  'batch.filter.matchesHidden': '{n} 张符合，其中 {hidden} 张被文件名筛选隐藏，不会选中',
   'batch.filter.failed': '没能查找：{reason}',
   'batch.filter.selectMatches': '选中符合的',
+  'batch.filter.selectMatchesN': '选中符合的 {n} 张',
   'batch.filter.clear': '清除筛选',
-  'batch.filter.folderNote': '文件夹里的图不在图库里，条件只对图库里的图生效。',
+  'batch.filter.outside': '{n} 张不在图库里（文件夹里的图），条件筛选不适用：不算符合，也不算不符合。',
 
   'batch.name.hint': '文件名按下面的规则生成；点某一张的文件名可以单独改',
   'batch.name.template': '命名规则',

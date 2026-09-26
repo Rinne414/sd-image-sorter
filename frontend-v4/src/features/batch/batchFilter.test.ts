@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { byName, matchKeys, shownKeys } from './batchFilter'
+import { byName, matchKeys, outsideLibrary, shownKeys, visibleMatches } from './batchFilter'
 
 const entries = [
   { key: 'l:1', filename: 'Cover_final.png', imageId: 1 },
@@ -24,5 +24,17 @@ describe('the batch condition', () => {
   it('matches only the batch images the library search returned', () => {
     expect([...matchKeys(entries, [2, 9, 1])]).toEqual(['l:1', 'l:2'])
     expect(matchKeys(entries, []).size).toBe(0)
+  })
+})
+
+describe('what a condition can and does select', () => {
+  it('counts the images outside the library, which no condition applies to', () => {
+    expect(outsideLibrary(entries)).toBe(1)
+  })
+
+  it('selects exactly the matches the name filter still shows', () => {
+    const matches = new Set(['l:1', 'l:2'])
+    expect(visibleMatches(matches, null)).toBe(matches)
+    expect([...visibleMatches(matches, new Set(['l:1', 'f:a']))]).toEqual(['l:1'])
   })
 })

@@ -6,6 +6,7 @@ import { useApp } from '../../state/store'
 import { Lightbox } from '../lightbox/Lightbox'
 import { AddFolderDialog } from './AddFolderDialog'
 import { removingKey, useRemoving } from './batchApi'
+import { unmatched } from './batchFilter'
 import { BatchFilterBar } from './BatchFilterBar'
 import { DropOverlay, useDatasetDrop } from './DatasetDrop'
 import { entrySummary, type Entry } from './entries'
@@ -180,7 +181,6 @@ export function PickStep({ batch, next, onNext }: Props) {
       <BatchFilterBar
         view={view}
         total={source.entries.length}
-        hasFolderImages={folderCount > 0}
         onSelectMatches={(keys) => setPicks({ keys, anchor: null })}
       />
       <div ref={scrollRef} className={styles.scroller} tabIndex={0} role="listbox" aria-multiselectable aria-label={t('batch.pick.count', { n: entries.length })} data-testid="pick-grid">
@@ -203,7 +203,7 @@ export function PickStep({ batch, next, onNext }: Props) {
                     cursor={index === at}
                     selected={selection.keys.has(entry.key)}
                     pending={removing.has(removingKey(batch.id, entry.key))}
-                    dim={view.matches.keys !== null && !view.matches.keys.has(entry.key)}
+                    dim={unmatched(view.matches.keys, entry)}
                     drop={carried?.has(entry.key) ? undefined : drag.sideOf(index)}
                     dragging={carried?.has(entry.key) ?? false}
                     onClick={click}

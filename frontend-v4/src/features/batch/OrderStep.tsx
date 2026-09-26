@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import type { Batch } from '../../api/types'
 import { useT, type MessageKey } from '../../i18n'
+import { unmatched } from './batchFilter'
 import { BatchFilterBar } from './BatchFilterBar'
 import { stepLabel } from './labels'
 import type { GroupMove } from './orderLogic'
@@ -135,7 +136,6 @@ export function OrderStep({ batch, next, onNext }: Props) {
       <BatchFilterBar
         view={view}
         total={source.entries.length}
-        hasFolderImages={source.entries.some((entry) => entry.ref.kind === 'folder')}
         hiddenNote={t('batch.order.hiddenNote')}
         onSelectMatches={(keys) => setPicks({ keys, anchor: null })}
       />
@@ -153,7 +153,7 @@ export function OrderStep({ batch, next, onNext }: Props) {
                 position={positions.get(entry.key) ?? index}
                 cursor={index === at}
                 selected={selection.keys.has(entry.key)}
-                dim={view.matches.keys !== null && !view.matches.keys.has(entry.key)}
+                dim={unmatched(view.matches.keys, entry)}
                 dragging={carried?.has(entry.key) ?? false}
                 drop={carried?.has(entry.key) ? undefined : drag.sideOf(index)}
                 onClick={click}

@@ -1,11 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
-import { parseSearch, toImageParams, type ScopeFilter } from '../../lib/searchQuery'
+import { api, unwrap } from '../../api/client'
+import type { components } from '../../api/schema'
+import { parseSearch, toImageParams, type ImageQueryParams, type ScopeFilter } from '../../lib/searchQuery'
+import { toSelectionBody } from '../../lib/selectionBody'
 import { useApp } from '../../state/store'
-import { matchingIds } from '../selection/invert'
 import { isEverything } from '../sort/rules'
-import { byName, matchKeys, shownKeys } from './batchFilter'
+import { byName, matchKeys, outsideLibrary, shownKeys } from './batchFilter'
+import { intersectPages, PAGE, type MatchPage, type MatchPages } from './batchMatch'
 import type { Entry } from './entries'
 import { NO_HISTORY, pushOrder, undoOrder, type OrderHistory } from './orderHistory'
 
@@ -60,32 +63,46 @@ function useSettled(value: string): string {
   return settled
 }
 
+type TokenBody = components['schemas']['SelectionTokenRequest']
+
+/** The library's matches for these gallery filters, page by page (POST selection-token, GET selection-chunk). */
+function serverPages(params: ImageQueryParams, signal: AbortSignal): MatchPages {
+  return {
+    token: async () => {
+      const body = { ...toSelectionBody(params), chunkSize: PAGE } as unknown as TokenBody
+      return unwrap<{ selection_token: string }>(await api.POST('/api/images/selection-token', { body, signal })).selection_token
+    },
+    chunk: async (token, offset, limit) =>
+      unwrap<MatchPage>(await api.GET('/api/images/selection-chunk', { params: { query: { selection_token: token, offset, limit } }, signal })),
+  }
+}
+
 export interface ConditionMatches {
-  /** The batch entries the condition matches; null when there is no condition. */
+  /** The batch's Library images the condition matches; null when there is no condition. */
   keys: ReadonlySet<string> | null
+  /** Batch images outside the Library (folder images): the condition does not apply to them. */
+  outside: number
   searching: boolean
   error: string | null
 }
 
-/**
- * The batch entries a library search condition matches: the library's
- * "every match" list (POST /api/images/selection-ids, the same filters as the
- * gallery) intersected with the batch, as V3.5's queue did.
- */
+/** The batch entries a library search condition matches (V3.5's queue: the library's matches intersected with the batch). */
 function useConditionMatches(condition: string, entries: readonly Entry[]): ConditionMatches {
   const libraryId = useApp((s) => s.libraryId)
   const text = condition.trim()
   const settled = useSettled(text)
   const params = useMemo(() => (settled && !isEverything(settled) ? toImageParams(parseSearch(settled), WHOLE_LIBRARY, 'newest') : null), [settled])
+  const libraryIds = useMemo(() => entries.flatMap((entry) => (entry.imageId === null ? [] : [entry.imageId])).sort((a, b) => a - b), [entries])
   const query = useQuery({
-    queryKey: ['batch-condition', libraryId, params],
+    queryKey: ['batch-condition', libraryId, params, libraryIds.join(',')],
     enabled: params !== null,
-    queryFn: () => matchingIds(params ?? {}),
+    queryFn: ({ signal }) => intersectPages(serverPages(params ?? {}, signal), libraryIds),
     staleTime: 30_000,
   })
-  const keys = useMemo(() => (params && query.data ? matchKeys(entries, query.data) : null), [params, query.data, entries])
+  const keys = useMemo(() => (params && query.data ? matchKeys(entries, [...query.data]) : null), [params, query.data, entries])
   return {
     keys,
+    outside: outsideLibrary(entries),
     searching: settled !== text || (params !== null && query.isFetching),
     error: params && query.error ? query.error.message : null,
   }

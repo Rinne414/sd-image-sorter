@@ -228,6 +228,21 @@ test('several images out at once, and undo puts each back in its place', async (
   expect((await project(page)).items.map(itemKey)).toEqual(before)
 })
 
+test('a library condition matches only the Library images; the folder images are said to be outside it, not counted as misses', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openV4(page, `#/batch/${batchId}`)
+  await expect(page.getByTestId('pick-tile')).toHaveCount(6)
+  await page.getByTestId('batch-condition').fill(TOKEN)
+  await expect(page.getByTestId('batch-condition-count')).toHaveText('3 matching')
+  await expect(page.getByTestId('batch-condition-outside')).toContainText('Not in the library: 3')
+  await expect(page.locator('[data-testid="pick-tile"][data-dim]')).toHaveCount(0)
+  await expect(page.getByTestId('batch-select-matches')).toHaveText('Select the 3 matching')
+  await page.getByTestId('batch-select-matches').click()
+  await expect(page.getByTestId('pick-selected')).toHaveText('3 selected')
+  await expect(page.locator('[data-testid="pick-tile"][data-source="library"][data-selected]')).toHaveCount(3)
+  await expect(page.locator('[data-testid="pick-tile"][data-source="folder"][data-selected]')).toHaveCount(0)
+})
+
 test('a change V3.5 made meanwhile is loaded again and said; nothing is overwritten', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   await openV4(page, `#/batch/${batchId}`)

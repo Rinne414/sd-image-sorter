@@ -508,12 +508,21 @@ test('filters: the name filter narrows Order, Pick and Censor, moves while filte
   // a library condition: the two made by ComfyUI
   await page.getByTestId('batch-condition').fill('gen:comfyui')
   await expect(page.getByTestId('batch-condition-count')).toHaveText('2 matching')
+  await expect(page.getByTestId('batch-condition-outside')).toHaveCount(0)
   await expect(page.locator('[data-testid="order-tile"][data-dim]')).toHaveCount(4)
   await page.getByTestId('batch-select-matches').click()
   const selected = () => page.locator('[data-testid="order-tile"][data-selected]').evaluateAll((els) => els.map((el) => Number(el.getAttribute('data-id'))))
   await expect.poll(selected).toEqual([d, f])
   await page.getByTestId('order-bottom').click()
   await expect.poll(() => apiOrder(page, orderBatchId)).toEqual([b, e, c, a, d, f])
+
+  // a match the name filter hides is counted and said, but not selected
+  await page.getByTestId('batch-name-filter').fill('.png')
+  await page.getByTestId('batch-condition').fill('gen:nai')
+  await expect(page.getByTestId('batch-condition-count')).toHaveText('4 matching; hidden by the name filter and not selected: 1')
+  await expect(page.getByTestId('batch-select-matches')).toHaveText('Select the 3 matching')
+  await page.getByTestId('batch-select-matches').click()
+  await expect.poll(selected).toEqual([b, e, a])
 
   expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
   expect(errors).toEqual([])
