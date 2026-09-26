@@ -20,7 +20,9 @@ from ai_runtime_guard import (
     PRIORITY_BATCH,
     PRIORITY_NORMAL,
     exclusive_ai_runtime,
+    forget_gpu_residency,
 )
+from gpu_duty_cycle import gpu_duty_cycle
 
 logger = logging.getLogger("tagger")
 
@@ -35,7 +37,11 @@ class _InferenceFlowMixin:
         assert self.session is not None
         input_name = self._input_name or self.session.get_inputs()[0].name
         try:
-            return self.session.run(None, {input_name: input_data})[self._output_index]
+            # D46: rest after each GPU batch so long runs do not peg the card.
+            with gpu_duty_cycle(self._session_uses_gpu()):
+                return self.session.run(None, {input_name: input_data})[
+                    self._output_index
+                ]
         except Exception as error:
             if not allow_gpu_fallback or not self._session_uses_gpu():
                 raise
@@ -76,14 +82,18 @@ class _InferenceFlowMixin:
         stay resident in VRAM while a local VLM (ToriiGate) owns the GPU.
         ``load()`` / ``tag_batch`` lazily rebuild the session on the next call
         via the ``_loaded`` flag, so a released tagger self-heals transparently.
+        Takes the VRAM lease first (same order as ``load``) so a release never
+        lands in the middle of this tagger's own inference.
         """
-        with self._load_lock:
-            if self.session is not None:
-                del self.session
-                self.session = None
-            self._loaded = False
-            self._images_since_session_create = 0
-            gc.collect()
+        with exclusive_ai_runtime(f"tagger-release:{self.model_name}"):
+            with self._load_lock:
+                if self.session is not None:
+                    del self.session
+                    self.session = None
+                self._loaded = False
+                self._images_since_session_create = 0
+                gc.collect()
+        forget_gpu_residency(self)
         logger.info("ONNX session released for %s.", self.model_name)
 
     def set_session_refresh_interval(self, interval: int) -> None:

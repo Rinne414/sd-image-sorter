@@ -19,7 +19,13 @@ import numpy as np
 from PIL import Image
 
 import config
-from ai_runtime_guard import PRIORITY_BATCH, exclusive_ai_runtime
+from ai_runtime_guard import (
+    PRIORITY_BATCH,
+    claim_gpu_residency,
+    exclusive_ai_runtime,
+    forget_gpu_residency,
+)
+from gpu_duty_cycle import gpu_duty_cycle
 from model_download_sources import (
     HF_OFFICIAL_ENDPOINT,
     format_hf_download_error,
@@ -434,6 +440,12 @@ class CLTaggerV2Tagger(_ScoringMixin):
                 raise CLTaggerV2Error(
                     "No ONNX Runtime execution provider is available for CL Tagger v2."
                 )
+            if any(
+                provider in providers
+                for provider in ("CUDAExecutionProvider", "DmlExecutionProvider")
+            ):
+                # One GPU tagger session at a time (D46).
+                claim_gpu_residency(self, self.release_session, label=self.model_name)
             self.session = runtime.InferenceSession(
                 model_path,
                 sess_options=self._build_session_options(
@@ -461,14 +473,17 @@ class CLTaggerV2Tagger(_ScoringMixin):
     def release_session(self) -> None:
         self.session = None
         self._loaded = False
+        forget_gpu_residency(self)
 
     def _run_logits(self, pixel_values: np.ndarray) -> np.ndarray:
         if self.session is None:
             raise CLTaggerV2Error("CL Tagger v2 session is not loaded.")
-        outputs = self.session.run(
-            ["logits"],
-            {"pixel_values": pixel_values.astype(np.float32, copy=False)},
-        )
+        # D46: rest after each GPU batch so long runs do not peg the card.
+        with gpu_duty_cycle(self._session_uses_gpu()):
+            outputs = self.session.run(
+                ["logits"],
+                {"pixel_values": pixel_values.astype(np.float32, copy=False)},
+            )
         if not outputs:
             raise CLTaggerV2Error("CL Tagger v2 returned no logits output.")
         return np.asarray(outputs[0])
@@ -511,7 +526,10 @@ class CLTaggerV2Tagger(_ScoringMixin):
         copyright_threshold: Optional[float],
         return_runtime_info: bool,
     ):
-        del preferred_batch_size, min_batch_size
+        del min_batch_size
+        # The caller's batch size is the hardware-aware GPU cap; honour it
+        # instead of stacking the whole window into one inference.
+        chunk_size = max(1, int(preferred_batch_size or len(image_paths) or 1))
         with exclusive_ai_runtime("cl-tagger-v2-inference", priority=PRIORITY_BATCH):
             if not self._loaded:
                 self.load()
@@ -525,19 +543,22 @@ class CLTaggerV2Tagger(_ScoringMixin):
                     indices.append(index)
                 except Exception as exc:
                     results[index] = self._build_empty_result(str(exc))
-            if pixels:
-                logits = self._run_logits(np.stack(pixels, axis=0))
-                for result_index, source_index in enumerate(indices):
-                    results[source_index] = self._process_probs(
-                        logits[result_index],
+            for start in range(0, len(pixels), chunk_size):
+                logits = self._run_logits(
+                    np.stack(pixels[start : start + chunk_size], axis=0)
+                )
+                for offset, row in enumerate(logits):
+                    results[indices[start + offset]] = self._process_probs(
+                        row,
                         threshold=threshold,
                         character_threshold=character_threshold,
                         copyright_threshold=copyright_threshold,
                     )
             if return_runtime_info:
+                applied = min(chunk_size, len(image_paths))
                 return results, {
-                    "initial_chunk_size": len(image_paths),
-                    "final_chunk_size": len(image_paths),
+                    "initial_chunk_size": applied,
+                    "final_chunk_size": applied,
                     "backoff_steps": [],
                     "used_cpu_fallback": not self.use_gpu,
                     "attempted_gpu_backoff": False,
