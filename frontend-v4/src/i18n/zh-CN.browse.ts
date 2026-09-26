@@ -5,9 +5,9 @@
 export const zhCNBrowse = {
   'qop.any': '任一',
   'qop.contains': '包含',
-  'searchWarn.anyTagAlone': '“任一”标签要单独用：把其他标签也写进 | 里',
+  'searchWarn.anyTagAlone': '「任一」标签要单独用：把其他标签也写进 | 里',
   'searchHelp.tagAny': '有其中任何一个标签就算，用 | 隔开。整条搜索只能有这一组，不能再另外要求别的标签。',
-  'searchHelp.promptContains': '提示词里含有这段文字就算，可以是更长的词的一部分。写了 * 之后，所有提示词条件都按“包含”来找。',
+  'searchHelp.promptContains': '提示词里含有这段文字就算，可以是更长的词的一部分。写了 * 之后，所有提示词条件都按「包含」来找。',
 
   'browse.filter.tags': '标签',
   'browse.filter.tagsAdd': '加标签，回车确定',

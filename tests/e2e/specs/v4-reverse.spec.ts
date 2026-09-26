@@ -156,8 +156,9 @@ test('tags then the vision model: waits its turn, sends the target model, shows 
   await stubSmartTag(page, s, { status: 'queued', queue_id: 'q7', queue_position: 2 }, [
     { active: true, job_id: 'someone-else', status: 'running', pipeline_queue: { queued: [{ queue_id: 'q7', kind: 'smart', position: 1 }] } },
     { active: true, job_id: 'someone-else', status: 'running', pipeline_queue: { queued: [{ queue_id: 'q7', kind: 'smart', position: 1 }] } },
-    { active: true, job_id: 'j1', status: 'running', pipeline_queue: { queued: [] } },
-    { active: false, job_id: 'j1', status: 'completed', processed: 1, total: 1 },
+    // the backend names the queue place a job was started from (settings.queue_id)
+    { active: true, job_id: 'j1', status: 'running', settings: { queue_id: 'q7' }, pipeline_queue: { queued: [] } },
+    { active: false, job_id: 'j1', status: 'completed', processed: 1, total: 1, settings: { queue_id: 'q7' } },
   ])
   await openReverse(page)
   await page.getByTestId('intake-file').setInputFiles(NO_METADATA)
@@ -189,8 +190,8 @@ test('Cancel stops a running vision-model run, and a queued one only when its tu
     queued,
     queued,
     queued,
-    { active: true, job_id: 'j9', status: 'running', pipeline_queue: { queued: [] } },
-    { active: true, job_id: 'j9', status: 'running' },
+    { active: true, job_id: 'j9', status: 'running', settings: { queue_id: 'q9' }, pipeline_queue: { queued: [] } },
+    { active: true, job_id: 'j9', status: 'running', settings: { queue_id: 'q9' } },
   ])
   await openReverse(page)
   await page.getByTestId('intake-file').setInputFiles(NO_METADATA)

@@ -505,11 +505,11 @@ test('describing one image from its right-click menu writes its description and 
     await page.getByTestId('card-menu').getByRole('menuitem', { name: 'Analyze' }).hover()
     await page.locator('[data-ctx-sub]').getByRole('menuitem', { name: 'Describe…' }).click()
     const dialog = page.getByTestId('tag-dialog')
-    await expect(dialog.getByRole('heading', { name: 'Describe 1 images' })).toBeVisible()
+    await expect(dialog.getByRole('heading', { name: 'Describe 1 image' })).toBeVisible()
     await expect(dialog.getByTestId('tag-tagger-on')).not.toBeChecked()
     await expect(dialog.getByTestId('tag-tagger-off')).toBeVisible()
     await dialog.locator('input[name="describer"][value="vlm"]').check()
-    await expect(dialog.getByTestId('tag-describe-calls')).toHaveText('Calls e2e-fake-vlm 1 times; it runs on this computer, so it costs nothing.')
+    await expect(dialog.getByTestId('tag-describe-calls')).toHaveText('Calls e2e-fake-vlm 1 time; it runs on this computer, so it costs nothing.')
     await dialog.getByRole('button', { name: 'Describe 1' }).click()
     await expect(dialog).toHaveCount(0)
 
@@ -527,7 +527,7 @@ test('describing one image from its right-click menu writes its description and 
     const card = page.getByTestId('generation-card')
     await expect(card).toContainText(sentence)
     await card.getByTestId('card-describe').click()
-    await expect(page.getByTestId('tag-dialog').getByRole('heading', { name: 'Describe 1 images' })).toBeVisible()
+    await expect(page.getByTestId('tag-dialog').getByRole('heading', { name: 'Describe 1 image' })).toBeVisible()
     await expect(page.getByTestId('tag-dialog').getByTestId('tag-tagger-on')).not.toBeChecked()
     await page.keyboard.press('Escape')
 

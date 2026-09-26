@@ -154,7 +154,8 @@ export async function openLibrary(page: Page, query: string, count: number, them
   const input = page.getByTestId('query-input')
   await input.fill(query)
   await input.press('Enter')
-  await expect(page.getByTestId('result-count')).toHaveText(`${count.toLocaleString('en-US')} images`)
+  // English counts of 1 are singular (i18n/plural.ts)
+  await expect(page.getByTestId('result-count')).toHaveText(`${count.toLocaleString('en-US')} ${count === 1 ? 'image' : 'images'}`)
   await expect(page.locator('[data-testid="gallery-scroller"]:not([aria-busy])')).toBeVisible()
 }
 

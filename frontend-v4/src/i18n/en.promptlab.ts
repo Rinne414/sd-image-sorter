@@ -26,7 +26,7 @@ export const enPromptLab: Record<keyof typeof zhCNPromptLab, string> = {
   'pl.stats.highTagsNote': 'The tags most common in images with an aesthetic score of 7 or more; the number is images.',
   'pl.stats.topModels': 'Most used models',
   'pl.stats.bestModels': 'Best-scoring models',
-  'pl.stats.bestModelsNote': 'Ranked by average aesthetic score; a model is listed once {min} of its images are scored.',
+  'pl.stats.bestModelsNote': 'Ranked by average aesthetic score; a model is listed once it has {min} scored images.',
   'pl.stats.examples': 'Top-scoring images',
   'pl.stats.recipes': 'Recipe ideas',
   'pl.stats.recipesNote': 'A model with the tags most common in the images it made.',

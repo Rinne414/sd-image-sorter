@@ -87,7 +87,7 @@ test('A/B showdown: pick, undo, a reload keeps the round, the winner is favourit
   expect(await sides(page)).toEqual([ids[0], ids[1]])
 
   await press(page, 'a', 'Round 2 of 3')
-  await expect(page.getByTestId('sort-side-a')).toContainText('held 1 rounds')
+  await expect(page.getByTestId('sort-side-a')).toContainText('held 1 round')
   await press(page, 'd', 'Round 3 of 3')
   expect(await sides(page)).toEqual([ids[2], ids[3]])
   await page.keyboard.press('ArrowLeft')

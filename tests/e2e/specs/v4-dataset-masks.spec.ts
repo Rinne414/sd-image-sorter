@@ -146,7 +146,7 @@ test('a dataset batch with three Library images', async ({ page }) => {
 test('painting and saving a mask flips the image to "has a mask"; the saved PNG is black where it was painted', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   await openCheck(page)
-  await expect(page.getByTestId('mask-coverage')).toHaveText('0 of 3 Library images have a mask')
+  await expect(page.getByTestId('mask-coverage')).toHaveText('Masks: 0 of 3 Library images')
   // no mask anywhere and none exported: nothing to say in the list
   await expect(page.locator('[data-testid="check-issue"][data-kind="no_mask"]')).toHaveCount(0)
 
@@ -181,7 +181,7 @@ test('painting and saving a mask flips the image to "has a mask"; the saved PNG 
   await page.getByTestId('mask-discard').click()
   await expect(page.getByTestId('mask-editor')).toHaveCount(0)
 
-  await expect(page.getByTestId('mask-coverage')).toHaveText('1 of 3 Library images have a mask')
+  await expect(page.getByTestId('mask-coverage')).toHaveText('Masks: 1 of 3 Library images')
   // masks in use now: the two without one are listed
   const noMask = page.locator('[data-testid="check-issue"][data-kind="no_mask"]')
   await expect(noMask).toBeVisible()
@@ -196,7 +196,7 @@ test('painting and saving a mask flips the image to "has a mask"; the saved PNG 
 test('the saved mask opens again and can be removed; the image is then trained whole', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await openCheck(page)
-  await expect(page.getByTestId('mask-coverage')).toHaveText('1 of 3 Library images have a mask')
+  await expect(page.getByTestId('mask-coverage')).toHaveText('Masks: 1 of 3 Library images')
   // the editor starts at the first image without a mask; A goes back to the one with it
   await page.getByTestId('mask-edit').click()
   await expect(state(page)).toHaveText('No mask: the whole picture is trained')
@@ -285,12 +285,12 @@ test('"mask automatically" downloads the engine first, then one job marks the im
 
   await page.setViewportSize({ width: 1366, height: 768 })
   await openCheck(page)
-  await expect(page.getByTestId('mask-coverage')).toHaveText('0 of 3 Library images have a mask')
+  await expect(page.getByTestId('mask-coverage')).toHaveText('Masks: 0 of 3 Library images')
   await expect(page.getByTestId('mask-all')).toHaveText('Download Lucida (about 885 MB) and mask 3')
   await page.getByTestId('mask-all').click()
 
   await expect.poll(() => started.length, { timeout: 15_000 }).toBe(1)
   expect(started[0]).toEqual({ image_ids: ids, method: 'lucida', overwrite: false })
-  await expect(page.getByTestId('mask-coverage')).toHaveText('3 of 3 Library images have a mask', { timeout: 15_000 })
+  await expect(page.getByTestId('mask-coverage')).toHaveText('Masks: 3 of 3 Library images', { timeout: 15_000 })
   await expect(page.locator('[data-testid="check-issue"][data-kind="no_mask"]')).toHaveCount(0)
 })

@@ -301,7 +301,7 @@ test('tag backup: a real export of this library only, then an import that says f
   const file = JSON.stringify({ version: '1.0', count: images.length, images })
   await page.getByTestId('tags-import-file').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(file) })
   const dialog = page.getByTestId('tags-import-dialog')
-  await expect(dialog.getByTestId('tags-import-counts')).toHaveText(`The file holds ${COUNT + 4} images: ${COUNT + 3} with tags or a description; 1 are empty and are skipped.`)
+  await expect(dialog.getByTestId('tags-import-counts')).toHaveText(`The file holds ${COUNT + 4} images: ${COUNT + 3} with tags or a description; 1 is empty and skipped.`)
   await expect(dialog).toContainText('Images of this library are matched by path, then by file name.')
   await expect(dialog.getByRole('radio', { name: 'Only fill in images that have no tags yet' })).toBeChecked()
   await dialog.getByTestId('tags-import-ok').click()
@@ -311,8 +311,8 @@ test('tag backup: a real export of this library only, then an import that says f
   await expect(result).toContainText(`Imported the tags of ${COUNT} images, skipped 3`)
   await expect(result.locator('li')).toHaveText([
     '1 not found in this library: neither the path nor the file name matches',
-    '1 have a file name that several images in this library share; it is unclear which one is meant, so they were not imported',
-    '1 are listed more than once in the file and were imported once',
+    '1 not imported: several images in this library share the file name, so it is unclear which one is meant',
+    '1 listed more than once in the file: imported once',
   ])
   await expect(dialog.getByTestId('tags-import-close')).toBeFocused()
   expect(countInDb(`SELECT COUNT(*) FROM tags t JOIN images i ON i.id = t.image_id WHERE i.library_id = ? AND t.tag = '${TAG}'`)).toBe(COUNT)
@@ -366,8 +366,8 @@ test('clearing the index: work in the way is named and stopped, the counts come 
   await expect(dialog).toContainText(`Clear the index of library “${LIB_NAME}”?`)
   const facts = dialog.getByTestId('clear-index-facts')
   await expect(facts).toContainText(`This deletes ${COUNT} image records.`)
-  await expect(facts).toContainText(`the tags and descriptions of ${COUNT} images and the ratings of 1 images`)
-  await expect(facts).toContainText('The 1 favorites are kept by file path')
+  await expect(facts).toContainText(`the tags and descriptions of ${COUNT} images and the ratings of 1 image`)
+  await expect(facts).toContainText('The 1 favorite is kept by file path')
   await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)

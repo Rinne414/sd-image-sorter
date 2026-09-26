@@ -293,7 +293,7 @@ test('the frequency table: character trait hints, blacklist, pick, and tags the 
   await expect(row(page, 'blush')).toBeVisible()
   await page.getByTestId('edit-pick-clear').click()
   await row(page, 'blush').getByTestId('freq-missed').click()
-  await expect(page.getByTestId('freq-missed-count')).toContainText('these 5')
+  await expect(page.getByTestId('freq-missed-count')).toContainText('the 5')
   await page.getByTestId('freq-missed-add').click()
   await expect(row(page, 'blush')).toContainText('6')
   const now = await heads(page)

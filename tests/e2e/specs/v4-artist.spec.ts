@@ -177,7 +177,7 @@ test('the five numbers, both lists and one artist’s images come from the libra
   const detail = page.getByTestId('artist-detail')
   await expect(detail).toHaveAttribute('data-artist', 'v4art_gamma')
   await expect(detail).toContainText('Unconfirmed')
-  await expect(detail).toContainText('1 images guessed as this name')
+  await expect(detail).toContainText('1 image guessed as this name')
   await expect(detail.getByTestId('artist-preview')).toHaveCount(1)
   await expect(detail.getByTestId('artist-preview').first()).toContainText('Unconfirmed')
 

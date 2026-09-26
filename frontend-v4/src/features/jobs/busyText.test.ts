@@ -52,7 +52,7 @@ describe('explainBusy', () => {
 
   test('a lock whose job is gone: restart, not wait', () => {
     const named = refused('stale_lock_holder_gone', { scope: 'process', pid: 9, label: 'wd14-tagger', elapsed_seconds: 9000, holder_alive: false })
-    expect(explainBusy(named, tZh)).toBe('AI 还被锁着，但锁住它的「打标签」已经不在运行了。等也不会好，重启 app 才能解开。')
+    expect(explainBusy(named, tZh)).toBe('AI 还被锁着，但锁住它的「打标签」已经不在运行了。等也不会好，重启程序才能解开。')
     expect(explainBusy(refused('stale_lock_holder_gone', null), tEn)).toBe(
       'The AI is still locked by a job that is no longer running. Waiting will not help: restart the app to clear it.',
     )

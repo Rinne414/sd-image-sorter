@@ -29,7 +29,7 @@ export const zhCNLexicon = {
   'lex.row.category': '{name} 的分类',
   'lex.loading': '正在读取…',
   'lex.loadFailed': '读不到：{reason}',
-  'lex.noMatch': '没有名字里带“{q}”的项。',
+  'lex.noMatch': '没有名字里带「{q}」的项。',
   'lex.noCategory': '这个分类里没有标签。',
   'lex.empty.tags': '还没有标签。先给图打标签，这里就会有。',
   'lex.empty.prompts': '还没有提示词。导入带生成信息的图之后就会有。',
@@ -37,7 +37,7 @@ export const zhCNLexicon = {
   'lex.empty.checkpoints': '还没有记录了模型的图。',
 
   // changing a tag's category
-  'lex.recat.done': '已把 {name} 改到“{category}”',
+  'lex.recat.done': '已把 {name} 改到「{category}」',
   'lex.recat.failed': '没能改分类：{reason}',
   'lex.recat.hint': '改了分类，提示词助手的随机组合和标签颜色都跟着变。',
 
@@ -49,5 +49,5 @@ export const zhCNLexicon = {
   'lex.query.scoped': '只算左栏选的范围',
   'lex.query.view': '在图库中查看',
   'lex.query.clear': '清空搜索',
-  'lex.query.hint': '同一类的两项（两个 LoRA、两个模型）是“其中之一”；标签按图库现在的匹配方式（全部都有，或其中之一）。',
+  'lex.query.hint': '同一类的两项（两个 LoRA、两个模型）是「其中之一」；标签按图库现在的匹配方式（全部都有，或其中之一）。',
 }

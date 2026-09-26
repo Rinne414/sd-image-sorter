@@ -95,7 +95,7 @@ export const enSimilar: Record<keyof typeof zhCNSimilar, string> = {
   'sim.dup.status': 'Duplicate groups: {n}',
   'sim.dup.statusAction': 'Review…',
   'sim.dup.never': 'No duplicate scan yet. The scan compares the images in the similarity index and finds groups that are nearly the same.',
-  'sim.dup.coverage': '{embedded} of {total} images are in the index',
+  'sim.dup.coverage': 'In the index: {embedded} of {total} images',
   'sim.dup.coveragePending': '{n} images are not in the index; the scan cannot see them',
   'sim.dup.lastScan': 'Last scan: {when} · {threshold} similar or more',
   'sim.dup.summary': '{groups} groups, {extra} extra images, {size}',

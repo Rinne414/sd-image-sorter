@@ -56,7 +56,7 @@ export const enLibrarySettings: Record<keyof typeof zhCNLibrarySettings, string>
   'libset.tags.badShape': 'Wrong kind of file: expected a tag file exported here (with an images list).',
   'libset.import.title': 'Import tags',
   'libset.import.file': 'File: {name}',
-  'libset.import.counts': 'The file holds {total} images: {usable} with tags or a description; {empty} are empty and are skipped.',
+  'libset.import.counts': 'The file holds {total} images: {usable} with tags or a description; {empty} are empty and skipped.',
   'libset.import.nothing': 'The file has no tags to import.',
   'libset.import.match': 'Images of this library are matched by path, then by file name. Images with no match, and file names that fit several images, are skipped.',
   'libset.import.fill': 'Only fill in images that have no tags yet',
@@ -66,9 +66,9 @@ export const enLibrarySettings: Record<keyof typeof zhCNLibrarySettings, string>
   'libset.import.ok': 'Import tags for {n}',
   'libset.import.done': 'Imported the tags of {imported} images, skipped {skipped}',
   'libset.import.why.not_found': '{n} not found in this library: neither the path nor the file name matches',
-  'libset.import.why.ambiguous': '{n} have a file name that several images in this library share; it is unclear which one is meant, so they were not imported',
-  'libset.import.why.already_tagged': '{n} already have tags and were left as they are',
-  'libset.import.why.duplicate': '{n} are listed more than once in the file and were imported once',
+  'libset.import.why.ambiguous': '{n} not imported: several images in this library share the file name, so it is unclear which one is meant',
+  'libset.import.why.already_tagged': '{n} left unchanged: they already had tags',
+  'libset.import.why.duplicate': '{n} listed more than once in the file: imported once',
 
   // Library › at the bottom: clearing the index
   'libset.clear.title': 'Clear this library’s index',

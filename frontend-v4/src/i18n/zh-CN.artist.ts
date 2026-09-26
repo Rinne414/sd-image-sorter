@@ -33,12 +33,12 @@ export const zhCNArtist = {
   'artist.run.loading': '正在载入画风模型…',
   'artist.run.stop': '停止',
   'artist.run.stopping': '正在停止…',
-  'artist.run.jobs': '在“工作”里看',
+  'artist.run.jobs': '在「工作」里看',
 
   // the model
   'artist.model.ready': 'Kaloscope 2.0 已就绪。',
-  'artist.model.download': '第一次识别前会先下载 Kaloscope 2.0（约 2.8 GB），进度在“工作”里，下载完自动开始识别。',
-  'artist.model.restart': 'Kaloscope 2.0 装好了，要重启 app 后才能用。',
+  'artist.model.download': '第一次识别前会先下载 Kaloscope 2.0（约 2.8 GB），进度在「工作」里，下载完自动开始识别。',
+  'artist.model.restart': 'Kaloscope 2.0 装好了，要重启程序后才能用。',
   'artist.model.local': '用本地模型文件：第一次只补装运行需要的包。',
   'artist.model.problem': '画风模型现在用不了。',
   'artist.model.missing': '缺少：{deps}',
@@ -47,7 +47,7 @@ export const zhCNArtist = {
 
   // settings (remembered as they change)
   'artist.settings.title': '识别设置',
-  'artist.settings.remembered': '改了就记住，下次和右键“识别画风”都用它。',
+  'artist.settings.remembered': '改了就记住，下次和右键「识别画风」都用它。',
   'artist.source': '模型来源',
   'artist.source.huggingface': 'HuggingFace（Kaloscope 2.0）',
   'artist.source.modelscope': 'ModelScope 镜像',
@@ -70,7 +70,7 @@ export const zhCNArtist = {
 
   // the lists
   'artist.top.title': '识别出的画师',
-  'artist.top.empty': '还没有识别出画师。在左边选好图，点“识别”。',
+  'artist.top.empty': '还没有识别出画师。在左边选好图，点「识别」。',
   'artist.top.emptyRan': '识别跑过了，但没有一张达到高置信度。再跑之前先查一下画师在不在词表里：不在词表里的画师永远识别不出来。',
   'artist.top.images': '{n} 张',
   'artist.top.avgPeak': '平均 {avg} · 最高 {peak}',

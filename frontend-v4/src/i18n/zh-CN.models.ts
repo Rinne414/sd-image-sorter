@@ -26,9 +26,9 @@ export const zhCNModels = {
   'mc.avail.later.censor': '自动打码：NudeNet，约 12 MB；隐私 YOLO 和 SAM 3 可选',
   'mc.avail.later.caption': '自然语言描述：Florence-2，约 465 MB；也可以用 AI 服务（在线或本地 Ollama）',
   'mc.avail.later.masks': '训练遮罩：Lucida，约 885 MB，或 rembg，约 170 MB',
-  'mc.avail.restart': '大多数模型下载完就能用。只有装了新的运行组件时才要重启 app，到时这里会出现「立即重启并继续」。',
-  'mc.moved.title': '换了新文件夹后，模型全显示“缺失”？',
-  'mc.moved.body': '模型还在旧文件夹的 data 目录里。把旧的 data 文件夹整个复制到新文件夹，再重启 app 就行，不用重新下载。',
+  'mc.avail.restart': '大多数模型下载完就能用。只有装了新的运行组件时才要重启程序，到时这里会出现「立即重启并继续」。',
+  'mc.moved.title': '换了新文件夹后，模型全显示「缺失」？',
+  'mc.moved.body': '模型还在旧文件夹的 data 目录里。把旧的 data 文件夹整个复制到新文件夹，再重启程序就行，不用重新下载。',
   'mc.loading': '正在检查本机的模型…',
   'mc.failed': '读不到模型状态：{reason}',
   'mc.retry': '再试一次',
@@ -101,7 +101,7 @@ export const zhCNModels = {
   'mc.otherTaggers.missing': '未下载',
   'mc.otherTaggers.get': '现在下载',
   'mc.gpu':
-    '用显卡打标时，每批之后会稍停一下，显卡不会一直满载（默认显卡忙 85% 的时间）。要改就在启动 app 前设置环境变量 SD_IMAGE_SORTER_GPU_DUTY_CYCLE：例如 70%；设成 off 就不停。',
+    '用显卡打标时，每批之后会稍停一下，显卡不会一直满载（默认显卡忙 85% 的时间）。要改就在启动程序前设置环境变量 SD_IMAGE_SORTER_GPU_DUTY_CYCLE：例如 70%；设成 off 就不停。',
 
   // where a card downloads from
   'mc.source': '来源',
@@ -111,7 +111,7 @@ export const zhCNModels = {
   'mc.source.sam3': '从 ModelScope 下载，不受上面的下载源影响。',
 
   // what getting it ready involves
-  'mc.plan.restart': '准备时要装 {n} 个运行组件，装好后要重启一次 app。',
+  'mc.plan.restart': '准备时要装 {n} 个运行组件，装好后要重启一次程序。',
   'mc.plan.noRestart': '准备时要装 {n} 个运行组件，装好就能用，不用重启。',
   'mc.plan.plain': '下载完就能用，不用重启。',
 
@@ -149,7 +149,7 @@ export const zhCNModels = {
 
   // restart banner and the list that continues after a restart
   'mc.banner.restartTitle': '需要重启',
-  'mc.banner.restartBody': '刚装的运行组件要重启 app 后才能用。重启后会自动接着下载（还剩 {n} 个）。',
+  'mc.banner.restartBody': '刚装的运行组件要重启程序后才能用。重启后会自动接着下载（还剩 {n} 个）。',
   'mc.banner.later': '稍后再说',
   'mc.banner.pendingTitle': '还有 {n} 个模型没下载完',
   'mc.banner.pendingBody': '上次的下载没做完：{names}。',

@@ -75,12 +75,12 @@ test('moved files are found again in another folder; a deleted one is cleared', 
   await chooser.getByRole('button', { name: 'Search here (with subfolders)' }).click()
   await expect(chooser).toHaveCount(0)
 
-  await expect(groups).toContainText('1 images', { timeout: 20_000 })
+  await expect(groups).toContainText('1 image', { timeout: 20_000 })
   await expect.poll(() => pathOf(page, `${PREFIX}00.png`)).toBe(path.join(tmpRoot, MOVED, 'later', `${PREFIX}00.png`))
 
   // the one that is really gone: clearing asks first and deletes no file
   await groups.getByRole('button', { name: 'Clear these records…' }).click()
-  await expect(groups).toContainText('Clear these 1 records? The files are already gone')
+  await expect(groups).toContainText('Clear the 1 record? The files are already gone')
   await groups.getByRole('button', { name: 'Clear 1' }).click()
   await expect(dialog).toContainText('No missing files.')
   await page.keyboard.press('Escape')

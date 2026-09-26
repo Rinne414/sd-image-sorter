@@ -81,7 +81,7 @@ export const enPrivacy: Record<keyof typeof zhCNPrivacy, string> = {
   // messages
   'privacy.added': 'Added {n} images',
   'privacy.addedFromLibrary': 'Added {n} images from the library, not processed yet: press Protect all to start.',
-  'privacy.libraryGone': '{n} images are no longer in this library and were not added.',
+  'privacy.libraryGone': 'Not added, no longer in this library: {n} images.',
   'privacy.noImages': 'There are no images among these files.',
   'privacy.copied': 'Result copied (PNG)',
   'privacy.copyFailed': 'Could not copy: {reason}',

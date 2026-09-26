@@ -263,7 +263,7 @@ test('the counts come first; the run sends no trigger, skips tagged images, and 
 
   await expect(page.getByTestId('scope-library')).toHaveText('Library images: 2 without tags, 1 already tagged')
   await expect(page.getByTestId('scope-folder')).toHaveText('Folder images: 2 without a caption, 0 with one')
-  await expect(page.getByTestId('tag-scope')).toContainText('You edited 1 captions')
+  await expect(page.getByTestId('tag-scope')).toContainText('You edited 1 caption')
   await expect(page.getByTestId('tag-total')).toHaveText('This run takes 4 images')
   // captions are off by default; without a VLM set up it cannot be chosen
   await expect(page.getByRole('radio', { name: /None/ })).toBeChecked()
@@ -296,10 +296,10 @@ test('the counts come first; the run sends no trigger, skips tagged images, and 
   // the edited caption is still the user's, and the step offers the new tags
   const mine = written.find((h) => h.item.item_type === 'library' && h.item.image_id === ids[2])
   expect(mine?.active_revision).toMatchObject({ author_class: 'user' })
-  await expect(page.getByTestId('tag-kept')).toContainText('1 captions you edited kept your version')
+  await expect(page.getByTestId('tag-kept')).toContainText('1 caption you edited kept your version')
 
   await page.getByTestId('tag-replace').click()
-  await expect(page.getByRole('status')).toContainText('1 captions now use the new tags.')
+  await expect(page.getByRole('status')).toContainText('1 caption now uses the new tags.')
   await expect(page.getByTestId('tag-kept')).toHaveCount(0)
   const replaced = (await heads(page)).find((h) => h.item.item_type === 'library' && h.item.image_id === ids[2])
   expect(replaced?.active_revision?.author_class).toBe('ai')
@@ -588,11 +588,11 @@ test('new thresholds from the stored scores: a dry run says what changes, then t
     el.dispatchEvent(new Event('input', { bubbles: true }))
   })
   await expect(panel).toContainText('Threshold 0.25')
-  await expect(page.getByTestId('re-report')).toContainText('Would change 1 images: 1 tags added, 0 removed.')
+  await expect(page.getByTestId('re-report')).toContainText('Would change 1 image: 1 tag added, 0 removed.')
   expect(libraryTags(ids[0])).not.toContain('outdoors')
 
   await page.getByTestId('re-apply').click()
-  await expect(page.getByRole('status')).toContainText('Updated 1 images: 1 tags added, 0 removed.')
+  await expect(page.getByRole('status')).toContainText('Updated 1 image: 1 tag added, 0 removed.')
   expect(libraryTags(ids[0])).toContain('outdoors')
 })
 

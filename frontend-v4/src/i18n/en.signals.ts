@@ -52,6 +52,6 @@ export const enSignals: Record<keyof typeof zhCNSignals, string> = {
   'signals.tag.resetTitle': 'Forget the remembered tagger, thresholds, GPU switch, drop list, tag limit, noise switch, caption handling and custom model paths (V4 only)',
   'signals.tag.resetDone': 'Defaults restored',
 
-  'signals.next.pick': 'Pick these {n} in the Library',
+  'signals.next.pick': 'Pick the {n} in the Library',
   'signals.next.editTags': 'Edit tags…',
 }

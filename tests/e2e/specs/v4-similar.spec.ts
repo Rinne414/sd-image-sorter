@@ -373,7 +373,7 @@ test('duplicates: tick what goes, keep two or more but never none, open full siz
   await expect(status).toContainText('Duplicate groups: 1')
   await status.getByRole('button', { name: 'Review…' }).click()
   const dialog = page.getByTestId('duplicates-dialog')
-  await expect(dialog.getByTestId('duplicates-coverage')).toContainText(`${COUNT} of ${COUNT} images are in the index`)
+  await expect(dialog.getByTestId('duplicates-coverage')).toContainText(`In the index: ${COUNT} of ${COUNT} images`)
   const group = dialog.getByTestId('duplicate-group')
   const mark = (i: number) => group.locator(`[data-testid="duplicate-mark"][data-id="${ids[i]}"]`)
   await expect(group.getByTestId('duplicate-mark')).toHaveCount(3)

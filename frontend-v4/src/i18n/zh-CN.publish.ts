@@ -6,7 +6,7 @@ export const zhCNPublish = {
   'batch.badge.reviewed': '已审核',
   'batch.badge.unreviewed': '待审核',
 
-  'batch.order.keys': '按发布顺序 · Ctrl/Shift 点选多张一起移 · 拖动或 Alt+←/→ 前后移一位 · Alt+Home/End 移到最前/最后 · Ctrl+Z 撤销',
+  'batch.order.keys': '按发布顺序 · Ctrl/Shift 点击选多张一起移 · 拖动或 Alt+←/→ 前后移一位 · Alt+Home/End 移到最前/最后 · Ctrl+Z 撤销',
   'batch.order.label': '发布顺序',
   'batch.order.empty': '这个批次还没有图。先到「挑图」加图。',
   'batch.order.moved': '「{name}」移到了第 {n} 张',

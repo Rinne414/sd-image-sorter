@@ -31,7 +31,7 @@ export const zhCNSignals = {
   'signals.panel.cpu': 'CPU',
   'signals.panel.progress': '第 {current} / {total} 张',
   'signals.panel.vram': '约占显存 {n} MB',
-  'signals.panel.stuck': '它占用 AI 已经超过 {time}，看起来卡住了。进度一直不动的话，重启 app。',
+  'signals.panel.stuck': '它占用 AI 已经超过 {time}，看起来卡住了。进度一直不动的话，重启程序。',
   'signals.panel.oneAtATime': '同一时间只有一个 AI 工作用显卡：后开始的打标签会排队，其他 AI 工作和它轮流用。',
   'signals.panel.openJobs': '打开工作列表',
 
@@ -40,9 +40,9 @@ export const zhCNSignals = {
   'signals.busy.thread': '「{who}」正在用 AI{running}。它结束后会自动让出；也可以在它开始的地方停掉它。',
   'signals.busy.process': '另一个进程里的「{who}」正在用 AI{running}。等它结束再试；如果是这里开始的打标签，可以在「工作」里停掉它。',
   'signals.busy.unnamed': '另一个进程正在用 AI，没说是什么。同一时间只能跑一个 AI 工作，等它结束再试。',
-  'signals.busy.stale': 'AI 还被锁着，但锁住它的「{who}」已经不在运行了。等也不会好，重启 app 才能解开。',
-  'signals.busy.staleUnnamed': 'AI 还被一个已经不在运行的工作锁着。等也不会好，重启 app 才能解开。',
-  'signals.busy.stuck': '它已经跑了很久，看起来卡住了；进度一直不动的话，重启 app。',
+  'signals.busy.stale': 'AI 还被锁着，但锁住它的「{who}」已经不在运行了。等也不会好，重启程序才能解开。',
+  'signals.busy.staleUnnamed': 'AI 还被一个已经不在运行的工作锁着。等也不会好，重启程序才能解开。',
+  'signals.busy.stuck': '它已经跑了很久，看起来卡住了；进度一直不动的话，重启程序。',
 
   'signals.tag.queueNamed': '「{who}」正在用 AI{running}。这次会排在它后面，它结束后自动开始，两批不会同时用显卡。',
   'signals.tag.queue': '前面还有打标签的工作在排队。这次排在它们后面，轮到时自动开始，不会同时用显卡。',

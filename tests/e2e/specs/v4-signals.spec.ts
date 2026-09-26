@@ -268,10 +268,10 @@ test('a finished run in a background tab marks the title; its next steps act on 
   await expect(page.getByTestId('selection-bar')).toHaveCount(0)
   await page.getByTestId('jobs-button').click()
   const next = page.getByTestId('jobs-drawer').getByTestId('tag-next')
-  await expect(next.getByRole('button', { name: 'Pick these 2 in the Library' })).toBeVisible()
+  await expect(next.getByRole('button', { name: 'Pick the 2 in the Library' })).toBeVisible()
   await next.getByRole('button', { name: 'Add to batch' }).click()
   await expect(next.getByRole('button', { name: 'New dataset…' })).toBeVisible()
-  await next.getByRole('button', { name: 'Pick these 2 in the Library' }).click()
+  await next.getByRole('button', { name: 'Pick the 2 in the Library' }).click()
   await expect(page.getByTestId('selection-bar')).toContainText('2 picked')
 
   await page.getByTestId('jobs-button').click()

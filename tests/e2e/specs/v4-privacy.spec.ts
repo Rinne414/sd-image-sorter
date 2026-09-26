@@ -129,7 +129,7 @@ test('protect then restore gives back the original pixels and prompt; Protect ag
   await page.getByTestId('privacy-password').fill('0512')
   await expect(page.getByTestId('privacy-password-offsite')).toHaveCount(0)
   await page.getByTestId('privacy-protect-all').click()
-  await expect(page.getByTestId('privacy-summary')).toHaveText('Protected 1/1 images')
+  await expect(page.getByTestId('privacy-summary')).toHaveText('Protected 1/1 image')
   await expect(page.getByTestId('privacy-item-status')).toHaveText('Protected · Standard · carries its generation details')
 
   const first = await download(page, page.getByTestId('privacy-item-download'))
@@ -146,7 +146,7 @@ test('protect then restore gives back the original pixels and prompt; Protect ag
   const before = await page.getByTestId('privacy-item-result').locator('img').getAttribute('src')
   await page.getByTestId('privacy-protect-all').click()
   await expect(page.getByTestId('privacy-item-result').locator('img')).not.toHaveAttribute('src', before!)
-  await expect(page.getByTestId('privacy-summary')).toHaveText('Protected 1/1 images')
+  await expect(page.getByTestId('privacy-summary')).toHaveText('Protected 1/1 image')
   const again = await download(page, page.getByTestId('privacy-item-download'))
   expect(sha(again.file)).toBe(sha(first.file))
 
@@ -155,7 +155,7 @@ test('protect then restore gives back the original pixels and prompt; Protect ag
   await expect(page.getByTestId('intake-zone')).toBeVisible()
   await page.getByTestId('intake-file').setInputFiles(first.file)
   await page.getByTestId('privacy-restore-all').click()
-  await expect(page.getByTestId('privacy-summary')).toHaveText('Restored 1/1 images')
+  await expect(page.getByTestId('privacy-summary')).toHaveText('Restored 1/1 image')
   const restored = facts((await download(page, page.getByTestId('privacy-item-download'))).file)
   expect(restored.size).toEqual([24, 24])
   expect(restored.rgba).toBe(original.rgba)
@@ -248,7 +248,7 @@ test('a huge image is flagged and never refused, a broken one says why, and a sl
   await expect(items).toHaveCount(2)
   await expect(items.nth(0).getByTestId('privacy-item-huge')).toHaveText('Very large (42.0 MP): it will be slow and use a lot of memory.')
   await expect(items.nth(0).getByTestId('privacy-item-source')).toHaveText('The browser cannot show this image')
-  await expect(page.getByTestId('privacy-huge-count')).toContainText('1 images are over 40 MP')
+  await expect(page.getByTestId('privacy-huge-count')).toContainText('1 image is over 40 MP')
   await expect(page.getByTestId('privacy-protect-all')).toBeEnabled()
 
   // 99 passes over 9 MP take seconds: long enough to cancel in the middle
@@ -268,7 +268,7 @@ test('a huge image is flagged and never refused, a broken one says why, and a sl
   await items.nth(1).getByTestId('privacy-item-remove').click()
   await expect(items).toHaveCount(1)
   await page.getByTestId('privacy-protect-all').click()
-  await expect(page.getByTestId('privacy-summary')).toHaveText('Protected 0/1 images; 1 failed, the reason is under each image')
+  await expect(page.getByTestId('privacy-summary')).toHaveText('Protected 0/1 image; 1 failed, the reason is under each image')
 })
 
 test('images come in by drop and paste, a new name is used for downloads, the preview closes with Esc, a result drags out as a file', async ({ page }) => {
@@ -289,7 +289,7 @@ test('images come in by drop and paste, a new name is used for downloads, the pr
     document.body.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
   }, fs.readFileSync(fixture('no-metadata-source.png')).toString('base64'))
   await expect(page.getByTestId('privacy-item')).toHaveCount(3)
-  await expect(page.getByRole('status').filter({ hasText: 'Added 1 images' })).toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: 'Added 1 image' })).toBeVisible()
 
   const name = page.getByTestId('privacy-item-name').first()
   await name.fill('for-a-friend')

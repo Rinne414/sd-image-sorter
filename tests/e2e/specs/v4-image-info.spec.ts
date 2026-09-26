@@ -217,12 +217,12 @@ test('a click on the model or a LoRA filters the library, from the card and from
   await inspect(page, 0)
   await card(page).getByTestId('card-model-filter').click()
   await expect(input).toHaveValue(`${TOKEN} checkpoint:v4info_model_alpha`)
-  await expect(count).toHaveText('1 images')
+  await expect(count).toHaveText('1 image')
   await expect(page.getByTestId('tile')).toHaveAttribute('title', name(0))
 
   await card(page).getByTestId('card-lora-filter').click()
   await expect(input).toHaveValue(`${TOKEN} checkpoint:v4info_model_alpha lora:v4info_lora_one`)
-  await expect(count).toHaveText('1 images')
+  await expect(count).toHaveText('1 image')
 
   // from the big image: it closes and the library shows the result
   await input.fill(TOKEN)
@@ -234,7 +234,7 @@ test('a click on the model or a LoRA filters the library, from the card and from
   await lightbox.getByTestId('card-model-filter').click()
   await expect(lightbox).toHaveCount(0)
   await expect(input).toHaveValue(`${TOKEN} checkpoint:v4info_model_beta`)
-  await expect(count).toHaveText('1 images')
+  await expect(count).toHaveText('1 image')
   await expect(page.getByTestId('tile')).toHaveAttribute('title', name(1))
 })
 
@@ -255,7 +255,7 @@ test('right-click › Filter by this model filters the library by that image\'s 
   await menu.getByRole('menuitem', { name: 'Filter by this model' }).click()
   await expect(menu).toHaveCount(0)
   await expect(input).toHaveValue(`${TOKEN} checkpoint:v4info_model_alpha`)
-  await expect(page.getByTestId('result-count')).toHaveText('1 images')
+  await expect(page.getByTestId('result-count')).toHaveText('1 image')
   await expect(page.getByTestId('tile')).toHaveAttribute('title', name(0))
 })
 
@@ -312,8 +312,8 @@ test('aesthetic scoring: one image (downloading the model first), the sort notic
   await page.getByRole('button', { name: /^Sort\s*[:：]/ }).click()
   await page.getByRole('menuitemcheckbox', { name: 'Aesthetic score' }).click()
   const notice = page.getByTestId('sort-notice-aesthetic')
-  await expect(notice).toContainText('2 of these images have no aesthetic score')
-  await notice.getByRole('button', { name: 'Score these 2' }).click()
+  await expect(notice).toContainText('No aesthetic score yet for 2 of these images')
+  await notice.getByRole('button', { name: 'Score the 2' }).click()
   await expect(notice).toHaveCount(0)
   expect(stub.scored).toHaveLength(3)
 

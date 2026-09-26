@@ -264,7 +264,7 @@ test('every issue is listed: small, duplicates, empty caption, changed file; CCI
   await page.getByTestId('check-purity-run').click()
   await expect(issue(page, 'character_outlier')).toBeVisible({ timeout: 15_000 })
   expect(await thumbKeys(page, 'character_outlier')).toEqual([`lib:${ids[2]}`])
-  await expect(page.getByTestId('check-purity-result')).toContainText('1 look like another character')
+  await expect(page.getByTestId('check-purity-result')).toContainText('1 looks like another character')
   expect(calls[0]).toBe('/status')
   expect(calls).toContain('/prepare')
   expect(calls.indexOf('start')).toBeGreaterThan(calls.indexOf('/prepare'))
@@ -350,7 +350,7 @@ test('each is removable; a changed file can be re-added as it is now; the Librar
   await expect(issue(page, 'file_changed')).toHaveCount(0)
   await expect.poll(async () => (await localIn(page))[0]?.source_status).toBe('available')
   // the re-added file was not part of the last size / near-duplicate check, and the page says so
-  await expect(page.getByTestId('check-unchecked')).toContainText('1 images were added after the last check')
+  await expect(page.getByTestId('check-unchecked')).toContainText('1 image was added after the last check')
 
   // changed again: "Check again" reads the project again and lists it; this time it is taken out
   changeFolderFile(11)

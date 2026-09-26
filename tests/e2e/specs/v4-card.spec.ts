@@ -99,7 +99,7 @@ test('tags: add with suggestions, remove and undo; captions; read again', async 
   await expect.poll(async () => (await detail(page, first)).tags).not.toContain('v4 card alpha')
   const removedToast = page.getByRole('status').locator('div', { hasText: 'Removed: v4 card alpha' }).last()
   await removedToast.getByRole('button', { name: 'Undo' }).click()
-  await expect(page.getByText('Undone: 1 images restored.')).toBeVisible()
+  await expect(page.getByText('Undone: 1 image restored.')).toBeVisible()
   await expect.poll(async () => (await detail(page, first)).tags).toContain('v4 card alpha')
 
   // the next image is offered the tags the library already has
