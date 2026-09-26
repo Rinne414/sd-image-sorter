@@ -19,7 +19,7 @@ const t = (key: string, params?: Record<string, string | number>) =>
   params ? `${key}(${Object.entries(params).map(([k, v]) => `${k}=${v}`).join(',')})` : key
 
 function bulkOps(): BulkOps {
-  return { rate: vi.fn(), favorite: vi.fn(), dialog: vi.fn(), censor: vi.fn(), newBatch: vi.fn(), addToBatch: vi.fn(), compare: vi.fn(), score: vi.fn() }
+  return { rate: vi.fn(), favorite: vi.fn(), dialog: vi.fn(), censor: vi.fn(), newBatch: vi.fn(), addToBatch: vi.fn(), compare: vi.fn(), score: vi.fn(), sort: vi.fn() }
 }
 
 function imageOps(): ImageOps {
@@ -72,7 +72,17 @@ describe('bulk actions', () => {
     expect(ops.newBatch).toHaveBeenCalledWith('custom', [4, 8], template)
     expect(ops.addToBatch).toHaveBeenCalledWith(batch, [4, 8])
     expect(ops.score).toHaveBeenCalledWith([4, 8])
+    expect(ops.sort).toHaveBeenCalledWith([4, 8])
     for (const d of ['tag', 'edit-tags', 'export', 'move-library', 'copy', 'remove']) expect(ops.dialog).toHaveBeenCalledWith(d, [4, 8])
+  })
+
+  it('"Sort these…" sits under More after copy, only for two or more images', () => {
+    const ops = bulkOps()
+    expect(ids(bulkActions({ ids: [1], favorited: false, batches: [], templates: [], ops }))).not.toContain('sort')
+    const three = bulkActions({ ids: [5, 2, 9], favorited: false, batches: [], templates: [], ops })
+    expect(ids(three.filter((a) => a.bar === 'more')).slice(0, 3)).toEqual(['censor', 'copy', 'sort'])
+    find(three, 'sort').run?.()
+    expect(ops.sort).toHaveBeenCalledWith([5, 2, 9])
   })
 
   it('compare exists only for exactly two images, and compares those two', () => {

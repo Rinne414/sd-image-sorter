@@ -163,10 +163,17 @@ class SessionStateMixin:
         sorted_count = sum(1 for item in active_history if item.get("action") == "move")
         skipped_count = sum(1 for item in active_history if item.get("action") == "skip")
         collected_count = sum(1 for item in active_history if item.get("action") == "collect")
+        # V4: images sent to each slot (moved, copied or collected), by key.
+        slot_counts: Dict[str, int] = {}
+        for item in active_history:
+            key = item.get("folder_key")
+            if item.get("action") in {"move", "collect"} and isinstance(key, str) and key:
+                slot_counts[key] = slot_counts.get(key, 0) + 1
         return {
             "sorted_count": sorted_count,
             "skipped_count": skipped_count,
             "collected_count": collected_count,
+            "slot_counts": slot_counts,
         }
 
     def _get_sort_session_flags(

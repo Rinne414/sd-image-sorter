@@ -5,6 +5,7 @@ import { zhCNLibrary } from './zh-CN.library'
 import { zhCNSimilar } from './zh-CN.similar'
 import { zhCNInfo } from './zh-CN.info'
 import { zhCNStatus } from './zh-CN.status'
+import { zhCNSort } from './zh-CN.sort'
 
 export const zhCN = {
   ...zhCNPublish,
@@ -13,6 +14,7 @@ export const zhCN = {
   ...zhCNInfo,
   ...zhCNDataset,
   ...zhCNStatus,
+  ...zhCNSort,
   'app.name': 'SD Image Sorter',
   'nav.home': '首页',
   'nav.library': '图库',
@@ -438,10 +440,6 @@ export const zhCN = {
   'palette.cmd.jobs': '打开工作列表',
   'palette.hint': '↑↓ 选择，Enter 执行，Esc 关闭',
 
-  'planned.sort.title': '分拣',
-  'planned.sort.body':
-    '把图真正放进文件夹：WASD 手动分拣、按条件自动分类、分区发牌，三种做法放在同一页，共用同一套筛选。',
-  'planned.note': '这一页在 V4 计划里，方向确认后再做。现在可以先用 V3.5 的对应功能。',
   'planned.openV3': '在 V3.5 里打开',
 
   'edge.steps': '{n} 步',
@@ -690,7 +688,7 @@ export const zhCN = {
   'home.start.dataset': '新的数据集',
   'home.start.datasetBody': '从图库挑图，AI 打标，改标签，导出 kohya 格式。',
   'home.start.sort': '整理图片',
-  'home.start.sortBody': '到分拣页，用 WASD 或按条件把图放进文件夹。',
+  'home.start.sortBody': '到分拣页，用 W A S D 一张张把图放进文件夹。',
   'palette.group.batch': '批次',
   'palette.cmd.openBatch': '打开批次「{name}」',
   'palette.cmd.picksToNew.pixiv': '把选中的图放进新的 Pixiv 投稿…',

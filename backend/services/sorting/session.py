@@ -98,8 +98,9 @@ class SortSessionMixin:
         scope: Optional[str] = None,
         folder: Optional[str] = None,
         has_metadata: Optional[bool] = None,
+        image_ids: Optional[Any] = None,
     ) -> Dict[str, Any]:
-        """Start a manual sort session."""
+        """Start a manual sort session (over a filter, or over ``image_ids`` when given)."""
         operation_mode = self._validate_file_operation(operation_mode)
         normalized_mode = str(mode or SORT_MODE_DEFAULT).strip().lower()
         if normalized_mode not in VALID_SORT_MODES:
@@ -145,7 +146,8 @@ class SortSessionMixin:
         artist_name = artist.strip() if artist else None
         search_query = search.strip() if search else None
 
-        image_ids = db.get_filtered_image_ids(
+        picked_ids = image_ids
+        image_ids = self._readable_picked_ids(picked_ids) if picked_ids is not None else db.get_filtered_image_ids(
             generators=gen_list,
             tags=tag_list,
             tag_mode=normalized_tag_mode,
@@ -257,10 +259,19 @@ class SortSessionMixin:
 
                 image_ids = self._sort_session["image_ids"]
                 if self._sort_session["current_index"] >= len(image_ids):
+                    # The summary (totals, folders, per-slot counts) outlives a reload.
                     return {
                         "done": True,
                         "message": "All images sorted",
                         "mode": self._sort_session.get("mode", SORT_MODE_DEFAULT),
+                        "index": len(image_ids),
+                        "total": len(image_ids),
+                        "remaining": 0,
+                        "image_ids": list(image_ids),
+                        "folders": dict(self._sort_session["folders"]),
+                        "collection_slots": dict(self._sort_session.get("collection_slots", {})),
+                        "operation_mode": self._sort_session.get("operation_mode", "move"),
+                        **self._get_sort_session_flags(),
                     }
 
                 current_id = image_ids[self._sort_session["current_index"]]
@@ -709,6 +720,27 @@ class SortSessionMixin:
                 "operation_mode": operation_mode,
                 **session_flags,
             }
+
+    @staticmethod
+    def _readable_picked_ids(picked: Any) -> list:
+        """The picked ids that are readable images of the current library, deduplicated, in pick order."""
+        from library_context import current_library_sql
+
+        wanted = list(dict.fromkeys(int(i) for i in picked or []))
+        lib_sql, lib_params = current_library_sql()
+        found: set = set()
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            for start in range(0, len(wanted), 500):
+                chunk = wanted[start:start + 500]
+                placeholders = ",".join("?" * len(chunk))
+                cursor.execute(
+                    f"SELECT id FROM images WHERE id IN ({placeholders}) "
+                    f"AND COALESCE(is_readable, 1) = 1 AND {lib_sql}",
+                    (*chunk, *lib_params),
+                )
+                found.update(row[0] for row in cursor.fetchall())
+        return [i for i in wanted if i in found]
 
     def set_sort_folders(self, config: FolderConfig) -> Dict[str, Any]:
         """Set folder destinations (and optional per-slot collections) for sort keys."""

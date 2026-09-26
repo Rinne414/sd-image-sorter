@@ -13,6 +13,7 @@ import { scoreImages } from '../info/aesthetic'
 import { copyAndSay, openImageFolder } from '../library/fileActions'
 import { useSimilarDialogs } from '../similar/dialogs'
 import { showLikeImage } from '../similar/similarStore'
+import { sortImages } from '../sort/sortStore'
 import { bulkActions, imageActions, type ImageAction, type ImageFacts } from './actions'
 import { useSelectionDialog } from './dialogs'
 
@@ -45,6 +46,7 @@ export function useBulkActions(ids: number[]): ImageAction[] {
           addToBatch: (batch, list) => void addPicksTo(batch, list),
           compare: (a, b) => useSimilarDialogs.getState().openCompare(a, b),
           score: (list) => void scoreImages(list),
+          sort: (list) => sortImages({ kind: 'picks', ids: [...list] }),
         },
       }),
     [ids, favorited, batches.data, templates.data, rate, favorite],

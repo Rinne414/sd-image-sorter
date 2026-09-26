@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { folderNameProblem, joinFolder, parentFolder, tailOfPath } from './paths'
+import { folderName, folderNameProblem, joinFolder, parentFolder, tailOfPath } from './paths'
 
 describe('paths', () => {
   test('parent folder of a file or folder, Windows and POSIX', () => {
@@ -10,6 +10,14 @@ describe('paths', () => {
     expect(parentFolder('/home')).toBe('/')
     expect(parentFolder('/')).toBeNull()
     expect(parentFolder('')).toBeNull()
+  })
+
+  test('the last name in a path, a drive or root staying whole', () => {
+    expect(folderName('D:\\art\\keep')).toBe('keep')
+    expect(folderName('D:\\art\\keep\\')).toBe('keep')
+    expect(folderName('/home/me/keep')).toBe('keep')
+    expect(folderName('D:\\')).toBe('D:')
+    expect(folderName('/')).toBe('/')
   })
 
   test('join uses the separator the base already uses', () => {

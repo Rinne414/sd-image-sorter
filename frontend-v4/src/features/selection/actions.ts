@@ -66,6 +66,8 @@ export interface BulkOps {
   compare: (a: number, b: number) => void
   /** Aesthetic scoring, as a job. */
   score: (ids: number[]) => void
+  /** Open the Sort tab with these images. */
+  sort: (ids: number[]) => void
 }
 
 export interface BulkInput {
@@ -141,6 +143,7 @@ export function bulkActions(input: BulkInput): ImageAction[] {
     { id: 'move', section: 'files', bar: 'main', label: k('sel.move'), palette: k('palette.cmd.move'), run: dialog('move') },
     { id: 'censor', section: 'work', bar: 'more', label: k('sel.censor'), palette: k('palette.cmd.censorPicks'), run: () => ops.censor(ids) },
     { id: 'copy', section: 'files', bar: 'more', label: k('sel.copy'), palette: k('palette.cmd.copy'), run: dialog('copy') },
+    ...sortAction(ids, ops),
     { id: 'edit-tags', section: 'work', bar: 'more', label: k('sel.editTags'), palette: k('palette.cmd.editTags'), run: dialog('edit-tags') },
     { id: 'aesthetic', section: 'work', bar: 'more', label: k('info.aes.scorePicks'), palette: k('info.aes.scorePicksPalette'), run: () => ops.score(ids) },
     { id: 'export', section: 'files', bar: 'more', label: k('sel.exportData'), palette: k('palette.cmd.exportData'), run: dialog('export') },
@@ -149,6 +152,12 @@ export function bulkActions(input: BulkInput): ImageAction[] {
     { id: 'remove', section: 'danger', bar: 'more', danger: true, hint: 'Del', label: k('sel.remove'), palette: k('palette.cmd.remove'), run: dialog('remove') },
     { id: 'trash', section: 'danger', bar: 'more', danger: true, label: k('sel.trash'), palette: k('palette.cmd.trash'), run: dialog('trash') },
   ]
+}
+
+/** Sorting one image by keys makes no sense: "Sort these…" needs at least two. */
+function sortAction(ids: number[], ops: BulkOps): ImageAction[] {
+  if (ids.length < 2) return []
+  return [{ id: 'sort', section: 'files', bar: 'more', label: k('sort.sel.label'), palette: k('sort.sel.palette', { n: ids.length }), run: () => ops.sort(ids) }]
 }
 
 /** "Compare these two" exists only when exactly two images are the target. */

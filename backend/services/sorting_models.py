@@ -530,6 +530,10 @@ class ManualSortStartRequest(SortFilterRequest):
     replace_existing: bool = False
     # v3.3.2 Workbench: culling/sorting mode ("slot" = WASD slot-sort, default).
     mode: str = Field(default=SORT_MODE_DEFAULT, max_length=16)
+    # V4: sort exactly these images, in this order (the picks, or every match of
+    # the gallery filter resolved by /api/images/selection-ids). When given, the
+    # filter fields above are not used.
+    image_ids: Optional[List[int]] = Field(default=None, max_length=5_000_000)
 
 
 class FolderConfig(BaseModel):

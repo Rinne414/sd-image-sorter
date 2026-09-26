@@ -9596,6 +9596,8 @@ export interface components {
              * @default slot
              */
             mode: string;
+            /** Image Ids */
+            image_ids?: number[] | null;
         };
         /** MaskAutoBatchRequest */
         MaskAutoBatchRequest: {

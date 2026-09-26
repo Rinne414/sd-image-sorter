@@ -633,6 +633,7 @@ async def start_sort_session(
             scope=request.scope,
             folder=request.folder,
             has_metadata=request.has_metadata,
+            image_ids=request.image_ids,
         )
 
     return service.start_sort_session(

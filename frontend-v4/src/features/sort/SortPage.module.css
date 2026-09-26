@@ -1,0 +1,319 @@
+/* The Sort tab's setup and finished summary: one sheet on the stage, like Home. */
+
+.page {
+  height: 100%;
+  overflow-y: auto;
+  background: var(--stage);
+}
+
+.sheet {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 28px 32px 40px;
+}
+
+@media (min-width: 2400px) {
+  .sheet {
+    max-width: 1320px;
+  }
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-7);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.lede {
+  margin: 6px 0 18px;
+  color: var(--text-2);
+  font-size: var(--fs-4);
+}
+
+.section {
+  margin: 0 0 8px;
+  padding: 0;
+  font-size: var(--fs-1);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.note {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+
+.error {
+  margin: 6px 0 0;
+  color: var(--danger);
+  font-size: var(--fs-3);
+}
+
+.warn {
+  margin: 8px 0 0;
+  color: var(--warn);
+  font-size: var(--fs-3);
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ---- the unfinished sort ---- */
+
+.resume {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0 0 18px;
+  padding: 12px 14px 12px 16px;
+  background: var(--surface-1);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-lg);
+}
+
+.resumeText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-4);
+}
+
+/* ---- how to sort ---- */
+
+.modes {
+  margin: 0 0 20px;
+}
+
+.modeRow {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+}
+
+.mode {
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+  white-space: nowrap;
+}
+
+.mode:first-child {
+  border-left: 0;
+}
+
+.mode[aria-checked='true'] {
+  background: var(--wash-strong);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.mode:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+/* ---- what, where, move or copy ---- */
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 0;
+  cursor: pointer;
+}
+
+.option input {
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+}
+
+.optionText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.optionTitle {
+  color: var(--text);
+  font-size: var(--fs-4);
+}
+
+.optionHint {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slotList {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.slotRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 8px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.cap {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
+  color: var(--text);
+  font-size: var(--fs-4);
+  font-weight: 600;
+  line-height: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+}
+
+.folder {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.folderName {
+  flex-shrink: 0;
+  max-width: 60%;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-4);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folderParent {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unset {
+  color: var(--muted);
+  font-size: var(--fs-3);
+}
+
+.startRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.startRow .note,
+.startRow .error {
+  margin: 0;
+}
+
+.startRow :global(.btn) {
+  height: 36px;
+  padding: 0 18px;
+}
+
+.confirmBody {
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* ---- the finished summary ---- */
+
+.doneList {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doneRow {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 80px auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 8px 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.doneCount {
+  color: var(--accent);
+  font-size: var(--fs-4);
+  text-align: right;
+}
+
+.doneActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.gap {
+  flex: 1;
+}

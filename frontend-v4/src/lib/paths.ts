@@ -17,6 +17,11 @@ export function parentFolder(path: string): string | null {
   return head || sep
 }
 
+/** The last name in a path (a folder's own name); a drive or root is returned whole. */
+export function folderName(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path
+}
+
 export function joinFolder(base: string, name: string): string {
   const sep = sepOf(base)
   return base.endsWith(sep) ? `${base}${name}` : `${base}${sep}${name}`

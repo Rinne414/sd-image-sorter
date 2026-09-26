@@ -11,11 +11,11 @@ import { LibraryPage } from '../features/library/LibraryPage'
 import { ShortcutSheet } from '../features/library/ShortcutSheet'
 import { CompareDialog } from '../features/similar/CompareDialog'
 import { DuplicatesDialog } from '../features/similar/DuplicatesDialog'
+import { SortPage } from '../features/sort/SortPage'
 import { HealthDialog } from '../features/status/HealthDialog'
 import { useLang } from '../i18n'
 import { useApp } from '../state/store'
 import styles from './App.module.css'
-import { PlannedPage } from './PlannedPage'
 import { TopBar } from './TopBar'
 import { Toasts } from '../ui/toasts'
 
@@ -46,7 +46,7 @@ export function App() {
       <div className={styles.body}>
         {page === 'library' && <LibraryPage />}
         {page === 'batch' && <BatchPage />}
-        {page === 'sort' && <PlannedPage title="planned.sort.title" body="planned.sort.body" />}
+        {page === 'sort' && <SortPage />}
         {page === 'home' && <HomePage />}
       </div>
       <CommandPalette />

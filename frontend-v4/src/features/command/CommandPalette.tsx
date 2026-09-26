@@ -22,6 +22,7 @@ import { useSimilarDialogs } from '../similar/dialogs'
 import { pickImageFile } from '../similar/imageSearch'
 import { startIndexing } from '../similar/similarApi'
 import { useSimilar } from '../similar/similarStore'
+import { continueSort, sortImages, useSortPending } from '../sort/sortStore'
 import { useStatusDialogs } from '../status/dialogs'
 import styles from './CommandPalette.module.css'
 
@@ -79,6 +80,7 @@ function Palette() {
   const [picks] = useState(() => useApp.getState().selection)
   const bulk = useBulkActions(picks)
   const single = useImageActions(inspectedId)
+  const sortPending = useSortPending()
   const [q, setQ] = useState('')
   const [active, setActive] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -128,6 +130,8 @@ function Palette() {
     list.push(mk('report', 'palette.group.library', 'status.report.palette', () => useStatusDialogs.getState().setReport(true)))
     list.push(mk('build-index', 'palette.group.library', 'sim.palette.buildIndex', () => void withClip(() => void startIndexing())))
     if (s.page === 'library') list.push(mk('invert', 'palette.group.library', 'lib.palette.invert', () => void invertPicks(currentLibraryParams()), 'Ctrl+I'))
+    if (s.page === 'library') list.push(mk('sort-filter', 'palette.group.library', 'sort.palette.filter', () => sortImages({ kind: 'filter' })))
+    if (sortPending) list.push(mk('sort-continue', 'palette.group.go', 'sort.palette.continue', () => continueSort()))
     list.push(mk('import', 'palette.group.library', 'palette.cmd.import', () => useSelectionDialog.getState().showFor('import', null, 1)))
     list.push(mk('libraries', 'palette.group.library', 'palette.cmd.libraries', () => useSelectionDialog.getState().showFor('libraries', null, 1)))
     if (useJobs.getState().jobs.length > 0) {
@@ -144,7 +148,7 @@ function Palette() {
     for (const a of runnable(single)) list.push(fromAction(a, 'palette.group.image', 'img', lang))
     list.push(mk('shortcuts', 'lib.palette.groupHelp', 'lib.palette.shortcuts', () => useShortcutSheet.getState().setOpen(true)))
     return list
-  }, [lang, libraries.data, batches.data, picks, bulk, single])
+  }, [lang, libraries.data, batches.data, picks, bulk, single, sortPending])
 
   const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean)
   const shown = commands.filter((c) => terms.every((term) => c.haystack.includes(term)))

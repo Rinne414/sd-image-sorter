@@ -6,6 +6,8 @@ import { useBatches } from '../batch/batchApi'
 import { timeAgo } from '../batch/batchLogic'
 import { Covers } from '../batch/Covers'
 import { kindLabel, stepLabel } from '../batch/labels'
+import { summary, usableSlots, type SessionView } from '../sort/sortSession'
+import { continueSort, newSort, useSortPending } from '../sort/sortStore'
 import styles from './HomePage.module.css'
 
 const CONTINUE_COUNT = 3
@@ -18,6 +20,7 @@ export function HomePage() {
   const libraryId = useApp((s) => s.libraryId)
   const library = libraries.data?.libraries.find((l) => l.id === libraryId)
   const recent = (batches.data ?? []).slice(0, CONTINUE_COUNT)
+  const sort = useSortPending(true)
   const libraryName = library?.is_default && library.name === 'Main library' ? t('rail.mainLibrary') : library?.name
 
   return (
@@ -31,10 +34,11 @@ export function HomePage() {
         )}
 
         <h2 className={styles.section}>{t('home.continue')}</h2>
-        {batches.isSuccess && recent.length === 0 ? (
+        {batches.isSuccess && recent.length === 0 && !sort ? (
           <p className={styles.empty}>{t('home.noBatches')}</p>
         ) : (
           <ul className={styles.recent}>
+            {sort && <RecentSort view={sort} />}
             {recent.map((b) => (
               <RecentBatch key={b.id} batch={b} />
             ))}
@@ -45,7 +49,7 @@ export function HomePage() {
         <div className={styles.starts}>
           <Start kind="pixiv" title="home.start.pixiv" body="home.start.pixivBody" />
           <Start kind="dataset" title="home.start.dataset" body="home.start.datasetBody" />
-          <button type="button" className={styles.start} onClick={() => useApp.getState().setPage('sort')} data-testid="home-start-sort">
+          <button type="button" className={styles.start} onClick={newSort} data-testid="home-start-sort">
             <span className={styles.startTitle}>{t('home.start.sort')}</span>
             <span className={styles.startBody}>{t('home.start.sortBody')}</span>
           </button>
@@ -71,6 +75,25 @@ function RecentBatch({ batch }: { batch: BatchSummary }) {
         <span className={styles.cardWhen}>{t('batch.list.updated', { when: timeAgo(batch.updated_at, lang) })}</span>
       </div>
       <button type="button" className="btn btn-primary" onClick={() => openBatch(batch.id)} aria-label={t('batch.list.openNamed', { name: batch.name })}>
+        {t('home.resume')}
+      </button>
+    </li>
+  )
+}
+
+/** The unfinished WASD sort: the next images as its cover, how far it got. */
+function RecentSort({ view }: { view: SessionView }) {
+  const t = useT()
+  const { sent } = summary(view)
+  const op = t(view.operation === 'copy' ? 'sort.copying' : 'sort.moving')
+  return (
+    <li className={styles.card} data-testid="home-sort">
+      <Covers ids={view.ids.slice(view.index, view.index + 3)} />
+      <div className={styles.cardInfo}>
+        <span className={styles.cardName}>{t('sort.home.name', { at: view.index + 1, total: view.total })}</span>
+        <span className={styles.cardMeta}>{t('sort.home.meta', { op, n: usableSlots(view).length, sent })}</span>
+      </div>
+      <button type="button" className="btn btn-primary" onClick={continueSort} data-testid="home-sort-continue">
         {t('home.resume')}
       </button>
     </li>

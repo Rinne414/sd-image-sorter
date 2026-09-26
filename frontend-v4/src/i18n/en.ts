@@ -4,6 +4,7 @@ import { enLibrary } from './en.library'
 import { enSimilar } from './en.similar'
 import { enInfo } from './en.info'
 import { enStatus } from './en.status'
+import { enSort } from './en.sort'
 import type { MessageKey } from './zh-CN'
 
 export const en: Record<MessageKey, string> = {
@@ -13,6 +14,7 @@ export const en: Record<MessageKey, string> = {
   ...enInfo,
   ...enDataset,
   ...enStatus,
+  ...enSort,
   'app.name': 'SD Image Sorter',
   'nav.home': 'Home',
   'nav.library': 'Library',
@@ -438,10 +440,6 @@ export const en: Record<MessageKey, string> = {
   'palette.cmd.jobs': 'Open jobs',
   'palette.hint': '↑↓ to choose, Enter to run, Esc to close',
 
-  'planned.sort.title': 'Organize',
-  'planned.sort.body':
-    'Move images into real folders: WASD by hand, automatic rules, or dealing into zones. All three live on one page and share one set of filters.',
-  'planned.note': 'This page is in the V4 plan and gets built once the direction is agreed. Until then, use the matching V3.5 feature.',
   'planned.openV3': 'Open in V3.5',
 
   'edge.steps': '{n} steps',
@@ -690,7 +688,7 @@ export const en: Record<MessageKey, string> = {
   'home.start.dataset': 'New dataset',
   'home.start.datasetBody': 'Pick images in the library, tag them with AI, edit the tags and export for kohya.',
   'home.start.sort': 'Organize images',
-  'home.start.sortBody': 'Go to Organize and put images into folders with WASD or by rules.',
+  'home.start.sortBody': 'Go to Organize and put images into folders one by one with W A S D.',
   'palette.group.batch': 'Batches',
   'palette.cmd.openBatch': 'Open batch "{name}"',
   'palette.cmd.picksToNew.pixiv': 'Put the picks into a new Pixiv post…',

@@ -1,0 +1,236 @@
+/* A sort in progress: the picture fills what the keys and the film strip leave. */
+
+.stage {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+  height: 100%;
+  background: var(--stage);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 12px 0 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.pos {
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: var(--fs-3);
+  white-space: nowrap;
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gap {
+  flex: 1;
+}
+
+.op {
+  flex-shrink: 0;
+  padding: 0 8px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  letter-spacing: 0.06em;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  line-height: 20px;
+}
+
+.rule {
+  width: 1px;
+  height: 18px;
+  background: var(--line-strong);
+}
+
+/* The picture, pinned to the frame's edges so it always fits whole. */
+.frame {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.picture {
+  position: absolute;
+  inset: 14px 24px 6px;
+  display: grid;
+}
+
+.under,
+.full {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  object-fit: contain;
+}
+
+.full {
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease);
+}
+
+.full[data-ready] {
+  opacity: 1;
+}
+
+.status {
+  margin: 0;
+  padding: 4px 16px 8px;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status[data-tone='error'] {
+  color: var(--danger);
+}
+
+/* ---- the keys ---- */
+
+.slots {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 0.8fr);
+  gap: 8px;
+  padding: 0 16px 12px;
+}
+
+.slotWrap {
+  position: relative;
+  min-width: 0;
+}
+
+.slot,
+.skip {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 52px;
+  padding: 0 12px 0 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--text);
+  text-align: left;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+
+.slot:hover,
+.skip:hover {
+  background: var(--surface-2);
+  border-color: var(--muted);
+}
+
+/* Room for the change-folder button in the corner. */
+.slotWrap .slot {
+  padding-right: 40px;
+}
+
+.slotWrap[data-unset] .slot {
+  border-style: dashed;
+  color: var(--muted);
+  background: transparent;
+}
+
+.slotWrap[data-lit] .slot {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.cap {
+  display: inline-grid;
+  place-items: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 6px;
+  color: var(--text);
+  font-size: var(--fs-4);
+  font-weight: 600;
+  line-height: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+}
+
+.slotName {
+  overflow: hidden;
+  font-size: var(--fs-4);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slotCount {
+  color: var(--accent);
+  font-size: var(--fs-4);
+}
+
+.slotEdit {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  translate: 0 -50%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  border-radius: var(--radius);
+}
+
+.slotEdit:hover {
+  background: var(--wash-hover);
+  color: var(--text);
+}
+
+/* ---- up next: the film strip ---- */
+
+.strip {
+  display: flex;
+  gap: 6px;
+  height: 92px;
+  padding: 14px 12px;
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 8px, var(--film-hole) 8px 17px) top 4px left / 100% 6px no-repeat,
+    repeating-linear-gradient(90deg, transparent 0 8px, var(--film-hole) 8px 17px) bottom 4px left / 100% 6px no-repeat,
+    var(--film);
+  border-top: 1px solid var(--hairline);
+}
+
+.thumb {
+  flex: none;
+  height: 100%;
+  aspect-ratio: 1;
+  background: var(--surface-1);
+  opacity: 0.7;
+}
+
+.thumb:first-child {
+  opacity: 1;
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
