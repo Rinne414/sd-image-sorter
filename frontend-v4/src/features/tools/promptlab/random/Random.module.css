@@ -1,0 +1,515 @@
+/* 随机: the tag pool (sticky on the left) and the work column. */
+.random {
+  display: grid;
+  grid-template-columns: clamp(320px, 30%, 520px) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+/* Generate and the slots side by side when there is room; the lists below span both. */
+.work {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 540px), 1fr));
+  align-items: start;
+  gap: 16px;
+  min-width: 0;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+/* ---- shared words and controls ---- */
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.55;
+}
+
+.problem {
+  margin: 0;
+  color: var(--danger);
+  line-height: 1.6;
+}
+
+.ok {
+  margin: 0;
+  padding: 6px 10px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  border-left: 2px solid var(--ok);
+  background: var(--wash);
+}
+
+.warn {
+  margin: 0;
+  padding: 6px 10px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.55;
+  border-left: 2px solid var(--warn);
+  background: var(--wash);
+}
+
+.subLabel {
+  font-size: var(--fs-1);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.textButton {
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
+.textButton:hover:not(:disabled) {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.textButton:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+.input,
+.textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-3);
+  border-radius: var(--radius);
+}
+
+.input {
+  height: 30px;
+  padding: 0 8px;
+}
+
+.textarea {
+  padding: 6px 8px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.input:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: var(--fs-3);
+  cursor: pointer;
+}
+
+.check input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.runRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.panelHead > .panelTitle {
+  flex: 1;
+}
+
+.panelTitle {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-4);
+  font-weight: 600;
+}
+
+.chipX {
+  margin-right: -3px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: var(--fs-3);
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.chipX:hover {
+  opacity: 1;
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+/* ---- the tag pool ---- */
+.browser {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: calc(100 * var(--vh) - 210px);
+  min-height: 240px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding: 12px 10px 14px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.group {
+  border-bottom: 1px solid var(--hairline);
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: var(--fs-3);
+  text-align: left;
+}
+
+.groupHead:hover {
+  color: var(--text);
+}
+
+.groupName {
+  color: var(--text);
+}
+
+.picked {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: var(--fs-2);
+}
+
+.groupTags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0 10px;
+}
+
+.tagChip {
+  cursor: pointer;
+}
+
+.tagChip:hover {
+  border-color: var(--c);
+}
+
+.tagChip[aria-pressed="true"] {
+  border-color: var(--c);
+  background: color-mix(in srgb, var(--c) 30%, transparent);
+  font-weight: 600;
+}
+
+/* ---- slots ---- */
+.slots {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.slot {
+  display: grid;
+  grid-template-columns: 64px 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.slot > .warn {
+  grid-column: 1 / -1;
+}
+
+.slot:last-child {
+  border-bottom: 0;
+}
+
+
+.lock {
+  width: 100%;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  background: none;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+  border-radius: var(--radius);
+}
+
+.lock:hover {
+  color: var(--text);
+}
+
+.lock[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
+.slotName {
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--fs-3);
+  font-weight: 600;
+}
+
+.weight {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.weight input {
+  width: 90px;
+  accent-color: var(--accent);
+}
+
+.weight .mono {
+  width: 4ch;
+  text-align: right;
+}
+
+.slotTags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+}
+
+.violations {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ---- generate ---- */
+.runBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+}
+
+.countInput {
+  width: 72px;
+}
+
+.seedInput {
+  width: 150px;
+}
+
+.options {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) auto;
+  justify-content: start;
+  align-items: end;
+  gap: 10px 14px;
+}
+
+.options > .check {
+  height: 30px;
+}
+
+.affixes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.resultList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.result p {
+  margin: 0;
+}
+
+.resultHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.resultActions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-left: auto;
+}
+
+.negative {
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+/* ---- tag sets, presets, rules ---- */
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.listRow {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.listRow:last-child {
+  border-bottom: 0;
+}
+
+.listHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.listName {
+  color: var(--text);
+  font-size: var(--fs-3);
+  font-weight: 600;
+}
+
+.listActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.listActions :global(.btn) {
+  height: 24px;
+  font-size: var(--fs-2);
+}
+
+.badge {
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.form > .textButton {
+  align-self: flex-start;
+}

@@ -1,5 +1,5 @@
 import { modelFilterValue } from '../../../lib/imageInfo'
-import { addTags, onlyWith } from '../../../lib/queryEdit'
+import { addTags, isKey, onlyWith, replaceTokens, tokenValue } from '../../../lib/queryEdit'
 import { parseSearch } from '../../../lib/searchQuery'
 
 // "筛到图库": the library's search text is the only filter state, so these
@@ -23,4 +23,9 @@ export function withCheckpoint(text: string, name: string): string {
 /** A recipe: its model, plus its tags. */
 export function withRecipe(text: string, name: string, tags: readonly string[]): string {
   return withTags(withCheckpoint(text, name), tags)
+}
+
+/** Images whose prompt has every one of these words; earlier prompt words in the search give way. */
+export function withPromptWords(text: string, words: readonly string[]): string {
+  return replaceTokens(text, isKey('prompt'), words.map((w) => `prompt:${tokenValue(w)}`))
 }

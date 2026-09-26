@@ -6,6 +6,7 @@ import { ComparePanel } from './ComparePanel'
 import { MODES, setMode, useLabMode, type LabMode } from './labStore'
 import { usePL, type PlKey } from './plText'
 import styles from './PromptLab.module.css'
+import { RandomPanel } from './random/RandomPanel'
 import { StatsPanel } from './StatsPanel'
 
 // 提示词助手: four ways to work with prompts, the last one used opens again.
@@ -15,6 +16,7 @@ const PANELS: Record<LabMode, { label: PlKey; Panel: ComponentType }> = {
   stats: { label: 'pl.mode.stats', Panel: StatsPanel },
   compare: { label: 'pl.mode.compare', Panel: ComparePanel },
   build: { label: 'pl.mode.build', Panel: BuildPanel },
+  random: { label: 'pl.mode.random', Panel: RandomPanel },
 }
 
 const openSent = (id: number) => void openBuildImage(id)

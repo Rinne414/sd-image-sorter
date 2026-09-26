@@ -3,7 +3,7 @@ import { create } from 'zustand'
 // 提示词助手's mode (remembered across restarts) and the two images Compare
 // shows (kept while the user is elsewhere in the app).
 
-export const MODES = ['stats', 'compare', 'build'] as const
+export const MODES = ['stats', 'compare', 'build', 'random'] as const
 export type LabMode = (typeof MODES)[number]
 
 const MODE_KEY = 'sd-v4-promptlab-mode'

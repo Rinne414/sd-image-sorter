@@ -11,7 +11,7 @@ import { plt } from './plText'
 // Build's prompt: started from one image or from a draft (Compare's words, a
 // stats tag, a recipe), edited freely, kept across restarts.
 
-export type DraftFrom = 'compare' | 'stats' | 'recipe'
+export type DraftFrom = 'compare' | 'stats' | 'recipe' | 'random'
 
 export type BuildOrigin = { kind: 'image'; id: number } | { kind: 'draft'; from: DraftFrom; name?: string } | null
 

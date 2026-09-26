@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseSearch } from '../../../lib/searchQuery'
-import { withCheckpoint, withRecipe, withTag } from './libraryLinks'
+import { withCheckpoint, withPromptWords, withRecipe, withTag } from './libraryLinks'
 
 describe('"筛到图库" edits only the search text', () => {
   it('adds a tag and keeps what the search already had', () => {
@@ -23,6 +23,12 @@ describe('"筛到图库" edits only the search text', () => {
 
   it('a model replaces any model filter already there, by its file name', () => {
     expect(withCheckpoint('checkpoint:old -checkpoint:bad tag:x', 'models/Stable/animagine-xl-4.0.safetensors')).toBe('tag:x checkpoint:animagine-xl-4.0')
+  })
+
+  it('a generated prompt finds images with each of its words, replacing earlier prompt words', () => {
+    const text = withPromptWords('prompt:old tag:x', ['1girl', 'silver hair', 'smile'])
+    expect(text).toBe('tag:x prompt:1girl prompt:"silver hair" prompt:smile')
+    expect(parseSearch(text).prompts).toEqual(['1girl', 'silver hair', 'smile'])
   })
 
   it('a recipe sets the model and adds its tags', () => {

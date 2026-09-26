@@ -6,7 +6,7 @@ import { shortModelName } from '../../../lib/meta'
 import { useApp } from '../../../state/store'
 import { CopyButton } from '../../card/CardParts'
 import { arrangeByGroup, cleanTags, lookupKey, splitPrompt } from './buildCleanup'
-import { clearBuild, openBuildImage, replacePrompt, setNegative, setPrompt, useBuild, type BuildOrigin } from './buildStore'
+import { clearBuild, openBuildImage, replacePrompt, setNegative, setPrompt, useBuild, type BuildOrigin, type DraftFrom } from './buildStore'
 import { ImagePicker } from './ImagePicker'
 import { fetchCategories } from './labApi'
 import { plt, usePL, type PlKey } from './plText'
@@ -54,10 +54,16 @@ function SourceImage({ id }: { id: number }) {
   )
 }
 
+const DRAFT_FROM: Record<Exclude<DraftFrom, 'recipe'>, PlKey> = {
+  compare: 'pl.build.draftFrom.compare',
+  stats: 'pl.build.draftFrom.stats',
+  random: 'pl.build.draftFrom.random',
+}
+
 function originText(origin: BuildOrigin): string {
   if (origin?.kind !== 'draft') return ''
   if (origin.from === 'recipe') return plt('pl.build.draftFrom.recipe', { name: origin.name ?? '' })
-  return plt(origin.from === 'compare' ? 'pl.build.draftFrom.compare' : 'pl.build.draftFrom.stats')
+  return plt(DRAFT_FROM[origin.from])
 }
 
 /** The image being looked at in the library, offered when Build has another source. */

@@ -7,12 +7,13 @@ import { sendToTool } from '../handoff'
 import { addToBuild, openBuildImage, startDraft } from './buildStore'
 import { openInLibrary, showInLibrary } from './libraryActions'
 import { withCheckpoint, withRecipe, withTag } from './libraryLinks'
+import { sendToRandom } from './random/runRandom'
 import { usePL, type PlKey } from './plText'
 import styles from './PromptLab.module.css'
 import type { CheckpointCount, CheckpointLeader, CheckpointRecipe, ScoredExample, TagCount } from './types'
 
 // The lists on the Stats page. Every "筛到图库" only edits the library's
-// search text; "加入构建" / "送去构建" fill Build.
+// search text; "加入构建" / "送去构建" fill Build, "用于随机" fills Random's slots.
 
 export type Categories = Map<string, TagCategory> | undefined
 
@@ -84,6 +85,9 @@ export function TagList({ rows, shown, categories, value, empty, testId }: TagLi
             </button>
             <button type="button" className={styles.textButton} onClick={() => addToBuild([row.tag])} data-action="build">
               {t('pl.act.toBuild')}
+            </button>
+            <button type="button" className={styles.textButton} onClick={() => void sendToRandom([row.tag])} data-action="random">
+              {t('pl.act.toRandom')}
             </button>
           </span>
         </li>
@@ -161,6 +165,9 @@ export function LeaderList(props: { rows: CheckpointLeader[]; recipes: Checkpoin
             <button type="button" className={styles.textButton} onClick={() => filterModel(row.name)} data-action="filter">
               {t('pl.act.filter')}
             </button>
+            <button type="button" className={styles.textButton} onClick={() => void sendToRandom(tags)} disabled={tags.length === 0} data-action="random">
+              {t('pl.act.toRandom')}
+            </button>
             <button type="button" className={styles.textButton} onClick={() => startDraft(tags, 'recipe', shortModelName(row.name))} disabled={tags.length === 0} data-action="build">
               {t('pl.act.sendBuild')}
             </button>
@@ -183,6 +190,9 @@ export function RecipeList({ rows, shown, categories, empty }: { rows: Checkpoin
           <>
             <button type="button" className={styles.textButton} onClick={() => tryRecipe(row)} data-action="filter">
               {t('pl.act.tryInLibrary')}
+            </button>
+            <button type="button" className={styles.textButton} onClick={() => void sendToRandom(row.tags)} disabled={row.tags.length === 0} data-action="random">
+              {t('pl.act.toRandom')}
             </button>
             <button type="button" className={styles.textButton} onClick={() => startDraft(row.tags, 'recipe', shortModelName(row.name))} disabled={row.tags.length === 0} data-action="build">
               {t('pl.act.sendBuild')}

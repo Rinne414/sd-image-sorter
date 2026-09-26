@@ -99,3 +99,46 @@ export interface CompareResult {
   prompt_only_a: string[]
   prompt_only_b: string[]
 }
+
+// ---- Random mode: /api/prompts/{categories,sets,exclusions,presets,generate,validate} ----
+
+export interface TagSetMember {
+  tag: string
+  category: string
+  weight: number
+  required: boolean
+}
+
+export interface TagSet {
+  /** Built-in sets have text ids ("builtin-tag-set:kimono"); the user's are numbers. */
+  id: number | string
+  name: string
+  category: string
+  description: string
+  tag_count: number
+  members: TagSetMember[]
+}
+
+export interface PromptPreset {
+  id: number
+  name: string
+  config: Record<string, unknown>
+  created_at: string | null
+}
+
+export interface GeneratedPrompt {
+  positive_prompt: string
+  negative_prompt: string
+  tags_used: { tag: string; category: string }[]
+}
+
+export interface Violation {
+  rule: string
+  triggering_tags: string[]
+  conflicting_tags: string[]
+}
+
+export interface ValidateResult {
+  valid: boolean
+  violations: Violation[]
+}

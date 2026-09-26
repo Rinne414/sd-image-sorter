@@ -9,7 +9,9 @@ import { cleanupImages, dbPath, pageOverflow, runBackendScript, seedImages, VIEW
  * "Show in library" only writes the search line (and the library then shows
  * those images), Compare starts from the two images picked in the library,
  * Build starts from the image being looked at, cleans a prompt while keeping
- * its LoRA, and the mode is remembered. No model is needed.
+ * its LoRA, and the mode is remembered. Random draws the same prompts from
+ * the same seed, keeps a locked slot, sends every option, makes and deletes
+ * tag sets, presets and exclusion rules. No model is needed.
  * Needs the V4 build: `cd frontend-v4 && npm run build`.
  */
 
@@ -76,8 +78,25 @@ test.beforeAll(() => {
   expect(ids).toHaveLength(COUNT)
 })
 
+/** Tag sets, rules and presets the Random tests made (they belong to the whole app, not the library). */
+function dropPromptData(): void {
+  runBackendScript(`
+import sqlite3
+with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
+    conn.execute("DELETE FROM tag_set_members WHERE set_id IN (SELECT id FROM tag_sets WHERE name LIKE 'v4pl%')")
+    conn.execute("DELETE FROM tag_sets WHERE name LIKE 'v4pl%'")
+    conn.execute("DELETE FROM tag_exclusion_conditions WHERE exclusion_id IN (SELECT id FROM tag_exclusions WHERE rule_name LIKE 'v4pl%')")
+    conn.execute("DELETE FROM tag_exclusion_targets WHERE exclusion_id IN (SELECT id FROM tag_exclusions WHERE rule_name LIKE 'v4pl%')")
+    conn.execute("DELETE FROM tag_exclusions WHERE rule_name LIKE 'v4pl%'")
+    conn.execute("DELETE FROM prompt_presets WHERE name LIKE 'v4pl%'")
+    conn.commit()
+print("ok")
+`)
+}
+
 test.afterAll(() => {
   dropLibrary()
+  dropPromptData()
   cleanupImages(PREFIX, [DIR])
 })
 
@@ -94,6 +113,7 @@ async function openAt(page: Page, hash: string, mode = 'stats') {
       localStorage.setItem('sd-library-workspace-v1', JSON.stringify({ v: 2, currentId: library }))
       localStorage.removeItem('sd-v4-browse')
       localStorage.removeItem('sd-v4-promptlab-build')
+      localStorage.removeItem('sd-v4-promptlab-random')
       localStorage.setItem('sd-v4-promptlab-mode', first)
     },
     { library: LIBRARY, first: mode },
@@ -284,17 +304,174 @@ print("ok")
   await expect(page.getByTestId('pl-compare-problem')).toHaveText(
     'One of the files is missing from disk, so the two cannot be compared. Rescan its folder or choose another image.',
   )
+  // the file is back for the tests after this one
+  runBackendScript(`
+import sqlite3
+with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
+    conn.execute("UPDATE images SET is_readable = 1 WHERE id = ?", (${ids[6]},))
+    conn.commit()
+print("ok")
+`)
+})
+
+/** Two tags of one category of the generator's pool (the pool depends on the test database). */
+async function poolTags(page: Page, category: string): Promise<[string, string]> {
+  const pool = await page.evaluate(async () => (await (await fetch('/api/prompts/categories')).json()).categories as Record<string, string[]>)
+  const tags = pool[category] ?? []
+  expect(tags.length, `the pool has no ${category} tags`).toBeGreaterThan(1)
+  return [tags[0]!, tags[1]!]
+}
+
+/** Find a tag in the pool browser and click it into its slot. */
+async function pickTag(page: Page, category: string, tag: string) {
+  const browser = page.getByTestId('pl-browser')
+  await browser.getByTestId('pl-browser-search').fill(tag)
+  await browser.locator(`[data-cat="${category}"]`).getByRole('button', { name: tag, exact: true }).click()
+  await expect(page.locator(`[data-slot="${category}"]`).locator(`[data-tag="${tag}"]`)).toBeVisible()
+  await browser.getByTestId('pl-browser-search').fill('')
+}
+
+const resultTexts = (page: Page) => page.getByTestId('pl-result-prompt').allTextContents()
+
+test('Random: the same seed writes the same prompts, a locked slot stays, and every option is sent', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await openAt(page, '#/tools/promptlab', 'random')
+  await expect(page.getByTestId('pl-random')).toBeVisible()
+  const [pose] = await poolTags(page, 'pose')
+  await pickTag(page, 'pose', pose)
+  await page.getByTestId('pl-lock-pose').click()
+  await expect(page.getByTestId('pl-lock-pose')).toHaveAttribute('aria-pressed', 'true')
+
+  await page.getByTestId('pl-seed').fill('777')
+  await page.getByTestId('pl-count').fill('3')
+  await page.getByTestId('pl-quality').selectOption('medium')
+  const bodies: Record<string, unknown>[] = []
+  page.on('request', (r) => r.url().includes('/api/prompts/generate') && bodies.push(r.postDataJSON() as Record<string, unknown>))
+
+  await page.getByTestId('pl-randomize').click()
+  await expect(page.getByTestId('pl-result')).toHaveCount(3)
+  const first = await resultTexts(page)
+  for (const text of first) expect(text).toContain(pose)
+  await expect(page.getByTestId('pl-result').first()).toHaveAttribute('data-seed', '777')
+  expect(bodies.map((b) => b.seed).sort()).toEqual([777, 778, 779])
+  for (const body of bodies) {
+    expect(body).toMatchObject({ count: 1, quality_preset: 'medium', include_negative: true, tag_sets: [], count_tag: '' })
+    expect((body.categories as Record<string, { tags: string[]; locked: boolean }>).pose).toEqual({ tags: [pose], weight: 0.5, locked: true })
+  }
+  // the medium quality words and their negative prompt
+  await expect(page.getByTestId('pl-result').first()).toContainText('Negative')
+
+  await page.getByTestId('pl-randomize').click()
+  await expect.poll(() => resultTexts(page)).toEqual(first)
+  expect(bodies).toHaveLength(6)
+  expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
+})
+
+test('Random: a tag set is made, used and deleted; a preset brings the setup back', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openAt(page, '#/tools/promptlab', 'random')
+  const [pose] = await poolTags(page, 'pose')
+  await pickTag(page, 'pose', pose)
+
+  // a new tag set (V3.5 could only delete them)
+  await page.getByTestId('pl-set-new').click()
+  const dialog = page.getByTestId('pl-set-dialog')
+  await dialog.getByTestId('pl-set-name').fill('v4pl set')
+  await dialog.getByTestId('pl-set-tags').fill('v4pl_setone, v4pl_settwo')
+  await dialog.getByTestId('pl-set-create').click()
+  await expect(dialog).toHaveCount(0)
+  const set = page.getByTestId('pl-sets').locator('[data-set="v4pl set"]')
+  await expect(set).toContainText('v4pl_setone, v4pl_settwo')
+  await set.getByRole('button', { name: 'Use' }).click()
+  await expect(page.getByTestId('pl-sets-in-use')).toContainText('v4pl set')
+
+  const body = page.waitForRequest((r) => r.url().includes('/api/prompts/generate'))
+  await page.getByTestId('pl-quality').selectOption('none')
+  await page.getByTestId('pl-generate').click()
+  expect(((await body).postDataJSON() as { tag_sets: string[] }).tag_sets).toEqual([expect.stringMatching(/^\d+$/)])
+  await expect(page.getByTestId('pl-result-prompt')).toContainText('v4pl_setone')
+  await expect(page.getByTestId('pl-result-prompt')).toContainText(pose)
+
+  // a preset keeps the slots and the tag set; clearing and loading brings them back
+  await page.getByTestId('pl-preset-save').click()
+  await page.getByTestId('pl-preset-name').fill('v4pl preset')
+  await page.getByTestId('pl-preset-confirm').click()
+  const preset = page.getByTestId('pl-presets').locator('[data-preset="v4pl preset"]')
+  await expect(preset).toBeVisible()
+  await page.getByTestId('pl-clear-slots').click()
+  await expect(page.locator('[data-slot="pose"]').locator(`[data-tag="${pose}"]`)).toHaveCount(0)
+  await set.getByRole('button', { name: 'Stop using' }).click()
+  await expect(page.getByTestId('pl-sets-in-use')).not.toContainText('v4pl set')
+  await preset.getByRole('button', { name: 'Load' }).click()
+  await expect(page.locator('[data-slot="pose"]').locator(`[data-tag="${pose}"]`)).toBeVisible()
+  await expect(page.getByTestId('pl-sets-in-use')).toContainText('v4pl set')
+
+  // delete the set; Undo makes it again
+  await set.getByRole('button', { name: 'Delete' }).click()
+  await expect(set).toHaveCount(0)
+  await expect(page.getByTestId('pl-sets-in-use')).not.toContainText('v4pl set')
+  await toast(page, 'Deleted tag set “v4pl set”').getByRole('button', { name: 'Undo' }).click()
+  await expect(set).toBeVisible()
+  // and the preset
+  await preset.getByRole('button', { name: 'Delete' }).click()
+  await expect(preset).toHaveCount(0)
+})
+
+test('Random: a new exclusion rule explains the clash in its slot, and Check conflicts finds it', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await openAt(page, '#/tools/promptlab', 'random')
+  const [a, b] = await poolTags(page, 'pose')
+  await page.getByTestId('pl-rule-new').click()
+  const dialog = page.getByTestId('pl-rule-dialog')
+  await dialog.getByTestId('pl-rule-name').fill('v4pl rule')
+  await dialog.getByTestId('pl-rule-when').fill(a)
+  await dialog.getByTestId('pl-rule-not').fill(b)
+  await dialog.getByTestId('pl-rule-create').click()
+  await expect(dialog).toHaveCount(0)
+  const rule = page.getByTestId('pl-rules').locator('[data-rule="v4pl rule"]')
+  await expect(rule).toContainText(`with ${a}, no ${b}`)
+
+  await pickTag(page, 'pose', a)
+  await pickTag(page, 'pose', b)
+  await expect(page.locator('[data-slot="pose"]').getByTestId('pl-slot-conflict')).toHaveText(`“v4pl rule”: ${b} should not be there with ${a}`)
+  await page.getByTestId('pl-check').click()
+  await expect(page.getByTestId('pl-check-result')).toContainText(`“v4pl rule”: ${b} should not be there with ${a}`)
+
+  await rule.getByRole('button', { name: 'Delete' }).click()
+  await expect(rule).toHaveCount(0)
+  await expect(page.locator('[data-slot="pose"]').getByTestId('pl-slot-conflict')).toHaveCount(0)
+})
+
+test('Stats "Use in Random" fills a slot; a written prompt finds its images in the library', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openAt(page, '#/tools/promptlab')
+  await rowOf(page, 'pl-top-tags', 'v4pl_pair').getByRole('button', { name: 'Use in Random' }).click()
+  await expect(page.getByTestId('pl-mode-random')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('[data-slot="unknown"]').locator('[data-tag="v4pl_pair"]')).toBeVisible()
+
+  // a prompt of words the seeded images have
+  await page.locator('[data-slot="unknown"]').getByRole('button', { name: 'Remove v4pl_pair' }).click()
+  await pickTag(page, 'character', '1girl')
+  await page.getByTestId('pl-quality').selectOption('none')
+  await page.getByTestId('pl-prepend').fill(TOKEN)
+  await page.getByTestId('pl-generate').click()
+  await expect(page.getByTestId('pl-result-prompt')).toHaveText(`${TOKEN}, 1girl`)
+  await page.getByTestId('pl-result').getByRole('button', { name: 'Find in library' }).click()
+  await expect(page.getByTestId('query-input')).toHaveValue(`prompt:${TOKEN} prompt:1girl`)
+  await expect(page.getByTestId('result-count')).toHaveText('7 images')
 })
 
 for (const viewport of VIEWPORTS) {
   test(`Prompt Lab fits at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport)
     await openAt(page, '#/tools/promptlab')
-    for (const mode of ['stats', 'compare', 'build'] as const) {
+    for (const mode of ['stats', 'compare', 'build', 'random'] as const) {
       await page.getByTestId(`pl-mode-${mode}`).click()
       await expect(page.getByTestId(`pl-mode-${mode}`)).toBeInViewport({ ratio: 1 })
       expect(await pageOverflow(page), mode).toBeLessThanOrEqual(0)
     }
+    await expect(page.getByTestId('pl-randomize')).toBeInViewport({ ratio: 1 })
+    await page.getByTestId('pl-mode-build').click()
     await page.getByTestId('pl-build-pick').click()
     await expect(page.getByTestId('pl-picker-search')).toBeInViewport({ ratio: 1 })
     await page.keyboard.press('Escape')
