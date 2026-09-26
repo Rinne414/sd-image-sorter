@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useModelStatus } from '../../../api/queries'
 import { useT } from '../../../i18n'
+import { ModelGuideLink } from '../../settings/models/ModelGuideLink'
 import styles from './MaskEditor.module.css'
 import { ENGINES, type MaskEngine } from './maskApi'
 import type { MaskTool } from './maskModel'
@@ -110,6 +111,7 @@ function AutoSection({ session, engine, onEngine, ready }: { session: MaskSessio
         </select>
       </label>
       {engine === 'lucida' && <p className={styles.hint}>{t('dataset.masks.lucidaNote')}</p>}
+      <ModelGuideLink card={engine} />
       <button type="button" className="btn" disabled={!ready || session.busy !== null} onClick={() => void session.auto(engine)} data-testid="mask-auto">
         {session.busy === 'auto'
           ? t('dataset.masks.autoBusy')

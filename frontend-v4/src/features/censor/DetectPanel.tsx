@@ -4,6 +4,7 @@ import type { Batch, BatchItem } from '../../api/types'
 import { useT, type MessageKey } from '../../i18n'
 import { useJobs } from '../jobs/jobs'
 import { isFinished } from '../jobs/progress'
+import { DetectorGuideLink } from '../settings/models/ModelGuideLink'
 import { refineTargets, startDetectAll, startRefineAll } from './detectAll'
 import { censorModelsQuery, type LegacyFile } from './detectApi'
 import { detectCurrent, refineCurrent, segmentCurrent, useDetectBusy } from './detectRun'
@@ -112,6 +113,7 @@ export function DetectPanel({ batch, item }: Props) {
           ))}
         </div>
         <p className={tp.note}>{t(DETECTOR_NOTE[detector])}</p>
+        <DetectorGuideLink detector={detector} />
       </Section>
       <DetectButtons batch={batch} item={item} busy={busy} />
       {usesTargets(detector) && <Targets />}

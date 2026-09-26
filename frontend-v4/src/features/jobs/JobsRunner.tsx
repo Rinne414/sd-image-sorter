@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { resumeModelDownloads } from './installResume'
 import { adoptRunningJobs, pollJobs, useJobs } from './jobs'
 import { isFinished } from './progress'
 import { watchTitle } from './titleBadge'
@@ -14,7 +15,7 @@ export function JobsRunner() {
   useEffect(() => {
     if (adopted) return
     adopted = true
-    void adoptRunningJobs()
+    void adoptRunningJobs().then(resumeModelDownloads) // 5d: model downloads left for after a restart
   }, [])
 
   useEffect(() => {

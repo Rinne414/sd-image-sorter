@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useModelStatus, useTaggerModels } from '../../api/queries'
 import { useT } from '../../i18n'
 import { Dialog } from '../../ui/Dialog'
+import { ModelGuideLink } from '../settings/models/ModelGuideLink'
 import { GpuNotice, useTagStartPlan } from './GpuNotice'
 import styles from './TagDialog.module.css'
 import { clearTagOptions, hasStoredTagOptions, loadTagOptions, rememberedThresholds, saveTagOptions, startTagging, type TagOptions } from './tagJob'
@@ -129,6 +130,7 @@ export function TagDialog({ ids, count, onClose }: Props) {
       {models.isError && <p className={styles.error}>{t('error.generic', { reason: models.error.message })}</p>}
       {models.isPending && <p className={styles.lead}>{t('picker.loading')}</p>}
       <GpuNotice plan={plan} />
+      <ModelGuideLink card="wd14" onGo={onClose} />
       <div className={styles.list} role="radiogroup" aria-label={t('tagging.tagger')}>
         {list.map((m) => {
           const inf = taggerInfo(m.name)

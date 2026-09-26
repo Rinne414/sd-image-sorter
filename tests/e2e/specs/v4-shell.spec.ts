@@ -64,9 +64,13 @@ test('settings tabs are addresses: clicking, typing the address, unknown tab, ba
   await expect(page).toHaveURL(/#\/settings\/about$/)
   await expect(page.getByTestId('about-update')).toBeVisible()
   await expect(page.getByTestId('settings-planned')).toHaveCount(0)
+  // the Model Center is built too (slice 5d, v4-models.spec.ts)
+  await page.getByTestId('settings-tab-models').click()
+  await expect(page.getByTestId('model-center')).toBeVisible()
+  await expect(page.getByTestId('settings-planned')).toHaveCount(0)
 
   // every other tab: its address, one honest line, and the way to V3.5 (no controls that do nothing)
-  for (const [id, name] of [['library', 'Library'], ['models', 'Model Center'], ['ai', 'AI services'], ['disk', 'Disk & cache']] as const) {
+  for (const [id, name] of [['library', 'Library'], ['ai', 'AI services'], ['disk', 'Disk & cache']] as const) {
     await page.getByTestId(`settings-tab-${id}`).click()
     await expect(page).toHaveURL(new RegExp(`#/settings/${id}$`))
     await expect(page.getByTestId(`settings-tab-${id}`)).toHaveAttribute('aria-current', 'page')
