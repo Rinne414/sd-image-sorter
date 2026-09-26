@@ -6,6 +6,7 @@
 }
 
 .scroller {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -101,6 +102,20 @@
   font-weight: 600;
   line-height: 26px;
   text-align: center;
+  border-radius: var(--radius);
+}
+
+/* The aesthetic score, when the image has one: edge print in the top-right corner. */
+.score {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 0 6px;
+  background: var(--tile-caption-bg);
+  color: var(--edge-print);
+  font-size: var(--fs-1);
+  letter-spacing: 0.08em;
+  line-height: 20px;
   border-radius: var(--radius);
 }
 

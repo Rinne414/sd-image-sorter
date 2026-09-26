@@ -22,7 +22,20 @@ export interface NamePreview {
 }
 
 /** Tokens offered next to the template input, in the order shown. */
-export const TEMPLATE_TOKENS = ['{batch}', '{n}', '{n:02}', '{n:03}', '{original}'] as const
+export const TEMPLATE_TOKENS = ['{batch}', '{n}', '{n:02}', '{n:03}', '{original}', '{date}', '{time}'] as const
+
+const pad2 = (n: number) => String(n).padStart(2, '0')
+
+/**
+ * {date} (YYYYMMDD) and {time} (HHMMSS) filled in with `when`, local time, as
+ * V3.5's rename did: the moment the names are made, not the file's own date.
+ * The page fills them; the server renders every other token.
+ */
+export function stampTemplate(template: string, when: Date): string {
+  const date = `${when.getFullYear()}${pad2(when.getMonth() + 1)}${pad2(when.getDate())}`
+  const time = `${pad2(when.getHours())}${pad2(when.getMinutes())}${pad2(when.getSeconds())}`
+  return template.replaceAll('{date}', date).replaceAll('{time}', time)
+}
 
 /** Ids of images whose final name another image also gets (case-insensitive). */
 export function duplicateIds(preview: NamePreview | undefined): Set<number> {

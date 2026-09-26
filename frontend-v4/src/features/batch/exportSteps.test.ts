@@ -180,7 +180,7 @@ describe('export settings', () => {
   })
 
   it('builds the export request with the chosen policy', () => {
-    const body = exportBody(custom, 'skip')
+    const body = exportBody(custom, 'skip', new Date())
     expect(body).toMatchObject({ output_folder: 'D:\\posts', missing_censored: 'skip', metadata_option: 'keep', name_template: 'p{n:03}' })
     expect(body.watermark.text).toBe('@me')
   })

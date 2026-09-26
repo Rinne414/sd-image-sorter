@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
 import { api, unwrap } from '../../api/client'
+import { useFavorites } from '../../api/queries'
 import type { components } from '../../api/schema'
 import { parseSearch, toImageParams, type ImageQueryParams, type ScopeFilter } from '../../lib/searchQuery'
 import { toSelectionBody } from '../../lib/selectionBody'
@@ -10,18 +11,22 @@ import { isEverything } from '../sort/rules'
 import { byName, matchKeys, outsideLibrary, shownKeys } from './batchFilter'
 import { intersectPages, PAGE, type MatchPage, type MatchPages } from './batchMatch'
 import type { Entry } from './entries'
+import { favoriteKeys } from './librarySearch'
 import { NO_HISTORY, pushOrder, undoOrder, type OrderHistory } from './orderHistory'
 
 // What each batch's steps show and can undo, per library and batch, while the
 // app is open: the name filter and condition (shared by Pick, Censor and
-// Order, so they carry from step to step) and the reorder history.
+// Order, so they carry from step to step; "only favorites" is part of the
+// condition) and the reorder history.
 
 interface State {
   names: Readonly<Record<string, string>>
   conditions: Readonly<Record<string, string>>
+  favorites: Readonly<Record<string, boolean>>
   histories: Readonly<Record<string, OrderHistory>>
   setName: (key: string, text: string) => void
   setCondition: (key: string, text: string) => void
+  setFavorites: (key: string, on: boolean) => void
   /** Remember the order before a reorder. */
   record: (key: string, order: readonly string[]) => void
   /** The order before the last reorder, taken off the history; null when there is none. */
@@ -31,9 +36,11 @@ interface State {
 export const useStepViews = create<State>((set, get) => ({
   names: {},
   conditions: {},
+  favorites: {},
   histories: {},
   setName: (key, text) => set((s) => ({ names: { ...s.names, [key]: text } })),
   setCondition: (key, text) => set((s) => ({ conditions: { ...s.conditions, [key]: text } })),
+  setFavorites: (key, on) => set((s) => ({ favorites: { ...s.favorites, [key]: on } })),
   record: (key, order) => set((s) => ({ histories: { ...s.histories, [key]: pushOrder(s.histories[key] ?? NO_HISTORY, order) } })),
   takeUndo: (key) => {
     const undo = undoOrder(get().histories[key] ?? NO_HISTORY)
@@ -86,8 +93,12 @@ export interface ConditionMatches {
   error: string | null
 }
 
-/** The batch entries a library search condition matches (V3.5's queue: the library's matches intersected with the batch). */
-function useConditionMatches(condition: string, entries: readonly Entry[]): ConditionMatches {
+/**
+ * The batch entries a library search condition matches (V3.5's queue: the
+ * library's matches intersected with the batch), kept to favorites when the
+ * condition says "only favorites".
+ */
+function useConditionMatches(condition: string, onlyFavorites: boolean, entries: readonly Entry[]): ConditionMatches {
   const libraryId = useApp((s) => s.libraryId)
   const text = condition.trim()
   const settled = useSettled(text)
@@ -99,11 +110,17 @@ function useConditionMatches(condition: string, entries: readonly Entry[]): Cond
     queryFn: ({ signal }) => intersectPages(serverPages(params ?? {}, signal), libraryIds),
     staleTime: 30_000,
   })
-  const keys = useMemo(() => (params && query.data ? matchKeys(entries, [...query.data]) : null), [params, query.data, entries])
+  const favorites = useFavorites()
+  const favoriteIds = onlyFavorites ? favorites.data?.ids : undefined
+  const keys = useMemo(() => {
+    const byText = params && query.data ? matchKeys(entries, [...query.data]) : null
+    if (!onlyFavorites) return byText
+    return favoriteIds && (params === null || byText) ? favoriteKeys(entries, byText, favoriteIds) : null
+  }, [params, query.data, entries, onlyFavorites, favoriteIds])
   return {
     keys,
     outside: outsideLibrary(entries),
-    searching: settled !== text || (params !== null && query.isFetching),
+    searching: settled !== text || (params !== null && query.isFetching) || (onlyFavorites && favorites.isFetching),
     error: params && query.error ? query.error.message : null,
   }
 }
@@ -113,10 +130,11 @@ export function useStepView(batchId: number, entries: readonly Entry[]) {
   const key = useViewKey(batchId)
   const name = useStepViews((s) => s.names[key] ?? '')
   const condition = useStepViews((s) => s.conditions[key] ?? '')
+  const onlyFavorites = useStepViews((s) => s.favorites[key] ?? false)
   const shown = useMemo(() => byName(entries, name), [entries, name])
   const shownSet = useMemo(() => shownKeys(entries, name), [entries, name])
-  const matches = useConditionMatches(condition, entries)
-  return { key, name, condition, shown, shownSet, matches }
+  const matches = useConditionMatches(condition, onlyFavorites, entries)
+  return { key, name, condition, onlyFavorites, shown, shownSet, matches }
 }
 
 export type StepView = ReturnType<typeof useStepView>

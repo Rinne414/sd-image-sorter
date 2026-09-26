@@ -48,10 +48,10 @@ export function ExportStep({ batch, onGo }: Props) {
   const check = withServerMissing(preflight(batch.items), batch.items, serverMissing)
   const censorStep = batch.steps.find((step) => step.id === 'censor')
 
-  const start = (policy: MissingPolicy, overwrite = false) => {
+  const start = (policy: MissingPolicy, overwrite = false, when = new Date()) => {
     flushExportSettings(batch.id)
     const count = policy === 'skip' ? check.total - check.missing.length : check.total
-    void runExport(batch.id, count, exportBody(overwrite ? { ...settings, overwrite: true } : settings, policy))
+    void runExport(batch.id, count, exportBody(overwrite ? { ...settings, overwrite: true } : settings, policy, when))
   }
 
   const goCensor = () => {

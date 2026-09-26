@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import type { Batch } from '../../api/types'
 import { useT } from '../../i18n'
 import { Dialog } from '../../ui/Dialog'
@@ -15,7 +15,8 @@ interface Props {
   /** Images without a censored copy. */
   missing: number
   onCancel: () => void
-  onOk: () => void
+  /** `when`: the moment these names were made; the export writes exactly them. */
+  onOk: (when: Date) => void
 }
 
 /**
@@ -27,7 +28,8 @@ interface Props {
 export function ExportConfirm({ batch, settings, policy, missing, onCancel, onOk }: Props) {
   const t = useT()
   const cancelRef = useRef<HTMLButtonElement>(null)
-  const { preview, stale } = useNamePreview(batch, namesBody(settings, policy))
+  const [when] = useState(() => new Date())
+  const { preview, stale } = useNamePreview(batch, namesBody(settings, policy, when))
   const block = nameBlock(preview, stale)
   const rows = (preview?.items ?? []).filter((row) => row.included)
   const leftOut = (preview?.items ?? []).filter((row) => !row.included)
@@ -38,7 +40,7 @@ export function ExportConfirm({ batch, settings, policy, missing, onCancel, onOk
       <button ref={cancelRef} type="button" className="btn btn-ghost" onClick={onCancel} data-testid="confirm-cancel">
         {t('common.cancel')}
       </button>
-      <button type="button" className={danger ? 'btn btn-danger' : 'btn btn-primary'} onClick={onOk} disabled={block !== null} data-testid="confirm-ok">
+      <button type="button" className={danger ? 'btn btn-danger' : 'btn btn-primary'} onClick={() => onOk(when)} disabled={block !== null} data-testid="confirm-ok">
         {danger ? t('batch.export.originalsOk', { n: missing }) : t('batch.export.confirmSkipOk', { n: rows.length })}
       </button>
     </>

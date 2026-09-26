@@ -7,6 +7,7 @@ import { useNamePreview } from './exportApi'
 import { namesBody, type ExportSettings } from './exportSettings'
 import { InlineName } from './InlineName'
 import { ItemImage } from './ItemImage'
+import { useFreshNameStamp } from './nameStamp'
 import { stepLabel } from './labels'
 import { cleanOverride, duplicateIds, insertToken, nameBlock, TEMPLATE_TOKENS, type NamePreviewItem } from './names'
 import styles from './NameStep.module.css'
@@ -19,6 +20,8 @@ const TOKEN_HELP: Record<(typeof TEMPLATE_TOKENS)[number], MessageKey> = {
   '{n:02}': 'batch.name.token.n2',
   '{n:03}': 'batch.name.token.n3',
   '{original}': 'batch.name.token.original',
+  '{date}': 'batch.name.token.date',
+  '{time}': 'batch.name.token.time',
 }
 
 const TEMPLATE_MAX = 200
@@ -33,8 +36,9 @@ interface Props {
 export function NameStep({ batch, next, onNext }: Props) {
   const t = useT()
   const [settings, update] = useExportSettings(batch)
+  const stamp = useFreshNameStamp()
   const hasTemplate = settings.name_template.trim() !== ''
-  const { preview, stale } = useNamePreview(batch, namesBody(settings, 'block'), hasTemplate)
+  const { preview, stale } = useNamePreview(batch, namesBody(settings, 'block', stamp), hasTemplate)
   const block = hasTemplate ? nameBlock(preview, stale) : 'template'
   const dups = duplicateIds(preview)
   const blocked = block === 'template' || block === 'duplicates'

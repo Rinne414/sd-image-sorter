@@ -4,6 +4,8 @@
 // post only: the caption, overwriting, and keeping generation data, which
 // always starts off (removed). Every function returns new data.
 
+import { stampTemplate } from './names'
+
 export type MetadataOption = 'strip' | 'keep' | 'minimal'
 export type OutputFormat = 'original' | 'png' | 'jpg' | 'webp'
 export type WatermarkPosition = 'top_left' | 'top_right' | 'bottom_left' | 'bottom_right' | 'center'
@@ -134,20 +136,20 @@ export function rememberLastUsed(settings: ExportSettings): void {
   }
 }
 
-/** The body of POST /api/batches/{id}/export/names: what decides the file names. */
-export function namesBody(settings: ExportSettings, policy: MissingPolicy) {
+/** The body of POST /api/batches/{id}/export/names: what decides the file names ({date}/{time} as at `when`). */
+export function namesBody(settings: ExportSettings, policy: MissingPolicy, when: Date) {
   return {
-    name_template: settings.name_template,
+    name_template: stampTemplate(settings.name_template, when),
     start_number: settings.start_number,
     output_format: settings.output_format,
     missing_censored: policy,
   }
 }
 
-/** The body of POST /api/batches/{id}/export. */
-export function exportBody(settings: ExportSettings, policy: MissingPolicy) {
+/** The body of POST /api/batches/{id}/export; `when` is the moment the export starts. */
+export function exportBody(settings: ExportSettings, policy: MissingPolicy, when: Date) {
   return {
-    ...namesBody(settings, policy),
+    ...namesBody(settings, policy, when),
     output_folder: settings.output_folder,
     metadata_option: settings.metadata_option,
     overwrite: settings.overwrite,

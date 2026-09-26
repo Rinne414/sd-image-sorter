@@ -10,6 +10,8 @@ import { unmatched } from './batchFilter'
 import { BatchFilterBar } from './BatchFilterBar'
 import { DropOverlay, useDatasetDrop } from './DatasetDrop'
 import { entrySummary, type Entry } from './entries'
+import { gridRects } from './marquee'
+import { MarqueeBox } from './MarqueeBox'
 import type { GroupMove } from './orderLogic'
 import { draggedKeys, movingKeys, orderMoves } from './orderMoves'
 import { PickBar } from './PickBar'
@@ -19,6 +21,7 @@ import styles from './PickStep.module.css'
 import { PickTile } from './PickTile'
 import { useStepView } from './stepView'
 import { useBatchEntries } from './useBatchEntries'
+import { useMarquee } from './useMarquee'
 
 const GAP = 8
 const PAD = 16
@@ -47,7 +50,8 @@ interface Props {
 /**
  * The pick step: the batch's images in order (a dataset batch's folder images
  * beside its Library ones). Arrows move, Alt + arrows or a drag move the
- * selection (or the one under the cursor), Ctrl/Shift click select, Delete
+ * selection (or the one under the cursor), Ctrl/Shift click or a box dragged
+ * from empty space select, Delete
  * takes the selection (or the one under the cursor) out, Enter opens a
  * Library image. The name filter only narrows the grid: what is hidden is
  * neither selected, moved nor removed.
@@ -148,6 +152,12 @@ export function PickStep({ batch, next, onNext }: Props) {
   })
   const drag = useTileDrag(dropOn, setCursor)
   const carried = drag.drag ? draggedKeys(selection.keys, order[drag.drag.from] ?? '') : null
+  const marquee = useMarquee({
+    scrollRef,
+    tiles: () => gridRects(order, { cols, tileW, rowH: tileW + CAPTION + GAP, gap: GAP, pad: PAD }),
+    selection,
+    onSelect: setPicks,
+  })
 
   const click = (index: number, e: MouseEvent) => {
     setCursor(index)
@@ -183,7 +193,7 @@ export function PickStep({ batch, next, onNext }: Props) {
         total={source.entries.length}
         onSelectMatches={(keys) => setPicks({ keys, anchor: null })}
       />
-      <div ref={scrollRef} className={styles.scroller} tabIndex={0} role="listbox" aria-multiselectable aria-label={t('batch.pick.count', { n: entries.length })} data-testid="pick-grid">
+      <div ref={scrollRef} className={styles.scroller} tabIndex={0} role="listbox" aria-multiselectable aria-label={t('batch.pick.count', { n: entries.length })} data-testid="pick-grid" {...marquee.handlers}>
         {entries.length === 0 ? (
           <p className={styles.empty}>{empty}</p>
         ) : (
@@ -219,6 +229,7 @@ export function PickStep({ batch, next, onNext }: Props) {
             )}
           </div>
         )}
+        <MarqueeBox box={marquee.box} />
       </div>
       {dropOver && <DropOverlay />}
       {source.isDataset && <AddFolderDialog batchId={batch.id} />}

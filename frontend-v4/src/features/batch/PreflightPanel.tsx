@@ -17,7 +17,8 @@ interface Props {
   /** Why exporting cannot start yet (no folder, watermark without text), or null. */
   notReady: string | null
   canCensor: boolean
-  onExport: (policy: MissingPolicy, overwrite?: boolean) => void
+  /** `when`: the moment {date} and {time} name (default: now). */
+  onExport: (policy: MissingPolicy, overwrite?: boolean, when?: Date) => void
   onGoCensor: () => void
   onGoName: () => void
 }
@@ -55,9 +56,9 @@ export function PreflightPanel(props: Props) {
   const needReviewNod = check.unreviewed.length > 0 && !acceptUnreviewed
   const failure = run?.state === 'failed' ? run.failure : null
   const [lastPolicy, setLastPolicy] = useState<MissingPolicy>('block')
-  const go = (policy: MissingPolicy, overwrite = false) => {
+  const go = (policy: MissingPolicy, overwrite = false, when?: Date) => {
     setLastPolicy(policy)
-    props.onExport(policy, overwrite)
+    props.onExport(policy, overwrite, when)
   }
 
   return (
@@ -132,9 +133,9 @@ export function PreflightPanel(props: Props) {
           policy={confirm}
           missing={missing}
           onCancel={() => setConfirm(null)}
-          onOk={() => {
+          onOk={(when) => {
             setConfirm(null)
-            go(confirm)
+            go(confirm, false, when)
           }}
         />
       )}

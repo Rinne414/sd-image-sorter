@@ -1,8 +1,11 @@
 import { useT } from '../../i18n'
 import { parseSearch } from '../../lib/searchQuery'
+import { useApp } from '../../state/store'
+import { Icon } from '../../ui/Icon'
 import { FilterPanel } from '../library/FilterPanel'
 import { visibleMatches } from './batchFilter'
 import styles from './BatchFilterBar.module.css'
+import { fromLibrarySearch } from './librarySearch'
 import { useStepViews, type StepView } from './stepView'
 
 interface Props {
@@ -19,15 +22,16 @@ interface Props {
  */
 export function BatchFilterBar({ view, total, hiddenNote, onSelectMatches }: Props) {
   const t = useT()
-  const { key, name, condition, matches } = view
+  const { key, name, condition, onlyFavorites, matches } = view
   const setName = (text: string) => useStepViews.getState().setName(key, text)
   const setCondition = (text: string) => useStepViews.getState().setCondition(key, text)
+  const setFavorites = (on: boolean) => useStepViews.getState().setFavorites(key, on)
   const unread = parseSearch(condition).parts.flatMap((p) => (p.kind === 'warn' ? [p.raw] : []))
   const found = matches.keys
   const filtering = name.trim() !== ''
   const picking = found ? visibleMatches(found, view.shownSet) : null
   const hiddenMatches = found && picking ? found.size - picking.size : 0
-  const conditionSet = condition.trim() !== ''
+  const conditionSet = condition.trim() !== '' || onlyFavorites
 
   const status = matches.error
     ? t('batch.filter.failed', { reason: matches.error })
@@ -64,7 +68,19 @@ export function BatchFilterBar({ view, total, hiddenNote, onSelectMatches }: Pro
           onChange={(e) => setCondition(e.target.value)}
           data-testid="batch-condition"
         />
+        {onlyFavorites && (
+          <button type="button" className={`btn btn-ghost ${styles.chip}`} onClick={() => setFavorites(false)} title={t('batch.filter.favoritesOff')} data-testid="batch-only-favorites">
+            {t('batch.filter.favorites')}
+            <Icon name="close" size={10} />
+          </button>
+        )}
         <FilterPanel text={condition} onChange={setCondition} />
+        <UseLibrarySearch
+          onUse={(next) => {
+            setCondition(next.text)
+            setFavorites(next.favorites)
+          }}
+        />
         {status && (
           <span className={matches.error ? styles.error : styles.note} role="status" data-testid="batch-condition-count">
             {status}
@@ -86,6 +102,7 @@ export function BatchFilterBar({ view, total, hiddenNote, onSelectMatches }: Pro
             onClick={() => {
               setName('')
               setCondition('')
+              setFavorites(false)
             }}
             data-testid="batch-filter-clear"
           >
@@ -109,5 +126,27 @@ export function BatchFilterBar({ view, total, hiddenNote, onSelectMatches }: Pro
         </p>
       )}
     </div>
+  )
+}
+
+/** One click puts the library's current search (its line and rail scope) into the condition. */
+function UseLibrarySearch({ onUse }: { onUse: (next: ReturnType<typeof fromLibrarySearch>) => void }) {
+  const t = useT()
+  const queryText = useApp((s) => s.queryText)
+  const scope = useApp((s) => s.scope)
+  const next = fromLibrarySearch(queryText, scope)
+  const none = next.text === '' && !next.favorites
+  const shown = [next.text, next.favorites ? t('batch.filter.favorites') : ''].filter(Boolean).join(' · ')
+  return (
+    <button
+      type="button"
+      className="btn btn-ghost"
+      disabled={none}
+      onClick={() => onUse(next)}
+      title={none ? t('batch.filter.useLibraryNone') : t('batch.filter.useLibraryTip', { text: shown })}
+      data-testid="batch-use-library-search"
+    >
+      {t('batch.filter.useLibrary')}
+    </button>
   )
 }

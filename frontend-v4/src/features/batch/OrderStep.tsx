@@ -3,7 +3,9 @@ import type { Batch } from '../../api/types'
 import { useT, type MessageKey } from '../../i18n'
 import { unmatched } from './batchFilter'
 import { BatchFilterBar } from './BatchFilterBar'
+import { HoverPreview, useHoverPreview } from './HoverPreview'
 import { stepLabel } from './labels'
+import { MarqueeBox } from './MarqueeBox'
 import type { GroupMove } from './orderLogic'
 import { draggedKeys, movingKeys, orderMoves } from './orderMoves'
 import styles from './OrderStep.module.css'
@@ -13,6 +15,8 @@ import { clickSelection, keepPresent, NO_PICKS, selectAll, type PickSelection } 
 import { StepBar } from './StepBar'
 import { useStepView, useStepViews } from './stepView'
 import { useBatchEntries } from './useBatchEntries'
+import { useBatchScores } from './useBatchScores'
+import { renderedTileRects, useMarquee } from './useMarquee'
 
 const MOVES: readonly { how: GroupMove; label: MessageKey }[] = [
   { how: 'top', label: 'batch.order.top' },
@@ -44,7 +48,8 @@ interface Props {
 
 /**
  * The posting order: large pictures as they will be posted. Click, Ctrl or
- * Shift click select; the buttons, Alt + arrows / Home / End or a drag move
+ * Shift click select, and so does a box dragged from empty space; a short
+ * hover shows a picture larger, and a tile shows its aesthetic score; the buttons, Alt + arrows / Home / End or a drag move
  * the selection together (or the image under the cursor); Ctrl+Z undoes.
  */
 export function OrderStep({ batch, next, onNext }: Props) {
@@ -56,6 +61,7 @@ export function OrderStep({ batch, next, onNext }: Props) {
   const positions = useMemo(() => new Map(source.entries.map((entry, i) => [entry.key, i])), [source.entries])
   const stepRef = useRef<HTMLElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const cols = useColumns(gridRef)
   const [cursor, setCursor] = useState(0)
   const [picks, setPicks] = useState<PickSelection>(NO_PICKS)
@@ -64,6 +70,8 @@ export function OrderStep({ batch, next, onNext }: Props) {
   const selection = useMemo(() => keepPresent(picks, shownOrder), [picks, shownOrder])
   const at = shown.length === 0 ? -1 : Math.min(Math.max(cursor, 0), shown.length - 1)
   const moves = orderMoves(source, view.key)
+  const hover = useHoverPreview()
+  const scores = useBatchScores(source.entries)
 
   useEffect(() => {
     gridRef.current?.querySelector<HTMLElement>(`[data-index="${at}"]`)?.scrollIntoView({ block: 'nearest' })
@@ -108,6 +116,7 @@ export function OrderStep({ batch, next, onNext }: Props) {
   })
   const drag = useTileDrag(dropOn, setCursor)
   const carried = drag.drag ? draggedKeys(selection.keys, shownOrder[drag.drag.from] ?? '') : null
+  const marquee = useMarquee({ scrollRef, tiles: () => renderedTileRects(scrollRef.current), selection, onSelect: setPicks })
 
   const click = (index: number, e: MouseEvent) => {
     setCursor(index)
@@ -139,7 +148,16 @@ export function OrderStep({ batch, next, onNext }: Props) {
         hiddenNote={t('batch.order.hiddenNote')}
         onSelectMatches={(keys) => setPicks({ keys, anchor: null })}
       />
-      <div className={styles.scroller} tabIndex={0} role="listbox" aria-multiselectable aria-label={t('batch.order.label')} data-testid="order-grid">
+      <div
+        ref={scrollRef}
+        className={styles.scroller}
+        tabIndex={0}
+        role="listbox"
+        aria-multiselectable
+        aria-label={t('batch.order.label')}
+        data-testid="order-grid"
+        {...marquee.handlers}
+      >
         {shown.length === 0 ? (
           <p className={styles.empty}>{source.entries.length === 0 ? t('batch.order.empty') : t('batch.filter.noneShown', { text: view.name.trim() })}</p>
         ) : (
@@ -156,7 +174,10 @@ export function OrderStep({ batch, next, onNext }: Props) {
                 dim={unmatched(view.matches.keys, entry)}
                 dragging={carried?.has(entry.key) ?? false}
                 drop={carried?.has(entry.key) ? undefined : drag.sideOf(index)}
+                score={entry.imageId === null ? undefined : scores.get(entry.imageId)}
                 onClick={click}
+                onHover={hover.enter}
+                onLeave={hover.leave}
                 onDragStart={(i, e) => drag.start(i, shownOrder[i] ?? '', e)}
                 onDragOver={drag.over}
                 onDrop={drag.drop}
@@ -165,7 +186,9 @@ export function OrderStep({ batch, next, onNext }: Props) {
             ))}
           </div>
         )}
+        <MarqueeBox box={marquee.box} />
       </div>
+      <HoverPreview batch={batch} shown={marquee.box || drag.drag ? null : hover.shown} />
       <p className="visually-hidden" aria-live="polite">
         {said}
       </p>

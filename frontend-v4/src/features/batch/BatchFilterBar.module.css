@@ -5,13 +5,15 @@
   background: var(--bg);
 }
 
+/* One row when it fits; on a narrow window the counts and buttons wrap under the inputs. */
 .bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px 8px;
   min-width: 0;
-  height: 42px;
-  padding: 0 12px 0 16px;
+  min-height: 42px;
+  padding: 6px 12px 6px 16px;
   white-space: nowrap;
 }
 
@@ -42,6 +44,15 @@
 .condition:focus {
   border-color: var(--accent-line);
   outline: none;
+}
+
+.chip {
+  flex: none;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--accent-line);
+  color: var(--text);
 }
 
 .note,

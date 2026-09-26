@@ -1,0 +1,8 @@
+/* The selection box over a batch grid: a thin amber rule on a faint wash. */
+.box {
+  position: absolute;
+  z-index: 2;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  pointer-events: none;
+}

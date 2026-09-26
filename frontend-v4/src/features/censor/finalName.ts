@@ -1,6 +1,7 @@
 import type { Batch } from '../../api/types'
 import { useNamePreview } from '../batch/exportApi'
 import { namesBody } from '../batch/exportSettings'
+import { useNameStamp } from '../batch/nameStamp'
 import { useExportSettings } from '../batch/useExportSettings'
 
 /**
@@ -10,7 +11,8 @@ import { useExportSettings } from '../batch/useExportSettings'
  */
 export function useFinalName(batch: Batch, imageId: number): string | null {
   const [settings] = useExportSettings(batch)
+  const stamp = useNameStamp()
   const hasTemplate = settings.name_template.trim() !== ''
-  const { preview } = useNamePreview(batch, namesBody(settings, 'block'), hasTemplate)
+  const { preview } = useNamePreview(batch, namesBody(settings, 'block', stamp), hasTemplate)
   return preview?.items.find((i) => i.image_id === imageId)?.output_name ?? null
 }
