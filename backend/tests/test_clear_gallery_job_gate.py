@@ -344,12 +344,16 @@ def test_clear_gallery_rejects_single_aesthetic_score_during_inference(
         except Exception as exc:
             thread_errors.append(exc)
 
+    # The gate is under test, not the dependency probe: a cold is_available()
+    # imports torch + open_clip inside the request (about 4 s), longer than
+    # the wait below.
+    monkeypatch.setattr(aesthetic, "is_available", lambda: True)
     monkeypatch.setattr(aesthetic, "predict_score", paused_predict_score)
     score_thread = threading.Thread(target=run_score, name="test-aesthetic-score")
     score_thread.start()
-    assert inference_entered.wait(timeout=2)
 
     try:
+        assert inference_entered.wait(timeout=2)
         response = test_client.delete("/api/clear-gallery")
         assert response.status_code == 409
         assert response.json()["code"] == "gallery_clear_jobs_active"
@@ -378,6 +382,7 @@ def test_single_aesthetic_not_found_releases_activity_before_clear(
         predict_calls.append(path)
         return 7.5
 
+    monkeypatch.setattr(aesthetic, "is_available", lambda: True)
     monkeypatch.setattr(aesthetic, "predict_score", record_unexpected_prediction)
 
     score_response = test_client.post(
