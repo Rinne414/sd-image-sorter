@@ -347,6 +347,7 @@ window.I18nLang_en = {
     'library.deleteConfirm': 'Delete library “{name}”? Its indexed images, collections and dataset projects are removed. Files on disk are kept. Other libraries are not affected.',
     'library.deletedToast': 'Library “{name}” deleted',
     'library.deleteFailed': 'Could not delete library',
+    'library.goneSwitched': 'The library that was open no longer exists (it may have been deleted in another window). Switched to “{name}”.',
     'library.cannotDeleteMain': 'The main library cannot be deleted. Clear it instead.',
     'library.renameTitle': 'Rename library',
     'library.renamePrompt': 'Rename library:',

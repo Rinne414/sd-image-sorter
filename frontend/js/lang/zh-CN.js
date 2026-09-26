@@ -349,6 +349,7 @@ window.I18nLang_zhCN = {
     'library.deleteConfirm': '删除图库「{name}」？它的索引图片、合集和数据集项目会一起移除。磁盘文件保留，其他图库不受影响。',
     'library.deletedToast': '已删除图库「{name}」',
     'library.deleteFailed': '无法删除图库',
+    'library.goneSwitched': '刚才打开的图库已不存在（可能在另一个窗口里删除了），已切换到「{name}」。',
     'library.cannotDeleteMain': '主图库不能删除，请改用「清空当前图库」。',
     'library.renameTitle': '重命名图库',
     'library.renamePrompt': '重命名图库：',
