@@ -214,11 +214,17 @@ export function CivitaiResources({ list }: { list: CivitaiResource[] }) {
   )
 }
 
+/** Open or closed as the user left it (the Reader remembers); the card leaves it to the browser. */
+interface Remembered {
+  open?: boolean
+  onToggle?: (open: boolean) => void
+}
+
 /** ComfyUI: every text node of the graph, with its role. */
-export function PromptNodes({ nodes }: { nodes: PromptNode[] }) {
+export function PromptNodes({ nodes, open, onToggle }: { nodes: PromptNode[] } & Remembered) {
   const t = useT()
   return (
-    <details className={cardStyles.extra} data-testid="card-nodes">
+    <details className={cardStyles.extra} data-testid="card-nodes" open={open} onToggle={onToggle && ((e) => onToggle(e.currentTarget.open))}>
       <summary>
         {t('info.nodes.title')}
         <span className="mono">{nodes.length}</span>
@@ -257,11 +263,11 @@ const GROUP_LABEL: Record<ModelGroupId, MessageKey> = {
 }
 
 /** The workflow's other models (VAE, text encoders, upscalers, detectors...). */
-export function OtherModels({ groups }: { groups: ImageInfo['otherModels'] }) {
+export function OtherModels({ groups, open, onToggle }: { groups: ImageInfo['otherModels'] } & Remembered) {
   const t = useT()
   const count = groups.reduce((n, g) => n + g.names.length, 0)
   return (
-    <details className={cardStyles.extra} data-testid="card-other-models">
+    <details className={cardStyles.extra} data-testid="card-other-models" open={open} onToggle={onToggle && ((e) => onToggle(e.currentTarget.open))}>
       <summary>
         {t('info.models.title')}
         <span className="mono">{count}</span>

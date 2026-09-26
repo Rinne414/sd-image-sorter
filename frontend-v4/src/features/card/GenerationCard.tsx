@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { thumbnailUrl } from '../../api/client'
 import { useCategories, useFavorites, useImageDetail, useSetRating, useToggleFavorite } from '../../api/queries'
 import type { ImageTag, TagCategory } from '../../api/types'
-import { useT, type MessageKey } from '../../i18n'
-import { copyText, fileSize, generatorCode } from '../../lib/format'
-import { formatScore, readImageInfo } from '../../lib/imageInfo'
-import { readGeneration, type GenerationInfo } from '../../lib/meta'
+import { useT } from '../../i18n'
+import { fileSize } from '../../lib/format'
+import { readImageInfo } from '../../lib/imageInfo'
+import { readGeneration } from '../../lib/meta'
 import { parentFolder, tailOfPath } from '../../lib/paths'
 import { promptTagKeys, segmentPrompt, tagKey } from '../../lib/prompt'
 import { useApp } from '../../state/store'
@@ -17,21 +17,17 @@ import { Menu } from '../../ui/Menu'
 import { TagInput } from '../../ui/TagInput'
 import { addTags, removeTag, reparse, saveCaptions } from './cardEdits'
 import { CopyButton, Section } from './CardParts'
+import { EdgeCodes, type EdgeFacts } from './sections/FilmEdge'
 import { CivitaiResources, Facts, NoParamsNote, OtherModels, PromptNodes, SidecarCaption, useI2iLabel } from '../info/CardInfo'
 import { ColorSection } from '../info/ColorSection'
 import { copyAndSay, openImageFolder } from '../library/fileActions'
 import { menuItemsOf } from '../selection/actions'
 import { useImageActions } from '../selection/actionOps'
 import { showLikeImage } from '../similar/similarStore'
+import { sendToTool } from '../tools/handoff'
+import { useTT } from '../tools/toolText'
 
 const TAGS_SHOWN = 24
-
-const RATING_KEYS: Record<string, MessageKey> = {
-  general: 'rating.general',
-  sensitive: 'rating.sensitive',
-  questionable: 'rating.questionable',
-  explicit: 'rating.explicit',
-}
 
 interface Props {
   id: number | null
@@ -197,6 +193,7 @@ function CardBody({ id, variant }: { id: number; variant: 'panel' | 'overlay' })
           </button>
         )}
         {image && <CopyMenu id={id} />}
+        {variant === 'panel' && image && <OpenInReader id={id} />}
         {variant === 'panel' && (
           <button type="button" className="btn btn-ghost" onClick={() => void reparse(id)} title={t('card.reparseHint')}>
             {t('card.reparse')}
@@ -259,16 +256,6 @@ function sortTags(tags: ImageTag[]): { general: ImageTag[]; rating: string | nul
   return { general, rating }
 }
 
-/** What the film edge prints: the key parameters, plus the img2img marker and the aesthetic score. */
-interface EdgeFacts {
-  gen: GenerationInfo | null
-  generator: string | null
-  rating?: string | null
-  score?: number | null
-  /** The img2img marker's words, when the image was made from another. */
-  i2i?: string | null
-}
-
 function Frame({ id, edge }: { id: number; edge: EdgeFacts }) {
   const [bigLoaded, setBigLoaded] = useState<number | null>(null)
   const openLightbox = useApp((s) => s.openLightbox)
@@ -289,53 +276,6 @@ function Frame({ id, edge }: { id: number; edge: EdgeFacts }) {
       </div>
       <EdgeCodes {...edge} part="bottom" />
     </figure>
-  )
-}
-
-/** Parameters printed on the film edge; click a code to copy its value. */
-function EdgeCodes({ gen, generator, rating, score, i2i, part, inline }: EdgeFacts & { part?: 'top' | 'bottom'; inline?: boolean }) {
-  const t = useT()
-  // [label, what is shown, what gets copied]
-  type Code = [string, string, string]
-  const code = (label: string, value: string | null | undefined, shown?: string): Code | null =>
-    value ? [label, shown ?? value, value] : null
-  const ratingKey = rating && RATING_KEYS[rating]
-  const top = [
-    code('SEED', gen?.seed),
-    code('', gen?.steps, gen?.steps ? t('edge.steps', { n: gen.steps }) : undefined),
-    code('CFG', gen?.cfg),
-    code('', gen?.denoise, gen?.denoise ? t('edge.denoise', { n: gen.denoise }) : undefined),
-    code('', i2i),
-  ]
-  const shownScore = formatScore(score)
-  const bottom = [
-    code('', gen?.sampler),
-    code('', gen?.scheduler),
-    code('', gen?.size),
-    code('', rating, ratingKey ? t(ratingKey) : undefined),
-    code('', shownScore, shownScore ? t('info.aes.edge', { score: shownScore }) : undefined),
-    code('', generatorCode(generator)),
-  ]
-  const rows = inline ? [...top, ...bottom] : part === 'top' ? top : bottom
-  const shown = rows.filter((c): c is Code => c !== null)
-  return (
-    <div className={styles.edgeStrip} data-part={part} data-inline={inline || undefined}>
-      {!inline && <span className={styles.holes} aria-hidden />}
-      <span className={styles.codes}>
-        {shown.map(([label, display, value]) => (
-          <button
-            key={`${label}${value}`}
-            type="button"
-            className={styles.code}
-            title={t('card.clickToCopy')}
-            onClick={() => void copyText(value)}
-          >
-            {label && <span className={styles.codeKey}>{label}</span>}
-            {display.toUpperCase()}
-          </button>
-        ))}
-      </span>
-    </div>
   )
 }
 
@@ -422,6 +362,16 @@ function Negative({ text }: { text: string }) {
       </button>
       <CopyButton text={text} compact testId="card-copy-negative" />
     </div>
+  )
+}
+
+/** The Reader shows everything the file records, and edits it. */
+function OpenInReader({ id }: { id: number }) {
+  const t = useTT()
+  return (
+    <button type="button" className="btn btn-ghost" onClick={() => sendToTool('reader', [id])} title={t('reader.openInReaderHint')} data-testid="card-open-reader">
+      {t('reader.openInReader')}
+    </button>
   )
 }
 

@@ -23,10 +23,10 @@ const SAMPLE = 128
 const W = 256
 const H = 64
 
-async function loadBins(id: number): Promise<Bins> {
+async function loadBins(src: string): Promise<Bins> {
   const img = new Image()
   img.decoding = 'async'
-  img.src = thumbnailUrl(id, 384)
+  img.src = src
   await img.decode()
   const scale = Math.min(1, SAMPLE / Math.max(img.naturalWidth, img.naturalHeight))
   const w = Math.max(1, Math.round(img.naturalWidth * scale))
@@ -57,13 +57,24 @@ const MODES: [HistMode, MessageKey][] = [
   ['luma', 'info.color.luma'],
 ]
 
-function ColorBody({ id, image }: { id: number; image: ImageDetail }) {
-  const t = useT()
-  const mode = useColorPrefs((s) => s.mode)
-  const bins = useQuery({ queryKey: ['thumb-bins', id], queryFn: () => loadBins(id), staleTime: Infinity, retry: false })
+/** The histogram and the stored colour analysis of a library image (the Reader shows it in its own section). */
+export function ColorBody({ id, image }: { id: number; image: ImageDetail }) {
   const facts = readColorFacts(image)
   return (
     <div className={styles.body}>
+      <PixelHistogram src={thumbnailUrl(id, 384)} cacheKey={['thumb-bins', id]} />
+      {facts ? <Facts facts={facts} /> : <Unanalysed id={id} />}
+    </div>
+  )
+}
+
+/** The histogram of a picture measured in the browser, with its three views (the Reader shows it for files too). */
+export function PixelHistogram({ src, cacheKey }: { src: string; cacheKey: readonly unknown[] }) {
+  const t = useT()
+  const mode = useColorPrefs((s) => s.mode)
+  const bins = useQuery({ queryKey: cacheKey, queryFn: () => loadBins(src), staleTime: Infinity, retry: false })
+  return (
+    <>
       <div className={styles.modes} role="group" aria-label={t('info.color.modes')}>
         {MODES.map(([m, key]) => (
           <button key={m} type="button" aria-pressed={mode === m} onClick={() => useColorPrefs.setState({ mode: m })}>
@@ -78,8 +89,7 @@ function ColorBody({ id, image }: { id: number; image: ImageDetail }) {
       ) : (
         <div className={styles.histogram} aria-hidden />
       )}
-      {facts ? <Facts facts={facts} /> : <Unanalysed id={id} />}
-    </div>
+    </>
   )
 }
 

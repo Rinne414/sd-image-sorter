@@ -1,4 +1,4 @@
-import type { ComponentType, LazyExoticComponent } from 'react'
+import { lazy, type ComponentType, type LazyExoticComponent } from 'react'
 import type { MessageKey } from '../../i18n'
 import type { ToolId } from '../../lib/route'
 
@@ -22,7 +22,7 @@ export interface ToolEntry {
 }
 
 export const TOOLS: readonly ToolEntry[] = [
-  { id: 'reader', label: 'tools.reader', what: 'tools.reader.what', accepts: 'one', ready: false },
+  { id: 'reader', label: 'tools.reader', what: 'tools.reader.what', accepts: 'one', ready: true, page: lazy(() => import('./reader/ReaderPage').then((m) => ({ default: m.ReaderPage }))) },
   { id: 'reverse', label: 'tools.reverse', what: 'tools.reverse.what', accepts: 'one', ready: false },
   { id: 'promptlab', label: 'tools.promptlab', what: 'tools.promptlab.what', accepts: 'one', ready: false },
   { id: 'artist', label: 'tools.artist', what: 'tools.artist.what', accepts: 'many', ready: false },

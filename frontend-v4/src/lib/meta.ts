@@ -5,6 +5,8 @@ export interface CharacterPrompt {
   index: number
   prompt: string
   negative: string
+  /** Where NovelAI placed the character (0-1 across and down), when recorded. */
+  center: { x: number; y: number } | null
 }
 
 export interface GenerationInfo {
@@ -57,6 +59,12 @@ function parseJson(raw: string | null): Record<string, unknown> {
   }
 }
 
+function readCenter(v: unknown): CharacterPrompt['center'] {
+  if (!v || typeof v !== 'object') return null
+  const { x, y } = v as { x?: unknown; y?: unknown }
+  return typeof x === 'number' && typeof y === 'number' ? { x, y } : null
+}
+
 export function parseLoras(raw: string | null): string[] {
   if (!raw) return []
   try {
@@ -89,6 +97,7 @@ export function readGeneration(input: {
           index: typeof c.index === 'number' ? c.index : i,
           prompt: str(c.prompt) ?? '',
           negative: str(c.negative_prompt) ?? '',
+          center: readCenter(c.center),
         }))
         .filter((c) => c.prompt)
     : []

@@ -7,7 +7,7 @@ routers.images (the facade), NOT this module: the facade's import sequence
 IS the route registration order (single-segment static GET routes must
 register before ``GET /api/images/{image_id}`` or they 422-shadow).
 """
-from typing import Optional, Any, List
+from typing import Optional, Any, Dict, List
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -262,10 +262,19 @@ class SaveEditedMetadataRequest(BaseModel):
     allow_overwrite: bool = False
 
 
+class SaveEditedWarningCode(BaseModel):
+    """One save warning by code, with the values its sentence needs (chunk names, format, frames)."""
+
+    code: str
+    params: Dict[str, Any] = Field(default_factory=dict)
+
+
 class SaveEditedMetadataResponse(BaseModel):
     output_path: str
     format: str
     warnings: List[str] = Field(default_factory=list)
+    # The same warnings, in the same order, as codes a client can translate.
+    warning_codes: List[SaveEditedWarningCode] = Field(default_factory=list)
 
 
 class OpenFolderRequest(BaseModel):

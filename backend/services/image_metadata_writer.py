@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from PIL import Image, ImageSequence, PngImagePlugin
 
@@ -542,6 +543,70 @@ def collect_frames_for_save(
             pass
 
     return frames, save_kwargs
+
+
+# The warnings above are English sentences. V4 translates them, so the save
+# response also names each one by a code, with the values its sentence needs.
+# The patterns are built from the same constants and templates the writer
+# formats, so rewording a sentence keeps its code.
+_FIXED_WARNING_CODES = (
+    (JPEG_LIMITATION_WARNING, "jpeg_limited"),
+    (WEBP_LIMITATION_WARNING, "webp_limited"),
+    (JPEG_ALPHA_WARNING, "jpeg_alpha_flattened"),
+)
+_TEMPLATE_WARNING_CODES = (
+    (PRESERVED_GENERATION_RECORD_WARNING, "record_preserved"),
+    (UNCARRIED_CHUNKS_WARNING, "chunks_not_carried"),
+    (ANIMATION_FLATTENED_WARNING, "animation_flattened"),
+    (DROPPED_PARAMETER_SETTINGS_WARNING, "settings_dropped"),
+)
+
+
+def _template_pattern(template: str) -> "re.Pattern[str]":
+    parts = re.split(r"\{(\w+)\}", template)
+    body = "".join(re.escape(part) if index % 2 == 0 else f"(?P<{part}>.+?)" for index, part in enumerate(parts))
+    return re.compile(f"^{body}$", re.DOTALL)
+
+
+_TEMPLATE_PATTERNS = tuple((_template_pattern(template), code) for template, code in _TEMPLATE_WARNING_CODES)
+
+
+def _template_params(values: Dict[str, str]) -> Dict[str, Any]:
+    params: Dict[str, Any] = {}
+    for name, value in values.items():
+        if name == "keys":
+            params["keys"] = [key for key in value.split(", ") if key]
+        elif name == "label":
+            params["format"] = value
+        elif name == "frames":
+            params["frames"] = int(value) if value.isdigit() else value
+        else:
+            params[name] = value
+    return params
+
+
+def warning_code_for(warning: str) -> Dict[str, Any]:
+    """One save warning as ``{"code", "params"}``; an unknown one is ``other`` with its text."""
+    # Imported here: the mutation service reaches the database layer, which
+    # this module otherwise never needs.
+    from services.indexed_file_mutation_service import RECONCILE_WARNING
+
+    text = str(warning)
+    for fixed, code in _FIXED_WARNING_CODES:
+        if text == fixed:
+            return {"code": code, "params": {}}
+    if text == RECONCILE_WARNING:
+        return {"code": "library_refresh_failed", "params": {}}
+    for pattern, code in _TEMPLATE_PATTERNS:
+        match = pattern.match(text)
+        if match:
+            return {"code": code, "params": _template_params(match.groupdict())}
+    return {"code": "other", "params": {"text": text}}
+
+
+def warning_codes_for(warnings: Iterable[str]) -> List[Dict[str, Any]]:
+    """The codes of these warnings, in the same order."""
+    return [warning_code_for(warning) for warning in warnings]
 
 
 def _discard_backup(backup_path: Path) -> None:

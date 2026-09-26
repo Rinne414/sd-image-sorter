@@ -1,0 +1,584 @@
+/* 读图: the picture on the left in its film frame, the details on the right. */
+.page {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(480px, calc(42 * var(--vw)), 780px);
+  height: 100%;
+  min-height: 0;
+}
+
+.page:not([data-has-image]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.note {
+  margin: 0;
+  padding: 8px 10px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+  border-left: 2px solid var(--warn);
+  background: var(--wash);
+}
+
+.problem {
+  margin: 0;
+  color: var(--danger);
+  line-height: 1.6;
+}
+
+.warnText {
+  margin: 0;
+  color: var(--warn);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+
+.subLabel {
+  font-size: var(--fs-1);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---- the picture ---- */
+.stage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  padding: 14px 20px 16px 24px;
+}
+
+.fileHead {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.generator {
+  color: var(--accent);
+  font-size: var(--fs-2);
+  font-weight: 600;
+}
+
+.fileName {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: var(--fs-3);
+}
+
+.fileTools {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.iconButton {
+  display: grid;
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+}
+
+.iconButton:hover {
+  color: var(--text);
+}
+
+.frame {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  background: var(--film);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.window {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  min-height: 0;
+  background: var(--stage);
+  overflow: hidden;
+}
+
+/* Small pictures are shown large too: this page is for looking closely. */
+.picture {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.pictureOver {
+  opacity: 0;
+  transition: opacity var(--t-med) var(--ease);
+}
+
+.pictureOver[data-ready] {
+  opacity: 1;
+}
+
+.stageActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---- the details ---- */
+.info {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding: 6px 22px 48px 20px;
+  background: var(--surface-1);
+  border-left: 1px solid var(--line);
+}
+
+.info > p {
+  padding-top: 14px;
+}
+
+/* Card pieces reused here (Civitai, nodes, other models, caption file) get the same rhythm as the folds. */
+.info > section:not(.fold),
+.info > details {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+/* The card's own folding parts (prompt nodes, other models) look like the folds. */
+.info > details > summary {
+  align-items: center;
+  min-height: 30px;
+  font-size: var(--fs-1);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.fold {
+  padding: 8px 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.foldHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+}
+
+.foldToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: left;
+}
+
+.foldToggle:hover {
+  color: var(--text);
+}
+
+.foldCaret {
+  color: var(--faint);
+}
+
+.foldBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 6px;
+}
+
+.foldActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.segment {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+}
+
+.segment button {
+  height: 26px;
+  padding: 0 9px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.segment button + button {
+  border-left: 1px solid var(--line-strong);
+}
+
+.segment button[aria-pressed="true"] {
+  background: var(--wash-strong);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.negativeText {
+  margin: 0;
+  color: var(--text-2);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.characters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.characters li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.characterHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.castNo {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  font-size: var(--fs-1);
+  border-radius: var(--radius);
+}
+
+.characterNegative {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  overflow-wrap: anywhere;
+}
+
+.models {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.modelRow {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 10px;
+}
+
+.modelRow dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-width: 0;
+  margin: 0;
+}
+
+.modelName {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.modelName:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.plainName {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.weight {
+  color: var(--accent);
+  font-size: var(--fs-2);
+}
+
+.hashRow {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.hash {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  cursor: copy;
+}
+
+.hash:hover {
+  color: var(--text);
+}
+
+.link {
+  color: var(--ai);
+  font-size: var(--fs-2);
+}
+
+.params {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 18px;
+  margin: 0;
+}
+
+.params div {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.params dt {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.params dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.paramValue {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-2);
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: copy;
+}
+
+.paramValue:hover {
+  color: var(--accent);
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.groupHead > :first-child {
+  flex: 1;
+}
+
+.textButton {
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.textButton:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* ---- the editor ---- */
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.field input,
+.field textarea,
+.field select {
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-3);
+  border-radius: var(--radius);
+}
+
+.field textarea {
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.field input:focus,
+.field textarea:focus,
+.field select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.field [aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 10px;
+}
+
+.editorRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.saveBox,
+.dangerBox {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.saveRow {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.grow {
+  flex: 1;
+}
+
+.folderRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.folderPath {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dangerBox {
+  margin-top: 6px;
+  padding-top: 14px;
+}
+
+.saved {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.savedPath {
+  margin: 0;
+  color: var(--ok);
+  font-size: var(--fs-2);
+  overflow-wrap: anywhere;
+}
+
+.notes {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--warn);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+
+.dialogText {
+  margin: 0 0 8px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}

@@ -1429,6 +1429,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tag/scope-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Tag Scope Count
+         * @description How many images a whole-library tagging run would process.
+         */
+        get: operations["get_tag_scope_count_api_tag_scope_count_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tag/progress": {
         parameters: {
             query?: never;
@@ -5163,6 +5183,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/smart-tag/tagged-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tagged Count
+         * @description Count the requested library images that already have tags.
+         *
+         *     With skip_existing on, Smart Tag drops these images entirely; the dialog
+         *     shows the count and lets the user skip or process them.
+         */
+        post: operations["tagged_count_api_smart_tag_tagged_count_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/smart-tag/cancel": {
         parameters: {
             query?: never;
@@ -5671,6 +5714,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/publish/staging-folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a fresh folder for the Censor page's hand-over
+         * @description Returns a new, empty folder under the app's data directory. The Censor page
+         *     renders its censored results there and sends each file's path to the export
+         *     as `censored_path`. Earlier hand-over folders are removed.
+         */
+        post: operations["create_publish_staging_folder_api_publish_staging_folder_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/publish/export": {
         parameters: {
             query?: never;
@@ -5683,11 +5748,15 @@ export interface paths {
         /**
          * Export an ordered publish set with sequential names
          * @description Copies each item into `output_folder` as `{name_prefix}{NN}.{ext}` (numbering
-         *     is positional: `start_index` + position, zero-padded to `pad_width`), keeping
-         *     the source file's extension. Items with `use_censored: true` FAIL rather than
-         *     silently exporting the uncensored original when no censored variant exists.
-         *     Existing files are skipped unless `overwrite` is set. A non-empty
-         *     `caption_text` is written to `caption.txt` in the same folder.
+         *     is positional: `start_index` + position, zero-padded to `pad_width`), or as
+         *     `{output_name}.{ext}` when the item carries a name, keeping the source file's
+         *     extension. Items with `use_censored: true` use their `censored_path` when one
+         *     is sent, otherwise the `{stem}{suffix}.*` pairing; they FAIL rather than
+         *     silently exporting the uncensored original when no censored file exists.
+         *     `metadata_option` defaults to `strip`: PNG text chunks, EXIF and XMP (prompt,
+         *     model, seed) are removed. `keep` copies the file unchanged; `minimal` keeps
+         *     only the color profile and DPI. Existing files are skipped unless `overwrite`
+         *     is set. A non-empty `caption_text` is written to `caption.txt`.
          */
         post: operations["export_publish_set_api_publish_export_post"];
         delete?: never;
@@ -5968,6 +6037,12 @@ export interface paths {
          *     those land in `sidecar_caption` and deliberately leave `prompt` empty, because
          *     the image was not generated from that text. Other counts: still_missing /
          *     used_raw / used_file / missing_source.
+         *
+         *     `scope: "metadata_error"` instead re-reads the file of every readable image
+         *     whose generation details failed to read (`metadata_status = 'error'`), like the
+         *     per-image re-read. Its result carries `scope` plus `fixed` / `still_error` /
+         *     `unreadable` (the file no longer opens) / `gone` (the file vanished; untouched).
+         *     Both scopes share the one-at-a-time slot.
          */
         post: operations["start_reparse_api_metadata_reparse_post"];
         delete?: never;
@@ -9844,6 +9919,16 @@ export interface components {
              * @default false
              */
             use_censored: boolean;
+            /**
+             * Censored Path
+             * @description Censored file handed over by the Censor page; used instead of pairing by name
+             */
+            censored_path?: string | null;
+            /**
+             * Output Name
+             * @description File name given on the Censor page; the extension follows the exported file
+             */
+            output_name?: string | null;
         };
         /** PublishExportRequest */
         PublishExportRequest: {
@@ -9882,6 +9967,13 @@ export interface components {
              */
             overwrite: boolean;
             watermark?: components["schemas"]["PublishWatermarkSettings"];
+            /**
+             * Metadata Option
+             * @description Generation info in the exported files: strip (default), keep the file as it is, or minimal
+             * @default strip
+             * @enum {string}
+             */
+            metadata_option: "strip" | "keep" | "minimal";
         };
         /**
          * PublishWatermarkSettings
@@ -10018,7 +10110,7 @@ export interface components {
         ReparseRequest: {
             /**
              * Scope
-             * @description Which rows to retry. Only 'missing_prompt' is supported.
+             * @description Which rows to retry: 'missing_prompt' recovers missing text; 'metadata_error' re-reads the files whose generation details failed to read.
              * @default missing_prompt
              */
             scope: string;
@@ -10204,6 +10296,20 @@ export interface components {
             format: string;
             /** Warnings */
             warnings?: string[];
+            /** Warning Codes */
+            warning_codes?: components["schemas"]["SaveEditedWarningCode"][];
+        };
+        /**
+         * SaveEditedWarningCode
+         * @description One save warning by code, with the values its sentence needs (chunk names, format, frames).
+         */
+        SaveEditedWarningCode: {
+            /** Code */
+            code: string;
+            /** Params */
+            params?: {
+                [key: string]: unknown;
+            };
         };
         /** SaveSettingsRequest */
         SaveSettingsRequest: {
@@ -10927,6 +11033,16 @@ export interface components {
              * @default true
              */
             toriigate_grounding: boolean;
+        };
+        /**
+         * SmartTagTaggedCountRequest
+         * @description Library sources of a planned run; paths are never skipped, so not sent.
+         */
+        SmartTagTaggedCountRequest: {
+            /** Image Ids */
+            image_ids?: number[];
+            /** Selection Token */
+            selection_token?: string | null;
         };
         /** StatsResponse */
         StatsResponse: {
@@ -13968,6 +14084,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_tag_scope_count_api_tag_scope_count_get: {
+        parameters: {
+            query?: {
+                retag_all?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -19802,6 +19949,41 @@ export interface operations {
             };
         };
     };
+    tagged_count_api_smart_tag_tagged_count_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SmartTagTaggedCountRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     cancel_api_smart_tag_cancel_post: {
         parameters: {
             query?: never;
@@ -20724,6 +20906,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_publish_staging_folder_api_publish_staging_folder_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

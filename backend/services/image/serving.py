@@ -40,6 +40,7 @@ from services.image_metadata_writer import (
     harvest_source_text_chunks,
     normalize_edited_metadata,
     uncarried_chunk_warning,
+    warning_codes_for,
     write_image_atomically,
 )
 from thumbnail_cache import (
@@ -277,6 +278,7 @@ class ServingMixin:
             "output_path": str(output.path),
             "format": requested_format,
             "warnings": warnings,
+            "warning_codes": warning_codes_for(warnings),
         }
 
     def open_image_folder(

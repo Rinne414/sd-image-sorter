@@ -637,7 +637,7 @@ A `location_unreachable` group is never cleared. Naming one explicitly returns `
 `status` is `cleared`, `refused`, or `nothing_to_clear`. Call `GET /api/images/missing-summary` first to learn what clearing would cost.
 
 #### POST /api/image-metadata/save-edited
-Save an image copy with edited metadata fields.
+Save an image copy with edited metadata fields. Returns `{ "output_path", "format", "warnings", "warning_codes" }`: `warnings` are English sentences; `warning_codes` names the same warnings in the same order as `{ "code", "params" }` for a client to translate. Codes: `jpeg_limited`, `webp_limited`, `jpeg_alpha_flattened`, `record_preserved` (`keys`), `chunks_not_carried` (`format`, `keys`), `animation_flattened` (`format`, `frames`), `settings_dropped` (`keys`), `library_refresh_failed`, and `other` (`text`) for a warning without a code.
 
 #### POST /api/open-folder
 Open an image's containing folder in the host file explorer.
