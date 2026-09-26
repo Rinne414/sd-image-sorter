@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useLang, useT, type Lang, type MessageKey } from '../../i18n'
 import { percent, roomAt, SCALE_OPTIONS, type ScaleSetting } from '../../lib/uiScale'
 import { useTheme, type ThemeMode } from '../../theme'
 import styles from './AppearanceTab.module.css'
 import { useUiScale } from './uiScaleStore'
-
-const SAVED_MS = 2400
+import { useSaved } from './useSaved'
 
 const THEMES: { value: ThemeMode; label: MessageKey }[] = [
   { value: 'system', label: 'theme.system' },
@@ -20,23 +19,10 @@ const LANGS: { value: Lang; label: MessageKey }[] = [
 
 type Section = 'theme' | 'lang' | 'scale'
 
-/** Which section was just changed, for a moment ("已保存" beside its title). */
-function useSaved(): [Section | null, (section: Section) => void] {
-  const [saved, setSaved] = useState<Section | null>(null)
-  const timer = useRef<number | undefined>(undefined)
-  useEffect(() => () => window.clearTimeout(timer.current), [])
-  const mark = (section: Section) => {
-    setSaved(section)
-    window.clearTimeout(timer.current)
-    timer.current = window.setTimeout(() => setSaved(null), SAVED_MS)
-  }
-  return [saved, mark]
-}
-
 /** Settings › Appearance: theme, language and interface zoom, each applied as soon as it is chosen. */
 export function AppearanceTab() {
   const t = useT()
-  const [saved, mark] = useSaved()
+  const [saved, mark] = useSaved<Section>()
   const mode = useTheme((s) => s.mode)
   const lang = useLang((s) => s.lang)
 

@@ -1,0 +1,132 @@
+import { create } from 'zustand'
+import { api, unwrap } from '../../api/client'
+import { translate, useLang, type MessageKey, type Params } from '../../i18n'
+import { useToasts } from '../../ui/toasts'
+import { waitForNewBoot, type BootDeps } from './restartWait'
+
+// Restarting the app and installing an update, shared by About & updates and
+// (later) the Model Center. Both end the same way: a full-screen "restarting"
+// until a server answers with a new boot id, then a reload; after three
+// minutes the screen says what to do instead. RestartOverlay draws `screen`.
+
+export type RestartScreen =
+  | { kind: 'none' }
+  /** "Restart?": `jobs` null for the plain question, else the jobs a restart would stop. */
+  | { kind: 'ask'; jobs: string[] | null }
+  | { kind: 'wait'; what: 'download' | 'update' | 'restart'; latest: string }
+  | { kind: 'slow' }
+  | { kind: 'unsupported' }
+
+interface RestartState {
+  screen: RestartScreen
+  /** Answers the open question (true: go ahead). */
+  answer: (go: boolean) => void
+  /** Closes the "taking long" or "cannot restart" screen. */
+  dismiss: () => void
+}
+
+let pending: ((go: boolean) => void) | null = null
+
+export const useRestart = create<RestartState>((set) => ({
+  screen: { kind: 'none' },
+  answer: (go) => {
+    set({ screen: { kind: 'none' } })
+    pending?.(go)
+    pending = null
+  },
+  dismiss: () => set({ screen: { kind: 'none' } }),
+}))
+
+const show = (screen: RestartScreen) => useRestart.setState({ screen })
+const say = (key: MessageKey, params?: Params) => translate(useLang.getState().lang, key, params)
+const toastError = (text: string) => useToasts.getState().push(text, 'error')
+
+function ask(jobs: string[] | null): Promise<boolean> {
+  pending?.(false)
+  return new Promise((resolve) => {
+    pending = resolve
+    show({ kind: 'ask', jobs })
+  })
+}
+
+async function bootId(): Promise<string | null> {
+  const res = unwrap<{ boot_id?: unknown }>(await api.GET('/api/updates/boot-id'))
+  return typeof res.boot_id === 'string' ? res.boot_id : null
+}
+
+const REAL_SERVER: BootDeps = {
+  fetchBootId: bootId,
+  sleep: (ms) => new Promise((resolve) => window.setTimeout(resolve, ms)),
+  now: () => Date.now(),
+}
+
+/** Full screen until the new server answers, then reload; the "taking long" screen after three minutes. */
+async function comeBack(previous: string | null, waiting: RestartScreen): Promise<void> {
+  show(waiting)
+  if (await waitForNewBoot(previous, REAL_SERVER)) window.location.reload()
+  else show({ kind: 'slow' })
+}
+
+interface RestartAnswer {
+  status?: string
+  jobs?: unknown
+  boot_id?: unknown
+}
+
+async function postRestart(reason: string, force: boolean): Promise<RestartAnswer> {
+  return unwrap<RestartAnswer>(await api.POST('/api/updates/restart', { body: { reason, force } }))
+}
+
+export type RestartOutcome = 'restarting' | 'declined' | 'unsupported' | 'failed'
+
+/**
+ * Restart the app. Asks first (unless the caller's own button already was the
+ * question); when jobs are running the backend names them and the user decides
+ * whether to restart anyway.
+ */
+export async function restartApp({ reason = 'user', askFirst = true }: { reason?: string; askFirst?: boolean } = {}): Promise<RestartOutcome> {
+  if (askFirst && !(await ask(null))) return 'declined'
+  try {
+    let result = await postRestart(reason, false)
+    if (result.status === 'busy') {
+      const jobs = Array.isArray(result.jobs) ? result.jobs.map(String) : []
+      if (!(await ask(jobs))) return 'declined'
+      result = await postRestart(reason, true)
+    }
+    if (result.status !== 'scheduled') {
+      show({ kind: 'unsupported' })
+      return 'unsupported'
+    }
+    void comeBack(typeof result.boot_id === 'string' ? result.boot_id : null, { kind: 'wait', what: 'restart', latest: '' })
+    return 'restarting'
+  } catch (error) {
+    toastError(say('restart.failed', { reason: (error as Error).message }))
+    return 'failed'
+  }
+}
+
+export type InstallOutcome = 'installing' | 'upToDate' | 'failed'
+
+/**
+ * Download and install `latest` (the user confirmed it). The request itself
+ * downloads the package, so the "downloading" screen shows from the start.
+ */
+export async function installUpdate(latest: string): Promise<InstallOutcome> {
+  show({ kind: 'wait', what: 'download', latest })
+  const before = await bootId().catch(() => null)
+  try {
+    const result = unwrap<{ status?: string }>(await api.POST('/api/updates/apply', { body: { force_check: true, relaunch: true } }))
+    if (result.status !== 'scheduled') {
+      show({ kind: 'none' })
+      if (result.status === 'up_to_date') useToasts.getState().push(say('about.install.upToDate'))
+      else toastError(say('about.install.failed', { reason: String(result.status ?? '') }))
+      return result.status === 'up_to_date' ? 'upToDate' : 'failed'
+    }
+  } catch (error) {
+    show({ kind: 'none' })
+    toastError(say('about.install.failed', { reason: (error as Error).message }))
+    return 'failed'
+  }
+  void comeBack(before, { kind: 'wait', what: 'update', latest })
+  return 'installing'
+}

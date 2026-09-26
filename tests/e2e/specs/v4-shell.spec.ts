@@ -32,6 +32,7 @@ async function openAt(page: Page, hash: string, { lang = 'en', scale }: { lang?:
       sessionStorage.setItem('v4shell-init', '1')
       localStorage.setItem('sd-image-sorter-lang', l)
       localStorage.setItem('sd-v4-theme', 'dark')
+      localStorage.setItem('sd-v4-update-autocheck', '0')
       if (s) localStorage.setItem('sd-v4-ui-scale', s)
       else localStorage.removeItem('sd-v4-ui-scale')
     },
@@ -56,8 +57,16 @@ test('settings tabs are addresses: clicking, typing the address, unknown tab, ba
   await expect(page.getByTestId('settings-button')).toHaveAttribute('aria-current', 'page')
   await expect(topTabs(page).and(page.locator('[aria-current="page"]'))).toHaveCount(0)
 
+  // About & updates is built (slice 5c, v4-about.spec.ts): its page, not the placeholder
+  // (its hardware probe would touch the GPU: answered here)
+  await page.route('**/api/system-info', (route) => route.fulfill({ json: { system_info: { gpu_name: 'Test GPU', torch_cuda_available: true } } }))
+  await page.getByTestId('settings-tab-about').click()
+  await expect(page).toHaveURL(/#\/settings\/about$/)
+  await expect(page.getByTestId('about-update')).toBeVisible()
+  await expect(page.getByTestId('settings-planned')).toHaveCount(0)
+
   // every other tab: its address, one honest line, and the way to V3.5 (no controls that do nothing)
-  for (const [id, name] of [['library', 'Library'], ['models', 'Model Center'], ['ai', 'AI services'], ['disk', 'Disk & cache'], ['about', 'About & updates']] as const) {
+  for (const [id, name] of [['library', 'Library'], ['models', 'Model Center'], ['ai', 'AI services'], ['disk', 'Disk & cache']] as const) {
     await page.getByTestId(`settings-tab-${id}`).click()
     await expect(page).toHaveURL(new RegExp(`#/settings/${id}$`))
     await expect(page.getByTestId(`settings-tab-${id}`)).toHaveAttribute('aria-current', 'page')

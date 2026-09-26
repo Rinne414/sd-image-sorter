@@ -1,5 +1,6 @@
 import createClient from 'openapi-fetch'
 import type { paths } from './schema'
+import { debugMiddleware } from '../lib/debug'
 import { useApp } from '../state/store'
 
 // Typed requests: path + query params are checked against the backend's
@@ -15,6 +16,9 @@ api.use({
     return request
   },
 })
+
+// Settings › About › Support › Detailed log: every request in the browser console.
+api.use(debugMiddleware())
 
 export class ApiError extends Error {
   readonly status: number

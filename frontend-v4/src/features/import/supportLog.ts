@@ -18,12 +18,14 @@ interface Diagnostics {
 }
 
 /** Lines of the backend log in a copied bundle. */
-const LOG_LINES = 200
+export const LOG_LINES = 200
 
-export function formatDiagnostics(d: Diagnostics): string {
+/** `extra`: more lines after the version (About › Support adds the hardware and the update check). */
+export function formatDiagnostics(d: Diagnostics, { title = 'SD Image Sorter scan diagnostics', extra = [] as string[] } = {}): string {
   return [
-    'SD Image Sorter scan diagnostics',
+    title,
     `App version: ${d.app_version || 'unknown'}`,
+    ...extra,
     `Log file: ${d.log_file_path_redacted || (d.log_file_path ? '<PATH>' : 'unavailable')}`,
     `Log exists: ${d.log_file_exists ? 'yes' : 'no'}`,
     `Access log: ${d.access_log_enabled ? 'on' : 'off'}`,
@@ -36,7 +38,7 @@ export function formatDiagnostics(d: Diagnostics): string {
 
 const say = (text: string, tone: 'info' | 'error' = 'info') => useToasts.getState().push(text, tone)
 
-async function diagnostics(lines: number): Promise<Diagnostics | null> {
+export async function diagnostics(lines: number): Promise<Diagnostics | null> {
   try {
     return unwrap<Diagnostics>(await api.GET('/api/support/diagnostics', { params: { query: { lines } } }))
   } catch (error) {

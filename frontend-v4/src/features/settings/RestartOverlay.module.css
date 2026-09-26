@@ -1,0 +1,88 @@
+.askBody {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+/* Covers the whole page: behind it the old server has stopped answering. */
+.screen {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.panel {
+  width: min(520px, 100%);
+  padding: 28px 32px 26px;
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--accent);
+  background: var(--surface-1);
+  border-radius: var(--radius);
+}
+
+.title {
+  margin: 0 0 16px;
+  color: var(--text);
+  font-size: var(--fs-6);
+  font-weight: 650;
+}
+
+/* One thin rule with a mark running along it: work is going on, length unknown. */
+.track {
+  position: relative;
+  height: 2px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  background: var(--line);
+}
+
+.run {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 30%;
+  background: var(--accent);
+  animation: run 1.6s var(--ease) infinite;
+}
+
+@keyframes run {
+  from {
+    left: -30%;
+  }
+  to {
+    left: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .run {
+    left: 0;
+    width: 100%;
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
+.body {
+  margin: 0;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+
+.clock {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 22px;
+}

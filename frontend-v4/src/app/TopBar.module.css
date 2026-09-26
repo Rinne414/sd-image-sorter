@@ -66,6 +66,8 @@
 
 .tabs {
   display: flex;
+  /* never squeezed: a Chinese tab name would break between its characters */
+  flex: none;
   gap: 2px;
   margin-left: 14px;
   align-self: stretch;
@@ -78,6 +80,7 @@
   background: none;
   color: var(--muted);
   font-size: var(--fs-4);
+  white-space: nowrap;
 }
 
 .tab:hover {
@@ -106,12 +109,15 @@
 
 .command {
   display: flex;
-  flex: 0 1 auto;
+  /* Gives way first when the busy chip, the update hint and jobs all show (it
+     shrinks far faster than the chip, which names what holds the AI): its width
+     is only a wish (the basis), and with its content left out of its size the
+     bar's minimum counts it at min-width, not at the wish. */
+  flex: 0 100 clamp(210px, 22 * var(--vw), 320px);
+  contain: inline-size;
+  min-width: 150px;
   align-items: center;
   gap: 8px;
-  /* gives way first when the busy chip, the update hint and jobs all show */
-  width: clamp(210px, 22 * var(--vw), 320px);
-  min-width: 150px;
   height: 30px;
   margin-right: 4px;
   padding: 0 7px 0 10px;

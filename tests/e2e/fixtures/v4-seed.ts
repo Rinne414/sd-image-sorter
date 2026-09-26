@@ -141,6 +141,8 @@ export async function openLibrary(page: Page, query: string, count: number, them
     sessionStorage.setItem(flag, '1')
     localStorage.setItem('sd-image-sorter-lang', 'en')
     localStorage.setItem('sd-v4-theme', th)
+    // no update check half a minute after start: the test server would ask GitHub (v4-about.spec.ts stubs and tests it)
+    localStorage.setItem('sd-v4-update-autocheck', '0')
   }, theme)
   const res = await page.goto('/v4/', { waitUntil: 'domcontentloaded' })
   expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)

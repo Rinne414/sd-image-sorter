@@ -13,6 +13,7 @@ import { CompareDialog } from '../features/similar/CompareDialog'
 import { DuplicatesDialog } from '../features/similar/DuplicatesDialog'
 import { SortPage } from '../features/sort/SortPage'
 import { HealthDialog } from '../features/status/HealthDialog'
+import { RestartOverlay } from '../features/settings/RestartOverlay'
 import { SettingsPage } from '../features/settings/SettingsPage'
 // Keeps the interface zoom in step with the window (auto) from the first render.
 import '../features/settings/uiScaleStore'
@@ -64,6 +65,7 @@ export function App() {
       <DropImport />
       <SelectionDialogs />
       <BatchDialogs />
+      <RestartOverlay />
       <Toasts />
     </div>
   )

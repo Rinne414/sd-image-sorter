@@ -25,7 +25,12 @@ export const SETTINGS_PAGES: readonly SettingsTabEntry[] = [
   { id: 'models', label: 'settings.tab.models', what: 'settings.what.models' },
   { id: 'ai', label: 'settings.tab.ai', what: 'settings.what.ai' },
   { id: 'disk', label: 'settings.tab.disk', what: 'settings.what.disk' },
-  { id: 'about', label: 'settings.tab.about', what: 'settings.what.about' },
+  {
+    id: 'about',
+    label: 'settings.tab.about',
+    what: 'settings.what.about',
+    page: lazy(() => import('./about/AboutTab').then((m) => ({ default: m.AboutTab }))),
+  },
 ]
 
 export function settingsTab(id: SettingsTab): SettingsTabEntry {
