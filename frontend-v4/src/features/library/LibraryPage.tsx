@@ -74,7 +74,7 @@ export function LibraryPage() {
     <div className={styles.page} data-card={cardOpen || undefined} data-rail={railOpen || undefined}>
       {railOpen && <Rail texture={texture} />}
       <main className={styles.main}>
-        <QueryBar total={total} inputRef={inputRef} />
+        <QueryBar total={total} about={shown.totalAbout} inputRef={inputRef} />
         {adding && <AddingBanner target={adding} />}
         {!similar && <SortNotice params={params} />}
         {similar && <SimilarBanner query={similar} count={images.length} loading={shown.loading} error={shown.error} retry={shown.retry} />}

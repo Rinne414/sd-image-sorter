@@ -195,6 +195,31 @@ test('folder tree: a parent that only holds subfolders can be chosen, and scopes
   expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
 })
 
+test('6e: the folders opened and closed by hand stay so after a reload, per library', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openLibrary(page, TOKEN, COUNT)
+  const tree = page.getByTestId('folder-tree')
+  const opener = tree.getByRole('button', { name: /v4-browse: folders inside$/ })
+  if ((await opener.count()) && (await opener.getAttribute('aria-expanded')) === 'false') await opener.click()
+  const parentOpener = tree.getByRole('button', { name: 'parent: folders inside' })
+  await expect(parentOpener).toHaveAttribute('aria-expanded', 'false')
+  await parentOpener.click()
+  await expect(tree.getByRole('button', { name: /^a$/ })).toBeVisible()
+
+  // nothing chosen, only opened: after a reload the same rows are open
+  await page.reload()
+  await expect(tree.getByRole('button', { name: 'parent: folders inside' })).toHaveAttribute('aria-expanded', 'true')
+  await expect(tree.getByRole('button', { name: /^a$/ })).toBeVisible()
+  // and closing it by hand is kept too
+  await tree.getByRole('button', { name: 'parent: folders inside' }).click()
+  await page.reload()
+  await expect(tree.getByRole('button', { name: 'parent: folders inside' })).toHaveAttribute('aria-expanded', 'false')
+  await expect(tree.getByRole('button', { name: /^a$/ })).toHaveCount(0)
+  // kept under this library
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('sd-v4-folder-tree') ?? '{}'))
+  expect(Object.keys(stored)).toEqual(['main'])
+})
+
 test('"any of" tags and "prompt contains": search line, chips and the filter panel', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await openLibrary(page, TOKEN, COUNT)
@@ -228,6 +253,8 @@ test('"any of" tags and "prompt contains": search line, chips and the filter pan
   await expect(input).toHaveValue(`${TOKEN} prompt:"blue eyes"`)
   await grid(page).waitFor()
   await expect(tiles).toHaveCount(30)
+  // 6e: the backend counts "light blue eyes" too before it checks whole words; every image is here, so the count is theirs
+  await expect(count(page)).toHaveText('30 images')
 
   // adding a word in the panel follows the mode shown
   await panel.getByTestId('filter-prompt-mode').getByRole('button', { name: 'Contains the text' }).click()
@@ -237,6 +264,29 @@ test('"any of" tags and "prompt contains": search line, chips and the filter pan
   await expect(input).toHaveValue(`${TOKEN} prompt:"*blue eyes*" prompt:*light*`)
   await expect(count(page)).toHaveText('30 images')
   expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
+})
+
+test('6e: a whole-word prompt count the backend can only estimate says "about" until every page is here', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openLibrary(page, TOKEN, COUNT)
+  // 300 images, 240 a page: the first page cannot tell how many really have the word
+  const input = page.getByTestId('query-input')
+  await input.fill(`${TOKEN} prompt:1girl`)
+  await input.press('Enter')
+  await expect(count(page)).toHaveText('about 300 images')
+  // the rest loads as the grid scrolls to its end: now it is a count
+  await grid(page).waitFor()
+  const scroller = page.getByTestId('gallery-scroller')
+  await expect
+    .poll(async () => {
+      await scroller.evaluate((el) => el.scrollTo(0, el.scrollHeight))
+      return count(page).textContent()
+    })
+    .toBe('300 images')
+  // "contains" is counted exactly by the backend: no "about"
+  await input.fill(`${TOKEN} prompt:*1girl*`)
+  await input.press('Enter')
+  await expect(count(page)).toHaveText('300 images')
 })
 
 async function topSpot(page: Page): Promise<{ id: number; index: number } | null> {

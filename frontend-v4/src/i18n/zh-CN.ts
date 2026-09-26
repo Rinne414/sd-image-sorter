@@ -143,6 +143,7 @@ export const zhCN = {
   'view.card': '右侧生成卡',
 
   'grid.count': '{n} 张',
+  'grid.countAbout': '约 {n} 张',
   'grid.loading': '正在加载…',
   'grid.empty': '没有符合的图片',
   'grid.error': '图片列表加载失败：{reason}',

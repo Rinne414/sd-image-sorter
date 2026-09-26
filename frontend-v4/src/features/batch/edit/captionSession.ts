@@ -134,8 +134,11 @@ export function createCaptionSession(deps: SessionDeps) {
         store.setState((s) => ({ items: { ...s.items, [key]: fresh } }))
         return
       }
+      if (head.generation <= item.head.generation) return
       // Saved elsewhere since (an AI run): take the newer version unless the user is mid-edit.
-      if (head.generation > item.head.generation && item.status === 'saved') put(key, { ...fresh, undo: item.undo })
+      if (item.status === 'saved') put(key, { ...fresh, undo: item.undo })
+      // The conflict notice always shows the latest version, and both its answers act on that one.
+      else if (item.status === 'conflict') put(key, { head, content: head.content ?? item.content })
     },
 
     edit,

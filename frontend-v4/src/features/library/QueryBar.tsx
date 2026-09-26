@@ -26,6 +26,8 @@ const OP_NAMES: Record<string, MessageKey> = { any: 'qop.any', contains: 'qop.co
 
 interface Props {
   total: number | null
+  /** The total is the backend's estimate. */
+  about?: boolean
   inputRef: React.RefObject<HTMLInputElement | null>
 }
 
@@ -34,7 +36,7 @@ interface Option {
   count?: number
 }
 
-export function QueryBar({ total, inputRef }: Props) {
+export function QueryBar({ total, about = false, inputRef }: Props) {
   const t = useT()
   const queryText = useApp((s) => s.queryText)
   const setQueryText = useApp((s) => s.setQueryText)
@@ -273,7 +275,7 @@ export function QueryBar({ total, inputRef }: Props) {
         ]}
       />
       <span className={`${styles.count} mono`} data-testid="result-count">
-        {total === null ? '' : t('grid.count', { n: total })}
+        {total === null ? '' : t(about ? 'grid.countAbout' : 'grid.count', { n: total })}
       </span>
     </div>
   )

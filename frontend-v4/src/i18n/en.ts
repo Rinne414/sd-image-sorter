@@ -143,6 +143,7 @@ export const en: Record<MessageKey, string> = {
   'view.card': 'Generation card',
 
   'grid.count': '{n} images',
+  'grid.countAbout': 'about {n} images',
   'grid.loading': 'Loading…',
   'grid.empty': 'No images match',
   'grid.error': "Couldn't load images: {reason}",

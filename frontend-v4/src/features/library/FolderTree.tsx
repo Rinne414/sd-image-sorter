@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useT } from '../../i18n'
+import { folderPaths, parseFolderMemory, recallOpen, rememberOpen } from '../../lib/folderMemory'
 import { ancestorPaths, buildFolderTree, defaultOpen, normalizeFolder, type FolderNode } from '../../lib/folderTree'
 import { useApp } from '../../state/store'
 import { Icon } from '../../ui/Icon'
@@ -13,27 +14,56 @@ interface Branches {
   choose: (path: string) => void
 }
 
+/** Rows opened and closed by hand, per library (lib/folderMemory.ts). */
+const MEMORY_KEY = 'sd-v4-folder-tree'
+
+function readMemory() {
+  try {
+    return parseFolderMemory(localStorage.getItem(MEMORY_KEY))
+  } catch {
+    return {}
+  }
+}
+
+/** The rows the user opened and closed by hand in this library, kept over a reload. */
+function useHandOpened(libraryId: string, paths: ReadonlySet<string>) {
+  const pathsKey = [...paths].join('\n')
+  const [hand, setHand] = useState(() => recallOpen(readMemory(), libraryId, paths))
+  // Another library, or other folders (compared by their paths): read that library's rows again; gone folders drop out.
+  useEffect(() => setHand(recallOpen(readMemory(), libraryId, paths)), [libraryId, pathsKey])
+  const update = (opened: ReadonlySet<string>, closed: ReadonlySet<string>) => {
+    setHand({ opened: new Set(opened), closed: new Set(closed) })
+    try {
+      localStorage.setItem(MEMORY_KEY, JSON.stringify(rememberOpen(readMemory(), libraryId, opened, closed)))
+    } catch {
+      // storage blocked: the tree just won't be remembered
+    }
+  }
+  return [hand, update] as const
+}
+
 /**
  * The library's folders as a tree. Choosing a folder shows it and everything
  * under it; choosing it again shows every folder. The top rows start open,
- * and the rows above the chosen folder open by themselves.
+ * the rows above the chosen folder open by themselves, and what the user
+ * opened or closed by hand stays so (per library, over a reload).
  */
 export function FolderTree({ folders }: { folders: string[] }) {
   const tree = useMemo(() => buildFolderTree(folders), [folders])
   const folder = useApp((s) => s.scope.folder)
   const setScope = useApp((s) => s.setScope)
   const active = folder ? normalizeFolder(folder) : null
+  const libraryId = useApp((s) => s.libraryId)
+  const paths = useMemo(() => folderPaths(tree), [tree])
   // What the user opened or closed by hand; everything else follows the defaults.
-  const [opened, setOpened] = useState<ReadonlySet<string>>(new Set())
-  const [closed, setClosed] = useState<ReadonlySet<string>>(new Set())
+  const [{ opened, closed }, setHand] = useHandOpened(libraryId, paths)
   const auto = useMemo(() => new Set([...defaultOpen(tree), ...(active ? ancestorPaths(tree, active) : [])]), [tree, active])
 
   const branches: Branches = {
     isOpen: (path) => opened.has(path) || (!closed.has(path) && auto.has(path)),
     toggle: (path, open) => {
       const without = (set: ReadonlySet<string>) => new Set([...set].filter((p) => p !== path))
-      setOpened(open ? without(opened) : new Set([...opened, path]))
-      setClosed(open ? new Set([...closed, path]) : without(closed))
+      setHand(open ? without(opened) : new Set([...opened, path]), open ? new Set([...closed, path]) : without(closed))
     },
     active,
     choose: (path) => setScope({ folder: active === path ? null : path }),

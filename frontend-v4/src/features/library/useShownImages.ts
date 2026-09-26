@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useImages } from '../../api/queries'
 import type { ImageSummary } from '../../api/types'
+import { shownTotal, totalIsEstimate } from '../../lib/resultTotal'
 import type { ImageQueryParams } from '../../lib/searchQuery'
 import { useRankedImages } from '../similar/similarApi'
 import { queryKeyOf, useSimilar, type SimilarQuery } from '../similar/similarStore'
@@ -13,6 +14,8 @@ export interface Shown {
   images: ImageSummary[]
   /** The filter's size; null while ranked by likeness (the ranking has no size). */
   total: number | null
+  /** `total` is the backend's estimate (whole-word prompt terms, more pages to come). */
+  totalAbout: boolean
   hasMore: boolean
   fetchingMore: boolean
   fetchMore: () => void
@@ -49,6 +52,7 @@ export function useShownImages(params: ImageQueryParams): Shown {
     return {
       images: rankedImages,
       total: null,
+      totalAbout: false,
       hasMore: ranked.hasNextPage,
       fetchingMore: ranked.isFetchingNextPage,
       fetchMore: fetchRanked,
@@ -62,9 +66,11 @@ export function useShownImages(params: ImageQueryParams): Shown {
       retry: () => void ranked.refetch(),
     }
   }
+  const counted = shownTotal(filter.data?.pages[0]?.total ?? null, totalIsEstimate(params), filterImages.length, filter.hasNextPage)
   return {
     images: filterImages,
-    total: filter.data?.pages[0]?.total ?? null,
+    total: counted?.n ?? null,
+    totalAbout: counted?.about ?? false,
     hasMore: filter.hasNextPage,
     fetchingMore: filter.isFetchingNextPage,
     fetchMore: fetchFilter,

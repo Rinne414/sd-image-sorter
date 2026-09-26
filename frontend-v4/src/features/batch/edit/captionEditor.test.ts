@@ -172,6 +172,39 @@ describe('the caption session', () => {
     expect(item()?.lost).toBeNull()
   })
 
+  it('6e: while the conflict notice shows, a newer version elsewhere replaces the one shown; both answers act on the latest', async () => {
+    const { session, calls, item } = setup([() => ({ kind: 'conflict', head: head(5, content('theirs')) }), savedAs])
+    session.open('k', head(2, content('a')), content(''))
+    session.edit('k', () => content('mine'))
+    await vi.advanceTimersByTimeAsync(500)
+    expect(item()?.status).toBe('conflict')
+
+    // saved again elsewhere (V3.5, an AI run) while the notice is up
+    session.open('k', head(6, content('theirs again')), content(''))
+    expect(item()).toMatchObject({ status: 'conflict', content: content('theirs again'), lost: content('mine') })
+    expect(item()?.head.generation).toBe(6)
+    // an older head arriving late changes nothing
+    session.open('k', head(5, content('theirs')), content(''))
+    expect(item()?.content).toEqual(content('theirs again'))
+
+    // "use mine" saves on top of the latest, not the one the notice first showed
+    session.reapplyLost('k')
+    await vi.advanceTimersByTimeAsync(500)
+    expect(calls.at(-1)).toEqual({ content: content('mine'), generation: 6 })
+    expect(item()?.status).toBe('saved')
+  })
+
+  it('6e: "keep the latest" keeps the version that arrived last', async () => {
+    const { session, item } = setup([() => ({ kind: 'conflict', head: head(5, content('theirs')) })])
+    session.open('k', head(2, content('a')), content(''))
+    session.edit('k', () => content('mine'))
+    await vi.advanceTimersByTimeAsync(500)
+    session.open('k', head(7, content('newest')), content(''))
+    session.dismiss('k')
+    expect(item()).toMatchObject({ status: 'saved', content: content('newest'), lost: null })
+    expect(item()?.head.generation).toBe(7)
+  })
+
   it('keeps a failed change on screen and saves it on retry', async () => {
     const { session, calls, item } = setup([() => ({ kind: 'failed', reason: 'offline' }), savedAs])
     session.open('k', head(1, content('a')), content(''))
