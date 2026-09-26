@@ -1,8 +1,9 @@
 // Path helpers for folders the backend reports. Paths stay in the form the
-// backend gave (Windows `D:\a\b` or POSIX `/a/b`); nothing here touches disk.
+// backend gave (Windows `D:\a\b`, a drive with forward slashes `L:/a/b` as
+// library folders are listed, or POSIX `/a/b`); nothing here touches disk.
 
-const isWindows = (p: string) => /^[A-Za-z]:/.test(p) || p.includes('\\')
-const sepOf = (p: string) => (isWindows(p) ? '\\' : '/')
+/** `\` once a path has one (Windows, a share, a mixed path) or is a bare drive; otherwise `/`. */
+const sepOf = (p: string) => (p.includes('\\') || /^[A-Za-z]:$/.test(p) ? '\\' : '/')
 
 /** The folder that holds `path`, or null at a drive or file-system root. */
 export function parentFolder(path: string): string | null {
@@ -13,7 +14,7 @@ export function parentFolder(path: string): string | null {
   const cut = trimmed.lastIndexOf(sep)
   if (cut < 0) return null
   const head = trimmed.slice(0, cut)
-  if (sep === '\\' && /^[A-Za-z]:$/.test(head)) return `${head}\\`
+  if (/^[A-Za-z]:$/.test(head)) return `${head}${sep}`
   return head || sep
 }
 

@@ -44,3 +44,47 @@ describe('paths', () => {
     expect(tailOfPath('D:\\very long folder name\\another level\\final', 24)).toBe('…\\another level\\final')
   })
 })
+
+// Library folders come back from the backend as `L:/Pictures/...` (a drive with
+// forward slashes): those split on `/`, so every folder chooser row shows its own end.
+describe('each kind of path keeps its own separator', () => {
+  test('a drive with forward slashes (L:/a/b)', () => {
+    expect(parentFolder('L:/a/b')).toBe('L:/a')
+    expect(parentFolder('L:/a')).toBe('L:/')
+    expect(joinFolder('L:/a', 'keep')).toBe('L:/a/keep')
+    expect(tailOfPath('L:/Pictures/AAA Reference/AAAno prompt', 21)).toBe('…/AAAno prompt')
+    expect(tailOfPath('L:/Pictures/AAA Reference/AAAwith prompt', 21)).toBe('…/AAAwith prompt')
+  })
+
+  test('a drive with backslashes (L:\\a\\b), as before', () => {
+    expect(parentFolder('L:\\a\\b')).toBe('L:\\a')
+    expect(parentFolder('L:\\a')).toBe('L:\\')
+    expect(joinFolder('L:\\a', 'keep')).toBe('L:\\a\\keep')
+    expect(tailOfPath('L:\\Pictures\\AAA Reference\\AAAno prompt', 21)).toBe('…\\AAAno prompt')
+  })
+
+  test('a network share (\\\\server\\share\\x), as before', () => {
+    expect(parentFolder('\\\\server\\share\\x')).toBe('\\\\server\\share')
+    expect(joinFolder('\\\\server\\share', 'x')).toBe('\\\\server\\share\\x')
+    expect(tailOfPath('\\\\server\\share\\some long folder\\x', 20)).toBe('…\\some long folder\\x')
+  })
+
+  test('a POSIX path (/home/u/x), as before', () => {
+    expect(parentFolder('/home/u/x')).toBe('/home/u')
+    expect(joinFolder('/home/u', 'x')).toBe('/home/u/x')
+    expect(tailOfPath('/home/u/some long folder/x', 20)).toBe('…/some long folder/x')
+  })
+
+  test('a mixed path (any backslash) keeps the Windows separator, as before', () => {
+    expect(parentFolder('L:\\a/b\\c')).toBe('L:\\a/b')
+    expect(joinFolder('L:\\a/b', 'c')).toBe('L:\\a/b\\c')
+    expect(tailOfPath('L:\\Pictures/AAA Reference\\AAAno prompt', 21)).toBe('…\\AAAno prompt')
+  })
+
+  test('a drive root with a forward slash (L:/)', () => {
+    expect(parentFolder('L:/')).toBeNull()
+    expect(joinFolder('L:/', 'keep')).toBe('L:/keep')
+    expect(tailOfPath('L:/', 21)).toBe('L:/')
+    expect(folderName('L:/')).toBe('L:')
+  })
+})
