@@ -174,6 +174,8 @@ test('the check lists the captions written the other way; the bulk panel writes 
 
   await page.locator('[data-testid="rail-step"][data-step-id="edit"]').click()
   await page.getByTestId('edit-mode-bulk').click()
+  // the frequency table shows the emoticon as it is written, not as "^ ^"
+  await expect(page.locator('[data-testid="freq-row"][data-tag="^_^"]')).toContainText('^_^')
   const unify = page.getByTestId('bulk-unify-style')
   await expect(unify).toHaveText('Write tags one way (2 captions)')
   await unify.click()

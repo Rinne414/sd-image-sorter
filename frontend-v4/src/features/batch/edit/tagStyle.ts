@@ -50,6 +50,9 @@ export function styledTag(tag: string, style: TagStyle): string {
   return clean.replace(/_/g, ' ').split(/\s+/).filter(Boolean).join(' ')
 }
 
+/** A tag as the screen shows it: spaces for underscores, emoticons and score_ tags as they are. */
+export const displayTag = (tag: string): string => styledTag(tag, 'spaces')
+
 /** A caption's tags that are not written the batch's way. */
 export function offStyleTags(booru: string, style: TagStyle): string[] {
   return splitTags(booru).filter((tag) => styledTag(tag, style) !== tag)

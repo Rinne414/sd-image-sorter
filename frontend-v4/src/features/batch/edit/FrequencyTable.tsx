@@ -6,6 +6,7 @@ import { tagKey as promptKey } from '../../../lib/prompt'
 import styles from './Bulk.module.css'
 import type { TagRow } from './captionOps'
 import type { TraitMark } from './tagInsights'
+import { displayTag } from './tagStyle'
 
 const ROW_H = 38
 
@@ -110,7 +111,7 @@ function Row({ row, top, scopeSize, category, listed, trait, busy, actions, canF
   return (
     <div className={styles.row} style={{ transform: `translateY(${top}px)`, height: ROW_H }} data-testid="freq-row" data-tag={row.tag}>
       <span className={`chip cat-${category} ${styles.rowChip}`} data-listed={listed || undefined} title={listed ? t('dataset.edit.droppedBlacklist') : undefined}>
-        {row.tag.replace(/_/g, ' ')}
+        {displayTag(row.tag)}
       </span>
       <span className={styles.traitCell}>
         {trait && (

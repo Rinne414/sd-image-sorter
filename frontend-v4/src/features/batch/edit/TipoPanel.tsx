@@ -4,6 +4,7 @@ import { useT } from '../../../i18n'
 import { Icon } from '../../../ui/Icon'
 import styles from './CaptionPanel.module.css'
 import { loadTipoModel, saveTipoModel, suggestUpsample, TIPO_MODELS, tipoInstalled, type TipoModel, type TipoProposal } from './tagAids'
+import { displayTag } from './tagStyle'
 
 interface Props {
   tags: readonly string[]
@@ -94,7 +95,7 @@ function TipoResult({ ask, picked, toggle }: { ask: Ask; picked: ReadonlySet<str
         <li key={p.tag}>
           <label className={`chip cat-${p.category} ${styles.proposal}`}>
             <input type="checkbox" checked={picked.has(p.tag)} onChange={() => toggle(p.tag)} data-testid="edit-tipo-pick" />
-            {p.tag.replace(/_/g, ' ')}
+            {displayTag(p.tag)}
           </label>
         </li>
       ))}

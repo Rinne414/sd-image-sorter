@@ -5,6 +5,7 @@ import { Icon } from '../../../ui/Icon'
 import { tagKey } from './captionContent'
 import styles from './CaptionPanel.module.css'
 import { useTagInfo, type TagInfo } from './tagAids'
+import { displayTag } from './tagStyle'
 
 export interface ChipFacts {
   categories: ReadonlyMap<string, TagCategory> | undefined
@@ -50,7 +51,7 @@ export function TagChips({ tags, facts, disabled, selected, onSelect, onRemove }
               onClick={() => onSelect(selected === tag ? null : tag)}
               title={dropped ? t(DROP_NOTE[dropped]) : t('dataset.edit.tagInfoOpen')}
             >
-              {tag.replace(/_/g, ' ')}
+              {displayTag(tag)}
               {zh && <span className={styles.zh}>{zh}</span>}
               {confidence !== undefined && <span className={`${styles.conf} mono`}>{Math.round(confidence * 100)}</span>}
             </button>

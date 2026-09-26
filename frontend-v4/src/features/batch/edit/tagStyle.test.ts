@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 import type { CaptionContent } from '../datasetTag'
 import { tagStyleIssues } from '../check/captionChecks'
 import { applyOp, planOp } from './captionOps'
-import { isKaomojiTag, offStyleTags, styledList, styledTag, styleOf, withTagStyle } from './tagStyle'
+import { displayTag, isKaomojiTag, offStyleTags, styledList, styledTag, styleOf, withTagStyle } from './tagStyle'
 
 const content = (booru: string): CaptionContent => ({ content_version: 1, booru_caption: booru, nl_caption: '', caption_type: 'booru' })
 const unknown = () => 'unknown'
@@ -32,6 +32,13 @@ describe('writing a tag the way the batch template does', () => {
     expect(isKaomojiTag('blue_sky')).toBe(false)
     expect(isKaomojiTag('a_bc')).toBe(false)
     expect(isKaomojiTag('_')).toBe(false)
+  })
+
+  test('on screen: spaces for underscores, but emoticons and score_ tags keep their glyphs', () => {
+    expect(displayTag('blue_sky')).toBe('blue sky')
+    expect(displayTag('^_^')).toBe('^_^')
+    expect(displayTag('>_<')).toBe('>_<')
+    expect(displayTag('score_9')).toBe('score_9')
   })
 
   test('typed lists and whole captions are written one way; a caption already so is left as it is', () => {
