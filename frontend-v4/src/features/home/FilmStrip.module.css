@@ -1,0 +1,152 @@
+/* Home's film strip: a length of film across the page, as the V3.5 entry
+   page's film cover drew it (black rebate, sprocket holes along both edges,
+   frames at their own shape with a 10 px gap), holding still so a frame can be
+   clicked. The holes are the big image's strip holes (Lightbox.module.css). */
+.film {
+  /* Frames grow faster than the window: ~108 px at 768 high keeps the three
+     ways to start on screen; ~183 px at 1080 is the V3.5 film's frame size. */
+  --frame-h: clamp(88px, calc(24 * var(--vh) - 76px), 200px);
+  display: flex;
+  /* The page sets the width and the frames fill it, never the other way round
+     (the shell's grid column would otherwise grow to the row of frames). */
+  contain: inline-size;
+  padding: 16px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 8px, var(--film-hole) 8px 17px) top 4px left / 100% 6px no-repeat,
+    repeating-linear-gradient(90deg, transparent 0 8px, var(--film-hole) 8px 17px) bottom 4px left / 100% 6px no-repeat,
+    var(--film);
+  border-block: 1px solid var(--hairline);
+}
+
+/* Frames, then the end of the film right after the last one; unexposed film runs on to the edge. */
+.reel {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: stretch;
+  gap: 10px;
+  min-width: 0;
+}
+
+.frames {
+  display: flex;
+  flex: none;
+  gap: 10px;
+  height: var(--frame-h);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cell {
+  flex: none;
+  height: 100%;
+}
+
+.frame {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--film-hole);
+  cursor: zoom-in;
+}
+
+.frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.92;
+  transition: opacity var(--t-fast) var(--ease);
+}
+
+.frame:hover img {
+  opacity: 1;
+}
+
+/* On film the amber edge print is the focus colour in both themes. */
+.frame:focus-visible,
+.more:focus-visible {
+  outline: 2px solid var(--edge-print);
+  outline-offset: 2px;
+}
+
+.stars {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 5px;
+  font-size: var(--fs-1);
+  color: var(--edge-print);
+  background: var(--tile-caption-bg);
+  border-radius: var(--radius);
+}
+
+.endSlot {
+  display: flex;
+  flex: none;
+}
+
+/* The end of the film: the way to every ★5 image, or how to make some. */
+.end {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  width: 168px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--film-hole);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--on-image);
+  text-align: left;
+}
+
+.more {
+  transition: border-color var(--t-fast) var(--ease);
+}
+
+.more:hover {
+  border-color: var(--edge-print);
+}
+
+.endTitle {
+  font-size: var(--fs-3);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.endBody {
+  font-size: var(--fs-2);
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--on-image) 72%, transparent);
+}
+
+.count {
+  font-size: var(--fs-2);
+  letter-spacing: 0.04em;
+  color: var(--edge-print);
+}
+
+.note {
+  display: flex;
+  align-items: center;
+  min-height: var(--frame-h);
+  margin: 0;
+  color: var(--on-image);
+  font-size: var(--fs-3);
+}
+
+@media (min-width: 2400px) {
+  .end {
+    width: 196px;
+  }
+}

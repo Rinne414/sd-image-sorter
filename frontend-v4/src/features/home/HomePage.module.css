@@ -4,10 +4,19 @@
   background: var(--stage);
 }
 
+/* The film runs the full width of the page, a little below the top bar. */
+.filmRow {
+  padding-top: 20px;
+}
+
 .sheet {
   max-width: 1040px;
   margin: 0 auto;
   padding: 36px 32px 64px;
+}
+
+.filmRow + .sheet {
+  padding-top: 22px;
 }
 
 @media (min-width: 2400px) {
@@ -38,6 +47,29 @@
   color: var(--text-2);
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius);
+}
+
+.emptyLibrary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 22px 20px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+}
+
+.emptyTitle {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-5);
+  font-weight: 600;
+}
+
+.emptyHint {
+  margin: 0 0 4px;
+  color: var(--text-2);
 }
 
 .recent {

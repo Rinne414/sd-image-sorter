@@ -10,11 +10,14 @@ import { describeSession } from '../sort/SetupParts'
 import type { SessionView } from '../sort/sortSession'
 import { useOtherLibrary } from '../sort/StageParts'
 import { continueSort, newSort, useSortPending } from '../sort/sortStore'
+import { useSelectionDialog } from '../selection/dialogs'
+import { FilmStrip } from './FilmStrip'
 import styles from './HomePage.module.css'
+import { useFilm } from './useFilm'
 
 const CONTINUE_COUNT = 3
 
-/** Home: where you left off, and the three ways to start. */
+/** Home: ★5 and the newest images on film, where you left off, and the three ways to start. */
 export function HomePage() {
   const t = useT()
   const batches = useBatches()
@@ -23,17 +26,24 @@ export function HomePage() {
   const library = libraries.data?.libraries.find((l) => l.id === libraryId)
   const recent = (batches.data ?? []).slice(0, CONTINUE_COUNT)
   const sort = useSortPending(true)
+  const film = useFilm()
   const libraryName = library?.is_default && library.name === 'Main library' ? t('rail.mainLibrary') : library?.name
 
   return (
     <section className={styles.page} data-testid="home">
+      <h1 className="visually-hidden">{t('nav.home')}</h1>
+      {!film.empty && (
+        <div className={styles.filmRow}>
+          <FilmStrip film={film} />
+        </div>
+      )}
       <div className={styles.sheet}>
-        <h1 className="visually-hidden">{t('nav.home')}</h1>
         {library && (
           <p className={`${styles.library} mono`}>
             {libraryName} · {t('rail.images', { n: library.image_count })}
           </p>
         )}
+        {film.empty && <EmptyLibrary />}
 
         <h2 className={styles.section}>{t('home.continue')}</h2>
         {batches.isSuccess && recent.length === 0 && !sort ? (
@@ -58,6 +68,25 @@ export function HomePage() {
         </div>
       </div>
     </section>
+  )
+}
+
+/** A library with no images yet: where the film would be, the way to bring some in. */
+function EmptyLibrary() {
+  const t = useT()
+  return (
+    <div className={styles.emptyLibrary} data-testid="home-empty">
+      <p className={styles.emptyTitle}>{t('browse.empty.title')}</p>
+      <p className={styles.emptyHint}>{t('browse.empty.hint')}</p>
+      <button
+        type="button"
+        className="btn btn-primary"
+        onClick={() => useSelectionDialog.getState().showFor('import', null, 1)}
+        data-testid="home-empty-import"
+      >
+        {t('browse.empty.import')}
+      </button>
+    </div>
   )
 }
 
