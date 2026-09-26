@@ -7711,6 +7711,11 @@ export interface components {
              * @default 72
              */
             limit: number;
+            /**
+             * Dedupe Implications
+             * @default false
+             */
+            dedupe_implications: boolean;
         };
         /**
          * DatasetExportRequest
@@ -7857,6 +7862,16 @@ export interface components {
              * @default false
              */
             allow_empty_captions: boolean;
+            /**
+             * Nl Sidecar
+             * @default false
+             */
+            nl_sidecar: boolean;
+            /**
+             * Dedupe Implications
+             * @default false
+             */
+            dedupe_implications: boolean;
             /** Readiness Report Id */
             readiness_report_id?: string | null;
             /** Readiness Input Fingerprint */
@@ -8475,6 +8490,16 @@ export interface components {
              * @default false
              */
             allow_empty_captions: boolean;
+            /**
+             * Nl Sidecar
+             * @default false
+             */
+            nl_sidecar: boolean;
+            /**
+             * Dedupe Implications
+             * @default false
+             */
+            dedupe_implications: boolean;
             /** Readiness Report Id */
             readiness_report_id?: string | null;
             /** Readiness Input Fingerprint */

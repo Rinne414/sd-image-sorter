@@ -11,6 +11,7 @@ import { useBatchDialog } from './dialogStore'
 import styles from './BatchView.module.css'
 import { CheckStep } from './check/CheckStep'
 import { EditStep } from './edit/EditStep'
+import { DatasetExportStep } from './dsexport/DatasetExportStep'
 import { ExportStep } from './ExportStep'
 import { InlineName } from './InlineName'
 import { kindLabel } from './labels'
@@ -129,6 +130,8 @@ function Loaded({ batch }: { batch: Batch }) {
             <CheckStep batch={batch} next={next?.id ?? null} onNext={goTo} />
           ) : current === 'export' && batch.kind === 'pixiv' ? (
             <ExportStep batch={batch} onGo={goTo} />
+          ) : current === 'export' && batch.kind === 'dataset' ? (
+            <DatasetExportStep batch={batch} onGo={goTo} />
           ) : (
             <StepPanel batch={batch} step={current} next={next?.id ?? null} onNext={goTo} />
           )}

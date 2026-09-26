@@ -2,6 +2,7 @@ import { readSmartTag, type SmartTagContext } from './smartTagJob'
 import { readPurity, readPurityDownload } from './purityJob'
 import { readMasks } from './maskJob'
 import { readAesthetic } from './aestheticJob'
+import { readDatasetExport } from './datasetExportJob'
 import { readReparse } from './reparseJob' // reparse/reread
 // Reads the backend's progress payloads for long jobs into one shape.
 // move/copy: GET /api/move/progress · trash: GET /api/images/delete-selected/progress
@@ -14,6 +15,7 @@ import { readReparse } from './reparseJob' // reparse/reread
 // · purity/purityget: character purity (CCIP) analysis and its model download, read in purityJob.ts.
 // · masks: GET /api/bulk-jobs/{id} (auto-masking a dataset's Library images), read in maskJob.ts.
 // · aesthetic: GET /api/aesthetic/progress, or this page's run over picked images, read in aestheticJob.ts.
+// · dsexport: a dataset batch's check and export (two bulk jobs, followed by its page), read in datasetExportJob.ts.
 // · reparse/reread: GET /api/bulk-jobs/{id} (recover missing text / re-read failed details), read in reparseJob.ts.
 
 /**
@@ -42,6 +44,7 @@ export type JobKind =
   | 'purityget'
   | 'masks'
   | 'aesthetic'
+  | 'dsexport'
   | 'reparse'
   | 'reread'
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
@@ -289,6 +292,8 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
       return readMasks(base, raw, ctx.maskJobId)
     case 'aesthetic':
       return readAesthetic(base, raw)
+    case 'dsexport':
+      return readDatasetExport(base, raw)
     case 'reparse': // reparse/reread
     case 'reread':
       return readReparse(base, raw, ctx.reparseJobId) // reparse/reread

@@ -12,26 +12,9 @@ import {
   type WatermarkSettings,
 } from './exportSettings'
 import styles from './ExportStep.module.css'
+import { recentFolders, rememberFolder } from './recentFolders'
 
 const RECENT_KEY = 'sd-v4-recent-export-folders'
-const RECENT_MAX = 8
-
-function recentFolders(): string[] {
-  try {
-    const raw = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]') as unknown
-    return Array.isArray(raw) ? raw.filter((p): p is string => typeof p === 'string' && p.length > 0) : []
-  } catch {
-    return []
-  }
-}
-
-function rememberFolder(path: string): void {
-  try {
-    localStorage.setItem(RECENT_KEY, JSON.stringify([path, ...recentFolders().filter((p) => p !== path)].slice(0, RECENT_MAX)))
-  } catch {
-    // storage blocked: the list just won't be remembered
-  }
-}
 
 const META_LABEL: Record<MetadataOption, MessageKey> = {
   strip: 'batch.export.meta.strip',
@@ -67,7 +50,7 @@ interface Props {
 export function ExportForm({ settings, update, disabled }: Props) {
   const t = useT()
   const [choosing, setChoosing] = useState(false)
-  const recent = useMemo(recentFolders, [choosing])
+  const recent = useMemo(() => recentFolders(RECENT_KEY), [choosing])
 
   return (
     <fieldset className={styles.form} disabled={disabled} data-testid="export-form">
@@ -138,7 +121,7 @@ export function ExportForm({ settings, update, disabled }: Props) {
           shortcuts={[{ heading: t('batch.export.recentFolders'), paths: recent, testId: 'export-recent' }]}
           onChoose={async (target) => {
             update({ output_folder: target })
-            rememberFolder(target)
+            rememberFolder(RECENT_KEY, target)
             return true
           }}
           onClose={() => setChoosing(false)}

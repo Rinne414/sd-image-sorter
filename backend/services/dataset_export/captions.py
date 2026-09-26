@@ -29,6 +29,7 @@ from services.dataset_export._constants import (
     DATASET_LEGACY_TEMPLATE,
     TRAINING_TAG_CONTENT_MODES,
 )
+from services.dataset_export.v4_options import dedupe_content_implications
 from services.dataset_sidecar import (
     MAX_DATASET_SIDECAR_BYTES,
     dataset_sidecar_caption_rows,
@@ -175,8 +176,12 @@ def render_training_caption_content(
     caption_transforms: Mapping[str, object],
     trigger: str,
     common_tags: Sequence[str],
+    *,
+    dedupe_implications: bool = False,
 ) -> str:
     """Render one immutable caption content object without legacy field mixing."""
+    if dedupe_implications:
+        content = dedupe_content_implications(content)
     rendered = compose_caption_with_nl(
         content.booru_caption,
         content.caption_type,
@@ -431,6 +436,7 @@ def _render_dataset_sidecar(
             prefix=str(getattr(request, "prefix", "") or ""),
             template_options=template_options,
             normalize_tag_underscores=bool(getattr(request, "normalize_tag_underscores", True)),
+            dedupe_implications=bool(getattr(request, "dedupe_implications", False)),
         )
         rendered = _append_common_tags_for_mode(rendered, request, content_mode)
     # Point 3: fold in the per-image natural-language sentence (no-op unless the

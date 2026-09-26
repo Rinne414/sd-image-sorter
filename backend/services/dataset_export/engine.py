@@ -77,6 +77,7 @@ from services.dataset_export.captions import (
     project_target_model,
     render_training_caption_content,
 )
+from services.dataset_export.v4_options import nl_twin_text, plan_nl_twin
 from services.dataset_export.annotations import (
     AnnotationProvenance,
     annotation_selection_key,
@@ -1036,6 +1037,7 @@ def _export_dataset(
                     request.caption_transforms or {},
                     request.trigger,
                     request.common_tags,
+                    dedupe_implications=request.dedupe_implications,
                 )
             else:
                 caption_text = _render_dataset_sidecar(
@@ -1057,6 +1059,28 @@ def _export_dataset(
         expected_caption_sha256 = hashlib.sha256(
             caption_text.encode("utf-8")
         ).hexdigest()
+
+        # The ``_nl`` twin is planned before anything of the row is written,
+        # so a twin that cannot be written fails the row whole (no half pairs).
+        planned_nl_twin: Optional[Path] = None
+        planned_nl_text = ""
+        if request.nl_sidecar:
+            planned_nl_twin, nl_twin_error = plan_nl_twin(
+                dst_caption_path,
+                request.overwrite_policy,
+                used_caption_paths,
+            )
+            if nl_twin_error is not None:
+                _record_error(image_id, src_image_path, nl_twin_error, filename)
+                return True
+            planned_nl_text = nl_twin_text(
+                record,
+                annotation["content"] if annotation is not None else None,
+                nl_overrides_int,
+                nl_overrides_path,
+                request.trigger,
+                request.prefix,
+            )
 
         # Verify source exists
         if not src_image_path or not os.path.exists(src_image_path):
@@ -1335,6 +1359,18 @@ def _export_dataset(
                     masks_missing += 1
                     _record_error(image_id, src_image_path, mask_error, filename)
                     return True
+
+        if planned_nl_twin is not None:
+            try:
+                _write_text_file_atomic(planned_nl_text, planned_nl_twin)
+            except OSError as exc:
+                _record_error(
+                    image_id,
+                    src_image_path,
+                    f"wrote the image and caption but not {planned_nl_twin.name}: {exc}",
+                    filename,
+                )
+                return True
 
         exported += 1
         processed += 1
@@ -1701,6 +1737,7 @@ def preview_dataset_export(request: DatasetExportPreviewRequest) -> Dict[str, An
                         request.caption_transforms or {},
                         request.trigger,
                         request.common_tags,
+                        dedupe_implications=request.dedupe_implications,
                     )
                     compose_advisory = nl_compose_advisory(
                         content.caption_type,

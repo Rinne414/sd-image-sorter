@@ -221,6 +221,11 @@ def dataset_readiness_fingerprint(request: DatasetReadinessRequest) -> str:
     payload = request.model_dump(mode="json")
     payload.pop("readiness_report_id", None)
     payload.pop("readiness_input_fingerprint", None)
+    # V4 options that are off are not part of the checked request, so a
+    # request without them keeps the fingerprint it always had.
+    for option in ("nl_sidecar", "dedupe_implications"):
+        if not payload.get(option):
+            payload.pop(option, None)
     payload["image_ids"] = list(_iter_unique_image_ids(request.image_ids))
     payload["image_paths"] = [
         _normalize_fingerprint_path(path)
@@ -501,6 +506,8 @@ def plan_dataset_readiness(
     def process_unreadable(image_id: int, raw_path: str) -> None:
         nonlocal processed
         normalized_path = _normalize_fingerprint_path(raw_path) if raw_path else ""
+        # A requested item matches its selection even when it cannot be read.
+        used_annotation_keys.add(str(image_id) if image_id > 0 else normalized_path)
         update_input("unreadable", {"image_id": image_id, "path": normalized_path})
         settle_skippable(
             str(image_id) if image_id > 0 else normalized_path,
@@ -545,6 +552,10 @@ def plan_dataset_readiness(
         annotation: ResolvedAnnotationSelection | None = resolved_annotations.get(
             annotation_key
         )
+        if annotation is not None:
+            # Matched even when the item is left out below (an existing output
+            # under the "skip" rule, a planning problem).
+            used_annotation_keys.add(annotation_key)
         normalized_record = dict(record)
         normalized_record["path"] = source_path
         normalized_record["filename"] = str(
@@ -753,6 +764,7 @@ def plan_dataset_readiness(
                     request.caption_transforms or {},
                     request.trigger,
                     request.common_tags,
+                    dedupe_implications=request.dedupe_implications,
                 )
                 compose_advisory = nl_compose_advisory(
                     content.caption_type,

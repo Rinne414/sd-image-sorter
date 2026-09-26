@@ -227,6 +227,8 @@ export function FolderChooser({
           title={t('picker.pathHint')}
           onChange={(e) => {
             userMoved.current = true
+            // A listing that landed with the same text left the "select on land" armed: typing disarms it.
+            selectLanded.current = false
             setTyped(e.target.value)
           }}
           onKeyDown={(e) => {

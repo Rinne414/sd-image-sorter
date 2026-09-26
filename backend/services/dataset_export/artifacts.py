@@ -44,6 +44,7 @@ from services.dataset_export.kohya_contract import (
     validate_kohya_request,
 )
 from services.dataset_export.planning import _output_mode
+from services.dataset_export.v4_options import NL_SIDECAR_CONTENT_MODES
 from services.dataset_export.package_integrity import (
     PackageOwnershipError,
     package_requested,
@@ -451,6 +452,23 @@ def _validate_export_request_read_only(request: DatasetExportRequest) -> Optiona
                 "a package must contain every requested item"
             ),
         )
+    if getattr(request, "nl_sidecar", False):
+        if package_requested(request):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "nl_sidecar is not available for verified trainer packages; "
+                    "a package lists every file it holds, so use trainer_config='none'"
+                ),
+            )
+        if str(request.content_mode or "template").strip().lower() not in NL_SIDECAR_CONTENT_MODES:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "nl_sidecar requires a tag-only content mode ('tags' or 'template'); "
+                    f"{request.content_mode!r} already carries the sentence in the caption"
+                ),
+            )
     if output_mode == "beside_image" and trainer_config_mode != "none":
         raise HTTPException(
             status_code=400,

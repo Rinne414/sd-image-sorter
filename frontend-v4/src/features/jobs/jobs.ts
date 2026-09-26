@@ -10,6 +10,7 @@ import { driveSmartTag } from './smartTagDriver'
 import { drivePurity, drivePurityDownload } from './purityDriver'
 import { driveMasks } from './maskDriver'
 import { adoptAesthetic, driveAesthetic } from './aestheticDriver'
+import { driveDatasetExport } from './datasetExportDriver'
 import { adoptReparse, driveReparse } from './reparseDriver' // reparse/reread
 
 // Every long job the user started (or that was already running when V4
@@ -57,6 +58,7 @@ type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors'
   | 'purity' | 'purityget'
   | 'masks'
   | 'aesthetic'
+  | 'dsexport'
   | 'reparse' | 'reread'
 
 // Censor work over a batch (detecting, SAM3 refining, filters) runs one at a time.
@@ -152,6 +154,7 @@ const DRIVERS: Record<Queue, Driver> = {
   purityget: drivePurityDownload,
   masks: driveMasks,
   aesthetic: driveAesthetic,
+  dsexport: driveDatasetExport,
   reparse: driveReparse,
   reread: driveReparse, // reparse/reread share the backend's one slot (409 while either runs)
 }
@@ -354,6 +357,7 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   purityget: ['purity-status'],
   masks: ['mask-status'],
   aesthetic: ['images', 'image', 'image-count', 'library-health'],
+  dsexport: ['images', 'image', 'batch-project'],
   reparse: ['images', 'image', 'image-count', 'library-health'],
   reread: ['images', 'image', 'image-count', 'library-health', 'missing-summary', 'missing-groups'], // reread: a file that no longer opens joins the missing files
 }
@@ -425,6 +429,7 @@ const RUNNING: Record<JobKind, MessageKey> = {
   purityget: 'dataset.check.purity.downloading',
   masks: 'dataset.masks.job.running',
   aesthetic: 'info.aes.job.running',
+  dsexport: 'dataset.export.job.running',
   reparse: 'status.reparse.running',
   reread: 'status.reread.running',
 }
@@ -450,6 +455,7 @@ const DONE: Record<JobKind, MessageKey> = {
   purityget: 'dataset.check.purity.downloaded',
   masks: 'dataset.masks.job.done',
   aesthetic: 'info.aes.job.done',
+  dsexport: 'dataset.export.job.done',
   reparse: 'status.reparse.done',
   reread: 'status.reread.done',
 }

@@ -357,6 +357,12 @@ class DatasetExportRequest(BaseModel):
     # Write an empty caption file instead of treating an empty caption as a
     # problem (regularization images, trigger-only training).
     allow_empty_captions: bool = False
+    # V4: also write each caption's natural-language sentence to a
+    # ``{stem}_nl.txt`` twin (diffusion-pipe split captions), and drop tags a
+    # more specific tag of the same caption implies. Both reuse the tag export
+    # implementation and default off (off writes exactly what it always did).
+    nl_sidecar: bool = False
+    dedupe_implications: bool = False
 
     # Public export transports require both values. They stay optional in the
     # shared model so read-only readiness and the internal engine can use the
@@ -429,6 +435,8 @@ class DatasetExportPreviewRequest(BaseModel):
     )
     trainer_resolution: int = Field(default=1024, ge=256, le=4096)
     limit: int = Field(default=72, ge=1, le=500)
+    # Renders captions the way an export with the same option writes them.
+    dedupe_implications: bool = False
 
     @model_validator(mode="after")
     def validate_annotation_selection_contract(self) -> "DatasetExportPreviewRequest":

@@ -5,7 +5,8 @@ import type { MaskExport, ProjectSettings, TrainerConfig } from './datasetSettin
 // services/dataset_project_models.py): the screen switches off what a
 // verified trainer cannot take, and says why, instead of letting a save fail.
 
-const MASKS: Record<TrainerConfig, readonly MaskExport[]> = {
+/** The mask layouts each trainer takes. */
+export const MASKS: Record<TrainerConfig, readonly MaskExport[]> = {
   none: ['none', 'onetrainer', 'kohya'],
   kohya_toml: ['none', 'kohya'],
   anima_lora_toml: ['none', 'anima_lora'],

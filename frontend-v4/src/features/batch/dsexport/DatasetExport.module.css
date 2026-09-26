@@ -1,0 +1,250 @@
+/* The dataset export step. Shared pieces (groups, choices, pre-flight panel,
+   result table) come from ../ExportStep.module.css; these are its own. */
+
+.formats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.note {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+
+.note[data-tone="warn"] {
+  color: var(--warn);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  min-width: 0;
+}
+
+.number {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+}
+
+.number input {
+  width: 72px;
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  border-radius: var(--radius);
+}
+
+.number input:focus,
+.pattern:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.pattern {
+  flex: 1;
+  min-width: 160px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  border-radius: var(--radius);
+}
+
+.estimate {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-1);
+  color: var(--text);
+  border-radius: var(--radius);
+}
+
+.estimate b {
+  font-family: var(--font-mono);
+  font-weight: 650;
+}
+
+.option {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.option:first-of-type {
+  border-top: 0;
+}
+
+.option[data-blocked] > label {
+  color: var(--muted);
+}
+
+.why {
+  margin: 0 0 0 24px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}
+
+.sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-left: 24px;
+  padding: 8px 10px;
+  border-left: 1px solid var(--line-strong);
+}
+
+.sample {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  word-break: break-all;
+}
+
+.sample b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.leftOut {
+  max-height: 150px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  font-size: var(--fs-2);
+}
+
+.leftOut li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.leftOut li > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.leftOut li > span:last-child {
+  flex: none;
+  color: var(--muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--danger);
+  background: var(--bg);
+  border-radius: var(--radius);
+}
+
+.group[data-severity="warning"] {
+  border-left-color: var(--warn);
+}
+
+.groupHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.groupNames {
+  margin: 0;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2);
+  word-break: break-all;
+}
+
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius);
+}
+
+.meter {
+  height: 4px;
+  background: var(--wash-strong);
+}
+
+.meter > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.progressLine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.progressLine > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.lines {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+}
+
+.lines b {
+  color: var(--text);
+}
+
+.ok {
+  color: var(--ok);
+}
