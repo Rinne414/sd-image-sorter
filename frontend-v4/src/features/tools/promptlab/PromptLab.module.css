@@ -1,0 +1,612 @@
+/* 提示词助手: the mode strip on top, the mode's page below (it scrolls). */
+.page {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.modes {
+  display: flex;
+  gap: 4px;
+  padding: 0 24px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--line);
+}
+
+.modeTab {
+  height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font-size: var(--fs-4);
+  white-space: nowrap;
+}
+
+.modeTab:hover {
+  color: var(--text);
+  background: var(--wash-hover);
+}
+
+.modeTab[aria-selected="true"] {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+.body {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding: 18px 24px 56px;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* ---- words ---- */
+.lead {
+  margin: 0;
+  max-width: 78ch;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+  line-height: 1.65;
+}
+
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.55;
+}
+
+.problem {
+  margin: 0;
+  color: var(--danger);
+  line-height: 1.6;
+}
+
+.problemBox {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.warn {
+  margin: 0;
+  padding: 8px 10px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+  border-left: 2px solid var(--warn);
+  background: var(--wash);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.offer {
+  margin: 0;
+  padding-left: 8px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.55;
+  border-left: 2px solid var(--accent);
+}
+
+.subLabel {
+  font-size: var(--fs-1);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.textButton {
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
+.textButton:hover:not(:disabled) {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.textButton:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+.runRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.score {
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: var(--fs-3);
+  cursor: pointer;
+}
+
+.check input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/* ---- panels ---- */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.panelTitle {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-4);
+  font-weight: 600;
+}
+
+/* ---- Stats ---- */
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.statCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.statCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.statValue {
+  color: var(--text);
+  font-size: var(--fs-7);
+  line-height: 1.15;
+}
+
+/* The lists flow down columns (they differ a lot in height), so no row waits for its tallest panel. */
+.statGrid {
+  columns: 500px;
+  column-gap: 16px;
+}
+
+.statGrid > .panel {
+  break-inside: avoid;
+  margin-bottom: 16px;
+}
+
+.more {
+  align-self: flex-start;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row,
+.modelRow {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.row {
+  grid-template-columns: minmax(0, 1fr) minmax(48px, 110px) 52px auto;
+}
+
+.modelRow {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.row:last-child,
+.modelRow:last-child {
+  border-bottom: 0;
+}
+
+.rowName {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--c, var(--text));
+  font-size: var(--fs-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modelRow .rowName {
+  color: var(--text);
+}
+
+.bar {
+  display: block;
+  height: 6px;
+  background: var(--wash);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  background: var(--accent-line);
+}
+
+.rowValue {
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.rowActions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.modelCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.modelCardHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.modelName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-3);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.examples {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.example {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.exampleThumb,
+.slotThumb,
+.sourceThumb {
+  width: 112px;
+  height: 112px;
+  object-fit: contain;
+  background: var(--film);
+  border-radius: var(--radius);
+}
+
+.exampleMain {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.examplePrompt {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+
+/* ---- Compare ---- */
+.slots {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: 12px;
+}
+
+.slots > button {
+  align-self: center;
+  font-size: var(--fs-5);
+}
+
+.slot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.slotBody {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.slotInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.slotInfo .modelName,
+.sourceText .modelName {
+  flex: none;
+}
+
+.diffGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.diffCol {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.diffCol .panelHead > :first-child {
+  flex: 1;
+}
+
+/* ---- Build ---- */
+.sourceBar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 10px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.sourceThumb {
+  width: 72px;
+  height: 72px;
+}
+
+.sourceText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sourceBar > .lead {
+  flex: 1;
+}
+
+.sourceActions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.buildGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-3);
+  line-height: 1.6;
+  resize: vertical;
+  border-radius: var(--radius);
+}
+
+.textarea:focus,
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.groupHead > :first-child {
+  flex: 1;
+}
+
+/* ---- the image picker ---- */
+.pickerBar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0 10px;
+  background: var(--surface-2);
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-3);
+  border-radius: var(--radius);
+}
+
+.pickerGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pickTile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 4px;
+  border: 1px solid var(--line);
+  background: var(--surface-1);
+  color: var(--text-2);
+  text-align: left;
+  border-radius: var(--radius);
+}
+
+.pickTile:hover,
+.pickTile:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.pickTile img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  background: var(--film);
+}
+
+.pickName {
+  overflow: hidden;
+  font-size: var(--fs-1);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sentinel {
+  height: 1px;
+}

@@ -14,6 +14,7 @@ import { enReader } from './en.reader'
 import { enModels } from './en.models'
 import { enPrivacy } from './en.privacy'
 import { enLibrarySettings } from './en.library-settings'
+import { enPromptLab } from './en.promptlab'
 import type { MessageKey } from './zh-CN'
 
 export const en: Record<MessageKey, string> = {
@@ -33,6 +34,7 @@ export const en: Record<MessageKey, string> = {
   ...enModels,
   ...enPrivacy,
   ...enLibrarySettings,
+  ...enPromptLab,
   'app.name': 'SD Image Sorter',
   'nav.home': 'Home',
   'nav.library': 'Library',

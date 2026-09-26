@@ -1,0 +1,304 @@
+import { expect, test, type Page } from '@playwright/test'
+
+import { markModelsReady } from '../fixtures/model-status'
+import { cleanupImages, dbPath, pageOverflow, runBackendScript, seedImages, VIEWPORTS } from '../fixtures/v4-seed'
+
+/**
+ * V4 Prompt Lab (提示词助手) on the real backend, in a library of its own so
+ * the statistics are exactly the seeded rows: Stats counts what was seeded,
+ * "Show in library" only writes the search line (and the library then shows
+ * those images), Compare starts from the two images picked in the library,
+ * Build starts from the image being looked at, cleans a prompt while keeping
+ * its LoRA, and the mode is remembered. No model is needed.
+ * Needs the V4 build: `cd frontend-v4 && npm run build`.
+ */
+
+test.describe.configure({ mode: 'serial' })
+test.use({ permissions: ['clipboard-read', 'clipboard-write'] })
+
+const TOKEN = 'v4pltoken'
+const PREFIX = 'v4pl-'
+const COUNT = 7
+const DIR = 'v4-promptlab'
+const LIBRARY = 'v4pl-lib'
+const LORA_PROMPT = `${TOKEN}, 1girl, 1GIRL, silver_hair, masterpiece, <lora:my_style_v2:0.8>, smile`
+
+/** Ids of the seeded rows by index (00..06). */
+let ids: number[] = []
+
+function dropLibrary(): void {
+  runBackendScript(`
+import sqlite3
+with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
+    conn.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename LIKE ?)", (${JSON.stringify(PREFIX)} + "%",))
+    conn.execute("DELETE FROM libraries WHERE id = ?", (${JSON.stringify(LIBRARY)},))
+    conn.commit()
+print("ok")
+`)
+}
+
+/**
+ * Rows 00-05 carry tags, scores and models; row 06 has none (and later loses its file).
+ *   tags: v4pl_common on 00-05, v4pl_four on 00-03, v4pl_pair on 00-01
+ *   scores: 00 8.5, 01 7.5, 02 7.2, 03 5.0
+ *   models: 00-02 v4pl_alpha, 03-04 v4pl_beta
+ */
+function seedLibrary(): number[] {
+  const out = runBackendScript(`
+import json, sqlite3
+prefix = ${JSON.stringify(PREFIX)}
+with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
+    conn.execute("INSERT OR IGNORE INTO libraries (id, name, is_default) VALUES (?, 'V4 e2e prompt lab', 0)", (${JSON.stringify(LIBRARY)},))
+    conn.execute("UPDATE images SET library_id = ? WHERE filename LIKE ?", (${JSON.stringify(LIBRARY)}, prefix + "%"))
+    ids = [r[0] for r in conn.execute("SELECT id FROM images WHERE filename LIKE ? AND filename NOT LIKE ? ORDER BY filename", (prefix + "%", prefix + "cache%"))]
+    scores = [8.5, 7.5, 7.2, 5.0, None, None, None]
+    models = ["models/v4pl_alpha.safetensors"] * 3 + ["v4pl_beta.safetensors"] * 2 + [None, None]
+    for i, image_id in enumerate(ids):
+        tags = (["v4pl_common"] if i < 6 else []) + (["v4pl_four"] if i < 4 else []) + (["v4pl_pair"] if i < 2 else [])
+        for tag in tags:
+            conn.execute("INSERT INTO tags (image_id, tag, confidence, source) VALUES (?, ?, 0.9, 'e2e')", (image_id, tag))
+        model = models[i]
+        conn.execute(
+            "UPDATE images SET aesthetic_score = ?, checkpoint = ?, checkpoint_normalized = ? WHERE id = ?",
+            (scores[i], model, model.split("/")[-1].rsplit(".", 1)[0] if model else None, image_id),
+        )
+    conn.execute("UPDATE images SET prompt = ? WHERE id = ?", (${JSON.stringify(LORA_PROMPT)}, ids[5]))
+    conn.commit()
+print(json.dumps(ids))
+`)
+  return JSON.parse(out.split('\n').at(-1)!) as number[]
+}
+
+test.beforeAll(() => {
+  dropLibrary()
+  seedImages({ prefix: PREFIX, token: TOKEN, count: COUNT, dir: DIR })
+  ids = seedLibrary()
+  expect(ids).toHaveLength(COUNT)
+})
+
+test.afterAll(() => {
+  dropLibrary()
+  cleanupImages(PREFIX, [DIR])
+})
+
+/** V4 in English, in the test's own library, at `hash`. */
+async function openAt(page: Page, hash: string, mode = 'stats') {
+  await markModelsReady(page)
+  await page.addInitScript(
+    ({ library, first }) => {
+      if (sessionStorage.getItem('v4pl-init')) return
+      sessionStorage.setItem('v4pl-init', '1')
+      localStorage.setItem('sd-image-sorter-lang', 'en')
+      localStorage.setItem('sd-v4-theme', 'dark')
+      localStorage.setItem('sd-v4-update-autocheck', '0')
+      localStorage.setItem('sd-library-workspace-v1', JSON.stringify({ v: 2, currentId: library }))
+      localStorage.removeItem('sd-v4-browse')
+      localStorage.removeItem('sd-v4-promptlab-build')
+      localStorage.setItem('sd-v4-promptlab-mode', first)
+    },
+    { library: LIBRARY, first: mode },
+  )
+  const res = await page.goto(`/v4/${hash}`, { waitUntil: 'domcontentloaded' })
+  expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
+}
+
+const tile = (page: Page, i: number) => page.locator(`[data-testid="tile"][data-id="${ids[i]}"]`)
+const rowOf = (page: Page, list: string, tag: string) => page.getByTestId(list).locator(`[data-tag="${tag}"]`)
+/** The newest toast saying `text`. */
+const toast = (page: Page, text: string) => page.getByRole('status').locator('div', { hasText: text }).last()
+
+test('Stats counts exactly what the library holds', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await openAt(page, '#/tools/promptlab')
+  await expect(page.getByTestId('pl-stats')).toBeVisible()
+
+  await expect(page.getByTestId('pl-stat-total')).toContainText('7')
+  await expect(page.getByTestId('pl-stat-total')).toContainText('6 tagged')
+  await expect(page.getByTestId('pl-stat-scored')).toContainText('4')
+  await expect(page.getByTestId('pl-stat-scored')).toContainText('57% of all images')
+  await expect(page.getByTestId('pl-stat-caption')).toHaveCount(0)
+
+  // most used tags, share of the 7 images on disk, in order
+  const top = page.getByTestId('pl-top-tags').locator('li')
+  await expect(top).toHaveCount(3)
+  await expect(top.nth(0)).toHaveAttribute('data-tag', 'v4pl_common')
+  await expect(top.nth(0)).toContainText('85.7%')
+  await expect(rowOf(page, 'pl-top-tags', 'v4pl_four')).toContainText('57.1%')
+  await expect(rowOf(page, 'pl-top-tags', 'v4pl_pair')).toContainText('28.6%')
+
+  // tags of the 7+ images (00, 01, 02): common 3, four 3, pair 2
+  await expect(rowOf(page, 'pl-high-tags', 'v4pl_pair')).toContainText('2')
+  await expect(page.getByTestId('pl-high-tags').locator('li')).toHaveCount(3)
+
+  // models: alpha 3, beta 2; only alpha has 3 scored images, averaging (8.5 + 7.5 + 7.2) / 3
+  const models = page.getByTestId('pl-top-models').locator('li')
+  await expect(models).toHaveCount(2)
+  await expect(models.nth(0)).toContainText('v4pl_alpha')
+  await expect(models.nth(0)).toContainText('3 images')
+  await expect(models.nth(1)).toContainText('v4pl_beta')
+  const best = page.getByTestId('pl-best-models').locator('li')
+  await expect(best).toHaveCount(1)
+  await expect(best.first()).toContainText('average 7.73 · 3 images')
+
+  // the best-scoring images, highest first
+  const examples = page.getByTestId('pl-examples').locator('li')
+  await expect(examples).toHaveCount(4)
+  await expect(examples.first()).toHaveAttribute('data-id', String(ids[0]))
+  await expect(examples.first()).toContainText('score 8.50')
+  expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
+})
+
+test('"Show in library" only writes the search line, and the library shows those images', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openAt(page, '#/tools/promptlab')
+  await rowOf(page, 'pl-top-tags', 'v4pl_four').getByRole('button', { name: 'Show in library' }).click()
+  await expect(page).toHaveURL(/#\/library/)
+  await expect(page.getByTestId('query-input')).toHaveValue('tag:v4pl_four')
+  await expect(page.getByTestId('result-count')).toHaveText('4 images')
+
+  // a model replaces any model in the search and keeps the rest
+  await page.getByTestId('tools-menu').click()
+  await page.getByRole('menuitem', { name: 'Prompt Lab' }).click()
+  await page.getByTestId('pl-top-models').locator('li').first().getByRole('button', { name: 'Show in library' }).click()
+  await expect(page.getByTestId('query-input')).toHaveValue('tag:v4pl_four checkpoint:v4pl_alpha')
+  await expect(page.getByTestId('result-count')).toHaveText('3 images')
+})
+
+test('adding a stats tag and sending a recipe fill Build', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openAt(page, '#/tools/promptlab')
+  await rowOf(page, 'pl-top-tags', 'v4pl_pair').getByRole('button', { name: 'Add to Build' }).click()
+  await expect(toast(page, 'Added to Build: v4pl_pair')).toBeVisible()
+  await expect(page.getByTestId('pl-mode-stats')).toHaveAttribute('aria-selected', 'true')
+
+  await page.getByTestId('pl-recipes').locator('li').first().getByRole('button', { name: 'Send to Build' }).click()
+  await expect(page.getByTestId('pl-mode-build')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByTestId('pl-build-source')).toContainText('A draft from the recipe “v4pl_alpha”')
+  await expect(page.getByTestId('pl-build-prompt')).toHaveValue(/v4pl_common/)
+  await expect(page.getByTestId('pl-build-prompt')).toHaveValue(/v4pl_pair/)
+  // the draft replaced the text; Undo brings the added tag back
+  await toast(page, 'Sent to Build').getByRole('button', { name: 'Undo' }).click()
+  await expect(page.getByTestId('pl-build-prompt')).toHaveValue('v4pl_pair')
+})
+
+test('Compare starts from the two images picked in the library; a list becomes a draft', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openAt(page, '#/library')
+  await expect(page.getByTestId('result-count')).toHaveText('7 images')
+  await tile(page, 0).click({ modifiers: ['Control'] })
+  await tile(page, 2).click({ modifiers: ['Control'] })
+  await page.getByTestId('tools-menu').click()
+  await page.getByRole('menuitem', { name: 'Prompt Lab' }).click()
+  await page.getByTestId('pl-mode-compare').click()
+
+  await expect(page.getByTestId('pl-compare-name-a')).toHaveText(`${PREFIX}00.png`)
+  await expect(page.getByTestId('pl-compare-name-b')).toHaveText(`${PREFIX}02.png`)
+  const common = page.getByTestId('pl-prompt-common')
+  await expect(common).toContainText(TOKEN)
+  await expect(common).toContainText('(silver hair:1.2)')
+  await expect(page.getByTestId('pl-prompt-only-a')).toContainText('frame 0')
+  await expect(page.getByTestId('pl-prompt-only-b')).toContainText('frame 2')
+  await expect(page.getByTestId('pl-tags-common')).toContainText('v4pl_four')
+  await expect(page.getByTestId('pl-tags-only-a')).toContainText('v4pl_pair')
+  expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
+
+  // B from the picker: the search finds any image of the library
+  await page.getByTestId('pl-compare-pick-b').click()
+  const picker = page.getByTestId('pl-picker')
+  await picker.getByTestId('pl-picker-search').fill(`${TOKEN} tag:v4pl_common -tag:v4pl_four`)
+  await expect(picker.locator('[data-id]')).toHaveCount(2)
+  await picker.locator(`[data-id="${ids[4]}"]`).click()
+  await expect(picker).toHaveCount(0)
+  await expect(page.getByTestId('pl-compare-name-b')).toHaveText(`${PREFIX}04.png`)
+  await expect(page.getByTestId('pl-tags-only-a')).toContainText('v4pl_four')
+
+  await page.getByTestId('pl-prompt-common').getByRole('button', { name: 'Send to Build' }).click()
+  await expect(page.getByTestId('pl-build-source')).toContainText('A draft from Compare')
+  await expect(page.getByTestId('pl-build-prompt')).toHaveValue(new RegExp(`${TOKEN}`))
+  await expect(page.getByTestId('pl-build-prompt')).not.toHaveValue(/frame/)
+})
+
+test('Build starts from the image being looked at and cleans its prompt, keeping the LoRA', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await openAt(page, '#/library')
+  await tile(page, 5).click()
+  await page.getByTestId('tools-menu').click()
+  await page.getByRole('menuitem', { name: 'Prompt Lab' }).click()
+  await page.getByTestId('pl-mode-build').click()
+  await page.getByTestId('pl-build-use-viewed').click()
+  await expect(page.getByTestId('pl-build-source-name')).toHaveText(`${PREFIX}05.png`)
+  const prompt = page.getByTestId('pl-build-prompt')
+  await expect(prompt).toHaveValue(LORA_PROMPT)
+  await expect(page.getByTestId('pl-build-negative')).toHaveValue('lowres')
+
+  await page.getByTestId('pl-build-clean').click()
+  await expect(prompt).toHaveValue(`${TOKEN}, 1girl, silver_hair, masterpiece, <lora:my_style_v2:0.8>, smile`)
+  await page.getByTestId('pl-build-spaces').click()
+  await expect(prompt).toHaveValue(`${TOKEN}, 1girl, silver hair, masterpiece, <lora:my_style_v2:0.8>, smile`)
+  await page.getByTestId('pl-build-dropQuality').click()
+  await expect(prompt).not.toHaveValue(/masterpiece/)
+  await expect(prompt).toHaveValue(/, <lora:my_style_v2:0\.8>$/)
+  await toast(page, 'Cleaned: 6 words → 5').getByRole('button', { name: 'Undo' }).click()
+  await expect(prompt).toHaveValue(/masterpiece/)
+
+  // the library's tags by group; ticking only some makes them the prompt
+  const recipe = page.getByTestId('pl-build-recipe')
+  await expect(recipe).toContainText('These are the tags the library gave this image.')
+  await expect(recipe).toContainText('v4pl_common')
+  expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
+})
+
+test('"Send to tool" opens a library image in Build, and the mode is remembered', async ({ page }) => {
+  await page.setViewportSize({ width: 2560, height: 1440 })
+  await openAt(page, '#/library', 'compare')
+  await tile(page, 1).click({ button: 'right' })
+  await page.getByTestId('card-menu').getByRole('menuitem', { name: 'Send to tool' }).hover()
+  await page.locator('[data-ctx-sub]').getByRole('menuitem', { name: 'Prompt Lab' }).click()
+  await expect(page.getByTestId('pl-mode-build')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByTestId('pl-build-source-name')).toHaveText(`${PREFIX}01.png`)
+  await expect(page.getByTestId('pl-build-prompt')).toHaveValue(`${TOKEN}, 1girl, (silver hair:1.2), smile, frame 1`)
+
+  await page.getByTestId('pl-mode-compare').click()
+  await page.reload()
+  await expect(page.getByTestId('pl-mode-compare')).toHaveAttribute('aria-selected', 'true')
+  // the build text is kept across the reload too
+  await page.getByTestId('pl-mode-build').click()
+  await expect(page.getByTestId('pl-build-prompt')).toHaveValue(/frame 1/)
+})
+
+test('Compare says plainly when a file is missing from disk', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openAt(page, '#/library')
+  await tile(page, 3).click({ modifiers: ['Control'] })
+  await tile(page, 6).click({ modifiers: ['Control'] })
+  runBackendScript(`
+import sqlite3
+with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
+    conn.execute("UPDATE images SET is_readable = 0 WHERE id = ?", (${ids[6]},))
+    conn.commit()
+print("ok")
+`)
+  await page.getByTestId('tools-menu').click()
+  await page.getByRole('menuitem', { name: 'Prompt Lab' }).click()
+  await page.getByTestId('pl-mode-compare').click()
+  await expect(page.getByTestId('pl-compare-problem')).toHaveText(
+    'One of the files is missing from disk, so the two cannot be compared. Rescan its folder or choose another image.',
+  )
+})
+
+for (const viewport of VIEWPORTS) {
+  test(`Prompt Lab fits at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport)
+    await openAt(page, '#/tools/promptlab')
+    for (const mode of ['stats', 'compare', 'build'] as const) {
+      await page.getByTestId(`pl-mode-${mode}`).click()
+      await expect(page.getByTestId(`pl-mode-${mode}`)).toBeInViewport({ ratio: 1 })
+      expect(await pageOverflow(page), mode).toBeLessThanOrEqual(0)
+    }
+    await page.getByTestId('pl-build-pick').click()
+    await expect(page.getByTestId('pl-picker-search')).toBeInViewport({ ratio: 1 })
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('pl-picker')).toHaveCount(0)
+    await expect(page.getByTestId('promptlab-page')).toBeVisible()
+  })
+}
