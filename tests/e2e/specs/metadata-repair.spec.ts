@@ -3,6 +3,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
 import { expect, test } from '../fixtures/click-ledger'
+import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 /**
  * Metadata L3 (v3.5.0): raw-envelope retention + "Re-parse Missing Prompts".
@@ -67,6 +68,7 @@ function runBackendScript(script: string): string {
 /** Inserts the two fixture rows; returns [recoverableId, missingSourceId]. */
 function resetFixture(): number[] {
   const script = `
+${PY_DELETE_IMAGES}
 import gzip
 import json
 import sqlite3
@@ -88,7 +90,7 @@ raw = gzip.compress(json.dumps({"prompt": json.dumps(graph)}).encode("utf-8"))
 ids = []
 with sqlite3.connect(db_path) as conn:
     cur = conn.cursor()
-    cur.execute("DELETE FROM images WHERE filename LIKE 'v350-meta-%'")
+    delete_images(cur, "filename LIKE 'v350-meta-%'")
     cur.execute(
         """
         INSERT INTO images (path, filename, generator, prompt, width, height, file_size,
@@ -154,12 +156,13 @@ print(json.dumps([dict(row) for row in rows]))
 
 function cleanupFixture() {
   const script = `
+${PY_DELETE_IMAGES}
 import sqlite3
 from pathlib import Path
 
 db_path = Path(${JSON.stringify(runtimeDatabasePath)})
 with sqlite3.connect(db_path) as conn:
-    conn.execute("DELETE FROM images WHERE filename LIKE 'v350-meta-%'")
+    delete_images(conn, "filename LIKE 'v350-meta-%'")
     conn.commit()
 print("ok")
 `

@@ -3,6 +3,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 /**
  * Aurora #25c caption consolidation (v3.5.0):
@@ -71,6 +72,7 @@ function runBackendScript(script: string): string {
 /** 4 PNGs + DB rows with tags; the first two also carry a stored NL caption. */
 function resetCaptionFixture(): number[] {
   const script = `
+${PY_DELETE_IMAGES}
 import json
 import shutil
 import sqlite3
@@ -96,7 +98,7 @@ with sqlite3.connect(db_path) as conn:
 
         cur.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename = ?)", (filename,))
         cur.execute("DELETE FROM image_prompt_tokens WHERE image_id IN (SELECT id FROM images WHERE filename = ?)", (filename,))
-        cur.execute("DELETE FROM images WHERE filename = ?", (filename,))
+        delete_images(cur, "filename = ?", (filename,))
         cur.execute(
             """
             INSERT INTO images (
@@ -132,6 +134,7 @@ print(json.dumps(ids))
 
 function cleanupCaptionFixture() {
   const script = `
+${PY_DELETE_IMAGES}
 import shutil
 import sqlite3
 from pathlib import Path
@@ -144,7 +147,7 @@ with sqlite3.connect(db_path) as conn:
     cur = conn.cursor()
     cur.execute(f"DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename IN ({placeholders}))", filenames)
     cur.execute(f"DELETE FROM image_prompt_tokens WHERE image_id IN (SELECT id FROM images WHERE filename IN ({placeholders}))", filenames)
-    cur.execute(f"DELETE FROM images WHERE filename IN ({placeholders})", filenames)
+    delete_images(cur, f"filename IN ({placeholders})", filenames)
     conn.commit()
 shutil.rmtree(repo_root / ".tmp" / "v350-caption-merge", ignore_errors=True)
 print("ok")

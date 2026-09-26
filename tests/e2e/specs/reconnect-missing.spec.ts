@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process'
 
 import { expect, test } from '../fixtures/click-ledger'
 import { observeManualScanTerminal } from '../fixtures/scan-terminal-observer'
+import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..')
 const runtimeDatabasePath = process.env.SD_IMAGE_SORTER_DB_PATH
@@ -96,6 +97,7 @@ async function resetReconnectFixture() {
   await fs.mkdir(newDir, { recursive: true })
 
   runBackendScript(`
+${PY_DELETE_IMAGES}
 import sqlite3
 from pathlib import Path
 from PIL import Image
@@ -108,7 +110,7 @@ db_path = Path(${JSON.stringify(runtimeDatabasePath)})
 with sqlite3.connect(db_path) as conn:
     cur = conn.cursor()
     cur.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename = ?)", (${JSON.stringify(reconnectFilename)},))
-    cur.execute("DELETE FROM images WHERE filename = ?", (${JSON.stringify(reconnectFilename)},))
+    delete_images(cur, "filename = ?", (${JSON.stringify(reconnectFilename)},))
     conn.commit()
 print("ok")
 `)

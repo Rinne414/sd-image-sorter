@@ -3,6 +3,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 /**
  * Owner feedback v3.5.0 (2026-07-04), gallery layout:
@@ -73,6 +74,7 @@ function runBackendScript(script: string): string {
 
 function resetThumbFixture(): number[] {
   const script = `
+${PY_DELETE_IMAGES}
 import json
 import shutil
 import sqlite3
@@ -94,7 +96,7 @@ with sqlite3.connect(db_path) as conn:
     cur.execute(
         "DELETE FROM image_prompt_tokens WHERE image_id IN (SELECT id FROM images WHERE filename LIKE 'v350-thumb-%')"
     )
-    cur.execute("DELETE FROM images WHERE filename LIKE 'v350-thumb-%'")
+    delete_images(cur, "filename LIKE 'v350-thumb-%'")
     for index in range(1, count + 1):
         filename = f"v350-thumb-{index}.png"
         image_path = (root / filename).resolve()
@@ -128,6 +130,7 @@ print(json.dumps(ids))
 
 function cleanupThumbFixture() {
   const script = `
+${PY_DELETE_IMAGES}
 import shutil
 import sqlite3
 from pathlib import Path
@@ -139,7 +142,7 @@ with sqlite3.connect(db_path) as conn:
     cur.execute(
         "DELETE FROM image_prompt_tokens WHERE image_id IN (SELECT id FROM images WHERE filename LIKE 'v350-thumb-%')"
     )
-    cur.execute("DELETE FROM images WHERE filename LIKE 'v350-thumb-%'")
+    delete_images(cur, "filename LIKE 'v350-thumb-%'")
     conn.commit()
 shutil.rmtree(repo_root / ".tmp" / "v350-thumb-size", ignore_errors=True)
 print("ok")

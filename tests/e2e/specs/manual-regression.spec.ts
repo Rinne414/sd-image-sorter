@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process'
 import { expect, test, type APIRequestContext, type Locator, type Page } from '../fixtures/click-ledger'
 import { observeManualScanTerminal } from '../fixtures/scan-terminal-observer'
 import { markModelsReady } from '../fixtures/model-status'
+import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -355,6 +356,7 @@ function prepareAutoSeparateCopyPartialFixture(): {
   search: string
 } {
   return runBackendJson(`
+${PY_DELETE_IMAGES}
 import json
 from pathlib import Path
 import sys
@@ -382,7 +384,7 @@ Image.new("RGB", (96, 96), color=(255, 140, 60)).save(failed_path)
 
 with db.get_db() as conn:
     conn.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename IN (?, ?))", (successful_filename, failed_filename))
-    conn.execute("DELETE FROM images WHERE filename IN (?, ?)", (successful_filename, failed_filename))
+    delete_images(conn, "filename IN (?, ?)", (successful_filename, failed_filename))
 
 for image_path in (successful_path, failed_path):
     stat_result = image_path.stat()
@@ -413,6 +415,7 @@ print(json.dumps({
 
 function cleanupAutoSeparateCopyPartialFixtureRows() {
   runBackendScript(`
+${PY_DELETE_IMAGES}
 import sqlite3
 from pathlib import Path
 
@@ -420,7 +423,7 @@ db_path = Path(${JSON.stringify(runtimeDatabasePath)})
 fixture_names = ("manual-autosep-copy-ok.png", "manual-autosep-copy-fail.png")
 with sqlite3.connect(db_path) as conn:
     conn.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename IN (?, ?))", fixture_names)
-    conn.execute("DELETE FROM images WHERE filename IN (?, ?)", fixture_names)
+    delete_images(conn, "filename IN (?, ?)", fixture_names)
 print("ok")
 `)
 }
@@ -466,6 +469,7 @@ async function resetSaveOutputs() {
 
 function cleanupCensorJpegAlphaFixture() {
   runBackendScript(`
+${PY_DELETE_IMAGES}
 import shutil
 import sys
 from pathlib import Path
@@ -476,7 +480,7 @@ import database as db
 fixture_root = Path(${JSON.stringify(censorJpegAlphaRoot)})
 fixture_filenames = (${JSON.stringify(censorJpegAlphaFilename)}, ${JSON.stringify(censorJpegAlphaOutputFilename)})
 with db.get_db() as conn:
-    conn.execute("DELETE FROM images WHERE filename IN (?, ?)", fixture_filenames)
+    delete_images(conn, "filename IN (?, ?)", fixture_filenames)
 
 if fixture_root.exists():
     shutil.rmtree(fixture_root)
@@ -574,6 +578,7 @@ async function clearFavorites(request: APIRequestContext) {
 
 function resetScanBrowserFixture() {
   const script = `
+${PY_DELETE_IMAGES}
 from pathlib import Path
 from PIL import Image
 import sqlite3
@@ -595,7 +600,7 @@ db_path = Path(${JSON.stringify(runtimeDatabasePath)})
 with sqlite3.connect(db_path) as conn:
     cur = conn.cursor()
     cur.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename IN (?, ?))", tuple(files.keys()))
-    cur.execute("DELETE FROM images WHERE filename IN (?, ?)", tuple(files.keys()))
+    delete_images(cur, "filename IN (?, ?)", tuple(files.keys()))
     conn.commit()
 
 print('ok')
@@ -606,6 +611,7 @@ print('ok')
 
 function prepareTagIoFixture(): { imageId: number, filename: string, expectedTag: string } {
   const script = `
+${PY_DELETE_IMAGES}
 import json
 import sqlite3
 from pathlib import Path
@@ -624,7 +630,7 @@ with sqlite3.connect(db_path) as conn:
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     cur.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename = ?)", ("manual-tag-io-source.png",))
-    cur.execute("DELETE FROM images WHERE filename = ?", ("manual-tag-io-source.png",))
+    delete_images(cur, "filename = ?", ("manual-tag-io-source.png",))
     cur.execute(
         '''
         INSERT INTO images (
@@ -689,6 +695,7 @@ print(json.dumps([row[0] for row in rows]))
 
 function prepareTagLiveFixture() {
   const script = `
+${PY_DELETE_IMAGES}
 from pathlib import Path
 from PIL import Image
 import sqlite3
@@ -707,7 +714,7 @@ with sqlite3.connect(db_path) as conn:
     cur = conn.cursor()
     cur.execute("UPDATE images SET tagged_at = COALESCE(tagged_at, CURRENT_TIMESTAMP)")
     cur.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename IN (?, ?))", tuple(fixture_names))
-    cur.execute("DELETE FROM images WHERE filename IN (?, ?)", tuple(fixture_names))
+    delete_images(cur, "filename IN (?, ?)", tuple(fixture_names))
     conn.commit()
 
 print("ok")
@@ -717,6 +724,7 @@ print("ok")
 
 function cleanupExtendedFixtureRows() {
   const script = `
+${PY_DELETE_IMAGES}
 import sqlite3
 from pathlib import Path
 
@@ -733,7 +741,7 @@ fixture_names = (
 with sqlite3.connect(db_path) as conn:
     cur = conn.cursor()
     cur.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename IN (?, ?, ?, ?, ?))", fixture_names)
-    cur.execute("DELETE FROM images WHERE filename IN (?, ?, ?, ?, ?)", fixture_names)
+    delete_images(cur, "filename IN (?, ?, ?, ?, ?)", fixture_names)
     conn.commit()
 
 print("ok")
@@ -743,6 +751,7 @@ print("ok")
 
 function prepareSidebarLayoutFixture(): { finalFolder: string } {
   return runBackendJson<{ finalFolder: string }>(`
+${PY_DELETE_IMAGES}
 import json
 import sqlite3
 from pathlib import Path
@@ -755,7 +764,7 @@ db_path = Path(${JSON.stringify(runtimeDatabasePath)})
 
 with sqlite3.connect(db_path) as conn:
     conn.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename LIKE ?)", (filename_prefix + "%",))
-    conn.execute("DELETE FROM images WHERE filename LIKE ?", (filename_prefix + "%",))
+    delete_images(conn, "filename LIKE ?", (filename_prefix + "%",))
     for index in range(1, 41):
         folder = fixture_root / f"folder-{index:02d}"
         folder.mkdir(parents=True, exist_ok=True)
@@ -792,6 +801,7 @@ print(json.dumps({"finalFolder": str((fixture_root / "folder-40").resolve()).rep
 
 function cleanupSidebarLayoutFixture() {
   runBackendScript(`
+${PY_DELETE_IMAGES}
 import shutil
 import sqlite3
 from pathlib import Path
@@ -802,7 +812,7 @@ db_path = Path(${JSON.stringify(runtimeDatabasePath)})
 
 with sqlite3.connect(db_path) as conn:
     conn.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename LIKE ?)", (filename_prefix + "%",))
-    conn.execute("DELETE FROM images WHERE filename LIKE ?", (filename_prefix + "%",))
+    delete_images(conn, "filename LIKE ?", (filename_prefix + "%",))
 
 if fixture_root.exists():
     shutil.rmtree(fixture_root)

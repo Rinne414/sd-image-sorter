@@ -3,6 +3,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 /**
  * v3.4.1 UI regression coverage (2026-06-12):
@@ -80,6 +81,7 @@ function runBackendScript(script: string) {
  */
 function resetComboFixture() {
   const script = `
+${PY_DELETE_IMAGES}
 import shutil
 import sqlite3
 from pathlib import Path
@@ -106,7 +108,7 @@ with sqlite3.connect(db_path) as conn:
 
         cur.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename = ?)", (filename,))
         cur.execute("DELETE FROM image_prompt_tokens WHERE image_id IN (SELECT id FROM images WHERE filename = ?)", (filename,))
-        cur.execute("DELETE FROM images WHERE filename = ?", (filename,))
+        delete_images(cur, "filename = ?", (filename,))
         cur.execute(
             """
             INSERT INTO images (
@@ -134,6 +136,7 @@ print("ok")
 
 function cleanupComboFixtureRows() {
   const script = `
+${PY_DELETE_IMAGES}
 import sqlite3
 from pathlib import Path
 
@@ -144,7 +147,7 @@ with sqlite3.connect(db_path) as conn:
     cur = conn.cursor()
     cur.execute(f"DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename IN ({placeholders}))", filenames)
     cur.execute(f"DELETE FROM image_prompt_tokens WHERE image_id IN (SELECT id FROM images WHERE filename IN ({placeholders}))", filenames)
-    cur.execute(f"DELETE FROM images WHERE filename IN ({placeholders})", filenames)
+    delete_images(cur, f"filename IN ({placeholders})", filenames)
     conn.commit()
 print("ok")
 `

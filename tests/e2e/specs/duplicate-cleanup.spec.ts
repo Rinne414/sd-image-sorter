@@ -3,6 +3,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
 import { expect, test } from '../fixtures/click-ledger'
+import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 /**
  * Duplicate Cleanup workflow (v3.5.0 Tier 1): whole-library near-dup GROUP
@@ -58,6 +59,7 @@ function runBackendScript(script: string): string {
 /** 3 near-identical + 1 unrelated + a 0°/17°/34° chain; returns inserted ids. */
 function resetFixture(): number[] {
   const script = `
+${PY_DELETE_IMAGES}
 import json
 import shutil
 import sqlite3
@@ -90,7 +92,7 @@ ratings = [5, 0, 0, 0, 5, 0, 0]
 ids = []
 with sqlite3.connect(db_path) as conn:
     cur = conn.cursor()
-    cur.execute("DELETE FROM images WHERE filename LIKE 'v350-dup-%'")
+    delete_images(cur, "filename LIKE 'v350-dup-%'")
     for index, (vec, rating) in enumerate(zip(vecs, ratings), start=1):
         filename = f"v350-dup-{index}.png"
         image_path = (root / filename).resolve()
@@ -119,6 +121,7 @@ print(json.dumps(ids))
 
 function cleanupFixture() {
   const script = `
+${PY_DELETE_IMAGES}
 import shutil
 import sqlite3
 from pathlib import Path
@@ -126,7 +129,7 @@ from pathlib import Path
 repo_root = Path(${JSON.stringify(repoRoot)})
 db_path = Path(${JSON.stringify(runtimeDatabasePath)})
 with sqlite3.connect(db_path) as conn:
-    conn.execute("DELETE FROM images WHERE filename LIKE 'v350-dup-%'")
+    delete_images(conn, "filename LIKE 'v350-dup-%'")
     conn.commit()
 shutil.rmtree(repo_root / ".tmp" / "v350-dup-cleanup", ignore_errors=True)
 print("ok")

@@ -4,6 +4,7 @@ import path from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 
 import { dbPath, pageOverflow, runBackendScript, tmpRoot } from '../fixtures/v4-seed'
+import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 /**
  * V4 Pixiv batch, Order -> Name -> Export, with a REAL export into a temp
@@ -32,6 +33,7 @@ const nameOf: Record<number, string> = {}
 /** a.png, b.png (PNG text chunks + EXIF + XMP), c.jpg (EXIF UserComment + XMP); censored PNGs of a and c. */
 function seed(): number[] {
   const out = runBackendScript(`
+${PY_DELETE_IMAGES}
 import shutil, sqlite3, sys
 from pathlib import Path
 sys.path.insert(0, "backend")
@@ -54,7 +56,7 @@ ids = []
 with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("DELETE FROM batches WHERE name LIKE ?", (${JSON.stringify(NAME + '%')},))
-    conn.execute("DELETE FROM images WHERE filename LIKE ?", (prefix + "%",))
+    delete_images(conn, "filename LIKE ?", (prefix + "%",))
     for path in files:
         path = path.resolve()
         cur = conn.execute(
@@ -72,12 +74,13 @@ print(" ".join(str(i) for i in ids))
 
 function cleanup(): void {
   runBackendScript(`
+${PY_DELETE_IMAGES}
 import shutil, sqlite3
 from pathlib import Path
 with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("DELETE FROM batches WHERE name LIKE ?", (${JSON.stringify(NAME + '%')},))
-    conn.execute("DELETE FROM images WHERE filename LIKE ?", (${JSON.stringify(PREFIX + '%')},))
+    delete_images(conn, "filename LIKE ?", (${JSON.stringify(PREFIX + '%')},))
     conn.commit()
 shutil.rmtree(Path(${JSON.stringify(path.join(tmpRoot, DIR))}), ignore_errors=True)
 print("ok")

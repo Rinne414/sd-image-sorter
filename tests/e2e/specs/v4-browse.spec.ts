@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 import { dbPath, openLibrary, pageOverflow, runBackendScript, tmpRoot } from '../fixtures/v4-seed'
+import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 /**
  * V4 browsing details on the real backend: each library keeps its own search
@@ -27,6 +28,7 @@ const LIB_NAME = 'V4 e2e browse'
  */
 function seed(): void {
   runBackendScript(`
+${PY_DELETE_IMAGES}
 import shutil, sqlite3
 from pathlib import Path
 from PIL import Image
@@ -42,7 +44,7 @@ with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
     cur = conn.cursor()
     cur.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename LIKE ?)", (prefix + "%",))
     cur.execute("DELETE FROM image_prompt_tokens WHERE image_id IN (SELECT id FROM images WHERE filename LIKE ?)", (prefix + "%",))
-    cur.execute("DELETE FROM images WHERE filename LIKE ?", (prefix + "%",))
+    delete_images(cur, "filename LIKE ?", (prefix + "%",))
     for i in range(${COUNT}):
         w, h = shapes[i % len(shapes)]
         name = f"{prefix}{i:03d}.png"
@@ -72,15 +74,16 @@ print("ok")
 
 function cleanup(): void {
   runBackendScript(`
+${PY_DELETE_IMAGES}
 import shutil, sqlite3
 from pathlib import Path
 prefix = ${JSON.stringify(PREFIX)}
 with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
     conn.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename LIKE ?)", (prefix + "%",))
     conn.execute("DELETE FROM image_prompt_tokens WHERE image_id IN (SELECT id FROM images WHERE filename LIKE ?)", (prefix + "%",))
-    conn.execute("DELETE FROM images WHERE filename LIKE ?", (prefix + "%",))
+    delete_images(conn, "filename LIKE ?", (prefix + "%",))
     for (lid,) in conn.execute("SELECT id FROM libraries WHERE name = ? AND id != 'main'", (${JSON.stringify(LIB_NAME)},)).fetchall():
-        conn.execute("DELETE FROM images WHERE library_id = ?", (lid,))
+        delete_images(conn, "library_id = ?", (lid,))
         conn.execute("DELETE FROM libraries WHERE id = ?", (lid,))
     conn.commit()
 shutil.rmtree(Path(${JSON.stringify(tmpRoot)}) / ${JSON.stringify(DIR)}, ignore_errors=True)

@@ -5,6 +5,7 @@ import { expect, test, type Page, type Route } from '@playwright/test'
 
 import { markModelsReady } from '../fixtures/model-status'
 import { dbPath, pageOverflow, repoRoot, runBackendScript, tmpRoot, VIEWPORTS } from '../fixtures/v4-seed'
+import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 /**
  * V4 Settings › Library and Settings › Disk & cache (slice 5e), on the real
@@ -41,11 +42,12 @@ const serverBase = process.env.BASE_URL || `http://127.0.0.1:${process.env.PW_WE
 
 function dropTestLibrary(): void {
   runBackendScript(`
+${PY_DELETE_IMAGES}
 import shutil, sqlite3
 from pathlib import Path
 with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
     for lib in (${JSON.stringify(LIB)}, ${JSON.stringify(OTHER)}):
-        conn.execute("DELETE FROM images WHERE library_id = ?", (lib,))
+        delete_images(conn, "library_id = ?", (lib,))
         conn.execute("DELETE FROM library_roots WHERE library_id = ?", (lib,))
         conn.execute("DELETE FROM libraries WHERE id = ?", (lib,))
     conn.execute("DELETE FROM favorite_paths WHERE path_key LIKE ?", ("%${PREFIX}%",))
@@ -121,11 +123,10 @@ print("ok")
 /** Take the strangers away again (and drop the server's cached counts). */
 function dropStrangers(): void {
   runBackendScript(`
+${PY_DELETE_IMAGES}
 import sqlite3
 with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
-    ids = [r[0] for r in conn.execute("SELECT id FROM images WHERE filename IN (?, ?)", ("${PREFIX}twin.png", "${PREFIX}other.png"))]
-    conn.executemany("DELETE FROM tags WHERE image_id = ?", [(i,) for i in ids])
-    conn.executemany("DELETE FROM images WHERE id = ?", [(i,) for i in ids])
+    delete_images(conn, "filename IN (?, ?)", ("${PREFIX}twin.png", "${PREFIX}other.png"))
     conn.execute("DELETE FROM libraries WHERE id = ?", (${JSON.stringify(OTHER)},))
     conn.commit()
 print("ok")

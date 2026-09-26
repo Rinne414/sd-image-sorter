@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
 
 import { dbPath, pageOverflow, runBackendScript, tmpRoot, VIEWPORTS } from '../fixtures/v4-seed'
+import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 /**
  * V4 censor step, AI detection and review: detect all as a job (stop, go on,
@@ -29,6 +30,7 @@ let rotatedBatch = 0
 
 function seedNoise(): number[] {
   const out = runBackendScript(`
+${PY_DELETE_IMAGES}
 import json, random, shutil, sqlite3
 from pathlib import Path
 from PIL import Image
@@ -42,7 +44,7 @@ meta = json.dumps({"_parsed": {"generation_params": {"steps": 28}}})
 ids = []
 with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
     cur = conn.cursor()
-    cur.execute("DELETE FROM images WHERE filename LIKE ?", (prefix + "%",))
+    delete_images(cur, "filename LIKE ?", (prefix + "%",))
     for i in range(3):
         data = bytes(rng.randrange(256) for _ in range(${W} * ${H} * 3))
         name = f"{prefix}{i:02d}.png"
@@ -79,12 +81,13 @@ print(" ".join(str(i) for i in ids))
 
 function cleanupDb(): void {
   runBackendScript(`
+${PY_DELETE_IMAGES}
 import shutil, sqlite3
 from pathlib import Path
 with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("DELETE FROM batches WHERE name LIKE ?", (${JSON.stringify(NAME + '%')},))
-    conn.execute("DELETE FROM images WHERE filename LIKE ?", (${JSON.stringify(PREFIX + '%')},))
+    delete_images(conn, "filename LIKE ?", (${JSON.stringify(PREFIX + '%')},))
     conn.commit()
 shutil.rmtree(Path(${JSON.stringify(tmpRoot)}) / ${JSON.stringify(DIR)}, ignore_errors=True)
 print("ok")

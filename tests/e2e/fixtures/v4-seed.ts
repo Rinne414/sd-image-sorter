@@ -4,6 +4,8 @@ import { execFileSync } from 'node:child_process'
 
 import { expect, type Page } from '@playwright/test'
 
+import { PY_DELETE_IMAGES } from './e2e-db'
+
 /**
  * Shared set-up for the V4 specs (V4 is served at /v4/ by the same backend).
  * Each spec seeds its own rows into the isolated test database under its own
@@ -59,6 +61,7 @@ from pathlib import Path
 from PIL import Image
 sys.path.insert(0, str(Path(${JSON.stringify(repoRoot)}) / "backend"))
 from utils.source_paths import indexed_image_path_casefold
+${PY_DELETE_IMAGES}
 
 root = Path(${JSON.stringify(tmpRoot)}) / ${JSON.stringify(spec.dir)}
 shutil.rmtree(root, ignore_errors=True)
@@ -69,8 +72,7 @@ prefix = ${JSON.stringify(spec.prefix)}
 token = ${JSON.stringify(spec.token)}
 with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
     cur = conn.cursor()
-    cur.execute("DELETE FROM image_prompt_tokens WHERE image_id IN (SELECT id FROM images WHERE filename LIKE ?)", (prefix + "%",))
-    cur.execute("DELETE FROM images WHERE filename LIKE ?", (prefix + "%",))
+    delete_images(cur, "filename LIKE ?", (prefix + "%",))
     for i in range(${spec.count}):
         w, h = shapes[i % len(shapes)]
         name = f"{prefix}{i:02d}.png"
@@ -121,10 +123,10 @@ export function cleanupImages(prefix: string, dirs: string[]): void {
   runBackendScript(`
 import shutil, sqlite3
 from pathlib import Path
+${PY_DELETE_IMAGES}
 prefix = ${JSON.stringify(prefix)}
 with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
-    conn.execute("DELETE FROM image_prompt_tokens WHERE image_id IN (SELECT id FROM images WHERE filename LIKE ?)", (prefix + "%",))
-    conn.execute("DELETE FROM images WHERE filename LIKE ?", (prefix + "%",))
+    delete_images(conn, "filename LIKE ?", (prefix + "%",))
     conn.commit()
 for d in ${JSON.stringify(dirs)}:
     shutil.rmtree(Path(${JSON.stringify(tmpRoot)}) / d, ignore_errors=True)

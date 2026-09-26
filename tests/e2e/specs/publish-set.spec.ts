@@ -3,6 +3,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
 import { expect, test } from '../fixtures/click-ledger'
+import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 /**
  * Publish Set workbench (v3.5.0 Tier 1 — Pixiv 成套發布): gallery selection →
@@ -67,6 +68,7 @@ const SECRET = 'masterpiece, publish secret 51f3'
  */
 function resetFixture(): { ids: number[], metaId: number } {
   const script = `
+${PY_DELETE_IMAGES}
 import json
 import shutil
 import sqlite3
@@ -83,7 +85,7 @@ db_path = Path(${JSON.stringify(runtimeDatabasePath)})
 ids = []
 with sqlite3.connect(db_path) as conn:
     cur = conn.cursor()
-    cur.execute("DELETE FROM images WHERE filename LIKE 'v350-pub-%'")
+    delete_images(cur, "filename LIKE 'v350-pub-%'")
     for index in (1, 2, 3):
         filename = f"v350-pub-{index}.png"
         image_path = (root / "src" / filename).resolve()
@@ -159,6 +161,7 @@ with Image.open(path) as image:
 
 function cleanupFixture() {
   const script = `
+${PY_DELETE_IMAGES}
 import shutil
 import sqlite3
 from pathlib import Path
@@ -166,7 +169,7 @@ from pathlib import Path
 repo_root = Path(${JSON.stringify(repoRoot)})
 db_path = Path(${JSON.stringify(runtimeDatabasePath)})
 with sqlite3.connect(db_path) as conn:
-    conn.execute("DELETE FROM images WHERE filename LIKE 'v350-pub-%'")
+    delete_images(conn, "filename LIKE 'v350-pub-%'")
     conn.commit()
 shutil.rmtree(repo_root / ".tmp" / "v350-publish", ignore_errors=True)
 print("ok")

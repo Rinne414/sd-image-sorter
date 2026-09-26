@@ -3,6 +3,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 /**
  * Search bar v2 (owner request 2026-07-05): the key:value search grows into a
@@ -66,6 +67,7 @@ function runBackendScript(script: string): string {
 /** A handful of images carrying a distinctive tag for autocomplete tests. */
 function resetSearchFixture(): number[] {
   const script = `
+${PY_DELETE_IMAGES}
 import json
 import shutil
 import sqlite3
@@ -84,7 +86,7 @@ with sqlite3.connect(db_path) as conn:
     cur.execute(
         "DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename LIKE 'v350-search-%')"
     )
-    cur.execute("DELETE FROM images WHERE filename LIKE 'v350-search-%'")
+    delete_images(cur, "filename LIKE 'v350-search-%'")
     for index in range(1, 7):
         filename = f"v350-search-{index}.png"
         image_path = (root / filename).resolve()
@@ -117,6 +119,7 @@ print(json.dumps(ids))
 
 function cleanupSearchFixture() {
   const script = `
+${PY_DELETE_IMAGES}
 import shutil
 import sqlite3
 from pathlib import Path
@@ -128,7 +131,7 @@ with sqlite3.connect(db_path) as conn:
     cur.execute(
         "DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename LIKE 'v350-search-%')"
     )
-    cur.execute("DELETE FROM images WHERE filename LIKE 'v350-search-%'")
+    delete_images(cur, "filename LIKE 'v350-search-%'")
     conn.commit()
 shutil.rmtree(repo_root / ".tmp" / "v350-search-v2", ignore_errors=True)
 print("ok")

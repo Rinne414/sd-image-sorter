@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 import { markModelsReady } from '../fixtures/model-status'
 import { dbPath, pageOverflow, runBackendScript, tmpRoot, VIEWPORTS } from '../fixtures/v4-seed'
+import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 /**
  * V4 Home film strip (slice 6c): ★5 images first (newest first), then the
@@ -37,11 +38,12 @@ let ids: Record<string, number> = {}
 
 function dropLibraries(): void {
   runBackendScript(`
+${PY_DELETE_IMAGES}
 import shutil, sqlite3
 from pathlib import Path
 with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
     for lid in (${JSON.stringify(LIBRARY)}, ${JSON.stringify(EMPTY_LIBRARY)}):
-        conn.execute("DELETE FROM images WHERE library_id = ?", (lid,))
+        delete_images(conn, "library_id = ?", (lid,))
         conn.execute("DELETE FROM libraries WHERE id = ?", (lid,))
     conn.commit()
 shutil.rmtree(Path(${JSON.stringify(tmpRoot)}) / ${JSON.stringify(DIR)}, ignore_errors=True)

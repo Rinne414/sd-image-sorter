@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 import { cleanupImages, dbPath, openLibrary, pageOverflow, runBackendScript, seedImages } from '../fixtures/v4-seed'
+import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 /**
  * V4 libraries on the real backend: create (and switch), move picks into
@@ -18,11 +19,12 @@ const DIR = 'v4-lib'
 
 function dropTestLibraries(): void {
   runBackendScript(`
+${PY_DELETE_IMAGES}
 import sqlite3
 with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
     ids = [r[0] for r in conn.execute("SELECT id FROM libraries WHERE name LIKE 'V4 e2e%' AND id != 'main'")]
     for lid in ids:
-        conn.execute("DELETE FROM images WHERE library_id = ?", (lid,))
+        delete_images(conn, "library_id = ?", (lid,))
         conn.execute("DELETE FROM libraries WHERE id = ?", (lid,))
     conn.commit()
 print("ok")

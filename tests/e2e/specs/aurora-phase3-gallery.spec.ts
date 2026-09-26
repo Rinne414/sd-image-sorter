@@ -14,6 +14,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
 import { expect, test } from '../fixtures/click-ledger'
+import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..')
 const runtimeDatabasePath = process.env.SD_IMAGE_SORTER_DB_PATH
@@ -65,6 +66,7 @@ function runBackendScript(script: string) {
 
 function deleteRowsByFilenames(filenames: string[]) {
   runBackendScript(`
+${PY_DELETE_IMAGES}
 import sqlite3
 from pathlib import Path
 
@@ -74,7 +76,7 @@ with sqlite3.connect(db_path) as conn:
     cur = conn.cursor()
     marks = ",".join("?" for _ in names)
     cur.execute(f"DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename IN ({marks}))", names)
-    cur.execute(f"DELETE FROM images WHERE filename IN ({marks})", names)
+    delete_images(cur, f"filename IN ({marks})", names)
     cur.execute("DELETE FROM reconnect_reviews WHERE filename IN (%s)" % marks, names)
     conn.commit()
 print("ok")
