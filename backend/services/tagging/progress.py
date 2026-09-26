@@ -27,8 +27,15 @@ def _build_tag_progress_state(
     memory_pressure_warning: str = "",
     run_id: int = 0,
     last_run_stats: Optional[Dict[str, Any]] = None,
+    model: str = "",
 ) -> Dict[str, Any]:
-    """Build a normalized tag progress payload."""
+    """Build a normalized tag progress payload.
+
+    ``model`` is the tagger key of the current (or last) run and ``uses_gpu``
+    says whether it runs on the GPU: the requested device until the model has
+    loaded, then the device it actually loaded on. Other pages name a tagging
+    run started elsewhere from these two fields.
+    """
     payload: Dict[str, Any] = {
         "status": status,
         "current": current,
@@ -42,6 +49,8 @@ def _build_tag_progress_state(
         "runtime_backend_reason": runtime_backend_reason,
         "memory_pressure_warning": memory_pressure_warning,
         "run_id": run_id,
+        "model": model,
+        "uses_gpu": _uses_gpu(runtime_backend_target, runtime_backend_actual),
     }
     if last_run_stats:
         # Only present on terminal states (done / cancelled / error). The
@@ -49,6 +58,10 @@ def _build_tag_progress_state(
         # the post-tag stats modal exactly once per run.
         payload["last_run_stats"] = last_run_stats
     return payload
+
+
+def _uses_gpu(target: str, actual: str) -> bool:
+    return (actual or target) == "gpu"
 
 
 class ProgressMixin:
@@ -70,6 +83,7 @@ class ProgressMixin:
             runtime_backend_reason=str(state.get("runtime_backend_reason", "") or ""),
             memory_pressure_warning=str(state.get("memory_pressure_warning", "") or ""),
             run_id=int(state.get("run_id", 0) or 0),
+            model=str(state.get("model", "") or ""),
         )
         if "processed" in state:
             coerced["processed"] = int(state.get("processed", coerced["current"]) or 0)
@@ -247,7 +261,14 @@ class ProgressMixin:
                     self._progress.get("memory_pressure_warning", ""),
                 ),
                 "run_id": effective_run_id,
+                # The run's model is set when the run starts; a payload without
+                # one (older worker messages) keeps it.
+                "model": payload.get("model") or self._progress.get("model", ""),
             }
+            self._progress["uses_gpu"] = _uses_gpu(
+                self._progress["runtime_backend_target"],
+                self._progress["runtime_backend_actual"],
+            )
             # Terminal payloads carry last_run_stats (the post-run stats
             # modal's trigger — app.js pops it when GET /api/tag/progress
             # exposes the key). The explicit-key rebuild above used to drop

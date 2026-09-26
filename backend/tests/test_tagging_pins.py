@@ -430,6 +430,9 @@ PROGRESS_STATE_KEYS = {
     "runtime_backend_reason",
     "memory_pressure_warning",
     "run_id",
+    # V4 AI-busy chip: which model a run started elsewhere uses, and on what.
+    "model",
+    "uses_gpu",
 }
 
 

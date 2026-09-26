@@ -102,6 +102,57 @@ for (const viewport of VIEWPORTS) {
   })
 }
 
+test('PixAI v1.0 sits under v0.9 as the PixAI pick, with its cost, and its name fits its column', async ({ page }) => {
+  const status = {
+    models: [
+      {
+        id: 'wd14',
+        status: 'ready',
+        available: true,
+        variants: ['wd-swinv2-tagger-v3', 'pixai-tagger-v0.9', 'pixai-tagger-v1.0'],
+        installed_variants: ['wd-swinv2-tagger-v3', 'pixai-tagger-v0.9'],
+      },
+    ],
+  }
+  for (const viewport of VIEWPORTS) {
+    await page.setViewportSize(viewport)
+    await openLibrary(page, TOKEN, COUNT)
+    await page.route('**/api/models/status', (route) => route.fulfill({ json: status }))
+    await pickTwo(page)
+    const dialog = await openTagDialog(page)
+
+    const names = await dialog.locator('label').evaluateAll((rows) => rows.map((row) => row.querySelector('span')?.textContent ?? ''))
+    const v09 = names.findIndex((n) => n.startsWith('PixAI v0.9'))
+    expect(v09).toBeGreaterThanOrEqual(0)
+    expect(names[v09 + 1]).toContain('PixAI v1.0')
+
+    const v1 = dialog.locator('label', { hasText: 'PixAI v1.0' })
+    await expect(v1).toContainText('Best PixAI')
+    await expect(v1).not.toContainText('Recommended')
+    await expect(v1).toContainText('better at characters and series, weak at artist styles')
+    await expect(v1).toContainText('7.5 GB')
+    await expect(v1).toContainText('Downloads first, about 2 GB')
+    await expect(dialog.locator('label', { hasText: 'PixAI v0.9' })).toContainText('Downloaded')
+    await expect(dialog.locator('label', { hasText: 'WD SwinV2 v3' })).toContainText('Recommended')
+
+    // The badge stays inside the name column instead of running into the note.
+    const [name, note] = await v1.evaluate((row) => {
+      const spans = row.querySelectorAll(':scope > span')
+      return [spans[0]!.getBoundingClientRect(), spans[1]!.getBoundingClientRect()].map((r) => ({ right: r.right, left: r.left }))
+    })
+    const badgeRight = await v1.locator('[data-kind="family"]').evaluate((b) => b.getBoundingClientRect().right)
+    expect(badgeRight).toBeLessThanOrEqual(note!.left + 0.5)
+    expect(name!.right).toBeLessThanOrEqual(note!.left + 0.5)
+    expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
+    await v1.scrollIntoViewIfNeeded()
+    await page.screenshot({ path: `test-results/v4-tagging-pixai-${viewport.width}.png` })
+
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+    await page.unroute('**/api/models/status')
+  }
+})
+
 test('a downloaded tagger starts at once; the advanced choices reach the backend and are remembered', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   await openLibrary(page, TOKEN, COUNT)

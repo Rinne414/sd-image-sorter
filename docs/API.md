@@ -811,6 +811,8 @@ The response now includes truthful runtime fields so the UI can distinguish targ
 - `runtime_backend_actual`
 - `runtime_backend_reason`
 - `memory_pressure_warning`
+- `model`: the tagger key of the current (or last) run, e.g. `pixai-tagger-v1.0`; `""` before any run.
+- `uses_gpu`: `true` when that run is on the GPU; the requested device until the model has loaded, then the device it actually loaded on.
 
 **v3.4.2:** the progress snapshot additionally carries `pipeline_queue`: `{"total_queued": N, "queued": [{"queue_id", "kind", "position", "enqueued_at"}], "last_start_error"}` so pollers can render "Queued #N" before the job starts. The same field appears on the Smart Tag and VLM batch progress endpoints.
 

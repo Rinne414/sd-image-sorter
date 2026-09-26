@@ -11,6 +11,8 @@ export interface TaggerInfo {
   card: string
   variant: string | null
   sizeHint: string | null
+  /** Badge for the best pick within its family (not the app default). */
+  familyPick?: MessageKey
 }
 
 const WD = (label: string, note: MessageKey, size: string): TaggerInfo => ({ label, note, card: 'wd14', variant: null, sizeHint: size })
@@ -22,7 +24,16 @@ const CATALOG: Record<string, TaggerInfo> = {
   'wd-vit-tagger-v3': WD('WD ViT v3', 'tagger.note.vit', '446 MB'),
   'wd-vit-large-tagger-v3': WD('WD ViT Large v3', 'tagger.note.vitLarge', '446 MB'),
   'camie-tagger-v2': { label: 'Camie v2', note: 'tagger.note.camie', card: 'wd14', variant: null, sizeHint: null },
-  'pixai-tagger-v0.9': { label: 'PixAI v0.9', note: 'tagger.note.pixai', card: 'wd14', variant: null, sizeHint: null },
+  'pixai-tagger-v0.9': { label: 'PixAI v0.9', note: 'tagger.note.pixai', card: 'wd14', variant: null, sizeHint: '1.2 GB' },
+  // D47: the recommended PixAI choice; 1008 px input, one image per GPU call.
+  'pixai-tagger-v1.0': {
+    label: 'PixAI v1.0',
+    note: 'tagger.note.pixaiV10',
+    card: 'wd14',
+    variant: null,
+    sizeHint: '2 GB',
+    familyPick: 'tagging.pixaiPick',
+  },
   'oppai-oracle-v1.1': { label: 'OppaiOracle v1.1', note: 'tagger.note.oppai', card: 'oppai-oracle', variant: null, sizeHint: '947 MB' },
   'cl-tagger-v2': { label: 'CL Tagger v2', note: 'tagger.note.cl', card: 'cl-tagger-v2', variant: null, sizeHint: '2.7 GB' },
 }

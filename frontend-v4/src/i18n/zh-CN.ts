@@ -10,6 +10,7 @@ import { zhCNSort } from './zh-CN.sort'
 import { zhCNSettings } from './zh-CN.settings'
 import { zhCNTools } from './zh-CN.tools'
 import { zhCNSignals } from './zh-CN.signals'
+import { zhCNPixai } from './zh-CN.pixai'
 
 export const zhCN = {
   ...zhCNPublish,
@@ -23,6 +24,7 @@ export const zhCN = {
   ...zhCNSettings,
   ...zhCNTools,
   ...zhCNSignals,
+  ...zhCNPixai,
   'app.name': 'SD Image Sorter',
   'nav.home': '首页',
   'nav.library': '图库',

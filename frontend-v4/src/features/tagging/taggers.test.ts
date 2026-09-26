@@ -30,6 +30,20 @@ describe('tagger readiness', () => {
     expect(readiness(taggerInfo('oppai-oracle-v1.1'), undefined)).toBe('check')
   })
 
+  test('PixAI v1.0 sits on the WD14 card, says its size and is the PixAI pick, not the default', () => {
+    const v1 = taggerInfo('pixai-tagger-v1.0')
+    expect(v1).toMatchObject({ label: 'PixAI v1.0', note: 'tagger.note.pixaiV10', card: 'wd14', variant: 'pixai-tagger-v1.0', sizeHint: '2 GB' })
+    expect(v1.familyPick).toBe('tagging.pixaiPick')
+    expect(taggerInfo('pixai-tagger-v0.9').familyPick).toBeUndefined()
+    expect(taggerInfo('wd-swinv2-tagger-v3').familyPick).toBeUndefined()
+
+    const wd14 = (installed: string[]): ModelCard[] => [
+      { id: 'wd14', status: 'ready', variants: ['wd-swinv2-tagger-v3', 'pixai-tagger-v0.9', 'pixai-tagger-v1.0'], installed_variants: installed },
+    ]
+    expect(readiness(v1, wd14(['wd-swinv2-tagger-v3', 'pixai-tagger-v1.0']))).toBe('ready')
+    expect(readiness(v1, wd14(['wd-swinv2-tagger-v3']))).toBe('download')
+  })
+
   test('captioners are not offered as taggers', () => {
     expect(isTagger('toriigate-0.5')).toBe(false)
     expect(isTagger('wd-swinv2-tagger-v3')).toBe(true)

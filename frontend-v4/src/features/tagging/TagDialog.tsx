@@ -140,6 +140,11 @@ export function TagDialog({ ids, count, onClose }: Props) {
               <span className={styles.name}>
                 {inf.label}
                 {m.recommended && <span className={styles.badge}>{t('tagging.recommended')}</span>}
+                {!m.recommended && inf.familyPick && (
+                  <span className={styles.badge} data-kind="family">
+                    {t(inf.familyPick)}
+                  </span>
+                )}
               </span>
               <span className={styles.note}>{t(inf.note)}</span>
               <span className={styles.state} data-state={statusKnown ? r : 'checking'}>

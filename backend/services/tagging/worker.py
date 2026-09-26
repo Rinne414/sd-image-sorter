@@ -344,6 +344,7 @@ def _tagging_worker_run(
                 runtime_backend_reason=runtime_backend_reason,
                 memory_pressure_warning=memory_pressure_warning,
                 last_run_stats=last_run_stats,
+                model=effective_model_name,
             )
         )
 
