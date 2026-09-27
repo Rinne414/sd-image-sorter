@@ -203,9 +203,18 @@ function _renderReconnectResultPanel(progress) {
         ? `<div class="reconnect-result-path"><span>${escapeHtml(label)}</span><code>${escapeHtml(value)}</code></div>`
         : '';
     const emptyText = appT('reconnect.resultEmpty', 'Nothing to show here.');
-    const renderItems = (items, renderItem) => items.length
-        ? items.slice(0, 5).map(renderItem).join('')
-        : `<div class="reconnect-result-empty">${escapeHtml(emptyText)}</div>`;
+    // A group shows a few examples; when the total is larger, it says so.
+    const renderItems = (items, renderItem, total = items.length) => {
+        if (!items.length) return `<div class="reconnect-result-empty">${escapeHtml(emptyText)}</div>`;
+        const shown = items.slice(0, 5);
+        const more = total > shown.length
+            ? `<div class="reconnect-result-empty">${escapeHtml(appT('reconnect.showingFirst', 'Showing the first {shown} of {total}.')
+                .replace('{shown}', String(shown.length))
+                .replace('{total}', String(total)))}</div>`
+            : '';
+        return shown.map(renderItem).join('') + more;
+    };
+    const conflictTotal = Number(result.conflicts || conflicts.length || 0);
 
     panel.innerHTML = `
         <div class="reconnect-result-summary">
@@ -216,14 +225,14 @@ function _renderReconnectResultPanel(progress) {
                 .replace('{libraryMissing}', String(libraryMissingTotal)))}</span>
         </div>
         <details class="reconnect-result-group" open>
-            <summary>${escapeHtml(appT('reconnect.resultUpdated', 'Reconnected'))} <span>${updated.length}</span></summary>
+            <summary>${escapeHtml(appT('reconnect.resultUpdated', 'Reconnected'))} <span>${matched || updated.length}</span></summary>
             ${renderItems(updated, (item) => `
                 <div class="reconnect-result-item">
                     <strong>${escapeHtml(item.filename || `#${item.image_id}`)}</strong>
                     ${pathLine(appT('reconnect.oldPathLabel', 'Old'), item.old_path)}
                     ${pathLine(appT('reconnect.newPathLabel', 'New'), item.new_path)}
                 </div>
-            `)}
+            `, matched || updated.length)}
         </details>
         <details class="reconnect-result-group" ${needsReview.length ? 'open' : ''}>
             <summary>${escapeHtml(appT('reconnect.resultNeedsReview', 'Need your choice'))} <span>${Number(result.review_pending_total || needsReview.length || 0)}</span></summary>
@@ -241,8 +250,8 @@ function _renderReconnectResultPanel(progress) {
             `)}
         </details>
         <details class="reconnect-result-group" ${conflicts.length ? 'open' : ''}>
-            <summary>${escapeHtml(appT('reconnect.resultConflicts', 'Already in gallery'))} <span>${conflicts.length}</span></summary>
-            ${renderItems(conflicts, (item) => `
+            <summary>${escapeHtml(appT('reconnect.resultConflicts', 'Already in gallery'))} <span>${conflictTotal}</span></summary>
+            <div class="reconnect-result-list">${conflicts.length ? conflicts.map((item) => `
                 <div class="reconnect-result-item">
                     <strong>${escapeHtml(item.filename || '')}</strong>
                     <p>${escapeHtml(appT('reconnect.conflictHelp', 'The file at the new path is already in the gallery. If the old missing record is just a duplicate, remove it from the gallery.'))}</p>
@@ -250,17 +259,17 @@ function _renderReconnectResultPanel(progress) {
                     ${pathLine(appT('reconnect.existingPathLabel', 'Already indexed'), item.existing_path)}
                     ${item.old_image_id ? `<button type="button" class="btn btn-ghost btn-small reconnect-remove-old" data-reconnect-remove-id="${escapeHtml(item.old_image_id)}">${escapeHtml(appT('reconnect.removeOldRecord', 'Remove old gallery record'))}</button>` : ''}
                 </div>
-            `)}
+            `).join('') : `<div class="reconnect-result-empty">${escapeHtml(emptyText)}</div>`}</div>
         </details>
         <details class="reconnect-result-group" ${stillMissing.length ? '' : ''}>
-            <summary>${escapeHtml(appT('reconnect.resultStillMissing', 'Still missing'))} <span>${stillMissing.length}</span></summary>
+            <summary>${escapeHtml(appT('reconnect.resultStillMissing', 'Still missing'))} <span>${missing || stillMissing.length}</span></summary>
             ${renderItems(stillMissing, (item) => `
                 <div class="reconnect-result-item">
                     <strong>${escapeHtml(item.filename || `#${item.image_id}`)}</strong>
                     <p>${escapeHtml(appT('reconnect.stillMissingHelp', 'The file was not found in the folder you chose. Try a wider folder or reconnect the drive.'))}</p>
                     ${pathLine(appT('reconnect.oldPathLabel', 'Old'), item.old_path)}
                 </div>
-            `)}
+            `, missing || stillMissing.length)}
         </details>
         ${errors.length ? `<details class="reconnect-result-group" open>
             <summary>${escapeHtml(appT('reconnect.resultErrors', 'Errors'))} <span>${errors.length}</span></summary>

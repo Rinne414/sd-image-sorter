@@ -4867,6 +4867,7 @@ window.I18nLang_zhCN = {
     'reconnect.removeOldRecord': '移除旧的图库记录',
     'reconnect.resultConflicts': '已在图库中',
     'reconnect.resultEmpty': '这里没有可显示的内容。',
+    'reconnect.showingFirst': '只列出前 {shown} 条，共 {total} 条。',
     'reconnect.resultErrors': '错误',
     'reconnect.resultNeedsReview': '需要你确认',
     'reconnect.resultStillMissing': '仍然缺失',

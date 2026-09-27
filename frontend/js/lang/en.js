@@ -4870,6 +4870,7 @@ window.I18nLang_en = {
     'reconnect.removeOldRecord': 'Remove old gallery record',
     'reconnect.resultConflicts': 'Already in gallery',
     'reconnect.resultEmpty': 'Nothing to show here.',
+    'reconnect.showingFirst': 'Showing the first {shown} of {total}.',
     'reconnect.resultErrors': 'Errors',
     'reconnect.resultNeedsReview': 'Need your choice',
     'reconnect.resultStillMissing': 'Still missing',

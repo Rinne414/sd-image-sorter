@@ -346,15 +346,16 @@ class ReconnectMixin:
                         result["conflicts"] += 1
                         accounted_image_ids.add(image_id)
                         refresh_scoped_missing_counts()
-                        if len(result["conflict_samples"]) < 10:
-                            result["conflict_samples"].append({
-                                "filename": filename,
-                                "old_image_id": image_id,
-                                "old_path": match.get("path"),
-                                "found_path": resolved_found_path,
-                                "existing_image_id": existing_at_found_path.get("id"),
-                                "existing_path": existing_at_found_path.get("path"),
-                            })
+                        # Every conflict is listed: each one carries its own
+                        # "remove the old record" action on the result page.
+                        result["conflict_samples"].append({
+                            "filename": filename,
+                            "old_image_id": image_id,
+                            "old_path": match.get("path"),
+                            "found_path": resolved_found_path,
+                            "existing_image_id": existing_at_found_path.get("id"),
+                            "existing_path": existing_at_found_path.get("path"),
+                        })
                         emit(current_item=filename)
                         continue
 

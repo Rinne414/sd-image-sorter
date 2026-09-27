@@ -7462,6 +7462,12 @@ html:not(.lang-zh) .filter-sidebar .btn-ghost.full-width {
     display: none;
 }
 
+/* Every "already in gallery" conflict is listed; a long list scrolls in place. */
+.reconnect-result-list {
+    max-height: 320px;
+    overflow-y: auto;
+}
+
 .reconnect-result-item {
     background: rgba(255, 255, 255, 0.045);
     border-radius: 10px;
