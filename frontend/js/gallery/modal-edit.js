@@ -145,10 +145,24 @@ Object.assign(window.Gallery, {
         const api = app.API;
         try {
             // Undo newest-first so each restore sees the state it recorded.
+            // The backend skips an image whose tags changed again since the
+            // edit; say so instead of claiming the tags were restored.
+            let restored = 0;
+            let skipped = 0;
             for (const opId of [...opIds].reverse()) {
-                await api.post(`/api/tags/bulk/undo/${encodeURIComponent(opId)}`, {});
+                const result = await api.post(`/api/tags/bulk/undo/${encodeURIComponent(opId)}`, {});
+                restored += Number(result?.restored || 0);
+                skipped += Array.isArray(result?.skipped_conflicts) ? result.skipped_conflicts.length : 0;
             }
-            app.showToast?.(this._t('modal.tagsRestored', null, 'Tags restored'), 'success');
+            if (skipped > 0 && restored === 0) {
+                app.showToast?.(this._t('modal.tagsUndoSkipped', null,
+                    'Not undone: the tags of this image were changed again after this edit'), 'warning');
+            } else if (skipped > 0) {
+                app.showToast?.(this._t('modal.tagsUndoPartial', null,
+                    'Partly undone: the parts changed again after this edit were kept'), 'warning');
+            } else {
+                app.showToast?.(this._t('modal.tagsRestored', null, 'Tags restored'), 'success');
+            }
             await this._reloadModalTags(id);
             app.loadImages?.();
         } catch (e) {

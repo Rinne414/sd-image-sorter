@@ -1945,6 +1945,8 @@ window.I18nLang_en = {
     'modal.addTagPlaceholder': 'Add a tag, press Enter',
     'modal.tagsSaved': 'Tags updated',
     'modal.tagsRestored': 'Tags restored',
+    'modal.tagsUndoSkipped': 'Not undone: the tags of this image were changed again after this edit',
+    'modal.tagsUndoPartial': 'Partly undone: the parts changed again after this edit were kept',
     'modal.tagsSaveFailed': 'Failed to update tags',
     'modal.showMore': 'Show More',
     'modal.showLess': 'Show Less',
