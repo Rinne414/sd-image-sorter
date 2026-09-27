@@ -28,7 +28,7 @@ _update_service_provider = ServiceProvider(UpdateService)
 class ApplyUpdateRequest(BaseModel):
     force_check: bool = True
     relaunch: bool = True
-    # Ask first when jobs are running (V4 sends it; V3.5 installs without asking).
+    # Ask first when jobs are running (V4 and V3.5 send it; older clients do not).
     check_busy: bool = False
 
 
