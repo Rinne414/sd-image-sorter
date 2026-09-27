@@ -43,6 +43,11 @@ from services.image_metadata_writer import (
     warning_codes_for,
     write_image_atomically,
 )
+from services.image_metadata_records import (
+    build_nai_pnginfo,
+    keep_unshown_parameter_settings,
+    nai_comment_record,
+)
 from thumbnail_cache import (
     generate_placeholder_thumbnail,
     clear_cache as clear_thumbnail_cache,
@@ -236,19 +241,28 @@ class ServingMixin:
                 if icc_profile:
                     save_kwargs["icc_profile"] = icc_profile
 
-                dropped_settings = dropped_parameter_settings_warning(source_chunks, parameters_text)
+                # Settings the editor does not show stay in the saved block.
+                record_text = keep_unshown_parameter_settings(parameters_text, source_chunks)
+                dropped_settings = dropped_parameter_settings_warning(source_chunks, record_text)
                 if dropped_settings:
                     warnings.append(dropped_settings)
 
-                if pil_format == "PNG":
+                nai_record = nai_comment_record(source_chunks) if pil_format == "PNG" else None
+                if nai_record is not None:
+                    # A NovelAI PNG takes the edit in its own record, with no
+                    # A1111 block that would make it read back as WebUI.
+                    save_kwargs["pnginfo"] = build_nai_pnginfo(
+                        normalized_metadata, source_chunks, nai_record, warnings
+                    )
+                elif pil_format == "PNG":
                     save_kwargs["pnginfo"] = build_pnginfo(
                         normalized_metadata,
-                        parameters_text,
+                        record_text,
                         source_chunks=source_chunks,
                         warnings=warnings,
                     )
                 else:
-                    exif_bytes = build_exif_bytes(image, parameters_text)
+                    exif_bytes = build_exif_bytes(image, record_text)
                     if exif_bytes:
                         save_kwargs["exif"] = exif_bytes
                     save_kwargs["quality"] = int(quality if quality is not None else (92 if pil_format == "JPEG" else 95))
