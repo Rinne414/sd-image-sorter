@@ -159,6 +159,8 @@ Object.assign(API, {
         return this.post('/api/updates/apply', {
             force_check: options.forceCheck ?? true,
             relaunch: options.relaunch ?? true,
+            // true: answer {status: "busy", jobs} instead of installing over running work.
+            check_busy: options.checkBusy === true,
         });
     },
 

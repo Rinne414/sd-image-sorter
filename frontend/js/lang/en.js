@@ -2594,6 +2594,8 @@ window.I18nLang_en = {
     'models.restartTakingLong': 'The restart is taking longer than usual. Check the launcher window for errors, then reload this page.',
     'models.restartReloadPage': 'Reload',
     'restartBusy.title': 'Restart now?',
+    'update.busyTitle': 'Install the update now?',
+    'update.busyBody': 'Still running: {jobs}. Installing restarts the program and stops it; you can start it again afterwards. Install anyway?',
     'restartBusy.body': 'Still running: {jobs}. Restarting stops it; you can start it again afterwards. Restart anyway?',
     'restartBusy.separator': ', ',
     'restartBusy.job.scan': 'a folder scan',

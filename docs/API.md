@@ -1543,7 +1543,7 @@ Restart the app without applying an update. Feature setup uses this after an ins
 Return `{boot_id}`, a value that changes every time the server starts. After `POST /api/updates/restart`, the page polls this until the id differs from the one it was given, then reloads.
 
 #### POST /api/updates/apply
-Apply a downloaded update package.
+Apply a downloaded update package. Body: `{force_check?: bool, relaunch?: bool, check_busy?: bool}` (defaults `true`, `true`, `false`). With `check_busy: true`, an install while work is running returns `{status: "busy", jobs, boot_id}` (the same ids as `POST /api/updates/restart`) before anything is downloaded or scheduled, so the page can ask the user; sending it again with `check_busy: false` installs anyway. Without the flag the endpoint installs as before (older clients; V4 and V3.5 send it).
 
 When an update is scheduled, response includes `pending_manifest` and `restart_required`. The updater validates archive entries and the package manifest before copying files, and rejects protected runtime paths such as `data/`, `update/downloads/`, `update/logs/`, `update/state/`, `update/worker/`, and `update/backups/`.
 

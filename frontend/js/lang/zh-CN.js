@@ -2770,6 +2770,8 @@ window.I18nLang_zhCN = {
     'models.restartTakingLong': '重启比平时久。看看启动窗口有没有报错，然后刷新这个页面。',
     'models.restartReloadPage': '刷新',
     'restartBusy.title': '现在重启吗？',
+    'update.busyTitle': '现在安装更新吗？',
+    'update.busyBody': '还在进行：{jobs}。安装更新会重启程序并中断它，之后可以再开始。仍要安装吗？',
     'restartBusy.body': '还在进行：{jobs}。重启会中断它，重启后可以再开始。仍要重启吗？',
     'restartBusy.separator': '、',
     'restartBusy.job.scan': '文件夹扫描',

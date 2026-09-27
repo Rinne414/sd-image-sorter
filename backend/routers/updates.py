@@ -28,6 +28,8 @@ _update_service_provider = ServiceProvider(UpdateService)
 class ApplyUpdateRequest(BaseModel):
     force_check: bool = True
     relaunch: bool = True
+    # Ask first when jobs are running (V4 and V3.5 send it; older clients do not).
+    check_busy: bool = False
 
 
 class RestartAppRequest(BaseModel):
@@ -127,7 +129,16 @@ def restart_app(payload: RestartAppRequest) -> dict:
 def apply_update(payload: ApplyUpdateRequest) -> dict:
     """
     Download and stage the latest update, then shut down so the worker can patch files.
+
+    Installing stops whatever is running. With ``check_busy`` it first answers
+    ``busy`` with the running jobs, like ``/restart``, before anything is
+    downloaded, and the page asks the user.
     """
+    if payload.check_busy:
+        busy = collect_busy_jobs()
+        if busy:
+            return {"status": "busy", "jobs": busy, "boot_id": app_lifecycle.BOOT_ID}
+
     try:
         result = get_update_service().prepare_update(
             force_check=payload.force_check,

@@ -227,3 +227,74 @@ def test_apply_update_returns_503_on_failure(test_client):
 
     assert response.status_code == 503
     assert response.json()["error"] == "boom"
+
+
+def _scheduled_apply_service() -> FakeUpdateService:
+    return FakeUpdateService(apply_payload={"status": "scheduled", "latest_version": "3.1.1"})
+
+
+def test_apply_update_checking_busy_answers_busy_and_downloads_nothing(test_client, monkeypatch):
+    """A scan or tag started in another tab or in V3.5 would be cut off mid-write by the install."""
+    import app_lifecycle
+
+    fake = _scheduled_apply_service()
+    updates.set_update_service(fake)
+    monkeypatch.setattr(updates, "collect_busy_jobs", lambda: ["scan", "tagging"])
+    exit_calls: list[str] = []
+    monkeypatch.setattr(updates, "_schedule_process_exit", lambda *args, **kwargs: exit_calls.append("exit"))
+
+    response = test_client.post(
+        "/api/updates/apply",
+        json={"force_check": True, "relaunch": True, "check_busy": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "busy",
+        "jobs": ["scan", "tagging"],
+        "boot_id": app_lifecycle.BOOT_ID,
+    }
+    assert fake.apply_calls == []
+    assert exit_calls == []
+
+
+def test_apply_update_checking_busy_installs_when_nothing_runs(test_client, monkeypatch):
+    fake = _scheduled_apply_service()
+    updates.set_update_service(fake)
+    monkeypatch.setattr(updates, "collect_busy_jobs", lambda: [])
+    exit_calls: list[str] = []
+    monkeypatch.setattr(updates, "_schedule_process_exit", lambda *args, **kwargs: exit_calls.append("exit"))
+
+    response = test_client.post(
+        "/api/updates/apply",
+        json={"force_check": True, "relaunch": True, "check_busy": True},
+    )
+
+    assert response.json()["status"] == "scheduled"
+    assert fake.apply_calls == [(True, True)]
+    assert exit_calls == ["exit"]
+
+
+def test_apply_update_without_check_busy_installs_as_before_while_jobs_run(test_client, monkeypatch):
+    """V3.5 sends no flag, and "Install anyway" sends it off: neither asks about jobs."""
+    looked: list[bool] = []
+
+    def busy() -> list[str]:
+        looked.append(True)
+        return ["scan"]
+
+    monkeypatch.setattr(updates, "collect_busy_jobs", busy)
+    monkeypatch.setattr(updates, "_schedule_process_exit", lambda *args, **kwargs: None)
+
+    for body in (
+        {"force_check": True, "relaunch": True},
+        {"force_check": True, "relaunch": True, "check_busy": False},
+    ):
+        fake = _scheduled_apply_service()
+        updates.set_update_service(fake)
+
+        response = test_client.post("/api/updates/apply", json=body)
+
+        assert response.json() == {"status": "scheduled", "latest_version": "3.1.1"}
+        assert fake.apply_calls == [(True, True)]
+    assert looked == []

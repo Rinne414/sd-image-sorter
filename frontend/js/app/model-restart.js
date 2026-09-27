@@ -214,12 +214,17 @@ const RESTART_BUSY_JOB_NAMES = {
     ai: ['restartBusy.job.ai', 'AI work'],
 };
 
-function _confirmRestartWhileBusy(jobs) {
+// The running jobs as one readable list (also used before installing an update).
+function describeBusyJobs(jobs) {
     const names = (Array.isArray(jobs) ? jobs : []).map((id) => {
         const entry = RESTART_BUSY_JOB_NAMES[id] || RESTART_BUSY_JOB_NAMES.background_jobs;
         return _prepareRestartT(entry[0], entry[1]);
     });
-    const list = [...new Set(names)].join(_prepareRestartT('restartBusy.separator', ', '));
+    return [...new Set(names)].join(_prepareRestartT('restartBusy.separator', ', '));
+}
+
+function _confirmRestartWhileBusy(jobs) {
+    const list = describeBusyJobs(jobs);
     const title = _prepareRestartT('restartBusy.title', 'Restart now?');
     const message = _prepareRestartT(
         'restartBusy.body',

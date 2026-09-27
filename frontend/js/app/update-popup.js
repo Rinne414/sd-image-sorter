@@ -116,6 +116,22 @@ function buildUpdateConfirmMessage(status) {
     });
 }
 
+function _confirmInstallWhileBusy(jobs) {
+    const list = typeof describeBusyJobs === 'function' ? describeBusyJobs(jobs) : (jobs || []).join(', ');
+    return new Promise((resolve) => {
+        showConfirm(
+            appT('update.busyTitle', 'Install the update now?'),
+            appT(
+                'update.busyBody',
+                'Still running: {jobs}. Installing restarts the program and stops it; you can start it again afterwards. Install anyway?',
+                { jobs: list }
+            ),
+            () => resolve(true),
+            () => resolve(false)
+        );
+    });
+}
+
 async function applyAppUpdate(status = AppState.update.status) {
     if (!status?.has_update) {
         return null;
@@ -124,7 +140,17 @@ async function applyAppUpdate(status = AppState.update.status) {
     showGlobalLoading(appT('update.downloading', 'Downloading update...'));
     setUpdateButtonState(status, true);
     try {
-        const result = await API.applyUpdate({ forceCheck: true, relaunch: true });
+        let result = await API.applyUpdate({ forceCheck: true, relaunch: true, checkBusy: true });
+        // Installing restarts the program and stops whatever runs: ask first.
+        if (result?.status === 'busy') {
+            hideGlobalLoading();
+            if (!(await _confirmInstallWhileBusy(result.jobs))) {
+                setUpdateButtonState(status, false);
+                return { status: 'declined', jobs: result.jobs };
+            }
+            showGlobalLoading(appT('update.downloading', 'Downloading update...'));
+            result = await API.applyUpdate({ forceCheck: true, relaunch: true, checkBusy: false });
+        }
         if (result?.status !== 'scheduled') {
             hideGlobalLoading();
             setUpdateButtonState(result, false);
