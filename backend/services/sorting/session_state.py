@@ -222,8 +222,8 @@ class SessionStateMixin:
     def _sort_session_library(self) -> Dict[str, Any]:
         """The library the session's images belong to, as ``library_id`` and ``library_mixed``.
 
-        The one saved session is shared by every library and by V3.5, so the
-        V4 page compares this with the library it has open and says so when
+        The one saved session is shared by every library, so a page compares
+        this with the library it has open and says so before resuming when
         they differ. Images from more than one library are "mixed" (no
         ``library_id``). Every image counts, in one query of any size: the ids
         go in as one JSON array, and each library the index holds is checked
