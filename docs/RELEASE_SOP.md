@@ -88,9 +88,10 @@ What the updater does (`backend/services/update_service_delivery.py`, tests in
 `backend/tests/test_update_vopus_releases.py`):
 
 - It reads the release **list** beside GitHub's latest-release endpoint
-  (`/repos/<owner>/<repo>/releases`, the first page: the 30 most recently
-  created releases), through the update proxy when one is set. The GitHub
-  "Latest" flag therefore does not matter to Vopus.
+  (`/repos/<owner>/<repo>/releases?per_page=100`, newest created first),
+  through the update proxy when one is set. It reads the next page only while
+  a full page holds no Vopus release, three pages (300 releases) at most. The
+  GitHub "Latest" flag does not matter to Vopus.
 - It offers the highest-versioned release whose tag is `vopus-v` followed by a
   version. Drafts, releases marked **pre-release**, V3.5 tags and malformed
   tags are never offered. A Vopus release you want installs to receive must be
@@ -98,13 +99,23 @@ What the updater does (`backend/services/update_service_delivery.py`, tests in
 - A channel URL that answers with one release instead of a list (a custom
   mirror) is checked for the same tag rule.
 
-Effect on the other line: V3.5 installs are never offered a `vopus-v` release
-(V3.5's version compare reads `vopus-v1.0.0` as `opus-v1.0.0`, which sorts
-below every `3.x`), and V4 preview installs (version 3.5.0, same compare)
-are not offered Vopus either: they need the full package. Marking a Vopus
-release "Latest" is safe for both, but it decides where the README's Download
-link (`/releases/latest`) leads; pass `--latest=false` to
-`gh release create` to leave a V3.5 release as Latest.
+**v3.5.0 stays "Latest": publish every Vopus release with `--latest=false`.**
+Older installs read `/releases/latest` and strip only a leading `v`, so a
+Vopus release there reads as `opus-v1.0.0`:
+
+- V3.1.0 to 3.4.3 and 3.5.0-beta.1 compare versions without type tags:
+  `("opus", "v", 1, 0, 0)` against `(3, 4, 3)` raises TypeError, the check
+  reports "Failed to reach the default GitHub update channel … enable VPN",
+  and those users lose the in-app path to v3.5.0.
+- 3.5.0 does not offer it, but shows "Latest Version: opus-v1.0.0" and the
+  Vopus notes in its update popup.
+- V4 preview installs (version 3.5.0, the same updater) are never offered
+  Vopus; they need the full Vopus package. They must not take an in-app 3.5.x
+  update either: it replaces the interface with V3.5, which cannot open the
+  database Vopus upgraded.
+
+With v3.5.0 as Latest, `/releases/latest` leads to V3.5, so the README links
+Vopus users to the releases page and names the `vopus-v` tags.
 
 ## Release Build Steps
 
@@ -124,8 +135,10 @@ python scripts/lazy_release_qa.py --skip-server
 git add . && git commit -m "release: prepare vopus-vX.Y.Z" && git push
 # 7. Create GitHub release with ALL 6 assets (glob uploads every built artifact)
 #    Tag vopus-vX.Y.Z (see "Vopus Tags and the In-App Updater"); never --prerelease
-#    for a release installs should receive.
+#    for a release installs should receive, and always --latest=false so v3.5.0
+#    stays Latest for V3.5 installs.
 gh release create vopus-vX.Y.Z artifacts/release/sd-image-sorter-vopus-vX.Y.Z-* \
+  --latest=false \
   --title "Vopus X.Y.Z" --notes "$(cat release-notes.md)"
 # 8. Verify: 6 assets (windows-portable, app-patch, linux, linux-portable x86_64, linux-portable aarch64, manifest)
 gh release view vopus-vX.Y.Z --json assets --jq '.assets[].name'
@@ -146,7 +159,7 @@ gh release view vopus-vX.Y.Z --json assets --jq '.assets[].name'
 
 - [ ] `backend/app_info.py` version matches
 - [ ] Tag is `vopus-vX.Y.Z` and every asset is named `sd-image-sorter-vopus-vX.Y.Z-*`
-- [ ] Published as a normal release (not pre-release); Latest flag chosen on purpose
+- [ ] Published as a normal release (not pre-release) with `--latest=false`; `gh api repos/Rinne414/sd-image-sorter/releases/latest --jq .tag_name` still prints a V3.5 tag
 - [ ] `CHANGELOG.md` entry exists with bilingual notes
 - [ ] Full CI green (backend + E2E)
 - [ ] `build_release_packages.py` completes without errors
