@@ -205,3 +205,37 @@ def test_reconnect_api_routes_are_not_captured_by_image_id_route(test_client, tm
     payload = progress.json()
     assert payload["status"] == "done"
     assert payload["matched"] == 1
+
+
+def test_every_already_indexed_conflict_is_listed_not_only_ten(test_db, tmp_path):
+    """V3.5 #16: the result listed the first 10 conflicts, and the page counted that list."""
+    from services.image_service import ImageService
+
+    old_ids = []
+    for index in range(12):
+        name = f"conflict-{index}.png"
+        found = _make_image(tmp_path / "new" / name)
+        stat = found.stat()
+        old_ids.append(
+            test_db.add_image(
+                path=str(tmp_path / "old" / name),
+                filename=name,
+                metadata_json="{}",
+                file_size=stat.st_size,
+                source_size=stat.st_size,
+                source_mtime_ns=stat.st_mtime_ns,
+            )
+        )
+        test_db.add_image(
+            path=str(found),
+            filename=name,
+            metadata_json="{}",
+            file_size=stat.st_size,
+            source_size=stat.st_size,
+            source_mtime_ns=stat.st_mtime_ns,
+        )
+
+    result = ImageService().reconnect_missing_files_once(str(tmp_path / "new"), recursive=True)
+
+    assert result["conflicts"] == 12
+    assert sorted(item["old_image_id"] for item in result["conflict_samples"]) == sorted(old_ids)
