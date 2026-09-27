@@ -978,3 +978,29 @@ def test_coverage_gate_counts_seen_controls_nobody_used(
     )
     assert coverage_gate.main() == 1
     assert "dropped below the committed baseline" in capsys.readouterr().out
+
+
+def test_coverage_gate_fails_a_ledger_that_recorded_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _configure_coverage_gate_fixture(monkeypatch, tmp_path)
+    coverage_gate.COVERAGE_RUN_PATH.write_text(
+        json.dumps({"schemaVersion": 1, "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.parent.mkdir(parents=True)
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.write_text(
+        json.dumps({"status": "passed", "failedTests": [], "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+    next(coverage_gate.LEDGER_DIR.glob("raw-*.jsonl")).write_text("", encoding="utf-8")
+    coverage_gate.BASELINE_PATH.write_text(
+        json.dumps({"min_click_coverage_pct": 0.0, "waivers": []}),
+        encoding="utf-8",
+    )
+
+    assert coverage_gate.main() == 1
+    assert "the click ledger recorded 0 seen and 0 used controls" in capsys.readouterr().out
+

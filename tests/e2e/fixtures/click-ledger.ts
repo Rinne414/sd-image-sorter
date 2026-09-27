@@ -3,7 +3,8 @@
  *
  * Every spec imports { test, expect } from this module instead of
  * '@playwright/test'. The extended `context` fixture:
- *   1. injects fixtures/control-key.js (window.__controlKey / __controlContext /
+ *   1. injects the language packs' strings (window.__uiStrings) and
+ *      fixtures/control-key.js (window.__controlKey / __controlContext /
  *      __controlsInView),
  *   2. records every control a test used (click, or a change/input on a field)
  *      as a "used" row, and every control that was on screen shortly after an
@@ -28,6 +29,36 @@ if (SHARD_INDEX && !/^[1-9]\d*$/.test(SHARD_INDEX)) {
   throw new Error(`PW_SHARD_INDEX must be a positive integer when set, received ${SHARD_INDEX}`)
 }
 const CONTROL_KEY_SCRIPT = path.join(__dirname, 'control-key.js')
+const I18N_DIR = path.resolve(__dirname, '..', '..', '..', 'frontend-v4', 'src', 'i18n')
+// A pack entry: 'key': 'text' (single, double or back quotes; the text may start on the next line).
+const PACK_ENTRY = /'([\w.-]+)':\s*(['"`])((?:\\.|(?!\2)[^\\])*)\2/g
+
+/**
+ * Every short string of the language packs, as [text, key]: exact ones and
+ * templates with {params}. control-key.js names a control by the key its
+ * label was written from, so a tag or batch name in a label is not a new control.
+ */
+function loadUiStrings(): { exact: [string, string][]; templates: [string, string][] } {
+  const exact: [string, string][] = []
+  const templates: [string, string][] = []
+  let files: string[] = []
+  try {
+    files = fs.readdirSync(I18N_DIR).filter((f) => /^(en|zh-CN)(\.[\w-]+)?\.ts$/.test(f))
+  } catch {
+    return { exact, templates }
+  }
+  for (const file of files) {
+    const text = fs.readFileSync(path.join(I18N_DIR, file), 'utf8')
+    for (const m of text.matchAll(PACK_ENTRY)) {
+      const value = m[3]!.replace(/\\(['"`\\])/g, '$1').replace(/\\n/g, ' ')
+      if (value.length > 160) continue
+      ;(value.includes('{') ? templates : exact).push([value, m[1]!])
+    }
+  }
+  return { exact, templates }
+}
+
+const UI_STRINGS = loadUiStrings()
 const FINAL_SNAPSHOT_TIMEOUT_MS = 1500
 
 type Kind = 'used' | 'seen'
@@ -59,6 +90,9 @@ export const test = base.extend({
     await context.exposeBinding('__pwLedgerRecord', (_source, entries: LedgerEntry[]) => {
       if (Array.isArray(entries)) for (const entry of entries) add(entry)
     })
+    await context.addInitScript((strings) => {
+      ;(window as unknown as { __uiStrings?: unknown }).__uiStrings = strings
+    }, UI_STRINGS)
     await context.addInitScript({ path: CONTROL_KEY_SCRIPT })
     await context.addInitScript(() => {
       const w = window as unknown as LedgerWindow

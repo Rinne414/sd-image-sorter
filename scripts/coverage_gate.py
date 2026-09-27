@@ -301,6 +301,14 @@ def main() -> int:
         return 1
 
     inventory_keys = set(seen)
+    if not inventory_keys or not clicked:
+        print(
+            "[coverage-gate] FAIL: the click ledger recorded "
+            f"{len(inventory_keys)} seen and {len(clicked)} used controls; a full "
+            "run records hundreds. Is fixtures/click-ledger.ts still the test "
+            "every spec imports?"
+        )
+        return 1
 
     def waived(key: str) -> bool:
         return any(pattern.search(key) for pattern in waivers)

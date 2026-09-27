@@ -19,18 +19,31 @@ only when that run passed.
 
 ## Control names
 
-- A control with a `data-testid` is `tid:<test id>`; runs of two or more digits
-  become `#`, so `card-1234` and `card-5678` are one control.
-- Otherwise it is `<role or tag>[<input type>]:<accessible name>`, prefixed by
-  the nearest ancestor's test id, so "Close" in two dialogs stays two controls.
-- Contexts: `dialog:<label>`, `menu:<label>`, `listbox:<label>`, or
-  `page:<name>` (the hash for Settings and Tools pages, else the page root's
-  test id, else the current top-bar tab).
+A name must depend on the interface, never on the test data: seeding an image
+with 15 tags must not add 15 controls.
+
+- A control with a `data-testid` is `tid:<test id>`; every run of digits
+  becomes `#`, so `card-1234` and `card-5` are one control.
+- Otherwise it is `<role or tag>[<input type>]:<name>`, prefixed by the
+  nearest ancestor's test id (so "Close" in two dialogs stays two controls).
+  `<name>` is, in this order:
+  1. `@<key>`: the language-pack key the label was written from, found by
+     exact text or by template ("Remove tag {tag}" matches every tag). The
+     ledger reads `frontend-v4/src/i18n/{en,zh-CN}*.ts` at start-up.
+  2. `(row)`: a label no pack wrote, on a control inside a row the data fills
+     (`li`, table row, tree item, option, menu item, tag chip): every row is
+     one control.
+  3. `@<key>…`: a label that starts with a UI string and goes on with data or
+     a key hint ("Negative" + the prompt).
+  4. The label itself, numbers folded.
+- Contexts: `dialog:…`, `menu:…`, `listbox:…` (test id, else the label as
+  above), or `page:<name>` (the hash for Settings and Tools pages, else the
+  page root's test id, else the current top-bar tab).
 
 ## What the number means
 
 - **coverage** = used controls (plus waivers) ÷ controls seen anywhere in the
-  suite.
+  suite. A run whose ledger recorded no seen or no used control fails.
 - A control no test ever renders is not counted at all: the ledger measures how
   well the suite uses what it shows, not whether every page is visited. Adding
   a spec that opens a new page therefore adds its controls to the denominator.
@@ -39,7 +52,10 @@ only when that run passed.
 ## Common commands
 
 ```bash
-# after a partial local run (skips when the run artifacts are missing)
+# after a sharded run (the runner wrote artifacts/click-coverage-run.json)
+python scripts/coverage_gate.py --expected-run-id "$(python -c "import json;print(json.load(open('artifacts/click-coverage-run.json'))['runId'])")"
+
+# before any full run has left a run marker: reports the missing artifacts, exits 0
 python scripts/coverage_gate.py --allow-missing
 
 # full run (run_ci runs the gate after the sharded E2E)
