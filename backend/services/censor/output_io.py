@@ -547,10 +547,13 @@ class _OutputMixin:
 
     @staticmethod
     def _strip_all_metadata(image: Image.Image) -> Image.Image:
-        """Strip all metadata by creating a clean copy."""
-        clean_image = Image.new(image.mode, image.size)
-        pixel_data_getter = getattr(image, "get_flattened_data", image.getdata)
-        clean_image.putdata(list(pixel_data_getter()))
+        """Strip all metadata by creating a clean copy.
+
+        The raw pixel buffer goes straight into a new image with no info, so
+        no per-pixel Python objects are made (a tuple per pixel took ~6 s and
+        ~480 MB for a 6 MP image).
+        """
+        clean_image = Image.frombytes(image.mode, image.size, image.tobytes())
         # A palette image's pixels are indices into its palette, and the
         # transparent colour is part of the picture, not generation metadata.
         if image.palette is not None and image.mode in ("P", "PA"):
