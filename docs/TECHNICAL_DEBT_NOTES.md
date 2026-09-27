@@ -14,33 +14,33 @@ It records:
 - audit targets worth validating across the whole repo
 - a prompt for another AI to audit debt across the whole software, not just the move/copy/save flows
 
-## V4 note (2026-09-28)
+## Vopus note (2026-09-28)
 
-This repository is the V4 app: the interface is `frontend-v4/` (React +
+This repository is the Vopus app (formerly V4): the interface is `frontend-v4/` (React +
 TypeScript, served at `/v4/`), and the V3.5 frontend (`frontend/`) was removed
 in f9b7b00. Entries below are a historical record; every `frontend/...` path
 in them names a V3.5 file that no longer exists here. Backend entries apply
-to V4 as written. D-numbers point to the V4 decision log
+to Vopus as written. D-numbers point to the decision log
 (`.plans/v4/decisions.md`), kept next to the checkout and not in the
 repository. The entries whose subject was the V3.5 frontend stand as
-follows in V4:
+follows in Vopus:
 
-| Entry | V4 status |
+| Entry | Vopus status |
 |---|---|
-| Debt-05 Gallery selection semantics | Closed for V4: one selection model; "select all matches" resolves ids with `POST /api/images/selection-ids` and keeps them in the normal selection (`.plans/v4/decisions.md` D14). |
-| Debt-08 Bilingual copy per entry point | Closed for V4: every string lives in typed `zh-CN` / `en` packs with key parity enforced by the types, and `frontend-v4/src/i18n/packs.test.ts` guards every pack (no English in zh-CN, no Taiwan terms). Refusals and empty answers go through shared helpers (`unwrap`, `pushRefusal`). |
-| Debt-09 Censor CSS split across layers | Closed for V4: CSS Modules, one module per component, tokens in `src/design/tokens.css` (`docs/DESIGN.md` §css-ownership). |
-| Debt-14 Missing-file review UI | Shipped in V3.5; V4 has its own missing-files review in library status. |
-| Debt-20 Auto-censor model labels | V3.5 fix only; V4's censor step has its own detector picker (`frontend-v4/src/features/censor/DetectPanel.tsx`). |
-| Debt-27 Per-item exclude filters | Shipped in V3.5; V4's library search takes excluded terms with a leading `-` (`frontend-v4/src/lib/queryEdit.ts`). |
-| Audit Target A Obfuscation parity | Locked for V4: the V3.5 engine is kept as `tests/e2e/fixtures/obfuscation/v35-obfuscate-engine.js` and V4's privacy engine is checked byte for byte against it in `frontend-v4/src/features/tools/privacy/engine/engine.test.ts`. |
-| Audit Target B Visible i18n gaps | Closed for V4 (see Debt-08). |
-| Audit Target C Desktop small-screen pressure | Mostly covered for V4: 37 of the 47 V4 page specs end with "fits at" checks at 1366×768, 1920×1080 and 2560×1440 (`docs/DESIGN.md` §desktop-layout). Still without them: browse, dataset-batch, dataset-tagstyle, folder-chooser, libraries, library-status, missing, models, pixiv-export (it checks 2560 on its own) and status. |
-| Audit Target E Large-image client performance | Measured for V4's censor editor: editing stays responsive up to about 45 MP (D31). Reader and privacy tool not measured. |
+| Debt-05 Gallery selection semantics | Closed for Vopus: one selection model; "select all matches" resolves ids with `POST /api/images/selection-ids` and keeps them in the normal selection (`.plans/v4/decisions.md` D14). |
+| Debt-08 Bilingual copy per entry point | Closed for Vopus: every string lives in typed `zh-CN` / `en` packs with key parity enforced by the types, and `frontend-v4/src/i18n/packs.test.ts` guards every pack (no English in zh-CN, no Taiwan terms). Refusals and empty answers go through shared helpers (`unwrap`, `pushRefusal`). |
+| Debt-09 Censor CSS split across layers | Closed for Vopus: CSS Modules, one module per component, tokens in `src/design/tokens.css` (`docs/DESIGN.md` §css-ownership). |
+| Debt-14 Missing-file review UI | Shipped in V3.5; Vopus has its own missing-files review in library status. |
+| Debt-20 Auto-censor model labels | V3.5 fix only; Vopus's censor step has its own detector picker (`frontend-v4/src/features/censor/DetectPanel.tsx`). |
+| Debt-27 Per-item exclude filters | Shipped in V3.5; Vopus's library search takes excluded terms with a leading `-` (`frontend-v4/src/lib/queryEdit.ts`). |
+| Audit Target A Obfuscation parity | Locked for Vopus: the V3.5 engine is kept as `tests/e2e/fixtures/obfuscation/v35-obfuscate-engine.js` and Vopus's privacy engine is checked byte for byte against it in `frontend-v4/src/features/tools/privacy/engine/engine.test.ts`. |
+| Audit Target B Visible i18n gaps | Closed for Vopus (see Debt-08). |
+| Audit Target C Desktop small-screen pressure | Mostly covered for Vopus: 37 of the 47 Vopus page specs end with "fits at" checks at 1366×768, 1920×1080 and 2560×1440 (`docs/DESIGN.md` §desktop-layout). Still without them: browse, dataset-batch, dataset-tagstyle, folder-chooser, libraries, library-status, missing, models, pixiv-export (it checks 2560 on its own) and status. |
+| Audit Target E Large-image client performance | Measured for Vopus's censor editor: editing stays responsive up to about 45 MP (D31). Reader and privacy tool not measured. |
 
-V4 debt that is still open: response types are hand-written in
+Vopus debt that is still open: response types are hand-written in
 `frontend-v4/src/api/types.ts` because most routes have no `response_model`
-(D6). The click-coverage ledger measures V4 controls again
+(D6). The click-coverage ledger measures Vopus controls again
 (`docs/COVERAGE_LEDGER.md`), but only the controls some spec shows: a page no
 spec opens is not counted.
 

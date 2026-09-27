@@ -6,10 +6,11 @@
 
 ## CRITICAL: GitHub Release Notes Structure
 
-The in-app "Check Update" popup (`app.js:_showUpdatePopup`) truncates
-`release_notes` to the **first 200 characters** and displays it as "更新说明".
+Settings › About shows the start of `release_notes`: the summary above the
+first `---`, at most **200 characters** (`notesLead` in
+`frontend-v4/src/features/settings/about/updateState.ts`), as "更新说明".
 The release body is fetched raw from `release.body` via the GitHub API
-(`update_service.py`).
+(`update_service_delivery.py`).
 
 **The first 200 characters MUST be a useful changelog summary, NOT download
 instructions.**
@@ -17,7 +18,7 @@ instructions.**
 ### Required Section Order
 
 ```
-1. Title line (## vX.Y.Z — 中文摘要 / English summary)
+1. Title line (## Vopus X.Y.Z — 中文摘要 / English summary)
 2. 2-3 sentence bilingual changelog summary (this is what users see in-app)
 3. ---
 4. ## Fixed / 修复  (detailed bilingual changelog)
@@ -34,7 +35,7 @@ instructions.**
 ### Title Line Format
 
 ```
-## vX.Y.Z — 中文关键词 + 关键词 / English Keywords + Keywords
+## Vopus X.Y.Z — 中文关键词 + 关键词 / English Keywords + Keywords
 ```
 
 Keep under 80 chars. This becomes the "更新说明" heading.
@@ -68,11 +69,49 @@ Each bullet:
 - release-manifest.json — updater metadata / 更新器元数据
 ```
 
+## Vopus Tags and the In-App Updater
+
+This checkout is **Vopus** (formerly V4). The same GitHub repository also
+publishes V3.5 (tags `vX.Y.Z`, e.g. `v3.5.0`), so Vopus releases carry their
+own prefix:
+
+- **Tag**: `vopus-vX.Y.Z`, lowercase, where `X.Y.Z` is `APP_VERSION` in
+  `backend/app_info.py` (e.g. `vopus-v1.0.0`; a pre-release suffix such as
+  `vopus-v1.1.0-beta.1` is allowed).
+- **Files**: `sd-image-sorter-vopus-vX.Y.Z-<kind>` (the templates in
+  `backend/app_info.py`; `build_release_packages.py` and
+  `lazy_release_qa.py` use the same names).
+- **Notes**: `docs/RELEASE_NOTES_vopus-vX.Y.Z.md`, copied to the root
+  `release-notes.md`; the title line starts `## Vopus X.Y.Z — `.
+
+What the updater does (`backend/services/update_service_delivery.py`, tests in
+`backend/tests/test_update_vopus_releases.py`):
+
+- It reads the release **list** beside GitHub's latest-release endpoint
+  (`/repos/<owner>/<repo>/releases`, the first page: the 30 most recently
+  created releases), through the update proxy when one is set. The GitHub
+  "Latest" flag therefore does not matter to Vopus.
+- It offers the highest-versioned release whose tag is `vopus-v` followed by a
+  version. Drafts, releases marked **pre-release**, V3.5 tags and malformed
+  tags are never offered. A Vopus release you want installs to receive must be
+  published as a normal (not pre-release) release.
+- A channel URL that answers with one release instead of a list (a custom
+  mirror) is checked for the same tag rule.
+
+Effect on the other line: V3.5 installs are never offered a `vopus-v` release
+(V3.5's version compare reads `vopus-v1.0.0` as `opus-v1.0.0`, which sorts
+below every `3.x`), and V4 preview installs (version 3.5.0, same compare)
+are not offered Vopus either: they need the full package. Marking a Vopus
+release "Latest" is safe for both, but it decides where the README's Download
+link (`/releases/latest`) leads; pass `--latest=false` to
+`gh release create` to leave a V3.5 release as Latest.
+
 ## Release Build Steps
 
 ```bash
 # 1. Ensure version in backend/app_info.py matches target
-# 2. Ensure CHANGELOG.md has the version entry
+# 2. Ensure CHANGELOG.md has the version entry and docs/RELEASE_NOTES_vopus-vX.Y.Z.md
+#    exists (copy it to the root release-notes.md)
 # 3. Run full CI
 python scripts/run_ci.py
 # 4. Build packages
@@ -82,12 +121,14 @@ python scripts/build_release_packages.py --version X.Y.Z
 #    fast (archive integrity only; omit it to also boot the backend for a smoke run).
 python scripts/lazy_release_qa.py --skip-server
 # 6. Commit and push
-git add . && git commit -m "release: prepare vX.Y.Z" && git push
+git add . && git commit -m "release: prepare vopus-vX.Y.Z" && git push
 # 7. Create GitHub release with ALL 6 assets (glob uploads every built artifact)
-gh release create vX.Y.Z artifacts/release/sd-image-sorter-vX.Y.Z-* \
-  --title "vX.Y.Z" --notes "$(cat release-notes.md)"
+#    Tag vopus-vX.Y.Z (see "Vopus Tags and the In-App Updater"); never --prerelease
+#    for a release installs should receive.
+gh release create vopus-vX.Y.Z artifacts/release/sd-image-sorter-vopus-vX.Y.Z-* \
+  --title "Vopus X.Y.Z" --notes "$(cat release-notes.md)"
 # 8. Verify: 6 assets (windows-portable, app-patch, linux, linux-portable x86_64, linux-portable aarch64, manifest)
-gh release view vX.Y.Z --json assets --jq '.assets[].name'
+gh release view vopus-vX.Y.Z --json assets --jq '.assets[].name'
 ```
 
 ### Required Assets (always 6)
@@ -104,6 +145,8 @@ gh release view vX.Y.Z --json assets --jq '.assets[].name'
 ### Pre-Release Checklist
 
 - [ ] `backend/app_info.py` version matches
+- [ ] Tag is `vopus-vX.Y.Z` and every asset is named `sd-image-sorter-vopus-vX.Y.Z-*`
+- [ ] Published as a normal release (not pre-release); Latest flag chosen on purpose
 - [ ] `CHANGELOG.md` entry exists with bilingual notes
 - [ ] Full CI green (backend + E2E)
 - [ ] `build_release_packages.py` completes without errors

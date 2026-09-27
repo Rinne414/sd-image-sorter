@@ -1,11 +1,11 @@
-# SD Image Sorter V4 — UI Design Rules
+# SD Image Sorter Vopus — UI Design Rules
 
-This document describes the V4 interface (`frontend-v4/`, React + TypeScript,
-served at `/v4/`; `/` redirects there). It has two layers: **§principles** is
+This document describes the Vopus interface (formerly V4; `frontend-v4/`, React
++ TypeScript, served at `/v4/`; `/` redirects there). It has two layers: **§principles** is
 the design philosophy every surface must serve; the sections after it are
 **micro-invariants** that survived a "wait, why?" review. When a change
 conflicts with either layer, the change is wrong; see `docs/AI_PRINCIPLES.md`
-for the authority order. The D-numbers below point to the V4 decision log,
+for the authority order. The D-numbers below point to the decision log,
 `.plans/v4/decisions.md`, which is kept next to the checkout and is not part
 of the repository (`.plans/` is ignored).
 
@@ -59,7 +59,7 @@ When in doubt: behave like local multi-catalog tools (Eagle libraries /
 Lightroom catalogs class) — durable workspaces, explicit clear/delete — never
 like a temporary viewer or two peer "session vs permanent" galleries.
 
-### Shell and information architecture (V4)
+### Shell and information architecture (Vopus)
 
 5. **Three places, one toolbox.** The top bar holds 图库 (Library), 批次
    (Batches) and 分拣 (Sort); everything else is reached from 工具 (Tools),
@@ -80,9 +80,9 @@ like a temporary viewer or two peer "session vs permanent" galleries.
 10. **Entrances may duplicate; implementations must not.** Two entrances to
     one feature call the same function or open the same page.
 
-### Visual language (V4's own; D9, D10)
+### Visual language (Vopus's own; D9, D10)
 
-11. **Two themes of V4's own, never a copy of V3.5's Dusk.** Dark
+11. **Two themes of Vopus's own, never a copy of V3.5's Dusk.** Dark
     "darkroom" (warm near-black, paper-white type, amber edge print) and
     light "proof" (a contact sheet on proof paper, ink type). The default
     follows Windows; the choice is stored in `sd-v4-theme`.
@@ -247,7 +247,7 @@ Prioritize size honesty + cleanup (thumbs, models, vacuum) over cloud quotas.
 - A page's spec ends with a "fits at W×H" test over `VIEWPORTS`
   (`tests/e2e/fixtures/v4-seed.ts`) that checks the primary action is in the
   viewport (`toBeInViewport`, not `toBeVisible`) and that nothing overlaps,
-  clips or scrolls sideways. 37 of the 47 V4 page specs have one (four more specs test the API only); these do not yet:
+  clips or scrolls sideways. 37 of the 47 Vopus page specs (`v4-*.spec.ts`) have one (four more specs test the API only); these do not yet:
   browse, dataset-batch, dataset-tagstyle, folder-chooser, libraries, library-status, missing, models, pixiv-export (it checks 2560 on its own) and status. A new page's spec must have one.
   `backend/tests/test_desktop_viewport_contract.py` only rejects browser
   viewports narrower than 1280 px; it does not check that the fits-at tests
@@ -320,7 +320,7 @@ download always ends with its own result (D52).
 ## Maintenance
 
 - Update this file when a rule above is revised or reverted, and record the
-  decision in the V4 decision log (`.plans/v4/decisions.md`, outside the
+  decision in the decision log (`.plans/v4/decisions.md`, outside the
   repository).
 - Add a section every time a UI rule survives a "wait, why?" review.
 - Cross-reference rules from CSS comments with the `§<slug>` anchor.

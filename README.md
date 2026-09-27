@@ -311,7 +311,7 @@ run.bat
 > Windows 便携版自带 Python 3.12。源码 / Linux 用户只要装 Python 3.12 或 3.13 都可以——v3.2.2 起 lockfile 同时锁了两个版本（3.12 走 numpy 1.x，3.13 走 numpy 2.x）。默认只安装轻量核心依赖；CLIP / NudeNet / YOLO / SAM3 / 美学评分 / 画师识别等重型 AI 运行库会在你点击 Feature Setup 的 Prepare / Download 后按需安装。若界面提示已安装 Python 包，请重启应用后再使用该功能。
 
 > [!NOTE]
-> 从源码运行时，V4 界面（`/v4/`，打开 `/` 会自动跳转过去）需要 [Node.js](https://nodejs.org/)：装好后 `run.bat` / `run.sh` 会自动构建。下载的发布包已自带构建好的 V4，不需要 Node.js。
+> 从源码运行时，Vopus 界面（原 V4；地址 `/v4/`，打开 `/` 会自动跳转过去）需要 [Node.js](https://nodejs.org/)：装好后 `run.bat` / `run.sh` 会自动构建。下载的发布包已自带构建好的 Vopus 界面，不需要 Node.js。
 
 ## 下载与运行说明
 
@@ -525,7 +525,7 @@ run.bat
 ```text
 sd-image-sorter/
 ├── backend/            # FastAPI + SQLite + AI model orchestration
-├── frontend-v4/        # V4 UI (React + TypeScript, Vite build)
+├── frontend-v4/        # Vopus UI (React + TypeScript, Vite build)
 ├── data/               # 运行时状态（images.db、thumbnails、models、state 等）
 ├── models/             # 发布时附带的基础模型文件（运行时会同步到 data/models）
 ├── run-portable.bat    # Windows 便携版入口
@@ -712,7 +712,7 @@ cd sd-image-sorter
 > macOS users can run `./run.sh` directly. Apple Silicon and Intel Macs both support the core gallery, organization, and ONNX features. General Torch-backed AI requires **macOS 14+ on Apple Silicon**; SAM3 remains NVIDIA CUDA-only and is unavailable on macOS. Intel or older macOS is rejected before an unsafe legacy Torch install while the core app remains usable.
 
 > [!NOTE]
-> From source, the V4 interface (`/v4/`; `/` redirects there) needs [Node.js](https://nodejs.org/): once it is installed, `run.bat` / `run.sh` build V4 automatically. Release packages ship V4 already built and need no Node.js.
+> From source, the Vopus interface (formerly V4; address `/v4/`, and `/` redirects there) needs [Node.js](https://nodejs.org/): once it is installed, `run.bat` / `run.sh` build it automatically. Release packages ship Vopus already built and need no Node.js.
 
 
 ### What Works Immediately vs. What Needs Setup?

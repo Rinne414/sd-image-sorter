@@ -2,7 +2,7 @@
 
 ## System Overview
 
-SD Image Sorter is a local web application for managing, tagging, sorting, and censoring Stable Diffusion generated images. It runs as a FastAPI backend serving the V4 React frontend at `/v4/` on `127.0.0.1:8487` by default (configurable via `SD_IMAGE_SORTER_PORT`); `/` redirects there.
+SD Image Sorter is a local web application for managing, tagging, sorting, and censoring Stable Diffusion generated images. It runs as a FastAPI backend serving the Vopus React frontend (formerly V4) at `/v4/` on `127.0.0.1:8487` by default (configurable via `SD_IMAGE_SORTER_PORT`); `/` redirects there.
 
 ## Architecture Diagram
 
@@ -29,7 +29,7 @@ SD Image Sorter is a local web application for managing, tagging, sorting, and c
 #### Entry Point
 - **`main.py`**: FastAPI application assembly, service initialization, router mounting, exception handlers, and process startup.
 - **`app_security.py`**: CORS, localhost-only enforcement, in-memory API rate limiting, and security response headers.
-- **`app_static.py`**: serves the V4 build at `/v4/` (hashed assets cached forever, `index.html` never), falls back to `index.html` for client routes, and redirects `/` to `/v4/` with its query string.
+- **`app_static.py`**: serves the Vopus build at `/v4/` (hashed assets cached forever, `index.html` never), falls back to `index.html` for client routes, and redirects `/` to `/v4/` with its query string.
 - **`app_diagnostics.py`**: Bounded support diagnostics, support-log redaction, and file-manager opening for the support log.
 
 #### Routers (`routers/`)
