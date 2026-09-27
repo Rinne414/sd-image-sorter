@@ -8,9 +8,11 @@ and the transparent index was lost with the rest of ``info``.
 
 from __future__ import annotations
 
+import tracemalloc
 from pathlib import Path
 from types import ModuleType
 
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image, PngImagePlugin
 
@@ -80,3 +82,31 @@ def test_saving_an_unedited_palette_png_without_metadata_keeps_its_colours(
     with Image.open(source) as before, Image.open(out_dir / "palette_out.png") as after:
         assert "parameters" not in after.info
         assert after.convert("RGBA").tobytes() == before.convert("RGBA").tobytes()
+
+
+@pytest.mark.parametrize("mode", ["RGB", "RGBA", "L", "LA", "1", "I;16", "CMYK", "P"])
+def test_every_mode_keeps_its_exact_pixels(mode):
+    image = Image.effect_noise((33, 17), 60).convert(mode)
+    image.info["parameters"] = "1girl, secret prompt"
+
+    stripped = CensorService._strip_all_metadata(image)
+
+    assert stripped.mode == mode
+    assert "parameters" not in stripped.info
+    assert stripped.tobytes() == image.tobytes()
+
+
+def test_stripping_does_not_copy_every_pixel_into_python_objects():
+    """#10: a 2 MP strip took ~1.5 s and ~160 MB of Python objects (a tuple per pixel)."""
+    image = Image.effect_noise((1600, 1250), 60).convert("RGB")
+    image.info["parameters"] = "1girl, secret prompt"
+    raw_bytes = len(image.tobytes())
+
+    tracemalloc.start()
+    try:
+        CensorService._strip_all_metadata(image)
+        _current, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+
+    assert peak < 4 * raw_bytes, f"peak {peak / 1e6:.1f} MB for {raw_bytes / 1e6:.1f} MB of pixels"
