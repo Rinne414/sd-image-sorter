@@ -278,6 +278,28 @@ test('with many libraries the menu scrolls inside the window and its clear item 
   }
 })
 
+test('the library menu closes when the window is resized, like the colour picker', async ({ page }) => {
+  // Its height is fitted to the window when it opens, so a menu left open
+  // across a resize would keep a height that no longer fits.
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await openMainPage(page)
+  await page.locator('#nav-library-chip').click()
+  const menu = page.locator('#entry-library-menu')
+  await expect(menu).toBeVisible()
+  await expect(page.locator('#entry-library-switcher')).toHaveAttribute('aria-expanded', 'true')
+
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await expect(menu).toBeHidden()
+  await expect(page.locator('#entry-library-switcher')).toHaveAttribute('aria-expanded', 'false')
+
+  // Reopened, it is fitted to the new window.
+  await page.locator('#entry-library-switcher').click()
+  await expect(menu).toBeVisible()
+  const bottom = await menu.evaluate((node) => node.getBoundingClientRect().bottom)
+  expect(bottom).toBeLessThanOrEqual(768)
+  await expect(menu.locator('.entry-library-menu-clear')).toBeInViewport()
+})
+
 for (const viewport of CLEAR_GALLERY_VIEWPORTS) {
   test(`clear gallery fails closed when job state is unknown at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport)

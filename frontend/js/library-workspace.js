@@ -801,6 +801,10 @@
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') closeMenu();
         });
+        // Its height was fitted to the window on open; close on resize like
+        // the colour picker (theme.js) rather than keep a height that no
+        // longer fits.
+        window.addEventListener('resize', closeMenu);
         window.addEventListener('library-workspace-changed', () => {
             refreshNavChip();
         });
