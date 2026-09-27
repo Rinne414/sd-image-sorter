@@ -793,7 +793,8 @@ def get_exclusion_targets(active_tags: Set[str], rules: List[dict]) -> Set[str]:
             if cond_type == "present" and not tag_present:
                 conditions_met = False
                 break
-            elif cond_type == "absent" and tag_present:
+            # The API stores "missing"; "absent" is the older name. Same meaning.
+            elif cond_type in ("missing", "absent") and tag_present:
                 conditions_met = False
                 break
 
