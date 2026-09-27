@@ -1336,7 +1336,7 @@ Generate one or more prompts.
 | `seed` | int | null | Random seed for reproducibility |
 | `count` | int | 1 | Number of prompts to generate (1-20) |
 | `categories` | object | {} | Manual Prompt Lab slots: `{<category>: {tags, weight, locked}}` |
-| `tag_sets` | array | [] | Tag set ids/names to apply |
+| `tag_sets` | array | [] | Tag set ids/names to apply: required members always, optional members drawn by their weight from the seeded generator (also with `categories`; the slot tags themselves are kept as given) |
 
 Response: `positive_prompt`, `negative_prompt`, `prompt` (alias of `positive_prompt`), `tags_used`, `exclusions_applied`, and `warnings` describe the first generated prompt, plus `count` (prompts actually generated) and `prompts` (array of per-prompt objects with the same fields, length == `count`). With a fixed `seed` and `count > 1`, prompt slot `i` uses `seed + i`, so the batch is varied but reproducible.
 
