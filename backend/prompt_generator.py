@@ -147,6 +147,8 @@ class PromptGenerator:
         self._exclusion_rules: List[Dict[str, Any]] = self._normalize_builtin_exclusion_rules()
         self._user_exclusion_rules: List[Dict[str, Any]] = []
         self._user_tag_sets: List[Dict[str, Any]] = []
+        # The user's own tag -> category choices (tag_categories), by lookup key.
+        self._category_overrides: Dict[str, str] = {}
         self._rng: random.Random = random.Random()
 
     @staticmethod
@@ -252,6 +254,7 @@ class PromptGenerator:
                 for row in cursor.fetchall()
                 if str(row[0] or "").strip() and str(row[1] or "").strip()
             }
+            self._category_overrides = overrides
             if overrides:
                 rebuilt_pool: Dict[str, List[Dict[str, Any]]] = {}
                 for cat_tags in self._tag_pool.values():
@@ -315,6 +318,14 @@ class PromptGenerator:
                     "conditions": conditions,
                     "targets": targets,
                 })
+
+    def _category_of(self, tag: str) -> str:
+        """A tag's category, honouring the user's own category choices."""
+        return self._category_overrides.get(self._normalize_lookup_key(tag)) or categorize_tag(tag)
+
+    def _exclusions(self, active_tag_set: Set[str], rules: List[dict]) -> Set[str]:
+        """Tags the rules exclude now; a category target covers its whole category."""
+        return get_exclusion_targets(active_tag_set, rules, categorize=self._category_of)
 
     def get_all_rules(self) -> List[dict]:
         """Get all exclusion rules (built-in + user-defined)."""
@@ -534,7 +545,7 @@ class PromptGenerator:
             "positive_prompt": positive_prompt,
             "negative_prompt": negative_prompt,
             "tags_used": selected_tags,
-            "exclusions_applied": list(get_exclusion_targets(active_tag_set, all_rules)),
+            "exclusions_applied": list(self._exclusions(active_tag_set, all_rules)),
             "warnings": validation.get("suggestions", []),
         }
 
@@ -640,7 +651,7 @@ class PromptGenerator:
                 self._select_tag(selected_tags, seen_tags, active_tag_set, outfit, "outfit")
 
         # Step 5: Pose (with exclusion checking)
-        excluded = get_exclusion_targets(active_tag_set, all_rules)
+        excluded = self._exclusions(active_tag_set, all_rules)
         pose = config.get("pose")
         pose_tag = self._pick_from_category(
             "pose", pose, excluded, WEIGHTED_GROUPS.get("pose")
@@ -648,7 +659,7 @@ class PromptGenerator:
         if pose_tag:
             self._select_tag(selected_tags, seen_tags, active_tag_set, pose_tag, "pose")
             # Recompute exclusions with new tag
-            excluded = get_exclusion_targets(active_tag_set, all_rules)
+            excluded = self._exclusions(active_tag_set, all_rules)
 
         # Step 6: Camera angle
         angle = config.get("angle")
@@ -657,7 +668,7 @@ class PromptGenerator:
         )
         if angle_tag:
             self._select_tag(selected_tags, seen_tags, active_tag_set, angle_tag, "angle")
-            excluded = get_exclusion_targets(active_tag_set, all_rules)
+            excluded = self._exclusions(active_tag_set, all_rules)
 
         # Step 7: Body features (hair, eyes - respecting exclusions)
         body = config.get("body")
@@ -665,7 +676,7 @@ class PromptGenerator:
             body_tags = self._pick_body_features(excluded)
             for bt in body_tags:
                 self._select_tag(selected_tags, seen_tags, active_tag_set, bt, "body")
-            excluded = get_exclusion_targets(active_tag_set, all_rules)
+            excluded = self._exclusions(active_tag_set, all_rules)
 
         # Step 8: Expression (respecting exclusions)
         expression = config.get("expression")
@@ -712,8 +723,9 @@ class PromptGenerator:
             negative_prompt = self._generate_negative(config)
 
         # Check for warnings
-        excluded_final = get_exclusion_targets(active_tag_set, all_rules)
-        exclusions_applied = [t for t in excluded_final if t in active_tag_set]
+        excluded_final = self._exclusions(active_tag_set, all_rules)
+        # Walk the prompt's tags: a category target has no list of its own.
+        exclusions_applied = sorted(t for t in active_tag_set if t in excluded_final)
         if exclusions_applied:
             for ex in exclusions_applied:
                 warnings.append(f"Tag '{ex}' conflicts with other selected tags")

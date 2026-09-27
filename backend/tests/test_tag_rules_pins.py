@@ -381,10 +381,10 @@ class TestExclusionTargets:
         # Absent -> condition met -> target excluded.
         assert get_exclusion_targets({"1girl"}, rule) == {"foo"}
 
-    def test_category_only_target_is_a_noop(self):
-        # A `{"category": ...}` target with no "tag" is deliberately a no-op
-        # (the categorize_tag-backed category exclusion is not implemented);
-        # named-tag targets in the same rule still apply.
+    def test_category_target_covers_its_category(self, isolated_caches):
+        # A `{"category": ...}` target excludes every tag categorize_tag puts
+        # in that category (#28); iterating still yields only the named tags,
+        # and named-tag targets in the same rule still apply.
         rule = [
             {
                 "name": "c",
@@ -392,7 +392,10 @@ class TestExclusionTargets:
                 "targets": [{"category": "body"}, {"tag": "bar"}],
             }
         ]
-        assert get_exclusion_targets({"solo"}, rule) == {"bar"}
+        excluded = get_exclusion_targets({"solo"}, rule)
+        assert excluded == {"bar"}
+        assert "blue_eyes" in excluded
+        assert "smile" not in excluded
 
     def test_targets_are_underscore_normalized(self):
         rule = [
