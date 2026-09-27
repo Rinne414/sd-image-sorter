@@ -435,11 +435,11 @@ Object.assign(window.ArtistIdent, {
 
         showConfirm(
             this.tKey('artist.clearConfirmTitle', 'Clear Artist Predictions', '清空画师识别结果'),
-            this.tKey('artist.clearConfirmMessage', 'Clear all artist predictions? This cannot be undone.', '要清空全部画师识别结果吗？此操作无法撤销。'),
+            this.tKey('artist.clearConfirmMessage', 'Clear the artist predictions of the current library? Other libraries are not affected. This cannot be undone.', '要清空当前图库的画师识别结果吗？其他图库不受影响。此操作无法撤销。'),
             async () => {
                 try {
                     await API.delete('/api/artists/clear');
-                    showToast(this.tText('All predictions cleared', '已清除所有预测'), 'success');
+                    showToast(this.tText('This library\'s predictions cleared', '已清空当前图库的识别结果'), 'success');
                     this.loadStats();
                 } catch (e) {
                     showToast(formatUserError(e, this.tKey('artist.clearDataFailed', 'Failed to clear data', '清空数据失败')), "error");

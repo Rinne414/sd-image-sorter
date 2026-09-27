@@ -347,6 +347,7 @@ window.I18nLang_zhCN = {
     'library.deleteConfirm': '删除图库「{name}」？它的索引图片、合集和数据集项目会一起移除。磁盘文件保留，其他图库不受影响。',
     'library.deletedToast': '已删除图库「{name}」',
     'library.deleteFailed': '无法删除图库',
+    'library.goneSwitched': '刚才打开的图库已不存在（可能在另一个窗口里删除了），已切换到「{name}」。',
     'library.cannotDeleteMain': '主图库不能删除，请改用「清空当前图库」。',
     'library.renameTitle': '重命名图库',
     'library.renamePrompt': '重命名图库：',
@@ -1951,7 +1952,7 @@ window.I18nLang_zhCN = {
     'artist.progressPrimary': '画师识别',
     'artist.identifyingSelected': '正在识别 {count} 张已选图片...',
     'artist.clearConfirmTitle': '清空画师识别结果',
-    'artist.clearConfirmMessage': '要清空全部画师识别结果吗？此操作无法撤销。',
+    'artist.clearConfirmMessage': '要清空当前图库的画师识别结果吗？其他图库不受影响。此操作无法撤销。',
     'artist.clearDataFailed': '清空数据失败',
 
     // ========================

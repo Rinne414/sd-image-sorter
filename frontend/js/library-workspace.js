@@ -1,7 +1,7 @@
 /**
  * Long-lived multi-library workspaces (DESIGN.md §product-narrative).
  *
- * - One current library id (localStorage + X-SD-Library-Id on API calls)
+ * - One current library id per tab (localStorage read once + X-SD-Library-Id)
  * - Entry home: switch / create / rename / delete (main cannot delete)
  * - Clear gallery clears **current** library only (backend scoped)
  */
@@ -14,7 +14,11 @@
     // Name the backend seeds for the default library (db_libraries.py, migration 037).
     const DEFAULT_LIBRARY_SEED_NAME = 'Main library';
 
-    let _cache = null; // { libraries, currentId }
+    // This tab's library, read from the shared key once. Only a switch made in
+    // this tab changes it; another tab (V3.5 or V4) writing the key never
+    // does, or this tab's requests would name a library it does not show.
+    let _currentId = _readLocal().currentId;
+    let _cache = null; // { libraries }
 
     function _t(key, fallback, params) {
         if (typeof window.appT === 'function') return window.appT(key, fallback, params);
@@ -52,8 +56,7 @@
     }
 
     function getCurrentLibraryId() {
-        if (_cache && _cache.currentId) return _cache.currentId;
-        return _readLocal().currentId || DEFAULT_ID;
+        return _currentId;
     }
 
     function libraryHeaders(extra) {
@@ -141,39 +144,32 @@
         };
     }
 
+    // The list refreshes names and counts only; it never moves this tab to
+    // another tab's choice (see _currentId).
     async function refreshFromServer() {
+        let data = null;
         try {
-            const res = await fetch('/api/libraries', {
-                headers: libraryHeaders({ Accept: 'application/json' }),
-            });
+            const res = await fetch('/api/libraries', { headers: libraryHeaders({ Accept: 'application/json' }) });
             if (!res.ok) throw new Error('libraries_list_failed');
-            const data = await res.json();
-            const libraries = Array.isArray(data.libraries) ? data.libraries : [];
-            let currentId = _readLocal().currentId || DEFAULT_ID;
-            if (!libraries.some((lib) => lib.id === currentId)) {
-                currentId = data.current_id || DEFAULT_ID;
-                if (!libraries.some((lib) => lib.id === currentId)) {
-                    currentId = (libraries[0] && libraries[0].id) || DEFAULT_ID;
-                }
-            }
-            _cache = { libraries, currentId };
-            _writeLocal(currentId);
-            refreshEntryHome();
-            return _cache;
-        } catch (_e) {
-            // Offline / pre-migration backend: keep local main-only view.
-            _cache = {
-                currentId: _readLocal().currentId || DEFAULT_ID,
-                libraries: [{
-                    id: DEFAULT_ID,
-                    name: _t('library.defaultName', 'Main library'),
-                    is_default: true,
-                    image_count: 0,
-                }],
-            };
-            refreshEntryHome();
-            return _cache;
+            data = await res.json();
+        } catch (_e) { /* offline / pre-migration backend: a main-only list */ }
+        const offline = [{ id: DEFAULT_ID, name: _t('library.defaultName', 'Main library'), is_default: true, image_count: 0 }];
+        const libraries = !data ? offline : (Array.isArray(data.libraries) ? data.libraries : []);
+        _cache = { libraries };
+        if (data && !libraries.some((lib) => lib.id === _currentId)) {
+            await leaveMissingLibrary(libraries, data.current_id);
         }
+        refreshEntryHome();
+        return { libraries, currentId: _currentId };
+    }
+
+    // This tab's library is gone (deleted in another window or in V4): switch
+    // the whole way (filters, gallery, chip) to one that exists, and say so.
+    async function leaveMissingLibrary(libraries, serverCurrentId) {
+        const listed = libraries.some((lib) => lib.id === serverCurrentId);
+        await setCurrentLibraryId(listed ? serverCurrentId : ((libraries[0] && libraries[0].id) || DEFAULT_ID));
+        const text = 'The library that was open no longer exists (it may have been deleted in another window). Switched to “{name}”.';
+        window.showToast?.(_t('library.goneSwitched', text, { name: getCurrentLibrary().name }), 'warning');
     }
 
     // Filters, selection and the folder tree belong to the library they were
@@ -197,8 +193,9 @@
         if (prev !== next) {
             saveFilterState();
         }
+        // The shared key records the last choice, for the next launch.
         _writeLocal(next);
-        if (_cache) _cache.currentId = next;
+        _currentId = next;
         refreshEntryHome();
         try {
             window.dispatchEvent(new CustomEvent('library-workspace-changed', {
