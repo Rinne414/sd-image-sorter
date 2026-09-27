@@ -1592,6 +1592,7 @@ window.I18nLang_zhCN = {
     'promptlab.searchTags': '搜索标签...',
     'promptlab.slots': '提示词槽位',
     'promptlab.randomize': '随机生成',
+    'promptlab.fixedSlotsNote': '只用了固定槽位，没有随机部分，所以再点「生成」结果不会变。想要变化请用「随机生成」。',
     'promptlab.clear': '清除',
     'promptlab.output': '生成的提示词',
     'promptlab.affixPanelAria': '生成前后的固定标签',

@@ -275,6 +275,14 @@ Object.assign(window.PromptLab, {
 
         outputEl.value = this.generatedPrompt;
 
+        const fixedNote = document.getElementById('promptlab-fixed-note');
+        if (fixedNote) {
+            fixedNote.hidden = !this.fixedResultNote;
+            fixedNote.textContent = this.fixedResultNote
+                ? this._t('promptlab.fixedSlotsNote', 'Built only from fixed slots: nothing here is random, so Generate gives the same prompt again. Use Randomize for variety.')
+                : '';
+        }
+
         const warningsEl = document.getElementById('promptlab-warnings');
         if (!warningsEl) return;
 

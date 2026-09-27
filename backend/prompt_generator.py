@@ -505,14 +505,17 @@ class PromptGenerator:
         # the seeded generator, as in the automatic mode, so the seed and the
         # number of prompts mean something here too. A draw is made for every
         # optional member so a duplicate cannot shift the seeded sequence.
+        drew_optional = False
         for tag_set in tag_sets:
             for member in tag_set.get("tags", []):
                 if isinstance(member, dict):
                     tag = member.get("tag")
                     category = member.get("category") or tag_set.get("category") or "outfit"
                     required = member.get("required", True)
-                    if not required and self._rng.random() >= float(member.get("weight", 1.0)):
-                        continue
+                    if not required:
+                        drew_optional = True
+                        if self._rng.random() >= float(member.get("weight", 1.0)):
+                            continue
                 else:
                     tag = member
                     category = tag_set.get("category") or "outfit"
@@ -554,6 +557,9 @@ class PromptGenerator:
             "tags_used": selected_tags,
             "exclusions_applied": list(self._exclusions(active_tag_set, all_rules)),
             "warnings": validation.get("suggestions", []),
+            # Slots alone draw nothing: the seed and the number of prompts
+            # cannot change this prompt (the page says so).
+            "random_part": drew_optional,
         }
 
     def generate(self, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -582,6 +588,7 @@ class PromptGenerator:
                 "tags_used": [{"tag": str, "category": str}],
                 "exclusions_applied": [str],
                 "warnings": [str],
+                "random_part": bool,  # False: nothing was drawn (slots only)
             }
         """
         if config is None:
@@ -750,6 +757,7 @@ class PromptGenerator:
             "tags_used": selected_tags,
             "exclusions_applied": list(excluded_final),
             "warnings": warnings,
+            "random_part": True,
         }
 
     def validate_prompt(self, tags: List[str]) -> Dict[str, Any]:

@@ -11,7 +11,9 @@
 Object.assign(window.PromptLab, {
     // ============== Generation ==============
 
-    async generate() {
+    // explainFixed: the Generate button asks for it, so a prompt built only
+    // from fixed slots says why generating again gives the same prompt.
+    async generate({ explainFixed = false } = {}) {
         const { showToast } = window.App;
 
         if (!this.isReady) {
@@ -48,6 +50,7 @@ Object.assign(window.PromptLab, {
             this._readAffixInputs();
             this.generatedPromptCore = result.positive_prompt || result.prompt || '';
             this.generatedPrompt = this._applyPrependAppend(this.generatedPromptCore);
+            this.fixedResultNote = explainFixed && result.random_part === false;
             this.renderOutput();
 
             if (result.warnings?.length > 0) {

@@ -1593,6 +1593,7 @@ window.I18nLang_en = {
     'promptlab.searchTags': 'Search tags...',
     'promptlab.slots': 'Prompt Slots',
     'promptlab.randomize': 'Randomize',
+    'promptlab.fixedSlotsNote': 'Built only from fixed slots: nothing here is random, so Generate gives the same prompt again. Use Randomize for variety.',
     'promptlab.clear': 'Clear',
     'promptlab.output': 'Generated Prompt',
     'promptlab.affixPanelAria': 'Fixed tags before and after Generate',

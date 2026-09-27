@@ -24,7 +24,7 @@ Object.assign(window.PromptLab, {
         const prependInput = document.getElementById('promptlab-prepend');
         const appendInput = document.getElementById('promptlab-append');
 
-        btnGenerate?.addEventListener('click', () => this.generate());
+        btnGenerate?.addEventListener('click', () => this.generate({ explainFixed: true }));
         btnUseGallery?.addEventListener('click', () => this.usePromptInGallery());
         btnRandom?.addEventListener('click', () => this.randomize());
         btnValidate?.addEventListener('click', () => this.validate());

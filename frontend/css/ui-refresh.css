@@ -12395,3 +12395,15 @@ html .nav-bar.nav-measuring * {
 #btn-input-browse[hidden] {
     display: none;
 }
+
+/* Prompt Lab: a prompt built only from fixed slots says why it never changes. */
+.promptlab-fixed-note {
+    margin: 6px 0 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.promptlab-fixed-note[hidden] {
+    display: none;
+}
