@@ -1,4 +1,5 @@
 import { expect, test } from '../fixtures/click-ledger'
+import { markModelsReady } from '../fixtures/model-status'
 
 /**
  * Owner feedback batch 2026-07-05 (v3.5.0): regression tests for
@@ -84,6 +85,9 @@ test('visible Aesthetic controls follow the active task across start, cancel, an
     }
   })
 
+  // Start first checks the model is on disk; the runtime is stubbed below, so its card says so too
+  // (a fresh test server would otherwise ask to download ~2 GB and never send the start).
+  await markModelsReady(page, ['aesthetic'])
   await page.route('**/api/aesthetic/status', async (route) => {
     const available = aestheticAvailable
     if (holdNextStatus) {

@@ -1,5 +1,7 @@
+import fs from 'node:fs'
 import path from 'node:path'
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { execFileSync } from 'node:child_process'
 
 /**
  * Reverse Prompt — drop one image, get a prompt, and know which kind you got.
@@ -40,8 +42,21 @@ type ReverseWindow = typeof window & {
   ReversePrompt: { state: { sourcePath: string } }
 }
 
-// Ships in the repo and carries a real ComfyUI workflow in its PNG text chunks.
-const RECORDED_PNG = path.resolve(__dirname, '../../../backend/favorites/ComfyUI_00208_.png')
+const repoRoot = path.resolve(__dirname, '..', '..', '..')
+const tmpRoot = path.join(repoRoot, '.tmp')
+
+function runBackendScript(script: string): string {
+  const candidates = process.platform === 'win32'
+    ? [path.join(repoRoot, 'backend', 'venv', 'Scripts', 'python.exe'), 'python']
+    : [path.join(repoRoot, 'backend', 'venv', 'bin', 'python'), 'python3']
+  const python = process.env.PW_BACKEND_PYTHON || candidates.find((candidate) => !candidate.includes(path.sep) || fs.existsSync(candidate)) || candidates[0]
+  return execFileSync(python, ['-X', 'utf8', '-c', script], { cwd: repoRoot, stdio: 'pipe' }).toString()
+}
+
+// Carries a real ComfyUI workflow in its PNG text chunks. Written for the run by the
+// shared sample writer: the repo ships no such image (backend/favorites/ is git-ignored).
+const SAMPLES = path.join(tmpRoot, 'reverse-prompt', 'samples')
+const RECORDED_PNG = path.join(SAMPLES, 'v4reader-comfyui.png')
 // A plain UI screenshot: decodable, and recording no prompt at all
 // (generator "unknown", prompt length 0).
 const NO_METADATA_PNG = path.resolve(__dirname, '../fixtures/no-metadata-screenshot.png')
@@ -61,6 +76,18 @@ const TAGGER_RESPONSE = {
 }
 
 const JOB_CAPTION = 'A girl stands alone in a wheat field at golden hour.'
+
+test.beforeAll(() => {
+  runBackendScript(`
+import runpy, sys
+sys.argv = ["reader_samples.py", "--images", ${JSON.stringify(SAMPLES)}]
+runpy.run_path(${JSON.stringify(path.join(repoRoot, 'tests', 'e2e', 'fixtures', 'reader_samples.py'))}, run_name="__main__")
+`)
+})
+
+test.afterAll(() => {
+  fs.rmSync(path.dirname(SAMPLES), { recursive: true, force: true })
+})
 
 type Recorded = { starts: Array<Record<string, unknown>>; taggerCalls: number }
 
