@@ -68,6 +68,16 @@ def _artist_override_url(filename: str) -> Optional[str]:
     return None
 
 
+def _artist_runtime_zip_url(pinned_url: str) -> str:
+    """The LSNet runtime zip to fetch: the configured override, else ``pinned_url``.
+
+    Shared by every runtime download (Prepare and the direct download) so a
+    mirror, or the E2E fixture, set in SD_IMAGE_SORTER_ARTIST_RUNTIME_ZIP_URL
+    is used everywhere instead of github.com.
+    """
+    return os.environ.get("SD_IMAGE_SORTER_ARTIST_RUNTIME_ZIP_URL") or pinned_url
+
+
 def _candidate_hf_endpoints() -> List[str]:
     return _facade().get_hf_endpoint_order(model_name="Artist ID / Kaloscope")
 

@@ -273,3 +273,36 @@ def test_ensure_kaloscope_modelscope_files_short_circuits_when_present(monkeypat
     checkpoint_path, mapping_path = artist_identifier._ensure_kaloscope_modelscope_files()
     assert Path(checkpoint_path).exists()
     assert Path(mapping_path).exists()
+
+
+def _record_runtime_download(monkeypatch, tmp_path: Path) -> list[str]:
+    """Use an empty artist folder and record the URL the runtime download asks for."""
+    requested: list[str] = []
+    monkeypatch.setenv("SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY", "1")
+    monkeypatch.setattr(artist_identifier, "get_artist_model_dir", lambda: str(tmp_path / "artist"))
+    monkeypatch.setattr(
+        artist_identifier,
+        "_download_and_extract_github_zip",
+        lambda url, target_dir: requested.append(url) or target_dir,
+    )
+    return requested
+
+
+def test_lsnet_runtime_download_uses_the_configured_zip_url(monkeypatch, tmp_path: Path):
+    requested = _record_runtime_download(monkeypatch, tmp_path)
+    monkeypatch.setenv("SD_IMAGE_SORTER_ARTIST_RUNTIME_ZIP_URL", "https://mirror.test/lsnet.zip")
+
+    artist_identifier._ensure_comfyui_lsnet_runtime()
+
+    assert requested == ["https://mirror.test/lsnet.zip"]
+
+
+def test_lsnet_runtime_download_uses_the_pinned_zip_url_without_an_override(
+    monkeypatch, tmp_path: Path
+):
+    requested = _record_runtime_download(monkeypatch, tmp_path)
+    monkeypatch.delenv("SD_IMAGE_SORTER_ARTIST_RUNTIME_ZIP_URL", raising=False)
+
+    artist_identifier._ensure_comfyui_lsnet_runtime()
+
+    assert requested == [artist_identifier.ARTIST_LSNET_RUNTIME_ZIP_URL]

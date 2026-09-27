@@ -18,6 +18,8 @@ import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict
 
+from artist.downloads import _artist_runtime_zip_url
+
 
 def _svc():
     """Resolve facade-patched seams through services.model_service at call time.
@@ -73,7 +75,7 @@ def _safe_extract_single_root_zip(zip_path: Path, target_dir: Path, *, max_entri
 
 
 def _artist_runtime_url() -> str:
-    return os.environ.get("SD_IMAGE_SORTER_ARTIST_RUNTIME_ZIP_URL") or _svc().ARTIST_LSNET_RUNTIME_ZIP_URL
+    return _artist_runtime_zip_url(_svc().ARTIST_LSNET_RUNTIME_ZIP_URL)
 
 
 def _artist_resolve_url(repo_id: str, filename: str, *, hf_base: str) -> str:
