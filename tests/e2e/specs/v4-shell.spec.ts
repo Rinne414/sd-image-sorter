@@ -267,9 +267,13 @@ test('at 130% the gallery, the right-click menu and Ctrl K still measure right',
 
   // the right-click menu opens at the pointer (page px and screen px differ under zoom)
   await page.getByTestId('gallery-scroller').evaluate((el) => (el.scrollTop = 0))
-  const box = (await page.getByTestId('tile').nth(1).boundingBox())!
+  // the virtual grid draws the top rows a frame after the jump back: measure a tile that is there
+  const tile = page.getByTestId('tile').nth(1)
+  await expect(tile).toBeInViewport()
+  const box = (await tile.boundingBox())!
   await page.mouse.click(box.x + 12, box.y + 12, { button: 'right' })
   const menu = page.getByRole('menu')
+  await expect(menu).toBeVisible()
   const menuBox = (await menu.boundingBox())!
   expect(Math.abs(menuBox.x - (box.x + 12))).toBeLessThan(3)
   await expect(menu).toBeInViewport({ ratio: 1 })
