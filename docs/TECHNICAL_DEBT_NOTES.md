@@ -35,7 +35,7 @@ follows in V4:
 | Debt-27 Per-item exclude filters | Shipped in V3.5; V4's library search takes excluded terms with a leading `-` (`frontend-v4/src/lib/queryEdit.ts`). |
 | Audit Target A Obfuscation parity | Locked for V4: the V3.5 engine is kept as `tests/e2e/fixtures/obfuscation/v35-obfuscate-engine.js` and V4's privacy engine is checked byte for byte against it in `frontend-v4/src/features/tools/privacy/engine/engine.test.ts`. |
 | Audit Target B Visible i18n gaps | Closed for V4 (see Debt-08). |
-| Audit Target C Desktop small-screen pressure | Mostly covered for V4: 41 of 51 V4 specs end with "fits at" checks at 1366×768, 1920×1080 and 2560×1440 (`docs/DESIGN.md` §desktop-layout). Still without them: browse, dataset-batch, dataset-tagstyle, folder-chooser, libraries, library-status, missing, models, pixiv-export (it checks 2560 on its own) and status. |
+| Audit Target C Desktop small-screen pressure | Mostly covered for V4: 37 of the 47 V4 page specs end with "fits at" checks at 1366×768, 1920×1080 and 2560×1440 (`docs/DESIGN.md` §desktop-layout). Still without them: browse, dataset-batch, dataset-tagstyle, folder-chooser, libraries, library-status, missing, models, pixiv-export (it checks 2560 on its own) and status. |
 | Audit Target E Large-image client performance | Measured for V4's censor editor: editing stays responsive up to about 45 MP (D31). Reader and privacy tool not measured. |
 
 V4 debt that is still open: response types are hand-written in

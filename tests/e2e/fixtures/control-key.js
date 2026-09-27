@@ -47,12 +47,20 @@
             const parts = squash(text).split(/\{\w+\}|#/);
             if (parts.join('').trim().length < 2) continue; // "{name}" alone says nothing
             try {
-                templates.push([new RegExp(`^${parts.map(loosen).join('.+?')}$`), key]);
+                templates.push([new RegExp(`^${parts.map(loosen).join('.+?')}$`), key, parts.join('').length]);
             } catch {
                 // a string that makes no pattern is simply not used
             }
         }
+        // The template with the most fixed text wins: "Tag {n}" must not claim
+        // a label that "Tag {n} of {total}" wrote.
+        templates.sort((a, b) => b[2] - a[2]);
     };
+
+    // "In" is a UI string; "Inbox" does not start with it.
+    const wordChar = /[A-Za-z0-9#]/;
+    const startsWithWord = (text, ui) =>
+        text.startsWith(ui) && !(wordChar.test(ui.charAt(ui.length - 1)) && wordChar.test(text.charAt(ui.length)));
 
     /** The pack key a label was written from (whole, or a template), or null. */
     const uiKeyOf = (label) => {
@@ -83,7 +91,7 @@
         let best = '';
         let key = null;
         for (const [ui, name] of exact) {
-            if (ui.length > best.length && ui.length >= 2 && text.startsWith(ui)) {
+            if (ui.length > best.length && ui.length >= 2 && startsWithWord(text, ui)) {
                 best = ui;
                 key = `${name}…`;
             }

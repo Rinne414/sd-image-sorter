@@ -247,7 +247,7 @@ Prioritize size honesty + cleanup (thumbs, models, vacuum) over cloud quotas.
 - A page's spec ends with a "fits at W×H" test over `VIEWPORTS`
   (`tests/e2e/fixtures/v4-seed.ts`) that checks the primary action is in the
   viewport (`toBeInViewport`, not `toBeVisible`) and that nothing overlaps,
-  clips or scrolls sideways. 41 of the 51 V4 specs have one; these do not yet:
+  clips or scrolls sideways. 37 of the 47 V4 page specs have one (four more specs test the API only); these do not yet:
   browse, dataset-batch, dataset-tagstyle, folder-chooser, libraries, library-status, missing, models, pixiv-export (it checks 2560 on its own) and status. A new page's spec must have one.
   `backend/tests/test_desktop_viewport_contract.py` only rejects browser
   viewports narrower than 1280 px; it does not check that the fits-at tests
