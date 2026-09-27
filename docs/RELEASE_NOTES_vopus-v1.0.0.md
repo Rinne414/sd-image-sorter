@@ -22,6 +22,8 @@ The new interface is now called Vopus, starts at 1.0.0 and checks only for Vopus
   - Vopus 是独立的程序，版本号单独计算。V3.5 不会在程序内更新到 Vopus，请下载下面的完整包。
 - Installs of the earlier V4 preview (version 3.5.0) are not offered Vopus in the app either: download the full package.
   - 之前的 V4 预览版（版本 3.5.0）同样不会在程序内收到 Vopus，请下载完整包。
+- V4 preview installs report version 3.5.0 and use the old updater, which may offer a V3.5 update (3.5.x). Do not install it: it replaces the interface with V3.5, which cannot open the database Vopus uses. Install the Vopus package instead.
+  - V4 预览版显示的版本是 3.5.0，用的是旧的更新器，可能会提示 V3.5 的更新（3.5.x）。不要安装：它会把界面换回 V3.5，而 V3.5 打不开 Vopus 用的数据库。请改装 Vopus 完整包。
 - Opening a library in Vopus upgrades its database, and V3.5 then refuses to open it. Copy `data/images.db` first if you want to go back to V3.5.
   - 用 Vopus 打开图库会升级数据库，之后 V3.5 打不开它。想回到 V3.5 的话，先备份 `data/images.db`。
 
