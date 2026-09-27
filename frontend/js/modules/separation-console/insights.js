@@ -42,17 +42,25 @@ Object.assign(SeparationConsole, {
                 return;
             }
             try {
-                const response = await fetch('/api/tags/coverage-gaps', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        tag: row.key.replace(/ /g, '_'),
-                        image_ids: ids,
-                        limit: 100,
-                    }),
-                });
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                this._renderGaps(panel, row, await response.json());
+                // Every page: "add all" must cover every missed image, not the first page.
+                let report = null;
+                const gaps = [];
+                do {
+                    const response = await fetch('/api/tags/coverage-gaps', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            tag: row.key.replace(/ /g, '_'),
+                            image_ids: ids,
+                            limit: 2000,
+                            offset: gaps.length,
+                        }),
+                    });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    report = await response.json();
+                    gaps.push(...(report.gaps || []));
+                } while (report.has_more && (report.gaps || []).length > 0);
+                this._renderGaps(panel, row, { ...report, gaps });
             } catch (e) {
                 panel.textContent = sepconT('Find-missed failed: ', '找漏打失败：') + String(e.message || e);
             }

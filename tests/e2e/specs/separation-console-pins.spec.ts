@@ -345,6 +345,45 @@ test('find-missed action: posts the queue ids to coverage-gaps and bulk-adds the
   expect(bulkCalls[0].tags).toEqual(['1girl'])
 })
 
+// V3.5 #14: more gaps than one page — every page is read, and "add all" covers them all.
+test('find-missed reads every page of gaps and adds the tag to all of them', async ({ page }) => {
+  await boot(page)
+  await seedQueue(page, [
+    { id: 601, filename: 'a.png', caption: '1girl' },
+    { id: 602, filename: 'b.png', caption: '1girl' },
+  ])
+  const offsets: unknown[] = []
+  await page.route('**/api/tags/coverage-gaps', async (route) => {
+    const body = route.request().postDataJSON() as Record<string, unknown>
+    offsets.push(body.offset)
+    const first = body.offset === 0
+    await route.fulfill({
+      json: {
+        tag: '1girl', band_low: 0.28, band_high: 0.35, total: 3, offset: body.offset,
+        has_more: first,
+        gaps: first
+          ? [{ image_id: 901, filename: 'miss-a.png', score: 0.33 }, { image_id: 902, filename: 'miss-b.png', score: 0.31 }]
+          : [{ image_id: 903, filename: 'miss-c.png', score: 0.29 }],
+      },
+    })
+  })
+  const bulkCalls: Array<Record<string, unknown>> = []
+  await page.route('**/api/tags/bulk/add', async (route) => {
+    bulkCalls.push(route.request().postDataJSON() as Record<string, unknown>)
+    await route.fulfill({ json: { operation: 'bulk_add', updated: 3 } })
+  })
+
+  await openConsole(page)
+  await clickRowAction(page, /^1girl$/, 3)
+
+  const panel = page.locator('#sepcon-gaps')
+  await expect(panel).toContainText('3 image(s) probably missed')
+  expect(offsets).toEqual([0, 2])
+  await panel.getByRole('button', { name: /to all 3/ }).click()
+  await expect.poll(() => bulkCalls.length).toBe(1)
+  expect(bulkCalls[0].image_ids).toEqual([901, 902, 903])
+})
+
 test('model-audit action: posts to tag-audit and renders one line per scoring model', async ({ page }) => {
   await boot(page)
   await seedQueue(page, [
