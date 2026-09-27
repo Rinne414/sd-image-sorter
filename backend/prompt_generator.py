@@ -501,11 +501,18 @@ class PromptGenerator:
             if _normalize_tag_key(count_tag) in _SOLO_IMPLYING_COUNT_TAGS:
                 injected_solo = self._append_tag(selected_tags, seen_tags, "solo", "meta")
 
+        # Required members always; optional ones are drawn by their weight from
+        # the seeded generator, as in the automatic mode, so the seed and the
+        # number of prompts mean something here too. A draw is made for every
+        # optional member so a duplicate cannot shift the seeded sequence.
         for tag_set in tag_sets:
             for member in tag_set.get("tags", []):
                 if isinstance(member, dict):
                     tag = member.get("tag")
                     category = member.get("category") or tag_set.get("category") or "outfit"
+                    required = member.get("required", True)
+                    if not required and self._rng.random() >= float(member.get("weight", 1.0)):
+                        continue
                 else:
                     tag = member
                     category = tag_set.get("category") or "outfit"
