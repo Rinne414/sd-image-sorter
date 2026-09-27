@@ -286,8 +286,10 @@
             return true;
         },
 
+        // The ORIGINAL file of an item: every run starts from it (a second
+        // Protect must not scramble the first result again).
         async _ensureSourceFile(item) {
-            if (item.resultBlob || item.file || !item.libraryImageId) return;
+            if (item.file || !item.libraryImageId) return;
             const response = await fetch(`/api/image-file/${item.libraryImageId}`);
             if (!response.ok) {
                 throw new Error(this._t(
@@ -564,13 +566,6 @@
             return `${mode === 'encode' ? 'encoded' : 'decoded'}_${stem}.png`;
         },
 
-        _createProcessingFile(item) {
-            if (!item?.resultBlob) return item?.file || null;
-            const resultName = item.resultName || `${item.name.replace(/\.[^.]+$/, '')}.png`;
-            const resultType = item.resultBlob.type || 'image/png';
-            return new File([item.resultBlob], resultName, { type: resultType });
-        },
-
         async _processAll(mode) {
             if (!this._queue.length) {
                 window.App?.showToast?.(this._t('tools.noQueue', 'No images in queue'), 'error');
@@ -599,8 +594,12 @@
                     this._renderQueue();
 
                     try {
-                        await this._ensureSourceFile(item);
-                        const sourceBlob = item.resultBlob || item.file;
+                        // Protect always starts from the original, so pressing it
+                        // twice gives the same result. Restore undoes this queue's
+                        // own Protect when there was one, else restores the file.
+                        const restoringOwnResult = mode !== 'encode' && Boolean(item.protectedBlob);
+                        if (!restoringOwnResult) await this._ensureSourceFile(item);
+                        const sourceBlob = restoringOwnResult ? item.protectedBlob : item.file;
 
                         if (hasEngine) {
                             const engineFn = mode === 'encode'
@@ -618,7 +617,9 @@
                             item.resultName = this._getResultName(item, '.png');
                         } else {
                             // ── Backend fallback (only if engine unavailable) ──
-                            const processingFile = this._createProcessingFile(item);
+                            const processingFile = sourceBlob
+                                ? new File([sourceBlob], item.name, { type: sourceBlob.type || 'image/png' })
+                                : null;
                             if (!processingFile) {
                                 throw new Error(this._t('tools.processingFailed', 'Processing failed'));
                             }
@@ -650,8 +651,9 @@
 
                         item.status = 'done';
                         completed += 1;
-                        // A library original can be fetched again; the result
-                        // is what later steps read, so let the original go.
+                        if (mode === 'encode') item.protectedBlob = item.resultBlob;
+                        // A library original can be fetched again (the next
+                        // Protect does), so let it go.
                         if (item.libraryImageId) item.file = null;
                     } catch (error) {
                         item.status = 'error';
@@ -775,7 +777,7 @@
                 const lv = new DataView(local.buffer);
                 lv.setUint32(0, 0x04034b50, true); // signature
                 lv.setUint16(4, 20, true); // version needed
-                lv.setUint16(6, 0, true); // flags
+                lv.setUint16(6, 0x0800, true); // flags: bit 11 = file names are UTF-8
                 lv.setUint16(8, 0, true); // compression (store)
                 lv.setUint16(10, 0, true); // mod time
                 lv.setUint16(12, 0, true); // mod date
@@ -794,7 +796,7 @@
                 cv.setUint32(0, 0x02014b50, true);
                 cv.setUint16(4, 20, true); // version made by
                 cv.setUint16(6, 20, true); // version needed
-                cv.setUint16(8, 0, true); // flags
+                cv.setUint16(8, 0x0800, true); // flags: bit 11 = file names are UTF-8
                 cv.setUint16(10, 0, true); // compression
                 cv.setUint16(12, 0, true); // mod time
                 cv.setUint16(14, 0, true); // mod date
