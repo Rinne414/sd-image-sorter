@@ -23,6 +23,7 @@ _THREAD_TIMEOUT_SECONDS = 3.0
 # even when the payload shape is versioned forward.
 _PREVIOUS_RESULT = {
     "version": dgs._RESULT_VERSION,
+    "library_id": "main",
     "groups": [],
     "marker": "previous",
 }

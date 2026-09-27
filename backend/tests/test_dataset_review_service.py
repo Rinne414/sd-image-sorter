@@ -193,6 +193,7 @@ def _write_duplicate_state(
                 # Bound to the live constant: this fixture stands for "a
                 # persisted scan the loader still accepts", not one shape of it.
                 "version": _RESULT_VERSION,
+                "library_id": "main",
                 "scanned_at": scanned_at,
                 "threshold": 0.95,
                 "summary": {
