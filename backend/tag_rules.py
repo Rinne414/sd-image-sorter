@@ -9,7 +9,7 @@ import csv
 import logging
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Callable, Dict, Iterable, List, Optional, Set
 
 # Data tables extracted to the tag_vocab/ package (2026-07 split). Every name
 # is re-imported here because the 8 production importers and the test suite
@@ -769,12 +769,42 @@ def categorize_tags_batch(tags: List[str]) -> Dict[str, str]:
     return {tag: categorize_tag(tag) for tag in tags}
 
 
-def get_exclusion_targets(active_tags: Set[str], rules: List[dict]) -> Set[str]:
+class ExcludedTags(set):
+    """Excluded tag names; ``tag in`` also covers every tag of an excluded category.
+
+    Iterating yields only the named tags (a category has no finite list).
+    """
+
+    def __init__(
+        self,
+        tags: Iterable[str] = (),
+        categories: Iterable[str] = (),
+        categorize: Optional[Callable[[str], str]] = None,
+    ):
+        super().__init__(tags)
+        self.categories = frozenset(categories)
+        self._categorize = categorize or categorize_tag
+
+    def __contains__(self, tag: object) -> bool:
+        if set.__contains__(self, tag):
+            return True
+        return bool(self.categories) and isinstance(tag, str) and self._categorize(tag) in self.categories
+
+
+def get_exclusion_targets(
+    active_tags: Set[str],
+    rules: List[dict],
+    categorize: Optional[Callable[[str], str]] = None,
+) -> Set[str]:
     """
     Given a set of active tags and exclusion rules,
     return the set of tags that should be excluded.
+
+    A target naming a category excludes every tag ``categorize`` (default
+    ``categorize_tag``) puts in it; test membership with ``in``.
     """
     excluded = set()
+    excluded_categories = set()
 
     for rule in rules:
         conditions = rule.get("conditions", [])
@@ -803,8 +833,6 @@ def get_exclusion_targets(active_tags: Set[str], rules: List[dict]) -> Set[str]:
                 if "tag" in target and target["tag"]:
                     excluded.add(target["tag"].lower().replace(" ", "_"))
                 if "category" in target and target.get("category"):
-                    # Category-level exclusion would need the categorize_tag function
-                    # For now, individual tag targets are sufficient
-                    pass
+                    excluded_categories.add(str(target["category"]).strip().lower())
 
-    return excluded
+    return ExcludedTags(excluded, excluded_categories, categorize)
