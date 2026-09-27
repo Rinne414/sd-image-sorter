@@ -5,6 +5,16 @@
  * classic-script global lexical scoping keeps them single instances across parts.
  * Load order is pinned in index.html - see censor/state.js for the full note.
  */
+
+// Boxes and masks must come in the frame the canvas draws. A normal load shows
+// the picture upright (the browser applies the EXIF orientation). Proxy edit
+// mode draws the raw stored frame (its size comes from the database) and the
+// save replays its operations on the raw file, so there the raw frame is asked
+// for: an upright box would censor the wrong spot of the saved file.
+function censorDetectionUpright(item) {
+    return !shouldUseProxyEditMode(item);
+}
+
 function readCensorDetectionWarnings(result) {
     if (!result || typeof result !== 'object' || Array.isArray(result)) {
         throw new TypeError('Censor detection response must be an object');
@@ -468,9 +478,7 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
             model_type: plan.modelType,
             confidence_threshold: CensorState.confidence,
             target_classes: plan.targetClasses,
-            // The canvas shows the picture upright (EXIF orientation applied by
-            // the browser), so boxes and masks must come in that frame too.
-            upright: true,
+            upright: censorDetectionUpright(item),
         };
         if (plan.modelType === 'sam3') {
             const customInput = document.getElementById('sam3-custom-prompt')?.value?.trim();
@@ -581,10 +589,11 @@ async function segmentCurrentImageByText() {
         prompt: textPrompt,
     }, 'SAM3 text segment · {prompt}'));
     try {
+        const activeItem = CensorState.queue.find((entry) => entry.id === CensorState.activeId);
         const result = await window.App.API.post('/api/censor/segment-text', {
             image_id: CensorState.activeId,
             text_prompt: textPrompt,
-            upright: true,
+            upright: censorDetectionUpright(activeItem),
         });
 
         if (!result?.mask && !result?.mask_ref) {
@@ -704,6 +713,7 @@ async function runSam3BatchRefine() {
                     image_id: item.id,
                     box: region.box,
                     text_prompt: null,
+                    upright: censorDetectionUpright(item),
                 });
             }
         }
@@ -736,7 +746,6 @@ async function runSam3BatchRefine() {
         const result = await window.App.API.post('/api/censor/batch-refine-mask', {
             items: batchItems,
             sam3_confidence: CensorState.sam3Confidence,
-            upright: true,
         });
 
         showLoading(false);
