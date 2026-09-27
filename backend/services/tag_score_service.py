@@ -45,7 +45,9 @@ class CoverageGapsRequest(BaseModel):
     model: Optional[str] = Field(default=None, max_length=256)
     band_low: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     band_high: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    # One page; ``offset`` pages on, and ``total`` counts every gap.
     limit: int = Field(default=200, ge=1, le=2000)
+    offset: int = Field(default=0, ge=0)
 
 
 class TagAuditRequest(BaseModel):
@@ -403,14 +405,17 @@ def find_gaps_for_request(request: CoverageGapsRequest) -> Dict[str, Any]:
         band_high=float(band_high),
         image_ids=ids or None,
         model=request.model,
-        limit=request.limit,
+        limit=0,
     )
+    page = gaps[request.offset:request.offset + request.limit]
     return {
         "tag": request.tag,
         "band_low": float(band_low),
         "band_high": float(band_high),
         "model": request.model,
         "scope_images": len(ids),
-        "gaps": gaps,
+        "gaps": page,
         "total": len(gaps),
+        "offset": request.offset,
+        "has_more": request.offset + len(page) < len(gaps),
     }
