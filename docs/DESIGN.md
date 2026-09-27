@@ -5,8 +5,9 @@ served at `/v4/`; `/` redirects there). It has two layers: **§principles** is
 the design philosophy every surface must serve; the sections after it are
 **micro-invariants** that survived a "wait, why?" review. When a change
 conflicts with either layer, the change is wrong; see `docs/AI_PRINCIPLES.md`
-for the authority order. Decisions with their evidence live in
-`.plans/v4/decisions.md` (the D-numbers below point there).
+for the authority order. The D-numbers below point to the V4 decision log,
+`.plans/v4/decisions.md`, which is kept next to the checkout and is not part
+of the repository (`.plans/` is ignored).
 
 ---
 
@@ -243,10 +244,14 @@ Prioritize size honesty + cleanup (thumbs, models, vacuum) over cloud quotas.
 
 - Supported widths are desktop and laptop only: test 1366×768, 1920×1080 and
   2560×1440 (plus 3840×2160 when a page scales). Never phone or tablet.
-- Each page's spec ends with a "fits at W×H" test that checks the primary
-  action is in the viewport (`toBeInViewport`, not `toBeVisible`) and that
-  nothing overlaps, clips or scrolls sideways.
-  `backend/tests/test_desktop_viewport_contract.py` keeps those checks present.
+- A page's spec ends with a "fits at W×H" test over `VIEWPORTS`
+  (`tests/e2e/fixtures/v4-seed.ts`) that checks the primary action is in the
+  viewport (`toBeInViewport`, not `toBeVisible`) and that nothing overlaps,
+  clips or scrolls sideways. 41 of the 51 V4 specs have one; these do not yet:
+  browse, dataset-batch, dataset-tagstyle, folder-chooser, libraries, library-status, missing, models, pixiv-export (it checks 2560 on its own) and status. A new page's spec must have one.
+  `backend/tests/test_desktop_viewport_contract.py` only rejects browser
+  viewports narrower than 1280 px; it does not check that the fits-at tests
+  exist.
 - The interface zoom follows the window width by default
   (`src/lib/uiScale.ts`: 100% below 2000 px, then 115% / 130% / 140% / 150%
   from 2000 / 2350 / 3100 / 3600 px); the user can pin it in Settings ›
@@ -315,6 +320,7 @@ download always ends with its own result (D52).
 ## Maintenance
 
 - Update this file when a rule above is revised or reverted, and record the
-  decision in `.plans/v4/decisions.md`.
+  decision in the V4 decision log (`.plans/v4/decisions.md`, outside the
+  repository).
 - Add a section every time a UI rule survives a "wait, why?" review.
 - Cross-reference rules from CSS comments with the `§<slug>` anchor.
