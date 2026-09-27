@@ -137,11 +137,16 @@ git add . && git commit -m "release: prepare vopus-vX.Y.Z" && git push
 #    Tag vopus-vX.Y.Z (see "Vopus Tags and the In-App Updater"); never --prerelease
 #    for a release installs should receive, and always --latest=false so v3.5.0
 #    stays Latest for V3.5 installs.
+#    --target: without an existing tag, gh tags the default branch (main = V3.5),
+#    and the tag and GitHub's "Source code" archives would be V3.5 code. Run
+#    this from the Vopus checkout whose pushed HEAD the packages were built from.
 gh release create vopus-vX.Y.Z artifacts/release/sd-image-sorter-vopus-vX.Y.Z-* \
-  --latest=false \
+  --target "$(git rev-parse HEAD)" --latest=false \
   --title "Vopus X.Y.Z" --notes "$(cat release-notes.md)"
 # 8. Verify: 6 assets (windows-portable, app-patch, linux, linux-portable x86_64, linux-portable aarch64, manifest)
 gh release view vopus-vX.Y.Z --json assets --jq '.assets[].name'
+# 9. Verify the tag is the built Vopus commit, not main
+git fetch --tags && test "$(git rev-parse vopus-vX.Y.Z^{commit})" = "$(git rev-parse HEAD)"
 ```
 
 ### Required Assets (always 6)
@@ -159,6 +164,7 @@ gh release view vopus-vX.Y.Z --json assets --jq '.assets[].name'
 
 - [ ] `backend/app_info.py` version matches
 - [ ] Tag is `vopus-vX.Y.Z` and every asset is named `sd-image-sorter-vopus-vX.Y.Z-*`
+- [ ] The tag points at the Vopus commit the packages were built from (`--target <full SHA>`), not at `main`
 - [ ] Published as a normal release (not pre-release) with `--latest=false`; `gh api repos/Rinne414/sd-image-sorter/releases/latest --jq .tag_name` still prints a V3.5 tag
 - [ ] `CHANGELOG.md` entry exists with bilingual notes
 - [ ] Full CI green (backend + E2E)
