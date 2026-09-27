@@ -551,6 +551,13 @@ class _OutputMixin:
         clean_image = Image.new(image.mode, image.size)
         pixel_data_getter = getattr(image, "get_flattened_data", image.getdata)
         clean_image.putdata(list(pixel_data_getter()))
+        # A palette image's pixels are indices into its palette, and the
+        # transparent colour is part of the picture, not generation metadata.
+        if image.palette is not None and image.mode in ("P", "PA"):
+            palette_mode = image.palette.mode
+            clean_image.putpalette(image.getpalette(rawmode=palette_mode), rawmode=palette_mode)
+        if "transparency" in image.info:
+            clean_image.info["transparency"] = image.info["transparency"]
         return clean_image
 
     @staticmethod
