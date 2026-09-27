@@ -3,10 +3,16 @@
 Moved verbatim from services/tagging_service.py (decomposition 2026-07).
 """
 
-from typing import Any, Dict, List, Optional
+import sqlite3
+from typing import Any, Dict, List, Optional, Tuple
 
 import database as db
+from library_context import current_library_sql
 from services.tagging.request import VALID_SORT_OPTIONS, TagImportRequest
+
+# Why an import row changed nothing. ``skipped`` in the import result is their
+# sum; each is also reported on its own so the UI can say why.
+IMPORT_SKIP_REASONS = ("not_found", "ambiguous", "already_tagged", "duplicate")
 
 
 class LibraryIOMixin:
@@ -66,19 +72,23 @@ class LibraryIOMixin:
         return {"checkpoints": checkpoints, "total": total}
 
     def export_tags(self) -> Dict[str, Any]:
-        """Export all image tags as JSON for backup/transfer."""
+        """Export the current library's image tags as JSON for backup/transfer."""
+        lib_sql, lib_params = current_library_sql("i.library_id")
         with db.get_db() as conn:
             cursor = conn.cursor()
 
-            cursor.execute("""
+            cursor.execute(
+                f"""
                 SELECT i.id, i.path, i.filename, i.generator, i.checkpoint,
                        i.ai_caption,
                        GROUP_CONCAT(t.tag || ':' || t.confidence, '|||') as tags
                 FROM images i
                 LEFT JOIN tags t ON i.id = t.image_id
-                WHERE i.tagged_at IS NOT NULL
+                WHERE i.tagged_at IS NOT NULL AND {lib_sql}
                 GROUP BY i.id
-            """)
+                """,
+                lib_params,
+            )
 
             export_data = []
             for row in cursor.fetchall():
@@ -109,9 +119,16 @@ class LibraryIOMixin:
             return {"version": "1.0", "count": len(export_data), "images": export_data}
 
     def import_tags(self, request: TagImportRequest) -> Dict[str, int]:
-        """Import tags from exported JSON data."""
-        imported = 0
-        skipped = 0
+        """Import tags from exported JSON data into the current library.
+
+        Rows are matched to the library's own images, by path and then by file
+        name; another library's image is never written. A file name that
+        several of the library's images share is skipped, not guessed.
+        Returns ``imported``, ``skipped`` and each reason in
+        :data:`IMPORT_SKIP_REASONS` (they add up to ``skipped``). Rows with
+        neither tags nor a caption are left out of every count.
+        """
+        counts = dict.fromkeys(("imported", *IMPORT_SKIP_REASONS), 0)
         batched_updates: List[Dict[str, Any]] = []
         scheduled_image_ids: set[int] = set()
 
@@ -119,44 +136,28 @@ class LibraryIOMixin:
             cursor = conn.cursor()
 
             for img_data in request.images:
-                path = img_data.get("path", "")
-                filename = img_data.get("filename", "")
                 tags = self._normalize_import_tags(img_data.get("tags", []))
                 ai_caption = str(img_data.get("ai_caption") or "").strip()
                 if not tags and not ai_caption:
                     continue
 
-                image_row = db.get_image_by_path(path) if path else None
-                row = None
-                if image_row:
-                    cursor.execute(
-                        "SELECT id, tagged_at FROM images WHERE id = ?",
-                        (image_row["id"],),
-                    )
-                    row = cursor.fetchone()
-                elif filename:
-                    cursor.execute(
-                        "SELECT id, tagged_at FROM images WHERE filename = ?",
-                        (filename,),
-                    )
-                    row = cursor.fetchone()
-
-                if not row:
-                    skipped += 1
+                row, miss = self._find_import_target(
+                    cursor, img_data.get("path", ""), img_data.get("filename", "")
+                )
+                if row is None:
+                    counts[miss] += 1
                     continue
 
                 image_id = row["id"]
-                already_tagged = row["tagged_at"] is not None
-
-                if already_tagged and not request.overwrite:
-                    skipped += 1
+                if row["tagged_at"] is not None and not request.overwrite:
+                    counts["already_tagged"] += 1
                     continue
 
                 # Keep import semantics stable for overwrite=False:
                 # duplicate rows targeting the same previously-untagged image
                 # should only import once in a single request.
                 if not request.overwrite and image_id in scheduled_image_ids:
-                    skipped += 1
+                    counts["duplicate"] += 1
                     continue
 
                 batched_updates.append(
@@ -167,14 +168,50 @@ class LibraryIOMixin:
                     }
                 )
                 scheduled_image_ids.add(image_id)
-                imported += 1
+                counts["imported"] += 1
 
         if batched_updates:
             # User-supplied import data: mark rows 'manual' so later tagger
             # re-runs (pipeline scope) don't wipe what the user brought in.
             db.add_tags_batch(batched_updates, default_source="manual")
 
-        return {"imported": imported, "skipped": skipped}
+        skipped = sum(counts[reason] for reason in IMPORT_SKIP_REASONS)
+        return {
+            "imported": counts["imported"],
+            "skipped": skipped,
+            **{reason: counts[reason] for reason in IMPORT_SKIP_REASONS},
+        }
+
+    @staticmethod
+    def _find_import_target(
+        cursor: sqlite3.Cursor, path: str, filename: str
+    ) -> Tuple[Optional[sqlite3.Row], Optional[str]]:
+        """The current library's image an import row names, or why there is none.
+
+        Returns ``(row, None)`` with the row's ``id`` and ``tagged_at``, or
+        ``(None, "not_found" | "ambiguous")``.
+        """
+        image_row = (
+            db.get_image_by_path(path, current_library_only=True) if path else None
+        )
+        if image_row:
+            cursor.execute(
+                "SELECT id, tagged_at FROM images WHERE id = ?",
+                (image_row["id"],),
+            )
+            row = cursor.fetchone()
+            return (row, None) if row else (None, "not_found")
+        if not filename:
+            return None, "not_found"
+        lib_sql, lib_params = current_library_sql()
+        cursor.execute(
+            f"SELECT id, tagged_at FROM images WHERE filename = ? AND {lib_sql} LIMIT 2",
+            (filename, *lib_params),
+        )
+        rows = cursor.fetchall()
+        if len(rows) > 1:
+            return None, "ambiguous"
+        return (rows[0], None) if rows else (None, "not_found")
 
     @staticmethod
     def _normalize_import_tags(raw_tags: Any) -> List[Dict[str, Any]]:

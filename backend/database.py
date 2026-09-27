@@ -265,6 +265,7 @@ from db_tags import (
     add_tags,
     add_tags_batch,
     tag_update_transaction,
+    on_tag_write,
     get_image_tags,
     get_image_tags_map,
     get_tag_writer_provenance_map,

@@ -493,7 +493,14 @@ def test_import_tags_falls_back_to_filename_match_when_path_unknown(
         )
     )
 
-    assert result == {"imported": 1, "skipped": 0}
+    assert result == {
+        "imported": 1,
+        "skipped": 0,
+        "not_found": 0,
+        "ambiguous": 0,
+        "already_tagged": 0,
+        "duplicate": 0,
+    }
     assert {t["tag"] for t in db.get_image_tags(image_id)} == {"found_by_name"}
 
 

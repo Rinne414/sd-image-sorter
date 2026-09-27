@@ -821,10 +821,10 @@ Reset stuck tagging task.
 Cancel the active tagging task.
 
 #### GET /api/tags/export
-Export all tag data as JSON.
+Export the tag data of the current library's (`X-SD-Library-Id`, default `main`) tagged images as JSON: `version`, `count`, `images`.
 
 #### POST /api/tags/import
-Import tag data from JSON.
+Import tag data from JSON into the current library only: rows match its images by path, then by file name; a file name several of its images share is skipped, not guessed. Response: `imported`, `skipped`, and the reasons that add up to `skipped`: `not_found`, `ambiguous`, `already_tagged` (overwrite off), `duplicate` (the same image listed again, overwrite off). Rows with neither tags nor a caption are in no count. Clears the library-health cache, as every tag write does.
 
 #### POST /api/tags/export-batch
 Export one same-name sidecar per selected image. Text modes write `.txt`; `json` writes `.json`.

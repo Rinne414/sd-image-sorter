@@ -142,8 +142,9 @@ SCAN_UI_STALLED_SECONDS = max(
 #
 # 60s freshness is the right granularity for a "library health" report
 # — none of the inputs (image count, embedding completeness, missing
-# metadata) change within seconds. Tagging or scanning a batch will
-# refresh once the TTL expires; the user can also force a refresh by
+# metadata) change within seconds. Scanning a batch will refresh once
+# the TTL expires (tag writes drop the cache at once, see
+# invalidate_library_health_cache); the user can also force a refresh by
 # reloading after they trigger a long operation.
 #
 # Cache keyed by sample_limit so callers asking for different sample
@@ -164,12 +165,16 @@ def invalidate_library_health_cache() -> None:
       * clear_gallery()                         (DELETE FROM images)
       * ImageService._remove_selected_image_id_chunk  (bulk gallery removal)
       * ImageService.run_reconnect              (relink flips unreadable->readable)
-    Lower-impact writers (move/scan/tag, mark_image_unreadable during background
+      * every tag write (db.on_tag_write below)  (tagged_at feeds `untagged`)
+    Lower-impact writers (move/scan, mark_image_unreadable during background
     scoring) currently rely on the 60s TTL self-healing; wire them here too if a
     stale count after those flows is ever reported.
     """
     with _LIBRARY_HEALTH_CACHE_LOCK:
         _LIBRARY_HEALTH_CACHE.clear()
+
+
+db.on_tag_write(invalidate_library_health_cache)
 
 
 def _get_library_health_cached(sample_limit: int) -> Dict[str, Any]:
