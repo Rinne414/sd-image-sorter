@@ -4,7 +4,7 @@
   align-items: center;
   gap: 4px;
   height: var(--topbar-h);
-  padding: 0 10px 0 12px;
+  padding: 0 14px 0 16px;
   background: var(--bg);
   border-bottom: 1px solid var(--line);
 }
@@ -79,7 +79,7 @@
   border: 0;
   background: none;
   color: var(--muted);
-  font-size: var(--fs-4);
+  font-size: var(--fs-5);
   white-space: nowrap;
 }
 
@@ -96,11 +96,12 @@
 .tab[aria-current="page"]::after {
   content: "";
   position: absolute;
-  left: 10px;
-  right: 10px;
+  left: 12px;
+  right: 12px;
   bottom: -1px;
-  height: 2px;
-  background: var(--text);
+  height: 3px;
+  background: var(--accent);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
 
 .gap {
@@ -118,10 +119,10 @@
   min-width: 150px;
   align-items: center;
   gap: 8px;
-  height: 30px;
+  height: var(--control-h);
   margin-right: 4px;
-  padding: 0 7px 0 10px;
-  border: 1px solid var(--line);
+  padding: 0 7px 0 12px;
+  border: 1px solid transparent;
   background: var(--surface-1);
   color: var(--faint);
   border-radius: var(--radius);

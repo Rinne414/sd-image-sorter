@@ -664,7 +664,7 @@ export const en: Record<MessageKey, string> = {
   'batch.list.empty': 'No batches yet. Pick a few images in the library and click Add to batch at the bottom.',
   'batch.list.archived': 'Archived',
   'batch.list.openNamed': 'Open "{name}"',
-  'batch.list.at': 'At: {step}',
+  'batch.sheet.empty': 'Empty',
   'batch.list.updated': 'changed {when}',
   'batch.rename': 'Rename',
   'batch.archive': 'Archive',

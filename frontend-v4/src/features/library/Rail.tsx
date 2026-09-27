@@ -153,7 +153,7 @@ function LibraryLabel({ name, count, texture }: { name: string; count: number | 
           <Icon name="caret" size={14} />
         </span>
       </button>
-      {count !== null && <span className={`${styles.libraryCount} mono`}>{t('rail.images', { n: count })}</span>}
+      {count !== null && <span className={styles.libraryCount}>{t('rail.images', { n: count })}</span>}
       {open && (
         <ul className={styles.menu} role="menu">
           {(libraries.data?.libraries ?? []).map((l) => (
@@ -226,7 +226,7 @@ function Row({ label, count, active, onClick, icon, iconClass, dim, title }: Row
       >
         {icon && <span className={iconClass}>{icon}</span>}
         <span className={styles.rowLabel}>{label}</span>
-        {count !== undefined && <span className={`${styles.count} mono`}>{count.toLocaleString()}</span>}
+        {count !== undefined && <span className={styles.count}>{count.toLocaleString()}</span>}
       </button>
     </li>
   )
@@ -314,7 +314,7 @@ function SmartFilterRow({ saved, index, active }: { saved: SavedSearch; index: n
         }}
       >
         <span className={styles.rowLabel}>{saved.name}</span>
-        {count.data !== undefined && <span className={`${styles.count} mono`}>{count.data.toLocaleString()}</span>}
+        {count.data !== undefined && <span className={styles.count}>{count.data.toLocaleString()}</span>}
       </button>
       <button
         type="button"

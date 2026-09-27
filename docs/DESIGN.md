@@ -93,9 +93,13 @@ like a temporary viewer or two peer "session vs permanent" galleries.
     Primary buttons are printed in ink (`--ink-button`): paper-white on dark,
     ink-black on light. One primary per area.
 13. **Film is the shape of a group of images.** The home film strip, the
-    lightbox strip and a batch's covers are drawn as film (black rebate,
-    sprocket holes, amber edge print). Film keeps the same black rebate in
-    both themes, like a contact print.
+    lightbox strip and every batch card are drawn as film (black rebate,
+    sprocket holes, amber edge print). A batch card is a contact sheet: only
+    its real frames, then "+N" for the rest, and under it a step track of the
+    batch's own switched-on steps (done, current in amber, still to come).
+    An empty batch or inspector shows one unexposed frame, never grey
+    placeholder boxes. Film keeps the same black rebate in both themes, like
+    a contact print.
 14. **Must not look AI-made** (owner rule, D10): no purple or indigo
     gradients, glass or blur, glow, emoji or sparkle icons, pills everywhere,
     or stock icon sets. Icons are drawn by hand in `src/ui/Icon.tsx`. The
@@ -109,6 +113,14 @@ like a temporary viewer or two peer "session vs permanent" galleries.
 17. **Dangerous operations sit apart from common ones.** Delete, Trash and
     "remove from library" use the danger button with focus on Cancel (D15),
     and sit at the far end of their row or behind a divider in menus.
+18. **Filled controls, readable labels** (owner choice A, 2026-09-28).
+    Buttons are filled surfaces, not outlines; buttons, text fields and
+    selects share one height (`--control-h`) so a row lines up. Corners are
+    `--radius` on controls, `--radius-lg` on cards, `--radius-sm` inside
+    them. Section labels are `--fs-2` in `--text-2`, never tiny muted caps.
+    Counts are ordinary text in `--muted`; mono and amber stay for edge print
+    and data. A chosen option wears the accent wash and edge, like a checked
+    row.
 
 Do NOT:
 - Add a second "group of images" concept next to batches (rule 6).
@@ -268,7 +280,7 @@ Prioritize size honesty + cleanup (thumbs, models, vacuum) over cloud quotas.
 - `src/design/tokens.css` owns every colour, font, size, radius, layout width
   and motion token, for both themes. Nothing else defines a palette value.
 - `src/design/base.css` owns the element reset and the shared control shapes
-  (`.btn`, `.btn-primary`, `.btn-danger`, `.btn-ghost`, `.btn-icon`, `kbd`,
+  (`.btn`, `.btn-primary`, `.btn-danger`, `.btn-ghost`, `.btn-icon`, `.btn-sm`, `kbd`,
   `.mono`, `.chip` and the tag category classes). Components compose these
   classes; nothing restyles them later.
 - Every component styles itself in its own CSS Module (`*.module.css`). A

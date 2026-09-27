@@ -1,0 +1,103 @@
+/* A batch printed as a contact sheet: black rebate, sprocket holes along both
+   edges (the home film's holes), frames at a portrait 3:4. */
+.sheet {
+  --h: 88px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 10px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 6px, var(--film-hole) 6px 13px) top 4px left / 100% 5px no-repeat,
+    repeating-linear-gradient(90deg, transparent 0 6px, var(--film-hole) 6px 13px) bottom 4px left / 100% 5px no-repeat,
+    var(--film);
+  border-radius: var(--radius);
+  flex: none;
+}
+
+.sheet[data-size="l"] {
+  --h: auto;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  width: 100%;
+  padding: 16px 12px;
+}
+
+.frame,
+.more,
+.blank {
+  display: block;
+  height: var(--h);
+  aspect-ratio: 3 / 4;
+  border-radius: var(--radius-sm);
+  background: var(--film-hole);
+}
+
+.frame {
+  object-fit: cover;
+}
+
+.sheet[data-size="l"] .frame,
+.sheet[data-size="l"] .more,
+.sheet[data-size="l"] .blank {
+  width: 100%;
+  height: auto;
+}
+
+.more,
+.blank {
+  display: grid;
+  place-items: center;
+  color: var(--edge-print);
+  font-size: var(--fs-3);
+  background: none;
+  border: 1px dashed var(--film-hole);
+}
+
+.blank {
+  color: color-mix(in srgb, var(--on-image) 55%, transparent);
+  font-size: var(--fs-2);
+}
+
+/* On a laptop the home card's words need the room more than the frames. */
+@media (max-width: 1500px) {
+  .sheet {
+    --h: 72px;
+  }
+}
+
+@media (min-width: 2400px) {
+  .sheet {
+    --h: 112px;
+  }
+}
+
+/* Steps as a row of segments: done ones filled, the current one in the accent. */
+.track {
+  display: flex;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Equal segments while they fit; a step name is never cut. */
+.step {
+  flex: 1 1 0;
+  min-width: max-content;
+  padding-top: 7px;
+  border-top: 3px solid var(--surface-3);
+  color: var(--muted);
+  font-size: var(--fs-1);
+  white-space: nowrap;
+}
+
+.step[data-state="done"] {
+  border-top-color: var(--text-2);
+  color: var(--text-2);
+}
+
+.step[data-state="current"] {
+  border-top-color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
+}

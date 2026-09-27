@@ -664,7 +664,7 @@ export const zhCN = {
   'batch.list.empty': '还没有批次。在图库里选几张图，点底部的「加入批次」。',
   'batch.list.archived': '已归档',
   'batch.list.openNamed': '打开「{name}」',
-  'batch.list.at': '做到：{step}',
+  'batch.sheet.empty': '空',
   'batch.list.updated': '{when}改过',
   'batch.rename': '改名',
   'batch.archive': '归档',

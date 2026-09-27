@@ -120,7 +120,7 @@
 
 .number {
   width: 120px;
-  height: 30px;
+  height: var(--control-h);
   padding: 0 9px;
   border: 1px solid var(--line-strong);
   background: var(--bg);

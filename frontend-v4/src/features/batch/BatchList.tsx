@@ -6,10 +6,10 @@ import { batchFromCollection, patchBatch, useBatches, useCollections } from './b
 import { useBatchDialog } from './dialogStore'
 import { timeAgo } from './batchLogic'
 import styles from './BatchList.module.css'
-import { Covers } from './Covers'
+import { ContactSheet, StepTrack } from './ContactSheet'
 import { V35Projects } from './V35Projects'
 import { InlineName } from './InlineName'
-import { collectionName, kindLabel, stepLabel } from './labels'
+import { collectionName, kindLabel } from './labels'
 import { NewBatchMenu } from './NewBatchMenu'
 
 /** The Batch tab: this library's batches, and its V3.5 dataset projects and collections ready to become batches. */
@@ -26,7 +26,7 @@ export function BatchList() {
       <div className={styles.sheet}>
         <header className={styles.head}>
           <h1 className={styles.title}>{t('batch.list.title')}</h1>
-          <span className={`${styles.count} mono`}>{t('batch.list.count', { n: active.length })}</span>
+          <span className={styles.count}>{t('batch.list.count', { n: active.length })}</span>
           <span className={styles.gap} />
           <label className={styles.toggle}>
             <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} data-testid="show-archived" />
@@ -41,7 +41,7 @@ export function BatchList() {
         ) : batches.isSuccess && active.length === 0 ? (
           <p className={styles.empty}>{t('batch.list.empty')}</p>
         ) : (
-          <ul className={styles.rows}>
+          <ul className={styles.grid}>
             {active.map((b) => (
               <BatchRow key={b.id} batch={b} />
             ))}
@@ -51,7 +51,7 @@ export function BatchList() {
         {showArchived && archived.length > 0 && (
           <>
             <h2 className={styles.section}>{t('batch.list.archived')}</h2>
-            <ul className={styles.rows}>
+            <ul className={styles.grid}>
               {archived.map((b) => (
                 <BatchRow key={b.id} batch={b} />
               ))}
@@ -80,9 +80,9 @@ function BatchRow({ batch }: { batch: BatchSummary }) {
   }
 
   return (
-    <li className={styles.row} data-archived={archived || undefined} data-orphaned={batch.orphaned || undefined} data-testid="batch-row" data-batch-id={batch.id}>
+    <li className={styles.card} data-archived={archived || undefined} data-orphaned={batch.orphaned || undefined} data-testid="batch-row" data-batch-id={batch.id}>
       <button type="button" className={styles.open} onClick={() => openBatch(batch.id)} aria-label={t('batch.list.openNamed', { name: batch.name })}>
-        <Covers ids={batch.cover_image_ids} />
+        <ContactSheet ids={batch.cover_image_ids} total={batch.item_count} size="l" />
       </button>
       <div className={styles.info}>
         {renaming ? (
@@ -99,32 +99,33 @@ function BatchRow({ batch }: { batch: BatchSummary }) {
               {t('dataset.orphaned')}
             </span>
           ) : (
-            <span className="mono">{t('rail.images', { n: batch.item_count })}</span>
+            <span>{t('rail.images', { n: batch.item_count })}</span>
           )}
-          {batch.current_step && !batch.orphaned && <span>{t('batch.list.at', { step: stepLabel(batch.current_step, t) })}</span>}
           <span>{t('batch.list.updated', { when: timeAgo(batch.updated_at, lang) })}</span>
         </span>
+        {!batch.orphaned && <StepTrack steps={batch.steps} current={batch.current_step} />}
       </div>
       <span className={styles.actions}>
         {!batch.orphaned && (
           <>
-            <button type="button" className="btn" onClick={() => openBatch(batch.id)}>
+            <button type="button" className="btn btn-primary" onClick={() => openBatch(batch.id)}>
               {t('batch.open')}
             </button>
-            <button type="button" className={styles.fix} onClick={() => setRenaming(true)}>
+            <button type="button" className="btn btn-ghost" onClick={() => setRenaming(true)}>
               {t('batch.rename')}
             </button>
             {batch.kind === 'dataset' && (
-              <button type="button" className={styles.fix} onClick={() => useBatchDialog.getState().show({ type: 'copy', batch })} data-testid="batch-copy">
+              <button type="button" className="btn btn-ghost" onClick={() => useBatchDialog.getState().show({ type: 'copy', batch })} data-testid="batch-copy">
                 {t('batch.copy.button')}
               </button>
             )}
-            <button type="button" className={styles.fix} onClick={() => void patchBatch(batch.id, { archived: !archived }, batch.revision)}>
+            <button type="button" className="btn btn-ghost" onClick={() => void patchBatch(batch.id, { archived: !archived }, batch.revision)}>
               {archived ? t('batch.unarchive') : t('batch.archive')}
             </button>
           </>
         )}
-        <button type="button" className={`${styles.fix} ${styles.danger}`} onClick={remove}>
+        <span className={styles.gap} />
+        <button type="button" className={`btn btn-ghost ${styles.danger}`} onClick={remove}>
           {t('batch.delete.button')}
         </button>
       </span>
@@ -163,7 +164,7 @@ function Collections() {
               <div className={styles.info}>
                 <span className={styles.plainName}>{collectionName(c, t)}</span>
                 <span className={styles.meta}>
-                  <span className="mono">{t('rail.images', { n: c.item_count })}</span>
+                  <span>{t('rail.images', { n: c.item_count })}</span>
                   {made && <span data-testid="collection-batch">{t('dataset.collectionMade', { name: made.name })}</span>}
                 </span>
               </div>

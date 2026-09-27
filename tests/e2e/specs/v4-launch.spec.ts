@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from '../fixtures/click-ledger'
 
 import { markModelsReady } from '../fixtures/model-status'
-import { cleanupImages, dbPath, pageOverflow, runBackendScript, seedImages, VIEWPORTS } from '../fixtures/v4-seed'
+import { cleanupImages, dbPath, pageOverflow, runBackendScript, scrollToMiddle, seedImages, VIEWPORTS } from '../fixtures/v4-seed'
 
 /**
  * V4 at launch (slice 6l): a plain /v4/ opens Home, as V3.5 opens on its
@@ -152,7 +152,7 @@ for (const viewport of VIEWPORTS) {
     await launch(page, '/v4/#/settings/appearance')
     for (const id of ['setting-start', 'setting-film']) {
       const row = page.getByTestId(id)
-      await row.scrollIntoViewIfNeeded()
+      await scrollToMiddle(row)
       await expect(row).toBeInViewport({ ratio: 1 })
     }
     expect(await pageOverflow(page)).toBeLessThanOrEqual(0)

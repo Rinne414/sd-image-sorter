@@ -43,8 +43,8 @@
 .heading {
   padding: 5px 8px 2px;
   color: var(--muted);
-  font-size: var(--fs-1);
-  letter-spacing: 0.06em;
+  font-size: var(--fs-2);
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 

@@ -164,42 +164,47 @@ export function SlotRows({ setup, onChoose, onClear, onFavorites }: SlotsProps) 
   return (
     <fieldset className={styles.group} data-testid="sort-slots">
       <legend className={styles.section}>{t('sort.slots.title')}</legend>
-      <ul className={styles.slotList}>
+      <div className={styles.keyboard}>
         {SLOT_KEYS.map((slot) => {
           const path = setup.folders[slot] ?? null
           const favorites = setup.favorites.includes(slot)
           const key = slot.toUpperCase()
+          const set = path !== null || favorites
           return (
-            <li key={slot} className={styles.slotRow} data-slot={slot}>
-              <kbd className={styles.cap}>{key}</kbd>
-              {path ? <FolderLabel path={path} /> : favorites ? <FavoritesLabel /> : <span className={styles.unset}>{t('sort.slot.unset')}</span>}
-              <button type="button" className="btn" onClick={() => onChoose(slot)} data-testid={`sort-choose-${slot}`}>
-                {t(path ? 'sort.slot.change' : 'sort.slot.choose')}
-              </button>
+            <div key={slot} className={styles.keycap} data-slot={slot} data-set={set || undefined}>
+              <span className={styles.keyLetter}>{key}</span>
+              <span className={styles.keyTarget}>
+                {path ? <FolderLabel path={path} /> : favorites ? <FavoritesLabel /> : <span className={styles.unset}>{t('sort.slot.unset')}</span>}
+              </span>
+              <span className={styles.keyActions}>
+                <button type="button" className="btn btn-sm" onClick={() => onChoose(slot)} data-testid={`sort-choose-${slot}`}>
+                  {t(path ? 'sort.slot.change' : 'sort.slot.choose')}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => onFavorites(slot)}
+                  disabled={favorites}
+                  title={t('sort.slot.toFavoritesTip', { key })}
+                  data-testid={`sort-favorites-${slot}`}
+                >
+                  {t('sort.slot.toFavorites')}
+                </button>
+              </span>
               <button
                 type="button"
-                className="btn"
-                onClick={() => onFavorites(slot)}
-                disabled={favorites}
-                title={t('sort.slot.toFavoritesTip', { key })}
-                data-testid={`sort-favorites-${slot}`}
-              >
-                {t('sort.slot.toFavorites')}
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost btn-icon"
+                className={`btn btn-sm btn-ghost btn-icon ${styles.keyClear}`}
                 onClick={() => onClear(slot)}
-                disabled={!path && !favorites}
+                disabled={!set}
                 aria-label={t('sort.slot.clear', { key })}
                 title={t('sort.slot.clear', { key })}
               >
                 <Icon name="close" size={13} />
               </button>
-            </li>
+            </div>
           )
         })}
-      </ul>
+      </div>
       <p className={styles.note}>{t('sort.slots.hint')}</p>
     </fieldset>
   )

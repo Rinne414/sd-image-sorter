@@ -41,10 +41,10 @@
 }
 
 .subLabel {
-  font-size: var(--fs-1);
-  letter-spacing: 0.08em;
+  font-size: var(--fs-2);
+  letter-spacing: 0.02em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 /* ---- the picture ---- */
@@ -175,8 +175,8 @@
 .info > details > summary {
   align-items: center;
   min-height: 30px;
-  font-size: var(--fs-1);
-  letter-spacing: 0.08em;
+  font-size: var(--fs-2);
+  letter-spacing: 0.02em;
   text-transform: uppercase;
 }
 
@@ -201,9 +201,9 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--muted);
-  font-size: var(--fs-1);
-  letter-spacing: 0.08em;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  letter-spacing: 0.02em;
   text-transform: uppercase;
   text-align: left;
 }

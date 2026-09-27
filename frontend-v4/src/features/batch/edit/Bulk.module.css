@@ -192,10 +192,12 @@
   gap: 2px;
 }
 
+/* Five text actions on every row: plain weight keeps them on one line. */
 .rowActions :global(.btn) {
   height: 26px;
-  padding: 0 7px;
+  padding: 0 6px;
   font-size: var(--fs-2);
+  font-weight: 400;
 }
 
 .missed {

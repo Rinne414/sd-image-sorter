@@ -52,10 +52,10 @@
 }
 
 .subLabel {
-  font-size: var(--fs-1);
-  letter-spacing: 0.08em;
+  font-size: var(--fs-2);
+  letter-spacing: 0.02em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .textButton {

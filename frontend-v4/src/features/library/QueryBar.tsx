@@ -274,7 +274,7 @@ export function QueryBar({ total, about = false, inputRef }: Props) {
           { id: 'card', label: t('view.card'), checked: cardOpen, onSelect: toggleCard, hint: 'I', divider: true },
         ]}
       />
-      <span className={`${styles.count} mono`} data-testid="result-count">
+      <span className={styles.count} data-testid="result-count">
         {total === null ? '' : t(about ? 'grid.countAbout' : 'grid.count', { n: total })}
       </span>
     </div>

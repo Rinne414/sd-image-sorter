@@ -39,25 +39,25 @@
 .body {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   flex: 1;
   min-height: 0;
-  padding: 12px 14px;
+  padding: 10px 14px;
   overflow-y: auto;
 }
 
 .section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .heading {
   margin: 0;
-  color: var(--muted);
+  color: var(--text-2);
   font-size: var(--fs-2);
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
 .tools {

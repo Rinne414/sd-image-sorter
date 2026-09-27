@@ -104,7 +104,7 @@
 
 .field input:not([type='checkbox']),
 .field select {
-  height: 30px;
+  height: var(--control-h);
 }
 
 .field textarea {

@@ -52,7 +52,7 @@ function ToolSettings() {
     <>
       <div className={styles.grid} role="group" aria-label={t('censor.style')}>
         {STYLES.map((style) => (
-          <button key={style} type="button" className="btn" aria-pressed={s.style === style} onClick={() => s.setStyle(style)} data-testid={`censor-style-${style}`}>
+          <button key={style} type="button" className="btn btn-sm" aria-pressed={s.style === style} onClick={() => s.setStyle(style)} data-testid={`censor-style-${style}`}>
             {t(STYLE_LABEL[style])}
           </button>
         ))}
@@ -68,7 +68,7 @@ function ChangesToggle() {
   const t = useT()
   const on = useCensorPanel((s) => s.showChanges)
   return (
-    <button type="button" className="btn" aria-pressed={on} onClick={() => requestShowChanges(!on)} title={t('censor.changes.tip')} data-testid="censor-changes-toggle">
+    <button type="button" className="btn btn-sm" aria-pressed={on} onClick={() => requestShowChanges(!on)} title={t('censor.changes.tip')} data-testid="censor-changes-toggle">
       {t('censor.changes.toggle')}
       <kbd>H</kbd>
     </button>
@@ -81,16 +81,16 @@ function ViewControls() {
   const view = useCanvasView.getState
   return (
     <div className={styles.row}>
-      <button type="button" className="btn btn-icon" onClick={() => view().zoomBy(1 / ZOOM_STEP)} title={t('censor.zoomOut')} aria-label={t('censor.zoomOut')} data-testid="censor-zoom-out">
+      <button type="button" className="btn btn-sm btn-icon" onClick={() => view().zoomBy(1 / ZOOM_STEP)} title={t('censor.zoomOut')} aria-label={t('censor.zoomOut')} data-testid="censor-zoom-out">
         <Icon name="minus" size={14} />
       </button>
       <output className={`${styles.zoom} mono`} aria-label={t('censor.zoomLevel')} data-testid="censor-zoom">
         {Math.round(z * 100)}%
       </output>
-      <button type="button" className="btn btn-icon" onClick={() => view().zoomBy(ZOOM_STEP)} title={t('censor.zoomIn')} aria-label={t('censor.zoomIn')} data-testid="censor-zoom-in">
+      <button type="button" className="btn btn-sm btn-icon" onClick={() => view().zoomBy(ZOOM_STEP)} title={t('censor.zoomIn')} aria-label={t('censor.zoomIn')} data-testid="censor-zoom-in">
         <Icon name="plus" size={14} />
       </button>
-      <button type="button" className="btn" onClick={() => view().fit()} title={t('censor.fitTip')} data-testid="censor-fit">
+      <button type="button" className="btn btn-sm" onClick={() => view().fit()} title={t('censor.fitTip')} data-testid="censor-fit">
         <Icon name="fit" size={14} />
         {t('censor.fit')}
       </button>
@@ -154,7 +154,7 @@ function BrushTab({ batchId, item, edit }: { batchId: number; item: BatchItem; e
       <Section title={t('censor.tools')}>
         <div className={styles.tools} role="group" aria-label={t('censor.tools')}>
           {TOOLS.map((tool) => (
-            <button key={tool} type="button" className="btn" aria-pressed={s.tool === tool} onClick={() => s.setTool(tool)} title={t(TOOL_TIP[tool])} data-testid={`censor-tool-${tool}`}>
+            <button key={tool} type="button" className="btn btn-sm" aria-pressed={s.tool === tool} onClick={() => s.setTool(tool)} title={t(TOOL_TIP[tool])} data-testid={`censor-tool-${tool}`}>
               {t(TOOL_LABEL[tool])}
               <kbd>{TOOL_KEY[tool]}</kbd>
             </button>

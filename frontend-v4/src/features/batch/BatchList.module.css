@@ -5,9 +5,9 @@
 }
 
 .sheet {
-  max-width: 1120px;
+  max-width: 1560px;
   margin: 0 auto;
-  padding: 28px 32px 64px;
+  padding: 32px 40px 64px;
 }
 
 @media (min-width: 2400px) {
@@ -29,9 +29,8 @@
 }
 
 .count {
-  color: var(--accent);
-  font-size: var(--fs-2);
-  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-size: var(--fs-4);
 }
 
 .gap {
@@ -69,14 +68,15 @@
 
 .section {
   margin: 36px 0 0;
-  font-size: var(--fs-1);
-  font-weight: 500;
-  letter-spacing: 0.1em;
+  font-size: var(--fs-2);
+  font-weight: 600;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--text-2);
 }
 
-.section + .rows {
+.section + .rows,
+.lead + .rows {
   margin-top: 10px;
 }
 
@@ -162,27 +162,8 @@
   white-space: nowrap;
 }
 
-.fix {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text-2);
-  font-size: var(--fs-2);
-  text-decoration: underline;
-  text-decoration-color: var(--line-strong);
-  text-underline-offset: 3px;
-}
-
-.fix:hover {
-  color: var(--text);
-}
-
 /* Delete sits last, after a gap, away from Open. */
-.danger {
-  margin-left: 10px;
-  color: var(--danger);
-}
-
+.danger,
 .danger:hover {
   color: var(--danger);
 }
@@ -192,6 +173,52 @@
   color: var(--warn);
 }
 
-.row[data-orphaned] .open {
+.card[data-orphaned] .open {
   opacity: 0.6;
+}
+
+/* Batches as contact sheets, three or four to a row on a desktop screen. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 16px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 12px 14px;
+  background: var(--surface-1);
+  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+  transition: border-color var(--t-fast) var(--ease);
+}
+
+.card:hover {
+  border-color: var(--line-strong);
+}
+
+.card[data-archived] {
+  opacity: 0.72;
+}
+
+.card .open {
+  display: block;
+  width: 100%;
+  cursor: pointer;
+}
+
+.card .info {
+  gap: 6px;
+  padding: 0 4px;
+}
+
+.card .actions {
+  display: flex;
+  gap: 4px;
+  padding: 0 0 0 4px;
 }

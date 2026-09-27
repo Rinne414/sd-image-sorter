@@ -10,35 +10,50 @@
 }
 
 .sheet {
-  max-width: 1040px;
+  max-width: 1560px;
   margin: 0 auto;
-  padding: 36px 32px 64px;
+  padding: 28px 40px 56px;
 }
 
 .filmRow + .sheet {
-  padding-top: 22px;
-}
-
-@media (min-width: 2400px) {
-  .sheet {
-    max-width: 1320px;
-  }
+  padding-top: 26px;
 }
 
 .library {
-  margin: 0 0 8px;
-  color: var(--accent);
-  font-size: var(--fs-2);
-  letter-spacing: 0.04em;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 6px;
+}
+
+.libraryName {
+  font-size: var(--fs-6);
+  font-weight: 650;
+  color: var(--text);
+}
+
+.libraryCount {
+  color: var(--muted);
+  font-size: var(--fs-3);
+}
+
+/* Where you left off beside the ways to start: the page fills a desktop screen. */
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  gap: 20px 48px;
+  align-items: start;
+}
+
+.column {
+  min-width: 0;
 }
 
 .section {
-  margin: 28px 0 10px;
-  font-size: var(--fs-1);
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
+  margin: 22px 0 12px;
+  font-size: var(--fs-3);
+  font-weight: 600;
+  color: var(--text-2);
 }
 
 .empty {
@@ -74,7 +89,7 @@
 
 .recent {
   display: grid;
-  gap: 8px;
+  gap: 12px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -84,17 +99,16 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 16px;
-  padding: 10px 14px 10px 10px;
+  gap: 20px;
+  padding: 12px 20px 12px 12px;
   background: var(--surface-1);
-  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
 }
 
 .cardInfo {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -104,11 +118,11 @@
   white-space: nowrap;
   color: var(--text);
   font-size: var(--fs-5);
-  font-weight: 600;
+  font-weight: 650;
 }
 
 .cardMeta {
-  color: var(--text-2);
+  color: var(--muted);
   font-size: var(--fs-2);
 }
 
@@ -119,17 +133,16 @@
 
 .starts {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
 .start {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 16px 18px;
-  border: 1px solid var(--line-strong);
+  align-items: stretch;
+  gap: 8px;
+  padding: 20px 22px 18px;
+  border: 1px solid transparent;
   background: var(--surface-1);
   color: var(--text);
   text-align: left;
@@ -144,11 +157,68 @@
 
 .startTitle {
   font-size: var(--fs-5);
-  font-weight: 600;
+  font-weight: 650;
 }
 
 .startBody {
   color: var(--text-2);
   font-size: var(--fs-3);
   line-height: 1.6;
+}
+
+.keys {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.key {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  font-size: var(--fs-3);
+  color: var(--text);
+  border-bottom-width: 3px;
+}
+
+@media (max-width: 1500px) {
+  .sheet {
+    padding-inline: 28px;
+  }
+
+  .columns {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: 16px 28px;
+  }
+}
+
+/* A short laptop screen: tighter spacing keeps all three ways to start in view. */
+@media (max-height: 820px) {
+  .filmRow {
+    padding-top: 12px;
+  }
+
+  .filmRow + .sheet {
+    padding-top: 16px;
+  }
+
+  .section {
+    margin: 14px 0 10px;
+  }
+
+  .recent,
+  .starts {
+    gap: 10px;
+  }
+
+  .start {
+    gap: 6px;
+    padding: 14px 20px 14px;
+  }
+
+  .card {
+    padding-block: 10px;
+  }
 }

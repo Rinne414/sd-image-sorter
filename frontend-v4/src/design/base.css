@@ -67,12 +67,13 @@ main:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 30px;
+  height: var(--control-h);
   padding: 0 12px;
-  border: 1px solid var(--line-strong);
-  background: transparent;
+  border: 1px solid transparent;
+  background: var(--surface-2);
   color: var(--text);
   font-size: var(--fs-3);
+  font-weight: 500;
   white-space: nowrap;
   text-decoration: none;
   border-radius: var(--radius);
@@ -80,38 +81,37 @@ main:focus-visible {
 }
 
 .btn:hover {
-  background: var(--wash-hover);
-  border-color: var(--muted);
+  background: var(--surface-3);
 }
 
 .btn[aria-pressed="true"],
 .btn[aria-expanded="true"] {
-  border-color: var(--text-2);
-  background: var(--wash-strong);
+  border-color: var(--line-strong);
+  background: var(--surface-3);
 }
 
 /* Primary actions are printed in ink: paper-white on dark, ink-black on light. */
 .btn-primary {
   background: var(--ink-button);
-  border-color: var(--ink-button);
   color: var(--on-ink-button);
-  font-weight: 600;
+  font-weight: 650;
 }
 
 .btn-primary:hover {
-  background: var(--text-2);
-  border-color: var(--text-2);
+  background: color-mix(in srgb, var(--ink-button) 86%, var(--accent));
 }
 
 .btn-primary kbd {
   color: inherit;
   border-color: currentColor;
+  background: none;
   opacity: 0.6;
 }
 
 /* Destructive confirmations: the danger ink on the surface, never a filled red slab. */
 .btn-danger {
-  border-color: var(--danger);
+  background: transparent;
+  border-color: color-mix(in srgb, var(--danger) 60%, transparent);
   color: var(--danger);
   font-weight: 600;
 }
@@ -128,14 +128,26 @@ main:focus-visible {
 }
 
 .btn-ghost {
-  border-color: transparent;
+  background: transparent;
 }
 
 .btn-ghost:hover {
-  border-color: transparent;
+  background: var(--wash-hover);
 }
 
 .btn-icon {
+  width: var(--control-h);
+  padding: 0;
+}
+
+/* A compact button for tight places, such as the actions on a sort key. */
+.btn-sm {
+  height: 30px;
+  padding: 0 10px;
+  font-size: var(--fs-2);
+}
+
+.btn-sm.btn-icon {
   width: 30px;
   padding: 0;
 }
@@ -144,8 +156,9 @@ kbd {
   font-family: var(--font-mono);
   font-size: var(--fs-1);
   color: var(--muted);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   padding: 0 4px;
   line-height: 16px;
 }
@@ -199,3 +212,10 @@ kbd {
 .cat-meta { --c: var(--cat-meta); }
 .cat-rating { --c: var(--cat-rating); }
 .cat-unknown { --c: var(--cat-unknown); }
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}

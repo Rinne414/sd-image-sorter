@@ -3,9 +3,10 @@
    frames at their own shape with a 10 px gap), holding still so a frame can be
    clicked. The holes are the big image's strip holes (Lightbox.module.css). */
 .film {
-  /* Frames grow faster than the window: ~108 px at 768 high keeps the three
-     ways to start on screen; ~183 px at 1080 is the V3.5 film's frame size. */
-  --frame-h: clamp(88px, calc(24 * var(--vh) - 76px), 200px);
+  /* Frames grow much faster than the window: ~130 px at 768 high (~112 at
+     720) keeps the three ways to start on screen; ~250 px at 1080 lets the
+     film carry the page on a desktop screen. */
+  --frame-h: clamp(96px, calc(38 * var(--vh) - 162px), 300px);
   display: flex;
   /* The page sets the width and the frames fill it, never the other way round
      (the shell's grid column would otherwise grow to the row of frames). */

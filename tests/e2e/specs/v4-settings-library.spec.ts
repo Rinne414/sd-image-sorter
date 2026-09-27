@@ -4,7 +4,7 @@ import path from 'node:path'
 import { expect, test, type Page, type Route } from '../fixtures/click-ledger'
 
 import { markModelsReady } from '../fixtures/model-status'
-import { dbPath, pageOverflow, repoRoot, runBackendScript, tmpRoot, VIEWPORTS } from '../fixtures/v4-seed'
+import { dbPath, pageOverflow, repoRoot, runBackendScript, scrollToMiddle, tmpRoot, VIEWPORTS } from '../fixtures/v4-seed'
 import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 /**
@@ -492,7 +492,7 @@ for (const viewport of VIEWPORTS) {
     await expect(page.getByTestId('roots-add')).toBeInViewport({ ratio: 1 })
     await expect(rows(page).first().getByTestId('root-rescan')).toBeInViewport({ ratio: 1 })
     const clear = page.getByTestId('clear-index')
-    await clear.scrollIntoViewIfNeeded()
+    await scrollToMiddle(clear)
     await expect(clear).toBeInViewport({ ratio: 1 })
     await expect(page.getByTestId('tags-import')).toBeVisible()
 
@@ -500,7 +500,7 @@ for (const viewport of VIEWPORTS) {
     await expect(page.getByTestId('disk-thumb-save')).toBeInViewport({ ratio: 1 })
     await page.getByTestId('disk-advanced').locator('summary').click()
     const rebuild = page.getByTestId('disk-rebuild')
-    await rebuild.scrollIntoViewIfNeeded()
+    await scrollToMiddle(rebuild)
     await expect(rebuild).toBeInViewport({ ratio: 1 })
     expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
   })

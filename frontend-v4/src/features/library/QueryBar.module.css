@@ -2,7 +2,7 @@
   position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 6px;
   padding: 10px 12px 10px 12px;
   background: var(--bg);
   border-bottom: 1px solid var(--hairline);
@@ -20,7 +20,7 @@
 .glyph {
   position: absolute;
   left: 10px;
-  top: 7.5px;
+  top: 9.5px;
   display: grid;
   color: var(--muted);
   pointer-events: none;
@@ -28,7 +28,7 @@
 
 .input {
   width: 100%;
-  height: 30px;
+  height: var(--control-h);
   padding: 0 12px 0 32px;
   border: 1px solid var(--line-strong);
   background: var(--surface-1);
@@ -105,8 +105,8 @@
   align-self: center;
   min-width: 88px;
   text-align: right;
-  color: var(--accent);
-  font-size: var(--fs-2);
+  color: var(--muted);
+  font-size: var(--fs-3);
   white-space: nowrap;
 }
 

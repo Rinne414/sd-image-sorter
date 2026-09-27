@@ -42,7 +42,7 @@
 }
 
 .field input {
-  height: 30px;
+  height: var(--control-h);
   padding: 0 10px;
   border: 1px solid var(--line-strong);
   background: var(--bg);

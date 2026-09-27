@@ -99,6 +99,8 @@ export interface BatchSummary {
   id: number
   kind: BatchKind
   name: string
+  /** Its own steps in order, disabled ones included. */
+  steps: BatchStep[]
   current_step: string | null
   revision: number
   archived_at: string | null

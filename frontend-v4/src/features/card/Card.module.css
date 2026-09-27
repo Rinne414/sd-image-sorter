@@ -48,14 +48,16 @@
 }
 
 .emptyFrame {
-  width: 70%;
-  aspect-ratio: 4 / 5;
-  margin-bottom: 10px;
-  border: 1px dashed var(--line-strong);
-  background:
-    repeating-linear-gradient(90deg, var(--line) 0 7px, transparent 7px 14px) top / 100% 5px no-repeat,
-    repeating-linear-gradient(90deg, var(--line) 0 7px, transparent 7px 14px) bottom / 100% 5px no-repeat;
+  width: 56%;
+  aspect-ratio: 3 / 4;
+  margin-bottom: 16px;
   border-radius: var(--radius);
+  /* one unexposed frame on film, waiting for a picture */
+  background:
+    repeating-linear-gradient(90deg, transparent 0 6px, var(--film-hole) 6px 13px) top 5px left / 100% 5px no-repeat,
+    repeating-linear-gradient(90deg, transparent 0 6px, var(--film-hole) 6px 13px) bottom 5px left / 100% 5px no-repeat,
+    linear-gradient(var(--surface-2), var(--surface-2)) center / calc(100% - 20px) calc(100% - 40px) no-repeat,
+    var(--film);
 }
 
 /* ---- film frame: the preview with parameters on its edges ---- */
@@ -237,10 +239,10 @@
 }
 
 .label {
-  font-size: var(--fs-1);
-  letter-spacing: 0.08em;
+  font-size: var(--fs-2);
+  letter-spacing: 0.02em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .copy {

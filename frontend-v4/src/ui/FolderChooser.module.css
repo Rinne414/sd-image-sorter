@@ -7,7 +7,7 @@
 .path {
   flex: 1;
   min-width: 0;
-  height: 30px;
+  height: var(--control-h);
   padding: 0 10px;
   border: 1px solid var(--line-strong);
   background: var(--bg);
@@ -64,10 +64,10 @@
 
 .groupTitle {
   margin: 0 0 2px;
-  color: var(--muted);
-  font-size: var(--fs-1);
+  color: var(--text-2);
+  font-size: var(--fs-2);
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
 .place,
@@ -174,7 +174,7 @@
 
 .nameInput {
   width: 200px;
-  height: 30px;
+  height: var(--control-h);
   padding: 0 8px;
   border: 1px solid var(--accent);
   background: var(--bg);

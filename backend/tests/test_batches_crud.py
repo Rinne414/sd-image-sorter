@@ -125,6 +125,27 @@ def test_list_reports_counts_covers_and_hides_archived(
     assert batch["id"] in all_ids
 
 
+def test_list_carries_each_batch_own_steps(
+    test_client, test_db, tmp_path, batch_data_dir
+):
+    batch = create_batch(test_client, _seed_three(test_db, tmp_path))
+    steps = [
+        {"id": "pick", "enabled": True},
+        {"id": "censor", "enabled": False},
+        {"id": "my-check", "enabled": True},
+        {"id": "export", "enabled": True},
+    ]
+    patched = test_client.patch(
+        f"/api/batches/{batch['id']}",
+        json={"revision": batch["revision"], "steps": steps},
+    )
+    assert patched.status_code == 200, patched.text
+
+    listed = test_client.get("/api/batches").json()["batches"]
+    summary = next(row for row in listed if row["id"] == batch["id"])
+    assert summary["steps"] == steps
+
+
 def test_batches_are_scoped_to_the_request_library(
     test_client, test_db, tmp_path, batch_data_dir
 ):

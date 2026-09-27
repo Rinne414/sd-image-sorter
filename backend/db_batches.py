@@ -286,6 +286,7 @@ def list_batches(include_archived: bool, kind: str | None) -> list[dict[str, Any
             f"""
             SELECT b.id, b.kind, b.name, b.current_step, b.revision, b.archived_at,
                    b.created_at, b.updated_at, b.dataset_project_id, b.settings_json,
+                   b.steps_json,
                    COUNT(bi.image_id) AS item_count,
                    COALESCE(SUM(CASE WHEN bi.censored_path IS NOT NULL THEN 1 ELSE 0 END), 0)
                        AS censored_count
@@ -308,6 +309,7 @@ def list_batches(include_archived: bool, kind: str | None) -> list[dict[str, Any
     views = []
     for summary in summaries:
         summary["cover_image_ids"] = covers.get(int(summary["id"]), [])
+        summary["steps"] = json.loads(summary.pop("steps_json"))
         summary["source_collection_id"] = _source_collection_id(
             summary.pop("settings_json")
         )

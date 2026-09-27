@@ -16,11 +16,11 @@
 
 .heading {
   margin: 0;
-  font-size: var(--fs-1);
-  font-weight: 500;
-  letter-spacing: 0.1em;
+  font-size: var(--fs-2);
+  font-weight: 600;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .list {

@@ -4,7 +4,7 @@ import { useLang, useT } from '../../i18n'
 import { useApp } from '../../state/store'
 import { timeAgo } from './batchLogic'
 import styles from './BatchList.module.css'
-import { Covers } from './Covers'
+import { ContactSheet } from './ContactSheet'
 import { openProjectAsBatch, useUnlinkedProjects } from './datasetApi'
 
 /** V3.5's dataset projects that no batch shows yet: opening one makes it a dataset batch (V3.5 keeps it too). */
@@ -28,22 +28,22 @@ export function V35Projects({ showArchived }: { showArchived: boolean }) {
     <>
       <h2 className={styles.section}>{t('dataset.v35.title')}</h2>
       <p className={styles.lead}>{t('dataset.v35.lead')}</p>
-      <ul className={styles.rows}>
+      <ul className={styles.grid}>
         {list.map((p) => (
-          <li key={p.id} className={styles.row} data-archived={p.archived_at !== null || undefined} data-testid="v35-project-row" data-project-id={p.id}>
+          <li key={p.id} className={styles.card} data-archived={p.archived_at !== null || undefined} data-testid="v35-project-row" data-project-id={p.id}>
             <button type="button" className={styles.open} onClick={() => void open(p)} disabled={busy !== null} aria-label={t('batch.list.openNamed', { name: p.name })}>
-              <Covers ids={p.cover_image_ids} />
+              <ContactSheet ids={p.cover_image_ids} total={p.item_count} size="l" />
             </button>
             <div className={styles.info}>
               <span className={styles.plainName}>{p.name}</span>
               <span className={styles.meta}>
-                <span className="mono">{t('rail.images', { n: p.item_count })}</span>
+                <span>{t('rail.images', { n: p.item_count })}</span>
                 {p.archived_at !== null && <span>{t('dataset.v35.archived')}</span>}
                 <span>{t('batch.list.updated', { when: timeAgo(p.updated_at, lang) })}</span>
               </span>
             </div>
             <span className={styles.actions}>
-              <button type="button" className="btn" onClick={() => void open(p)} disabled={busy !== null} data-testid="v35-project-open">
+              <button type="button" className="btn btn-primary" onClick={() => void open(p)} disabled={busy !== null} data-testid="v35-project-open">
                 {t('batch.open')}
               </button>
             </span>

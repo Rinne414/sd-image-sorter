@@ -56,7 +56,7 @@
 .folder {
   flex: 1;
   min-width: 0;
-  height: 30px;
+  height: var(--control-h);
   padding: 0 10px;
   border: 1px solid var(--line);
   background: var(--bg);
@@ -130,7 +130,7 @@
 
 .select,
 .text {
-  height: 30px;
+  height: var(--control-h);
   padding: 0 8px;
   border: 1px solid var(--line-strong);
   background: var(--bg);

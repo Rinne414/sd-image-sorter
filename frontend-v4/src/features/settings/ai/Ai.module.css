@@ -51,19 +51,19 @@
 
 .groupTitle {
   margin: 0 0 10px;
-  color: var(--muted);
-  font-size: var(--fs-1);
-  font-weight: 400;
-  letter-spacing: 0.06em;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 /* The heading over a list of models. */
 .listTitle {
   margin: 20px 0 8px;
-  color: var(--muted);
-  font-size: var(--fs-1);
-  font-weight: 400;
-  letter-spacing: 0.06em;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .field {
@@ -98,7 +98,7 @@
 
 .input,
 .select {
-  height: 30px;
+  height: var(--control-h);
   padding: 0 9px;
 }
 

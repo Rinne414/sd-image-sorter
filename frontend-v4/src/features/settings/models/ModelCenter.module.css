@@ -152,10 +152,10 @@
 
 .listTitle {
   margin: 0 0 4px;
-  color: var(--muted);
+  color: var(--text-2);
   font-size: var(--fs-2);
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
 .list {
@@ -203,14 +203,15 @@
   gap: 6px;
 }
 
-/* Same crop-mark chips as Appearance: the chosen one inked. */
+/* Same chips as Appearance. */
 .choice {
   position: relative;
   display: inline-flex;
   align-items: center;
-  height: 30px;
+  height: var(--control-h);
   padding: 0 14px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid transparent;
+  background: var(--surface-2);
   color: var(--text-2);
   cursor: pointer;
   white-space: nowrap;
@@ -219,13 +220,14 @@
 }
 
 .choice:hover {
-  background: var(--wash-hover);
+  background: var(--surface-3);
   color: var(--text);
 }
 
+/* Chosen like a checked row elsewhere: the accent wash and edge. */
 .choice[data-checked] {
-  border-color: var(--text);
-  background: var(--wash-strong);
+  border-color: var(--accent);
+  background: var(--accent-soft);
   color: var(--text);
   font-weight: 600;
 }

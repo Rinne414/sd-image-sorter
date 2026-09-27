@@ -113,7 +113,10 @@ async function openHome(page: Page, library: string, theme: 'dark' | 'light' = '
 const frameIds = (page: Page) => page.getByTestId('home-frame').evaluateAll((els) => els.map((el) => Number((el as HTMLElement).dataset.imageId)))
 
 test('the film shows the ★5 images first, newest first, then the newest ones, each once', async ({ page }) => {
-  await page.setViewportSize({ width: 1920, height: 1080 })
+  // The film shows the frames that fit. An ultrawide window (its frames stay
+  // ~155 px high at 130%) fits all eight test pictures; the fit tests below cover the
+  // usual sizes.
+  await page.setViewportSize({ width: 2560, height: 1080 })
   await openHome(page, LIBRARY)
   await expect(page.locator('[data-testid="home-film"]:not([aria-busy])')).toBeVisible()
   await expect(page.getByTestId('home-frame')).toHaveCount(ROWS.length)
@@ -197,8 +200,12 @@ for (const viewport of VIEWPORTS) {
     test(`the film fits at ${viewport.width}x${viewport.height} (${theme})`, async ({ page }) => {
       await page.setViewportSize(viewport)
       await openHome(page, LIBRARY, theme)
-      await expect(page.getByTestId('home-frame')).toHaveCount(ROWS.length)
+      await expect(page.locator('[data-testid="home-film"]:not([aria-busy])')).toBeVisible()
       await expect(page.getByTestId('home-film-all')).toBeInViewport({ ratio: 1 })
+      // the frames that fit, in the film's order from the start: at least the three ★5
+      const shown = await frameIds(page)
+      expect(shown.length).toBeGreaterThanOrEqual(3)
+      expect(shown).toEqual(STRIP_ORDER.slice(0, shown.length).map((key) => ids[key]))
       await expect(page.getByTestId('home-start-sort')).toBeInViewport({ ratio: 1 })
       expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
       // every frame and the end sit whole on the film, in one row, none over another; the film spans the window

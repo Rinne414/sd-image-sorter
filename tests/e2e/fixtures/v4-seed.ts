@@ -2,7 +2,7 @@ import fsSync from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
-import { expect, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
 
 import { PY_DELETE_IMAGES } from './e2e-db'
 
@@ -157,6 +157,16 @@ export async function openLibrary(page: Page, query: string, count: number, them
   // English counts of 1 are singular (i18n/plural.ts)
   await expect(page.getByTestId('result-count')).toHaveText(`${count.toLocaleString('en-US')} ${count === 1 ? 'image' : 'images'}`)
   await expect(page.locator('[data-testid="gallery-scroller"]:not([aria-busy])')).toBeVisible()
+}
+
+/**
+ * Scroll an element to the middle of its scroller before a "wholly on screen"
+ * check. scrollIntoViewIfNeeded stops as soon as the element's edge meets the
+ * scroller's edge, and with fractional line heights that edge can sit a part
+ * of a pixel outside, which reads as not wholly visible.
+ */
+export async function scrollToMiddle(target: Locator): Promise<void> {
+  await target.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'nearest' }))
 }
 
 /** Horizontal overflow of the whole page, in px (0 or less is fine). */

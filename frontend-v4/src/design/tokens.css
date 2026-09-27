@@ -12,21 +12,21 @@
   color-scheme: dark;
 
   /* surfaces, darkest to lightest */
-  --stage: #0d0c0b;
-  --bg: #131210;
+  --stage: #0a0909;
+  --bg: #121110;
   --surface-1: #1a1917;
-  --surface-2: #22211e;
-  --surface-3: #2d2b27;
-  --line: #34322d;
-  --line-strong: #4a463f;
+  --surface-2: #23221f;
+  --surface-3: #2e2c28;
+  --line: #282622;
+  --line-strong: #3d3a34;
   --hairline: #1f1e1b;
   --scrim: rgba(8, 7, 6, 0.62);
   --overlay-panel: rgba(26, 25, 23, 0.96);
 
   /* type */
   --text: #ece6da;
-  --text-2: #bfb8aa;
-  --muted: #8f887b;
+  --text-2: #c9c2b4;
+  --muted: #989184;
   --faint: #7a7367;
 
   /* roles */
@@ -89,22 +89,22 @@
   --surface-1: #f6f3ed;
   --surface-2: #fbf9f5;
   --surface-3: #e6e1d6;
-  --line: #d2cbbd;
-  --line-strong: #b8b0a0;
+  --line: #ddd6c9;
+  --line-strong: #c4bcad;
   --hairline: #e2dcd0;
   --scrim: rgba(40, 36, 30, 0.35);
   --overlay-panel: rgba(246, 243, 237, 0.97);
 
   --text: #1c1a17;
   --text-2: #3f3b34;
-  --muted: #655f55;
+  --muted: #605a50;
   --faint: #857d6e;
 
   --ink-button: #1c1a17;
   --on-ink-button: #f6f3ed;
-  --accent: #8a5409;
-  --accent-soft: rgba(138, 84, 9, 0.1);
-  --accent-line: rgba(138, 84, 9, 0.45);
+  --accent: #844e03;
+  --accent-soft: rgba(132, 78, 3, 0.1);
+  --accent-line: rgba(132, 78, 3, 0.45);
   --marker: #b5311a;
   --marker-soft: rgba(181, 49, 26, 0.1);
   --on-marker: #fff8f4;
@@ -151,19 +151,21 @@
 
 :root {
   /* type */
-  --font-ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
   --font-mono: "Cascadia Mono", "JetBrains Mono", Consolas, ui-monospace, monospace;
-  --fs-1: 11px;
-  --fs-2: 12px;
-  --fs-3: 13px;
-  --fs-4: 14px;
-  --fs-5: 16px;
-  --fs-6: 20px;
-  --fs-7: 26px;
+  --fs-1: 12px;
+  --fs-2: 13px;
+  --fs-3: 14px;
+  --fs-4: 15px;
+  --fs-5: 17px;
+  --fs-6: 22px;
+  --fs-7: 30px;
 
-  /* shape: small square-ish corners and hairlines, like printed matter */
-  --radius: 2px;
-  --radius-lg: 3px;
+  /* shape: soft corners on controls and cards; small ones inside them
+     (keys, film frames, the tab mark) */
+  --radius-sm: 3px;
+  --radius: 6px;
+  --radius-lg: 10px;
 
   /* layout */
   /* One percent of the window in the page's own px. Under the interface zoom
@@ -172,7 +174,9 @@
      <html> by index.html and lib/uiScale. */
   --vh: calc(1vh / var(--ui-zoom, 1));
   --vw: calc(1vw / var(--ui-zoom, 1));
-  --topbar-h: 46px;
+  --topbar-h: 54px;
+  /* buttons, text fields and selects share one height so a row lines up */
+  --control-h: 34px;
   --rail-w: 232px;
   --card-w: 380px;
   --gap-grid: 6px;
@@ -190,14 +194,21 @@
   }
 }
 
+/* A short laptop screen (768 high) keeps the slimmer top bar. */
+@media (max-height: 820px) {
+  :root {
+    --topbar-h: 46px;
+  }
+}
+
 @media (min-width: 2400px) {
   :root {
-    --fs-1: 12px;
-    --fs-2: 13px;
-    --fs-3: 14px;
-    --fs-4: 15px;
-    --fs-5: 17px;
-    --topbar-h: 50px;
+    --fs-1: 13px;
+    --fs-2: 14px;
+    --fs-3: 15px;
+    --fs-4: 16px;
+    --fs-5: 18px;
+    --topbar-h: 58px;
     --rail-w: 280px;
     --card-w: 480px;
   }

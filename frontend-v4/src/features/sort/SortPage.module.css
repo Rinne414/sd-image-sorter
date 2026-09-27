@@ -7,9 +7,9 @@
 }
 
 .sheet {
-  max-width: 1040px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 28px 32px 40px;
+  padding: 32px 40px 40px;
 }
 
 @media (min-width: 2400px) {
@@ -34,11 +34,11 @@
 .section {
   margin: 0 0 8px;
   padding: 0;
-  font-size: var(--fs-1);
-  font-weight: 500;
-  letter-spacing: 0.1em;
+  font-size: var(--fs-2);
+  font-weight: 600;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .note {
@@ -144,8 +144,8 @@
 
 .columns {
   display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: 28px;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
+  gap: 48px;
   align-items: start;
 }
 
@@ -194,40 +194,6 @@
   font-size: var(--fs-2);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.slotList {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.slotRow {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 6px 6px 8px;
-  background: var(--surface-1);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-}
-
-.cap {
-  display: inline-grid;
-  place-items: center;
-  min-width: 30px;
-  height: 30px;
-  padding: 0 6px;
-  color: var(--text);
-  font-size: var(--fs-4);
-  font-weight: 600;
-  line-height: 1;
-  background: var(--surface-2);
-  border: 1px solid var(--line-strong);
-  border-bottom-width: 2px;
 }
 
 .folder {
@@ -374,11 +340,11 @@
 
 .presetsLabel {
   margin-right: 4px;
-  font-size: var(--fs-1);
-  font-weight: 500;
-  letter-spacing: 0.1em;
+  font-size: var(--fs-2);
+  font-weight: 600;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .preset {
@@ -678,4 +644,80 @@
   background: var(--surface-1);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+}
+
+/* WASD as the keys themselves: W above, A S D below, each cap names its folder. */
+.keyboard {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-areas:
+    ". w ."
+    "a s d";
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* The letter beside its folder, clear in the corner, the two actions below. */
+.keycap {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "letter target clear"
+    "actions actions actions";
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+  padding: 10px 8px 10px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-bottom: 5px solid var(--surface-3);
+  border-radius: var(--radius-lg);
+}
+
+.keycap[data-slot="w"] { grid-area: w; }
+.keycap[data-slot="a"] { grid-area: a; }
+.keycap[data-slot="s"] { grid-area: s; }
+.keycap[data-slot="d"] { grid-area: d; }
+
+.keycap[data-set] {
+  background: var(--surface-2);
+  border-color: var(--line-strong);
+  border-bottom-color: var(--accent);
+}
+
+.keyLetter {
+  grid-area: letter;
+  font-family: var(--font-mono);
+  font-size: var(--fs-7);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.keycap[data-set] .keyLetter {
+  color: var(--accent);
+}
+
+.keyTarget {
+  grid-area: target;
+  min-width: 0;
+}
+
+.keyClear {
+  grid-area: clear;
+  align-self: start;
+}
+
+.keyTarget .folder {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.keyActions {
+  grid-area: actions;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
 }

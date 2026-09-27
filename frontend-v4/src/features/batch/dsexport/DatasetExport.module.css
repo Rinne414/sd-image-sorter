@@ -35,7 +35,7 @@
 
 .number input {
   width: 72px;
-  height: 30px;
+  height: var(--control-h);
   padding: 0 6px;
   border: 1px solid var(--line-strong);
   background: var(--bg);
@@ -53,7 +53,7 @@
 .pattern {
   flex: 1;
   min-width: 160px;
-  height: 30px;
+  height: var(--control-h);
   padding: 0 8px;
   border: 1px solid var(--line-strong);
   background: var(--bg);

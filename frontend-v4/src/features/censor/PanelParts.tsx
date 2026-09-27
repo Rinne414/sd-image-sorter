@@ -55,11 +55,11 @@ export function HistoryButtons({ batchId, item, edit }: { batchId: number; item:
   }
   return (
     <div className={styles.pair}>
-      <button type="button" className="btn" onClick={() => run(undoEdit)} disabled={!canUndo} title={t('censor.undoTip')} data-testid="censor-undo">
+      <button type="button" className="btn btn-sm" onClick={() => run(undoEdit)} disabled={!canUndo} title={t('censor.undoTip')} data-testid="censor-undo">
         <Icon name="undo" size={14} />
         {t('censor.undo')}
       </button>
-      <button type="button" className="btn" onClick={() => run(redoEdit)} disabled={!canRedo} title={t('censor.redoTip')} data-testid="censor-redo">
+      <button type="button" className="btn btn-sm" onClick={() => run(redoEdit)} disabled={!canRedo} title={t('censor.redoTip')} data-testid="censor-redo">
         <Icon name="redo" size={14} />
         {t('censor.redo')}
       </button>
