@@ -91,7 +91,13 @@ test('the nav width check measures final tab widths, not a running transition', 
   // while the tabs were still animating, read the old narrow widths, dropped
   // the compact layout, and "More" ended up under the settings button.
   await page.setViewportSize({ width: 1280, height: 720 })
-  await page.addInitScript(() => localStorage.setItem('sd-image-sorter-lang', 'zh-CN'))
+  await page.addInitScript(() => {
+    localStorage.setItem('sd-image-sorter-lang', 'zh-CN')
+    // The default five tabs fit at 1280 with full labels, so nothing would be
+    // compacted. A sixth tab (the user can add 数据集 in "customize") makes
+    // the bar need compact labels — the state this check starts from.
+    localStorage.setItem('aurora-nav-tabs', JSON.stringify(['gallery', 'reader', 'sorting', 'censor', 'similar', 'dataset']))
+  })
   await page.goto('/')
   await expect(page.locator('#view-gallery')).toBeVisible()
   await page.click('#nav-tab-censor')
