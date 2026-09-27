@@ -24,6 +24,12 @@
         lastProgress: null,
         bannerVisible: false,
         wasRunning: false,         // tracks running->idle transition for "Done" UX
+        // One request analyzes at most 50,000 images (backend limit). A run the
+        // user started keeps going, round after round, until nothing is missing,
+        // a round analyzes nothing, or the user cancels.
+        continueRounds: false,
+        sessionCompleted: 0,       // images analyzed across the rounds of this run
+        sessionFailed: 0,
         doneAutoCloseTimer: null,  // auto-close toast/chip 5s after completion
         doneState: false,          // when true, chip/toast show completion banner
 
@@ -149,46 +155,86 @@
 
         async startAnalysis() {
             this.hideBanner();
+            this.sessionCompleted = 0;
+            this.sessionFailed = 0;
+            const missing = await this._fetchMissingCount();
+            const data = await this._startRound();
+            if (!data) return;
+            // Nothing queued (everything already analyzed) — say so and
+            // skip the progress toast, which would sit at "0/0 0%" forever.
+            if (!Number(data.total)) {
+                this._toast(
+                    this.t("All images already have color analysis.", "所有图片都已完成色彩分析。"),
+                    "info",
+                );
+                return;
+            }
+            this.continueRounds = true;
+            const all = Math.max(missing, Number(data.total));
+            this._toast(
+                all > Number(data.total)
+                    ? this.t(
+                        `Color analysis started — ${all.toLocaleString()} images to analyze, ${Number(data.total).toLocaleString()} per round until none are left.`,
+                        `已开始补算 ${all.toLocaleString()} 张图的色彩，每批 ${Number(data.total).toLocaleString()} 张，自动接着做到全部完成。`,
+                    )
+                    : this.t(
+                        `Color analysis started — ${data.total.toLocaleString()} images queued.`,
+                        `已开始补算 ${data.total.toLocaleString()} 张图的色彩。`,
+                    ),
+                "info",
+            );
+            this.openToast();
+            this.startPolling();
+        },
+
+        // One analyze request. Returns its answer, or null after saying why it failed.
+        async _startRound() {
             try {
                 const resp = await (window.apiFetch || fetch)("/api/colors/analyze", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    // Cap one call at 50k images (backend Field max_length).
-                    // For libraries beyond that, the user can click Analyze
-                    // again after the first batch finishes — backend
-                    // get_images_missing_color_data() returns the next slice.
+                    // The backend takes at most 50,000 per request; the rounds
+                    // continue in refreshProgress until nothing is missing.
                     body: JSON.stringify({ limit: 50000 }),
                 });
                 if (!resp.ok) {
                     const err = await resp.json().catch(() => ({}));
                     this._toast(err.detail || resp.statusText, "error");
-                    return;
+                    return null;
                 }
-                const data = await resp.json();
-                // Nothing queued (everything already analyzed) — say so and
-                // skip the progress toast, which would sit at "0/0 0%" forever.
-                if (!Number(data.total)) {
-                    this._toast(
-                        this.t("All images already have color analysis.", "所有图片都已完成色彩分析。"),
-                        "info",
-                    );
-                    return;
-                }
-                this._toast(
-                    this.t(
-                        `Color analysis started — ${data.total.toLocaleString()} images queued.`,
-                        `已开始补算 ${data.total.toLocaleString()} 张图的色彩。`,
-                    ),
-                    "info",
-                );
-                this.openToast();
-                this.startPolling();
+                return await resp.json();
             } catch (e) {
                 this._toast(String(e.message || e), "error");
+                return null;
             }
         },
 
+        // A round just ended: start the next one while images are still missing.
+        // Returns true when a next round started.
+        async _continueWithNextRound(data) {
+            this.sessionCompleted += Number(data.completed || 0);
+            this.sessionFailed += Number(data.failed || 0);
+            if (!this.continueRounds || data.cancel_requested || !(Number(data.completed) > 0)) {
+                return false;
+            }
+            const missing = await this._fetchMissingCount();
+            if (missing <= 0) return false;
+            const next = await this._startRound();
+            if (!next || !Number(next.total)) return false;
+            this.wasRunning = true;
+            this._toast(
+                this.t(
+                    `${this.sessionCompleted.toLocaleString()} images analyzed, ${missing.toLocaleString()} left — continuing with the next ${Number(next.total).toLocaleString()}.`,
+                    `已分析 ${this.sessionCompleted.toLocaleString()} 张，还剩 ${missing.toLocaleString()} 张，继续下一批 ${Number(next.total).toLocaleString()} 张。`,
+                ),
+                "info",
+            );
+            this.startPolling();
+            return true;
+        },
+
         async cancelAnalysis() {
+            this.continueRounds = false;
             try {
                 await (window.apiFetch || fetch)("/api/colors/cancel", { method: "POST" });
             } catch (_) { /* ignore */ }
@@ -236,6 +282,9 @@
 
             this.lastProgress = data;
 
+            if (justFinished && await this._continueWithNextRound(data)) {
+                return; // the next round is running; the next poll shows it
+            }
             if (justFinished && data.completed > 0) {
                 this._showDoneBanner(data);
                 try { window.dispatchEvent(new CustomEvent("colorAnalysisCompleted")); } catch (_e) {}
@@ -280,13 +329,22 @@
                 if (chip) chip.hidden = true;
             }, 5000);
             // Surface a global toast too — visible even when the chip toast is closed.
-            this._toast(
-                this.t(
-                    `Color analysis done — ${data.completed.toLocaleString()} images analyzed.`,
-                    `色彩分析完成 — 已分析 ${data.completed.toLocaleString()} 张。`,
-                ),
-                "success",
-            );
+            // It counts every round of this run and says what is still missing.
+            const analyzed = this.continueRounds ? this.sessionCompleted : Number(data.completed || 0);
+            this.continueRounds = false;
+            this._fetchMissingCount().then((missing) => {
+                const done = this.t(
+                    `Color analysis done — ${analyzed.toLocaleString()} images analyzed.`,
+                    `色彩分析完成 — 已分析 ${analyzed.toLocaleString()} 张。`,
+                );
+                const left = missing > 0
+                    ? this.t(
+                        ` ${missing.toLocaleString()} could not be analyzed yet.`,
+                        `还有 ${missing.toLocaleString()} 张没能分析。`,
+                    )
+                    : "";
+                this._toast(done + left, missing > 0 ? "warning" : "success");
+            });
         },
 
         _renderChip(data) {
