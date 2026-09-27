@@ -370,19 +370,23 @@ def list_collections() -> List[Dict[str, Any]]:
     """List collections in the active library with their item counts, newest first."""
     ensure_favorites_collection()
     lib_sql, lib_params = _library_clause("c.library_id")
+    # Count only members that still live in this library: an image moved to
+    # another library keeps its item row but is no longer shown here.
+    img_sql, img_params = _library_clause("i.library_id")
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
             f"""
             SELECT c.id, c.slug, c.name, c.folder_path, c.created_at,
-                   COUNT(ci.id) AS item_count
+                   COUNT(i.id) AS item_count
             FROM collections c
             LEFT JOIN collection_items ci ON ci.collection_id = c.id
+            LEFT JOIN images i ON i.id = ci.source_image_id AND {img_sql}
             WHERE {lib_sql}
             GROUP BY c.id
             ORDER BY c.created_at DESC, c.id DESC
             """,
-            lib_params,
+            img_params + lib_params,
         )
         collections = [_row_to_dict(row) for row in cursor.fetchall()]
     # Favorites is path-anchored (not a collection_items snapshot), so report its
@@ -484,12 +488,13 @@ def set_collection_membership(collection_id: int, source_image_id: int, member: 
         remove_collection_item(collection_id, source_image_id)
         return False
 
+    img_sql, img_params = _library_clause()
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT path, prompt, negative_prompt, checkpoint, loras, metadata_json, "
-            "created_at, width, height, file_size FROM images WHERE id = ?",
-            (source_image_id,),
+            f"created_at, width, height, file_size FROM images WHERE id = ? AND {img_sql}",
+            (source_image_id, *img_params),
         )
         row = cursor.fetchone()
     if row is None:
@@ -524,8 +529,8 @@ def set_collection_membership_bulk(
 
     Returns the number of memberships actually written (upserted rows for
     member=True, deleted rows for member=False). Image ids that no longer
-    exist are silently skipped. Raises ValueError on a missing collection
-    (the caller maps that to a 404).
+    exist, or that live in another library, are skipped when adding. Raises
+    ValueError on a missing collection (the caller maps that to a 404).
     """
     if not collection_exists(collection_id):
         raise ValueError(f"Collection {collection_id} not found")
@@ -542,6 +547,7 @@ def set_collection_membership_bulk(
         # heart hydration / count / rescan-proofing keep working.
         return _set_favorites_membership_bulk(ids, fav_id, member)
 
+    img_sql, img_params = _library_clause()
     changed = 0
     with get_db() as conn:
         cursor = conn.cursor()
@@ -559,8 +565,8 @@ def set_collection_membership_bulk(
             cursor.execute(
                 "SELECT id, path, prompt, negative_prompt, checkpoint, loras, "
                 "metadata_json, created_at, width, height, file_size "
-                f"FROM images WHERE id IN ({placeholders})",
-                chunk,
+                f"FROM images WHERE id IN ({placeholders}) AND {img_sql}",
+                [*chunk, *img_params],
             )
             images = [_row_to_dict(row) for row in cursor.fetchall()]
             if not images:
@@ -692,16 +698,17 @@ def get_collection_image_ids(collection_id: int) -> List[int]:
     fav_id = get_favorites_collection_id()
     if fav_id is not None and collection_id == fav_id:
         return get_favorite_source_ids()
+    img_sql, img_params = _library_clause("i.library_id")
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            """
+            f"""
             SELECT ci.source_image_id
             FROM collection_items ci
             INNER JOIN images i ON i.id = ci.source_image_id
-            WHERE ci.collection_id = ?
+            WHERE ci.collection_id = ? AND {img_sql}
             ORDER BY ci.added_at DESC, ci.id DESC
             """,
-            (collection_id,),
+            (collection_id, *img_params),
         )
         return [row[0] for row in cursor.fetchall()]
