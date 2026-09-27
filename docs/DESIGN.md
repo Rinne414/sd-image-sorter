@@ -1,18 +1,19 @@
-# SD Image Sorter — UI Design Rules
+# SD Image Sorter V4 — UI Design Rules
 
-This document has two layers: **§principles** is the macro design philosophy every
-feature and surface must serve; everything after it is a **micro-invariant** that
-survived a "wait, why?" review. It is the source of truth for "why does this look
-like that" questions. When a change conflicts with either layer, the change is
-wrong — see `docs/AI_PRINCIPLES.md` for the authority order.
+This document describes the V4 interface (`frontend-v4/`, React + TypeScript,
+served at `/v4/`; `/` redirects there). It has two layers: **§principles** is
+the design philosophy every surface must serve; the sections after it are
+**micro-invariants** that survived a "wait, why?" review. When a change
+conflicts with either layer, the change is wrong; see `docs/AI_PRINCIPLES.md`
+for the authority order. Decisions with their evidence live in
+`.plans/v4/decisions.md` (the D-numbers below point there).
 
 ---
 
 ## §principles — The design principles (macro layer)
 
-Distilled from owner directives 2025–2026; none of these are generic best-practice
-imports — each one came from a real owner complaint or an explicit ruling. Read
-this before adding any feature, entrance, or surface.
+Distilled from owner directives 2025–2026. Read this before adding any
+feature, entrance, or surface.
 
 ### Product layer (owner-set, highest authority)
 
@@ -57,77 +58,62 @@ When in doubt: behave like local multi-catalog tools (Eagle libraries /
 Lightroom catalogs class) — durable workspaces, explicit clear/delete — never
 like a temporary viewer or two peer "session vs permanent" galleries.
 
-### Entrance & information-architecture layer (owner FB 2026-07-06/07)
+### Shell and information architecture (V4)
 
-5. **Intent first.** The entry page asks "what are we organizing today":
-   missions (outcome-oriented) above, tools (room-oriented) below.
-6. **The Library is home** (see §product-narrative). Biggest button on the entry
-   page; always one step away; its nav tab can never be hidden. Home opens the
-   **current long-lived library** (workspace). Switching libraries is a
-   workspace action, not a short-lived "session scope" peer to generator tabs.
-7. **Missions are guided modes.** Picking a mission scopes the top bar to only
-   that pipeline's tabs, in order, with step numbers — the bar itself answers
-   "how do I go". A visible chip exits back to the full set.
-8. **Never cage.** Every feature stays reachable through at least two paths
-   (direct tab or More-menu mirror, plus the function catalog). ESC always goes
-   up exactly one level and never loses progress.
-9. **Newcomer defaults, pro overrides.** The default experience explains itself
-   (badges, step numbers, catalog descriptions); power users can customize the
-   tab bar, skip the entry page, change the cover mode — and every override is
-   reversible.
-10. **The app carries its own map.** The 所有功能 catalog lists every feature
-    with a one-line usage; a feature that is not in the catalog effectively
-    does not exist for new users.
-11. **Entrances may duplicate; implementations must not.** A feature may be
-    reachable from the entry page, the nav bar, the catalog, and a menu — but
-    all entrances must proxy the SAME button/function (e.g. the entry page's
-    language button clicks `#btn-language-toggle`). Never fork the behavior
-    per entrance.
+5. **Three places, one toolbox.** The top bar holds 图库 (Library), 批次
+   (Batches) and 分拣 (Sort); everything else is reached from 工具 (Tools),
+   ⚙ (Settings) or Ctrl K. Home (the brand button) shows the ★5 film strip,
+   where you left off, and the three ways to start. Settings and Tools are
+   pages (`#/settings/<tab>`, `#/tools/<tool>`, D43), not modals.
+6. **A batch is an ordered, saved set of images with steps.** Pixiv
+   (挑图 → 打码 → 排顺序 → 命名 → 导出), dataset (挑图 → AI 打标 → 改标签 → 检查
+   → 导出) and custom batches share one step rail; steps can be switched off
+   and reordered. Every "group of images" workflow is a batch; do not add a
+   parallel concept.
+7. **Click inspects, double-click opens.** In the library a click shows the
+   image's generation card in the right column; double-click or Enter opens
+   the lightbox (one image up close); `I` toggles the right column.
+8. **Esc closes only the topmost layer and never navigates** (D8).
+9. **Never cage.** Every feature is reachable from at least two places (its
+   page or menu, plus Ctrl K). A feature missing from Ctrl K is hard to find.
+10. **Entrances may duplicate; implementations must not.** Two entrances to
+    one feature call the same function or open the same page.
 
-### Visual-language layer (Graphite contract + de-AI craft)
+### Visual language (V4's own; D9, D10)
 
-12. **One accent. Color is not a category system.**
-    Graphite surfaces are true-neutral (R=G=B). Exactly one accent
-    (`--accent`, restrained amber) marks the primary action and the
-    selected state. Status colours (success / warning / danger) are data
-    and always sit next to a glyph. Historical names `--blue` / `--pink` /
-    `--purple` in older CSS remap onto this: blue and pink are the accent,
-    purple is a neutral grey. Do not reintroduce a three-accent semantics.
-    **One solid primary per screen. No brand gradients.**
-    `frontend/css/tokens.css` is the single palette owner (see §css-ownership).
-13. **Bilingual completeness.** en/zh key parity is audited; user-facing errors
-    must have a Chinese variant. No zh-TW in the zh-CN pack.
-14. **Dangerous operations sit far from common ones** (e.g. the danger divider
-    in menus); icon-only buttons always carry a tooltip.
-15. **Local darkroom, not AI SaaS skin (de-AI manifesto).**
-    This is desktop software for sitting with images. The product stance:
-
-    > **The image is the only thing that may glow. UI does not glow, does not
-    > gradient-brand, and does not coach by default.**
-
-    Craft rules that override trend:
-    - **Matte solid panels** over glass/blur atmosphere (blur only for true
-      overlays that sit on top of photos: peeks, modals).
-    - **No decorative ambient** (radial orbs, hero-bleed wallpapers, glow
-      shadows used as brand).
-    - **No product-coach chrome by default** (daily-loop tips, celebratory
-      chips). Opt-in only; status may be quiet and dismissible.
-    - **Typography serves filing and reading**, not landing-page warmth.
-    - **One sharp memory** beats five soft “premium” effects (e.g. Space
-      light peek is enough; do not stack hero bleed + gradient CTA + purple
-      coach chips on the same screen).
-
-    When a change makes the UI look more like a generic AI dashboard
-    (gradients, glow, multi-accent chrome, ambient blur), it is wrong even
-    if tokens already exist for it.
+11. **Two themes of V4's own, never a copy of V3.5's Dusk.** Dark
+    "darkroom" (warm near-black, paper-white type, amber edge print) and
+    light "proof" (a contact sheet on proof paper, ink type). The default
+    follows Windows; the choice is stored in `sd-v4-theme`.
+12. **One spot colour per role.** Amber (`--accent`) marks focus, the active
+    tab and the current step; vermilion (`--marker`) marks picked frames;
+    cyanotype blue (`--ai`) marks what a model produced. Status colours
+    (`--ok`, `--warn`, `--danger`) are data and sit next to words or a glyph.
+    Primary buttons are printed in ink (`--ink-button`): paper-white on dark,
+    ink-black on light. One primary per area.
+13. **Film is the shape of a group of images.** The home film strip, the
+    lightbox strip and a batch's covers are drawn as film (black rebate,
+    sprocket holes, amber edge print). Film keeps the same black rebate in
+    both themes, like a contact print.
+14. **Must not look AI-made** (owner rule, D10): no purple or indigo
+    gradients, glass or blur, glow, emoji or sparkle icons, pills everywhere,
+    or stock icon sets. Icons are drawn by hand in `src/ui/Icon.tsx`. The
+    image is the only thing that may glow.
+15. **Contrast floors** (checked by script, D9): body text at least 9:1,
+    muted text at least 5:1, accents at least 5:1, in both themes.
+16. **Bilingual completeness.** Every string exists in `zh-CN` and `en`
+    (the i18n types enforce key parity). Chinese strings are Simplified
+    Chinese with no English hints, no Taiwan terms, and never the word
+    "app" (use 程序). Errors a user can see have a Chinese version.
+17. **Dangerous operations sit apart from common ones.** Delete, Trash and
+    "remove from library" use the danger button with focus on Cancel (D15),
+    and sit at the far end of their row or behind a divider in menus.
 
 Do NOT:
-- Add an entrance whose behavior differs from the existing entrance to the
-  same feature (rule 11).
-- Ship a feature without a catalog row (rule 10).
-- Hide or remove capability to simplify a surface — layer it instead (rule 3).
-- Reintroduce blue→purple (or any) **brand gradients** on buttons/progress.
-- Add ambient decorative blur/glow “for premium feel” on browse surfaces.
+- Add a second "group of images" concept next to batches (rule 6).
+- Define a colour, font size or radius outside `tokens.css` (§css-ownership).
+- Import an icon package or add emoji to the interface (rule 14).
+- Hide or remove capability to simplify a surface; layer it instead (rule 3).
 
 ---
 
@@ -194,13 +180,13 @@ App
     ├── 训练-2026
     └── 私密
          └── inside each library:
-              library roots · folder tree · collections · tags · sort/filter
+              library roots · folder tree · batches · favorites · tags · sort/filter
 ```
 
 | Need | Mechanism |
 |------|-----------|
 | Images on D: and E: | Library **roots** + folder tree **inside** current library |
-| Curated training pack | **Collection** inside current library |
+| Curated training pack | A dataset **batch** inside the current library |
 | Just scanned a batch | **Sort newest** / filter folder — not a new library |
 | Work vs private isolation | **Separate libraries** + switch |
 | Wipe only this project | **Clear current library** or **Delete library** |
@@ -231,42 +217,6 @@ libraries" and never "only a process session."
 
 Prioritize size honesty + cleanup (thumbs, models, vacuum) over cloud quotas.
 
-### Mapping: current code → target product
-
-| Current | Role today | Target |
-|---------|------------|--------|
-| `images.db` + `images` table | De-facto single long-term library | **Default / only library at first**; later rows scoped by `library_id` **or** one db per library |
-| `gallery_session_images` + `scope=current_session` | Process-lifetime "this run" membership; header peer to library | **Retire as user-facing concept.** Optional internal use during a scan job only; do not restore dual-scope chrome. Batch focus → **newest / folder filter** |
-| Header session \| library toggle | Two peer gallery worlds | **Remove.** Replace with **当前图库 ▾** (list, new, rename, clear, delete) in shell chrome (sidebar top / nav), not generator-tab row |
-| Clear Current Library (`#btn-clear-db`) | Wipes the one global index | **Clear current library** only; confirm with name; other libraries untouched |
-| Library roots (`library_roots` / 图库文件夹) | Source folders for the one DB | **Per-library** roots (or shared roots with membership filter — prefer per-library clarity) |
-| Collections | Curated sets in the one DB | **Stay inside a library**; not a substitute for multi-library isolation |
-| Favorites | Special collection | Stay inside a library (or explicit global favorites later — default: per library) |
-| `SD_IMAGE_SORTER_DATA_DIR` / `DB_PATH` | Single data location | Remains app home; multi-library is **inside** that home (table or subfolders), not "user must set env vars" |
-| Sort `newest` / `indexed_at` / `library_order_time` | Already supports recency | **Primary UX for "what I just imported"** once dual-scope is gone |
-| Reconnect missing files | Path repair for indexed rows | Per current library (or all libraries in advanced repair later) |
-
-### Implementation shape (guidance, not a forced schema)
-
-**Phase 0 — narrative + UX honesty (minimal code):**  
-Stop teaching short-term gallery. Prefer library-only language. Clear button
-copy = current library. Dual-scope control is debt to remove.
-
-**Phase 1 — single library behaves as "主图库":**  
-Today's DB **is** the first long-lived library. No multi-switch UI required yet;
-Clear = clear this one library (current behavior, correct story).
-
-**Phase 2 — multi-library:**  
-- `libraries`/`workspaces` registry (id, name, created_at, last_opened).  
-- Membership: `library_id` on images **or** `library_images` M2M **or**
-  separate db file per library under `data/libraries/<id>/`.  
-- Switch current library id in app state; Gallery queries filter by it.  
-- UI: **当前图库 ▾** — switch / 新建 / 重命名 / 清空 / 删除.  
-- Thumbs: `thumbnails/<library_id>/` when partitioned.
-
-**Do not** implement Phase 2 by overloading `gallery_session_images` (wrong
-lifetime and wrong name).
-
 ### Decisions this narrative freezes
 
 - Short-term gallery / process session as a **product** → **no**.
@@ -287,215 +237,84 @@ lifetime and wrong name).
 - Require cloud for durable libraries.
 - Clear library data on process exit as a feature.
 
-### Follow-on implementation order
+---
 
-1. Copy + defaults: one library story; retire dual-scope UX.  
-2. Clear button semantics + confirm copy = current library.  
-3. Multi-library registry + switcher UI.  
-4. Storage panel (index/thumbs/models per library where applicable).  
-5. Optional: export/backup one library folder.
+## §desktop-layout — Every page fits 1366×768 through 2560×1440
 
-**Status (P0–P3, 2026-08):** multi-library registry + `library_id` isolation,
-nav chip, path non-steal + claim/move, per-library `library_roots`, scan skip
-messaging, index export JSON, and disk panel library breakdown are implemented.
-Thumbs remain path-keyed (path is globally unique); clear does best-effort thumb
-delete. Full `thumbnails/<library_id>/` partition is optional later polish.
-
-Track remaining polish in release plans; this section is the **product law**.
+- Supported widths are desktop and laptop only: test 1366×768, 1920×1080 and
+  2560×1440 (plus 3840×2160 when a page scales). Never phone or tablet.
+- Each page's spec ends with a "fits at W×H" test that checks the primary
+  action is in the viewport (`toBeInViewport`, not `toBeVisible`) and that
+  nothing overlaps, clips or scrolls sideways.
+  `backend/tests/test_desktop_viewport_contract.py` keeps those checks present.
+- The interface zoom follows the window width by default
+  (`src/lib/uiScale.ts`: 100% below 2000 px, then 115% / 130% / 140% / 150%
+  from 2000 / 2350 / 3100 / 3600 px); the user can pin it in Settings ›
+  Appearance. Heights tied to the window use `calc(N * var(--vh))`, never
+  `Nvh`, because `vh` is zoomed too.
+- A Chinese label never breaks between its characters: tab rows and button
+  rows are `flex: none` or `white-space: nowrap`, and give way by shrinking
+  the search box, not the labels.
 
 ---
 
-## §filter-sidebar — Filter summary rows must stay single-line
+## §css-ownership — One owner for every token, one module per component
 
-Each row in `.filter-summary > .summary-row` shows a label (e.g. `生成器`, `Tags`) and a value (e.g. `14/14`, `0`, `Any`). These rows MUST render on ONE visual line. Long values truncate with `text-overflow: ellipsis`, never wrap.
-
-Rationale:
-- The sidebar is a dense scannable summary, not a body of prose.
-- Wrapping makes label and value look like separate items rather than a key-value pair.
-- Users complained at 1366×768 that the rows broke into "label on top / value below" stacks because of `word-break: break-word`. Confirmed regression caused by a generic `.summary-value` rule in `ui-refresh.css`.
-
-Implementation:
-- `.filter-summary .summary-row { flex-wrap: nowrap; align-items: center; }`
-- `.filter-summary .summary-label { flex: 0 0 auto; white-space: nowrap; }`
-- `.filter-summary .summary-value { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`
-- The generic `.summary-value` rule (which wraps for prose-like uses elsewhere) is preserved separately so it does not affect the filter sidebar.
+- `src/design/tokens.css` owns every colour, font, size, radius, layout width
+  and motion token, for both themes. Nothing else defines a palette value.
+- `src/design/base.css` owns the element reset and the shared control shapes
+  (`.btn`, `.btn-primary`, `.btn-danger`, `.btn-ghost`, `.btn-icon`, `kbd`,
+  `.mono`, `.chip` and the tag category classes). Components compose these
+  classes; nothing restyles them later.
+- Every component styles itself in its own CSS Module (`*.module.css`). A
+  module reaches a global class only through `:global(...)`. This removed the
+  V3.5 bug class where a later stylesheet silently overrode an earlier one
+  (D3).
 
 Do NOT:
-- Add `flex-wrap: wrap` to `.filter-summary .summary-row`.
-- Set `word-break: break-word` or `overflow-wrap: anywhere` directly on `.filter-summary .summary-value`.
-- Stack label and value as `<div>` blocks — they must remain inline children of a flex row.
+- Style another component's module class from outside it.
+- Add a global stylesheet next to `tokens.css` and `base.css`.
 
 ---
 
-## §gallery-toolbar — All buttons fit a 1366×768 laptop without wrapping
+## §color-exemptions — Data colours are exempt from the spot-colour roles
 
-The gallery toolbar (`.gallery-header`) and generator tabs (`.generator-tabs`) MUST remain on one line at 1366×768. This is the lowest-resolution consumer laptop the project supports.
+A literal or extra hue is legitimate only when it encodes data. Registered:
+- **Tag categories**: 14 `--cat-*` tokens mirroring backend
+  `tag_rules.categorize_tag`, used through the `.cat-*` classes.
+- **Adjust histogram**: `--hist-r`, `--hist-g`, `--hist-b`.
+- **Marks drawn over pictures**: `--on-image`, `--ai-on-image`,
+  `--ok-on-image` (they sit on arbitrary pixels, so they do not follow the
+  theme's surfaces).
 
-Implementation:
-- `.gallery-header { flex-wrap: nowrap; }`
-- `.generator-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }`
-- Below 1500px, secondary actions (Random, Reconnect) are hidden via `@media (max-width: 1500px)`.
-- Below 1600px, the "X images" count is hidden. Generator tab counts stay on every tab so switching All / NovelAI / ComfyUI does not resize the pills; extra tabs scroll.
-
-Do NOT:
-- Use `flex-wrap: wrap` on these containers; users have explicitly rejected line breaks here.
-- Hide gen-tab labels — only the count badges are removable.
-
----
-
-## §nav-bar — Tab visibility has three layers; nothing becomes unreachable
-
-(Rewritten 2026-07-07 — the old rule "all tabs always visible at 1366×768"
-predates mission mode and the customize checklist. Deliberate tucking is now a
-feature; INVOLUNTARY hiding is still the bug.)
-
-Three layers decide which direct tabs show (`frontend/js/modules/nav-missions.js`):
-1. **Mission mode** (`aurora-nav-mission`): an entry mission scopes the bar to
-   its pipeline tabs with step badges + an exit chip.
-2. **Base set** (`aurora-nav-tabs`): the 自定义标签栏 checklist under More.
-   Gallery is locked in. Dataset is out of the DEFAULT set (owner 2026-07-07).
-3. **Width-degradation ladder** (`updateNavigationOverflowState` in `app.js`):
-   involuntary, width-driven — labels/brand compact before any tab vanishes;
-   Prompt Helper / Style Finder tuck first into their More mirrors.
-
-Invariants:
-- Every tucked view (any layer) must have a More-menu mirror (`#nav-tools-{view}`)
-  that is visible exactly while its direct tab is hidden.
-- Mirrors carry `data-mirror-view`, NEVER `data-view` — Playwright page objects
-  click plain `[data-view=...]` locators; a duplicate trips strict mode.
-  (`#nav-tools-promptlab`/`-artist` predate this rule and are grandfathered.)
-- The active view's tab is always contextually revealed, so an open view never
-  lacks its highlighted tab.
-- The DEFAULT base set must fit at 1366×768 without the ladder eating tabs.
-- Mirror-like new elements need a `[hidden]{display:none}` guard — `.nav-tab`'s
-  own display rule beats the UA `[hidden]` rule (recurring trap).
-
-Nav actions (right side):
-- Below 1500px, `.nav-actions .btn:not(.btn-icon-only)` shows icons only (label hidden).
-- Below 1500px, secondary icon buttons (`#btn-refresh-ui`, `#btn-mass-tag-editor`, `#btn-app-update`) are hidden to free space.
-
-Do NOT:
-- Give a More-menu mirror a `data-view` attribute.
-- Add a view to the default base set without verifying the 1366×768 fit.
-- Add new always-visible icon buttons to `.nav-actions` without first verifying 1366×768 still fits.
-- Render the same Help/Guide button both in nav-bar and inside a view (`.gallery-header`, `.censor-toolbar-v2`, etc.) at the same time. The nav-bar `#btn-help` covers all views via `Guide.getCurrentTab()`.
+A new hardcoded colour must encode data and be registered here; anything else
+uses the role tokens.
 
 ---
 
-## §progress-toast — Background work must show a clear "Done" state
+## §jobs — Background work always ends with a visible result
 
-Long-running background jobs (color analysis, scanning, tagging, similarity build) MUST surface a clear completion state, not silently disappear.
-
-Pattern (see `frontend/js/color-backfill.js`):
-1. Detect `running` → `idle` transition (use a `wasRunning` flag).
-2. On transition, show a "Done — N items processed" banner via the in-app toast.
-3. Update the nav chip from `N%` to `✓` and keep it visible for ~5 s.
-4. Auto-hide both chip and toast after 5 s.
-
-Do NOT:
-- Hide the chip immediately when polling sees `running=false` (user has no time to see completion).
-- Leave the toast showing the last in-progress filename forever.
-
----
-
-## §css-ownership — Shared tokens and feature layouts must have one owner
-
-The frontend still uses plain CSS with multiple layered stylesheets. Keep the ownership boundary explicit so broad UI refresh work does not become override-only churn.
-
-Ownership:
-- `tokens.css`: THE palette owner (Graphite canonical tokens + legacy variable
-  remap + prefers-contrast re-assertion). Loaded LAST in `index.html` — it must
-  stay last or the high-contrast a11y re-assertion breaks. Do not put palette
-  literals in `index.html` `<style>` after this file.
-- `styles.css`: legacy/base layout foundation and broad compatibility rules.
-- `ui-refresh.css`: current theme/chrome, shared controls, and cross-view refresh overrides (its color literals defer to `tokens.css` vars).
-- Feature stylesheets (`censor-v2.css`, `dataset-maker.css`, `vlm.css`, etc.): feature-local layout and controls only.
-
-Do NOT:
-- Load any stylesheet after `tokens.css`, or define palette values outside it.
-- Add a third stylesheet that competes with `ui-refresh.css` for global tokens or nav/gallery chrome.
-- Put feature-specific layout fixes in `ui-refresh.css` when a feature stylesheet already owns that surface.
-- Change the same shell from both `styles.css` and a feature stylesheet without documenting which layer wins.
-- Add broad selectors that wrap or resize toolbar/nav/filter text without checking the 1366x768 desktop contract.
-
----
-
-## §color-exemptions — Data-viz palettes are exempt from the accent semantics
-
-(v3.5.0 color audit, 2026-07-07. Rule 12 in §principles says blue/pink/purple
-are semantic accents. A hardcoded hue is legitimate ONLY when it encodes data,
-not UI meaning — these registered palettes may keep literal hex values.)
-
-Registered data-viz palettes:
-- **WASD direction coding** (`styles.css` folder slots / sort folders):
-  up=green, left=indigo `#3b82f6`, down=red, right=amber `#f59e0b`. The left
-  key is deliberately indigo, NOT `var(--blue)` — a direction must not read as
-  "the next action". The right key is pinned literal amber because it predates
-  Aurora: it was written as `var(--accent-primary)` when that token WAS orange,
-  and the remap silently turned it blue (fixed 2026-07-07).
-- **Cull flash/stamps**: keep/reject/skip map to `--success`/`--danger`/`--blue`
-  (semantic tokens, not literals — they ARE state feedback).
-- **Danbooru category dots** (`caption-autocomplete.css`): 14 fixed hues,
-  annotated in-file as "data-viz hue, not a UI accent".
-- **Queue Solitaire section colors** (`queue-solitaire.css`): user-picked
-  labels, a data palette by definition.
-- **Generator badges** (`image-reader.css` `.gen-*`): third-party branding hues.
-- **Prompt Lab diff coding** (`ui-refresh.css`): common=green, A=blue tint,
-  B=amber tint (only-b was another accent-primary remap casualty, fixed).
-
-Audit checklist for new hardcoded colors:
-1. Does it encode data (category, direction, diff-side, brand)? → register here.
-2. Is it a status (info/success/warning/danger)? → use the semantic tokens.
-3. Is it an accent (action/selection/AI)? → `--blue`/`--pink`/`--purple` only.
-4. Grep trap: any pre-Aurora `var(--accent-primary)` paired with warm colors
-   was probably orange-intent — the remap turned those blue silently.
-
-Do NOT:
-- Introduce a new blue/purple/pink hex for UI chrome — that is what rule 12's
-  "one solid-blue primary per screen" exists to protect.
-- "Fix" the WASD left key to `var(--blue)` — the collision with the semantic
-  blue is exactly why it stays indigo.
+Imports, tagging, colour analysis, similarity indexing, model downloads and
+file moves run as jobs. The jobs button in the top bar shows what is running;
+when a job ends it says so (done, failed with the reason, or stopped) and the
+result stays in the jobs drawer. A job never just disappears. A followed model
+download always ends with its own result (D52).
 
 ---
 
 ## §motion — Motion clarifies state; it never decorates
 
-(v3.5.0, 2026-07-07. Written down from what the code already does, so new
-surfaces stop inventing their own timing.)
-
-The vocabulary (tokens in `tokens.css`):
-- `--duration-fast` (150ms) — hover, focus, toggles, chips, tab underlines.
-  Usually paired with plain `ease` (legacy `--transition-fast` bundles both).
-- `--duration-normal` (250ms) — panels, modals, view reveals, collapses.
-- `--ease-out` (`cubic-bezier(0.16, 1, 0.3, 1)`) — entrances only (dropdown
-  menus, toasts, popovers): fast start, soft landing. Exits may simply fade;
-  nothing bounces.
-
-Rules:
-1. Animate compositor-friendly properties (`transform`, `opacity`) for
-   anything that runs repeatedly or over a large area. Color/border
-   transitions are fine at `--duration-fast` on small controls.
-2. One duration per interaction: an element's hover state and its container's
-   reveal must not race two different clocks on the same property.
-3. Ambient/long-running animation is BUDGETED like the gradient: the entry
-   film strip is the one sanctioned ambient loop, and it stops under
-   `prefers-reduced-motion` with a static fallback that still shows content.
-4. The global reduced-motion kill-switch in `styles.css` (`0.01ms` everything)
-   stays; a new long-running animation must ALSO ship its own semantic
-   fallback (what does the user see instead?), not just rely on the kill.
-5. No scroll-jacking, no parallax, no attention-seeking idle loops — this is a
-   desktop work tool; motion answers "what just changed", nothing else.
-
-Do NOT:
-- Introduce a new easing curve or a 400ms+ transition without adding it here.
-- Use `var(--duration-fast, …)`-style fallbacks as a substitute for defining
-  the token — two undefined-token bugs (`--accent`, `--ease-out`) shipped that
-  way before the 2026-07-07 audit caught them.
+- Tokens: `--t-fast` (120 ms) for hover, focus and small toggles; `--t-med`
+  (180 ms) for panels, dialogs and page fades; `--ease` for both.
+- Animate `transform` and `opacity` for anything large or repeated.
+- No ambient loops, parallax or attention-seeking idle motion. Under
+  `prefers-reduced-motion` both durations drop to 1 ms.
 
 ---
 
 ## Maintenance
 
-- Update this file when reverting or revising any rule above.
-- Add a new section every time a UI rule survives a "wait, why?" review.
-- Cross-reference rules from CSS comments via the `§<slug>` anchor.
+- Update this file when a rule above is revised or reverted, and record the
+  decision in `.plans/v4/decisions.md`.
+- Add a section every time a UI rule survives a "wait, why?" review.
+- Cross-reference rules from CSS comments with the `§<slug>` anchor.
