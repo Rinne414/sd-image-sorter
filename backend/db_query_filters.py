@@ -55,8 +55,13 @@ def _apply_tag_filter(query: str, tags: Optional[List[str]], params: List[Any],
         return query, params
 
     if tag_mode == "or":
+        # One row per image even when it carries several of the tags: joining
+        # the tags table directly repeated such images in the list.
         placeholders = ",".join("?" * len(tags))
-        query += f" INNER JOIN tags _tor ON i.id = _tor.image_id AND _tor.tag IN ({placeholders})"
+        query += (
+            " INNER JOIN (SELECT DISTINCT image_id FROM tags"
+            f" WHERE tag IN ({placeholders})) _tor ON i.id = _tor.image_id"
+        )
         params.extend(tags)
     else:
         for i, tag in enumerate(tags):
