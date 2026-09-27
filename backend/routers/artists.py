@@ -529,7 +529,7 @@ async def lookup_artist_vocabulary(
 async def clear_predictions(
     service: ArtistService = Depends(get_artist_service),
 ):
-    """Clear all artist predictions."""
+    """Clear the artist predictions of the current library's images."""
     try:
         return service.clear_predictions()
     except OperationInProgressError as exc:

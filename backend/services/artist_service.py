@@ -634,29 +634,34 @@ class ArtistService:
         if not safe_artist:
             raise ValidationError("Artist name is required", field="artist_name")
 
+        from library_context import current_library_sql
+
+        # The current library only, like get_stats: its counts and this list must agree.
+        lib_sql, lib_params = current_library_sql("i.library_id")
         with db.get_db() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                """
+                f"""
                 SELECT COUNT(*)
                 FROM artist_predictions ap
-                WHERE ap.artist = ?
+                INNER JOIN images i ON i.id = ap.image_id
+                WHERE ap.artist = ? AND {lib_sql}
                 """,
-                (safe_artist,),
+                (safe_artist, *lib_params),
             )
             total = int(cursor.fetchone()[0] or 0)
 
             cursor.execute(
-                """
+                f"""
                 SELECT i.id, i.filename, i.path, ap.artist, ap.confidence
                 FROM artist_predictions ap
                 INNER JOIN images i ON i.id = ap.image_id
-                WHERE ap.artist = ?
+                WHERE ap.artist = ? AND {lib_sql}
                 ORDER BY ap.confidence DESC, COALESCE(i.library_order_time, i.created_at) DESC, i.id DESC
                 LIMIT ?
                 OFFSET ?
                 """,
-                (safe_artist, limit, offset),
+                (safe_artist, *lib_params, limit, offset),
             )
             rows = cursor.fetchall()
 
@@ -699,13 +704,21 @@ class ArtistService:
             "vocabulary_loaded": vocabulary_size > 0,
         }
 
-    def clear_predictions(self) -> Dict[str, str]:
+    def clear_predictions(self) -> Dict[str, Any]:
+        """Remove the artist results of the current library's images (other libraries keep theirs)."""
+        from library_context import current_library_sql
+
+        lib_sql, lib_params = current_library_sql("library_id")
         with self._batch_lock:
             if self._batch_progress["running"]:
                 raise OperationInProgressError("Artist identification")
 
             with db.get_db() as conn:
                 cursor = conn.cursor()
-                cursor.execute("DELETE FROM artist_predictions")
+                cursor.execute(
+                    f"DELETE FROM artist_predictions WHERE image_id IN (SELECT id FROM images WHERE {lib_sql})",
+                    lib_params,
+                )
+                cleared = int(cursor.rowcount or 0)
 
-        return {"message": "All artist predictions cleared"}
+        return {"message": "Artist predictions of this library cleared", "cleared": cleared}
