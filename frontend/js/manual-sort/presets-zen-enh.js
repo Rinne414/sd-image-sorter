@@ -395,6 +395,26 @@ function describeForeignLibrarySortSession(session) {
     );
 }
 
+// Sentence for the "discard it and start another mode" dialog: whose progress
+// (and undo history) is thrown away. '' when the session is this library's.
+function describeForeignLibraryDiscard(session) {
+    const foreign = getForeignLibrarySortSession(session);
+    if (!foreign) return '';
+    if (foreign.mixed) {
+        return manualSortText(
+            'manual.discardMixedLibrary',
+            'The progress to discard, and its undo history, has images from more than one library.',
+            '要丢弃的这份进度（连同撤销记录）里有来自多个图库的图片。'
+        );
+    }
+    return formatManualSortText(
+        'manual.discardForeignLibrary',
+        'The progress to discard, and its undo history, belongs to library “{name}”, not the library open now.',
+        '要丢弃的这份进度（连同撤销记录）属于图库「{name}」，不是当前打开的图库。',
+        { name: foreign.name }
+    );
+}
+
 // Resolves true when the session is this library's or the user chose to go on.
 function confirmForeignLibrarySortSession(session) {
     const body = describeForeignLibrarySortSession(session);

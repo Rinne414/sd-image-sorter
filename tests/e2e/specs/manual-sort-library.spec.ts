@@ -120,3 +120,32 @@ test('a saved sort of the open library resumes without an extra question', async
   await expect(page.locator('#sort-interface')).toBeVisible()
   await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
 })
+
+test('starting another mode over a sort of another library names whose progress it discards', async ({ page }) => {
+  const created = await page.request.post('/api/libraries', { data: { name: 'Discard elsewhere' } })
+  expect(created.ok()).toBe(true)
+  const otherId: string = (await created.json()).library.id
+  try {
+    await page.setViewportSize(VIEWPORTS[0])
+    await page.addInitScript(() => localStorage.setItem('manual_sort_mode_v1', 'slot'))
+    await openManualWithSession(page, { ...savedSession(otherId), mode: 'bracket' })
+    const discardCalls: string[] = []
+    await page.route('**/api/sort/session', (route) => {
+      discardCalls.push(route.request().method())
+      return route.fulfill({ json: { status: 'ok' } })
+    })
+
+    await page.click('#btn-start-sorting')
+    const dialog = page.locator('#confirm-modal.visible')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.locator('#confirm-message')).toContainText(
+      '要丢弃的这份进度（连同撤销记录）属于图库「Discard elsewhere」，不是当前打开的图库。')
+    await expect(dialog.locator('#btn-confirm-ok')).toBeInViewport()
+
+    await page.click('#btn-confirm-cancel')
+    await expect(page.locator('#sort-setup')).toBeVisible()
+    expect(discardCalls).toEqual([])
+  } finally {
+    await page.request.delete(`/api/libraries/${encodeURIComponent(otherId)}`)
+  }
+})

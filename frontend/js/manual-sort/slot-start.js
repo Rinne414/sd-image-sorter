@@ -59,11 +59,13 @@ async function confirmCrossModeSavedSession(savedSession, requestedMode) {
             remaining: Number(savedSession.remaining || 0),
         }
     );
+    // Discarding another library's sort throws away its progress and undo history.
+    const libraryWarning = describeForeignLibraryDiscard(savedSession);
 
     return new Promise(resolve => {
         window.App.showConfirm(
             manualSortText('manual.crossModeTitle', 'Finish the saved session first', '先处理未完成的排序会话'),
-            body,
+            libraryWarning ? `${body} ${libraryWarning}` : body,
             async () => {
                 try {
                     await API.delete('/api/sort/session');

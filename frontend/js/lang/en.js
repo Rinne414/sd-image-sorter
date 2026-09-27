@@ -996,6 +996,8 @@ window.I18nLang_en = {
     'manual.resumeBannerNote': 'The settings here may differ from the saved session.',
     'manual.resumeLibraryOther': 'Belongs to library “{name}”, not the library open now.',
     'manual.resumeLibraryMixed': 'Has images from more than one library.',
+    'manual.discardForeignLibrary': 'The progress to discard, and its undo history, belongs to library “{name}”, not the library open now.',
+    'manual.discardMixedLibrary': 'The progress to discard, and its undo history, has images from more than one library.',
     'manual.foreignLibraryTitle': 'Resume a sort from another library?',
     'manual.foreignLibraryBody': 'This unfinished sort belongs to library “{name}”, but “{current}” is open. Resuming shows, moves and copies the images of “{name}”.',
     'manual.foreignLibraryMixedBody': 'This unfinished sort has images from more than one library, and “{current}” is open. Resuming shows, moves and copies images from all of them.',
