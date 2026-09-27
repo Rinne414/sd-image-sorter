@@ -537,6 +537,8 @@ window.I18nLang_zhCN = {
     'gallery.dropNoPath': '无法获取文件夹路径，请使用导入按钮手动选择。',
     'gallery.dropHintBrowse': '找不到“{name}”的位置：浏览器不提供文件夹的完整路径。请点「浏览」选中它再扫描。',
     'gallery.importingDropped': '正在导入 {count} 张图片...',
+    'gallery.dropCopyTitle': '把 {count} 张图片复制进图库？',
+    'gallery.dropCopyBody': '拖进来的文件会复制一份到程序自己的导入文件夹（data/imports），加进当前图库的是这份副本。原文件留在原处，不会被改动。想让图片留在原来的文件夹，请点取消，改用「导入图片」。',
     'gallery.importedDropped': '已导入 {count} 张图片到图库',
     'gallery.importDroppedFailed': '没有图片可以导入',
     'gallery.importDroppedError': '导入拖入的图片失败',

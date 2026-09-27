@@ -535,6 +535,8 @@ window.I18nLang_en = {
     'gallery.dropNoPath': 'Could not determine folder path. Please use the Import button to browse.',
     'gallery.dropHintBrowse': "Couldn't locate \"{name}\": browsers don't share a folder's full path. Pick it with Browse to scan it.",
     'gallery.importingDropped': 'Importing {count} images...',
+    'gallery.dropCopyTitle': 'Copy {count} images into the library?',
+    'gallery.dropCopyBody': 'Dropped files are copied into the imports folder of this program (data/imports), and the copy is added to the current library. Your original files stay where they are, untouched. To keep images in their own folder instead, cancel and use Import Images.',
     'gallery.importedDropped': 'Imported {count} images into gallery',
     'gallery.importDroppedFailed': 'No images could be imported',
     'gallery.importDroppedError': 'Failed to import dropped images',

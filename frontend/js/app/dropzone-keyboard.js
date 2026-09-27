@@ -198,7 +198,25 @@ async function _handleFolderDrop(folderName, files, folderFiles) {
     }
 }
 
+// Dropped files cannot be read in place (the browser never shares their path),
+// so they are copied into the program's imports folder. Say so first.
+function _confirmCopyDroppedImages(count) {
+    return new Promise((resolve) => {
+        showConfirm(
+            appT('gallery.dropCopyTitle', 'Copy {count} images into the library?')
+                .replace('{count}', String(count)),
+            appT(
+                'gallery.dropCopyBody',
+                'Dropped files are copied into the imports folder of this program (data/imports), and the copy is added to the current library. Your original files stay where they are, untouched. To keep images in their own folder instead, cancel and use Import Images.'
+            ),
+            () => resolve(true),
+            () => resolve(false)
+        );
+    });
+}
+
 async function _handleImageFilesDrop(imageFiles) {
+    if (!(await _confirmCopyDroppedImages(imageFiles.length))) return;
     showToast(
         appT('gallery.importingDropped', 'Importing {count} images...')
             .replace('{count}', String(imageFiles.length)),
