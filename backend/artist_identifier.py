@@ -78,6 +78,7 @@ from artist.downloads import (
     ARTIST_MODELSCOPE_REVISION,
     _ARTIST_USER_AGENT,
     _artist_override_url,
+    _artist_runtime_zip_url,
     _assert_http_download_url,
     _bounded_download_reporthook,
     _candidate_hf_endpoints,

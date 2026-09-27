@@ -7,7 +7,7 @@ manifest lines: the project-root math reads the FACADE ``__file__``
 deeper (wrong parent.parent) AND miss those patches. All other facade-patched
 reads (ARTIST_LSNET_CODE_PATH, get_artist_model_dir, _get_artist_model_root,
 _project_root, _copy_existing_tree, _download_and_extract_github_zip,
-ARTIST_LSNET_RUNTIME_ZIP_URL, _resolve_lsnet_runtime_path,
+ARTIST_LSNET_RUNTIME_ZIP_URL, _artist_runtime_zip_url, _resolve_lsnet_runtime_path,
 _ensure_comfyui_lsnet_runtime) resolve through _facade() at call time. The
 sys.path inject + lazy timm/lsnet_model imports are byte-verbatim (pinned).
 """
@@ -87,7 +87,8 @@ def _ensure_comfyui_lsnet_runtime() -> str:
             return str(target_dir.resolve())
 
     logger.info("Downloading comfyui-lsnet runtime into %s", target_dir)
-    _facade()._download_and_extract_github_zip(_facade().ARTIST_LSNET_RUNTIME_ZIP_URL, target_dir)
+    runtime_zip_url = _facade()._artist_runtime_zip_url(_facade().ARTIST_LSNET_RUNTIME_ZIP_URL)
+    _facade()._download_and_extract_github_zip(runtime_zip_url, target_dir)
     return str(target_dir)
 
 
