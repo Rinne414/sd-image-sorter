@@ -7,7 +7,7 @@
  * finishSorting / exitSorting. Classic script: loads after
  * manual-sort/state-constants.js (base).
  */
-async function resumeSavedSession(prefetchedSession = null) {
+async function resumeSavedSession(prefetchedSession = null, { libraryConfirmed = false } = {}) {
     const { $, API, showToast } = window.App;
     const previousResumeSnapshot = ManualSortState.resumeBannerSessionSnapshot
         ? {
@@ -24,6 +24,10 @@ async function resumeSavedSession(prefetchedSession = null) {
         if (!session || session.done || !(session.image || session.champion)) {
             renderManualSortResumeBanner(null, { visible: false });
             showToast(manualSortText('manual.noSavedSession', 'No saved sorting session to resume', '没有可恢复的已保存排序会话'), 'info');
+            return;
+        }
+        if (!libraryConfirmed && !(await confirmForeignLibrarySortSession(session))) {
+            renderManualSortResumeBanner(session, { visible: true });
             return;
         }
 

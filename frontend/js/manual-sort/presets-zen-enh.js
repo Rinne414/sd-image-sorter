@@ -342,6 +342,90 @@ function summarizeManualSortFolders(folders = {}) {
         .join(' · ');
 }
 
+// The one saved sort session is shared by every library. Returns null when
+// its images are all in the library this tab has open, otherwise
+// { mixed, name } so the page can say whose images a resume would sort.
+function getForeignLibrarySortSession(session) {
+    const workspace = window.LibraryWorkspace;
+    if (!session || !workspace) return null;
+    if (session.library_mixed) return { mixed: true, name: '' };
+    const libraryId = session.library_id;
+    if (!libraryId || libraryId === workspace.getCurrentLibraryId()) return null;
+    const name = workspace.getLibraryNameById(libraryId);
+    return { mixed: false, name: name || libraryId, known: Boolean(name) };
+}
+
+// The banner can render before the library list has loaded; look the name up
+// once per library and repaint, instead of leaving the raw id on screen.
+const manualSortLibraryNameLookups = new Set();
+
+function lookUpManualSortLibraryName(libraryId) {
+    if (manualSortLibraryNameLookups.has(libraryId)) return;
+    manualSortLibraryNameLookups.add(libraryId);
+    Promise.resolve(window.LibraryWorkspace.refreshFromServer())
+        .then(() => {
+            const snapshot = ManualSortState.resumeBannerSessionSnapshot;
+            if (snapshot && snapshot.library_id === libraryId) {
+                renderManualSortResumeBanner(snapshot, { visible: true });
+            }
+        })
+        .catch((error) => {
+            if (window.Logger) Logger.warn('Failed to load library names for the sort banner:', error);
+        });
+}
+
+// Full sentence for a confirm dialog, or '' when the session is this library's.
+function describeForeignLibrarySortSession(session) {
+    const foreign = getForeignLibrarySortSession(session);
+    if (!foreign) return '';
+    const current = window.LibraryWorkspace.getCurrentLibrary().name;
+    if (foreign.mixed) {
+        return formatManualSortText(
+            'manual.foreignLibraryMixedBody',
+            'This unfinished sort has images from more than one library, and “{current}” is open. Resuming shows, moves and copies images from all of them.',
+            '这份没排完的整理里有来自多个图库的图片，当前打开的是「{current}」。继续会显示、移动或复制所有这些图片。',
+            { current }
+        );
+    }
+    return formatManualSortText(
+        'manual.foreignLibraryBody',
+        'This unfinished sort belongs to library “{name}”, but “{current}” is open. Resuming shows, moves and copies the images of “{name}”.',
+        '这份没排完的整理属于图库「{name}」，当前打开的是「{current}」。继续会显示、移动或复制「{name}」里的图片。',
+        { name: foreign.name, current }
+    );
+}
+
+// Resolves true when the session is this library's or the user chose to go on.
+function confirmForeignLibrarySortSession(session) {
+    const body = describeForeignLibrarySortSession(session);
+    if (!body) return Promise.resolve(true);
+    return new Promise(resolve => {
+        window.App.showConfirm(
+            manualSortText('manual.foreignLibraryTitle', 'Resume a sort from another library?', '继续另一个图库的整理？'),
+            body,
+            () => resolve(true),
+            () => resolve(false)
+        );
+    });
+}
+
+function renderManualSortResumeLibraryLine(banner, session) {
+    const libraryEl = banner.querySelector('.resume-library');
+    if (!libraryEl) return;
+    const foreign = getForeignLibrarySortSession(session);
+    libraryEl.style.display = foreign ? '' : 'none';
+    if (!foreign) return;
+    if (!foreign.mixed && !foreign.known) lookUpManualSortLibraryName(session.library_id);
+    libraryEl.textContent = foreign.mixed
+        ? manualSortText('manual.resumeLibraryMixed', 'Has images from more than one library.', '这份进度里的图片来自多个图库。')
+        : formatManualSortText(
+            'manual.resumeLibraryOther',
+            'Belongs to library “{name}”, not the library open now.',
+            '这份进度属于图库「{name}」，不是当前打开的图库。',
+            { name: foreign.name }
+        );
+}
+
 function renderManualSortResumeBanner(session, { visible = true } = {}) {
     const banner = document.querySelector('#sort-resume-banner');
     if (!banner) return;
@@ -368,7 +452,10 @@ function renderManualSortResumeBanner(session, { visible = true } = {}) {
         // default for a brand-new session is 'copy' (Principle #11).
         operation_mode: session?.operation_mode || 'copy',
         folders: { ...(session?.folders || {}) },
+        library_id: session?.library_id ?? null,
+        library_mixed: Boolean(session?.library_mixed),
     };
+    renderManualSortResumeLibraryLine(banner, session);
 
     const countEl = banner.querySelector('.resume-count');
     if (countEl) {

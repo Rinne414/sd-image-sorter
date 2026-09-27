@@ -991,6 +991,11 @@ window.I18nLang_en = {
     'manual.resumeFolderSummary': 'Saved session folders: {summary}',
     'manual.resumeFoldersEmpty': 'No destination folders saved yet',
     'manual.resumeBannerNote': 'The settings here may differ from the saved session.',
+    'manual.resumeLibraryOther': 'Belongs to library “{name}”, not the library open now.',
+    'manual.resumeLibraryMixed': 'Has images from more than one library.',
+    'manual.foreignLibraryTitle': 'Resume a sort from another library?',
+    'manual.foreignLibraryBody': 'This unfinished sort belongs to library “{name}”, but “{current}” is open. Resuming shows, moves and copies the images of “{name}”.',
+    'manual.foreignLibraryMixedBody': 'This unfinished sort has images from more than one library, and “{current}” is open. Resuming shows, moves and copies images from all of them.',
     'manual.folderPath': 'Folder Path for {key}',
     'manual.folderPathHint': 'Enter the destination folder path.\nExample: D:\\sorted\\folder-name',
 

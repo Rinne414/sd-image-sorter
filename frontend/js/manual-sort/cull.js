@@ -19,6 +19,10 @@ async function startCullSorting() {
         const hasActive = existing && !existing.done && (existing.image || existing.champion);
         if (hasActive) {
             if (existing.mode === 'cull') {
+                if (!(await confirmForeignLibrarySortSession(existing))) {
+                    renderManualSortResumeBanner(existing, { visible: true });
+                    return;
+                }
                 ManualSortState.startTime = Date.now();
                 ManualSortState.history = [];
                 ManualSortState.actionTimestamps = [];

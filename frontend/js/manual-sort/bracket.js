@@ -21,6 +21,10 @@ async function startBracketSorting() {
         const hasActive = existing && !existing.done && (existing.image || existing.champion);
         if (hasActive) {
             if (existing.mode === 'bracket') {
+                if (!(await confirmForeignLibrarySortSession(existing))) {
+                    renderManualSortResumeBanner(existing, { visible: true });
+                    return;
+                }
                 ManualSortState.startTime = Date.now();
                 ManualSortState.history = [];
                 ManualSortState.actionTimestamps = [];

@@ -144,6 +144,15 @@
         };
     }
 
+    /** Display name of a library in the loaded list ('' when it is not listed yet). */
+    function getLibraryNameById(libraryId) {
+        const list = (_cache && _cache.libraries) || [];
+        const found = list.find((lib) => lib.id === libraryId);
+        if (found) return libraryDisplayName(found);
+        if (libraryId === DEFAULT_ID) return _t('library.defaultName', 'Main library');
+        return '';
+    }
+
     // The list refreshes names and counts only; it never moves this tab to
     // another tab's choice (see _currentId).
     async function refreshFromServer() {
@@ -766,6 +775,7 @@
         HEADER,
         getCurrentLibraryId,
         getCurrentLibrary,
+        getLibraryNameById,
         libraryHeaders,
         apiFetch,
         setCurrentLibraryId,

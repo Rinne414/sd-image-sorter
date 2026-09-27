@@ -1424,7 +1424,8 @@ def test_manual_sort_start_routes_unfinished_sessions_to_resume():
     source = _manual_sort_family_source(repo_root)
 
     assert "confirmResumeSavedSessionFromStart(savedSession)" in source
-    assert "resumeSavedSession(savedSession)" in source
+    # The start dialog already carries the other-library warning (#17).
+    assert "resumeSavedSession(savedSession, { libraryConfirmed: true })" in source
     assert "discard the saved session first" in source
     assert "replaceExisting = false" in source
 

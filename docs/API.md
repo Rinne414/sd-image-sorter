@@ -914,7 +914,7 @@ Reset stuck batch move progress.
 Start manual sort session. Preferred clients send a JSON body with `generators`, `tags`, `ratings`, `checkpoints`, `loras`, `prompts`, `prompt_match_mode`, `artist`, `search`, size/aesthetic filters, `folders`, `operation_mode`, and `replace_existing`; this avoids URL/query-length limits for large filter scopes. Legacy query-string parameters remain supported, including `prompt_match_mode=exact|contains`. If an unfinished session exists, the default response is HTTP 409; pass `replace_existing=true` only after the user explicitly chooses to discard saved progress.
 
 #### GET /api/sort/current
-Get current sort image.
+Get current sort image. Every session answer (here and from `/api/sort/action`) carries `library_id`, the library the session's images belong to (the one saved session is shared by every library; null without a session), and `library_mixed`: true when the images belong to more than one library (then `library_id` is null). Manual Sort asks before resuming a session that is not the open library's.
 
 #### POST /api/sort/action
 Perform `move`, `skip`, or `undo`.

@@ -19,13 +19,15 @@ async function confirmResumeSavedSessionFromStart(savedSession) {
             remaining: Number(savedSession.remaining || 0),
         }
     );
+    // One dialog: the other-library warning rides along instead of a second one.
+    const libraryWarning = describeForeignLibrarySortSession(savedSession);
 
     return new Promise(resolve => {
         window.App.showConfirm(
             manualSortText('manual.resumeInsteadTitle', 'Resume saved Manual Sort session?', '恢复已保存的手动排序会话？'),
-            body,
+            libraryWarning ? `${body} ${libraryWarning}` : body,
             async () => {
-                await resumeSavedSession(savedSession);
+                await resumeSavedSession(savedSession, { libraryConfirmed: true });
                 resolve(true);
             },
             () => {

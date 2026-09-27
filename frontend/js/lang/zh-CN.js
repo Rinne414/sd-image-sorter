@@ -1002,6 +1002,11 @@ window.I18nLang_zhCN = {
     'manual.resumeFolderSummary': '已保存会话文件夹：{summary}',
     'manual.resumeFoldersEmpty': '还没有保存目标文件夹',
     'manual.resumeBannerNote': '这里的设置可能和已保存的排序进度不一样。',
+    'manual.resumeLibraryOther': '这份进度属于图库「{name}」，不是当前打开的图库。',
+    'manual.resumeLibraryMixed': '这份进度里的图片来自多个图库。',
+    'manual.foreignLibraryTitle': '继续另一个图库的整理？',
+    'manual.foreignLibraryBody': '这份没排完的整理属于图库「{name}」，当前打开的是「{current}」。继续会显示、移动或复制「{name}」里的图片。',
+    'manual.foreignLibraryMixedBody': '这份没排完的整理里有来自多个图库的图片，当前打开的是「{current}」。继续会显示、移动或复制所有这些图片。',
     'manual.folderPath': '{key} 键对应的文件夹路径',
     'manual.folderPathHint': '输入目标文件夹路径。\n示例：D:\\sorted\\folder-name',
 
