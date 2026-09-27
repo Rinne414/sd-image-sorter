@@ -13,8 +13,11 @@ const PLAYWRIGHT_MODULE_REFERENCE = Object.freeze({ kind: 'playwright-module' })
 const PLAYWRIGHT_DEVICES_REFERENCE = Object.freeze({ kind: 'playwright-devices' })
 const PLAYWRIGHT_TEST_REFERENCE = Object.freeze({ kind: 'playwright-test' })
 const UNKNOWN_REFERENCE = Object.freeze({ kind: 'unknown' })
+const TUPLE_REFERENCE_KIND = 'tuple'
 const LEXICAL_BINDINGS = Symbol('lexical-bindings')
 const VAR_SCOPE = Symbol('var-scope')
+const MODULE_EXTENSIONS = ['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs']
+const exportedConstantsByModule = new Map()
 
 function propertyNameText(name) {
   if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
@@ -479,8 +482,27 @@ function objectNumericPropertyResolution(reference, propertyName) {
   )
 }
 
+function isArrayEntriesCall(node) {
+  if (!ts.isCallExpression(node) || node.arguments.length > 0) return false
+  const callee = unwrapExpression(node.expression)
+  return ts.isPropertyAccessExpression(callee) && callee.name.text === 'entries'
+}
+
+// `list.entries()` yields one `[index, item]` pair per item of the list.
+function arrayEntryReferences(node, environment, seenBindings) {
+  const receiver = unwrapExpression(node.expression).expression
+  return iterableReferences(makeReference(receiver, environment), seenBindings)
+    .map((item, index) => (item.kind === UNKNOWN_REFERENCE.kind
+      ? UNKNOWN_REFERENCE
+      : {
+          kind: TUPLE_REFERENCE_KIND,
+          items: [makeReference(ts.factory.createNumericLiteral(index), environment), item],
+        }))
+}
+
 function iterableReferences(reference, seenBindings) {
   if (reference.kind === UNKNOWN_REFERENCE.kind) return [UNKNOWN_REFERENCE]
+  if (reference.kind === TUPLE_REFERENCE_KIND) return reference.items
   if (reference.kind !== 'expression') return [UNKNOWN_REFERENCE]
   const node = unwrapExpression(reference.node)
   const binding = resolveBinding(reference, seenBindings)
@@ -500,6 +522,10 @@ function iterableReferences(reference, seenBindings) {
       }
       return [makeReference(element, reference.environment)]
     })
+  }
+
+  if (isArrayEntriesCall(node)) {
+    return arrayEntryReferences(node, reference.environment, new Set(seenBindings))
   }
 
   if (ts.isConditionalExpression(node)) {
@@ -607,7 +633,7 @@ function playwrightImportBindings(sourceFile) {
   return importBindings
 }
 
-function analyzeSource(sourceText, fileName, minimumWidth) {
+function parseSource(sourceText, fileName) {
   const sourceFile = ts.createSourceFile(
     fileName,
     sourceText,
@@ -621,6 +647,82 @@ function analyzeSource(sourceText, fileName, minimumWidth) {
       .join('; ')
     throw new SyntaxError(`Could not parse browser automation source ${fileName}: ${diagnostics}`)
   }
+  return sourceFile
+}
+
+function resolveRelativeModulePath(importingFile, moduleName) {
+  const base = path.resolve(path.dirname(importingFile), moduleName)
+  const candidates = [
+    base,
+    ...MODULE_EXTENSIONS.map((extension) => `${base}${extension}`),
+    ...MODULE_EXTENSIONS.map((extension) => path.join(base, `index${extension}`)),
+  ]
+  return candidates.find((candidate) =>
+    MODULE_EXTENSIONS.includes(path.extname(candidate))
+    && fs.existsSync(candidate)
+    && fs.statSync(candidate).isFile(),
+  ) || null
+}
+
+// `export const NAME = value` at the top of a module, resolved in an
+// environment of that module's own top-level constants. `let`/`var` exports
+// can be reassigned and functions compute their value, so those stay
+// unresolved and a viewport built from them is reported.
+function exportedConstants(modulePath) {
+  const cached = exportedConstantsByModule.get(modulePath)
+  if (cached) return cached
+
+  const sourceFile = parseSource(fs.readFileSync(modulePath, 'utf8'), modulePath)
+  const moduleEnvironment = new Map()
+  moduleEnvironment.set(VAR_SCOPE, moduleEnvironment)
+  moduleEnvironment.set(LEXICAL_BINDINGS, new Set())
+  const exported = new Map()
+  for (const statement of sourceFile.statements) {
+    if (!ts.isVariableStatement(statement)) continue
+    const declarationKind = statement.declarationList.flags & ts.NodeFlags.BlockScoped
+    if (declarationKind !== ts.NodeFlags.Const) continue
+    const isExported = (statement.modifiers || [])
+      .some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
+    for (const declaration of statement.declarationList.declarations) {
+      if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue
+      const reference = makeReference(declaration.initializer, moduleEnvironment)
+      moduleEnvironment.set(declaration.name.text, reference)
+      moduleEnvironment.get(LEXICAL_BINDINGS).add(declaration.name.text)
+      if (isExported) exported.set(declaration.name.text, reference)
+    }
+  }
+  exportedConstantsByModule.set(modulePath, exported)
+  return exported
+}
+
+// Named value imports from relative modules that resolve to exported
+// constants, such as a spec's shared list of desktop viewports. Anything
+// else stays unbound, exactly as before.
+function importedConstantBindings(sourceFile, fileName) {
+  const importBindings = []
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
+      continue
+    }
+    const importClause = statement.importClause
+    const namedBindings = importClause?.namedBindings
+    if (!namedBindings || importClause.isTypeOnly || !ts.isNamedImports(namedBindings)) continue
+    if (!statement.moduleSpecifier.text.startsWith('.')) continue
+
+    const modulePath = resolveRelativeModulePath(fileName, statement.moduleSpecifier.text)
+    if (!modulePath) continue
+    const exported = exportedConstants(modulePath)
+    for (const element of namedBindings.elements) {
+      if (element.isTypeOnly) continue
+      const reference = exported.get(element.propertyName?.text || element.name.text)
+      if (reference) importBindings.push([element.name.text, reference])
+    }
+  }
+  return importBindings
+}
+
+function analyzeSource(sourceText, fileName, minimumWidth) {
+  const sourceFile = parseSource(sourceText, fileName)
 
   const functionDeclarations = new Map()
   const functionScopedDeclarations = new Set()
@@ -958,7 +1060,11 @@ function analyzeSource(sourceText, fileName, minimumWidth) {
   }
 
   collectFunctions(sourceFile)
-  const importBindings = playwrightImportBindings(sourceFile)
+  // Playwright bindings come last so they win over a same-named constant.
+  const importBindings = [
+    ...importedConstantBindings(sourceFile, fileName),
+    ...playwrightImportBindings(sourceFile),
+  ]
   const rootEnvironment = new Map(importBindings)
   rootEnvironment.set(VAR_SCOPE, rootEnvironment)
   rootEnvironment.set(LEXICAL_BINDINGS, new Set(importBindings.map(([name]) => name)))

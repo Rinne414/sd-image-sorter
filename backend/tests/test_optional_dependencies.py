@@ -33,11 +33,11 @@ def test_requirement_lock_map_uses_release_pins():
         else "opencv-python==4.11.0.86"
     )
 
-    assert lock_map["transformers"] == "transformers==5.6.2"
+    assert lock_map["transformers"] == "transformers==5.10.4"
     assert lock_map["fastembed"] == "fastembed==0.8.0"
     assert lock_map["torch"] == expected_torch
     assert lock_map["opencv_python"] == expected_opencv
-    assert optional_dependencies._lock_package_spec("transformers>=5.6.0") == "transformers==5.6.2"
+    assert optional_dependencies._lock_package_spec("transformers>=5.6.0") == "transformers==5.10.4"
     assert optional_dependencies._lock_package_spec("torch>=2.0.0") == expected_torch
 
 
@@ -206,8 +206,8 @@ def test_ensure_group_installs_missing_or_too_old_packages(monkeypatch):
 
     result = optional_dependencies.ensure_group("sam3")
 
-    assert installed == ["transformers==5.6.2"]
-    assert result.installed_packages == ("transformers==5.6.2",)
+    assert installed == ["transformers==5.10.4"]
+    assert result.installed_packages == ("transformers==5.10.4",)
     # Nothing in this group was imported yet, so the upgrade is usable now.
     assert result.restart_recommended is False
 
@@ -273,13 +273,13 @@ def test_toriigate_requires_transformers_version_with_qwen35_support(monkeypatch
 
     result = optional_dependencies.ensure_group("toriigate")
 
-    assert installed == ["transformers==5.6.2"]
-    assert result.installed_packages == ("transformers==5.6.2",)
+    assert installed == ["transformers==5.10.4"]
+    assert result.installed_packages == ("transformers==5.10.4",)
     assert result.restart_recommended is False
 
 
 def test_ensure_group_keeps_newer_compatible_transformers(monkeypatch):
-    """A 5.7.x install already meets transformers>=5.6.0 — do not downgrade."""
+    """A 5.11.x install is newer than the 5.10.4 lock — do not downgrade."""
     installed = []
 
     monkeypatch.setattr(optional_dependencies.importlib.util, "find_spec", lambda module: object())
@@ -287,7 +287,7 @@ def test_ensure_group_keeps_newer_compatible_transformers(monkeypatch):
     monkeypatch.setattr(
         optional_dependencies.importlib.metadata,
         "version",
-        lambda package: "5.7.0" if package == "transformers" else _release_locked_version(package),
+        lambda package: "5.11.0" if package == "transformers" else _release_locked_version(package),
     )
     monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
     monkeypatch.setattr(
@@ -299,6 +299,28 @@ def test_ensure_group_keeps_newer_compatible_transformers(monkeypatch):
     assert installed == []
     assert result.installed_packages == ()
     assert result.restart_recommended is False
+
+
+def test_an_install_at_the_old_vulnerable_lock_is_raised_to_the_security_lock(monkeypatch):
+    """transformers 5.6.2 (PYSEC-2026-3929) is below the 5.10.4 lock, so Prepare upgrades it."""
+    installed = []
+
+    monkeypatch.setattr(optional_dependencies.importlib.util, "find_spec", lambda module: object())
+    monkeypatch.setattr(optional_dependencies.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        optional_dependencies.importlib.metadata,
+        "version",
+        lambda package: "5.6.2" if package == "transformers" else _release_locked_version(package),
+    )
+    monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
+    monkeypatch.setattr(
+        optional_dependencies, "_restart_reason_after_install", lambda **kwargs: ""
+    )
+
+    result = optional_dependencies.ensure_group("florence2")
+
+    assert installed == ["transformers==5.10.4"]
+    assert result.installed_packages == ("transformers==5.10.4",)
 
 
 def test_ensure_group_skips_already_satisfied_packages(monkeypatch):
@@ -465,7 +487,7 @@ def test_ensure_group_reports_restart_reason_when_a_loaded_module_is_replaced(mo
 
     result = optional_dependencies.ensure_group("toriigate")
 
-    assert installed == ["transformers==5.6.2"]
+    assert installed == ["transformers==5.10.4"]
     assert seen["preloaded_modules"] == ("transformers",)
     assert result.restart_recommended is True
     assert result.restart_reason == optional_dependencies.RESTART_REASON_LOADED_MODULE

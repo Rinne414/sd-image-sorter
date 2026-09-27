@@ -195,7 +195,7 @@ for (const [sam3FileName, sam3FileContents] of Object.entries(sam3BundleSmallFil
   fs.writeFileSync(path.join(sam3BundleDir, sam3FileName), sam3FileContents)
 }
 writeStubModule('torch.py', `__version__ = '2.13.0+cu126'\nclass version:\n    cuda = '12.6'\nclass cuda:\n    @staticmethod\n    def is_available():\n        return True\n`)
-writeStubModule('transformers.py', `__version__ = '5.6.2'\n`)
+writeStubModule('transformers.py', `__version__ = '5.10.4'\n`)
 writeStubModule('safetensors.py', `__version__ = '0.7.0'\n`)
 writeStubModule('timm.py', `__version__ = '1.0.26'\n`)
 if (!backendPythonHasModule('cv2')) {
@@ -209,7 +209,7 @@ writeStubModule('pycocotools/__init__.py', '')
 writeStubModule('decord.py', '')
 writeStubModule('iopath/__init__.py', '')
 writeStubPackageMetadata('torch', '2.13.0+cu126')
-writeStubPackageMetadata('transformers', '5.6.2')
+writeStubPackageMetadata('transformers', '5.10.4')
 writeStubPackageMetadata('timm', '1.0.26')
 writeStubPackageMetadata('safetensors', '0.7.0')
 writeStubPackageMetadata('opencv-python', '4.11.0.86')

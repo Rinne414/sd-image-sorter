@@ -290,7 +290,7 @@ def _resolved_install_spec(module_name: str, declared_spec: str) -> Optional[str
 
     The release lock (``name==X`` in requirements.txt) is a floor, not a pin:
     an older install is raised to the lock (torch 2.10 -> the 2.13.0 security
-    lock), but a newer compatible one (transformers 5.7.x over a 5.6.2 lock)
+    lock), but a newer compatible one (transformers 5.11.x over a 5.10.4 lock)
     is never downgraded. A declared exact pin with no lock entry stays exact.
     """
     locked = _lock_package_spec(declared_spec)
