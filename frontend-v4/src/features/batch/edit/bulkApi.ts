@@ -229,10 +229,20 @@ export interface Gap {
   score: number
 }
 
-/** Library images whose stored score for the tag sits just under the tagger's threshold, without the tag. */
+/** One request answers at most this many gaps; the rest come page by page. */
+const GAP_PAGE = 2000
+
+/**
+ * Library images whose stored score for the tag sits just under the tagger's
+ * threshold, without the tag: every one of them, read a page at a time.
+ */
 export async function coverageGaps(tag: string, imageIds: readonly number[]): Promise<Gap[]> {
-  const res = unwrap<{ gaps: Gap[] }>(
-    await api.POST('/api/tags/coverage-gaps', { body: { tag: tag.trim().replace(/ /g, '_'), image_ids: [...imageIds], limit: 2000 } }),
-  )
-  return res.gaps
+  const body = { tag: tag.trim().replace(/ /g, '_'), image_ids: [...imageIds], limit: GAP_PAGE }
+  const gaps: Gap[] = []
+  for (let offset = 0; ; ) {
+    const res = unwrap<{ gaps: Gap[]; has_more?: boolean }>(await api.POST('/api/tags/coverage-gaps', { body: { ...body, offset } }))
+    gaps.push(...res.gaps)
+    if (!res.has_more || res.gaps.length === 0) return gaps
+    offset += res.gaps.length
+  }
 }

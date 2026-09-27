@@ -7647,6 +7647,11 @@ export interface components {
              * @default 200
              */
             limit: number;
+            /**
+             * Offset
+             * @default 0
+             */
+            offset?: number;
         };
         /** CreateCollectionRequest */
         CreateCollectionRequest: {
