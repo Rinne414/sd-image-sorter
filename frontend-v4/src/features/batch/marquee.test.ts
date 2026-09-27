@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { boxOf, edgeScroll, gridRects, hitKeys, isDrag, marqueeSelection } from './marquee'
+import { boxOf, contentAt, edgeScroll, gridRects, hitKeys, isDrag, marqueeSelection, onContent, tileRectIn } from './marquee'
 import { clickSelection, NO_PICKS } from './pickLogic'
 
 // Box (marquee) selection in a batch's grids, as V3.5's queue had it: drag
@@ -71,5 +71,32 @@ describe('scrolling while boxing', () => {
 
   it('scrolls faster the further past the edge the pointer is', () => {
     expect(edgeScroll(640, 100, 600)).toBeGreaterThan(edgeScroll(590, 100, 600))
+  })
+})
+
+// At the automatic 130 % interface zoom (2560 px screens) the pointer and element
+// boxes are in screen px while the grid's content, scroll offsets and client size
+// are in the page's own px: everything the box does is worked out in page px.
+describe('the box under the interface zoom', () => {
+  const grid = { left: 364, top: 248 }
+  const client = { width: 1689, height: 917 }
+
+  it('turns the pointer into a point of the scrolled content, in page px', () => {
+    expect(contentAt(364 + 130, 248 + 260, grid, { left: 0, top: 100 }, 1.3)).toEqual({ x: 100, y: 300 })
+    expect(contentAt(364 + 100, 248 + 200, grid, { left: 0, top: 100 }, 1)).toEqual({ x: 100, y: 300 })
+  })
+
+  it('reads a tile where the box reads the pointer', () => {
+    const tile = { left: 364 + 13, top: 248 + 26, right: 364 + 13 + 260, bottom: 248 + 26 + 390 }
+    expect(tileRectIn(tile, grid, { left: 0, top: 0 }, 1.3)).toEqual({ left: 10, top: 20, right: 210, bottom: 320 })
+  })
+
+  it('starts from anywhere on the background, the far corner too, but not on the scrollbar', () => {
+    // the grid's bottom-right corner, 8 screen px in: inside its content (1683 x 911 page px)
+    expect(onContent(364 + 2196 - 8, 248 + 1192 - 8, grid, client, 1.3)).toBe(true)
+    // past the content width: the scrollbar
+    expect(onContent(364 + (1689 + 4) * 1.3, 248 + 100, grid, client, 1.3)).toBe(false)
+    expect(onContent(364 + 1689 - 8, 248 + 917 - 8, grid, client, 1)).toBe(true)
+    expect(onContent(364 + 1689 + 4, 248 + 100, grid, client, 1)).toBe(false)
   })
 })

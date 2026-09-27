@@ -56,9 +56,12 @@ export function toPagePx(screenPx: number): number {
   return screenPx / uiZoom()
 }
 
+/** A point in screen px (a pointer, a box corner) as page px from `origin` (a box corner in screen px). */
+export function pageOffset(x: number, y: number, origin: { left: number; top: number }, zoom: number): [number, number] {
+  return [(x - origin.left) / zoom, (y - origin.top) / zoom]
+}
+
 /** Where the pointer is inside `el`, in page px from its top-left corner. */
 export function pointIn(el: Element, e: { clientX: number; clientY: number }): [number, number] {
-  const box = el.getBoundingClientRect()
-  const z = uiZoom()
-  return [(e.clientX - box.left) / z, (e.clientY - box.top) / z]
+  return pageOffset(e.clientX, e.clientY, el.getBoundingClientRect(), uiZoom())
 }

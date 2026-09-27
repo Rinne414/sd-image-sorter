@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import indexHtml from '../../index.html?raw'
-import { autoScale, parseScaleSetting, roomAt, scaleFor, SCALE_OPTIONS, UI_SCALE_KEY } from './uiScale'
+import { autoScale, pageOffset, parseScaleSetting, roomAt, scaleFor, SCALE_OPTIONS, UI_SCALE_KEY } from './uiScale'
 
 describe('uiScale', () => {
   it('auto follows the V3.5 thresholds by window width', () => {
@@ -59,5 +59,12 @@ describe('uiScale', () => {
         expect(run(w, stored), `${w} ${stored}`).toEqual({ zoom: expected, prop: expected })
       }
     }
+  })
+})
+
+describe('a screen point as page px', () => {
+  it('measures from the origin and divides by the zoom', () => {
+    expect(pageOffset(364 + 130, 248 + 65, { left: 364, top: 248 }, 1.3)).toEqual([100, 50])
+    expect(pageOffset(464, 298, { left: 364, top: 248 }, 1)).toEqual([100, 50])
   })
 })

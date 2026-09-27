@@ -1,3 +1,4 @@
+import { pageOffset } from '../../lib/uiScale'
 import type { PickSelection } from './pickLogic'
 
 // Box (marquee) selection in a batch's grids, as V3.5's queue had it: a drag
@@ -20,6 +21,36 @@ export interface Rect {
 export interface TileRect {
   key: string
   rect: Rect
+}
+
+// Under the interface zoom (lib/uiScale) the pointer and element boxes are in
+// screen px while the content, its scroll offsets and the grid's client size are
+// in page px: the three helpers below turn screen px into page px, so the
+// scrollbar test, the hit test and the drawn box all work in page px.
+
+/** Where an element's box starts on screen (a DOMRect has more; this is all that is read). */
+export interface ScreenOrigin {
+  left: number
+  top: number
+}
+
+/** A pointer (screen px) as a point in the grid's scrolled content (page px). */
+export function contentAt(clientX: number, clientY: number, grid: ScreenOrigin, scroll: { left: number; top: number }, zoom: number): Point {
+  const [x, y] = pageOffset(clientX, clientY, grid, zoom)
+  return { x: x + scroll.left, y: y + scroll.top }
+}
+
+/** A tile's box (screen px) in the grid's scrolled content (page px). */
+export function tileRectIn(tile: Rect, grid: ScreenOrigin, scroll: { left: number; top: number }, zoom: number): Rect {
+  const a = contentAt(tile.left, tile.top, grid, scroll, zoom)
+  const b = contentAt(tile.right, tile.bottom, grid, scroll, zoom)
+  return { left: a.x, top: a.y, right: b.x, bottom: b.y }
+}
+
+/** A press (screen px) on the grid's content area, not on its scrollbar (the client size is in page px). */
+export function onContent(clientX: number, clientY: number, grid: ScreenOrigin, client: { width: number; height: number }, zoom: number): boolean {
+  const [x, y] = pageOffset(clientX, clientY, grid, zoom)
+  return x < client.width && y < client.height
 }
 
 /** Pixels the pointer must move before a press on empty space becomes a box. */

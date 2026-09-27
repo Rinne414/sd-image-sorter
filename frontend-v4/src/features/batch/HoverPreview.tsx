@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { imageFileUrl } from '../../api/urls'
+import { uiZoom } from '../../lib/uiScale'
 import type { Batch, BatchItem } from '../../api/types'
 import { entryThumb, type Entry } from './entries'
 import { useCensoredUrl } from './exportApi'
-import { HOVER_DELAY_MS, hoverPlace, previewBox } from './hoverPlace'
+import { HOVER_DELAY_MS, hoverPlace, pagePlace, previewBox } from './hoverPlace'
 import styles from './HoverPreview.module.css'
 
 // The Order step's hover preview: after a short hover a larger picture shows
@@ -55,10 +56,11 @@ export function useHoverPreview() {
 /** The picture as it will be posted: a censored copy when there is one, never the original in its place. */
 export function HoverPreview({ batch, shown }: { batch: Batch; shown: Hovered | null }) {
   if (!shown) return null
-  const viewport = { w: window.innerWidth, h: window.innerHeight }
+  // (the preview's CSS is in page px: the pointer and the window are read the same way)
+  const { pointer, viewport } = pagePlace(shown, { w: window.innerWidth, h: window.innerHeight }, uiZoom())
   const { entry } = shown
   const box = previewBox(entry.width, entry.height, viewport)
-  const place = hoverPlace(shown, box, viewport)
+  const place = hoverPlace(pointer, box, viewport)
   return createPortal(
     <div className={styles.preview} style={{ left: place.left, top: place.top, width: box.w, height: box.h }} aria-hidden data-testid="order-hover-preview" data-id={entry.imageId ?? undefined}>
       {entry.item?.has_censored ? <CensoredPicture batch={batch} item={entry.item} /> : <PlainPicture entry={entry} />}

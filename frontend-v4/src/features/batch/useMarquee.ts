@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type RefObject } from 'react'
-import { boxOf, edgeScroll, hitKeys, isDrag, marqueeSelection, type Point, type Rect, type TileRect } from './marquee'
+import { uiZoom } from '../../lib/uiScale'
+import { boxOf, contentAt, edgeScroll, hitKeys, isDrag, marqueeSelection, onContent, tileRectIn, type Point, type Rect, type TileRect } from './marquee'
 import type { PickSelection } from './pickLogic'
 
 // Drives a box selection over a batch grid's scroller (see marquee.ts): a
@@ -25,16 +26,17 @@ interface Drag {
   frame: number
 }
 
+const scrollOf = (el: HTMLElement) => ({ left: el.scrollLeft, top: el.scrollTop })
+
+/** The pointer in the grid's scrolled content, in page px (the interface zoom taken out). */
 function contentPoint(el: HTMLElement, clientX: number, clientY: number): Point {
-  const r = el.getBoundingClientRect()
-  return { x: clientX - r.left + el.scrollLeft, y: clientY - r.top + el.scrollTop }
+  return contentAt(clientX, clientY, el.getBoundingClientRect(), scrollOf(el), uiZoom())
 }
 
 /** A press the box may start from: the main button on the grid's own background, not on its scrollbar. */
 function startsBox(e: PointerEvent<HTMLElement>, el: HTMLElement): boolean {
   if (e.button !== 0 || (e.target as Element).closest('[data-key], button, input, a, label')) return false
-  const r = el.getBoundingClientRect()
-  return e.clientX - r.left < el.clientWidth && e.clientY - r.top < el.clientHeight
+  return onContent(e.clientX, e.clientY, el.getBoundingClientRect(), { width: el.clientWidth, height: el.clientHeight }, uiZoom())
 }
 
 export function useMarquee({ scrollRef, tiles, selection, onSelect }: Options) {
@@ -122,14 +124,13 @@ export function useMarquee({ scrollRef, tiles, selection, onSelect }: Options) {
   }
 }
 
-/** Every rendered tile's place in the scrolled content (for grids that draw all their tiles). */
+/** Every rendered tile's place in the scrolled content, in page px (for grids that draw all their tiles). */
 export function renderedTileRects(el: HTMLElement | null): TileRect[] {
   if (!el) return []
   const r = el.getBoundingClientRect()
-  return [...el.querySelectorAll<HTMLElement>('[data-key]')].map((tile) => {
-    const t = tile.getBoundingClientRect()
-    const left = t.left - r.left + el.scrollLeft
-    const top = t.top - r.top + el.scrollTop
-    return { key: tile.dataset.key ?? '', rect: { left, top, right: left + t.width, bottom: top + t.height } }
-  })
+  const zoom = uiZoom()
+  return [...el.querySelectorAll<HTMLElement>('[data-key]')].map((tile) => ({
+    key: tile.dataset.key ?? '',
+    rect: tileRectIn(tile.getBoundingClientRect(), r, scrollOf(el), zoom),
+  }))
 }

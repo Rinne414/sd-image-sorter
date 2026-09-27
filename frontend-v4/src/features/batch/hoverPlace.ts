@@ -24,6 +24,18 @@ const OFFSET_X = 16
 const OFFSET_Y = 60
 const MARGIN = 8
 
+/**
+ * The pointer and the window in page px, where the preview is placed and sized:
+ * under the interface zoom (130 % on 2560 px screens) the pointer is in screen
+ * px and the window keeps its screen size, while the preview's CSS is in page px.
+ */
+export function pagePlace(pointer: { x: number; y: number }, window: Size, zoom: number): { pointer: { x: number; y: number }; viewport: Size } {
+  return {
+    pointer: { x: pointer.x / zoom, y: pointer.y / zoom },
+    viewport: { w: Math.round(window.w / zoom), h: Math.round(window.h / zoom) },
+  }
+}
+
 /** Where the preview goes: right of the pointer and a little above it, flipped or held inside the window. */
 export function hoverPlace(pointer: { x: number; y: number }, box: Size, viewport: Size): { left: number; top: number } {
   let left = pointer.x + OFFSET_X

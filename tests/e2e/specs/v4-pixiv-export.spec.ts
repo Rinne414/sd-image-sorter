@@ -673,6 +673,78 @@ print("ok")
   expect(errors).toEqual([])
 })
 
+/** Near: within 2 px (the box's 1 px border and sub-pixel rounding). */
+const near = (actual: number, expected: number, what: string) => expect(Math.abs(actual - expected), `${what}: ${actual} vs ${expected}`).toBeLessThanOrEqual(2)
+
+/**
+ * A box from the grid's bottom-right empty corner to the middle of the `to`-th tile: it must start
+ * and be drawn exactly under the pointer while held. Returns the ids of the tiles the pointer's
+ * rectangle covers on screen, in grid order (what the box must pick).
+ */
+async function boxFromCorner(page: Page, gridId: string, tileId: string, to: number): Promise<number[]> {
+  const grid = await page.getByTestId(gridId).boundingBox()
+  const target = await page.getByTestId(tileId).nth(to).boundingBox()
+  if (!grid || !target) throw new Error('no grid or tile box')
+  const from = { x: grid.x + grid.width - 16, y: grid.y + grid.height - 16 }
+  const end = { x: target.x + target.width / 2, y: target.y + 20 }
+  const covered: number[] = []
+  for (const el of await page.getByTestId(tileId).all()) {
+    const b = await el.boundingBox()
+    if (b && b.x < from.x && b.x + b.width > end.x && b.y < from.y && b.y + b.height > end.y) covered.push(Number(await el.getAttribute('data-id')))
+  }
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+  await page.mouse.move(end.x, end.y, { steps: 8 })
+  const drawn = await page.getByTestId('batch-marquee').boundingBox()
+  if (!drawn) throw new Error('no box drawn')
+  near(drawn.x, end.x, 'box left')
+  near(drawn.y, end.y, 'box top')
+  near(drawn.x + drawn.width, from.x, 'box right')
+  near(drawn.y + drawn.height, from.y, 'box bottom')
+  await page.mouse.up()
+  await expect(page.getByTestId('batch-marquee')).toHaveCount(0)
+  return covered
+}
+
+test('at 2560 x 1440 (the automatic 130 % zoom) the box starts from the far corner, is drawn under the pointer and picks what it covers; the hover preview sits beside the pointer', async ({ page }) => {
+  const errors = watchErrors(page)
+  await page.setViewportSize({ width: 2560, height: 1440 })
+  await openBatch(page, orderBatchId)
+  expect(await page.evaluate(() => document.documentElement.style.zoom)).toBe('1.3')
+
+  await railStep(page, 'order').click()
+  await expect(page.getByTestId('order-tile')).toHaveCount(6)
+  const shown = await tileIds(page)
+  const coveredInOrder = await boxFromCorner(page, 'order-grid', 'order-tile', 3)
+  expect(coveredInOrder).toEqual([shown[3], shown[4], shown[5]])
+  await expect.poll(() => selectedIn(page, 'order-tile')).toEqual(coveredInOrder)
+
+  // the hover preview: right of the pointer and a little above it, 16 and 60 page px (x 1.3 on screen)
+  await page.keyboard.press('Escape')
+  const tile = await orderTile(page, shown[1] as number).boundingBox()
+  if (!tile) throw new Error('no tile box')
+  const pointer = { x: tile.x + tile.width / 2, y: tile.y + tile.height / 2 }
+  await page.mouse.move(pointer.x, pointer.y)
+  const preview = page.getByTestId('order-hover-preview')
+  await expect(preview).toHaveAttribute('data-id', String(shown[1]))
+  const at = await preview.boundingBox()
+  if (!at) throw new Error('no preview box')
+  near(at.x, pointer.x + 16 * 1.3, 'preview left')
+  near(at.y, pointer.y - 60 * 1.3, 'preview top')
+  expect(at.x + at.width, 'the preview stays in the window').toBeLessThanOrEqual(2560)
+  await page.mouse.move(200, 20)
+  await expect(preview).toHaveCount(0)
+
+  // the pick grid boxes the same way
+  await railStep(page, 'pick').click()
+  await expect(page.getByTestId('pick-tile')).toHaveCount(6)
+  const coveredInPick = await boxFromCorner(page, 'pick-grid', 'pick-tile', 3)
+  expect(coveredInPick.length).toBeGreaterThan(0)
+  await expect.poll(() => selectedIn(page, 'pick-tile')).toEqual(coveredInPick)
+  expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
+  expect(errors).toEqual([])
+})
+
 test('condition: one click takes the library\'s current search, its generator and "only favorites" scope included', async ({ page }) => {
   const errors = watchErrors(page)
   await page.setViewportSize({ width: 1366, height: 768 })
