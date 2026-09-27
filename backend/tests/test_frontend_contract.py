@@ -4149,8 +4149,12 @@ def test_the_theme_picker_offers_only_palettes_that_are_actually_styled():
     assert "sd-image-sorter-theme" in index
     assert 'src="/static/js/theme.js"' in index
     assert 'id="theme-menu"' in index
-    assert 'id="btn-theme-toggle"' in index
+    # The top bar's palette icon repeated Settings › colour theme (owner
+    # 2026-09-28); the entry page button and the Settings select remain.
+    assert 'id="btn-theme-toggle"' not in index
+    assert "btn-theme-toggle" not in theme_js
     assert 'id="entry-theme-btn"' in index
+    assert 'id="settings-theme"' in index
     assert ".theme-menu[hidden]" in tokens
 
     for theme_id in THEME_IDS:
@@ -4260,13 +4264,13 @@ def test_the_theme_picker_is_reachable_from_settings_not_only_the_nav_icon():
     assert "settings-theme" in theme_js, "theme.js must wire the settings control"
 
 
-def test_the_theme_menu_announces_against_the_button_that_opened_it():
-    """Two buttons open one listbox, so a fixed label association is wrong.
+def test_the_theme_menu_announces_against_the_button_that_opens_it():
+    """The entry-page button is the picker's only anchor, so it labels it.
 
-    The nav icon and the entry-page button both open ``#theme-menu``. If
-    ``aria-expanded`` and ``aria-labelledby`` only ever track the nav icon, a
-    screen-reader user opening the picker from the entry page is told about a
-    control that is not on screen.
+    The top bar's palette icon repeated Settings › colour theme and was
+    removed (owner 2026-09-28). ``#theme-menu`` is labelled by the entry
+    button and ``aria-expanded`` follows that button, so a screen reader is
+    never told about a control that no longer exists.
     """
     repo_root = Path(__file__).resolve().parents[2]
     index = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
@@ -4282,10 +4286,12 @@ def test_the_theme_menu_announces_against_the_button_that_opened_it():
     ):
         assert attribute in entry_markup, f"entry-theme-btn is missing {attribute}"
 
-    # The open state must be driven from the pressed anchor, not one hard id.
-    assert "ANCHOR_IDS" in theme_js
-    assert "entry-theme-btn" in theme_js
-    assert "setAttribute('aria-labelledby'" in theme_js
+    menu = re.search(r"<div[^>]*id=\"theme-menu\"[^>]*>", index)
+    assert menu, "theme-menu is missing"
+    assert 'aria-labelledby="entry-theme-btn"' in menu.group(0)
+
+    assert "var ANCHOR_ID = 'entry-theme-btn'" in theme_js
+    assert "setAttribute('aria-expanded'" in theme_js
 
 
 def test_room_warmth_says_it_is_graphite_only_instead_of_silently_doing_nothing():

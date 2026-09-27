@@ -73,11 +73,6 @@
         }
         var select = document.getElementById('settings-theme');
         if (select && select.value !== chosen) select.value = chosen;
-        var toggle = document.getElementById('btn-theme-toggle');
-        if (toggle) {
-            toggle.setAttribute('aria-label', t('theme.open', 'Color theme'));
-            toggle.setAttribute('title', t('theme.openTooltip', 'Choose a color theme'));
-        }
         var entry = document.getElementById('entry-theme-btn');
         if (entry) {
             entry.setAttribute('aria-label', t('theme.open', 'Color theme'));
@@ -89,22 +84,14 @@
         return document.getElementById('theme-menu');
     }
 
-    /* Both the nav icon and the entry-page button open the same listbox, so
-       the open state and the label association have to follow whichever one
-       the user actually pressed — otherwise a screen reader announces the
-       listbox against a control that is off-screen. */
-    var ANCHOR_IDS = ['btn-theme-toggle', 'entry-theme-btn'];
+    /* The picker opens from the entry page's theme button; Settings has its
+       own select. The top bar's palette icon repeated Settings and is gone
+       (owner 2026-09-28). */
+    var ANCHOR_ID = 'entry-theme-btn';
 
     function setExpanded(anchor) {
-        for (var i = 0; i < ANCHOR_IDS.length; i += 1) {
-            var node = document.getElementById(ANCHOR_IDS[i]);
-            if (!node) continue;
-            node.setAttribute('aria-expanded', node === anchor ? 'true' : 'false');
-        }
-        var menu = menuEl();
-        if (menu && anchor && anchor.id) {
-            menu.setAttribute('aria-labelledby', anchor.id);
-        }
+        var node = document.getElementById(ANCHOR_ID);
+        if (node) node.setAttribute('aria-expanded', node === anchor ? 'true' : 'false');
     }
 
     function closeMenu() {
@@ -138,10 +125,7 @@
         if (!menu || menu.hidden) return;
         var target = event.target;
         if (menu.contains(target)) return;
-        if (target.closest && (
-            target.closest('#btn-theme-toggle') ||
-            target.closest('#entry-theme-btn')
-        )) return;
+        if (target.closest && target.closest('#' + ANCHOR_ID)) return;
         closeMenu();
     }
 
@@ -152,14 +136,7 @@
     function bind() {
         apply(current());
 
-        var toggle = document.getElementById('btn-theme-toggle');
-        if (toggle) {
-            toggle.addEventListener('click', function (event) {
-                event.stopPropagation();
-                toggleFrom(toggle);
-            });
-        }
-        var entry = document.getElementById('entry-theme-btn');
+        var entry = document.getElementById(ANCHOR_ID);
         if (entry) {
             entry.addEventListener('click', function (event) {
                 event.stopPropagation();
