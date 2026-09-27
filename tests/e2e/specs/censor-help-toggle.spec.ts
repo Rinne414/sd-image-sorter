@@ -68,6 +68,25 @@ test('the three helper paragraphs are folded behind a keyboard-reachable "?"', a
   }
 })
 
+test('at 1366x768 the folded Auto Detect actions sit above the sticky Save & Queue card', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openCensor(page)
+
+  // Save & Queue is a sticky footer card, so 全部保存 stays on screen either
+  // way; what the unfolded paragraphs did was push the detect actions under it.
+  await expect(page.locator('#btn-save-all-processed')).toBeInViewport()
+  for (const selector of ['#btn-auto-detect-current', '#btn-auto-detect-all-sidebar', '#btn-run-auto-censor']) {
+    await expect(page.locator(selector)).toBeInViewport()
+    const uncovered = await page.evaluate((target) => {
+      const element = document.querySelector(target)!
+      const box = element.getBoundingClientRect()
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+      return Boolean(hit && element.contains(hit))
+    }, selector)
+    expect(uncovered, `${selector} is not covered by the Save & Queue card`).toBe(true)
+  }
+})
+
 test('the folded panel keeps its controls in view without overflow at desktop sizes', async ({ page }) => {
   const shotPhase = process.env.SUBTRACT_SHOT_PHASE
   await page.setViewportSize({ width: 1366, height: 768 })
