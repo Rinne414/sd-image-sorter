@@ -38,10 +38,8 @@ from tag_rules import (  # noqa: E402
     get_exclusion_targets,
 )
 
-# The 14 categories the frontend renders as pill colors
-# (frontend/css/dataset-maker.css `dataset-tag-pill-category-*`, pinned by
-# test_frontend_contract.py:878). No categorize_tag result may fall outside this
-# set, and none of these strings may change.
+# The 14 categories the frontend renders as tag colors. No categorize_tag
+# result may fall outside this set, and none of these strings may change.
 FRONTEND_CATEGORIES = {
     "character",
     "artist",

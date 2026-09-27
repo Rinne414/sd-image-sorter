@@ -568,14 +568,14 @@ V4_OLD_ASSET = "frontend-v4/dist/assets/index-OldHash1.js"
 V4_NEW_ASSET = "frontend-v4/dist/assets/index-NewHash2.js"
 
 
-def test_apply_update_installs_the_v4_interface_over_a_v35_install(monkeypatch, tmp_path: Path):
-    pending_manifest_path, package_root, _update_root, data_root, _ = _prepare_pending_update(
+def test_apply_update_replaces_the_v35_interface_with_v4(monkeypatch, tmp_path: Path):
+    """A V4-only package over a V3.5 install: the old frontend/ goes, the library stays."""
+    pending_manifest_path, package_root, update_root, data_root, _ = _prepare_pending_update(
         tmp_path,
-        current_manifest_paths=["frontend/index.html", "update/package-manifest.json"],
-        new_manifest_paths=["frontend/index.html", V4_INDEX, V4_NEW_ASSET, "update/package-manifest.json"],
-        installed_files={"frontend/index.html": "v3.5\n"},
+        current_manifest_paths=["frontend/index.html", "frontend/js/app.js", "update/package-manifest.json"],
+        new_manifest_paths=[V4_INDEX, V4_NEW_ASSET, "update/package-manifest.json"],
+        installed_files={"frontend/index.html": "v3.5\n", "frontend/js/app.js": "v3.5\n"},
         payload_files={
-            "frontend/index.html": "v3.5 next\n",
             V4_INDEX: '<script src="/v4/assets/index-NewHash2.js"></script>\n',
             V4_NEW_ASSET: "new build\n",
         },
@@ -586,8 +586,11 @@ def test_apply_update_installs_the_v4_interface_over_a_v35_install(monkeypatch, 
 
     assert "index-NewHash2.js" in (package_root / V4_INDEX).read_text(encoding="utf-8")
     assert (package_root / V4_NEW_ASSET).read_text(encoding="utf-8") == "new build\n"
-    assert (package_root / "frontend" / "index.html").read_text(encoding="utf-8") == "v3.5 next\n"
+    assert not (package_root / "frontend" / "index.html").exists()
+    assert not (package_root / "frontend" / "js" / "app.js").exists()
     assert (data_root / "images.db").read_text(encoding="utf-8") == "USERDATA\n"
+    installed_manifest = json.loads((update_root / "installed-manifest.json").read_text(encoding="utf-8"))
+    assert not any(path.startswith("frontend/") for path in installed_manifest["managed_paths"])
 
 
 def test_apply_update_replaces_an_older_v4_build_without_leaving_its_hashed_assets(monkeypatch, tmp_path: Path):

@@ -42,16 +42,6 @@ def test_debt_notes_do_not_tell_agents_to_keep_deleted_db_repos():
     assert not (ROOT / "backend" / "db_repos").exists()
 
 
-def test_manual_sort_does_not_advertise_modes_that_do_not_exist():
-    html = _read("frontend", "index.html")
-    assert "sort-mode-soon" not in html
-    assert "manual.modeMoreSoon" not in html
-    en = _read("frontend", "js", "lang", "en.js")
-    zh = _read("frontend", "js", "lang", "zh-CN.js")
-    assert "manual.modeMoreSoon" not in en
-    assert "manual.modeMoreSoon" not in zh
-
-
 def test_marketing_tagger_count_matches_the_catalog():
     tagger_count = sum(
         1 for cfg in TAGGER_MODELS.values() if not cfg.get("captioner_only")
@@ -105,7 +95,6 @@ def test_marketing_copy_matches_shipped_template_and_vlm_facts():
     assert "~65 MB" not in _read("backend", "config.py")
     assert "~65 MB" not in _read("backend", "similarity.py")
     assert "~65 MB" not in _read("docs", "API.md")
-    assert ".tab-badge-experimental" not in _read("frontend", "css", "styles.css")
     assert "100% local, zero cloud upload" not in why
     assert "docs/screenshots/gallery_hero.png" not in readme
     assert "facebookresearch/sam2" not in readme
@@ -116,51 +105,9 @@ def test_marketing_copy_matches_shipped_template_and_vlm_facts():
 
     security = _read("backend", "app_security.py")
     assert 'allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]' in security
-    assert "entry.multiLibrarySoon" not in _read("frontend", "js", "lang", "en.js")
-    assert "entry.multiLibrarySoon" not in _read("frontend", "js", "lang", "zh-CN.js")
-    assert "images never leave this PC" not in _read("frontend", "js", "lang", "en.js")
-    assert "图不出这台电脑" not in _read("frontend", "js", "lang", "zh-CN.js")
-    assert "The 4 tabs in the modal" not in _read("frontend", "js", "lang", "en.js")
-    assert "4 个 tab" not in _read("frontend", "js", "lang", "zh-CN.js")
-    assert "named as somebody else" not in _read("frontend", "index.html")
-    shortcuts = _read("frontend", "js", "modules", "components", "keyboard-shortcuts.js")
-    assert "1-7" not in shortcuts
-    assert "Switch tabs quickly" not in shortcuts
 
 
-def test_first_use_downloads_the_clicked_feature_with_progress():
-    html = _read("frontend", "index.html")
-    api_at = html.find("js/app/api-features.js")
-    restart_at = html.find("js/app/model-restart.js")
-    ensure_at = html.find("js/app/ensure-model.js")
-    tagging_at = html.find("js/app/tagging-flow.js")
-    assert api_at != -1 and restart_at != -1 and ensure_at != -1 and tagging_at != -1
-    assert api_at < restart_at < ensure_at < tagging_at
-
-    helper = _read("frontend", "js", "app", "ensure-model.js")
-    assert "FEATURE_INSTALL_CONFIRM_BYTES" in helper
-    assert "100 * 1024 * 1024" in helper
-    assert "/api/models/plan" in helper
-    assert "function ensureFeatureModel" in helper
-    assert "/api/models/download-progress" in helper
-    assert "prepareSpecForTagger" in helper
-
-    assert "ensureFeatureModel" in _read("frontend", "js", "app", "tagging-flow.js")
-    assert "ensureFeatureModel" in _read("frontend", "js", "similar", "embedding.js")
-    assert "ensureFeatureModel" in _read("frontend", "js", "app", "stats-aesthetic.js")
-    assert "ensureFeatureModel" in _read("frontend", "js", "artist", "identify.js")
-    assert "ensureFeatureModel" in _read("frontend", "js", "smart-tag", "run.js")
-    detect = _read("frontend", "js", "censor", "detect.js")
-    assert "ensureFeatureModel" in detect
-    assert "censor-nudenet" in detect
-    assert "It may look stuck" not in _read("frontend", "js", "lang", "en.js")
-    assert "censor.nudenetFirstUseDownload" in _read("frontend", "js", "lang", "zh-CN.js")
-    assert "第一次使用 NudeNet 会下载模型" in _read("frontend", "js", "lang", "zh-CN.js")
-    assert "btnEmbed.disabled = !modelReady" not in _read("frontend", "js", "similar", "status.js")
-    assert "Model-health owns the CTA" not in _read("frontend", "js", "similar", "status.js")
-    assert "!isAvailable" not in _read("frontend", "js", "artist", "diagnostics.js")
-    assert "startButton.disabled = true" not in _read("frontend", "js", "app", "stats-aesthetic.js")
-
+def test_first_use_download_docs_and_artist_loader_stay_true():
     architecture = _read("docs", "architecture.md")
     assert "progress overlay" in architecture.lower()
     assert "1 GB" in architecture

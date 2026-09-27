@@ -10,11 +10,12 @@ import { repoBytes, repoText } from './testFiles'
 // The TypeScript engine must stay byte-identical to what Big Tomato and Small
 // Tomato produce, and to V3.5's engine (owner requirement). Three locks:
 //  1. the golden vectors generated from the saved Big Tomato site JS (the same
-//     file V3.5's obfuscation-parity.spec.ts and the backend parity test read);
+//     file the backend parity test reads);
 //  2. the harvest table of backend/tests/test_obfuscation_client_engine_parity.py
 //     on the same fixture files;
-//  3. V3.5's own frontend/js/obfuscate-engine.js, run here on many sizes,
-//     passwords and texts, compared output for output.
+//  3. V3.5's own engine (kept as a test reference in
+//     tests/e2e/fixtures/obfuscation/v35-obfuscate-engine.js), run here on many
+//     sizes, passwords and texts, compared output for output.
 
 interface V35Engine {
   parsePassword: (raw: string) => Password
@@ -33,9 +34,11 @@ interface V35Engine {
   }
 }
 
+const V35_ENGINE = 'tests/e2e/fixtures/obfuscation/v35-obfuscate-engine.js'
+
 function loadV35(): V35Engine {
   const host: { ObfuscateEngine?: V35Engine } = {}
-  new Function('window', repoText('frontend/js/obfuscate-engine.js'))(host)
+  new Function('window', repoText(V35_ENGINE))(host)
   if (!host.ObfuscateEngine) throw new Error('V3.5 engine did not load')
   return host.ObfuscateEngine
 }

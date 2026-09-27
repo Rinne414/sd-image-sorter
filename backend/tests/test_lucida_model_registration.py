@@ -116,25 +116,3 @@ def test_lucida_runtime_dependencies_are_declared():
 
     assert "kornia==0.8.3" in requirements
     assert "einops>=" in requirements
-
-
-def test_lucida_ui_and_model_manager_copy_is_bilingual():
-    repo_root = Path(__file__).resolve().parents[2]
-    en = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
-    zh = (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
-
-    for key in (
-        "dataset.maskAutoEngine",
-        "dataset.maskAutoRemBg",
-        "dataset.maskAutoLucida",
-        "dataset.maskLucidaLicense",
-        "models.group.trainingMasks",
-        "models.lucida.ready",
-        "models.lucida.missingDeps",
-        "models.lucida.missing",
-    ):
-        assert f"'{key}':" in en
-        assert f"'{key}':" in zh
-
-    assert "research-only" in en
-    assert "仅限研究" in zh

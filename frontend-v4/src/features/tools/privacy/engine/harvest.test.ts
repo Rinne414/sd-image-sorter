@@ -26,7 +26,7 @@ const fixture = (name: string) => repoBytes(`tests/e2e/fixtures/obfuscation/${na
 
 type V35 = { __internals: { extractSourceTextChunksFromBytes: (b: Uint8Array) => TextChunk[] } }
 const host: { ObfuscateEngine?: V35 } = {}
-new Function('window', repoText('frontend/js/obfuscate-engine.js'))(host)
+new Function('window', repoText('tests/e2e/fixtures/obfuscation/v35-obfuscate-engine.js'))(host)
 const v35Harvest = (b: Uint8Array) => host.ObfuscateEngine!.__internals.extractSourceTextChunksFromBytes(b)
 
 // ---- synthetic JPEG / WebP containers, for the EXIF shapes the fixtures do not cover ----

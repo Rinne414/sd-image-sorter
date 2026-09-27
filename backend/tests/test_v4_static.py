@@ -1,4 +1,4 @@
-"""V4 frontend is served at /v4/ next to the V3.5 app, from frontend-v4/dist."""
+"""V4 is the only interface: served at /v4/ from frontend-v4/dist, and / redirects there."""
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -30,6 +30,28 @@ def test_index_is_served_without_cache(tmp_path):
     assert res.status_code == 200
     assert "id=root" in res.text
     assert res.headers["cache-control"] == "no-cache"
+
+
+def test_root_redirects_to_v4(tmp_path):
+    client = _client(_build(tmp_path))
+    res = client.get("/", follow_redirects=False)
+    assert res.status_code in (307, 308)
+    assert res.headers["location"] == "/v4/"
+
+
+def test_root_redirect_keeps_the_query_string(tmp_path):
+    # An old V3.5 bookmark such as /?library=lib_2 still opens that library.
+    client = _client(_build(tmp_path))
+    res = client.get("/?library=lib_2&x=a%20b", follow_redirects=False)
+    assert res.status_code in (307, 308)
+    assert res.headers["location"] == "/v4/?library=lib_2&x=a%20b"
+
+
+def test_the_app_redirects_root_to_v4_and_serves_no_v35_static(test_client):
+    res = test_client.get("/", follow_redirects=False)
+    assert res.status_code in (307, 308)
+    assert res.headers["location"] == "/v4/"
+    assert test_client.get("/static/js/app.js").status_code == 404
 
 
 def test_bare_v4_redirects_to_trailing_slash(tmp_path):
@@ -73,10 +95,8 @@ def test_unbuilt_v4_explains_how_to_build(tmp_path):
     res = client.get("/v4/")
     assert res.status_code == 503
     assert "charset=utf-8" in res.headers["content-type"]
-    # Both languages: the launchers build V4 once Node.js is installed, and
-    # V3.5 at / never needs it.
-    for text in ("Node.js", "run.bat", "run.sh", "npm run build", "V3.5"):
+    # Both languages: the launchers build V4 once Node.js is installed. There
+    # is no V3.5 to fall back to.
+    for text in ("Node.js", "run.bat", "run.sh", "npm run build", "自动构建", "automatically"):
         assert text in res.text
-    for text in ("自动构建", "打开 /"):
-        assert text in res.text
-    assert "automatically" in res.text
+    assert "V3.5" not in res.text

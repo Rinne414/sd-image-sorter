@@ -39,32 +39,9 @@ def test_backend_infrastructure_modules_own_extracted_main_concerns():
 
     assert "def _is_loopback_host" in security
     assert "def configure_security_middleware" in security
-    assert "class NoCacheStaticFiles" in static
-    assert "def serve_frontend_index" in static
+    assert "def mount_frontend_v4" in static
     assert "def build_support_diagnostics" in diagnostics
     assert "def open_support_log_file" in diagnostics
-
-
-def test_frontend_core_modules_load_before_app_script():
-    index_html = _read_repo_file("frontend", "index.html")
-    storage_script = '/static/js/modules/core/storage-utils.js'
-    request_script = '/static/js/modules/core/request-manager.js'
-    app_script = '/static/js/app.js'
-
-    assert storage_script in index_html
-    assert request_script in index_html
-    assert index_html.index(storage_script) < index_html.index(app_script)
-    assert index_html.index(request_script) < index_html.index(app_script)
-
-
-def test_app_js_delegates_core_utilities_to_modules():
-    source = _read_repo_file("frontend", "js", "app.js")
-
-    assert "const RequestManager =" not in source
-    assert "function readStoredJson" not in source
-    assert "function writeStoredJson" not in source
-    assert "function readStoredBoolean" not in source
-    assert "function writeStoredBoolean" not in source
 
 
 def test_image_service_delegates_reader_metadata_write_helpers():

@@ -181,7 +181,7 @@ def test_release_skip_rules_drop_root_internal_reports():
 
     assert release_builder.should_skip_path(Path("HANDOFF-qa-followup.md")) is True
     assert release_builder.should_skip_path(Path("qa-sweep-v3.5.0-stable-REPORT.md")) is True
-    assert release_builder.should_skip_path(Path("frontend") / "USER-REPORT.md") is False
+    assert release_builder.should_skip_path(Path("backend") / "USER-REPORT.md") is False
 
 
 def test_release_skip_rules_drop_loose_root_level_images():
@@ -214,7 +214,7 @@ def test_release_skip_rules_drop_loose_root_level_images():
     # Images under subdirectories must still be allowed (the docs/ tree
     # is excluded elsewhere; here we just confirm the new rule does
     # not over-match).
-    assert release_builder.should_skip_path(Path("frontend") / "static" / "logo.png") is False
+    assert release_builder.should_skip_path(Path("frontend-v4") / "dist" / "assets" / "logo.png") is False
     assert release_builder.should_skip_path(Path("models") / "yolo" / "preview.png") is True  # excluded by models rule, not the new one
     # Sanity: legit launcher and doc files at the repo root are still allowed.
     assert release_builder.should_skip_path(Path("README.md")) is False
@@ -231,7 +231,8 @@ def test_release_copy_project_prunes_excluded_directory_trees(monkeypatch, tmp_p
     files = {
         "README.md": "readme\n",
         "backend/main.py": "print('ok')\n",
-        "frontend/index.html": "<html></html>\n",
+        # A V3.5 interface folder left in the working copy: V4-only packages never ship it.
+        "frontend/index.html": "must not copy\n",
         "models/yolo/README.md": "model docs\n",
         "models/yolo/model.onnx": "model payload\n",
         "backend/venv/Lib/site-packages/huge.py": "must not copy\n",
@@ -259,7 +260,7 @@ def test_release_copy_project_prunes_excluded_directory_trees(monkeypatch, tmp_p
 
     assert (stage_root / "README.md").exists()
     assert (stage_root / "backend/main.py").exists()
-    assert (stage_root / "frontend/index.html").exists()
+    assert not (stage_root / "frontend").exists()
     assert (stage_root / "models/yolo/README.md").exists()
     assert not (stage_root / "models/yolo/model.onnx").exists()
     assert not (stage_root / "backend/venv/Lib/site-packages/huge.py").exists()
@@ -641,8 +642,8 @@ def test_write_package_manifest_excludes_runtime_files(tmp_path):
 
     (tmp_path / "backend").mkdir()
     (tmp_path / "backend" / "main.py").write_text("print('ok')\n", encoding="utf-8")
-    (tmp_path / "frontend").mkdir()
-    (tmp_path / "frontend" / "index.html").write_text("<html></html>\n", encoding="utf-8")
+    (tmp_path / "frontend-v4" / "dist").mkdir(parents=True)
+    (tmp_path / "frontend-v4" / "dist" / "index.html").write_text("<html></html>\n", encoding="utf-8")
     (tmp_path / "python").mkdir()
     (tmp_path / "python" / "python.exe").write_text("binary\n", encoding="utf-8")
 
@@ -651,7 +652,7 @@ def test_write_package_manifest_excludes_runtime_files(tmp_path):
 
     assert payload["version"] == "9.9.9"
     assert "backend/main.py" in payload["managed_paths"]
-    assert "frontend/index.html" in payload["managed_paths"]
+    assert "frontend-v4/dist/index.html" in payload["managed_paths"]
     assert "python/python.exe" not in payload["managed_paths"]
     assert "update/package-manifest.json" in payload["managed_paths"]
 
@@ -981,30 +982,6 @@ def test_core_requirements_exclude_heavy_ai_packages():
         for line in normalized_text.splitlines()
     )
     assert "fastapi==" in requirements_text
-
-
-def test_prepare_flow_frontend_warns_when_restart_is_needed():
-    # App-family read: app.js was split into app/*.js (2026-07); the
-    # pinned literals live in whichever family file hosts them now.
-    app_js = "\n".join(
-        [(ROOT / "frontend" / "js" / "app.js").read_text(encoding="utf-8")]
-        + [
-            p.read_text(encoding="utf-8")
-            for p in sorted((ROOT / "frontend" / "js" / "app").glob("*.js"))
-        ]
-    )
-    en_js = (ROOT / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
-    zh_js = (ROOT / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
-
-    assert "withRestartReminder" in app_js
-    assert "restart_recommended" in app_js
-    assert "installed_packages" in app_js
-    assert "restartApp" in app_js
-    assert "/api/updates/restart" in app_js
-    assert "models.restartAfterInstallWithPackages" in en_js
-    assert "models.restartNowAndContinue" in en_js
-    assert "使用这个功能前请重启应用" in zh_js
-    assert "立即重启并继续" in zh_js
 
 
 def test_dev_requirements_keep_platform_specific_wheels_guarded():
@@ -1469,9 +1446,7 @@ def test_release_ci_keeps_security_audit_and_windows_linux_guardrails():
 
     assert "scripts/security_check.py" in run_ci
     assert "dependency security audit" in run_ci
-    assert "frontend js syntax" in run_ci
-    assert "--check" in run_ci
-    assert "FRONTEND_JS_FILES" in run_ci
+    assert "v4 frontend typecheck" in run_ci
     # The dependency audit now scans the full resolved tree (no --no-deps flag)
     # and is blocking, with reviewed advisories explicitly allowlisted in source.
     assert "--ignore-vuln" in security_check
@@ -1524,23 +1499,14 @@ def test_playwright_specs_are_not_an_empty_ci_shell():
     specs = sorted(specs_dir.glob("*.spec.ts"))
 
     assert len(specs) >= 1
-    assert any(path.name == "smoke.spec.ts" for path in specs)
+    assert any(path.name == "v4-shell.spec.ts" for path in specs)
 
 
 def test_playwright_ci_inputs_are_tracked_or_generated():
-    run_ci = (ROOT / "scripts" / "run_ci.py").read_text(encoding="utf-8")
     config = (ROOT / "tests" / "e2e" / "playwright.config.ts").read_text(encoding="utf-8")
-    reader_live = (ROOT / "tests" / "e2e" / "specs" / "reader-live.spec.ts").read_text(encoding="utf-8")
 
-    assert (ROOT / "scripts" / "build_review_dataset.py").exists()
-    assert "REVIEW_DATASET_BUILDER" in run_ci
-    assert "build_review_dataset.py" in run_ci
     assert "storage/onboarding-complete.json" not in config
-    # QA P3-4 renamed the seeded state: only the entry-skip flag remains
-    # (the tour's auto-start is retired, so its completion flag is not seeded).
-    assert "suiteStorageState" in config
     assert "sd-image-sorter-onboarding-completed" not in config
-    assert "scripts/build_review_dataset.py" in reader_live
 
 
 def test_playwright_ai_runtime_stubs_match_exact_lock():
@@ -1559,180 +1525,6 @@ def test_playwright_ai_runtime_stubs_match_exact_lock():
     assert "if (!backendPythonHasModule('cv2'))" in config
     assert "writeStubModule('cv2.py', `__version__ = '4.11.0'\\n`)" in config
     assert "writeStubPackageMetadata('opencv-python', '4.11.0.86')" in config
-
-
-def test_frontend_i18n_and_censor_css_keep_safety_contracts():
-    i18n_js = (ROOT / "frontend" / "js" / "i18n.js").read_text(encoding="utf-8")
-    styles_css = (ROOT / "frontend" / "css" / "styles.css").read_text(encoding="utf-8")
-    css_text = "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "frontend" / "css").glob("*.css"))
-    censor_css = (ROOT / "frontend" / "css" / "censor-v2.css").read_text(encoding="utf-8")
-
-    assert "innerHTML = this.t" not in i18n_js
-    assert "height: calc(100vh - 60px);" not in styles_css
-    assert "height: calc(100vh - var(--nav-height))" in styles_css
-    for hardcoded_accent in ("rgba(168, 85, 247", "rgba(124, 58, 237", "#a855f7", "#7c3aed", "#e9d5ff"):
-        assert hardcoded_accent not in css_text
-    assert "var(--censor-accent" in censor_css
-
-def test_autosep_and_manual_sort_default_to_copy_for_safety():
-    """Regression test: locked defaults from AI_PRINCIPLES.md Principle #11.
-
-    The Auto-Separate and Manual Sort file-action mode must default to
-    ``copy`` (non-destructive) so first-time users do not move thousands
-    of files in a single click before they understand the workflow.
-
-    The user can still switch to ``move`` per session via the radio
-    buttons, and their last choice is persisted to localStorage so
-    power users only flip once. But the *out-of-box default* must be
-    copy.
-
-    This test pins both halves:
-      1. The HTML radios in index.html ship with ``checked`` on the
-         ``copy`` value (not ``move``) for the two action-owner radio
-         groups: autosep-operation-mode-main and manual-sort-operation.
-         The old autosep-operation-mode-settings duplicate must stay
-         absent; the main Action pane now owns Auto-Separate file action.
-      2. The JS fallbacks in autosep.js / manual-sort.js / app.js
-         resolve to ``copy`` when localStorage has no saved value
-         (or when the saved value is corrupt/unrecognized).
-
-    If a future agent flips any of these back to ``move``, this test
-    must fail loudly. See ``docs/AI_PRINCIPLES.md`` Principle #11 and
-    ``docs/AI_DECISION_LOG.md`` ADR-2026-05-16-copy-default for the
-    full reasoning.
-    """
-    import re
-
-    index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
-    # Autosep-family read: autosep.js is being split into autosep/*.js (the
-    # pinned literals live in state-constants / operation-mode after the
-    # split; family == autosep.js until then).
-    autosep_js = "\n".join(
-        [(ROOT / "frontend" / "js" / "autosep.js").read_text(encoding="utf-8")]
-        + [
-            p.read_text(encoding="utf-8")
-            for p in sorted((ROOT / "frontend" / "js" / "autosep").glob("*.js"))
-        ]
-    )
-    # Manual-sort-family read: manual-sort.js is being split into
-    # manual-sort/*.js (the pinned literals live in state-constants /
-    # mode-operation / init after the split; family == manual-sort.js until
-    # then).
-    manual_sort_js = "\n".join(
-        [(ROOT / "frontend" / "js" / "manual-sort.js").read_text(encoding="utf-8")]
-        + [
-            p.read_text(encoding="utf-8")
-            for p in sorted((ROOT / "frontend" / "js" / "manual-sort").glob("*.js"))
-        ]
-    )
-    # App-family read: app.js was split into app/*.js (2026-07).
-    app_js = "\n".join(
-        [(ROOT / "frontend" / "js" / "app.js").read_text(encoding="utf-8")]
-        + [
-            p.read_text(encoding="utf-8")
-            for p in sorted((ROOT / "frontend" / "js" / "app").glob("*.js"))
-        ]
-    )
-
-    # ---- HTML radios ----
-    # For each radio group, find both the move and copy radio tags and
-    # assert the copy one carries ``checked`` while the move one does not.
-    for group in ("autosep-operation-mode-main", "manual-sort-operation"):
-        move_pattern = re.compile(
-            rf'<input type="radio" name="{re.escape(group)}" value="move"[^>]*>',
-            re.IGNORECASE,
-        )
-        copy_pattern = re.compile(
-            rf'<input type="radio" name="{re.escape(group)}" value="copy"[^>]*>',
-            re.IGNORECASE,
-        )
-        move_match = move_pattern.search(index_html)
-        copy_match = copy_pattern.search(index_html)
-        assert move_match is not None, f"Could not find move radio for {group}"
-        assert copy_match is not None, f"Could not find copy radio for {group}"
-        assert "checked" not in move_match.group(0).lower(), (
-            f"Radio group {group}: 'move' must NOT carry the ``checked`` "
-            f"attribute. Locked by AI_PRINCIPLES.md Principle #11. "
-            f"Found: {move_match.group(0)!r}"
-        )
-        assert "checked" in copy_match.group(0).lower(), (
-            f"Radio group {group}: 'copy' MUST carry the ``checked`` "
-            f"attribute. Locked by AI_PRINCIPLES.md Principle #11. "
-            f"Found: {copy_match.group(0)!r}"
-        )
-
-    assert 'name="autosep-operation-mode-settings"' not in index_html, (
-        "Auto-Separate Settings must not reintroduce the duplicate file-action "
-        "radio group; the main Action pane owns operation mode after the "
-        "NOISE-03/04 de-dup."
-    )
-
-    # ---- HTML helper text under manual-sort radios ----
-    # Helper text + status line should reflect ``copy`` as the initial
-    # state. JS overrides on user toggle, but the static HTML the user
-    # sees on first paint must match the new default.
-    assert 'data-i18n="manual.actionModeCopyHelp"' in index_html
-    assert 'data-i18n="manual.actionModeMoveHelp"' not in index_html
-    assert "Action mode: Copy and keep originals" in index_html
-    assert "Action mode: Move originals" not in index_html
-    execution_mode_match = re.search(
-        r'<div class="helper-text" id="manual-sort-execution-mode"[^>]*>',
-        index_html,
-        re.IGNORECASE,
-    )
-    assert execution_mode_match is not None
-    assert "data-i18n" not in execution_mode_match.group(0).lower(), (
-        "manual-sort-execution-mode is dynamic text with a {mode} param; "
-        "global data-i18n cannot supply that param and must not overwrite it."
-    )
-
-    # ---- autosep.js DEFAULT_AUTOSEP_SETTINGS.operationMode ----
-    autosep_default_match = re.search(
-        r"DEFAULT_AUTOSEP_SETTINGS\s*=\s*\{[^}]*?operationMode\s*:\s*'([^']+)'",
-        autosep_js,
-        re.DOTALL,
-    )
-    assert autosep_default_match is not None, (
-        "Could not find DEFAULT_AUTOSEP_SETTINGS.operationMode in autosep.js"
-    )
-    assert autosep_default_match.group(1) == "copy", (
-        f"DEFAULT_AUTOSEP_SETTINGS.operationMode must be 'copy', got "
-        f"{autosep_default_match.group(1)!r}. Locked by AI_PRINCIPLES.md "
-        f"Principle #11."
-    )
-
-    # ---- autosep.js normalizeAutoSepOperationMode ----
-    # The fallback for an unrecognized stored value must be 'copy', NOT
-    # 'move'. A corrupt localStorage entry must never silently flip to
-    # the destructive path.
-    assert "return mode === 'move' ? 'move' : 'copy'" in autosep_js, (
-        "autosep.js normalizeAutoSepOperationMode must fall back to "
-        "'copy' for unrecognized values. Locked by Principle #11."
-    )
-
-    # ---- manual-sort.js localStorage fallback + normalize ----
-    assert "localStorage.getItem(MANUAL_SORT_OPERATION_MODE_KEY) || 'copy'" in manual_sort_js, (
-        "manual-sort.js localStorage fallback must be 'copy'. "
-        "Locked by Principle #11."
-    )
-    assert "operationMode: 'copy'" in manual_sort_js, (
-        "ManualSortState.operationMode must initialize to 'copy' before init "
-        "runs. Locked by Principle #11."
-    )
-    assert "return mode === 'move' ? 'move' : 'copy'" in manual_sort_js, (
-        "manual-sort.js normalizeManualSortOperationMode must fall back to "
-        "'copy' for unrecognized values. Locked by Principle #11."
-    )
-
-    # ---- app.js startSortSession parameter default ----
-    assert "operationMode = 'copy'" in app_js, (
-        "app.js startSortSession's operationMode parameter default must "
-        "be 'copy'. Locked by Principle #11."
-    )
-    assert "operation_mode: operationMode || 'copy'" in app_js, (
-        "app.js startSortSession's operation_mode body field must fall "
-        "back to 'copy'. Locked by Principle #11."
-    )
 
 
 def test_model_manager_sam3_setup_copy_matches_lazy_prepare_policy():
@@ -1759,9 +1551,6 @@ def _lazy_release_common_archive_names():
         "sd-image-sorter/backend/main.py",
         "sd-image-sorter/backend/config.py",
         "sd-image-sorter/backend/services/service_provider.py",
-        "sd-image-sorter/frontend/index.html",
-        "sd-image-sorter/frontend/js/app.js",
-        "sd-image-sorter/frontend/js/gallery.js",
         "sd-image-sorter/frontend-v4/dist/index.html",
         "sd-image-sorter/update/package-manifest.json",
     }
@@ -1775,6 +1564,18 @@ def test_lazy_release_qa_accepts_linux_archive_without_windows_launchers():
     }
 
     module.assert_archive_contents(names, package_kind="linux")
+
+
+def test_lazy_release_qa_rejects_an_archive_that_ships_the_v35_interface():
+    module = _load_lazy_release_qa_module("lazy_release_qa_no_v35_for_test")
+
+    names = _lazy_release_common_archive_names() | {
+        "sd-image-sorter/run.sh",
+        "sd-image-sorter/frontend/index.html",
+    }
+
+    with pytest.raises(module.LazyQaError, match="forbidden runtime/dev paths: frontend/index.html"):
+        module.assert_archive_contents(names, package_kind="linux")
 
 
 def test_lazy_release_qa_rejects_linux_archive_with_bundled_python():
@@ -1863,41 +1664,6 @@ def test_lazy_release_qa_rejects_unknown_package_kind():
 
     with pytest.raises(module.LazyQaError, match="Unknown package kind"):
         module.assert_archive_contents(_lazy_release_common_archive_names(), package_kind="mystery")
-
-
-def test_lazy_release_qa_uses_matching_node_runtime_for_linux_python(monkeypatch):
-    module = _load_lazy_release_qa_module("lazy_release_qa_for_test")
-
-    captured = {}
-
-    def fake_first_executable(*candidates):
-        captured["candidates"] = candidates
-        return str(candidates[0])
-
-    monkeypatch.setattr(module, "_first_executable", fake_first_executable)
-
-    node = module._node_executable("/usr/bin/python3")
-
-    assert node == "node"
-    assert captured["candidates"][0] == "node"
-    assert not str(captured["candidates"][0]).lower().endswith(".exe")
-
-
-def test_lazy_release_qa_uses_windows_node_for_windows_python(monkeypatch):
-    module = _load_lazy_release_qa_module("lazy_release_qa_for_test_windows")
-
-    captured = {}
-
-    def fake_first_executable(*candidates):
-        captured["candidates"] = candidates
-        return str(candidates[0])
-
-    monkeypatch.setattr(module, "_first_executable", fake_first_executable)
-
-    node = module._node_executable("C:/Python312/python.exe")
-
-    assert node.lower().endswith("node.exe")
-    assert str(captured["candidates"][0]).endswith("node.exe")
 
 
 # --- V4 interface (/v4/) in every package ------------------------------------
@@ -2033,9 +1799,8 @@ def _fake_release_project(root: Path, version: str) -> None:
             "backend/main.py": "pass\n",
             "backend/config.py": "pass\n",
             "backend/services/service_provider.py": "pass\n",
+            # Left over from V3.5 in the working copy; no package may carry it.
             "frontend/index.html": "<html></html>\n",
-            "frontend/js/app.js": "\n",
-            "frontend/js/gallery.js": "\n",
             "run.bat": "@echo off\n",
             "run.sh": "#!/bin/bash\n",
             f"docs/RELEASE_NOTES_v{version}.md": "## v9.9.9 -- Test\n\nSummary.\n\n## Checksums\n\n| a | b |\n",
@@ -2093,6 +1858,7 @@ def test_every_release_archive_carries_the_built_v4_interface(monkeypatch, tmp_p
         v4_files = sorted(name for name in names if name.startswith("frontend-v4/") and "." in name.rsplit("/", 1)[-1])
         assert v4_files == V4_SHIPPED_PATHS, archive_path.name
         assert set(V4_SHIPPED_PATHS) <= set(manifest["managed_paths"]), archive_path.name
+        assert not any(name.startswith("frontend/") for name in names), archive_path.name
 
     qa.check_release_packages(artifact_root, version)
 

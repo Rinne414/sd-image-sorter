@@ -20,7 +20,6 @@ from services.tagging.catalog import TAGGER_MODEL_HINTS
 from services.tagging.request import resolve_request_thresholds
 
 MODEL = "pixai-tagger-v1.0"
-REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(autouse=True)
@@ -324,22 +323,3 @@ def test_model_center_lists_v1_on_the_wd14_card_and_requires_the_weights_file(
     assert listed()[MODEL] is False
     (target / "model.onnx.data").write_bytes(b"d")
     assert listed()[MODEL] is True
-
-
-def test_frontend_names_the_model_in_both_languages_and_sizes_its_download():
-    ui = (REPO_ROOT / "frontend" / "js" / "app" / "tagger-model-ui.js").read_text(
-        encoding="utf-8"
-    )
-    ensure = (REPO_ROOT / "frontend" / "js" / "app" / "ensure-model.js").read_text(
-        encoding="utf-8"
-    )
-    en = (REPO_ROOT / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
-    zh = (REPO_ROOT / "frontend" / "js" / "lang" / "zh-CN.js").read_text(
-        encoding="utf-8"
-    )
-
-    assert "'pixai-tagger-v1.0': 'tagger.model.pixaiV10'" in ui
-    assert "'pixai-tagger-v1.0': 2.0" in ensure
-    for key in ("summary", "bestFor", "runtimeNote", "safeModeNote"):
-        assert f"'tagger.model.pixaiV10.{key}'" in en
-        assert f"'tagger.model.pixaiV10.{key}'" in zh

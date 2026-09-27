@@ -10,7 +10,6 @@ The owner rejected two covers that had been treated as acceptable:
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from PIL import Image
@@ -33,37 +32,6 @@ def test_sample_artist_list_file_is_gone():
 
 def test_identify_payload_does_not_mark_the_feature_experimental():
     assert "experimental" not in IdentifyResponse.model_fields
-
-
-def test_style_finder_chrome_does_not_call_the_feature_experimental():
-    html = (REPO_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
-    artist_more = re.search(
-        r'<button[^>]*id="nav-tools-artist"[^>]*>.*?</button>',
-        html,
-        flags=re.DOTALL,
-    )
-    assert artist_more is not None
-    assert "nav.experimental" not in artist_more.group(0)
-
-    catalog = (REPO_ROOT / "frontend" / "js" / "modules" / "entry-catalog.js").read_text(
-        encoding="utf-8"
-    )
-    assert "goView('artist')" in catalog
-    artist_entry = re.search(
-        r"\{[^{}]*goView\('artist'\)[^{}]*\}",
-        catalog,
-        flags=re.DOTALL,
-    )
-    assert artist_entry is not None
-    assert "experimental" not in artist_entry.group(0).lower()
-
-    en = (REPO_ROOT / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
-    zh = (REPO_ROOT / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
-    en_catalog = re.search(r"'catalog\.artist':\s*'([^']*)'", en)
-    zh_catalog = re.search(r"'catalog\.artist':\s*'([^']*)'", zh)
-    assert en_catalog is not None and zh_catalog is not None
-    assert "experimental" not in en_catalog.group(1).lower()
-    assert "实验" not in zh_catalog.group(1)
 
 
 def test_huggingface_load_failure_does_not_lock_placeholder(monkeypatch):

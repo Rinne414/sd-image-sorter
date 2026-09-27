@@ -8,9 +8,7 @@ Library Health prints ``sample.read_error`` with no formatter, so a row
 marked unreadable by a scan could put the owner's folder into the attention
 list.
 
-The stored cause has to be the same shape the move path already writes. The
-attention list also has to survive rows that were stored before that, because
-``formatUserError`` would delete the whole sentence rather than shorten it.
+The stored cause has to be the same shape the move path already writes.
 """
 
 from __future__ import annotations
@@ -23,7 +21,6 @@ from image_manager import _parse_metadata_job, scan_folder
 from metadata_parser import verify_image_readable
 from PIL import Image
 
-from tests.test_library_health_attention_reasons import _panel_reasons
 from tests.test_move_failure_reporting import _assert_the_frontend_can_show
 
 
@@ -44,7 +41,7 @@ def _undecodable_png(folder: Path, name: str = "00042.png") -> Path:
 def test_scan_of_an_undecodable_file_stores_a_cause_without_a_drive_path(
     test_db, tmp_path: Path
 ) -> None:
-    """The scan worker, the DB row, and the attention-list copy all stay path-free.
+    """The scan worker, the DB row, and the health report's sample all stay path-free.
 
     A brand-new corrupt file is dropped from the library (the scan reports it
     and moves on). An already-indexed file that later fails to decode is the
@@ -87,9 +84,7 @@ def test_scan_of_an_undecodable_file_stores_a_cause_without_a_drive_path(
 
     report = db.get_library_health_report(sample_limit=8)
     sample = next(row for row in report["issue_samples"] if int(row["id"]) == int(stored["id"]))
-    printed = _panel_reasons([sample])[0]
-    assert re.search(r"[A-Za-z]:\\", printed) is None, f"drive path reached the list: {printed!r}"
-    assert str(library) not in printed
+    assert sample["read_error"] == cause
 
 
 def test_parse_job_record_does_not_keep_the_folder_either(tmp_path: Path) -> None:
@@ -101,46 +96,3 @@ def test_parse_job_record_does_not_keep_the_folder_either(tmp_path: Path) -> Non
     assert broken.name in cause
     assert str(broken.parent) not in cause
     _assert_the_frontend_can_show(cause)
-
-
-def test_attention_list_still_names_the_file_when_the_stored_cause_has_a_folder(
-    test_db, tmp_path: Path
-) -> None:
-    """Old scan rows already have the raw path. formatUserError would wipe them.
-
-    A one-line display sanitiser has to keep the decoder's sentence and the
-    filename, and drop only the directory, so a library that has not been
-    re-scanned stops leaking without turning the reason into a blank.
-    """
-    library = tmp_path / "library"
-    library.mkdir()
-    raw = (
-        "cannot identify image file "
-        r"'L:\OwnersLibrary\kept.png'"
-    )
-    image_id = int(
-        db.add_image(
-            path=str(library / "kept.png"),
-            filename="kept.png",
-            generator="unknown",
-            metadata_json="{}",
-        )
-    )
-    with db.get_db() as conn:
-        conn.execute(
-            "UPDATE images SET is_readable = 0, read_error = ?, metadata_status = 'error' "
-            "WHERE id = ?",
-            (raw, image_id),
-        )
-
-    report = db.get_library_health_report(sample_limit=8)
-    sample = next(row for row in report["issue_samples"] if int(row["id"]) == image_id)
-    assert sample["read_error"] == raw, (
-        "this pins display of an already-stored value; if the payload rewrote "
-        "it, the sanitiser would no longer be what this test is watching"
-    )
-    printed = _panel_reasons([sample])[0]
-    assert "kept.png" in printed
-    assert re.search(r"[A-Za-z]:\\", printed) is None, f"drive path reached the list: {printed!r}"
-    assert "OwnersLibrary" not in printed
-    assert "cannot identify" in printed.lower()

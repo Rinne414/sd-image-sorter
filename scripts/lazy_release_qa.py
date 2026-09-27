@@ -40,6 +40,8 @@ PACKAGE_FORBIDDEN_PREFIXES = (
     "backend/tests/",
     "backend/venv/",
     "data/",
+    # The V3.5 interface: this package is V4 only.
+    "frontend/",
     "frontend-v4/node_modules/",
     "frontend-v4/src/",
     "node_modules/",
@@ -55,9 +57,6 @@ PACKAGE_REQUIRED_COMMON_APP_FILES = (
     "backend/main.py",
     "backend/config.py",
     "backend/services/service_provider.py",
-    "frontend/index.html",
-    "frontend/js/app.js",
-    "frontend/js/gallery.js",
     "frontend-v4/dist/index.html",
     "update/package-manifest.json",
 )
@@ -657,102 +656,6 @@ def run_api_checks(qa: LazyQa, folders: dict[str, Path], image_count: int, scan_
     return {"first_id": first_id, "first_path": str(first_path)}
 
 
-def _first_executable(*candidates: str | Path) -> str:
-    for candidate in candidates:
-        if isinstance(candidate, Path):
-            if candidate.exists():
-                return str(candidate)
-        else:
-            found = shutil.which(candidate)
-            if found:
-                return found
-    return str(candidates[0])
-
-
-def _node_executable(python_executable: str) -> str:
-    windows_node = Path("/mnt/c/Program Files/nodejs/node.exe")
-    if python_executable.lower().endswith(".exe"):
-        return _first_executable(windows_node, Path("C:/Program Files/nodejs/node.exe"), "node")
-    return _first_executable("node", Path("/usr/bin/node"), Path("/usr/local/bin/node"), windows_node)
-
-
-def _path_for_browser(path_value: str, node_executable: str) -> str:
-    if not path_value or not (node_executable.lower().endswith(".exe") and os.name != "nt"):
-        return path_value
-    try:
-        result = subprocess.run(
-            ["wslpath", "-w", path_value],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-        )
-        return result.stdout.strip() or path_value
-    except Exception:
-        return path_value
-
-
-def _playwright_command(node_executable: str, script: str, cli_args: list[str], env_values: dict[str, str]) -> list[str]:
-    if node_executable.lower().endswith(".exe") and os.name != "nt":
-        env_assignments = "; ".join(
-            f"process.env[{json.dumps(key)}]={json.dumps(value)}"
-            for key, value in env_values.items()
-        )
-        argv = ", ".join(json.dumps(arg) for arg in cli_args)
-        return [
-            node_executable,
-            "-e",
-            (
-                f"{env_assignments}; "
-                "const path = require('path'); "
-                "const { pathToFileURL } = require('url'); "
-                f"const script = {json.dumps(script)}; "
-                f"process.argv = [process.execPath, script, {argv}]; "
-                "(async () => { "
-                "await import(pathToFileURL(path.resolve(script)).href); "
-                "})().catch((error) => { console.error(error); process.exit(1); });"
-            ),
-        ]
-    return [node_executable, script, *cli_args]
-
-
-def run_frontend_checks(
-    qa: LazyQa,
-    *,
-    port: int,
-    folders: dict[str, Path],
-    api_context: dict[str, Any],
-    python_executable: str,
-) -> None:
-    e2e_root = ROOT / "tests" / "e2e"
-    wrapper = e2e_root / "scripts" / "run-playwright.mjs"
-    if not wrapper.exists():
-        raise LazyQaError(f"Playwright wrapper not found: {wrapper}")
-
-    node = _node_executable(python_executable)
-    first_image_for_browser = _path_for_browser(str(api_context.get("first_path") or ""), node)
-    env_values = {
-        "BASE_URL": qa.base_url,
-        "PW_REUSE_SERVER": "1",
-        "PW_WEB_SERVER_PORT": str(port),
-        "PW_BACKEND_PYTHON": python_executable,
-        "SD_LAZY_QA_FRONTEND": "1",
-        "SD_LAZY_QA_FIRST_IMAGE": first_image_for_browser,
-        "SD_LAZY_QA_COPY_DEST": str(folders["copy_dest"]),
-    }
-    env = os.environ.copy()
-    env.update(env_values)
-    command = _playwright_command(
-        node,
-        "./scripts/run-playwright.mjs",
-        ["test", "specs/lazy-human.spec.ts", "--reporter=list"],
-        env_values,
-    )
-    result = subprocess.run(command, cwd=e2e_root, env=env)
-    if result.returncode != 0:
-        raise LazyQaError(f"Frontend Playwright QA failed with exit code {result.returncode}")
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--artifact-root", type=Path, default=ARTIFACT_ROOT, help="Release artifact folder")
@@ -764,7 +667,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--python", default=sys.executable, help="Python executable used to start backend/main.py")
     parser.add_argument("--skip-package", action="store_true", help="Skip release archive validation")
     parser.add_argument("--skip-server", action="store_true", help="Skip backend/API smoke checks")
-    parser.add_argument("--frontend", action="store_true", help="Also run real browser UI clicks with Playwright")
     parser.add_argument("--keep-workdir", action="store_true", help="Do not delete the QA workspace before running")
     parser.add_argument("--verbose", action="store_true", help="Print extra diagnostics")
     return parser.parse_args()
@@ -797,17 +699,7 @@ def main() -> int:
                 qa.step("backend startup", qa.wait_for_server, args.startup_timeout)
                 if process.poll() is not None:
                     raise LazyQaError(f"Backend exited early with code {process.returncode}; log={log_path}")
-                api_context = run_api_checks(qa, folders, args.image_count, args.scan_timeout)
-                if args.frontend:
-                    qa.step(
-                        "frontend human Playwright",
-                        run_frontend_checks,
-                        qa,
-                        port=port,
-                        folders=folders,
-                        api_context=api_context,
-                        python_executable=args.python,
-                    )
+                run_api_checks(qa, folders, args.image_count, args.scan_timeout)
             finally:
                 stop_backend(process)
                 process = None

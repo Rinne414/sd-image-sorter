@@ -6188,35 +6188,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Root
-         * @description Serve the main frontend page.
-         *
-         *     Injects ``?v=APP_VERSION`` cache-busters onto every ``/static/*.js`` and
-         *     ``/static/*.css`` reference in ``index.html``. This ensures that when a
-         *     user upgrades the app (e.g. v3.2.0 -> v3.2.1) the browser refetches the
-         *     JS/CSS bundles on a normal F5, instead of silently serving the old
-         *     cached language packs and breaking new i18n keys until the user does a
-         *     hard refresh (ctrl+shift+r). DB rows, scan progress, filters and
-         *     selections live in localStorage / SQLite so this is purely a transport
-         *     fix; no user data is touched.
-         */
-        get: operations["root__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -21952,26 +21923,6 @@ export interface operations {
         };
     };
     support_open_log_api_support_open_log_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    root__get: {
         parameters: {
             query?: never;
             header?: never;

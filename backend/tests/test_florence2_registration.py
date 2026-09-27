@@ -136,20 +136,8 @@ def test_prepare_florence2_uses_dedicated_pinned_checkpoint_flow(monkeypatch):
     }
 
 
-def test_florence2_ui_copy_exists_without_booru_registry_entry():
+def test_florence2_has_no_booru_registry_entry():
     repo_root = Path(__file__).resolve().parents[2]
-    index_html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    en = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
-    zh = (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
     tagger_models = (repo_root / "backend" / "tagger_models.py").read_text(encoding="utf-8")
 
-    assert '<option value="florence2"' in index_html
-    for key in (
-        "smartTag.nlSourceFlorence2",
-        "models.florence2.ready",
-        "models.florence2.missingDeps",
-        "models.florence2.missing",
-    ):
-        assert f"'{key}':" in en
-        assert f"'{key}':" in zh
     assert '"florence2"' not in tagger_models

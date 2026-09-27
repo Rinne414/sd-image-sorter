@@ -1,5 +1,5 @@
 // Password digits and the two compatibility modes, ported from V3.5's
-// frontend/js/obfuscate-engine.js. Big Tomato (dfqtphx) reads the first two
+// obfuscate-engine.js. Big Tomato (dfqtphx) reads the first two
 // characters as the number of scramble passes and the next two as extra width
 // and height; Small Tomato (singularpoint) has no password at all.
 

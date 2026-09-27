@@ -1,4 +1,4 @@
-// Tests only: files of the repository (fixtures, V3.5's engine) read from disk.
+// Tests only: files of the repository (fixtures, V3.5's reference engine) read from disk.
 // This app's tsconfig has no Node types, so fs is loaded untyped; vitest runs
 // the tests in Node.
 

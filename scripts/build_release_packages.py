@@ -141,6 +141,9 @@ EXCLUDED_PREFIXES = (
     # whole path segments; loose root files go in EXCLUDED_FILES below.)
     "design_handoff_extract",
     "metadata missing",
+    # The V3.5 interface. This package is V4 only; a frontend/ folder left in
+    # a working copy (ignored or untracked files) must never ship.
+    "frontend",
     "artifacts",
     "data",
     "backend/data",

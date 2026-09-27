@@ -8,14 +8,14 @@ file happened to go through the queue or the backend.
 
 This is the backend half of a two-sided pin, following the same shape as the
 existing reference-site parity pair (test_obfuscation_reference_parity.py +
-tests/e2e/specs/obfuscation-parity.spec.ts):
+the V4 engine's engine.test.ts):
 
   * both halves read the SAME committed fixture bytes in
     tests/e2e/fixtures/obfuscation/, written by Pillow with the tag shapes real
     SD tools produce (see make-sd-metadata-fixtures.py there);
   * this file pins what backend harvesting returns for those bytes;
-  * obfuscation-metadata-roundtrip.spec.ts pins that the browser engine's
-    extractSourceTextChunksFromBytes returns exactly the same pairs.
+  * frontend-v4's privacy engine harvest.test.ts pins that the browser
+    engine's extractSourceTextChunksFromBytes returns exactly the same pairs.
 
 Harvesting is the only stage that differed. Pixel scrambling and both text
 crypto algorithms are already pinned byte-exact across the two implementations by
@@ -34,7 +34,14 @@ import obfuscation as obf
 
 FIXTURE_DIR = Path(__file__).resolve().parents[2] / "tests" / "e2e" / "fixtures" / "obfuscation"
 SPEC_PATH = (
-    Path(__file__).resolve().parents[2] / "tests" / "e2e" / "specs" / "obfuscation-metadata-roundtrip.spec.ts"
+    Path(__file__).resolve().parents[2]
+    / "frontend-v4"
+    / "src"
+    / "features"
+    / "tools"
+    / "privacy"
+    / "engine"
+    / "harvest.test.ts"
 )
 
 # The literal the fixtures embed, split the way the spec builds it so a drift on

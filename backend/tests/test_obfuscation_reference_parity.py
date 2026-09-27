@@ -10,7 +10,7 @@ golden-ratio offset, padding, or the text crypto, uploads stop round-tripping
 with the real site and this file goes red.
 
 The frontend engine is pinned against the same vectors by
-``tests/e2e/specs/obfuscation-parity.spec.ts``.
+``frontend-v4/src/features/tools/privacy/engine/engine.test.ts``.
 
 Verified divergences that are deliberately NOT covered (site-side quirks):
 - Non-numeric passwords: the site's ``parseInt`` yields NaN and it scrambles

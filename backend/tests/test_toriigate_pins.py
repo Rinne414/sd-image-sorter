@@ -23,8 +23,8 @@ SEAM NOTES a split MUST honor:
   * ``_sanitize_nl_text`` is inlined by migrations/019_sanitize_nl_captions.py;
     test_migration_019 asserts byte-parity. It must stay ``ToriiGateTagger.
     _sanitize_nl_text`` and behave identically.
-  * ``test_frontend_contract.py::test_tagger_ui_does_not_market_cpu_as_safe_mode``
-    path-scans THIS file for FORBIDDEN "Safe Mode" wording (negative contract).
+  * THIS file must never carry "Safe Mode" wording (negative contract,
+    section 13 below).
 """
 
 from __future__ import annotations
@@ -965,8 +965,8 @@ def test_sanitize_nl_text_is_classmethod_and_migration_parity_stable():
 # 13. Source-scanner negative contract (facade wording lock)
 # ===========================================================================
 def test_module_source_has_no_cpu_safe_mode_marketing():
-    """Mirrors test_frontend_contract::test_tagger_ui_does_not_market_cpu_as_safe_mode
-    scoped to THIS file. Phrases are concatenated so this pin itself never trips
+    """The tagger must not market CPU as a "safe mode", scoped to THIS
+    file. Phrases are concatenated so this pin itself never trips
     a source scanner. A facade/package split MUST keep this wording contract on
     every scanned path (see report Scanner-narrowing risk)."""
     source = Path(tg.__file__).read_text(encoding="utf-8")

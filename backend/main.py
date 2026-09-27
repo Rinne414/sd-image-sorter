@@ -109,12 +109,9 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-import app_static
 from app_diagnostics import build_support_diagnostics, open_support_log_file
 from app_security import _is_loopback_host, configure_security_middleware
-from app_static import mount_frontend_static, mount_frontend_v4, serve_frontend_index, static_cache_bust_token
-
-_STATIC_CACHE_BUST_RE = app_static._STATIC_CACHE_BUST_RE
+from app_static import mount_frontend_v4
 
 import database as db
 from ai_runtime_guard import AiRuntimeBusyError
@@ -373,22 +370,9 @@ https://github.com/Rinne414/sd-image-sorter/blob/main/docs/API.md
 configure_security_middleware(app)
 
 
-# Serve frontend static files
-frontend_path = str(BACKEND_DIR.parent / "frontend")
-mount_frontend_static(app, frontend_path=frontend_path)
-
-# V4 frontend (Vite build) at /v4/, coexisting with the V3.5 app at /.
+# V4 frontend (Vite build) at /v4/; / redirects there.
 frontend_v4_dist_path = str(BACKEND_DIR.parent / "frontend-v4" / "dist")
 mount_frontend_v4(app, dist_path=frontend_v4_dist_path)
-
-
-def _static_cache_bust_token(asset_path: str) -> str:
-    """Compatibility shim for existing cache-bust tests."""
-    return static_cache_bust_token(
-        asset_path,
-        frontend_path=frontend_path,
-        app_version=APP_VERSION,
-    )
 
 
 # Include routers
@@ -595,23 +579,6 @@ async def support_diagnostics(lines: int = 200):
 async def support_open_log():
     """Open the rotating support log file in the OS file manager."""
     return open_support_log_file()
-
-
-@app.get("/")
-async def root():
-    """
-    Serve the main frontend page.
-
-    Injects ``?v=APP_VERSION`` cache-busters onto every ``/static/*.js`` and
-    ``/static/*.css`` reference in ``index.html``. This ensures that when a
-    user upgrades the app (e.g. v3.2.0 -> v3.2.1) the browser refetches the
-    JS/CSS bundles on a normal F5, instead of silently serving the old
-    cached language packs and breaking new i18n keys until the user does a
-    hard refresh (ctrl+shift+r). DB rows, scan progress, filters and
-    selections live in localStorage / SQLite so this is purely a transport
-    fix; no user data is touched.
-    """
-    return serve_frontend_index(frontend_path=frontend_path, app_version=APP_VERSION)
 
 
 # ============== Run Server ==============
