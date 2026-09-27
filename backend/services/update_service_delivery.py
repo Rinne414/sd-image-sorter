@@ -20,7 +20,7 @@ seam keeps working.
 
 Vopus release rule (2026-09): the repository also publishes V3.5, so
 _read_release_json reads the release list beside GitHub's latest-release
-endpoint and _build_status offers only tags that start with
+endpoint (100 a page, at most 3 pages) and _build_status offers only tags that start with
 app_info.RELEASE_TAG_PREFIX (tests/test_update_vopus_releases.py sets
 APP_VERSION on this module to stand in for an installed Vopus).
 """
@@ -62,6 +62,9 @@ _DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 # The version part of a Vopus release tag: 1.0.0, 1.1.0-beta.1.
 _RELEASE_VERSION_RE = re.compile(r"\d+(?:\.\d+)+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?")
 _LATEST_RELEASE_PATH = "/releases/latest"
+# GitHub's largest release-list page, and how many of them one check reads.
+_RELEASE_LIST_PAGE_SIZE = 100
+_RELEASE_LIST_MAX_PAGES = 3
 
 
 def _github_api_error_payload(payload: dict[str, Any]) -> bool:
@@ -114,17 +117,20 @@ def _safe_version_text(version: str) -> str:
     return re.sub(r"[^0-9A-Za-z._-]+", "-", _normalize_version(version)) or "latest"
 
 
-def _release_list_url(api_url: str) -> str:
-    """The release list for a channel that names GitHub's latest-release endpoint.
+def _is_latest_release_url(api_url: str) -> bool:
+    return api_url.rstrip("/").endswith(_LATEST_RELEASE_PATH)
+
+
+def _release_list_page_url(api_url: str, page: int) -> str:
+    """Page ``page`` of the release list beside a latest-release endpoint.
 
     The repository's latest release may be a V3.5 one (tag v3.5.x), so Vopus
     reads the list next to it (newest created first) and picks its own there.
-    A proxy mirror keeps its prefix; any other channel URL is read as it is.
+    A proxy mirror keeps its prefix.
     """
-    trimmed = api_url.rstrip("/")
-    if trimmed.endswith(_LATEST_RELEASE_PATH):
-        return trimmed.removesuffix("/latest")
-    return api_url
+    base = api_url.rstrip("/").removesuffix("/latest")
+    first = f"{base}?per_page={_RELEASE_LIST_PAGE_SIZE}"
+    return first if page == 1 else f"{first}&page={page}"
 
 
 def _release_version(release: dict[str, Any]) -> Optional[str]:
@@ -223,20 +229,37 @@ class _UpdateDeliveryMixin:
             return "linux"
         return "unsupported"
 
-    def _read_release_json(self) -> Optional[dict[str, Any]]:
-        """The newest Vopus release the channel names, or None when it names none."""
-        channel = self._channel_state()
-        req = urllib.request.Request(_release_list_url(channel["api_url"]), headers=_HTTP_HEADERS)
+    def _read_api_json(self, url: str) -> Any:
+        req = urllib.request.Request(url, headers=_HTTP_HEADERS)
         with urllib.request.urlopen(req, timeout=20) as response:
             raw = response.read()
         payload = json.loads(raw.decode("utf-8"))
-        if isinstance(payload, list):
-            return _newest_vopus_release(payload)
-        if not isinstance(payload, dict):
-            raise RuntimeError("Update API returned an unexpected payload")
-        if _github_api_error_payload(payload):
+        if isinstance(payload, dict) and _github_api_error_payload(payload):
             raise RuntimeError("Update API returned an error instead of a release")
         return payload
+
+    def _read_release_json(self) -> Optional[dict[str, Any]]:
+        """The newest Vopus release the channel names, or None when it names none."""
+        api_url = self._channel_state()["api_url"]
+        if not _is_latest_release_url(api_url):
+            payload = self._read_api_json(api_url)
+            if isinstance(payload, list):
+                return _newest_vopus_release(payload)
+            if not isinstance(payload, dict):
+                raise RuntimeError("Update API returned an unexpected payload")
+            return payload
+
+        # Page by page until a page holds a Vopus release or the list ends.
+        releases: list[Any] = []
+        for page in range(1, _RELEASE_LIST_MAX_PAGES + 1):
+            batch = self._read_api_json(_release_list_page_url(api_url, page))
+            if not isinstance(batch, list):
+                raise RuntimeError("Update API returned an unexpected payload")
+            releases.extend(batch)
+            newest = _newest_vopus_release(releases)
+            if newest is not None or len(batch) < _RELEASE_LIST_PAGE_SIZE:
+                return newest
+        return None
 
     def _read_release_manifest(self, manifest_url: str) -> dict[str, Any]:
         req = urllib.request.Request(manifest_url, headers=_HTTP_HEADERS)

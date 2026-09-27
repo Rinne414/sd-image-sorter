@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -24,6 +25,8 @@ from app_info import (
 from services.update_service import UpdateService
 
 CURRENT = "1.0.0"
+# Page 1 of the release list: GitHub's largest page.
+LIST_URL = f"{GITHUB_RELEASES_API_URL}?per_page=100"
 
 
 @pytest.fixture
@@ -73,11 +76,24 @@ def _release(tag: str, *, version: str | None = None, **extra) -> dict:
     }
 
 
-def _serve(monkeypatch, payload) -> list[str]:
-    """Answer every update request with ``payload``; returns the requested URLs."""
+def _serve(monkeypatch, payload=None, *, pages=None) -> list[str]:
+    """Answer update requests; returns the requested URLs.
+
+    ``payload`` answers every request. ``pages`` answers page N of the release
+    list with ``pages[N - 1]``, and an empty list past the last one.
+    """
     requested: list[str] = []
 
+    def _answer(url: str):
+        if pages is None:
+            return payload
+        page = int(parse_qs(urlsplit(url).query).get("page", ["1"])[0])
+        return pages[page - 1] if page <= len(pages) else []
+
     class _Response:
+        def __init__(self, body):
+            self._body = body
+
         def __enter__(self):
             return self
 
@@ -85,11 +101,11 @@ def _serve(monkeypatch, payload) -> list[str]:
             return False
 
         def read(self):
-            return json.dumps(payload).encode("utf-8")
+            return json.dumps(self._body).encode("utf-8")
 
     def _open(request, timeout=0):
         requested.append(request.full_url)
-        return _Response()
+        return _Response(_answer(request.full_url))
 
     monkeypatch.setattr(us.urllib.request, "urlopen", _open)
     return requested
@@ -111,7 +127,7 @@ def test_a_v35_latest_release_is_not_offered(service, monkeypatch):
 
     _assert_up_to_date(status)
     # The release list, not /releases/latest (which may name a V3.5 release).
-    assert requested == [GITHUB_RELEASES_API_URL]
+    assert requested == [LIST_URL]
 
 
 def test_a_single_v35_release_from_a_custom_endpoint_is_not_offered(
@@ -236,7 +252,7 @@ def test_a_proxy_mirror_reads_the_release_list_and_downloads_through_the_mirror(
 
     status = service.get_status(force=True)
 
-    assert requested == [f"https://ghfast.top/{GITHUB_RELEASES_API_URL}"]
+    assert requested == [f"https://ghfast.top/{LIST_URL}"]
     assert status["has_update"] is True
     assert status["latest_version"] == "1.0.1"
     assert status["asset"]["download_url"].startswith(
@@ -262,4 +278,82 @@ def test_an_unsafe_channel_override_still_falls_back_to_github(
 
     service.get_status(force=True)
 
-    assert requested == [GITHUB_RELEASES_API_URL]
+    assert requested == [LIST_URL]
+
+
+def _v35_releases(count: int) -> list[dict]:
+    return [_release(f"v3.{n}.0") for n in range(count)]
+
+
+def test_a_vopus_release_past_the_first_30_entries_is_found(service, monkeypatch):
+    # GitHub lists 30 releases a page unless asked for more; V3.5 releases
+    # created after it must not push a Vopus release out of sight.
+    requested = _serve(
+        monkeypatch, pages=[[*_v35_releases(40), _release("vopus-v1.0.1")]]
+    )
+
+    status = service.get_status(force=True)
+
+    assert status["latest_version"] == "1.0.1"
+    assert requested == [LIST_URL]
+
+
+def test_the_next_page_is_read_when_a_full_page_has_no_vopus_release(
+    service, monkeypatch
+):
+    requested = _serve(
+        monkeypatch, pages=[_v35_releases(100), [_release("vopus-v1.0.1")]]
+    )
+
+    status = service.get_status(force=True)
+
+    assert status["latest_version"] == "1.0.1"
+    assert requested == [LIST_URL, f"{LIST_URL}&page=2"]
+
+
+def test_a_full_page_with_a_vopus_release_needs_no_next_page(service, monkeypatch):
+    requested = _serve(
+        monkeypatch,
+        pages=[
+            [*_v35_releases(99), _release("vopus-v1.0.1")],
+            [_release("vopus-v9.9.9")],
+        ],
+    )
+
+    assert service.get_status(force=True)["latest_version"] == "1.0.1"
+    assert requested == [LIST_URL]
+
+
+def test_a_short_page_ends_the_list(service, monkeypatch):
+    requested = _serve(monkeypatch, pages=[_v35_releases(5)])
+
+    _assert_up_to_date(service.get_status(force=True))
+    assert requested == [LIST_URL]
+
+
+def test_at_most_three_pages_are_read(service, monkeypatch):
+    requested = _serve(
+        monkeypatch,
+        pages=[
+            _v35_releases(100),
+            _v35_releases(100),
+            _v35_releases(100),
+            [_release("vopus-v1.0.1")],
+        ],
+    )
+
+    _assert_up_to_date(service.get_status(force=True))
+    assert requested == [LIST_URL, f"{LIST_URL}&page=2", f"{LIST_URL}&page=3"]
+
+
+def test_the_next_page_goes_through_the_proxy_mirror_too(service, monkeypatch):
+    service.save_proxy_channel("https://ghfast.top")
+    requested = _serve(
+        monkeypatch, pages=[_v35_releases(100), [_release("vopus-v1.0.1")]]
+    )
+
+    assert service.get_status(force=True)["latest_version"] == "1.0.1"
+    assert requested == [
+        f"https://ghfast.top/{LIST_URL}",
+        f"https://ghfast.top/{LIST_URL}&page=2",
+    ]
