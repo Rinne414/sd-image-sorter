@@ -17,8 +17,9 @@ This service runs as a bulk background job (progress + cancel via
 4. Enrich members with metadata and rank each group: highest
    (user_rating, aesthetic_score, resolution, file_size) first — that
    member becomes the suggested keeper.
-5. Persist the full result to ``<state>/duplicate-groups.json`` so the
-   review UI can page through it and survive restarts.
+5. Persist the full result to ``<state>/duplicate-groups.json`` (main
+   library) or ``duplicate-groups-<library id>.json`` so the review UI can
+   page through it and survive restarts. Each library keeps its own result.
 
 Deletion is deliberately NOT implemented here — the frontend feeds the
 checked ids to the existing trash-backed delete pipeline.
@@ -48,7 +49,9 @@ _GROUP_CANCEL_CHECK_INTERVAL = 256
 # v3: the summary gained the coverage fields. A v2 result cannot say how much
 # of the library its verdict covered, so it is discarded and rescanned rather
 # than shown as a "0 duplicates" answer nobody can vouch for.
-_RESULT_VERSION = 3
+# v4: the result records the library it was scanned in. A v3 result may belong
+# to any library, so its "remove the rest" suggestions are not trusted.
+_RESULT_VERSION = 4
 _STATE_FILENAME = "duplicate-groups.json"
 
 _SCAN_LOCK = threading.Lock()
@@ -67,9 +70,22 @@ class DuplicateGroupPersistenceError(RuntimeError):
 
 
 def _state_path() -> Path:
+    """Result file of the current library (main keeps the original name)."""
     import config
+    from library_context import MAIN_LIBRARY_ID, get_current_library_id
 
-    return Path(config.get_state_dir()) / _STATE_FILENAME
+    library_id = get_current_library_id()
+    if library_id == MAIN_LIBRARY_ID:
+        filename = _STATE_FILENAME
+    else:
+        filename = f"duplicate-groups-{library_id}.json"
+    return Path(config.get_state_dir()) / filename
+
+
+def _current_library_id() -> str:
+    from library_context import get_current_library_id
+
+    return get_current_library_id()
 
 
 # ---------------------------------------------------------------------------
@@ -628,6 +644,7 @@ def run_duplicate_scan(handle, threshold: float = DEFAULT_THRESHOLD) -> None:
     )
     result = {
         "version": _RESULT_VERSION,
+        "library_id": _current_library_id(),
         "scanned_at": time.time(),
         "threshold": threshold,
         "summary": {
@@ -648,6 +665,7 @@ def run_duplicate_scan(handle, threshold: float = DEFAULT_THRESHOLD) -> None:
 def _empty_result(threshold: float, embedded_count: int) -> Dict[str, Any]:
     return {
         "version": _RESULT_VERSION,
+        "library_id": _current_library_id(),
         "scanned_at": time.time(),
         "threshold": threshold,
         "summary": {
@@ -746,6 +764,7 @@ def load_result() -> Optional[Dict[str, Any]]:
         if (
             not isinstance(data, dict)
             or data.get("version") != _RESULT_VERSION
+            or data.get("library_id") != _current_library_id()
             or not isinstance(data.get("groups"), list)
         ):
             return None
