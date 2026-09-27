@@ -108,4 +108,43 @@ test.describe('library workspace', () => {
     expect(apis.claim).toBe(true)
     expect(apis.move).toBe(true)
   })
+
+  // V3.5 3-3: more than 5,000 images move in batches, and a batch that fails
+  // part-way says how many already moved instead of a bare "could not move".
+  test('moving past 5,000 images goes in batches and a failure says how many moved', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    const batchSizes: number[] = []
+    let failFrom = Number.POSITIVE_INFINITY
+    await page.route('**/api/libraries/move-images', async (route) => {
+      const body = route.request().postDataJSON() as { image_ids: number[] }
+      batchSizes.push(body.image_ids.length)
+      if (batchSizes.length >= failFrom) {
+        await route.fulfill({ status: 500, json: { detail: 'disk busy' } })
+        return
+      }
+      await route.fulfill({ json: { moved: body.image_ids.length, target_library_id: 'other', image_ids: body.image_ids } })
+    })
+    await page.addInitScript(() => localStorage.setItem('sd-image-sorter-lang', 'zh-CN'))
+    await page.goto('/')
+    await page.waitForFunction(() => Boolean((window as any).LibraryWorkspace?.moveImagesToLibrary), null, {
+      timeout: 15000,
+    })
+
+    const ids = Array.from({ length: 6001 }, (_, index) => index + 1)
+    const moved = await page.evaluate(
+      (list) => (window as any).LibraryWorkspace.moveImagesToLibrary(list, 'other', 'Other set'),
+      ids,
+    )
+    expect(moved?.moved).toBe(6001)
+    expect(batchSizes).toEqual([2000, 2000, 2000, 1])
+
+    batchSizes.length = 0
+    failFrom = 3
+    const failed = await page.evaluate(
+      (list) => (window as any).LibraryWorkspace.moveImagesToLibrary(list, 'other', 'Other set'),
+      ids,
+    )
+    expect(failed).toBeNull()
+    await expect(page.locator('#toast-container')).toContainText('已将 4000/6001 张移入「Other set」，其余的没能移动')
+  })
 })

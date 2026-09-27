@@ -367,6 +367,7 @@ window.I18nLang_en = {
     'library.moveSelectionTo': '→ {name}',
     'library.movedToast': 'Moved {count} image(s) to “{name}”',
     'library.moveFailed': 'Could not move images',
+    'library.movePartiallyFailed': 'Moved {moved} of {total} image(s) to “{name}”; the rest could not be moved',
     'library.claimedToast': 'Claimed {count} image(s) into this library',
     'library.claimFailed': 'Could not claim images',
     'disk.libraryIndexTitle': 'Library index',

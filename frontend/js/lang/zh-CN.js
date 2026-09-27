@@ -369,6 +369,7 @@ window.I18nLang_zhCN = {
     'library.moveSelectionTo': '→ {name}',
     'library.movedToast': '已将 {count} 张移入「{name}」',
     'library.moveFailed': '无法移动图片',
+    'library.movePartiallyFailed': '已将 {moved}/{total} 张移入「{name}」，其余的没能移动',
     'library.claimedToast': '已将 {count} 张认领到当前图库',
     'library.claimFailed': '无法认领图片',
     'disk.libraryIndexTitle': '图库索引',

@@ -447,8 +447,14 @@
     async function moveImagesToLibrary(imageIds, targetLibraryId, targetName) {
         const ids = (imageIds || []).map(Number).filter((n) => n > 0);
         if (!ids.length || !targetLibraryId) return null;
+        const data = { moved: 0 };
+        const refreshAfterMove = async () => {
+            await refreshFromServer();
+            if (typeof window.loadImages === 'function') {
+                try { await window.loadImages(false, { coalesce: true }); } catch (_e) { /* ignore */ }
+            }
+        };
         try {
-            const data = { moved: 0 };
             for (let start = 0; start < ids.length; start += LIBRARY_BATCH_SIZE) {
                 const res = await apiFetch('/api/libraries/move-images', {
                     method: 'POST',
@@ -465,10 +471,7 @@
                 const batch = await res.json();
                 data.moved += Number(batch.moved || 0);
             }
-            await refreshFromServer();
-            if (typeof window.loadImages === 'function') {
-                try { await window.loadImages(false, { coalesce: true }); } catch (_e) { /* ignore */ }
-            }
+            await refreshAfterMove();
             if (typeof window.showToast === 'function') {
                 window.showToast(
                     _t(
@@ -484,8 +487,21 @@
             }
             return data;
         } catch (_e) {
+            // Earlier batches are already in the other library: show that, and how many.
+            if (data.moved > 0) {
+                try { await refreshAfterMove(); } catch (_refreshError) { /* the toast still reports it */ }
+            }
             if (typeof window.showToast === 'function') {
-                window.showToast(_t('library.moveFailed', 'Could not move images'), 'error');
+                window.showToast(
+                    data.moved > 0
+                        ? _t(
+                            'library.movePartiallyFailed',
+                            'Moved {moved} of {total} image(s) to “{name}”; the rest could not be moved',
+                            { moved: String(data.moved), total: String(ids.length), name: targetName || targetLibraryId },
+                        )
+                        : _t('library.moveFailed', 'Could not move images'),
+                    'error',
+                );
             }
             return null;
         }
