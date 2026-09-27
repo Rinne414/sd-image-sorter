@@ -2690,13 +2690,18 @@
                                 </div>
                             </div>
                             <div class="censor-detect-quick">
-                                <select id="censor-model-type" class="toolbar-select censor-detect-select">
-                                    <option value="legacy" data-i18n="censor.legacyYolo">YOLO</option>
-                                    <option value="nudenet" data-i18n="censor.nudenet">NudeNet</option>
-                                    <option value="sam3" data-i18n="censor.sam3">SAM3</option>
-                                    <option value="both" data-i18n="censor.both">Both</option>
-                                </select>
-                                <small class="helper-text" id="censor-model-type-help" data-i18n="censor.modelTypeHelp">Both (recommended) runs privacy YOLO and NudeNet together for the widest coverage. YOLO alone uses the local file below; NudeNet and SAM3 need their own models. The app picks the best detector you have installed.</small>
+                                <div class="censor-help-row">
+                                    <select id="censor-model-type" class="toolbar-select censor-detect-select">
+                                        <option value="legacy" data-i18n="censor.legacyYolo">YOLO</option>
+                                        <option value="nudenet" data-i18n="censor.nudenet">NudeNet</option>
+                                        <option value="sam3" data-i18n="censor.sam3">SAM3</option>
+                                        <option value="both" data-i18n="censor.both">Both</option>
+                                    </select>
+                                    <button type="button" class="censor-help-toggle" aria-controls="censor-model-type-help" aria-expanded="false"
+                                            title="About the detectors" aria-label="About the detectors"
+                                            data-i18n-title="censor.modelTypeHelpToggle" data-i18n-aria="censor.modelTypeHelpToggle"><span aria-hidden="true">?</span></button>
+                                </div>
+                                <small class="helper-text" id="censor-model-type-help" hidden data-i18n="censor.modelTypeHelp">Both (recommended) runs privacy YOLO and NudeNet together for the widest coverage. YOLO alone uses the local file below; NudeNet and SAM3 need their own models. The app picks the best detector you have installed.</small>
                                 <small class="helper-text" id="censor-model-type-status" aria-live="polite"></small>
                                 <div class="censor-detect-actions-inline">
                                     <button class="btn btn-primary btn-small censor-detect-action" id="btn-auto-detect-current" title="Detect Current (D)" data-i18n-title="censor.detectCurrent"><svg class="icon" aria-hidden="true"><use href="#i-target"/></svg> <kbd>D</kbd></button>
@@ -2721,12 +2726,18 @@
                                     <option value="precise" data-i18n="censor.maskShapePrecise">Precise (pixel)</option>
                                     <option value="box" data-i18n="censor.maskShapeBox">Box</option>
                                 </select>
+                                <button type="button" class="censor-help-toggle" aria-controls="censor-mask-shape-help" aria-expanded="false"
+                                        title="About mask shape" aria-label="About mask shape"
+                                        data-i18n-title="censor.maskShapeHelpToggle" data-i18n-aria="censor.maskShapeHelpToggle"><span aria-hidden="true">?</span></button>
                             </div>
-                            <small class="helper-text" id="censor-mask-shape-help" data-i18n="censor.maskShapeHelp">Precise follows the exact shape from the model mask (YOLO-seg / SAM3); Box censors a rectangle. Takes effect on the next detect.</small>
+                            <small class="helper-text" id="censor-mask-shape-help" hidden data-i18n="censor.maskShapeHelp">Precise follows the exact shape from the model mask (YOLO-seg / SAM3); Box censors a rectangle. Takes effect on the next detect.</small>
                             <div class="censor-side-row" id="censor-sam3-refine-row">
                                 <button class="btn btn-secondary btn-small" id="btn-sam3-refine-all-sidebar" style="flex:1;"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg> <span data-i18n="censor.sam3RefineAllSidebar">Refine all with SAM3</span></button>
+                                <button type="button" class="censor-help-toggle" aria-controls="censor-sam3-refine-help" aria-expanded="false"
+                                        title="About SAM3 refine" aria-label="About SAM3 refine"
+                                        data-i18n-title="censor.sam3RefineHelpToggle" data-i18n-aria="censor.sam3RefineHelpToggle"><span aria-hidden="true">?</span></button>
                             </div>
-                            <small class="helper-text" id="censor-sam3-refine-help" data-i18n="censor.sam3RefineAllHelp">After detecting, re-segment every box with SAM3. It runs once per box, so it's slow and GPU-heavy, and not always sharper than YOLO. Use it when a shape needs fixing.</small>
+                            <small class="helper-text" id="censor-sam3-refine-help" hidden data-i18n="censor.sam3RefineAllHelp">After detecting, re-segment every box with SAM3. It runs once per box, so it's slow and GPU-heavy, and not always sharper than YOLO. Use it when a shape needs fixing.</small>
                             <div class="censor-side-row" id="sam3-confidence-group" style="display:none;">
                                 <label class="censor-side-inline-label">SAM3: <span class="censor-side-value" id="sam3-confidence-value">0.50</span></label>
                                 <input type="range" id="sam3-confidence" class="slider-v2" min="0.0" max="1.0" step="0.05" value="0.5">

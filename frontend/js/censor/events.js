@@ -89,6 +89,15 @@ function refreshLocalizedCensorContent() {
     renderQueue();
 }
 
+// The side panel's long helper paragraphs stay folded; each "?" opens and
+// closes the one paragraph it controls.
+function toggleCensorHelp(button) {
+    const help = document.getElementById(button.getAttribute('aria-controls'));
+    if (!help) return;
+    help.hidden = !help.hidden;
+    button.setAttribute('aria-expanded', String(!help.hidden));
+}
+
 function bindEvents() {
     const { $, $$ } = window.App;
 
@@ -198,6 +207,10 @@ function bindEvents() {
         if (sidebarVal) sidebarVal.textContent = display;
         const sidebarSlider = $('#censor-confidence-sidebar');
         if (sidebarSlider) sidebarSlider.value = e.target.value;
+    });
+
+    $$('#view-censor .censor-help-toggle').forEach((button) => {
+        button.addEventListener('click', () => toggleCensorHelp(button));
     });
 
     $('#censor-model-type')?.addEventListener('change', () => {

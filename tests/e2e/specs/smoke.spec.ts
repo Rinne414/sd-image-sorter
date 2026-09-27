@@ -7218,10 +7218,16 @@ test.describe('Smoke Tests', () => {
     await openView(page, 'censor')
     await expect(page.locator('#view-censor.active')).toBeVisible()
 
+    // The detector explanation is folded behind its "?" next to the detector
+    // select (V3.5 subtraction 4); open it before reading it.
+    await expect(page.locator('#censor-model-type-help')).toBeHidden()
+    await page.locator('#view-censor button[aria-controls="censor-model-type-help"]').click()
+    await expect(page.locator('#censor-model-type-help')).toBeVisible()
+    await expect(page.locator('#censor-model-type-help')).toContainText('YOLO alone uses the local file below')
+
     // censor-simple-guide is hidden in the redesigned UI (info moved to settings popup)
     await page.locator('#btn-open-detect-modal').click()
     await expect(page.locator('#detect-modal.visible')).toBeVisible()
-    await expect(page.locator('#censor-model-type-help')).toContainText('YOLO alone uses the local file below')
     await expect(page.locator('#censor-model-type-status')).toContainText('Use this file: wenaka_yolov8s-seg.onnx')
 
     // Model details and advanced picker are in collapsed <details> sections

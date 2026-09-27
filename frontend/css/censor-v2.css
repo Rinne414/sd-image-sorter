@@ -1077,6 +1077,51 @@ button.censor-batch-outcome-badge:focus-visible {
     font-size: 12px;
 }
 
+/* A control and the "?" that opens its folded helper paragraph. */
+.censor-help-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.censor-help-row .censor-detect-select {
+    flex: 1 1 auto;
+}
+
+.censor-help-toggle {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--r-ctl, 4px);
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.censor-help-toggle:hover,
+.censor-help-toggle[aria-expanded="true"] {
+    color: var(--text-primary);
+    border-color: rgba(var(--accent-primary-rgb), 0.4);
+    background: var(--bg-hover);
+}
+
+.censor-help-toggle:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+}
+
+.censor-side-card .helper-text[hidden] {
+    display: none;
+}
+
 .censor-detect-actions-inline {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
