@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { expect, test, type Page, type Request } from '@playwright/test'
+import { expect, test, type Page, type Request } from '../fixtures/click-ledger'
 
 import { markModelsReady } from '../fixtures/model-status'
 import { cleanupImages, dbPath, openLibrary, pageOverflow, repoRoot, runBackendScript, seedImages, tmpRoot, VIEWPORTS } from '../fixtures/v4-seed'

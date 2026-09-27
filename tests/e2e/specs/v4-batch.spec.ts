@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from '../fixtures/click-ledger'
 
 import { cleanupImages, dbPath, openLibrary, pageOverflow, runBackendScript, seedImages, VIEWPORTS } from '../fixtures/v4-seed'
 

@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from '../fixtures/click-ledger'
 
 import { dbPath, pageOverflow, runBackendScript, tmpRoot } from '../fixtures/v4-seed'
 import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'

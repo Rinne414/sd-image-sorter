@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from '../fixtures/click-ledger'
 
 import { cleanupImages, dbPath, openLibrary, pageOverflow, runBackendScript, seedImages } from '../fixtures/v4-seed'
 import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'

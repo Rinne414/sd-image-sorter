@@ -134,7 +134,7 @@ def _require_sharded_full_ci(environment: dict[str, str]) -> None:
             incompatible.append(f"{name}={value}")
     if incompatible:
         raise ValueError(
-            "full CI requires the sharded Playwright run; unset "
+            "full CI click coverage requires sharded Playwright; unset "
             + ", ".join(incompatible)
         )
 
@@ -338,10 +338,32 @@ def _run_ci(
             ],
             ROOT / "tests" / "e2e",
         ),
+        (
+            # Click-coverage ratchet (docs/COVERAGE_LEDGER.md): the click
+            # ledger records every V4 control the specs showed and every one
+            # they used; the gate fails when the used share drops below
+            # tests/e2e/coverage-baseline.json.
+            "click coverage gate",
+            [
+                str(BACKEND_PYTHON),
+                "scripts/coverage_gate.py",
+            ],
+            ROOT,
+        ),
     ]
 
     all_ok = True
+    passed_checks: set[str] = set()
     for name, command, cwd in checks:
+        if name == "click coverage gate" and "playwright e2e" not in passed_checks:
+            print(
+                "[CI] SKIPPED: click coverage gate — playwright e2e did not "
+                "pass in this CI invocation."
+            )
+            all_ok = False
+            continue
+        if name == "click coverage gate":
+            command = [*command, "--expected-run-id", coverage_run_id]
         print(f"[CI] Working directory: {cwd}")
         env = os.environ.copy()
         _apply_stable_temp_env(env)
@@ -368,6 +390,7 @@ def _run_ci(
             all_ok = False
         else:
             print(f"[CI] PASSED: {name}")
+            passed_checks.add(name)
 
     return 0 if all_ok else 1
 

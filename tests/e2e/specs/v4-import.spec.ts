@@ -1,6 +1,6 @@
 import path from 'node:path'
 
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from '../fixtures/click-ledger'
 
 import { cleanupImages, pageOverflow, runBackendScript, tmpRoot, VIEWPORTS } from '../fixtures/v4-seed'
 

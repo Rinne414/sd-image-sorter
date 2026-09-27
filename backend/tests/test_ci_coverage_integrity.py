@@ -9,7 +9,7 @@ from typing import BinaryIO
 
 import pytest
 
-from scripts import run_ci, workspace_lock
+from scripts import coverage_gate, run_ci, workspace_lock
 
 
 def test_run_ci_direct_script_resolves_shared_workspace_lock(tmp_path: Path) -> None:
@@ -41,10 +41,11 @@ def _install_ci_process_probe(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     playwright_returncode: int,
-) -> tuple[list[tuple[str, ...]], list[str], list[dict[str, str]]]:
+) -> tuple[list[tuple[str, ...]], list[str], list[dict[str, str]], list[str]]:
     executed_commands: list[tuple[str, ...]] = []
     playwright_run_ids: list[str] = []
     playwright_lock_environments: list[dict[str, str]] = []
+    coverage_gate_lock_results: list[str] = []
 
     def select_test_port(*preferred_ports: int) -> str:
         if not preferred_ports:
@@ -77,25 +78,87 @@ def _install_ci_process_probe(
                     "PW_WORKSPACE_LOCK_RUN_ID",
                 )
             })
+        if any("coverage_gate.py" in part for part in normalized):
+            try:
+                with run_ci._exclusive_ci_lock(
+                    run_ci.CI_LOCK_PATH,
+                    "direct-contender",
+                    "direct-contender-capability-value",
+                ):
+                    coverage_gate_lock_results.append("unexpectedly-acquired")
+            except run_ci.CiLockError as error:
+                coverage_gate_lock_results.append(str(error))
         returncode = playwright_returncode if is_playwright else 0
         return subprocess.CompletedProcess(normalized, returncode)
 
     monkeypatch.setattr(run_ci, "CI_LOCK_PATH", tmp_path / "run-ci.lock")
     monkeypatch.setattr(run_ci, "_find_available_port", select_test_port)
     monkeypatch.setattr(run_ci.subprocess, "run", run_command)
-    return executed_commands, playwright_run_ids, playwright_lock_environments
+    return (
+        executed_commands,
+        playwright_run_ids,
+        playwright_lock_environments,
+        coverage_gate_lock_results,
+    )
 
 
 def _command_was_executed(commands: list[tuple[str, ...]], script_name: str) -> bool:
     return any(any(script_name in part for part in command) for command in commands)
 
 
-def test_ci_fails_when_playwright_fails(
+def _configure_coverage_gate_fixture(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    artifacts = tmp_path / "artifacts"
+    ledger = artifacts / "click-coverage"
+    baseline = tmp_path / "coverage-baseline.json"
+    ledger.mkdir(parents=True)
+    rows = [
+        {"test": "fixture", "kind": "seen", "key": "tid:import-button", "context": "page:home"},
+        {"test": "fixture", "kind": "used", "key": "tid:import-button", "context": "page:home"},
+    ]
+    (ledger / "raw-worker-0.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    baseline.write_text(
+        json.dumps({"min_click_coverage_pct": 100.0, "waivers": []}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(coverage_gate, "ARTIFACTS", artifacts)
+    monkeypatch.setattr(coverage_gate, "LEDGER_DIR", ledger)
+    monkeypatch.setattr(
+        coverage_gate,
+        "COVERAGE_RUN_PATH",
+        artifacts / "click-coverage-run.json",
+    )
+    monkeypatch.setattr(
+        coverage_gate,
+        "PLAYWRIGHT_LAST_RUN_PATH",
+        tmp_path / "test-results" / ".last-run.json",
+    )
+    monkeypatch.setattr(coverage_gate, "MERGED_PATH", artifacts / "click-coverage.json")
+    monkeypatch.setattr(coverage_gate, "UNTESTED_PATH", artifacts / "untested-controls.json")
+    monkeypatch.setattr(coverage_gate, "BASELINE_PATH", baseline)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["coverage_gate.py", "--expected-run-id", "fixture-run"],
+    )
+
+
+def test_ci_skips_click_coverage_gate_after_playwright_failure(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    commands, playwright_run_ids, _playwright_lock_environments = _install_ci_process_probe(
+    (
+        commands,
+        playwright_run_ids,
+        _playwright_lock_environments,
+        coverage_gate_lock_results,
+    ) = _install_ci_process_probe(
         monkeypatch,
         tmp_path,
         playwright_returncode=1,
@@ -105,14 +168,21 @@ def test_ci_fails_when_playwright_fails(
 
     assert _command_was_executed(commands, "run-playwright.mjs")
     assert len(playwright_run_ids) == 1
-    assert "FAILED: playwright e2e" in capsys.readouterr().out
+    assert not _command_was_executed(commands, "coverage_gate.py")
+    assert coverage_gate_lock_results == []
+    assert "SKIPPED: click coverage gate" in capsys.readouterr().out
 
 
-def test_ci_hands_playwright_its_run_identity_and_the_held_lock(
+def test_ci_runs_click_coverage_gate_after_playwright_success(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    commands, playwright_run_ids, playwright_lock_environments = _install_ci_process_probe(
+    (
+        commands,
+        playwright_run_ids,
+        playwright_lock_environments,
+        coverage_gate_lock_results,
+    ) = _install_ci_process_probe(
         monkeypatch,
         tmp_path,
         playwright_returncode=0,
@@ -120,14 +190,30 @@ def test_ci_hands_playwright_its_run_identity_and_the_held_lock(
 
     assert run_ci.main() == 0
 
-    assert _command_was_executed(commands, "run-playwright.mjs")
-    assert len(playwright_run_ids) == 1
+    playwright_index = next(
+        index
+        for index, command in enumerate(commands)
+        if any("run-playwright.mjs" in part for part in command)
+    )
+    coverage_index = next(
+        index
+        for index, command in enumerate(commands)
+        if any("coverage_gate.py" in part for part in command)
+    )
+    assert playwright_index < coverage_index
+    coverage_command = commands[coverage_index]
+    expected_id_index = coverage_command.index("--expected-run-id") + 1
+    assert playwright_run_ids == [coverage_command[expected_id_index]]
     assert len(playwright_lock_environments) == 1
     lock_environment = playwright_lock_environments[0]
     assert Path(lock_environment["PW_BACKEND_PYTHON"]) == run_ci.BACKEND_PYTHON
     assert lock_environment["PW_WORKSPACE_LOCK_RUN_ID"] == playwright_run_ids[0]
     assert lock_environment["PW_WORKSPACE_LOCK_HOLDER_PID"] == str(os.getpid())
     assert len(lock_environment["PW_WORKSPACE_LOCK_CAPABILITY"]) >= 32
+    assert len(coverage_gate_lock_results) == 1
+    assert "canonical workspace lock" in coverage_gate_lock_results[0]
+    assert playwright_run_ids[0] in coverage_gate_lock_results[0]
+    assert lock_environment["PW_WORKSPACE_LOCK_CAPABILITY"] not in coverage_gate_lock_results[0]
 
 
 @pytest.mark.parametrize(
@@ -149,7 +235,12 @@ def test_ci_rejects_non_sharded_full_run_configuration_before_playwright(
     environment_value: str,
 ) -> None:
     monkeypatch.setenv(environment_name, environment_value)
-    commands, playwright_run_ids, _playwright_lock_environments = _install_ci_process_probe(
+    (
+        commands,
+        playwright_run_ids,
+        _playwright_lock_environments,
+        coverage_gate_lock_results,
+    ) = _install_ci_process_probe(
         monkeypatch,
         tmp_path,
         playwright_returncode=0,
@@ -158,8 +249,10 @@ def test_ci_rejects_non_sharded_full_run_configuration_before_playwright(
     assert run_ci.main() == 1
 
     assert not _command_was_executed(commands, "run-playwright.mjs")
+    assert not _command_was_executed(commands, "coverage_gate.py")
     assert playwright_run_ids == []
-    assert "full CI requires the sharded Playwright run" in capsys.readouterr().out
+    assert coverage_gate_lock_results == []
+    assert "full CI click coverage requires sharded Playwright" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
@@ -391,3 +484,497 @@ def test_inherited_workspace_lock_requires_a_live_matching_owner(tmp_path: Path)
             "fixture-run",
             capability,
         )
+
+
+def test_coverage_gate_rejects_mismatched_run_identity_before_writing_outputs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _configure_coverage_gate_fixture(monkeypatch, tmp_path)
+    coverage_gate.COVERAGE_RUN_PATH.write_text(
+        json.dumps({"schemaVersion": 1, "runId": "coverage-run"}),
+        encoding="utf-8",
+    )
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.parent.mkdir(parents=True)
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.write_text(
+        json.dumps({"status": "passed", "failedTests": [], "runId": "terminal-run"}),
+        encoding="utf-8",
+    )
+    coverage_gate.MERGED_PATH.write_text("stale", encoding="utf-8")
+    coverage_gate.UNTESTED_PATH.write_text("stale", encoding="utf-8")
+
+    assert coverage_gate.main() == 1
+
+    output = capsys.readouterr().out
+    assert "run identity mismatch" in output
+    assert "coverage-run" in output
+    assert "terminal-run" in output
+    assert not coverage_gate.MERGED_PATH.exists()
+    assert not coverage_gate.UNTESTED_PATH.exists()
+
+
+def test_coverage_gate_accepts_matching_successful_run_identity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _configure_coverage_gate_fixture(monkeypatch, tmp_path)
+    coverage_gate.COVERAGE_RUN_PATH.write_text(
+        json.dumps({"schemaVersion": 1, "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.parent.mkdir(parents=True)
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.write_text(
+        json.dumps({"status": "passed", "failedTests": [], "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+
+    assert coverage_gate.main() == 0
+
+    assert coverage_gate.MERGED_PATH.exists()
+    assert coverage_gate.UNTESTED_PATH.exists()
+
+
+def test_coverage_gate_rejects_identity_replaced_while_reading_ledger(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _configure_coverage_gate_fixture(monkeypatch, tmp_path)
+    coverage_gate.COVERAGE_RUN_PATH.write_text(
+        json.dumps({"schemaVersion": 1, "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.parent.mkdir(parents=True)
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.write_text(
+        json.dumps({"status": "passed", "failedTests": [], "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+    load_ledger = coverage_gate._load_ledger
+
+    def replace_identity_after_ledger_read() -> tuple[dict[str, str], set[str], dict[str, int]]:
+        result = load_ledger()
+        coverage_gate.COVERAGE_RUN_PATH.write_text(
+            json.dumps({"schemaVersion": 1, "runId": "other-run"}),
+            encoding="utf-8",
+        )
+        coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.write_text(
+            json.dumps({"status": "passed", "failedTests": [], "runId": "other-run"}),
+            encoding="utf-8",
+        )
+        return result
+
+    monkeypatch.setattr(coverage_gate, "_load_ledger", replace_identity_after_ledger_read)
+
+    assert coverage_gate.main() == 1
+
+    assert "coverage inputs changed while reading" in capsys.readouterr().out
+    assert not coverage_gate.MERGED_PATH.exists()
+    assert not coverage_gate.UNTESTED_PATH.exists()
+
+
+def test_coverage_gate_removes_outputs_when_identity_changes_during_write(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _configure_coverage_gate_fixture(monkeypatch, tmp_path)
+    coverage_gate.COVERAGE_RUN_PATH.write_text(
+        json.dumps({"schemaVersion": 1, "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.parent.mkdir(parents=True)
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.write_text(
+        json.dumps({"status": "passed", "failedTests": [], "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+    load_current_run_id = coverage_gate._load_current_run_id
+    identity_checks = 0
+
+    def replace_identity_after_prewrite_check(expected_run_id: str) -> str:
+        nonlocal identity_checks
+        run_id = load_current_run_id(expected_run_id)
+        identity_checks += 1
+        if identity_checks == 2:
+            coverage_gate.COVERAGE_RUN_PATH.write_text(
+                json.dumps({"schemaVersion": 1, "runId": "other-run"}),
+                encoding="utf-8",
+            )
+            coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.write_text(
+                json.dumps({"status": "passed", "failedTests": [], "runId": "other-run"}),
+                encoding="utf-8",
+            )
+        return run_id
+
+    monkeypatch.setattr(
+        coverage_gate,
+        "_load_current_run_id",
+        replace_identity_after_prewrite_check,
+    )
+
+    assert coverage_gate.main() == 1
+
+    assert "coverage inputs changed while writing" in capsys.readouterr().out
+    assert not coverage_gate.MERGED_PATH.exists()
+    assert not coverage_gate.UNTESTED_PATH.exists()
+
+
+def test_coverage_gate_rejects_matching_canonical_identity_from_another_invocation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _configure_coverage_gate_fixture(monkeypatch, tmp_path)
+    coverage_gate.COVERAGE_RUN_PATH.write_text(
+        json.dumps({"schemaVersion": 1, "runId": "other-run"}),
+        encoding="utf-8",
+    )
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.parent.mkdir(parents=True)
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.write_text(
+        json.dumps({"status": "passed", "failedTests": [], "runId": "other-run"}),
+        encoding="utf-8",
+    )
+
+    assert coverage_gate.main() == 1
+
+    output = capsys.readouterr().out
+    assert "expected runId='fixture-run'" in output
+    assert "current runId='other-run'" in output
+    assert not coverage_gate.MERGED_PATH.exists()
+    assert not coverage_gate.UNTESTED_PATH.exists()
+
+
+def test_coverage_gate_rejects_failed_terminal_status(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _configure_coverage_gate_fixture(monkeypatch, tmp_path)
+    coverage_gate.COVERAGE_RUN_PATH.write_text(
+        json.dumps({"schemaVersion": 1, "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.parent.mkdir(parents=True)
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.write_text(
+        json.dumps(
+            {
+                "status": "failed",
+                "failedTests": ["fixture failure"],
+                "runId": "fixture-run",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert coverage_gate.main() == 1
+
+    assert "not a clean success" in capsys.readouterr().out
+    assert not coverage_gate.MERGED_PATH.exists()
+    assert not coverage_gate.UNTESTED_PATH.exists()
+
+
+def test_coverage_gate_rejects_unsupported_identity_schema(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _configure_coverage_gate_fixture(monkeypatch, tmp_path)
+    coverage_gate.COVERAGE_RUN_PATH.write_text(
+        json.dumps({"schemaVersion": 2, "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.parent.mkdir(parents=True)
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.write_text(
+        json.dumps({"status": "passed", "failedTests": [], "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+
+    assert coverage_gate.main() == 1
+
+    assert "requires schemaVersion=1" in capsys.readouterr().out
+    assert not coverage_gate.MERGED_PATH.exists()
+    assert not coverage_gate.UNTESTED_PATH.exists()
+
+
+def test_coverage_gate_reports_invalid_identity_utf8_without_traceback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _configure_coverage_gate_fixture(monkeypatch, tmp_path)
+    coverage_gate.COVERAGE_RUN_PATH.write_bytes(b"\xff\xfe")
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.parent.mkdir(parents=True)
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.write_text(
+        json.dumps({"status": "passed", "failedTests": [], "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+
+    assert coverage_gate.main() == 1
+
+    output = capsys.readouterr().out
+    assert "invalid UTF-8" in output
+    assert str(coverage_gate.COVERAGE_RUN_PATH) in output
+    assert "Traceback" not in output
+
+
+@pytest.mark.parametrize(
+    ("artifact_name", "payload", "expected_error"),
+    [
+        ("ledger", "{", "click ledger row is invalid JSON"),
+        (
+            "ledger",
+            '{"test":"fixture","key":"tid:x","kind":"hovered"}',
+            "click ledger row 1 has kind 'hovered'",
+        ),
+        (
+            "ledger",
+            "{}",
+            "click ledger row 1 requires non-empty string field 'key'",
+        ),
+        ("baseline", "{", "coverage baseline is invalid JSON"),
+        (
+            "baseline",
+            '{"waivers":[]}',
+            "coverage baseline requires numeric field 'min_click_coverage_pct'",
+        ),
+        (
+            "baseline",
+            '{"min_click_coverage_pct":39.0}',
+            "coverage baseline requires 'waivers'",
+        ),
+        (
+            "baseline",
+            '{"min_click_coverage_pct":NaN,"waivers":[]}',
+            "coverage baseline field 'min_click_coverage_pct' must be finite",
+        ),
+    ],
+)
+def test_coverage_gate_reports_malformed_coverage_inputs_without_traceback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    artifact_name: str,
+    payload: str,
+    expected_error: str,
+) -> None:
+    _configure_coverage_gate_fixture(monkeypatch, tmp_path)
+    coverage_gate.COVERAGE_RUN_PATH.write_text(
+        json.dumps({"schemaVersion": 1, "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.parent.mkdir(parents=True)
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.write_text(
+        json.dumps({"status": "passed", "failedTests": [], "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+    artifact_paths = {
+        "baseline": coverage_gate.BASELINE_PATH,
+        "ledger": next(coverage_gate.LEDGER_DIR.glob("raw-*.jsonl")),
+    }
+    artifact_paths[artifact_name].write_text(payload, encoding="utf-8")
+
+    assert coverage_gate.main() == 1
+
+    output = capsys.readouterr().out
+    assert expected_error in output
+    assert "Traceback" not in output
+    assert not coverage_gate.MERGED_PATH.exists()
+    assert not coverage_gate.UNTESTED_PATH.exists()
+
+
+def test_coverage_gate_requires_the_committed_coverage_baseline(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _configure_coverage_gate_fixture(monkeypatch, tmp_path)
+    coverage_gate.COVERAGE_RUN_PATH.write_text(
+        json.dumps({"schemaVersion": 1, "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.parent.mkdir(parents=True)
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.write_text(
+        json.dumps({"status": "passed", "failedTests": [], "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+    coverage_gate.BASELINE_PATH.unlink()
+
+    assert coverage_gate.main() == 1
+
+    output = capsys.readouterr().out
+    assert "missing current-run artifacts" in output
+    assert str(coverage_gate.BASELINE_PATH) in output
+    assert not coverage_gate.MERGED_PATH.exists()
+    assert not coverage_gate.UNTESTED_PATH.exists()
+
+
+def test_coverage_gate_removes_partial_outputs_when_a_write_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _configure_coverage_gate_fixture(monkeypatch, tmp_path)
+    coverage_gate.COVERAGE_RUN_PATH.write_text(
+        json.dumps({"schemaVersion": 1, "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.parent.mkdir(parents=True)
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.write_text(
+        json.dumps({"status": "passed", "failedTests": [], "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+    real_write_text = Path.write_text
+
+    def fail_untested_write(
+        path: Path,
+        data: str,
+        **options: str | None,
+    ) -> int:
+        if path == coverage_gate.UNTESTED_PATH:
+            raise OSError("synthetic output write failure")
+        return real_write_text(path, data, **options)
+
+    monkeypatch.setattr(Path, "write_text", fail_untested_write)
+
+    assert coverage_gate.main() == 1
+
+    output = capsys.readouterr().out
+    assert "could not write coverage outputs" in output
+    assert "synthetic output write failure" in output
+    assert "Traceback" not in output
+    assert not coverage_gate.MERGED_PATH.exists()
+    assert not coverage_gate.UNTESTED_PATH.exists()
+
+
+def test_coverage_gate_requires_current_run_identity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _configure_coverage_gate_fixture(monkeypatch, tmp_path)
+
+    assert coverage_gate.main() == 1
+
+    output = capsys.readouterr().out
+    assert "missing current-run artifacts" in output
+    assert "click-coverage-run.json" in output
+    assert ".last-run.json" in output
+    assert not coverage_gate.MERGED_PATH.exists()
+    assert not coverage_gate.UNTESTED_PATH.exists()
+
+
+@pytest.mark.parametrize(
+    ("coverage_marker", "terminal_status", "expected_error"),
+    [
+        (
+            "{",
+            '{"status":"passed","failedTests":[],"runId":"fixture-run"}',
+            "coverage run marker is invalid JSON",
+        ),
+        (
+            "[]",
+            '{"status":"passed","failedTests":[],"runId":"fixture-run"}',
+            "coverage run marker must be a JSON object",
+        ),
+        (
+            '{"schemaVersion":1,"runId":"fixture-run"}',
+            "{",
+            "Playwright terminal status is invalid JSON",
+        ),
+        (
+            '{"schemaVersion":1,"runId":"fixture-run"}',
+            "[]",
+            "Playwright terminal status must be a JSON object",
+        ),
+    ],
+)
+def test_coverage_gate_rejects_malformed_identity_artifacts(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    coverage_marker: str,
+    terminal_status: str,
+    expected_error: str,
+) -> None:
+    _configure_coverage_gate_fixture(monkeypatch, tmp_path)
+    coverage_gate.COVERAGE_RUN_PATH.write_text(coverage_marker, encoding="utf-8")
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.parent.mkdir(parents=True)
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.write_text(
+        terminal_status,
+        encoding="utf-8",
+    )
+    coverage_gate.MERGED_PATH.write_text("stale", encoding="utf-8")
+    coverage_gate.UNTESTED_PATH.write_text("stale", encoding="utf-8")
+
+    assert coverage_gate.main() == 1
+
+    assert expected_error in capsys.readouterr().out
+    assert not coverage_gate.MERGED_PATH.exists()
+    assert not coverage_gate.UNTESTED_PATH.exists()
+
+
+def test_coverage_gate_rejects_native_run_status_without_run_identity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _configure_coverage_gate_fixture(monkeypatch, tmp_path)
+    coverage_gate.COVERAGE_RUN_PATH.write_text(
+        json.dumps({"schemaVersion": 1, "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.parent.mkdir(parents=True)
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.write_text(
+        json.dumps({"status": "passed", "failedTests": []}),
+        encoding="utf-8",
+    )
+
+    assert coverage_gate.main() == 1
+
+    output = capsys.readouterr().out
+    assert "Playwright terminal status requires non-empty string field 'runId'" in output
+    assert not coverage_gate.MERGED_PATH.exists()
+    assert not coverage_gate.UNTESTED_PATH.exists()
+
+
+def test_coverage_gate_counts_seen_controls_nobody_used(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _configure_coverage_gate_fixture(monkeypatch, tmp_path)
+    coverage_gate.COVERAGE_RUN_PATH.write_text(
+        json.dumps({"schemaVersion": 1, "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.parent.mkdir(parents=True)
+    coverage_gate.PLAYWRIGHT_LAST_RUN_PATH.write_text(
+        json.dumps({"status": "passed", "failedTests": [], "runId": "fixture-run"}),
+        encoding="utf-8",
+    )
+    ledger_file = next(coverage_gate.LEDGER_DIR.glob("raw-*.jsonl"))
+    with ledger_file.open("a", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps({"test": "fixture", "kind": "seen", "key": "tid:sort-start", "context": "page:sort-setup"})
+            + "\n"
+        )
+    coverage_gate.BASELINE_PATH.write_text(
+        json.dumps({"min_click_coverage_pct": 50.0, "waivers": []}),
+        encoding="utf-8",
+    )
+
+    assert coverage_gate.main() == 0
+
+    merged = json.loads(coverage_gate.MERGED_PATH.read_text(encoding="utf-8"))
+    assert merged["seen_controls"] == 2
+    assert merged["covered_controls"] == 1
+    assert merged["coverage_pct"] == 50.0
+    untested = json.loads(coverage_gate.UNTESTED_PATH.read_text(encoding="utf-8"))
+    assert untested == {"count": 1, "by_context": {"page:sort-setup": ["tid:sort-start"]}}
+
+    coverage_gate.BASELINE_PATH.write_text(
+        json.dumps({"min_click_coverage_pct": 60.0, "waivers": []}),
+        encoding="utf-8",
+    )
+    assert coverage_gate.main() == 1
+    assert "dropped below the committed baseline" in capsys.readouterr().out

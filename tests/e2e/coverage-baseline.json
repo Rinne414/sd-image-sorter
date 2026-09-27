@@ -1,0 +1,6 @@
+{
+  "comment": "V4 click-coverage ratchet (scripts/coverage_gate.py, docs/COVERAGE_LEDGER.md): used controls / controls the suite showed. min_click_coverage_pct may only go UP; it is set from the first full V4 run. Waivers are regexes matched against control keys; each entry needs a reason.",
+  "min_click_coverage_pct": 0.0,
+  "waivers": [
+  ]
+}

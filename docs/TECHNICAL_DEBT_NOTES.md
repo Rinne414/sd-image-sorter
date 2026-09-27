@@ -36,10 +36,11 @@ follows in V4:
 | Audit Target C Desktop small-screen pressure | Closed for V4: every page's E2E spec ends with "fits at" checks at 1366×768, 1920×1080 and 2560×1440 (`docs/DESIGN.md` §desktop-layout). |
 | Audit Target E Large-image client performance | Measured for V4's censor editor: editing stays responsive up to about 45 MP (D31). Reader and privacy tool not measured. |
 
-V4 debt that is still open: V4 has no click-coverage gate for its controls
-yet (the V3.5 ledger measured V3.5 controls only), and response
-types are hand-written in `frontend-v4/src/api/types.ts` because most routes
-have no `response_model` (D6).
+V4 debt that is still open: response types are hand-written in
+`frontend-v4/src/api/types.ts` because most routes have no `response_model`
+(D6). The click-coverage ledger measures V4 controls again
+(`docs/COVERAGE_LEDGER.md`), but only the controls some spec shows: a page no
+spec opens is not counted.
 
 ## Debt Entry Format
 

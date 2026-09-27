@@ -1,6 +1,6 @@
 import path from 'node:path'
 
-import { expect, test, type Page, type Route } from '@playwright/test'
+import { expect, test, type Page, type Route } from '../fixtures/click-ledger'
 
 import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 import { cleanupImages, dbPath, openLibrary, pageOverflow, runBackendScript, seedImages, tmpRoot, VIEWPORTS } from '../fixtures/v4-seed'

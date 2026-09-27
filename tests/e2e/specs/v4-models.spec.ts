@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from '@playwright/test'
+import { expect, test, type Page, type Route } from '../fixtures/click-ledger'
 
 import { cleanupImages, openLibrary, pageOverflow, seedImages } from '../fixtures/v4-seed'
 
