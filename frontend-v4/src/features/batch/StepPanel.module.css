@@ -36,11 +36,6 @@
   color: var(--text-2);
 }
 
-.note {
-  margin: 0;
-  color: var(--muted);
-}
-
 .actions {
   display: flex;
   gap: 8px;

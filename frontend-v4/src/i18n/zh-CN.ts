@@ -43,7 +43,6 @@ export const zhCN = {
   'nav.batch': '批次',
   'nav.sort': '分拣',
   'nav.command': '找功能或指令',
-  'nav.backToV3': '回到 V3.5',
 
   'rail.images': '{n} 张',
   'rail.mainLibrary': '主图库',
@@ -453,7 +452,6 @@ export const zhCN = {
   'palette.cmd.onlyFavorites': '只看收藏',
   'palette.cmd.clearFilters': '清空所有筛选',
   'palette.cmd.openFull': '看大图',
-  'palette.cmd.backToV3': '回到旧版界面（V3.5）',
   'palette.group.selection': '选中的图',
   'palette.cmd.move': '把选中的图移动到…',
   'palette.cmd.copy': '把选中的图复制到…',
@@ -469,8 +467,6 @@ export const zhCN = {
   'palette.cmd.checkUpdates': '检查更新',
   'palette.cmd.restart': '重启程序（重新启动）…',
   'palette.hint': '↑↓ 选择，Enter 执行，Esc 关闭',
-
-  'planned.openV3': '在 V3.5 里打开',
 
   'edge.steps': '{n} 步',
   'edge.denoise': '重绘 {n}',
@@ -710,7 +706,6 @@ export const zhCN = {
   'batch.panel.unknown': '这一步是模板里自己加的，V4 还不知道怎么做。',
   'batch.panel.applies': '作用于这个批次的全部 {n} 张图。',
   'batch.panel.appliesNone': '这个批次还没有图，先到「挑图」加图。',
-  'batch.panel.notYet': '现在可以先用 V3.5 的对应功能。',
   'batch.panel.next': '下一步：{step}',
   'batch.pick.count': '{n} 张',
   'batch.pick.keys': '按挑图的顺序 · 方向键移动 · Enter 看大图 · Delete 移出批次',

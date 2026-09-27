@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLibraries } from '../../api/queries'
 import { translate, useLang, useT, type Lang, type MessageKey, type Params } from '../../i18n'
-import { leaveForV35 } from '../../state/arrival'
 import { useApp } from '../../state/store'
 import { useTheme } from '../../theme'
 import { useLayer } from '../../ui/layers'
@@ -103,7 +102,6 @@ function Palette() {
       mk('go-batch', 'palette.group.go', 'palette.cmd.goBatch', () => s.setPage('batch')),
       mk('go-sort', 'palette.group.go', 'palette.cmd.goSort', () => s.setPage('sort')),
       mk('go-home', 'palette.group.go', 'palette.cmd.goHome', () => s.setPage('home')),
-      mk('back-v3', 'palette.group.go', 'palette.cmd.backToV3', () => leaveForV35(useApp.getState().libraryId)),
       mk('card', 'palette.group.view', 'palette.cmd.toggleCard', () => s.toggleCard(), 'I'),
       mk('rail', 'palette.group.view', 'palette.cmd.toggleRail', () => s.toggleRail()),
       mk('masonry', 'palette.group.view', 'palette.cmd.masonry', () => s.setLayout('masonry')),

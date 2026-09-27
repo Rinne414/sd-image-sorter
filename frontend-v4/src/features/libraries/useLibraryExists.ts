@@ -23,7 +23,7 @@ export function useLibraryExists(): void {
 
   // Only a new list decides. A switch to a library made a moment ago waits
   // for the list that holds it, and the store's id (not this render's) counts:
-  // an arrival from V3.5 may have switched in the same commit.
+  // an arrival on a ?library= link may have switched in the same commit.
   useEffect(() => {
     const s = useApp.getState()
     const next = replacementLibrary(s.libraryId, data)

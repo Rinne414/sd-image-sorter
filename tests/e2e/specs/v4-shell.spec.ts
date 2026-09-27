@@ -381,43 +381,37 @@ test('6d: a dialog with no chosen first focus starts on its first real control, 
   expect(sheet.label).not.toBe('Close')
 })
 
-test('back to V3.5 (slice 6b): About and Ctrl K carry the open library; coming back with ?library= opens it and the page V4 was left from', async ({ page }) => {
+test('/ opens V4 and keeps ?library=: an old address opens that library, an unknown id keeps the open one; nothing leads back to V3.5', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
-  const made = await page.request.post('/api/libraries', { data: { name: `v4shell switch ${Date.now()}` } })
+  const made = await page.request.post('/api/libraries', { data: { name: `v4shell arrival ${Date.now()}` } })
   expect(made.ok()).toBe(true)
   const other: string = (await made.json()).library.id
-  // V3.5 is stood in for: only where the links lead is under test here (its side is app-switch.spec.ts)
-  await page.route((url) => url.pathname === '/', (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>V3.5</title>' }))
+  const storedLibrary = () => page.evaluate(() => JSON.parse(localStorage.getItem('sd-library-workspace-v1') || '{}').currentId)
   try {
     await openAt(page, '#/settings/about', { lang: 'zh-CN' })
-    const back = page.getByTestId('about-back-v35')
-    await expect(back).toHaveText('回到旧版界面（V3.5）')
-    await expect(back).toHaveAttribute('href', '/?library=main')
-    await expect(back).toBeInViewport({ ratio: 1 })
-    await back.click()
-    await expect(page).toHaveURL(/\/\?library=main$/)
+    await expect(page.getByTestId('about-version')).toBeVisible()
+    // no link, button or command leads to the V3.5 interface any more
+    await expect(page.locator('a[href="/"], a[href^="/?"]')).toHaveCount(0)
+    await expect(page.getByText(/V3\.5|旧版界面/)).toHaveCount(0)
+    await page.keyboard.press('Control+k')
+    await page.keyboard.type('旧版界面')
+    await expect(page.getByTestId('palette').getByRole('option').filter({ hasText: 'V3.5' })).toHaveCount(0)
+    await page.keyboard.press('Control+a')
+    await page.keyboard.type('old interface')
+    await expect(page.getByTestId('palette').getByRole('option').filter({ hasText: 'V3.5' })).toHaveCount(0)
+    await page.keyboard.press('Escape')
 
-    // V3.5 sends the user back in another library: V4 opens it, and the About page it was left from
-    await page.goto(`/v4/?library=${other}`)
-    await expect(page).toHaveURL(/\/v4\/#\/settings\/about$/)
-    await expect(back).toHaveAttribute('href', `/?library=${other}`)
-    await expect(page.locator('header').getByRole('link', { name: '回到 V3.5' })).toHaveAttribute('href', `/?library=${other}`)
+    // a V3.5 bookmark (/?library=): / redirects to /v4/ with the query, V4 opens that library and drops it
+    await page.goto(`/?library=${other}`)
+    await expect(page).toHaveURL(/\/v4\/(#.*)?$/)
+    await expect.poll(storedLibrary).toBe(other)
 
     // an id this backend does not know: V4 keeps its own library, says nothing
     await page.goto('/v4/?library=no-such-library#/settings/about')
     await expect(page).toHaveURL(/\/v4\/#\/settings\/about$/)
-    await expect(back).toHaveAttribute('href', `/?library=${other}`)
+    await expect(page.getByTestId('about-version')).toBeVisible()
+    expect(await storedLibrary()).toBe(other)
     await expect(page.locator('[aria-live="polite"] > [data-tone]')).toHaveCount(0)
-
-    // Ctrl K: found in either language, goes back with the library
-    await page.keyboard.press('Control+k')
-    await page.keyboard.type('旧版界面')
-    await expect(page.getByTestId('palette').getByRole('option').first()).toHaveText('回到旧版界面（V3.5）')
-    await page.keyboard.press('Control+a')
-    await page.keyboard.type('old interface')
-    await expect(page.getByTestId('palette').getByRole('option').first()).toHaveText('回到旧版界面（V3.5）')
-    await page.keyboard.press('Enter')
-    await expect(page).toHaveURL(new RegExp(`/\\?library=${other}$`))
   } finally {
     await page.request.delete(`/api/libraries/${encodeURIComponent(other)}`)
   }
@@ -432,7 +426,6 @@ for (const viewport of VIEWPORTS) {
       await page.reload()
       await expect(page.getByTestId('settings-page')).toBeVisible()
       for (const id of ['import-button', 'open-palette', 'tools-menu', 'settings-button', 'theme-toggle']) await expect(page.getByTestId(id)).toBeInViewport({ ratio: 1 })
-      await expect(page.locator('header').getByRole('link', { name: lang === 'en' ? 'Back to V3.5' : '回到 V3.5' })).toBeInViewport({ ratio: 1 })
       expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
       // the free space in the bar, in page px: the jobs button, the AI busy chip and the update hint fit in it later
       const room = await page.evaluate(() => {

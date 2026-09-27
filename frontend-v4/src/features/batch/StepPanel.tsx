@@ -30,17 +30,13 @@ export function StepPanel({ batch, step, next, onNext }: Props) {
         <h2 className={styles.title}>{stepLabel(step, t)}</h2>
         <p className={styles.what}>{t(whatKey(step, batch.kind), { n })}</p>
         <p className={styles.applies}>{n === 0 ? t('batch.panel.appliesNone') : t('batch.panel.applies', { n })}</p>
-        <p className={styles.note}>{t('batch.panel.notYet')}</p>
-        <div className={styles.actions}>
-          {next && (
+        {next && (
+          <div className={styles.actions}>
             <button type="button" className="btn" onClick={() => onNext(next)} data-testid="step-next">
               {t('batch.panel.next', { step: stepLabel(next, t) })}
             </button>
-          )}
-          <a className="btn btn-ghost" href="/">
-            {t('planned.openV3')}
-          </a>
-        </div>
+          </div>
+        )}
       </div>
     </section>
   )

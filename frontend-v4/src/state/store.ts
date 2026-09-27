@@ -163,8 +163,8 @@ function loadPrefs(): Prefs {
 
 const prefs = loadPrefs()
 
-// A plain launch opens the start page; an address that names a page (or the
-// page V4 was left from, put back by ./arrival) opens that page.
+// A plain launch opens the start page; an address that names a page opens
+// that page.
 const initialRoute = stateFor(startRoute(location.hash, prefs.startPage), {
   page: 'library',
   batchId: null,

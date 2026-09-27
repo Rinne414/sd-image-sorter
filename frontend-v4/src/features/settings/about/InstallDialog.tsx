@@ -49,7 +49,6 @@ export function InstallDialog({ latest, sizeBytes, onClose }: { latest: string; 
             {t('about.install.jobs', { n: running })}
           </p>
         )}
-        <p className={styles.hint}>{t('about.install.v4')}</p>
       </div>
     </Dialog>
   )

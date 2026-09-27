@@ -43,7 +43,6 @@ export const en: Record<MessageKey, string> = {
   'nav.batch': 'Batches',
   'nav.sort': 'Organize',
   'nav.command': 'Find a feature or command',
-  'nav.backToV3': 'Back to V3.5',
 
   'rail.images': '{n} images',
   'rail.mainLibrary': 'Main library',
@@ -453,7 +452,6 @@ export const en: Record<MessageKey, string> = {
   'palette.cmd.onlyFavorites': 'Only favorites',
   'palette.cmd.clearFilters': 'Clear all filters',
   'palette.cmd.openFull': 'Open large',
-  'palette.cmd.backToV3': 'Back to the old interface (V3.5)',
   'palette.group.selection': 'Picks',
   'palette.cmd.move': 'Move picks to…',
   'palette.cmd.copy': 'Copy picks to…',
@@ -469,8 +467,6 @@ export const en: Record<MessageKey, string> = {
   'palette.cmd.restart': 'Restart the app…',
   'palette.cmd.jobs': 'Open jobs',
   'palette.hint': '↑↓ to choose, Enter to run, Esc to close',
-
-  'planned.openV3': 'Open in V3.5',
 
   'edge.steps': '{n} steps',
   'edge.denoise': 'Denoise {n}',
@@ -710,7 +706,6 @@ export const en: Record<MessageKey, string> = {
   'batch.panel.unknown': 'A template added this step, and V4 does not know how to do it yet.',
   'batch.panel.applies': 'Applies to all {n} images in this batch.',
   'batch.panel.appliesNone': 'This batch has no images yet; add some in the Pick step first.',
-  'batch.panel.notYet': 'Until it is, use the matching V3.5 feature.',
   'batch.panel.next': 'Next: {step}',
   'batch.pick.count': '{n} images',
   'batch.pick.keys': 'In pick order · arrows move · Enter opens · Delete takes out',

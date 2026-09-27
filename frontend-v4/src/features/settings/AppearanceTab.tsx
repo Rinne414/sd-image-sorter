@@ -61,9 +61,7 @@ export function AppearanceTab() {
           useLang.getState().setLang(v)
           mark('lang')
         }}
-      >
-        <p className={styles.hint}>{t('settings.lang.hint')}</p>
-      </Choice>
+      />
       <ScaleChoice saved={saved === 'scale'} onSaved={() => mark('scale')} />
       <HomeChoices saved={saved} mark={mark} />
     </div>

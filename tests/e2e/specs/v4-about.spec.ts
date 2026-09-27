@@ -173,6 +173,9 @@ test('About: the version, no "latest" before a check, a check that finds a new v
 
   await expect(page.getByTestId('settings-tab-about')).toHaveAttribute('aria-current', 'page')
   await expect(page.getByTestId('app-version')).toHaveText(/^\d+\.\d+\.\d+/)
+  // the version section no longer points at V3.5
+  await expect(page.getByTestId('about-version')).not.toContainText('V3.5')
+  await expect(page.getByTestId('about-back-v35')).toHaveCount(0)
   await expect(page.getByTestId('about-privacy')).toContainText('Images are processed only on this computer')
 
   // nothing checked yet: nothing said about the latest version, nothing asked
@@ -310,7 +313,8 @@ test('install: the confirm says what it downloads, replaces and leaves alone; th
   await expect(dialog).toContainText('replaces the program files in this folder (backend, interface and launch scripts)')
   await expect(dialog).toContainText('Your images, library index, settings and downloaded models are left alone.')
   await expect(dialog).toContainText('restarts by itself, usually in one to three minutes')
-  await expect(dialog).toContainText('If the new version does not include V4, carry on in V3.5')
+  // V4 is the only interface: nothing about carrying on in V3.5
+  await expect(dialog).not.toContainText('V3.5')
   await expect(dialog.getByTestId('install-jobs')).toHaveCount(0)
   await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()
 
@@ -514,7 +518,6 @@ for (const viewport of VIEWPORTS) {
       for (const id of ['ai-busy', 'update-hint', 'jobs-button', 'import-button', 'open-palette', 'tools-menu', 'settings-button', 'theme-toggle']) {
         await expect(page.getByTestId(id), `${id} (${lang} at ${viewport.width})`).toBeInViewport({ ratio: 1 })
       }
-      await expect(page.locator('header').getByRole('link', { name: lang === 'en' ? 'Back to V3.5' : '回到 V3.5' })).toBeInViewport({ ratio: 1 })
       expect(await pageOverflow(page), `${lang} at ${viewport.width}`).toBeLessThanOrEqual(0)
       const overlaps = await page.evaluate(() => {
         const items = [...document.querySelector('header')!.children]

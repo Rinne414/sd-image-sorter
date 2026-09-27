@@ -1,13 +1,13 @@
 import { useEffect } from 'react'
 import { useLibraries } from '../../api/queries'
-import { arrivalLibrary } from '../../lib/appSwitch'
+import { arrivalLibrary } from '../../lib/libraryLink'
 import { takeCarriedLibrary } from '../../state/arrival'
 import { useApp } from '../../state/store'
 
 /**
- * Open the library V3.5 had open when it sent the user here. Waits for the
- * libraries list; an id it does not hold (or a list that failed) keeps V4's
- * own library, without a word.
+ * Open the library the address named (?library=). Waits for the libraries
+ * list; an id it does not hold (or a list that failed) keeps V4's own
+ * library, without a word.
  */
 export function useLibraryArrival(): void {
   const libraries = useLibraries()
