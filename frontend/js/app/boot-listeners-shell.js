@@ -146,6 +146,56 @@ async function verifyClearGalleryJobsIdle() {
     return false;
 }
 
+/**
+ * Clear the current long-lived library (not a process session, not other
+ * libraries). The library menu's "Clear current library…" item is its only
+ * entrance (library-workspace.js).
+ */
+async function clearCurrentLibraryInteractive() {
+    // Local timers can outlive their backend jobs, so they are diagnostic
+    // only. The server endpoints are re-checked both before the modal opens
+    // and immediately before the destructive request is sent.
+    if (!await verifyClearGalleryJobsIdle()) return;
+    try {
+        await window.LibraryWorkspace?.refreshFromServer?.();
+    } catch (_e) { /* offline */ }
+    const copy = (typeof window.LibraryWorkspace?.clearConfirmCopy === 'function')
+        ? window.LibraryWorkspace.clearConfirmCopy()
+        : {
+            title: appT('gallery.clearTitle', 'Clear current library'),
+            message: appT(
+                'gallery.clearMessage',
+                'Clear all indexed images from the current library? Files on disk are not deleted.',
+            ),
+            success: appT('gallery.clearSuccess', 'Library cleared'),
+        };
+    showConfirm(
+        copy.title,
+        copy.message,
+        async () => {
+            if (!await verifyClearGalleryJobsIdle()) return;
+            try {
+                await API.clearGallery();
+                showToast(copy.success);
+                try {
+                    await window.LibraryWorkspace?.refreshFromServer?.();
+                } catch (_e) { /* ignore */ }
+                loadImages();
+                loadStats();
+                // The "N images can't open" banner reads a 60s-cached
+                // library-health count. Clearing emptied the library, so drop
+                // the cache and force an immediate recheck — otherwise the
+                // stale count lingers until the TTL lapses (it looked
+                // permanent because nothing re-polled after a clear).
+                window.UnreadableBanner?.invalidate?.();
+                window.UnreadableBanner?.refresh?.(true);
+            } catch (e) {
+                showToast(formatUserError(e, appT('gallery.clearFailed', 'Failed to clear gallery')), "error");
+            }
+        }
+    );
+}
+
 function initBootListenersShell() {
     // Nav tabs. Tools-menu entries that open modals (Duplicate Cleanup,
     // Publish Set) are .nav-tab for styling but carry no data-view —
@@ -196,7 +246,7 @@ function initBootListenersShell() {
         try {
             await API.cancelAesthetic();
             // Don't wait ~1.2s for the next poll tick to clear local state.
-            // Without this, the busy guard on #btn-clear-db (and related
+            // Without this, the busy guard on Clear current library (and related
             // "is something running" checks elsewhere) will keep blocking
             // user input for the full polling interval after cancel returns.
             clearAestheticProgressTimer();
@@ -537,54 +587,4 @@ function initBootListenersShell() {
             loadImages();
         }
     });
-
-
-
-
-    // Clear current long-lived library (not process session; not other libraries).
-    $('#btn-clear-db').addEventListener('click', async () => {
-        // Local timers can outlive their backend jobs, so they are diagnostic
-        // only. The server endpoints are re-checked both before the modal opens
-        // and immediately before the destructive request is sent.
-        if (!await verifyClearGalleryJobsIdle()) return;
-        try {
-            await window.LibraryWorkspace?.refreshFromServer?.();
-        } catch (_e) { /* offline */ }
-        const copy = (typeof window.LibraryWorkspace?.clearConfirmCopy === 'function')
-            ? window.LibraryWorkspace.clearConfirmCopy()
-            : {
-                title: appT('gallery.clearTitle', 'Clear current library'),
-                message: appT(
-                    'gallery.clearMessage',
-                    'Clear all indexed images from the current library? Files on disk are not deleted.',
-                ),
-                success: appT('gallery.clearSuccess', 'Library cleared'),
-            };
-        showConfirm(
-            copy.title,
-            copy.message,
-            async () => {
-                if (!await verifyClearGalleryJobsIdle()) return;
-                try {
-                    await API.clearGallery();
-                    showToast(copy.success);
-                    try {
-                        await window.LibraryWorkspace?.refreshFromServer?.();
-                    } catch (_e) { /* ignore */ }
-                    loadImages();
-                    loadStats();
-                    // The "N images can't open" banner reads a 60s-cached
-                    // library-health count. Clearing emptied the library, so drop
-                    // the cache and force an immediate recheck — otherwise the
-                    // stale count lingers until the TTL lapses (it looked
-                    // permanent because nothing re-polled after a clear).
-                    window.UnreadableBanner?.invalidate?.();
-                    window.UnreadableBanner?.refresh?.(true);
-                } catch (e) {
-                    showToast(formatUserError(e, appT('gallery.clearFailed', 'Failed to clear gallery')), "error");
-                }
-            }
-        );
-    });
-
 }

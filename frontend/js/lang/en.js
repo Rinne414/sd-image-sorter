@@ -245,7 +245,7 @@ window.I18nLang_en = {
     'action.library': 'Library',
     'action.libraryTooltip': 'Browse all tags and prompts in your library',
     'action.help': 'Help',
-    'action.clearGallery': 'Clear current library',
+    'action.clearGallery': 'Clear current library…',
     'action.clearGalleryTooltip': 'Clear the current library index (files on disk stay)',
     'flow.scanDoneTitle': 'Imported {count} images. What next?',
     'flow.scanDoneTitleZero': 'Import complete. What next?',

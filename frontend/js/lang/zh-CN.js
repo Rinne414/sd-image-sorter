@@ -248,7 +248,7 @@ window.I18nLang_zhCN = {
     'action.library': '词库',
     'action.libraryTooltip': '浏览词库中所有标签和提示词',
     'action.help': '帮助',
-    'action.clearGallery': '清空当前图库',
+    'action.clearGallery': '清空当前图库…',
     'action.clearGalleryTooltip': '清空当前图库中的索引（磁盘文件保留）',
     'flow.scanDoneTitle': '已导入 {count} 张图片，接下来做什么？',
     'flow.scanDoneTitleZero': '导入完成，接下来做什么？',

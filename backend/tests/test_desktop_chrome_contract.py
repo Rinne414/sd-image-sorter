@@ -9,6 +9,8 @@ FRONTEND = REPO / "frontend"
 INDEX = (FRONTEND / "index.html").read_text(encoding="utf-8")
 NAV_MISSIONS = (FRONTEND / "js" / "modules" / "nav-missions.js").read_text(encoding="utf-8")
 TOKENS = (FRONTEND / "css" / "tokens.css").read_text(encoding="utf-8")
+LIBRARY_WORKSPACE = (FRONTEND / "js" / "library-workspace.js").read_text(encoding="utf-8")
+BOOT_SHELL = (FRONTEND / "js" / "app" / "boot-listeners-shell.js").read_text(encoding="utf-8")
 DESIGN = (REPO / "docs" / "DESIGN.md").read_text(encoding="utf-8")
 
 
@@ -28,20 +30,22 @@ def test_import_and_tag_are_gallery_only_chrome():
     assert ".nav-bar:not([data-view=\"gallery\"]) #btn-tag" in TOKENS
 
 
-def test_clear_library_lives_in_sidebar_not_thumbnail_row():
-    assert INDEX.count('id="btn-clear-db"') == 1
-    footer = re.search(
-        r'class="filter-sidebar-footer".*?id="btn-clear-db"',
-        INDEX,
-        re.DOTALL,
-    )
-    assert footer, "Clear library must sit in the gallery sidebar footer"
-    header = re.search(
-        r'class="gallery-header".*?id="btn-clear-db"',
-        INDEX,
-        re.DOTALL,
-    )
-    assert not header, "Clear library must not sit on the thumbnail toolbar"
+def test_clear_library_lives_in_library_menu_not_gallery_chrome():
+    """Owner 2026-09-28: the danger button sat right under Select Images.
+
+    It is now the last item of the library menu, and both the menu item and
+    any future entrance call the one clearCurrentLibraryInteractive().
+    """
+    assert 'id="btn-clear-db"' not in INDEX
+    footer_start = INDEX.find('class="filter-sidebar-footer"')
+    footer_end = INDEX.find("</aside>", footer_start)
+    assert footer_start != -1 and footer_end > footer_start
+    assert "danger" not in INDEX[footer_start:footer_end]
+
+    assert "entry-library-menu-clear" in LIBRARY_WORKSPACE
+    assert "window.clearCurrentLibraryInteractive()" in LIBRARY_WORKSPACE
+    assert BOOT_SHELL.count("async function clearCurrentLibraryInteractive()") == 1
+    assert "API.clearGallery()" not in LIBRARY_WORKSPACE
 
 
 def test_hard_refresh_lives_in_settings_not_nav():

@@ -2468,16 +2468,6 @@ li > .icon {
 .filter-sidebar [data-sidebar-section="collections"] { order: 2; }
 .filter-sidebar [data-sidebar-section="filters"] { order: 3; }
 
-.filter-sidebar-footer .gallery-clear-button {
-    width: 100%;
-    justify-content: center;
-    margin-top: 12px;
-    border: 1px solid rgba(var(--danger-rgb), 0.34);
-    border-radius: var(--r-ctl);
-    background: var(--surface-danger);
-    color: var(--danger-ink);
-}
-
 /* Passive chrome: an indicator, a dropzone and a help button are not actions. */
 .nav-library-chip,
 .similar-upload-dropzone,

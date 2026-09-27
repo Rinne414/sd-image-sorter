@@ -947,13 +947,6 @@
                                  bottom action bar (#gallery-action-bar); this panel keeps
                                  the selection SCOPE tools only, per the 24a checklist. -->
                         </div>
-
-                        <!-- Danger last: the everyday Select button sits on top of the
-                             footer, Clear library at its bottom edge (owner 2026-06-12:
-                             visible at a glance, but far from common ops). -->
-                        <button id="btn-clear-db" class="btn btn-ghost btn-small danger gallery-clear-button" type="button" title="Clear all indexed images from the current library (files stay on disk)" data-i18n-title="action.clearGalleryTooltip" aria-label="Clear current library" data-i18n-aria="action.clearGallery">
-                            <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></span> <span data-i18n="action.clearGallery">Clear current library</span>
-                        </button>
                     </div>
                 </aside>
 
@@ -6007,10 +6000,9 @@
                                 <span class="checkbox-text" id="scan-auto-tag-label" data-i18n="scan.autoTagLabel">Auto-tag after import (slower)</span>
                             </label>
                         </div>
-                        <!-- NOISE-05 (superseded 2026-06-12): the Clear-DB danger zone moved
-                             from here back to the gallery header — owner directive: it must be
-                             visible at a glance on the gallery page itself, not buried in this
-                             modal. See #btn-clear-db inside .gallery-header. -->
+                        <!-- NOISE-05: the Clear-DB danger zone left this modal; "Clear
+                             current library…" is the last item of the library menu
+                             (library-workspace.js renderMenu). -->
 
                     </div>
                 </details>

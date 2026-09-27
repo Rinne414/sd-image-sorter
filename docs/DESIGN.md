@@ -238,7 +238,7 @@ Prioritize size honesty + cleanup (thumbs, models, vacuum) over cloud quotas.
 | `images.db` + `images` table | De-facto single long-term library | **Default / only library at first**; later rows scoped by `library_id` **or** one db per library |
 | `gallery_session_images` + `scope=current_session` | Process-lifetime "this run" membership; header peer to library | **Retire as user-facing concept.** Optional internal use during a scan job only; do not restore dual-scope chrome. Batch focus → **newest / folder filter** |
 | Header session \| library toggle | Two peer gallery worlds | **Remove.** Replace with **当前图库 ▾** (list, new, rename, clear, delete) in shell chrome (sidebar top / nav), not generator-tab row |
-| Clear Current Library (`#btn-clear-db`) | Wipes the one global index | **Clear current library** only; confirm with name; other libraries untouched |
+| Clear Current Library (library menu, last item) | Wipes the one global index | **Clear current library** only; confirm with name; other libraries untouched |
 | Library roots (`library_roots` / 图库文件夹) | Source folders for the one DB | **Per-library** roots (or shared roots with membership filter — prefer per-library clarity) |
 | Collections | Curated sets in the one DB | **Stay inside a library**; not a substitute for multi-library isolation |
 | Favorites | Special collection | Stay inside a library (or explicit global favorites later — default: per library) |

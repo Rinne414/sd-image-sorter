@@ -7,9 +7,9 @@ import { expect, test, type Page } from '../fixtures/click-ledger'
 /**
  * v3.4.1 UI regression coverage (2026-06-12):
  *
- * 1. Clear Gallery button — owner directive: must be visible at a glance on
- *    the gallery page (it previously hid inside the Import modal's advanced
- *    options). It now lives at the far-right end of .gallery-header.
+ * 1. Clear current library — it left the Import modal's advanced options in
+ *    v3.4.1; since 2026-09-28 (owner) it is the last item of the library
+ *    menu, away from the everyday Select Images button.
  * 2. Filter presets — saveFilterPreset/loadFilterPreset/renderFilterPresets
  *    existed in app.js but had NO UI entry point (#filter-presets-list was
  *    never in the DOM). The filter modal now has a presets bar.
@@ -164,6 +164,23 @@ async function openMainPage(page: Page) {
   }).toBe(true)
 }
 
+/**
+ * Choose "Clear current library…" in the library menu (V3.5 subtraction,
+ * owner 2026-09-28: it moved out of the gallery sidebar footer). From the
+ * gallery the nav library chip opens the menu; once the entry page shows,
+ * its library switcher does.
+ */
+async function chooseClearCurrentLibrary(page: Page) {
+  const menu = page.locator('#entry-library-menu')
+  if (await menu.isHidden()) {
+    const switcher = page.locator('#entry-library-switcher')
+    await (await switcher.isVisible() ? switcher : page.locator('#nav-library-chip')).click()
+  }
+  const clearItem = menu.locator('.entry-library-menu-clear')
+  await expect(clearItem).toBeInViewport()
+  await clearItem.click()
+}
+
 async function openSortingManualView(page: Page) {
   await page.locator('.nav-tabs [data-view="sorting"]').first().click({ force: true })
   await expect(page.locator('#view-sorting.active')).toBeVisible()
@@ -177,60 +194,88 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
-test('clear gallery button should be visible on the gallery page, not buried in the scan modal', async ({ page }) => {
+test('clear current library is the last library-menu item, not a button under Select Images', async ({ page }) => {
   await openMainPage(page)
 
-  // Owner directive (2026-06-12): the button must be seen at a glance on the
-  // gallery page — no modal, no <details> expansion required.
-  const clearButton = page.locator('#btn-clear-db')
-  await expect(clearButton).toHaveCount(1)
-  await expect(clearButton).toBeVisible()
-
-  // It lives in the gallery sidebar footer (still on the gallery page)...
-  await expect(page.locator('.filter-sidebar-footer #btn-clear-db')).toHaveCount(1)
-  await expect(page.locator('.gallery-header #btn-clear-db')).toHaveCount(0)
-  // ...and is gone from the import/scan modal's danger zone.
-  await expect(page.locator('#scan-modal #btn-clear-db')).toHaveCount(0)
+  // Owner (2026-09-28): the danger button sat right under the most-used
+  // Select Images button. The gallery sidebar footer now holds no danger
+  // action, and the import/scan modal's old danger zone stays gone.
+  await expect(page.locator('#btn-toggle-select')).toBeVisible()
+  await expect(page.locator('#btn-clear-db')).toHaveCount(0)
+  await expect(page.locator('.filter-sidebar-footer .danger')).toHaveCount(0)
   await expect(page.locator('#scan-modal .scan-danger-zone')).toHaveCount(0)
-
-  // Dangerous op stays away from view toggles / sort on the thumbnail row.
-  const separation = await page.evaluate(() => {
-    const button = document.getElementById('btn-clear-db')
-    const viewOptions = document.querySelector('.gallery-header .view-options')
-    const sidebar = document.querySelector('.filter-sidebar')
-    if (!button || !viewOptions || !sidebar) return null
-    return {
-      isInsideViewOptions: viewOptions.contains(button),
-      isInSidebar: sidebar.contains(button),
-    }
-  })
-  expect(separation).toEqual({
-    isInsideViewOptions: false,
-    isInSidebar: true,
-  })
-
-  // Danger last: the everyday Select button comes first in the footer and
-  // Clear library sits below it, not right on top of it.
-  const clearBox = await clearButton.boundingBox()
-  const selectBox = await page.locator('#btn-toggle-select').boundingBox()
-  expect(clearBox && selectBox).toBeTruthy()
-  expect(clearBox!.y).toBeGreaterThan(selectBox!.y + selectBox!.height)
-
-  // The existing handler + confirmation flow must still fire from the new
-  // location (the busy-guard probes progress endpoints first, then confirms).
-  await clearButton.click()
-  await expect(page.locator('#confirm-modal.visible')).toBeVisible()
-  await expect(page.locator('#confirm-modal')).toContainText('Clear current library')
-  await page.locator('#btn-confirm-cancel').click()
-  await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
 
   // The scan modal still opens fine without its old danger zone.
   await page.locator('#btn-scan').click()
   await expect(page.locator('#scan-modal.visible')).toBeVisible()
   await page.locator('#scan-advanced-options summary').click()
-  await expect(page.locator('#scan-modal #btn-clear-db')).toHaveCount(0)
+  await expect(page.locator('#scan-modal').getByText('Clear current library')).toHaveCount(0)
   await page.locator('#btn-cancel-scan').click()
   await expect(page.locator('#scan-modal.visible')).toHaveCount(0)
+
+  // Danger last: the library menu ends with a divider, then the clear item.
+  await page.locator('#nav-library-chip').click()
+  const menu = page.locator('#entry-library-menu')
+  await expect(menu).toBeVisible()
+  const clearItem = menu.locator('.entry-library-menu-clear')
+  await expect(clearItem).toHaveText('Clear current library…')
+  await expect(clearItem).toHaveAttribute('title', 'Clear the current library index (files on disk stay)')
+  const placement = await menu.evaluate((node) => {
+    const item = node.querySelector('.entry-library-menu-clear')
+    return {
+      isLastChild: node.lastElementChild === item,
+      dividerBefore: item?.previousElementSibling?.getAttribute('role') ?? null,
+      itemsBefore: Array.from(node.querySelectorAll('.entry-library-menu-item, .entry-library-menu-create'))
+        .every((other) => Boolean(other.compareDocumentPosition(item!) & Node.DOCUMENT_POSITION_FOLLOWING)),
+    }
+  })
+  expect(placement).toEqual({ isLastChild: true, dividerBefore: 'separator', itemsBefore: true })
+
+  // The same handler + confirmation flow runs (the busy guard probes the
+  // progress endpoints first, then confirms, naming the library).
+  const libraryName = await page.evaluate(() => (window as any).LibraryWorkspace.getCurrentLibrary().name)
+  await chooseClearCurrentLibrary(page)
+  await expect(menu).toBeHidden()
+  await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+  await expect(page.locator('#confirm-modal')).toContainText('Clear current library')
+  await expect(page.locator('#confirm-modal #confirm-message')).toContainText(`“${libraryName}”`)
+  await page.locator('#btn-confirm-cancel').click()
+  await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
+})
+
+test('with many libraries the menu scrolls inside the window and its clear item stays reachable', async ({ page, request }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  const created: string[] = []
+  try {
+    for (let index = 0; index < 6; index += 1) {
+      const response = await request.post('/api/libraries', { data: { name: `v341 many ${index} ${Date.now()}` } })
+      expect(response.ok()).toBe(true)
+      created.push((await response.json()).library.id)
+    }
+    await openMainPage(page)
+    await page.locator('#nav-library-chip').click()
+    const menu = page.locator('#entry-library-menu')
+    await expect(menu.locator('.entry-library-menu-item')).toHaveCount(7)
+
+    // The entry page clips overflow, so a menu running past the window bottom
+    // would hide "New library…", "Export…" and "Clear current library…".
+    const fit = await menu.evaluate((node) => {
+      const box = node.getBoundingClientRect()
+      return { bottom: box.bottom, scrolls: node.scrollHeight > node.clientHeight }
+    })
+    expect(fit.bottom).toBeLessThanOrEqual(768)
+    expect(fit.scrolls).toBe(true)
+
+    await menu.hover()
+    await page.mouse.wheel(0, 2000)
+    await expect(menu.locator('.entry-library-menu-clear')).toBeInViewport()
+    await chooseClearCurrentLibrary(page)
+    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+    await page.locator('#btn-confirm-cancel').click()
+    await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
+  } finally {
+    for (const id of created) await request.delete(`/api/libraries/${encodeURIComponent(id)}`)
+  }
 })
 
 for (const viewport of CLEAR_GALLERY_VIEWPORTS) {
@@ -284,7 +329,7 @@ for (const viewport of CLEAR_GALLERY_VIEWPORTS) {
 
     await openMainPage(page)
     rejectScanProbe = true
-    await page.locator('#btn-clear-db').click()
+    await chooseClearCurrentLibrary(page)
 
     const errorToast = page.locator('#toast-container [role="alert"]')
       .filter({ hasText: "Couldn't check background jobs" })
@@ -295,7 +340,6 @@ for (const viewport of CLEAR_GALLERY_VIEWPORTS) {
     expect(clearRequests).toBe(0)
 
     const layout = await page.evaluate(() => {
-      const button = document.getElementById('btn-clear-db')?.getBoundingClientRect()
       const toast = Array.from(document.querySelectorAll<HTMLElement>('#toast-container [role="alert"]'))
         .find((element) => element.textContent?.includes("Couldn't check background jobs"))
         ?.getBoundingClientRect()
@@ -305,7 +349,6 @@ for (const viewport of CLEAR_GALLERY_VIEWPORTS) {
         ?.getBoundingClientRect()
       return {
         horizontalOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-        button: button ? { left: button.left, top: button.top, right: button.right, bottom: button.bottom } : null,
         toast: toast ? { left: toast.left, top: toast.top, right: toast.right, bottom: toast.bottom } : null,
         toastMessage: toastMessage
           ? { left: toastMessage.left, top: toastMessage.top, right: toastMessage.right, bottom: toastMessage.bottom }
@@ -313,11 +356,6 @@ for (const viewport of CLEAR_GALLERY_VIEWPORTS) {
       }
     })
     expect(layout.horizontalOverflow).toBeLessThanOrEqual(0)
-    expect(layout.button).not.toBeNull()
-    expect(layout.button!.left).toBeGreaterThanOrEqual(0)
-    expect(layout.button!.top).toBeGreaterThanOrEqual(0)
-    expect(layout.button!.right).toBeLessThanOrEqual(viewport.width)
-    expect(layout.button!.bottom).toBeLessThanOrEqual(viewport.height)
     expect(layout.toast).not.toBeNull()
     expect(layout.toast!.left).toBeGreaterThanOrEqual(0)
     expect(layout.toast!.top).toBeGreaterThanOrEqual(0)
@@ -330,7 +368,7 @@ for (const viewport of CLEAR_GALLERY_VIEWPORTS) {
     expect(layout.toastMessage!.bottom).toBeLessThanOrEqual(layout.toast!.bottom)
 
     rejectScanProbe = false
-    await page.locator('#btn-clear-db').click()
+    await chooseClearCurrentLibrary(page)
     await expect(page.locator('#confirm-modal.visible')).toBeVisible()
     await expect(page.locator('#confirm-modal')).toContainText('Clear current library')
     expect(clearRequests).toBe(0)
@@ -416,7 +454,7 @@ test('clear gallery validates active, malformed tag, and malformed aesthetic pro
   tagMode = 'idle'
   tagProbeCalls = 0
   aestheticProbeCalls = 0
-  await page.locator('#btn-clear-db').click()
+  await chooseClearCurrentLibrary(page)
   await expect(page.locator('#confirm-modal.visible')).toBeVisible()
   await page.locator('#btn-confirm-cancel').click()
   await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
@@ -429,7 +467,7 @@ test('clear gallery validates active, malformed tag, and malformed aesthetic pro
   tagMode = 'running'
   tagProbeCalls = 0
   aestheticProbeCalls = 0
-  await page.locator('#btn-clear-db').click()
+  await chooseClearCurrentLibrary(page)
   await expect(page.locator('#toast-container [role="alert"]')
     .filter({ hasText: "Can't clear the gallery while scanning, tagging or scoring is running or queued" })
     .last()).toBeVisible()
@@ -440,7 +478,7 @@ test('clear gallery validates active, malformed tag, and malformed aesthetic pro
   tagMode = 'queued'
   tagProbeCalls = 0
   aestheticProbeCalls = 0
-  await page.locator('#btn-clear-db').click()
+  await chooseClearCurrentLibrary(page)
   await expect(page.locator('#toast-container [role="alert"]')
     .filter({ hasText: "Can't clear the gallery while scanning, tagging or scoring is running or queued" })
     .last()).toBeVisible()
@@ -451,7 +489,7 @@ test('clear gallery validates active, malformed tag, and malformed aesthetic pro
   tagMode = 'malformed'
   tagProbeCalls = 0
   aestheticProbeCalls = 0
-  await page.locator('#btn-clear-db').click()
+  await chooseClearCurrentLibrary(page)
   await expect(page.locator('#toast-container [role="alert"]')
     .filter({ hasText: 'tag progress returned unexpected status "mystery"' })
     .last()).toBeVisible()
@@ -463,7 +501,7 @@ test('clear gallery validates active, malformed tag, and malformed aesthetic pro
   malformedAesthetic = true
   tagProbeCalls = 0
   aestheticProbeCalls = 0
-  await page.locator('#btn-clear-db').click()
+  await chooseClearCurrentLibrary(page)
   await expect(page.locator('#toast-container [role="alert"]')
     .filter({ hasText: 'aesthetic progress must include boolean running' })
     .last()).toBeVisible()
@@ -472,7 +510,7 @@ test('clear gallery validates active, malformed tag, and malformed aesthetic pro
   expect(aestheticProbeCalls).toBe(2)
 
   malformedAesthetic = false
-  await page.locator('#btn-clear-db').click()
+  await chooseClearCurrentLibrary(page)
   await expect(page.locator('#confirm-modal.visible')).toBeVisible()
   await expect(page.locator('#confirm-modal')).toContainText('Clear current library')
 
@@ -488,7 +526,7 @@ test('clear gallery validates active, malformed tag, and malformed aesthetic pro
   expect(clearRequests).toBe(0)
 
   tagMode = 'idle'
-  await page.locator('#btn-clear-db').click()
+  await chooseClearCurrentLibrary(page)
   await expect(page.locator('#confirm-modal.visible')).toBeVisible()
   malformedAesthetic = true
   tagProbeCalls = 0
@@ -502,7 +540,7 @@ test('clear gallery validates active, malformed tag, and malformed aesthetic pro
   expect(clearRequests).toBe(0)
 
   malformedAesthetic = false
-  await page.locator('#btn-clear-db').click()
+  await chooseClearCurrentLibrary(page)
   await expect(page.locator('#confirm-modal.visible')).toBeVisible()
   await page.locator('#btn-confirm-ok').click()
   await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)

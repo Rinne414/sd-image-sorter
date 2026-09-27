@@ -1992,37 +1992,6 @@ textarea:focus,
     outline: none;
 }
 
-/* 2026-06-12 owner directive: Clear Library must be visible at a glance on
-   the gallery page. It is the LAST gallery-header item, outside .view-options,
-   pushed apart from everyday controls (danger far from common ops) and styled
-   as a distinct red danger pill so it cannot be mistaken for a view toggle. */
-.gallery-header > .gallery-clear-button {
-    flex: 0 0 auto;
-    margin-left: 8px;
-    padding: 5px 12px;
-    border: 1px solid rgba(var(--accent-danger-rgb), 0.34);
-    border-radius: 999px;
-    background: var(--surface-danger);
-    color: #F2C7C5;
-    font-size: 12px;
-}
-
-.gallery-header > .gallery-clear-button:hover,
-.gallery-header > .gallery-clear-button:focus-visible {
-    background: rgba(var(--accent-danger-rgb), 0.18);
-    border-color: rgba(var(--accent-danger-rgb), 0.58);
-    color: #F8DEDC;
-}
-
-@media (max-width: 1500px) {
-    /* Small laptops (1280-1500px): keep the button VISIBLE but collapse the
-       text label so the crowded header never overflows. The accessible name
-       and tooltip stay via aria-label / title (action.clearGallery i18n). */
-    .gallery-header > .gallery-clear-button span:not([aria-hidden]) {
-        display: none;
-    }
-}
-
 .model-manager-summary {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

@@ -2,7 +2,7 @@
  * Long-lived multi-library workspaces (DESIGN.md §product-narrative).
  *
  * - One current library id per tab (localStorage read once + X-SD-Library-Id)
- * - Entry home: switch / create / rename / delete (main cannot delete)
+ * - Entry home: switch / create / rename / delete (main cannot delete) / clear
  * - Clear gallery clears **current** library only (backend scoped)
  */
 (function () {
@@ -13,6 +13,8 @@
     const DEFAULT_ID = 'main';
     // Name the backend seeds for the default library (db_libraries.py, migration 037).
     const DEFAULT_LIBRARY_SEED_NAME = 'Main library';
+    const MENU_VIEWPORT_GAP_PX = 12;
+    const MENU_MIN_HEIGHT_PX = 160;
 
     // This tab's library, read from the shared key once. Only a switch made in
     // this tab changes it; another tab (V3.5 or V4) writing the key never
@@ -429,6 +431,24 @@
             'Clearing the gallery only empties the current library. Other libraries stay intact.',
         );
         menu.appendChild(note);
+
+        // Danger last, behind a divider (owner 2026-09-28: it used to sit
+        // right under the everyday Select Images button in the gallery).
+        const divider = document.createElement('div');
+        divider.className = 'entry-library-menu-divider';
+        divider.setAttribute('role', 'separator');
+        menu.appendChild(divider);
+
+        const clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.className = 'entry-library-menu-clear';
+        clearBtn.textContent = _t('action.clearGallery', 'Clear current library…');
+        clearBtn.title = _t('action.clearGalleryTooltip', 'Clear the current library index (files on disk stay)');
+        clearBtn.addEventListener('click', () => {
+            closeMenu();
+            void window.clearCurrentLibraryInteractive();
+        });
+        menu.appendChild(clearBtn);
     }
 
     function _selectedImageIds() {
@@ -713,6 +733,16 @@
         }
     }
 
+    // The entry page clips overflow, so a long menu (many libraries, a
+    // selection to move) scrolls inside the window instead of running off
+    // its bottom and hiding the last item, "Clear current library…".
+    function fitMenuToViewport(menu) {
+        menu.style.maxHeight = '';
+        const top = menu.getBoundingClientRect().top;
+        const room = window.innerHeight - top - MENU_VIEWPORT_GAP_PX;
+        menu.style.maxHeight = `${Math.max(MENU_MIN_HEIGHT_PX, room)}px`;
+    }
+
     function openMenu() {
         const menu = document.getElementById('entry-library-menu');
         const switcher = document.getElementById('entry-library-switcher');
@@ -720,6 +750,7 @@
         refreshFromServer().then(() => {
             renderMenu(menu);
             menu.hidden = false;
+            fitMenuToViewport(menu);
             switcher.setAttribute('aria-expanded', 'true');
         });
     }

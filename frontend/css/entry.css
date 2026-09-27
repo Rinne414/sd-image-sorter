@@ -708,6 +708,9 @@ body.entry-active {
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: rgba(30, 30, 30, 0.98);
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+    /* max-height is set on open (library-workspace.js fitMenuToViewport). */
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .entry-library-menu[hidden] {
@@ -804,6 +807,35 @@ body.entry-active {
     font-size: 11px;
     line-height: 1.45;
     color: rgba(var(--accent-rgb), 0.45);
+}
+
+/* Danger last: "Clear current library…" closes the menu behind a divider. */
+.entry-library-menu-divider {
+    height: 1px;
+    margin: 4px 0;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.entry-library-menu-clear {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 9px 10px;
+    border: 1px solid rgba(var(--danger-rgb), 0.34);
+    border-radius: 8px;
+    background: var(--surface-danger);
+    color: var(--danger-ink);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+}
+
+.entry-library-menu-clear:hover,
+.entry-library-menu-clear:focus-visible {
+    background: rgba(var(--danger-rgb), 0.2);
+    border-color: rgba(var(--danger-rgb), 0.58);
 }
 
 /* model-center tile — the new-user starting point (owner FB 2026-07-06).

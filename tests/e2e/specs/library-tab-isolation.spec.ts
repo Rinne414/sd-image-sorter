@@ -45,14 +45,21 @@ async function nextRequestLibrary(page: Page): Promise<string | undefined> {
   return (await request).headers()['x-sd-library-id']
 }
 
-/** Open "清空当前图库" (it refreshes the library list first), read what it would clear, cancel. */
+/**
+ * Choose "清空当前图库…" in the library menu (the menu and the action each
+ * refresh the library list first), read what it would clear, cancel, and go
+ * back to the gallery the way a user does.
+ */
 async function clearConfirmText(page: Page): Promise<string> {
-  await page.click('#btn-clear-db')
+  await page.click('#nav-library-chip')
+  await page.click('#entry-library-menu .entry-library-menu-clear')
   const message = page.locator('#confirm-modal.visible #confirm-message')
   await expect(message).toBeVisible()
   const text = (await message.textContent()) ?? ''
   await page.click('#btn-confirm-cancel')
   await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
+  await page.click('#entry-fn-gallery')
+  await expect(page.locator('#entry-page')).toBeHidden()
   return text
 }
 
