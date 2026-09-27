@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { isFinished, readProgress } from './progress'
-import { queuedRunAnswer, smartTagAdoption, startedJobId } from './smartTagJob'
+import { queuedRunAnswer, smartTagAdoption, smartTagCancelQuery, startedJobId } from './smartTagJob'
 
 describe('a Smart Tag run in the drawer', () => {
   test('waiting in the AI queue behind other work: queued, with nothing counted yet', () => {
@@ -106,5 +106,14 @@ describe('a batch tag run that started out queued, looked up by its queue place 
   test('the backend no longer knows it, or the place now names another run: lost', () => {
     expect(queuedRunAnswer({ status: 'unknown', found: false, queue_id: 'q9', pipeline_queue: queue([]) }, 'q9', 'T1')).toEqual({ state: 'lost' })
     expect(queuedRunAnswer(job('completed', { settings: { queue_id: 'q9', queue_enqueued_at: 'T5' } }), 'q9', 'T1')).toEqual({ state: 'lost' })
+  })
+})
+
+describe('stopping a Smart Tag run names that run', () => {
+  test('by its job id, its queue place, or both; never neither when one is known', () => {
+    expect(smartTagCancelQuery('s12', undefined)).toEqual({ job_id: 's12' })
+    expect(smartTagCancelQuery(undefined, 'q9')).toEqual({ queue_id: 'q9' })
+    expect(smartTagCancelQuery('s12', 'q9')).toEqual({ job_id: 's12', queue_id: 'q9' })
+    expect(smartTagCancelQuery(undefined, undefined)).toEqual({})
   })
 })

@@ -5226,7 +5226,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Cancel */
+        /**
+         * Cancel
+         * @description Cancel the run named by ``job_id`` / ``queue_id`` (only that one).
+         *
+         *     Without either, the active run is cancelled and every queued Smart Tag
+         *     run is removed (older clients).
+         */
         post: operations["cancel_api_smart_tag_cancel_post"];
         delete?: never;
         options?: never;
@@ -20036,7 +20042,10 @@ export interface operations {
     };
     cancel_api_smart_tag_cancel_post: {
         parameters: {
-            query?: never;
+            query?: {
+                job_id?: string | null;
+                queue_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -20052,6 +20061,15 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -457,7 +457,7 @@ async function stubTagRuns(page: Page): Promise<Runs> {
       json: { job_id: `e2e-ai-${runs.smartStarts.length}`, status: 'completed', active: false, total: n, processed: n, succeeded: n, failed: 0, errors: [], pipeline_queue: { total_queued: 0, queued: [] } },
     })
   })
-  await page.route('**/api/smart-tag/cancel', (route) => route.fulfill({ json: { status: 'cancelled' } }))
+  await page.route('**/api/smart-tag/cancel**', (route) => route.fulfill({ json: { status: 'cancelled' } }))
   return runs
 }
 

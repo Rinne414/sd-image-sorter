@@ -1,7 +1,7 @@
 import { api, unwrap } from '../../api/client'
 import type { Job } from './jobs'
 import { readProgress } from './progress'
-import { DESCRIBE_WORDS, smartTagAdoption, startedJobId } from './smartTagJob'
+import { DESCRIBE_WORDS, smartTagAdoption, smartTagCancelQuery, startedJobId } from './smartTagJob'
 
 // Polls and stops a Smart Tag run for the Jobs drawer (read by smartTagJob.ts).
 
@@ -31,5 +31,9 @@ export const driveSmartTag = {
     if (job && started) found.set(job.id, started)
     return raw
   },
-  cancel: async (): Promise<unknown> => unwrap(await api.POST('/api/smart-tag/cancel')),
+  // Stop stops this run only, never another page's run or the rest of the queue.
+  cancel: async (job?: Job): Promise<unknown> => {
+    const query = smartTagCancelQuery(job ? smartTagJobId(job) : undefined, job?.ctx.smartTag?.queueId)
+    return unwrap(await api.POST('/api/smart-tag/cancel', { params: { query } }))
+  },
 }

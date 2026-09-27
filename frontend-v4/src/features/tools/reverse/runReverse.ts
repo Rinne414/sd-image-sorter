@@ -1,6 +1,6 @@
 import { api, unwrap } from '../../../api/client'
 import type { TargetModel } from '../../batch/datasetSettings'
-import { queuedRunAnswer } from '../../jobs/smartTagJob'
+import { queuedRunAnswer, smartTagCancelQuery } from '../../jobs/smartTagJob'
 import type { TagOptions } from '../../tagging/tagJob'
 import { tt } from '../toolText'
 import { captionOf, promptToTags, smartTagBody, tagSingleBody, tagsToPrompt, type ReverseMode } from './reverseModes'
@@ -51,9 +51,10 @@ export async function runTagger(path: string, o: TagOptions, hooks: Hooks): Prom
   }
 }
 
-async function cancelActive(): Promise<void> {
+/** Stops our run only: its job, or its place in the AI queue while it waits. */
+async function cancelOurs(jobId: string | null, queueId: string): Promise<void> {
   try {
-    await api.POST('/api/smart-tag/cancel')
+    await api.POST('/api/smart-tag/cancel', { params: { query: smartTagCancelQuery(jobId ?? undefined, queueId || undefined) } })
   } catch {
     // it ended on its own in the meantime
   }
@@ -63,9 +64,8 @@ async function cancelActive(): Promise<void> {
  * Poll until our job has finished. A run that waits in the AI queue is asked
  * for by its queue place (?queue_id=) until it has a job id, so a run that
  * started and ended between two polls is still found, and a place the backend
- * no longer knows is said plainly. Cancel stops our job only: while it still
- * waits, the backend's cancel would stop whatever else is running, so it waits
- * for its turn and is stopped then.
+ * no longer knows is said plainly. Cancel stops our run only, at once: its
+ * job, or its place in the queue while it still waits.
  */
 async function follow(start: Raw, hooks: Hooks): Promise<{ jobId: string; last: Raw }> {
   const queueId = str(start.queue_id)
@@ -76,9 +76,9 @@ async function follow(start: Raw, hooks: Hooks): Promise<{ jobId: string; last: 
   hooks.onPhase(jobId ? 'running' : 'queued')
   for (;;) {
     if (jobId && TERMINAL.has(str(last.status))) return { jobId, last }
-    if (jobId && hooks.signal.aborted) {
+    if (hooks.signal.aborted) {
       hooks.onPhase('cancelling')
-      await cancelActive()
+      await cancelOurs(jobId, queueId)
       throw new Cancelled()
     }
     await wait(POLL_MS)

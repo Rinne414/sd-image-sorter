@@ -208,7 +208,7 @@ async function stubAi(page: Page, vlm: 'configured' | 'none', run: StubRun = { f
     const results = paths.map((p) => ({ path: p, caption: '', booru_text: run.booru, nl_text: run.nl ?? 'A girl stands in a red room.' }))
     return route.fulfill({ json: { results, has_more: false, limit: 1000 } })
   })
-  await page.route('**/api/smart-tag/cancel', (route) => route.fulfill({ json: { status: 'cancelled' } }))
+  await page.route('**/api/smart-tag/cancel**', (route) => route.fulfill({ json: { status: 'cancelled' } }))
   return starts
 }
 

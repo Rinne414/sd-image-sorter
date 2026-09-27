@@ -10,7 +10,7 @@ import { cleanupImages, dbPath, openLibrary, pageOverflow, repoRoot, runBackendS
  * V4 Reverse prompt (反推提示词): the prompt the file recorded comes first;
  * the tagger (the one remembered in the tag panel), the vision model, or tags
  * then the vision model work one out; the target model is sent; Cancel stops
- * only our own run (one still queued is stopped when its turn comes); the
+ * only our own run, by its job id or, while it waits, its queue place; the
  * draft survives a reload and takes TIPO's ticked tags.
  *
  * Nothing runs on the GPU: /api/tag/single, /api/smart-tag/*,
@@ -52,12 +52,13 @@ interface Stubs {
   tagSingle: Request[]
   starts: Request[]
   cancels: number
+  cancelUrls: URL[]
   tipo: Request[]
 }
 
 /** Every AI call answered here; the vision model counts as set up when `vlm`. */
 async function stubAi(page: Page, vlm = true): Promise<Stubs> {
-  const s: Stubs = { vlm, tagSingle: [], starts: [], cancels: 0, tipo: [] }
+  const s: Stubs = { vlm, tagSingle: [], starts: [], cancels: 0, cancelUrls: [], tipo: [] }
   await markModelsReady(page, ['wd14', 'tipo'], { extraVariants: ['wd-vit-tagger-v3', 'v2.1', '200m-ft'] })
   await page.route('**/api/vlm/settings', (route) =>
     route.fulfill({ json: s.vlm ? { provider: 'openai_compat', endpoint: 'http://127.0.0.1:11434/v1', model: 'stub-vlm' } : { provider: 'openai_compat', endpoint: '', model: '' } }),
@@ -66,8 +67,9 @@ async function stubAi(page: Page, vlm = true): Promise<Stubs> {
     s.tagSingle.push(route.request())
     await route.fulfill({ json: { model: 'wd-vit-tagger-v3', all_tags: [{ tag: '1girl' }, { tag: 'silver_hair' }, { tag: 'score_9' }], stored: false } })
   })
-  await page.route('**/api/smart-tag/cancel', async (route) => {
+  await page.route('**/api/smart-tag/cancel**', async (route) => {
     s.cancels += 1
+    s.cancelUrls.push(new URL(route.request().url()))
     await route.fulfill({ json: { status: 'cancelled', cancel_requested: true } })
   })
   await page.route('**/api/tags/suggest-upsample', async (route) => {
@@ -215,7 +217,7 @@ test('a queued run that starts and finishes between two polls still shows its re
   expect(asked).toContain('queue_id=q5')
 })
 
-test('Cancel stops a running vision-model run, and a queued one only when its turn comes', async ({ page }) => {
+test('Cancel stops only our own run: a queued one at once, by its queue place', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   const s = await stubAi(page)
   const queued = { status: 'queued', found: true, active: false, queue_id: 'q9', pipeline_queue: { queued: [{ queue_id: 'q9', kind: 'smart', position: 1 }] } }
@@ -233,11 +235,11 @@ test('Cancel stops a running vision-model run, and a queued one only when its tu
   await page.getByTestId('reverse-run-button').click()
   await expect(page.getByTestId('reverse-status')).toContainText('Queued')
   await page.getByTestId('reverse-cancel').click()
-  await expect(page.getByTestId('reverse-status')).toContainText('Cancelling')
-  // someone else's run is active: nothing is cancelled until ours starts
-  expect(s.cancels).toBe(0)
   await expect(page.getByTestId('reverse-status')).toHaveText('Cancelled.', { timeout: 10_000 })
+  // someone else's run is active: only our place in the queue is dropped
   expect(s.cancels).toBe(1)
+  expect(s.cancelUrls[0]!.searchParams.get('queue_id')).toBe('q9')
+  expect(s.cancelUrls[0]!.searchParams.has('job_id')).toBe(false)
   expect(bodyOf(s.starts[0]!)).toMatchObject({ enable_wd14: false, enable_vlm: true, vlm_grounding: false })
   await expect(page.getByTestId('reverse-inferred')).toHaveCount(0)
 })

@@ -69,6 +69,15 @@ export function startedJobId(payload: unknown, queueId: string | undefined, enqu
   return jobId
 }
 
+/**
+ * Who POST /api/smart-tag/cancel stops: this run only, by its job id, or by its
+ * place in the AI queue while it waits (both when both are known). Without
+ * either the backend would stop the active run and drop every queued one.
+ */
+export function smartTagCancelQuery(jobId: string | undefined, queueId: string | undefined): { job_id?: string; queue_id?: string } {
+  return { ...(jobId ? { job_id: jobId } : {}), ...(queueId ? { queue_id: queueId } : {}) }
+}
+
 /** A queued run looked up by its queue place (GET /api/smart-tag/progress?queue_id=), after a reload. */
 export type QueuedRunAnswer = { state: 'waiting' } | { state: 'running' | 'done'; jobId: string } | { state: 'ended' } | { state: 'lost' }
 
