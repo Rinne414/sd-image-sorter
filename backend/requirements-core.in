@@ -36,3 +36,8 @@ socksio>=1.0.0
 slowapi>=0.1.9
 psutil>=5.9.0
 send2trash>=1.8.3
+# Security floor: anyio 4.14.2 fixes CVE-2026-63374 (a TLS connection to an
+# internationalized host name accepts a certificate for its IDNA 2003 form;
+# the VLM and translate clients use httpx.AsyncClient on anyio) and
+# CVE-2026-64847 (process-pool workers can wedge on a full stderr pipe).
+anyio>=4.14.2

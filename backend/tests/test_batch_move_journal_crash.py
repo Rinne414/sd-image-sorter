@@ -20,7 +20,7 @@ import pytest
 
 import services.sorting_service as ss
 from services.sorting import move_journal
-from tests.test_batch_move_undo import _library, _run, _undo, svc  # noqa: F401
+from tests.test_batch_move_undo import _library, _run, _undo
 
 
 class PowerLoss(BaseException):

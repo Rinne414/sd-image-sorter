@@ -51,7 +51,10 @@ sortedcontainers>=2.4.0
 # absent a configured SOCKS proxy raises a clear "install httpx[socks]" error
 # (see vlm_providers/base.py make_async_client) instead of crashing the request.
 socksio>=1.0.0
-transformers>=5.6.0
+# Security floor: transformers 5.10.0 fixes PYSEC-2026-3929 (CVE-2026-9856), a
+# path traversal in tokenizer/processor save_pretrained() through the keys of a
+# downloaded chat_template.
+transformers>=5.10.0
 # Torch 2.13 is the first current branch without known advisories and with
 # setuptools 83 compatibility. Intel Mac has no matching wheel and stays
 # core-only; Apple Silicon requires macOS 14+, enforced before optional install.
@@ -79,3 +82,8 @@ urllib3>=2.7.0
 # Security floor: idna <3.15 is flagged by pip-audit (CVE-2026-45409, CPU-DoS
 # on crafted hostnames). Transitive via anyio/httpx/requests.
 idna>=3.15
+# Security floor: anyio 4.14.2 fixes CVE-2026-63374 (a TLS connection to an
+# internationalized host name accepts a certificate for its IDNA 2003 form;
+# the VLM and translate clients use httpx.AsyncClient on anyio) and
+# CVE-2026-64847 (process-pool workers can wedge on a full stderr pipe).
+anyio>=4.14.2

@@ -41,7 +41,11 @@ def _seed(test_client, monkeypatch, vectors):
 
 
 def _give_file_and_fake_clip(test_client, monkeypatch, tmp_path, image_id, vector):
-    """Back an unindexed image with a real file and stub CLIP for it."""
+    """Back an unindexed image with a real file and stub CLIP for it.
+
+    The stub reports CLIP as installed, so the result does not depend on
+    whether this machine has the real CLIP model downloaded.
+    """
     from PIL import Image
     import services.similarity_service as similarity_service
 
@@ -49,6 +53,9 @@ def _give_file_and_fake_clip(test_client, monkeypatch, tmp_path, image_id, vecto
     Image.new("RGB", (8, 8), (40, 80, 120)).save(source)
     with test_client.test_db.get_db() as conn:
         conn.execute("UPDATE images SET path = ? WHERE id = ?", (str(source), image_id))
+    monkeypatch.setattr(
+        similarity_service, "get_model_health", lambda: {"clip": {"available": True}}
+    )
     monkeypatch.setattr(
         similarity_service, "embed_image_pil", lambda _image: np.asarray(vector, dtype=np.float32)
     )

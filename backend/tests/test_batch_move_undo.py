@@ -30,18 +30,6 @@ def _png(path: Path, color: str = "white") -> Path:
     return path
 
 
-@pytest.fixture
-def svc(tmp_path, monkeypatch, test_db):
-    monkeypatch.setattr(
-        ss, "SESSION_FILE", str(tmp_path / "session.json"), raising=False
-    )
-    monkeypatch.setattr(
-        ss, "LEGACY_SESSION_FILE", str(tmp_path / "legacy.json"), raising=False
-    )
-    monkeypatch.setattr(move_journal, "journal_dir", lambda: tmp_path / "runs")
-    return ss.SortingService()
-
-
 def _run(svc, request) -> dict:
     tasks = BackgroundTasks()
     started = svc.batch_move_images(request, tasks)

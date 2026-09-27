@@ -1550,8 +1550,8 @@ def test_playwright_ai_runtime_stubs_match_exact_lock():
     assert "__version__ = '2.13.0+cu126'" in config
     assert "cuda = '12.6'" in config
     assert "writeStubPackageMetadata('torch', '2.13.0+cu126')" in config
-    assert "writeStubModule('transformers.py', `__version__ = '5.6.2'\\n`)" in config
-    assert "writeStubPackageMetadata('transformers', '5.6.2')" in config
+    assert "writeStubModule('transformers.py', `__version__ = '5.10.4'\\n`)" in config
+    assert "writeStubPackageMetadata('transformers', '5.10.4')" in config
     assert "writeStubModule('timm.py', `__version__ = '1.0.26'\\n`)" in config
     assert "writeStubPackageMetadata('timm', '1.0.26')" in config
     assert "function backendPythonHasModule(moduleName: string): boolean" in config

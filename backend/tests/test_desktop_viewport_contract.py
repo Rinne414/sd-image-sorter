@@ -925,3 +925,133 @@ test('mobile', aliasedMobileTest)
 
     assert result.returncode == 1
     assert "960px" in result.stdout
+
+
+def test_checker_follows_named_imports_of_exported_constants(tmp_path: Path) -> None:
+    fixtures = tmp_path / "fixtures"
+    fixtures.mkdir()
+    _write_fixture(
+        fixtures,
+        "shared.ts",
+        """
+const PHONE_WIDTH = 390
+export const VIEWPORTS = [
+  { width: 1366, height: 768 },
+  { width: PHONE_WIDTH, height: 844 },
+]
+""",
+    )
+    spec = _write_fixture(
+        tmp_path,
+        "imported-viewports.spec.ts",
+        """
+import { test } from '@playwright/test'
+import { VIEWPORTS as SIZES } from './fixtures/shared'
+
+for (const viewport of SIZES) {
+  test(`fits at ${viewport.width}`, async ({ page }) => {
+    await page.setViewportSize(viewport)
+  })
+}
+""",
+    )
+
+    result = _run_checker([spec])
+
+    assert result.returncode == 1
+    assert "imported-viewports.spec.ts:" in result.stdout
+    assert "390px" in result.stdout
+    assert "1366px" not in result.stdout
+
+
+def test_checker_accepts_imported_desktop_viewport_constants(tmp_path: Path) -> None:
+    _write_fixture(
+        tmp_path,
+        "desktop.ts",
+        """
+export const DESKTOP_VIEWPORTS = [
+  { width: 1366, height: 768 },
+  { width: 2560, height: 1440 },
+] as const
+""",
+    )
+    spec = _write_fixture(
+        tmp_path,
+        "imported-desktop.spec.ts",
+        """
+import { DESKTOP_VIEWPORTS } from './desktop'
+
+async function checkAll(page) {
+  for (const viewport of DESKTOP_VIEWPORTS) {
+    await page.setViewportSize(viewport)
+  }
+}
+
+checkAll(page)
+""",
+    )
+
+    result = _run_checker([spec])
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "passed for 1 configured site(s)" in result.stdout
+
+
+def test_checker_rejects_imports_that_are_not_exported_constants(tmp_path: Path) -> None:
+    _write_fixture(
+        tmp_path,
+        "shared.ts",
+        """
+export let REASSIGNABLE = { width: 1366, height: 768 }
+export function computed() {
+  return { width: 1366, height: 768 }
+}
+const PRIVATE = { width: 1366, height: 768 }
+""",
+    )
+    spec = _write_fixture(
+        tmp_path,
+        "unresolved-imports.spec.ts",
+        """
+import { REASSIGNABLE, computed, PRIVATE } from './shared'
+import { ELSEWHERE } from './does-not-exist'
+
+page.setViewportSize(REASSIGNABLE)
+page.setViewportSize(computed())
+page.setViewportSize(PRIVATE)
+page.setViewportSize(ELSEWHERE)
+""",
+    )
+
+    result = _run_checker([spec])
+
+    assert result.returncode == 1
+    assert result.stdout.count("unresolved-imports.spec.ts:") == 4
+    assert "unresolved viewport width" in result.stdout.lower()
+
+
+def test_checker_follows_array_entries_in_for_of_loops(tmp_path: Path) -> None:
+    fixture = _write_fixture(
+        tmp_path,
+        "entries-loop.spec.ts",
+        """
+const VIEWPORTS = [
+  { width: 1920, height: 1080 },
+  { width: 1024, height: 768 },
+]
+for (const [i, viewport] of VIEWPORTS.entries()) {
+  page.setViewportSize(viewport)
+}
+for (const [i, viewport] of resolveViewports().entries()) {
+  page.setViewportSize(viewport)
+}
+""",
+    )
+
+    result = _run_checker([fixture])
+
+    assert result.returncode == 1
+    assert "1024px" in result.stdout
+    assert "1920px" not in result.stdout
+    assert result.stdout.count("entries-loop.spec.ts:") == 2
+    assert "unresolved viewport width" in result.stdout.lower()

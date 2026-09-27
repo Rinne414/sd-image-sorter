@@ -452,6 +452,30 @@ def authorize_legacy_dataset_exports(request, monkeypatch):
 
 
 # ============================================================================
+# Batch Move Fixture
+# ============================================================================
+
+@pytest.fixture
+def svc(tmp_path, monkeypatch, test_db):
+    """A SortingService whose session files and move journals live in tmp_path.
+
+    Used by the batch-move undo and journal crash tests. A test module that
+    defines its own ``svc`` fixture overrides this one.
+    """
+    import services.sorting_service as ss
+    from services.sorting import move_journal
+
+    monkeypatch.setattr(
+        ss, "SESSION_FILE", str(tmp_path / "session.json"), raising=False
+    )
+    monkeypatch.setattr(
+        ss, "LEGACY_SESSION_FILE", str(tmp_path / "legacy.json"), raising=False
+    )
+    monkeypatch.setattr(move_journal, "journal_dir", lambda: tmp_path / "runs")
+    return ss.SortingService()
+
+
+# ============================================================================
 # Mock Fixtures
 # ============================================================================
 
