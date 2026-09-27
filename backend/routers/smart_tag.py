@@ -176,6 +176,15 @@ def tagged_count(request: SmartTagTaggedCountRequest) -> Dict[str, int]:
 
 @router.post("/cancel")
 def cancel(
+    job_id: Optional[str] = None,
+    queue_id: Optional[str] = None,
     pipeline: TaggingPipelineService = Depends(get_tagging_pipeline_service),
 ) -> Dict[str, Any]:
+    """Cancel the run named by ``job_id`` / ``queue_id`` (only that one).
+
+    Without either, the active run is cancelled and every queued Smart Tag
+    run is removed (older clients).
+    """
+    if job_id or queue_id:
+        return pipeline.cancel_smart_tagging(job_id=job_id, queue_id=queue_id)
     return pipeline.cancel_smart_tagging()

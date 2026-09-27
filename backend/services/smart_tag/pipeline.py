@@ -141,6 +141,22 @@ def cancel_active_job() -> Optional[SmartTagJobState]:
         return job
 
 
+def cancel_job_if_active(job_id: str) -> Optional[SmartTagJobState]:
+    """Like :func:`cancel_active_job`, but only when ``job_id`` is the running job.
+
+    A page cancelling its own run must never stop a run another page started.
+    """
+    with _jobs_lock:
+        if _active_job_id is None or _active_job_id != job_id:
+            return None
+        job = _jobs.get(job_id)
+        if job is None:
+            return None
+        job.cancel_requested = True
+        job.message = "Cancellation requested..."
+        return job
+
+
 _TERMINAL_JOB_STATUSES = {"completed", "warning", "failed", "cancelled"}
 
 

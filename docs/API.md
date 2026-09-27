@@ -2176,6 +2176,12 @@ Count how many library images of a planned run already have tags (`tagged_at` se
 Request cancellation of the active Smart Tag job. The worker stops at the next image boundary;
 already committed gallery captions and path results remain available. Returns 404 when no job is active.
 
+Optional query params `job_id` and `queue_id` name one run: its queue entry is removed while it
+waits (`status: "queue_cleared"`, `removed_queued: 1`), and its job (named, or started from that
+queue entry) is cancelled when it is the active one. Other queued Smart Tag runs stay queued. 404
+when that run is neither queued nor running. Without either param the active run is cancelled and
+every queued Smart Tag run is removed (older clients).
+
 ---
 
 Use `/docs` for interactive exploration. Contract drift is checked by `backend/tests/test_api_docs_contract.py`, and `scripts/export_openapi.py` exports a stable sorted OpenAPI JSON schema without starting the server.
