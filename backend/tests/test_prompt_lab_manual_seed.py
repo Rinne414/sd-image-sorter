@@ -60,3 +60,25 @@ def test_several_prompts_from_one_request_differ(test_client):
     prompts = [item["positive_prompt"] for item in response.json()["prompts"]]
     assert len(prompts) == 6
     assert len(set(prompts)) > 1
+
+
+def test_the_answer_says_whether_anything_was_drawn():
+    """Slots alone draw nothing, so seed and count cannot change the prompt; the page says so."""
+    generator = PromptGenerator()
+
+    slots_only = generator.generate({**_config(1), "tag_sets": []})
+    with_tag_set = generator.generate(_config(1))
+    automatic = generator.generate({"quality_preset": "none", "include_negative": False, "seed": 1})
+
+    assert slots_only["random_part"] is False
+    assert with_tag_set["random_part"] is True
+    assert automatic["random_part"] is True
+
+
+def test_the_route_passes_the_flag_for_every_prompt(test_client):
+    response = test_client.post("/api/prompts/generate", json={**_config(3, count=2), "tag_sets": []})
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["random_part"] is False
+    assert [item["random_part"] for item in body["prompts"]] == [False, False]

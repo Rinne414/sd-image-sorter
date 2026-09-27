@@ -1425,7 +1425,7 @@ Generate one or more prompts.
 | `categories` | object | {} | Manual Prompt Lab slots: `{<category>: {tags, weight, locked}}` |
 | `tag_sets` | array | [] | Tag set ids/names to apply: required members always, optional members drawn by their weight from the seeded generator (also with `categories`; the slot tags themselves are kept as given) |
 
-Response: `positive_prompt`, `negative_prompt`, `prompt` (alias of `positive_prompt`), `tags_used`, `exclusions_applied`, and `warnings` describe the first generated prompt, plus `count` (prompts actually generated) and `prompts` (array of per-prompt objects with the same fields, length == `count`). With a fixed `seed` and `count > 1`, prompt slot `i` uses `seed + i`, so the batch is varied but reproducible.
+Response: `positive_prompt`, `negative_prompt`, `prompt` (alias of `positive_prompt`), `tags_used`, `exclusions_applied`, `warnings` and `random_part` (false when nothing was drawn, e.g. slots only: then the seed and `count` cannot change the prompt) describe the first generated prompt, plus `count` (prompts actually generated) and `prompts` (array of per-prompt objects with the same fields, length == `count`). With a fixed `seed` and `count > 1`, prompt slot `i` uses `seed + i`, so the batch is varied but reproducible.
 
 #### POST /api/prompts/validate
 Validate prompt conflicts.
