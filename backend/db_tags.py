@@ -743,47 +743,43 @@ def search_tags(
             "sort": sort_by,
         }
 
-    value_expr = "REPLACE(LOWER(t.tag), '_', ' ')"
-    rank_sql = _facet_search_rank_sql(value_expr)
-    match_pattern = f"%{escape_like_pattern(normalized_query)}%"
-    order_tail = "t.tag COLLATE NOCASE ASC" if sort_by == "alphabetical" else "count DESC, t.tag COLLATE NOCASE ASC"
-    params: List[Any] = [
-        *_facet_search_rank_params(normalized_query),
-        match_pattern,
-    ]
+    # Match against the library's own tag counts (get_all_tags: cached per
+    # library, dropped on every tag write) instead of scanning every tag row
+    # twice with a per-row LOWER/REPLACE: a few thousand unique tags instead of
+    # ~650,000 rows (measured 0.6-1.2 s per keystroke on a 12,853-image
+    # library). Matching, ranking and order are the SQL ones it replaces.
+    matches = []
+    for item in get_all_tags():
+        value = _sql_fold(item["tag"]).replace("_", " ")
+        if normalized_query in value:
+            matches.append((_search_rank(value, normalized_query), item))
+    if sort_by == "alphabetical":
+        matches.sort(key=lambda match: (match[0], _sql_fold(match[1]["tag"])))
+    else:
+        matches.sort(key=lambda match: (match[0], -match[1]["count"], _sql_fold(match[1]["tag"])))
+    shown = matches if limit is None else matches[:max(0, int(limit))]
+    tags = [{"tag": item["tag"], "count": item["count"]} for _rank, item in shown]
+    return {"tags": tags, "total": len(matches), "query": normalized_query, "sort": sort_by}
 
-    from library_context import current_library_sql
 
-    lib_sql, lib_params = current_library_sql("i.library_id")
-    with get_db() as conn:
-        cursor = conn.cursor()
-        total_row = cursor.execute(
-            f"""
-            SELECT COUNT(*) FROM (
-                SELECT t.tag
-                FROM tags t
-                INNER JOIN images i ON i.id = t.image_id
-                WHERE {value_expr} LIKE ? ESCAPE '\\' AND {lib_sql}
-                GROUP BY t.tag
-            )
-            """,
-            (match_pattern, *lib_params),
-        ).fetchone()
-        total = int(total_row[0] or 0) if total_row else 0
+# SQLite's LOWER() and NOCASE fold ASCII letters only; matching and ordering in
+# Python do the same so search results do not change.
+_ASCII_LOWER = {code: code + 32 for code in range(ord("A"), ord("Z") + 1)}
 
-        query = f"""
-            SELECT t.tag, COUNT(*) AS count, {rank_sql} AS relevance
-            FROM tags t
-            INNER JOIN images i ON i.id = t.image_id
-            WHERE {value_expr} LIKE ? ESCAPE '\\' AND {lib_sql}
-            GROUP BY t.tag
-            ORDER BY relevance ASC, {order_tail}
-        """
-        query, params = _append_optional_limit(query, [*params, *lib_params], limit)
-        cursor.execute(query, params)
-        tags = [{"tag": row["tag"], "count": row["count"]} for row in cursor.fetchall()]
 
-    return {"tags": tags, "total": total, "query": normalized_query, "sort": sort_by}
+def _sql_fold(value: str) -> str:
+    return value.translate(_ASCII_LOWER)
+
+
+def _search_rank(value: str, query: str) -> int:
+    """The rank of ``_facet_search_rank_sql``: exact, prefix, word start, other."""
+    if value == query:
+        return 0
+    if value.startswith(query):
+        return 1
+    if f" {query}" in value or f"({query}" in value or f"[{query}" in value:
+        return 2
+    return 3
 
 
 def _query_indexed_facet(
