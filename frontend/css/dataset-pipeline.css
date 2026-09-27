@@ -417,10 +417,11 @@
     display: none !important;
 }
 
-/* Dropzone */
+/* Dropzone: a fixed band, not the rest of the tab — empty, it filled 566 px
+   at 1920x1080 for one line of text. */
 .dataset-dropzone {
-    flex: 1 1 auto;
-    min-height: 240px;
+    flex: 0 0 auto;
+    min-height: clamp(180px, 20vh, 240px);
     display: flex;
     align-items: center;
     justify-content: center;
