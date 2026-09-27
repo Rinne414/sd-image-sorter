@@ -369,7 +369,9 @@ class TestEmbeddedChunkPreservation:
             {"Comment": saved_chunks["Comment"], "Software": "NovelAI"},
         )
         assert recovered["generator"] == "nai"
-        assert recovered["prompt"] == "ORIGINAL nai positive"
+        # The NovelAI record takes the edit itself (#20), no A1111 block beside it.
+        assert recovered["prompt"] == "edited prompt"
+        assert "parameters" not in saved_chunks
 
     def test_the_edit_still_wins_when_a_generation_record_is_preserved(
         self, test_client, tmp_path
@@ -538,10 +540,10 @@ class TestEmbeddedChunkPreservation:
             f"warned about a loss that did not happen: {warnings!r}"
         )
 
-    def test_settings_the_editor_cannot_rebuild_are_reported_not_dropped_silently(
+    def test_settings_the_editor_does_not_show_are_kept_not_dropped(
         self, test_client, tmp_path
     ):
-        """The editor owns ``parameters``; what it cannot carry must be named."""
+        """The editor owns ``parameters``; the settings it does not show stay in it (#20)."""
         rich_parameters = (
             "a prompt\nNegative prompt: a negative\n"
             "Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 42, Size: 32x32, "
@@ -559,12 +561,11 @@ class TestEmbeddedChunkPreservation:
         )
         assert response.status_code == 200, response.text
 
-        warnings = " ".join(response.json()["warnings"])
-        assert "Model hash" in warnings and "Clip skip" in warnings, (
-            "settings the rebuilt parameter block loses must be named, not dropped silently"
+        settings = _text_chunks(output)["parameters"].splitlines()[-1]
+        assert "Model hash: abc123" in settings and "Clip skip: 2" in settings, (
+            "settings the editor does not show must be kept, not dropped"
         )
-        # ...and only the genuinely missing ones are named.
-        assert "Sampler" not in warnings
+        assert response.json()["warnings"] == []
 
 
 # ---------------------------------------------------------------------------
