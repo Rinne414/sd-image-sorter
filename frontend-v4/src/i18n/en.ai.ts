@@ -159,7 +159,7 @@ export const enAi: Record<keyof typeof zhCNAi, string> = {
   'ai.ollama.phase.starting': 'Starting',
 
   'ai.log.title': 'API chat log',
-  'ai.log.lead': "The requests and replies of V3.5's last 80 batch-captioning calls, to see why a model answered off the mark. Keys and images are never shown; descriptions written while tagging are not logged here.",
+  'ai.log.lead': "The requests and replies of the last 80 batch-captioning calls (a run started outside these pages, for example through the API), to see why a model answered off the mark. Keys and images are never shown; descriptions written while tagging are not logged here.",
   'ai.log.show': 'Show the log',
   'ai.log.refresh': 'Refresh',
   'ai.log.loading': 'Reading…',

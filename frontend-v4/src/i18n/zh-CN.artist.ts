@@ -115,7 +115,7 @@ export const zhCNArtist = {
   'artist.job.allFailed': '{n} 张都没能识别：文件可能已经不在，或模型出错了。',
   'artist.job.skipped': '{n} 张已有结果，跳过了。',
   'artist.job.allSkipped': '这 {n} 张都已有画风结果，没有要识别的。',
-  'artist.job.busy': '画风识别已经在进行（也可能是 V3.5 开始的），等它结束再开始。',
+  'artist.job.busy': '画风识别已经在进行（也可能是在别的窗口开始的），等它结束再开始。',
   'artist.job.startFailed': '没能开始识别：{reason}',
   'artist.job.show': '看结果',
 }

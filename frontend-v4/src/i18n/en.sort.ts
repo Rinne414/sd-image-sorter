@@ -26,7 +26,7 @@ export const enSort: Record<keyof typeof zhCNSort, string> = {
   'sort.slot.choose': 'Choose a folder…',
   'sort.slot.change': 'Change folder…',
   'sort.slot.clear': 'Stop using {key}',
-  'sort.slot.collection': 'Collection #{id} (set in V3.5: adds to the collection, no file moves)',
+  'sort.slot.collection': 'Collection #{id} (adds to the collection, no file moves)',
   'sort.slot.chooseTitle': 'Folder for images sent with {key}',
   'sort.slot.use': 'Use this folder',
   'sort.slot.recent': 'Recently used',

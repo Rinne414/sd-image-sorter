@@ -27,7 +27,7 @@ export const zhCNSort = {
   'sort.slot.choose': '选择文件夹…',
   'sort.slot.change': '换文件夹…',
   'sort.slot.clear': '不用 {key} 键',
-  'sort.slot.collection': '合集 #{id}（V3.5 设的：只加进合集，不动文件）',
+  'sort.slot.collection': '合集 #{id}（只加进合集，不动文件）',
   'sort.slot.chooseTitle': '按 {key} 的图放进哪个文件夹',
   'sort.slot.use': '用这个文件夹',
   'sort.slot.recent': '最近用过',

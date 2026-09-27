@@ -106,7 +106,7 @@ export const enArtist: Record<keyof typeof zhCNArtist, string> = {
   'artist.job.allFailed': 'None of the {n} images could be identified: the files may be gone, or the model failed.',
   'artist.job.skipped': '{n} already had a result and were skipped.',
   'artist.job.allSkipped': 'All {n} images already have a style result; nothing to identify.',
-  'artist.job.busy': 'Style identification is already running (V3.5 may have started it); wait for it to end.',
+  'artist.job.busy': 'Style identification is already running (perhaps started in another window); wait for it to end.',
   'artist.job.startFailed': 'Could not start identifying: {reason}',
   'artist.job.show': 'See results',
 }

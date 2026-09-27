@@ -131,7 +131,7 @@ test('6b-fix2: the open library deleted in another window: back in this one, V4 
   // coming back to this window reads the list again; the first gallery request after it names main
   const next = page.waitForRequest((r) => new URL(r.url()).pathname === '/api/images')
   await page.evaluate(() => window.dispatchEvent(new Event('focus')))
-  await expect(page.getByText('The library that was open is gone (perhaps deleted in another window or in V3.5). Now showing “Main library”.')).toBeVisible()
+  await expect(page.getByText('The library that was open is gone (perhaps deleted in another window). Now showing “Main library”.')).toBeVisible()
   expect((await next).headers()['x-sd-library-id']).toBe('main')
   await expect(rail).toContainText('Main library')
   expect(await storedLibrary(page)).toBe('main')
@@ -141,7 +141,7 @@ test('6b-fix2: a stale library stored at launch: V4 opens one that exists and sa
   await page.setViewportSize({ width: 1366, height: 768 })
   const next = page.waitForRequest((r) => new URL(r.url()).pathname === '/api/images' && r.headers()['x-sd-library-id'] === 'main')
   await openWithStoredLibrary(page, 'lib_never_existed', 'zh-CN')
-  await expect(page.getByText('之前打开的图库已经不在了（可能在别的窗口或旧版界面里删掉了），现在打开的是「主图库」。')).toBeVisible()
+  await expect(page.getByText('之前打开的图库已经不在了（可能在别的窗口里删掉了），现在打开的是「主图库」。')).toBeVisible()
   await next
   await expect(page.getByTestId('library-switch')).toContainText('主图库')
   expect(await storedLibrary(page)).toBe('main')

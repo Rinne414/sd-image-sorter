@@ -382,7 +382,7 @@ test('deleting a dataset batch says what goes, and refuses a project V3.5 change
   const row = page.getByTestId('batch-row').filter({ hasText: `${NAME} set` })
   await row.getByRole('button', { name: 'Delete…' }).click()
   const dialog = page.getByTestId('batch-delete-dialog')
-  await expect(dialog.getByTestId('dataset-delete-body')).toContainText('disappears from V3.5 too')
+  await expect(dialog.getByTestId('dataset-delete-body')).toContainText("This also deletes the batch's dataset project: the list and order of its")
   await expect(dialog.getByTestId('dataset-delete-uploads')).toContainText('files uploaded into this batch (1)')
   await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()
 
