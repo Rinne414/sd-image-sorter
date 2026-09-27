@@ -165,7 +165,10 @@ async def get_model_plan(model_id: str):
 
 
 @router.get("/status")
-async def get_models_status(service: ModelService = Depends(get_model_service)):
+def get_models_status(service: ModelService = Depends(get_model_service)):
+    # Plain def: FastAPI runs it in the thread pool. Building the inventory
+    # looks at every model file and runtime (about 0.8 s warm), and on the
+    # event loop it held up every other request meanwhile.
     return service.get_status()
 
 
