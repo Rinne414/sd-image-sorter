@@ -49,6 +49,35 @@
     // The AI-queue place of our run while it waits (and after it starts):
     // Cancel names it so other pages' queued Smart Tag runs stay queued.
     let activeQueueId = null;
+
+    // This tab's own run (queue place and/or job id), kept across a reload of
+    // the tab in sessionStorage. After a reload only these ids are cancelled:
+    // a queued run the tab did not start is never taken for its own.
+    const SMART_TAG_OWN_RUN_KEY = 'smart-tag-own-run';
+
+    function rememberOwnSmartTagRun(run) {
+        try {
+            sessionStorage.setItem(SMART_TAG_OWN_RUN_KEY, JSON.stringify({
+                queueId: run.queueId || null,
+                jobId: run.jobId || null,
+            }));
+        } catch (_e) { /* storage blocked: this page still knows its ids until a reload */ }
+    }
+
+    function readOwnSmartTagRun() {
+        try {
+            const run = JSON.parse(sessionStorage.getItem(SMART_TAG_OWN_RUN_KEY) || 'null');
+            return run && typeof run === 'object'
+                ? { queueId: run.queueId || null, jobId: run.jobId || null }
+                : { queueId: null, jobId: null };
+        } catch (_e) {
+            return { queueId: null, jobId: null };
+        }
+    }
+
+    function forgetOwnSmartTagRun() {
+        try { sessionStorage.removeItem(SMART_TAG_OWN_RUN_KEY); } catch (_e) { /* ignore */ }
+    }
     // v3.4.1 AI job queue: timestamp of our queued (not-yet-started) start.
     // 0 when we are not waiting in the unified pipeline queue. Guards the
     // pipeline_queue.last_start_error check against stale errors from

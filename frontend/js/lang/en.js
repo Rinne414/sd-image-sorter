@@ -4093,6 +4093,7 @@ window.I18nLang_en = {
     'smartTag.noImages': 'No images in Dataset Maker. Add images first.',
     'smartTag.cancelRequested': 'Smart Tag cancellation requested',
     'smartTag.queuedRunRemoved': 'Removed this Smart Tag run from the queue',
+    'smartTag.cancelNotOwnRun': 'This queued Smart Tag run was started on another page. Cancel it there.',
     'smartTag.cancellingKept': 'Cancelling; results so far are kept',
     'smartTag.jobAlreadyFinished': 'Job already finished',
     'smartTag.trainingPurpose': 'Training purpose',

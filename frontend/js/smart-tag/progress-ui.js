@@ -59,12 +59,14 @@
             // v3.4.1 AI job queue: also resume when our start is still
             // waiting in the unified pipeline queue (e.g. after an F5).
             if (!isLive && queuedEntries.length === 0) return;
-            activeJobId = snap.job_id || activeJobId;
+            // Only this tab's own run is cancelled later (kept across a
+            // reload); a running job on screen may be stopped as shown.
+            const own = readOwnSmartTagRun();
+            activeJobId = own.jobId || activeJobId || (isLive ? snap.job_id || null : null);
+            activeQueueId = own.queueId || activeQueueId;
             showProgress(true);
             if (!isLive && queuedEntries.length > 0) {
                 pipelineQueuedSince = Date.now();
-                // After a reload the page shows the first queued run; Cancel names that one.
-                activeQueueId = queuedEntries[0].queue_id || null;
                 setProgressUI({
                     percent: 0,
                     text: smartTagT('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish')

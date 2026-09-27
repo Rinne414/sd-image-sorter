@@ -1124,7 +1124,14 @@ test('a pipeline_queued start response shows the progress region with the queue 
 test('cancel() posts to /api/smart-tag/cancel and swallows a 404 job-already-finished without throwing', async ({ page }) => {
   let cancelCalls = 0
   let cancelStatus = 200
-  await page.route('**/api/smart-tag/cancel', (route) => {
+  // Cancel names the page's own run, so the page starts one first.
+  await page.route('**/api/smart-tag/start', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ job_id: 'job-pin-13', status: 'running', active: true, total: 1, processed: 0 }),
+    }))
+  await page.route((url) => url.pathname === '/api/smart-tag/cancel', (route) => {
     cancelCalls += 1
     route.fulfill({
       status: cancelStatus,
@@ -1134,6 +1141,8 @@ test('cancel() posts to /api/smart-tag/cancel and swallows a 404 job-already-fin
   })
 
   await openScopedAndReady(page, [10])
+  await page.locator('#smart-tag-enable-vlm').uncheck()
+  await page.evaluate(async () => { await (window as any).SmartTag.run() })
 
   // 200 path: resolves cleanly.
   const firstThrew = await page.evaluate(async () => {
@@ -1212,6 +1221,55 @@ test('cancel() names a started run by its job id', async ({ page }) => {
   expect(cancelUrls).toHaveLength(1)
   expect(new URL(cancelUrls[0]).searchParams.get('job_id')).toBe('job-mine')
   expect(new URL(cancelUrls[0]).searchParams.get('queue_id')).toBeNull()
+})
+
+// 13c. After a reload the tab cancels only its own run (kept in sessionStorage);
+//      a queued run it did not start is never taken for its own.
+// ---------------------------------------------------------------------------
+
+function queuedProgress(queueIds: string[]) {
+  return JSON.stringify({
+    status: 'idle',
+    active: false,
+    pipeline_queue: { queued: queueIds.map((id, index) => ({ queue_id: id, kind: 'smart-tag', position: index + 1 })) },
+  })
+}
+
+test('after a reload cancel names the queue place this tab stored, not the first queued run', async ({ page }) => {
+  await page.route('**/api/smart-tag/progress**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: queuedProgress(['q3', 'q9']) }))
+  const cancelUrls: string[] = []
+  await page.route((url) => url.pathname === '/api/smart-tag/cancel', (route) => {
+    cancelUrls.push(route.request().url())
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'queue_cleared', removed_queued: 1 }) })
+  })
+
+  // This tab queued q9 before the reload (the run keeps it in sessionStorage).
+  await page.evaluate(() => sessionStorage.setItem('smart-tag-own-run', JSON.stringify({ queueId: 'q9', jobId: null })))
+  await gotoSmartTag(page)
+  await openScopedAndReady(page, [10])
+  await expect(page.locator('#smart-tag-progress')).toBeVisible()
+  await page.evaluate(async () => { await (window as any).SmartTag.cancel() })
+
+  expect(cancelUrls).toHaveLength(1)
+  expect(new URL(cancelUrls[0]).searchParams.get('queue_id')).toBe('q9')
+})
+
+test('a queued run this tab did not start is not cancelled from here', async ({ page }) => {
+  await page.route('**/api/smart-tag/progress**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: queuedProgress(['q3']) }))
+  const cancelUrls: string[] = []
+  await page.route((url) => url.pathname === '/api/smart-tag/cancel', (route) => {
+    cancelUrls.push(route.request().url())
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'queue_cleared', removed_queued: 1 }) })
+  })
+
+  await openScopedAndReady(page, [10])
+  await expect(page.locator('#smart-tag-progress')).toBeVisible()
+  await page.evaluate(async () => { await (window as any).SmartTag.cancel() })
+
+  expect(cancelUrls).toEqual([])
+  await expect(page.locator('#toast-container')).toContainText('started on another page')
 })
 
 // ---------------------------------------------------------------------------

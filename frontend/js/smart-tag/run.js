@@ -220,6 +220,7 @@
         }
         activeJobId = null;
         activeQueueId = null;
+        forgetOwnSmartTagRun();
     }
 
     let pendingExistingChoice = null;
@@ -371,6 +372,7 @@
                 pipelineQueuedSince = Date.now();
                 activeJobId = null;
                 activeQueueId = snap.queue_id || null;
+                rememberOwnSmartTagRun({ queueId: activeQueueId });
                 if (typeof window.showToast === 'function') {
                     window.showToast(snap.duplicate
                         ? smartTagT('aiQueue.duplicateToast', 'An identical job is already queued')
@@ -388,6 +390,7 @@
             pipelineQueuedSince = 0;
             activeJobId = snap.job_id || null;
             activeQueueId = null;
+            rememberOwnSmartTagRun({ jobId: activeJobId });
             renderSnapshot(snap);
             startProgressPolling();
         } catch (err) {
@@ -404,11 +407,17 @@
     async function cancelSmartTag() {
         const cancelBtn = smartTag$('#btn-smart-tag-cancel-job');
         // Name our own run: its queue place while it waits (the backend also
-        // finds the job it started as), else its job id. Only a page that knows
-        // neither falls back to the unnamed cancel.
+        // finds the job it started as), else its job id. A page that knows
+        // neither shows a run another page queued: it cancels nothing.
         const runParam = activeQueueId
             ? `?queue_id=${encodeURIComponent(activeQueueId)}`
             : (activeJobId ? `?job_id=${encodeURIComponent(activeJobId)}` : '');
+        if (!runParam) {
+            if (typeof window.showToast === 'function') {
+                window.showToast(smartTagT('smartTag.cancelNotOwnRun', 'This queued Smart Tag run was started on another page. Cancel it there.'), 'info');
+            }
+            return;
+        }
         try {
             const result = await postJson(`/api/smart-tag/cancel${runParam}`, null);
             if (result && result.status === 'queue_cleared') {
@@ -416,6 +425,7 @@
                 stopProgressPolling();
                 pipelineQueuedSince = 0;
                 activeQueueId = null;
+                forgetOwnSmartTagRun();
                 showProgress(false);
                 if (typeof window.showToast === 'function') {
                     window.showToast(smartTagT('smartTag.queuedRunRemoved', 'Removed this Smart Tag run from the queue'), 'info');

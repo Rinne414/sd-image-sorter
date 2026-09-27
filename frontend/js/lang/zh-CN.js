@@ -4093,6 +4093,7 @@ window.I18nLang_zhCN = {
     'smartTag.noImages': '数据集里还没有图片，请先添加图片。',
     'smartTag.cancelRequested': '已请求取消智能标注',
     'smartTag.queuedRunRemoved': '已把这次智能标注移出队列',
+    'smartTag.cancelNotOwnRun': '这次排队中的智能标注是在别的页面开始的，请到那个页面取消。',
     'smartTag.cancellingKept': '正在取消，已经打好的结果会保留',
     'smartTag.jobAlreadyFinished': '任务已经结束',
     'smartTag.trainingPurpose': '训练用途',
