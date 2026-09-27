@@ -52,7 +52,7 @@ Even with a trusted-local threat model, these are enforced in code:
 | Path traversal | `backend/utils/path_validation.py` | Rejects `..`, control characters, dot-only and whitespace-only names; caps path depth and length; resolves and re-validates symlink targets; compares with `Path.parents` rather than string prefixes |
 | Extension allowlisting | `backend/config.py`, `path_validation.py` | Reads only `.png .jpg .jpeg .webp .gif .bmp .tif .tiff`; writes only `.png .jpg .jpeg .webp` |
 | SQL injection | `backend/db_*.py` | Parameterized queries throughout; `LIKE` wildcards escaped with an explicit `ESCAPE` clause |
-| XSS | `frontend/js/` | Vanilla JS, no templating or markdown rendering; user-derived text goes through `textContent` |
+| XSS | `frontend-v4/src/` | React escapes rendered text; no markdown rendering and no `dangerouslySetInnerHTML` |
 | Error disclosure | `backend/main.py` | A global handler logs the traceback server-side and returns a generic message to the client |
 | Destructive operations | `services/image_service.move_file_to_trash` | Deletes go to the Recycle Bin, never `unlink`. Writes are atomic (temp sibling + fsync + `os.replace`) so an interrupted save cannot truncate your original |
 

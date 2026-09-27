@@ -2,7 +2,7 @@
 
 ## System Overview
 
-SD Image Sorter is a local web application for managing, tagging, sorting, and censoring Stable Diffusion generated images. It runs as a FastAPI backend serving a vanilla HTML/JS/CSS frontend on `127.0.0.1:8487` by default (configurable via `SD_IMAGE_SORTER_PORT`).
+SD Image Sorter is a local web application for managing, tagging, sorting, and censoring Stable Diffusion generated images. It runs as a FastAPI backend serving the V4 React frontend at `/v4/` on `127.0.0.1:8487` by default (configurable via `SD_IMAGE_SORTER_PORT`); `/` redirects there.
 
 ## Architecture Diagram
 
@@ -29,7 +29,7 @@ SD Image Sorter is a local web application for managing, tagging, sorting, and c
 #### Entry Point
 - **`main.py`**: FastAPI application assembly, service initialization, router mounting, exception handlers, and process startup.
 - **`app_security.py`**: CORS, localhost-only enforcement, in-memory API rate limiting, and security response headers.
-- **`app_static.py`**: `/static` mounting, no-cache static responses, and `GET /` cache-bust injection for frontend JS/CSS.
+- **`app_static.py`**: serves the V4 build at `/v4/` (hashed assets cached forever, `index.html` never), falls back to `index.html` for client routes, and redirects `/` to `/v4/` with its query string.
 - **`app_diagnostics.py`**: Bounded support diagnostics, support-log redaction, and file-manager opening for the support log.
 
 #### Routers (`routers/`)
@@ -70,42 +70,21 @@ Business logic layer with dependency injection:
 #### Utilities (`utils/`)
 - **`path_validation.py`**: Path traversal prevention, filename sanitization
 
-### 2. Frontend (`frontend/`)
+### 2. Frontend (`frontend-v4/`)
 
-Single-page application with no build step. Every script is a classic
-`<script src>` tag in `index.html` sharing one global lexical scope, so **tag
-order is the dependency graph**. The only dynamic loader is
-`dataset/core.js:_appendOrderedScript`, which appends the rest of the Dataset
-Maker family.
+React + TypeScript single-page app, built by Vite into `frontend-v4/dist`
+(release packages ship only that build; a source checkout builds it from the
+launchers once Node.js is installed). The address hash is the route.
 
-- **`index.html`**: every view, modal and overlay in one file
-- **`js/modules/core/`**: the earliest prerequisites, loaded before anything
-  else (`storage-utils.js`, `request-manager.js`)
-- **`js/stores/`**: `FilterStore` / `SelectionStore`. Both hold key-by-key
-  allowlists — a new filter field must be added to **both**, or it is silently
-  dropped
-- **`js/app.js`**: boot remainder only (~245 lines). The former god file was
-  decomposed into **`js/app/`** (41 modules: state-core, api, filters, flows,
-  binders)
-- **Feature families**, each a directory with an ordered set of modules:
-  `gallery/`, `censor/`, `dataset/`, `manual-sort/`, `autosep/`, `similar/`,
-  `prompt-lab/`, `artist/`, `image-reader/`, `reverse-prompt/`, `smart-tag/`,
-  `vlm-caption/`, `guide/`, `v321/`
-- **`js/gallery.js`, `similar.js`, `prompt-lab.js`, `artist-ident.js`**: 8–10
-  line compatibility shims that only point at the directory above. Do not add
-  behavior to them
-- **`js/lang/en.js`, `js/lang/zh-CN.js`**: locale packs with **identical key
-  sets** — that symmetry is a contract enforced by a test
-- **`js/theme.js`**: the Graphite / Black+Blue palette picker
-
-Stylesheets load `styles.css` first, then the feature sheets, then
-**`css/tokens.css` LAST — and that ordering is load-bearing.** `tokens.css` is
-an *override layer*, not a cleaned source of truth: `styles.css` and
-`ui-refresh.css` still hold their original hardcoded colors, radii and
-line-heights, and `tokens.css` wins only because it is last. Deleting or
-"tidying" those sheets on the assumption that `tokens.css` is authoritative
-will break the design. The current visual language is flat graphite with one
-accent — not glassmorphism, which `tokens.css` explicitly retired.
+- **`src/app/`**: the shell (top bar, page switch)
+- **`src/features/`**: one folder per area (`library/`, `batch/`, `sort/`,
+  `censor/`, `tools/`, `settings/`, ...)
+- **`src/api/`**: the typed client; `schema.d.ts` is generated from the
+  backend's OpenAPI (`npm run gen:api`)
+- **`src/state/`**: app state (zustand); **`src/i18n/`**: zh-CN and en packs
+  with identical key sets
+- **`src/design/tokens.css`**: the design tokens. The visual language is flat
+  graphite with one accent — not glassmorphism.
 
 ### 3. Runtime Layout
 
@@ -227,7 +206,7 @@ The project is intentionally a local-first monolith, but individual files should
 
 ### Backend
 
-- `main.py` is an application composition file. Do not move security middleware, static asset serving, cache busting, support diagnostics, or OS file-manager logic back into it.
+- `main.py` is an application composition file. Do not move security middleware, frontend serving, support diagnostics, or OS file-manager logic back into it.
 - Routers should own HTTP request/response contracts and framework background-task scheduling. Business workflow state belongs in services.
 - Sorting request schemas belong in `services/sorting_models.py`; manual-sort JSON file IO belongs in `services/sorting_session_store.py`. Keep `sorting_service.py` focused on workflow orchestration and compatibility state.
 - Very large service files are allowed only as temporary refactor waypoints. New cross-feature helpers should be extracted into focused service modules instead of growing `image_service.py`, `sorting_service.py`, or `smart_tag_service.py`.
@@ -235,21 +214,11 @@ The project is intentionally a local-first monolith, but individual files should
 
 ### Frontend
 
-- `app.js` is boot-only. New reusable infrastructure goes under
-  `frontend/js/modules/core/` or `frontend/js/modules/utils/`, loaded before
-  `app.js` in `index.html`.
-- Feature behavior lives in that feature's directory (`gallery/`, `censor/`,
-  `dataset/`, `manual-sort/`, …), never in `app.js` or in the 8–10 line
-  compatibility shims.
-- `tokens.css` owns the palette and current chrome, and must stay the last
-  stylesheet. Feature stylesheets own their own surfaces. Avoid competing
-  selector ownership for the same layout shell.
-- Dynamic text on an element that carries `data-i18n` will be reset by the
-  `#app` MutationObserver in `ui-refresh.js`. Either repoint the `data-i18n`
-  key or claim `dataset.i18nLocked = '1'`.
-- Adding a palette means converting the feature stylesheets first. Only
-  `tokens.css` has `data-theme` selectors today; the other sheets still carry
-  hardcoded dark values, which is why a light theme is not offered.
+- Feature behavior lives in its own folder under `frontend-v4/src/features/`;
+  the shell in `src/app/` only lays pages out.
+- Colors, sizes and type come from the tokens in `src/design/tokens.css`.
+- Every user-visible string is an i18n key present in both the zh-CN and en
+  packs.
 
 ## Performance Considerations
 

@@ -12,10 +12,11 @@ After building release assets:
 
 ```bash
 VERSION=3.1.0-techdebt.$(git rev-parse --short HEAD)
-python3 scripts/lazy_release_qa.py --version "$VERSION" --frontend
+python3 scripts/lazy_release_qa.py --version "$VERSION"
 ```
 
-This runs package checks, backend/API smoke, and a real Playwright browser that clicks through the UI.
+This runs package checks and the backend/API smoke. The V4 interface is covered
+by the Playwright specs in `tests/e2e/specs/v4-*.spec.ts`.
 
 Use the current version string from the package filename. If you only want to
 validate the zip/tar assets:
@@ -25,26 +26,18 @@ VERSION=3.1.0-techdebt.$(git rev-parse --short HEAD)
 python3 scripts/lazy_release_qa.py --version "$VERSION" --skip-server
 ```
 
-## Frontend Human Clicks
-
-Add `--frontend` when you want the lazy gate to act like a real user. It starts a real browser with Playwright against the isolated QA backend, then clicks through Gallery, filters, detail modal, selection/export, Censor, Reader, Obfuscation, Auto-Separate, Manual Sort controls, Queue Manager, Similarity, Prompt Lab, Artist, Model Manager, language toggle, and mobile navigation.
-
-```bash
-python3 scripts/lazy_release_qa.py --version "$VERSION" --frontend
-```
-
 ## Large Smoke
 
 For a larger synthetic gallery/selection scan:
 
 ```bash
-python3 scripts/lazy_release_qa.py --version "$VERSION" --frontend --image-count 10000 --scan-timeout 900
+python3 scripts/lazy_release_qa.py --version "$VERSION" --image-count 10000 --scan-timeout 900
 ```
 
 For a heavier stress run:
 
 ```bash
-python3 scripts/lazy_release_qa.py --version "$VERSION" --frontend --image-count 50000 --scan-timeout 3600
+python3 scripts/lazy_release_qa.py --version "$VERSION" --image-count 50000 --scan-timeout 3600
 ```
 
 ## What It Covers
@@ -56,8 +49,7 @@ python3 scripts/lazy_release_qa.py --version "$VERSION" --frontend --image-count
 - Isolated temporary app data and SQLite DB
 - Synthetic images with WebUI, Forge, NovelAI, ComfyUI, plain JPG, corrupt file, zero-byte file, unicode paths, nested folders, and long prompts
 - Backend startup on a random local port
-- Optional real browser UI click-through with `--frontend`
-- `/`, `/docs`, `/api/stats`
+- `/` (redirects to `/v4/`), `/docs`, `/api/stats`
 - Model/status endpoints for Models, Censor, Aesthetic, Artist, Similarity, Prompt Lab, and Updates
 - Path validation and folder browsing
 - Folder scan and progress polling
