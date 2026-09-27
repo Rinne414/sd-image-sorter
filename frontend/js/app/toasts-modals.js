@@ -512,7 +512,9 @@ function closeFilterModal() {
 // Custom input modal (replaces native prompt())
 let inputModalResolve = null;
 
-function showInputModal(title, message, defaultValue = '') {
+// options.browseFolder: show a Browse button that fills the field from the
+// folder browser; options.suggestions: values offered as the user types.
+function showInputModal(title, message, defaultValue = '', options = {}) {
     return new Promise((resolve) => {
         // Resolve previous if still pending
         if (inputModalResolve) {
@@ -531,7 +533,19 @@ function showInputModal(title, message, defaultValue = '') {
         if (inputEl) {
             inputEl.value = defaultValue;
             inputEl.placeholder = '';
+            inputEl.dataset.folderBrowserContainer = 'input-modal-folder-browser';
         }
+        const browseBtn = $('#btn-input-browse');
+        if (browseBtn) browseBtn.hidden = !options.browseFolder;
+        const suggestionsEl = $('#input-modal-suggestions');
+        if (suggestionsEl) {
+            suggestionsEl.replaceChildren(...(options.suggestions || []).map((value) => {
+                const option = document.createElement('option');
+                option.value = value;
+                return option;
+            }));
+        }
+        if (typeof window.hideFolderBrowser === 'function') window.hideFolderBrowser();
 
         // Show modal
         showModal('input-modal');
@@ -570,6 +584,9 @@ function initInputModal() {
     okBtn?.addEventListener('click', handleOk);
     cancelBtn?.addEventListener('click', handleCancel);
     backdrop?.addEventListener('click', handleCancel);
+    $('#btn-input-browse')?.addEventListener('click', () => {
+        if (inputField && typeof window.showFolderBrowser === 'function') window.showFolderBrowser(inputField);
+    });
 
     // Handle Enter key in input field
     inputField?.addEventListener('keydown', (e) => {

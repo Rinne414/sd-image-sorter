@@ -6722,9 +6722,12 @@
             <div class="modal-content modal-small">
                 <h3 id="input-modal-title" data-i18n="modal.enterValue">Enter Value</h3>
                 <p id="input-modal-message" class="modal-description"></p>
-                <div class="form-group">
-                    <input type="text" id="input-modal-field" class="input-field" placeholder="">
+                <div class="form-group input-modal-field-row">
+                    <input type="text" id="input-modal-field" class="input-field" placeholder="" list="input-modal-suggestions">
+                    <button type="button" class="btn btn-secondary" id="btn-input-browse" data-i18n="common.browse" hidden>Browse</button>
                 </div>
+                <datalist id="input-modal-suggestions"></datalist>
+                <div id="input-modal-folder-browser"></div>
                 <div class="modal-actions">
                     <button class="btn btn-ghost" id="btn-input-cancel" data-i18n="modal.cancel">Cancel</button>
                     <button class="btn btn-primary" id="btn-input-ok" data-i18n="modal.ok">OK</button>

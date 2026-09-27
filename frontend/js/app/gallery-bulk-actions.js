@@ -290,6 +290,32 @@ function removeSelectedGalleryImages() {
     return removeGalleryImagesByIds(getSelectedGalleryIds());
 }
 
+// Move/copy destinations the user chose, newest first. Kept apart from the
+// recent IMPORT folders (sd-image-sorter-recent-folders): the folder images
+// were imported from is rarely where they should be moved to.
+const RECENT_MOVE_DESTINATIONS_KEY = 'sd-image-sorter-recent-move-destinations';
+const MAX_RECENT_MOVE_DESTINATIONS = 8;
+
+function getRecentMoveDestinations() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(RECENT_MOVE_DESTINATIONS_KEY) || '[]');
+        return Array.isArray(saved) ? saved.filter((item) => typeof item === 'string' && item) : [];
+    } catch (_e) {
+        return [];
+    }
+}
+
+function addRecentMoveDestination(path) {
+    if (!path || typeof path !== 'string') return;
+    const updated = [path, ...getRecentMoveDestinations().filter((item) => item !== path)]
+        .slice(0, MAX_RECENT_MOVE_DESTINATIONS);
+    try {
+        localStorage.setItem(RECENT_MOVE_DESTINATIONS_KEY, JSON.stringify(updated));
+    } catch (_e) {
+        /* storage full or blocked: the move itself already happened */
+    }
+}
+
 async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {}) {
     const normalizedOperation = operation === 'copy' ? 'copy' : 'move';
     // v3.2.1 task #34: when the user is in "Select All Filtered" scope, the
@@ -321,7 +347,8 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
                 .replace('{operation}', operationLabel),
         appT('selection.destinationPromptBody', 'Enter the destination folder path for {count} selected image(s).')
             .replace('{count}', totalCount),
-        getRecentFolders()[0] || ''
+        getRecentMoveDestinations()[0] || '',
+        { browseFolder: true, suggestions: getRecentMoveDestinations() }
     );
     if (!destination || !destination.trim()) return;
 
@@ -396,7 +423,7 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
                 }
             }
 
-            addRecentFolder(trimmedDestination);
+            addRecentMoveDestination(trimmedDestination);
             resetSelectionDataCache();
             updateSelectionUI();
             emitSelectionStateChanged();

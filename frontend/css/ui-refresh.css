@@ -12380,3 +12380,18 @@ html .nav-bar.nav-measuring * {
     color: var(--text-2);
     margin-right: auto;
 }
+
+/* Input dialog with a folder field: path + Browse on one row. */
+.input-modal-field-row {
+    display: flex;
+    gap: 8px;
+}
+
+.input-modal-field-row .input-field {
+    flex: 1;
+    min-width: 0;
+}
+
+#btn-input-browse[hidden] {
+    display: none;
+}
