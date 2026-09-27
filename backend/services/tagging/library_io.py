@@ -283,6 +283,13 @@ class LibraryIOMixin:
 
             conn.commit()
 
+        if fixed_count:
+            # Rows were deleted: drop the cached tag counts (autocomplete answers
+            # from them) and tell the tag-write listeners, like every tag write.
+            from db_tags import _after_tag_write
+
+            _after_tag_write()
+
         return {
             "status": "ok",
             "images_fixed": fixed_count,
