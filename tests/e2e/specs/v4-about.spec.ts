@@ -469,7 +469,7 @@ test('support: diagnostics copied with the hardware, the log folder opened, the 
   await expect(page.getByText('Diagnostics copied')).toBeVisible()
   const copied = await page.evaluate(() => navigator.clipboard.readText())
   expect(copied).toContain('SD Image Sorter diagnostics')
-  expect(copied).toContain('Interface: V4')
+  expect(copied).toContain('Interface: Vopus')
   expect(copied).toContain('GPU: NVIDIA GeForce RTX 3090 (AI can use it)')
   expect(copied).toContain('Update check: unchecked')
   expect(copied).toContain('Recent backend log:')

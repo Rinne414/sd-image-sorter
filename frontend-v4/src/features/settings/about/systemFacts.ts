@@ -51,7 +51,7 @@ export function diagnosticLines(facts: SystemFacts | null, update: string, win: 
       ]
     : ['Hardware: unavailable']
   return [
-    'Interface: V4',
+    'Interface: Vopus',
     ...hardware,
     `Update check: ${update}`,
     `Window: ${win.width}x${win.height} at ${Math.round(win.zoom * 100)}%`,

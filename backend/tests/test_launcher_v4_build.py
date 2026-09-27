@@ -159,7 +159,8 @@ def test_build_if_needed_without_npm_prints_one_bilingual_line_and_continues(
     lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
     assert len(lines) == 1
     assert "Node.js" in lines[0]
-    assert "V3.5" in lines[0]
+    assert "Vopus" in lines[0]
+    assert "V3.5" not in lines[0]
     assert "需要" in lines[0]
 
 
@@ -174,7 +175,7 @@ def test_build_if_needed_reports_a_failed_build_and_still_exits_zero(
 
     assert len(calls) == 1
     out = capsys.readouterr().out
-    assert "V3.5" in out
+    assert "Vopus" in out
     assert "失败" in out
 
 
@@ -185,7 +186,7 @@ def test_build_if_needed_stops_after_a_failed_install(monkeypatch, tmp_path, cap
     assert launcher_v4_build.build_if_needed(frontend) == 0
 
     assert [command[1:] for command, _cwd in calls] == [["ci"]]
-    assert "V3.5" in capsys.readouterr().out
+    assert "Vopus" in capsys.readouterr().out
 
 
 def test_build_if_needed_survives_npm_that_cannot_start(monkeypatch, tmp_path, capsys):

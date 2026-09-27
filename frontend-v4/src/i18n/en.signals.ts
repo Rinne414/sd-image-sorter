@@ -49,7 +49,7 @@ export const enSignals: Record<keyof typeof zhCNSignals, string> = {
   'signals.tag.queued': 'Queued: {n} images. They start by themselves when the tagging ahead ends; see Jobs.',
   'signals.tag.duplicate': 'The same tagging run is already waiting in line; it was not added twice.',
   'signals.tag.reset': 'Restore defaults',
-  'signals.tag.resetTitle': 'Forget the remembered tagger, thresholds, GPU switch, drop list, tag limit, noise switch, caption handling and custom model paths (V4 only)',
+  'signals.tag.resetTitle': 'Forget the remembered tagger, thresholds, GPU switch, drop list, tag limit, noise switch, caption handling and custom model paths (Vopus only)',
   'signals.tag.resetDone': 'Defaults restored',
 
   'signals.next.pick': 'Pick the {n} in the Library',

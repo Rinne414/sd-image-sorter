@@ -44,7 +44,7 @@ export function TopBar() {
       <button type="button" className={styles.brand} onClick={() => setPage('home')} aria-label={t('nav.home')} title={t('nav.home')}>
         <FrameMark />
         <span className={styles.brandName}>SD Image Sorter</span>
-        <span className={`${styles.version} mono`}>V4</span>
+        <span className={`${styles.version} mono`}>Vopus</span>
       </button>
 
       <nav className={styles.tabs} aria-label="main">

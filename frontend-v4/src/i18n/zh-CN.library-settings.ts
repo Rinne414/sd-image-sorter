@@ -37,7 +37,7 @@ export const zhCNLibrarySettings = {
   // 图库 › 空闲时自动检查新图
   'libset.auto.title': '空闲时自动检查新图',
   'libset.auto.label': '空闲时自动检查来源文件夹里的新图',
-  'libset.auto.hint': '开着 V4 且一分钟没操作时，最多每 5 分钟挑一个最久没扫描的来源文件夹，导入里面的新图。只导入，不打标签，不用 GPU。',
+  'libset.auto.hint': '开着 Vopus 且一分钟没操作时，最多每 5 分钟挑一个最久没扫描的来源文件夹，导入里面的新图。只导入，不打标签，不用 GPU。',
   'libset.auto.failed': '空闲检查没有开始：{reason}。可以在「设置 › 图库」里手动重新扫描。',
 
   // 图库 › 图库

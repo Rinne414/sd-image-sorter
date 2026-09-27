@@ -45,7 +45,7 @@ describe('diagnosticLines', () => {
   test('hardware, the update check and the window, for the copied bundle', () => {
     const facts = systemFacts({ gpu_name: 'RTX 3090', torch_cuda_available: true, gpu_vram_total_mb: 24576, gpu_vram_available_mb: 20480, total_ram_gb: 64, available_ram_gb: 40, cpu_count: 24, os_platform: 'Windows' })
     expect(diagnosticLines(facts, 'latest', { width: 1366, height: 768, zoom: 1, agent: 'Chrome/140' })).toEqual([
-      'Interface: V4',
+      'Interface: Vopus',
       'GPU: RTX 3090 (AI can use it)',
       'VRAM: 4.0 GB used of 24.0 GB',
       'RAM: 40.0 GB free of 64.0 GB',
@@ -59,7 +59,7 @@ describe('diagnosticLines', () => {
 
   test('unknown hardware is said so, not skipped', () => {
     expect(diagnosticLines(null, 'unchecked', { width: 1920, height: 1080, zoom: 1.15, agent: 'x' })).toEqual([
-      'Interface: V4',
+      'Interface: Vopus',
       'Hardware: unavailable',
       'Update check: unchecked',
       'Window: 1920x1080 at 115%',

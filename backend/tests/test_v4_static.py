@@ -100,3 +100,5 @@ def test_unbuilt_v4_explains_how_to_build(tmp_path):
     for text in ("Node.js", "run.bat", "run.sh", "npm run build", "自动构建", "automatically"):
         assert text in res.text
     assert "V3.5" not in res.text
+    assert "Vopus" in res.text
+    assert "V4" not in res.text

@@ -703,7 +703,7 @@ export const zhCN = {
   'batch.panel.tag': '用 AI 给这 {n} 张打标签，也可以加一句自然语言描述，结果写进这个批次的训练 caption。',
   'batch.panel.edit': '逐张改这 {n} 张的训练 caption：加触发词、删掉不要的标签。只改这个批次，不动图库里的标签。',
   'batch.panel.check': '导出前检查这 {n} 张：标签太多或太少、重复的图、还没打标的图。',
-  'batch.panel.unknown': '这一步是模板里自己加的，V4 还不知道怎么做。',
+  'batch.panel.unknown': '这一步是模板里自己加的，Vopus 还不知道怎么做。',
   'batch.panel.applies': '作用于这个批次的全部 {n} 张图。',
   'batch.panel.appliesNone': '这个批次还没有图，先到「挑图」加图。',
   'batch.panel.next': '下一步：{step}',

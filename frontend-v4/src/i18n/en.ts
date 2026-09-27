@@ -703,7 +703,7 @@ export const en: Record<MessageKey, string> = {
   'batch.panel.tag': "Tag the {n} images with AI, optionally with a natural-language description; the result goes into this batch's training captions.",
   'batch.panel.edit': "Edit the training captions of the {n} images one by one: add trigger words, drop unwanted tags. Only this batch changes, not the library's tags.",
   'batch.panel.check': 'Check the {n} images before export: too many or too few tags, duplicates, untagged images.',
-  'batch.panel.unknown': 'A template added this step, and V4 does not know how to do it yet.',
+  'batch.panel.unknown': 'A template added this step, and Vopus does not know how to do it yet.',
   'batch.panel.applies': 'Applies to all {n} images in this batch.',
   'batch.panel.appliesNone': 'This batch has no images yet; add some in the Pick step first.',
   'batch.panel.next': 'Next: {step}',

@@ -36,7 +36,7 @@ export const enLibrarySettings: Record<keyof typeof zhCNLibrarySettings, string>
   // Library › Checking for new images while idle
   'libset.auto.title': 'Check for new images while idle',
   'libset.auto.label': 'Check the source folders for new images while idle',
-  'libset.auto.hint': 'While V4 is open and untouched for a minute, at most every 5 minutes the source folder scanned longest ago is checked and its new images imported. Import only: no tagging, no GPU.',
+  'libset.auto.hint': 'While Vopus is open and untouched for a minute, at most every 5 minutes the source folder scanned longest ago is checked and its new images imported. Import only: no tagging, no GPU.',
   'libset.auto.failed': 'The idle check did not start: {reason}. You can rescan by hand in Settings › Library.',
 
   // Library › Libraries

@@ -1,12 +1,12 @@
-"""Build the V4 interface (/v4/) for a source checkout before the app starts.
+"""Build the Vopus interface (/v4/) for a source checkout before the app starts.
 
 run.bat and run.sh call this. Release packages ship frontend-v4/dist already
 built and carry no sources, so there it does nothing. In a source checkout it
 runs ``npm ci`` when node_modules is missing or older than package-lock.json,
 then ``npm run build`` when the build is missing or older than its inputs.
 
-It never stops V3.5 from starting: every outcome exits 0, and a skipped or
-failed V4 build prints one plain line in Chinese and English.
+It never stops the app from starting: every outcome exits 0, and a skipped or
+failed build prints one plain line in Chinese and English.
 """
 
 from __future__ import annotations
@@ -30,12 +30,12 @@ BUILD_INPUTS = (
 INSTALL_STAMP = Path("node_modules") / ".package-lock.json"
 
 NO_NODE_MESSAGE = (
-    "[INFO] V4 界面（/v4/）需要 Node.js 才能构建，本次跳过；V3.5 界面照常可用。"
-    " / The V4 interface (/v4/) needs Node.js to build and is skipped; V3.5 still works."
+    "[INFO] Vopus 界面（/v4/）需要 Node.js 才能构建，本次跳过；程序照常启动。"
+    " / The Vopus interface (/v4/) needs Node.js to build and is skipped; the app still starts."
 )
 FAILED_MESSAGE = (
-    "[WARN] V4 界面（/v4/）构建失败，本次跳过；V3.5 界面照常可用。"
-    " / The V4 interface (/v4/) failed to build and is skipped; V3.5 still works."
+    "[WARN] Vopus 界面（/v4/）构建失败，本次跳过；程序照常启动。"
+    " / The Vopus interface (/v4/) failed to build and is skipped; the app still starts."
 )
 
 
@@ -73,11 +73,11 @@ def plan_build(frontend_dir: Path) -> str:
 
 
 def _run_npm(npm: str, npm_args: list[str], frontend_dir: Path) -> bool:
-    print(f"[Info] V4: npm {' '.join(npm_args)}", flush=True)
+    print(f"[Info] Vopus: npm {' '.join(npm_args)}", flush=True)
     try:
         result = subprocess.run([npm, *npm_args], cwd=frontend_dir)
     except OSError as exc:
-        print(f"[WARN] V4: npm {' '.join(npm_args)} could not start: {exc}", flush=True)
+        print(f"[WARN] Vopus: npm {' '.join(npm_args)} could not start: {exc}", flush=True)
         return False
     return result.returncode == 0
 
@@ -90,13 +90,13 @@ def build_if_needed(frontend_dir: Path) -> int:
     if npm is None:
         print(NO_NODE_MESSAGE, flush=True)
         return 0
-    print("[Info] Building the V4 interface (/v4/)...", flush=True)
+    print("[Info] Building the Vopus interface (/v4/)...", flush=True)
     npm_steps = [["ci"], ["run", "build"]] if step == "install" else [["run", "build"]]
     for npm_args in npm_steps:
         if not _run_npm(npm, npm_args, frontend_dir):
             print(FAILED_MESSAGE, flush=True)
             return 0
-    print("[OK] V4 interface built: /v4/", flush=True)
+    print("[OK] Vopus interface built: /v4/", flush=True)
     return 0
 
 
@@ -107,7 +107,7 @@ def main() -> int:
     frontend_dir = Path(__file__).resolve().parent.parent / FRONTEND_DIRNAME
     try:
         return build_if_needed(frontend_dir)
-    except Exception as exc:  # noqa: BLE001 - a V4 problem must never block V3.5
+    except Exception as exc:  # noqa: BLE001 - a build problem must never block the app
         print(f"{FAILED_MESSAGE} ({exc})", flush=True)
         return 0
 

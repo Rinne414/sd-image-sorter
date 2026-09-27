@@ -20,13 +20,13 @@ class ImmutableStaticFiles(StaticFiles):
 
 
 V4_NOT_BUILT_MESSAGE = (
-    "SD Image Sorter V4 界面还没有构建。\n"
-    "安装 Node.js 后重新运行 run.bat（Windows）或 run.sh（Linux / macOS），会自动构建 V4；"
+    "SD Image Sorter Vopus 界面还没有构建。\n"
+    "安装 Node.js 后重新运行 run.bat（Windows）或 run.sh（Linux / macOS），会自动构建 Vopus 界面；"
     "也可以在 frontend-v4 文件夹里运行 npm ci 和 npm run build，然后刷新本页。\n"
     "\n"
-    "SD Image Sorter V4 has not been built yet.\n"
+    "SD Image Sorter Vopus has not been built yet.\n"
     "Install Node.js, then start the app again with run.bat (Windows) or run.sh (Linux / macOS): "
-    "it builds V4 automatically. You can also run npm ci and npm run build in the frontend-v4 folder, "
+    "it builds Vopus automatically. You can also run npm ci and npm run build in the frontend-v4 folder, "
     "then reload this page.\n"
 )
 

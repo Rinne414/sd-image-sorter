@@ -51,7 +51,7 @@ const JARGON = new Set([
   ...['GPU', 'CPU', 'CUDA', 'API', 'URL', 'HTTP', 'HTTPS', 'http', 'https', 'localhost', 'SOCKS', 'socks5', 'VPN', 'SSD', 'RGB', 'HDR', 'DPI'],
   ...['GB', 'MB', 'KB', 'B', 'MP', 'px', 'ms', 'ID', 'MIT', 'NSFW'],
   // generation and training words
-  ...['SEED', 'CFG', 'caption', 'Caption', 'token', 'tokens', 'V3.5', 'V4'],
+  ...['SEED', 'CFG', 'caption', 'Caption', 'token', 'tokens', 'V3.5', 'Vopus'],
   // a language named in its own language (the language picker)
   'English',
 ])

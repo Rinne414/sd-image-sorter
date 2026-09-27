@@ -28,11 +28,11 @@ function VersionSection() {
   return (
     <Section title={t('about.version.title')} testId="about-version">
       <p className={styles.version}>
-        SD Image Sorter{' '}
+        SD Image Sorter
+        <span className={`${styles.badge} mono`}>Vopus</span>
         <span className="mono" data-testid="app-version">
           {version ?? (stats.isPending ? t('about.version.loading') : '—')}
         </span>
-        <span className={`${styles.badge} mono`}>V4</span>
       </p>
       {home && (
         <p className={`${styles.hint} ${styles.links}`}>
