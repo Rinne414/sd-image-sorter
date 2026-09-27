@@ -118,7 +118,8 @@ export const enReader: Record<keyof typeof zhCNReader, string> = {
   'reader.warn.recordPreserved': 'The original generation record ({keys}) was kept so it is not lost; it still describes the original generation, not your edits.',
   'reader.warn.chunksNotCarried': '{format} cannot hold these original data blocks, so they were not carried over: {keys}. Save as PNG to keep them.',
   'reader.warn.animationFlattened': '{format} cannot hold animation, so only the current frame was saved (the original has {frames} frames). Save as PNG or WebP to keep the animation.',
-  'reader.warn.settingsDropped': 'The editor rewrites the parameters from the fields it shows, so these settings from the original are not in the new file: {keys}.',
+  'reader.warn.settingsDropped': 'These settings from the original are not in the new file (you cleared them, or they belonged to a value you changed): {keys}.',
+  'reader.warn.naiFieldsUnsaved': 'A NovelAI record has no place for these, so they were not saved: {keys}.',
   'reader.warn.refreshFailed': 'The file was saved, but the library entry did not update itself; if the details still look old, click "Read again" on the generation card.',
 
   // reverse prompt

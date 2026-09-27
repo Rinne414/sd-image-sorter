@@ -32,8 +32,8 @@ ANIMATION_FLATTENED_WARNING = (
     "(the original has {frames} frames). Save as PNG or WebP to keep the animation."
 )
 DROPPED_PARAMETER_SETTINGS_WARNING = (
-    "The editor rebuilds the parameter block from the fields it shows, so these "
-    "settings from the original are not in the saved file: {keys}."
+    "These settings from the original are not in the saved file (they were "
+    "cleared in the editor, or they described a value that was changed): {keys}."
 )
 ANIMATION_TOO_LARGE_MESSAGE = (
     "This animation is too large to rewrite safely ({frames} frames, {megapixels:.0f} "
@@ -405,14 +405,12 @@ def dropped_parameter_settings_warning(
     source_chunks: Optional[Dict[str, str]],
     parameters_text: str,
 ) -> Optional[str]:
-    """Name settings the original parameter block had and the rebuilt one lacks.
+    """Name settings the original parameter block had and the saved one lacks.
 
-    The editor owns the ``parameters`` chunk and rebuilds it from the fields it
-    displays, so a setting the Reader does not show (``Model hash``,
-    ``Clip skip``, an extension's own key) disappears on save. Merging unknown
-    A1111 keys back in would mean re-emitting someone else's parameter syntax,
-    which risks corrupting the one block the app itself reads, so the loss is
-    reported instead of guessed at.
+    Settings the Reader does not show are copied back verbatim
+    (``image_metadata_records.keep_unshown_parameter_settings``), so what is
+    left to name is a shown setting the user cleared and a dependent setting
+    that went stale (``Model hash`` after the model changed).
     """
     source_parameters = (source_chunks or {}).get("parameters")
     if not source_parameters:
@@ -545,6 +543,8 @@ def collect_frames_for_save(
     return frames, save_kwargs
 
 
+from services.image_metadata_records import NAI_UNSAVED_FIELDS_WARNING  # noqa: E402
+
 # The warnings above are English sentences. V4 translates them, so the save
 # response also names each one by a code, with the values its sentence needs.
 # The patterns are built from the same constants and templates the writer
@@ -559,6 +559,7 @@ _TEMPLATE_WARNING_CODES = (
     (UNCARRIED_CHUNKS_WARNING, "chunks_not_carried"),
     (ANIMATION_FLATTENED_WARNING, "animation_flattened"),
     (DROPPED_PARAMETER_SETTINGS_WARNING, "settings_dropped"),
+    (NAI_UNSAVED_FIELDS_WARNING, "nai_fields_unsaved"),
 )
 
 

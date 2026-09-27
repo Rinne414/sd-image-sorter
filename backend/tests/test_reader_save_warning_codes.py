@@ -80,7 +80,7 @@ def test_jpeg_save_names_every_warning_by_code(test_client, tmp_path: Path):
     assert JPEG_ALPHA_WARNING in body["warnings"]
 
 
-def test_png_save_reports_kept_record_and_dropped_settings(test_client, tmp_path: Path):
+def test_png_save_reports_kept_record_and_keeps_unshown_settings(test_client, tmp_path: Path):
     src = tmp_path / "src.png"
     _png_with_chunks(
         src, parameters="1girl\nSteps: 20, Clip skip: 2, Model hash: abcd", comfy=True
@@ -94,12 +94,27 @@ def test_png_save_reports_kept_record_and_dropped_settings(test_client, tmp_path
         {"prompt": "1girl, edited", "steps": 20},
     )
 
-    by_code = {entry["code"]: entry["params"] for entry in body["warning_codes"]}
-    assert by_code["record_preserved"] == {"keys": ["prompt", "workflow"]}
-    assert by_code["settings_dropped"] == {"keys": ["Clip skip", "Model hash"]}
-    assert [entry["code"] for entry in body["warning_codes"]] == [
-        "settings_dropped",
-        "record_preserved",
+    # Settings the editor does not show are kept, so only the record is named.
+    assert [entry["code"] for entry in body["warning_codes"]] == ["record_preserved"]
+    assert body["warning_codes"][0]["params"] == {"keys": ["prompt", "workflow"]}
+
+
+def test_png_save_names_a_model_hash_that_went_stale(test_client, tmp_path: Path):
+    src = tmp_path / "src.png"
+    _png_with_chunks(
+        src, parameters="1girl\nSteps: 20, Model: old, Model hash: abcd, Clip skip: 2"
+    )
+
+    body = _save(
+        test_client,
+        src,
+        tmp_path / "out.png",
+        "png",
+        {"prompt": "1girl", "steps": 20, "model": "new"},
+    )
+
+    assert body["warning_codes"] == [
+        {"code": "settings_dropped", "params": {"keys": ["Model hash"]}}
     ]
 
 
@@ -149,4 +164,12 @@ def test_each_known_warning_maps_to_its_code():
         {"code": "settings_dropped", "params": {"keys": ["Clip skip"]}},
         {"code": "library_refresh_failed", "params": {}},
         {"code": "other", "params": {"text": "Something new the writer says."}},
+    ]
+
+
+def test_the_novelai_warning_has_its_own_code():
+    from services.image_metadata_records import NAI_UNSAVED_FIELDS_WARNING
+
+    assert warning_codes_for([NAI_UNSAVED_FIELDS_WARNING.format(keys="LoRAs")]) == [
+        {"code": "nai_fields_unsaved", "params": {"keys": ["LoRAs"]}}
     ]

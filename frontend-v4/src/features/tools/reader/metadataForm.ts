@@ -119,6 +119,7 @@ const WARNING_KEYS: Record<string, ToolKey> = {
   chunks_not_carried: 'reader.warn.chunksNotCarried',
   animation_flattened: 'reader.warn.animationFlattened',
   settings_dropped: 'reader.warn.settingsDropped',
+  nai_fields_unsaved: 'reader.warn.naiFieldsUnsaved',
   library_refresh_failed: 'reader.warn.refreshFailed',
 }
 

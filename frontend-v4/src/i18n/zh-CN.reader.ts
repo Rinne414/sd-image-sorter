@@ -124,7 +124,8 @@ export const zhCNReader = {
   'reader.warn.recordPreserved': '原图里的生成记录（{keys}）原样留下了，没有丢；但它们记的还是原来的生成，不包含这次的修改。',
   'reader.warn.chunksNotCarried': '{format} 存不下这些原有的数据块，没有带过去：{keys}。要保留请存成 PNG。',
   'reader.warn.animationFlattened': '{format} 不能存动画，只保存了当前这一帧（原图有 {frames} 帧）。要保留动画请存成 PNG 或 WebP。',
-  'reader.warn.settingsDropped': '编辑器只按显示的这几项重写参数，原图里的这些设置没有写进新文件：{keys}。',
+  'reader.warn.settingsDropped': '原图里的这些设置没有写进新文件（你清空了它们，或者它们对应的项目已经改了）：{keys}。',
+  'reader.warn.naiFieldsUnsaved': 'NovelAI 的生成记录里没有地方放这些内容，所以没有保存：{keys}。',
   'reader.warn.refreshFailed': '文件已保存，但图库里的记录没能自动更新；如果生成信息看起来还是旧的，请在生成卡上点「重新读取」。',
 
   // reverse prompt

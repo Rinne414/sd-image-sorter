@@ -87,6 +87,7 @@ describe('save warnings', () => {
   })
 
   it("an unknown code keeps the backend's sentence", () => {
+    expect(warningMessage({ code: 'nai_fields_unsaved', params: { keys: ['LoRAs'] } }, 'x')).toMatchObject({ key: 'reader.warn.naiFieldsUnsaved', params: { keys: 'LoRAs' } })
     expect(warningMessage({ code: 'other', params: { text: 'New thing.' } }, 'New thing.')).toEqual({ text: 'New thing.' })
     expect(warningMessage({ code: 'brand_new' }, 'Said in English.')).toEqual({ text: 'Said in English.' })
   })
