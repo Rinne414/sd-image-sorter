@@ -93,11 +93,14 @@
        fonts.googleapis.com. For an offline-first local tool that is both a
        network dependency on the critical render path and a privacy leak, and
        three families is one more than this UI needs. The stack below resolves
-       natively on Windows/macOS/Linux and covers CJK. ===== */
+       natively on Windows/macOS/Linux and covers CJK.
+       YaHei sits before system-ui: on a Traditional Chinese Windows,
+       system-ui draws CJK with Microsoft JhengHei, which centres 。、 and
+       gives the Simplified UI Traditional glyph shapes. ===== */
     --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
-        "Segoe UI", system-ui, "Microsoft YaHei", "PingFang SC",
-        "Hiragino Sans GB", "Noto Sans CJK SC", "Source Han Sans SC",
-        "Noto Sans SC", Roboto, sans-serif;
+        "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui,
+        "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC",
+        "Source Han Sans SC", "Noto Sans SC", Roboto, sans-serif;
     --font-display: var(--font-body);
     --font-mono: ui-monospace, "Cascadia Mono", "Cascadia Code",
         "Segoe UI Mono", "SF Mono", Menlo, Consolas, "Liberation Mono",
