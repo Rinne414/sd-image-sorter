@@ -504,9 +504,9 @@ def render_packaged_release_notes(source_bytes: bytes) -> bytes:
 
 def write_release_notes(stage_dir: Path, version: str) -> Path:
     """Write package-safe release notes without self-referential archive hashes."""
-    source = ROOT / "docs" / f"RELEASE_NOTES_v{version}.md"
+    source = ROOT / "docs" / f"RELEASE_NOTES_{RELEASE_TAG_PREFIX}{version}.md"
     if not source.exists():
-        raise FileNotFoundError(f"Release notes are missing for v{version}: {source}")
+        raise FileNotFoundError(f"Release notes are missing for {RELEASE_TAG_PREFIX}{version}: {source}")
     destination = stage_dir / "release-notes.md"
     destination.parent.mkdir(parents=True, exist_ok=True)
     source_bytes = source.read_bytes()

@@ -477,7 +477,7 @@ def test_release_packages_use_version_specific_release_notes(tmp_path):
     release_builder = load_release_builder()
     app_version = _read_app_version()
 
-    notes_path = ROOT / "docs" / f"RELEASE_NOTES_v{app_version}.md"
+    notes_path = ROOT / "docs" / f"RELEASE_NOTES_vopus-v{app_version}.md"
     assert notes_path.exists()
 
     copied_path = release_builder.write_release_notes(tmp_path, app_version)
@@ -486,7 +486,7 @@ def test_release_packages_use_version_specific_release_notes(tmp_path):
 
     assert copied_path.name == "release-notes.md"
     assert copied_bytes == release_builder.render_packaged_release_notes(source_bytes)
-    assert f"v{app_version}".encode() in copied_bytes
+    assert f"Vopus {app_version}".encode() in copied_bytes
     assert b"release-manifest.json" in copied_bytes
 
 
@@ -542,7 +542,7 @@ def test_all_five_release_archives_use_packaged_release_notes(monkeypatch, tmp_p
     staging_root = artifact_root / "staging"
     version = "9.9.9"
     source_bytes = b"## v9.9.9 -- Test\n\nSummary.\n\n## Checksums\n\n| asset | deadbeef |\n"
-    notes_path = fake_root / "docs" / f"RELEASE_NOTES_v{version}.md"
+    notes_path = fake_root / "docs" / f"RELEASE_NOTES_vopus-v{version}.md"
     notes_path.parent.mkdir(parents=True)
     notes_path.write_bytes(source_bytes)
     expected = release_builder.render_packaged_release_notes(source_bytes)
@@ -585,11 +585,11 @@ def test_all_five_release_archives_use_packaged_release_notes(monkeypatch, tmp_p
 
 def test_stable_release_notes_follow_in_app_summary_sop():
     app_version = _read_app_version()
-    notes_path = ROOT / "docs" / f"RELEASE_NOTES_v{app_version}.md"
+    notes_path = ROOT / "docs" / f"RELEASE_NOTES_vopus-v{app_version}.md"
     notes = notes_path.read_text(encoding="utf-8")
     lines = notes.splitlines()
 
-    assert lines[0].startswith(f"## v{app_version} — ")
+    assert lines[0].startswith(f"## Vopus {app_version} — ")
     assert len(lines[0]) <= 80
 
     first_200 = notes[:200]
@@ -1805,7 +1805,7 @@ def _fake_release_project(root: Path, version: str) -> None:
             "frontend/index.html": "<html></html>\n",
             "run.bat": "@echo off\n",
             "run.sh": "#!/bin/bash\n",
-            f"docs/RELEASE_NOTES_v{version}.md": "## v9.9.9 -- Test\n\nSummary.\n\n## Checksums\n\n| a | b |\n",
+            f"docs/RELEASE_NOTES_vopus-v{version}.md": "## v9.9.9 -- Test\n\nSummary.\n\n## Checksums\n\n| a | b |\n",
             **V4_DIST_FILES,
             **V4_DEV_FILES,
         },

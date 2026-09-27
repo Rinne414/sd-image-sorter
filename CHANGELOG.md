@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-28
+
+Vopus 1.0.0: the new interface, until now called V4, gets its own name and its own version line. See `docs/RELEASE_NOTES_vopus-v1.0.0.md`.
+
+Vopus 1.0.0：原来叫 V4 的新界面有了自己的名字和版本号。详见 `docs/RELEASE_NOTES_vopus-v1.0.0.md`。
+
+### Changed / 变更
+
+- **The name Vopus**: the top bar, Settings › About, the browser tab, the copied diagnostics and the launcher lines say Vopus instead of V4.
+  - 顶栏、设置 › 关于、浏览器标签页、复制的诊断信息和启动器提示都写 Vopus，不再写 V4。
+- **Updates stay on the Vopus line**: the update check offers only releases tagged `vopus-v<version>`; a V3.5 release (`v3.5.x`) is never offered. Release files are named `sd-image-sorter-vopus-v<version>-…`.
+  - 检查更新只看标签为 `vopus-v<版本>` 的发布，V3.5 的发布（`v3.5.x`）不会出现；发布文件名为 `sd-image-sorter-vopus-v<版本>-…`。
+
 ## [3.5.0] - 2026-09-25
 
 The stable release of the 3.5 line: everything from 3.5.0-beta.1 to beta.6, plus the changes below. 3.5 is the last release of the V3 line.
