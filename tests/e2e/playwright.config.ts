@@ -15,13 +15,6 @@ const baseURL = process.env.BASE_URL || `http://127.0.0.1:${defaultPort}`
 const browserChannel = process.env.PW_BROWSER_CHANNEL || ''
 const basePort = Number(new URL(baseURL).port || defaultPort)
 const repoRoot = path.resolve(__dirname, '..', '..')
-const coverageLedgerOwner = process.env.PW_COVERAGE_LEDGER_OWNER || ''
-if (coverageLedgerOwner && coverageLedgerOwner !== 'runner') {
-  throw new Error(`PW_COVERAGE_LEDGER_OWNER must be "runner" when set, received ${coverageLedgerOwner}`)
-}
-const globalSetupConfig = coverageLedgerOwner === 'runner'
-  ? {}
-  : { globalSetup: './fixtures/global-setup.ts' }
 const testOutputConfig = process.env.PW_TEST_OUTPUT_DIR
   ? { outputDir: path.resolve(process.env.PW_TEST_OUTPUT_DIR) }
   : {}
@@ -214,36 +207,14 @@ writeStubPackageMetadata('timm', '1.0.26')
 writeStubPackageMetadata('safetensors', '0.7.0')
 writeStubPackageMetadata('opencv-python', '4.11.0.86')
 
-// The onboarding tour's auto-start was retired (QA P3-4) so its completion
-// flag no longer needs seeding here — only the entry overlay must be skipped.
-const suiteStorageState = {
-  cookies: [],
-  origins: [
-    {
-      origin: new URL(baseURL).origin,
-      localStorage: [
-        {
-          // v4.0 Aurora shell: suppress the mission entry page so the existing
-          // suite lands directly in the gallery. entry-page.spec.ts opts back
-          // in per-test by clearing this key.
-          name: 'aurora-entry-skip',
-          value: '1',
-        },
-      ],
-    },
-  ],
-}
-
 /**
  * E2E Test Configuration for SD Image Sorter
  *
  * Tests run against the local FastAPI server on a configurable localhost port.
  */
 export default defineConfig({
-  ...globalSetupConfig,
   ...testOutputConfig,
   testDir: './specs',
-  // The outer shard runner owns the shared coverage reset for full runs.
   fullyParallel: false, // Sequential execution for state-dependent tests
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -255,7 +226,6 @@ export default defineConfig({
   ],
   use: {
     baseURL,
-    storageState: suiteStorageState,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -273,7 +243,9 @@ export default defineConfig({
   ],
   webServer: {
     command: webServerCommand,
-    url: baseURL,
+    // Readiness is the API, not /: / redirects to /v4/, which answers 503
+    // until frontend-v4 is built, and the V4 specs say so themselves.
+    url: new URL('/docs', baseURL).href,
     env: {
       ...(localRuntimeLdPath ? { LD_LIBRARY_PATH: localRuntimeLdPath } : {}),
       PYTHONPATH: e2eStubModulesDir,

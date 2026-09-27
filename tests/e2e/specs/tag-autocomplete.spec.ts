@@ -2,15 +2,13 @@ import fsSync from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
-import { expect, test, type Page } from '../fixtures/click-ledger'
+import { expect, test } from '@playwright/test'
 import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 /**
- * Tag autocomplete v2 (owner request 2026-07-05): the caption-editor style
- * type-ahead grows a unified backend (GET /api/tags/suggest — library tags
- * merged with the bundled danbooru vocabulary, alias-aware) and attaches to
- * every comma-separated tag input: dataset editor textarea, image detail tag
- * editor, mass tag add/remove boxes, export-preview textareas.
+ * Tag autocomplete v2 (owner request 2026-07-05): the unified suggest backend
+ * (GET /api/tags/suggest — library tags merged with the bundled danbooru
+ * vocabulary, alias-aware).
  */
 
 test.describe.configure({ mode: 'serial' })
@@ -142,26 +140,6 @@ test.afterAll(() => {
   cleanupFixture()
 })
 
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('sd-image-sorter-lang', 'en')
-    localStorage.setItem('sd-sorter-entry-skip-session', '1')
-  })
-})
-
-async function openDetailTagEditor(page: Page) {
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('#view-gallery')).toBeVisible()
-  await expect.poll(async () => page.evaluate(() => window.App.AppState?.isLoading === false)).toBe(true)
-  await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible({ timeout: 20_000 })
-  await page.locator('#gallery-grid .gallery-item').first().click()
-  await expect(page.locator('#image-modal.visible')).toBeVisible({ timeout: 10_000 })
-  await page.locator('#btn-edit-modal-tags').click()
-  const input = page.locator('#modal-tags-add-input')
-  await expect(input).toBeVisible()
-  return input
-}
-
 test('suggest API merges library tags with the danbooru vocabulary', async ({ request }) => {
   // Library fixture tag ranks first for its own prefix.
   const lib = await (await request.get(`/api/tags/suggest?q=v350_tagac&limit=10`)).json()
@@ -181,112 +159,4 @@ test('suggest API merges library tags with the danbooru vocabulary', async ({ re
   // Alias matching: "boobs" is a danbooru alias of "breasts".
   const alias = await (await request.get(`/api/tags/suggest?q=boobs&limit=10`)).json()
   expect(alias.suggestions.map((s: any) => s.tag)).toContain('breasts')
-})
-
-test('detail-modal tag editor: typing opens suggestions, Enter accepts into the input', async ({ page }) => {
-  const input = await openDetailTagEditor(page)
-  const chips = page.locator('#modal-tags-edit-chips .tag-editable')
-  const chipsBefore = await chips.count()
-
-  await input.fill('v350_tagac')
-  const dropdown = page.locator('.caption-autocomplete-dropdown')
-  await expect(dropdown).toBeVisible({ timeout: 5_000 })
-  await expect(dropdown.locator('.caption-autocomplete-item').first()).toContainText(FIXTURE_TAG)
-
-  await input.press('Enter')
-  // Accept replaced the token in the input — and did NOT fire the modal's
-  // own Enter handler (which would have converted it into a chip).
-  await expect(input).toHaveValue(`${FIXTURE_TAG}, `)
-  expect(await chips.count()).toBe(chipsBefore)
-  await expect(dropdown).toBeHidden()
-
-  // With the dropdown closed, Enter belongs to the modal handler again:
-  // a brand-new token becomes a chip and the input clears.
-  await input.fill('v350_never_suggested_zz')
-  await input.press('Enter')
-  await expect(chips).toHaveCount(chipsBefore + 1)
-  await expect(input).toHaveValue('')
-})
-
-test('danbooru suggestions carry category dots; Escape closes only the dropdown', async ({ page }) => {
-  const input = await openDetailTagEditor(page)
-
-  await input.fill('hatsune')
-  const dropdown = page.locator('.caption-autocomplete-dropdown')
-  await expect(dropdown).toBeVisible({ timeout: 5_000 })
-  await expect(
-    dropdown.locator('.caption-autocomplete-item .cap-ac-dot-character').first()
-  ).toBeVisible()
-
-  await input.press('Escape')
-  await expect(dropdown).toBeHidden()
-  // The image modal stays open — Escape was consumed by the dropdown.
-  await expect(page.locator('#image-modal.visible')).toBeVisible()
-})
-
-test('mass tag editor add box is attached to the shared autocomplete', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('#view-gallery')).toBeVisible()
-  const attached = await page.evaluate(() => {
-    const add = document.getElementById('mass-tag-add-tags') as HTMLElement | null
-    const remove = document.getElementById('mass-tag-remove-tags') as HTMLElement | null
-    return {
-      add: add?.dataset.captionAutocomplete === '1',
-      remove: remove?.dataset.captionAutocomplete === '1',
-    }
-  })
-  expect(attached.add).toBe(true)
-  expect(attached.remove).toBe(true)
-})
-
-test('blacklist boxes attach in comma mode; Prompt Lab writing boxes in insert mode', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('#view-gallery')).toBeVisible()
-  const modes = await page.evaluate(() => {
-    const read = (id: string) => {
-      const el = document.getElementById(id) as HTMLElement | null
-      return el ? { attached: el.dataset.captionAutocomplete === '1', mode: el.dataset.capAcMode || 'comma' } : null
-    }
-    return {
-      datasetBlacklist: read('dataset-blacklist'),
-      tagPreBlacklist: read('tag-pre-blacklist'),
-      batchExportBlacklist: read('batch-export-blacklist'),
-      plPrompt: read('pl-build-prompt'),
-      plNegative: read('pl-build-negative'),
-    }
-  })
-  expect(modes.datasetBlacklist).toEqual({ attached: true, mode: 'comma' })
-  expect(modes.tagPreBlacklist).toEqual({ attached: true, mode: 'comma' })
-  expect(modes.batchExportBlacklist).toEqual({ attached: true, mode: 'comma' })
-  expect(modes.plPrompt).toEqual({ attached: true, mode: 'insert' })
-  expect(modes.plNegative).toEqual({ attached: true, mode: 'insert' })
-})
-
-test('insert mode completes the caret word without adding a comma', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('#view-gallery')).toBeVisible()
-  // The build editor only shows after loading a prompt source; its display
-  // logic isn't under test here, so reveal it directly.
-  await page.evaluate(() => {
-    ;(window as any).App.switchView('promptlab')
-  })
-  await page.locator('.promptlab-tab[data-mode="build"]').click()
-  await page.evaluate(() => {
-    const editor = document.getElementById('pl-build-editor')
-    if (editor) (editor as HTMLElement).style.display = ''
-  })
-  const input = page.locator('#pl-build-prompt')
-  await expect(input).toBeVisible()
-
-  await input.click()
-  await input.pressSequentially('masterpiece, (hatsune_mi', { delay: 10 })
-  const dropdown = page.locator('.caption-autocomplete-dropdown')
-  await expect(dropdown).toBeVisible({ timeout: 5_000 })
-  await expect(dropdown.locator('.caption-autocomplete-item').first()).toContainText('hatsune_miku')
-
-  await input.press('Enter')
-  // Insert mode: the word under the caret is completed in place — no ", "
-  // separator, and the "(" boundary is preserved.
-  await expect(input).toHaveValue('masterpiece, (hatsune_miku')
-  await expect(dropdown).toBeHidden()
 })

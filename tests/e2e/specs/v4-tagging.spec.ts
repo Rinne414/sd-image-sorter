@@ -531,15 +531,6 @@ test('describing one image from its right-click menu writes its description and 
     await expect(page.getByTestId('tag-dialog').getByTestId('tag-tagger-on')).not.toBeChecked()
     await page.keyboard.press('Escape')
 
-    // V3.5's preview shows it beside the tag caption, which stayed
-    await page.evaluate(() => localStorage.setItem('sd-sorter-entry-skip-session', '1'))
-    await page.goto('/', { waitUntil: 'domcontentloaded' })
-    await expect(page.locator('#view-gallery')).toBeVisible({ timeout: 20_000 })
-    await expect.poll(() => page.evaluate(() => (window as unknown as { App: { AppState?: { isLoading?: boolean } } }).App.AppState?.isLoading === false)).toBe(true)
-    await page.evaluate((id) => (window as unknown as { Gallery: { openPreview: (id: number) => Promise<void> } }).Gallery.openPreview(id), before.id)
-    await expect(page.locator('#image-modal.visible')).toBeVisible({ timeout: 10_000 })
-    await expect(page.locator('#modal-nl-caption-text')).toHaveText(sentence)
-    await expect(page.locator('#modal-caption-text')).toHaveText('1girl, smile')
   } finally {
     await page.evaluate(() =>
       fetch('/api/vlm/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: '', model: '' }) }),

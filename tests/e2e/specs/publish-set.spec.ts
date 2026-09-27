@@ -2,13 +2,12 @@ import fsSync from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
-import { expect, test } from '../fixtures/click-ledger'
+import { expect, test } from '@playwright/test'
 import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 /**
- * Publish Set workbench (v3.5.0 Tier 1 — Pixiv 成套發布): gallery selection →
- * drag order → censored-variant pairing ({stem}_censored.*) → sequential
- * export (01.png, 02.png, … + caption.txt).
+ * Publish Set API (v3.5.0 Tier 1 — Pixiv 成套發布): censored-variant pairing
+ * ({stem}_censored.*) and sequential export (01.png, 02.png, … + caption.txt).
  *
  * The fixture creates real files under .tmp/ and real library rows; exports
  * land in .tmp/ too, so nothing outside the repo is touched.
@@ -191,14 +190,6 @@ test.afterAll(() => {
   cleanupFixture()
 })
 
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('sd-image-sorter-lang', 'en')
-    localStorage.setItem('sd-sorter-entry-skip-session', '1')
-    localStorage.removeItem('sd-sorter-publish-settings')
-  })
-})
-
 test('API pairs the censored sibling and exports sequential names + caption', async ({ request }) => {
   const pairs = await (await request.post('/api/publish/censor-pairs', {
     data: { image_ids: fixtureIds },
@@ -257,205 +248,3 @@ test('API export removes generation info by default and keeps it only when asked
   expect(kept.success).toBe(true)
   expect(fsSync.readFileSync(path.join(keepDir, '01.png')).equals(fsSync.readFileSync(source))).toBe(true)
 })
-
-test('workbench renders pairs, drag reorders, and exports through the UI', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('#view-gallery')).toBeVisible()
-
-  await page.evaluate((ids) => (window as any).PublishSet.open(ids), fixtureIds)
-  await expect(page.locator('#publish-set-modal.visible')).toBeVisible()
-  const rows = page.locator('.pub-item')
-  await expect(rows).toHaveCount(3)
-
-  // Master toggle defaults on: the paired row pre-selects its censored variant.
-  // The pair line names the censored file it resolved, and carries the paired
-  // state as a class rather than as a glyph in the text, so this survives icon
-  // and locale sweeps while still failing if the affordance disappears.
-  const pairedRow = page.locator(`.pub-item[data-image-id="${fixtureIds[1]}"]`)
-  await expect(pairedRow.locator('.pub-item-pair')).toHaveText('v350-pub-2_censored.png')
-  await expect(pairedRow.locator('.pub-item-pair')).toHaveClass(/is-paired/)
-  await expect(pairedRow.locator('.pub-variant-btn.active')).toHaveText('Censored')
-  const unpairedRow = page.locator(`.pub-item[data-image-id="${fixtureIds[0]}"]`)
-  await expect(unpairedRow.locator('.pub-item-pair')).toHaveClass(/is-unpaired/)
-  await expect(unpairedRow.locator('.pub-variant-btn.active')).toHaveText('Original')
-
-  // Drag the first row below the last one → order becomes [2, 3, 1].
-  const firstRow = page.locator(`.pub-item[data-image-id="${fixtureIds[0]}"]`)
-  const lastRow = page.locator(`.pub-item[data-image-id="${fixtureIds[2]}"]`)
-  const lastBox = await lastRow.boundingBox()
-  await firstRow.dragTo(lastRow, {
-    targetPosition: { x: 40, y: Math.max(1, (lastBox?.height ?? 20) - 4) },
-  })
-  await expect(page.locator('.pub-item').first()).toHaveAttribute(
-    'data-image-id', String(fixtureIds[1]))
-  await expect(page.locator('.pub-item').last()).toHaveAttribute(
-    'data-image-id', String(fixtureIds[0]))
-  await expect(page.locator('.pub-item').first().locator('.pub-item-number')).toHaveText('#01')
-
-  // Export via the form. Two rows have no censored version, so the check
-  // names them first and Cancel is the default: nothing is written.
-  const outDir = path.join(fixtureRoot, 'out-ui')
-  await page.locator('#pub-folder').fill(outDir)
-  await page.locator('#pub-prefix').fill('set_')
-  await page.locator('#btn-pub-export').click()
-  const check = page.locator('#pub-uncensored-check')
-  await expect(check).toBeInViewport()
-  await expect(check.locator('li')).toHaveCount(2)
-  await expect(check.locator('li').first()).toContainText('v350-pub-3.png')
-  await expect(page.locator('#btn-pub-uncensored-cancel')).toBeFocused()
-  await page.keyboard.press('Enter')
-  await expect(check).toBeHidden()
-  await expect(page.locator('#publish-set-modal.visible')).toBeVisible()
-  expect(fsSync.existsSync(outDir)).toBe(false)
-
-  // "Leave these out" exports only the censored image, numbered from 01.
-  const censoredOnlyDir = path.join(fixtureRoot, 'out-ui-censored-only')
-  await page.locator('#pub-folder').fill(censoredOnlyDir)
-  await page.locator('#btn-pub-export').click()
-  await page.locator('#btn-pub-uncensored-skip').click()
-  await expect(page.locator('.pub-result-line.pub-result-ok')).toBeVisible()
-  await expect.poll(() => fsSync.existsSync(path.join(censoredOnlyDir, 'set_01.png'))).toBe(true)
-  expect(fsSync.readdirSync(censoredOnlyDir)).toEqual(['set_01.png'])
-
-  // Exporting them as they are is an explicit choice, and the result says
-  // which files went out uncensored.
-  await page.locator('#pub-folder').fill(outDir)
-  await page.locator('#btn-pub-export').click()
-  await page.locator('#btn-pub-uncensored-include').click()
-  await expect(page.locator('.pub-result-line.pub-result-ok')).toBeVisible()
-  await expect(page.locator('.pub-result-file.pub-result-warn')).toHaveCount(2)
-
-  await expect.poll(() => fsSync.existsSync(path.join(outDir, 'set_01.png'))).toBe(true)
-  expect(fsSync.existsSync(path.join(outDir, 'set_02.png'))).toBe(true)
-  expect(fsSync.existsSync(path.join(outDir, 'set_03.png'))).toBe(true)
-  // Position 1 exported the censored variant of pub-2 (master toggle default).
-  const censoredSource = path.join(fixtureRoot, 'src', 'v350-pub-2_censored.png')
-  expect(inspectImage(path.join(outDir, 'set_01.png')).pixels).toBe(inspectImage(censoredSource).pixels)
-
-  // Watermark is applied only to the publish copy, never to the selected
-  // library source. The interaction stays in the same workbench flow.
-  const watermarkOut = path.join(fixtureRoot, 'out-ui-watermark')
-  await page.locator('#pub-folder').fill(watermarkOut)
-  await page.locator('#pub-prefix').fill('wm_')
-  await page.locator('#pub-watermark-enabled').check()
-  await page.locator('#pub-watermark-text').fill('@artist')
-  await page.locator('#pub-watermark-opacity').fill('90')
-  await page.locator('#pub-overwrite').check()
-  await page.locator('#btn-pub-export').click()
-  await page.locator('#btn-pub-uncensored-include').click()
-  await expect(page.locator('.pub-result-line.pub-result-ok')).toBeVisible()
-  await expect.poll(() => fsSync.existsSync(path.join(watermarkOut, 'wm_01.png'))).toBe(true)
-  expect(inspectImage(path.join(watermarkOut, 'wm_01.png')).pixels).not.toBe(inspectImage(censoredSource).pixels)
-})
-
-test('Censor Edit hands its censored result to the set: censored pixels, its name, no generation info', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('#view-gallery')).toBeVisible()
-
-  // One queued image, censored with a black bar and renamed in Censor Edit.
-  await page.evaluate((id) => {
-    const state = (window as any).__CENSOR_STATE__
-    state.queue = [{
-      id,
-      originalFilename: 'v350-pub-4.png',
-      outputFilename: 'cover_01.png',
-      width: 64,
-      height: 48,
-      editOperations: [{
-        kind: 'geometry_effect',
-        style: 'black_bar',
-        block_size: 16,
-        blur_radius: 8,
-        regions: [{ box: [0, 0, 32, 24], label: 'manual', confidence: 1 }],
-      }],
-    }]
-  }, metaId)
-  await page.evaluate(() => (window as any).App.switchView('censor'))
-  await page.locator('#btn-censor-to-publish-set').click()
-
-  await expect(page.locator('#publish-set-modal.visible')).toBeVisible()
-  const row = page.locator(`.pub-item[data-image-id="${metaId}"]`)
-  await expect(row.locator('.pub-item-pair')).toHaveClass(/is-paired/)
-  await expect(row.locator('.pub-variant-btn.active')).toHaveText('Censored')
-  await expect(page.locator('#pub-use-censor-names')).toBeChecked()
-  await expect(row.locator('.pub-item-outname')).toContainText('cover_01.png')
-  await expect(page.locator('#pub-metadata-option')).toHaveValue('strip')
-
-  const outDir = path.join(fixtureRoot, 'out-handover')
-  await page.locator('#pub-folder').fill(outDir)
-  await page.locator('#btn-pub-export').click()
-  await expect(page.locator('.pub-result-line.pub-result-ok')).toBeVisible()
-  // Every image was censored, so nothing had to be asked.
-  await expect(page.locator('#pub-uncensored-check')).toBeHidden()
-  await expect(page.locator('.pub-result-file')).toHaveText(/cover_01\.png/)
-
-  const exported = path.join(outDir, 'cover_01.png')
-  await expect.poll(() => fsSync.existsSync(exported)).toBe(true)
-  const report = inspectImage(exported)
-  const original = inspectImage(path.join(fixtureRoot, 'src', 'v350-pub-4.png'))
-  expect(original.corner).toEqual([200, 120, 60])
-  expect(report.corner).toEqual([0, 0, 0])
-  expect(report.pixels).not.toBe(original.pixels)
-  expect(report.hasSecret).toBe(false)
-  expect(report.infoKeys).not.toContain('parameters')
-  expect(report.infoKeys).not.toContain('Comment')
-  expect(report.infoKeys).not.toContain('Software')
-})
-
-test('Escape closes the workbench and it reopens; the More-menu item is gone', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('#view-gallery')).toBeVisible()
-
-  // Owner 2026-07-07: 成套发布 left the More menu — the Pixiv mission, the
-  // gallery batch bar's publish button, and the function catalog are its
-  // entrances now (the always-empty modal entrance was the complaint).
-  await page.locator('#nav-tools-toggle').click()
-  await expect(page.locator('#nav-tools-publish-set')).toHaveCount(0)
-  await page.keyboard.press('Escape')
-
-  await page.evaluate((ids) => (window as any).PublishSet.open(ids), fixtureIds)
-  await expect(page.locator('#publish-set-modal.visible')).toBeVisible()
-
-  await page.keyboard.press('Escape')
-  await expect(page.locator('#publish-set-modal.visible')).toHaveCount(0)
-  await expect(page.locator('#view-gallery')).toBeVisible()
-
-  // Reopening still works after an Escape-close.
-  await page.evaluate((ids) => (window as any).PublishSet.open(ids), fixtureIds)
-  await expect(page.locator('#publish-set-modal.visible')).toBeVisible()
-})
-
-for (const viewport of [
-  { width: 1366, height: 768 },
-  { width: 1920, height: 1080 },
-  { width: 2560, height: 1440 },
-]) {
-  test(`the not-censored check, metadata choice and export stay on screen at ${viewport.width}x${viewport.height}`, async ({ page }) => {
-    await page.setViewportSize(viewport)
-    await page.goto('/', { waitUntil: 'domcontentloaded' })
-    await expect(page.locator('#view-gallery')).toBeVisible()
-    await page.evaluate((ids) => (window as any).PublishSet.open(ids), fixtureIds)
-    await expect(page.locator('.pub-item')).toHaveCount(3)
-
-    await expect(page.locator('#pub-metadata-option')).toBeInViewport()
-    await expect(page.locator('#btn-pub-export')).toBeInViewport()
-    await page.locator('#pub-folder').fill(path.join(fixtureRoot, 'out-layout'))
-    await page.locator('#btn-pub-export').click()
-    for (const id of ['#btn-pub-uncensored-cancel', '#btn-pub-uncensored-skip', '#btn-pub-uncensored-include']) {
-      await expect(page.locator(id)).toBeInViewport()
-    }
-    const overflow = await page.evaluate(() => {
-      const content = document.querySelector('.publish-set-content') as HTMLElement
-      return {
-        page: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-        modal: content.scrollWidth - content.clientWidth,
-      }
-    })
-    expect(overflow.page).toBeLessThanOrEqual(0)
-    expect(overflow.modal).toBeLessThanOrEqual(0)
-    await page.screenshot({
-      path: path.join(repoRoot, '.tmp', 'v35-fix', `publish-check-${viewport.width}x${viewport.height}.png`),
-    })
-    await page.locator('#btn-pub-uncensored-cancel').click()
-  })
-}

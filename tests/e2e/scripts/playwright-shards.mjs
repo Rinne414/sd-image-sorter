@@ -9,7 +9,6 @@ import {
 
 const DEFAULT_SHARD_COUNT = 2
 const MAX_SHARD_COUNT = 8
-const COVERAGE_RUN_SCHEMA_VERSION = 1
 const COVERAGE_RUN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 
 function requireInteger(value, fieldName) {
@@ -58,25 +57,12 @@ export function resolveRunPaths(repoRoot, runId) {
   const artifactsRoot = path.join(repoRoot, 'artifacts')
   const runRoot = path.join(artifactsRoot, 'playwright-runs', runId)
   const cleanupParentRoot = path.join(artifactsRoot, 'playwright-cleanup')
-  const canonicalCoverageRunPath = path.join(artifactsRoot, 'click-coverage-run.json')
   return {
     artifactsRoot,
     blobRoot: path.join(runRoot, 'blob-reports'),
-    canonicalClickLedgerRoot: path.join(artifactsRoot, 'click-coverage'),
-    canonicalCoverageRunPath,
-    canonicalCoverageFilePaths: [
-      canonicalCoverageRunPath,
-      ...[
-        'click-coverage.json',
-        'control-inventory.json',
-        'js-coverage-unused.json',
-        'untested-controls.json',
-      ].map((name) => path.join(artifactsRoot, name)),
-    ],
     canonicalLastRunPath: path.join(repoRoot, 'tests', 'e2e', 'test-results', '.last-run.json'),
     cleanupParentRoot,
     cleanupRoot: path.join(cleanupParentRoot, runId),
-    clickLedgerRoot: path.join(runRoot, 'click-coverage'),
     dataRoot: path.join(repoRoot, '.tmp', 'e2e-data-sharded', runId),
     fixtureRoot: path.join(repoRoot, '.tmp', 'e2e-model-fixtures-sharded', runId),
     htmlRoot: path.join(runRoot, 'playwright-report'),
@@ -112,7 +98,6 @@ export function buildShardDescriptors(input) {
         PLAYWRIGHT_BLOB_OUTPUT_FILE: path.join(paths.blobRoot, `shard-${shardIndex}.zip`),
         PWTEST_BLOB_DO_NOT_REMOVE: '1',
         PWTEST_CACHE_DIR: path.join(paths.runRoot, 'transform-cache', `shard-${shardIndex}`),
-        PW_COVERAGE_LEDGER_OWNER: 'runner',
         PW_E2E_FIXTURE_ROOT: path.join(paths.fixtureRoot, `shard-${shardIndex}`),
         PW_E2E_DATA_ROOT: path.join(paths.dataRoot, `shard-${shardIndex}`),
         PW_REUSE_SERVER: '0',
@@ -139,12 +124,9 @@ export function formatMergedSummary(stats) {
 
 export function prepareRunDirectories(paths) {
   fs.rmSync(paths.canonicalLastRunPath, { force: true })
-  for (const filePath of paths.canonicalCoverageFilePaths) fs.rmSync(filePath, { force: true })
-  fs.rmSync(paths.canonicalClickLedgerRoot, { recursive: true, force: true })
   fs.rmSync(paths.cleanupParentRoot, { recursive: true, force: true })
   fs.rmSync(paths.runRoot, { recursive: true, force: true })
   fs.mkdirSync(paths.blobRoot, { recursive: true })
-  fs.mkdirSync(paths.clickLedgerRoot, { recursive: true })
   fs.mkdirSync(paths.testOutputRoot, { recursive: true })
 }
 
@@ -267,19 +249,6 @@ function replaceDirectory(source, target, runId) {
   fs.renameSync(staging, target)
 }
 
-function publishCoverageRunIdentity(paths, runId) {
-  requireNonEmptyString(runId, 'runId')
-  const stagingPath = `${paths.canonicalCoverageRunPath}.${runId}.tmp`
-  fs.rmSync(stagingPath, { force: true })
-  fs.writeFileSync(
-    stagingPath,
-    `${JSON.stringify({ schemaVersion: COVERAGE_RUN_SCHEMA_VERSION, runId }, null, 2)}\n`,
-    'utf8',
-  )
-  fs.rmSync(paths.canonicalCoverageRunPath, { force: true })
-  fs.renameSync(stagingPath, paths.canonicalCoverageRunPath)
-}
-
 export function resolveCoverageRunId(env, processId, timestampMs) {
   if (!env || typeof env !== 'object' || Array.isArray(env)) {
     throw new TypeError('env must be an object')
@@ -300,18 +269,7 @@ export function resolveCoverageRunId(env, processId, timestampMs) {
 
 export function publishSuccessfulArtifacts(paths, runId) {
   replaceFile(paths.jsonPath, path.join(paths.artifactsRoot, 'playwright-results.json'), runId)
-  replaceFile(
-    path.join(paths.runRoot, 'control-inventory.json'),
-    path.join(paths.artifactsRoot, 'control-inventory.json'),
-    runId,
-  )
-  replaceFile(
-    path.join(paths.runRoot, 'js-coverage-unused.json'),
-    path.join(paths.artifactsRoot, 'js-coverage-unused.json'),
-    runId,
-  )
   replaceDirectory(paths.htmlRoot, path.join(paths.artifactsRoot, 'playwright-report'), runId)
-  replaceDirectory(paths.clickLedgerRoot, paths.canonicalClickLedgerRoot, runId)
 }
 
 function stageSuccessfulShardCleanup(paths) {
@@ -325,16 +283,6 @@ function stageSuccessfulShardCleanup(paths) {
     throw new Error(`Deferred Playwright cleanup path already exists: ${paths.cleanupRoot}`)
   }
   fs.renameSync(paths.runRoot, paths.cleanupRoot)
-}
-
-function restoreDiagnosticRunRoot(paths) {
-  if (!fs.existsSync(paths.cleanupRoot)) return
-  if (fs.existsSync(paths.runRoot)) {
-    throw new Error(
-      `Cannot restore Playwright diagnostics because both paths exist: ${paths.runRoot}, ${paths.cleanupRoot}`,
-    )
-  }
-  fs.renameSync(paths.cleanupRoot, paths.runRoot)
 }
 
 function normalizeFailedTestIds(failedTests) {
@@ -428,24 +376,8 @@ export async function finishSuccessfulRun(paths, runId, verifyRuntimeReleased) {
     }
     throw error
   }
-  let diagnosticsStaged = false
-  try {
-    publishTerminalRunStatus(paths, runId, 'passed', [])
-    stageSuccessfulShardCleanup(paths)
-    diagnosticsStaged = true
-    publishCoverageRunIdentity(paths, runId)
-  } catch (error) {
-    if (!diagnosticsStaged) throw error
-    try {
-      restoreDiagnosticRunRoot(paths)
-    } catch (restoreError) {
-      throw new AggregateError(
-        [error, restoreError],
-        `Successful Playwright finalization failed and diagnostics could not be restored: ${paths.runRoot}`,
-      )
-    }
-    throw error
-  }
+  publishTerminalRunStatus(paths, runId, 'passed', [])
+  stageSuccessfulShardCleanup(paths)
 }
 
 function finishFailedRunFromShards(paths, runId, shardCount) {

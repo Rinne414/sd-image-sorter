@@ -2,14 +2,12 @@ import fsSync from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
-import { expect, test } from '../fixtures/click-ledger'
+import { expect, test } from '@playwright/test'
 import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
 
 /**
- * Duplicate Cleanup workflow (v3.5.0 Tier 1): whole-library near-dup GROUP
- * scan (bulk background job) + review modal with suggested keepers.
- * Deletion reuses the trash pipeline — the UI test mocks it and asserts the
- * exact ids sent, so nothing real is ever trashed.
+ * Duplicate Cleanup API (v3.5.0 Tier 1): the whole-library near-dup GROUP
+ * scan (bulk background job) and its suggested keepers, over HTTP.
  */
 
 test.describe.configure({ mode: 'serial' })
@@ -148,13 +146,6 @@ test.afterAll(() => {
   cleanupFixture()
 })
 
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('sd-image-sorter-lang', 'en')
-    localStorage.setItem('sd-sorter-entry-skip-session', '1')
-  })
-})
-
 test('scan API clusters the library into groups with a rating-first keeper', async ({ request }) => {
   const start = await request.post('/api/duplicates/scan', { data: { threshold: 0.95 } })
   expect(start.ok()).toBe(true)
@@ -191,90 +182,4 @@ test('scan API clusters the library into groups with a rating-first keeper', asy
   const suggestedLosers = groups.groups.flatMap((g: any) =>
     g.members.filter((m: any) => !m.suggested_keep).map((m: any) => m.id))
   expect(suggestedLosers).not.toContain(chainIds[2])
-})
-
-test('review modal renders groups; keep-best sends exactly the losers to the trash pipeline', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('#view-gallery')).toBeVisible()
-
-  // Open via the nav Tools menu entry.
-  await page.locator('#nav-tools-toggle').click()
-  await page.locator('#nav-tools-dup-cleaner').click()
-  await expect(page.locator('#dup-cleaner-modal.visible')).toBeVisible()
-
-  const group = page.locator('.dup-group', {
-    has: page.locator(`input[data-image-id="${fixtureIds[0]}"]`),
-  })
-  await expect(group).toBeVisible({ timeout: 10_000 })
-
-  // Keeper badge on the 5-star member; losers pre-checked.
-  const keeper = group.locator('.dup-member.is-keeper')
-  await expect(keeper).toHaveCount(1)
-  await expect(keeper.locator('input.dup-member-check')).not.toBeChecked()
-  await expect(group.locator('input.dup-member-check:checked')).toHaveCount(2)
-
-  // Mock the delete endpoint — assert ids, never actually trash.
-  let deleteBody: any = null
-  await page.route('**/api/images/delete-selected', async (route) => {
-    deleteBody = route.request().postDataJSON()
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ deleted: deleteBody.image_ids.length, errors: [] }),
-    })
-  })
-  page.on('dialog', (dialog) => dialog.accept())
-
-  await group.getByTestId('dup-keep-best').click()
-  await expect.poll(() => deleteBody).not.toBe(null)
-  expect(deleteBody.confirm_delete_files).toBe(true)
-  expect(deleteBody.image_ids.sort()).toEqual(fixtureIds.slice(1, 3).sort())
-  // The reviewed group leaves the list after the (mocked) delete.
-  await expect(group).toHaveCount(0)
-})
-
-test('transitive similarity never sends the non-matching endpoint to trash', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('#view-gallery')).toBeVisible()
-  await page.locator('#nav-tools-toggle').click()
-  await page.locator('#nav-tools-dup-cleaner').click()
-  await expect(page.locator('#dup-cleaner-modal.visible')).toBeVisible()
-
-  const chainIds = fixtureIds.slice(4, 7)
-  const group = page.locator('.dup-group', {
-    has: page.locator(`input[data-image-id="${chainIds[0]}"]`),
-  })
-  await expect(group).toBeVisible({ timeout: 10_000 })
-  const memberIds = await group.locator('input.dup-member-check').evaluateAll((inputs) =>
-    inputs.map((input) => Number((input as HTMLInputElement).dataset.imageId)),
-  )
-  expect(memberIds).toEqual(chainIds.slice(0, 2))
-  await expect(group.locator(`input[data-image-id="${chainIds[2]}"]`)).toHaveCount(0)
-  await expect(group.locator('input.dup-member-check:checked')).toHaveCount(1)
-
-  let deleteBody: any = null
-  await page.route('**/api/images/delete-selected', async (route) => {
-    deleteBody = route.request().postDataJSON()
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ deleted: deleteBody.image_ids.length, errors: [] }),
-    })
-  })
-  page.on('dialog', (dialog) => dialog.accept())
-
-  await group.getByTestId('dup-keep-best').click()
-  await expect.poll(() => deleteBody).not.toBe(null)
-  expect(deleteBody.image_ids).toEqual([chainIds[1]])
-  expect(deleteBody.image_ids).not.toContain(chainIds[2])
-})
-
-test('Escape closes the cleanup modal without leaving the gallery', async ({ page }) => {
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('#view-gallery')).toBeVisible()
-  await page.evaluate(() => (window as any).DupCleaner.open())
-  await expect(page.locator('#dup-cleaner-modal.visible')).toBeVisible()
-  await page.keyboard.press('Escape')
-  await expect(page.locator('#dup-cleaner-modal.visible')).toHaveCount(0)
-  await expect(page.locator('#view-gallery')).toBeVisible()
 })

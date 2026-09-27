@@ -751,7 +751,7 @@ def test_checker_follows_project_fixture_test_use_calls(tmp_path: Path) -> None:
         tmp_path,
         "project-fixture-use.spec.ts",
         """
-import { test as scenario } from '../fixtures/click-ledger'
+import { test as scenario } from '../fixtures/v4-seed'
 
 scenario.use({ viewport: { width: 390, height: 844 } })
 """,

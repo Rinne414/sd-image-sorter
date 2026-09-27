@@ -489,7 +489,7 @@ test('project config fails closed when the supported wrapper isolation marker is
   assert.equal(output.includes(fakeParentCredentialValue), false)
 })
 
-test('each shard owns a port, transform cache, backend data root, blob, result directory, and click ledger', () => {
+test('each shard owns a port, transform cache, backend data root, blob, and result directory', () => {
   const undefinedArtifact = path.join(repoRoot, 'undefined')
   assert.equal(fs.existsSync(undefinedArtifact), false)
 
@@ -531,7 +531,6 @@ test('each shard owns a port, transform cache, backend data root, blob, result d
   assert.equal(new Set(descriptors.map((descriptor) => descriptor.env.PW_TEST_OUTPUT_DIR)).size, 4)
   assert.ok(descriptors.every((descriptor) => descriptor.env.PWTEST_CACHE_DIR.includes('fixture-run')))
   assert.deepEqual(descriptors.map((descriptor) => descriptor.env.PW_SHARD_INDEX), ['1', '2', '3', '4'])
-  assert.ok(descriptors.every((descriptor) => descriptor.env.PW_COVERAGE_LEDGER_OWNER === 'runner'))
   assert.ok(descriptors.every((descriptor) => descriptor.env.PW_REUSE_SERVER === '0'))
   assert.ok(descriptors.every((descriptor) => !(fakeParentCredentialName in descriptor.env)))
   assert.ok(
@@ -689,25 +688,11 @@ test('merged summary states total, passed, failed, skipped, and flaky counts', (
   )
 })
 
-test('preparing a sharded run invalidates stale canonical coverage state and creates isolated directories', (t) => {
+test('preparing a sharded run invalidates the stale terminal status and creates isolated directories', (t) => {
   const tempRepo = makeTempRepo(t)
   const paths = resolveRunPaths(tempRepo, 'fixture-run')
   fs.mkdirSync(path.dirname(paths.canonicalLastRunPath), { recursive: true })
   fs.writeFileSync(paths.canonicalLastRunPath, '{"status":"passed","failedTests":[]}\n')
-  const staleCanonicalFiles = [
-    'click-coverage-run.json',
-    'click-coverage.json',
-    'control-inventory.json',
-    'js-coverage-unused.json',
-    'untested-controls.json',
-  ].map((name) => path.join(paths.artifactsRoot, name))
-  for (const filePath of staleCanonicalFiles) {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true })
-    fs.writeFileSync(filePath, 'stale')
-  }
-  const staleCanonicalLedger = path.join(paths.artifactsRoot, 'click-coverage')
-  fs.mkdirSync(staleCanonicalLedger, { recursive: true })
-  fs.writeFileSync(path.join(staleCanonicalLedger, 'raw-worker-0.jsonl'), 'stale')
   fs.mkdirSync(paths.cleanupRoot, { recursive: true })
   fs.writeFileSync(path.join(paths.cleanupRoot, 'previous-success.txt'), 'stale')
   fs.mkdirSync(paths.runRoot, { recursive: true })
@@ -716,12 +701,9 @@ test('preparing a sharded run invalidates stale canonical coverage state and cre
   prepareRunDirectories(paths)
 
   assert.equal(fs.existsSync(paths.canonicalLastRunPath), false)
-  assert.ok(staleCanonicalFiles.every((filePath) => !fs.existsSync(filePath)))
-  assert.equal(fs.existsSync(staleCanonicalLedger), false)
   assert.equal(fs.existsSync(paths.cleanupParentRoot), false)
   assert.equal(fs.existsSync(path.join(paths.runRoot, 'stale.txt')), false)
   assert.equal(fs.existsSync(paths.blobRoot), true)
-  assert.equal(fs.existsSync(paths.clickLedgerRoot), true)
   assert.equal(fs.existsSync(paths.testOutputRoot), true)
 })
 
@@ -730,8 +712,6 @@ test('failed terminal state is current, deterministic, and preserves diagnostic 
   const paths = resolveRunPaths(tempRepo, 'fixture-run')
   prepareRunDirectories(paths)
   fs.writeFileSync(path.join(paths.runRoot, 'failure.txt'), 'diagnostic')
-  fs.writeFileSync(path.join(paths.runRoot, 'control-inventory.json'), '{"controls":[]}\n')
-  fs.writeFileSync(path.join(paths.clickLedgerRoot, 'raw-worker-0.jsonl'), '{"key":"fixture"}\n')
 
   finishFailedRun(paths, 'fixture-run', ['test-b', 'test-a', 'test-b'])
 
@@ -741,18 +721,11 @@ test('failed terminal state is current, deterministic, and preserves diagnostic 
     runId: 'fixture-run',
   })
   assert.equal(fs.existsSync(path.join(paths.runRoot, 'failure.txt')), true)
-  assert.equal(fs.existsSync(path.join(paths.runRoot, 'control-inventory.json')), true)
-  assert.equal(fs.existsSync(path.join(paths.clickLedgerRoot, 'raw-worker-0.jsonl')), true)
-  assert.equal(fs.existsSync(paths.canonicalCoverageRunPath), false)
-  assert.equal(fs.existsSync(paths.canonicalClickLedgerRoot), false)
 })
 
-test('failed sharded orchestration retains run diagnostics without canonical coverage publication', async (t) => {
+test('failed sharded orchestration retains run diagnostics without publishing results', async (t) => {
   const tempRepo = makeTempRepo(t)
   const paths = resolveRunPaths(tempRepo, 'fixture-run')
-  fs.mkdirSync(paths.canonicalClickLedgerRoot, { recursive: true })
-  fs.writeFileSync(paths.canonicalCoverageRunPath, '{"schemaVersion":1,"runId":"stale-run"}\n')
-  fs.writeFileSync(path.join(paths.canonicalClickLedgerRoot, 'raw-worker-0.jsonl'), 'stale')
   const fakePlaywrightCli = path.join(tempRepo, 'fake-playwright.mjs')
   fs.writeFileSync(fakePlaywrightCli, `import fs from 'node:fs'
 import path from 'node:path'
@@ -794,8 +767,7 @@ process.exitCode = 1
   })
   assert.equal(fs.readFileSync(path.join(paths.runRoot, 'failure-1.txt'), 'utf8'), 'diagnostic')
   assert.equal(fs.readFileSync(path.join(paths.runRoot, 'failure-2.txt'), 'utf8'), 'diagnostic')
-  assert.equal(fs.existsSync(paths.canonicalCoverageRunPath), false)
-  assert.equal(fs.existsSync(paths.canonicalClickLedgerRoot), false)
+  assert.equal(fs.existsSync(path.join(paths.artifactsRoot, 'playwright-results.json')), false)
 })
 
 test('successful terminal state stages duplicate run artifacts for deferred cleanup', async (t) => {
@@ -819,27 +791,21 @@ test('successful terminal state stages duplicate run artifacts for deferred clea
   assert.equal(fs.existsSync(paths.fixtureRoot), false)
 })
 
-test('successful run finalizes matching coverage identity as the last publication step', async (t) => {
+test('successful run publishes the merged results and report, then the passed status', async (t) => {
   const tempRepo = makeTempRepo(t)
   const paths = resolveRunPaths(tempRepo, 'fixture-run')
   prepareRunDirectories(paths)
   fs.writeFileSync(paths.jsonPath, '{"stats":{}}\n')
-  fs.writeFileSync(path.join(paths.runRoot, 'control-inventory.json'), '{"controls":[]}\n')
-  fs.writeFileSync(path.join(paths.runRoot, 'js-coverage-unused.json'), '{"unused":[]}\n')
-  fs.writeFileSync(path.join(paths.clickLedgerRoot, 'raw-worker-0.jsonl'), '{"key":"fixture"}\n')
   fs.mkdirSync(paths.htmlRoot, { recursive: true })
   fs.writeFileSync(path.join(paths.htmlRoot, 'index.html'), 'fixture report')
 
   publishSuccessfulArtifacts(paths, 'fixture-run')
   await finishSuccessfulRun(paths, 'fixture-run', async () => {})
 
-  assert.deepEqual(
-    JSON.parse(fs.readFileSync(path.join(paths.artifactsRoot, 'click-coverage-run.json'), 'utf8')),
-    { schemaVersion: 1, runId: 'fixture-run' },
-  )
+  assert.equal(fs.readFileSync(path.join(paths.artifactsRoot, 'playwright-results.json'), 'utf8'), '{"stats":{}}\n')
   assert.equal(
-    fs.readFileSync(path.join(paths.canonicalClickLedgerRoot, 'raw-worker-0.jsonl'), 'utf8'),
-    '{"key":"fixture"}\n',
+    fs.readFileSync(path.join(paths.artifactsRoot, 'playwright-report', 'index.html'), 'utf8'),
+    'fixture report',
   )
   assert.deepEqual(JSON.parse(fs.readFileSync(paths.canonicalLastRunPath, 'utf8')), {
     status: 'passed',
@@ -850,7 +816,7 @@ test('successful run finalizes matching coverage identity as the last publicatio
   assert.equal(fs.existsSync(paths.cleanupRoot), true)
 })
 
-test('runtime release failure prevents terminal success and coverage identity publication', async (t) => {
+test('runtime release failure prevents terminal success', async (t) => {
   const tempRepo = makeTempRepo(t)
   const paths = resolveRunPaths(tempRepo, 'fixture-run')
   prepareRunDirectories(paths)
@@ -868,19 +834,16 @@ test('runtime release failure prevents terminal success and coverage identity pu
     failedTests: [],
     runId: 'fixture-run',
   })
-  assert.equal(fs.existsSync(paths.canonicalCoverageRunPath), false)
   assert.equal(fs.existsSync(paths.runRoot), true)
   assert.equal(fs.readFileSync(path.join(paths.runRoot, 'diagnostic.txt'), 'utf8'), 'retained')
 })
 
-test('terminal publication failure keeps diagnostics and never publishes coverage identity', async (t) => {
+test('terminal publication failure keeps diagnostics', async (t) => {
   const tempRepo = makeTempRepo(t)
   const paths = resolveRunPaths(tempRepo, 'fixture-run')
   prepareRunDirectories(paths)
   fs.writeFileSync(paths.jsonPath, '{"stats":{}}\n')
-  fs.writeFileSync(path.join(paths.runRoot, 'control-inventory.json'), '{"controls":[]}\n')
-  fs.writeFileSync(path.join(paths.runRoot, 'js-coverage-unused.json'), '{"unused":[]}\n')
-  fs.writeFileSync(path.join(paths.clickLedgerRoot, 'raw-worker-0.jsonl'), '{"key":"fixture"}\n')
+  fs.writeFileSync(path.join(paths.runRoot, 'diagnostic.txt'), 'retained')
   fs.mkdirSync(paths.htmlRoot, { recursive: true })
   fs.writeFileSync(path.join(paths.htmlRoot, 'index.html'), 'fixture report')
   publishSuccessfulArtifacts(paths, 'fixture-run')
@@ -891,19 +854,16 @@ test('terminal publication failure keeps diagnostics and never publishes coverag
     () => finishSuccessfulRun(paths, 'fixture-run', async () => {}),
     /EEXIST|ENOTDIR/,
   )
-  assert.equal(fs.existsSync(paths.canonicalCoverageRunPath), false)
   assert.equal(fs.existsSync(paths.runRoot), true)
-  assert.equal(fs.readFileSync(path.join(paths.runRoot, 'control-inventory.json'), 'utf8'), '{"controls":[]}\n')
+  assert.equal(fs.readFileSync(path.join(paths.runRoot, 'diagnostic.txt'), 'utf8'), 'retained')
 })
 
-test('cleanup staging failure keeps diagnostics and never publishes coverage identity', async (t) => {
+test('cleanup staging failure keeps diagnostics', async (t) => {
   const tempRepo = makeTempRepo(t)
   const paths = resolveRunPaths(tempRepo, 'fixture-run')
   prepareRunDirectories(paths)
   fs.writeFileSync(paths.jsonPath, '{"stats":{}}\n')
-  fs.writeFileSync(path.join(paths.runRoot, 'control-inventory.json'), '{"controls":[]}\n')
-  fs.writeFileSync(path.join(paths.runRoot, 'js-coverage-unused.json'), '{"unused":[]}\n')
-  fs.writeFileSync(path.join(paths.clickLedgerRoot, 'raw-worker-0.jsonl'), '{"key":"fixture"}\n')
+  fs.writeFileSync(path.join(paths.runRoot, 'diagnostic.txt'), 'retained')
   fs.mkdirSync(paths.htmlRoot, { recursive: true })
   fs.writeFileSync(path.join(paths.htmlRoot, 'index.html'), 'fixture report')
   publishSuccessfulArtifacts(paths, 'fixture-run')
@@ -914,47 +874,21 @@ test('cleanup staging failure keeps diagnostics and never publishes coverage ide
     () => finishSuccessfulRun(paths, 'fixture-run', async () => {}),
     /Deferred Playwright cleanup path already exists/,
   )
-  assert.equal(fs.existsSync(paths.canonicalCoverageRunPath), false)
   assert.equal(fs.existsSync(paths.runRoot), true)
-  assert.equal(fs.readFileSync(path.join(paths.runRoot, 'control-inventory.json'), 'utf8'), '{"controls":[]}\n')
+  assert.equal(fs.readFileSync(path.join(paths.runRoot, 'diagnostic.txt'), 'utf8'), 'retained')
 })
 
-test('coverage marker publication failure restores the diagnostic run root', async (t) => {
+test('incomplete successful publication fails without publishing results', (t) => {
   const tempRepo = makeTempRepo(t)
   const paths = resolveRunPaths(tempRepo, 'fixture-run')
   prepareRunDirectories(paths)
   fs.writeFileSync(paths.jsonPath, '{"stats":{}}\n')
-  fs.writeFileSync(path.join(paths.runRoot, 'control-inventory.json'), '{"controls":[]}\n')
-  fs.writeFileSync(path.join(paths.runRoot, 'js-coverage-unused.json'), '{"unused":[]}\n')
-  fs.writeFileSync(path.join(paths.clickLedgerRoot, 'raw-worker-0.jsonl'), '{"key":"fixture"}\n')
-  fs.mkdirSync(paths.htmlRoot, { recursive: true })
-  fs.writeFileSync(path.join(paths.htmlRoot, 'index.html'), 'fixture report')
-  publishSuccessfulArtifacts(paths, 'fixture-run')
-  fs.mkdirSync(paths.canonicalCoverageRunPath)
-
-  await assert.rejects(
-    () => finishSuccessfulRun(paths, 'fixture-run', async () => {}),
-    /EISDIR|EPERM/,
-  )
-  assert.equal(fs.existsSync(paths.runRoot), true)
-  assert.equal(fs.existsSync(paths.cleanupRoot), false)
-  assert.equal(fs.statSync(paths.canonicalCoverageRunPath).isDirectory(), true)
-  assert.equal(fs.readFileSync(path.join(paths.runRoot, 'control-inventory.json'), 'utf8'), '{"controls":[]}\n')
-})
-
-test('incomplete successful publication fails without publishing a coverage identity', (t) => {
-  const tempRepo = makeTempRepo(t)
-  const paths = resolveRunPaths(tempRepo, 'fixture-run')
-  prepareRunDirectories(paths)
-  fs.writeFileSync(paths.jsonPath, '{"stats":{}}\n')
-  fs.writeFileSync(path.join(paths.runRoot, 'control-inventory.json'), '{"controls":[]}\n')
-  fs.mkdirSync(paths.htmlRoot, { recursive: true })
 
   assert.throws(
     () => publishSuccessfulArtifacts(paths, 'fixture-run'),
-    /Required Playwright artifact is missing.*js-coverage-unused\.json/,
+    /Required Playwright artifact directory is missing.*playwright-report/,
   )
-  assert.equal(fs.existsSync(paths.canonicalCoverageRunPath), false)
+  assert.equal(fs.existsSync(path.join(paths.artifactsRoot, 'playwright-report')), false)
   assert.equal(fs.existsSync(paths.runRoot), true)
 })
 
