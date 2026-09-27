@@ -4,9 +4,9 @@ import { usePresets } from './aiApi'
 import { isAiKey, useAT } from './aiText'
 import type { Preset } from './types'
 import type { VlmDraft } from './useVlmDraft'
-import { applyPreset, OUTPUTS } from './vlmForm'
+import { applyPreset } from './vlmForm'
 
-/** What the model is asked to write: the output, a preset, the prompts and whether tags go along. */
+/** What the model is asked to write: a preset, the prompts and whether tags go along. */
 export function PromptFields({ draft }: { draft: VlmDraft }) {
   const t = useAT()
   const presetId = useId()
@@ -32,20 +32,6 @@ export function PromptFields({ draft }: { draft: VlmDraft }) {
   return (
     <div className={styles.group}>
       <h4 className={styles.groupTitle}>{t('ai.prompts')}</h4>
-      <div className={styles.field}>
-        <span className={styles.label} id={`${presetId}-output`}>
-          {t('ai.output')}
-        </span>
-        <div className={styles.choices} role="radiogroup" aria-labelledby={`${presetId}-output`} data-testid="vlm-output">
-          {OUTPUTS.map((o) => (
-            <label key={o} className={styles.choice} data-checked={form.outputFormat === o || undefined}>
-              <input type="radio" name="vlm-output" value={o} checked={form.outputFormat === o} onChange={() => set({ outputFormat: o })} />
-              {t(`ai.output.${o}`)}
-            </label>
-          ))}
-        </div>
-        <p className={styles.hint}>{t('ai.output.hint')}</p>
-      </div>
       <div className={styles.field}>
         <label className={styles.label} htmlFor={presetId}>
           {t('ai.preset')}

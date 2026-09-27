@@ -37,16 +37,11 @@ export const zhCNAi = {
   'ai.model.picked': '已填入 {model}，保存后生效。',
 
   // output and prompts
-  'ai.output': '输出',
-  'ai.output.nl_caption': '描述',
-  'ai.output.danbooru_tags': '标签',
-  'ai.output.both': '描述和标签',
-  'ai.output.hint': '打标时写的描述总是自然语言；这一项只影响 V3.5 的「批量描述」。',
   'ai.prompts': '提示词',
   'ai.preset': '预设',
   'ai.preset.choose': '选一个预设…',
   'ai.preset.apply': '套用',
-  'ai.preset.applied': '已套用「{name}」：提示词和输出已替换，保存后生效。',
+  'ai.preset.applied': '已套用「{name}」：提示词已替换，保存后生效。',
   'ai.preset.lora_training': 'LoRA 训练（描述）',
   'ai.preset.anima_flux': 'Anima / FLUX（详细描述）',
   'ai.preset.krea2_long_nl': 'Krea 2（长描述，适合 JoyCaption）',

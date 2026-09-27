@@ -1,16 +1,17 @@
 import type { components } from '../../../api/schema'
 import type { AiKey } from './aiText'
-import type { OutputFormat, Preset, Provider, TestResult, VlmSettings } from './types'
+import type { Preset, Provider, TestResult, VlmSettings } from './types'
 
 // The VLM form of Settings › AI services, as plain values. POST
 // /api/vlm/settings changes only the fields it is sent, and an empty string
 // wipes a stored secret: so the key and the service account are sent only
 // when the user typed a new one, never empty, never the masked stand-in.
+// The stored output format (description / tags / both) is never sent: only
+// V3.5's batch captioning reads it, and V4's descriptions are always prose.
 
 export type SaveBody = components['schemas']['SaveSettingsRequest']
 
 export const PROVIDERS: readonly Provider[] = ['openai_compat', 'anthropic', 'gemini']
-export const OUTPUTS: readonly OutputFormat[] = ['nl_caption', 'danbooru_tags', 'both']
 /** Where "Use" points a model Ollama runs on this computer. */
 export const OLLAMA_ENDPOINT = 'http://localhost:11434/v1'
 const DEFAULT_LOCATION = 'us-central1'
@@ -21,7 +22,6 @@ export interface VlmForm {
   /** A new key typed here; empty keeps the stored one. */
   apiKey: string
   model: string
-  outputFormat: OutputFormat
   systemPrompt: string
   userPrompt: string
   userPromptWithTags: string
@@ -69,7 +69,6 @@ export const NUMBER_FIELDS: readonly NumberField[] = [
 
 const text = (v: unknown) => (typeof v === 'string' ? v : '')
 const asProvider = (v: unknown): Provider => (PROVIDERS.includes(v as Provider) ? (v as Provider) : 'openai_compat')
-const asOutput = (v: unknown): OutputFormat | null => (OUTPUTS.includes(v as OutputFormat) ? (v as OutputFormat) : null)
 const numberText = (v: unknown, fallback: number) => String(typeof v === 'number' && Number.isFinite(v) ? v : fallback)
 
 export function formFromSettings(s: VlmSettings): VlmForm {
@@ -82,7 +81,6 @@ export function formFromSettings(s: VlmSettings): VlmForm {
     endpoint: text(s.endpoint),
     apiKey: '',
     model: text(s.model),
-    outputFormat: asOutput(s.output_format) ?? 'nl_caption',
     systemPrompt: text(s.system_prompt),
     userPrompt: text(s.user_prompt),
     userPromptWithTags: text(s.user_prompt_with_tags),
@@ -138,7 +136,6 @@ export function settingsBody(form: VlmForm): BuildResult {
     provider: form.provider,
     endpoint,
     model: form.model.trim(),
-    output_format: form.outputFormat,
     system_prompt: form.systemPrompt,
     user_prompt: form.userPrompt,
     user_prompt_with_tags: form.userPromptWithTags,
@@ -171,7 +168,6 @@ export function applyPreset(form: VlmForm, preset: Preset): VlmForm {
     systemPrompt: preset.system_prompt ?? '',
     userPrompt: preset.user_prompt ?? '',
     userPromptWithTags: preset.user_prompt_with_tags ?? '',
-    outputFormat: asOutput(preset.output_format) ?? form.outputFormat,
   }
 }
 

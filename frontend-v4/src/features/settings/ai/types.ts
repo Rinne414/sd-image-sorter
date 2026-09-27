@@ -1,7 +1,6 @@
 // What the /api/vlm/* routes answer (they declare no response models).
 
 export type Provider = 'openai_compat' | 'anthropic' | 'gemini'
-export type OutputFormat = 'nl_caption' | 'danbooru_tags' | 'both'
 
 /**
  * GET /api/vlm/settings: the stored settings. The key and the service account

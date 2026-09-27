@@ -73,10 +73,14 @@ describe('settingsBody never wipes a stored secret', () => {
       caption_max_tokens: 1024,
       max_image_size: 1024,
       retry_delay_seconds: 2,
-      output_format: 'nl_caption',
       include_tags_as_context: true,
       vertex_location: 'us-central1',
     })
+  })
+
+  it('leaves the stored output format alone (only V3.5 batch captioning reads it)', () => {
+    const r = settingsBody(form())
+    expect(r.ok && 'output_format' in r.body).toBe(false)
   })
 })
 
@@ -101,12 +105,12 @@ describe('settingsBody checks what the backend would refuse', () => {
 describe('formFromSettings', () => {
   it('fills the defaults the backend uses and never holds a secret', () => {
     const f = formFromSettings({})
-    expect(f).toMatchObject({ provider: 'openai_compat', endpoint: '', apiKey: '', maxRetries: '3', timeoutSeconds: '60', concurrent: '2', maxTokens: '1024', temperature: '0.3', retryDelay: '2', maxImageSize: '1024', outputFormat: 'nl_caption', includeTags: true, vertexLocation: 'us-central1', serviceAccountJson: '' })
+    expect(f).toMatchObject({ provider: 'openai_compat', endpoint: '', apiKey: '', maxRetries: '3', timeoutSeconds: '60', concurrent: '2', maxTokens: '1024', temperature: '0.3', retryDelay: '2', maxImageSize: '1024', includeTags: true, vertexLocation: 'us-central1', serviceAccountJson: '' })
     expect(formFromSettings(stored).apiKey).toBe('')
   })
 
-  it('treats an unknown provider or output as the default', () => {
-    expect(formFromSettings({ provider: 'mystery', output_format: 'poem' })).toMatchObject({ provider: 'openai_compat', outputFormat: 'nl_caption' })
+  it('treats an unknown provider as the default', () => {
+    expect(formFromSettings({ provider: 'mystery' })).toMatchObject({ provider: 'openai_compat' })
   })
 })
 
@@ -128,7 +132,7 @@ describe('the provider follows the address', () => {
 })
 
 describe('applyPreset', () => {
-  it('replaces the prompts and the output with the preset', () => {
+  it('replaces the prompts with the preset', () => {
     const f = applyPreset(form({ systemPrompt: 'mine', userPrompt: 'mine' }), {
       name: 'Hybrid',
       output_format: 'both',
@@ -136,12 +140,11 @@ describe('applyPreset', () => {
       user_prompt: 'user',
       user_prompt_with_tags: 'user {tags}',
     })
-    expect(f).toMatchObject({ systemPrompt: 'sys', userPrompt: 'user', userPromptWithTags: 'user {tags}', outputFormat: 'both' })
+    expect(f).toMatchObject({ systemPrompt: 'sys', userPrompt: 'user', userPromptWithTags: 'user {tags}' })
   })
 
-  it('keeps the output when the preset names none it knows', () => {
-    const f = applyPreset(form({ outputFormat: 'danbooru_tags' }), { name: 'x', output_format: 'poem', system_prompt: 's', user_prompt: 'u' })
-    expect(f.outputFormat).toBe('danbooru_tags')
+  it('clears a prompt the preset does not have', () => {
+    const f = applyPreset(form({ userPromptWithTags: 'mine {tags}' }), { name: 'x', output_format: 'poem', system_prompt: 's', user_prompt: 'u' })
     expect(f.userPromptWithTags).toBe('')
   })
 })

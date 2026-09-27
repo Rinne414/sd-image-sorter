@@ -154,45 +154,6 @@
   accent-color: var(--accent);
 }
 
-/* Output: three choices side by side, the chosen one printed in ink. */
-.choices {
-  display: inline-flex;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
-  width: max-content;
-}
-
-.choice {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 14px;
-  color: var(--text-2);
-  cursor: pointer;
-}
-
-.choice + .choice {
-  border-left: 1px solid var(--line-strong);
-}
-
-.choice input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.choice[data-checked] {
-  background: var(--wash-strong);
-  color: var(--text);
-  font-weight: 600;
-}
-
-.choice:has(input:focus-visible) {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
 /* The models the service listed: a strip of names to pick from. */
 .models {
   display: flex;
