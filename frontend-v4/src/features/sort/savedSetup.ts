@@ -25,7 +25,9 @@ export interface SortSetup {
   more: RuleSetup[]
 }
 
-export const EMPTY_SETUP: SortSetup = { mode: 'slot', folders: {}, favorites: [], operation: 'move', rule: EMPTY_RULE, more: [] }
+// Copy until the user picks move once (owner, ADR-2026-05-16-copy-default in
+// docs/AI_DECISION_LOG.md): a first sort must never move a library by surprise.
+export const EMPTY_SETUP: SortSetup = { mode: 'slot', folders: {}, favorites: [], operation: 'copy', rule: EMPTY_RULE, more: [] }
 
 const keyOf = (libraryId: string) => `sd-v4-sort-setup:${libraryId}`
 
@@ -45,7 +47,7 @@ export function cleanSetup(raw: unknown): SortSetup {
     mode: SETUP_MODES.includes(mode as SetupMode) ? (mode as SetupMode) : 'slot',
     folders: clean,
     favorites: cleanFavorites(favorites),
-    operation: operation === 'copy' ? 'copy' : 'move',
+    operation: operation === 'move' ? 'move' : 'copy',
     rule: cleanRule(rule),
     // A setup or preset from before several rules has none added.
     more: Array.isArray(more) ? more.filter((r) => r && typeof r === 'object').map(cleanRule) : [],

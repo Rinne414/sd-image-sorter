@@ -94,6 +94,9 @@ test('six picks go into four folders by key; undo moves back; a reload keeps the
   await expect(setup.getByRole('radio', { name: /The 6 picked/ })).toBeChecked()
   await expect(page.getByTestId('sort-start')).toBeDisabled()
   for (const slot of SLOTS) await chooseFolder(page, `sort-choose-${slot}`, destOf(slot))
+  // a new sort copies until the user picks move (ADR-2026-05-16-copy-default)
+  await expect(page.getByTestId('sort-op-copy')).toBeChecked()
+  await page.getByTestId('sort-op-move').check()
   await expect(page.getByTestId('sort-start')).toHaveText('Sort 6 images')
   await page.getByTestId('sort-start').click()
 

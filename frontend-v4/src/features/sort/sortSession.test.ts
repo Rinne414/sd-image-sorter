@@ -280,10 +280,18 @@ describe('the setup, remembered per library', () => {
     store.set('sd-v4-sort-setup:main', '{not json')
     expect(loadSetup('main')).toEqual(EMPTY_SETUP)
     store.set('sd-v4-sort-setup:main', JSON.stringify({ folders: { w: 5, a: 'D:/a', q: 'D:/q' }, operation: 'teleport' }))
-    expect(loadSetup('main')).toMatchObject({ mode: 'slot', folders: { a: 'D:/a' }, operation: 'move' })
+    expect(loadSetup('main')).toMatchObject({ mode: 'slot', folders: { a: 'D:/a' }, operation: 'copy' })
     const cleared = withFolder(loadSetup('main'), 'a', null)
     expect(cleared.folders).toEqual({})
     expect(hasFolder(cleared)).toBe(false)
+  })
+
+  // ADR-2026-05-16-copy-default (owner): sorting copies until the user picks move once.
+  it('copies by default; a stored move choice sticks', () => {
+    expect(EMPTY_SETUP.operation).toBe('copy')
+    expect(loadSetup('main').operation).toBe('copy')
+    saveSetup('main', { ...EMPTY_SETUP, operation: 'move' })
+    expect(loadSetup('main').operation).toBe('move')
   })
 
   it('starts with the images in order and only the keys that have a folder', () => {
@@ -291,7 +299,7 @@ describe('the setup, remembered per library', () => {
     expect(startBody([5, 3, 9], setup, false)).toMatchObject({
       image_ids: [5, 3, 9],
       folders: { w: 'D:/w', s: 'D:/s' },
-      operation_mode: 'move',
+      operation_mode: 'copy',
       replace_existing: false,
       mode: 'slot',
     })

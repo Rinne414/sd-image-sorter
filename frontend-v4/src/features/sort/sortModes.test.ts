@@ -292,6 +292,6 @@ describe('setups and presets', () => {
     store.set('sd-v4-sort-presets:main', '{nope')
     expect(loadPresets('main')).toEqual([])
     store.set('sd-v4-sort-presets:main', JSON.stringify([{ name: '' }, { name: 'ok', mode: 'teleport', folders: { q: 1 } }, 7]))
-    expect(loadPresets('main')).toEqual([{ name: 'ok', mode: 'slot', folders: {}, operation: 'move', rule: EMPTY_RULE, more: [], favorites: [] }])
+    expect(loadPresets('main')).toEqual([{ name: 'ok', mode: 'slot', folders: {}, operation: 'copy', rule: EMPTY_RULE, more: [], favorites: [] }])
   })
 })

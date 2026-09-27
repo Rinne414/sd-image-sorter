@@ -80,6 +80,9 @@ test('the library search moves every match into subfolders; undo puts them back 
   const dest = destOf('by-condition')
   await chooseDestination(page, dest)
   await page.getByTestId('sort-split-generator').check()
+  // copy is the default (ADR-2026-05-16-copy-default); this run picks move
+  await expect(page.getByTestId('sort-op-copy')).toBeChecked()
+  await page.getByTestId('sort-op-move').check()
   await page.getByTestId('sort-start').click()
   const confirm = page.getByTestId('sort-confirm')
   await expect(confirm).toContainText('Moves 6 images')
@@ -202,6 +205,7 @@ test('several rules sort into their own folders in one run, first match wins; on
   await expect(page.getByTestId('sort-start')).toBeInViewport({ ratio: 1 })
   expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
 
+  await page.getByTestId('sort-op-move').check()
   await page.getByTestId('sort-start').click()
   const plan = page.getByTestId('sort-rules-plan')
   await expect(plan.getByTestId('sort-rules-plan-row')).toHaveCount(2)
