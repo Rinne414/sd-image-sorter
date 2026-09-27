@@ -365,6 +365,8 @@ test('the details column keeps its place on the next image; the one before stays
   await dropFile(page, sample('comfyui'), 'image/png')
   await expect(page.getByTestId('card-nodes')).toBeVisible()
   const info = page.getByTestId('reader-info')
+  const tagGroups = info.locator('[data-testid^="reader-group-"]')
+  await expect(tagGroups.first()).toBeVisible()
   const place = await info.evaluate((el) => {
     const max = el.scrollHeight - el.clientHeight
     el.scrollTop = Math.round(max * 0.6)
@@ -380,6 +382,16 @@ test('the details column keeps its place on the next image; the one before stays
     await held
     await route.continue()
   })
+  // and its tag categories answer only after its details are laid out, as on a busy server:
+  // the tag groups grow late, and the column still ends in its place
+  let holdCategories = false
+  let answerCategories: () => void = () => {}
+  const categoriesHeld = new Promise<void>((resolve) => (answerCategories = resolve))
+  await page.route('**/api/prompts/categorize', async (route) => {
+    if (holdCategories) await categoriesHeld
+    await route.continue()
+  })
+  holdCategories = true
   await page.getByTestId('intake-file').setInputFiles(sample('a1111'))
   await expect(info).toHaveAttribute('data-stale', 'true')
   await expect(page.getByTestId('reader-prompt')).toContainText('v4reader comfy prompt')
@@ -387,12 +399,19 @@ test('the details column keeps its place on the next image; the one before stays
   release()
   await expect(page.getByTestId('reader-prompt')).toContainText('v4reader webui prompt')
   await expect(info).not.toHaveAttribute('data-stale', 'true')
-  const expected = await info.evaluate((el, p) => {
-    const max = el.scrollHeight - el.clientHeight
-    return max > 0 ? Math.min(max, Math.max(p.top, p.ratio * max)) : 0
-  }, place)
-  await expect.poll(() => info.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
-  expect(Math.abs((await info.evaluate((el) => el.scrollTop)) - expected)).toBeLessThanOrEqual(2)
+  // the kept place for what the column holds right now: as far down, or further when it is longer
+  const offPlace = () =>
+    info.evaluate((el, p) => {
+      const max = el.scrollHeight - el.clientHeight
+      const want = max > 0 ? Math.min(max, Math.max(p.top, p.ratio * max)) : 0
+      return Math.abs(el.scrollTop - want)
+    }, place)
+  await expect(tagGroups).toHaveCount(0)
+  await expect.poll(offPlace).toBeLessThanOrEqual(2)
+  answerCategories()
+  await expect(tagGroups.first()).toBeVisible()
+  await expect.poll(offPlace).toBeLessThanOrEqual(2)
+  expect(await info.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
 })
 
 test('fits the desktop sizes with nothing cut off', async ({ page }) => {

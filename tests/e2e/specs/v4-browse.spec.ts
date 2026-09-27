@@ -289,6 +289,8 @@ test('6d: the library is exactly the window high at 1366x768, and the filter pan
   expect(lib.right).toBeLessThanOrEqual(lib.vw)
   await page.keyboard.press('Escape')
 
+  // One saved sort per server (an earlier spec may have left one): Sort must open on its setup.
+  expect((await page.request.delete('/api/sort/session')).ok()).toBe(true)
   await page.goto('/v4/#/sort')
   await page.getByTestId('sort-mode-rules').click()
   await page.getByTestId('sort-condition').getByTestId('filter-button').click()

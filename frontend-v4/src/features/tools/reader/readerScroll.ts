@@ -5,9 +5,6 @@ import { useLayoutEffect, type RefObject } from 'react'
 // together with how far down it was, and on the next image it goes back to
 // the same place, or further when the new details are longer.
 
-/** V3.5 applied the place again 120 ms later, for parts that grow after the first layout. */
-const RESTORE_AGAIN_MS = 120
-
 export interface ScrollPlace {
   top: number
   /** How far down, 0–1, of what could be scrolled. */
@@ -38,8 +35,9 @@ export function rememberScroll(el: HTMLElement): void {
 
 /**
  * Puts the column back in its place when the details of another image
- * (`shownKey`) are laid out: at once, after the layout settles and once more
- * a moment later, unless the user scrolls first.
+ * (`shownKey`) are laid out, and again each time a part of them changes size
+ * afterwards (V3.5 tried once more after 120 ms; the tag groups wait for the
+ * server and can come later than that), until the user scrolls.
  */
 export function useKeptScroll(ref: RefObject<HTMLElement | null>, shownKey: string | null): void {
   useLayoutEffect(() => {
@@ -51,13 +49,21 @@ export function useKeptScroll(ref: RefObject<HTMLElement | null>, shownKey: stri
       if (top !== null) el.scrollTop = top
     }
     apply()
-    let frame = requestAnimationFrame(() => {
-      frame = requestAnimationFrame(apply)
+    // Every size change inside the column shows up as a change of one of its sections, or of the column.
+    const sizes = new ResizeObserver(apply)
+    const watch = (node: Node) => {
+      if (node instanceof Element) sizes.observe(node)
+    }
+    sizes.observe(el)
+    el.childNodes.forEach(watch)
+    const sections = new MutationObserver((changes) => {
+      for (const change of changes) change.addedNodes.forEach(watch)
+      apply()
     })
-    const timer = window.setTimeout(apply, RESTORE_AGAIN_MS)
+    sections.observe(el, { childList: true })
     const stop = () => {
-      cancelAnimationFrame(frame)
-      window.clearTimeout(timer)
+      sizes.disconnect()
+      sections.disconnect()
     }
     for (const type of USER_SCROLL) el.addEventListener(type, stop, { passive: true })
     return () => {

@@ -47,6 +47,14 @@ test('AI Tag Images with nothing selected says how many library images it will t
 })
 
 test('VLM captioning with nothing selected asks first, with the count and the cost', async ({ page }) => {
+  // "Nothing selected" means the images the Gallery shows, so it must show one (the test's own:
+  // a fresh test library is empty).
+  const image = { id: 9301, filename: 'scope-count.png', path: 'L:/scope-count.png', width: 64, height: 64 }
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#d9e2f2"/></svg>'
+  await page.route(`**/api/image-thumbnail/${image.id}**`, (route) =>
+    route.fulfill({ status: 200, contentType: 'image/svg+xml', body: svg }))
+  await page.route('**/api/images?**', (route) =>
+    route.fulfill({ json: { images: [image], total: 1, has_more: false, next_cursor: null } }))
   let batchPosts = 0
   await page.route('**/api/images/selection-token', async (route) => {
     await route.fulfill({ json: { selection_token: 'e2e', total_estimate: 4321, exact_total: true, chunk_size: 2000 } })
