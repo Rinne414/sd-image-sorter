@@ -43,7 +43,7 @@ async function dropTwoImages(page: Page) {
 
 test('dropping images asks first and Cancel copies nothing', async ({ page }) => {
   const importCalls: string[] = []
-  await page.setViewportSize(VIEWPORTS[0])
+  await page.setViewportSize({ width: 1366, height: 768 })
   await openGallery(page, importCalls)
 
   await dropTwoImages(page)
@@ -68,7 +68,7 @@ test('dropping images asks first and Cancel copies nothing', async ({ page }) =>
 
 test('choosing to copy imports the dropped images', async ({ page }) => {
   const importCalls: string[] = []
-  await page.setViewportSize(VIEWPORTS[1])
+  await page.setViewportSize({ width: 1920, height: 1080 })
   await openGallery(page, importCalls)
 
   await dropTwoImages(page)

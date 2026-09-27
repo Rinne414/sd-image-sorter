@@ -46,7 +46,7 @@ async function openMoveDialog(page: Page, seeds: Record<string, string>) {
 }
 
 test('the dialog does not prefill the import folder and has a Browse button', async ({ page }) => {
-  await page.setViewportSize(VIEWPORTS[0])
+  await page.setViewportSize({ width: 1366, height: 768 })
   await openMoveDialog(page, { [IMPORTS_KEY]: JSON.stringify(['C:/imports/where-images-are']) })
 
   await expect(page.locator('#input-modal-field')).toHaveValue('')
@@ -71,7 +71,7 @@ test('the dialog does not prefill the import folder and has a Browse button', as
 })
 
 test('the dialog starts from the last move destination and offers the recent ones', async ({ page }) => {
-  await page.setViewportSize(VIEWPORTS[1])
+  await page.setViewportSize({ width: 1920, height: 1080 })
   await openMoveDialog(page, {
     [IMPORTS_KEY]: JSON.stringify(['C:/imports/where-images-are']),
     [MOVES_KEY]: JSON.stringify(['D:/sorted/best', 'D:/sorted/keep']),

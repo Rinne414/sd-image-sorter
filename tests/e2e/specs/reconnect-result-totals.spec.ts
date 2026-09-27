@@ -66,7 +66,7 @@ async function showResult(page: Page, conflictCount: number) {
 }
 
 test('every conflict is listed with its own remove button and the real total', async ({ page }) => {
-  await page.setViewportSize(VIEWPORTS[0])
+  await page.setViewportSize({ width: 1366, height: 768 })
   await showResult(page, 23)
 
   const panel = page.locator('#reconnect-result-panel')

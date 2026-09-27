@@ -61,7 +61,7 @@ test('a saved sort of another library says so and asks before resuming', async (
   expect(created.ok()).toBe(true)
   const otherId: string = (await created.json()).library.id
   try {
-    await page.setViewportSize(VIEWPORTS[0])
+    await page.setViewportSize({ width: 1366, height: 768 })
     await openManualWithSession(page, savedSession(otherId))
 
     const line = page.locator('#sort-resume-banner .resume-library')
@@ -101,7 +101,7 @@ test('a saved sort of another library says so and asks before resuming', async (
 })
 
 test('a saved sort whose images span libraries says so', async ({ page }) => {
-  await page.setViewportSize(VIEWPORTS[1])
+  await page.setViewportSize({ width: 1920, height: 1080 })
   await openManualWithSession(page, savedSession(null, true))
 
   await expect(page.locator('#sort-resume-banner .resume-library')).toHaveText('这份进度里的图片来自多个图库。')
@@ -112,7 +112,7 @@ test('a saved sort whose images span libraries says so', async ({ page }) => {
 })
 
 test('a saved sort of the open library resumes without an extra question', async ({ page }) => {
-  await page.setViewportSize(VIEWPORTS[1])
+  await page.setViewportSize({ width: 1920, height: 1080 })
   await openManualWithSession(page, savedSession('main'))
 
   await expect(page.locator('#sort-resume-banner .resume-library')).toBeHidden()
@@ -126,7 +126,7 @@ test('starting another mode over a sort of another library names whose progress 
   expect(created.ok()).toBe(true)
   const otherId: string = (await created.json()).library.id
   try {
-    await page.setViewportSize(VIEWPORTS[0])
+    await page.setViewportSize({ width: 1366, height: 768 })
     await page.addInitScript(() => localStorage.setItem('manual_sort_mode_v1', 'slot'))
     await openManualWithSession(page, { ...savedSession(otherId), mode: 'bracket' })
     const discardCalls: string[] = []

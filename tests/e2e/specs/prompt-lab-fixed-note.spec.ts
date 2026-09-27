@@ -38,7 +38,7 @@ async function openRandomMode(page: Page, randomPart: boolean) {
 }
 
 test('Generate from fixed slots says the prompt has no random part', async ({ page }) => {
-  await page.setViewportSize(VIEWPORTS[0])
+  await page.setViewportSize({ width: 1366, height: 768 })
   await openRandomMode(page, false)
 
   await page.locator('#btn-promptlab-generate').click()
@@ -61,7 +61,7 @@ test('Generate from fixed slots says the prompt has no random part', async ({ pa
 })
 
 test('a prompt with a random part shows no note', async ({ page }) => {
-  await page.setViewportSize(VIEWPORTS[1])
+  await page.setViewportSize({ width: 1920, height: 1080 })
   await openRandomMode(page, true)
 
   await page.locator('#btn-promptlab-generate').click()
