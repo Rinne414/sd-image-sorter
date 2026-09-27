@@ -245,10 +245,14 @@ test('edits are saved as a new image; an existing name asks first; the new file 
 
   await page.getByTestId('reader-save-as').click()
   await expect(page.getByTestId('reader-saved')).toContainText('v4reader-a1111.edited.png')
-  // the A1111 sample's own settings the editor does not show are named, in the user's language
-  await expect(page.getByTestId('reader-save-notes')).toContainText('these settings from the original are not in the new file')
+  // the A1111 sample's own settings the editor does not show are kept, so nothing is said to be missing
+  await expect(page.getByTestId('reader-save-notes').filter({ hasText: 'are not in the new file' })).toHaveCount(0)
 
   const written = path.join(OUT, 'v4reader-a1111.edited.png')
+  const block = fs.readFileSync(written).toString('latin1')
+  for (const kept of ['Schedule type: Karras', 'Model hash: 0a1b2c3d4e', 'Lora hashes: "v4reader_detail: 9f8e7d6c5b4a"', 'Clip skip: 2', 'Version: v1.10.1']) {
+    expect(block, `${kept} kept in the saved parameters`).toContain(kept)
+  }
   const parsed = await request.post('/api/parse-image', {
     multipart: { file: { name: 'check.png', mimeType: 'image/png', buffer: fs.readFileSync(written) } },
   })
