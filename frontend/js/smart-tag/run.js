@@ -219,6 +219,7 @@
             }
         }
         activeJobId = null;
+        activeQueueId = null;
     }
 
     let pendingExistingChoice = null;
@@ -369,6 +370,7 @@
                 // starts the job.
                 pipelineQueuedSince = Date.now();
                 activeJobId = null;
+                activeQueueId = snap.queue_id || null;
                 if (typeof window.showToast === 'function') {
                     window.showToast(snap.duplicate
                         ? smartTagT('aiQueue.duplicateToast', 'An identical job is already queued')
@@ -385,6 +387,7 @@
             }
             pipelineQueuedSince = 0;
             activeJobId = snap.job_id || null;
+            activeQueueId = null;
             renderSnapshot(snap);
             startProgressPolling();
         } catch (err) {
@@ -400,8 +403,25 @@
 
     async function cancelSmartTag() {
         const cancelBtn = smartTag$('#btn-smart-tag-cancel-job');
+        // Name our own run: its queue place while it waits (the backend also
+        // finds the job it started as), else its job id. Only a page that knows
+        // neither falls back to the unnamed cancel.
+        const runParam = activeQueueId
+            ? `?queue_id=${encodeURIComponent(activeQueueId)}`
+            : (activeJobId ? `?job_id=${encodeURIComponent(activeJobId)}` : '');
         try {
-            await postJson('/api/smart-tag/cancel', null);
+            const result = await postJson(`/api/smart-tag/cancel${runParam}`, null);
+            if (result && result.status === 'queue_cleared') {
+                // Our run never started: it is gone from the queue, nothing to wait for.
+                stopProgressPolling();
+                pipelineQueuedSince = 0;
+                activeQueueId = null;
+                showProgress(false);
+                if (typeof window.showToast === 'function') {
+                    window.showToast(smartTagT('smartTag.queuedRunRemoved', 'Removed this Smart Tag run from the queue'), 'info');
+                }
+                return;
+            }
             // Immediately reflect intent in the UI so the user gets
             // feedback instead of watching the progress bar keep moving
             // for ~1s until the worker checks the cancel flag.

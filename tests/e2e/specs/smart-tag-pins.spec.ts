@@ -1153,6 +1153,68 @@ test('cancel() posts to /api/smart-tag/cancel and swallows a 404 job-already-fin
 })
 
 // ---------------------------------------------------------------------------
+// 13b. Cancel names our own run (V3.5 #21): a queued run by its queue place,
+//      a started run by its job id, so other queued Smart Tag runs stay queued.
+// ---------------------------------------------------------------------------
+
+test('cancel() names our queued run by its queue place and leaves the queue when it is removed', async ({ page }) => {
+  const cancelUrls: string[] = []
+  await page.route('**/api/smart-tag/start', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ pipeline_queued: true, queue_id: 'q7', queue_position: 2, duplicate: false }),
+    }))
+  await page.route((url) => url.pathname === '/api/smart-tag/cancel', (route) => {
+    cancelUrls.push(route.request().url())
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ status: 'queue_cleared', removed_queued: 1, cancel_requested: false }),
+    })
+  })
+
+  await openScopedAndReady(page, [10, 11, 12])
+  await page.locator('#smart-tag-enable-vlm').uncheck()
+  await page.evaluate(async () => { await (window as any).SmartTag.run() })
+  await expect(page.locator('#smart-tag-progress')).toBeVisible()
+
+  await page.evaluate(async () => { await (window as any).SmartTag.cancel() })
+
+  expect(cancelUrls).toHaveLength(1)
+  expect(new URL(cancelUrls[0]).searchParams.get('queue_id')).toBe('q7')
+  expect(new URL(cancelUrls[0]).searchParams.get('job_id')).toBeNull()
+  await expect(page.locator('#smart-tag-progress')).toBeHidden()
+})
+
+test('cancel() names a started run by its job id', async ({ page }) => {
+  const cancelUrls: string[] = []
+  await page.route('**/api/smart-tag/start', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ job_id: 'job-mine', status: 'running', active: true, total: 3, processed: 0 }),
+    }))
+  await page.route((url) => url.pathname === '/api/smart-tag/cancel', (route) => {
+    cancelUrls.push(route.request().url())
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ job_id: 'job-mine', status: 'running', cancel_requested: true, removed_queued: 0 }),
+    })
+  })
+
+  await openScopedAndReady(page, [10, 11, 12])
+  await page.locator('#smart-tag-enable-vlm').uncheck()
+  await page.evaluate(async () => { await (window as any).SmartTag.run() })
+  await page.evaluate(async () => { await (window as any).SmartTag.cancel() })
+
+  expect(cancelUrls).toHaveLength(1)
+  expect(new URL(cancelUrls[0]).searchParams.get('job_id')).toBe('job-mine')
+  expect(new URL(cancelUrls[0]).searchParams.get('queue_id')).toBeNull()
+})
+
+// ---------------------------------------------------------------------------
 // 14. Ollama warning banner — a cloud endpoint hides it; unconfigured + no Ollama shows it.
 // ---------------------------------------------------------------------------
 

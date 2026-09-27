@@ -4082,6 +4082,7 @@ window.I18nLang_en = {
     'smartTag.description': 'Build LoRA training captions from booru tags, natural-language descriptions, or both.',
     'smartTag.noImages': 'No images in Dataset Maker. Add images first.',
     'smartTag.cancelRequested': 'Smart Tag cancellation requested',
+    'smartTag.queuedRunRemoved': 'Removed this Smart Tag run from the queue',
     'smartTag.cancellingKept': 'Cancelling; results so far are kept',
     'smartTag.jobAlreadyFinished': 'Job already finished',
     'smartTag.trainingPurpose': 'Training purpose',

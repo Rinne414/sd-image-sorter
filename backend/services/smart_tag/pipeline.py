@@ -92,6 +92,29 @@ def get_job(job_id: str) -> Optional[SmartTagJobState]:
         return _jobs.get(job_id)
 
 
+def note_queue_entry(job_id: str, queue_id: str, enqueued_at: str) -> None:
+    """Record the AI-queue entry a job was started from (``settings``).
+
+    A run queued behind other AI work has no job id while it waits; the
+    page that queued it finds the job again by its queue place, also after
+    it ended while no page watched (``get_job_by_queue_id``).
+    """
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job is not None:
+            job.settings["queue_id"] = queue_id
+            job.settings["queue_enqueued_at"] = enqueued_at
+
+
+def get_job_by_queue_id(queue_id: str) -> Optional[SmartTagJobState]:
+    """The kept job started from this queue entry, running or finished (None: not known)."""
+    with _jobs_lock:
+        for job in _jobs.values():
+            if job.settings.get("queue_id") == queue_id:
+                return job
+    return None
+
+
 def get_active_job() -> Optional[SmartTagJobState]:
     with _jobs_lock:
         if _active_job_id is None:
@@ -111,6 +134,22 @@ def cancel_active_job() -> Optional[SmartTagJobState]:
         if _active_job_id is None:
             return None
         job = _jobs.get(_active_job_id)
+        if job is None:
+            return None
+        job.cancel_requested = True
+        job.message = "Cancellation requested..."
+        return job
+
+
+def cancel_job_if_active(job_id: str) -> Optional[SmartTagJobState]:
+    """Like :func:`cancel_active_job`, but only when ``job_id`` is the running job.
+
+    A page cancelling its own run must never stop a run another page started.
+    """
+    with _jobs_lock:
+        if _active_job_id is None or _active_job_id != job_id:
+            return None
+        job = _jobs.get(job_id)
         if job is None:
             return None
         job.cancel_requested = True

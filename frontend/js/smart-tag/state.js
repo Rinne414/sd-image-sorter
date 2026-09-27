@@ -46,6 +46,9 @@
     /** Consecutive poll failures — reset on every successful poll. */
     let pollFailureCount = 0;
     let activeJobId = null;
+    // The AI-queue place of our run while it waits (and after it starts):
+    // Cancel names it so other pages' queued Smart Tag runs stay queued.
+    let activeQueueId = null;
     // v3.4.1 AI job queue: timestamp of our queued (not-yet-started) start.
     // 0 when we are not waiting in the unified pipeline queue. Guards the
     // pipeline_queue.last_start_error check against stale errors from

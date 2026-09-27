@@ -4082,6 +4082,7 @@ window.I18nLang_zhCN = {
     'smartTag.description': '用 booru 标签、自然语言描述或两者一起，组成 LoRA 训练用的 caption。',
     'smartTag.noImages': '数据集里还没有图片，请先添加图片。',
     'smartTag.cancelRequested': '已请求取消智能标注',
+    'smartTag.queuedRunRemoved': '已把这次智能标注移出队列',
     'smartTag.cancellingKept': '正在取消，已经打好的结果会保留',
     'smartTag.jobAlreadyFinished': '任务已经结束',
     'smartTag.trainingPurpose': '训练用途',

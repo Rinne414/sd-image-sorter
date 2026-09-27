@@ -536,8 +536,12 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
                 )
             return GalleryMutationActivity(state="idle", jobs=(), detail="")
 
-    def get_smart_tag_progress(self, job_id: Optional[str] = None) -> Dict[str, Any]:
+    def get_smart_tag_progress(
+        self, job_id: Optional[str] = None, queue_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         queue_info = self.queue_snapshot(KIND_SMART)  # before status; see get_gallery_progress
+        if queue_id and not job_id:
+            return self._smart_progress_by_queue_id(queue_id, queue_info)
         job = smart_tag_service.get_job(job_id) if job_id else smart_tag_service.get_active_job()
         if job is None:
             snapshot: Dict[str, Any] = {"status": "idle", "active": False}
@@ -548,7 +552,49 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
         out["pipeline_queue"] = queue_info
         return out
 
-    def cancel_smart_tagging(self) -> Dict[str, Any]:
+    def _smart_progress_by_queue_id(self, queue_id: str, queue_info: Dict[str, Any]) -> Dict[str, Any]:
+        """A run found by the AI-queue place it was queued at (additive; V4).
+
+        The job started from that entry (running or kept after it ended), or
+        ``status: "queued"`` while the entry still waits, or ``"failed"`` when
+        it could not start. ``found: false`` when the backend no longer knows
+        the entry (it restarted, or the finished job was dropped).
+        """
+        job = smart_tag_service.get_job_by_queue_id(queue_id)
+        start_error = queue_info.get("last_start_error")
+        if job is not None:
+            snapshot: Dict[str, Any] = job.snapshot()
+            snapshot["active"] = job.status in SMART_ACTIVE_STATUSES
+        elif any(item.get("queue_id") == queue_id for item in queue_info.get("queued", [])):
+            snapshot = {"status": "queued", "active": False}
+        elif isinstance(start_error, dict) and start_error.get("queue_id") == queue_id:
+            snapshot = {"status": "failed", "active": False, "message": str(start_error.get("error") or "")}
+        else:
+            snapshot = {
+                "status": "unknown",
+                "active": False,
+                "found": False,
+                "message": "This queued Smart Tag run is no longer known (the app restarted or its result was dropped).",
+            }
+        snapshot.setdefault("found", True)
+        snapshot["queue_id"] = queue_id
+        out = _with_owner(snapshot, KIND_SMART)
+        out["pipeline_queue"] = queue_info
+        return out
+
+    def cancel_smart_tagging(
+        self, job_id: Optional[str] = None, queue_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Cancel Smart Tag work.
+
+        With ``job_id`` and/or ``queue_id`` only that run is touched: its queue
+        entry is dropped while it waits, and its job (named, or started from
+        that queue entry) is cancelled when it is the active one. Other queued
+        Smart Tag runs stay queued. Without either (older clients) the active
+        run is cancelled and every queued Smart Tag run is removed.
+        """
+        if job_id or queue_id:
+            return self._cancel_one_smart_run(job_id, queue_id)
         removed = self.remove_queued_jobs(KIND_SMART)
         job = smart_tag_service.cancel_active_job()
         if job is None:
@@ -562,6 +608,41 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
                     KIND_SMART,
                 )
             raise HTTPException(status_code=404, detail="No active Smart Tag job to cancel.")
+        out = _with_owner(
+            {"job_id": job.job_id, "status": job.status, "cancel_requested": True},
+            KIND_SMART,
+        )
+        out["removed_queued"] = removed
+        return out
+
+    def _cancel_one_smart_run(
+        self, job_id: Optional[str], queue_id: Optional[str]
+    ) -> Dict[str, Any]:
+        removed = self._remove_queued_entry(KIND_SMART, queue_id) if queue_id else 0
+        target = job_id
+        if not target and queue_id and not removed:
+            started = smart_tag_service.get_job_by_queue_id(queue_id)
+            target = started.job_id if started is not None else None
+        job = smart_tag_service.cancel_job_if_active(target) if target else None
+        if job is None:
+            if removed:
+                return _with_owner(
+                    {
+                        "status": "queue_cleared",
+                        "removed_queued": removed,
+                        "cancel_requested": False,
+                    },
+                    KIND_SMART,
+                )
+            raise HTTPException(
+                status_code=404,
+                detail="This Smart Tag run is no longer running or queued.",
+            )
+        with _start_lock:
+            # The cancelled job must not be re-queued on the next restart.
+            if self._running_entry is not None and self._running_entry.kind == KIND_SMART:
+                self._running_entry = None
+                self._persist_state_locked()
         out = _with_owner(
             {"job_id": job.job_id, "status": job.status, "cancel_requested": True},
             KIND_SMART,
@@ -603,6 +684,21 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
                 "queued": entries,
                 "last_start_error": last_error,
             }
+
+    def _remove_queued_entry(self, kind: str, queue_id: str) -> int:
+        """Drop the one queued ``kind`` entry at ``queue_id`` (0 when it is not queued)."""
+        with _start_lock:
+            before = len(self._queue)
+            self._queue = [
+                entry for entry in self._queue
+                if not (entry.kind == kind and entry.queue_id == queue_id)
+            ]
+            removed = before - len(self._queue)
+            if removed:
+                self._persist_state_locked()
+        if removed:
+            logger.info("Removed queued %s job %s", kind, queue_id)
+        return removed
 
     def remove_queued_jobs(self, kind: str) -> int:
         """Drop every queued entry of ``kind`` (queued-job cancellation)."""
@@ -707,7 +803,11 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
                 raise RuntimeError("Gallery tagging service unavailable for the queued start")
             entry.legacy_service.start_tagging(entry.payload, _ThreadLaunchBackgroundTasks())
         elif entry.kind == KIND_SMART:
-            smart_tag_service.start_smart_tag_job(entry.payload)
+            snapshot = smart_tag_service.start_smart_tag_job(entry.payload)
+            job_id = snapshot.get("job_id") if isinstance(snapshot, dict) else None
+            if job_id:
+                # The page that queued it finds the run again by its queue place.
+                smart_tag_service.note_queue_entry(job_id, entry.queue_id, entry.enqueued_at)
         elif entry.kind == KIND_VLM:
             _start_queued_vlm_batch(entry)
         else:  # pragma: no cover - defensive
@@ -730,6 +830,7 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
                     "pipeline_queued": True,
                     "duplicate": True,
                     "queue_id": last.queue_id,
+                    "enqueued_at": last.enqueued_at,
                     "queue_position": len(self._queue),
                     "queue_length": len(self._queue),
                     "message": DUPLICATE_QUEUED_MESSAGE,
@@ -756,6 +857,7 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
                 "status": "queued",
                 "pipeline_queued": True,
                 "queue_id": entry.queue_id,
+                "enqueued_at": entry.enqueued_at,
                 "queue_position": position,
                 "queue_length": position,
                 "message": QUEUED_MESSAGE,

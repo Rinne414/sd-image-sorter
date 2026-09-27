@@ -63,6 +63,8 @@
             showProgress(true);
             if (!isLive && queuedEntries.length > 0) {
                 pipelineQueuedSince = Date.now();
+                // After a reload the page shows the first queued run; Cancel names that one.
+                activeQueueId = queuedEntries[0].queue_id || null;
                 setProgressUI({
                     percent: 0,
                     text: smartTagT('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish')
