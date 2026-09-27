@@ -626,25 +626,33 @@ def get_all_tags() -> List[Dict[str, Any]]:
     Uses in-memory caching with TTL to reduce database load.
     Cache is invalidated after 60 seconds or when tags are modified,
     and is keyed by the active library so workspaces cannot share counts.
+    A write by another process (a script, or V3.5 and V4 on one database)
+    never reaches the invalidation, so the cache is also checked against a
+    cheap marker of the rows it was built from.
     """
     from library_context import current_library_sql, get_current_library_id
 
     current_time = time.time()
     library_id = get_current_library_id()
 
-    # Check cache
     with _tags_cache_lock:
-        if (
-            db_core._tags_cache_data is not None
+        cached = db_core._tags_cache_data
+        cached_marker = db_core._tags_cache_marker
+        fresh = (
+            cached is not None
             and db_core._tags_cache_library_id == library_id
             and (current_time - db_core._tags_cache_timestamp) < _TAGS_CACHE_TTL
-        ):
-            return db_core._tags_cache_data
+        )
 
     lib_sql, lib_params = current_library_sql()
     foreign_sql, _ = current_library_sql("i.library_id")
     with get_db() as conn:
         cursor = conn.cursor()
+        # Taken before the counts: a write in between costs one extra rebuild,
+        # never a stale cache.
+        marker = _tag_counts_marker(cursor, lib_sql, lib_params)
+        if fresh and marker == cached_marker:
+            return cached
         # Usually one library holds every tag row. Then the plain covering
         # index count is exact, and a ~5 ms probe proves it.
         has_foreign_tags = cursor.execute(
@@ -684,8 +692,25 @@ def get_all_tags() -> List[Dict[str, Any]]:
         db_core._tags_cache_data = result
         db_core._tags_cache_timestamp = current_time
         db_core._tags_cache_library_id = library_id
+        db_core._tags_cache_marker = marker
 
     return result
+
+
+def _tag_counts_marker(cursor: sqlite3.Cursor, lib_sql: str, lib_params: Tuple[Any, ...]) -> Tuple[Any, ...]:
+    """A cheap fingerprint of the rows the per-library tag counts come from.
+
+    Tag rows are only ever inserted (AUTOINCREMENT ids, never reused) or
+    deleted, never updated in place, so the highest id and the row count
+    together change with every tag write; the library's image count follows
+    images moved between libraries. Three separate queries: in one statement
+    SQLite scans the wide table instead (measured 65 ms against about 25 ms
+    on 650,000 tag rows).
+    """
+    max_id = cursor.execute("SELECT MAX(id) FROM tags").fetchone()[0]
+    tag_rows = cursor.execute("SELECT COUNT(*) FROM tags").fetchone()[0]
+    images = cursor.execute(f"SELECT COUNT(*) FROM images WHERE {lib_sql}", lib_params).fetchone()[0]
+    return (max_id, tag_rows, images)
 
 
 def _facet_search_rank_params(normalized_query: str) -> List[str]:

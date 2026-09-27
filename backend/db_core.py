@@ -70,11 +70,14 @@ def _invalidate_facet_caches():
 
 def _invalidate_tags_cache():
     """Clear the tags cache when tags are modified."""
-    global _tags_cache_data, _tags_cache_timestamp, _tags_cache_library_id
+    global _tags_cache_data, _tags_cache_timestamp, _tags_cache_library_id, _tags_cache_marker
     with _tags_cache_lock:
         _tags_cache_data = None
         _tags_cache_timestamp = 0
         _tags_cache_library_id = None
+        _tags_cache_marker = None
+# Fingerprint of the rows the cached counts were built from (db_tags).
+_tags_cache_marker = None
 
 
 _pragmas_initialized: set = set()
