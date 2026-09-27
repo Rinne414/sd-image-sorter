@@ -412,7 +412,7 @@ def test_build_status_passes_release_body_verbatim(monkeypatch, tmp_path: Path):
     service = UpdateService()
     status = service._build_status(
         {
-            "tag_name": "v9.9.9",
+            "tag_name": "vopus-v9.9.9",
             "html_url": "https://example.com/release",
             "body": "## v9.9.9 raw body verbatim",
             "assets": [],
@@ -444,7 +444,7 @@ def test_get_status_caches_within_ttl_and_force_refetches(monkeypatch, tmp_path:
 
     def fake_read():
         calls["n"] += 1
-        return {"tag_name": "v9.9.9", "body": "b", "assets": []}
+        return {"tag_name": "vopus-v9.9.9", "body": "b", "assets": []}
 
     monkeypatch.setattr(service, "_read_release_json", fake_read)
 
@@ -704,7 +704,7 @@ def test_write_pending_manifest_records_archive_launcher_and_pid(
     launcher.write_text("#!/bin/sh\n", encoding="utf-8")
     monkeypatch.setattr(service, "_resolve_launcher_path", lambda: launcher)
 
-    archive_path = tmp_path / "downloads" / "sd-image-sorter-v9.9.9-app-patch.zip"
+    archive_path = tmp_path / "downloads" / "sd-image-sorter-vopus-v9.9.9-app-patch.zip"
     manifest_path = service._write_pending_manifest(
         archive_path=archive_path,
         version="9.9.9",

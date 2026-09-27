@@ -28,6 +28,12 @@ BACKEND_ROOT = ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
+from app_info import (  # noqa: E402
+    LINUX_FULL_ASSET_TEMPLATE,
+    LINUX_PORTABLE_ASSET_TEMPLATE,
+    RELEASE_MANIFEST_ASSET_TEMPLATE,
+    RELEASE_TAG_PREFIX,
+)
 from update_worker import (  # noqa: E402
     INSTALLED_MANIFEST_RELATIVE_PATH,
     PACKAGE_MANIFEST_RELATIVE_PATH,
@@ -1336,7 +1342,7 @@ def stage_archive(name: str, version: str, seven_zip: Path | None, *, populate) 
     stage_dir.mkdir(parents=True, exist_ok=True)
     populate(stage_dir)
 
-    archive_name = f"sd-image-sorter-v{version}-{name}.zip"
+    archive_name = f"sd-image-sorter-{RELEASE_TAG_PREFIX}{version}-{name}.zip"
     archive_path = ARTIFACT_ROOT / archive_name
     create_zip(stage_dir, archive_path, seven_zip)
     return archive_path
@@ -1407,7 +1413,7 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
         info.gname = ""
         return info
 
-    tar_name = f"sd-image-sorter-v{version}-linux.tar.gz"
+    tar_name = LINUX_FULL_ASSET_TEMPLATE.format(version=version)
     tar_path = ARTIFACT_ROOT / tar_name
     with tarfile.open(tar_path, "w:gz") as tar:
         tar.add(linux_stage, arcname="sd-image-sorter", filter=_linux_source_tar_filter)
@@ -1489,7 +1495,7 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
         linux_portable_stage.mkdir(parents=True, exist_ok=True)
         populate_linux_portable_for_arch(linux_portable_stage, arch)
 
-        linux_portable_tar_name = f"sd-image-sorter-v{version}-linux-portable-{arch}.tar.gz"
+        linux_portable_tar_name = LINUX_PORTABLE_ASSET_TEMPLATE.format(version=version, arch=arch)
         linux_portable_tar_path = ARTIFACT_ROOT / linux_portable_tar_name
         with tarfile.open(linux_portable_tar_path, "w:gz") as tar:
             # Preserve mode bits so python/bin/python3 and run-portable.sh stay
@@ -1507,7 +1513,7 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
             }
         )
 
-    manifest_path = ARTIFACT_ROOT / f"sd-image-sorter-v{version}-release-manifest.json"
+    manifest_path = ARTIFACT_ROOT / RELEASE_MANIFEST_ASSET_TEMPLATE.format(version=version)
     manifest_path.write_text(json.dumps({"version": version, "assets": manifest_entries}, indent=2), encoding="utf-8")
     assets.append(manifest_path)
     shutil.rmtree(STAGING_ROOT, ignore_errors=True)

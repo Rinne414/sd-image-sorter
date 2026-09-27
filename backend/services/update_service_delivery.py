@@ -17,6 +17,12 @@ Never-patched names (APP_VERSION, DATA_DIR, the asset-name templates,
 PACKAGE_MANIFEST_RELATIVE_PATH) import directly, and network calls stay
 attribute-form ``urllib.request.urlopen(...)`` so the stdlib-module patch
 seam keeps working.
+
+Vopus release rule (2026-09): the repository also publishes V3.5, so
+_read_release_json reads the release list beside GitHub's latest-release
+endpoint and _build_status offers only tags that start with
+app_info.RELEASE_TAG_PREFIX (tests/test_update_vopus_releases.py sets
+APP_VERSION on this module to stand in for an installed Vopus).
 """
 from __future__ import annotations
 
@@ -37,6 +43,8 @@ from app_info import (
     APP_VERSION,
     LINUX_FULL_ASSET_TEMPLATE,
     PATCH_ASSET_TEMPLATE,
+    RELEASE_MANIFEST_ASSET_TEMPLATE,
+    RELEASE_TAG_PREFIX,
     WINDOWS_FULL_ASSET_TEMPLATE,
 )
 from config import DATA_DIR
@@ -51,6 +59,9 @@ _HTTP_HEADERS = {
     "User-Agent": f"sd-image-sorter/{APP_VERSION}",
 }
 _DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+# The version part of a Vopus release tag: 1.0.0, 1.1.0-beta.1.
+_RELEASE_VERSION_RE = re.compile(r"\d+(?:\.\d+)+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?")
+_LATEST_RELEASE_PATH = "/releases/latest"
 
 
 def _github_api_error_payload(payload: dict[str, Any]) -> bool:
@@ -101,6 +112,48 @@ def _version_is_newer(candidate: str, current: str) -> bool:
 
 def _safe_version_text(version: str) -> str:
     return re.sub(r"[^0-9A-Za-z._-]+", "-", _normalize_version(version)) or "latest"
+
+
+def _release_list_url(api_url: str) -> str:
+    """The release list for a channel that names GitHub's latest-release endpoint.
+
+    The repository's latest release may be a V3.5 one (tag v3.5.x), so Vopus
+    reads the list next to it (newest created first) and picks its own there.
+    A proxy mirror keeps its prefix; any other channel URL is read as it is.
+    """
+    trimmed = api_url.rstrip("/")
+    if trimmed.endswith(_LATEST_RELEASE_PATH):
+        return trimmed.removesuffix("/latest")
+    return api_url
+
+
+def _release_version(release: dict[str, Any]) -> Optional[str]:
+    """The version of a Vopus release (tag vopus-v1.0.1 -> 1.0.1); None for any other tag."""
+    tag = str(release.get("tag_name") or "").strip()
+    if not tag.startswith(RELEASE_TAG_PREFIX):
+        return None
+    version = tag[len(RELEASE_TAG_PREFIX) :]
+    return version if _RELEASE_VERSION_RE.fullmatch(version) else None
+
+
+def _newest_vopus_release(releases: list[Any]) -> Optional[dict[str, Any]]:
+    """The newest published Vopus release of a release list, by version.
+
+    Drafts and pre-releases are left out, as GitHub's latest-release endpoint
+    leaves them out; so is every tag without the Vopus prefix.
+    """
+    if not all(isinstance(release, dict) for release in releases):
+        raise RuntimeError("Update API returned an unexpected payload")
+    published = [
+        (version, release)
+        for release in releases
+        if not release.get("draft")
+        and not release.get("prerelease")
+        and (version := _release_version(release)) is not None
+    ]
+    if not published:
+        return None
+    return max(published, key=lambda pair: _version_key(pair[0]))[1]
 
 
 def _validate_archive_member_name(name: str) -> None:
@@ -170,12 +223,15 @@ class _UpdateDeliveryMixin:
             return "linux"
         return "unsupported"
 
-    def _read_release_json(self) -> dict[str, Any]:
+    def _read_release_json(self) -> Optional[dict[str, Any]]:
+        """The newest Vopus release the channel names, or None when it names none."""
         channel = self._channel_state()
-        req = urllib.request.Request(channel["api_url"], headers=_HTTP_HEADERS)
+        req = urllib.request.Request(_release_list_url(channel["api_url"]), headers=_HTTP_HEADERS)
         with urllib.request.urlopen(req, timeout=20) as response:
             raw = response.read()
         payload = json.loads(raw.decode("utf-8"))
+        if isinstance(payload, list):
+            return _newest_vopus_release(payload)
         if not isinstance(payload, dict):
             raise RuntimeError("Update API returned an unexpected payload")
         if _github_api_error_payload(payload):
@@ -232,7 +288,7 @@ class _UpdateDeliveryMixin:
             preferred_names.append(("full", WINDOWS_FULL_ASSET_TEMPLATE.format(version=latest_version)))
         elif platform_key == "linux":
             preferred_names.append(("full", LINUX_FULL_ASSET_TEMPLATE.format(version=latest_version)))
-        manifest_name = f"sd-image-sorter-v{latest_version}-release-manifest.json"
+        manifest_name = RELEASE_MANIFEST_ASSET_TEMPLATE.format(version=latest_version)
         manifest_download_url = ""
         for asset in assets:
             if not isinstance(asset, dict):
@@ -295,14 +351,11 @@ class _UpdateDeliveryMixin:
             "checked_at": time.time(),
         }
 
-        if not release:
+        latest_version = _release_version(release) if release else None
+        if latest_version is None:
+            # No release, or not a Vopus one (a V3.5 tag such as v3.5.0, or a
+            # malformed tag): nothing to offer, whatever its number says.
             return status
-
-        latest_version = _normalize_version(
-            release.get("tag_name")
-            or release.get("name")
-            or current_version
-        ) or current_version
         asset = self._select_update_asset(release, latest_version)
         newer_than_current = _version_is_newer(latest_version, current_version)
         status.update(

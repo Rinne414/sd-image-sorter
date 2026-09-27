@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+import app_info
+
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD_SCRIPT = ROOT / "scripts" / "build_release_packages.py"
@@ -441,7 +443,7 @@ def test_release_public_docs_link_to_releases_page_not_pinned_assets():
         "README must not hardcode a release-asset download URL: that form "
         "needs an exact filename and 404s on the next version bump."
     )
-    pinned = sorted(set(re.findall(r"sd-image-sorter-v\d[\w.]*-[\w.\-]+", readme_text)))
+    pinned = sorted(set(re.findall(r"sd-image-sorter-(?:vopus-)?v\d[\w.]*-[\w.\-]+", readme_text)))
     assert not pinned, f"README pins version-specific asset filenames: {pinned}"
 
     # Built from app_info.py so an owner/repo rename cannot silently leave the
@@ -1061,7 +1063,7 @@ def test_linux_release_package_uses_linux_only_name():
     build_script = (ROOT / "scripts" / "build_release_packages.py").read_text(encoding="utf-8")
 
     assert "linux.tar.gz" in app_info
-    assert "linux.tar.gz" in build_script
+    assert "LINUX_FULL_ASSET_TEMPLATE.format(version=version)" in build_script
     assert "linux-mac.tar.gz" not in app_info
     assert "linux-mac.tar.gz" not in build_script
 
@@ -1131,14 +1133,14 @@ def test_linux_portable_release_constants_are_pinned_and_consistent():
     # arch via {arch} so the updater can pick the right tarball at runtime.
     app_info = (ROOT / "backend" / "app_info.py").read_text(encoding="utf-8")
     assert "LINUX_PORTABLE_ASSET_TEMPLATE" in app_info
-    assert "sd-image-sorter-v{version}-linux-portable-{arch}.tar.gz" in app_info
+    assert "sd-image-sorter-vopus-v{version}-linux-portable-{arch}.tar.gz" in app_info
     assert "LINUX_PORTABLE_ASSET_ARCHES" in app_info
     assert '"x86_64"' in app_info
     assert '"aarch64"' in app_info
 
-    # build-script side: the filename must contain the matching suffix.
+    # build-script side: the filename comes from that same template.
     build_script = (ROOT / "scripts" / "build_release_packages.py").read_text(encoding="utf-8")
-    assert "sd-image-sorter-v{version}-linux-portable-{arch}.tar.gz" in build_script
+    assert "LINUX_PORTABLE_ASSET_TEMPLATE.format(version=version, arch=arch)" in build_script
 
     # The build script must call its three new pieces — the helper, the
     # launcher writer, and the build step — so a future cleanup that
@@ -1851,6 +1853,20 @@ def test_every_release_archive_carries_the_built_v4_interface(monkeypatch, tmp_p
     assets = release_builder.build_release_assets(version, 1900)
 
     assert order[:2] == ["build", "stage"]
+    # Every file carries the Vopus prefix the updater looks for (app_info templates).
+    assert sorted(path.name for path in assets) == sorted(
+        [
+            app_info.WINDOWS_FULL_ASSET_TEMPLATE.format(version=version),
+            app_info.PATCH_ASSET_TEMPLATE.format(version=version),
+            app_info.LINUX_FULL_ASSET_TEMPLATE.format(version=version),
+            *(
+                app_info.LINUX_PORTABLE_ASSET_TEMPLATE.format(version=version, arch=arch)
+                for arch in app_info.LINUX_PORTABLE_ASSET_ARCHES
+            ),
+            app_info.RELEASE_MANIFEST_ASSET_TEMPLATE.format(version=version),
+        ]
+    )
+    assert all(path.name.startswith("sd-image-sorter-vopus-v9.9.9-") for path in assets)
     archives = [path for path in assets if not path.name.endswith(".json")]
     assert len(archives) == 5
     for archive_path in archives:
@@ -1861,6 +1877,21 @@ def test_every_release_archive_carries_the_built_v4_interface(monkeypatch, tmp_p
         assert not any(name.startswith("frontend/") for name in names), archive_path.name
 
     qa.check_release_packages(artifact_root, version)
+
+
+def test_lazy_release_qa_does_not_take_a_v35_release_manifest(tmp_path):
+    qa = _load_lazy_release_qa_module("lazy_release_qa_v35_manifest_for_test")
+    (tmp_path / "sd-image-sorter-v3.5.0-release-manifest.json").write_text('{"assets": []}', encoding="utf-8")
+
+    with pytest.raises(qa.LazyQaError, match="No release manifest"):
+        qa.find_manifest(tmp_path, None)
+    with pytest.raises(qa.LazyQaError, match="No release manifest"):
+        qa.find_manifest(tmp_path, "3.5.0")
+
+    vopus = tmp_path / "sd-image-sorter-vopus-v1.0.0-release-manifest.json"
+    vopus.write_text('{"assets": []}', encoding="utf-8")
+    assert qa.find_manifest(tmp_path, None) == vopus
+    assert qa.find_manifest(tmp_path, "1.0.0") == vopus
 
 
 def _v4_reader(files: dict[str, str]):

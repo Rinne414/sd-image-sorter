@@ -11,9 +11,16 @@ GITHUB_RELEASES_API_URL = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_
 GITHUB_LATEST_RELEASE_API_URL = f"{GITHUB_RELEASES_API_URL}/latest"
 GITHUB_REPOSITORY_URL = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}"
 
-PATCH_ASSET_TEMPLATE = "sd-image-sorter-v{version}-app-patch.zip"
-WINDOWS_FULL_ASSET_TEMPLATE = "sd-image-sorter-v{version}-windows-portable.zip"
-LINUX_FULL_ASSET_TEMPLATE = "sd-image-sorter-v{version}-linux.tar.gz"
+# Vopus releases are tagged vopus-v<version> (vopus-v1.0.0) and their files
+# carry the same prefix. The repository also publishes V3.5 (tags v3.5.x) and
+# its "latest" release may be one of those, so the updater offers only
+# releases whose tag starts with this prefix (docs/RELEASE_SOP.md).
+RELEASE_TAG_PREFIX = "vopus-v"
+
+PATCH_ASSET_TEMPLATE = "sd-image-sorter-vopus-v{version}-app-patch.zip"
+WINDOWS_FULL_ASSET_TEMPLATE = "sd-image-sorter-vopus-v{version}-windows-portable.zip"
+LINUX_FULL_ASSET_TEMPLATE = "sd-image-sorter-vopus-v{version}-linux.tar.gz"
+RELEASE_MANIFEST_ASSET_TEMPLATE = "sd-image-sorter-vopus-v{version}-release-manifest.json"
 # Linux portable bundle: app + python-build-standalone cpython-3.13. Source
 # Linux users keep using LINUX_FULL_ASSET_TEMPLATE; this asset family is for
 # users on distros without Python 3.12+ in the package manager, or on
@@ -23,7 +30,7 @@ LINUX_FULL_ASSET_TEMPLATE = "sd-image-sorter-v{version}-linux.tar.gz"
 # AWS Graviton, ARM Linux servers). The ``{arch}`` slot is filled with the
 # values in ``LINUX_PORTABLE_ASSET_ARCHES`` so the in-app updater can pick
 # the right tarball for the running machine.
-LINUX_PORTABLE_ASSET_TEMPLATE = "sd-image-sorter-v{version}-linux-portable-{arch}.tar.gz"
+LINUX_PORTABLE_ASSET_TEMPLATE = "sd-image-sorter-vopus-v{version}-linux-portable-{arch}.tar.gz"
 LINUX_PORTABLE_ASSET_ARCHES = ("x86_64", "aarch64")
 PACKAGE_MANIFEST_RELATIVE_PATH = "update/package-manifest.json"
 INSTALLED_MANIFEST_RELATIVE_PATH = "update/installed-manifest.json"

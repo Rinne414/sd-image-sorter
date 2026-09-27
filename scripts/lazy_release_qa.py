@@ -299,7 +299,8 @@ def _read_tar_member(archive: tarfile.TarFile, name: str) -> bytes:
 
 
 def find_manifest(artifact_root: Path, version: str | None) -> Path:
-    pattern = f"sd-image-sorter-v{version}-release-manifest.json" if version else "sd-image-sorter-v*-release-manifest.json"
+    # Vopus release files: sd-image-sorter-vopus-v<version>-... (backend/app_info.py).
+    pattern = f"sd-image-sorter-vopus-v{version or '*'}-release-manifest.json"
     candidates = sorted(artifact_root.glob(pattern), key=lambda path: path.stat().st_mtime, reverse=True)
     if not candidates:
         raise LazyQaError(f"No release manifest found in {artifact_root} matching {pattern}")

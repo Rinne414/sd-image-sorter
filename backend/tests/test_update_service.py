@@ -28,12 +28,12 @@ def test_get_status_reports_available_patch_update(monkeypatch):
         service,
         "_read_release_json",
         lambda: {
-            "tag_name": "v9.9.9",
+            "tag_name": "vopus-v9.9.9",
             "html_url": "https://example.com/release",
             "body": "notes",
             "assets": [
                 {
-                    "name": "sd-image-sorter-v9.9.9-app-patch.zip",
+                    "name": "sd-image-sorter-vopus-v9.9.9-app-patch.zip",
                     "size": 123,
                     "browser_download_url": "https://example.com/patch.zip",
                     "content_type": "application/zip",
@@ -48,7 +48,7 @@ def test_get_status_reports_available_patch_update(monkeypatch):
     assert status["has_update"] is True
     assert status["latest_version"] == "9.9.9"
     assert status["asset"]["kind"] == "patch"
-    assert status["asset"]["name"] == "sd-image-sorter-v9.9.9-app-patch.zip"
+    assert status["asset"]["name"] == "sd-image-sorter-vopus-v9.9.9-app-patch.zip"
     assert status["channel_api_url"]
     assert status["channel_web_url"]
 
@@ -60,19 +60,19 @@ def test_get_status_prefers_patch_over_full_package(monkeypatch):
         service,
         "_read_release_json",
         lambda: {
-            "tag_name": "v9.9.9",
+            "tag_name": "vopus-v9.9.9",
             "html_url": "https://example.com/release",
             "body": "notes",
             "assets": [
                 {
-                    "name": "sd-image-sorter-v9.9.9-linux.tar.gz",
+                    "name": "sd-image-sorter-vopus-v9.9.9-linux.tar.gz",
                     "size": 999,
                     "browser_download_url": "https://example.com/full.tar.gz",
                     "content_type": "application/gzip",
                     "updated_at": "2026-01-01T00:00:00Z",
                 },
                 {
-                    "name": "sd-image-sorter-v9.9.9-app-patch.zip",
+                    "name": "sd-image-sorter-vopus-v9.9.9-app-patch.zip",
                     "size": 123,
                     "browser_download_url": "https://example.com/patch.zip",
                     "content_type": "application/zip",
@@ -86,7 +86,7 @@ def test_get_status_prefers_patch_over_full_package(monkeypatch):
 
     assert status["has_update"] is True
     assert status["asset"]["kind"] == "patch"
-    assert status["asset"]["name"] == "sd-image-sorter-v9.9.9-app-patch.zip"
+    assert status["asset"]["name"] == "sd-image-sorter-vopus-v9.9.9-app-patch.zip"
 
 
 def test_get_status_flags_missing_patch_asset(monkeypatch):
@@ -95,7 +95,7 @@ def test_get_status_flags_missing_patch_asset(monkeypatch):
         service,
         "_read_release_json",
         lambda: {
-            "tag_name": "v9.9.9",
+            "tag_name": "vopus-v9.9.9",
             "html_url": "https://example.com/release",
             "body": "notes",
             "assets": [],
@@ -116,12 +116,12 @@ def test_get_status_falls_back_to_full_package_when_patch_missing(monkeypatch):
         service,
         "_read_release_json",
         lambda: {
-            "tag_name": "v9.9.9",
+            "tag_name": "vopus-v9.9.9",
             "html_url": "https://example.com/release",
             "body": "notes",
             "assets": [
                 {
-                    "name": "sd-image-sorter-v9.9.9-linux.tar.gz",
+                    "name": "sd-image-sorter-vopus-v9.9.9-linux.tar.gz",
                     "size": 456,
                     "browser_download_url": "https://example.com/full.tar.gz",
                     "content_type": "application/gzip",
@@ -136,7 +136,7 @@ def test_get_status_falls_back_to_full_package_when_patch_missing(monkeypatch):
     assert status["has_update"] is True
     assert status["latest_version"] == "9.9.9"
     assert status["asset"]["kind"] == "full"
-    assert status["asset"]["name"] == "sd-image-sorter-v9.9.9-linux.tar.gz"
+    assert status["asset"]["name"] == "sd-image-sorter-vopus-v9.9.9-linux.tar.gz"
 
 
 def test_read_release_json_uses_configured_update_api_url(monkeypatch):
@@ -174,7 +174,7 @@ def test_select_update_asset_applies_download_proxy_prefix(monkeypatch):
         {
             "assets": [
                 {
-                    "name": "sd-image-sorter-v9.9.9-app-patch.zip",
+                    "name": "sd-image-sorter-vopus-v9.9.9-app-patch.zip",
                     "size": 321,
                     "browser_download_url": "https://github.com/example/patch.zip",
                 }
@@ -194,12 +194,12 @@ def test_select_update_asset_attaches_release_manifest_url(monkeypatch):
         {
             "assets": [
                 {
-                    "name": "sd-image-sorter-v9.9.9-app-patch.zip",
+                    "name": "sd-image-sorter-vopus-v9.9.9-app-patch.zip",
                     "size": 321,
                     "browser_download_url": "https://example.com/patch.zip",
                 },
                 {
-                    "name": "sd-image-sorter-v9.9.9-release-manifest.json",
+                    "name": "sd-image-sorter-vopus-v9.9.9-release-manifest.json",
                     "size": 123,
                     "browser_download_url": "https://example.com/manifest.json",
                 },
@@ -220,7 +220,7 @@ def test_resolve_asset_sha256_reads_release_manifest(monkeypatch):
         lambda url: {
             "assets": [
                 {
-                    "name": "sd-image-sorter-v9.9.9-app-patch.zip",
+                    "name": "sd-image-sorter-vopus-v9.9.9-app-patch.zip",
                     "sha256": "abc123",
                 }
             ]
@@ -229,7 +229,7 @@ def test_resolve_asset_sha256_reads_release_manifest(monkeypatch):
 
     sha256_value = service._resolve_asset_sha256(
         {
-            "name": "sd-image-sorter-v9.9.9-app-patch.zip",
+            "name": "sd-image-sorter-vopus-v9.9.9-app-patch.zip",
             "manifest_download_url": "https://example.com/manifest.json",
         }
     )
@@ -389,7 +389,7 @@ def test_download_asset_rejects_sha256_mismatch(monkeypatch, tmp_path: Path):
     monkeypatch.setattr("services.update_service.urllib.request.urlopen", lambda request, timeout=0: FakeResponse())
 
     asset = {
-        "name": "sd-image-sorter-v9.9.9-app-patch.zip",
+        "name": "sd-image-sorter-vopus-v9.9.9-app-patch.zip",
         "size_bytes": len(payload),
         "download_url": "https://example.com/patch.zip",
     }
@@ -397,6 +397,6 @@ def test_download_asset_rejects_sha256_mismatch(monkeypatch, tmp_path: Path):
     with pytest.raises(RuntimeError, match="checksum mismatch"):
         service._download_asset(asset, "9.9.9")
 
-    final_path = tmp_path / "9.9.9" / "sd-image-sorter-v9.9.9-app-patch.zip"
+    final_path = tmp_path / "9.9.9" / "sd-image-sorter-vopus-v9.9.9-app-patch.zip"
     assert final_path.exists() is False
     assert final_path.with_name(final_path.name + ".tmp").exists() is False
