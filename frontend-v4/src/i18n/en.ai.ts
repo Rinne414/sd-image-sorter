@@ -45,8 +45,6 @@ export const enAi: Record<keyof typeof zhCNAi, string> = {
   'ai.preset.short_caption': 'One-sentence description',
   'ai.preset.character_lora': 'Character LoRA training',
   'ai.preset.nsfw_relaxed': 'Adult content (local models)',
-  'ai.preset.vlm_danbooru': 'Danbooru tags (VLM as tagger)',
-  'ai.preset.vlm_hybrid': 'Description and tags (JSON)',
   'ai.system': 'System prompt',
   'ai.user': 'User prompt',
   'ai.includeTags': "Send the image's existing tags along (better descriptions)",

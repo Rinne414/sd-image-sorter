@@ -48,8 +48,6 @@ export const zhCNAi = {
   'ai.preset.short_caption': '一句话描述',
   'ai.preset.character_lora': '角色 LoRA 训练',
   'ai.preset.nsfw_relaxed': '成人内容（本地模型）',
-  'ai.preset.vlm_danbooru': 'Danbooru 标签（让 VLM 打标）',
-  'ai.preset.vlm_hybrid': '描述和标签（JSON）',
   'ai.system': '系统提示词',
   'ai.user': '用户提示词',
   'ai.includeTags': '把图片已有的标签一起发给模型（描述更准）',

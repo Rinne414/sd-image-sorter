@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyPreset,
+  describingPresets,
   formFromSettings,
   isDirty,
   isLocalEndpoint,
@@ -128,6 +129,18 @@ describe('the provider follows the address', () => {
   it('ignores an answer that is not a known provider', () => {
     const f = form()
     expect(withDetectedProvider(f, f.endpoint, 'mystery')).toBe(f)
+  })
+})
+
+describe('describingPresets', () => {
+  it('offers only presets that ask for a description', () => {
+    const presets = {
+      lora: { name: 'LoRA', output_format: 'nl_caption', system_prompt: 's', user_prompt: 'u' },
+      plain: { name: 'Plain', system_prompt: 's', user_prompt: 'u' },
+      tags: { name: 'Tags', output_format: 'danbooru_tags', system_prompt: 's', user_prompt: 'u' },
+      both: { name: 'Both', output_format: 'both', system_prompt: 's', user_prompt: 'u' },
+    }
+    expect(describingPresets(presets).map(([id]) => id)).toEqual(['lora', 'plain'])
   })
 })
 

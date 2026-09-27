@@ -260,12 +260,13 @@ test('the address sets the service type; Fetch lists models to pick; presets, Fi
   await expect(page.getByTestId('vlm-model')).toHaveValue('claude-b')
   await expect(list).toContainText('claude-b filled in; it applies once saved.')
 
-  // a preset replaces the prompts
-  await page.getByTestId('vlm-preset').selectOption('vlm_hybrid')
+  // a preset replaces the prompts; one that asks for tags or JSON is not offered
+  await expect(page.getByTestId('vlm-preset').locator('option[value="vlm_hybrid"]')).toHaveCount(0)
+  await page.getByTestId('vlm-preset').selectOption('lora_training')
   await page.getByTestId('vlm-preset-apply').click()
-  await expect(page.getByTestId('vlm-preset-note')).toHaveText('"Description and tags (JSON)" applied: the prompts were replaced; they apply once saved.')
-  await expect(page.getByTestId('vlm-system')).toHaveValue(PRESETS.vlm_hybrid.system_prompt)
-  await expect(page.getByTestId('vlm-user-tags')).toHaveValue(PRESETS.vlm_hybrid.user_prompt_with_tags)
+  await expect(page.getByTestId('vlm-preset-note')).toHaveText('"LoRA training (description)" applied: the prompts were replaced; they apply once saved.')
+  await expect(page.getByTestId('vlm-system')).toHaveValue(PRESETS.lora_training.system_prompt)
+  await expect(page.getByTestId('vlm-user-tags')).toHaveValue(PRESETS.lora_training.user_prompt_with_tags)
 
   // Find the limit saves, probes from 8 up, and fills in what held
   await page.getByTestId('vlm-advanced').locator('summary').click()
@@ -275,7 +276,7 @@ test('the address sets the service type; Fetch lists models to pick; presets, Fi
   expect(vlm.probes).toEqual([{ max_level: 8, apply: true }])
   const saved = vlm.posts.at(-1)!
   expect(saved).not.toHaveProperty('output_format')
-  expect(saved).toMatchObject({ model: 'claude-b', system_prompt: PRESETS.vlm_hybrid.system_prompt, user_prompt_with_tags: PRESETS.vlm_hybrid.user_prompt_with_tags })
+  expect(saved).toMatchObject({ model: 'claude-b', system_prompt: PRESETS.lora_training.system_prompt, user_prompt_with_tags: PRESETS.lora_training.user_prompt_with_tags })
   expect(saved).not.toHaveProperty('api_key')
   await expect(page.getByTestId('vlm-actions')).not.toContainText('Unsaved changes')
 

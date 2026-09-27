@@ -162,6 +162,15 @@ export function withDetectedProvider(form: VlmForm, endpoint: string, provider: 
   return { ...form, provider: provider as Provider }
 }
 
+/**
+ * The presets V4 can use. Every V4 description is prose (Smart Tag asks for
+ * nl_caption), so a preset written to make the model answer with tags or JSON
+ * would put a tag list or JSON into the image's description: it is not offered.
+ */
+export function describingPresets(presets: Record<string, Preset>): [string, Preset][] {
+  return Object.entries(presets).filter(([, p]) => !p.output_format || p.output_format === 'nl_caption')
+}
+
 export function applyPreset(form: VlmForm, preset: Preset): VlmForm {
   return {
     ...form,

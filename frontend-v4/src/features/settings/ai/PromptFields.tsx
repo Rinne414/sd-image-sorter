@@ -4,7 +4,7 @@ import { usePresets } from './aiApi'
 import { isAiKey, useAT } from './aiText'
 import type { Preset } from './types'
 import type { VlmDraft } from './useVlmDraft'
-import { applyPreset } from './vlmForm'
+import { applyPreset, describingPresets } from './vlmForm'
 
 /** What the model is asked to write: a preset, the prompts and whether tags go along. */
 export function PromptFields({ draft }: { draft: VlmDraft }) {
@@ -23,7 +23,7 @@ export function PromptFields({ draft }: { draft: VlmDraft }) {
     return isAiKey(key) ? t(key) : p.name
   }
   const apply = () => {
-    const preset = presets.data?.[chosen]
+    const preset = describingPresets(presets.data ?? {}).find(([id]) => id === chosen)?.[1]
     if (!preset) return
     set((f) => applyPreset(f, preset))
     setApplied(presetName(chosen, preset))
@@ -39,7 +39,7 @@ export function PromptFields({ draft }: { draft: VlmDraft }) {
         <div className={styles.inline}>
           <select id={presetId} className={styles.select} value={chosen} onChange={(e) => setChosen(e.target.value)} data-testid="vlm-preset">
             <option value="">{t('ai.preset.choose')}</option>
-            {Object.entries(presets.data ?? {}).map(([id, p]) => (
+            {describingPresets(presets.data ?? {}).map(([id, p]) => (
               <option key={id} value={id}>
                 {presetName(id, p)}
               </option>
