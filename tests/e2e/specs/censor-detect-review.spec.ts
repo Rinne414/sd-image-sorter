@@ -163,6 +163,7 @@ test('detect current: request wire format, region sort, box bake, processed mark
     model_type: 'nudenet',
     confidence_threshold: 0.5,
     target_classes: ['breasts', 'pussy', 'dick', 'penis', 'anus', 'buttocks'],
+    upright: true,
   })
 
   await expect(

@@ -468,6 +468,9 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
             model_type: plan.modelType,
             confidence_threshold: CensorState.confidence,
             target_classes: plan.targetClasses,
+            // The canvas shows the picture upright (EXIF orientation applied by
+            // the browser), so boxes and masks must come in that frame too.
+            upright: true,
         };
         if (plan.modelType === 'sam3') {
             const customInput = document.getElementById('sam3-custom-prompt')?.value?.trim();
@@ -581,6 +584,7 @@ async function segmentCurrentImageByText() {
         const result = await window.App.API.post('/api/censor/segment-text', {
             image_id: CensorState.activeId,
             text_prompt: textPrompt,
+            upright: true,
         });
 
         if (!result?.mask && !result?.mask_ref) {
@@ -732,6 +736,7 @@ async function runSam3BatchRefine() {
         const result = await window.App.API.post('/api/censor/batch-refine-mask', {
             items: batchItems,
             sam3_confidence: CensorState.sam3Confidence,
+            upright: true,
         });
 
         showLoading(false);

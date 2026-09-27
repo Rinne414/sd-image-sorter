@@ -16,7 +16,7 @@ from io import BytesIO
 from typing import TYPE_CHECKING, Any, Dict, List
 
 from fastapi import HTTPException
-from PIL import Image
+from PIL import Image, ImageOps
 
 import database as db
 
@@ -35,6 +35,12 @@ def _svc():
     import services.censor_service as censor_service
 
     return censor_service
+
+
+def _open_rgb(image_path: str, upright: bool) -> Image.Image:
+    """The picture as RGB; `upright` applies its EXIF orientation first (the frame viewers and V4 use)."""
+    with Image.open(image_path) as src:
+        return (ImageOps.exif_transpose(src) if upright else src).convert("RGB")
 
 
 class _Sam3Mixin:
@@ -68,8 +74,7 @@ class _Sam3Mixin:
         )
 
         try:
-            with Image.open(image_path) as src:
-                image = src.convert("RGB")
+            image = _open_rgb(image_path, request.upright)
             refiner = get_sam3_refiner()
             mask = refiner.refine_box(
                 image,
@@ -124,8 +129,7 @@ class _Sam3Mixin:
         )
 
         try:
-            with Image.open(image_path) as src:
-                image = src.convert("RGB")
+            image = _open_rgb(image_path, request.upright)
             refiner = get_sam3_refiner()
             mask = refiner.segment_by_text(
                 image,
@@ -269,8 +273,7 @@ class _Sam3Mixin:
                     image_id=item.image_id,
                     action_label="SAM3 batch refinement",
                 )
-                with Image.open(image_path) as src:
-                    image = src.convert("RGB")
+                image = _open_rgb(image_path, item.upright or request.upright)
 
                 if refiner is None:
                     refiner = get_sam3_refiner()

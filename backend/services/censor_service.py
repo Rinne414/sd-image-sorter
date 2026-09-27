@@ -50,6 +50,10 @@ class CensorDetectRequest(BaseModel):
     exposed_only: bool = True
     target_classes: Optional[List[str]] = None
     text_prompts: Optional[List[str]] = None
+    # True: work on the picture as viewers show it (EXIF orientation applied),
+    # so boxes, masks and the reported size are in that upright frame (V4's
+    # canvas). False keeps the file's raw pixel frame, as before.
+    upright: bool = False
 
 
 class MaskRefineRequest(BaseModel):
@@ -62,6 +66,10 @@ class MaskRefineRequest(BaseModel):
     # built-in defaults on the single endpoint, or the batch-level
     # ``sam3_confidence`` when nested inside a BatchMaskRefineRequest.
     sam3_confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+    # True: work on the picture as viewers show it (EXIF orientation applied),
+    # so boxes, masks and the reported size are in that upright frame (V4's
+    # canvas). False keeps the file's raw pixel frame, as before.
+    upright: bool = False
 
 
 class TextSegmentRequest(BaseModel):
@@ -71,6 +79,10 @@ class TextSegmentRequest(BaseModel):
     # Optional override for SAM3's presence gate. Omitted -> the looser
     # explicit-text default (decoupled from the 0.5 auto-detect gate).
     presence_threshold: Optional[float] = Field(None, ge=0.0, le=1.0)
+    # True: work on the picture as viewers show it (EXIF orientation applied),
+    # so boxes, masks and the reported size are in that upright frame (V4's
+    # canvas). False keeps the file's raw pixel frame, as before.
+    upright: bool = False
 
 
 class BatchMaskRefineRequest(BaseModel):
@@ -82,6 +94,8 @@ class BatchMaskRefineRequest(BaseModel):
     # ``sam3_confidence``. The frontend slider (sidebar + detect modal)
     # sends this on every batch refine.
     sam3_confidence: float = Field(0.5, ge=0.0, le=1.0)
+    # Upright frame for every item (an item may also ask for itself).
+    upright: bool = False
 
 
 class CensorApplyRequest(BaseModel):

@@ -244,6 +244,7 @@ async function censorReviewDetect() {
             model_type: plan.modelType,
             confidence_threshold: CensorState.confidence,
             target_classes: plan.targetClasses,
+            upright: true, // boxes in the upright frame the canvas shows
         };
         if (plan.modelType === 'sam3') {
             const customInput = document.getElementById('sam3-custom-prompt')?.value?.trim();

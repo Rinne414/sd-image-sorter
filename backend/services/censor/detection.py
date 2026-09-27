@@ -16,11 +16,12 @@ from __future__ import annotations
 import logging
 import os
 import traceback
+from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, TypedDict
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, TypedDict
 
 from fastapi import HTTPException
-from PIL import Image
+from PIL import Image, ImageOps
 
 import database as db
 from ai_runtime_guard import PRIORITY_INTERACTIVE
@@ -52,6 +53,39 @@ def _svc():
 
 class _DetectionMixin:
     """Detection/model slice of CensorService (assembled in services/censor_service.py)."""
+
+    @staticmethod
+    def _open_upright(image_path: str) -> Image.Image:
+        """The picture as viewers show it: EXIF orientation applied, detached from the file."""
+        with Image.open(image_path) as source:
+            return ImageOps.exif_transpose(source)
+
+    @staticmethod
+    @contextmanager
+    def _source_image(image_path: str, upright_image: Optional[Image.Image]) -> Iterator[Image.Image]:
+        """The upright picture when one was asked for, else the file opened as it is (raw frame)."""
+        if upright_image is not None:
+            yield upright_image
+            return
+        with Image.open(image_path) as image:
+            yield image
+
+    @staticmethod
+    def _run_nudenet(detector: Any, image_path: str, upright_image: Optional[Image.Image], request: Any) -> List[Dict[str, Any]]:
+        options = {
+            "conf_threshold": request.confidence_threshold,
+            "exposed_only": request.exposed_only,
+            "priority": PRIORITY_INTERACTIVE,
+        }
+        if upright_image is not None:
+            return detector.detect_from_pil(upright_image, **options)
+        return detector.detect(image_path, **options)
+
+    @staticmethod
+    def _run_legacy(detector: Any, image_path: str, upright_image: Optional[Image.Image], confidence: float) -> List[Dict[str, Any]]:
+        if upright_image is not None:
+            return detector.detect_from_image(upright_image.convert("RGB"), confidence, priority=PRIORITY_INTERACTIVE)
+        return detector.detect(image_path, confidence, priority=PRIORITY_INTERACTIVE)
 
     @staticmethod
     def _normalize_target_family(label: str) -> str:
@@ -276,6 +310,8 @@ class _DetectionMixin:
         try:
             model_type = request.model_type
             detection_warnings: List[str] = []
+            # V4 asks for the upright frame; V3.5 leaves the flag off and gets the raw frame.
+            upright_image = self._open_upright(image_path) if request.upright else None
 
             if model_type == "sam3":
                 from sam3_refiner import get_sam3_refiner
@@ -290,7 +326,7 @@ class _DetectionMixin:
                         for p in request.text_prompts if p.strip()
                     ]
                 try:
-                    with Image.open(image_path) as img:
+                    with self._source_image(image_path, upright_image) as img:
                         detections = refiner.detect_privacy_regions(
                             img,
                             conf_threshold=request.confidence_threshold,
@@ -306,12 +342,7 @@ class _DetectionMixin:
                 from nudenet_detector import get_nudenet_detector
                 detector = get_nudenet_detector()
                 try:
-                    detections = detector.detect(
-                        image_path,
-                        conf_threshold=request.confidence_threshold,
-                        exposed_only=request.exposed_only,
-                        priority=PRIORITY_INTERACTIVE,
-                    )
+                    detections = self._run_nudenet(detector, image_path, upright_image, request)
                 except RuntimeError as exc:
                     raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -323,12 +354,7 @@ class _DetectionMixin:
                 try:
                     from nudenet_detector import get_nudenet_detector
                     nn_det = get_nudenet_detector()
-                    nn_results = nn_det.detect(
-                        image_path,
-                        conf_threshold=request.confidence_threshold,
-                        exposed_only=request.exposed_only,
-                        priority=PRIORITY_INTERACTIVE,
-                    )
+                    nn_results = self._run_nudenet(nn_det, image_path, upright_image, request)
                     all_detections.extend({**detection, "source": "nudenet"} for detection in nn_results)
                     successful_backends.append("NudeNet")
                 except Exception as exc:
@@ -354,11 +380,7 @@ class _DetectionMixin:
                     )
                     if legacy_model_path:
                         detector = get_detector(legacy_model_path)
-                        legacy_results = detector.detect(
-                            image_path,
-                            request.confidence_threshold,
-                            priority=PRIORITY_INTERACTIVE,
-                        )
+                        legacy_results = self._run_legacy(detector, image_path, upright_image, request.confidence_threshold)
                         all_detections.extend({**detection, "source": "legacy"} for detection in legacy_results)
                         successful_backends.append("Legacy YOLO")
                 except Exception as exc:
@@ -397,16 +419,12 @@ class _DetectionMixin:
                 )
 
                 detector = get_detector(legacy_model_path)
-                detections = detector.detect(
-                    image_path,
-                    request.confidence_threshold,
-                    priority=PRIORITY_INTERACTIVE,
-                )
+                detections = self._run_legacy(detector, image_path, upright_image, request.confidence_threshold)
 
             filtered_detections = self._filter_detections_by_targets(detections, request.target_classes)
 
             polygon_count = sum(1 for d in filtered_detections if self._has_polygon_geometry(d))
-            with Image.open(image_path) as image_for_mask:
+            with self._source_image(image_path, upright_image) as image_for_mask:
                 combined_mask_payload = self._build_combined_mask_payload(
                     image_for_mask.size,
                     filtered_detections,
