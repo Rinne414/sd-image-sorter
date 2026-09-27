@@ -400,7 +400,40 @@ def _assemble_result_dict(
     }
 
 
-def _persist_result(image_id: int, result: Dict[str, Any], merge_strategy: str) -> None:
+def _persist_description(image_id: int, nl_text: str, merge_strategy: str) -> None:
+    """Write only the description of a describe-only run (the booru tagger off).
+
+    The tag rows, their scores and WD14 writer provenance, ``tagged_at`` and
+    the composed ``ai_caption`` belong to the last tagging run and stay as
+    they are: the tagging write path below would replace every pipeline tag
+    row with this run's empty tag list (D53). An image never tagged stays
+    untagged. Empty words change nothing.
+    """
+    import database as db
+
+    rows_by_id = db.get_images_by_ids([image_id])
+    if image_id not in rows_by_id:
+        raise LookupError(
+            f"Cannot write Smart Tag description: image_id={image_id} does not exist"
+        )
+    text = (nl_text or "").strip()
+    if not text:
+        return
+    final_nl = text
+    if merge_strategy == "append":
+        prior_nl = (rows_by_id[image_id].get("nl_caption") or "").strip()
+        if prior_nl and prior_nl != text:
+            final_nl = f"{prior_nl} {text}"
+    db.set_image_captions(image_id, nl_caption=final_nl, set_nl_caption=True)
+
+
+def _persist_result(
+    image_id: int,
+    result: Dict[str, Any],
+    merge_strategy: str,
+    *,
+    describe_only: bool = False,
+) -> None:
     """Write the caption back to the DB so it shows up in the Caption Editor.
 
     We reuse ``database.add_tags_batch`` (the same write path the regular
@@ -408,7 +441,14 @@ def _persist_result(image_id: int, result: Dict[str, Any], merge_strategy: str) 
     tag-display, search, and export plumbing. ``ai_caption`` carries the
     final composed caption (trigger + tags + NL sentences); the per-tag
     rows carry the individual tag/confidence pairs.
+
+    ``describe_only``: the run had no booru tagger, so only the description
+    is written (``_persist_description``) and the tags stay untouched.
     """
+    if describe_only:
+        _persist_description(image_id, result.get("nl_text") or "", merge_strategy)
+        return
+
     import database as db
 
     caption = (result.get("caption") or "").strip()

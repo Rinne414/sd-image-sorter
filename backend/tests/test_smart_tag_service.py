@@ -1120,7 +1120,7 @@ def test_run_pipeline_streams_selection_token_id_chunks(monkeypatch) -> None:
     monkeypatch.setattr(
         smart_tag_service,
         "_persist_result",
-        lambda image_id, result, merge_strategy: persisted_ids.append(image_id),
+        lambda image_id, result, merge_strategy, **_: persisted_ids.append(image_id),
     )
 
     job = SmartTagJobState(job_id="selection-job")
@@ -1160,7 +1160,7 @@ def test_skip_existing_drops_already_tagged_images_and_counts_them(monkeypatch) 
     monkeypatch.setattr(
         smart_tag_service,
         "_persist_result",
-        lambda image_id, result, merge_strategy: persisted_ids.append(image_id),
+        lambda image_id, result, merge_strategy, **_: persisted_ids.append(image_id),
     )
 
     job = SmartTagJobState(job_id="skip-existing-job")
@@ -1202,7 +1202,7 @@ def test_skip_existing_false_processes_already_tagged_images(monkeypatch) -> Non
     monkeypatch.setattr(
         smart_tag_service,
         "_persist_result",
-        lambda image_id, result, merge_strategy: persisted_ids.append(image_id),
+        lambda image_id, result, merge_strategy, **_: persisted_ids.append(image_id),
     )
 
     job = SmartTagJobState(job_id="no-skip-job")
@@ -1237,7 +1237,7 @@ def test_skip_existing_fails_open_when_tagged_lookup_raises(monkeypatch) -> None
     monkeypatch.setattr(
         smart_tag_service,
         "_persist_result",
-        lambda image_id, result, merge_strategy: persisted_ids.append(image_id),
+        lambda image_id, result, merge_strategy, **_: persisted_ids.append(image_id),
     )
 
     job = SmartTagJobState(job_id="fail-open-job")
@@ -1825,7 +1825,7 @@ def _run_pipeline_with_provider_construction_failure(
     monkeypatch.setattr(
         smart_tag_service,
         "_persist_result",
-        lambda image_id, result, merge_strategy: persisted_db.append(image_id),
+        lambda image_id, result, merge_strategy, **_: persisted_db.append(image_id),
     )
     monkeypatch.setattr(
         smart_tag_service,
