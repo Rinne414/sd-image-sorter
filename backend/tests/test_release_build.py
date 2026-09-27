@@ -450,7 +450,11 @@ def test_release_public_docs_link_to_releases_page_not_pinned_assets():
     # landing page pointing at a URL that only survives via a GitHub redirect.
     owner = _read_app_info_constant("GITHUB_OWNER")
     repo = _read_app_info_constant("GITHUB_REPO")
-    assert f"https://github.com/{owner}/{repo}/releases/latest" in readme_text
+    # Latest stays a V3.5 release (docs/RELEASE_SOP.md), so /releases/latest
+    # would send Vopus readers to V3.5: link the releases page and name the tag.
+    assert f"https://github.com/{owner}/{repo}/releases" in readme_text
+    assert "/releases/latest" not in readme_text
+    assert "vopus-v" in readme_text
 
     for suffix in _README_PLATFORM_ASSET_SUFFIXES:
         assert suffix in readme_text, (

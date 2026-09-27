@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Rinne414/sd-image-sorter/releases/latest"><b>⬇️ Download</b></a>
+  <a href="https://github.com/Rinne414/sd-image-sorter/releases"><b>⬇️ Download</b></a>
   ·
   <a href="#quick-start">Quick Start</a>
 </p>
@@ -236,7 +236,7 @@ Eagle、Billfish 是通用素材库，不列入这张 SD 工作流细表。详�
 
 ## 60 秒上手
 
-所有安装包都放在 **[Releases 页面](https://github.com/Rinne414/sd-image-sorter/releases/latest)** 的 **Assets** 区域。按下表对号入座下载一个就好：
+所有安装包都放在 **[Releases 页面](https://github.com/Rinne414/sd-image-sorter/releases)** 的 **Assets** 区域。Vopus 的发布标签以 `vopus-v` 开头（例如 `vopus-v1.0.0`），选其中最新的一个；标为 Latest 的 `v3.5.x` 是 V3.5。按下表对号入座下载一个就好：
 
 | 你的系统 | 下载这个文件 | 启动方式 |
 |:--|:--|:--|
@@ -249,7 +249,7 @@ Eagle、Billfish 是通用素材库，不列入这张 SD 工作流细表。详�
 
 ### Windows
 
-1. 在 [Releases 页面](https://github.com/Rinne414/sd-image-sorter/releases/latest) 下载 `windows-portable.zip`
+1. 在 [Releases 页面](https://github.com/Rinne414/sd-image-sorter/releases) 下载 `windows-portable.zip`
 2. 解压到任意目录
 3. 双击 `run-portable.bat`
 4. 浏览器会自动打开 `http://localhost:8487`
@@ -259,7 +259,7 @@ Eagle、Billfish 是通用素材库，不列入这张 SD 工作流细表。详�
 
 **便携版（推荐，无需系统 Python）：**
 
-在 [Releases 页面](https://github.com/Rinne414/sd-image-sorter/releases/latest) 按 CPU 架构挑一个：
+在 [Releases 页面](https://github.com/Rinne414/sd-image-sorter/releases) 按 CPU 架构挑一个：
 
 - **x86_64**（一般 PC、Intel/AMD 桌面/笔电、Steam Deck、传统 x86 服务器）
   下载 `linux-portable-x86_64.tar.gz`（约 80 MB）
@@ -280,7 +280,7 @@ chmod +x run-portable.sh
 
 **源码版（需要自己装 Python 3.12+）：**
 
-1. 在 [Releases 页面](https://github.com/Rinne414/sd-image-sorter/releases/latest) 下载 `linux.tar.gz`
+1. 在 [Releases 页面](https://github.com/Rinne414/sd-image-sorter/releases) 下载 `linux.tar.gz`
 2. 解压并执行：
 
 ```bash
@@ -648,7 +648,7 @@ The GitHub attachment at the top of this README is the screenshot that currently
 
 ### Quick Start
 
-Every build lives under **Assets** on the **[Releases page](https://github.com/Rinne414/sd-image-sorter/releases/latest)**. Grab exactly one:
+Every build lives under **Assets** on the **[Releases page](https://github.com/Rinne414/sd-image-sorter/releases)**. Vopus releases are tagged `vopus-v…` (for example `vopus-v1.0.0`): take the newest of those. The release marked Latest, `v3.5.x`, is V3.5. Grab exactly one:
 
 | Your system | Download this file | How to start it |
 |:--|:--|:--|
@@ -661,7 +661,7 @@ Every build lives under **Assets** on the **[Releases page](https://github.com/R
 
 #### Windows Portable
 
-1. Download `windows-portable.zip` from the [Releases page](https://github.com/Rinne414/sd-image-sorter/releases/latest)
+1. Download `windows-portable.zip` from the [Releases page](https://github.com/Rinne414/sd-image-sorter/releases)
 2. Extract it anywhere
 3. Double-click `run-portable.bat`
 4. Your browser opens `http://localhost:8487`
@@ -673,7 +673,7 @@ On NVIDIA machines, first launch may spend extra time at `Checking Windows ONNX 
 
 **Portable (recommended, no system Python needed):**
 
-Pick the right tarball for your CPU on the [Releases page](https://github.com/Rinne414/sd-image-sorter/releases/latest):
+Pick the right tarball for your CPU on the [Releases page](https://github.com/Rinne414/sd-image-sorter/releases):
 
 - **x86_64** — typical PCs, Intel/AMD laptops, Steam Deck, traditional x86 servers. Download `linux-portable-x86_64.tar.gz`, ~80 MB.
 - **aarch64 / arm64** — Raspberry Pi 4 / 5, ARM Linux servers, AWS Graviton, Apple Silicon under Linux. Download `linux-portable-aarch64.tar.gz`, ~75 MB.
@@ -691,7 +691,7 @@ Works on every modern Linux distro on either architecture, including ones whose 
 
 **Source (bring your own Python 3.12 / 3.13):**
 
-Download `linux.tar.gz` from the [Releases page](https://github.com/Rinne414/sd-image-sorter/releases/latest), then:
+Download `linux.tar.gz` from the [Releases page](https://github.com/Rinne414/sd-image-sorter/releases), then:
 
 ```bash
 tar xzf sd-image-sorter-*-linux.tar.gz
