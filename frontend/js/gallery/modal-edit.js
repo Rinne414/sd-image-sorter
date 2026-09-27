@@ -160,6 +160,9 @@ Object.assign(window.Gallery, {
             } else if (skipped > 0) {
                 app.showToast?.(this._t('modal.tagsUndoPartial', null,
                     'Partly undone: the parts changed again after this edit were kept'), 'warning');
+            } else if (restored === 0) {
+                app.showToast?.(this._t('modal.tagsUndoNothing', null,
+                    'Nothing was changed: the tags were already as before this edit'), 'info');
             } else {
                 app.showToast?.(this._t('modal.tagsRestored', null, 'Tags restored'), 'success');
             }

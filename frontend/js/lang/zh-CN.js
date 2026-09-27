@@ -2127,6 +2127,7 @@ window.I18nLang_zhCN = {
     'modal.tagsRestored': '标签已恢复',
     'modal.tagsUndoSkipped': '没有撤销：这张图的标签在这次修改之后又被改过了',
     'modal.tagsUndoPartial': '只撤销了一部分：这次修改之后又改过的部分保留原样',
+    'modal.tagsUndoNothing': '没有变化：标签本来就和这次修改之前一样',
     'modal.tagsSaveFailed': '更新标签失败',
     'modal.showMore': '显示更多',
     'modal.showLess': '收起',

@@ -45,3 +45,10 @@ test('a clean undo still says the tags were restored', async ({ page }) => {
 
   await expect(page.locator('#toast-container')).toContainText('标签已恢复')
 })
+
+test('an undo that changed nothing says so instead of claiming the tags were restored', async ({ page }) => {
+  await undoWith(page, [{ restored: 0, skipped_conflicts: [] }])
+
+  await expect(page.locator('#toast-container')).toContainText('没有变化：标签本来就和这次修改之前一样')
+  await expect(page.locator('#toast-container')).not.toContainText('标签已恢复')
+})
