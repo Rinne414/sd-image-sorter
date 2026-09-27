@@ -44,6 +44,19 @@ Vopus debt that is still open: response types are hand-written in
 (`docs/COVERAGE_LEDGER.md`), but only the controls some spec shows: a page no
 spec opens is not counted.
 
+Two release-side items are also open (found in the Vopus rename review,
+2026-09-28):
+
+- The update package manifest (`update/package-manifest.json`, written by
+  `scripts/build_release_packages.py`) names a version but no product, so
+  `update_worker.py` cannot refuse a V3.5 patch applied over Vopus files (for
+  example by a V4 preview's old updater, which reads `/releases/latest`).
+  Vopus's own updater only offers `vopus-v` releases.
+- `scripts/lazy_release_qa.py` hard-codes the `sd-image-sorter-vopus-v`
+  manifest name instead of reading the templates in `backend/app_info.py`;
+  a prefix change must be made in both places (the fake-build test in
+  `backend/tests/test_release_build.py` catches a mismatch).
+
 ## Debt Entry Format
 
 Use this structure for future confirmed-debt entries:
