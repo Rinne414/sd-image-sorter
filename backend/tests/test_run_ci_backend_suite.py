@@ -16,6 +16,9 @@ def test_backend_suite_runs_in_parallel_by_file_without_coverage() -> None:
     assert "backend/tests" in command
     index = command.index("-n")
     assert command[index + 1] == "8"
+    # named, because GitHub CI turns plugin autoloading off
+    assert command[command.index("-p") + 1] == "xdist"
+    assert command.index("-p") < index
     assert command[command.index("--dist") + 1] == "loadfile"
     assert not any(part.startswith("--cov") for part in command)
 
@@ -26,6 +29,8 @@ def test_backend_suite_measures_coverage_when_asked() -> None:
     assert "--cov=backend" in command
     assert "--cov-report=xml:backend/coverage.xml" in command
     assert "-n" in command
+    plugins = [command[i + 1] for i, part in enumerate(command) if part == "-p"]
+    assert plugins == ["xdist", "pytest_cov"]
 
 
 def test_one_backend_worker_runs_the_suite_in_one_process() -> None:

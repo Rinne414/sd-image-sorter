@@ -239,7 +239,8 @@ def _backend_suite_command(workers: int, with_coverage: bool) -> list[str]:
     """
     command = [str(BACKEND_PYTHON), "-m", "pytest", "backend/tests", "-q"]
     if workers > 1:
-        command += ["-n", str(workers), "--dist", "loadfile"]
+        # Named plugins: GitHub CI sets PYTEST_DISABLE_PLUGIN_AUTOLOAD=1.
+        command += ["-p", "xdist", "-n", str(workers), "--dist", "loadfile"]
     if with_coverage:
         command += [
             "-p",
