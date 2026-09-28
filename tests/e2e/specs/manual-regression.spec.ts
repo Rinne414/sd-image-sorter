@@ -1707,6 +1707,23 @@ async function revealFolderRowAboveFooter(row: Locator) {
   })
 }
 
+/**
+ * Resize, then wait until ui-scale.js has applied the zoom for the new width.
+ * It switches the root zoom 150 ms after a resize (1.3x at 2560, 1x at 1366
+ * and 1920). A measurement or click inside that window races the relayout:
+ * Playwright re-scrolls its click target and the scroll looks like the app's.
+ */
+async function resizeAndSettleUiScale(page: Page, viewport: { width: number, height: number }) {
+  await page.setViewportSize(viewport)
+  await expect.poll(async () => page.evaluate(() => {
+    const scale = window.UiScale
+    return Boolean(scale) && scale.get() === scale.autoScaleForWidth(window.innerWidth)
+  })).toBe(true)
+  await page.evaluate(() => new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve))
+  }))
+}
+
 test('gallery folder tree stays usable above the selection footer on supported desktops', async ({ page }) => {
   const { finalFolder } = prepareSidebarLayoutFixture()
   const consoleErrors: string[] = []
@@ -1760,10 +1777,7 @@ test('gallery folder tree stays usable above the selection footer on supported d
       { width: 2560, height: 1440 },
       { width: 1366, height: 768 },
     ]) {
-      await page.setViewportSize(viewport)
-      await page.evaluate(() => new Promise((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(resolve))
-      }))
+      await resizeAndSettleUiScale(page, viewport)
       await folderTree.evaluate((tree: HTMLElement) => {
         tree.scrollTop = tree.scrollHeight
       })
@@ -1823,7 +1837,7 @@ test('gallery folder tree stays usable above the selection footer on supported d
       const url = new URL(response.url())
       return url.pathname === '/api/images' && url.searchParams.get('folder') === finalFolder
     })
-    await page.setViewportSize({ width: 2560, height: 1440 })
+    await resizeAndSettleUiScale(page, { width: 2560, height: 1440 })
     await lastFolder.evaluate((row: HTMLElement) => {
       row.scrollIntoView({ block: 'nearest', inline: 'nearest' })
     })
@@ -1835,7 +1849,9 @@ test('gallery folder tree stays usable above the selection footer on supported d
     await expect(sidebar.locator('#selection-actions')).toBeVisible()
     await expect.poll(async () => revealFolderRowAboveFooter(lastFolder))
       .toEqual({ noOverlap: true, insideViewport: true, hitBelongsToRow: true })
-    await page.setViewportSize({ width: 1366, height: 768 })
+    // 2560 -> 1366 switches the UI zoom from 1.3x back to 1x; the branch
+    // toggle below must be measured and clicked after that switch.
+    await resizeAndSettleUiScale(page, { width: 1366, height: 768 })
     await expect.poll(async () => revealFolderRowAboveFooter(lastFolder))
       .toEqual({ noOverlap: true, insideViewport: true, hitBelongsToRow: true })
     await page.evaluate(() => new Promise((resolve) => {
