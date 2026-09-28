@@ -46,6 +46,8 @@ _availability_warning_logged: bool = False
 
 _MIN_AESTHETIC_CUDA_FREE_MB = 3800
 _AESTHETIC_HEAD_FILENAME = "sa_0_4_vit_l_14_linear.pth"
+# Bumped when stored scores stop being comparable: 2 = CLIP built with QuickGELU.
+AESTHETIC_SCORE_VERSION = 2
 _AESTHETIC_BACKBONE_REPO_DIR = "models--timm--vit_large_patch14_clip_224.openai"
 _AESTHETIC_BACKBONE_FILENAMES = (
     "open_clip_model.safetensors",
@@ -210,17 +212,15 @@ def _load_predictor(device: Optional[str] = None):
             with warnings.catch_warnings():
                 warnings.filterwarnings(
                     "ignore",
-                    message="QuickGELU mismatch.*",
-                    category=UserWarning,
-                    module=r"open_clip\.factory",
-                )
-                warnings.filterwarnings(
-                    "ignore",
                     message="Warning: You are sending unauthenticated requests to the HF Hub.*",
                     category=UserWarning,
                 )
+                # The OpenAI weights (and the LAION head trained on their
+                # embeddings) use QuickGELU; the "ViT-L-14" config defaults to
+                # GELU. The mismatch warning used to be silenced here, which
+                # put every score off by up to about a point.
                 model, _, preprocess = open_clip.create_model_and_transforms(
-                    "ViT-L-14", pretrained="openai", device=_device
+                    "ViT-L-14", pretrained="openai", device=_device, force_quick_gelu=True
                 )
             model.eval()
             _clip_model = model

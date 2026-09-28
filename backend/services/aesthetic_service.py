@@ -10,6 +10,7 @@ import threading
 from typing import Any, Callable, Dict, Optional
 
 import database as db
+from aesthetic import AESTHETIC_SCORE_VERSION
 from exceptions import ImageFileNotFoundError, ImageNotFoundError, ServiceError
 from image_fingerprint import compute_image_content_fingerprint
 from services.derived_state_service import (
@@ -20,6 +21,9 @@ from utils.source_paths import resolve_existing_indexed_image_path
 
 
 logger = logging.getLogger(__name__)
+
+# An image needs scoring when it has no LAION score or one from an older build.
+NEEDS_SCORE_SQL = "(aesthetic_score IS NULL OR aesthetic_version IS NULL OR aesthetic_version < ?)"
 
 ProgressCallback = Callable[[Dict[str, Any]], None]
 
@@ -190,12 +194,29 @@ class AestheticService:
         except Exception:
             return 0
 
+    def _outdated_count(self) -> int:
+        try:
+            from library_context import current_library_sql
+
+            lib_sql, lib_params = current_library_sql()
+            with db.get_db() as conn:
+                row = conn.execute(
+                    f"SELECT COUNT(*) FROM images WHERE aesthetic_score IS NOT NULL "
+                    f"AND (aesthetic_version IS NULL OR aesthetic_version < ?) AND {lib_sql}",
+                    (AESTHETIC_SCORE_VERSION, *lib_params),
+                ).fetchone()
+                return int(row[0] or 0)
+        except Exception:
+            return 0
+
     def get_status(self, availability_checker: Callable[[], bool]) -> Dict[str, Any]:
         available = availability_checker()
         return {
             "available": available,
             "message": None if available else "Aesthetic predictor dependencies are not installed",
             "scored_count": self._scored_count(),
+            # Scores from before the QuickGELU fix: kept, but Score all redoes them.
+            "outdated_count": self._outdated_count(),
             # What "Score Aesthetic" would process: the library's unscored images.
             "to_score_count": self.count_images_to_score(force=False),
         }
@@ -248,8 +269,8 @@ class AestheticService:
                 ).fetchone()
             else:
                 row = conn.execute(
-                    f"SELECT COUNT(*) FROM images WHERE aesthetic_score IS NULL AND {lib_sql}",
-                    lib_params,
+                    f"SELECT COUNT(*) FROM images WHERE {NEEDS_SCORE_SQL} AND {lib_sql}",
+                    (AESTHETIC_SCORE_VERSION, *lib_params),
                 ).fetchone()
             return int(row[0] or 0)
 
@@ -293,8 +314,9 @@ class AestheticService:
                 query = f"SELECT id, path FROM images WHERE {lib_sql}"
                 count_query = f"SELECT COUNT(*) FROM images WHERE {lib_sql}"
             else:
-                query = f"SELECT id, path FROM images WHERE aesthetic_score IS NULL AND {lib_sql}"
-                count_query = f"SELECT COUNT(*) FROM images WHERE aesthetic_score IS NULL AND {lib_sql}"
+                query = f"SELECT id, path FROM images WHERE {NEEDS_SCORE_SQL} AND {lib_sql}"
+                count_query = f"SELECT COUNT(*) FROM images WHERE {NEEDS_SCORE_SQL} AND {lib_sql}"
+                lib_params = (AESTHETIC_SCORE_VERSION, *lib_params)
             count_row = conn.execute(count_query, lib_params).fetchone()
             total = int(count_row[0] or 0) if count_row else 0
             emit({"total": total})

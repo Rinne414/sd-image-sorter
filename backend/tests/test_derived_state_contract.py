@@ -156,7 +156,8 @@ EXPECTED_DERIVED_IMAGE_UPDATE_STATEMENTS = Counter({
     ): 1,
     (
         "services/derived_state_service.py",
-        "UPDATE images SET aesthetic_score = ?, content_fingerprint = ? "
+        # aesthetic_version (migration 049) marks which scorer build wrote the score.
+        "UPDATE images SET aesthetic_score = ?, aesthetic_version = ?, content_fingerprint = ? "
         "WHERE id = ? AND content_fingerprint = ?",
     ): 1,
     (

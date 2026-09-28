@@ -3213,6 +3213,7 @@ window.I18nLang_en = {
     'tagger.tabLocalDesc': 'Fast Danbooru-style tags from local WD14 / Camie / PixAI models.',
     'tagger.modalDescNl': 'Choose a natural-language backend and caption selected images.',
     'tagger.modalDescAesthetic': 'Score the images in this library that have no aesthetic score yet, with the local model.',
+    'tagger.aestheticScopeCountOutdated': 'This run scores {count} images: {unscored} without a score and {outdated} whose score came from an older build that set up CLIP wrongly (off by up to about 1 point).',
     'tagger.aestheticScopeCount': 'This run scores the {count} images in this library that have no aesthetic score yet.',
     'tagger.tabNl': 'Natural Language',
     'tagger.tabNlDesc': 'Caption with a VLM API (cloud / Ollama); the local ToriiGate runs in Smart Tag.',

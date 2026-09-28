@@ -8,6 +8,8 @@ to avoid a circular dependency through services.__init__.
 """
 from __future__ import annotations
 
+from aesthetic import AESTHETIC_SCORE_VERSION
+
 import sqlite3
 from typing import Any, Iterable, Optional, Sequence
 
@@ -81,10 +83,11 @@ def write_image_aesthetic_score(
         """
         UPDATE images
         SET aesthetic_score = ?,
+            aesthetic_version = ?,
             content_fingerprint = ?
         WHERE id = ? AND content_fingerprint = ?
         """,
-        (aesthetic_score, fingerprint, image_id, fingerprint),
+        (aesthetic_score, AESTHETIC_SCORE_VERSION, fingerprint, image_id, fingerprint),
     )
     return cursor.rowcount == 1
 

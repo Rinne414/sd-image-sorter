@@ -3380,6 +3380,7 @@ window.I18nLang_zhCN = {
     'tagger.tabLocalDesc': '用 WD14 / Camie / PixAI 等本地模型，快速打出 Danbooru 标签。',
     'tagger.modalDescNl': '选择自然语言后端，给选中的图片生成描述。',
     'tagger.modalDescAesthetic': '用本地美学模型给这个图库里还没评分的图打分。',
+    'tagger.aestheticScopeCountOutdated': '这次会评 {count} 张：{unscored} 张还没评分，{outdated} 张的分数是旧版算的（当时 CLIP 设置有误，最多偏差约 1 分）。',
     'tagger.aestheticScopeCount': '这次会给这个图库里还没评分的 {count} 张图打分。',
     'tagger.tabNl': '自然语言',
     'tagger.tabNlDesc': '用 VLM API（云端 / Ollama）生成描述；本地的 ToriiGate 在 Smart Tag 里运行。',
