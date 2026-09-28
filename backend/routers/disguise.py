@@ -98,12 +98,12 @@ def _output_folder(requested: str) -> Path:
     return folder
 
 
-def _free_name(folder: Path, stem: str) -> Path:
+def _free_name(folder: Path, stem: str, suffix: str = ".png") -> Path:
     clean = sanitize_filename(stem) or "disguise"
-    candidate = folder / f"{clean}.png"
+    candidate = folder / f"{clean}{suffix}"
     counter = 2
     while candidate.exists():
-        candidate = folder / f"{clean} ({counter}).png"
+        candidate = folder / f"{clean} ({counter}){suffix}"
         counter += 1
     return candidate
 
@@ -175,6 +175,7 @@ async def make_disguise(
     detect_targets: str = Form(""),
     output_folder: str = Form(""),
     output_name: str = Form(""),
+    output_format: str = Form("disguise", pattern="^(disguise|gif)$"),
     censor_service=Depends(get_censor_service),
 ):
     """Make one disguise. Several sources become one animation, in order.
@@ -234,6 +235,19 @@ async def make_disguise(
         pictures.append(image)
         stems.append(stem)
 
+    options = MakeOptions(
+        frame_ms=frame_ms,
+        max_side=max_side,
+        scrub=scrub,
+        canvas_background=canvas_background,
+    )
+    if output_format == "gif":
+        # A plain looping GIF: no cover, every viewer shows the animation.
+        made = await run_in_threadpool(
+            disguise_service.make_loop_gif, pictures, options
+        )
+        return await _save_made(made, stems, output_folder, output_name, ".gif")
+
     cover_upload = (
         _open_image(await _read_upload(cover_file)) if cover_file is not None else None
     )
@@ -243,12 +257,6 @@ async def make_disguise(
         text=cover_text,
         background=cover_background,
         foreground=cover_foreground,
-    )
-    options = MakeOptions(
-        frame_ms=frame_ms,
-        max_side=max_side,
-        scrub=scrub,
-        canvas_background=canvas_background,
     )
     detector = None
     if cover_kind == "mosaic" and first_image_id is not None:
@@ -267,10 +275,15 @@ async def make_disguise(
         )
     except CoverUnavailable as exc:
         return {"status": "needs_cover", "reason": exc.reason}
+    return await _save_made(made, stems, output_folder, output_name, ".png")
 
+
+async def _save_made(
+    made, stems: list[str], output_folder: str, output_name: str, suffix: str
+) -> dict:
     folder = _output_folder(output_folder)
     default_stem = stems[0] if len(stems) == 1 else f"{stems[0]}_{len(stems)}p"
-    target = _free_name(folder, output_name.strip() or default_stem)
+    target = _free_name(folder, output_name.strip() or default_stem, suffix)
     await run_in_threadpool(target.write_bytes, made.data)
     token = _remember_result(target)
     return {
@@ -290,7 +303,8 @@ async def make_disguise(
 @router.get("/result/{token}")
 async def get_result(token: str):
     path = _result_path(token)
-    return FileResponse(path, media_type="image/png", filename=os.path.basename(path))
+    media_type = "image/gif" if path.lower().endswith(".gif") else "image/png"
+    return FileResponse(path, media_type=media_type, filename=os.path.basename(path))
 
 
 class CopyRequest(BaseModel):
@@ -324,7 +338,9 @@ async def reveal_result(request: RevealRequest):
     """Show a made disguise in the OS file manager, selected, ready to drag into a chat."""
     path = _result_path(request.token)
     if not await run_in_threadpool(open_in_file_manager, Path(path)):
-        raise HTTPException(status_code=501, detail="No file manager is available on this computer.")
+        raise HTTPException(
+            status_code=501, detail="No file manager is available on this computer."
+        )
     return {"status": "ok"}
 
 

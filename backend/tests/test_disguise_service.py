@@ -249,3 +249,22 @@ def test_a_cover_that_cannot_be_made_writes_nothing(tmp_path: Path) -> None:
     assert not (
         disguise_registry.disguise_dir() / disguise_registry.REGISTRY_NAME
     ).exists()
+
+
+def test_a_loop_gif_plays_every_picture_in_order_and_loops_forever() -> None:
+    pictures = [Image.new("RGBA", (60, 40), RED), Image.new("RGBA", (40, 60), BLUE), Image.new("RGBA", (60, 40), (40, 200, 40, 255))]
+
+    made = service.make_loop_gif(pictures, MakeOptions(frame_ms=300, scrub=False))
+
+    with Image.open(io.BytesIO(made.data)) as gif:
+        assert gif.format == "GIF"
+        assert gif.n_frames == 3
+        assert gif.info.get("loop") == 0
+        centers = []
+        for index in range(3):
+            gif.seek(index)
+            centers.append(gif.convert("RGB").getpixel((30, 30)))
+            assert gif.info.get("duration") == 300
+    assert centers == [RED[:3], BLUE[:3], (40, 200, 40)]
+    assert (made.width, made.height, made.real_frames) == (60, 60, 3)
+    assert disguise_apng.probe_disguise(made.data) is None

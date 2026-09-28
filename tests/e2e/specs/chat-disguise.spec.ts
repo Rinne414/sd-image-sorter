@@ -332,7 +332,7 @@ test('a picture protected in Simple mode first still downloads as the disguise P
   await page.locator('#obfuscate-queue .obfuscate-download').first().click()
   const file = await download
 
-  expect(file.suggestedFilename()).toBe('simple-first.png')
+  expect(file.suggestedFilename()).toMatch(/^simple-first( \(\d+\))?\.png$/)
   const bytes = fs.readFileSync((await file.path())!)
   expect(bytes.includes(Buffer.from('acTL'))).toBe(true)
 })
@@ -363,4 +363,28 @@ test('a library image is sent by id even after its file was fetched', async ({ p
   await expect.poll(() => sent.length).toBe(1)
   expect(sent[0]).toContain(`[{"image_id":${imageId}}]`)
   await expect(page.locator('#obfuscate-queue .obfuscate-item').first()).toHaveClass(/needs_cover/)
+})
+
+test('a pack can be a plain looping GIF, which needs no cover', async ({ page }) => {
+  await openPrivacyTools(page)
+  await addPictures(page, [
+    { name: 'gif-one.png', buffer: await pngBytes(page, '#c83030') },
+    { name: 'gif-two.png', buffer: await pngBytes(page, '#3060c8') },
+  ])
+  await chooseDisguiseMode(page, 'upload')
+  await expect(page.locator('#disguise-pack-format-row')).toBeHidden()
+  await page.locator('#disguise-pack').check()
+  await expect(page.locator('#disguise-pack-format-row')).toBeVisible()
+
+  await page.locator('#disguise-pack-format').selectOption('gif')
+
+  await expect(page.locator('#disguise-cover-row')).toBeHidden()
+  await page.locator('#obfuscate-btn-encode').click()
+  await expect(page.locator('#disguise-pack-result')).toBeVisible()
+  await expect(page.locator('#disguise-pack-info')).toContainText(/gif-one_2p( \(\d+\))?\.gif/)
+  const header = await page.evaluate(async () => {
+    const blob: Blob = await (await fetch((window as any).ImageDisguise._packResult.file_url)).blob()
+    return String.fromCharCode(...new Uint8Array(await blob.slice(0, 6).arrayBuffer()))
+  })
+  expect(header).toBe('GIF89a')
 })

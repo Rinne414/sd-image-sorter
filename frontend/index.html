@@ -1585,7 +1585,7 @@
 
                         <!-- Chat disguise settings (only in the chat disguise mode) -->
                         <div class="disguise-settings" id="disguise-settings" hidden>
-                            <div class="disguise-row">
+                            <div class="disguise-row" id="disguise-cover-row">
                                 <label class="disguise-label" for="disguise-cover-kind" data-i18n="disguise.coverLabel">Cover</label>
                                 <select id="disguise-cover-kind" class="input-field disguise-cover-kind">
                                     <option value="default" data-i18n="disguise.coverDefault">Default cover</option>
@@ -1622,6 +1622,13 @@
                                 <label class="disguise-inline">
                                     <span data-i18n="disguise.frameSeconds">Seconds per picture</span>
                                     <input type="number" id="disguise-frame-seconds" class="input-field disguise-number" min="0.1" step="0.1" value="1">
+                                </label>
+                                <label class="disguise-inline" id="disguise-pack-format-row" hidden>
+                                    <span data-i18n="disguise.packFormat">Make</span>
+                                    <select id="disguise-pack-format" class="input-field">
+                                        <option value="disguise" data-i18n="disguise.packFormatDisguise">A disguise (APNG)</option>
+                                        <option value="gif" data-i18n="disguise.packFormatGif">A looping GIF (no cover)</option>
+                                    </select>
                                 </label>
                             </div>
                         </div>

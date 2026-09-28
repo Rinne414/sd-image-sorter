@@ -77,6 +77,7 @@
             set('disguise-frame-seconds', readSetting('frame_seconds', String(DEFAULT_FRAME_SECONDS)));
             set('disguise-max-side', readSetting('max_side', String(DEFAULT_MAX_SIDE)));
             set('disguise-output-folder', readSetting('output_folder', ''));
+            set('disguise-pack-format', readSetting('pack_format', 'disguise'));
             const pack = byId('disguise-pack');
             if (pack) pack.checked = readSetting('pack', '0') === '1';
             const scrub = byId('disguise-scrub');
@@ -97,6 +98,7 @@
             remember('disguise-frame-seconds', 'frame_seconds');
             remember('disguise-max-side', 'max_side');
             remember('disguise-output-folder', 'output_folder');
+            remember('disguise-pack-format', 'pack_format');
             remember('disguise-pack', 'pack', (el) => (el.checked ? '1' : '0'));
             remember('disguise-scrub', 'scrub', (el) => (el.checked ? '1' : '0'));
             byId('disguise-text-input')?.addEventListener('keydown', (event) => event.stopPropagation());
@@ -180,6 +182,8 @@
                 coverBg: byId('disguise-text-bg')?.value || '#26272b',
                 coverFg: byId('disguise-text-fg')?.value || '#f2f2f2',
                 pack: Boolean(byId('disguise-pack')?.checked),
+                // A pack can also be a plain looping GIF (no cover) for places without APNG.
+                packFormat: byId('disguise-pack-format')?.value === 'gif' ? 'gif' : 'disguise',
                 frameMs: Math.max(1, Math.round((Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_FRAME_SECONDS) * 1000)),
                 maxSide: Number.isFinite(maxSide) && maxSide >= 0 ? maxSide : DEFAULT_MAX_SIDE,
                 scrub: byId('disguise-scrub')?.checked ?? true,
@@ -211,6 +215,8 @@
             const show = (id, visible) => { const el = byId(id); if (el) el.hidden = !visible; };
 
             show('disguise-settings', active);
+            show('disguise-pack-format-row', settings.pack);
+            show('disguise-cover-row', !(settings.pack && settings.packFormat === 'gif'));
             show('disguise-advanced', active);
             show('obfuscate-metadata-row', !active);
             show('obfuscate-legacy-row', !active);
@@ -262,11 +268,12 @@
             if (obfuscator._processing) return;
             if (mode === 'decode') return this._guard(() => this._restoreAll());
             const settings = this._settings();
-            if (settings.coverKind === 'upload' && !this._uploadCover) {
+            const needsCover = !(settings.pack && settings.packFormat === 'gif');
+            if (needsCover && settings.coverKind === 'upload' && !this._uploadCover) {
                 this._toast(this._t('disguise.pickCoverFirst', 'Choose a cover picture first'), 'warning');
                 return;
             }
-            if (settings.coverKind === 'mosaic') await this._ensureDetector();
+            if (needsCover && settings.coverKind === 'mosaic') await this._ensureDetector();
             return this._guard(() => (settings.pack ? this._makePack(settings) : this._makeEach(obfuscator._queue, settings)));
         },
 
@@ -313,6 +320,7 @@
             form.append('scrub', String(settings.scrub));
             form.append('output_folder', settings.outputFolder);
             if (items.length === 1) form.append('output_name', this._obfuscator._getBaseName(items[0]));
+            if (settings.pack && settings.packFormat === 'gif') form.append('output_format', 'gif');
             if (settings.coverKind === 'mosaic') {
                 const detector = this._detectorSettings();
                 form.append('detect_model_type', detector.modelType);
@@ -408,7 +416,9 @@
                 }
                 this._packResult = { ...result, url: URL.createObjectURL(result.blob) };
                 items.forEach((item) => { item.status = 'packed'; });
-                this._toast(this._t('disguise.packSummary', 'Packed {count} pictures into one disguise', { count: items.length }), 'success');
+                this._toast(settings.packFormat === 'gif'
+                    ? this._t('disguise.packGifSummary', 'Made one looping GIF from {count} pictures', { count: items.length })
+                    : this._t('disguise.packSummary', 'Packed {count} pictures into one disguise', { count: items.length }), 'success');
             } catch (error) {
                 items.forEach((item) => { item.status = 'error'; });
                 this._toast(String(error.message || error), 'error');

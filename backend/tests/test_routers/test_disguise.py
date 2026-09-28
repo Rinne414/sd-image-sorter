@@ -418,3 +418,27 @@ def test_the_page_can_ask_whether_a_default_cover_exists(test_client, data_dir) 
 
     assert info["exists"] is True
     assert isinstance(info["version"], int)
+
+
+def test_a_pack_can_be_a_plain_looping_gif_without_a_cover(test_client, data_dir) -> None:
+    body = _make(
+        test_client,
+        [{"file_index": 0}, {"file_index": 1}],
+        files=[("a.png", _png(RED)), ("b.png", _png(GREEN))],
+        cover_kind="mosaic",  # ignored: a GIF has no cover
+        output_format="gif",
+        frame_ms=250,
+    ).json()
+
+    assert body["status"] == "ok", body
+    assert body["file_name"] == "a_2p.gif"
+    served = test_client.get(body["file_url"])
+    assert served.headers["content-type"] == "image/gif"
+    with Image.open(io.BytesIO(served.content)) as gif:
+        assert gif.format == "GIF" and gif.n_frames == 2
+
+
+def test_an_unknown_output_format_is_refused(test_client, data_dir) -> None:
+    response = _make(test_client, [{"file_index": 0}], files=[("a.png", _png(RED))], cover_kind="blur", output_format="webm")
+
+    assert response.status_code == 400

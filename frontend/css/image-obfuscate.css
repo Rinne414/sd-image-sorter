@@ -327,7 +327,9 @@
     border: 1px solid rgba(var(--accent-rgb), 0.06);
 }
 
-/* .obfuscate-checkbox-row sets display:flex, which would override [hidden]. */
+/* These rows set their own display, which would override [hidden]. */
+#disguise-settings [hidden],
+#disguise-advanced [hidden],
 .obfuscate-checkbox-row[hidden],
 .disguise-settings[hidden],
 .disguise-advanced[hidden],

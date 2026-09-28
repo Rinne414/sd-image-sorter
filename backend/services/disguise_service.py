@@ -18,6 +18,7 @@ into a duplicate of the original picture.
 
 from __future__ import annotations
 
+import io
 import logging
 import os
 from dataclasses import dataclass
@@ -284,6 +285,39 @@ def make_disguise(
         width=canvas[0],
         height=canvas[1],
         real_frames=len(prepared),
+    )
+
+
+def make_loop_gif(pictures: Sequence[Image.Image], options: MakeOptions = MakeOptions()) -> MadeDisguise:
+    """Several pictures as one ordinary looping GIF, for places that do not play APNG.
+
+    No cover: every viewer shows the animation. GIF has no partial
+    transparency, so pictures sit on ``canvas_background``.
+    """
+    if not pictures:
+        raise ValueError("A GIF needs at least one picture")
+    prepared = [limit_side(picture.convert("RGBA"), options.max_side) for picture in pictures]
+    if options.scrub:
+        prepared = [disguise_apng.scrub_hidden_data(picture) for picture in prepared]
+    background = _color(options.canvas_background, "#ffffff")
+    canvas = (max(p.width for p in prepared), max(p.height for p in prepared))
+    frames = [disguise_apng.fit_onto_canvas(picture, canvas, background).convert("RGB") for picture in prepared]
+    buffer = io.BytesIO()
+    frames[0].save(
+        buffer,
+        format="GIF",
+        save_all=True,
+        append_images=frames[1:],
+        duration=max(20, int(options.frame_ms)),
+        loop=0,
+        optimize=False,
+    )
+    return MadeDisguise(
+        data=buffer.getvalue(),
+        cover=frames[0].convert("RGBA"),
+        width=canvas[0],
+        height=canvas[1],
+        real_frames=len(frames),
     )
 
 
