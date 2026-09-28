@@ -813,6 +813,7 @@ def test_get_status_wraps_inventory_and_health(monkeypatch):
         "clip",
         "aesthetic",
         "aesthetic-waifu",
+        "aesthetic-anime",
         "artist",
         "lucida",
         "rembg",

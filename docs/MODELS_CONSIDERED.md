@@ -11,7 +11,7 @@
 
 ### 美学评分
 
-已经有的：LAION 美学评分（照片取向，已内置）。已加入：**Waifu Scorer V3**（二次元，0–10 分，只多约 11 MB，和 LAION 共用同一个 CLIP 模型；在模型中心「Waifu Scorer V3」卡片下载）。正在加入：**deepghs anime_aesthetic**（二次元，masterpiece 到 worst 共 7 档，ONNX，不需要 torch），完成后会出现在模型中心。
+已经有的：LAION 美学评分（照片取向，已内置）。已加入，都在模型中心下载：**Waifu Scorer V3**（二次元，0–10 分，只多约 11 MB，和 LAION 共用同一个 CLIP 模型）和 **deepghs anime_aesthetic**（二次元，masterpiece 到 worst 共 7 档，约 420 MB 的 ONNX 模型；许可证为 openrail，程序只从官方仓库下载，不重新分发）。两者都在美学评分时一起计算，所以都需要先装好美学评分模型。
 我们在 150 张随机图上对比过：三个模型的排名相关只有 0.03–0.12，说明它们看的东西很不一样，所以会都做成可选，由你按用途挑。
 
 | 模型 | 它是什么 | 为什么暂时没加 | 什么情况下会加 |
@@ -41,7 +41,7 @@ Last updated: 2026-09-28.
 
 ### Aesthetic scoring
 
-Already in the app: the LAION aesthetic score (photo-oriented, built in). Added: **Waifu Scorer V3** (anime, 0–10, about 11 MB extra, sharing the CLIP model LAION already uses; download it from its Model Center card). Being added: **deepghs anime_aesthetic** (anime, seven grades from masterpiece to worst, ONNX, no torch); it will appear in the Model Center when done.
+Already in the app: the LAION aesthetic score (photo-oriented, built in). Added, both downloaded from the Model Center: **Waifu Scorer V3** (anime, 0–10, about 11 MB extra, sharing the CLIP model LAION already uses) and **deepghs anime_aesthetic** (anime, seven grades from masterpiece to worst, a ~420 MB ONNX model; licensed openrail, downloaded from the official repository and not redistributed). Both are computed during aesthetic scoring, so both need the Aesthetic Predictor installed first.
 On 150 random pictures the three models' rankings correlate only 0.03–0.12, so they judge different things; all of them will be optional, pick by purpose.
 
 | Model | What it is | Why not yet | When we would add it |

@@ -263,16 +263,16 @@ Object.assign(window.V321Integration, {
 
     /** "This run scores N images" text. toScore counts every picture the run
      *  touches: unscored ones, outdated ones (scored before the QuickGELU
-     *  fix) and, once the Waifu head is installed, already scored ones that
-     *  only lack a Waifu score (extra). */
+     *  fix) and, once the Waifu head or the anime grade is installed, already
+     *  scored ones that only lack those scores (extra). */
     _aestheticScopeText(toScore, outdated, extra, i18n) {
         const needsScore = Math.max(0, toScore - extra);
         const extraText = i18n('tagger.aestheticScopeExtra',
-            'It also adds the Waifu score to {extra} images that already have an aesthetic score.')
+            'It also adds the newly installed anime scores to {extra} images that already have an aesthetic score.')
             .replace('{extra}', extra.toLocaleString());
         if (needsScore === 0 && extra > 0) {
             return i18n('tagger.aestheticScopeOnlyExtra',
-                'Every image already has an aesthetic score. This run adds the Waifu score to {extra} of them.')
+                'Every image already has an aesthetic score. This run adds the newly installed anime scores to {extra} of them.')
                 .replace('{extra}', extra.toLocaleString());
         }
         const scoreText = outdated > 0

@@ -157,9 +157,15 @@ Object.assign(window.Gallery, {
                 const score = Number(result?.aesthetic_score);
                 if (Number.isFinite(score)) {
                     const waifu = result?.aesthetic_waifu;
+                    const grade = result?.aesthetic_anime_grade;
                     this._patchImageState(id, {
                         aesthetic_score: score,
                         ...(waifu == null ? {} : { aesthetic_waifu: Number(waifu) }),
+                        ...(grade ? {
+                            aesthetic_anime: Number(result.aesthetic_anime),
+                            aesthetic_anime_pct: Number(result.aesthetic_anime_pct),
+                            aesthetic_anime_grade: grade,
+                        } : {}),
                     });
                     if (Number(this._currentPreviewId) === id && this._lastModalImage && this._lastParsedData) {
                         this._renderModalSections(this._lastModalImage, this._lastParsedData);

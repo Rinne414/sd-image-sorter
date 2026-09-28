@@ -302,6 +302,20 @@ Object.assign(window.Gallery, {
             if (hasWaifu) waifuText.textContent = `${Number(image.aesthetic_waifu).toFixed(2)} / 10`;
         }
 
+        // --- deepghs anime grade: masterpiece ... worst, plus rank among the model's reference pictures ---
+        const animeItem = $('#modal-anime-item');
+        const animeText = $('#modal-anime-grade');
+        if (animeItem && animeText) {
+            const grade = image.aesthetic_anime_grade;
+            animeItem.style.display = grade ? '' : 'none';
+            if (grade) {
+                const top = Math.max(1, Math.round((1 - Number(image.aesthetic_anime_pct || 0)) * 100));
+                animeText.textContent = this._t('modal.animeGradeValue', { grade, top }, '{grade} · top {top}%')
+                    .replace('{grade}', grade)
+                    .replace('{top}', String(top));
+            }
+        }
+
         // --- img2img Badge ---
         const img2imgBadge = $('#modal-img2img-badge');
         if (parsedData.is_img2img) {

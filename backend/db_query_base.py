@@ -119,6 +119,9 @@ def _get_order_clause(sort_by: str) -> str:
         # Waifu Scorer V3 (0-10, 0 is a real score): unscored pictures sort last both ways.
         "aesthetic_waifu": "COALESCE(i.aesthetic_waifu, -1) DESC, i.id DESC",
         "aesthetic_waifu_asc": "COALESCE(i.aesthetic_waifu, 99) ASC, i.id ASC",
+        # deepghs anime grade by its continuous score (0-6): unscored last both ways.
+        "aesthetic_anime": "COALESCE(i.aesthetic_anime, -1) DESC, i.id DESC",
+        "aesthetic_anime_asc": "COALESCE(i.aesthetic_anime, 99) ASC, i.id ASC",
         # v3.3.2 user star rating (FF-2). user_rating is NOT NULL DEFAULT 0.
         "user_rating": "i.user_rating DESC, i.id DESC",
         "user_rating_asc": "i.user_rating ASC, i.id ASC",

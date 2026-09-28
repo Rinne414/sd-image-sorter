@@ -160,7 +160,7 @@ async def get_images(
     ),
     sort_by: str = Query(
         default="newest",
-        description="Sort order: newest, oldest, name_asc, name_desc, generator, generator_desc, prompt_length, prompt_length_asc, tag_count, tag_count_asc, rating, rating_desc, character_count, character_count_asc, random, file_size, file_size_asc, aesthetic, aesthetic_asc, aesthetic_waifu, aesthetic_waifu_asc, brightness, brightness_asc, saturation, saturation_asc, brightness_skew, brightness_skew_asc, user_rating, user_rating_asc. Cursor pagination works for newest/oldest only.",
+        description="Sort order: newest, oldest, name_asc, name_desc, generator, generator_desc, prompt_length, prompt_length_asc, tag_count, tag_count_asc, rating, rating_desc, character_count, character_count_asc, random, file_size, file_size_asc, aesthetic, aesthetic_asc, aesthetic_waifu, aesthetic_waifu_asc, aesthetic_anime, aesthetic_anime_asc, brightness, brightness_asc, saturation, saturation_asc, brightness_skew, brightness_skew_asc, user_rating, user_rating_asc. Cursor pagination works for newest/oldest only.",
         examples=["newest"],
     ),
     limit: int = Query(

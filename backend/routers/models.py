@@ -100,6 +100,7 @@ async def get_download_progress():
 MODEL_DEPENDENCY_GROUPS: Dict[str, str] = {
     "aesthetic": "aesthetic",
     "aesthetic-waifu": "aesthetic",
+    "aesthetic-anime": "aesthetic",
     "artist": "artist",
     "censor-legacy": "yolo",
     "censor-nudenet": "nudenet",
@@ -196,6 +197,17 @@ BULK_MODEL_BUNDLE: list[dict[str, object]] = [
         # 11 MB on its own; Prepare also sets up the Aesthetic predictor
         # (~1.7 GB) when that item is not installed or selected.
         "label": "Waifu Scorer V3 (anime aesthetic score; needs the Aesthetic predictor)",
+        "feature_key": "scoring",
+        "recommended": False,
+        "default_selected": False,
+        "restart_after_install": True,
+    },
+    {
+        "id": "aesthetic-anime",
+        # ~420 MB on its own; Prepare also sets up the Aesthetic predictor
+        # (~1.7 GB) when that item is not installed or selected.
+        "size_bytes": 419 * 1024 * 1024,
+        "label": "deepghs anime aesthetic grade (masterpiece ... worst; needs the Aesthetic predictor)",
         "feature_key": "scoring",
         "recommended": False,
         "default_selected": False,

@@ -164,9 +164,13 @@ EXPECTED_DERIVED_IMAGE_UPDATE_STATEMENTS = Counter({
     (
         "services/derived_state_service.py",
         # aesthetic_version (migration 049) marks which scorer build wrote the score;
-        # the Waifu score keeps its stored value when this run did not compute it.
+        # optional scores (Waifu, anime grade) keep their stored value when this
+        # run did not compute them.
         "UPDATE images SET aesthetic_score = ?, aesthetic_version = ?, "
-        "aesthetic_waifu = COALESCE(?, aesthetic_waifu), content_fingerprint = ? "
+        "aesthetic_waifu = COALESCE(?, aesthetic_waifu), "
+        "aesthetic_anime = COALESCE(?, aesthetic_anime), "
+        "aesthetic_anime_pct = COALESCE(?, aesthetic_anime_pct), "
+        "aesthetic_anime_grade = COALESCE(?, aesthetic_anime_grade), content_fingerprint = ? "
         "WHERE id = ? AND content_fingerprint = ?",
     ): 1,
     (

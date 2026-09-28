@@ -113,7 +113,7 @@ test('the Aesthetic tab says which pictures only get the Waifu score', async ({ 
 
   await expect(page.locator('#tagger-aesthetic-scope')).toHaveText(
     'This run scores the 2 images in this library that have no aesthetic score yet. '
-      + 'It also adds the Waifu score to 6 images that already have an aesthetic score.',
+      + 'It also adds the newly installed anime scores to 6 images that already have an aesthetic score.',
   )
 })
 
@@ -128,6 +128,6 @@ test('when every picture is scored the Aesthetic tab only mentions the Waifu sco
   })
 
   const scope = page.locator('#tagger-aesthetic-scope')
-  await expect(scope).toHaveText('Every image already has an aesthetic score. This run adds the Waifu score to 10 of them.')
+  await expect(scope).toHaveText('Every image already has an aesthetic score. This run adds the newly installed anime scores to 10 of them.')
   await expect(scope).toBeInViewport()
 })

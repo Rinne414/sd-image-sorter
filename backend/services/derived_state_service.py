@@ -82,6 +82,7 @@ def write_image_aesthetic_score(
     fingerprint = str(content_fingerprint or "").strip()
     if not fingerprint:
         raise ValueError("content_fingerprint must be non-empty for an Aesthetic score")
+    anime = scores.anime
 
     cursor.execute(
         """
@@ -89,6 +90,9 @@ def write_image_aesthetic_score(
         SET aesthetic_score = ?,
             aesthetic_version = ?,
             aesthetic_waifu = COALESCE(?, aesthetic_waifu),
+            aesthetic_anime = COALESCE(?, aesthetic_anime),
+            aesthetic_anime_pct = COALESCE(?, aesthetic_anime_pct),
+            aesthetic_anime_grade = COALESCE(?, aesthetic_anime_grade),
             content_fingerprint = ?
         WHERE id = ? AND content_fingerprint = ?
         """,
@@ -96,6 +100,9 @@ def write_image_aesthetic_score(
             scores.laion,
             AESTHETIC_SCORE_VERSION,
             scores.waifu,
+            anime.score if anime else None,
+            anime.percentile if anime else None,
+            anime.grade if anime else None,
             fingerprint,
             image_id,
             fingerprint,

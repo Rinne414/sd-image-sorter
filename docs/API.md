@@ -121,7 +121,7 @@ Retrieve images with filters and cursor pagination.
 | `loras` | string | - | Comma-separated LoRA names |
 | `search` | string | - | Free-text prompt / filename search |
 | `artist` | string | - | Artist name filter |
-| `sort_by` | string | `newest` | `newest`, `oldest`, `name_asc`, `name_desc`, `generator`, `generator_desc`, `prompt_length`, `prompt_length_asc`, `tag_count`, `tag_count_asc`, `rating`, `rating_desc`, `character_count`, `character_count_asc`, `random`, `file_size`, `file_size_asc`, `aesthetic`, `aesthetic_asc`, `aesthetic_waifu`, `aesthetic_waifu_asc` (unscored images last both ways), `brightness`, `brightness_asc`, `saturation`, `saturation_asc`, `brightness_skew`, `brightness_skew_asc`, `user_rating`, `user_rating_asc` |
+| `sort_by` | string | `newest` | `newest`, `oldest`, `name_asc`, `name_desc`, `generator`, `generator_desc`, `prompt_length`, `prompt_length_asc`, `tag_count`, `tag_count_asc`, `rating`, `rating_desc`, `character_count`, `character_count_asc`, `random`, `file_size`, `file_size_asc`, `aesthetic`, `aesthetic_asc`, `aesthetic_waifu`, `aesthetic_waifu_asc`, `aesthetic_anime`, `aesthetic_anime_asc` (unscored images last both ways), `brightness`, `brightness_asc`, `saturation`, `saturation_asc`, `brightness_skew`, `brightness_skew_asc`, `user_rating`, `user_rating_asc` |
 | `limit` | int | 100 | Max images per page |
 | `cursor` | string | - | Opaque cursor token from the previous page; pass it back unchanged |
 | `min_width` | int | - | Minimum width in pixels |
@@ -1569,10 +1569,10 @@ Remove the saved default cover. Returns `{status, removed}`.
 ### Aesthetic
 
 #### GET /api/aesthetic/status
-Get aesthetic scorer availability and scored count. Returns `{ "available", "message", "scored_count", "outdated_count", "missing_extra_count", "to_score_count" }`. `to_score_count` is what `POST /api/aesthetic/score-all` would process in the current library: images with no LAION score, `outdated_count` images whose score came from a build older than `aesthetic.AESTHETIC_SCORE_VERSION` (before the QuickGELU fix), and, once the Waifu Scorer V3 head is installed, `missing_extra_count` images that already have a current LAION score but no Waifu score.
+Get aesthetic scorer availability and scored count. Returns `{ "available", "message", "scored_count", "outdated_count", "missing_extra_count", "to_score_count" }`. `to_score_count` is what `POST /api/aesthetic/score-all` would process in the current library: images with no LAION score, `outdated_count` images whose score came from a build older than `aesthetic.AESTHETIC_SCORE_VERSION` (before the QuickGELU fix), and, once an optional model is installed (Waifu Scorer V3 head, deepghs anime grade), `missing_extra_count` images that already have a current LAION score but lack that model's score. A model file that fails to load stops counting until it is prepared again.
 
 #### POST /api/aesthetic/score/{image_id}
-Score a single image. Returns `{ "image_id", "aesthetic_score", "aesthetic_waifu" }`; `aesthetic_waifu` (0-10) is `null` unless the Waifu Scorer V3 head is installed. Both come from one CLIP pass. Gallery rows and `GET /api/images/{id}` carry `aesthetic_waifu` too.
+Score a single image. Returns `{ "image_id", "aesthetic_score", "aesthetic_waifu", "aesthetic_anime", "aesthetic_anime_pct", "aesthetic_anime_grade" }`. `aesthetic_waifu` (0-10) is `null` unless the Waifu Scorer V3 head is installed; it comes from the same CLIP pass. The `aesthetic_anime*` fields are `null` unless the deepghs anime aesthetic model is installed: `aesthetic_anime` is its continuous score (worst 0 ... masterpiece 6), `aesthetic_anime_pct` its percentile among the model's reference samples (0-1), and `aesthetic_anime_grade` the grade read from that percentile (`masterpiece` >= 0.95, `best` >= 0.85, `great` >= 0.75, `good` >= 0.5, `normal` >= 0.25, `low` >= 0.1, else `worst`). Gallery rows and `GET /api/images/{id}` carry these fields too.
 
 #### POST /api/aesthetic/score-all
 Start batch aesthetic scoring.

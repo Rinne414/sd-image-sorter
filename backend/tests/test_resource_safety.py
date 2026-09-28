@@ -110,6 +110,7 @@ def test_aesthetic_gpu_oom_unloads_and_retries_on_cpu(monkeypatch, tmp_path: Pat
     monkeypatch.setattr(aesthetic, "_load_predictor", lambda device=None: _install_fake_aesthetic(aesthetic, device, calls, _FakeClipModel, _FakePredictor, _FakeTensor))
     monkeypatch.setattr(aesthetic, "_unload_models", lambda: _fake_unload_aesthetic(aesthetic, calls))
     monkeypatch.setattr(aesthetic, "is_waifu_installed", lambda: False)
+    monkeypatch.setattr(aesthetic.anime_aesthetic, "is_scoring", lambda: False)
 
     assert aesthetic.predict_scores(str(image_path)).laion == 7.25
     assert calls.count("load:cuda") == 1

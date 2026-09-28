@@ -22,6 +22,7 @@ VALID_SORT_OPTIONS = {
     "rating", "rating_desc", "character_count", "character_count_asc",
     "random", "file_size", "file_size_asc", "aesthetic", "aesthetic_asc",
     "aesthetic_waifu", "aesthetic_waifu_asc",
+    "aesthetic_anime", "aesthetic_anime_asc",
     # v3.3.2 user star rating (FF-2)
     "user_rating", "user_rating_asc",
     # v3.2.1 color sorts
@@ -71,8 +72,12 @@ _IMAGE_COLUMNS_BASE_FIELDS = (
     # nothing may filter or shorten captions by it.
     "sidecar_caption_format",
     "aesthetic_score",
-    # Optional anime aesthetic score (migration 049), 0-10.
+    # Optional anime aesthetic scores (migration 049): Waifu 0-10, and the
+    # deepghs grade with its 0-6 score and percentile among reference samples.
     "aesthetic_waifu",
+    "aesthetic_anime",
+    "aesthetic_anime_pct",
+    "aesthetic_anime_grade",
     # v3.3.2 user star rating (FF-2): INTEGER 0-5, NOT NULL DEFAULT 0 (0 = unrated).
     "user_rating",
     # Color analysis (migration 010, v3.2.1). All nullable until backfill.
@@ -109,6 +114,9 @@ _IMAGE_COLUMNS_WITH_PROMPT_FIELDS = (
     "tagged_at",
     "aesthetic_score",
     "aesthetic_waifu",
+    "aesthetic_anime",
+    "aesthetic_anime_pct",
+    "aesthetic_anime_grade",
     # v3.3.2 user star rating (FF-2): 0-5, 0 = unrated.
     "user_rating",
     # Color summary for gallery list (v3.2.1). Histogram/skew skipped to keep row light.
@@ -141,6 +149,9 @@ _IMAGE_COLUMNS_LIGHTWEIGHT_FIELDS = (
     "tagged_at",
     "aesthetic_score",
     "aesthetic_waifu",
+    "aesthetic_anime",
+    "aesthetic_anime_pct",
+    "aesthetic_anime_grade",
     # v3.3.2 user star rating (FF-2): 0-5, 0 = unrated.
     "user_rating",
     # Color summary for gallery list (v3.2.1). Histogram/skew skipped to keep row light.

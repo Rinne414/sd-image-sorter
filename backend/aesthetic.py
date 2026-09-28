@@ -8,7 +8,8 @@ path. If files are still missing, scoring may fetch them from Hugging Face.
 
 Waifu Scorer V3 is an optional anime aesthetic head (0-10) on the same
 normalized CLIP embedding: once its 11 MB file is installed, the same CLIP
-pass yields both scores.
+pass yields both scores. deepghs anime_aesthetic (``anime_aesthetic.py``) is
+an optional ONNX grade on the same opened picture.
 """
 import logging
 import os
@@ -18,6 +19,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
 from pathlib import Path
 
+import anime_aesthetic
 import pinned_download
 
 from ai_runtime_guard import (
@@ -42,6 +44,9 @@ _waifu_head = None
 # Set when the installed Waifu file cannot be loaded, so every picture does
 # not retry it; cleared by a fresh Prepare / Download or a model reload.
 _waifu_head_failed = False
+# Set once the anime grade runs out of GPU memory: it stays on CPU from then on
+# instead of reloading the 418 MB model for every picture.
+_anime_on_cpu = False
 
 # Cache for is_available() so the frontend's /api/aesthetic/status poll does
 # not run a fresh ``import torch`` on every call. When torch is absent (the
@@ -80,10 +85,13 @@ WAIFU_SCORE_MAX = 10.0
 
 @dataclass(frozen=True)
 class AestheticScores:
-    """Scores from one CLIP pass: LAION (~1-10) and, when installed, Waifu Scorer V3 (0-10)."""
+    """One scoring pass: LAION (~1-10) plus, when installed, Waifu (0-10) and the anime grade."""
 
     laion: float
     waifu: Optional[float] = None
+    anime: Optional[anime_aesthetic.AnimeAesthetic] = None
+    # The anime grade is installed but failed on this picture (it stays unscored).
+    anime_failed: bool = False
 
 
 def _get_models_dir() -> Path:
@@ -253,6 +261,7 @@ def _unload_models() -> None:
     _clip_preprocess = None
     _waifu_head = None
     _waifu_head_failed = False
+    anime_aesthetic.unload()
     previous_device = _device
     _device = None
     try:
@@ -266,7 +275,7 @@ def _ensure_loaded(device: Optional[str] = None):
     """Lazy-load CLIP + aesthetic head on first call."""
     global _predictor, _clip_model, _clip_preprocess, _device
 
-    target_device = device or _select_device(use_gpu=True)
+    target_device = device or _default_device()
     if _predictor is not None and _device == target_device and not _waifu_head_pending():
         return
 
@@ -278,6 +287,19 @@ def _ensure_loaded(device: Optional[str] = None):
         elif _waifu_head_pending():
             # Installed while CLIP was already loaded: add just the head.
             _load_waifu_head()
+
+
+def _default_device() -> str:
+    """Keep models already on the GPU there; otherwise pick by free VRAM.
+
+    Re-checking free VRAM for every picture moved loaded models to the CPU as
+    soon as their own memory (CLIP, the anime grade) pushed free VRAM under the
+    threshold, then back to the GPU on the next picture, reloading both each
+    time. A real shortage still ends on the CPU through the out-of-memory path.
+    """
+    if _predictor is not None and _device == "cuda" and not _force_cpu_after_gpu_failure:
+        return "cuda"
+    return _select_device(use_gpu=True)
 
 
 def _waifu_head_pending() -> bool:
@@ -401,7 +423,7 @@ def _load_predictor(device: Optional[str] = None):
         raise
 
 
-def _predict_scores_loaded(image_path: str) -> AestheticScores:
+def _predict_scores_loaded(image_path: str, extras: bool = True) -> AestheticScores:
     torch = _get_torch_module()
     from PIL import Image
 
@@ -409,29 +431,85 @@ def _predict_scores_loaded(image_path: str) -> AestheticScores:
     assert _clip_model is not None
     assert _predictor is not None
 
+    anime = None
     with Image.open(image_path) as img:
         img_tensor = _clip_preprocess(img.convert("RGB")).unsqueeze(0).to(_device)
+        if extras:
+            anime = _predict_anime(img)
+    # A grade model that could not load stops scoring; only a per-picture failure counts.
+    anime_failed = extras and anime is None and anime_aesthetic.is_scoring()
 
     waifu = None
     with torch.no_grad():
         features = _clip_model.encode_image(img_tensor)
         features = (features / features.norm(dim=-1, keepdim=True)).float()
         laion = _predictor(features)
-        if _waifu_head is not None:
+        if extras and _waifu_head is not None:
             waifu = _waifu_head(features).clamp(WAIFU_SCORE_MIN, WAIFU_SCORE_MAX)
 
     result = AestheticScores(
         laion=round(float(laion.item()), 4),
         waifu=None if waifu is None else round(float(waifu.item()), 4),
+        anime=anime,
+        anime_failed=anime_failed,
     )
     del img_tensor, features, laion, waifu
     return result
 
 
+def _predict_anime(picture) -> Optional[anime_aesthetic.AnimeAesthetic]:
+    """The optional anime grade; it never costs the picture its LAION score."""
+    if not anime_aesthetic.is_scoring():
+        return None
+    use_gpu = _device == "cuda" and not _anime_on_cpu
+    try:
+        return _grade(picture, use_gpu=use_gpu)
+    except Exception as exc:
+        if use_gpu and _is_cuda_oom(exc):
+            return _grade_on_cpu_from_now_on(picture)
+        _log_grade_failure(exc)
+        return None
+
+
+def _grade(picture, *, use_gpu: bool) -> anime_aesthetic.AnimeAesthetic:
+    anime_aesthetic.load(use_gpu=use_gpu)
+    return anime_aesthetic.predict(picture, use_gpu=use_gpu)
+
+
+def _grade_on_cpu_from_now_on(picture) -> Optional[anime_aesthetic.AnimeAesthetic]:
+    """Out of GPU memory (loading or grading): move the grade to the CPU for good."""
+    global _anime_on_cpu
+
+    logger.warning("Anime aesthetic ran out of GPU memory; grading on CPU from now on")
+    _anime_on_cpu = True
+    anime_aesthetic.unload()
+    try:
+        return _grade(picture, use_gpu=False)
+    except Exception as exc:
+        _log_grade_failure(exc)
+        return None
+
+
+def _log_grade_failure(exc: Exception) -> None:
+    if anime_aesthetic.is_scoring():
+        logger.warning("Anime aesthetic grade failed for this picture: %s", exc)
+        return
+    # load() marked the files unusable, so later pictures skip the grade.
+    logger.error(
+        "Anime aesthetic model at %s could not be loaded (%s). Aesthetic scoring continues "
+        "without it; run Prepare / Download on its Model Center card to replace the files.",
+        anime_aesthetic.model_path(),
+        exc,
+    )
+
+
 def predict_scores(
-    image_path: str, priority: int = PRIORITY_NORMAL
+    image_path: str, priority: int = PRIORITY_NORMAL, *, extras: bool = True
 ) -> Optional[AestheticScores]:
-    """Score one image: LAION (~1-10) plus Waifu (0-10) when installed; None on error.
+    """Score one image: LAION (~1-10) plus the installed optional scores; None on error.
+
+    ``extras=False`` computes only the LAION score (for callers that use
+    nothing else, such as the dataset audit).
 
     ``priority`` is the AI-runtime admission lane and is supplied by the caller,
     because this function serves both ``POST /api/aesthetic/score/{id}`` (one
@@ -445,7 +523,7 @@ def predict_scores(
         with exclusive_ai_runtime("aesthetic", priority=priority), _inference_lock:
             _ensure_loaded()
             try:
-                return _predict_scores_loaded(image_path)
+                return _predict_scores_loaded(image_path, extras=extras)
             except Exception as exc:
                 if _device != "cuda" or not _is_cuda_oom(exc):
                     raise
@@ -456,7 +534,7 @@ def predict_scores(
                 _force_cpu_after_gpu_failure = True
                 _unload_models()
                 _ensure_loaded("cpu")
-                return _predict_scores_loaded(image_path)
+                return _predict_scores_loaded(image_path, extras=extras)
 
     except Exception as e:
         logger.error(f"Aesthetic prediction failed for {image_path}: {e}")

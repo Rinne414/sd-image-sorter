@@ -331,20 +331,27 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
             "paths": {},
         }, dependency_result)
 
-    if normalized_model_id == "aesthetic-waifu":
-        # The Waifu head scores the Aesthetic Predictor's CLIP embedding, so the
-        # predictor is prepared first (a no-op when it is already ready).
+    if normalized_model_id in ("aesthetic-waifu", "aesthetic-anime"):
+        # Both optional scores run inside aesthetic scoring, so the Aesthetic
+        # Predictor is prepared first (a no-op when it is already ready).
         base = _prepare_model(service, "aesthetic", source=source)
         if base.get("status") != "ok":
             return {**base, "model_id": normalized_model_id}
-        from aesthetic import prepare_waifu_head
+        if normalized_model_id == "aesthetic-waifu":
+            from aesthetic import prepare_waifu_head
 
-        head_path = prepare_waifu_head(_svc()._direct_download_file)
+            paths = {"waifu_head_path": str(prepare_waifu_head(_svc()._direct_download_file))}
+            message = "Waifu Scorer V3 is ready. The next aesthetic scoring run adds its score."
+        else:
+            import anime_aesthetic
+
+            paths = anime_aesthetic.prepare(_svc()._direct_download_file)
+            message = "Anime aesthetic grades are ready. The next aesthetic scoring run adds them."
         return {
             **base,
             "model_id": normalized_model_id,
-            "message": "Waifu Scorer V3 is ready. The next aesthetic scoring run adds its score.",
-            "paths": {**(base.get("paths") or {}), "waifu_head_path": str(head_path)},
+            "message": message,
+            "paths": {**(base.get("paths") or {}), **paths},
         }
 
     if normalized_model_id == "censor-anime":

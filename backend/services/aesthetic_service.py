@@ -10,6 +10,7 @@ import threading
 from typing import Any, Callable, Dict, Optional
 
 import aesthetic
+import anime_aesthetic
 import database as db
 from aesthetic import AESTHETIC_SCORE_VERSION, AestheticScores
 from exceptions import ImageFileNotFoundError, ImageNotFoundError, ServiceError
@@ -25,13 +26,25 @@ logger = logging.getLogger(__name__)
 
 # An image needs scoring when it has no LAION score or one from an older build.
 NEEDS_SCORE_SQL = "(aesthetic_score IS NULL OR aesthetic_version IS NULL OR aesthetic_version < ?)"
-# ...or, once the Waifu head is installed, when it has no Waifu score yet.
+# ...or when an installed optional model (Waifu head, anime grade) has not scored it.
 MISSING_WAIFU_SQL = "aesthetic_waifu IS NULL"
+MISSING_ANIME_SQL = "aesthetic_anime IS NULL"
+
+
+def _missing_extra_sql() -> str:
+    """Rows lacking a score from an installed optional model; empty when none is installed."""
+    missing = []
+    if aesthetic.is_waifu_scoring():
+        missing.append(MISSING_WAIFU_SQL)
+    if anime_aesthetic.is_scoring():
+        missing.append(MISSING_ANIME_SQL)
+    return f"({' OR '.join(missing)})" if missing else ""
 
 
 def _needs_score_sql() -> str:
-    if aesthetic.is_waifu_scoring():
-        return f"({NEEDS_SCORE_SQL} OR {MISSING_WAIFU_SQL})"
+    missing_extra = _missing_extra_sql()
+    if missing_extra:
+        return f"({NEEDS_SCORE_SQL} OR {missing_extra})"
     return NEEDS_SCORE_SQL
 
 
@@ -223,7 +236,8 @@ class AestheticService:
 
     def _missing_extra_count(self) -> int:
         """Pictures with a current LAION score that only lack an installed extra score."""
-        if not aesthetic.is_waifu_scoring():
+        missing_extra = _missing_extra_sql()
+        if not missing_extra:
             return 0
         try:
             from library_context import current_library_sql
@@ -232,7 +246,7 @@ class AestheticService:
             with db.get_db() as conn:
                 row = conn.execute(
                     f"SELECT COUNT(*) FROM images WHERE NOT {NEEDS_SCORE_SQL} "
-                    f"AND {MISSING_WAIFU_SQL} AND {lib_sql}",
+                    f"AND {missing_extra} AND {lib_sql}",
                     (AESTHETIC_SCORE_VERSION, *lib_params),
                 ).fetchone()
                 return int(row[0] or 0)
@@ -247,7 +261,7 @@ class AestheticService:
             "scored_count": self._scored_count(),
             # Scores from before the QuickGELU fix: kept, but Score all redoes them.
             "outdated_count": self._outdated_count(),
-            # Already scored, but a newly installed Waifu head has not scored them.
+            # Already scored, but a newly installed optional model has not scored them.
             "missing_extra_count": self._missing_extra_count(),
             # What "Score Aesthetic" would process: the library's unscored images.
             "to_score_count": self.count_images_to_score(force=False),
@@ -287,10 +301,14 @@ class AestheticService:
         )
         if not written:
             raise ServiceError(AESTHETIC_PUBLISH_STALE_ERROR)
+        anime = scores.anime
         return {
             "image_id": image_id,
             "aesthetic_score": scores.laion,
             "aesthetic_waifu": scores.waifu,
+            "aesthetic_anime": anime.score if anime else None,
+            "aesthetic_anime_pct": anime.percentile if anime else None,
+            "aesthetic_anime_grade": anime.grade if anime else None,
         }
 
     def count_images_to_score(self, *, force: bool) -> int:
@@ -408,6 +426,10 @@ class AestheticService:
                         if not written:
                             raise ServiceError(AESTHETIC_PUBLISH_STALE_ERROR)
                         publication_conn.commit()
+                        if scores.anime_failed:
+                            # Saved, but the grade stays missing: say so in the run's errors.
+                            errors += 1
+                            emit({"errors": errors})
                     except Exception as exc:
                         publication_conn.rollback()
                         logger.error("Error scoring %s: %s", image_path, exc)

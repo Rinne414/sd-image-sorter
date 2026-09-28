@@ -216,6 +216,7 @@ const SORT_PAIRS = {
     file_size: 'file_size_asc',
     aesthetic: 'aesthetic_asc',
     aesthetic_waifu: 'aesthetic_waifu_asc',
+    aesthetic_anime: 'aesthetic_anime_asc',
     brightness: 'brightness_asc',
     saturation: 'saturation_asc',
     brightness_skew: 'brightness_skew_asc',

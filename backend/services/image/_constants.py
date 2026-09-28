@@ -51,6 +51,7 @@ VALID_SORT_OPTIONS = [
     "prompt_length", "prompt_length_asc", "tag_count", "tag_count_asc",
     "rating", "rating_desc", "character_count", "character_count_asc",
     "aesthetic", "aesthetic_asc", "aesthetic_waifu", "aesthetic_waifu_asc",
+    "aesthetic_anime", "aesthetic_anime_asc",
     # v3.3.2 user star rating (FF-2)
     "user_rating", "user_rating_asc",
     "random", "file_size", "file_size_asc",

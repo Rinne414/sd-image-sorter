@@ -352,6 +352,9 @@ def test_scoring_one_picture_returns_both_scores(
         "image_id": image_id,
         "aesthetic_score": 6.0,
         "aesthetic_waifu": 7.0,
+        "aesthetic_anime": None,
+        "aesthetic_anime_pct": None,
+        "aesthetic_anime_grade": None,
     }
 
 

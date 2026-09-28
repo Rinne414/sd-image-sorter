@@ -302,7 +302,7 @@ class TestSqlConstants:
             "i." + c for c in _IMAGE_COLUMNS_BARE.split(", ")
         )
 
-    def test_valid_sort_options_is_the_frozen_29_key_set(self):
+    def test_valid_sort_options_is_the_frozen_31_key_set(self):
         assert VALID_SORT_OPTIONS == {
             "newest",
             "oldest",
@@ -325,6 +325,8 @@ class TestSqlConstants:
             "aesthetic_asc",
             "aesthetic_waifu",
             "aesthetic_waifu_asc",
+            "aesthetic_anime",
+            "aesthetic_anime_asc",
             "user_rating",
             "user_rating_asc",
             "brightness",

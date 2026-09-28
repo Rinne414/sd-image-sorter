@@ -399,7 +399,7 @@ def test_aesthetic_batch_scoring_does_not_take_the_interactive_lane(
 
     monkeypatch.setattr(aesthetic, "_ensure_loaded", lambda *_a, **_k: None)
 
-    def _predict_scores_loaded(_path):
+    def _predict_scores_loaded(_path, **_kwargs):
         note_admission()
         return aesthetic.AestheticScores(laion=5.5)
 

@@ -57,6 +57,7 @@ from lucida_matting import LUCIDA_REQUIRED_FILES
 import rembg_model
 import anime_censor_models
 import aesthetic
+import anime_aesthetic
 from cl_tagger_v2 import CL_TAGGER_V2_REQUIRED_MODULES
 
 from censor import canonicalize_class_name as _canonicalize_yolo_class_name
@@ -658,6 +659,7 @@ def get_model_health() -> Dict[str, Any]:
         "rembg": rembg_model.health(),
         "censor_anime": anime_censor_models.health(),
         "aesthetic_waifu": aesthetic.waifu_health(),
+        "aesthetic_anime": anime_aesthetic.health(),
         "video_ffmpeg": _video_ffmpeg_health(),
         "cl_tagger_v2": {
             "available": bool(cl_tagger_v2_checkpoint) and not cl_tagger_v2_missing,
