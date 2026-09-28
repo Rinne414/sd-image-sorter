@@ -55,6 +55,7 @@ from model_download_sources import is_nonempty_model_file, missing_model_artifac
 from florence2_captioner import FLORENCE2_REQUIRED_FILES
 from lucida_matting import LUCIDA_REQUIRED_FILES
 import rembg_model
+import anime_censor_models
 from cl_tagger_v2 import CL_TAGGER_V2_REQUIRED_MODULES
 
 from censor import canonicalize_class_name as _canonicalize_yolo_class_name
@@ -640,6 +641,7 @@ def get_model_health() -> Dict[str, Any]:
             "message": lucida_message,
         },
         "rembg": rembg_model.health(),
+        "censor_anime": anime_censor_models.health(),
         "cl_tagger_v2": {
             "available": bool(cl_tagger_v2_checkpoint) and not cl_tagger_v2_missing,
             "model_name": "cl-tagger-v2",

@@ -319,6 +319,17 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
             "paths": {"model_path": refreshed["model_path"]},
         }, dependency_result)
 
+    if normalized_model_id == "censor-anime":
+        import anime_censor_models
+
+        paths = anime_censor_models.prepare(_svc()._direct_download_file)
+        return {
+            "status": "ok",
+            "model_id": normalized_model_id,
+            "message": "Anime censor detector and face guard are ready.",
+            "paths": paths,
+        }
+
     if normalized_model_id == "censor-legacy":
         # Keep first launch light, but preserve the existing .pt YOLO path
         # once the user explicitly prepares the legacy censor model.

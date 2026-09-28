@@ -324,6 +324,8 @@ def get_default_legacy_model_path() -> Optional[str]:
     preferred_names = [
         "wenaka_yolov8s-seg.onnx",
         "wenaka_yolov8s-seg.pt",
+        # Privacy detector before the general COCO models below.
+        "deepghs_anime_censor_v1.0_s.onnx",
         "yolo26s-seg.onnx",
         "yolo26s-seg.pt",
         "yolov8s-seg.onnx",

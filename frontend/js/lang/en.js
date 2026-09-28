@@ -2728,6 +2728,9 @@ window.I18nLang_en = {
     'models.censorLegacy.missing': 'No legacy YOLO model found in models/yolo.',
 
     // NudeNet messages
+    'models.censorAnime.ready': 'Anime censor detector and face guard are ready.',
+    'models.censorAnime.partial': 'Only part of the anime censor models is downloaded. Click Prepare / Download to finish.',
+    'models.censorAnime.missing': 'Not downloaded yet. Click Prepare / Download (~89 MB).',
     'models.censorNudenet.ready': 'NudeNet runtime is ready.',
     'models.censorNudenet.installed': 'NudeNet runtime is installed, but 320n.onnx is missing. Run Prepare / Download.',
     'models.censorNudenet.missing': 'NudeNet runtime is not installed yet.',

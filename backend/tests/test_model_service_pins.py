@@ -816,6 +816,7 @@ def test_get_status_wraps_inventory_and_health(monkeypatch):
         "lucida",
         "rembg",
         "censor-legacy",
+        "censor-anime",
         "censor-nudenet",
         "sam3",
     ]

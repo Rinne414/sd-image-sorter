@@ -67,6 +67,7 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
     artist = health["artist"]
     lucida = health.get("lucida", {})
     rembg = health.get("rembg", {})
+    censor_anime = health.get("censor_anime", {})
     florence2 = health.get("florence2", {})
     cl_tagger_v2 = health.get("cl_tagger_v2", {})
     installed_wd14 = [item["name"] for item in health["wd14"]["installed_models"] if item["available"]]
@@ -618,6 +619,29 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "Click Prepare to auto-download the recommended privacy YOLO model.",
                 "If auto-download fails (Civitai login wall), download manually from the Civitai link above.",
                 "Place the .pt file in " + str(Path(_svc().get_yolo_model_dir())),
+            ],
+        },
+        {
+            "id": "censor-anime",
+            "name": "Anime Censor + Face Guard (deepghs)",
+            "group": "Censor",
+            "group_key": "models.group.censor",
+            "available": bool(censor_anime.get("available")),
+            **with_status(
+                is_ready=bool(censor_anime.get("available")),
+                is_downloaded=bool(censor_anime.get("censor_model_path") and censor_anime.get("face_model_path")),
+            ),
+            "message": censor_anime.get("message") or "Not downloaded yet.",
+            "message_key": censor_anime.get("message_key") or "models.censorAnime.missing",
+            "path": censor_anime.get("censor_model_path") or censor_anime.get("expected_censor_path", ""),
+            "download_supported": True,
+            "external_links": [
+                {"label": "Censor model", "url": "https://huggingface.co/deepghs/anime_censor_detection"},
+                {"label": "Face model", "url": "https://huggingface.co/deepghs/anime_face_detection"},
+            ],
+            "setup_steps": [
+                "Click Prepare / Download to get both MIT-licensed models (~89 MB).",
+                "The censor model appears in the Censor page's YOLO list; the face model powers Face guard.",
             ],
         },
         {

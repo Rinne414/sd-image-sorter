@@ -2895,6 +2895,9 @@ window.I18nLang_zhCN = {
     'models.censorLegacy.missing': 'models/yolo 目录下没有找到 YOLO 模型。',
 
     // NudeNet messages
+    'models.censorAnime.ready': '二次元打码检测和脸部保护已就绪。',
+    'models.censorAnime.partial': '二次元打码模型只下载了一部分，请点击准备 / 下载补齐。',
+    'models.censorAnime.missing': '还没有下载。点击准备 / 下载（约 89 MB）。',
     'models.censorNudenet.ready': 'NudeNet 运行环境已就绪。',
     'models.censorNudenet.installed': 'NudeNet 运行环境已安装，但缺少 320n.onnx。请点击准备 / 下载。',
     'models.censorNudenet.missing': 'NudeNet 运行环境尚未安装。',
