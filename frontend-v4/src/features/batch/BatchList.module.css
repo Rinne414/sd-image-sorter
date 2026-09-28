@@ -75,7 +75,6 @@
   color: var(--text-2);
 }
 
-.section + .rows,
 .lead + .rows {
   margin-top: 10px;
 }
@@ -94,10 +93,6 @@
   gap: 16px;
   padding: 10px 4px;
   border-bottom: 1px solid var(--line);
-}
-
-.row[data-archived] {
-  opacity: 0.72;
 }
 
 .collection {
@@ -160,12 +155,6 @@
   align-items: center;
   gap: 14px;
   white-space: nowrap;
-}
-
-/* Delete sits last, after a gap, away from Open. */
-.danger,
-.danger:hover {
-  color: var(--danger);
 }
 
 /* A dataset batch whose project V3.5 deleted: only Delete is left. */

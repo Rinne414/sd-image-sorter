@@ -72,9 +72,11 @@
 }
 
 /* Steps as a row of segments: done ones filled, the current one in the accent. */
+/* Many or long custom steps wrap to a second row instead of leaving the card. */
 .track {
   display: flex;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 6px 4px;
   margin: 8px 0 0;
   padding: 0;
   list-style: none;

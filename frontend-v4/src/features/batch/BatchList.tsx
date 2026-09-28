@@ -125,7 +125,7 @@ function BatchRow({ batch }: { batch: BatchSummary }) {
           </>
         )}
         <span className={styles.gap} />
-        <button type="button" className={`btn btn-ghost ${styles.danger}`} onClick={remove}>
+        <button type="button" className="btn btn-danger" onClick={remove}>
           {t('batch.delete.button')}
         </button>
       </span>
