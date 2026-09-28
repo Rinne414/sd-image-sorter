@@ -232,6 +232,24 @@ function bindEvents() {
         setCensorBlockSizeAuto(false);
     });
     $('#censor-block-size-auto')?.addEventListener('change', (e) => setCensorBlockSizeAuto(e.target.checked));
+    const expandSlider = $('#censor-expand-percent');
+    if (expandSlider) {
+        const showExpand = () => {
+            const label = $('#censor-expand-percent-value');
+            if (label) label.textContent = `${CensorState.expandPercent}%`;
+        };
+        expandSlider.value = String(CensorState.expandPercent);
+        showExpand();
+        expandSlider.addEventListener('input', (e) => {
+            CensorState.expandPercent = Number(e.target.value) || 0;
+            try {
+                localStorage.setItem('censor_expand_percent', String(CensorState.expandPercent));
+            } catch (_) {
+                // Blocked storage: the choice just is not remembered.
+            }
+            showExpand();
+        });
+    }
     const faceGuardBox = $('#censor-face-guard');
     if (faceGuardBox) {
         faceGuardBox.checked = CensorState.faceGuard;
@@ -377,7 +395,7 @@ function bindEvents() {
     if (maskShapeSelect) {
         maskShapeSelect.value = CensorState.maskShape;
         maskShapeSelect.addEventListener('change', (e) => {
-            CensorState.maskShape = e.target.value === 'box' ? 'box' : 'precise';
+            CensorState.maskShape = ['box', 'ellipse', 'fit'].includes(e.target.value) ? e.target.value : 'precise';
             try { localStorage.setItem('censor_mask_shape', CensorState.maskShape); } catch (_) {}
         });
     }

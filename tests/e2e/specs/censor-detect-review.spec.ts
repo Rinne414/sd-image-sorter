@@ -164,8 +164,10 @@ test('detect current: request wire format, region sort, box bake, processed mark
     confidence_threshold: 0.5,
     target_classes: ['breasts', 'pussy', 'dick', 'penis', 'anus', 'buttocks'],
     upright: true,
-    // Face guard (2026-09-28) is on by default.
+    // Face guard, region shape and edge growth (2026-09-28) at their defaults.
     face_guard: true,
+    shape: 'precise',
+    expand_percent: 0,
   })
 
   await expect(

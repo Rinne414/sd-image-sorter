@@ -433,6 +433,15 @@ class _DetectionMixin:
                         filtered_detections, guard_image, self._normalize_target_family
                     )
 
+            if filtered_detections and (request.shape != "precise" or request.expand_percent > 0):
+                from services.censor.region_shapes import reshape
+
+                with self._source_image(image_path, upright_image) as shape_image:
+                    filtered_detections, shape_warnings = reshape(
+                        filtered_detections, shape_image, request.shape, request.expand_percent
+                    )
+                detection_warnings.extend(shape_warnings)
+
             polygon_count = sum(1 for d in filtered_detections if self._has_polygon_geometry(d))
             with self._source_image(image_path, upright_image) as image_for_mask:
                 combined_mask_payload = self._build_combined_mask_payload(

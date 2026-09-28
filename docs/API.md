@@ -1190,6 +1190,12 @@ mostly (>= 50%) on a face found by the anime face model, when that model is
 installed; penis and cum are never dropped. The response carries
 `face_guard: {active, faces, dropped}`.
 
+`shape` is `precise` (default: model outline, else box), `box`, `ellipse`
+(plain boxes become an inscribed ellipse) or `fit` (plain boxes are traced
+with GrabCut; an ellipse where the trace fails, with a warning).
+`expand_percent` (0-100, default 0) grows every region by that share of its
+own size; returned boxes and polygons are the grown ones.
+
 `model_type` accepts `legacy`, `nudenet`, `sam3`, or `both`. Every successful
 response includes `warnings: string[]`. In `both` mode, one detector may fail
 while the other still returns usable detections; that partial result remains

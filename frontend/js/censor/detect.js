@@ -488,6 +488,8 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
             target_classes: plan.targetClasses,
             upright: censorDetectionUpright(item),
             face_guard: CensorState.faceGuard,
+            shape: CensorState.maskShape,
+            expand_percent: CensorState.expandPercent,
         };
         if (plan.modelType === 'sam3') {
             const customInput = document.getElementById('sam3-custom-prompt')?.value?.trim();

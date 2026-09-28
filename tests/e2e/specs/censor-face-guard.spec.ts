@@ -79,3 +79,35 @@ test('turning face guard off is sent and remembered', async ({ page }) => {
   expect(await page.evaluate(() => localStorage.getItem('censor_face_guard'))).toBe('0')
   await expect(page.locator('#toast-container .toast', { hasText: 'Face guard skipped' })).toHaveCount(0)
 })
+
+test('the chosen region shape and edge growth are sent and remembered', async ({ page }) => {
+  const calls = await openCensor(page, 0)
+
+  await page.locator('#censor-mask-shape').scrollIntoViewIfNeeded()
+  await page.locator('#censor-mask-shape').selectOption('fit')
+  await page.locator('#censor-expand-percent').fill('15')
+  await expect(page.locator('#censor-expand-percent-value')).toHaveText('15%')
+  await page.locator('#btn-auto-detect-current').click()
+
+  await expect.poll(() => calls.length).toBe(1)
+  expect(calls[0]).toMatchObject({ shape: 'fit', expand_percent: 15 })
+  expect(await page.evaluate(() => [localStorage.getItem('censor_mask_shape'), localStorage.getItem('censor_expand_percent')]))
+    .toEqual(['fit', '15'])
+})
+
+test('the detection rows can be scrolled clear of the sticky Save card at every desktop size', async ({ page }) => {
+  await openCensor(page, 0)
+
+  for (const size of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }, { width: 2560, height: 1440 }]) {
+    await page.setViewportSize(size)
+    const layout = await page.evaluate(() => {
+      let scroller: HTMLElement | null = document.getElementById('censor-face-guard-row')
+      while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement
+      if (scroller) scroller.scrollTop = scroller.scrollHeight
+      const saveTop = document.getElementById('btn-save-all-processed')!.closest('.censor-side-card')!.getBoundingClientRect().top
+      return ['censor-mask-shape-row', 'censor-expand-row', 'censor-face-guard-row']
+        .filter((id) => document.getElementById(id)!.getBoundingClientRect().bottom > saveTop + 1)
+    })
+    expect(layout, `rows under the Save card at ${size.width}x${size.height}`).toEqual([])
+  }
+})

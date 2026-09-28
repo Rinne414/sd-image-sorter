@@ -109,7 +109,13 @@ const CensorState = {
     metadataOption: 'strip',
     outputFormat: 'png', // 'png', 'jpg', or 'webp'
     sam3Confidence: 0.5, // SAM3 confidence threshold
-    maskShape: localStorage.getItem('censor_mask_shape') === 'box' ? 'box' : 'precise', // 'precise': use YOLO-seg/SAM3 polygon masks; 'box': censor rectangles
+    // 'precise': model outline (YOLO-seg / SAM3) else box; 'box': rectangles;
+    // 'ellipse' / 'fit': plain boxes become an ellipse / a GrabCut trace (backend).
+    maskShape: ['box', 'ellipse', 'fit'].includes(localStorage.getItem('censor_mask_shape'))
+        ? localStorage.getItem('censor_mask_shape')
+        : 'precise',
+    // Grow every detected region by this share of its own size.
+    expandPercent: Math.min(50, Math.max(0, Number(localStorage.getItem('censor_expand_percent')) || 0)),
 
     // Queue Manager
     queueManagerSearch: '',

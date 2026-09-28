@@ -57,6 +57,11 @@ class CensorDetectRequest(BaseModel):
     # Drop detections that are really a face (a mouth read as a pussy) when the
     # anime face model is installed. Penis / cum on a face are never dropped.
     face_guard: bool = True
+    # Region shape: precise (model outline, else box), box, ellipse (inside each
+    # plain box) or fit (GrabCut trace of each plain box, ellipse on failure).
+    shape: str = Field("precise", pattern="^(precise|box|ellipse|fit)$")
+    # Grow every region outward by this share of its own size (0 = as detected).
+    expand_percent: float = Field(0.0, ge=0.0, le=100.0)
 
 
 class MaskRefineRequest(BaseModel):

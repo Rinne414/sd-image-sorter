@@ -2802,10 +2802,16 @@
                                 <select id="censor-mask-shape" class="toolbar-select censor-detect-select" style="flex:1;">
                                     <option value="precise" data-i18n="censor.maskShapePrecise">Precise (pixel)</option>
                                     <option value="box" data-i18n="censor.maskShapeBox">Box</option>
+                                    <option value="ellipse" data-i18n="censor.maskShapeEllipse">Ellipse</option>
+                                    <option value="fit" data-i18n="censor.maskShapeFit">Fit outline</option>
                                 </select>
                                 <button type="button" class="censor-help-toggle" aria-controls="censor-mask-shape-help" aria-expanded="false"
                                         title="About mask shape" aria-label="About mask shape"
                                         data-i18n-title="censor.maskShapeHelpToggle" data-i18n-aria="censor.maskShapeHelpToggle"><span aria-hidden="true">?</span></button>
+                            </div>
+                            <div class="censor-side-row" id="censor-expand-row">
+                                <label class="censor-side-inline-label"><span data-i18n="censor.expandEdge">Grow edge</span>: <span class="censor-side-value" id="censor-expand-percent-value">0%</span></label>
+                                <input type="range" id="censor-expand-percent" class="slider-v2" min="0" max="50" step="5" value="0">
                             </div>
                             <div class="censor-side-row" id="censor-face-guard-row">
                                 <label class="censor-block-auto censor-face-guard-label">
