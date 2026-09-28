@@ -99,6 +99,8 @@ const CensorState = {
     blockSize: 16,
     // Auto (default): the mosaic cell is 1/100 of each picture's long side.
     blockSizeAuto: localStorage.getItem('censor_block_size_auto') !== '0',
+    // Skip detections that are really a face (needs the anime face model).
+    faceGuard: localStorage.getItem('censor_face_guard') !== '0',
     targetClasses: ['breasts', 'pussy', 'dick', 'penis', 'anus', 'buttocks'], // Covers the main privacy classes used by Wenaka + NudeNet
     // Default to STRIP: this is a censor-for-publishing tool, so exporting the
     // full generation prompt/metadata by default was a privacy leak. Matches the

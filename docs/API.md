@@ -1185,6 +1185,11 @@ Structured errors can include:
 #### POST /api/censor/detect
 Run censor detection.
 
+`face_guard` (default `true`) drops pussy / anus / breasts detections that lie
+mostly (>= 50%) on a face found by the anime face model, when that model is
+installed; penis and cum are never dropped. The response carries
+`face_guard: {active, faces, dropped}`.
+
 `model_type` accepts `legacy`, `nudenet`, `sam3`, or `both`. Every successful
 response includes `warnings: string[]`. In `both` mode, one detector may fail
 while the other still returns usable detections; that partial result remains

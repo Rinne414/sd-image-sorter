@@ -54,6 +54,9 @@ class CensorDetectRequest(BaseModel):
     # so boxes, masks and the reported size are in that upright frame (V4's
     # canvas). False keeps the file's raw pixel frame, as before.
     upright: bool = False
+    # Drop detections that are really a face (a mouth read as a pussy) when the
+    # anime face model is installed. Penis / cum on a face are never dropped.
+    face_guard: bool = True
 
 
 class MaskRefineRequest(BaseModel):

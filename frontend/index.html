@@ -2807,6 +2807,16 @@
                                         title="About mask shape" aria-label="About mask shape"
                                         data-i18n-title="censor.maskShapeHelpToggle" data-i18n-aria="censor.maskShapeHelpToggle"><span aria-hidden="true">?</span></button>
                             </div>
+                            <div class="censor-side-row" id="censor-face-guard-row">
+                                <label class="censor-block-auto censor-face-guard-label">
+                                    <input type="checkbox" id="censor-face-guard" checked>
+                                    <span data-i18n="censor.faceGuard">Face guard</span>
+                                </label>
+                                <button type="button" class="censor-help-toggle" aria-controls="censor-face-guard-help" aria-expanded="false"
+                                        title="About face guard" aria-label="About face guard"
+                                        data-i18n-title="censor.faceGuardHelpToggle" data-i18n-aria="censor.faceGuardHelpToggle"><span aria-hidden="true">?</span></button>
+                            </div>
+                            <small class="helper-text" id="censor-face-guard-help" hidden data-i18n="censor.faceGuardHelp">With the anime face model (Model Center, "Anime Censor + Face Guard"), detections that are really a face, such as a mouth read as a private part, are skipped. A penis or cum on a face is never skipped.</small>
                             <small class="helper-text" id="censor-mask-shape-help" hidden data-i18n="censor.maskShapeHelp">Precise follows the exact shape from the model mask (YOLO-seg / SAM3); Box censors a rectangle. Takes effect on the next detect.</small>
                             <div class="censor-side-row" id="censor-sam3-refine-row">
                                 <button class="btn btn-secondary btn-small" id="btn-sam3-refine-all-sidebar" style="flex:1;"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg> <span data-i18n="censor.sam3RefineAllSidebar">Refine all with SAM3</span></button>

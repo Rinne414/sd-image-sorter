@@ -232,6 +232,18 @@ function bindEvents() {
         setCensorBlockSizeAuto(false);
     });
     $('#censor-block-size-auto')?.addEventListener('change', (e) => setCensorBlockSizeAuto(e.target.checked));
+    const faceGuardBox = $('#censor-face-guard');
+    if (faceGuardBox) {
+        faceGuardBox.checked = CensorState.faceGuard;
+        faceGuardBox.addEventListener('change', (e) => {
+            CensorState.faceGuard = e.target.checked;
+            try {
+                localStorage.setItem('censor_face_guard', CensorState.faceGuard ? '1' : '0');
+            } catch (_) {
+                // Blocked storage: the choice just is not remembered.
+            }
+        });
+    }
     syncCensorBlockSizeControls();
 
     // Checkboxes

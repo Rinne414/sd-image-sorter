@@ -29,6 +29,14 @@ function readCensorDetectionWarnings(result) {
         }
         return warning.trim();
     });
+    const skippedOnFaces = Number(result.face_guard?.dropped || 0);
+    if (skippedOnFaces > 0) {
+        warnings.push(censorT(
+            'censor.faceGuardDropped',
+            { count: skippedOnFaces },
+            'Face guard skipped {count} detection(s) sitting on a face. Check the face if it really shows something to hide.'
+        ));
+    }
     return Array.from(new Set(warnings));
 }
 
@@ -479,6 +487,7 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
             confidence_threshold: CensorState.confidence,
             target_classes: plan.targetClasses,
             upright: censorDetectionUpright(item),
+            face_guard: CensorState.faceGuard,
         };
         if (plan.modelType === 'sam3') {
             const customInput = document.getElementById('sam3-custom-prompt')?.value?.trim();

@@ -424,6 +424,15 @@ class _DetectionMixin:
 
             filtered_detections = self._filter_detections_by_targets(detections, request.target_classes)
 
+            face_guard_report = {"active": False, "faces": 0, "dropped": 0}
+            if request.face_guard:
+                import face_guard
+
+                with self._source_image(image_path, upright_image) as guard_image:
+                    filtered_detections, face_guard_report = face_guard.apply(
+                        filtered_detections, guard_image, self._normalize_target_family
+                    )
+
             polygon_count = sum(1 for d in filtered_detections if self._has_polygon_geometry(d))
             with self._source_image(image_path, upright_image) as image_for_mask:
                 combined_mask_payload = self._build_combined_mask_payload(
@@ -460,6 +469,7 @@ class _DetectionMixin:
                 "image_height": combined_mask_payload["image_height"],
                 "geometry_mode": geometry_mode,
                 "warnings": detection_warnings,
+                "face_guard": face_guard_report,
             }
         except HTTPException:
             raise
