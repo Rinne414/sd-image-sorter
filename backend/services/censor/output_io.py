@@ -142,6 +142,24 @@ def _paths_match_runtime_case(candidate: Path, resolved: Path) -> bool:
     return os.path.normcase(str(candidate)) == os.path.normcase(str(resolved))
 
 
+
+def _without_stealth_prompt(image: Image.Image) -> Image.Image:
+    """Clear a signed stealth prompt (NovelAI / WebUI pixel-LSB metadata).
+
+    Dropping text chunks does not remove it, so a "stripped" picture still
+    carried the prompt. Only a picture that actually has a signed carrier is
+    touched (every channel moves by at most 1); any other picture keeps its
+    pixels bit for bit.
+    """
+    from metadata_parser.png_stealth import probe_pillow_stealth_signature
+
+    if image.mode not in ("RGB", "RGBA") or probe_pillow_stealth_signature(image) is None:
+        return image
+    from disguise_apng import scrub_hidden_data
+
+    scrubbed = scrub_hidden_data(image)
+    return scrubbed if image.mode == "RGBA" else scrubbed.convert(image.mode)
+
 class _OutputMixin:
     """Output/save/metadata slice of CensorService (assembled in services/censor_service.py)."""
 
@@ -561,7 +579,7 @@ class _OutputMixin:
             clean_image.putpalette(image.getpalette(rawmode=palette_mode), rawmode=palette_mode)
         if "transparency" in image.info:
             clean_image.info["transparency"] = image.info["transparency"]
-        return clean_image
+        return _without_stealth_prompt(clean_image)
 
     @staticmethod
     def _png_text_to_exif(original_img: Image.Image) -> Optional[bytes]:
