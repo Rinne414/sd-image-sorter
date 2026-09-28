@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 /**
  * The colour theme is chosen on the entry page or in Settings (V3.5 subtraction 3).
@@ -37,7 +38,7 @@ test('the top bar has no palette icon and keeps its other buttons in view', asyn
   await expect(page.locator('#theme-menu')).toHaveAttribute('aria-labelledby', 'entry-theme-btn')
 
   for (const viewport of VIEWPORTS) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     for (const id of ['#btn-open-model-manager', '#btn-language-toggle', '#btn-app-update', '#btn-help', '#btn-scan', '#btn-tag']) {
       await expect(page.locator(id)).toBeInViewport()
     }

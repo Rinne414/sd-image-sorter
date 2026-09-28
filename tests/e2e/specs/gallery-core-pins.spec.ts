@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 /**
  * Characterization pins for the gallery.js god-file (4,708 lines) — "step 0" of a
@@ -248,7 +249,7 @@ test('refresh replaces the settled empty state with skeletons until the image re
     { width: 1920, height: 1080 },
     { width: 2560, height: 1440 },
   ]) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     const requestStarted = createDeferred()
     const responseReleased = createDeferred()
     pendingResponse = {
@@ -327,7 +328,7 @@ test('failed refresh removes skeletons and restores the settled Gallery state', 
     { width: 1920, height: 1080 },
     { width: 2560, height: 1440 },
   ]) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     failNextRequest = true
     await page.evaluate(() => window.App.loadImages())
 

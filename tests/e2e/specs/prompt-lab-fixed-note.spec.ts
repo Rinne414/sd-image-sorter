@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 /**
  * Prompt Helper says when Generate cannot change the prompt (review of 8cbd754).
@@ -47,7 +48,7 @@ test('Generate from fixed slots says the prompt has no random part', async ({ pa
   await expect(note).toHaveText('只用了固定槽位，没有随机部分，所以再点「生成」结果不会变。想要变化请用「随机生成」。')
 
   for (const viewport of VIEWPORTS) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     await note.scrollIntoViewIfNeeded()
     await expect(note).toBeInViewport()
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)

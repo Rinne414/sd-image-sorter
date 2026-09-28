@@ -1,5 +1,6 @@
 import { expect, test } from '../fixtures/click-ledger'
 import { markModelsReady } from '../fixtures/model-status'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 /**
  * Owner feedback batch 2026-07-05 (v3.5.0): regression tests for
@@ -512,7 +513,7 @@ test('visible Aesthetic controls follow the active task across start, cancel, an
     { width: 1920, height: 1080 },
     { width: 2560, height: 1440 },
   ]) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     const geometry = await page.locator('#tagger-aesthetic-panel').evaluate((panel) => {
       const panelBox = panel.getBoundingClientRect()
       const modal = panel.closest<HTMLElement>('.modal-content')
@@ -755,7 +756,7 @@ test('CLIP, OppaiOracle, and Favorites use the active language instead of backen
     { width: 1920, height: 1080 },
     { width: 2560, height: 1440 },
   ]) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     await similarityDetails.scrollIntoViewIfNeeded()
     const geometry = await page.locator('#similar-model-health').evaluate((banner) => {
       const box = banner.getBoundingClientRect()
@@ -793,7 +794,7 @@ test('CLIP, OppaiOracle, and Favorites use the active language instead of backen
     { width: 1920, height: 1080 },
     { width: 2560, height: 1440 },
   ]) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     await oppaiMessage.scrollIntoViewIfNeeded()
     const geometry = await page.locator('article.model-card[data-model-id="oppai-oracle"]').evaluate((card) => {
       const cardBox = card.getBoundingClientRect()
@@ -844,7 +845,7 @@ test('Guide supplements preserve the main language dimension labels in Filter Im
   ]
 
   for (const viewport of viewports) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     await page.evaluate(() => (window as any).I18n.setLang('zh-CN'))
     await page.locator('#btn-toolbar-filters').click()
     await expect(page.locator('#filter-modal.visible')).toBeVisible()

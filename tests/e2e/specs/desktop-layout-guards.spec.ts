@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 /**
  * Two whole-app layout guards, both for defect classes this project has now hit
@@ -52,7 +53,7 @@ async function leakingHiddenElements(page: Page): Promise<string[]> {
 test('an element marked hidden is actually hidden, at every desktop width', async ({ page }) => {
   await gotoApp(page)
   for (const viewport of DESKTOP_VIEWPORTS) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     // Give any width-conditional stylesheet a frame to apply.
     await page.waitForTimeout(120)
     const leaks = await leakingHiddenElements(page)
@@ -109,7 +110,7 @@ test('artist cards show their confidence line in full at every desktop width', a
   await gotoApp(page)
 
   for (const viewport of DESKTOP_VIEWPORTS) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     await page.evaluate(() => (window as any).App.switchView('artist'))
     await page.evaluate(() => (window as any).ArtistIdent?.loadStats?.())
     await page.waitForFunction(() => document.querySelectorAll('#artist-results-grid .artist-card').length > 0)
@@ -301,7 +302,7 @@ test('every artist control column button can be brought into view uncovered', as
   await gotoApp(page)
 
   for (const viewport of DESKTOP_VIEWPORTS) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     for (const guide of ['shown', 'dismissed'] as const) {
       await openArtistView(page, guide)
 

@@ -7,6 +7,7 @@ import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_pr
 import type { Request, Response } from '@playwright/test'
 
 import { expect, test } from '../fixtures/click-ledger'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..')
 const backendMain = path.join(repoRoot, 'backend', 'main.py')
@@ -438,7 +439,7 @@ test.describe('Entry page (opted in)', () => {
         { width: 1920, height: 1080 },
         { width: 2560, height: 1440 },
       ]) {
-        await page.setViewportSize(viewport)
+        await resizeAndSettleUiScale(page, viewport)
         const geometry = await page.locator('.identity-stats').evaluate((stats) => {
           const box = stats.getBoundingClientRect()
           return {
@@ -473,7 +474,7 @@ test.describe('Entry page (opted in)', () => {
         { width: 1920, height: 1080 },
         { width: 2560, height: 1440 },
       ]) {
-        await page.setViewportSize(viewport)
+        await resizeAndSettleUiScale(page, viewport)
         const geometry = await generatorSummary.evaluate((summary) => {
           const box = summary.getBoundingClientRect()
           const row = summary.closest('.summary-row')?.getBoundingClientRect()

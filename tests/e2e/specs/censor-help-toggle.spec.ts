@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 /**
  * Censor side panel: the three long helper paragraphs open on demand
@@ -93,7 +94,7 @@ test('the folded panel keeps its controls in view without overflow at desktop si
   await openCensor(page)
 
   for (const viewport of VIEWPORTS) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     for (const { control, help } of HELPS) {
       await page.locator(control).scrollIntoViewIfNeeded()
       await expect(page.locator(control)).toBeInViewport()

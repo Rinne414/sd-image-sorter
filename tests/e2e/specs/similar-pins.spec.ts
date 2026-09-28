@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 /**
  * Characterization pins for the similar.js god-file (1,517 lines) — "step 0" of a
@@ -539,7 +540,7 @@ test('findDuplicates renders the reason-specific empty message for insufficient_
   }> = []
 
   for (const viewport of viewports) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     for (const lang of ['en', 'zh-CN'] as const) {
       await page.evaluate((language) => (window as any).I18n.setLang(language), lang)
       await duplicatesButton.click()

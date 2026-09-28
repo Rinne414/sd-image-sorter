@@ -3,6 +3,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 /**
  * Tagger audit trio (v3.5.0, owner-approved 2026-07-07):
@@ -423,7 +424,7 @@ test('Dataset Maker waits for delayed modules before first activation', async ({
     { width: 1920, height: 1080 },
     { width: 2560, height: 1440 },
   ]) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     const geometry = await page.locator('#btn-dataset-trait-pruner').evaluate((button) => {
       const rect = button.getBoundingClientRect()
       return {

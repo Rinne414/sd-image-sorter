@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 /**
  * The move/copy dialog offers the user's own last destinations (V3.5 3-7).
@@ -52,7 +53,7 @@ test('the dialog does not prefill the import folder and has a Browse button', as
   await expect(page.locator('#input-modal-field')).toHaveValue('')
   const browse = page.locator('#btn-input-browse')
   for (const viewport of VIEWPORTS) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     await expect(browse).toBeInViewport()
     await expect(page.locator('#btn-input-ok')).toBeInViewport()
     await page.screenshot({ path: `${SHOT_DIR}/move-destination-${viewport.width}.png` })

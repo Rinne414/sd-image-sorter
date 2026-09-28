@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '../fixtures/click-ledger'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 const DISPLAY_LIMIT = 500
 const TOTAL_TAGS = 1001
@@ -131,7 +132,7 @@ test('library modal bounds rendered tags and reports shown vs total in both lang
   }
 
   for (const viewport of viewports) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     for (const language of ['en', 'zh-CN'] as const) {
       await page.evaluate((lang) => (window as any).I18n.setLang(lang), language)
       await page.locator('#btn-tags-library').click()

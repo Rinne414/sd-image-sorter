@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 /**
  * Find Moved Files lists every "already in gallery" conflict (V3.5 #16).
@@ -81,7 +82,7 @@ test('every conflict is listed with its own remove button and the real total', a
   await expect(updatedGroup).toContainText('只列出前 5 条，共 40 条。')
 
   for (const viewport of VIEWPORTS) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     const lastButton = panel.locator('[data-reconnect-remove-id="1022"]')
     await lastButton.scrollIntoViewIfNeeded()
     await expect(lastButton).toBeInViewport()

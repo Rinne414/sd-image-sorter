@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 /**
  * v321-ui.js god-file — characterization pins (decomposition step 0).
@@ -443,7 +444,7 @@ test('NL tab: the source card, the ToriiGate route and Start fit at desktop size
     { width: 1920, height: 1080 },
     { width: 2560, height: 1440 },
   ]) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     const ids = ['#btn-start-tag', '#btn-tagger-nl-torii-smart']
     for (const id of ids) {
       await expect(page.locator(id)).toBeInViewport()

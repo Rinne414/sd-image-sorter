@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 /**
  * prompt-lab.js god-file — characterization pins (decomposition step 0).
@@ -322,7 +323,7 @@ test('Build prompt cleanup preserves LoRA directives across every cleanup action
   ]
 
   for (const viewport of viewports) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     await clean(
       `portrait, ${lora}, ${lora}, sunset`,
       '#pl-build-clean-prompt',

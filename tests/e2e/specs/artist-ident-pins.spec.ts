@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
 import { markModelsReady } from '../fixtures/model-status'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 /**
  * Characterization pins for the artist-ident.js god-file (1,171 lines) — "step 0" of a
@@ -522,7 +523,7 @@ test('loadStats clears stale artist cards after a failed refresh', async ({ page
     { width: 1920, height: 1080 },
     { width: 2560, height: 1440 },
   ]) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     const layout = await page.evaluate(() => {
       const view = document.getElementById('view-artist')
       const gallery = document.getElementById('view-gallery')
@@ -803,7 +804,7 @@ test('run and clear buttons are gated on availability, in-flight state, and gall
     { width: 1920, height: 1080 },
     { width: 2560, height: 1440 },
   ]) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     await page.evaluate(() => {
       const A = (window as any).ArtistIdent
       A.isIdentifying = true
@@ -1418,7 +1419,7 @@ test('the vocabulary lookup answers "is my artist supported?" before a run is st
     { width: 1920, height: 1080 },
     { width: 2560, height: 1440 },
   ]) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     const geometry = await page.evaluate(() => {
       const section = document.getElementById('artist-vocabulary-section')
       const input = document.getElementById('artist-vocabulary-input')

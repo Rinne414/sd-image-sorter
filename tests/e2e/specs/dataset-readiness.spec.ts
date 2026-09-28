@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -1032,7 +1033,7 @@ test('Export runs the check in its dialog and can skip the images with problems'
     { width: 1920, height: 1080 },
     { width: 2560, height: 1440 },
   ]) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     const layout = await page.evaluate(() => {
       const card = document.querySelector('#dataset-confirm-modal .dataset-modal-card')
       const go = document.getElementById('btn-dataset-confirm-go')
@@ -1048,7 +1049,7 @@ test('Export runs the check in its dialog and can skip the images with problems'
     })
     expect(layout).toEqual({ horizontalOverflow: 0, cardInside: true, goInside: true })
   }
-  await page.setViewportSize({ width: 1366, height: 768 })
+  await resizeAndSettleUiScale(page, { width: 1366, height: 768 })
 
   await page.getByTestId('dataset-confirm-skip-blocked').check()
   await expect(status).toHaveText(
@@ -1091,7 +1092,7 @@ test('readiness stays unclipped and error-free at supported desktop widths', asy
     { width: 1920, height: 1080 },
     { width: 2560, height: 1440 },
   ]) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     const layout = await page.evaluate(() => {
       const band = document.getElementById('dataset-readiness')
       const actions = document.querySelector('.dataset-readiness-actions')

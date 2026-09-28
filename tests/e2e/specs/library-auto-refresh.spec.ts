@@ -5,6 +5,7 @@ import path from 'node:path'
 
 import { expect, test, type APIRequestContext, type Page, type Request, type Route } from '../fixtures/click-ledger'
 import { createTestImage } from '../fixtures/test-helpers'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 type ScanProgress = {
   status: string
@@ -355,7 +356,7 @@ async function assertProtectedFilesUnchanged(fixture: AutoRefreshFixture): Promi
 
 async function assertDesktopGalleryHealth(page: Page): Promise<void> {
   for (const viewport of DESKTOP_VIEWPORTS) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())))
     const health = await page.evaluate(() => {
       const firstCard = document.querySelector<HTMLElement>('#gallery-grid .gallery-item')

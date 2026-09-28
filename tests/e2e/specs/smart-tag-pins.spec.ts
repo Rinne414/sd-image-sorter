@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
 import { markModelsReady } from '../fixtures/model-status'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 /**
  * Characterization pins for the smart-tag.js god-file (1,246 lines) — "step 0" of a
@@ -1380,7 +1381,7 @@ for (const viewport of [
   { width: 2560, height: 1440 },
 ]) {
   test(`the already-tagged question and its buttons stay on screen at ${viewport.width}x${viewport.height}`, async ({ page }) => {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     await installAlreadyTaggedRun(page, [])
     await openScopedAndReady(page, [10, 11, 12])
     await page.locator('#btn-smart-tag-run').click()

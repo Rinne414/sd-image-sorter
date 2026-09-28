@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process'
 import { expect, test, type APIRequestContext, type Locator, type Page } from '../fixtures/click-ledger'
 import { observeManualScanTerminal } from '../fixtures/scan-terminal-observer'
 import { markModelsReady } from '../fixtures/model-status'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -1707,23 +1708,6 @@ async function revealFolderRowAboveFooter(row: Locator) {
   })
 }
 
-/**
- * Resize, then wait until ui-scale.js has applied the zoom for the new width.
- * It switches the root zoom 150 ms after a resize (1.3x at 2560, 1x at 1366
- * and 1920). A measurement or click inside that window races the relayout:
- * Playwright re-scrolls its click target and the scroll looks like the app's.
- */
-async function resizeAndSettleUiScale(page: Page, viewport: { width: number, height: number }) {
-  await page.setViewportSize(viewport)
-  await expect.poll(async () => page.evaluate(() => {
-    const scale = window.UiScale
-    return Boolean(scale) && scale.get() === scale.autoScaleForWidth(window.innerWidth)
-  })).toBe(true)
-  await page.evaluate(() => new Promise((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(resolve))
-  }))
-}
-
 test('gallery folder tree stays usable above the selection footer on supported desktops', async ({ page }) => {
   const { finalFolder } = prepareSidebarLayoutFixture()
   const consoleErrors: string[] = []
@@ -2189,7 +2173,7 @@ test('paused bracket keeps the server session authoritative across reload', asyn
     { width: 1920, height: 1080 },
     { width: 2560, height: 1440 },
   ]) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     await page.evaluate(() => new Promise((resolve) => {
       requestAnimationFrame(() => requestAnimationFrame(resolve))
     }))
@@ -2472,7 +2456,7 @@ test('Keep/Reject cull should switch modes, keep/reject/skip, and route kept ima
     { width: 1920, height: 1080 },
     { width: 2560, height: 1440 },
   ]) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     await page.evaluate(() => new Promise((resolve) => {
       requestAnimationFrame(() => requestAnimationFrame(resolve))
     }))

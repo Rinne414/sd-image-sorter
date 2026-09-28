@@ -2,6 +2,7 @@ import os from 'os'
 import path from 'path'
 import { test, expect, type Page, type Route } from '../fixtures/click-ledger'
 import { markModelsReady } from '../fixtures/model-status'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 // Destination path used by auto-separate mocked tests. Overridable via env so
 // runners on any platform can avoid writing to the author's absolute L:\ path.
@@ -7620,7 +7621,7 @@ test.describe('Smoke Tests', () => {
     ]
 
     for (const viewport of viewports) {
-      await page.setViewportSize({ width: viewport.width, height: viewport.height })
+      await resizeAndSettleUiScale(page, { width: viewport.width, height: viewport.height })
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
 
       const layout = await getFilterModalLayout(page)

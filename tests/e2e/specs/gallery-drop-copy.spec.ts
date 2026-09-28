@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 /**
  * Dropping image files on the gallery asks before copying them (V3.5 3-8).
@@ -54,7 +55,7 @@ test('dropping images asks first and Cancel copies nothing', async ({ page }) =>
   await expect(dialog.locator('#confirm-message')).toContainText('原文件留在原处，不会被改动')
   await expect(dialog.locator('#confirm-message')).toContainText('「导入图片」')
   for (const viewport of VIEWPORTS) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     await expect(dialog.locator('#btn-confirm-ok')).toBeInViewport()
     await expect(dialog.locator('#btn-confirm-cancel')).toBeInViewport()
     await page.screenshot({ path: `${SHOT_DIR}/gallery-drop-copy-${viewport.width}.png` })

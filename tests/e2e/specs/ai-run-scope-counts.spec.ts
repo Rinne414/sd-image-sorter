@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 /**
  * Whole-library AI runs say how many images they will process before they
@@ -112,7 +113,7 @@ test('the counts and Start stay on screen at desktop sizes', async ({ page }) =>
     { width: 1920, height: 1080 },
     { width: 2560, height: 1440 },
   ]) {
-    await page.setViewportSize(viewport)
+    await resizeAndSettleUiScale(page, viewport)
     for (const [tab, ids] of [
       ['local', ['#tag-scope-note-text', '#btn-start-tag']],
       ['aesthetic', ['#tagger-aesthetic-scope', '#btn-tagger-aesthetic-start']],

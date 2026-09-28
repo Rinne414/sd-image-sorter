@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
 
 /**
  * Manual Sort progress and the library it belongs to (V3.5 issue #17).
@@ -69,7 +70,7 @@ test('a saved sort of another library says so and asks before resuming', async (
     await expect(line).toHaveText('这份进度属于图库「Sort elsewhere」，不是当前打开的图库。')
 
     for (const viewport of VIEWPORTS) {
-      await page.setViewportSize(viewport)
+      await resizeAndSettleUiScale(page, viewport)
       await expect(line).toBeInViewport()
       await expect(page.locator('#btn-resume-sorting')).toBeInViewport()
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
