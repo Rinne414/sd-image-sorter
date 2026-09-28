@@ -63,6 +63,12 @@
 - **更快**：图库翻页从 0.36 秒降到 0.045 秒；批量打标 1000 张从 170 秒降到 106 秒（实测）。
 - **中英文完整**：中文界面里的按钮提示也都是中文。
 
+### v3.5.1
+
+- **视频和 GIF 打码**：文件夹里的 GIF 和视频可以逐帧自动打码；可选动漫检测器和脸部保护。
+- **隐私**：聊天伪装、把队列收成循环 GIF、去掉藏在像素里的提示词。扫描会把伪装图的真图另存为 `_real.png`。
+- **美学分**：可选 Waifu Scorer V3 和 deepghs 动画等级。3.5.0 以前的分数仍保留，需要时再重算。
+
 ### 为什么选 SD Image Sorter？
 
 **SD Image Sorter — 为 Stable Diffusion 工作流设计的本地图库**
@@ -237,7 +243,7 @@ Eagle、Billfish 是通用素材库，不列入这张 SD 工作流细表。详�
 
 ## 60 秒上手
 
-所有安装包都放在 **[Releases 页面](https://github.com/Rinne414/sd-image-sorter/releases/latest)** 的 **Assets** 区域。按下表对号入座下载一个就好：
+所有安装包都放在 **[Releases 页面](https://github.com/Rinne414/sd-image-sorter/releases/latest)** 的 **Assets** 区域。按下表对号入座下载一个就好。标成 Latest 的是 V3.5。Vopus（新界面）是另一条发布，标签以 `vopus-v` 开头，不在 Latest 里。
 
 | 你的系统 | 下载这个文件 | 启动方式 |
 |:--|:--|:--|
@@ -614,6 +620,12 @@ Eagle and Billfish are general asset managers and are not in this SD-workflow ta
 - **Faster**: gallery page 0.36 s to 0.045 s; Mass Tag on 1,000 images 170 s to 106 s (measured).
 - **Complete Chinese and English UI**, tooltips included.
 
+### v3.5.1
+
+- **Video and GIF censor**: auto-censor every frame in a folder, with an opt-in anime detector and face guard.
+- **Privacy**: chat disguise, a plain looping GIF of the queue, and stripping of prompts hidden in pixels. A scan saves the real picture of a disguise as `_real.png`.
+- **Aesthetic scores**: optional Waifu Scorer V3 and deepghs grades. Scores from before 3.5.1 are kept until you choose to re-score.
+
 ### Highlights
 
 - **Gallery built for SD workflows**: ComfyUI, NovelAI, WebUI / A1111, Forge metadata support
@@ -647,7 +659,7 @@ The GitHub attachment at the top of this README is the screenshot that currently
 
 ### Quick Start
 
-Every build lives under **Assets** on the **[Releases page](https://github.com/Rinne414/sd-image-sorter/releases/latest)**. Grab exactly one:
+Every build lives under **Assets** on the **[Releases page](https://github.com/Rinne414/sd-image-sorter/releases/latest)**. Grab exactly one. The release marked Latest is V3.5. Vopus, the new interface, is a separate release line whose tags start with `vopus-v`, and it is not the Latest release.
 
 | Your system | Download this file | How to start it |
 |:--|:--|:--|

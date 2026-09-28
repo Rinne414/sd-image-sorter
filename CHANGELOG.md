@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.5.1] - 2026-09-28
+
+GIF and video folders can be auto-censored frame by frame. Privacy Tools gain chat disguise, a plain looping GIF of the queue, and stripping of prompts hidden in pixels. Optional Waifu Scorer V3 and deepghs anime grades sit beside the corrected CLIP aesthetic score. PixAI Tagger v1.0 is available. Libraries, collections, duplicates, and tag backups stay inside the library that started the job.
+
+GIF 和视频文件夹可以逐帧自动打码。隐私工具新增聊天伪装、把队列收成普通循环 GIF，以及清掉藏在像素里的提示词。可选的 Waifu Scorer V3 和 deepghs 动画等级跟修正后的 CLIP 美学分放在一起。新增 PixAI Tagger v1.0。图库、合集、查重和标签备份都留在启动任务的那个图库里。
+
+### Added / 新增
+
+- **Folder video and GIF censor / 文件夹视频和 GIF 打码**: auto-censor every frame of the GIFs and videos in a folder. Manual censoring has its own quick keys. Box-only detections can draw an ellipse or a fitted outline, and the edge can grow. Auto mosaic uses a cell of 1/100 of the picture's long side.
+  - 文件夹里的 GIF 和视频可以逐帧自动打码。手动打码有自己的快捷键。只有框的检测可以画椭圆或贴合轮廓，边缘可以外扩。自动马赛克格子是画面长边的百分之一。
+- **Anime censor detector and face guard / 动漫打码模型与脸部保护**: an opt-in anime detector, and a face guard that skips detections that are really a face. Both download from Model Center when you Prepare them.
+  - 可选的动漫检测器，以及会跳过「其实是脸」的脸部保护。都在模型中心准备时才下载。
+- **Chat disguise / 聊天伪装**: Privacy Tools can build a chat-disguise image and copy it out as a file. A scan recognises a disguise PNG and writes the real picture beside it as `<name>_real.png`, without replacing the disguise. Pack the queue into a plain looping GIF.
+  - 隐私工具可以做聊天伪装图并复制成文件。扫描认出伪装 PNG 后，会在旁边另存真图 `<name>_real.png`，不覆盖伪装图。也可以把队列收成一张普通循环 GIF。
+- **Pixel-hidden prompt stripping / 清掉藏在像素里的提示词**: "strip metadata" also clears a NovelAI or WebUI stealth prompt stored in the lowest bits. A picture without that carrier keeps its pixels unchanged. Protecting a file twice no longer scrambles it again, and ZIP names are UTF-8.
+  - 「去除元数据」也会清掉藏在最低位的 NovelAI / WebUI stealth 提示词。没有这种载体的图，像素原样保留。同一张图保护两次不会再被搅乱，ZIP 内的文件名使用 UTF-8。
+- **Anime aesthetic scores / 动画美学分**: Waifu Scorer V3 (0-10) and the deepghs grade (masterpiece through worst) are optional scores on the aesthetic pass. PixAI Tagger v1.0 sits next to v0.9.
+  - 美学分可以同时给出 Waifu Scorer V3（0-10）和 deepghs 等级（masterpiece 到 worst）。PixAI Tagger v1.0 跟 v0.9 并列可选。
+
+### Fixed / 修复
+
+- **CLIP aesthetic scores were off / CLIP 美学分有偏差**: CLIP is built with QuickGELU, matching the OpenAI weights. Scores from 3.5.0 and earlier are kept and marked to score again. Score Aesthetic redoes them when you run it. Nothing is rewritten on upgrade.
+  - CLIP 改为 QuickGELU，与 OpenAI 权重一致。3.5.0 及更早的分数保留，并标成待重算。你自己跑「评分」时才会重算，升级不会改写旧分数。
+- **Censor boxes on rotated JPEGs / 旋转 JPEG 的打码框**: AI boxes land on the picture you see, and a large EXIF-rotated JPEG is saved where the box was. Detection and review approval keep manual strokes. Stripping generation metadata keeps a palette image's colours.
+  - AI 框落在你看到的画面上；大尺寸、带 EXIF 旋转的 JPEG 会按框的位置保存。检测和审核通过都会留下手绘笔触。去掉生成元数据时，调色板图片的颜色保持不变。
+- **Each library keeps its own work / 每个图库只处理自己的内容**: a browser tab keeps its library when another tab switches. Collections, duplicate scans, artist style results, and tag backup import/export stay in the current library. A Smart Tag run with the booru tagger off writes only the description. Cancelling after a reload names only this tab's run.
+  - 一个分页保持自己的图库，不会被另一个分页的切换带走。合集、查重、画师风格结果、标签备份的导入导出都留在当前图库。关掉 booru 打标的 Smart Tag 只写描述。重新载入后取消，只取消这个分页自己的那一次。
+- **Tag search and whole-library jobs / 标签搜索与全库任务**: tag search answers from the library's tag counts. Tags written by another process show up at once. Fixing duplicate rating tags refreshes those counts. Find-missed lists every missed image. Whole-library AI runs say how many images they will process. The finished-run average counts tags. Large taggers use smaller batches, rest between GPU batches, and keep one tagger loaded.
+  - 标签搜索改读图库的标签计数。别的进程刚写入的标签立刻可见。修掉重复的分级标签后，计数会刷新。漏标列表一次列出全部。全库 AI 任务会先说要处理多少张。完成时的「平均标签数」按标签计算。大输入打标器用更小的批次，GPU 批次之间会休息，同时只留一个打标器。
+- **Gallery, sort, and reader say what happened / 图库、分拣、读图会说明结果**: dropping files asks before copying them into imports. Move and copy start from the last destination. An undo that changed nothing, or did not restore tags, says so. A move into another library that fails part-way says how many moved. Manual Sort names whose library an unfinished sort belongs to and asks before resuming or discarding it. Colour analysis continues until every image is analyzed. Find Moved Files lists every "already in gallery" conflict. Reader paste works again, and a saved edit stays in that image's own metadata format.
+  - 拖入文件会先问再复制进 imports。移动和复制从上次的目的地开始。撤销没有改变、或没有恢复标签时会说清楚。搬到另一个图库中途失败时会说已经搬了多少。手动分拣会说明未完成的进度属于哪个图库，继续或丢掉之前会问。颜色分析会做到每一张。找回移动过的文件会列出每一个「已在图库」冲突。读图的粘贴恢复可用，保存的编辑仍写回这张图自己的元数据格式。
+- **Prompt rules, dataset keys, and a few pages / 提示词规则、数据集快捷键和几个页面**: an exclusion can name a whole category, and a "tag is missing" condition is checked. Seed and count reach tag sets when Prompt Lab slots are used. Prompt Helper says when a prompt has no random part. Dataset workbench keys act only while that page is open, and the empty import zone is a band. Caption edits in the export preview survive a reload until exported. The Natural Language tab runs what it shows; ToriiGate stays on Smart Tag. Publish sets export the censored file without generation info. Simplified Chinese is drawn with YaHei. Installing an update asks first while work is running.
+  - 排除规则可以排除一整类，也会检查「缺少某个标签」。Prompt Lab 槽位会把种子和数量带到标签组。没有随机部分时，提示词助手会说明。数据集快捷键只在这一页打开时生效，空的导入区是一条横带。导出预览里改过的标注在导出前重载仍然保留。自然语言分页跑的是它显示的那一项；ToriiGate 留在 Smart Tag。发布集会导出打码结果且不带生成信息。简体中文用 YaHei 绘制。有任务在跑时，安装更新会先问。
+
 ## [3.5.0] - 2026-09-25
 
 The stable release of the 3.5 line: everything from 3.5.0-beta.1 to beta.6, plus the changes below. 3.5 is the last release of the V3 line.
@@ -38,7 +72,7 @@ The stable release of the 3.5 line: everything from 3.5.0-beta.1 to beta.6, plus
 - **Chinese UI is Chinese**: 73 tooltips and 5 placeholders follow the UI language, the default library shows as 主图库, and each thing has one name (数据集, 合集, 模型中心).
   - 中文界面全是中文：73 个提示和 5 个占位文字跟着界面语言；默认图库显示为「主图库」；同一个东西只用一个名字。
 - **Quieter launcher**: missing thumbnails no longer flood the launcher window.
-  - 缺缩略图不再刷满启动器窗口。
+  - 缺缩略图不再刷满启动器窗口。
 
 ### Fixed / 修复
 - **Separate libraries no longer mix All counts / 独立图库不再混用 All 数量**: switching to an empty library zeros generator/tag/folder stats, gallery filters, and selection for that workspace. Mass Tag, including a queued Mass Tag, lists and tags only the images of the library it was started in, and library-health totals follow the current library.
