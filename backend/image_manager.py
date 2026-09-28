@@ -34,6 +34,7 @@ from sidecar_fingerprint import compute_sidecar_fingerprint
 from metadata_storage import compact_metadata_json
 from metadata_parser import PARSED_METADATA_VERSION, parse_image
 from exceptions import ScanError, ScanCancelledError, FileOperationError
+import disguise_apng
 from utils.atomic_staging import create_staging_sibling, publish_staging_file
 from utils.path_validation import is_directory_symlink_or_junction, validate_folder_path
 from utils.reported_cause import describe_readability_failure, normalize_reported_cause
@@ -228,6 +229,7 @@ def scan_folder(
     quick_import: bool = True,
     metadata_workers: int = DEFAULT_METADATA_WORKERS,
     precise_total: bool = True,
+    restore_disguised: bool = True,
 ) -> Dict[str, Any]:
     """
     Scan a folder for images and add them to the database.
@@ -237,6 +239,8 @@ def scan_folder(
         recursive: Whether to scan subdirectories
         progress_callback: Optional callback(current, total, filename)
         stop_requested: Optional callback returning True when the scan should stop
+        restore_disguised: For each new or changed chat-disguise PNG, write its
+            real picture beside it as ``<name>_real.png`` and index both
     
     Returns:
         {
@@ -270,7 +274,14 @@ def scan_folder(
         "metadata_processed": 0,
         "metadata_total_final": False,
         "library_ready": False,
+        "disguise_restored": 0,
+        "disguise_restore_failed": 0,
     }
+    # Real pictures written beside disguises during this scan. They are fed
+    # to the import loop as extra batches, and skipped if the directory walk
+    # also lists them, so each one is imported exactly once.
+    restored_queue: List[Dict[str, Any]] = []
+    restored_keys: set[str] = set()
     
     # Default to a precise count-first scan so the user sees a real
     # ``current/total`` and can estimate ETA from the first heartbeat.
@@ -343,6 +354,35 @@ def scan_folder(
             return None
         return (int(stat_result.st_dev), inode)
 
+    def _path_key(path: str) -> str:
+        return os.path.normcase(os.path.abspath(path))
+
+    def _restore_disguise_beside(image_path: str) -> None:
+        """Write a received disguise's real picture beside it and queue it for import."""
+        name = os.path.basename(image_path)
+        try:
+            restored = disguise_apng.restore_next_to(image_path)
+        except (disguise_apng.DisguiseReadError, OSError) as exc:
+            result["disguise_restore_failed"] += 1
+            logger.warning("Could not restore the real picture of %s: %s", name, exc)
+            return
+        except Exception:
+            result["disguise_restore_failed"] += 1
+            logger.exception("Unexpected error restoring the real picture of %s", name)
+            return
+        if restored is None:
+            return
+        restored_keys.add(_path_key(str(restored)))
+        try:
+            restored_stat: Optional[os.stat_result] = restored.stat()
+        except OSError:
+            restored_stat = None
+        restored_queue.append({"path": str(restored), "stat": restored_stat})
+        result["disguise_restored"] += 1
+        if precise_total:
+            result["counted"] += 1
+            result["total"] += 1
+
     def _iter_images():
         pending_dirs = [os.fspath(folder)]
         root_dir = os.path.abspath(os.fspath(folder))
@@ -385,6 +425,8 @@ def scan_folder(
                             if not entry.is_file(follow_symlinks=False):
                                 continue
                             if Path(entry.name).suffix.lower() not in IMAGE_EXTENSIONS:
+                                continue
+                            if _path_key(entry.path) in restored_keys:
                                 continue
                             try:
                                 stat_result = entry.stat(follow_symlinks=False)
@@ -854,6 +896,15 @@ def scan_folder(
                 result["updated"] = max(0, result["updated"] - marked)
                 result["metadata_updated"] = max(0, result["metadata_updated"] - marked)
 
+    def _import_batches() -> Iterator[List[Dict[str, Any]]]:
+        for image_batch in _chunked(_iter_images(), SCAN_DB_BATCH_SIZE):
+            yield image_batch
+            # Real pictures restored while that batch was imported.
+            while restored_queue:
+                extra_batch = restored_queue[:SCAN_DB_BATCH_SIZE]
+                del restored_queue[:SCAN_DB_BATCH_SIZE]
+                yield extra_batch
+
     executor: Optional[Any] = None
     try:
         scan_state.scan_started()
@@ -864,7 +915,7 @@ def scan_folder(
 
         try:
             # Pipeline: placeholder import and metadata backfill overlap.
-            for image_batch in _chunked(_iter_images(), SCAN_DB_BATCH_SIZE):
+            for image_batch in _import_batches():
                 _check_cancel()
                 image_paths = [entry["path"] for entry in image_batch]
                 existing_rows = get_image_scan_state_by_paths(image_paths)
@@ -905,6 +956,9 @@ def scan_folder(
                             generator = existing.get("generator") or "unknown"
                             result["by_generator"][generator] = result["by_generator"].get(generator, 0) + 1
                             continue
+
+                        if restore_disguised and filename.lower().endswith(".png"):
+                            _restore_disguise_beside(image_path)
 
                         pending_placeholder_records.append(
                             _build_placeholder_record(image_path, filename, stat, existing)

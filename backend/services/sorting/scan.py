@@ -433,6 +433,18 @@ class ScanMixin:
                     summary += f" 移除 {removed_count} 条失效记录 / {removed_count} missing removed."
                 if errors:
                     summary += f" {errors} 个问题 / {errors} scan issue(s)."
+                restored_count = result.get("disguise_restored", 0)
+                if restored_count:
+                    summary += (
+                        f" 还原了 {restored_count} 张伪装图，真图存在原图旁边 / "
+                        f"Restored {restored_count} disguise image(s); each real picture sits next to its original."
+                    )
+                restore_failed = result.get("disguise_restore_failed", 0)
+                if restore_failed:
+                    summary += (
+                        f" {restore_failed} 张伪装图没能还原 / "
+                        f"{restore_failed} disguise image(s) could not be restored."
+                    )
                 # "Done! N indexed." on its own reads as a clean success even
                 # when most of those rows stored no text at all.
                 #
