@@ -9,8 +9,8 @@
 
 function onCanvasMouseDown(e) {
     if (!CensorState.activeId) return;
-    // Don't start drawing if space is held (pan mode)
-    if (spacePressed) return;
+    // Don't start drawing if space is held (pan mode) or with the middle button (pan).
+    if (spacePressed || e.button === 1) return;
 
     const point = getCanvasPointerCoordinates(e);
     if (!point) {
@@ -19,6 +19,11 @@ function onCanvasMouseDown(e) {
     }
 
     focusCanvasWrapperWithoutScroll();
+    // Right-drag erases with the current size; the chosen tool comes back on release.
+    if (e.button === 2 && CensorState.currentTool !== 'eraser') {
+        CensorState.toolBeforeRightDrag = CensorState.currentTool;
+        CensorState.currentTool = 'eraser';
+    }
     CensorState.isDrawing = true;
 
     const { x, y } = point;
@@ -98,6 +103,11 @@ function onCanvasMouseMove(e) {
 }
 
 async function onCanvasMouseUp() {
+    // The eraser stroke's operation was built at mousedown, so the tool can come back now.
+    if (CensorState.toolBeforeRightDrag) {
+        CensorState.currentTool = CensorState.toolBeforeRightDrag;
+        CensorState.toolBeforeRightDrag = null;
+    }
     if (!isCensorViewActive()) return;
 
     const wasDrawing = CensorState.isDrawing;
@@ -412,6 +422,15 @@ function updateCursorOverlay(e) {
     cursor.style.top = `${y}px`;
 }
 
+// How the focused control got focus. :focus-visible cannot tell: Chromium
+// marks the focused element focus-visible as soon as any key is pressed.
+let censorFocusFromPointer = false;
+
+function trackCensorFocusModality(e) {
+    if (e.type === 'pointerdown') censorFocusFromPointer = true;
+    else if (e.key === 'Tab') censorFocusFromPointer = false;
+}
+
 function handleKeydown(e) {
     if (isEditableTarget(e.target)) return;
 
@@ -420,6 +439,29 @@ function handleKeydown(e) {
 
     const key = e.key.toLowerCase();
     const code = e.code;
+    const plainKey = !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey;
+
+    // Enter = done with this picture; Delete = out of the queue. Neither fires
+    // over an open dialog. A control reached with the keyboard keeps Enter
+    // (it presses that control); one merely left focused by a mouse click does
+    // not, or clicking Detect once would turn every later Enter into Detect.
+    if (plainKey && (e.key === 'Enter' || e.key === 'Delete')) {
+        // The Queue Manager (#queue-solitaire) has its own Enter/Delete meanings.
+        if (document.querySelector('.modal.visible, #queue-solitaire.active')) return;
+        if (e.key === 'Enter') {
+            const control = e.target?.closest?.('button, a[href], summary, [role="button"], [role="tab"]');
+            if (control && !censorFocusFromPointer) return;
+        }
+        e.preventDefault();
+        // A held key would approve or drop picture after picture unseen.
+        if (e.repeat) return;
+        if (e.key === 'Enter') {
+            finishCurrentCensorImage();
+        } else {
+            removeActiveFromCensorQueue();
+        }
+        return;
+    }
 
     // Navigation: ArrowLeft/ArrowRight for prev/next
     if (code === 'ArrowLeft') {
@@ -521,6 +563,133 @@ function updateBrushIndicator() {
     const label = document.getElementById('tool-size-value');
     if (slider) slider.value = CensorState.brushSize;
     if (label) label.textContent = CensorState.brushSize;
+}
+
+/** Enter: move on. Review tab: detect first, then approve (or pass a picture
+ *  with nothing found). Brush tab: next picture. At the real end of the queue
+ *  (nothing left to load either), Save. */
+function finishCurrentCensorImage() {
+    if (CensorState.queue.length === 0) return;
+    if (!isCensorReviewActive()) {
+        advanceCensorQueueOrSave();
+        return;
+    }
+    if (CensorReviewState.busy) return;
+    const activeId = CensorState.activeId;
+    const detectedHere = activeId != null && CensorReviewState.detectedForId === activeId;
+    if (detectedHere && CensorReviewState.regions.length > 0) {
+        censorReviewApprove();
+    } else if (detectedHere || (activeId != null && CensorReviewState.approvedId === activeId)) {
+        // Nothing found, or already approved: this picture is done.
+        CensorReviewState.approvedId = activeId;
+        advanceCensorQueueOrSave();
+    } else if (activeId == null) {
+        advanceCensorQueueOrSave();
+    } else {
+        censorReviewDetect();
+    }
+}
+
+/** Next picture; the next window of a large selection when the loaded part is
+ *  done; the Save dialog only at the real end. No open picture: open the first. */
+async function advanceCensorQueueOrSave() {
+    const index = CensorState.queue.findIndex(item => item.id === getFocusedCensorImageId());
+    if (index < 0) {
+        loadCanvasImage(CensorState.queue[0].id);
+        return;
+    }
+    if (index < CensorState.queue.length - 1) {
+        loadCanvasImage(CensorState.queue[index + 1].id);
+        return;
+    }
+    const more = await loadMoreCensorQueue();
+    if (more.item) {
+        loadCanvasImage(more.item.id);
+    } else if (more.status === 'none') {
+        openSaveOptionsPopup();
+    }
+}
+
+/** The next window of a large selection. status: 'loaded' (item = its first
+ *  picture), 'none' (nothing left), 'busy' (a load is running), 'failed'.
+ *  Busy and failed are told to the user. */
+async function loadMoreCensorQueue() {
+    const source = CensorState.tokenQueueSource;
+    if (!source?.hasMore) return { status: 'none', item: null };
+    if (source.loading) {
+        window.App.showToast(censorT('censor.stillLoadingMore', null, 'Still loading more pictures. Try again in a moment.'), 'info');
+        return { status: 'busy', item: null };
+    }
+    try {
+        const loaded = await loadNextTokenQueueWindow();
+        const item = loaded.items?.[0] || null;
+        return { status: item ? 'loaded' : 'none', item };
+    } catch (error) {
+        Logger.error('Loading more censor queue pictures failed:', error);
+        window.App.showToast(formatUserError(error, censorT('censor.loadMoreFailed', null, 'Could not load more pictures')), 'error');
+        return { status: 'failed', item: null };
+    }
+}
+
+/** Censoring on this picture that no save has written yet (the same test as
+ *  the leave-page warning: auto-censoring counts, not only brush edits). */
+function censorItemHasUnsavedWork(item) {
+    return Boolean(item) && item.batchStatus !== 'saved' && (item.isModified || itemHasCensorContent(item));
+}
+
+/** Delete: take the picture out of the queue. The file itself is never touched;
+ *  unsaved censoring on it is lost, so that case asks first. */
+function removeActiveFromCensorQueue() {
+    const index = CensorState.queue.findIndex(item => item.id === CensorState.activeId);
+    if (index < 0) return;
+    const item = CensorState.queue[index];
+    const name = item.outputFilename || item.originalFilename || String(item.id);
+    const remove = async () => {
+        const current = CensorState.queue.findIndex(entry => entry.id === item.id);
+        if (current < 0) return;
+        const remaining = CensorState.queue.filter(entry => entry.id !== item.id);
+        if (remaining.length === 0 && CensorState.tokenQueueSource?.loading) {
+            // Its pages would land in a queue reset under them; try again after.
+            window.App.showToast(censorT('censor.stillLoadingMore', null, 'Still loading more pictures. Try again in a moment.'), 'info');
+            return;
+        }
+        window.App.showToast(
+            censorT('censor.removedFromQueue', { name }, 'Took {name} out of the queue (the file is kept)'),
+            'success'
+        );
+        if (remaining.length > 0) {
+            CensorState.queue = remaining;
+            CensorState.selectedItems.delete(item.id);
+            renderQueue();
+            loadCanvasImage(remaining[Math.min(current, remaining.length - 1)].id);
+            return;
+        }
+        if (CensorState.tokenQueueSource?.hasMore) {
+            // The loaded part is empty, but the selection still has pictures.
+            CensorState.queue = remaining;
+            renderQueue();
+            const more = await loadMoreCensorQueue();
+            if (more.item) {
+                loadCanvasImage(more.item.id);
+                return;
+            }
+            if (more.status === 'failed') {
+                // Keep the selection so "Load more" can retry; drop the removed picture.
+                clearCanvas();
+                return;
+            }
+        }
+        resetToEmptyCensorQueue();
+    };
+    if (censorItemHasUnsavedWork(item)) {
+        window.App.showConfirm(
+            censorT('censor.removeEditedTitle', null, 'Remove this picture from the queue?'),
+            censorT('censor.removeEditedMessage', { name }, 'The censoring on {name} is not saved yet and will be lost. The file itself is kept.'),
+            remove
+        );
+        return;
+    }
+    remove();
 }
 
 function navigateQueue(direction) {

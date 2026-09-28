@@ -18,6 +18,7 @@ const CensorReviewState = {
     data: null,           // raw detect response (holds combined_mask for approve-all)
     excluded: new Set(),  // region indices the user unchecked (keep uncensored)
     detectedForId: null,  // which item id the current regions belong to
+    approvedId: null,     // last item approved or passed (Enter on it moves on, not re-detect)
     busy: false,
 };
 
@@ -337,6 +338,7 @@ async function censorReviewApprove() {
         CensorReviewState.excluded = new Set();
         CensorReviewState.data = null;
         CensorReviewState.detectedForId = null;
+        CensorReviewState.approvedId = item.id;
         clearCensorReviewOverlay();
         censorReviewGoTo(1, { atEndMessage: true });
     } catch (e) {

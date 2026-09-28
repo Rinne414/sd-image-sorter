@@ -98,6 +98,32 @@ function toggleCensorHelp(button) {
     button.setAttribute('aria-expanded', String(!help.hidden));
 }
 
+/** Empty queue: drop every per-image state and blank the canvas. */
+function resetToEmptyCensorQueue() {
+    CensorState.queue = [];
+    CensorState.tokenQueueSource = null;
+    CensorState.renamePlan = null;
+    CensorState.activeId = null;
+    CensorState.pendingActiveId = null;
+    CensorState.selectedItems.clear();
+    CensorState.lastSelectedIndex = -1;
+    CensorState.undoStack = [];
+    CensorState.redoStack = [];
+    CensorState.baseCanvasState = null;
+    CensorState.baseItemState = null;
+    CensorState.filterActionUndoStack = [];
+    CensorState.filterActionRedoStack = [];
+    CensorState.lastHistorySource = null;
+    CensorState.originalImage = null;
+    CensorState.originalImageData = null;
+    CensorState.activeImagePixels = 0;
+    CensorState.lowMemoryMode = false;
+    CensorState.preChangesData = null;
+    CensorState.showingChanges = false;
+    renderQueue();
+    clearCanvas();
+}
+
 function bindEvents() {
     const { $, $$ } = window.App;
 
@@ -286,28 +312,7 @@ function bindEvents() {
             censorT('modal.confirm', null, 'Are you sure?'),
             censorT('modal.confirmAction', null, 'This action cannot be undone.'),
             () => {
-                CensorState.queue = [];
-                CensorState.tokenQueueSource = null;
-                CensorState.renamePlan = null;
-                CensorState.activeId = null;
-                CensorState.pendingActiveId = null;
-                CensorState.selectedItems.clear();
-                CensorState.lastSelectedIndex = -1;
-                CensorState.undoStack = [];
-                CensorState.redoStack = [];
-                CensorState.baseCanvasState = null;
-                CensorState.baseItemState = null;
-                CensorState.filterActionUndoStack = [];
-                CensorState.filterActionRedoStack = [];
-                CensorState.lastHistorySource = null;
-                CensorState.originalImage = null;
-                CensorState.originalImageData = null;
-                CensorState.activeImagePixels = 0;
-                CensorState.lowMemoryMode = false;
-                CensorState.preChangesData = null;
-                CensorState.showingChanges = false;
-                renderQueue();
-                clearCanvas();
+                resetToEmptyCensorQueue();
                 window.App.showToast(censorT('censor.queueCleared', null, 'Queue cleared'), 'success');
             }
         );
@@ -612,6 +617,9 @@ function bindEvents() {
     // Keybinds - track for cleanup
     boundHandlers.keydown = handleKeydown;
     document.addEventListener('keydown', boundHandlers.keydown);
+    boundHandlers.focusModality = trackCensorFocusModality;
+    document.addEventListener('pointerdown', boundHandlers.focusModality, true);
+    document.addEventListener('keydown', boundHandlers.focusModality, true);
 
     // Add to Queue bridge for Gallery/App without mutating window.App.
     window.CensorEdit = window.CensorEdit || {};

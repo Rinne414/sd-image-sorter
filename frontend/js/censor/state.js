@@ -46,6 +46,7 @@ const CensorState = {
 
     // Tools
     currentTool: 'brush', // brush, pen, eraser, clone
+    toolBeforeRightDrag: null, // set while a right-drag erases; restored on release
     brushSize: 30,
     isDrawing: false,
     lastPoint: null,
@@ -131,6 +132,7 @@ let boundHandlers = {
     mousemove: null,
     mouseup: null,
     keydown: null,
+    focusModality: null,
     panMousemove: null,
     panMouseup: null,
     spaceKeydown: null,
@@ -299,6 +301,11 @@ function cleanupGlobalListeners() {
     if (boundHandlers.keydown) {
         document.removeEventListener('keydown', boundHandlers.keydown);
         boundHandlers.keydown = null;
+    }
+    if (boundHandlers.focusModality) {
+        document.removeEventListener('pointerdown', boundHandlers.focusModality, true);
+        document.removeEventListener('keydown', boundHandlers.focusModality, true);
+        boundHandlers.focusModality = null;
     }
     if (boundHandlers.panMousemove) {
         window.removeEventListener('mousemove', boundHandlers.panMousemove);
