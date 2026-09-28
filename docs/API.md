@@ -1530,7 +1530,8 @@ sources make one animation. `cover_kind` is `upload` (with `cover_file`),
 or `mosaic` (censor detections of the first library source; `detect_model_type`,
 `detect_model_path`, `detect_confidence`, `detect_targets`). Options: `frame_ms`,
 `max_side` (0 keeps the size, default 1600), `scrub`, `canvas_background`,
-`output_folder` (default `<data>/disguise/output`), `output_name`. An existing
+`output_folder` (default `<data>/disguise/output`), `output_name`, and
+`output_format` (`disguise`, or `gif` for a plain looping GIF with no cover). An existing
 file is never replaced (`name (2).png`). Returns `{status: "ok", token, file_url,
 output_path, file_name, cover_preview, width, height, real_frames, bytes}`, or
 `{status: "needs_cover", reason}` (`no_default_cover`, `no_upload`,

@@ -226,6 +226,7 @@ Eagle、Billfish 是通用素材库，不列入这张 SD 工作流细表。详�
 - 所有 AI 模型的状态集中在一处：已就绪、缺文件、需要重启
 - 第一次用某个功能时先说明下载大小、要装几个 Python 包、会不会需要重启，确认后才下载
 - 需要重启时一键重启（启动器会原地重开），回来后接着把剩下的准备完
+- 考虑过但暂时没加的模型和原因：[docs/MODELS_CONSIDERED.md](docs/MODELS_CONSIDERED.md)
 
 ## 这工具最适合谁
 
@@ -638,6 +639,7 @@ Eagle and Billfish are general asset managers and are not in this SD-workflow ta
 - **Caption Editor**: Dedicated full-screen workbench for editing LoRA training captions
 - **Pixiv Set Publishing**: censor, order, batch rename, and export a ready-to-upload set (metadata can be stripped)
 - **Model Center**: one place for every AI model; first-use setup states size and restart needs, and restarts in place
+- **Models we considered but have not added**, and why: [docs/MODELS_CONSIDERED.md](docs/MODELS_CONSIDERED.md)
 
 ### Screenshots
 
