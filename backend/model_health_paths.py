@@ -22,6 +22,7 @@ patches (e.g. model_health.Path.resolve).
 """
 from __future__ import annotations
 
+import ast
 import json
 import os
 from pathlib import Path
@@ -83,7 +84,12 @@ def _parse_class_mapping(raw_names: Any) -> List[str]:
         try:
             raw_names = json.loads(raw_names)
         except (json.JSONDecodeError, TypeError):
-            return []
+            # Ultralytics exports write a Python dict repr ({0: 'face'});
+            # literal_eval reads literals only and never runs code.
+            try:
+                raw_names = ast.literal_eval(raw_names)
+            except (ValueError, SyntaxError):
+                return []
     if isinstance(raw_names, dict):
         ordered = []
         for key in sorted(raw_names.keys(), key=lambda item: int(item) if str(item).isdigit() else str(item)):

@@ -99,6 +99,7 @@ class _DetectionMixin:
         _BREASTS_ALIASES = {
             "breasts", "breast", "malebreasts", "femalebreasts",
             "malebreast", "femalebreast", "boob", "boobs", "tits", "tit",
+            "nipple", "nipplef",
             "exposedbreasts", "coveredbreasts",
             "femalebreastexposed", "femalebreastcovered",
             "malebreastexposed", "malebreastcovered",

@@ -10,6 +10,7 @@ import json
 import threading
 import logging
 import os
+import ast
 import numpy as np
 from PIL import Image, ImageFilter, ImageDraw
 from typing import List, Dict, Tuple, Optional
@@ -38,6 +39,8 @@ _CLASS_NAME_ALIASES = {
     "boobs": "breasts",
     "tits": "breasts",
     "tit": "breasts",
+    "nipple": "breasts",
+    "nipplef": "breasts",
     "vagina": "pussy",
     "vulva": "pussy",
     "pussy": "pussy",
@@ -142,8 +145,13 @@ class CensorDetector:
             try:
                 parsed = json.loads(raw_names) if isinstance(raw_names, str) else raw_names
             except (json.JSONDecodeError, TypeError):
-                logger.warning("Invalid class name format in model metadata, using fallback")
-                parsed = raw_names if not isinstance(raw_names, str) else None
+                # Ultralytics writes names as a Python dict repr ({0: 'face'}).
+                # literal_eval reads literals only; it never runs code.
+                try:
+                    parsed = ast.literal_eval(raw_names) if isinstance(raw_names, str) else None
+                except (ValueError, SyntaxError):
+                    logger.warning("Invalid class name format in model metadata, using fallback")
+                    parsed = None
             names = self._names_from_mapping(parsed)
             if names:
                 self._set_classes(names)
@@ -161,12 +169,27 @@ class CensorDetector:
 
         channel_dim = output_shape[1]
         if not isinstance(channel_dim, int):
-            return False
+            # Exports such as deepghs' anime detectors declare every dimension
+            # symbolically; one run on a blank frame gives the real count.
+            channel_dim = self._probe_output_channels(session)
+            if channel_dim is None:
+                return False
 
         expected_channels = 4 + len(self.classes)
         if len(outputs) > 1:
             expected_channels += 32
         return channel_dim == expected_channels
+
+    def _probe_output_channels(self, session) -> Optional[int]:
+        width, height = self.input_size
+        blank = np.zeros((1, 3, height, width), dtype=np.float32)
+        try:
+            first_output = session.run(None, {self.input_name: blank})[0]
+        except Exception as exc:
+            logger.info("Could not probe the output layout of %s: %s", self.model_path, exc)
+            return None
+        shape = getattr(first_output, "shape", ())
+        return int(shape[1]) if len(shape) == 3 else None
 
     @staticmethod
     def _onnx_has_segmentation_outputs(session) -> bool:

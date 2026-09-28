@@ -94,7 +94,8 @@ class TestCanonicalizeClassName:
 
     def test_alias_table_shape_is_pinned(self):
         # Guards the aliasing dict against silent edits during a split.
-        assert len(censor._CLASS_NAME_ALIASES) == 17
+        # 17 + nipple / nipplef (deepghs anime censor labels, 2026-09-28).
+        assert len(censor._CLASS_NAME_ALIASES) == 19
         assert set(censor._CLASS_NAME_ALIASES.values()) == {
             "breasts",
             "pussy",
