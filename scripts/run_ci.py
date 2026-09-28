@@ -47,9 +47,10 @@ CI_LOCK_BYTE_OFFSET = workspace_lock.LOCK_BYTE_OFFSET
 CI_SHARD_COUNT_PATTERN = re.compile(r"^[0-9]+$")
 CI_MIN_SHARD_COUNT = 2
 CI_MAX_SHARD_COUNT = 8
-# Backend test processes: half the logical CPUs, at most 8. More adds heat and
-# power draw on a desktop for little gain; --backend-workers 1 runs one process.
-DEFAULT_BACKEND_WORKERS = max(1, min(8, (os.cpu_count() or 2) // 2))
+# Backend test processes: half the logical CPUs, at most 4. Each worker loads
+# the AI libraries; 8 of them next to a busy browser ran a 32 GB PC out of
+# memory (2026-09-28). --backend-workers raises it or sets 1 process.
+DEFAULT_BACKEND_WORKERS = max(1, min(4, (os.cpu_count() or 2) // 2))
 
 
 CiLockError = workspace_lock.WorkspaceLockError

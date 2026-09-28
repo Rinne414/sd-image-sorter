@@ -40,8 +40,9 @@ def test_one_backend_worker_runs_the_suite_in_one_process() -> None:
     assert "--dist" not in command
 
 
-def test_default_worker_count_is_between_one_and_eight() -> None:
-    assert 1 <= run_ci.DEFAULT_BACKEND_WORKERS <= 8
+def test_default_worker_count_is_between_one_and_four() -> None:
+    # more workers ran a 32 GB PC out of memory next to a busy browser
+    assert 1 <= run_ci.DEFAULT_BACKEND_WORKERS <= 4
 
 
 def _capture_run_ci(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
