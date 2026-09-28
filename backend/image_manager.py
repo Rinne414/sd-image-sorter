@@ -35,6 +35,7 @@ from metadata_storage import compact_metadata_json
 from metadata_parser import PARSED_METADATA_VERSION, parse_image
 from exceptions import ScanError, ScanCancelledError, FileOperationError
 import disguise_apng
+from disguise_registry import was_made_here
 from utils.atomic_staging import create_staging_sibling, publish_staging_file
 from utils.path_validation import is_directory_symlink_or_junction, validate_folder_path
 from utils.reported_cause import describe_readability_failure, normalize_reported_cause
@@ -361,6 +362,9 @@ def scan_folder(
         """Write a received disguise's real picture beside it and queue it for import."""
         name = os.path.basename(image_path)
         try:
+            if disguise_apng.probe_disguise(image_path) is None or was_made_here(image_path):
+                # Not a disguise, or one this program made: nothing to restore.
+                return
             restored = disguise_apng.restore_next_to(image_path)
         except (disguise_apng.DisguiseReadError, OSError) as exc:
             result["disguise_restore_failed"] += 1

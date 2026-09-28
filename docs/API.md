@@ -1475,6 +1475,50 @@ Run encode/decode in batch mode.
 #### POST /api/obfuscate/preview
 Generate obfuscation preview.
 
+### Chat disguise
+
+A chat disguise is one PNG that shows a cover as its still picture and the real
+picture(s) as its APNG animation: chat-list thumbnails show the cover, opening
+the image plays the real picture. Pixels are scrubbed by default (no metadata,
+no prompt hidden in pixel bits). Disguises made here are remembered by SHA-256,
+so a library scan does not restore them; a scan restores received disguises
+beside the original as `<name>_real.png` (see `scan_folder(restore_disguised)`).
+
+#### POST /api/disguise/make
+Multipart form. `sources` is a JSON list in frame order of `{"image_id": n}`
+(library image) or `{"file_index": n}` (index into the uploaded `files`); several
+sources make one animation. `cover_kind` is `upload` (with `cover_file`),
+`default`, `text` (`cover_text`, `cover_background`, `cover_foreground`), `blur`,
+or `mosaic` (censor detections of the first library source; `detect_model_type`,
+`detect_model_path`, `detect_confidence`, `detect_targets`). Options: `frame_ms`,
+`max_side` (0 keeps the size, default 1600), `scrub`, `canvas_background`,
+`output_folder` (default `<data>/disguise/output`), `output_name`. An existing
+file is never replaced (`name (2).png`). Returns `{status: "ok", token, file_url,
+output_path, file_name, cover_preview, width, height, real_frames, bytes}`, or
+`{status: "needs_cover", reason}` (`no_default_cover`, `no_upload`,
+`nothing_detected`, `detector_unavailable`, `not_in_library`) with nothing written.
+
+#### GET /api/disguise/result/{token}
+Serve a made disguise file by the token `make` returned (404 once unknown).
+
+#### POST /api/disguise/copy
+Body `{"tokens": [...]}`. Put the made files on the clipboard as files (Windows
+CF_HDROP), so pasting into a chat sends the APNG byte for byte. 501 on other
+platforms, 409 when another program holds the clipboard.
+
+#### POST /api/disguise/restore
+Upload a disguise (`file`); returns its real picture as PNG, or an ordinary
+looping APNG for a pack. 400 when the upload is not a disguise.
+
+#### GET /api/disguise/default-cover
+The saved default cover (PNG), or 404.
+
+#### PUT /api/disguise/default-cover
+Upload (`file`) and save the default cover (scrubbed like any output).
+
+#### DELETE /api/disguise/default-cover
+Remove the saved default cover. Returns `{status, removed}`.
+
 ### Aesthetic
 
 #### GET /api/aesthetic/status
