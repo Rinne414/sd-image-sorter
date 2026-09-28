@@ -1571,6 +1571,7 @@
                                 <select id="obfuscate-compat-mode" class="input-field obfuscate-mode-select" title="Compatibility mode" data-i18n-title="tip.compatibilityMode">
                                     <option value="big_tomato" data-i18n="tools.compatBigTomato">Standard (password + image info)</option>
                                     <option value="small_tomato" data-i18n="tools.compatSmallTomato">Simple (no password)</option>
+                                    <option value="chat_disguise" data-i18n="disguise.modeOption">Chat disguise</option>
                                 </select>
                                 <input type="password" id="obfuscate-password" class="input-field obfuscate-password-input" placeholder="Password (optional)" data-i18n-placeholder="tools.password">
                                 <button class="btn btn-ghost btn-small obfuscate-settings-toggle" id="obfuscate-settings-toggle" title="Advanced settings" data-i18n-title="tagger.advancedSummary" type="button"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg></button>
@@ -1579,6 +1580,49 @@
                                 <button id="obfuscate-btn-encode" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg> <span data-i18n="tools.encode">Protect</span></button>
                                 <button id="obfuscate-btn-decode" class="btn btn-secondary"><svg class="icon" aria-hidden="true"><use href="#i-unlock"/></svg> <span data-i18n="tools.decode">Restore</span></button>
                                 <button id="obfuscate-btn-clear" class="btn btn-ghost" data-i18n="tools.clearQueue">Clear</button>
+                            </div>
+                        </div>
+
+                        <!-- Chat disguise settings (only in the chat disguise mode) -->
+                        <div class="disguise-settings" id="disguise-settings" hidden>
+                            <div class="disguise-row">
+                                <label class="disguise-label" for="disguise-cover-kind" data-i18n="disguise.coverLabel">Cover</label>
+                                <select id="disguise-cover-kind" class="input-field disguise-cover-kind">
+                                    <option value="default" data-i18n="disguise.coverDefault">Default cover</option>
+                                    <option value="mosaic" data-i18n="disguise.coverMosaic">Auto mosaic of the picture</option>
+                                    <option value="text" data-i18n="disguise.coverText">Text card</option>
+                                    <option value="blur" data-i18n="disguise.coverBlur">Blurred picture</option>
+                                    <option value="upload" data-i18n="disguise.coverUpload">A picture I choose</option>
+                                </select>
+                                <span class="disguise-cover-extra" id="disguise-cover-default">
+                                    <img id="disguise-default-thumb" class="disguise-cover-thumb" alt="" hidden>
+                                    <span id="disguise-default-empty" class="disguise-note" data-i18n="disguise.noDefaultCover">No default cover yet</span>
+                                    <button type="button" class="btn btn-ghost btn-small" id="disguise-default-set" data-i18n="disguise.setDefaultCover">Set default cover…</button>
+                                    <button type="button" class="btn btn-ghost btn-small" id="disguise-default-clear" data-i18n="disguise.clearDefaultCover" hidden>Remove</button>
+                                </span>
+                                <span class="disguise-cover-extra" id="disguise-cover-upload" hidden>
+                                    <img id="disguise-upload-thumb" class="disguise-cover-thumb" alt="" hidden>
+                                    <button type="button" class="btn btn-ghost btn-small" id="disguise-upload-pick" data-i18n="disguise.chooseCover">Choose picture…</button>
+                                    <button type="button" class="btn btn-ghost btn-small" id="disguise-upload-as-default" data-i18n="disguise.useAsDefault" hidden>Use as default</button>
+                                </span>
+                                <span class="disguise-cover-extra" id="disguise-cover-text" hidden>
+                                    <input type="text" id="disguise-text-input" class="input-field disguise-text-input" data-i18n-placeholder="disguise.coverTextPlaceholder" placeholder="Text on the card">
+                                    <input type="color" id="disguise-text-bg" class="disguise-color" value="#26272b" title="Card colour" data-i18n-title="disguise.cardColor">
+                                    <input type="color" id="disguise-text-fg" class="disguise-color" value="#f2f2f2" title="Text colour" data-i18n-title="disguise.textColor">
+                                </span>
+                                <span class="disguise-cover-extra disguise-note" id="disguise-cover-mosaic" data-i18n="disguise.mosaicNote" hidden>Uses the Censor page detector. Library images only; pictures with nothing found are marked for you to choose.</span>
+                                <input type="file" id="disguise-upload-file" accept="image/*" hidden>
+                                <input type="file" id="disguise-default-file" accept="image/*" hidden>
+                            </div>
+                            <div class="disguise-row">
+                                <label class="obfuscate-checkbox-row">
+                                    <input type="checkbox" id="disguise-pack">
+                                    <span data-i18n="disguise.packLabel">Pack all pictures into one file (they play in turn)</span>
+                                </label>
+                                <label class="disguise-inline">
+                                    <span data-i18n="disguise.frameSeconds">Seconds per picture</span>
+                                    <input type="number" id="disguise-frame-seconds" class="input-field disguise-number" min="0.1" step="0.1" value="1">
+                                </label>
                             </div>
                         </div>
 
@@ -1593,12 +1637,40 @@
                                 <input type="checkbox" id="obfuscate-use-legacy-pnginfo">
                                 <span data-i18n="tools.legacyPngInfo">Use old PNG Info algorithm (legacy compat)</span>
                             </label>
+                            <div class="disguise-advanced" id="disguise-advanced" hidden>
+                                <label class="obfuscate-checkbox-row">
+                                    <input type="checkbox" id="disguise-scrub" checked>
+                                    <span data-i18n="disguise.scrubLabel">Remove prompts and hidden info from the pictures</span>
+                                </label>
+                                <label class="disguise-inline">
+                                    <span data-i18n="disguise.maxSideLabel">Longest side (px, 0 = original)</span>
+                                    <input type="number" id="disguise-max-side" class="input-field disguise-number" min="0" step="100" value="1600">
+                                </label>
+                                <label class="disguise-inline disguise-folder-row">
+                                    <span data-i18n="disguise.outputFolderLabel">Save to folder</span>
+                                    <input type="text" id="disguise-output-folder" class="input-field" data-i18n-placeholder="disguise.outputFolderPlaceholder" placeholder="Empty = the disguise folder in the program's data">
+                                </label>
+                            </div>
                         </div>
 
                         <!-- Progress -->
                         <div class="obfuscate-status-bar">
                             <span id="obfuscate-count" class="obfuscate-progress"></span>
                             <span id="obfuscate-progress" class="obfuscate-progress"></span>
+                        </div>
+
+                        <div class="disguise-needs-cover-bar" id="disguise-needs-cover-bar" hidden>
+                            <span id="disguise-needs-cover-text"></span>
+                            <button type="button" class="btn btn-secondary btn-small" id="disguise-redo-failed" data-i18n="disguise.redoFailed">Use the default cover for these</button>
+                            <button type="button" class="btn btn-ghost btn-small" id="disguise-redo-all" data-i18n="disguise.redoAll">Use the default cover for all</button>
+                        </div>
+
+                        <div class="disguise-pack-result" id="disguise-pack-result" hidden>
+                            <img id="disguise-pack-thumb" class="obfuscate-thumb result-thumb" alt="">
+                            <span id="disguise-pack-info" class="disguise-pack-info"></span>
+                            <button type="button" class="btn btn-primary btn-small" id="disguise-pack-copy"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg> <span data-i18n="disguise.copyFile">Copy file</span></button>
+                            <button type="button" class="btn btn-secondary btn-small" id="disguise-pack-download"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg> <span data-i18n="tools.downloadImage">Download</span></button>
+                            <button type="button" class="btn btn-ghost btn-small" id="disguise-pack-reveal" data-i18n="disguise.showInFolder">Show in folder</button>
                         </div>
 
                         <!-- Queue with larger previews -->
@@ -1608,6 +1680,7 @@
 
                         <!-- Batch download -->
                         <div class="obfuscate-batch-bar" id="obfuscate-batch-bar" style="display: none;">
+                            <button id="disguise-btn-copy-all" class="btn btn-primary btn-small" type="button" hidden><svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg> <span data-i18n="disguise.copyAll">Copy all as files</span></button>
                             <button id="obfuscate-btn-download-all" class="btn btn-secondary btn-small"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg> <span data-i18n="tools.downloadAll">Download All (.zip)</span></button>
                         </div>
                     </div>
@@ -8234,6 +8307,7 @@
     <script src="/static/js/image-reader/boot.js"></script>
     <script src="/static/js/image-reader.js"></script>
     <script src="/static/js/obfuscate-engine.js"></script>
+    <script src="/static/js/image-disguise.js"></script>
     <script src="/static/js/image-obfuscate.js"></script>
     <script src="/static/js/virtual-gallery.js"></script>
     <script src="/static/js/library-health.js"></script>

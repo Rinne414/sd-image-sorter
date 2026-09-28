@@ -315,3 +315,143 @@
         min-width: 100%;
     }
 }
+
+/* Chat disguise mode (image-disguise.js) */
+.disguise-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+    border: 1px solid rgba(var(--accent-rgb), 0.06);
+}
+
+/* .obfuscate-checkbox-row sets display:flex, which would override [hidden]. */
+.obfuscate-checkbox-row[hidden],
+.disguise-settings[hidden],
+.disguise-advanced[hidden],
+.disguise-cover-extra[hidden],
+.disguise-needs-cover-bar[hidden],
+.disguise-pack-result[hidden] {
+    display: none;
+}
+
+.disguise-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.disguise-label {
+    color: var(--text-muted);
+    font-size: var(--fs-body);
+}
+
+.disguise-cover-kind {
+    min-width: 160px;
+    max-width: 220px;
+}
+
+.disguise-cover-extra {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.disguise-cover-thumb {
+    width: 34px;
+    height: 34px;
+    object-fit: cover;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.disguise-note {
+    color: var(--text-muted);
+    font-size: var(--fs-body);
+    line-height: 1.4;
+}
+
+.disguise-text-input {
+    width: 200px;
+    max-width: 100%;
+}
+
+.disguise-color {
+    width: 34px;
+    height: 34px;
+    padding: 2px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+}
+
+.disguise-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-muted);
+    font-size: var(--fs-body);
+}
+
+.disguise-number {
+    width: 88px;
+}
+
+.disguise-folder-row .input-field {
+    flex: 1;
+    min-width: 220px;
+}
+
+.disguise-advanced {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.disguise-needs-cover-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: rgba(var(--warning-rgb), 0.08);
+    border: 1px solid rgba(var(--warning-rgb), 0.25);
+}
+
+.disguise-needs-cover-bar > span {
+    flex: 1;
+    min-width: 200px;
+}
+
+.disguise-pack-result {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: rgba(var(--success-rgb), 0.06);
+    border: 1px solid rgba(var(--success-rgb), 0.15);
+}
+
+.disguise-pack-info {
+    flex: 1;
+    min-width: 200px;
+    overflow-wrap: anywhere;
+}
+
+.obfuscate-item.needs_cover {
+    background: rgba(var(--warning-rgb), 0.06);
+    border-color: rgba(var(--warning-rgb), 0.25);
+}
+
+.obfuscate-item.packed {
+    opacity: 0.75;
+}

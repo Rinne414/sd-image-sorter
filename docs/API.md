@@ -1506,9 +1506,17 @@ Body `{"tokens": [...]}`. Put the made files on the clipboard as files (Windows
 CF_HDROP), so pasting into a chat sends the APNG byte for byte. 501 on other
 platforms, 409 when another program holds the clipboard.
 
+#### POST /api/disguise/reveal
+Body `{"token": "..."}`. Show a made disguise in the OS file manager with the
+file selected (Explorer `/select,`, macOS `open -R`, Linux opens the folder).
+
 #### POST /api/disguise/restore
 Upload a disguise (`file`); returns its real picture as PNG, or an ordinary
 looping APNG for a pack. 400 when the upload is not a disguise.
+
+#### GET /api/disguise/default-cover/info
+`{"exists": false}` or `{"exists": true, "version": <mtime ns>}`; the page asks this
+instead of requesting a possibly missing image.
 
 #### GET /api/disguise/default-cover
 The saved default cover (PNG), or 404.

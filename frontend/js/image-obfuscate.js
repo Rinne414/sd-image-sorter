@@ -29,6 +29,8 @@
                 return;
             }
             this._eventsBound = true;
+            // The chat disguise mode lives in image-disguise.js and shares this queue.
+            window.ImageDisguise?.init?.(this);
             this._bindDropZone(dropZone, fileInput);
             this._bindPasteShortcut();
             document.getElementById('obfuscate-compat-mode')?.addEventListener('change', () => {
@@ -138,6 +140,8 @@
                 processing: this._t('tools.statusProcessing', 'Processing'),
                 done: this._t('tools.statusDone', 'Done'),
                 error: this._t('tools.statusError', 'Error'),
+                needs_cover: this._t('disguise.statusNeedsCoverShort', 'Needs a cover'),
+                packed: this._t('disguise.statusPacked', 'In the packed disguise'),
             };
             return labels[status] || status;
         },
@@ -219,6 +223,7 @@
             legacyRow?.classList.remove('is-disabled');
             metadataRow?.classList.remove('is-disabled');
             this._renderMetadataDownloadNote(isSmallTomato);
+            window.ImageDisguise?.syncUI?.();
         },
 
         _renderMetadataDownloadNote(isSmallTomato) {
@@ -355,9 +360,10 @@
                 const hasResult = Boolean(item.resultUrl);
                 const copyDisabled = hasResult ? '' : 'disabled';
                 const downloadDisabled = hasResult ? '' : 'disabled';
-                const statusParts = [this._statusLabel(item.status)];
-                if (item.mode) statusParts.push(this._actionLabel(item.mode));
-                if (item.compatMode) statusParts.push(this._compatModeLabel(item.compatMode));
+                const disguiseStatus = window.ImageDisguise?.statusText?.(item) || '';
+                const statusParts = disguiseStatus ? [disguiseStatus] : [this._statusLabel(item.status)];
+                if (!disguiseStatus && item.mode) statusParts.push(this._actionLabel(item.mode));
+                if (!disguiseStatus && item.compatMode) statusParts.push(this._compatModeLabel(item.compatMode));
                 const copyTitle = hasResult
                     ? this._t('tools.copyImage', 'Copy image')
                     : this._t('tools.processFirst', 'Process this image first');
@@ -366,7 +372,7 @@
                     : this._t('tools.processFirst', 'Process this image first');
 
                 const resultThumb = hasResult
-                    ? `<span class="obfuscate-thumb-arrow">→</span><img src="${item.resultUrl}" class="obfuscate-thumb result-thumb" alt="result" draggable="true">`
+                    ? `<span class="obfuscate-thumb-arrow">→</span><img src="${item.resultThumbUrl || item.resultUrl}" class="obfuscate-thumb result-thumb" alt="result" draggable="true">`
                     : '';
 
                 const displayName = this._escapeHtml(this._getBaseName(item));
@@ -415,8 +421,10 @@
             // Click thumbnails to open large preview
             container.querySelectorAll('.obfuscate-thumb').forEach((thumb) => {
                 thumb.addEventListener('click', (event) => {
-                    const src = event.currentTarget.src;
                     const index = Number.parseInt(event.currentTarget.closest('.obfuscate-item')?.dataset?.index, 10);
+                    // A disguise's thumbnail is its cover; the preview plays the file itself.
+                    const resultUrl = event.currentTarget.classList.contains('result-thumb') ? this._queue[index]?.resultUrl : '';
+                    const src = resultUrl || event.currentTarget.src;
                     if (src) this._openPreview(src, index);
                 });
             });
@@ -456,6 +464,7 @@
             const hasResults = this._queue.some((item) => item.resultUrl);
             const batchBar = document.getElementById('obfuscate-batch-bar');
             if (batchBar) batchBar.style.display = hasResults ? 'flex' : 'none';
+            window.ImageDisguise?.afterRender?.();
         },
 
         _removeItem(index) {
@@ -469,6 +478,8 @@
 
         async _copyItem(index) {
             const item = this._queue[index];
+            // A disguise must be copied as a file: a copied bitmap loses its hidden frames.
+            if (item?.disguise) return window.ImageDisguise.copyItem(item);
             if (!item?.resultBlob) return;
 
             if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
@@ -567,6 +578,7 @@
         },
 
         async _processAll(mode) {
+            if (window.ImageDisguise?.isActive?.()) return window.ImageDisguise.run(mode, this);
             if (!this._queue.length) {
                 window.App?.showToast?.(this._t('tools.noQueue', 'No images in queue'), 'error');
                 return;
@@ -689,6 +701,7 @@
                 if (item.resultUrl) URL.revokeObjectURL(item.resultUrl);
             });
             this._queue = [];
+            window.ImageDisguise?.reset?.();
             const progressEl = document.getElementById('obfuscate-progress');
             if (progressEl) progressEl.textContent = '';
             this._renderQueue();
@@ -753,7 +766,8 @@
 
                 const zipBlob = this._createZipBlob(files);
                 const url = URL.createObjectURL(zipBlob);
-                this._triggerDownload(url, `obfuscated_${Date.now()}.zip`);
+                const zipPrefix = window.ImageDisguise?.isActive?.() ? 'disguise' : 'obfuscated';
+                this._triggerDownload(url, `${zipPrefix}_${Date.now()}.zip`);
                 setTimeout(() => URL.revokeObjectURL(url), 2000);
                 window.App?.showToast?.(this._t('tools.downloadAllSuccess', `Downloaded ${files.length} images as ZIP`), 'success');
             } catch (error) {

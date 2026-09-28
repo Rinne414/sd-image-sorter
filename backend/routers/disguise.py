@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 import disguise_apng
+from app_diagnostics import _open_path_in_file_manager as open_in_file_manager
 import disguise_registry
 from routers.censor import get_censor_service
 from services import disguise_service
@@ -314,6 +315,19 @@ async def copy_results(request: CopyRequest):
     return {"status": "ok", "copied": len(paths)}
 
 
+class RevealRequest(BaseModel):
+    token: str
+
+
+@router.post("/reveal")
+async def reveal_result(request: RevealRequest):
+    """Show a made disguise in the OS file manager, selected, ready to drag into a chat."""
+    path = _result_path(request.token)
+    if not await run_in_threadpool(open_in_file_manager, Path(path)):
+        raise HTTPException(status_code=501, detail="No file manager is available on this computer.")
+    return {"status": "ok"}
+
+
 @router.post("/restore")
 async def restore_upload(file: UploadFile = File(...)):
     """Return the real picture(s) of an uploaded disguise: PNG, or APNG for a pack."""
@@ -338,6 +352,15 @@ async def restore_upload(file: UploadFile = File(...)):
             )
         },
     )
+
+
+@router.get("/default-cover/info")
+async def get_default_cover_info():
+    """Whether a default cover is saved (a 404 image request would log a browser error)."""
+    path = disguise_service.default_cover_path()
+    if not path.is_file():
+        return {"exists": False}
+    return {"exists": True, "version": int(path.stat().st_mtime_ns)}
 
 
 @router.get("/default-cover")

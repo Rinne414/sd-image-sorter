@@ -394,3 +394,27 @@ def test_an_output_name_cannot_leave_the_output_folder(test_client, tmp_path, da
     ).json()
 
     assert Path(body["output_path"]).parent == out
+
+
+def test_reveal_opens_the_file_manager_on_the_made_file(test_client, data_dir, monkeypatch) -> None:
+    from routers import disguise as disguise_router
+
+    opened = []
+    monkeypatch.setattr(disguise_router, "open_in_file_manager", lambda path: opened.append(path) or True)
+    made = _make(test_client, [{"file_index": 0}], files=[("a.png", _png(RED))], cover_kind="blur").json()
+
+    response = test_client.post("/api/disguise/reveal", json={"token": made["token"]})
+
+    assert response.json() == {"status": "ok"}
+    assert opened == [Path(made["output_path"])]
+    assert test_client.post("/api/disguise/reveal", json={"token": "nope"}).status_code == 404
+
+
+def test_the_page_can_ask_whether_a_default_cover_exists(test_client, data_dir) -> None:
+    assert test_client.get("/api/disguise/default-cover/info").json() == {"exists": False}
+
+    test_client.put("/api/disguise/default-cover", files={"file": ("c.png", _png(BLUE), "image/png")})
+    info = test_client.get("/api/disguise/default-cover/info").json()
+
+    assert info["exists"] is True
+    assert isinstance(info["version"], int)
