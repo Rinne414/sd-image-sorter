@@ -29,7 +29,7 @@ from PIL import Image, ImageColor, ImageDraw, ImageFilter, ImageFont
 
 import database as db
 import disguise_apng
-from censor_transforms import auto_block_size
+from censor_transforms import auto_block_size, censor_under_mask
 from disguise_registry import disguise_dir, remember_made
 from utils.source_paths import resolve_existing_indexed_image_path
 
@@ -122,14 +122,7 @@ def regions_mask(size: tuple[int, int], detections: Iterable[dict]) -> Image.Ima
 def mosaic_cover(picture: Image.Image, mask: Image.Image) -> Image.Image:
     if mask.getbbox() is None:
         raise CoverUnavailable("nothing_detected")
-    base = picture.convert("RGBA")
-    block = mosaic_block_size(base.size)
-    cells = (max(1, base.width // block), max(1, base.height // block))
-    pixelated = base.resize(cells, Image.Resampling.BILINEAR).resize(
-        base.size, Image.Resampling.NEAREST
-    )
-    region = mask if mask.size == base.size else mask.resize(base.size)
-    return Image.composite(pixelated, base, region)
+    return censor_under_mask(picture, mask, "mosaic")
 
 
 def blurred_cover(picture: Image.Image) -> Image.Image:

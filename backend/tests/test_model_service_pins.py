@@ -817,6 +817,7 @@ def test_get_status_wraps_inventory_and_health(monkeypatch):
         "rembg",
         "censor-legacy",
         "censor-anime",
+        "video-ffmpeg",
         "censor-nudenet",
         "sam3",
     ]

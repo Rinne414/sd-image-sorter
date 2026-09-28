@@ -68,6 +68,7 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
     lucida = health.get("lucida", {})
     rembg = health.get("rembg", {})
     censor_anime = health.get("censor_anime", {})
+    video_ffmpeg = health.get("video_ffmpeg", {})
     florence2 = health.get("florence2", {})
     cl_tagger_v2 = health.get("cl_tagger_v2", {})
     installed_wd14 = [item["name"] for item in health["wd14"]["installed_models"] if item["available"]]
@@ -642,6 +643,28 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
             "setup_steps": [
                 "Click Prepare / Download to get both MIT-licensed models (~89 MB).",
                 "The censor model appears in the Censor page's YOLO list; the face model powers Face guard.",
+            ],
+        },
+        {
+            "id": "video-ffmpeg",
+            "name": "ffmpeg (video censoring)",
+            "group": "Censor",
+            "group_key": "models.group.censor",
+            "available": bool(video_ffmpeg.get("available")),
+            **with_status(
+                is_ready=bool(video_ffmpeg.get("available")),
+                is_downloaded=bool(video_ffmpeg.get("available")),
+            ),
+            "message": video_ffmpeg.get("message") or "Not installed.",
+            "message_key": video_ffmpeg.get("message_key") or "models.videoFfmpeg.missing",
+            "path": "",
+            "download_supported": True,
+            "external_links": [
+                {"label": "imageio-ffmpeg", "url": "https://github.com/imageio/imageio-ffmpeg"},
+            ],
+            "setup_steps": [
+                "Click Prepare / Download to install imageio-ffmpeg (~31 MB), which brings its own ffmpeg.",
+                "Only needed to censor videos; GIFs work without it.",
             ],
         },
         {

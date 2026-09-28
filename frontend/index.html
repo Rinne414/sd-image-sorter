@@ -2789,6 +2789,9 @@
                             <div class="censor-side-row" id="censor-quick-auto-censor-row">
                                 <button class="btn btn-primary btn-small" id="btn-run-auto-censor" style="flex:1;" title="For everyday privacy censoring, use Wenaka / NudeNet." data-i18n-title="censor.quickAutoCensorHelp"><svg class="icon" aria-hidden="true"><use href="#i-zap"/></svg> <span data-i18n="censor.quickAutoCensor">Quick Auto Censor</span></button>
                             </div>
+                            <div class="censor-side-row" id="censor-media-row">
+                                <button class="btn btn-secondary btn-small" id="btn-media-censor-open" type="button" style="flex:1;"><svg class="icon" aria-hidden="true"><use href="#i-zap"/></svg> <span data-i18n="mediaCensor.open">GIFs &amp; videos…</span></button>
+                            </div>
                             <div class="censor-side-row sam3-prompt-row" id="sam3-prompt-row" style="display:none">
                                 <input type="text" id="sam3-custom-prompt" class="input-field" placeholder="e.g. exposed breast, face, hands" data-i18n-placeholder="placeholder.eGExposedBreastFaceHands" style="flex:1;font-size:12px;padding:6px 8px;">
                                 <button class="btn btn-ghost btn-small" id="btn-sam3-common-words" title="Common prompts" data-i18n-title="tip.commonPrompts" style="white-space:nowrap;"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg></button>
@@ -6045,6 +6048,51 @@
             </div>
         </div>
 
+        <div class="modal" id="media-censor-modal" role="dialog" aria-modal="true" aria-labelledby="media-censor-title">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content media-censor-content">
+                <button class="modal-close" id="media-censor-close" type="button" aria-label="Close" data-i18n-aria="common.close"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+                <h3 id="media-censor-title" data-i18n="mediaCensor.title">Censor GIFs and videos</h3>
+                <p class="media-censor-note" data-i18n="mediaCensor.intro">Every frame is detected and censored with the Censor page's current detector settings. The files in the folder are not changed.</p>
+                <label class="media-censor-label" for="media-censor-folder" data-i18n="mediaCensor.sourceFolder">Folder with GIFs or videos</label>
+                <div class="folder-input-group">
+                    <input type="text" id="media-censor-folder" class="input-field" data-folder-browser-container="media-censor-source-browser">
+                    <button class="btn btn-secondary" id="media-censor-browse-source" type="button" data-i18n="scan.browse">Browse</button>
+                </div>
+                <div id="media-censor-source-browser" aria-live="polite"></div>
+                <p class="media-censor-note" id="media-censor-found" aria-live="polite"></p>
+                <label class="media-censor-label" for="media-censor-output" data-i18n="mediaCensor.outputFolder">Save to folder</label>
+                <div class="folder-input-group">
+                    <input type="text" id="media-censor-output" class="input-field" data-folder-browser-container="media-censor-output-browser" data-i18n-placeholder="mediaCensor.outputPlaceholder" placeholder="Empty = a censored folder inside the source folder">
+                    <button class="btn btn-secondary" id="media-censor-browse-output" type="button" data-i18n="scan.browse">Browse</button>
+                </div>
+                <div id="media-censor-output-browser" aria-live="polite"></div>
+                <div class="media-censor-options">
+                    <label class="media-censor-inline"><span data-i18n="mediaCensor.style">Style</span>
+                        <select id="media-censor-style" class="input-field">
+                            <option value="mosaic" data-i18n="censor.mosaic">Mosaic</option>
+                            <option value="blur" data-i18n="mediaCensor.styleBlur">Blur</option>
+                            <option value="black" data-i18n="mediaCensor.styleBlack">Black bar</option>
+                        </select>
+                    </label>
+                    <label class="media-censor-inline"><span data-i18n="mediaCensor.detectEvery">Detect every N frames</span>
+                        <input type="number" id="media-censor-every" class="input-field media-censor-number" min="1" max="60" value="2">
+                    </label>
+                    <label class="media-censor-inline"><span data-i18n="mediaCensor.hold">Keep after it vanishes (frames)</span>
+                        <input type="number" id="media-censor-hold" class="input-field media-censor-number" min="0" max="600" value="8">
+                    </label>
+                    <label class="obfuscate-checkbox-row">
+                        <input type="checkbox" id="media-censor-videos" checked>
+                        <span data-i18n="mediaCensor.includeVideos">Include videos (MP4 output, sound kept)</span>
+                    </label>
+                </div>
+                <div class="media-censor-actions">
+                    <button class="btn btn-primary" id="media-censor-start" type="button" data-i18n="mediaCensor.start">Start</button>
+                    <button class="btn btn-secondary" id="media-censor-stop" type="button" data-i18n="mediaCensor.stop" hidden>Stop</button>
+                </div>
+                <div class="media-censor-progress" id="media-censor-progress" aria-live="polite"></div>
+            </div>
+        </div>
         <div class="modal" id="scan-modal" role="dialog" aria-modal="true" aria-labelledby="scan-modal-title">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-medium">
@@ -8329,6 +8377,7 @@
     <script src="/static/js/obfuscate-engine.js"></script>
     <script src="/static/js/image-disguise.js"></script>
     <script src="/static/js/image-obfuscate.js"></script>
+    <script src="/static/js/media-censor.js"></script>
     <script src="/static/js/virtual-gallery.js"></script>
     <script src="/static/js/library-health.js"></script>
     <script src="/static/js/unreadable-banner.js"></script>

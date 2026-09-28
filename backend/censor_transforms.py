@@ -30,6 +30,28 @@ def resolve_block_size(requested: Optional[int], size: Tuple[int, int]) -> int:
     """``None`` or 0 means Auto; any other value is the chosen cell in pixels."""
     return int(requested) if requested else auto_block_size(size)
 
+
+MASK_STYLES = ("mosaic", "blur", "black")
+
+
+def censor_under_mask(image: Image.Image, mask: Image.Image, style: str = "mosaic", block_size: Optional[int] = None) -> Image.Image:
+    """Censor ``image`` where ``mask`` is set; everything else is left untouched.
+
+    mosaic: cells of ``block_size`` (0 / None = Auto) aligned to the whole
+    picture; blur: a Gaussian blur as strong as two cells; black: a solid bar.
+    """
+    base = image.convert("RGBA")
+    region = mask if mask.size == base.size else mask.resize(base.size)
+    block = resolve_block_size(block_size, base.size)
+    if style == "black":
+        effect = Image.new("RGBA", base.size, (0, 0, 0, 255))
+    elif style == "blur":
+        effect = base.filter(ImageFilter.GaussianBlur(radius=block * 2))
+    else:
+        cells = (max(1, base.width // block), max(1, base.height // block))
+        effect = base.resize(cells, Image.Resampling.BILINEAR).resize(base.size, Image.Resampling.NEAREST)
+    return Image.composite(effect, base, region.convert("L"))
+
 from config import (
     CENSOR_DEFAULT_BLOCK_SIZE,
     CENSOR_DEFAULT_BLUR_RADIUS,

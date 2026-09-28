@@ -99,6 +99,20 @@ from model_health_paths import (
 )
 
 
+
+def _video_ffmpeg_health() -> Dict[str, Any]:
+    """The optional ffmpeg component that video censoring runs on."""
+    from services import video_censor
+
+    ready = video_censor.is_available()
+    return {
+        "available": ready,
+        "message_key": "models.videoFfmpeg.ready" if ready else "models.videoFfmpeg.missing",
+        "message": "ffmpeg for video censoring is ready."
+        if ready
+        else "Not installed. Click Prepare / Download (~31 MB) or start a video job to be asked.",
+    }
+
 def _clip_model_loaded() -> bool:
     """Check whether the FastEmbed CLIP model singleton is already loaded in memory."""
     try:
@@ -642,6 +656,7 @@ def get_model_health() -> Dict[str, Any]:
         },
         "rembg": rembg_model.health(),
         "censor_anime": anime_censor_models.health(),
+        "video_ffmpeg": _video_ffmpeg_health(),
         "cl_tagger_v2": {
             "available": bool(cl_tagger_v2_checkpoint) and not cl_tagger_v2_missing,
             "model_name": "cl-tagger-v2",

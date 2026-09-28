@@ -2644,3 +2644,94 @@ button.censor-batch-outcome-badge:focus-visible {
 .censor-block-auto input {
     margin: 0;
 }
+
+/* GIF / video auto-censor dialog (media-censor.js) */
+.media-censor-content {
+    width: min(760px, 94vw);
+    max-height: 90vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 20px 22px;
+}
+
+.media-censor-label {
+    font-size: var(--fs-body);
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+.media-censor-note {
+    margin: 0;
+    font-size: var(--fs-body);
+    color: var(--text-muted);
+    line-height: 1.45;
+}
+
+.media-censor-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    align-items: center;
+    margin-top: 6px;
+}
+
+.media-censor-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--fs-body);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.media-censor-number {
+    width: 80px;
+}
+
+.media-censor-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.media-censor-actions [hidden] {
+    display: none;
+}
+
+.media-censor-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.media-censor-row {
+    display: grid;
+    /* Same columns on every row, so the progress bars line up. */
+    grid-template-columns: minmax(0, 1.2fr) 160px minmax(0, 1fr) 150px;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.media-censor-row.is-error {
+    background: rgba(var(--danger-rgb), 0.08);
+}
+
+.media-censor-row.is-done {
+    background: rgba(var(--success-rgb), 0.06);
+}
+
+.media-censor-name,
+.media-censor-status {
+    overflow-wrap: anywhere;
+    font-size: var(--fs-body);
+}
+
+.media-censor-row progress {
+    width: 100%;
+}
+

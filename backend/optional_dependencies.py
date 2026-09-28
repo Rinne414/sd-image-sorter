@@ -117,6 +117,9 @@ OPTIONAL_DEPENDENCY_GROUPS: dict[str, tuple[str, ...]] = {
     # feature. 2.0.69 resolves against the pinned numpy and brings no
     # onnxruntime of its own (verified with pip --dry-run, 2026-09-24).
     "rembg": ("rembg==2.0.69",),
+    # Video censoring: imageio-ffmpeg (BSD-2) ships its own ffmpeg binary, so
+    # nothing has to be installed system-wide. Pure wheel, no dependencies.
+    "video": ("imageio-ffmpeg==0.6.0",),
     "translation": ("translators==6.0.4",),
     # tipo-kgen imports torch/transformers at module load even for GGUF.
     # llama-cpp-python is installed separately from the official CPU wheel
@@ -217,6 +220,7 @@ GROUP_IMPORTS: dict[str, tuple[str, ...]] = {
     ),
     "cl-tagger-v2": ("huggingface_hub",),
     "rembg": ("rembg",),
+    "video": ("imageio_ffmpeg",),
     "translation": ("translators",),
     "tipo": ("torch", "transformers", "huggingface_hub", "kgen"),
 }

@@ -1182,6 +1182,33 @@ Structured errors can include:
 
 ### Censor
 
+#### POST /api/censor/media/list
+Body `{"folder": "..."}`. GIFs and videos directly in the folder:
+`{gifs: [paths], videos: [paths], video_ready}`; `video_ready` says whether the
+optional ffmpeg component (Model Center card `video-ffmpeg`) is installed.
+
+#### POST /api/censor/media/start
+Auto-censor every GIF (and, with `include_videos` and ffmpeg ready, every
+video) in `folder` into `output_folder` (default `<folder>/censored`; outputs
+are `<name>_censored.gif` / `.mp4`, never replacing a file). Detector settings
+mirror `/api/censor/detect` (`model_type` nudenet / legacy / both,
+`model_path`, `confidence`, `target_classes`, `face_guard`, `shape`,
+`expand_percent`) plus `style` (mosaic / blur / black), `block_size` (0 =
+Auto), `detect_every` (run the detector on every Nth frame) and `hold` (keep
+the last regions that many frames after they vanish). Returns the job snapshot
+with `job_id`. Jobs run one at a time in the background.
+
+#### GET /api/censor/media/jobs/{job_id}
+Job snapshot: `{status, files: [{name, status, frames_done, frames_total,
+censored_frames, output, error}], done, total}`; status is queued, running,
+done, done_with_errors or cancelled.
+
+#### POST /api/censor/media/jobs/{job_id}/reveal/{index}
+Show that file's output in the OS file manager.
+
+#### POST /api/censor/media/jobs/{job_id}/cancel
+Stop after the current frame; unfinished files are marked skipped.
+
 #### POST /api/censor/detect
 Run censor detection.
 
