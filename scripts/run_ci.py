@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import subprocess
 import sys
 import os
@@ -13,7 +14,7 @@ import socket
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Sequence
 
 if __package__:
     from . import workspace_lock
@@ -46,6 +47,9 @@ CI_LOCK_BYTE_OFFSET = workspace_lock.LOCK_BYTE_OFFSET
 CI_SHARD_COUNT_PATTERN = re.compile(r"^[0-9]+$")
 CI_MIN_SHARD_COUNT = 2
 CI_MAX_SHARD_COUNT = 8
+# Backend test processes: half the logical CPUs, at most 8. More adds heat and
+# power draw on a desktop for little gain; --backend-workers 1 runs one process.
+DEFAULT_BACKEND_WORKERS = max(1, min(8, (os.cpu_count() or 2) // 2))
 
 
 CiLockError = workspace_lock.WorkspaceLockError
@@ -227,10 +231,33 @@ def _apply_stable_temp_env(env: dict[str, str]) -> None:
     env["TMP"] = stable_tmp
 
 
+def _backend_suite_command(workers: int, with_coverage: bool) -> list[str]:
+    """The backend pytest run: whole test files spread over `workers` processes.
+
+    Line coverage is measured only when asked (nothing gates on it, and it slows
+    every test); the release gate asks for it with --backend-coverage.
+    """
+    command = [str(BACKEND_PYTHON), "-m", "pytest", "backend/tests", "-q"]
+    if workers > 1:
+        command += ["-n", str(workers), "--dist", "loadfile"]
+    if with_coverage:
+        command += [
+            "-p",
+            "pytest_cov",
+            "--cov=backend",
+            "--cov-report=term-missing",
+            "--cov-report=xml:backend/coverage.xml",
+        ]
+    return command
+
+
 def _run_ci(
     coverage_run_id: str,
     lock_capability: str,
     lock_holder_pid: int,
+    *,
+    backend_workers: int = DEFAULT_BACKEND_WORKERS,
+    backend_coverage: bool = False,
 ) -> int:
     checks: list[tuple[str, list[str], Path]] = [
         (
@@ -281,18 +308,7 @@ def _run_ci(
         ),
         (
             "backend full suite",
-            [
-                str(BACKEND_PYTHON),
-                "-m",
-                "pytest",
-                "-p",
-                "pytest_cov",
-                "backend/tests",
-                "-q",
-                "--cov=backend",
-                "--cov-report=term-missing",
-                "--cov-report=xml:backend/coverage.xml",
-            ],
+            _backend_suite_command(backend_workers, backend_coverage),
             ROOT,
         ),
         (
@@ -395,7 +411,31 @@ def _run_ci(
     return 0 if all_ok else 1
 
 
-def main() -> int:
+def _worker_count(value: str) -> int:
+    count = int(value)
+    if count < 1:
+        raise argparse.ArgumentTypeError("needs at least 1 worker")
+    return count
+
+
+def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--backend-coverage",
+        action="store_true",
+        help="also measure backend line coverage (slower; for the release gate)",
+    )
+    parser.add_argument(
+        "--backend-workers",
+        type=_worker_count,
+        default=DEFAULT_BACKEND_WORKERS,
+        help=f"backend test processes (default {DEFAULT_BACKEND_WORKERS}; 1 = one process)",
+    )
+    return parser.parse_args(list(argv))
+
+
+def main(argv: Sequence[str] = ()) -> int:
+    args = _parse_args(argv)
     coverage_run_id = _create_coverage_run_id()
     lock_capability = _create_lock_capability()
     lock_holder_pid = os.getpid()
@@ -407,11 +447,17 @@ def main() -> int:
             os.environ.copy(),
         )
         with _exclusive_ci_lock(CI_LOCK_PATH, coverage_run_id, lock_capability):
-            return _run_ci(coverage_run_id, lock_capability, lock_holder_pid)
+            return _run_ci(
+                coverage_run_id,
+                lock_capability,
+                lock_holder_pid,
+                backend_workers=args.backend_workers,
+                backend_coverage=args.backend_coverage,
+            )
     except (CiLockError, ValueError) as error:
         print(f"[CI] FAILED: {error}")
         return 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

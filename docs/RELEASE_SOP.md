@@ -123,8 +123,10 @@ Vopus users to the releases page and names the `vopus-v` tags.
 # 1. Ensure version in backend/app_info.py matches target
 # 2. Ensure CHANGELOG.md has the version entry and docs/RELEASE_NOTES_vopus-vX.Y.Z.md
 #    exists (copy it to the root release-notes.md)
-# 3. Run full CI
-python scripts/run_ci.py
+# 3. Run full CI, with backend line coverage for the release record
+#    (day-to-day runs skip coverage; the backend suite runs in parallel,
+#    --backend-workers 1 runs it in one process)
+python scripts/run_ci.py --backend-coverage
 # 4. Build packages
 python scripts/build_release_packages.py --version X.Y.Z
 # 5. Release QA gate (asset completeness + SHA256-vs-manifest verification)
