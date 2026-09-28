@@ -261,6 +261,32 @@ Object.assign(window.V321Integration, {
     },
 
 
+    /** "This run scores N images" text. toScore counts every picture the run
+     *  touches: unscored ones, outdated ones (scored before the QuickGELU
+     *  fix) and, once the Waifu head is installed, already scored ones that
+     *  only lack a Waifu score (extra). */
+    _aestheticScopeText(toScore, outdated, extra, i18n) {
+        const needsScore = Math.max(0, toScore - extra);
+        const extraText = i18n('tagger.aestheticScopeExtra',
+            'It also adds the Waifu score to {extra} images that already have an aesthetic score.')
+            .replace('{extra}', extra.toLocaleString());
+        if (needsScore === 0 && extra > 0) {
+            return i18n('tagger.aestheticScopeOnlyExtra',
+                'Every image already has an aesthetic score. This run adds the Waifu score to {extra} of them.')
+                .replace('{extra}', extra.toLocaleString());
+        }
+        const scoreText = outdated > 0
+            ? i18n('tagger.aestheticScopeCountOutdated',
+                'This run scores {count} images: {unscored} without a score and {outdated} whose score came from an older build that set up CLIP wrongly (off by up to about 1 point).')
+                .replace('{count}', needsScore.toLocaleString())
+                .replace('{unscored}', Math.max(0, needsScore - outdated).toLocaleString())
+                .replace('{outdated}', outdated.toLocaleString())
+            : i18n('tagger.aestheticScopeCount',
+                'This run scores the {count} images in this library that have no aesthetic score yet.')
+                .replace('{count}', needsScore.toLocaleString());
+        return extra > 0 ? `${scoreText} ${extraText}` : scoreText;
+    },
+
     /** Read aesthetic readiness and active-task state from the shared publisher. */
     async _refreshAestheticTab() {
         const titleEl = document.getElementById('tagger-aesthetic-status-title');
@@ -280,6 +306,7 @@ Object.assign(window.V321Integration, {
         let message = '';
         let toScore = null;
         let outdated = 0;
+        let extra = 0;
         try {
             const taskState = await refreshAestheticTaskState();
             isReady = Boolean(taskState?.status?.available);
@@ -287,6 +314,7 @@ Object.assign(window.V321Integration, {
             const reported = taskState?.status?.to_score_count;
             toScore = reported === null || reported === undefined ? null : Number(reported);
             outdated = Number(taskState?.status?.outdated_count || 0);
+            extra = Number(taskState?.status?.missing_extra_count || 0);
         } catch (_e) {
             isReady = false;
         }
@@ -295,17 +323,8 @@ Object.assign(window.V321Integration, {
         const scopeEl = document.getElementById('tagger-aesthetic-scope');
         if (scopeEl) {
             scopeEl.hidden = !Number.isFinite(toScore);
-            if (Number.isFinite(toScore) && outdated > 0) {
-                // Scores from before the QuickGELU fix are redone with the unscored ones.
-                scopeEl.textContent = i18n('tagger.aestheticScopeCountOutdated',
-                    'This run scores {count} images: {unscored} without a score and {outdated} whose score came from an older build that set up CLIP wrongly (off by up to about 1 point).')
-                    .replace('{count}', toScore.toLocaleString())
-                    .replace('{unscored}', Math.max(0, toScore - outdated).toLocaleString())
-                    .replace('{outdated}', outdated.toLocaleString());
-            } else if (Number.isFinite(toScore)) {
-                scopeEl.textContent = i18n('tagger.aestheticScopeCount',
-                    'This run scores the {count} images in this library that have no aesthetic score yet.')
-                    .replace('{count}', toScore.toLocaleString());
+            if (Number.isFinite(toScore)) {
+                scopeEl.textContent = this._aestheticScopeText(toScore, outdated, extra, i18n);
             }
         }
 

@@ -328,12 +328,12 @@ def test_clear_gallery_rejects_single_aesthetic_score_during_inference(
     score_responses: list[Response] = []
     thread_errors: list[Exception] = []
 
-    def paused_predict_score(path: str, **_kwargs) -> float:
+    def paused_predict_scores(path: str, **_kwargs) -> aesthetic.AestheticScores:
         assert path == str(image_path)
         inference_entered.set()
         if not release_inference.wait(timeout=5):
             raise TimeoutError("test did not release paused Aesthetic inference")
-        return 7.5
+        return aesthetic.AestheticScores(laion=7.5)
 
     def run_score() -> None:
         try:
@@ -348,7 +348,7 @@ def test_clear_gallery_rejects_single_aesthetic_score_during_inference(
     # imports torch + open_clip inside the request (about 4 s), longer than
     # the wait below.
     monkeypatch.setattr(aesthetic, "is_available", lambda: True)
-    monkeypatch.setattr(aesthetic, "predict_score", paused_predict_score)
+    monkeypatch.setattr(aesthetic, "predict_scores", paused_predict_scores)
     score_thread = threading.Thread(target=run_score, name="test-aesthetic-score")
     score_thread.start()
 
@@ -378,12 +378,12 @@ def test_single_aesthetic_not_found_releases_activity_before_clear(
     image_id = _add_indexed_image(test_client)
     predict_calls: list[str] = []
 
-    def record_unexpected_prediction(path: str) -> float:
+    def record_unexpected_prediction(path: str) -> aesthetic.AestheticScores:
         predict_calls.append(path)
-        return 7.5
+        return aesthetic.AestheticScores(laion=7.5)
 
     monkeypatch.setattr(aesthetic, "is_available", lambda: True)
-    monkeypatch.setattr(aesthetic, "predict_score", record_unexpected_prediction)
+    monkeypatch.setattr(aesthetic, "predict_scores", record_unexpected_prediction)
 
     score_response = test_client.post(
         f"/api/aesthetic/score/{image_id + 1_000_000}",

@@ -62,12 +62,45 @@ def _tipo_default_variant() -> str:
     return DEFAULT_MODEL_KEY
 
 
+def _waifu_card(waifu: Dict[str, Any], *, aesthetic_available: bool) -> Dict[str, Any]:
+    """Waifu Scorer V3 rides on the Aesthetic Predictor's CLIP pass, so it needs both."""
+    installed = bool(waifu.get("available"))
+    ready = installed and aesthetic_available
+    if installed and not aesthetic_available:
+        message_key = "models.aestheticWaifu.needsBase"
+        message = "Downloaded. It also needs the Aesthetic Predictor: click Prepare / Download."
+    else:
+        message_key = waifu.get("message_key") or "models.aestheticWaifu.missing"
+        message = waifu.get("message") or "Not downloaded yet."
+    return {
+        "id": "aesthetic-waifu",
+        "name": "Waifu Scorer V3 (anime aesthetic)",
+        "group": "Scoring",
+        "group_key": "models.group.scoring",
+        "available": ready,
+        "status": "ready" if ready else "missing",
+        "status_label": "Ready" if ready else "Missing",
+        "message": message,
+        "message_key": message_key,
+        "path": waifu.get("head_path") or waifu.get("expected_path", ""),
+        "download_supported": True,
+        "external_links": [
+            {"label": "Model", "url": "https://huggingface.co/Eugeoter/waifu-scorer-v3"},
+        ],
+        "setup_steps": [
+            "Click Prepare / Download: it sets up the Aesthetic Predictor if needed, then adds the 11 MB Waifu head.",
+            "Run aesthetic scoring: pictures get a second, anime-focused score (0-10) from the same CLIP pass.",
+        ],
+    }
+
+
 def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
     censor = health["censor"]
     artist = health["artist"]
     lucida = health.get("lucida", {})
     rembg = health.get("rembg", {})
     censor_anime = health.get("censor_anime", {})
+    aesthetic_waifu = health.get("aesthetic_waifu", {})
     video_ffmpeg = health.get("video_ffmpeg", {})
     florence2 = health.get("florence2", {})
     cl_tagger_v2 = health.get("cl_tagger_v2", {})
@@ -505,6 +538,7 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
             "note": "Uses CLIP ViT-L/14 + the LAION linear head. Prepare / Download validates both before reporting ready.",
             "backbone_path": aesthetic_backbone_path,
         },
+        _waifu_card(aesthetic_waifu, aesthetic_available=aesthetic_available),
         {
             "id": "artist",
             "name": "Artist ID / Kaloscope",

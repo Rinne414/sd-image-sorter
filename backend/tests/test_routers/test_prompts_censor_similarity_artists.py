@@ -20,6 +20,8 @@ from PIL import Image, ImageDraw
 # Add parent directories to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from aesthetic import AestheticScores  # noqa: E402
+
 
 class TestPromptsRouter:
     def test_list_categories_returns_builtin_fallback_when_library_is_empty(self, test_client):
@@ -3280,10 +3282,10 @@ class TestDerivedWriterPathResolution:
 
         def fake_predict(path: str):
             captured["path"] = path
-            return 7.25
+            return AestheticScores(laion=7.25)
 
         service = aesthetic_service_module.AestheticService()
-        result = service.score_single_image(image_id=image_id, predict_score=fake_predict)
+        result = service.score_single_image(image_id=image_id, predict_scores=fake_predict)
 
         assert result["image_id"] == image_id
         assert result["aesthetic_score"] == 7.25
@@ -3309,10 +3311,10 @@ class TestDerivedWriterPathResolution:
             content_fingerprint=original_fingerprint,
         )
 
-        def replace_source(_image_path: str) -> float:
+        def replace_source(_image_path: str) -> AestheticScores:
             with Image.new("RGB", (64, 64), color="black") as replacement:
                 replacement.save(image_path)
-            return 9.75
+            return AestheticScores(laion=9.75)
 
         service = AestheticService()
         with pytest.raises(
@@ -3321,7 +3323,7 @@ class TestDerivedWriterPathResolution:
         ):
             service.score_single_image(
                 image_id=image_id,
-                predict_score=replace_source,
+                predict_scores=replace_source,
             )
 
         with test_db.get_db() as conn:
@@ -3351,10 +3353,10 @@ class TestDerivedWriterPathResolution:
         )
         inference_called = False
 
-        def unexpected_inference(_image_path: str) -> float:
+        def unexpected_inference(_image_path: str) -> AestheticScores:
             nonlocal inference_called
             inference_called = True
-            return 9.75
+            return AestheticScores(laion=9.75)
 
         service = AestheticService()
         with pytest.raises(
@@ -3363,7 +3365,7 @@ class TestDerivedWriterPathResolution:
         ):
             service.score_single_image(
                 image_id=image_id,
-                predict_score=unexpected_inference,
+                predict_scores=unexpected_inference,
             )
 
         assert inference_called is False
@@ -3388,7 +3390,7 @@ class TestDerivedWriterPathResolution:
             content_fingerprint=original_fingerprint,
         )
 
-        def replace_database_state(_image_path: str) -> float:
+        def replace_database_state(_image_path: str) -> AestheticScores:
             with test_db.get_db() as conn:
                 conn.execute(
                     """
@@ -3398,7 +3400,7 @@ class TestDerivedWriterPathResolution:
                     """,
                     ("newer-fingerprint", 9.5, image_id),
                 )
-            return 2.0
+            return AestheticScores(laion=2.0)
 
         service = AestheticService()
         with pytest.raises(
@@ -3407,7 +3409,7 @@ class TestDerivedWriterPathResolution:
         ):
             service.score_single_image(
                 image_id=image_id,
-                predict_score=replace_database_state,
+                predict_scores=replace_database_state,
             )
 
         with test_db.get_db() as conn:
@@ -3439,17 +3441,17 @@ class TestDerivedWriterPathResolution:
             content_fingerprint=original_fingerprint,
         )
 
-        def replace_source(_image_path: str) -> float:
+        def replace_source(_image_path: str) -> AestheticScores:
             with Image.new("RGB", (64, 64), color="black") as replacement:
                 replacement.save(image_path)
-            return 9.75
+            return AestheticScores(laion=9.75)
 
         progress_updates = []
         service = AestheticService()
         monkeypatch.setattr(service, "_gpu_cleanup", lambda: None)
         service.score_batch(
             force=False,
-            predict_score=replace_source,
+            predict_scores=replace_source,
             progress_callback=progress_updates.append,
         )
 
@@ -3485,7 +3487,7 @@ class TestDerivedWriterPathResolution:
             content_fingerprint=original_fingerprint,
         )
 
-        def replace_database_state(_image_path: str) -> float:
+        def replace_database_state(_image_path: str) -> AestheticScores:
             with test_db.get_db() as conn:
                 conn.execute(
                     """
@@ -3495,14 +3497,14 @@ class TestDerivedWriterPathResolution:
                     """,
                     ("newer-fingerprint", 9.5, image_id),
                 )
-            return 2.0
+            return AestheticScores(laion=2.0)
 
         progress_updates = []
         service = AestheticService()
         monkeypatch.setattr(service, "_gpu_cleanup", lambda: None)
         service.score_batch(
             force=False,
-            predict_score=replace_database_state,
+            predict_scores=replace_database_state,
             progress_callback=progress_updates.append,
         )
 

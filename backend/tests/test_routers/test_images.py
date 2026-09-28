@@ -1351,8 +1351,13 @@ class TestAestheticEndpoints:
         first_id = db.add_image(path="/tmp/aesthetic-1.png", filename="aesthetic-1.png", metadata_json="{}")
         second_id = db.add_image(path="/tmp/aesthetic-2.png", filename="aesthetic-2.png", metadata_json="{}")
 
+        from aesthetic import AESTHETIC_SCORE_VERSION
+
         with db.get_db() as conn:
-            conn.execute("UPDATE images SET aesthetic_score = ? WHERE id = ?", (6.5, first_id))
+            conn.execute(
+                "UPDATE images SET aesthetic_score = ?, aesthetic_version = ? WHERE id = ?",
+                (6.5, AESTHETIC_SCORE_VERSION, first_id),
+            )
 
         with patch('aesthetic.is_available', return_value=True):
             response = test_client.post("/api/aesthetic/score-all")

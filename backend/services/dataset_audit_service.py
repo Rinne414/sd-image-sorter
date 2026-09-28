@@ -133,7 +133,8 @@ def _safe_aesthetic_score(image_path: str) -> Optional[float]:
     failure so the audit doesn't take down the whole pipeline."""
     try:
         import aesthetic  # local import so missing torch doesn't break audit
-        return aesthetic.predict_score(image_path)
+        scores = aesthetic.predict_scores(image_path)
+        return scores.laion if scores is not None else None
     except Exception as exc:  # noqa: BLE001
         logger.debug("audit: aesthetic skipped for %s: %s", image_path, exc)
         return None

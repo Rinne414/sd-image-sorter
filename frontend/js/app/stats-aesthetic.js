@@ -244,6 +244,8 @@ async function readAestheticStatus() {
             scored_count: Number(status?.scored_count || 0),
             // Scores from before the QuickGELU fix; Score Aesthetic redoes them.
             outdated_count: Number(status?.outdated_count || 0),
+            // Already scored, but a newly installed Waifu head has not scored them yet.
+            missing_extra_count: Number(status?.missing_extra_count || 0),
             // Unscored library images: what Score Aesthetic will process.
             to_score_count: Number.isFinite(toScore) ? toScore : null,
         };
@@ -253,6 +255,7 @@ async function readAestheticStatus() {
             message: formatUserError(error, appT('gallery.aestheticStatusFailed', 'Could not check aesthetic scoring status')),
             scored_count: 0,
             outdated_count: 0,
+            missing_extra_count: 0,
             to_score_count: null,
         };
     }

@@ -94,6 +94,11 @@ def _clear_image_pixel_caches(cursor: sqlite3.Cursor, image_id: int) -> None:
             ai_caption = NULL,
             nl_caption = NULL,
             aesthetic_score = NULL,
+            aesthetic_version = NULL,
+            aesthetic_waifu = NULL,
+            aesthetic_anime = NULL,
+            aesthetic_anime_pct = NULL,
+            aesthetic_anime_grade = NULL,
             ai_rating = NULL,
             ai_rating_confidence = NULL
         WHERE id = ?
@@ -454,7 +459,9 @@ def _copy_image_derived_state(cursor: sqlite3.Cursor, source_image_id: int, targ
 
     source_row = cursor.execute(
         """
-        SELECT tagged_at, ai_caption, nl_caption, aesthetic_score, embedding, content_fingerprint
+        SELECT tagged_at, ai_caption, nl_caption, aesthetic_score, aesthetic_version,
+               aesthetic_waifu, aesthetic_anime, aesthetic_anime_pct, aesthetic_anime_grade,
+               embedding, content_fingerprint
         FROM images
         WHERE id = ?
         """,
@@ -468,6 +475,11 @@ def _copy_image_derived_state(cursor: sqlite3.Cursor, source_image_id: int, targ
                 ai_caption = ?,
                 nl_caption = ?,
                 aesthetic_score = ?,
+                aesthetic_version = ?,
+                aesthetic_waifu = ?,
+                aesthetic_anime = ?,
+                aesthetic_anime_pct = ?,
+                aesthetic_anime_grade = ?,
                 embedding = ?,
                 content_fingerprint = COALESCE(?, content_fingerprint)
             WHERE id = ?
@@ -477,6 +489,11 @@ def _copy_image_derived_state(cursor: sqlite3.Cursor, source_image_id: int, targ
                 source_row["ai_caption"],
                 source_row["nl_caption"],
                 source_row["aesthetic_score"],
+                source_row["aesthetic_version"],
+                source_row["aesthetic_waifu"],
+                source_row["aesthetic_anime"],
+                source_row["aesthetic_anime_pct"],
+                source_row["aesthetic_anime_grade"],
                 source_row["embedding"],
                 source_row["content_fingerprint"],
                 target_image_id,

@@ -79,7 +79,7 @@ def resolve_canonical_rating(
 
 
 # Aesthetic-score buckets → danbooru-style quality ladder (the vocabulary the
-# Anima card trains with). ``predict_score`` returns ~1-10; thresholds are a
+# Anima card trains with). The LAION score is ~1-10; thresholds are a
 # judgment call documented here rather than hidden: most anime renders land
 # in the 4-7 band, so 7+ is genuinely rare-good and <3 is genuinely broken.
 _QUALITY_BUCKETS: List[tuple] = [

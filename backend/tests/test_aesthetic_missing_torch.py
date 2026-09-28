@@ -21,9 +21,9 @@ def test_score_single_returns_503_when_torch_missing(test_client, test_db, tmp_p
     monkeypatch.setattr(aesthetic, "is_available", lambda: False)
 
     def should_not_run(_path: str, **_kwargs):
-        raise AssertionError("predict_score must not run when torch is unavailable")
+        raise AssertionError("predict_scores must not run when torch is unavailable")
 
-    monkeypatch.setattr(aesthetic, "predict_score", should_not_run)
+    monkeypatch.setattr(aesthetic, "predict_scores", should_not_run)
 
     response = test_client.post(f"/api/aesthetic/score/{image_id}")
 

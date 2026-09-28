@@ -109,8 +109,9 @@ def test_aesthetic_gpu_oom_unloads_and_retries_on_cpu(monkeypatch, tmp_path: Pat
     monkeypatch.setattr(aesthetic, "_is_cuda_oom", lambda exc: "out of memory" in str(exc).lower())
     monkeypatch.setattr(aesthetic, "_load_predictor", lambda device=None: _install_fake_aesthetic(aesthetic, device, calls, _FakeClipModel, _FakePredictor, _FakeTensor))
     monkeypatch.setattr(aesthetic, "_unload_models", lambda: _fake_unload_aesthetic(aesthetic, calls))
+    monkeypatch.setattr(aesthetic, "is_waifu_installed", lambda: False)
 
-    assert aesthetic.predict_score(str(image_path)) == 7.25
+    assert aesthetic.predict_scores(str(image_path)).laion == 7.25
     assert calls.count("load:cuda") == 1
     assert calls.count("unload") == 1
     assert calls.count("load:cpu") == 1

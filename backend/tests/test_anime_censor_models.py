@@ -34,10 +34,10 @@ def _isolated(tmp_path: Path, monkeypatch) -> None:
             models.FACE_FILE, sha256=hashlib.sha256(FACE_BYTES).hexdigest()
         ),
     )
+    import pinned_download
+
     monkeypatch.setattr(
-        models,
-        "get_hf_endpoint_order",
-        lambda **_: ["https://huggingface.co", "https://hf-mirror.com"],
+        pinned_download, "get_hf_endpoint_order", lambda **_: ["https://huggingface.co", "https://hf-mirror.com"]
     )
 
 

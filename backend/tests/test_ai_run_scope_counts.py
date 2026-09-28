@@ -9,6 +9,7 @@ from pathlib import Path
 from PIL import Image
 
 import database as db
+from aesthetic import AESTHETIC_SCORE_VERSION
 
 
 def _seed(tmp_path: Path, rows):
@@ -22,8 +23,9 @@ def _seed(tmp_path: Path, rows):
         with db.get_connection() as conn:
             conn.execute(
                 "UPDATE images SET tagged_at = CASE WHEN ? THEN CURRENT_TIMESTAMP END, "
-                "aesthetic_score = ? WHERE id = ?",
-                (1 if is_tagged else 0, score, image_id),
+                "aesthetic_score = ?, aesthetic_version = ? WHERE id = ?",
+                # A score from the current scorer build (older ones count as to-score).
+                (1 if is_tagged else 0, score, AESTHETIC_SCORE_VERSION, image_id),
             )
 
 

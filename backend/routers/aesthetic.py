@@ -78,7 +78,7 @@ def score_single_image(
     """Score a single image by database ID."""
     with gallery_job_activity("aesthetic"):
         try:
-            from aesthetic import is_available, predict_score
+            from aesthetic import is_available, predict_scores
             if not is_available():
                 raise HTTPException(
                     status_code=503,
@@ -92,9 +92,9 @@ def score_single_image(
             return service.score_single_image(
                 image_id=image_id,
                 # One image with the user waiting, so this claims the interactive
-                # lane. Bound here rather than inside predict_score, which the
+                # lane. Bound here rather than inside predict_scores, which the
                 # score-all job below also calls.
-                predict_score=partial(predict_score, priority=PRIORITY_INTERACTIVE),
+                predict_scores=partial(predict_scores, priority=PRIORITY_INTERACTIVE),
             )
         except ImageNotFoundError as exc:
             raise HTTPException(status_code=404, detail=exc.message)
@@ -136,13 +136,13 @@ def score_all_images(
 
 def _score_batch(force: bool = False):
     """Background task to score all images."""
-    from aesthetic import predict_score
+    from aesthetic import predict_scores
 
     service = get_aesthetic_service()
     try:
         service.score_batch(
             force=force,
-            predict_score=predict_score,
+            predict_scores=predict_scores,
             progress_callback=service.apply_scoring_progress_update,
         )
         service.finish_scoring_progress()

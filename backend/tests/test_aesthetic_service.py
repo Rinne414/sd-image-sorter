@@ -6,6 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from aesthetic import AestheticScores
 from services.aesthetic_service import AestheticService
 
 
@@ -26,11 +27,11 @@ def test_score_batch_uses_stable_snapshot_when_filtering_unscored_rows(test_db, 
 
     scored_paths = []
 
-    def fake_predict(path: str) -> float:
+    def fake_predict(path: str) -> AestheticScores:
         scored_paths.append(path)
-        return 7.0
+        return AestheticScores(laion=7.0)
 
-    service.score_batch(force=False, predict_score=fake_predict)
+    service.score_batch(force=False, predict_scores=fake_predict)
 
     with test_db.get_db() as conn:
         row = conn.execute("SELECT COUNT(*) FROM images WHERE aesthetic_score IS NOT NULL").fetchone()
@@ -79,4 +80,4 @@ def test_score_batch_streams_target_rows_without_fetchall(test_db, tmp_path, mon
             return getattr(self._entered, name)
 
     monkeypatch.setattr(test_db, "get_db", lambda: ConnectionProxy(original_get_db()))
-    service.score_batch(force=False, predict_score=lambda _path: 6.0)
+    service.score_batch(force=False, predict_scores=lambda _path: AestheticScores(laion=6.0))

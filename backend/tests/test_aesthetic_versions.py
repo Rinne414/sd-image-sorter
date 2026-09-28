@@ -69,7 +69,7 @@ def test_a_new_score_is_stored_as_the_current_version(test_db, tmp_path: Path) -
         write_image_aesthetic_score(
             conn.cursor(),
             image_id=image_id,
-            aesthetic_score=6.0,
+            scores=aesthetic.AestheticScores(laion=6.0),
             content_fingerprint="fp",
         )
         conn.commit()
@@ -125,7 +125,9 @@ def test_score_all_re_scores_outdated_rows_and_leaves_current_ones(
     scored = []
 
     service.score_batch(
-        force=False, predict_score=lambda path: scored.append(Path(path).name) or 7.5
+        force=False,
+        predict_scores=lambda path: scored.append(Path(path).name)
+        or aesthetic.AestheticScores(laion=7.5),
     )
 
     with test_db.get_db() as conn:

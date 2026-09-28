@@ -99,6 +99,7 @@ async def get_download_progress():
 # Model cards whose setup installs an optional Python dependency group.
 MODEL_DEPENDENCY_GROUPS: Dict[str, str] = {
     "aesthetic": "aesthetic",
+    "aesthetic-waifu": "aesthetic",
     "artist": "artist",
     "censor-legacy": "yolo",
     "censor-nudenet": "nudenet",
@@ -187,6 +188,17 @@ BULK_MODEL_BUNDLE: list[dict[str, object]] = [
         "feature_key": "scoring",
         "recommended": True,
         "default_selected": True,
+        "restart_after_install": True,
+    },
+    {
+        "id": "aesthetic-waifu",
+        "size_bytes": 11 * 1024 * 1024,
+        # 11 MB on its own; Prepare also sets up the Aesthetic predictor
+        # (~1.7 GB) when that item is not installed or selected.
+        "label": "Waifu Scorer V3 (anime aesthetic score; needs the Aesthetic predictor)",
+        "feature_key": "scoring",
+        "recommended": False,
+        "default_selected": False,
         "restart_after_install": True,
     },
     {

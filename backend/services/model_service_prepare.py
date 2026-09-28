@@ -331,6 +331,22 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
             "paths": {},
         }, dependency_result)
 
+    if normalized_model_id == "aesthetic-waifu":
+        # The Waifu head scores the Aesthetic Predictor's CLIP embedding, so the
+        # predictor is prepared first (a no-op when it is already ready).
+        base = _prepare_model(service, "aesthetic", source=source)
+        if base.get("status") != "ok":
+            return {**base, "model_id": normalized_model_id}
+        from aesthetic import prepare_waifu_head
+
+        head_path = prepare_waifu_head(_svc()._direct_download_file)
+        return {
+            **base,
+            "model_id": normalized_model_id,
+            "message": "Waifu Scorer V3 is ready. The next aesthetic scoring run adds its score.",
+            "paths": {**(base.get("paths") or {}), "waifu_head_path": str(head_path)},
+        }
+
     if normalized_model_id == "censor-anime":
         import anime_censor_models
 

@@ -635,6 +635,7 @@ def test_health_top_level_and_censor_key_sets(monkeypatch, tmp_path):
         "lucida",
         "rembg",
         "censor_anime",
+        "aesthetic_waifu",
         "video_ffmpeg",
         "censor",
         "artist",

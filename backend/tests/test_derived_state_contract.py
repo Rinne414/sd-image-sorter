@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import database as db
 import services.derived_state_service as derived_state_service
+from aesthetic import AestheticScores
 from services.derived_state_service import (
     write_image_aesthetic_score,
     write_artist_prediction,
@@ -72,6 +73,9 @@ EXPECTED_DERIVED_IMAGE_UPDATE_STATEMENTS = Counter({
         "db_images_write.py",
         "UPDATE images SET content_fingerprint = NULL, embedding = NULL, "
         "tagged_at = NULL, ai_caption = NULL, nl_caption = NULL, aesthetic_score = NULL, "
+        # Migration 049: every aesthetic score and its version clear with the pixels.
+        "aesthetic_version = NULL, aesthetic_waifu = NULL, aesthetic_anime = NULL, "
+        "aesthetic_anime_pct = NULL, aesthetic_anime_grade = NULL, "
         "ai_rating = NULL, ai_rating_confidence = NULL WHERE id = ?",
     ): 1,
     (
@@ -120,7 +124,10 @@ EXPECTED_DERIVED_IMAGE_UPDATE_STATEMENTS = Counter({
     ): 1,
     (
         "db_images_write.py",
-        "UPDATE images SET tagged_at = ?, ai_caption = ?, nl_caption = ?, aesthetic_score = ?, embedding = ?, "
+        # A byte-identical duplicate keeps every aesthetic score (migration 049).
+        "UPDATE images SET tagged_at = ?, ai_caption = ?, nl_caption = ?, aesthetic_score = ?, "
+        "aesthetic_version = ?, aesthetic_waifu = ?, aesthetic_anime = ?, aesthetic_anime_pct = ?, "
+        "aesthetic_anime_grade = ?, embedding = ?, "
         "content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
     ): 1,
     (
@@ -156,8 +163,10 @@ EXPECTED_DERIVED_IMAGE_UPDATE_STATEMENTS = Counter({
     ): 1,
     (
         "services/derived_state_service.py",
-        # aesthetic_version (migration 049) marks which scorer build wrote the score.
-        "UPDATE images SET aesthetic_score = ?, aesthetic_version = ?, content_fingerprint = ? "
+        # aesthetic_version (migration 049) marks which scorer build wrote the score;
+        # the Waifu score keeps its stored value when this run did not compute it.
+        "UPDATE images SET aesthetic_score = ?, aesthetic_version = ?, "
+        "aesthetic_waifu = COALESCE(?, aesthetic_waifu), content_fingerprint = ? "
         "WHERE id = ? AND content_fingerprint = ?",
     ): 1,
     (
@@ -458,7 +467,7 @@ def test_aesthetic_writer_publishes_after_legacy_fingerprint_initialization(test
         written = write_image_aesthetic_score(
             cursor,
             image_id=image_id,
-            aesthetic_score=8.0,
+            scores=AestheticScores(laion=8.0),
             content_fingerprint="fingerprint-1",
         )
 
@@ -485,7 +494,7 @@ def test_aesthetic_writer_rejects_stale_score_and_preserves_newer_state(test_db)
         written = write_image_aesthetic_score(
             conn.cursor(),
             image_id=image_id,
-            aesthetic_score=2.0,
+            scores=AestheticScores(laion=2.0),
             content_fingerprint="fingerprint-1",
         )
 
@@ -506,7 +515,7 @@ def test_aesthetic_writer_requires_a_non_empty_fingerprint(test_db):
             write_image_aesthetic_score(
                 conn.cursor(),
                 image_id=image_id,
-                aesthetic_score=8.0,
+                scores=AestheticScores(laion=8.0),
                 content_fingerprint="",
             )
 

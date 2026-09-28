@@ -9,8 +9,9 @@ import sqlite3
 import threading
 from typing import Any, Callable, Dict, Optional
 
+import aesthetic
 import database as db
-from aesthetic import AESTHETIC_SCORE_VERSION
+from aesthetic import AESTHETIC_SCORE_VERSION, AestheticScores
 from exceptions import ImageFileNotFoundError, ImageNotFoundError, ServiceError
 from image_fingerprint import compute_image_content_fingerprint
 from services.derived_state_service import (
@@ -24,6 +25,17 @@ logger = logging.getLogger(__name__)
 
 # An image needs scoring when it has no LAION score or one from an older build.
 NEEDS_SCORE_SQL = "(aesthetic_score IS NULL OR aesthetic_version IS NULL OR aesthetic_version < ?)"
+# ...or, once the Waifu head is installed, when it has no Waifu score yet.
+MISSING_WAIFU_SQL = "aesthetic_waifu IS NULL"
+
+
+def _needs_score_sql() -> str:
+    if aesthetic.is_waifu_scoring():
+        return f"({NEEDS_SCORE_SQL} OR {MISSING_WAIFU_SQL})"
+    return NEEDS_SCORE_SQL
+
+
+ScorePredictor = Callable[[str], Optional[AestheticScores]]
 
 ProgressCallback = Callable[[Dict[str, Any]], None]
 
@@ -165,18 +177,18 @@ class AestheticService:
         if self._require_content_fingerprint(image_path) != expected_fingerprint:
             raise ServiceError(AESTHETIC_INFERENCE_STALE_ERROR)
 
-    def _store_score(
+    def _store_scores(
         self,
         *,
         image_id: int,
-        aesthetic_score: float,
+        scores: AestheticScores,
         content_fingerprint: str,
     ) -> bool:
         with db.get_db() as conn:
             return write_image_aesthetic_score(
                 conn.cursor(),
                 image_id=image_id,
-                aesthetic_score=aesthetic_score,
+                scores=scores,
                 content_fingerprint=content_fingerprint,
             )
 
@@ -209,6 +221,24 @@ class AestheticService:
         except Exception:
             return 0
 
+    def _missing_extra_count(self) -> int:
+        """Pictures with a current LAION score that only lack an installed extra score."""
+        if not aesthetic.is_waifu_scoring():
+            return 0
+        try:
+            from library_context import current_library_sql
+
+            lib_sql, lib_params = current_library_sql()
+            with db.get_db() as conn:
+                row = conn.execute(
+                    f"SELECT COUNT(*) FROM images WHERE NOT {NEEDS_SCORE_SQL} "
+                    f"AND {MISSING_WAIFU_SQL} AND {lib_sql}",
+                    (AESTHETIC_SCORE_VERSION, *lib_params),
+                ).fetchone()
+                return int(row[0] or 0)
+        except Exception:
+            return 0
+
     def get_status(self, availability_checker: Callable[[], bool]) -> Dict[str, Any]:
         available = availability_checker()
         return {
@@ -217,6 +247,8 @@ class AestheticService:
             "scored_count": self._scored_count(),
             # Scores from before the QuickGELU fix: kept, but Score all redoes them.
             "outdated_count": self._outdated_count(),
+            # Already scored, but a newly installed Waifu head has not scored them.
+            "missing_extra_count": self._missing_extra_count(),
             # What "Score Aesthetic" would process: the library's unscored images.
             "to_score_count": self.count_images_to_score(force=False),
         }
@@ -225,7 +257,7 @@ class AestheticService:
         self,
         *,
         image_id: int,
-        predict_score: Callable[[str], Optional[float]],
+        predict_scores: ScorePredictor,
     ) -> Dict[str, Any]:
         with db.get_db() as conn:
             row = conn.execute("SELECT path FROM images WHERE id = ?", (image_id,)).fetchone()
@@ -241,21 +273,25 @@ class AestheticService:
             image_id=image_id,
             image_path=image_path,
         )
-        score = predict_score(image_path)
-        if score is None:
+        scores = predict_scores(image_path)
+        if scores is None:
             raise ServiceError("Scoring failed")
         self._verify_source_fingerprint(
             image_path=image_path,
             expected_fingerprint=content_fingerprint,
         )
-        written = self._store_score(
+        written = self._store_scores(
             image_id=image_id,
-            aesthetic_score=score,
+            scores=scores,
             content_fingerprint=content_fingerprint,
         )
         if not written:
             raise ServiceError(AESTHETIC_PUBLISH_STALE_ERROR)
-        return {"image_id": image_id, "aesthetic_score": score}
+        return {
+            "image_id": image_id,
+            "aesthetic_score": scores.laion,
+            "aesthetic_waifu": scores.waifu,
+        }
 
     def count_images_to_score(self, *, force: bool) -> int:
         from library_context import current_library_sql
@@ -269,7 +305,7 @@ class AestheticService:
                 ).fetchone()
             else:
                 row = conn.execute(
-                    f"SELECT COUNT(*) FROM images WHERE {NEEDS_SCORE_SQL} AND {lib_sql}",
+                    f"SELECT COUNT(*) FROM images WHERE {_needs_score_sql()} AND {lib_sql}",
                     (AESTHETIC_SCORE_VERSION, *lib_params),
                 ).fetchone()
             return int(row[0] or 0)
@@ -290,7 +326,7 @@ class AestheticService:
         self,
         *,
         force: bool,
-        predict_score: Callable[[str], Optional[float]],
+        predict_scores: ScorePredictor,
         progress_callback: Optional[ProgressCallback] = None,
     ) -> None:
         def emit(update: Dict[str, Any]) -> None:
@@ -314,8 +350,9 @@ class AestheticService:
                 query = f"SELECT id, path FROM images WHERE {lib_sql}"
                 count_query = f"SELECT COUNT(*) FROM images WHERE {lib_sql}"
             else:
-                query = f"SELECT id, path FROM images WHERE {NEEDS_SCORE_SQL} AND {lib_sql}"
-                count_query = f"SELECT COUNT(*) FROM images WHERE {NEEDS_SCORE_SQL} AND {lib_sql}"
+                needs_score = _needs_score_sql()
+                query = f"SELECT id, path FROM images WHERE {needs_score} AND {lib_sql}"
+                count_query = f"SELECT COUNT(*) FROM images WHERE {needs_score} AND {lib_sql}"
                 lib_params = (AESTHETIC_SCORE_VERSION, *lib_params)
             count_row = conn.execute(count_query, lib_params).fetchone()
             total = int(count_row[0] or 0) if count_row else 0
@@ -355,8 +392,8 @@ class AestheticService:
                             image_path=image_path,
                         )
                         publication_conn.commit()
-                        score = predict_score(image_path)
-                        if score is None:
+                        scores = predict_scores(image_path)
+                        if scores is None:
                             raise ServiceError("Scoring failed")
                         self._verify_source_fingerprint(
                             image_path=image_path,
@@ -365,7 +402,7 @@ class AestheticService:
                         written = write_image_aesthetic_score(
                             publication_cursor,
                             image_id=image_id,
-                            aesthetic_score=score,
+                            scores=scores,
                             content_fingerprint=content_fingerprint,
                         )
                         if not written:

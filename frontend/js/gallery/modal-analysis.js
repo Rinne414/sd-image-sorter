@@ -156,7 +156,11 @@ Object.assign(window.Gallery, {
                 const result = await api.post(`/api/aesthetic/score/${id}`);
                 const score = Number(result?.aesthetic_score);
                 if (Number.isFinite(score)) {
-                    this._patchImageState(id, { aesthetic_score: score });
+                    const waifu = result?.aesthetic_waifu;
+                    this._patchImageState(id, {
+                        aesthetic_score: score,
+                        ...(waifu == null ? {} : { aesthetic_waifu: Number(waifu) }),
+                    });
                     if (Number(this._currentPreviewId) === id && this._lastModalImage && this._lastParsedData) {
                         this._renderModalSections(this._lastModalImage, this._lastParsedData);
                     }

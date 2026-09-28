@@ -15,31 +15,24 @@ equals Hugging Face's LFS etag for the file.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict
 
 import config
-from model_download_sources import get_hf_endpoint_order
+import pinned_download
 
 logger = logging.getLogger(__name__)
 
-DOWNLOAD_TIMEOUT_SECONDS = 600
 CENSOR_CONFIDENCE = 0.238
 FACE_CONFIDENCE = 0.307
 
 
 @dataclass(frozen=True)
-class PinnedFile:
-    key: str
-    repo: str
-    revision: str
-    remote_path: str
-    sha256: str
-    size_bytes: int
-    filename: str
+class PinnedFile(pinned_download.PinnedFile):
+    key: str = ""
+    filename: str = ""
 
 
 CENSOR_FILE = PinnedFile(
@@ -75,26 +68,11 @@ def _path_for(pinned: PinnedFile) -> Path:
     return censor_model_path() if pinned.key == "censor" else face_model_path()
 
 
-def _present(path: Path) -> bool:
-    try:
-        return path.is_file() and path.stat().st_size > 0
-    except OSError:
-        return False
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def health() -> Dict[str, Any]:
     censor = censor_model_path()
     face = face_model_path()
-    censor_ok = _present(censor)
-    face_ok = _present(face)
+    censor_ok = pinned_download.is_present(censor)
+    face_ok = pinned_download.is_present(face)
     if censor_ok and face_ok:
         key, message = (
             "models.censorAnime.ready",
@@ -130,26 +108,4 @@ def prepare(download_file: Callable[..., Path]) -> Dict[str, str]:
 
 
 def _prepare_one(pinned: PinnedFile, download_file: Callable[..., Path]) -> str:
-    target = _path_for(pinned)
-    if _present(target) and _sha256(target) == pinned.sha256:
-        return str(target)
-    staging = target.with_name(target.name + ".download")
-    failures: List[str] = []
-    for endpoint in get_hf_endpoint_order(model_name="Anime censor detector"):
-        url = f"{endpoint.rstrip('/')}/{pinned.repo}/resolve/{pinned.revision}/{pinned.remote_path}"
-        try:
-            download_file(url, staging, timeout=DOWNLOAD_TIMEOUT_SECONDS)
-        except Exception as exc:  # network / HTTP errors: try the next endpoint
-            failures.append(f"{endpoint}: {exc}")
-            staging.unlink(missing_ok=True)
-            continue
-        if _sha256(staging) != pinned.sha256:
-            failures.append(f"{endpoint}: checksum mismatch")
-            staging.unlink(missing_ok=True)
-            continue
-        staging.replace(target)
-        logger.info("Anime %s model ready at %s", pinned.key, target)
-        return str(target)
-    raise RuntimeError(
-        f"Could not download {pinned.repo}/{pinned.remote_path}. " + "; ".join(failures)
-    )
+    return str(pinned_download.fetch(pinned, _path_for(pinned), download_file, model_name="Anime censor detector"))

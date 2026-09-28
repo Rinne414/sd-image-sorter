@@ -5,13 +5,20 @@ Uses CLIP ViT-L/14 embeddings + a tiny linear head trained on human aesthetic ra
 Outputs a score from ~1 to ~10. The bulk download is about 1.7 GB (ViT-L/14
 backbone + head). Model Manager Prepare / Download is the supported install
 path. If files are still missing, scoring may fetch them from Hugging Face.
+
+Waifu Scorer V3 is an optional anime aesthetic head (0-10) on the same
+normalized CLIP embedding: once its 11 MB file is installed, the same CLIP
+pass yields both scores.
 """
 import logging
 import os
 import threading
 import warnings
-from typing import Optional
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, Optional
 from pathlib import Path
+
+import pinned_download
 
 from ai_runtime_guard import (
     PRIORITY_NORMAL,
@@ -31,6 +38,10 @@ _device = None
 _load_lock = threading.Lock()
 _inference_lock = threading.Lock()
 _force_cpu_after_gpu_failure = False
+_waifu_head = None
+# Set when the installed Waifu file cannot be loaded, so every picture does
+# not retry it; cleared by a fresh Prepare / Download or a model reload.
+_waifu_head_failed = False
 
 # Cache for is_available() so the frontend's /api/aesthetic/status poll does
 # not run a fresh ``import torch`` on every call. When torch is absent (the
@@ -54,6 +65,25 @@ _AESTHETIC_BACKBONE_FILENAMES = (
     "pytorch_model.bin",
     "ViT-L-14.pt",
 )
+
+WAIFU_HEAD_FILENAME = "waifu_scorer_v3.safetensors"
+WAIFU_HEAD_FILE = pinned_download.PinnedFile(
+    repo="Eugeoter/waifu-scorer-v3",
+    revision="c2a747fd61d310a90e9cbbf8fc590c522f234424",
+    remote_path="model.safetensors",
+    sha256="7def1b66314e318d9b045ff225fd51bb83bfbca855b12b2e213a5483efe37efd",
+    size_bytes=11_219_340,
+)
+WAIFU_SCORE_MIN = 0.0
+WAIFU_SCORE_MAX = 10.0
+
+
+@dataclass(frozen=True)
+class AestheticScores:
+    """Scores from one CLIP pass: LAION (~1-10) and, when installed, Waifu Scorer V3 (0-10)."""
+
+    laion: float
+    waifu: Optional[float] = None
 
 
 def _get_models_dir() -> Path:
@@ -113,6 +143,61 @@ def get_aesthetic_backbone_path() -> Optional[Path]:
     return None
 
 
+def waifu_head_path() -> Path:
+    return _get_models_dir() / WAIFU_HEAD_FILENAME
+
+
+def is_waifu_installed() -> bool:
+    return pinned_download.is_present(waifu_head_path())
+
+
+def is_waifu_scoring() -> bool:
+    """Installed and not known to be unloadable: only then do runs ask for Waifu scores.
+
+    A file that failed to load would otherwise keep every scored picture in
+    the "to score" queue forever while its Waifu score stays empty.
+    """
+    return is_waifu_installed() and not _waifu_head_failed
+
+
+def waifu_health() -> Dict[str, Any]:
+    path = waifu_head_path()
+    installed = is_waifu_installed()
+    if installed and _waifu_head_failed:
+        key, message = (
+            "models.aestheticWaifu.broken",
+            "The Waifu Scorer V3 file could not be loaded. Click Prepare / Download to replace it.",
+        )
+    elif installed:
+        key, message = (
+            "models.aestheticWaifu.ready",
+            "Waifu Scorer V3 is installed. The next aesthetic scoring run adds its score.",
+        )
+    else:
+        key, message = (
+            "models.aestheticWaifu.missing",
+            "Not downloaded yet. Click Prepare / Download (~11 MB, plus the Aesthetic Predictor).",
+        )
+    return {
+        "available": installed and not _waifu_head_failed,
+        "head_path": str(path) if installed else None,
+        "expected_path": str(path),
+        "message_key": key,
+        "message": message,
+    }
+
+
+def prepare_waifu_head(download_file: Callable[..., Path]) -> Path:
+    """Download and verify the Waifu Scorer V3 head; a verified copy is kept as is."""
+    global _waifu_head_failed
+
+    path = pinned_download.fetch(
+        WAIFU_HEAD_FILE, waifu_head_path(), download_file, model_name="Waifu Scorer V3"
+    )
+    _waifu_head_failed = False
+    return path
+
+
 def is_predictor_loaded() -> bool:
     """Return whether both predictor components are loaded in this process."""
     return _predictor is not None and _clip_model is not None
@@ -161,11 +246,13 @@ def _is_cuda_oom(exc: BaseException) -> bool:
 
 
 def _unload_models() -> None:
-    global _predictor, _clip_model, _clip_preprocess, _device
+    global _predictor, _clip_model, _clip_preprocess, _device, _waifu_head, _waifu_head_failed
 
     _predictor = None
     _clip_model = None
     _clip_preprocess = None
+    _waifu_head = None
+    _waifu_head_failed = False
     previous_device = _device
     _device = None
     try:
@@ -180,16 +267,70 @@ def _ensure_loaded(device: Optional[str] = None):
     global _predictor, _clip_model, _clip_preprocess, _device
 
     target_device = device or _select_device(use_gpu=True)
-    if _predictor is not None and _device == target_device:
+    if _predictor is not None and _device == target_device and not _waifu_head_pending():
         return
 
     with _load_lock:
-        if _predictor is not None and _device == target_device:
-            return
-
         if _predictor is not None and _device != target_device:
             _unload_models()
-        _load_predictor(target_device)
+        if _predictor is None:
+            _load_predictor(target_device)
+        elif _waifu_head_pending():
+            # Installed while CLIP was already loaded: add just the head.
+            _load_waifu_head()
+
+
+def _waifu_head_pending() -> bool:
+    return _waifu_head is None and not _waifu_head_failed and is_waifu_installed()
+
+
+def _build_waifu_head(torch, path: Path, device: str):
+    """Waifu Scorer V3's MLP; the published weights use ``layers.<n>`` keys."""
+    from safetensors.torch import load_file
+
+    nn = torch.nn
+    layers = nn.Sequential(
+        nn.Linear(768, 2048),
+        nn.ReLU(),
+        nn.BatchNorm1d(2048),
+        nn.Dropout(0.3),
+        nn.Linear(2048, 512),
+        nn.ReLU(),
+        nn.BatchNorm1d(512),
+        nn.Dropout(0.3),
+        nn.Linear(512, 256),
+        nn.ReLU(),
+        nn.BatchNorm1d(256),
+        nn.Dropout(0.2),
+        nn.Linear(256, 128),
+        nn.ReLU(),
+        nn.BatchNorm1d(128),
+        nn.Dropout(0.1),
+        nn.Linear(128, 32),
+        nn.ReLU(),
+        nn.Linear(32, 1),
+    )
+    state = load_file(str(path), device="cpu")
+    layers.load_state_dict({key.removeprefix("layers."): value for key, value in state.items()})
+    return layers.to(device).eval()
+
+
+def _load_waifu_head() -> None:
+    """Load the optional head; a bad file only loses the Waifu score, never LAION's."""
+    global _waifu_head, _waifu_head_failed
+
+    try:
+        _waifu_head = _build_waifu_head(_get_torch_module(), waifu_head_path(), _device or "cpu")
+        logger.info("Waifu Scorer V3 head loaded")
+    except Exception as exc:
+        _waifu_head = None
+        _waifu_head_failed = True
+        logger.error(
+            "Waifu Scorer V3 head at %s could not be loaded (%s). Aesthetic scoring continues "
+            "without it; run Prepare / Download on its Model Center card to replace the file.",
+            waifu_head_path(),
+            exc,
+        )
 
 
 def _load_predictor(device: Optional[str] = None):
@@ -250,6 +391,8 @@ def _load_predictor(device: Optional[str] = None):
         head.to(_device)
         head.eval()
         _predictor = head
+        if _waifu_head_pending():
+            _load_waifu_head()
         logger.info("Aesthetic predictor loaded successfully")
 
     except Exception as e:
@@ -258,7 +401,7 @@ def _load_predictor(device: Optional[str] = None):
         raise
 
 
-def _predict_score_loaded(image_path: str) -> float:
+def _predict_scores_loaded(image_path: str) -> AestheticScores:
     torch = _get_torch_module()
     from PIL import Image
 
@@ -269,20 +412,26 @@ def _predict_score_loaded(image_path: str) -> float:
     with Image.open(image_path) as img:
         img_tensor = _clip_preprocess(img.convert("RGB")).unsqueeze(0).to(_device)
 
+    waifu = None
     with torch.no_grad():
         features = _clip_model.encode_image(img_tensor)
-        features = features / features.norm(dim=-1, keepdim=True)
-        score = _predictor(features.float())
+        features = (features / features.norm(dim=-1, keepdim=True)).float()
+        laion = _predictor(features)
+        if _waifu_head is not None:
+            waifu = _waifu_head(features).clamp(WAIFU_SCORE_MIN, WAIFU_SCORE_MAX)
 
-    result = round(float(score.item()), 4)
-    del img_tensor, features, score
+    result = AestheticScores(
+        laion=round(float(laion.item()), 4),
+        waifu=None if waifu is None else round(float(waifu.item()), 4),
+    )
+    del img_tensor, features, laion, waifu
     return result
 
 
-def predict_score(
+def predict_scores(
     image_path: str, priority: int = PRIORITY_NORMAL
-) -> Optional[float]:
-    """Predict aesthetic score for a single image. Returns float ~1-10 or None on error.
+) -> Optional[AestheticScores]:
+    """Score one image: LAION (~1-10) plus Waifu (0-10) when installed; None on error.
 
     ``priority`` is the AI-runtime admission lane and is supplied by the caller,
     because this function serves both ``POST /api/aesthetic/score/{id}`` (one
@@ -296,7 +445,7 @@ def predict_score(
         with exclusive_ai_runtime("aesthetic", priority=priority), _inference_lock:
             _ensure_loaded()
             try:
-                return _predict_score_loaded(image_path)
+                return _predict_scores_loaded(image_path)
             except Exception as exc:
                 if _device != "cuda" or not _is_cuda_oom(exc):
                     raise
@@ -307,7 +456,7 @@ def predict_score(
                 _force_cpu_after_gpu_failure = True
                 _unload_models()
                 _ensure_loaded("cpu")
-                return _predict_score_loaded(image_path)
+                return _predict_scores_loaded(image_path)
 
     except Exception as e:
         logger.error(f"Aesthetic prediction failed for {image_path}: {e}")

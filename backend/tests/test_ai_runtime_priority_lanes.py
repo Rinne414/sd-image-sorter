@@ -362,22 +362,22 @@ def test_batch_mask_refinement_does_not_take_the_interactive_lane(scratch_png):
 
 
 class _FakeAestheticService:
-    """Minimal stand-in that just invokes whatever ``predict_score`` it is given.
+    """Minimal stand-in that just invokes whatever ``predict_scores`` it is given.
 
     The point under test is which callable each ROUTER hands to the service, so
-    the service body is irrelevant and the real ``aesthetic.predict_score`` (with
+    the service body is irrelevant and the real ``aesthetic.predict_scores`` (with
     its real lease) has to be the thing that runs.
     """
 
     def __init__(self, image_path: str) -> None:
         self._image_path = image_path
 
-    def score_single_image(self, *, image_id, predict_score):
-        predict_score(self._image_path)
+    def score_single_image(self, *, image_id, predict_scores):
+        predict_scores(self._image_path)
         return {"image_id": image_id, "aesthetic_score": 5.5}
 
-    def score_batch(self, *, force, predict_score, progress_callback=None):
-        predict_score(self._image_path)
+    def score_batch(self, *, force, predict_scores, progress_callback=None):
+        predict_scores(self._image_path)
 
     def apply_scoring_progress_update(self, _update):
         return None
@@ -392,18 +392,18 @@ def test_aesthetic_batch_scoring_does_not_take_the_interactive_lane(
     """Scoring one image must beat the running score-all job at the same leaf.
 
     ``routers/aesthetic.score_single_image`` and ``routers/aesthetic._score_batch``
-    both import the very same ``aesthetic.predict_score``.
+    both import the very same ``aesthetic.predict_scores``.
     """
     import aesthetic
     from routers import aesthetic as aesthetic_router
 
     monkeypatch.setattr(aesthetic, "_ensure_loaded", lambda *_a, **_k: None)
 
-    def _predict_score_loaded(_path):
+    def _predict_scores_loaded(_path):
         note_admission()
-        return 5.5
+        return aesthetic.AestheticScores(laion=5.5)
 
-    monkeypatch.setattr(aesthetic, "_predict_score_loaded", _predict_score_loaded)
+    monkeypatch.setattr(aesthetic, "_predict_scores_loaded", _predict_scores_loaded)
 
     service = _FakeAestheticService(scratch_png)
     monkeypatch.setattr(aesthetic_router, "get_aesthetic_service", lambda: service)

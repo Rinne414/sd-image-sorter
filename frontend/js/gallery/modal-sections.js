@@ -293,6 +293,15 @@ Object.assign(window.Gallery, {
             }
         }
 
+        // --- Waifu Scorer V3 (optional anime aesthetic head, 0-10) ---
+        const waifuItem = $('#modal-waifu-item');
+        const waifuText = $('#modal-waifu-score');
+        if (waifuItem && waifuText) {
+            const hasWaifu = image.aesthetic_waifu != null;
+            waifuItem.style.display = hasWaifu ? '' : 'none';
+            if (hasWaifu) waifuText.textContent = `${Number(image.aesthetic_waifu).toFixed(2)} / 10`;
+        }
+
         // --- img2img Badge ---
         const img2imgBadge = $('#modal-img2img-badge');
         if (parsedData.is_img2img) {

@@ -8,7 +8,7 @@ to avoid a circular dependency through services.__init__.
 """
 from __future__ import annotations
 
-from aesthetic import AESTHETIC_SCORE_VERSION
+from aesthetic import AESTHETIC_SCORE_VERSION, AestheticScores
 
 import sqlite3
 from typing import Any, Iterable, Optional, Sequence
@@ -71,10 +71,14 @@ def write_image_aesthetic_score(
     cursor: sqlite3.Cursor,
     *,
     image_id: int,
-    aesthetic_score: float,
+    scores: AestheticScores,
     content_fingerprint: str,
 ) -> bool:
-    """Store an aesthetic score only while its source fingerprint is current."""
+    """Store aesthetic scores only while their source fingerprint is current.
+
+    A score this run did not compute (its model is not installed) keeps the
+    stored value: changed pixels already clear every score elsewhere.
+    """
     fingerprint = str(content_fingerprint or "").strip()
     if not fingerprint:
         raise ValueError("content_fingerprint must be non-empty for an Aesthetic score")
@@ -84,10 +88,18 @@ def write_image_aesthetic_score(
         UPDATE images
         SET aesthetic_score = ?,
             aesthetic_version = ?,
+            aesthetic_waifu = COALESCE(?, aesthetic_waifu),
             content_fingerprint = ?
         WHERE id = ? AND content_fingerprint = ?
         """,
-        (aesthetic_score, AESTHETIC_SCORE_VERSION, fingerprint, image_id, fingerprint),
+        (
+            scores.laion,
+            AESTHETIC_SCORE_VERSION,
+            scores.waifu,
+            fingerprint,
+            image_id,
+            fingerprint,
+        ),
     )
     return cursor.rowcount == 1
 
