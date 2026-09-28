@@ -380,8 +380,8 @@ async function applyDetectedRegionsToItem(item, regions, data = {}) {
             item.editOperations = [...manualOperations, {
                 kind: 'geometry_effect',
                 style: CensorState.style,
-                block_size: Number(CensorState.blockSize || 16),
-                blur_radius: Math.max(1, Math.round(CensorState.blockSize / 2)),
+                block_size: censorBlockSizeFor(data.image_width || item.width, data.image_height || item.height),
+                blur_radius: Math.max(1, Math.round(censorBlockSizeFor(data.image_width || item.width, data.image_height || item.height) / 2)),
                 regions,
                 autoDetected: true,
             }];

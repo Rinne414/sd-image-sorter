@@ -200,8 +200,8 @@ function drawAtPoint(x, y) {
     if (CensorState.currentTool === 'brush') {
         const effectScale = getCurrentLogicalToCanvasScale();
         applyCensorStyle(ctx, x, y, size, {
-            blockSize: scaleOperationEffectValue(CensorState.blockSize || 16, effectScale, effectScale),
-            blurRadius: scaleOperationEffectValue(Math.max(8, CensorState.blockSize || 16), effectScale, effectScale),
+            blockSize: scaleOperationEffectValue(censorActiveBlockSize(), effectScale, effectScale),
+            blurRadius: scaleOperationEffectValue(Math.max(8, censorActiveBlockSize()), effectScale, effectScale),
         });
     } else if (CensorState.currentTool === 'pen') {
         // Draw with pen color and opacity
@@ -229,7 +229,7 @@ function drawAtPoint(x, y) {
 
 function applyCensorStyle(ctx, x, y, size, options = {}) {
     const style = options.style || CensorState.style;
-    const b = Math.max(1, Number(options.blockSize || CensorState.blockSize || 16));
+    const b = Math.max(1, Number(options.blockSize || censorActiveBlockSize()));
     const canvas = ctx.canvas;
 
     if (style === 'mosaic') {
@@ -252,7 +252,7 @@ function applyCensorStyle(ctx, x, y, size, options = {}) {
         }
     } else if (style === 'blur') {
         // Apply actual blur effect
-        const blurRadius = Math.max(1, Number(options.blurRadius || Math.max(8, CensorState.blockSize)));
+        const blurRadius = Math.max(1, Number(options.blurRadius || Math.max(8, censorActiveBlockSize())));
         const regionX = Math.max(0, Math.floor(x - size / 2));
         const regionY = Math.max(0, Math.floor(y - size / 2));
         const regionW = Math.min(canvas.width - regionX, Math.ceil(size));

@@ -363,8 +363,8 @@ function createStrokeOperationFromCurrentState(tool) {
     };
     if (tool === 'brush') {
         operation.style = CensorState.style;
-        operation.block_size = Number(CensorState.blockSize || 16);
-        operation.blur_radius = Math.max(8, Number(CensorState.blockSize || 16));
+        operation.block_size = censorActiveBlockSize();
+        operation.blur_radius = Math.max(8, censorActiveBlockSize());
     } else if (tool === 'pen') {
         operation.pen_color = CensorState.penColor;
         operation.pen_opacity = Number(CensorState.penOpacity || 1);
@@ -609,8 +609,8 @@ async function renderProxyPreviewDataForItem(item) {
 function applyBoxRegionsToCanvas(canvas, baseImage, regions, options = {}) {
     const ctx = canvas.getContext('2d');
     const style = options.style || CensorState.style;
-    const blockSize = Math.max(1, Number(options.blockSize || CensorState.blockSize || 16));
-    const blurRadius = Math.max(1, Number(options.blurRadius || Math.max(1, Math.round(CensorState.blockSize / 2))));
+    const blockSize = Math.max(1, Number(options.blockSize || censorActiveBlockSize()));
+    const blurRadius = Math.max(1, Number(options.blurRadius || Math.max(1, Math.round(censorActiveBlockSize() / 2))));
     ctx.save();
     regions.forEach(r => {
         if (!Array.isArray(r?.box) || r.box.length !== 4) return;
@@ -702,8 +702,8 @@ async function renderRasterMaskEffectOntoCanvas(canvas, maskDataUrl, options = {
     maskCtx.drawImage(maskImage, 0, 0, canvas.width, canvas.height);
     renderMaskStyleToCanvas(canvas, maskCanvas, {
         style: options.style || CensorState.style,
-        blockSize: Math.max(1, Number(options.blockSize || CensorState.blockSize || 16)),
-        blurRadius: Math.max(1, Number(options.blurRadius || Math.max(1, Math.round(CensorState.blockSize / 2)))),
+        blockSize: Math.max(1, Number(options.blockSize || censorActiveBlockSize())),
+        blurRadius: Math.max(1, Number(options.blurRadius || Math.max(1, Math.round(censorActiveBlockSize() / 2)))),
         originalImage: options.originalImage || CensorState.originalImage,
     });
 }
@@ -726,8 +726,8 @@ function createMaskEffectOperation(maskSource) {
     const operation = {
         kind: 'mask_effect',
         style: CensorState.style,
-        block_size: Number(CensorState.blockSize || 16),
-        blur_radius: Math.max(1, Math.round(CensorState.blockSize / 2)),
+        block_size: censorActiveBlockSize(),
+        blur_radius: Math.max(1, Math.round(censorActiveBlockSize() / 2)),
     };
 
     if (typeof maskSource === 'string') {

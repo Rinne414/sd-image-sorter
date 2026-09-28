@@ -29,6 +29,7 @@ from PIL import Image, ImageColor, ImageDraw, ImageFilter, ImageFont
 
 import database as db
 import disguise_apng
+from censor_transforms import auto_block_size
 from disguise_registry import disguise_dir, remember_made
 from utils.source_paths import resolve_existing_indexed_image_path
 
@@ -37,8 +38,6 @@ logger = logging.getLogger(__name__)
 COVER_KINDS = ("upload", "default", "text", "blur", "mosaic")
 DEFAULT_FRAME_MS = 1000
 DEFAULT_MAX_SIDE = 1600
-MOSAIC_BLOCK_DIVISOR = 100
-MOSAIC_MIN_BLOCK = 4
 BLUR_WORKING_SIDE = 96
 BLUR_RADIUS = 6
 TEXT_CARD_BACKGROUND = "#26272b"
@@ -95,9 +94,8 @@ class MadeDisguise:
 # ------------------------------------------------------------------ covers
 
 
-def mosaic_block_size(size: tuple[int, int]) -> int:
-    """Mosaic cell = 1/100 of the long side, at least 4 px."""
-    return max(MOSAIC_MIN_BLOCK, max(size) // MOSAIC_BLOCK_DIVISOR)
+# Same cell rule as the Censor page's Auto mosaic.
+mosaic_block_size = auto_block_size
 
 
 def regions_mask(size: tuple[int, int], detections: Iterable[dict]) -> Image.Image:

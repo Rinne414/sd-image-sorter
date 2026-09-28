@@ -97,6 +97,8 @@ const CensorState = {
     confidence: 0.5,
     style: 'mosaic',
     blockSize: 16,
+    // Auto (default): the mosaic cell is 1/100 of each picture's long side.
+    blockSizeAuto: localStorage.getItem('censor_block_size_auto') !== '0',
     targetClasses: ['breasts', 'pussy', 'dick', 'penis', 'anus', 'buttocks'], // Covers the main privacy classes used by Wenaka + NudeNet
     // Default to STRIP: this is a censor-for-publishing tool, so exporting the
     // full generation prompt/metadata by default was a privacy leak. Matches the
@@ -188,6 +190,33 @@ function getFocusedCensorImageId() {
 
 function getActiveCensorItem() {
     return CensorState.queue.find((item) => item.id === CensorState.activeId) || null;
+}
+
+const CENSOR_AUTO_BLOCK_DIVISOR = 100;
+const CENSOR_AUTO_BLOCK_MIN = 4;
+
+/**
+ * Mosaic cell, in the picture's own pixels, for a picture of this size.
+ * Auto: 1/100 of the long side and at least 4 px (the size Japanese platforms
+ * commonly ask for), so a 4000 px picture is as coarse as a 1024 px one.
+ * Otherwise the size the user picked. Same rule as the backend's auto_block_size.
+ */
+function censorBlockSizeFor(width, height) {
+    const chosen = Number(CensorState.blockSize || 16);
+    if (!CensorState.blockSizeAuto) return chosen;
+    const longSide = Math.max(Number(width) || 0, Number(height) || 0);
+    if (longSide <= 0) return chosen;
+    return Math.max(CENSOR_AUTO_BLOCK_MIN, Math.floor(longSide / CENSOR_AUTO_BLOCK_DIVISOR));
+}
+
+function censorActiveBlockSize() {
+    // The picture on the canvas, at its logical size (in proxy mode the loaded
+    // image is a downscaled copy). activeId can still name the previous item
+    // while a switch is loading, so the canvas's own size comes first.
+    const item = getActiveCensorItem();
+    const width = Number(CensorState.originalLogicalWidth || item?.width || 0);
+    const height = Number(CensorState.originalLogicalHeight || item?.height || 0);
+    return censorBlockSizeFor(width, height);
 }
 
 function cloneOperationPoints(points = []) {

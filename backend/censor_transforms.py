@@ -13,6 +13,23 @@ import os
 from PIL import Image, ImageFilter, ImageDraw
 from typing import List, Tuple, Optional
 
+AUTO_BLOCK_DIVISOR = 100
+AUTO_BLOCK_MIN = 4
+
+
+def auto_block_size(size: Tuple[int, int]) -> int:
+    """Mosaic cell for a picture: 1/100 of its long side, at least 4 px.
+
+    That is the cell size commonly asked for on Japanese platforms, and it
+    keeps the mosaic equally coarse on a 1024 px and a 4000 px picture.
+    """
+    return max(AUTO_BLOCK_MIN, max(size) // AUTO_BLOCK_DIVISOR)
+
+
+def resolve_block_size(requested: Optional[int], size: Tuple[int, int]) -> int:
+    """``None`` or 0 means Auto; any other value is the chosen cell in pixels."""
+    return int(requested) if requested else auto_block_size(size)
+
 from config import (
     CENSOR_DEFAULT_BLOCK_SIZE,
     CENSOR_DEFAULT_BLUR_RADIUS,
@@ -152,7 +169,7 @@ class Censor:
         """Apply censoring with specified style."""
         normalized_style = str(style or "mosaic").lower()
         if normalized_style == "mosaic":
-            block_size = kwargs.get("block_size", 16)
+            block_size = resolve_block_size(kwargs.get("block_size"), image.size)
             return Censor.apply_mosaic(image, regions, block_size)
         elif normalized_style in {"black_bar", "solid", "black"}:
             return Censor.apply_bar(image, regions, (0, 0, 0))

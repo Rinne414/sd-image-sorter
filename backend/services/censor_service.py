@@ -103,7 +103,8 @@ class CensorApplyRequest(BaseModel):
     image_id: int = Field(..., ge=1)
     regions: List[List[int]] = Field(..., min_length=1)
     style: str = Field("mosaic", pattern="^(mosaic|blur|solid|black_bar|white_bar|sticker)$")
-    block_size: int = Field(16, ge=1)
+    # 0 = Auto: 1/100 of the picture's long side, at least 4 px.
+    block_size: int = Field(0, ge=0)
     blur_radius: int = Field(20, ge=1)
     sticker_path: Optional[str] = None
 
@@ -121,7 +122,8 @@ class CensorSaveRequest(BaseModel):
     image_id: int = Field(..., ge=1)
     regions: List[List[int]] = Field(..., min_length=1)
     style: str = Field("mosaic", pattern="^(mosaic|blur|solid|black_bar|white_bar|sticker)$")
-    block_size: int = Field(16, ge=1)
+    # 0 = Auto: 1/100 of the picture's long side, at least 4 px.
+    block_size: int = Field(0, ge=0)
     blur_radius: int = Field(20, ge=1)
     sticker_path: Optional[str] = None
     output_folder: str = Field(..., min_length=1)

@@ -168,6 +168,8 @@ async function loadCanvasImage(id) {
         CensorState.originalImageData = null;
         CensorState.originalLogicalWidth = logicalDims.width || img.width;
         CensorState.originalLogicalHeight = logicalDims.height || img.height;
+        // Auto's mosaic cell depends on this picture's size.
+        if (typeof syncCensorBlockSizeControls === 'function') syncCensorBlockSizeControls();
         CensorState.preChangesData = null;
         CensorState.showingChanges = false;
         CensorState.activeImagePixels = getCensorItemPixelCount(item, img.width, img.height) || (img.width * img.height);

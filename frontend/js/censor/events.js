@@ -228,8 +228,11 @@ function bindEvents() {
 
     $('#censor-block-size')?.addEventListener('input', (e) => {
         CensorState.blockSize = parseInt(e.target.value, 10) || 16;
-        $('#censor-block-size-value').textContent = CensorState.blockSize;
+        // Picking a size by hand leaves Auto.
+        setCensorBlockSizeAuto(false);
     });
+    $('#censor-block-size-auto')?.addEventListener('change', (e) => setCensorBlockSizeAuto(e.target.checked));
+    syncCensorBlockSizeControls();
 
     // Checkboxes
     $$('.target-region-check').forEach(cb => {
@@ -683,5 +686,30 @@ function bindEvents() {
             }
         }
     });
+}
+
+function setCensorBlockSizeAuto(auto) {
+    CensorState.blockSizeAuto = Boolean(auto);
+    try {
+        localStorage.setItem('censor_block_size_auto', CensorState.blockSizeAuto ? '1' : '0');
+    } catch (_) {
+        // Blocked storage: the choice just is not remembered.
+    }
+    syncCensorBlockSizeControls();
+}
+
+/** Show Auto's cell for the picture being edited, or the hand-picked size. */
+function syncCensorBlockSizeControls() {
+    const autoBox = $('#censor-block-size-auto');
+    const slider = $('#censor-block-size');
+    const valueLabel = $('#censor-block-size-value');
+    if (autoBox) autoBox.checked = CensorState.blockSizeAuto;
+    const size = censorActiveBlockSize();
+    // In Auto the thumb shows the cell Auto chose (clamped to the slider's range).
+    if (slider) slider.value = String(Math.min(Number(slider.max) || size, Math.max(Number(slider.min) || 1, size)));
+    if (valueLabel) {
+        valueLabel.dataset.i18nLocked = '1';
+        valueLabel.textContent = censorT('censor.blockSizeValue', { size }, '{size} px');
+    }
 }
 

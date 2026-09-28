@@ -2628,3 +2628,19 @@ button.censor-batch-outcome-badge:focus-visible {
     letter-spacing: 0.01em;
     text-shadow: none;
 }
+
+/* Auto mosaic cell (1/100 of the long side) next to the block-size slider */
+.censor-block-auto {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--text-muted, #767676);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.censor-block-auto input {
+    margin: 0;
+}

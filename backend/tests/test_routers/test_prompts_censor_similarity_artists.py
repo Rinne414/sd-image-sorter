@@ -318,7 +318,8 @@ class TestCensorRouterValidation:
         [
             ({"image_id": 1, "regions": [[0, 0, 10, 10]], "style": "invalid"}, 400),
             ({"image_id": 1, "regions": [], "style": "mosaic"}, 400),
-            ({"image_id": 1, "regions": [[0, 0, 10, 10]], "style": "mosaic", "block_size": 0}, 400),
+            # 0 now means Auto (1/100 of the long side); a negative cell is still invalid.
+            ({"image_id": 1, "regions": [[0, 0, 10, 10]], "style": "mosaic", "block_size": -1}, 400),
         ],
     )
     def test_preview_validation_rejects_invalid_payloads(self, test_client, payload, expected_status):
