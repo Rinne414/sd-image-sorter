@@ -92,6 +92,16 @@
         if (element) element.textContent = value;
     }
 
+    // ui-refresh re-applies every [data-i18n] element whenever the DOM changes,
+    // so a plain textContent write under an element's static key snaps back to
+    // that key. Live text therefore moves the key along with the words.
+    function setKeyedText(selector, key, fallback) {
+        var element = $(selector);
+        if (!element) return;
+        element.setAttribute('data-i18n', key);
+        element.textContent = t(key, fallback);
+    }
+
     function showEmpty(container, key, fallback) {
         if (!container) return;
         container.innerHTML = '<div class="health-empty">' + escapeHtml(t(key, fallback)) + '</div>';
@@ -281,8 +291,8 @@
             titleKey = 'health.statusWatchTitle';
             detailKey = 'health.statusWatchDetail';
         }
-        setText('#health-status-title', t(titleKey));
-        setText('#health-status-detail', t(detailKey));
+        setKeyedText('#health-status-title', titleKey);
+        setKeyedText('#health-status-detail', detailKey);
     }
 
     function renderKpis(data) {
@@ -419,8 +429,8 @@
             button.classList.toggle('is-loading', isLoading);
         }
         if (isLoading && !state.loaded) {
-            setText('#health-status-title', t('health.loadingTitle', 'Checking your library...'));
-            setText('#health-status-detail', t('health.loadingDetail', 'This is read-only. No files will be moved, deleted, or rewritten.'));
+            setKeyedText('#health-status-title', 'health.loadingTitle', 'Checking your library...');
+            setKeyedText('#health-status-detail', 'health.loadingDetail', 'This is read-only. No files will be moved, deleted, or rewritten.');
         }
     }
 
@@ -439,8 +449,8 @@
             render(data || {});
             updateReparseVisibility();
         } catch (error) {
-            setText('#health-status-title', t('health.failedTitle', 'Could not load library health'));
-            setText('#health-status-detail', t('health.failedDetail', 'The check failed. Try again after the current scan finishes.'));
+            setKeyedText('#health-status-title', 'health.failedTitle', 'Could not load library health');
+            setKeyedText('#health-status-detail', 'health.failedDetail', 'The check failed. Try again after the current scan finishes.');
             if (window.App && typeof window.App.showToast === 'function') {
                 window.App.showToast(t('health.failedToast', 'Failed to load library health'), 'error');
             }
@@ -505,10 +515,15 @@
             var isActive = running && state.reparse.scope === scope;
             button.disabled = running;
             button.classList.toggle('is-loading', isActive);
-            if (label) {
-                label.textContent = isActive
-                    ? (progressText || t(spec.running[0], spec.running[1]))
-                    : t(spec.idle[0], spec.idle[1]);
+            if (!label) return;
+            if (isActive) {
+                // Progress numbers have no key of their own: hold the i18n lock
+                // (I18n.applyToDOM skips locked elements) while the run owns it.
+                label.dataset.i18nLocked = '1';
+                label.textContent = progressText || t(spec.running[0], spec.running[1]);
+            } else {
+                delete label.dataset.i18nLocked;
+                setKeyedText(spec.label, spec.idle[0], spec.idle[1]);
             }
         });
     }

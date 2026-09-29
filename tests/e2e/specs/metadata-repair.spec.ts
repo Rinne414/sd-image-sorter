@@ -398,6 +398,83 @@ test('a run that recovers only sidecar captions reports them instead of "0 promp
   await expect(button).toBeHidden({ timeout: 15_000 })
 })
 
+/**
+ * Live text vs. the page-wide translation pass. ui-refresh re-applies every
+ * [data-i18n] element whenever the DOM changes, so text written by the health
+ * panel into an element that still carries its static key snaps back to that
+ * key: the verdict read "Checking your library..." under a finished score, and
+ * a running re-read went back to its idle label.
+ */
+test('the audit verdict survives a translation pass instead of snapping back to "Checking your library..."', async ({ page }) => {
+  await page.route('**/api/library-health**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      summary: { quality_score: 77, total_images: 1200, metadata_ready_percent: 60, tagged_percent: 90, actionable_count: 40 },
+      issue_counts: {},
+      recommendations: [],
+      duplicate_filenames: { groups: 0, images: 0, samples: [] },
+      top_folders: [],
+      issue_samples: [],
+    }),
+  }))
+
+  await openAuditTab(page)
+  const title = page.locator('#health-status-title')
+  await expect(page.locator('#health-score-value')).toHaveText('77')
+  await expect(title).toHaveText('Library needs a quick cleanup pass')
+
+  await page.evaluate(() => (window as any).UIRefresh.applyTranslations())
+  await expect(title).toHaveText('Library needs a quick cleanup pass')
+  await expect(page.locator('#health-status-detail')).toContainText('metadata or organization gaps')
+
+  // A language switch must still translate the verdict, not freeze it.
+  await page.evaluate(() => (window as any).I18n.setLang('zh-CN'))
+  await expect(title).toHaveText('图库需要快速清理一下')
+})
+
+test('a running re-read keeps its progress label through a translation pass', async ({ page }) => {
+  await page.route('**/api/metadata/health', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      generators: [{ generator: 'comfyui', total: 500, missing_prompt: 0, missing_text: 0, with_raw: 500 }],
+      totals: { total: 500, missing_prompt: 0, missing_text: 0, with_raw: 500 },
+    }),
+  }))
+  await page.route('**/api/metadata/reparse-status', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ active: false }),
+  }))
+  await page.route('**/api/metadata/reparse', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ job_id: 'e2e-reread-job' }),
+  }))
+  let jobDone = false
+  await page.route('**/api/bulk-jobs/e2e-reread-job', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(jobDone
+      ? { status: 'done', total: 500, processed: 500, result: { changed: 0, unchanged: 500, kept: 0, missing_source: 0 } }
+      : { status: 'running', total: 500, processed: 120 }),
+  }))
+
+  await openAuditTab(page)
+  const button = page.locator('#btn-metadata-reread-comfyui')
+  const label = page.locator('#metadata-reread-comfyui-label')
+  await expect(button).toBeVisible({ timeout: 15_000 })
+  await button.click()
+
+  await expect(label).toHaveText('Re-reading… 120/500')
+  await page.evaluate(() => (window as any).UIRefresh.applyTranslations())
+  await expect(label).toHaveText('Re-reading… 120/500')
+  await expect(button).toBeDisabled()
+
+  // Once the run ends the idle label comes back and follows the language again.
+  jobDone = true
+  await expect(label).toHaveText('Re-read ComfyUI Prompts', { timeout: 10_000 })
+  await page.evaluate(() => (window as any).I18n.setLang('zh-CN'))
+  await expect(label).toHaveText('重读 ComfyUI 提示词')
+})
+
 test('a recovered sidecar caption is shown in its own labelled section, not as the generation prompt', async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => (window as any).I18n.setLang('en'))
