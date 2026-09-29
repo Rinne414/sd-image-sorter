@@ -134,6 +134,28 @@ with sqlite3.connect(Path(${JSON.stringify(runtimeDatabasePath)})) as conn:
   runBackendScript(script)
 }
 
+/** A readable ComfyUI row whose file exists, so the gallery's file check keeps it readable. */
+function insertReachableComfyRow(): void {
+  // A different existing file from insertReachableMissingTextRow: images.path is UNIQUE.
+  const imagePath = path.join(repoRoot, 'tests', 'e2e', 'fixtures', 'censor-nudenet-public-domain.jpg')
+  const script = `
+import sqlite3
+from pathlib import Path
+
+with sqlite3.connect(Path(${JSON.stringify(runtimeDatabasePath)})) as conn:
+    conn.execute(
+        """
+        INSERT INTO images (path, filename, generator, prompt, width, height, file_size,
+                            is_readable, metadata_status, created_at)
+        VALUES (?, 'v350-meta-comfy-present.png', 'comfyui', 'a prompt read at scan time', 1440, 900, 1000, 1, 'complete', CURRENT_TIMESTAMP)
+        """,
+        (${JSON.stringify(imagePath)},),
+    )
+    conn.commit()
+`
+  runBackendScript(script)
+}
+
 function readFixtureRows(): Array<{ id: number, prompt: string | null, has_raw: number }> {
   const script = `
 import json
@@ -226,6 +248,55 @@ test('reparse job recovers the raw-envelope row and flags the sourceless row', a
   expect(statusResponse.ok()).toBeTruthy()
   const status = await statusResponse.json()
   expect(status.active).toBe(false)
+})
+
+test('scope comfyui re-reads every ComfyUI row from its file and reports what moved', async ({ request }) => {
+  // Both fixture rows are readable ComfyUI rows whose files do not exist, so
+  // the job must walk them and count them as missing sources, never crash.
+  const start = await request.post('/api/metadata/reparse', { data: { scope: 'comfyui' } })
+  expect(start.ok()).toBeTruthy()
+  const { job_id: jobId } = await start.json()
+  expect(jobId).toBeTruthy()
+
+  const status = await (await request.get('/api/metadata/reparse-status')).json()
+  if (status.active) expect(status.scope).toBe('comfyui')
+
+  let job: Record<string, unknown> | null = null
+  await expect.poll(async () => {
+    const poll = await request.get(`/api/bulk-jobs/${jobId}`)
+    if (!poll.ok()) return 'poll-failed'
+    job = await poll.json()
+    return job ? String(job.status) : 'missing'
+  }, { timeout: 120_000, intervals: [500, 1000] }).toBe('done')
+
+  const result = (job!.result ?? {}) as Record<string, number>
+  for (const key of ['changed', 'unchanged', 'kept', 'missing_source']) {
+    expect(typeof result[key]).toBe('number')
+  }
+  expect(result.missing_source).toBeGreaterThanOrEqual(2)
+  expect(Number(job!.total)).toBeGreaterThanOrEqual(2)
+
+  const unknownScope = await request.post('/api/metadata/reparse', { data: { scope: 'webui' } })
+  expect(unknownScope.status()).toBe(422)
+})
+
+test('dataset audit hero offers Re-read ComfyUI Prompts whenever the library holds ComfyUI images', async ({ page }) => {
+  // The two seeded rows point at files that do not exist, and the gallery
+  // marks such rows unreadable on load; the button counts readable ComfyUI
+  // rows, so add one whose file is really there.
+  insertReachableComfyRow()
+  await page.goto('/')
+  await page.locator('#btn-open-model-manager').click()
+  await expect(page.locator('#model-manager-modal')).toBeVisible()
+  await page.locator('[data-settings-tab="audit"]').click()
+  await expect(page.locator('#audit-section')).toHaveAttribute('open', '')
+
+  const rereadButton = page.locator('#btn-metadata-reread-comfyui')
+  await expect(rereadButton).toBeVisible({ timeout: 15_000 })
+  await expect(rereadButton).toBeEnabled()
+  await expect(rereadButton).toHaveText(/Re-read ComfyUI Prompts/)
+  // The tooltip names how many images the run covers.
+  await expect.poll(async () => rereadButton.getAttribute('title')).toMatch(/ComfyUI images/)
 })
 
 test('dataset audit hero shows the re-parse button while prompts are missing', async ({ page }) => {

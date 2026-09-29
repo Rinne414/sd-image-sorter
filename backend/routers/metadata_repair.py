@@ -27,7 +27,11 @@ router = APIRouter(prefix="/api", tags=["metadata-repair"])
 class ReparseRequest(BaseModel):
     scope: str = Field(
         default="missing_prompt",
-        description="Which rows to retry. Only 'missing_prompt' is supported.",
+        description=(
+            "Which rows to work on: 'missing_prompt' retries every image without a "
+            "prompt; 'comfyui' re-reads every ComfyUI image's prompt from its file "
+            "with the current parser, stored prompt or not."
+        ),
     )
 
 
@@ -74,15 +78,24 @@ Two different recoveries are counted separately and never conflated:
 those land in `sidecar_caption` and deliberately leave `prompt` empty, because
 the image was not generated from that text. Other counts: still_missing /
 used_raw / used_file / missing_source.
+
+`scope: "comfyui"` is a different job: it re-reads EVERY readable ComfyUI
+image in the current library from its file with the current parser, whether
+or not a prompt is stored, and rewrites only the prompt-derived fields of rows
+whose prompt or negative prompt came out different. A file that no longer
+parses to a prompt leaves its row untouched (`kept`). Result:
+`{ "changed", "unchanged", "kept", "missing_source" }`. Use it after a
+parser upgrade that changed how ComfyUI graphs are read.
     """,
 )
 def start_reparse(request: ReparseRequest, background_tasks: BackgroundTasks):
     """Kick off the background text-recovery job."""
-    if request.scope != "missing_prompt":
+    scope = request.scope
+    if scope != metadata_repair_service.SCOPE_MISSING_PROMPT and scope not in metadata_repair_service.REREAD_SCOPES:
         raise HTTPException(status_code=422, detail="Unsupported scope")
     service = get_bulk_job_service()
     job_id = service.create_job(JOB_KIND_REPARSE_METADATA, message="Queued")
-    if not metadata_repair_service.claim_active_job_id(job_id):
+    if not metadata_repair_service.claim_active_job_id(job_id, scope):
         rejected_job = service.cancel_job(job_id)
         if rejected_job is None:
             raise RuntimeError(
@@ -91,7 +104,10 @@ def start_reparse(request: ReparseRequest, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=409, detail="A metadata re-parse is already running")
 
     def _worker(handle: BulkJobHandle) -> None:
-        metadata_repair_service.run_reparse_job(handle)
+        if scope == metadata_repair_service.SCOPE_MISSING_PROMPT:
+            metadata_repair_service.run_reparse_job(handle)
+        else:
+            metadata_repair_service.run_reread_job(handle, scope)
 
     def _run_job() -> None:
         try:
@@ -112,4 +128,10 @@ def get_reparse_status():
     job_id = metadata_repair_service.get_active_job_id()
     job = get_bulk_job_service().get_job(job_id) if job_id else None
     active = bool(job is not None and job["status"] not in TERMINAL_STATUSES)
-    return {"active": active, "job_id": job_id if active else None, "job": job}
+    return {
+        "active": active,
+        "job_id": job_id if active else None,
+        "job": job,
+        # Which button the reopened UI should show as running.
+        "scope": metadata_repair_service.get_active_scope() if active else None,
+    }

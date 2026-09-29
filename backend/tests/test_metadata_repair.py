@@ -13,6 +13,7 @@ from collections.abc import Generator
 
 import pytest
 from fastapi import BackgroundTasks, HTTPException
+from PIL import Image, PngImagePlugin
 
 from routers.metadata_repair import ReparseRequest, get_reparse_status, start_reparse
 from services import metadata_repair_service as mrs
@@ -445,3 +446,89 @@ class TestMetadataHealth:
         assert by_gen["comfyui"]["with_raw"] == 1
         assert by_gen["webui"]["missing_prompt"] == 1
         assert by_gen["webui"]["with_raw"] == 0
+
+
+def _write_comfy_png(path, graph: dict) -> None:
+    """A real 8x8 PNG carrying ``graph`` as its ComfyUI ``prompt`` chunk."""
+    info = PngImagePlugin.PngInfo()
+    info.add_text("prompt", json.dumps(graph))
+    Image.new("RGB", (8, 8), (20, 30, 40)).save(path, pnginfo=info)
+
+
+class TestRereadGeneratorPrompts:
+    """scope 'comfyui': every readable ComfyUI row is parsed again from its file."""
+
+    def test_snapshot_targets_readable_rows_of_that_generator_only(self, repair_env):
+        db = repair_env
+        comfy_id = db.add_image(path="C:/t/c1.png", filename="c1.png", generator="comfyui", prompt="old")
+        db.add_image(path="C:/t/n1.png", filename="n1.png", generator="nai", prompt="nai prompt")
+        unreadable_id = db.add_image(path="C:/t/c2.png", filename="c2.png", generator="comfyui",
+                                     prompt="old", is_readable=False, read_error="boom")
+        ids = mrs.snapshot_generator_ids("comfyui")
+        assert ids == [comfy_id]
+        assert unreadable_id not in ids
+
+    def test_doubled_prompt_row_is_rewritten_from_the_file(self, repair_env, tmp_path):
+        db = repair_env
+        png = tmp_path / "doubled.png"
+        _write_comfy_png(png, RECOVERABLE_GRAPH)
+        stale = "1girl, silver hair, masterpiece\n1girl, silver hair, masterpiece"
+        image_id = db.add_image(path=str(png), filename="doubled.png", generator="comfyui", prompt=stale)
+        with db.get_db() as conn:
+            conn.execute("UPDATE images SET negative_prompt = ? WHERE id = ?",
+                         ("worst quality, lowres\nworst quality, lowres", image_id))
+            conn.commit()
+
+        outcome = mrs._process_reread_chunk([image_id])
+
+        assert outcome["result_delta"] == {"changed": 1, "unchanged": 0, "kept": 0, "missing_source": 0}
+        row = _get_row(db, image_id)
+        assert row["prompt"] == "1girl, silver hair, masterpiece"
+        assert row["negative_prompt"] == "worst quality, lowres"
+        assert row["checkpoint"] == "meinamix_v11.safetensors"
+
+    def test_row_that_already_matches_counts_unchanged(self, repair_env, tmp_path):
+        db = repair_env
+        png = tmp_path / "same.png"
+        _write_comfy_png(png, RECOVERABLE_GRAPH)
+        image_id = db.add_image(path=str(png), filename="same.png", generator="comfyui",
+                                prompt="1girl, silver hair, masterpiece")
+        with db.get_db() as conn:
+            conn.execute("UPDATE images SET negative_prompt = ? WHERE id = ?", ("worst quality, lowres", image_id))
+            conn.commit()
+        outcome = mrs._process_reread_chunk([image_id])
+        assert outcome["result_delta"] == {"changed": 0, "unchanged": 1, "kept": 0, "missing_source": 0}
+
+    def test_file_without_a_prompt_keeps_the_stored_text(self, repair_env, tmp_path):
+        db = repair_env
+        png = tmp_path / "plain.png"
+        Image.new("RGB", (8, 8)).save(png)  # no metadata at all
+        image_id = db.add_image(path=str(png), filename="plain.png", generator="comfyui",
+                                prompt="text the user can still search")
+        outcome = mrs._process_reread_chunk([image_id])
+        assert outcome["result_delta"]["kept"] == 1
+        assert outcome["result_delta"]["changed"] == 0
+        assert _get_row(db, image_id)["prompt"] == "text the user can still search"
+
+    def test_missing_file_counts_missing_source(self, repair_env):
+        db = repair_env
+        image_id = db.add_image(path="C:/t/definitely/not/here.png", filename="here.png",
+                                generator="comfyui", prompt="old")
+        outcome = mrs._process_reread_chunk([image_id])
+        assert outcome["result_delta"]["missing_source"] == 1
+        assert _get_row(db, image_id)["prompt"] == "old"
+
+    def test_router_accepts_the_comfyui_scope_and_reports_it(self, repair_jobs: BulkJobService):
+        background_tasks = BackgroundTasks()
+        started = start_reparse(ReparseRequest(scope="comfyui"), background_tasks)
+        assert started["job_id"]
+        status = get_reparse_status()
+        assert status["active"] is True
+        assert status["scope"] == "comfyui"
+        _run_background_tasks(background_tasks)
+        assert get_reparse_status()["active"] is False
+
+    def test_router_still_rejects_unknown_scopes(self, repair_jobs: BulkJobService):
+        with pytest.raises(HTTPException) as excinfo:
+            start_reparse(ReparseRequest(scope="webui"), BackgroundTasks())
+        assert excinfo.value.status_code == 422

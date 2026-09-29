@@ -4130,6 +4130,12 @@ window.I18nLang_en = {
     'health.reparseCancelled': 'Text recovery cancelled.',
     'health.reparseFailed': 'Text recovery failed.',
     'health.reparseBusy': 'A text recovery run is already in progress.',
+    'health.rereadComfy': 'Re-read ComfyUI Prompts',
+    'health.rereadComfyTitle': 'Read the prompt of all {count} ComfyUI images again from their files with the current parser. Only rows whose prompt or negative prompt comes out different are rewritten; tags, scores and captions stay.',
+    'health.rereadRunning': 'Re-reading…',
+    'health.rereadRunningCount': 'Re-reading… {processed}/{total}',
+    'health.rereadDone': 'Re-read finished: {changed} images got a different prompt, {unchanged} were already right, {kept} files no longer parse to a prompt and were left as they were, {missing} files were not found.',
+    'health.rereadDoneSame': 'Re-read finished: all {unchanged} ComfyUI prompts were already right.',
 
     // ==== Dataset Maker (v3.2.2 issue #5 follow-up) ====
     'dataset.title': 'Dataset Maker',

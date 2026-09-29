@@ -4130,6 +4130,12 @@ window.I18nLang_zhCN = {
     'health.reparseCancelled': '文本恢复已取消。',
     'health.reparseFailed': '文本恢复失败。',
     'health.reparseBusy': '已有一个文本恢复任务在运行。',
+    'health.rereadComfy': '重读 ComfyUI 提示词',
+    'health.rereadComfyTitle': '用现在的解析器，把全部 {count} 张 ComfyUI 图的提示词从文件里重新读一遍。只有提示词或反向提示词读出来不一样的图才会改写；标签、评分、描述都不动。',
+    'health.rereadRunning': '重读中…',
+    'health.rereadRunningCount': '重读中… {processed}/{total}',
+    'health.rereadDone': '重读完成：{changed} 张的提示词有变化，{unchanged} 张本来就对，{kept} 张文件读不出提示词、保持原样，{missing} 张找不到文件。',
+    'health.rereadDoneSame': '重读完成：{unchanged} 张 ComfyUI 图的提示词本来就都对。',
 
     // ==== 数据集制作工具 (v3.2.2 issue #5 follow-up) ====
     'dataset.title': '数据集制作',

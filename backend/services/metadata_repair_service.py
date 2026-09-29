@@ -58,37 +58,54 @@ _READABLE_WHERE = "COALESCE(is_readable, 1) = 1"
 # (db_facets.get_library_health_report reads the same constant).
 _MISSING_PROMPT_WHERE = f"{NO_PROMPT_SQL} AND {_READABLE_WHERE}"
 
+# Generators whose prompts can be RE-READ from the files with today's parser
+# even though a prompt is already stored. ComfyUI is the one whose graph
+# parser keeps learning new node families; a fix there (2026-09-29: Impact
+# Pack pipe slots, tag-generator ban lists, two-pass duplicates) changes what
+# thousands of already-indexed rows should say.
+REREAD_SCOPES = ("comfyui",)
+SCOPE_MISSING_PROMPT = "missing_prompt"
+
 _active_lock = threading.Lock()
 _active_job_id: Optional[str] = None
+_active_scope: Optional[str] = None
 
 
-def claim_active_job_id(job_id: str) -> bool:
+def claim_active_job_id(job_id: str, scope: str = SCOPE_MISSING_PROMPT) -> bool:
     """Claim the re-parse slot unless its registry owner is inactive."""
     from services.bulk_job_service import TERMINAL_STATUSES, get_bulk_job_service
 
-    global _active_job_id
+    global _active_job_id, _active_scope
     with _active_lock:
         if _active_job_id is not None:
             current = get_bulk_job_service().get_job(_active_job_id)
             if current is not None and current["status"] not in TERMINAL_STATUSES:
                 return False
         _active_job_id = job_id
+        _active_scope = scope
         return True
 
 
 def release_active_job_id(job_id: str) -> bool:
     """Release the re-parse slot only when ``job_id`` still owns it."""
-    global _active_job_id
+    global _active_job_id, _active_scope
     with _active_lock:
         if _active_job_id != job_id:
             return False
         _active_job_id = None
+        _active_scope = None
         return True
 
 
 def get_active_job_id() -> Optional[str]:
     with _active_lock:
         return _active_job_id
+
+
+def get_active_scope() -> Optional[str]:
+    """The scope of the job holding the slot ("missing_prompt" or a generator)."""
+    with _active_lock:
+        return _active_scope if _active_job_id is not None else None
 
 
 def snapshot_missing_prompt_ids() -> List[int]:
@@ -336,6 +353,107 @@ def run_reparse_job(handle: BulkJobHandle) -> None:
     worker = BulkJobService.chunked_worker(
         snapshot_missing_prompt_ids,
         _process_chunk,
+        chunk_size=REPARSE_CHUNK_SIZE,
+    )
+    worker(handle)
+
+
+# ---------------------------------------------------------------------------
+# Re-read: every readable image of one generator, file first, prompt already
+# stored or not. Only the prompt-derived fields change, and only when the file
+# still parses to a prompt; a row is never emptied by a parser regression.
+# ---------------------------------------------------------------------------
+
+
+def snapshot_generator_ids(generator: str) -> List[int]:
+    """Readable rows of ``generator`` in the current library, before any write."""
+    with get_db() as conn:
+        from library_context import current_library_sql
+
+        lib_sql, lib_params = current_library_sql()
+        rows = conn.execute(
+            f"SELECT id FROM images WHERE generator = ? AND {_READABLE_WHERE} AND {lib_sql} ORDER BY id",
+            (generator, *lib_params),
+        ).fetchall()
+    return [int(row["id"]) for row in rows]
+
+
+def _normalize_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _process_reread_chunk(chunk_ids: List[int]) -> Dict[str, Any]:
+    """Bulk-job chunk: parse each file again and rewrite rows whose text moved."""
+    from metadata_parser import MetadataParser
+
+    parser = MetadataParser()
+    placeholders = ",".join("?" for _ in chunk_ids)
+    with get_db() as conn:
+        rows = [
+            dict(row)
+            for row in conn.execute(
+                f"""
+                SELECT id, path, prompt, negative_prompt
+                FROM images
+                WHERE id IN ({placeholders}) AND {_READABLE_WHERE}
+                """,
+                chunk_ids,
+            ).fetchall()
+        ]
+
+    changed = unchanged = kept = missing_source = 0
+    errors: List[str] = []
+    for row in rows:
+        path = row.get("path")
+        if not path or not os.path.isfile(path):
+            missing_source += 1
+            continue
+        try:
+            parsed = parser.parse(path)
+        except Exception as exc:
+            errors.append(f"image {row.get('id')}: {exc}")
+            continue
+        prompt = _normalize_text(parsed.get("prompt"))
+        if not prompt:
+            # Today's parser sees no prompt where the scan once did: leave the
+            # row as it is rather than erase text the user can still search.
+            kept += 1
+            continue
+        negative = _normalize_text(parsed.get("negative_prompt"))
+        if prompt == _normalize_text(row.get("prompt")) and negative == _normalize_text(row.get("negative_prompt")):
+            unchanged += 1
+            continue
+        generator = parsed.get("generator")
+        update_reparsed_prompt_fields(
+            int(row["id"]),
+            prompt=prompt,
+            negative_prompt=negative or None,
+            checkpoint=parsed.get("checkpoint"),
+            loras=parsed.get("loras") or None,
+            generator=generator if generator and generator != "unknown" else None,
+        )
+        changed += 1
+
+    return {
+        "processed": len(chunk_ids),
+        "errors": errors,
+        "result_delta": {
+            "changed": changed,
+            "unchanged": unchanged,
+            # The file parsed to no prompt at all; the stored text was kept.
+            "kept": kept,
+            "missing_source": missing_source,
+        },
+    }
+
+
+def run_reread_job(handle: BulkJobHandle, generator: str) -> None:
+    """Worker body for re-reading one generator's prompts from the files."""
+    from services.bulk_job_service import BulkJobService
+
+    worker = BulkJobService.chunked_worker(
+        lambda: snapshot_generator_ids(generator),
+        _process_reread_chunk,
         chunk_size=REPARSE_CHUNK_SIZE,
     )
     worker(handle)

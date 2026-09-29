@@ -5709,6 +5709,10 @@
                                      (plus the files and their .txt/.json sidecars) through
                                      the current parser. Hidden until the health endpoint
                                      reports images with no text at all (missing_text). -->
+                                <!-- Re-reads every ComfyUI image's prompt from its file with the
+                                     current parser (stored prompt or not). Shown whenever the library
+                                     holds readable ComfyUI images. -->
+                                <button class="btn btn-ghost btn-small" id="btn-metadata-reread-comfyui" type="button" hidden><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg> <span id="metadata-reread-comfyui-label" data-i18n="health.rereadComfy">Re-read ComfyUI Prompts</span></button>
                                 <button class="btn btn-ghost btn-small" id="btn-metadata-reparse" type="button" hidden><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg> <span id="metadata-reparse-label" data-i18n="health.reparse">Recover Missing Text</span></button>
                                 <button class="btn btn-primary btn-small" id="btn-health-refresh">↻ <span data-i18n="health.refresh">Refresh Audit</span></button>
                             </div>
