@@ -36,7 +36,7 @@ ComfyUI 提示词不再把反向混进正向或存两遍，一键重读旧图；
 
 ## Validation / 验证
 
-Full CI: pending (filled in after the run). / 完整 CI：待跑完后填写。
+Full CI on the final tree (2026-09-29): lock freshness, runtime dependencies, security audit, JS syntax, E2E typecheck, ruff, backend 7,177 passed / 12 skipped / 0 failed, Playwright 1,023 total: 1,018 passed / 0 failed / 5 skipped / 0 flaky, click coverage gate 46.70% (baseline 39%); lazy_release_qa --skip-server PASS; Windows portable booted on a copy of the owner's library (12,853 images). / 最终代码完整 CI 全部通过：后端 7,177 通过 / 12 略过 / 0 失败，Playwright 1,023 个：1,018 通过 / 0 失败 / 5 略过 / 0 不稳定，点击覆盖门 46.70%；发布 QA 通过；Windows 便携版在主人图库副本上开机验证。
 
 ---
 
