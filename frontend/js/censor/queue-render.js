@@ -177,8 +177,10 @@ function renderQueue() {
         // Update properties (always update these - they may have changed)
         img.dataset.index = index;
         const baseTitle = item.outputFilename || '';
+        // Only while the badge says so: a later refine or re-detect clears the
+        // status but not the old failure list.
         const batchNote = item.batchError
-            || (hasCensorDetectorFailures(item) ? describeCensorDetectorFailures(item) : '');
+            || (getCensorBatchOutcome(item) === 'detector-error' ? describeCensorDetectorFailures(item) : '');
         img.title = batchNote ? `${baseTitle}\n⚠ ${batchNote}` : baseTitle;
 
         // Only update src if it changed (prevents reload flash)

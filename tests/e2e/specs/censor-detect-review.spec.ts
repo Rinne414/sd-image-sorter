@@ -389,6 +389,24 @@ test('a detector that did not run is reported as a detector error, with one batc
   })
   await seedCensorQueue(page)
 
+  // A large send keeps only its first window in the queue; later pictures are
+  // fetched page by page during the batch and never join it. Their notes must
+  // still reach the summary.
+  const LATE_IMAGE = { id: 9403, filename: 'censor-detect-late.png', path: 'L:/censor-detect-late.png', width: 64, height: 64 }
+  const fulfillImage = (route: Route) => route.fulfill({ status: 200, contentType: 'image/svg+xml', body: MOCK_IMAGE_SVG })
+  await page.route(`**/api/image-file/${LATE_IMAGE.id}**`, fulfillImage)
+  await page.route(`**/api/image-thumbnail/${LATE_IMAGE.id}**`, fulfillImage)
+  await page.route('**/api/images/export-data', async (route) => {
+    const body = route.request().postDataJSON() as { selection_token?: string }
+    if (body?.selection_token !== 'late-token') return route.fallback()
+    await route.fulfill({
+      json: { images: [...IMAGES, LATE_IMAGE], total: 3, count: 3, offset: 0, has_more: false, next_offset: null },
+    })
+  })
+  await page.evaluate(() => {
+    (window as any).__CENSOR_STATE__.tokenQueueSource = { selectionToken: 'late-token', hasMore: true, nextOffset: 2 }
+  })
+
   await page.locator('#btn-run-auto-censor').click()
 
   const badges = page.locator('#censor-queue-list [data-testid="censor-batch-outcome-badge"]')
@@ -405,7 +423,7 @@ test('a detector that did not run is reported as a detector error, with one batc
   const warnings = page.locator('#toast-container .toast.warning')
   await expect(warnings).toHaveCount(1)
   await expect(warnings.first().locator('.toast-message')).toHaveText(
-    'Legacy YOLO did not run on 2 image(s), so those results may be incomplete.'
+    'Legacy YOLO did not run on 3 image(s), so those results may be incomplete.'
   )
   await expect(page.locator('#toast-container')).not.toContainText('found no regions')
   await expect(page.locator('#toast-container')).not.toContainText('Batch processing complete')
@@ -414,7 +432,7 @@ test('a detector that did not run is reported as a detector error, with one batc
   await warnings.first().locator('.toast-action-btn').click()
   const notes = page.locator('#censor-batch-notes')
   await expect(notes).toBeVisible()
-  await expect(notes.locator('.guide-steps li')).toHaveCount(2)
+  await expect(notes.locator('.guide-steps li')).toHaveCount(3)
   await expect(notes.locator('.guide-steps li').first()).toContainText('1 image(s)')
   await notes.locator('[data-guide-close]').click()
   await expect(notes).toHaveCount(0)

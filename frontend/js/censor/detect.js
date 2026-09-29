@@ -61,7 +61,7 @@ function readCensorDetectorFailures(result) {
 // (bilingual, with the raw exception) and the per-image wording can differ,
 // so joining every unique note used to stack a whole toast of near-copies.
 // The full list, each note once with its image count, is one click away.
-function showCensorBatchWarningSummary(items = CensorState.queue) {
+function showCensorBatchWarningSummary(items) {
     const notes = new Map();
     const failedBackends = new Set();
     let detectorErrorImages = 0;
@@ -356,6 +356,9 @@ async function runAutoCensorBatch() {
     showLoading(true, censorT('censor.autoCensorPreparing', null, 'Auto Censor · preparing queue...'));
 
     let count = 0;
+    // Pictures past the loaded window are fetched page by page and never join
+    // CensorState.queue, so every summary below reads this list instead.
+    const processed = [];
     const result = await processCensorBatchItems(async (item, { index, total }) => {
         showLoading(true, window.App.buildProgressText({
             progress: { message: item.originalFilename || item.outputFilename || `Image ${item.id}` },
@@ -366,6 +369,7 @@ async function runAutoCensorBatch() {
             primaryLabel: censorT('censor.autoCensorPrimary', null, 'Auto Censor')
         }));
         await runDetectionForImage(item, true, executionPlan); // true = silent/no-refresh
+        processed.push(item);
         count += 1;
     });
 
@@ -377,8 +381,8 @@ async function runAutoCensorBatch() {
     // Honest summary: runDetectionForImage now marks item.batchStatus in silent
     // mode, so a run where every detection threw no longer shows a green
     // "complete" toast. renderQueue() already red-outlines failed thumbs.
-    const { failedCount } = _summarizeBatchFailures();
-    const { appliedCount, emptyCount } = _summarizeBatchDetections();
+    const { failedCount } = _summarizeBatchFailures(processed);
+    const { appliedCount, emptyCount } = _summarizeBatchDetections(processed);
     if (failedCount > 0) {
         const okCount = Math.max(0, count - failedCount);
         showToast(
@@ -420,7 +424,7 @@ async function runAutoCensorBatch() {
     }
     // Neither applied nor cleanly empty: every image lost a detector, and the
     // summary below names it instead of a success toast.
-    showCensorBatchWarningSummary();
+    showCensorBatchWarningSummary(processed);
 }
 
 // Bake a set of detected regions into an item (proxy edit-op path or full
@@ -718,8 +722,10 @@ async function runDetectionForAll() {
     showLoading(true, censorT('censor.loadingDetectPreparing', null, 'Detect All · preparing queue...'));
     let count = 0;
     let failedCount = 0;
+    const processed = [];
 
     const result = await processCensorBatchItems(async (item, { index, total }) => {
+        processed.push(item);
         try {
             showLoading(true, window.App.buildProgressText({
                 progress: { message: item.originalFilename || item.outputFilename || `Image ${item.id}` },
@@ -747,7 +753,7 @@ async function runDetectionForAll() {
     showLoading(false);
     renderQueue();
     if (CensorState.activeId) loadCanvasImage(CensorState.activeId);
-    failedCount = Math.max(failedCount, _summarizeBatchFailures().failedCount);
+    failedCount = Math.max(failedCount, _summarizeBatchFailures(processed).failedCount);
     const total = result.total;
     if (failedCount > 0) {
         showToast(
@@ -767,7 +773,7 @@ async function runDetectionForAll() {
         );
     }
 
-    showCensorBatchWarningSummary();
+    showCensorBatchWarningSummary(processed);
 }
 
 
