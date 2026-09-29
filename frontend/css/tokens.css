@@ -3952,3 +3952,37 @@ li > .icon {
     background: transparent;
     padding-inline: 0;
 }
+
+/* .form-input was only ever styled inside Dataset Maker; everywhere else
+   (Reverse Prompt's target select, for one) it rendered as a bare native
+   control. One quiet field look for all of them — zero specificity, so the
+   dataset's own field rules still win where they exist. */
+:where(#app, body > .modal) :where(.form-input) {
+    min-height: 32px;
+    padding: 6px 10px;
+    border: 1px solid var(--hairline-2);
+    border-radius: var(--r-ctl);
+    background: var(--control-bg);
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+}
+
+:where(#app, body > .modal) :where(.form-input):hover {
+    border-color: var(--border-strong);
+}
+
+:where(#app, body > .modal) :where(.form-input):focus-visible {
+    outline: 2px solid rgba(236, 236, 238, 0.85);
+    outline-offset: 1px;
+}
+
+/* Censor sliders are 18px tall so the thumb has a hit area; painting that
+   whole box made a heavy grey bar. Draw a centred 4px line instead. */
+#app #view-censor .slider-v2 {
+    background-color: transparent;
+    background-image: linear-gradient(rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.14));
+    background-position: center;
+    background-size: 100% 4px;
+    background-repeat: no-repeat;
+}
