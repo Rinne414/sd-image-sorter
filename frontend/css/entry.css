@@ -1034,19 +1034,16 @@ body.entry-active {
 }
 
 .catalog-group-title {
-    font-family: var(--font-mono);
-    font-size: var(--fs-footnote);
-    font-weight: 700;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: rgba(var(--accent-rgb), 0.45);
-    margin: 10px 2px 2px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-2);
+    margin: 14px 4px 4px;
 }
 
 .catalog-group {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
 }
 
 .catalog-item {
@@ -1054,24 +1051,29 @@ body.entry-active {
     align-items: center;
     gap: 12px;
     width: 100%;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: var(--r-card);
-    padding: 10px 14px;
+    background: transparent;
+    border: 0;
+    border-radius: var(--r-ctl);
+    padding: 9px 12px;
     cursor: pointer;
     color: var(--text);
     text-align: left;
-    transition: border-color 150ms ease, background 150ms ease;
+    transition: background var(--duration-fast) ease;
 }
 
-.catalog-item:hover {
-    border-color: rgba(var(--blue-rgb), 0.55);
-    background: rgba(var(--blue-rgb), 0.08);
+.catalog-item:hover,
+.catalog-item:focus-visible {
+    background: rgba(255, 255, 255, 0.06);
 }
 
 .catalog-icon {
-    font-size: 18px;
+    display: inline-flex;
     flex: 0 0 auto;
+    color: var(--text-2);
+}
+
+.catalog-item:hover .catalog-icon {
+    color: var(--text);
 }
 
 .catalog-copy {
@@ -1083,22 +1085,24 @@ body.entry-active {
 
 .catalog-name {
     font-size: 13px;
-    font-weight: 700;
+    font-weight: 600;
 }
 
 .catalog-desc {
-    font-size: 11px;
-    color: rgba(var(--accent-rgb), 0.55);
+    font-size: 12px;
+    color: var(--muted);
 }
 
 .catalog-arrow {
     margin-left: auto;
     font-size: 14px;
-    color: rgba(var(--accent-rgb), 0.4);
+    color: var(--muted);
+    transition: color var(--duration-fast) ease, transform var(--duration-fast) ease;
 }
 
 .catalog-item:hover .catalog-arrow {
-    color: var(--blue);
+    color: var(--text);
+    transform: translateX(3px);
 }
 
 .entry-free-all .free-all-label {
