@@ -245,18 +245,17 @@
     padding: 14px;
     border: 1px solid var(--frame);
     border-radius: var(--r-panel);
-    background:
-        rgba(255,255,255,0.045),
-        var(--surface-1, rgba(28, 28, 28, 0.5));
-    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+    /* Was a two-colour list left over from a gradient; a colour can only be
+       the last background layer, so the declaration was dropped and the
+       cards had no surface at all. */
+    background: var(--surface-1);
+    box-shadow: none;
 }
 .dataset-import-card-gallery { grid-area: gallery; }
 .dataset-import-card-folder { grid-area: folder; }
 .dataset-import-card-audit { grid-area: audit; }
 .dataset-import-card-folder {
-    background:
-        rgba(var(--accent-primary-rgb, 124, 139, 255), 0.10),
-        var(--surface-1, rgba(28, 28, 28, 0.5));
+    background: var(--surface-1);
 }
 .dataset-import-card-copy {
     display: flex;

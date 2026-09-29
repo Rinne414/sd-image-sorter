@@ -3945,3 +3945,10 @@ li > .icon {
     border-top: 1px solid var(--hairline-1);
     border-radius: 0;
 }
+
+/* Inside the folder import card the path row is a field row, not a second
+   panel on the panel. */
+#app #view-dataset .dataset-import-card .dataset-folder-bar {
+    background: transparent;
+    padding-inline: 0;
+}
