@@ -2419,7 +2419,7 @@
     flex-direction: column;
     background: var(--surface-1, rgba(28, 28, 28, 0.5));
     border: 1px solid var(--border-color, rgba(255,255,255,0.08));
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     padding: 12px;
     min-height: 0;
     overflow: hidden;
@@ -2911,7 +2911,7 @@
     padding: 12px;
     background: rgba(17, 17, 17, 0.72);
     border: 1px solid var(--border-color, rgba(255,255,255,0.12));
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     overflow: hidden;
 }
 #view-dataset .dataset-split-head,
@@ -2954,7 +2954,7 @@
     padding: 10px;
     background: rgba(28, 28, 28, 0.72);
     border: 1px solid rgba(166, 166, 166, 0.18);
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     overflow-y: auto;
 }
 #view-dataset .dataset-split-position {

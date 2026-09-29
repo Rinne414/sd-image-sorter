@@ -155,7 +155,7 @@ body::after {
 .update-popup-card {
     background: var(--bg-card-solid, #1E1E1E);
     border: 1px solid var(--glass-border, rgba(var(--accent-rgb), 0.12));
-    border-radius: 16px;
+    border-radius: var(--r-panel);
     padding: 20px;
     min-width: 300px;
     width: min(440px, calc(100vw - 32px));
@@ -236,7 +236,7 @@ body::after {
 
 .update-channel-panel {
     margin-top: 2px;
-    border-radius: 12px;
+    border-radius: var(--r-panel);
 }
 
 .update-popup .guided-advanced-summary {
@@ -294,7 +294,7 @@ body::after {
     width: 100%;
     min-height: 38px;
     border: 1px solid var(--hairline-2);
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     background: rgba(28, 28, 28, 0.72);
     color: var(--text-primary, #FDFCFA);
     font-size: 13px;
@@ -351,7 +351,7 @@ body::after {
 
 .nav-tab {
     padding: 10px 16px;
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     border-color: transparent;
     background: transparent;
     color: var(--text-secondary);
@@ -530,7 +530,7 @@ body::after {
 .nav-bar.nav-tabs-compact-labels .nav-tools-toggle {
     padding: 8px 7px;
     gap: 4px;
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     font-size: 13px;
 }
 
@@ -611,7 +611,7 @@ html.lang-zh .nav-bar.nav-tabs-compact-labels .nav-tools-toggle {
     justify-content: center;
     line-height: 1.2;
     min-height: var(--btn-h);
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     border: 1px solid var(--border-color);
     background: rgba(255, 255, 255, 0.035);
     color: var(--text-primary);
@@ -761,7 +761,7 @@ textarea,
 .sort-dropdown {
     background: var(--control-bg);
     border: 1px solid var(--border-color);
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     color: var(--text-primary);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
@@ -807,7 +807,7 @@ textarea:focus,
     grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.95fr);
     gap: 18px;
     padding: 20px 22px;
-    border-radius: 22px;
+    border-radius: var(--r-panel);
     border: 1px solid var(--frame);
     background:
         rgba(var(--accent-secondary-rgb), 0.12),
@@ -966,7 +966,7 @@ textarea:focus,
 .control-section,
 .artist-detail-content {
     background: rgba(255, 255, 255, 0.025);
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     border: 1px solid var(--border-subtle);
 }
 
@@ -1024,7 +1024,7 @@ textarea:focus,
 
 #filter-modal .filter-focus-target {
     animation: none;
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     box-shadow: 0 0 0 2px rgba(var(--accent-primary-rgb), 0.55);
 }
 
@@ -1064,7 +1064,7 @@ textarea:focus,
 .tag-runtime-card,
 .tag-runtime-advanced,
 .guided-advanced-panel {
-    border-radius: 16px;
+    border-radius: var(--r-panel);
     border: 1px solid var(--frame);
     background: rgba(255, 255, 255, 0.04);
 }
@@ -1081,7 +1081,7 @@ textarea:focus,
     flex-direction: column;
     gap: 10px;
     padding: 14px 16px;
-    border-radius: 16px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(var(--accent-primary-rgb), 0.16);
 }
@@ -1284,7 +1284,7 @@ textarea:focus,
     margin: 0;
     min-height: 56px;
     padding: 12px 14px;
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--frame);
 }
@@ -1315,7 +1315,7 @@ textarea:focus,
     flex-direction: column;
     gap: 10px;
     padding: 14px 16px;
-    border-radius: 16px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--frame);
 }
@@ -1375,7 +1375,7 @@ textarea:focus,
     flex-direction: column;
     gap: 8px;
     padding: 12px 14px;
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--frame);
 }
@@ -1389,7 +1389,7 @@ textarea:focus,
 .tagger-disabled-notice {
     margin-top: 12px;
     padding: 12px 14px;
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     background: rgba(var(--danger-rgb), 0.10);
     border: 1px solid rgba(var(--danger-rgb), 0.22);
 }
@@ -1419,7 +1419,7 @@ textarea:focus,
 
 .censor-detect-section {
     padding: 18px 18px 16px;
-    border-radius: 18px;
+    border-radius: var(--r-panel);
     background: rgba(16, 16, 16, 0.54);
     border: 1px solid var(--frame);
     margin-top: 14px;
@@ -1500,7 +1500,7 @@ textarea:focus,
     flex-direction: column;
     gap: 12px;
     padding: 14px;
-    border-radius: 16px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--frame);
 }
@@ -1525,7 +1525,7 @@ textarea:focus,
     gap: 12px;
     align-items: center;
     padding: 10px 12px;
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     background: rgba(16, 16, 16, 0.58);
     border: 1px solid var(--frame);
     color: var(--text-primary);
@@ -1555,7 +1555,7 @@ textarea:focus,
 .rename-preview-alert {
     display: none;
     padding: 10px 12px;
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     font-size: 12px;
     line-height: 1.55;
 }
@@ -1601,7 +1601,7 @@ textarea:focus,
     min-width: 40px;
     min-height: 40px;
     padding: 0;
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     font-size: 15px;
     line-height: 1;
 }
@@ -1657,7 +1657,7 @@ textarea:focus,
     margin-bottom: 12px;
     background: var(--toolbar-bg);
     border: 1px solid var(--border-subtle);
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
 }
 
@@ -1689,7 +1689,7 @@ textarea:focus,
     min-width: 0;
     max-width: 100%;
     padding: 2px;
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     border: 1px solid var(--border-subtle, rgba(var(--accent-rgb), 0.10));
     background: rgba(0, 0, 0, 0.22);
 }
@@ -2009,7 +2009,7 @@ textarea:focus,
     margin: 0 0 16px;
     padding: 4px;
     border: 1px solid var(--border-subtle);
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     background: var(--surface-card);
     position: sticky;
     top: 0;
@@ -2088,7 +2088,7 @@ textarea:focus,
     margin: 0 0 18px;
     padding: 14px;
     border: 1px solid var(--border-subtle);
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     background: var(--surface-card);
 }
 
@@ -2112,7 +2112,7 @@ textarea:focus,
    gets an unmistakable on (accent) / off (dimmed) look. */
 .settings-row.settings-row-toggle {
     cursor: pointer;
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     margin: 0 -8px;
     padding: 0 8px;
     transition: background 140ms ease;
@@ -2218,7 +2218,7 @@ textarea:focus,
 
 .model-manager-stat {
     padding: 14px 16px;
-    border-radius: 16px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.06);
 }
@@ -2238,7 +2238,7 @@ textarea:focus,
 }
 .feature-availability-card {
     padding: 14px 16px;
-    border-radius: 16px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--frame);
 }
@@ -2279,7 +2279,7 @@ textarea:focus,
     margin: 0 0 16px;
     padding: 14px 16px;
     border: 1px solid rgba(var(--accent-primary-rgb), 0.32);
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     background: rgba(var(--accent-primary-rgb), 0.10);
 }
 
@@ -2309,7 +2309,7 @@ textarea:focus,
     margin: 0 0 16px;
     padding: 14px 16px;
     border: 1px solid var(--accent, #d39f64);
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     background: rgba(211, 159, 100, 0.12);
 }
 
@@ -2345,7 +2345,7 @@ textarea:focus,
     margin: 12px 0;
     padding: 10px 12px;
     background: rgba(255, 255, 255, 0.04);
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     max-height: 220px;
     overflow-y: auto;
     font-size: 12.5px;
@@ -2425,7 +2425,7 @@ textarea:focus,
     flex-direction: column;
     gap: 12px;
     padding: 18px;
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     background: var(--surface-card);
     border: 1px solid var(--border-subtle);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
@@ -2697,7 +2697,7 @@ textarea:focus,
     padding: 14px 16px;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--frame);
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     transition: border-color 180ms ease, background 180ms ease;
 }
 
@@ -2770,7 +2770,7 @@ textarea:focus,
     padding: 28px 22px;
     text-align: center;
     border: 1px dashed rgba(var(--accent-rgb), 0.22);
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.05);
 }
 
@@ -2883,7 +2883,7 @@ textarea:focus,
     padding: 10px 14px;
     background: rgba(0, 0, 0, 0.72);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
+    border-radius: var(--r-panel);
 }
 
 /* Minimap moves to the bottom-left for the same reason (it used to sit
@@ -3073,7 +3073,7 @@ textarea:focus,
     flex-wrap: wrap;
     margin: 0 0 18px;
     padding: 10px 14px;
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     border: 1px solid var(--glass-border);
     background: var(--glass-bg, rgba(255, 255, 255, 0.03));
 }
@@ -3130,7 +3130,7 @@ textarea:focus,
     gap: 10px;
     margin: 12px 0 14px;
     padding: 14px 16px;
-    border-radius: 16px;
+    border-radius: var(--r-panel);
     border: 1px solid var(--frame);
     background: rgba(21, 21, 21, 0.62);
 }
@@ -3266,7 +3266,7 @@ textarea:focus,
 .space-indicator {
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--frame);
-    border-radius: 18px;
+    border-radius: var(--r-panel);
 }
 
 .folder-slot {
@@ -3309,7 +3309,7 @@ textarea:focus,
 #view-similar[data-similar-phase="prepare"] #similar-workflow-status.similar-workflow-primary {
     width: min(780px, 100%);
     padding: 18px 20px;
-    border-radius: 16px;
+    border-radius: var(--r-panel);
 }
 
 #view-similar[data-similar-phase="prepare"] #similar-workflow-status .scope-status-actions .btn {
@@ -3425,7 +3425,7 @@ textarea:focus,
     gap: 14px;
     min-height: 56px;
     padding: 12px 14px;
-    border-radius: 18px;
+    border-radius: var(--r-panel);
     border: 1px dashed rgba(var(--accent-secondary-rgb), 0.34);
     background:
         rgba(var(--accent-secondary-rgb), 0.12);
@@ -3506,7 +3506,7 @@ textarea:focus,
 .slot-row,
 .cat-group,
 .preset-item {
-    border-radius: 16px;
+    border-radius: var(--r-panel);
 }
 
 #promptlab-output {
@@ -3520,7 +3520,7 @@ textarea:focus,
     margin-bottom: 14px;
     padding: 14px;
     border: 1px solid rgba(var(--accent-primary-rgb), 0.2);
-    border-radius: 18px;
+    border-radius: var(--r-panel);
     background:
         transparent,
         rgba(16, 16, 16, 0.58);
@@ -3653,7 +3653,7 @@ textarea:focus,
 .promptlab-stat-card {
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--frame);
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     padding: 14px 20px;
     text-align: center;
     min-width: 120px;
@@ -3705,7 +3705,7 @@ textarea:focus,
 .promptlab-stats-col {
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--frame);
-    border-radius: 18px;
+    border-radius: var(--r-panel);
     box-shadow: var(--shadow-card);
 }
 
@@ -3869,7 +3869,7 @@ textarea:focus,
     align-items: center;
     justify-content: center;
     padding: 18px;
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     border: 1px dashed var(--frame);
     background: rgba(255, 255, 255, 0.03);
     color: var(--text-secondary);
@@ -3891,7 +3891,7 @@ textarea:focus,
 
 .promptlab-action-card {
     padding: 10px 12px;
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.035);
     border: 1px solid var(--frame);
     display: flex;
@@ -3909,7 +3909,7 @@ textarea:focus,
 .promptlab-action-thumb {
     width: 88px;
     height: 88px;
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     overflow: hidden;
     border: 1px solid var(--frame);
     background: rgba(0, 0, 0, 0.2);
@@ -3988,7 +3988,7 @@ textarea:focus,
 .promptlab-image-preview-card {
     margin-top: 8px;
     border: 1px solid var(--frame);
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.035);
     min-height: 96px;
     overflow: hidden;
@@ -4069,7 +4069,7 @@ textarea:focus,
 
 .promptlab-image-picker-card {
     border: 1px solid var(--frame);
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.035);
     overflow: hidden;
     cursor: pointer;
@@ -4121,7 +4121,7 @@ textarea:focus,
 .promptlab-diff-card {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--frame);
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     padding: 12px;
 }
 
@@ -4350,7 +4350,7 @@ textarea:focus,
     min-width: 0;
     padding: 9px 10px;
     border: 1px solid var(--frame);
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.035);
 }
 
@@ -4416,7 +4416,7 @@ textarea:focus,
 }
 
 .modal-content {
-    border-radius: 16px;
+    border-radius: var(--r-panel);
     background: var(--modal-bg);
     border-color: var(--border-color);
     box-shadow: var(--shadow-modal);
@@ -4545,7 +4545,7 @@ textarea:focus,
     margin-top: 14px;
     padding: 14px;
     border: 1px solid rgba(var(--accent-primary-rgb), 0.36);
-    border-radius: 16px;
+    border-radius: var(--r-panel);
     background: rgba(var(--accent-primary-rgb), 0.12);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
     color: var(--text-primary, #E8E8E8);
@@ -4575,7 +4575,7 @@ textarea:focus,
 .scan-diagnostics-meta div {
     min-width: 0;
     padding: 8px 10px;
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     background: rgba(28, 28, 28, 0.34);
 }
 
@@ -4667,7 +4667,7 @@ textarea:focus,
 .toast {
     background: var(--surface-elevated);
     border: 1px solid var(--border-color);
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     color: var(--text-primary);
     box-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
     animation: toastIn 160ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
@@ -5099,7 +5099,7 @@ textarea:focus,
     padding: 16px 18px;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--frame);
-    border-radius: 18px;
+    border-radius: var(--r-panel);
 }
 
 .filter-modal-summary-label {
@@ -5133,7 +5133,7 @@ textarea:focus,
     gap: 10px;
     margin-top: 8px;
     padding: 8px 12px;
-    border-radius: 16px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--frame);
 }
@@ -5189,7 +5189,7 @@ textarea:focus,
     gap: 4px;
     min-width: 0;
     padding: 11px 12px;
-    border-radius: 16px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--frame);
 }
@@ -5269,7 +5269,7 @@ textarea:focus,
     padding: 18px;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--frame);
-    border-radius: 18px;
+    border-radius: var(--r-panel);
     overflow: visible;
 }
 
@@ -5362,7 +5362,7 @@ textarea:focus,
 .filter-list .checkbox-label {
     min-height: 56px;
     padding: 12px 14px;
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--frame);
 }
@@ -5455,7 +5455,7 @@ textarea:focus,
     gap: 8px;
     min-height: 82px;
     padding: 14px;
-    border-radius: 16px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--frame);
     transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
@@ -5533,7 +5533,7 @@ textarea:focus,
     flex: 0 1 auto;
     padding: 4px;
     gap: 4px;
-    border-radius: 12px;
+    border-radius: var(--r-panel);
 }
 
 .prompt-match-control .segmented-option span {
@@ -5590,7 +5590,7 @@ textarea:focus,
 
 .filter-empty-state {
     padding: 14px;
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     border: 1px dashed var(--frame);
     background: rgba(255, 255, 255, 0.03);
     color: var(--text-muted);
@@ -5688,7 +5688,7 @@ textarea:focus,
     padding: 12px 14px;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--frame);
-    border-radius: 16px;
+    border-radius: var(--r-panel);
     transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
 
@@ -5720,7 +5720,7 @@ textarea:focus,
 .library-feedback.error {
     width: 100%;
     padding: 18px;
-    border-radius: 16px;
+    border-radius: var(--r-panel);
     border: 1px solid rgba(var(--danger-rgb), 0.25);
     background: rgba(var(--danger-rgb), 0.08);
     color: #F5D4D3;
@@ -5735,7 +5735,7 @@ textarea:focus,
     justify-content: center;
     gap: 12px;
     padding: 24px;
-    border-radius: 18px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--frame);
     color: var(--text-secondary);
@@ -6067,7 +6067,7 @@ textarea:focus,
     padding: 8px 12px;
     background: rgba(var(--accent-primary-rgb), 0.10);
     border: 1px solid rgba(var(--accent-primary-rgb), 0.28);
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     font-size: 12.5px;
     line-height: 1.55;
     color: var(--text-secondary);
@@ -6098,7 +6098,7 @@ textarea:focus,
     max-width: none;
     transform: none;
     padding: 14px 16px;
-    border-radius: 20px;
+    border-radius: var(--r-panel);
 }
 
 .fab-buttons {
@@ -6154,7 +6154,7 @@ textarea:focus,
     flex-wrap: wrap;
     justify-content: center;
     gap: 8px;
-    border-radius: 24px !important;
+    border-radius: var(--r-panel) !important;
     background: rgba(20, 20, 20, 0.92) !important;
 }
 
@@ -6221,7 +6221,7 @@ textarea:focus,
 
 #view-censor .censor-canvas-wrapper-v2 {
     margin: 0 16px 16px !important;
-    border-radius: 22px !important;
+    border-radius: var(--r-panel) !important;
 }
 
 #view-censor .btn-side-v2 {
@@ -6337,7 +6337,7 @@ textarea:focus,
     min-width: 230px;
     padding: 10px 12px;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     background: rgba(20, 20, 20, 0.96);
     box-shadow: 0 18px 38px rgba(0, 0, 0, 0.42);
 }
@@ -6749,7 +6749,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 
 #view-censor .queue-selection-count {
     border: 1px solid var(--frame);
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.04);
     color: var(--text-secondary);
     font-size: 12px;
@@ -6967,7 +6967,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     gap: 12px;
     padding: 12px 14px;
     border: 1px solid var(--frame);
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.035);
 }
 
@@ -7134,7 +7134,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 .tag-threshold-note {
     margin-bottom: 18px;
     padding: 14px 16px;
-    border-radius: 16px;
+    border-radius: var(--r-panel);
     background: rgba(var(--accent-secondary-rgb), 0.1);
     border: 1px solid rgba(var(--accent-secondary-rgb), 0.24);
 }
@@ -7408,7 +7408,7 @@ html:not(.lang-zh) .filter-sidebar .btn-ghost.full-width {
 .export-format-preview {
     background: rgba(28, 28, 28, 0.58);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     color: rgba(255, 255, 255, 0.74);
     font-size: 12px;
     line-height: 1.4;
@@ -7419,7 +7419,7 @@ html:not(.lang-zh) .filter-sidebar .btn-ghost.full-width {
 .reconnect-result-panel {
     background: rgba(28, 28, 28, 0.52);
     border: 1px solid rgba(255, 255, 255, 0.09);
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     gap: 8px;
     margin-top: 12px;
     max-height: min(46vh, 420px);
@@ -7474,7 +7474,7 @@ html:not(.lang-zh) .filter-sidebar .btn-ghost.full-width {
 
 .reconnect-result-item {
     background: rgba(255, 255, 255, 0.045);
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     display: grid;
     gap: 5px;
     margin-top: 7px;
@@ -7544,7 +7544,7 @@ html:not(.lang-zh) .filter-sidebar .btn-ghost.full-width {
     justify-content: center;
     min-height: 40px;
     padding: 10px 12px;
-    border-radius: 14px;
+    border-radius: var(--r-panel);
 }
 
 #view-censor .queue-actions-row {
@@ -7607,7 +7607,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 
 .queue-manager-grid {
-    border-radius: 18px;
+    border-radius: var(--r-panel);
     border: 1px solid var(--frame);
     background: rgba(16, 16, 16, 0.56);
     padding: 12px;
@@ -8010,7 +8010,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     padding: 12px 14px;
     background: rgba(20, 20, 20, 0.96);
     border: 1px solid rgba(var(--accent-primary-rgb), 0.32);
-    border-radius: 18px;
+    border-radius: var(--r-panel);
     box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34), inset 0 0 0 1px rgba(var(--accent-primary-rgb), 0.08);
     font-size: 0.85rem;
     z-index: 1200;
@@ -8058,7 +8058,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     background: rgba(255, 255, 255, 0.08);
     color: var(--text-primary, #E3E3E3);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     padding: 7px 12px;
     cursor: pointer;
     font-size: var(--fs-body);
@@ -8115,7 +8115,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     gap: 6px;
     flex-direction: row;
     justify-content: center;
-    border-radius: 12px;
+    border-radius: var(--r-panel);
 }
 
 #view-censor .queue-action-btn span {
@@ -8172,7 +8172,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     align-items: center;
     gap: 8px;
     padding: 5px;
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--frame);
     box-shadow: var(--shadow-card);
@@ -8186,7 +8186,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     min-height: 36px;
     padding: 7px 12px;
     border: 1px solid transparent;
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     background: transparent;
     color: var(--text-secondary);
     font-weight: 700;
@@ -8226,7 +8226,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 
 .obfuscate-drop-zone {
     min-height: 100px;
-    border-radius: 14px;
+    border-radius: var(--r-panel);
 }
 
 .obfuscate-checkbox-row {
@@ -8235,7 +8235,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     gap: 10px;
     min-height: 36px;
     padding: 6px 10px;
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--frame);
 }
@@ -8260,14 +8260,14 @@ html.lang-zh #view-censor .queue-action-btn span {
 
 .obfuscate-item {
     padding: 10px 12px;
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     border: 1px solid var(--frame);
 }
 
 .obfuscate-thumb {
     width: 56px;
     height: 56px;
-    border-radius: 10px;
+    border-radius: var(--r-panel);
 }
 
 .obfuscate-item-info {
@@ -8323,7 +8323,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     gap: 10px;
     padding: 12px;
     margin-bottom: 10px;
-    border-radius: 16px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--frame);
 }
@@ -8468,7 +8468,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     align-items: center;
     justify-content: center;
     padding: 12px 14px;
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     border: 1px dashed var(--frame);
     color: var(--text-muted);
     background: rgba(255, 255, 255, 0.02);
@@ -8483,7 +8483,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     display: grid;
     gap: 6px;
     padding: 6px;
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     border: 1px solid var(--frame);
     background: rgba(16, 16, 16, 0.58);
     color: var(--text-secondary);
@@ -8499,7 +8499,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     width: 100%;
     aspect-ratio: 1;
     object-fit: cover;
-    border-radius: 10px;
+    border-radius: var(--r-panel);
 }
 
 .queue-manager-selection-chip-label {
@@ -8562,7 +8562,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     gap: 12px;
     width: min(520px, calc(100% - 48px));
     padding: 24px 28px;
-    border-radius: 24px;
+    border-radius: var(--r-panel);
     border: 1px solid var(--frame);
     background: rgba(20, 20, 20, 0.9);
     box-shadow: var(--shadow-card);
@@ -8636,7 +8636,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     margin: 14px 0 18px;
     padding: 16px;
     border: 1px solid rgba(var(--accent-rgb), 0.28);
-    border-radius: 18px;
+    border-radius: var(--r-panel);
     background: rgba(70, 70, 70, 0.35);
     box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
 }
@@ -8672,7 +8672,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     gap: 8px;
     margin: 0 0 10px;
     padding: 6px 12px;
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     border: 1px solid rgba(var(--accent-primary-rgb), 0.26);
     background: rgba(var(--accent-primary-rgb), 0.10);
     color: #E9CFB2;
@@ -8759,7 +8759,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     justify-content: center;
     background: rgba(19, 19, 19, 0.82);
     border: 3px dashed var(--accent-primary);
-    border-radius: 16px;
+    border-radius: var(--r-panel);
     pointer-events: none;
     transition: opacity 0.18s ease;
     opacity: 0;
@@ -9055,7 +9055,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     gap: 14px;
     margin: 0 0 14px 0;
     padding: 14px 18px;
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     border: 1px solid rgba(var(--accent-primary-rgb), 0.32);
     background: rgba(var(--accent-primary-rgb), 0.10);
     box-shadow: 0 8px 22px rgba(0, 0, 0, 0.25);
@@ -9113,7 +9113,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     margin-top: 24px;
     padding: 0;
     border: 1px solid var(--glass-border, rgba(var(--accent-rgb), 0.12));
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     background: rgba(25, 25, 25, 0.4);
     overflow: hidden;
 }
@@ -9313,7 +9313,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     align-items: center;
     background: var(--glass-bg, rgba(16, 16, 16, 0.55));
     border: 1px solid var(--glass-border, rgba(var(--accent-rgb), 0.12));
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     display: flex;
     gap: 4px;
     padding: 2px 4px 2px 2px;
@@ -9474,7 +9474,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     align-items: center;
     background: var(--glass-bg, rgba(16, 16, 16, 0.55));
     border: 1px solid var(--glass-border, rgba(var(--accent-rgb), 0.12));
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     color: var(--text-primary);
     cursor: pointer;
     display: flex;
@@ -9738,7 +9738,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     align-items: center;
     background: var(--surface-2, rgba(255, 255, 255, 0.04));
     border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     display: flex;
     gap: 12px;
     justify-content: space-between;
@@ -10260,7 +10260,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     flex-direction: column;
     gap: 4px;
     padding: 8px;
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     background: var(--glass-bg-strong, rgba(28, 28, 28, 0.94));
     border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.12));
     box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
@@ -10278,7 +10278,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 .nav-tools-item {
     width: 100%;
     justify-content: flex-start;
-    border-radius: 10px;
+    border-radius: var(--r-panel);
 }
 .nav-tools-badge {
     margin-left: auto;
@@ -10313,7 +10313,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     flex: 1 1 160px;
     min-width: 0;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.025);
 }
 
@@ -10374,7 +10374,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     color: var(--text-secondary, #BDBDBD);
     background: var(--bg-card, rgba(36, 36, 36, 0.62));
     border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     cursor: pointer;
     transition: transform var(--transition-normal, 180ms ease),
         border-color var(--transition-normal, 180ms ease),
@@ -10449,7 +10449,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     gap: 14px;
     max-width: min(680px, calc(100vw - 48px));
     padding: 12px 16px;
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     background: var(--glass-bg-strong, rgba(28, 28, 28, 0.94));
     border: 1px solid var(--border-glow, rgba(var(--accent-primary-rgb), 0.38));
     box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45), var(--shadow-glow, 0 0 30px rgba(var(--accent-primary-rgb), 0.20));
@@ -11309,7 +11309,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 
 @media (min-width: 769px) {
     .nav-brand {
-        border-radius: 10px;
+        border-radius: var(--r-panel);
         padding: 4px 8px;
         cursor: pointer;
     }
@@ -11454,7 +11454,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     width: 100%;
     padding: 8px 32px 8px 30px;
     font-size: 13px;
-    border-radius: 10px;
+    border-radius: var(--r-panel);
 }
 
 .gallery-search-clear {
@@ -11548,7 +11548,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     justify-content: space-between;
     gap: 14px;
     padding: 10px 14px;
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     background: var(--surface-elevated, rgba(30, 30, 30, 0.96));
     border: 1px solid var(--border-color);
     box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42);
@@ -11598,7 +11598,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     flex-direction: column;
     gap: 2px;
     padding: 6px;
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     background: var(--surface-elevated, rgba(30, 30, 30, 0.98));
     border: 1px solid var(--border-color);
     box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
@@ -11666,7 +11666,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     gap: 10px 14px;
     padding: 12px;
     border: 1px solid var(--border-color);
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.02);
 }
 
@@ -11687,7 +11687,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     width: 100%;
     max-height: 192px;
     object-fit: contain;
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     background: #141414;
 }
 
@@ -11728,7 +11728,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     gap: 8px;
     padding: 8px 10px;
     border: 1px solid var(--border-subtle);
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     cursor: pointer;
 }
 
@@ -11796,7 +11796,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     gap: 8px;
     margin: 8px 0;
     padding: 8px 12px;
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     border: 1px solid rgba(var(--pink-rgb), 0.45);
     background: rgba(var(--pink-rgb), 0.10);
     color: var(--text-primary);
@@ -11833,7 +11833,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     gap: 14px;
     align-items: flex-start;
     padding: 16px 18px;
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     border: 1px solid rgba(var(--purple-rgb, 167, 139, 255), 0.28);
     background:
         transparent,
@@ -11981,7 +11981,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     max-height: 320px;
     overflow-y: auto;
     padding: 6px;
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     border: 1px solid var(--border-color);
     background: var(--surface-elevated, rgba(30, 30, 30, 0.97));
     box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
@@ -12210,7 +12210,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     z-index: 1200;
     width: min(360px, calc(100vw - 24px));
     padding: 12px 14px;
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     background: var(--surface-2);
     border: 1px solid var(--border);
     box-shadow: var(--shadow-float);

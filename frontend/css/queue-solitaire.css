@@ -57,7 +57,7 @@
     right: 0;
     background: var(--bg-card, rgba(25, 25, 25, 0.95));
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     padding: 4px;
     min-width: 200px;
     z-index: 300;
@@ -177,7 +177,7 @@
 .qs-section {
     flex-shrink: 0;
     border: 2px solid rgba(255, 255, 255, 0.06);
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.02);
     overflow: hidden;
     transition: border-color 0.15s;
@@ -444,7 +444,7 @@
     padding: 8px 10px 10px;
     background: rgba(255, 255, 255, 0.035);
     border: 1px solid rgba(255, 255, 255, 0.065);
-    border-radius: 10px;
+    border-radius: var(--r-panel);
 }
 
 .qs-filter-advanced-fields[hidden] {
@@ -535,7 +535,7 @@
     transform: translateX(-50%);
     background: rgba(20, 20, 20, 0.9);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     padding: 8px 16px;
     font-size: 13px;
     color: var(--text-secondary);
@@ -626,7 +626,7 @@
 
 .qs-profile-card {
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
+    border-radius: var(--r-panel);
     padding: 12px;
     background: rgba(255, 255, 255, 0.03);
 }

@@ -9,7 +9,7 @@
     max-width: 1200px;
     margin: 0 auto;
     background: var(--bg-card, rgba(25, 25, 25, 0.88));
-    border-radius: 18px;
+    border-radius: var(--r-panel);
     border: 1px solid var(--frame);
     box-shadow: 0 20px 48px rgba(0, 0, 0, 0.34);
 }
@@ -17,7 +17,7 @@
 /* Drop zone */
 .obfuscate-drop-zone {
     border: 2px dashed rgba(var(--accent-primary-rgb), 0.25);
-    border-radius: 14px;
+    border-radius: var(--r-panel);
     padding: 24px 16px;
     text-align: center;
     cursor: pointer;
@@ -97,7 +97,7 @@
 .obfuscate-advanced-settings {
     padding: 10px 14px;
     background: rgba(0, 0, 0, 0.2);
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     border: 1px solid var(--frame);
     display: flex;
     flex-direction: column;
@@ -151,7 +151,7 @@
     align-items: center;
     gap: 12px;
     padding: 8px 12px;
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.05);
     transition: background 0.15s;
@@ -280,7 +280,7 @@
     padding: 32px 20px;
     font-size: 0.9rem;
     border: 1px dashed rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
+    border-radius: var(--r-panel);
 }
 
 /* Batch download bar */
@@ -323,7 +323,7 @@
     gap: 8px;
     padding: 10px 14px;
     background: rgba(0, 0, 0, 0.2);
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     border: 1px solid var(--frame);
 }
 
@@ -422,7 +422,7 @@
     gap: 8px;
     flex-wrap: wrap;
     padding: 8px 12px;
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     background: rgba(var(--warning-rgb), 0.08);
     border: 1px solid rgba(var(--warning-rgb), 0.25);
 }
@@ -438,7 +438,7 @@
     gap: 10px;
     flex-wrap: wrap;
     padding: 8px 12px;
-    border-radius: 10px;
+    border-radius: var(--r-panel);
     background: rgba(var(--success-rgb), 0.06);
     border: 1px solid rgba(var(--success-rgb), 0.15);
 }
