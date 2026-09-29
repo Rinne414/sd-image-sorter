@@ -12378,3 +12378,75 @@ html .nav-bar.nav-measuring * {
 .promptlab-fixed-note[hidden] {
     display: none;
 }
+
+/* Scroll cue: at 1366x768 these panels end mid-row (half a button under the
+   censor save card, a sentence under the artist run buttons, the Auto-Separate
+   lists). scroll-cue.js sets data-more-below while content sits past the
+   bottom edge, and a fade marks that edge as "more below" instead of reading
+   as a layout fault, like the gallery generator strip. */
+#view-censor .sidebar-bottom-actions::before,
+#view-sorting .autosep-pane::after,
+#view-sorting .autosep-action-cta::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 40px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 120ms ease;
+}
+
+/* Above the 10px band the save card paints over the content behind it. */
+#view-censor .sidebar-bottom-actions::before {
+    bottom: calc(100% + 10px);
+    background: linear-gradient(to bottom, transparent, var(--surface-1));
+}
+
+#view-censor .censor-sidebar-v2.right[data-more-below] .sidebar-bottom-actions::before {
+    opacity: 1;
+}
+
+#view-sorting .autosep-pane {
+    position: relative;
+}
+
+#view-sorting .autosep-pane::after {
+    bottom: 0;
+    background: linear-gradient(to bottom, transparent, var(--bg-card));
+}
+
+#view-sorting .autosep-pane:not(.autosep-pane-action):has(> .autosep-pane-body[data-more-below])::after {
+    opacity: 1;
+}
+
+/* The action pane pins its run button to the bottom, so the hidden options
+   are behind the button: fade the edge above it instead. */
+#view-sorting .autosep-action-cta::before {
+    bottom: 100%;
+    background: linear-gradient(to bottom, transparent, var(--bg-card));
+}
+
+#view-sorting .autosep-pane-action-body[data-more-below] .autosep-action-cta::before {
+    opacity: 1;
+}
+
+/* The artist run buttons are a pinned footer only at laptop heights. */
+@media (max-height: 820px) and (min-width: 1101px) {
+    #view-artist .artist-controls-actions::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 100%;
+        height: 40px;
+        pointer-events: none;
+        background: linear-gradient(to bottom, transparent, var(--bg-card));
+        opacity: 0;
+        transition: opacity 120ms ease;
+    }
+
+    #view-artist .artist-controls[data-more-below] .artist-controls-actions::before {
+        opacity: 1;
+    }
+}

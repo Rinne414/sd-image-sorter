@@ -298,6 +298,86 @@ test('the artist run buttons are on screen unscrolled while the column scrolls i
   }
 })
 
+// ---------------------------------------------------------------------------
+// A panel cut off at laptop height must say there is more below.
+// ---------------------------------------------------------------------------
+
+/**
+ * At 1366x768 these panels end mid-row: half a button under the censor save
+ * card, a sentence cut under the artist run buttons, the Auto-Separate filter
+ * list cut at "Search:". Each must show its "more below" fade while content is
+ * hidden and drop it once scrolled to the end.
+ */
+const SCROLL_CUE_PANELS = [
+  {
+    view: 'censor',
+    panel: '#view-censor .censor-sidebar-v2.right',
+    fade: '#view-censor .sidebar-bottom-actions',
+    pseudo: '::before',
+  },
+  {
+    view: 'artist',
+    panel: '#view-artist .artist-controls',
+    fade: '#view-artist .artist-controls-actions',
+    pseudo: '::before',
+  },
+  {
+    view: 'sorting',
+    panel: '#view-sorting .autosep-pane-filter .autosep-pane-body',
+    fade: '#view-sorting .autosep-pane-filter',
+    pseudo: '::after',
+  },
+  {
+    // The run button is pinned, so the hidden options sit behind it.
+    view: 'sorting',
+    panel: '#view-sorting .autosep-pane-action-body',
+    fade: '#view-sorting .autosep-action-cta',
+    pseudo: '::before',
+  },
+] as const
+
+test('a side panel cut off at laptop height shows a fade until it is scrolled to the end', async ({ page }) => {
+  await gotoApp(page)
+  await resizeAndSettleUiScale(page, { width: 1366, height: 768 })
+
+  for (const { view, panel, fade, pseudo } of SCROLL_CUE_PANELS) {
+    await page.evaluate((name) => (window as any).App.switchView(name), view)
+    await page.waitForTimeout(300)
+    const state = () => page.evaluate((target) => {
+      const scroller = document.querySelector(target.panel) as HTMLElement
+      const style = getComputedStyle(document.querySelector(target.fade)!, target.pseudo)
+      return {
+        hiddenBelowPx: Math.round(scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop),
+        // A pseudo-element that is not generated still reports opacity 1.
+        fadeShown: style.content !== 'none' && style.opacity === '1',
+      }
+    }, { panel, fade, pseudo })
+
+    // Guard the guard: the panel must really be cut at this height.
+    expect((await state()).hiddenBelowPx, `${view} panel is expected to overflow at 1366x768`).toBeGreaterThan(20)
+    await expect.poll(async () => (await state()).fadeShown, { message: `${view} fade while content is hidden` })
+      .toBe(true)
+
+    await page.evaluate((selector) => {
+      const scroller = document.querySelector(selector) as HTMLElement
+      scroller.scrollTop = scroller.scrollHeight
+    }, panel)
+    await expect.poll(async () => (await state()).fadeShown, { message: `${view} fade after scrolling to the end` })
+      .toBe(false)
+  }
+})
+
+test('the Auto-Separate scope card leaves no empty frame when it has no action to offer', async ({ page }) => {
+  await gotoApp(page)
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await page.evaluate(() => (window as any).App.switchView('sorting'))
+  await page.waitForTimeout(300)
+
+  // Filters already match the Gallery: none of the three sync actions applies.
+  await expect(page.locator('#autosep-scope-status button:not([hidden])')).toHaveCount(0)
+  await expect(page.locator('#autosep-scope-status')).toBeHidden()
+})
+
 test('every artist control column button can be brought into view uncovered', async ({ page }) => {
   await gotoApp(page)
 

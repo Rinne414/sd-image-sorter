@@ -152,6 +152,8 @@ function updateAutoSepScopeStatus() {
     useBtn.hidden = Boolean(status.lastSyncedAt);
     resyncBtn.hidden = !Boolean(status.lastSyncedAt) || status.matchesGallery;
     keepBtn.hidden = status.matchesGallery || status.isAcknowledged;
+    // The card only holds these actions; with none left it was an empty frame.
+    card.hidden = useBtn.hidden && resyncBtn.hidden && keepBtn.hidden;
 }
 
 function syncAutoSepFiltersFromGallery(options = {}) {
