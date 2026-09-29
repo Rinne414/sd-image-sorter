@@ -129,6 +129,8 @@
         btn.setAttribute('aria-pressed', String(on));
         const label = document.getElementById('settings-comfort-zen-label');
         if (label) {
+            // The key moves with the words, or the i18n pass restores "Off".
+            label.dataset.i18n = on ? 'comfort.zenOnLabel' : 'comfort.zenOffLabel';
             label.textContent = on
                 ? _t('comfort.zenOnLabel', 'On')
                 : _t('comfort.zenOffLabel', 'Off');

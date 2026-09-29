@@ -714,6 +714,9 @@
             entryBtn.setAttribute('aria-pressed', String(shown));
             const label = el('settings-entry-label');
             if (label) {
+                // Move the key with the words: the i18n pass re-applies
+                // data-i18n on every DOM change and would restore "On".
+                label.dataset.i18n = shown ? 'settings.entryOn' : 'settings.entryOff';
                 label.textContent = shown
                     ? t('settings.entryOn', {}, 'On')
                     : t('settings.entryOff', {}, 'Off');
@@ -725,6 +728,7 @@
             heroBtn.setAttribute('aria-pressed', String(shown));
             const label = el('settings-entry-hero-label');
             if (label) {
+                label.dataset.i18n = shown ? 'settings.entryHeroOn' : 'settings.entryHeroOff';
                 label.textContent = shown
                     ? t('settings.entryHeroOn', {}, 'On')
                     : t('settings.entryHeroOff', {}, 'Off');
