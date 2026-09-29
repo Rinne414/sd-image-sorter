@@ -3589,3 +3589,131 @@ li > .icon {
 #app #image-modal #modal-negative-text {
     color: var(--text-2);
 }
+
+/* ==========================================================================
+   Flatten v2 (2026-09-30) — no lifted tile inside a lifted panel.
+
+   Once surfaces were separated by lightness, every small filled box left
+   inside a panel became louder than the hairline it replaced. Rows inside a
+   panel are divided by a hairline; statistics read as a line of numbers with
+   a label, the way the entry page shows its library count — not as a row of
+   dashboard tiles.
+   ========================================================================== */
+
+/* Auto-Separate filter list: rows, not seven small boxes */
+#app #autosep-filter-summary .summary-item {
+    background: transparent;
+    border-radius: 0;
+    border: 0;
+    border-top: 1px solid var(--hairline-1);
+}
+
+#app #autosep-filter-summary .summary-item:first-child {
+    border-top: 0;
+}
+
+/* Filter editor: the nine counts are one line of label + value */
+#app .filter-modal-stat-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 22px;
+    padding: 2px 0 4px;
+    background: transparent;
+}
+
+#app .filter-modal-stat-grid .filter-stat-card {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+#app .filter-modal-stat-grid .filter-stat-label {
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--muted);
+}
+
+#app .filter-modal-stat-grid .filter-stat-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+/* Model Center: "9 ready · 9 need attention · 18 tracked" */
+#app #model-manager-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 28px;
+    background: transparent;
+}
+
+#app #model-manager-summary .model-manager-stat {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+#app #model-manager-summary .model-manager-stat strong {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+#app #model-manager-summary .model-manager-stat span {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+/* Big-number statistics (Style Finder, Similar, Prompt Helper): the number
+   carries the row, the label sits under it, no tiles. */
+#app :is(.artist-stats, #similar-stats, .promptlab-stats-grid) {
+    display: flex;
+    flex-wrap: wrap;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    padding: 4px 4px 8px;
+    gap: 40px;
+}
+
+#app :is(.artist-stats, #similar-stats) .stat-card,
+#app .promptlab-stat-card {
+    align-items: flex-start;
+    min-width: 0;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    flex: 0 0 auto;
+}
+
+#app :is(.artist-stats, #similar-stats) .stat-number,
+#app .promptlab-stat-number {
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1.1;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+
+#app :is(.artist-stats, #similar-stats) .stat-label,
+#app .promptlab-stat-label {
+    font-size: 12px;
+    color: var(--muted);
+}
