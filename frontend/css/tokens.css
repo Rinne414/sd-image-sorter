@@ -3856,3 +3856,92 @@ li > .icon {
     min-height: 36px;
     padding-inline: 18px;
 }
+
+/* ==========================================================================
+   Manual Sort setup (2026-09-30): a work surface, not a landing page.
+
+   The header was a centred stack (title, sentence, mode, presets, count,
+   Start) that pushed the WASD slots below the fold at 1366x768. The title
+   and its sentence now sit left, the scope count and Start sit right on the
+   same two rows, and mode + presets follow as full-width rows — so the
+   slots start about 150px higher. Start stays in view and never overlaps
+   the mode switch, presets or the filter summary (manual-sort-pins).
+   ========================================================================== */
+#app #view-manual #sort-setup {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 24px;
+    row-gap: 12px;
+    align-items: center;
+    padding: 20px 24px 24px;
+    text-align: left;
+    box-shadow: none;
+}
+
+#app #view-manual #sort-setup > * {
+    grid-column: 1 / -1;
+}
+
+#app #view-manual #sort-setup > .setup-title {
+    grid-column: 1;
+    grid-row: 1;
+    margin: 0;
+    text-align: left;
+}
+
+#app #view-manual #sort-setup > .setup-description {
+    grid-column: 1;
+    grid-row: 2;
+    margin: 0;
+    text-align: left;
+}
+
+#app #view-manual #sort-setup > .sort-setup-actions {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    width: auto;
+    margin: 0;
+    text-align: left;
+}
+
+#app #view-manual #sort-setup > .sort-setup-actions #btn-start-sorting {
+    margin: 0;
+}
+
+#app #view-manual #sort-setup > .sort-setup-actions #sort-resume-banner {
+    flex-basis: 100%;
+    width: auto;
+    margin: 0;
+}
+
+#app #view-manual #sort-setup > .sort-mode-switch,
+#app #view-manual #sort-setup > .sort-preset-bar {
+    margin: 0;
+    padding: 0;
+}
+
+#app #view-manual .sort-preset-select {
+    min-height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--hairline-2);
+    border-radius: var(--r-ctl);
+    background: var(--control-bg);
+    color: var(--text);
+}
+
+#app #view-manual .sort-preset-select:hover {
+    border-color: var(--border-strong);
+}
+
+/* The manual filter summary reads as label/value pairs, not a tile grid */
+#app #manual-sort-filter-summary .summary-item {
+    background: transparent;
+    border: 0;
+    border-top: 1px solid var(--hairline-1);
+    border-radius: 0;
+}
