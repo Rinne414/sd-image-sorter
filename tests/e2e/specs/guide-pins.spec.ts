@@ -285,6 +285,13 @@ test('missing contextual copy returns false and the help bridge falls back to ke
   await page.locator('#btn-help').click()
   await expect(page.locator('#keyboard-shortcuts-panel')).toHaveClass(/visible/)
   await expect(page.locator('#guide-overlay')).toHaveCount(0)
+  // Section titles lead with the app's line icons; no emoji glyphs anywhere.
+  const groupTitles = page.locator('#keyboard-shortcuts-panel .shortcuts-group-title')
+  const groupCount = await groupTitles.count()
+  expect(groupCount).toBeGreaterThan(2)
+  await expect(page.locator('#keyboard-shortcuts-panel .shortcuts-group-title svg.icon')).toHaveCount(groupCount)
+  const panelText = await page.locator('#keyboard-shortcuts-panel .shortcuts-panel-header').textContent()
+  expect(panelText || '').not.toMatch(/\p{Extended_Pictographic}/u)
 })
 
 test('the Tour action closes the guide and calls the OnboardingTour reset/start seam once', async ({ page }) => {

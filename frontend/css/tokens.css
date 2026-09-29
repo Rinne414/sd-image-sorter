@@ -4009,3 +4009,30 @@ li > .icon {
     display: inline-flex;
     margin-right: 6px;
 }
+
+/* Keycaps: this app is driven from the keyboard (WASD, B/P/E/G, D, ?), so a
+   key reads as one physical key everywhere — graphite cap, small corners, a
+   single dark bottom edge like a real keycap. Not a glow, not a pill. */
+:is(#app, body > .modal, #keyboard-shortcuts-panel) :is(kbd, .shortcut-key) {
+    background: var(--surface-3);
+    border: 0;
+    border-radius: var(--r-tile);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.shortcuts-group-title .icon {
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    color: var(--text-2);
+}
+
+#keyboard-shortcuts-panel .shortcuts-group-title {
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+}

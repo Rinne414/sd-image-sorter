@@ -10,7 +10,9 @@ const KeyboardShortcutsPanel = (function () {
         ],
         gallery: [
             { key: 'Arrow Left/Right', descKey: 'shortcuts.gallery.navigate', fallback: 'Navigate images in the detail modal.' },
-            { key: 'Space', descKey: 'shortcuts.gallery.selection', fallback: 'Toggle selection mode.' },
+            { key: 'S', descKey: 'shortcuts.gallery.selection', fallback: 'Toggle selection mode.' },
+            { key: 'F', descKey: 'shortcuts.gallery.filters', fallback: 'Open the filter editor.' },
+            { key: 'G / L / W', descKey: 'shortcuts.gallery.views', fallback: 'Grid, large or waterfall view.' },
             { key: 'R', descKey: 'shortcuts.gallery.random', fallback: 'Show a random image.' },
         ],
         manual: [
@@ -20,8 +22,14 @@ const KeyboardShortcutsPanel = (function () {
         ],
         censor: [
             { key: 'B', descKey: 'shortcuts.censor.brush', fallback: 'Switch to the brush tool.' },
+            { key: 'P', descKey: 'shortcuts.censor.pen', fallback: 'Switch to the pen tool.' },
             { key: 'E', descKey: 'shortcuts.censor.eraser', fallback: 'Switch to the eraser tool.' },
-            { key: 'C', descKey: 'shortcuts.censor.clone', fallback: 'Switch to clone mode.' },
+            { key: 'G', descKey: 'shortcuts.censor.clone', fallback: 'Switch to clone mode.' },
+            { key: 'R', descKey: 'shortcuts.censor.removeBg', fallback: 'Remove the background.' },
+            { key: 'D', descKey: 'shortcuts.censor.detect', fallback: 'Detect on the current image.' },
+            { key: 'H', descKey: 'shortcuts.censor.showChanges', fallback: 'Show what was changed.' },
+            { key: '[ / ]', descKey: 'shortcuts.censor.brushSize', fallback: 'Smaller or larger brush.' },
+            { key: 'Ctrl+Z / Ctrl+Y', descKey: 'shortcuts.censor.undo', fallback: 'Undo or redo.' },
         ],
     };
 
@@ -39,14 +47,15 @@ const KeyboardShortcutsPanel = (function () {
     }
 
     function getSectionLabel(section) {
+        // Same line icons as the matching top-bar tabs.
         const labels = {
-            global: { key: 'shortcuts.section.global', fallback: 'Global', icon: '🌐' },
-            gallery: { key: 'shortcuts.section.gallery', fallback: 'Gallery', icon: '🖼️' },
-            manual: { key: 'shortcuts.section.manual', fallback: 'Manual Sort', icon: '🎮' },
-            censor: { key: 'shortcuts.section.censor', fallback: 'Censor Edit', icon: '🔳' },
+            global: { key: 'shortcuts.section.global', fallback: 'Global', icon: 'i-globe' },
+            gallery: { key: 'shortcuts.section.gallery', fallback: 'Gallery', icon: 'i-image' },
+            manual: { key: 'shortcuts.section.manual', fallback: 'Manual Sort', icon: 'i-folders' },
+            censor: { key: 'shortcuts.section.censor', fallback: 'Censor Edit', icon: 'i-grid' },
         };
-        const label = labels[section] || { key: section, fallback: section, icon: '⌨️' };
-        return `${label.icon} ${t(label.key, label.fallback)}`;
+        const label = labels[section] || { key: section, fallback: section, icon: 'i-settings' };
+        return `<svg class="icon" aria-hidden="true"><use href="#${label.icon}"/></svg> ${t(label.key, label.fallback)}`;
     }
 
     function renderPanel(panel) {
@@ -62,7 +71,7 @@ const KeyboardShortcutsPanel = (function () {
         panel.innerHTML = `
             <div class="shortcuts-panel-content">
                 <div class="shortcuts-panel-header">
-                    <h3>⌨️ ${t('shortcuts.title', 'Keyboard Shortcuts')}</h3>
+                    <h3>${t('shortcuts.title', 'Keyboard Shortcuts')}</h3>
                     <button class="shortcuts-panel-close" aria-label="${t('common.close', 'Close')}">&times;</button>
                 </div>
                 <div class="shortcuts-panel-body">${bodyHtml}</div>
