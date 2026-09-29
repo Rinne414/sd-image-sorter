@@ -274,4 +274,81 @@ test.describe('comfort behavior', () => {
     await page.waitForLoadState('domcontentloaded')
     await expect(page.locator('#entry-resume')).toBeHidden()
   })
+
+  // --- Tester report 2026-09-29: "the view suddenly jumps to the bottom" ----
+  // A deep position saved earlier kept being re-applied: the save refuses a
+  // near-top write (so relaunch cannot bury a real place), and restore fired
+  // on every fresh load and every return to the Library. Scroll back up, go
+  // to Censor and back, or switch a filter, and the view was dragged to the
+  // old offset — clamped to the very bottom in a small library.
+
+  async function seedDeepResume(page: Page, extra: Record<string, unknown> = {}): Promise<number> {
+    const deep = await page.evaluate(() => {
+      const max = document.documentElement.scrollHeight - document.documentElement.clientHeight
+      return Math.min(1500, Math.max(200, Math.round(max / 2)))
+    })
+    await page.evaluate(({ top, fields }) => {
+      const gc = (window as any).GalleryComfort
+      const state = gc._read()
+      state.resume = {
+        scrollTop: top,
+        scope: String(window.App.AppState.filters?.scope || ''),
+        sortBy: String(window.App.AppState.filters?.sortBy || ''),
+        imageCount: 60,
+        savedAt: Date.now(),
+        ...fields,
+      }
+      localStorage.setItem('sd-gallery-comfort-v1', JSON.stringify(state))
+    }, { top: deep, fields: extra })
+    return deep
+  }
+
+  function readTop(page: Page): Promise<number> {
+    return page.evaluate(() => Math.round(window.pageYOffset || document.documentElement.scrollTop || 0))
+  }
+
+  test('leaving the Library at the top and coming back stays at the top', async ({ page }) => {
+    await bootGallery(page)
+    await seedCards(page)
+    const deep = await seedDeepResume(page)
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
+
+    // Real nav clicks: they go through the switchView comfort wraps, which
+    // window.App.switchView (captured before the wrap) would bypass.
+    await page.locator('#nav-tab-censor').click()
+    await page.waitForTimeout(300)
+    await page.locator('#nav-tab-gallery').click()
+    await page.waitForTimeout(1500)
+
+    expect(await readTop(page), `dragged back toward the old offset ${deep}`).toBeLessThan(80)
+  })
+
+  test('a later reload of the Library does not re-apply an old position', async ({ page }) => {
+    await bootGallery(page)
+    // seedCards is this session's first load with pictures (the relaunch
+    // restore point); everything after it is a filter change or a refresh.
+    await seedCards(page)
+    const deep = await seedDeepResume(page)
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
+
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('gallery-images-loaded', { detail: {} })))
+    await page.waitForTimeout(1200)
+    expect(await readTop(page), `dragged back toward the old offset ${deep}`).toBeLessThan(80)
+  })
+
+  test('a position saved for another library or filter set is not restored', async ({ page }) => {
+    await bootGallery(page)
+    await seedCards(page)
+    await seedDeepResume(page, { library: 'some-other-library' })
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
+
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('gallery-images-loaded', { detail: {} })))
+    await page.waitForTimeout(1200)
+    expect(await readTop(page)).toBeLessThan(80)
+
+    await seedDeepResume(page, { filters: '{"generators":["someone-else"]}' })
+    await page.evaluate(() => (window as any).GalleryComfort.restoreSoon())
+    await page.waitForTimeout(1500)
+    expect(await readTop(page)).toBeLessThan(80)
+  })
 })

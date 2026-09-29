@@ -31,6 +31,10 @@
     let _hoverImageId = null;
     let _peekOpen = false;
     let _spaceHeld = false;
+    // Only the first load with pictures is a relaunch worth restoring; later
+    // fresh loads are filter changes or refreshes, where re-applying the saved
+    // offset dragged the view (to the very bottom in a small library).
+    let _loadRestoreDone = false;
 
     function _sessionStartedAt() {
         try {
@@ -114,6 +118,8 @@
                 scrollTop: Number(raw.resume.scrollTop) || 0,
                 scope: String(raw.resume.scope || ''),
                 sortBy: String(raw.resume.sortBy || ''),
+                library: String(raw.resume.library || ''),
+                filters: String(raw.resume.filters || ''),
                 imageCount: Number(raw.resume.imageCount) || 0,
                 savedAt: Number(raw.resume.savedAt) || 0,
             };
@@ -215,6 +221,19 @@
         };
     }
 
+    /** Which pictures an offset belongs to: it means nothing in another set. */
+    function _resultSetSnapshot() {
+        const workspace = window.LibraryWorkspace;
+        return {
+            library: typeof workspace?.getCurrentLibraryId === 'function'
+                ? String(workspace.getCurrentLibraryId() || '')
+                : '',
+            filters: typeof window.App?.getAdvancedFilterContractSignature === 'function'
+                ? String(window.App.getAdvancedFilterContractSignature() || '')
+                : '',
+        };
+    }
+
     /**
      * True while the entry overlay covers the app. On relaunch AppState's
      * currentView already reads 'gallery' even though the user is still looking
@@ -227,7 +246,7 @@
         return getComputedStyle(entry).display !== 'none';
     }
 
-    function saveResumeNow() {
+    function saveResumeNow(options = {}) {
         if (_restoring) return;
         if (_appState()?.currentView && _appState().currentView !== 'gallery') return;
         if (_entryOverlayUp()) return;
@@ -236,12 +255,15 @@
         const scrollTop = _getScrollTop();
         // Never let a top-of-list write bury a real position. Relaunch, a
         // filter reset and a programmatic jump all momentarily report 0, and
-        // "resume at the top" is the same as no resume anyway.
-        if (scrollTop < 80 && Number(state.resume?.scrollTop) >= 80) return;
+        // "resume at the top" is the same as no resume anyway. Leaving the
+        // Library is the exception: that offset is the user's own, and keeping
+        // an older, deeper one made coming back jump there.
+        if (!options.leaving && scrollTop < 80 && Number(state.resume?.scrollTop) >= 80) return;
         state.resume = {
             scrollTop,
             scope: snap.scope,
             sortBy: snap.sortBy,
+            ..._resultSetSnapshot(),
             imageCount: Array.isArray(_appState()?.images) ? _appState().images.length : 0,
             savedAt: Date.now(),
         };
@@ -280,6 +302,9 @@
         // Only restore when the user is still in a comparable gallery mode.
         if (resume.scope && snap.scope && resume.scope !== snap.scope) return false;
         if (resume.sortBy && snap.sortBy && resume.sortBy !== snap.sortBy) return false;
+        const current = _resultSetSnapshot();
+        if (resume.library && resume.library !== current.library) return false;
+        if (resume.filters && resume.filters !== current.filters) return false;
 
         const count = Array.isArray(_appState()?.images) ? _appState().images.length : 0;
         if (count === 0) return false;
@@ -634,8 +659,8 @@
         const append = Boolean(detail && detail.appendMode);
         if (!append) {
             bumpDay('loads', 1);
-            // Fresh load: attempt resume once images exist.
-            if (Array.isArray(_appState()?.images) && _appState().images.length > 0) {
+            if (!_loadRestoreDone && Array.isArray(_appState()?.images) && _appState().images.length > 0) {
+                _loadRestoreDone = true;
                 tryRestoreResume();
             }
         }
@@ -684,7 +709,7 @@
             const originalSwitchView = window.switchView;
             const wrapped = function comfortSwitchView(viewName) {
                 if (_appState()?.currentView === 'gallery' && viewName !== 'gallery') {
-                    saveResumeNow();
+                    saveResumeNow({ leaving: true });
                 }
                 const result = originalSwitchView.apply(this, arguments);
                 markGalleryRoom(viewName === 'gallery');
