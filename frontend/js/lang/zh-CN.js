@@ -2713,7 +2713,6 @@ window.I18nLang_zhCN = {
     'models.manager': '设置',
     'models.managerTooltip': '设置、AI 模型、路径和运行环境',
     'models.title': '设置与模型',
-    'models.description': '应用设置、AI 模型和缓存都在这里。',
     'settings.title': '设置',
     'settings.homePanelTitle': '常规',
     'settings.tabGeneral': '设置',

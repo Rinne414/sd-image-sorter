@@ -1012,6 +1012,22 @@ test.describe('Model Manager', () => {
     await expect(page.getByText(/^Downloaded$/)).toHaveCount(0)
   })
 
+  // The header followed the tab but its subtitle stayed "App settings, AI
+  // models, cache and setup, all in one place." under every tab. Each tab
+  // already explains itself, so the header is the tab's name alone.
+  test('the settings header names the open tab without a stale all-tabs subtitle', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.goto('/')
+    await page.evaluate(() => (window as any).I18n.setLang('en'))
+    await page.locator('#btn-open-model-manager').click()
+    const header = page.locator('#model-manager-modal .modal-header')
+    for (const [tab, title] of [['models', 'Model Center'], ['disk', 'Disk & Cache'], ['audit', 'Dataset Audit'], ['general', 'Settings']]) {
+      await page.locator(`[data-settings-tab="${tab}"]`).click()
+      await expect(page.locator('#model-manager-title')).toHaveText(title)
+      await expect(header.locator('.modal-description')).toHaveCount(0)
+    }
+  })
+
   // Full file paths wrapped to three lines on every card and pushed Prepare /
   // Recheck below the fold at 1366x768. They are rarely needed, so they fold
   // behind one line that still names the path on hover.

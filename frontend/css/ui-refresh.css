@@ -2029,6 +2029,26 @@ textarea:focus,
     pointer-events: none;
 }
 
+/* The close button is pinned top-right over the scroll box. The header keeps
+   clear of it; the tab bar did not, so "Dataset Audit" slid under the button
+   whenever the dialog scrolled. Keep the bar clear too, and fill the strip
+   beside it (and the band above) so cards scrolling past never show there. */
+#model-manager-modal .settings-modal-tabs {
+    margin-right: 56px;
+    box-shadow: 56px 0 0 var(--surface-2);
+}
+
+#model-manager-modal .settings-modal-tabs::before {
+    right: -57px;
+}
+
+/* That band reaches 40px above the bar, which is over the title while the
+   dialog is unscrolled: the title paints above it. */
+#model-manager-modal .modal-header {
+    position: relative;
+    z-index: 4;
+}
+
 .settings-modal-tab {
     flex: 1 1 0;
     display: flex;

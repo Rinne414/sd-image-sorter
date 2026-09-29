@@ -2537,7 +2537,6 @@ window.I18nLang_en = {
     'models.manager': 'Settings',
     'models.managerTooltip': 'Settings, AI models, paths, and environment',
     'models.title': 'Settings & Models',
-    'models.description': 'App settings, AI models, cache and setup, all in one place.',
     'settings.title': 'Settings',
     'settings.homePanelTitle': 'General',
     'settings.tabGeneral': 'Settings',
