@@ -471,26 +471,36 @@ textarea:focus-visible,
 }
 
 /* Neutral buttons only — never restate background on bare .btn or it
-   stomps .btn-primary (same specificity, later wins). */
-.btn:not(.btn-primary):not(.btn-grad):not(.danger):not(.btn-danger),
-.btn-help {
-    background: var(--wash);
+   stomps .btn-primary (same specificity, later wins).
+   Secondary (the default) is a neutral wash with no outline; ghost is text
+   that gains the wash on hover. Fill, not an outline, tells them apart —
+   an outlined ghost looked like an input field. */
+.btn:not(.btn-primary):not(.btn-grad):not(.danger):not(.btn-danger):not(.btn-ghost),
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.07);
     color: var(--text);
+    border-color: transparent;
 }
 
-.btn-secondary,
+.btn:not(.btn-primary):not(.btn-grad):not(.danger):not(.btn-danger):not(.btn-ghost):hover:not(:disabled),
+.btn-secondary:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.11);
+    border-color: transparent;
+    color: var(--text);
+    box-shadow: none;
+}
+
 .btn-help,
 .btn-ghost {
     background: transparent;
     color: var(--text-2);
-    border-color: var(--border);
+    border-color: transparent;
 }
 
-.btn-secondary:hover:not(:disabled),
 .btn-help:hover:not(:disabled),
 .btn-ghost:hover:not(:disabled) {
-    background: var(--wash-hover);
-    border-color: var(--border-strong);
+    background: rgba(255, 255, 255, 0.07);
+    border-color: transparent;
     color: var(--text);
     box-shadow: none;
 }
@@ -619,26 +629,29 @@ textarea:focus-visible,
 }
 
 /* Idle select toggle is a mode switch, not the screen's primary CTA —
-   keep it quiet until armed (then pink = user decision). */
+   keep it quiet until armed. Armed it reads like a filter chip that is on
+   (amber wash, amber text), not like a second primary action beside Move. */
 #btn-toggle-select.btn-primary:not(.selection-active):not([aria-pressed="true"]) {
-    background: var(--wash);
+    background: rgba(255, 255, 255, 0.07);
     color: var(--text);
-    border-color: var(--border);
+    border-color: transparent;
     box-shadow: none;
 }
 
 #btn-toggle-select.btn-primary:not(.selection-active):not([aria-pressed="true"]):hover {
-    background: rgba(var(--pink-rgb), 0.10);
-    border-color: rgba(var(--pink-rgb), 0.40);
+    background: rgba(255, 255, 255, 0.11);
+    border-color: transparent;
     color: var(--text);
 }
 
 #btn-toggle-select.selection-active,
-#btn-toggle-select[aria-pressed="true"] {
-    background: var(--pink);
-    border-color: var(--pink-active);
-    color: var(--on-accent);
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+#btn-toggle-select[aria-pressed="true"],
+#btn-toggle-select.selection-active:hover,
+#btn-toggle-select[aria-pressed="true"]:hover {
+    background: var(--accent-soft);
+    border-color: transparent;
+    color: var(--accent);
+    box-shadow: none;
 }
 
 .dataset-import-gallery-grid .import-thumb.multi-selected,
@@ -1708,9 +1721,14 @@ a:hover,
 
 /* Project save = secondary chrome, not competing primary. */
 #view-dataset #btn-dataset-project-save {
-    background: var(--wash);
-    border: 1px solid var(--border);
-    color: var(--text-2);
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid transparent;
+    color: var(--text);
+}
+
+#view-dataset #btn-dataset-project-save:disabled {
+    background: rgba(255, 255, 255, 0.035);
+    color: var(--text-disabled);
 }
 
 /* AI / tag surfaces in dataset editor stay purple-quiet. */
@@ -3083,4 +3101,312 @@ li > .icon {
     background: var(--surface-3);
     border-color: transparent;
     box-shadow: none;
+}
+
+/* ==========================================================================
+   Controls v2 (2026-09-30) — three button tiers, told apart by fill.
+
+     primary    amber fill, dark ink — the one action a screen is for
+     secondary  neutral wash, no outline — the default button
+     ghost      text only; a wash appears on hover — toolbars, icons, menus
+     danger     red text at rest; a red fill only as a dialog's confirming act
+
+   Tabs and segmented switches: the container draws nothing, the chosen
+   segment is a neutral lift in white text. Amber is not "selected" here;
+   it is spent on the primary action, on filter chips that are on, and on
+   the top bar's you-are-here underline.
+
+   Focus is a white ring. An amber ring disappears on an amber button and
+   makes a neutral button look selected.
+   ========================================================================== */
+
+:is(#app, body > .modal) :is(.btn, .btn-help) {
+    border-color: transparent;
+    border-radius: 5px;
+    box-shadow: none;
+    font-weight: 500;
+}
+
+:is(#app, body > .modal) .btn-primary {
+    font-weight: 600;
+}
+
+:is(#app, body > .modal) :is(.btn-ghost, .btn-help)[aria-pressed="true"]:not(.btn-primary),
+:is(#app, body > .modal) .btn-ghost.btn-icon-only.active {
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+/* disabled reads as disabled, not as a faded copy of the live colour */
+:is(#app, body > .modal) :is(.btn, .btn-help):disabled {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.035);
+    color: var(--text-disabled);
+}
+
+:is(#app, body > .modal) :is(.btn-ghost, .btn-help):disabled {
+    background: transparent;
+}
+
+/* danger */
+:is(#app, body > .modal) :is(.btn.danger, .btn-danger, .btn-ghost.danger):not(.btn-primary) {
+    background: transparent;
+    border-color: transparent;
+    color: var(--danger-ink);
+}
+
+:is(#app, body > .modal) :is(.btn.danger, .btn-danger, .btn-ghost.danger):not(.btn-primary):hover:not(:disabled) {
+    background: rgba(var(--danger-rgb), 0.12);
+    border-color: transparent;
+    color: var(--danger-ink-hover);
+}
+
+:is(#app, body > .modal) .btn-primary.danger {
+    background: var(--danger);
+    border-color: transparent;
+    color: #1A0B0B;
+    font-weight: 600;
+}
+
+:is(#app, body > .modal) .btn-primary.danger:hover:not(:disabled) {
+    background: #E57B76;
+    color: #1A0B0B;
+}
+
+/* focus: one white ring on every control */
+:is(#app, body > .modal) :is(button, .btn, a, summary, [role="tab"], [role="button"], .gallery-item):focus-visible {
+    outline: 2px solid rgba(236, 236, 238, 0.85);
+    outline-offset: 2px;
+    box-shadow: none;
+}
+
+/* A dialog moves focus to its close button when it opens. That is focus,
+   not keyboard focus, so it must not draw a ring. */
+:is(#app, body > .modal) .modal-close:focus:not(:focus-visible) {
+    outline: none;
+    background: transparent;
+    box-shadow: none;
+}
+
+/* --- tabs and segmented switches ---------------------------------------- */
+:is(#app, body > .modal) :is(
+    .settings-modal-tabs,
+    .tagger-tabs,
+    .censor-tab-bar,
+    .reader-tools-tabs,
+    .sorting-sub-tabs,
+    .promptlab-tabs,
+    .similar-tabs,
+    .mass-tag-tabs,
+    .sepcon-view-tabs,
+    .sort-mode-switch,
+    .segmented-control,
+    .vlm-segmented,
+    .view-toggle,
+    .aspect-quick-toggle,
+    .gallery-scope-control,
+    .library-tabs,
+    .modal-color-mode-switch
+) {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+}
+
+:is(#app, body > .modal) :is(
+    .settings-modal-tab,
+    .tagger-tab,
+    .censor-tab,
+    .reader-tool-tab,
+    .sorting-sub-tab,
+    .promptlab-tab,
+    .similar-tab,
+    .mass-tag-tab,
+    .sepcon-view-tab,
+    .sort-mode-btn,
+    .toggle-btn,
+    .vlm-segmented-btn,
+    .dataset-tab,
+    .aspect-quick-btn,
+    .scope-btn
+) {
+    border-color: transparent;
+    border-radius: 5px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-2);
+}
+
+:is(#app, body > .modal) :is(
+    .settings-modal-tab,
+    .tagger-tab,
+    .censor-tab,
+    .reader-tool-tab,
+    .sorting-sub-tab,
+    .promptlab-tab,
+    .similar-tab,
+    .mass-tag-tab,
+    .sepcon-view-tab,
+    .sort-mode-btn,
+    .toggle-btn,
+    .vlm-segmented-btn,
+    .dataset-tab,
+    .aspect-quick-btn,
+    .scope-btn
+):hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+}
+
+:is(#app, body > .modal) :is(
+    .settings-modal-tab,
+    .tagger-tab,
+    .censor-tab,
+    .reader-tool-tab,
+    .sorting-sub-tab,
+    .promptlab-tab,
+    .similar-tab,
+    .mass-tag-tab,
+    .sepcon-view-tab,
+    .sort-mode-btn,
+    .toggle-btn,
+    .vlm-segmented-btn,
+    .dataset-tab,
+    .aspect-quick-btn,
+    .scope-btn
+):is(.active, .is-active, [aria-selected="true"], [aria-pressed="true"]) {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: transparent;
+    box-shadow: none;
+    color: var(--text);
+    font-weight: 600;
+}
+
+:is(#app, body > .modal) .segmented-option span {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-2);
+}
+
+:is(#app, body > .modal) .segmented-option input:checked + span {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: transparent;
+    box-shadow: none;
+    color: var(--text);
+    font-weight: 600;
+}
+
+/* --- top bar ------------------------------------------------------------ */
+/* You-are-here is the amber underline alone; the tab itself stays quiet. */
+#app .nav-tab.active,
+#app .nav-tab[aria-selected="true"] {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    color: var(--text);
+}
+
+#app :is(.nav-tab, .nav-tools-toggle, .nav-library-chip) {
+    border-color: transparent;
+    box-shadow: none;
+}
+
+#app .nav-library-chip {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-2);
+}
+
+#app .nav-library-chip:hover {
+    background: rgba(255, 255, 255, 0.09);
+    color: var(--text);
+}
+
+#app .nav-tools-toggle.active {
+    background: transparent;
+    color: var(--text);
+}
+
+/* --- filter chips: amber means "this filter is on" ----------------------- */
+#app :is(.gen-tab, .gallery-chip) {
+    border-color: transparent;
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: none;
+    color: var(--text-2);
+}
+
+#app :is(.gen-tab, .gallery-chip):hover {
+    background: rgba(255, 255, 255, 0.09);
+    color: var(--text);
+}
+
+#app :is(.gen-tab, .gallery-chip):is(.active, .is-active, [aria-selected="true"], [aria-pressed="true"]) {
+    background: var(--accent-soft);
+    border-color: transparent;
+    color: var(--accent);
+}
+
+/* Small utility buttons that never took .btn: text-and-icon ghosts. */
+:is(#app, body > .modal) :is(
+    .gallery-search-side-btn,
+    .btn-icon-small,
+    .censor-help-toggle,
+    .btn-group-action,
+    .guide-btn
+) {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-2);
+}
+
+:is(#app, body > .modal) :is(
+    .gallery-search-side-btn,
+    .btn-icon-small,
+    .censor-help-toggle,
+    .btn-group-action,
+    .guide-btn
+):hover {
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text);
+}
+
+/* Gallery view modes are a segmented switch like the others. */
+#app .view-btn {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-2);
+}
+
+#app .view-btn:hover {
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text);
+}
+
+#app .view-btn:is(.active, [aria-pressed="true"]) {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: transparent;
+    box-shadow: none;
+    color: var(--text);
+}
+
+/* Censor tool palette: tools are secondary-weight tiles; the chosen tool is
+   a neutral lift, because amber belongs to Save. */
+#view-censor .censor-workspace-v2 .tool-btn-v2 {
+    border-color: transparent;
+    background: rgba(255, 255, 255, 0.04);
+    box-shadow: none;
+}
+
+#view-censor .censor-workspace-v2 .tool-btn-v2:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: transparent;
+}
+
+#view-censor .censor-workspace-v2 .tool-btn-v2.active {
+    background: var(--surface-3);
+    border-color: transparent;
+    box-shadow: none;
+    color: var(--text);
 }

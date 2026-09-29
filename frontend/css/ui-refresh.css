@@ -733,9 +733,9 @@ summary:focus-visible {
 .btn-language,
 #btn-language-toggle,
 #mobile-btn-language {
-    background: rgba(var(--accent-secondary-rgb), 0.1);
-    border-color: rgba(var(--accent-secondary-rgb), 0.22);
-    color: var(--text-primary);
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-secondary);
 }
 
 #btn-app-update[data-update-state="checking"],
@@ -6166,16 +6166,17 @@ textarea:focus,
 }
 
 #view-censor .tool-btn-v2:hover {
-    background: rgba(var(--accent-secondary-rgb), 0.12) !important;
-    border-color: rgba(var(--accent-secondary-rgb), 0.3) !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: transparent !important;
     color: var(--text-primary) !important;
 }
 
+/* The chosen tool is a neutral lift: amber in this workspace belongs to Save. */
 #view-censor .tool-btn-v2.active {
-    background: rgba(var(--accent-primary-rgb), 0.34) !important;
-    border-color: rgba(var(--accent-primary-rgb), 0.45) !important;
+    background: var(--surface-3) !important;
+    border-color: transparent !important;
     color: var(--text-primary) !important;
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32) !important;
+    box-shadow: none !important;
 }
 
 #view-censor .tool-btn-v2.active .tool-icon-v2 {
