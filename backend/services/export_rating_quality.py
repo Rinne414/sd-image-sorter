@@ -91,6 +91,46 @@ _QUALITY_BUCKETS: List[tuple] = [
 ]
 
 
+# deepghs anime_aesthetic grade -> the same ladder. The grade is a percentile
+# rank among the model's reference anime pictures (backend/anime_aesthetic.py:
+# masterpiece >= 95th, best >= 85th, great >= 75th, good >= 50th, normal >= 25th,
+# low >= 10th, worst below), which is how NoobAI-XL's model card assigns its
+# quality tags (masterpiece > 95th, best quality > 85th, good quality > 60th,
+# normal quality > 30th, worst quality <= 30th). The vocabulary has no word
+# between "best" and "good", so great and good both render "good quality";
+# normal renders nothing, like the LAION normal band.
+ANIME_GRADE_QUALITY: Dict[str, str] = {
+    "masterpiece": "masterpiece, best quality",
+    "best": "best quality",
+    "great": "good quality",
+    "good": "good quality",
+    "normal": "",
+    "low": "low quality",
+    "worst": "worst quality",
+}
+
+
+def quality_from_anime_grade(grade: Any) -> Optional[str]:
+    """Map a deepghs anime grade to quality tags; None when unknown or unscored."""
+    if grade is None:
+        return None
+    return ANIME_GRADE_QUALITY.get(str(grade).strip().lower())
+
+
+def resolve_quality_tokens(image: Dict[str, Any]) -> Optional[str]:
+    """Quality tags for one image: anime grade first, else the LAION score bucket.
+
+    The anime grade is the danbooru quality ladder itself (trained on it), so
+    it wins when the picture has one; the CLIP+LAION score is a general-photo
+    predictor and only fills in for pictures the anime scorer never saw.
+    Returns None when the image carries neither.
+    """
+    from_grade = quality_from_anime_grade(image.get("aesthetic_anime_grade"))
+    if from_grade is not None:
+        return from_grade
+    return quality_from_aesthetic_score(image.get("aesthetic_score"))
+
+
 def quality_from_aesthetic_score(score: Any) -> Optional[str]:
     """Map an aesthetic score (~1-10) to quality tags; None when unscored."""
     if score is None:

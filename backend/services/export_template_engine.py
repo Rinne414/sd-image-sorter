@@ -59,6 +59,8 @@ from services.export_rating_quality import (
     resolve_canonical_rating,
     _QUALITY_BUCKETS,
     quality_from_aesthetic_score,
+    quality_from_anime_grade,
+    resolve_quality_tokens,
     flatten_single_line,
 )
 from services.export_template_render import (
@@ -197,13 +199,13 @@ def build_export_caption(
         safety = preset.get("default_safety", "")
     safety = _filter_template_value(safety, proc_config, separator)
 
-    # {quality}: user override > aesthetic-score bucket > preset default.
-    # A scored image in the normal band deliberately renders "" — a uniform
-    # quality token on every caption carries no training signal.
+    # {quality}: user override > anime grade > aesthetic-score bucket > preset
+    # default. A scored image in the normal band deliberately renders "" — a
+    # uniform quality token on every caption carries no training signal.
     if quality_override is not None:
         quality = quality_override
     else:
-        derived_quality = quality_from_aesthetic_score(image.get("aesthetic_score"))
+        derived_quality = resolve_quality_tokens(image)
         quality = (
             derived_quality
             if derived_quality is not None

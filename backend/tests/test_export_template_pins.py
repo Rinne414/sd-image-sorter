@@ -40,6 +40,8 @@ from services.export_template_engine import (
     normalize_lora_tag,
     process_tags,
     quality_from_aesthetic_score,
+    quality_from_anime_grade,
+    resolve_quality_tokens,
     render_template,
     resolve_canonical_rating,
 )
@@ -280,6 +282,47 @@ class TestQualityBuckets:
     def test_none_and_non_numeric_return_none(self):
         assert quality_from_aesthetic_score(None) is None
         assert quality_from_aesthetic_score("not a number") is None
+
+
+class TestAnimeGradeQuality:
+    """deepghs grade (the danbooru quality ladder itself) feeds {quality}."""
+
+    def test_every_grade_maps_onto_the_ladder(self):
+        assert quality_from_anime_grade("masterpiece") == "masterpiece, best quality"
+        assert quality_from_anime_grade("best") == "best quality"
+        assert quality_from_anime_grade("great") == "good quality"
+        assert quality_from_anime_grade("good") == "good quality"
+        assert quality_from_anime_grade("normal") == ""  # normal band renders nothing
+        assert quality_from_anime_grade("low") == "low quality"
+        assert quality_from_anime_grade("worst") == "worst quality"
+
+    def test_unknown_or_missing_grade_is_none(self):
+        assert quality_from_anime_grade(None) is None
+        assert quality_from_anime_grade("") is None
+        assert quality_from_anime_grade("legendary") is None
+
+    def test_grade_wins_over_the_laion_score(self):
+        image = {"aesthetic_anime_grade": "worst", "aesthetic_score": 7.5}
+        assert resolve_quality_tokens(image) == "worst quality"
+
+    def test_laion_score_fills_in_without_a_grade(self):
+        assert resolve_quality_tokens({"aesthetic_score": 7.5}) == "masterpiece, best quality"
+        assert resolve_quality_tokens({"aesthetic_anime_grade": None, "aesthetic_score": 3.2}) == "low quality"
+
+    def test_neither_score_is_none(self):
+        assert resolve_quality_tokens({}) is None
+
+    def test_caption_uses_the_grade(self):
+        image = {"aesthetic_anime_grade": "best", "aesthetic_score": 2.0}
+        tags = [{"tag": "1girl", "confidence": 0.9}]
+        caption = build_export_caption(image, tags, template_override="{quality}, {tags}")
+        assert caption == "best quality, 1girl"
+
+    def test_caption_normal_grade_renders_no_quality_token(self):
+        image = {"aesthetic_anime_grade": "normal", "aesthetic_score": 7.0}
+        tags = [{"tag": "1girl", "confidence": 0.9}]
+        caption = build_export_caption(image, tags, template_override="{quality}, {tags}")
+        assert caption == "1girl"
 
 
 # ====================================================================
