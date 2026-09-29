@@ -367,6 +367,19 @@ test('a side panel cut off at laptop height shows a fade until it is scrolled to
   }
 })
 
+test('the Auto-Separate action pane keeps its sticky bottom bar at 1280 wide', async ({ page }) => {
+  // At 1280 and below the action pane becomes a sticky bottom bar. The
+  // scroll-cue fade once gave every pane "position: relative" at a higher
+  // specificity, which silently turned that bar back into ordinary flow.
+  await gotoApp(page)
+  await resizeAndSettleUiScale(page, { width: 1280, height: 800 })
+  await page.evaluate(() => (window as any).App.switchView('sorting'))
+  await page.waitForTimeout(300)
+  const position = await page.evaluate(() =>
+    getComputedStyle(document.querySelector('#view-sorting .autosep-pane-action')!).position)
+  expect(position).toBe('sticky')
+})
+
 test('the Auto-Separate scope card leaves no empty frame when it has no action to offer', async ({ page }) => {
   await gotoApp(page)
   await page.setViewportSize({ width: 1366, height: 768 })

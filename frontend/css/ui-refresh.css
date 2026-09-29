@@ -12417,7 +12417,7 @@ html .nav-bar.nav-measuring * {
    bottom edge, and a fade marks that edge as "more below" instead of reading
    as a layout fault, like the gallery generator strip. */
 #view-censor .sidebar-bottom-actions::before,
-#view-sorting .autosep-pane::after,
+#view-sorting .autosep-pane:not(.autosep-pane-action)::after,
 #view-sorting .autosep-action-cta::before {
     content: '';
     position: absolute;
@@ -12439,11 +12439,12 @@ html .nav-bar.nav-measuring * {
     opacity: 1;
 }
 
-#view-sorting .autosep-pane {
+/* Not the action pane: at 1280 and below it is a sticky bottom bar. */
+#view-sorting .autosep-pane:not(.autosep-pane-action) {
     position: relative;
 }
 
-#view-sorting .autosep-pane::after {
+#view-sorting .autosep-pane:not(.autosep-pane-action)::after {
     bottom: 0;
     background: linear-gradient(to bottom, transparent, var(--bg-card));
 }
