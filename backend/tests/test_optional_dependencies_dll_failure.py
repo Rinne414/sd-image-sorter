@@ -16,9 +16,13 @@ on an opaque error.
 from __future__ import annotations
 
 import builtins
+import importlib.metadata
 
 
 import optional_dependencies
+
+# The real lookup, kept before any test patches importlib.metadata.version.
+_REAL_VERSION = importlib.metadata.version
 
 
 def _fake_install(installed_list):
@@ -29,14 +33,23 @@ def _fake_install(installed_list):
 
 
 def _locked_version(package_name: str) -> str:
+    """The locked release of an optional package; any other package's real version.
+
+    The patch is process-wide, and a package imported for the first time during
+    the test (huggingface_hub asks for aiohttp's version at import) must still
+    get an answer, whichever tests ran before in this process.
+    """
     normalized = optional_dependencies._normalize_package_name(package_name)
-    locked_spec = optional_dependencies._load_requirement_version_map()[normalized]
-    prefix = f"{package_name}=="
-    if not locked_spec.startswith(prefix):
+    locked_spec = optional_dependencies._load_requirement_version_map().get(normalized)
+    if locked_spec is None:
+        return _REAL_VERSION(package_name)
+    # hf_xet is locked as hf-xet: compare the names the way pip does.
+    locked_name, exact, version = locked_spec.partition("==")
+    if not exact or optional_dependencies._normalize_package_name(locked_name) != normalized:
         raise AssertionError(
             f"Expected an exact release lock for {package_name}: {locked_spec}"
         )
-    return locked_spec[len(prefix):]
+    return version
 
 
 def _patch_module_already_installed(monkeypatch):

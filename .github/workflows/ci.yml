@@ -36,8 +36,10 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
+      # A hosted runner: measuring backend coverage costs nothing here, and
+      # the report is uploaded below.
       - name: Run full CI script
-        run: python scripts/run_ci.py
+        run: python scripts/run_ci.py --backend-coverage
 
       - name: Upload backend coverage report
         if: always()
