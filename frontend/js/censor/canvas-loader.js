@@ -419,9 +419,18 @@ function clearCanvas() {
 
 function showLoading(show, msg) {
     const el = document.getElementById('censor-loading');
-    if (el) {
-        el.style.display = show ? 'flex' : 'none';
-        if (msg) document.getElementById('censor-loading-msg').textContent = msg;
+    if (!el) return;
+    el.style.display = show ? 'flex' : 'none';
+    const msgEl = document.getElementById('censor-loading-msg');
+    if (!msgEl) return;
+    // A run's own text (progress count, file name) holds the i18n lock, or the
+    // page-wide translation pass resets it to the static "Processing...".
+    if (show && msg) {
+        msgEl.dataset.i18nLocked = '1';
+        msgEl.textContent = msg;
+    } else if (!show) {
+        delete msgEl.dataset.i18nLocked;
+        msgEl.textContent = censorT('censor.processing', null, 'Processing...');
     }
 }
 

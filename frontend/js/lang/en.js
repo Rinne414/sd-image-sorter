@@ -1370,6 +1370,7 @@ window.I18nLang_en = {
     'censor.editsCleared': 'Edits cleared. Image restored to the original.',
     'censor.showChangesOn': 'Changed areas highlighted in red',
     'censor.loadingDetectPreparing': 'Detect All · preparing queue...',
+    'censor.loadingDetectSingle': 'Detecting · {name}',
     'censor.loadingDetectDefault': 'Running detection...',
     'censor.loadingDetectPrimary': 'Detect All',
     'censor.loadingSam3Batch': 'SAM3 Batch Refine · {current}/{total}',

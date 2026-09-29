@@ -15,6 +15,40 @@ function censorDetectionUpright(item) {
     return !shouldUseProxyEditMode(item);
 }
 
+// One detection run at a time. A cold model load takes seconds; with no sign
+// of life the button got clicked again, and every queued run then reported
+// "done" at once. While a run is on, every way to start one is busy.
+CensorState.detectionBusy = false;
+const CENSOR_DETECT_BUTTON_IDS = Object.freeze([
+    'btn-auto-detect-current',
+    'btn-auto-detect-all-sidebar',
+    'btn-run-auto-censor',
+    'btn-censor-detect-single',
+    'btn-auto-detect-current-modal',
+    'btn-auto-detect-all-modal',
+]);
+
+function setCensorDetectionBusy(busy) {
+    CensorState.detectionBusy = busy;
+    CENSOR_DETECT_BUTTON_IDS.forEach((id) => {
+        const button = document.getElementById(id);
+        if (!button) return;
+        button.disabled = busy;
+        button.setAttribute('aria-busy', String(busy));
+    });
+}
+
+// Runs the task unless a detection is already running; a repeat is dropped.
+async function runExclusiveCensorDetection(task) {
+    if (CensorState.detectionBusy) return;
+    setCensorDetectionBusy(true);
+    try {
+        await task();
+    } finally {
+        setCensorDetectionBusy(false);
+    }
+}
+
 function readCensorDetectionWarnings(result) {
     if (!result || typeof result !== 'object' || Array.isArray(result)) {
         throw new TypeError('Censor detection response must be an object');
@@ -332,7 +366,11 @@ async function resolveQuickAutoCensorExecutionPlan(options = {}) {
 
 // ============== Auto Censor Logic ==============
 
-async function runAutoCensorBatch() {
+function runAutoCensorBatch() {
+    return runExclusiveCensorDetection(autoCensorBatch);
+}
+
+async function autoCensorBatch() {
     const { showToast } = window.App;
     if (!hasCensorQueueWork()) {
         showToast(censorT('censor.queueEmpty', null, 'Queue is empty'), 'error');
@@ -522,7 +560,22 @@ async function applyDetectedRegionsToItem(item, regions, data = {}) {
     return { reloadedActiveItem, shouldUseMask, shouldUseBoxes };
 }
 
-async function runDetectionForImage(item, silent = false, executionPlan = null) {
+// Batch runs call this silently from inside their own exclusive run; a direct
+// (single-picture) run takes the lock itself and shows that it is working.
+function runDetectionForImage(item, silent = false, executionPlan = null) {
+    if (silent) return detectImage(item, true, executionPlan);
+    return runExclusiveCensorDetection(async () => {
+        const name = item.outputFilename || item.originalFilename || `#${item.id}`;
+        showLoading(true, censorT('censor.loadingDetectSingle', { name }, 'Detecting · {name}'));
+        try {
+            await detectImage(item, false, executionPlan);
+        } finally {
+            showLoading(false);
+        }
+    });
+}
+
+async function detectImage(item, silent, executionPlan) {
     try {
         let reloadedActiveItem = false;
         const plan = executionPlan || await resolveQuickAutoCensorExecutionPlan({ silent });
@@ -704,7 +757,11 @@ async function segmentCurrentImageByText() {
     }
 }
 
-async function runDetectionForAll() {
+function runDetectionForAll() {
+    return runExclusiveCensorDetection(detectAllImages);
+}
+
+async function detectAllImages() {
     const { showToast } = window.App;
     if (!hasCensorQueueWork()) {
         showToast(censorT('censor.queueEmpty', null, 'Queue is empty'), 'error');

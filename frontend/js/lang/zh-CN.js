@@ -1381,6 +1381,7 @@ window.I18nLang_zhCN = {
     'censor.editsCleared': '已清除修改，图片已恢复为原图。',
     'censor.showChangesOn': '已用红色高亮显示修改区域',
     'censor.loadingDetectPreparing': '批量检测：正在准备队列...',
+    'censor.loadingDetectSingle': '检测中 · {name}',
     'censor.loadingDetectDefault': '正在执行检测...',
     'censor.loadingDetectPrimary': '批量检测',
     'censor.loadingSam3Batch': 'SAM3 批量精修：{current}/{total}',

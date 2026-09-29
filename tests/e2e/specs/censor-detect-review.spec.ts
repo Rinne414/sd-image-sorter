@@ -447,6 +447,72 @@ test('a detector that did not run is reported as a detector error, with one batc
   await expect(firstBadge).toHaveText('检测器出错')
 })
 
+/**
+ * Tester report (2026-09-29): "clicking Detect shows no progress and no
+ * feedback, then a pile of 'detection complete' notices pops up at once".
+ * A cold model load takes seconds; a single detect showed nothing, Detect All
+ * showed a bare "Processing..." (its progress text was reset by the page-wide
+ * translation pass), and every repeat click started another run.
+ */
+test('a running detection says so, keeps its progress text, and ignores repeat clicks', async ({ page }) => {
+  await stubCensorBackend(page)
+  let detectCalls = 0
+  let release = () => {}
+  let held = new Promise<void>((resolve) => { release = resolve })
+  await page.route('**/api/censor/detect', async (route) => {
+    detectCalls += 1
+    const body = route.request().postDataJSON() as { image_id: number }
+    await held
+    await route.fulfill({
+      json: { status: 'ok', image_id: body.image_id, model_type: 'nudenet', detections: [], warnings: [] },
+    })
+  })
+  await seedCensorQueue(page)
+
+  const overlay = page.locator('#censor-loading')
+  const message = page.locator('#censor-loading-msg')
+  const detectButtons = ['#btn-auto-detect-current', '#btn-auto-detect-all-sidebar', '#btn-run-auto-censor']
+
+  // Single picture: immediate feedback, every detect entry point is busy.
+  await page.locator('#btn-auto-detect-current').click()
+  await expect(overlay).toBeVisible()
+  await expect(message).toContainText(`Detecting · ${IMAGES[0].filename}`)
+  for (const selector of detectButtons) {
+    await expect(page.locator(selector)).toBeDisabled()
+    await expect(page.locator(selector)).toHaveAttribute('aria-busy', 'true')
+  }
+  await expect.poll(() => detectCalls).toBe(1)
+  // The D shortcut is the other way in; it must not start a second run.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+  await page.keyboard.press('d')
+  await page.evaluate(() => (window as any).UIRefresh.applyTranslations())
+  await expect(message).toContainText(`Detecting · ${IMAGES[0].filename}`)
+  await page.waitForTimeout(300)
+  expect(detectCalls).toBe(1)
+
+  release()
+  await expect(overlay).toBeHidden()
+  for (const selector of detectButtons) {
+    await expect(page.locator(selector)).toBeEnabled()
+  }
+  await expect(page.locator('#toast-container .toast', { hasText: 'No matching regions found' })).toHaveCount(1)
+  expect(detectCalls).toBe(1)
+
+  // Detect All: the count survives a translation pass, a second click does nothing.
+  held = new Promise<void>((resolve) => { release = resolve })
+  detectCalls = 0
+  await page.evaluate(() => document.querySelectorAll('#toast-container .toast').forEach((toast) => toast.remove()))
+  await page.locator('#btn-auto-detect-all-sidebar').click()
+  await expect(message).toContainText('/2')
+  await page.evaluate(() => (window as any).UIRefresh.applyTranslations())
+  await expect(message).toContainText('/2')
+  await page.locator('#btn-auto-detect-all-sidebar').click({ force: true })
+  release()
+  await expect(overlay).toBeHidden()
+  await expect(page.locator('#toast-container .toast', { hasText: 'Detection complete' })).toHaveCount(1)
+  expect(detectCalls).toBe(2)
+})
+
 test('box shape mode strips polygon/mask geometry from stored regions', async ({ page }) => {
   await stubCensorBackend(page)
   const detectCalls = await stubDetect(page, [
