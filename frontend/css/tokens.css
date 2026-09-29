@@ -3276,11 +3276,12 @@ li > .icon {
     .aspect-quick-btn,
     .scope-btn
 ):is(.active, .is-active, [aria-selected="true"], [aria-pressed="true"]) {
+    /* colour and fill only: a heavier weight would widen the label and
+       shift its neighbours when the choice changes */
     background: rgba(255, 255, 255, 0.09);
     border-color: transparent;
     box-shadow: none;
     color: var(--text);
-    font-weight: 600;
 }
 
 :is(#app, body > .modal) .segmented-option span {
@@ -3295,7 +3296,10 @@ li > .icon {
     border-color: transparent;
     box-shadow: none;
     color: var(--text);
-    font-weight: 600;
+}
+
+#app #model-manager-modal .settings-modal-tabs {
+    background: var(--surface-2);
 }
 
 /* --- top bar ------------------------------------------------------------ */
@@ -3682,7 +3686,7 @@ li > .icon {
 
 /* Big-number statistics (Style Finder, Similar, Prompt Helper): the number
    carries the row, the label sits under it, no tiles. */
-#app :is(.artist-stats, #similar-stats, .promptlab-stats-grid) {
+#app :is(.artist-stats, #similar-stats, .promptlab-stats-grid):not([hidden]) {
     display: flex;
     flex-wrap: wrap;
     background: transparent;
