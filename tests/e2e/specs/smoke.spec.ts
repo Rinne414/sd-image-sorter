@@ -2499,6 +2499,25 @@ test.describe('Smoke Tests', () => {
     await expect(image).toHaveClass(/selected/)
   })
 
+  test('gallery context menu draws the app line icons, not coloured emoji', async ({ page }) => {
+    await mockGalleryImages(page, [
+      { id: 152, filename: 'context-icons.png', checkpoint: 'context-model.safetensors' },
+    ])
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await page.locator('#gallery-grid .gallery-item[data-id="152"]').click({ button: 'right' })
+
+    const menu = page.locator('.gallery-context-menu')
+    await expect(menu).toBeVisible()
+    const icons = menu.locator('.context-menu-item .context-menu-icon')
+    const count = await icons.count()
+    expect(count).toBeGreaterThan(10)
+    await expect(menu.locator('.context-menu-item .context-menu-icon svg.icon use')).toHaveCount(count)
+    const glyphs = await icons.evaluateAll((elements) => elements.map((element) => (element.textContent || '').trim()).join(''))
+    expect(glyphs).toBe('')
+  })
+
   test('gallery preview inspector should keep scroll position when switching images', async ({ page }) => {
     const imageIds = [171, 172]
     const longPrompt = Array.from({ length: 100 }, (_, index) => `modal_tag_${index}`).join(', ')

@@ -3986,3 +3986,21 @@ li > .icon {
     background-size: 100% 4px;
     background-repeat: no-repeat;
 }
+
+/* Context menu line icons sit in the same 18px column the emoji used,
+   in secondary grey so the label leads. */
+.context-menu-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-2);
+}
+
+.context-menu-item:hover .context-menu-icon,
+.context-menu-item:focus-visible .context-menu-icon {
+    color: var(--text);
+}
+
+.context-menu-item.is-danger .context-menu-icon {
+    color: inherit;
+}
