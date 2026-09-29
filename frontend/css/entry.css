@@ -124,8 +124,15 @@ body.entry-active {
     z-index: 1;
     pointer-events: none;
     background:
-        transparent,
-        transparent;
+        linear-gradient(to top,
+            rgba(10, 10, 10, 0.94) 0%,
+            rgba(10, 10, 10, 0.60) 20%,
+            rgba(10, 10, 10, 0.12) 44%,
+            transparent 60%),
+        linear-gradient(to right,
+            rgba(10, 10, 10, 0.82) 0%,
+            rgba(10, 10, 10, 0.34) 26%,
+            transparent 52%);
 }
 
 .entry-hero .film-strip {

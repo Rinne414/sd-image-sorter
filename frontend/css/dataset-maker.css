@@ -1089,7 +1089,7 @@
 #view-dataset .dataset-card-primary {
     border-color: rgba(var(--accent-primary-rgb, 124, 139, 255), 0.34);
     background:
-        rgba(var(--accent-primary-rgb, 124, 139, 255), 0.10),
+        linear-gradient(180deg, rgba(var(--accent-primary-rgb, 124, 139, 255), 0.10), rgba(255,255,255,0.02)),
         rgba(255,255,255,0.02);
 }
 #view-dataset .dataset-card-required {

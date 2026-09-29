@@ -300,10 +300,6 @@ body::before {
     left: 0;
     right: 0;
     bottom: 0;
-    background:
-        transparent,
-        transparent,
-        rgba(18, 18, 18, 0.65);
     pointer-events: none;
     z-index: -1;
     animation: none;
@@ -1792,9 +1788,6 @@ body::before {
         left: 0;
         right: 0;
         bottom: 0;
-        background:
-            transparent,
-            transparent;
         pointer-events: none;
     }
 
@@ -2119,12 +2112,6 @@ body::before {
         left: 0;
         right: 0;
         bottom: 0;
-        background:
-            transparent,
-            transparent,
-            transparent,
-            transparent,
-            transparent;
         pointer-events: none;
         animation: none;
     }
@@ -7681,10 +7668,7 @@ input[type="radio"] {
     display: block !important;
     min-height: calc(100vh - var(--nav-height));
     padding: 28px;
-    background:
-        transparent,
-        transparent,
-        var(--bg-dark);
+    background: var(--bg-dark);
 }
 
 .health-shell {

@@ -73,9 +73,6 @@ body {
 }
 
 body::before {
-    background:
-        transparent,
-        transparent;
     animation: none;
     opacity: 0.72;
 }
@@ -810,7 +807,7 @@ textarea:focus,
     border-radius: 22px;
     border: 1px solid rgba(var(--accent-rgb), 0.14);
     background:
-        rgba(var(--accent-secondary-rgb), 0.12),
+        linear-gradient(135deg, rgba(var(--accent-secondary-rgb), 0.12), rgba(var(--accent-primary-rgb), 0.08)),
         rgba(30, 30, 30, 0.96);
     box-shadow: var(--shadow-card);
 }
@@ -3291,7 +3288,7 @@ textarea:focus,
 
 #similar-workflow-status.similar-workflow-primary {
     background:
-        rgba(var(--accent-primary-rgb), 0.12),
+        linear-gradient(135deg, rgba(var(--accent-primary-rgb), 0.12), rgba(var(--accent-secondary-rgb), 0.08)),
         rgba(255, 255, 255, 0.03);
     border-color: rgba(var(--accent-primary-rgb), 0.24);
 }
@@ -3522,7 +3519,7 @@ textarea:focus,
     border: 1px solid rgba(var(--accent-primary-rgb), 0.2);
     border-radius: 18px;
     background:
-        transparent,
+        radial-gradient(circle at top left, rgba(var(--accent-primary-rgb), 0.16), transparent 38%),
         rgba(16, 16, 16, 0.58);
 }
 
@@ -6113,10 +6110,6 @@ textarea:focus,
 
 #view-censor .censor-workspace-v2 {
     height: var(--censor-workspace-height, var(--ui-viewport-below-nav)) !important;
-    background:
-        transparent,
-        transparent,
-        #131313 !important;
 }
 
 #view-censor .censor-workspace-v2::before {
@@ -11835,7 +11828,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     border-radius: 14px;
     border: 1px solid rgba(var(--purple-rgb, 167, 139, 255), 0.28);
     background:
-        transparent,
+        radial-gradient(120% 140% at 0% 0%, rgba(var(--purple-rgb, 167, 139, 255), 0.14), transparent 60%),
         var(--surface-elevated, rgba(40, 40, 40, 0.6));
 }
 
