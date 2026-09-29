@@ -310,8 +310,12 @@ body.entry-active {
        same reason, so the base tile now carries that opacity too. The hero
        still reads through, the labels stay legible against any cover. */
     background: rgba(14, 14, 14, 0.93);
-    border: 1px solid rgba(255, 255, 255, 0.13);
-    border-radius: var(--r-card);
+    /* Owner FB (2026-09-30): the column read "too square" next to the rest of
+       the app. Same corner and faint amber frame as the other cards, plus a
+       soft shadow so the tiles sit above the cover art. */
+    border: 1px solid rgba(var(--accent-rgb), 0.18);
+    border-radius: 14px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.04);
     padding: 13px 16px;
     display: flex;
     flex-direction: column;
@@ -319,12 +323,20 @@ body.entry-active {
     cursor: pointer;
     text-align: left;
     color: var(--text);
-    transition: border-color 150ms ease, background 150ms ease;
+    transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
 }
 
 .entry-tile:hover {
-    border-color: var(--border-strong);
-    background: rgba(24, 24, 24, 0.96);
+    border-color: rgba(var(--accent-rgb), 0.5);
+    background: rgba(24, 22, 20, 0.96);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.34), 0 0 0 3px rgba(var(--accent-rgb), 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* The library card is not a button itself (its buttons are); keep its hover calm. */
+.entry-library-home.entry-tile:hover {
+    border-color: rgba(var(--accent-rgb), 0.3);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 /* Film mode runs bright strips behind the tiles; lift the tile surface opacity
@@ -375,7 +387,7 @@ body.entry-active {
     flex-wrap: wrap;
     background: rgba(14, 14, 14, 0.6);
     border: 1px solid var(--hairline-2);
-    border-radius: var(--r-card);
+    border-radius: 14px;
     padding: 12px 16px;
     text-align: left;
     color: var(--text);
@@ -439,7 +451,8 @@ body.entry-active {
 .entry-anchor {
     background: rgba(14, 14, 14, 0.88);
     border: 1px solid rgba(var(--blue-rgb), 0.55);
-    border-radius: var(--r-card);
+    border-radius: 14px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
     padding: 17px 20px 15px;
     display: flex;
     flex-direction: column;
@@ -510,7 +523,7 @@ body.entry-active {
     background: var(--blue);
     color: var(--on-accent);
     border: none;
-    border-radius: var(--r-ctl);
+    border-radius: 10px;
     font-size: 13px;
     font-weight: 900;
     padding: 7px 18px;
@@ -551,6 +564,12 @@ body.entry-active {
     line-height: 1;
     font-size: 26px;
     color: var(--text);
+}
+
+/* No number to show: drop the slot so the title lines up with its subtitle
+   instead of sitting one flex gap to the right. */
+.entry-fn .fn-count:empty {
+    display: none;
 }
 
 .entry-fn .fn-title {
@@ -662,7 +681,7 @@ body.entry-active {
 
 .entry-library-enter {
     border: none;
-    border-radius: var(--r-ctl, 10px);
+    border-radius: 10px;
     padding: 9px 18px;
     background: var(--blue, #DBB180);
     color: var(--on-accent, #161616);
@@ -678,7 +697,7 @@ body.entry-active {
 
 .entry-library-manage {
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: var(--r-ctl, 10px);
+    border-radius: 10px;
     padding: 8px 12px;
     background: transparent;
     color: rgba(var(--accent-rgb), 0.7);

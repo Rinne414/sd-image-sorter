@@ -368,6 +368,18 @@ test.describe('Entry page (opted in)', () => {
     await expect(page.locator('#entry-count-gallery')).not.toHaveText('')
   })
 
+  test('a function tile with no number keeps its title in line with its subtitle', async ({ page }) => {
+    // No saved manual-sort session, so the Manual Sort count is empty. The
+    // empty slot used to keep its flex gap and push the title ~10px right.
+    const tile = page.locator('#entry-fn-sort')
+    await expect(tile.locator('.fn-count')).toHaveText('')
+    const titleBox = await tile.locator('.fn-title').boundingBox()
+    const subBox = await tile.locator('.fn-sub').boundingBox()
+    expect(titleBox).not.toBeNull()
+    expect(subBox).not.toBeNull()
+    expect(Math.abs(titleBox!.x - subBox!.x)).toBeLessThanOrEqual(1)
+  })
+
   test('empty library stats settle at zero and all generators stay localized', async ({ page }) => {
     const backend = await startIsolatedBackend()
     const consoleProblems: string[] = []
