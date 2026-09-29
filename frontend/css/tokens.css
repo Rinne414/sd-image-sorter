@@ -1315,7 +1315,7 @@ a:hover,
 
 #view-censor .queue-selection-count,
 #view-censor #queue-selection-count {
-    color: var(--pink);
+    color: var(--text-2);
     font-family: var(--font-mono);
     font-size: var(--fs-data);
 }
@@ -3409,4 +3409,183 @@ li > .icon {
     border-color: transparent;
     box-shadow: none;
     color: var(--text);
+}
+
+/* ==========================================================================
+   Amber budget v2 (2026-09-30)
+
+   Amber may mark only: the one primary action of a view, a filter or
+   selection that is on (chip, thumbnail outline, checkbox tick), progress
+   and filled stars, the top bar's you-are-here underline, and inline links.
+   It may not colour labels, kickers, step numbers, counters, parameter keys,
+   badges, secondary buttons or card edges. Everything below was spending it
+   on one of those.
+   ========================================================================== */
+
+/* Kickers and small titles are labels */
+#app :is(
+    .filter-panel-kicker,
+    .tagger-model-current-kicker,
+    .tagger-model-panel-title,
+    .dataset-import-card-kicker,
+    .model-card-setup-steps > summary
+) {
+    color: var(--text-2);
+    background: transparent;
+    border-color: transparent;
+}
+
+/* Step numbers: neutral discs; the current step is a white disc */
+#app :is(.dataset-tab-num, .dataset-step-number) {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: transparent;
+    color: var(--text-2);
+}
+
+#app .dataset-tab:is(.active, .is-active, [aria-selected="true"]) .dataset-tab-num,
+#app .dataset-workflow-step.is-active strong {
+    background: var(--text);
+    color: var(--bg);
+}
+
+#app .dataset-workflow-step.is-active {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: transparent;
+    color: var(--text);
+}
+
+/* Counters and read-outs are data */
+#app :is(
+    .dataset-selection-summary,
+    .queue-selection-count,
+    .zoom-level-v2,
+    .promptlab-stat-number,
+    .dataset-empty-arrow
+) {
+    color: var(--text-2);
+}
+
+#app :is(.queue-selection-count, .sort-scope-count) {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: transparent;
+    color: var(--text-2);
+}
+
+/* Parameter keys in the image popup */
+#app #modal-key-params .key-param strong {
+    color: var(--text-2);
+}
+
+/* Badges and quiet status chips */
+#app .model-card-badge {
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text-2);
+}
+
+/* Promotional / ready banners: a neutral panel, not an amber frame */
+#app :is(.smart-tag-hint-banner, .model-health-banner) {
+    background: rgba(255, 255, 255, 0.035);
+    border-color: transparent;
+    box-shadow: none;
+}
+
+#app .smart-tag-hint-banner-icon {
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text-2);
+}
+
+/* The banner's button is the way into another tool, not this dialog's goal */
+#app #btn-tag-modal-smart-tag-go.btn-primary {
+    background: rgba(255, 255, 255, 0.09);
+    color: var(--text);
+    font-weight: 500;
+}
+
+#app #btn-tag-modal-smart-tag-go.btn-primary:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.14);
+    color: var(--text);
+}
+
+/* Current-model picker in the tag dialog */
+#app .tagger-model-current {
+    border-color: transparent;
+    background: rgba(255, 255, 255, 0.035);
+}
+
+#app .tagger-model-current-action {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: transparent;
+    color: var(--text);
+}
+
+/* "Select everything matching" is a scope action, not a second primary */
+#app .filter-sidebar #btn-select-all.btn-primary,
+#app .selection-panel #btn-select-all.btn-primary {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: transparent;
+    color: var(--text);
+}
+
+#app .filter-sidebar #btn-select-all.btn-primary:hover:not(:disabled),
+#app .selection-panel #btn-select-all.btn-primary:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.11);
+}
+
+/* Generator toggles in the filter editor: the tick carries "on", the tile
+   stays neutral. Fourteen amber tiles made the default state look alarming. */
+#app :is(.filter-toggle-grid, .filter-list) .checkbox-label {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: transparent;
+    color: var(--text-2);
+}
+
+#app :is(.filter-toggle-grid, .filter-list) .checkbox-label:has(input:checked) {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: transparent;
+    color: var(--text);
+}
+
+/* Small secondary actions that were dressed as amber pills */
+#app :is(.reader-paste-btn, .dataset-queue-mode-btn.active, .reverse-mode-option) {
+    border-color: transparent;
+}
+
+#app .reader-paste-btn {
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text);
+}
+
+#app .reader-paste-btn:hover {
+    background: rgba(255, 255, 255, 0.11);
+}
+
+#app .dataset-queue-mode-btn.active {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text);
+}
+
+#app .reverse-mode-option:has(input:checked) {
+    background: rgba(255, 255, 255, 0.07);
+}
+
+#view-censor .censor-shortcuts-disclosure > summary {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-2);
+}
+
+/* "Needs setup" status: a neutral panel with a warning-coloured badge */
+#app .scope-status-card.is-warning {
+    background: rgba(255, 255, 255, 0.035);
+    border-color: transparent;
+}
+
+#app .scope-status-card.is-warning .scope-status-badge {
+    background: rgba(var(--warning-rgb), 0.12);
+    color: var(--warning);
+}
+
+/* The negative prompt is text, not an error */
+#app #image-modal #modal-negative-text {
+    color: var(--text-2);
 }

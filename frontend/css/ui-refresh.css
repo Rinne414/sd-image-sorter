@@ -6356,7 +6356,7 @@ textarea:focus,
 }
 
 #view-censor .zoom-level-v2 {
-    color: var(--accent-primary) !important;
+    color: var(--text-secondary) !important;
 }
 
 #view-censor .tool-label,
