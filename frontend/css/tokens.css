@@ -80,12 +80,13 @@
     --duration-normal: 160ms;   /* panels, modals, view reveals */
     --ease-out: cubic-bezier(0.2, 0, 0, 1);
 
-    /* ===== Radii — small and deliberate. Uniformly large corners are a
-       generated-UI tell and cost usable pixels in a dense tool. ===== */
-    --r-ctl: 4px;               /* buttons, inputs */
-    --r-card: 5px;              /* panels, cards */
-    --r-tile: 3px;              /* image tiles */
-    --r-modal: 6px;
+    /* ===== Radii — the rounded corners the owner likes (2026-09-30: "本来
+       圆角的不是挺好看的吗"). These are the values from before the August
+       Graphite pass, which had shrunk them to 4/5/3/6px. ===== */
+    --r-ctl: 10px;              /* buttons, inputs */
+    --r-card: 12px;             /* panels, cards */
+    --r-tile: 14px;             /* image tiles */
+    --r-modal: 16px;
     --r-pill: 999px;            /* genuinely round things only: toggles, dots */
 
     /* ===== Type — one UI stack, resolved from the OS.
