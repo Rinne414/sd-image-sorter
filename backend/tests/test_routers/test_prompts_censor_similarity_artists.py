@@ -1573,6 +1573,10 @@ class TestCensorRouterValidation:
         assert "NudeNet" in result["warnings"][0]
         assert "nudenet dependency failed" in result["warnings"][0]
         assert "Legacy YOLO" in result["warnings"][0]
+        # The UI must tell "a detector did not run" from "ran and found
+        # nothing" without parsing prose, so each failure is also structured.
+        assert [failure["backend"] for failure in result["failed_backends"]] == ["NudeNet"]
+        assert "nudenet dependency failed" in result["failed_backends"][0]["detail"]
 
     def test_detect_both_clean_empty_result_has_no_warnings(self, test_client, monkeypatch, tmp_path):
         import censor as censor_module
@@ -1622,6 +1626,7 @@ class TestCensorRouterValidation:
         result = response.json()
         assert result["detections"] == []
         assert result["warnings"] == []
+        assert result["failed_backends"] == []
 
     def test_detect_both_keeps_empty_partial_result_with_warning(self, test_client, monkeypatch, tmp_path):
         import censor as censor_module
@@ -1673,6 +1678,8 @@ class TestCensorRouterValidation:
         assert "Legacy YOLO" in result["warnings"][0]
         assert "legacy model could not run" in result["warnings"][0]
         assert "NudeNet" in result["warnings"][0]
+        assert [failure["backend"] for failure in result["failed_backends"]] == ["Legacy YOLO"]
+        assert "legacy model could not run" in result["failed_backends"][0]["detail"]
 
     def test_detect_returns_cached_mask_ref_for_large_combined_masks(self, test_client, monkeypatch, tmp_path):
         import censor as censor_module

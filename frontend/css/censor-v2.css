@@ -326,6 +326,24 @@ button.censor-batch-outcome-badge:focus-visible {
     color: #FAE7E6;
 }
 
+.censor-batch-outcome-badge.is-detector-error {
+    border-color: rgba(var(--warning-rgb), 0.9);
+    background: rgba(var(--warning-rgb), 0.94);
+    color: #211A08;
+}
+
+/* Batch detection notes can be long (bilingual detector errors): keep the
+   list inside the viewport and let file paths wrap. */
+#censor-batch-notes .guide-card {
+    max-height: calc(100vh - 64px);
+    overflow-y: auto;
+}
+
+#censor-batch-notes .guide-steps span {
+    overflow-wrap: anywhere;
+    white-space: pre-line;
+}
+
 .censor-batch-outcome-badge.is-refined {
     border-color: rgba(var(--accent-rgb), 0.8);
     background: rgba(61, 61, 61, 0.94);

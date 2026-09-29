@@ -367,6 +367,68 @@ test('detect all preserves item failures instead of reporting false success', as
   ])
 })
 
+test('a detector that did not run is reported as a detector error, with one batch summary line', async ({ page }) => {
+  await stubCensorBackend(page)
+  // Combined mode where Legacy YOLO cannot load: NudeNet still runs and finds
+  // nothing. The backend's prose differs per image (it quotes the exception),
+  // which used to stack every copy into the warning toast.
+  const failureDetail = (imageId: number) =>
+    `The detection model could not be loaded (opset 22 is not supported, image ${imageId}) / 检测模型无法加载`
+  await page.route('**/api/censor/detect', async (route) => {
+    const body = route.request().postDataJSON() as { image_id: number }
+    await route.fulfill({
+      json: {
+        status: 'ok',
+        image_id: body.image_id,
+        model_type: 'both',
+        detections: [],
+        warnings: [`Legacy YOLO detection failed; combined mode used NudeNet only. ${failureDetail(body.image_id)}`],
+        failed_backends: [{ backend: 'Legacy YOLO', detail: failureDetail(body.image_id) }],
+      },
+    })
+  })
+  await seedCensorQueue(page)
+
+  await page.locator('#btn-run-auto-censor').click()
+
+  const badges = page.locator('#censor-queue-list [data-testid="censor-batch-outcome-badge"]')
+  await expect(badges).toHaveCount(2)
+  const firstBadge = badges.and(page.locator(`[data-image-id="${IMAGES[0].id}"]`))
+  await expect(firstBadge).toHaveAttribute('data-status', 'detector-error')
+  await expect(firstBadge).toHaveText('Detector error')
+  await expect(firstBadge).toHaveAttribute('type', 'button')
+  await expect(firstBadge).toHaveAttribute('title', new RegExp(`Legacy YOLO: .*image ${IMAGES[0].id}`))
+  await expect(page.locator('[data-testid="censor-batch-outcome-badge"][data-status="no-match"]')).toHaveCount(0)
+
+  // One short line for the whole batch, and no "lower the threshold" advice
+  // for a result a threshold cannot fix.
+  const warnings = page.locator('#toast-container .toast.warning')
+  await expect(warnings).toHaveCount(1)
+  await expect(warnings.first().locator('.toast-message')).toHaveText(
+    'Legacy YOLO did not run on 2 image(s), so those results may be incomplete.'
+  )
+  await expect(page.locator('#toast-container')).not.toContainText('found no regions')
+  await expect(page.locator('#toast-container')).not.toContainText('Batch processing complete')
+
+  // The full notes stay one click away: each once, with its image count.
+  await warnings.first().locator('.toast-action-btn').click()
+  const notes = page.locator('#censor-batch-notes')
+  await expect(notes).toBeVisible()
+  await expect(notes.locator('.guide-steps li')).toHaveCount(2)
+  await expect(notes.locator('.guide-steps li').first()).toContainText('1 image(s)')
+  await notes.locator('[data-guide-close]').click()
+  await expect(notes).toHaveCount(0)
+
+  // The badge keeps the reason after the toast is gone.
+  await firstBadge.click()
+  await expect(page.locator('#toast-container .toast.warning .toast-message').last()).toContainText(
+    `Legacy YOLO: ${failureDetail(IMAGES[0].id)}`
+  )
+
+  await page.evaluate(() => (window as any).I18n.setLang('zh-CN'))
+  await expect(firstBadge).toHaveText('检测器出错')
+})
+
 test('box shape mode strips polygon/mask geometry from stored regions', async ({ page }) => {
   await stubCensorBackend(page)
   const detectCalls = await stubDetect(page, [

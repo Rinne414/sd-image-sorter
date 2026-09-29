@@ -177,7 +177,9 @@ function renderQueue() {
         // Update properties (always update these - they may have changed)
         img.dataset.index = index;
         const baseTitle = item.outputFilename || '';
-        img.title = item.batchError ? `${baseTitle}\n⚠ ${item.batchError}` : baseTitle;
+        const batchNote = item.batchError
+            || (hasCensorDetectorFailures(item) ? describeCensorDetectorFailures(item) : '');
+        img.title = batchNote ? `${baseTitle}\n⚠ ${batchNote}` : baseTitle;
 
         // Only update src if it changed (prevents reload flash)
         const newSrc = getCensorItemPreviewSrc(item);

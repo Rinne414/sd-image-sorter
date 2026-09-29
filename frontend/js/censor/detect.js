@@ -40,6 +40,74 @@ function readCensorDetectionWarnings(result) {
     return Array.from(new Set(warnings));
 }
 
+// Detectors that did not run in combined mode. An older payload without the
+// field reported no structured failures, which reads as none.
+function readCensorDetectorFailures(result) {
+    if (result.failed_backends === undefined) return [];
+    if (!Array.isArray(result.failed_backends)) {
+        throw new TypeError('Censor detection failed_backends must be an array');
+    }
+    return result.failed_backends.map((failure) => {
+        const backend = String(failure?.backend || '').trim();
+        const detail = String(failure?.detail || '').trim();
+        if (!backend || !detail) {
+            throw new TypeError('Each censor detection failure needs a backend and a detail');
+        }
+        return Object.freeze({ backend, detail });
+    });
+}
+
+// One line per batch, whatever its size. Detector failures are long
+// (bilingual, with the raw exception) and the per-image wording can differ,
+// so joining every unique note used to stack a whole toast of near-copies.
+// The full list, each note once with its image count, is one click away.
+function showCensorBatchWarningSummary(items = CensorState.queue) {
+    const notes = new Map();
+    const failedBackends = new Set();
+    let detectorErrorImages = 0;
+    items.forEach((item) => {
+        (item.batchWarnings || []).forEach((note) => notes.set(note, (notes.get(note) || 0) + 1));
+        if (!hasCensorDetectorFailures(item)) return;
+        detectorErrorImages += 1;
+        item.batchDetectorFailures.forEach((failure) => failedBackends.add(failure.backend));
+    });
+    if (notes.size === 0) return;
+
+    const message = detectorErrorImages > 0
+        ? censorT(
+            'censor.batchDetectorFailedSummary',
+            { count: detectorErrorImages, backends: Array.from(failedBackends).join(', ') },
+            '{backends} did not run on {count} image(s), so those results may be incomplete.'
+        )
+        : censorT('censor.batchNotesSummary', { count: notes.size }, 'The batch left {count} detection note(s).');
+    window.App.showToast(message, 'warning', {
+        duration: 8000,
+        actionLabel: censorT('censor.batchNotesDetails', null, 'Details'),
+        onAction: () => showCensorBatchWarningDetails(notes),
+    });
+}
+
+function showCensorBatchWarningDetails(notes) {
+    const overlayId = 'censor-batch-notes';
+    document.getElementById(overlayId)?.remove();
+    const overlay = window.App.createGuideOverlay({
+        id: overlayId,
+        title: censorT('censor.batchNotesTitle', null, 'Detection notes from this batch'),
+        description: censorT(
+            'censor.batchNotesDescription',
+            null,
+            'Each note once, with how many images it came from. Images whose detector did not run are marked "Detector error" in the queue.'
+        ),
+        steps: Array.from(notes, ([text, count]) => ({
+            title: censorT('censor.batchNotesImageCount', { count }, '{count} image(s)'),
+            text,
+        })),
+        maxWidth: '680px',
+        closeLabel: censorT('common.close', null, 'Close'),
+    });
+    document.body.appendChild(overlay);
+}
+
 function getLegacyBackendStatus() {
     return (CensorState.backendModelStatus?.models || []).find(model => model.id === 'legacy') || null;
 }
@@ -288,7 +356,6 @@ async function runAutoCensorBatch() {
     showLoading(true, censorT('censor.autoCensorPreparing', null, 'Auto Censor · preparing queue...'));
 
     let count = 0;
-    const detectionWarnings = new Set();
     const result = await processCensorBatchItems(async (item, { index, total }) => {
         showLoading(true, window.App.buildProgressText({
             progress: { message: item.originalFilename || item.outputFilename || `Image ${item.id}` },
@@ -298,8 +365,7 @@ async function runAutoCensorBatch() {
             defaultMessage: censorT('censor.autoCensorRunning', null, 'Running auto-censor...'),
             primaryLabel: censorT('censor.autoCensorPrimary', null, 'Auto Censor')
         }));
-        const warnings = await runDetectionForImage(item, true, executionPlan); // true = silent/no-refresh
-        warnings.forEach((warning) => detectionWarnings.add(warning));
+        await runDetectionForImage(item, true, executionPlan); // true = silent/no-refresh
         count += 1;
     });
 
@@ -344,7 +410,7 @@ async function runAutoCensorBatch() {
             ),
             'success'
         );
-    } else {
+    } else if (appliedCount > 0) {
         showToast(
             executionPlan.switchMessage
                 ? censorT('censor.batchProcessingCompleteAutoRestored', null, 'Batch processing complete. The app auto-restored the privacy detector before running.')
@@ -352,10 +418,9 @@ async function runAutoCensorBatch() {
             'success'
         );
     }
-
-    if (detectionWarnings.size > 0) {
-        showToast(Array.from(detectionWarnings).join(' '), 'warning');
-    }
+    // Neither applied nor cleanly empty: every image lost a detector, and the
+    // summary below names it instead of a success toast.
+    showCensorBatchWarningSummary();
 }
 
 // Bake a set of detected regions into an item (proxy edit-op path or full
@@ -499,6 +564,7 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
         }
         const data = await window.App.API.post('/api/censor/detect', detectBody);
         const detectionWarnings = readCensorDetectionWarnings(data);
+        const detectorFailures = readCensorDetectorFailures(data);
 
         const useBoxShape = CensorState.maskShape === 'box';
         const rawRegions = [...(data.detections || [])].sort((a, b) => b.confidence - a.confidence);
@@ -534,6 +600,8 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
         if (silent) {
             item.batchStatus = 'done';
             item.batchRegionCount = regions.length;
+            item.batchWarnings = detectionWarnings;
+            item.batchDetectorFailures = detectorFailures;
         }
 
         if (!silent && item.id === CensorState.activeId) {
@@ -650,7 +718,6 @@ async function runDetectionForAll() {
     showLoading(true, censorT('censor.loadingDetectPreparing', null, 'Detect All · preparing queue...'));
     let count = 0;
     let failedCount = 0;
-    const detectionWarnings = new Set();
 
     const result = await processCensorBatchItems(async (item, { index, total }) => {
         try {
@@ -662,8 +729,7 @@ async function runDetectionForAll() {
                 defaultMessage: censorT('censor.loadingDetectDefault', null, 'Running detection...'),
                 primaryLabel: censorT('censor.loadingDetectPrimary', null, 'Detect All')
             }));
-            const warnings = await runDetectionForImage(item, true, executionPlan);
-            warnings.forEach((warning) => detectionWarnings.add(warning));
+            await runDetectionForImage(item, true, executionPlan);
             if (item.batchStatus === 'failed') {
                 failedCount += 1;
                 return;
@@ -701,9 +767,7 @@ async function runDetectionForAll() {
         );
     }
 
-    if (detectionWarnings.size > 0) {
-        showToast(Array.from(detectionWarnings).join(' '), 'warning');
-    }
+    showCensorBatchWarningSummary();
 }
 
 

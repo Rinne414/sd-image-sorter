@@ -376,7 +376,12 @@ const CENSOR_BATCH_OUTCOME_LABELS = Object.freeze({
     refined: Object.freeze({ key: 'censor.batchOutcomeRefined', fallback: 'Refined' }),
     censored: Object.freeze({ key: 'censor.batchOutcomeCensored', fallback: 'Censored' }),
     'no-match': Object.freeze({ key: 'censor.batchOutcomeNoMatch', fallback: 'No match' }),
+    'detector-error': Object.freeze({ key: 'censor.batchOutcomeDetectorError', fallback: 'Detector error' }),
 });
+
+function hasCensorDetectorFailures(item) {
+    return Array.isArray(item?.batchDetectorFailures) && item.batchDetectorFailures.length > 0;
+}
 
 function getCensorBatchOutcome(item) {
     const status = typeof item?.batchStatus === 'string' ? item.batchStatus : '';
@@ -384,9 +389,18 @@ function getCensorBatchOutcome(item) {
         return status;
     }
     if (status === 'done' || status === 'detected') {
+        // A detector that did not run leaves the result incomplete whatever
+        // the other one found, so it is never reported as a plain outcome.
+        if (hasCensorDetectorFailures(item)) return 'detector-error';
         return Number(item.batchRegionCount) > 0 ? 'censored' : 'no-match';
     }
     return null;
+}
+
+function describeCensorDetectorFailures(item) {
+    return item.batchDetectorFailures
+        .map((failure) => `${failure.backend}: ${failure.detail}`)
+        .join('\n');
 }
 
 function getCensorBatchOutcomePresentation(item) {
@@ -395,6 +409,26 @@ function getCensorBatchOutcomePresentation(item) {
 
     const definition = CENSOR_BATCH_OUTCOME_LABELS[code];
     const label = censorT(definition.key, null, definition.fallback);
+    const filename = String(item?.outputFilename || item?.originalFilename || item?.id || '').trim();
+    if (code === 'detector-error') {
+        const failureReason = describeCensorDetectorFailures(item);
+        return Object.freeze({
+            code,
+            label,
+            isFailure: true,
+            failureReason,
+            failureAriaLabel: censorT(
+                'censor.batchOutcomeDetectorErrorAria',
+                { filename },
+                'Show which detector did not run for {filename}'
+            ),
+            failureTooltip: censorT(
+                'censor.batchOutcomeDetectorErrorTooltip',
+                { count: Number(item.batchRegionCount) || 0, reason: failureReason },
+                'Found {count} region(s), but a detector did not run, so some may be missed:\n{reason}'
+            ),
+        });
+    }
     if (code !== 'failed') {
         return Object.freeze({
             code,
@@ -406,7 +440,6 @@ function getCensorBatchOutcomePresentation(item) {
         });
     }
 
-    const filename = String(item?.outputFilename || item?.originalFilename || item?.id || '').trim();
     const failureReason = String(item?.batchError || '').trim();
     return Object.freeze({
         code,
@@ -427,19 +460,22 @@ function getCensorBatchOutcomePresentation(item) {
 }
 
 function showCensorBatchFailureReason(item) {
-    if (getCensorBatchOutcome(item) !== 'failed') {
-        throw new TypeError('A censor batch failure reason can only be shown for an item with failed status.');
+    const presentation = getCensorBatchOutcomePresentation(item);
+    if (!presentation?.isFailure) {
+        throw new TypeError('A censor batch failure reason can only be shown for a failed or detector-error item.');
     }
-
-    const failureReason = String(item?.batchError || '').trim();
-    if (!failureReason) {
-        throw new Error(`Censor queue item ${item?.id || 'unknown'} has failed status without a batchError.`);
+    if (!presentation.failureReason) {
+        throw new Error(`Censor queue item ${item?.id || 'unknown'} has ${presentation.code} status without a reason.`);
     }
     if (typeof window.App?.showToast !== 'function') {
         throw new Error('Cannot show the censor batch failure reason because App.showToast is unavailable.');
     }
 
-    window.App.showToast(failureReason, 'error');
+    window.App.showToast(
+        presentation.failureReason,
+        presentation.code === 'failed' ? 'error' : 'warning',
+        { duration: 8000 }
+    );
 }
 
 function _resetBatchStatus(items = CensorState.queue) {
@@ -447,6 +483,8 @@ function _resetBatchStatus(items = CensorState.queue) {
         delete item.batchStatus;
         delete item.batchError;
         delete item.batchRegionCount;
+        delete item.batchWarnings;
+        delete item.batchDetectorFailures;
     });
 }
 
@@ -462,14 +500,15 @@ function _summarizeBatchFailures(items = CensorState.queue) {
 // that ran cleanly but found nothing (e.g. NudeNet on anime at a high
 // threshold) is NOT a failure, but it also is not a "processed" success —
 // runAutoCensorBatch reports it separately so the toast never claims work it
-// did not do.
+// did not do. An empty result from a run that lost a detector is not "found
+// nothing" either: lowering the threshold would not help it.
 function _summarizeBatchDetections(items = CensorState.queue) {
     let appliedCount = 0;
     let emptyCount = 0;
     items.forEach((item) => {
         if (item.batchStatus === 'done') {
             if (Number(item.batchRegionCount) > 0) appliedCount += 1;
-            else emptyCount += 1;
+            else if (!hasCensorDetectorFailures(item)) emptyCount += 1;
         }
     });
     return { appliedCount, emptyCount };

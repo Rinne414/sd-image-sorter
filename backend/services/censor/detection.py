@@ -343,6 +343,10 @@ class _DetectionMixin:
         try:
             model_type = request.model_type
             detection_warnings: List[str] = []
+            # Detectors that did not run in combined mode. Kept apart from the
+            # prose warnings so a caller can tell "a detector failed" from
+            # "every detector ran and found nothing".
+            failed_backends: List[Dict[str, str]] = []
             # V4 asks for the upright frame; V3.5 leaves the flag off and gets the raw frame.
             upright_image = self._open_upright(image_path) if request.upright else None
 
@@ -439,6 +443,10 @@ class _DetectionMixin:
                     self._combined_detection_warning(failure, successful_backends)
                     for failure in backend_failures
                 ]
+                failed_backends = [
+                    {"backend": failure["backend"], "detail": failure["detail"]}
+                    for failure in backend_failures
+                ]
 
                 detections = all_detections
 
@@ -510,6 +518,7 @@ class _DetectionMixin:
                 "image_height": combined_mask_payload["image_height"],
                 "geometry_mode": geometry_mode,
                 "warnings": detection_warnings,
+                "failed_backends": failed_backends,
                 "face_guard": face_guard_report,
             }
         except HTTPException:
