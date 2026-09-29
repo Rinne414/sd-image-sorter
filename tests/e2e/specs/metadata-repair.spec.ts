@@ -449,13 +449,22 @@ test('a running re-read keeps its progress label through a translation pass', as
     status: 200, contentType: 'application/json', body: JSON.stringify({ job_id: 'e2e-reread-job' }),
   }))
   let jobDone = false
-  await page.route('**/api/bulk-jobs/e2e-reread-job', (route) => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify(jobDone
-      ? { status: 'done', total: 500, processed: 500, result: { changed: 0, unchanged: 500, kept: 0, missing_source: 0 } }
-      : { status: 'running', total: 500, processed: 120 }),
-  }))
+  let releasePolls = () => {}
+  const pollsReleased = new Promise<void>((resolve) => { releasePolls = resolve })
+  let pollCount = 0
+  await page.route('**/api/bulk-jobs/e2e-reread-job', async (route) => {
+    pollCount += 1
+    // Answer the first poll, then hold the rest: with no further progress
+    // writes, only the i18n lock can keep the label from snapping back.
+    if (pollCount > 1) await pollsReleased
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(jobDone
+        ? { status: 'done', total: 500, processed: 500, result: { changed: 0, unchanged: 500, kept: 0, missing_source: 0 } }
+        : { status: 'running', total: 500, processed: 120 }),
+    })
+  })
 
   await openAuditTab(page)
   const button = page.locator('#btn-metadata-reread-comfyui')
@@ -470,6 +479,7 @@ test('a running re-read keeps its progress label through a translation pass', as
 
   // Once the run ends the idle label comes back and follows the language again.
   jobDone = true
+  releasePolls()
   await expect(label).toHaveText('Re-read ComfyUI Prompts', { timeout: 10_000 })
   await page.evaluate(() => (window as any).I18n.setLang('zh-CN'))
   await expect(label).toHaveText('重读 ComfyUI 提示词')
