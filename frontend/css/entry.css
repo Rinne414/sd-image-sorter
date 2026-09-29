@@ -297,8 +297,8 @@ body.entry-active {
    a page whose only amber should be the one action it offers. The space above
    it is what separates the groups, not a box around them. */
 .entry-eyebrow {
-    font-size: 12px;
-    font-weight: 500;
+    font-size: 13px;
+    font-weight: 600;
     color: var(--text-2);
     padding: 0 4px;
     margin: 14px 0 -2px;
@@ -592,26 +592,29 @@ body.entry-active {
 .entry-tools {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 4px 12px;
+    gap: 2px 8px;
+    padding: 8px;
+    border-radius: 8px;
+    background: rgba(23, 23, 25, 0.9);
+}
+
+.entry-page:has(.hero-film) .entry-tools {
+    background: rgba(23, 23, 25, 0.96);
 }
 
 .entry-tools .entry-fn {
     flex-direction: row;
     align-items: center;
     gap: 10px;
-    min-height: 44px;
+    min-height: 40px;
     padding: 8px 12px;
     border-radius: 5px;
-    background: rgba(12, 12, 13, 0.55);
-}
-
-.entry-page:has(.hero-film) .entry-tools .entry-fn {
-    background: rgba(12, 12, 13, 0.85);
+    background: transparent;
 }
 
 .entry-tools .entry-fn:hover,
 .entry-tools .entry-fn:focus-visible {
-    background: rgba(40, 40, 44, 0.9);
+    background: rgba(255, 255, 255, 0.06);
 }
 
 .entry-tools .fn-head {
@@ -698,8 +701,12 @@ body.entry-active {
         font-size: 32px;
     }
 
+    .entry-tools {
+        padding: 6px;
+    }
+
     .entry-tools .entry-fn {
-        min-height: 36px;
+        min-height: 34px;
         padding: 6px 12px;
     }
 }

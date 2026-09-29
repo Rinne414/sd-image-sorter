@@ -3793,3 +3793,66 @@ li > .icon {
     letter-spacing: 0;
     color: var(--text);
 }
+
+/* ==========================================================================
+   Finish v2 (2026-09-30) — the last amber and a few stray controls.
+   ========================================================================== */
+
+/* In selection mode "Move" is the action; Import steps back while it lasts. */
+#app:has(#btn-toggle-select[aria-pressed="true"]) #btn-scan.btn-primary {
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text);
+    font-weight: 500;
+}
+
+#app:has(#btn-toggle-select[aria-pressed="true"]) #btn-scan.btn-primary:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.11);
+    color: var(--text);
+}
+
+/* The armed Select toggle: a neutral lift with white text (the check glyph
+   already says "on"), so the screen keeps one amber action. */
+#btn-toggle-select.selection-active,
+#btn-toggle-select[aria-pressed="true"],
+#btn-toggle-select.selection-active:hover,
+#btn-toggle-select[aria-pressed="true"]:hover {
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+/* Filter editor generator ticks: all fourteen are on by default, so the
+   tick is white on grey here; amber stays for filters that narrow results. */
+#app :is(.filter-toggle-grid, .filter-list) .checkbox-label input:checked + .checkbox-custom {
+    background: var(--surface-3);
+    border-color: transparent;
+    color: var(--text);
+}
+
+/* Toggles in Settings: one pressed look for every on/off button */
+#app #model-manager-modal .settings-row .btn[aria-pressed="true"] {
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+#app #model-manager-modal .settings-row .btn[aria-pressed="false"] {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-2);
+}
+
+/* Dataset header: Save As is a button, not a label */
+#app #view-dataset #btn-dataset-project-save-as {
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text);
+}
+
+#app #view-dataset #btn-dataset-project-save-as:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.11);
+}
+
+/* Dataset import: the gallery import button is sized to its words */
+#app #view-dataset #btn-dataset-import-gallery {
+    width: auto;
+    align-self: flex-start;
+    min-height: 36px;
+    padding-inline: 18px;
+}
