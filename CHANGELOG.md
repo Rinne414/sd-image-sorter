@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.6.0] - 2026-09-29
+
+vFable. ComfyUI prompts are read right: Impact Pack pipes, TIPO and WD14 ban lists, and hires or refiner passes no longer put the negative prompt inside the positive or store it twice, and a new Re-read ComfyUI Prompts button repairs images that were scanned before. Quick Auto Censor works again on Windows CPU installs, where every YOLO exported by current PyTorch was refused. The gallery search no longer applies a half-typed tag, and dataset captions take their quality tag from the anime grade.
+
+vFable。ComfyUI 提示词读对了：Impact Pack 管线、TIPO / WD14 的屏蔽词列表、高清修复或精修的第二遍，都不会再把反向提示词混进正向或存两遍；新增「重读 ComfyUI 提示词」按钮，修好以前扫描进来的图。快速自动打码在 Windows CPU 安装上恢复可用（此前所有新版 PyTorch 导出的 YOLO 都被拒绝加载）。图库搜索不再套用打了一半的标签，数据集 caption 的质量词改用动画等级。
+
+### Added / 新增
+
+- **Re-read ComfyUI Prompts / 重读 ComfyUI 提示词**: Settings → Dataset Audit has a button that parses every ComfyUI image of the current library again from its file with the current parser. Only rows whose prompt or negative prompt come out different are rewritten; tags, scores and captions stay. A file that no longer parses to a prompt keeps its stored text. The result says how many changed, were already right, were kept, and were not found.
+  - 设置 → 数据集体检 新增按钮，用现在的解析器把当前图库里的每张 ComfyUI 图从文件重新读一遍。只有提示词或反向提示词读出来不一样的图才改写；标签、评分、描述都不动。文件读不出提示词的图保持原样。结果会说明多少张有变化、多少张本来就对、多少张保持原样、多少张找不到文件。
+- **Quality tag from the anime grade / 质量词来自动画等级**: the dataset caption slot `{quality}` uses the deepghs anime grade when a picture has one (masterpiece → "masterpiece, best quality", best → "best quality", great and good → "good quality", normal → nothing, low → "low quality", worst → "worst quality"), the same ladder NoobAI-XL's model card uses. Pictures without a grade keep the CLIP score buckets; your own override still wins.
+  - 数据集 caption 的 `{quality}` 槽位在图片有 deepghs 动画等级时改用它（masterpiece → "masterpiece, best quality"，best → "best quality"，great 和 good → "good quality"，normal → 不写，low → "low quality"，worst → "worst quality"），与 NoobAI-XL 模型卡的质量词阶梯一致。没有等级的图仍按 CLIP 分数分档；你自己填的覆盖值仍然优先。
+
+### Fixed / 修复
+
+- **ComfyUI prompts / ComfyUI 提示词**: Impact Pack pipe nodes (ToBasicPipe, FromBasicPipe, FromBasicPipe_v2, EditBasicPipe, the Detailer pipes) are followed by output slot, so the positive and negative conditioning are told apart instead of the whole pipe being read as one text. Tag generators' `ban_tags` / `exclude_tags` links (TIPO, WD14Tagger), which are wired from the negative prompt, are no longer walked into the positive. A hires or refiner pass that reuses the same conditioning no longer stores the prompt twice. A pipe behind a switch node resolves through the selected branch. On the owner's 1,447 ComfyUI images 413 came out different and 0 worse: 243 exact halvings, 106 partial duplicates removed, 17 negatives taken out of the positive, 46 negative-only dedupes, 1 upgraded to the executed full prompt.
+  - Impact Pack 管线节点（ToBasicPipe、FromBasicPipe、FromBasicPipe_v2、EditBasicPipe、Detailer 管线）按输出端口追踪，正向和反向条件不再被当成同一段文字整条读进来。打标生成器（TIPO、WD14Tagger）的 `ban_tags` / `exclude_tags` 接线来自反向提示词，不再被走进正向。高清修复或精修复用同一份条件时，提示词不再存两遍。管线经过开关节点时，按选中的分支解析。在主人的 1,447 张 ComfyUI 图上，413 张结果不同、0 张变差：243 张正好去掉一倍重复、106 张去掉部分重复、17 张把反向从正向里拿出来、46 张只有反向去重、1 张换成实际执行的完整提示词。
+- **Quick Auto Censor on Windows CPU installs / Windows CPU 安装的快速自动打码**: the Windows CPU install pinned onnxruntime 1.20.1, which reads ONNX opset 21 at most, while every YOLO exported by current PyTorch / Ultralytics (Wenaka, yolov8s-seg, yolo26s-seg) is opset 22. The YOLO detector failed, combined mode quietly ran NudeNet alone, and explicit anime pictures came back "no match". The pin is now 1.21.0, the version the Windows GPU package already uses. When a model still cannot be read, the message names the model's opset and the runtime's, and says to update onnxruntime or re-export with opset 17.
+  - Windows CPU 安装锁定的 onnxruntime 1.20.1 最多只能读 ONNX opset 21，而现在 PyTorch / Ultralytics 导出的 YOLO（Wenaka、yolov8s-seg、yolo26s-seg）都是 opset 22。YOLO 检测器加载失败，组合模式悄悄只跑 NudeNet，明显的动画图返回「未匹配」。现在锁定 1.21.0，与 Windows GPU 包已用的版本相同。模型仍读不了时，提示会写出模型和运行库各自的 opset，并说明更新 onnxruntime 或用 opset 17 重新导出。
+- **Gallery search / 图库搜索**: typing `tag:blu` no longer applies the exact tag "blu" after half a second, which emptied the grid and toasted "added tag:blu" while the suggestion list was still open. The box waits while the caret is inside a token that takes suggestions and applies once the token is complete: a space, Enter, an accepted suggestion, or a typed value that is one of the suggestions.
+  - 输入 `tag:blu` 时不会再在半秒后套用标签「blu」本身，此前会清空图库并弹出「已加入筛选: tag:blu」而建议列表还开着。光标还在可补全的词里时搜索框会等待，词完整后才套用：空格、回车、选中一条建议，或输入的值正好是建议之一。
+- **Generator strip / 生成器条带**: at 1366 px the last visible generator chip was cut mid-glyph with no hint; it now fades into the toolbar so the cut reads as "more to the right".
+  - 1366 宽度下最后一个生成器标签被切在字中间且没有提示；现在渐隐进工具栏，看得出右边还有。
+
+### Changed / 变更
+
+- **CI**: the backend test suite runs in parallel (pytest-xdist, up to 4 workers) and measures coverage only with `--backend-coverage`; ported from the Vopus branch.
+  - 后端测试并行运行（pytest-xdist，最多 4 个进程），只有加 `--backend-coverage` 才统计覆盖率；从 Vopus 分支移植。
+
 ## [3.5.1] - 2026-09-28
 
 GIF and video folders can be auto-censored frame by frame. Privacy Tools gain chat disguise, a plain looping GIF of the queue, and stripping of prompts hidden in pixels. Optional Waifu Scorer V3 and deepghs anime grades sit beside the corrected CLIP aesthetic score. PixAI Tagger v1.0 is available. Libraries, collections, duplicates, and tag backups stay inside the library that started the job.

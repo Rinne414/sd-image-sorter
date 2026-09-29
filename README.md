@@ -63,6 +63,12 @@
 - **更快**：图库翻页从 0.36 秒降到 0.045 秒；批量打标 1000 张从 170 秒降到 106 秒（实测）。
 - **中英文完整**：中文界面里的按钮提示也都是中文。
 
+### v3.6.0（vFable）
+
+- **ComfyUI 提示词读对了**：Impact Pack 管线、TIPO / WD14 屏蔽词、高清修复第二遍，不再把反向混进正向或存两遍；设置 → 数据集体检 里新增「重读 ComfyUI 提示词」，一键修好以前扫进来的图。
+- **打码**：Windows CPU 安装能读新版 PyTorch 导出的 YOLO（ONNX opset 22）了；读不了时会说清楚是 opset 不匹配。
+- **图库与数据集**：搜索不再套用打了一半的标签；caption 的 `{quality}` 在有 deepghs 动画等级时改用它。
+
 ### v3.5.1
 
 - **视频和 GIF 打码**：文件夹里的 GIF 和视频可以逐帧自动打码；可选动漫检测器和脸部保护。
@@ -619,6 +625,12 @@ Eagle and Billfish are general asset managers and are not in this SD-workflow ta
 - **No hard stops**: caps and export gates became warnings with a choice.
 - **Faster**: gallery page 0.36 s to 0.045 s; Mass Tag on 1,000 images 170 s to 106 s (measured).
 - **Complete Chinese and English UI**, tooltips included.
+
+### v3.6.0 (vFable)
+
+- **ComfyUI prompts read right**: Impact Pack pipes, TIPO / WD14 ban lists and hires passes no longer put the negative prompt inside the positive or store it twice; Settings → Dataset Audit gains "Re-read ComfyUI Prompts" to repair images scanned before.
+- **Censor**: Windows CPU installs read YOLO models exported by current PyTorch (ONNX opset 22); when a model still cannot be read, the message names the opset mismatch.
+- **Gallery and dataset**: search no longer applies a half-typed tag; the caption slot `{quality}` uses the deepghs anime grade when a picture has one.
 
 ### v3.5.1
 
