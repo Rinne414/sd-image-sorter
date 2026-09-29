@@ -60,11 +60,11 @@ Full CI: pending (filled in after the run). / 完整 CI：待跑完后填写。
 
 | Asset | SHA-256 |
 |---|---|
-| `sd-image-sorter-v3.6.0-windows-portable.zip` | `pending` |
-| `sd-image-sorter-v3.6.0-app-patch.zip` | `pending` |
-| `sd-image-sorter-v3.6.0-linux.tar.gz` | `pending` |
-| `sd-image-sorter-v3.6.0-linux-portable-x86_64.tar.gz` | `pending` |
-| `sd-image-sorter-v3.6.0-linux-portable-aarch64.tar.gz` | `pending` |
-| `sd-image-sorter-v3.6.0-release-manifest.json` | `pending` |
+| `sd-image-sorter-v3.6.0-windows-portable.zip` | `ea8d3fb81d553601dd39d817beb791785b49ad21ebac713adeb6f27f80f551e0` |
+| `sd-image-sorter-v3.6.0-app-patch.zip` | `765e807c9293a27756524bc6f16f0c7cf0cb8bc2f57f77d796c1f22394f78084` |
+| `sd-image-sorter-v3.6.0-linux.tar.gz` | `f52d33159c48dc4dd18bdf5bc7dd2767ae32e92bebfef99963a2c4ee98c8bd3b` |
+| `sd-image-sorter-v3.6.0-linux-portable-x86_64.tar.gz` | `c13d789c7221ed05d4a91965e79a2cd21a55ad3022ed0c67fb402dde453b9f21` |
+| `sd-image-sorter-v3.6.0-linux-portable-aarch64.tar.gz` | `34dfdddf41ac0888ce6aedd568c9d7b0a779a41cea06c796dbe5c0dfb11ab458` |
+| `sd-image-sorter-v3.6.0-release-manifest.json` | `c42d4d49d7a944b298d65f57152674c6807889fdf55632073678b561d97f6f52` |
 
 The manifest contains the five archive checksums; its own checksum is recorded above. / manifest 内含五个归档校验和，其自身校验和记录于上表。
