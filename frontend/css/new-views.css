@@ -22,7 +22,7 @@
 .promptlab-output-panel {
     background: var(--bg-card);
     border-radius: var(--radius-xl);
-    border: 1px solid rgba(var(--accent-rgb), 0.1);
+    border: 1px solid var(--frame);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -38,7 +38,7 @@
 .promptlab-builder-header,
 .promptlab-output-header {
     padding: 18px 18px 16px;
-    border-bottom: 1px solid rgba(var(--accent-rgb), 0.08);
+    border-bottom: 1px solid var(--hairline-1);
     background: rgba(255, 255, 255, 0.03);
 }
 
@@ -160,7 +160,7 @@
 
 .slot-row {
     background: rgba(20, 20, 20, 0.76);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
     border-radius: var(--radius-lg);
     padding: 12px 14px;
     margin-bottom: 10px;
@@ -293,7 +293,7 @@
     flex: 1;
     min-height: 220px;
     background: rgba(15, 15, 15, 0.9);
-    border: 1px solid rgba(var(--accent-rgb), 0.12);
+    border: 1px solid var(--frame);
     border-radius: var(--radius-md);
     color: var(--text-primary);
     font-family: var(--font-body);
@@ -315,7 +315,7 @@
 
 .promptlab-presets-section {
     padding: 14px 16px 16px;
-    border-top: 1px solid rgba(var(--accent-rgb), 0.08);
+    border-top: 1px solid var(--hairline-1);
 }
 
 .promptlab-presets-header {
@@ -380,7 +380,7 @@
     gap: 8px;
     align-items: center;
     padding: 14px 16px 16px;
-    border-top: 1px solid rgba(var(--accent-rgb), 0.08);
+    border-top: 1px solid var(--hairline-1);
     background: rgba(255, 255, 255, 0.02);
 }
 
@@ -409,7 +409,7 @@
 .similar-header {
     background: var(--bg-card);
     border-radius: var(--radius-xl);
-    border: 1px solid rgba(var(--accent-rgb), 0.1);
+    border: 1px solid var(--frame);
     padding: 18px;
     display: flex;
     align-items: center;
@@ -435,7 +435,7 @@
     align-items: center;
     padding: 10px 18px;
     background: rgba(20, 20, 20, 0.72);
-    border: 1px solid rgba(var(--accent-rgb), 0.1);
+    border: 1px solid var(--frame);
     border-radius: var(--radius-lg);
     transition: all var(--transition-fast);
 }
@@ -481,7 +481,7 @@
     gap: 4px;
     background: var(--bg-card);
     border-radius: var(--radius-xl);
-    border: 1px solid rgba(var(--accent-rgb), 0.1);
+    border: 1px solid var(--frame);
     padding: 4px;
     width: fit-content;
     box-shadow: var(--shadow-card);
@@ -514,7 +514,7 @@
 .similar-panel {
     background: var(--bg-card);
     border-radius: var(--radius-xl);
-    border: 1px solid rgba(var(--accent-rgb), 0.1);
+    border: 1px solid var(--frame);
     padding: 18px;
     box-shadow: var(--shadow-card);
 }
@@ -544,7 +544,7 @@
     overflow: hidden;
     cursor: pointer;
     transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
 }
 
 .similar-result:hover {
@@ -728,7 +728,7 @@
 
 .model-health-banner .model-health-details {
     margin-top: 10px;
-    border-top: 1px solid rgba(var(--accent-rgb), 0.1);
+    border-top: 1px solid var(--hairline-1);
     padding-top: 10px;
 }
 
@@ -789,7 +789,7 @@
     gap: 16px;
     background: var(--bg-card);
     border-radius: var(--radius-xl);
-    border: 1px solid rgba(var(--accent-rgb), 0.1);
+    border: 1px solid var(--frame);
     padding: 18px;
     box-shadow: var(--shadow-card);
 }
@@ -808,7 +808,7 @@
 .artist-details {
     background: var(--bg-card);
     border-radius: var(--radius-xl);
-    border: 1px solid rgba(var(--accent-rgb), 0.1);
+    border: 1px solid var(--frame);
     box-shadow: var(--shadow-card);
 }
 
@@ -876,7 +876,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 18px;
-    border-bottom: 1px solid rgba(var(--accent-rgb), 0.08);
+    border-bottom: 1px solid var(--hairline-1);
 }
 
 .results-header h3 {

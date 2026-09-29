@@ -243,7 +243,7 @@
     justify-content: space-between;
     gap: 14px;
     padding: 14px;
-    border: 1px solid rgba(var(--accent-rgb), 0.10);
+    border: 1px solid var(--frame);
     border-radius: 14px;
     background:
         rgba(255,255,255,0.045),

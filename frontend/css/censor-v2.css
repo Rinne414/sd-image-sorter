@@ -2589,7 +2589,7 @@ button.censor-batch-outcome-badge:focus-visible {
    Specificity is raised only for surface/radius/shadow — layout stays above. */
 #view-censor .censor-workspace-v2 .censor-canvas-wrapper-v2 {
     background: var(--stage) !important;
-    border: 1px solid var(--border) !important;
+    border: 1px solid transparent !important;
     border-radius: var(--r-card, 5px) !important;
     box-shadow: none !important;
 }
@@ -2600,7 +2600,7 @@ button.censor-batch-outcome-badge:focus-visible {
 
 #view-censor .censor-workspace-v2 .censor-toolbar-v2 {
     background: var(--surface-1) !important;
-    border: 1px solid var(--border) !important;
+    border: 1px solid transparent !important;
     border-radius: var(--r-card, 5px) !important;
     box-shadow: none !important;
 }
@@ -2613,7 +2613,7 @@ button.censor-batch-outcome-badge:focus-visible {
 #view-censor .censor-workspace-v2 .zoom-controls-bar,
 #view-censor .censor-workspace-v2 .zoom-controls-v2 {
     background: var(--surface-1) !important;
-    border: 1px solid var(--border) !important;
+    border: 1px solid transparent !important;
     border-radius: var(--r-ctl, 4px) !important;
     box-shadow: none !important;
 }

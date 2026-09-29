@@ -27,34 +27,38 @@
 
 :root {
     /* ===== Surfaces — true neutral graphite (R=G=B, no hue cast) ===== */
-    --bg: #0E0E0F;              /* app canvas */
-    --surface-1: #151517;       /* panels */
-    --surface-2: #1C1C1E;       /* raised: modals, menus */
-    --surface-3: #232326;       /* hover / pressed */
-    --stage: #09090A;           /* deep stage behind images */
-    --border: #2B2B2E;          /* standard 1px hairline */
-    --border-strong: #3A3A3E;   /* emphasised divider, input outline */
+    --bg: #0D0D0E;              /* app canvas */
+    --surface-1: #171719;       /* panels: 10 above the canvas, so no outline is needed */
+    --surface-2: #212124;       /* raised: modals, menus, a selected segment */
+    --surface-3: #2B2B2F;       /* pressed / neutral selected */
+    --stage: #08080A;           /* deep stage behind images */
+    --border: #2A2A2E;          /* standard 1px hairline */
+    --border-strong: #3B3B40;   /* input hover/focus edge */
     --hairline-1: #1F1F22;      /* table/list row separators */
-    --hairline-2: #26262A;
+    --hairline-2: #27272B;      /* resting input edge */
+    /* The resting outline the older sheets drew around panels, cards and
+       chips (a faint amber hairline in ~140 rules). Surfaces separate by
+       lightness now, so it is off; one value turns every one back on. */
+    --frame: transparent;
     --scrim: rgba(0, 0, 0, 0.72);
 
     /* ===== Text — hierarchy by weight/size, contrast measured on --bg ===== */
-    --text: #E8E8EA;            /* 15.8:1 */
-    --text-2: #A6A6AB;          /* 7.96:1 */
-    --muted: #8A8A90;           /* 5.62:1 — still AA at 12px */
-    --text-disabled: #5A5A60;   /* non-interactive only */
+    --text: #ECECEE;            /* 16.3:1 */
+    --text-2: #A9A9AF;          /* 8.2:1 */
+    --muted: #86868C;           /* 5.4:1 — still AA at 12px */
+    --text-disabled: #565660;   /* non-interactive only */
 
     /* ===== The one accent: restrained amber =====
        Chosen for the instrument-panel register of real desktop tools. It is
        deliberately outside the cyan/violet/magenta range that reads as
        generated. 6.42:1 as text on --bg; 6.42:1 for --on-accent ink on the
        solid fill, so it works as text AND as a button surface. */
-    --accent: #C8873C;
-    --accent-rgb: 200, 135, 60;
-    --accent-bright: #D8974C;   /* hover: +1 step */
-    --accent-deep: #AE7231;     /* active: -1 step */
-    --accent-soft: rgba(200, 135, 60, 0.12);   /* selected row/tile wash */
-    --accent-line: rgba(200, 135, 60, 0.45);   /* selected outline */
+    --accent: #CF8B3D;
+    --accent-rgb: 207, 139, 61;
+    --accent-bright: #DE9B4D;   /* hover: +1 step */
+    --accent-deep: #B47530;     /* active: -1 step */
+    --accent-soft: rgba(207, 139, 61, 0.14);   /* selected row/tile wash */
+    --accent-line: rgba(207, 139, 61, 0.5);    /* selected outline */
     --on-accent: #17120A;       /* ink on a solid accent fill */
 
     /* ===== Status — data, always paired with a glyph ===== */
@@ -172,7 +176,7 @@
     --surface-hover: var(--surface-3);
     --surface-active: var(--accent-soft);
     --surface-danger: rgba(var(--danger-rgb), 0.12);
-    --control-bg: #101012;              /* inputs sit a step below panels */
+    --control-bg: #101012;              /* fields are sunk below panels; buttons are raised */
     --control-bg-hover: #17171A;
     --toolbar-bg: var(--surface-1);
     --modal-bg: var(--surface-2);
@@ -1505,7 +1509,7 @@ a:hover,
 }
 
 #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-pane {
-    border-color: rgba(var(--blue-rgb), 0.22);
+    border-color: transparent;
     background: var(--surface-1);
 }
 
@@ -1805,7 +1809,7 @@ html.gallery-comfort-room #view-gallery .gallery-header,
 html.gallery-comfort-room #view-gallery .gallery-search-row,
 #view-gallery.is-comfort-room .gallery-header,
 #view-gallery.is-comfort-room .gallery-search-row {
-    border-color: var(--hairline-2);
+    border-color: transparent;
     background: transparent;
 }
 
@@ -1992,11 +1996,11 @@ html.gallery-comfort-peeking {
    the delta is a couple of points per channel, the accent never changes, and
    neither variant reintroduces a blue/violet cast. */
 html[data-comfort-warmth="cool"] {
-    --bg: #0D0E10;
-    --surface-1: #141518;
-    --surface-2: #1B1C1F;
-    --surface-3: #222327;
-    --stage: #08090A;
+    --bg: #0C0D0F;
+    --surface-1: #16171A;
+    --surface-2: #202125;
+    --surface-3: #2A2B30;
+    --stage: #07080A;
     --text: #E7E9EC;
     --text-2: #A3A6AC;
 }
@@ -2006,10 +2010,10 @@ html[data-comfort-warmth="neutral"] {
 }
 
 html[data-comfort-warmth="warm"] {
-    --bg: #100F0D;
-    --surface-1: #171614;
-    --surface-2: #1E1D1A;
-    --surface-3: #262421;
+    --bg: #0F0E0C;
+    --surface-1: #191816;
+    --surface-2: #23211E;
+    --surface-3: #2D2B27;
     --stage: #0A0A09;
     --text: #EAE8E4;
     --text-2: #A9A59E;
@@ -2147,7 +2151,7 @@ html.comfort-view-switching .view.active {
 #view-dataset.is-comfort-room .dataset-editor-pane,
 #view-dataset.is-comfort-room .dataset-export-pane {
     background: var(--surface-1);
-    border-color: var(--hairline-2);
+    border-color: transparent;
 }
 
 #view-dataset.is-comfort-room .dataset-header {
@@ -2897,4 +2901,186 @@ li > .icon {
         transition-duration: 1ms !important;
         scroll-behavior: auto !important;
     }
+}
+
+
+/* ==========================================================================
+   Surfaces v2 (2026-09-30) — lightness separates, outlines do not.
+
+   Owner: "the buttons, borders and colours are ugly, nothing looks designed".
+   Every panel, every card inside it and every field inside that drew its own
+   1px outline, because the surface steps were only 7 apart and a raised
+   panel was invisible without one. The ladder above is 10 apart now, so:
+     - a panel is a lighter surface on the canvas, with no outline;
+     - a section inside a panel lies flat on it and is separated by space or
+       one top hairline, never by a second box;
+     - a well (preview grid, image stage) sinks below the panel;
+     - a field keeps one quiet hairline, because it must look enterable;
+     - only floating layers (modal, menu, popover) keep a ring and a shadow.
+   Check: from any point there are at most two closed rectangles upward
+   (panel > field). Rules are prefixed with #app (or a top-level modal) so
+   they win over the ID-scoped view rules in the older sheets.
+   ========================================================================== */
+
+/* Level 1 — panels on the canvas */
+:is(#app, body > .modal) :is(
+    .filter-sidebar,
+    .gallery-header,
+    .autosep-pane,
+    .sort-setup,
+    .similar-header,
+    .similar-panel,
+    .similar-tabs,
+    .promptlab-browser,
+    .promptlab-builder,
+    .promptlab-output-panel,
+    .artist-stats,
+    .artist-controls,
+    .artist-results,
+    .artist-details,
+    .dataset-queue-pane,
+    .dataset-editor-pane,
+    .dataset-export-pane,
+    .dataset-folder-bar,
+    .censor-toolbar-v2,
+    .censor-side-card,
+    .censor-tab-bar,
+    .censor-review,
+    .zoom-controls-v2,
+    .reverse-pane
+) {
+    border-color: transparent;
+    box-shadow: none;
+}
+
+:is(#app, body > .modal) :is(
+    .gallery-header,
+    .autosep-pane,
+    .sort-setup,
+    .artist-stats,
+    .artist-controls,
+    .artist-results,
+    .artist-details,
+    .dataset-queue-pane,
+    .dataset-editor-pane,
+    .dataset-export-pane,
+    .censor-toolbar-v2,
+    .censor-side-card,
+    .reverse-pane
+) {
+    background: var(--surface-1);
+}
+
+/* Level 2 — sections that lie flat on their panel */
+:is(#app, body > .modal) :is(
+    .filter-summary,
+    .filter-summary-compact,
+    .control-section,
+    .dataset-card,
+    .artist-detail-content,
+    .autosep-action-block,
+    .sort-mode-switch,
+    .sort-preset-bar,
+    .reverse-draft-card,
+    .reverse-tipo-card,
+    .reverse-modes,
+    .sidebar-filter-item,
+    .tagger-scope-note,
+    .preview-section,
+    .selection-panel,
+    .settings-home-panel,
+    .model-manager-bulk-actions,
+    .audit-section
+) {
+    border: 0 solid transparent;
+    box-shadow: none;
+    background: transparent;
+}
+
+/* ...divided from the section above by one hairline, not boxed */
+:is(#app, body > .modal) .control-section + .control-section,
+:is(#app, body > .modal) .dataset-card + .dataset-card,
+:is(#app, body > .modal) .autosep-action-block + .autosep-action-block,
+:is(#app, body > .modal) .reverse-draft-card + .reverse-tipo-card,
+:is(#app, body > .modal) .audit-section + .audit-section {
+    border-top: 1px solid var(--hairline-1);
+    border-radius: 0;
+}
+
+/* Wells sink below the panel instead of drawing a frame */
+:is(#app, body > .modal) :is(
+    .autosep-preview-list,
+    .dataset-export-preview,
+    .censor-canvas-wrapper-v2
+) {
+    border-color: transparent;
+    box-shadow: none;
+}
+
+:is(#app, body > .modal) :is(.autosep-preview-list, .dataset-export-preview) {
+    background: var(--control-bg);
+}
+
+/* Empty states are text on the surface they sit on, not another box */
+:is(#app, body > .modal) :is(
+    .autosep-preview-empty,
+    .empty-state,
+    .no-image-state-v2,
+    .queue-empty-state-v2
+) {
+    border-color: transparent;
+    box-shadow: none;
+    background: transparent;
+}
+
+/* Drop zones keep a dashed edge (it says "drop here"), in neutral grey */
+:is(#app, body > .modal) :is(
+    .reader-drop-zone,
+    .obfuscate-drop-zone,
+    .reverse-drop-zone,
+    .dataset-dropzone,
+    .similar-upload-dropzone
+) {
+    border: 1px dashed var(--border-strong);
+    background: rgba(255, 255, 255, 0.015);
+    box-shadow: none;
+}
+
+/* Cards inside a modal are a quiet wash on the modal, no outline */
+:is(#app, body > .modal) :is(.model-card, .tagger-model-panel, .health-recommendation) {
+    border-color: transparent;
+    box-shadow: none;
+    background: rgba(255, 255, 255, 0.035);
+}
+
+/* Floating layers: the ring lives in --shadow-modal / --shadow-float */
+:is(#app, body > .modal) .modal-content {
+    border-color: transparent;
+}
+
+/* A range track must read on any surface. The base rule painted it with
+   --bg-card, which is now the panel colour, so on a panel the track vanished
+   and only the thumb showed. background-color (not the shorthand) keeps any
+   value-fill gradient a slider paints on top. */
+:is(#app, body > .modal) input[type="range"] {
+    background-color: rgba(255, 255, 255, 0.13);
+}
+
+/* Sidebar list rows (collections) are rows, not cards: no outline at rest,
+   a wash on hover, a neutral lift when current. */
+:is(#app, body > .modal) .collection-row {
+    background: transparent;
+    border-color: transparent;
+    border-radius: 5px;
+}
+
+:is(#app, body > .modal) .collection-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: transparent;
+}
+
+:is(#app, body > .modal) .collection-row.is-active {
+    background: var(--surface-3);
+    border-color: transparent;
+    box-shadow: none;
 }

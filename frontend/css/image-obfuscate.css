@@ -10,7 +10,7 @@
     margin: 0 auto;
     background: var(--bg-card, rgba(25, 25, 25, 0.88));
     border-radius: 18px;
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
     box-shadow: 0 20px 48px rgba(0, 0, 0, 0.34);
 }
 
@@ -98,7 +98,7 @@
     padding: 10px 14px;
     background: rgba(0, 0, 0, 0.2);
     border-radius: 10px;
-    border: 1px solid rgba(var(--accent-rgb), 0.06);
+    border: 1px solid var(--frame);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -324,7 +324,7 @@
     padding: 10px 14px;
     background: rgba(0, 0, 0, 0.2);
     border-radius: 10px;
-    border: 1px solid rgba(var(--accent-rgb), 0.06);
+    border: 1px solid var(--frame);
 }
 
 /* These rows set their own display, which would override [hidden]. */

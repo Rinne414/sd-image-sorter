@@ -293,7 +293,7 @@ body::after {
 .update-popup-proxy-input {
     width: 100%;
     min-height: 38px;
-    border: 1px solid rgba(var(--accent-rgb), 0.14);
+    border: 1px solid var(--hairline-2);
     border-radius: 10px;
     background: rgba(28, 28, 28, 0.72);
     color: var(--text-primary, #FDFCFA);
@@ -808,7 +808,7 @@ textarea:focus,
     gap: 18px;
     padding: 20px 22px;
     border-radius: 22px;
-    border: 1px solid rgba(var(--accent-rgb), 0.14);
+    border: 1px solid var(--frame);
     background:
         rgba(var(--accent-secondary-rgb), 0.12),
         rgba(30, 30, 30, 0.96);
@@ -1065,7 +1065,7 @@ textarea:focus,
 .tag-runtime-advanced,
 .guided-advanced-panel {
     border-radius: 16px;
-    border: 1px solid rgba(var(--accent-rgb), 0.1);
+    border: 1px solid var(--frame);
     background: rgba(255, 255, 255, 0.04);
 }
 
@@ -1114,7 +1114,7 @@ textarea:focus,
     padding: 5px 10px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(var(--accent-rgb), 0.12);
+    border: 1px solid var(--frame);
     color: var(--text-secondary);
     font-size: 11px;
     font-weight: 700;
@@ -1175,7 +1175,7 @@ textarea:focus,
     padding: 5px 10px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(var(--accent-rgb), 0.12);
+    border: 1px solid var(--frame);
     color: var(--text-secondary);
     font-size: 11px;
     font-weight: 700;
@@ -1272,7 +1272,7 @@ textarea:focus,
     flex-direction: column;
     gap: 10px;
     padding: 12px 16px 16px;
-    border-top: 1px solid rgba(var(--accent-rgb), 0.08);
+    border-top: 1px solid var(--hairline-1);
 }
 
 .guided-advanced-body .form-group {
@@ -1286,7 +1286,7 @@ textarea:focus,
     padding: 12px 14px;
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
 }
 
 .tag-runtime-advanced-body .checkbox-label:hover,
@@ -1317,7 +1317,7 @@ textarea:focus,
     padding: 14px 16px;
     border-radius: 16px;
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
 }
 
 .system-info-chip-row {
@@ -1333,7 +1333,7 @@ textarea:focus,
     padding: 5px 10px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(var(--accent-rgb), 0.12);
+    border: 1px solid var(--frame);
     color: var(--text-secondary);
     font-size: 11px;
     font-weight: 700;
@@ -1377,7 +1377,7 @@ textarea:focus,
     padding: 12px 14px;
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
 }
 
 .tag-runtime-chunk-row label {
@@ -1421,7 +1421,7 @@ textarea:focus,
     padding: 18px 18px 16px;
     border-radius: 18px;
     background: rgba(16, 16, 16, 0.54);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
     margin-top: 14px;
 }
 
@@ -1502,7 +1502,7 @@ textarea:focus,
     padding: 14px;
     border-radius: 16px;
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
 }
 
 .rename-preview-summary {
@@ -1527,7 +1527,7 @@ textarea:focus,
     padding: 10px 12px;
     border-radius: 14px;
     background: rgba(16, 16, 16, 0.58);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
     color: var(--text-primary);
     font-size: 13px;
 }
@@ -1640,7 +1640,7 @@ textarea:focus,
 
 #view-censor #censor-target-region-group.is-disabled .checkbox-label {
     background: rgba(255, 255, 255, 0.03);
-    border-color: rgba(var(--accent-rgb), 0.06);
+    border-color: var(--frame);
 }
 
 .gallery-container {
@@ -1895,7 +1895,7 @@ textarea:focus,
     gap: 2px;
     padding: 2px;
     border-radius: 999px;
-    border: 1px solid rgba(var(--accent-rgb), 0.12);
+    border: 1px solid var(--frame);
     background: rgba(255, 255, 255, 0.04);
     flex: 0 0 auto;
 }
@@ -2240,7 +2240,7 @@ textarea:focus,
     padding: 14px 16px;
     border-radius: 16px;
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
 }
 .feature-availability-card.is-ready {
     border-color: rgba(var(--success-rgb), 0.26);
@@ -2417,7 +2417,7 @@ textarea:focus,
 .model-manager-section:not(:first-child) {
     margin-top: 14px;
     padding-top: 14px;
-    border-top: 1px solid rgba(var(--accent-rgb), 0.08);
+    border-top: 1px solid var(--hairline-1);
 }
 
 .model-card {
@@ -2696,7 +2696,7 @@ textarea:focus,
     align-items: start;
     padding: 14px 16px;
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(var(--accent-rgb), 0.10);
+    border: 1px solid var(--frame);
     border-radius: 14px;
     transition: border-color 180ms ease, background 180ms ease;
 }
@@ -3131,7 +3131,7 @@ textarea:focus,
     margin: 12px 0 14px;
     padding: 14px 16px;
     border-radius: 16px;
-    border: 1px solid rgba(var(--accent-rgb), 0.12);
+    border: 1px solid var(--frame);
     background: rgba(21, 21, 21, 0.62);
 }
 
@@ -3265,7 +3265,7 @@ textarea:focus,
 .folder-slot,
 .space-indicator {
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
     border-radius: 18px;
 }
 
@@ -3398,7 +3398,7 @@ textarea:focus,
     min-width: 118px;
     padding: 12px 16px;
     background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(var(--accent-rgb), 0.1);
+    border-color: var(--frame);
 }
 
 .similar-tabs {
@@ -3605,7 +3605,7 @@ textarea:focus,
     display: flex;
     gap: 4px;
     padding: 0 0 12px;
-    border-bottom: 1px solid rgba(var(--accent-rgb), 0.08);
+    border-bottom: 1px solid var(--hairline-1);
     flex-wrap: wrap;
 }
 
@@ -3652,7 +3652,7 @@ textarea:focus,
 
 .promptlab-stat-card {
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
     border-radius: 12px;
     padding: 14px 20px;
     text-align: center;
@@ -3704,7 +3704,7 @@ textarea:focus,
 .promptlab-summary-card,
 .promptlab-stats-col {
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(var(--accent-rgb), 0.1);
+    border: 1px solid var(--frame);
     border-radius: 18px;
     box-shadow: var(--shadow-card);
 }
@@ -3870,7 +3870,7 @@ textarea:focus,
     justify-content: center;
     padding: 18px;
     border-radius: 14px;
-    border: 1px dashed rgba(var(--accent-rgb), 0.16);
+    border: 1px dashed var(--frame);
     background: rgba(255, 255, 255, 0.03);
     color: var(--text-secondary);
     text-align: center;
@@ -3893,7 +3893,7 @@ textarea:focus,
     padding: 10px 12px;
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.035);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -3911,7 +3911,7 @@ textarea:focus,
     height: 88px;
     border-radius: 10px;
     overflow: hidden;
-    border: 1px solid rgba(var(--accent-rgb), 0.12);
+    border: 1px solid var(--frame);
     background: rgba(0, 0, 0, 0.2);
 }
 
@@ -3987,7 +3987,7 @@ textarea:focus,
 
 .promptlab-image-preview-card {
     margin-top: 8px;
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.035);
     min-height: 96px;
@@ -4068,7 +4068,7 @@ textarea:focus,
 }
 
 .promptlab-image-picker-card {
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.035);
     overflow: hidden;
@@ -4120,7 +4120,7 @@ textarea:focus,
 
 .promptlab-diff-card {
     background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
     border-radius: 10px;
     padding: 12px;
 }
@@ -4183,7 +4183,7 @@ textarea:focus,
     display: grid;
     gap: 10px;
     padding: 12px;
-    border: 1px solid rgba(var(--accent-rgb), 0.14);
+    border: 1px solid var(--frame);
     border-radius: var(--radius-md);
     background: rgba(18, 18, 18, 0.48);
 }
@@ -4242,7 +4242,7 @@ textarea:focus,
     display: grid;
     gap: 8px;
     padding: 10px;
-    border: 1px solid rgba(var(--accent-rgb), 0.12);
+    border: 1px solid var(--frame);
     border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.03);
 }
@@ -4279,7 +4279,7 @@ textarea:focus,
 .promptlab-build-category-chip {
     max-width: 100%;
     padding: 4px 7px;
-    border: 1px solid rgba(var(--accent-rgb), 0.14);
+    border: 1px solid var(--frame);
     border-radius: var(--radius-sm);
     background: rgba(255, 255, 255, 0.07);
     color: var(--text-secondary);
@@ -4349,7 +4349,7 @@ textarea:focus,
 .promptlab-resource-empty {
     min-width: 0;
     padding: 9px 10px;
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.035);
 }
@@ -4407,7 +4407,7 @@ textarea:focus,
 }
 
 .artist-card {
-    border-color: rgba(var(--accent-rgb), 0.08);
+    border-color: var(--frame);
 }
 
 .artist-card:hover,
@@ -4731,7 +4731,7 @@ textarea:focus,
     aspect-ratio: auto;
     display: flex;
     flex-direction: column;
-    border: 1px solid rgba(var(--accent-rgb), 0.1);
+    border: 1px solid var(--frame);
     background:
         rgba(18, 18, 18, 0.98);
     box-shadow: 0 16px 36px rgba(0, 0, 0, 0.25);
@@ -5098,7 +5098,7 @@ textarea:focus,
     gap: 12px;
     padding: 16px 18px;
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
     border-radius: 18px;
 }
 
@@ -5135,7 +5135,7 @@ textarea:focus,
     padding: 8px 12px;
     border-radius: 16px;
     background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
 }
 
 .filter-presets-title {
@@ -5159,7 +5159,7 @@ textarea:focus,
 .filter-presets-list .preset-item {
     gap: 6px;
     padding: 3px 8px;
-    border: 1px solid rgba(var(--accent-rgb), 0.12);
+    border: 1px solid var(--frame);
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.04);
 }
@@ -5191,7 +5191,7 @@ textarea:focus,
     padding: 11px 12px;
     border-radius: 16px;
     background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
 }
 
 .filter-stat-label {
@@ -5226,7 +5226,7 @@ textarea:focus,
     gap: 10px;
     padding: 10px 12px;
     background: rgba(16, 16, 16, 0.58);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
     border-radius: 999px;
 }
 
@@ -5268,7 +5268,7 @@ textarea:focus,
     min-width: 0;
     padding: 18px;
     background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
     border-radius: 18px;
     overflow: visible;
 }
@@ -5364,7 +5364,7 @@ textarea:focus,
     padding: 12px 14px;
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
 }
 
 .filter-toggle-grid .checkbox-label:hover,
@@ -5457,7 +5457,7 @@ textarea:focus,
     padding: 14px;
     border-radius: 16px;
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
     transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
 
@@ -5558,7 +5558,7 @@ textarea:focus,
 #modal-active-prompts {
     margin-top: 12px;
     padding-top: 12px;
-    border-top: 1px solid rgba(var(--accent-rgb), 0.08);
+    border-top: 1px solid var(--hairline-1);
 }
 
 .filter-modal-shell .active-tag {
@@ -5591,7 +5591,7 @@ textarea:focus,
 .filter-empty-state {
     padding: 14px;
     border-radius: 14px;
-    border: 1px dashed rgba(var(--accent-rgb), 0.16);
+    border: 1px dashed var(--frame);
     background: rgba(255, 255, 255, 0.03);
     color: var(--text-muted);
     font-size: 13px;
@@ -5605,7 +5605,7 @@ textarea:focus,
     align-items: center;
     gap: 12px;
     padding-top: 12px;
-    border-top: 1px solid rgba(var(--accent-rgb), 0.08);
+    border-top: 1px solid var(--hairline-1);
     background: rgba(30, 30, 30, 0.96);
 }
 
@@ -5687,7 +5687,7 @@ textarea:focus,
     min-width: 220px;
     padding: 12px 14px;
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(var(--accent-rgb), 0.1);
+    border: 1px solid var(--frame);
     border-radius: 16px;
     transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
@@ -5737,7 +5737,7 @@ textarea:focus,
     padding: 24px;
     border-radius: 18px;
     background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
     color: var(--text-secondary);
     text-align: center;
 }
@@ -5794,7 +5794,7 @@ textarea:focus,
     padding: 14px 62px 10px 16px;
     position: relative;
     z-index: 4;
-    border-bottom: 1px solid rgba(var(--accent-rgb), 0.08);
+    border-bottom: 1px solid var(--hairline-1);
     background: rgba(20, 20, 20, 0.96);
 }
 
@@ -6136,7 +6136,7 @@ textarea:focus,
 #view-censor .btn-side-v2,
 #view-censor .tool-btn-v2,
 #view-censor .censor-status-bar {
-    border-color: rgba(var(--accent-rgb), 0.12) !important;
+    border-color: var(--frame) !important;
 }
 
 #view-censor .censor-sidebar-v2 {
@@ -6215,7 +6215,7 @@ textarea:focus,
 #view-censor .censor-canvas-wrapper-v2,
 #view-censor .property-section {
     background: rgba(255, 255, 255, 0.04) !important;
-    border-color: rgba(var(--accent-rgb), 0.1) !important;
+    border-color: var(--frame) !important;
 }
 
 #view-censor .censor-canvas-wrapper-v2 {
@@ -6257,7 +6257,7 @@ textarea:focus,
     gap: 12px;
     padding: 14px 16px !important;
     background: rgba(20, 20, 20, 0.9) !important;
-    border-top: 1px solid rgba(var(--accent-rgb), 0.1) !important;
+    border-top: 1px solid var(--hairline-1) !important;
 }
 
 #view-censor .censor-status-bar {
@@ -6302,7 +6302,7 @@ textarea:focus,
     align-items: center;
     gap: 6px;
     padding: 6px 10px;
-    border: 1px solid rgba(var(--accent-rgb), 0.12);
+    border: 1px solid var(--frame);
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.04);
     color: var(--text-secondary);
@@ -6335,7 +6335,7 @@ textarea:focus,
     gap: 8px;
     min-width: 230px;
     padding: 10px 12px;
-    border: 1px solid rgba(var(--accent-rgb), 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 12px;
     background: rgba(20, 20, 20, 0.96);
     box-shadow: 0 18px 38px rgba(0, 0, 0, 0.42);
@@ -6347,7 +6347,7 @@ textarea:focus,
 
 #view-censor .zoom-controls-v2 {
     background: rgba(255, 255, 255, 0.04) !important;
-    border-color: rgba(var(--accent-rgb), 0.1) !important;
+    border-color: var(--frame) !important;
 }
 
 #view-censor .zoom-btn-v2:hover {
@@ -6747,7 +6747,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 
 #view-censor .queue-selection-count {
-    border: 1px solid rgba(var(--accent-rgb), 0.1);
+    border: 1px solid var(--frame);
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.04);
     color: var(--text-secondary);
@@ -6965,7 +6965,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     justify-content: space-between;
     gap: 12px;
     padding: 12px 14px;
-    border: 1px solid rgba(var(--accent-rgb), 0.1);
+    border: 1px solid var(--frame);
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.035);
 }
@@ -6993,7 +6993,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     max-width: min(100%, 360px);
     min-height: 28px;
     padding: 0 10px;
-    border: 1px solid rgba(var(--accent-rgb), 0.12);
+    border: 1px solid var(--frame);
     border-radius: 999px;
     color: var(--text-secondary);
     background: rgba(255, 255, 255, 0.045);
@@ -7607,7 +7607,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 
 .queue-manager-grid {
     border-radius: 18px;
-    border: 1px solid rgba(var(--accent-rgb), 0.1);
+    border: 1px solid var(--frame);
     background: rgba(16, 16, 16, 0.56);
     padding: 12px;
     min-height: 200px;
@@ -8173,7 +8173,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     padding: 5px;
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
     box-shadow: var(--shadow-card);
 }
 
@@ -8236,7 +8236,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     padding: 6px 10px;
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
 }
 
 .obfuscate-checkbox-row input {
@@ -8260,7 +8260,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 .obfuscate-item {
     padding: 10px 12px;
     border-radius: 14px;
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
 }
 
 .obfuscate-thumb {
@@ -8324,7 +8324,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     margin-bottom: 10px;
     border-radius: 16px;
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(var(--accent-rgb), 0.1);
+    border: 1px solid var(--frame);
 }
 
 #view-censor .queue-action-group {
@@ -8468,7 +8468,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     justify-content: center;
     padding: 12px 14px;
     border-radius: 14px;
-    border: 1px dashed rgba(var(--accent-rgb), 0.14);
+    border: 1px dashed var(--frame);
     color: var(--text-muted);
     background: rgba(255, 255, 255, 0.02);
     text-align: center;
@@ -8483,7 +8483,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     gap: 6px;
     padding: 6px;
     border-radius: 14px;
-    border: 1px solid rgba(var(--accent-rgb), 0.1);
+    border: 1px solid var(--frame);
     background: rgba(16, 16, 16, 0.58);
     color: var(--text-secondary);
     cursor: pointer;
@@ -8562,7 +8562,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     width: min(520px, calc(100% - 48px));
     padding: 24px 28px;
     border-radius: 24px;
-    border: 1px solid rgba(var(--accent-rgb), 0.12);
+    border: 1px solid var(--frame);
     background: rgba(20, 20, 20, 0.9);
     box-shadow: var(--shadow-card);
     text-align: center;
@@ -9809,7 +9809,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     overflow-y: auto;
     overscroll-behavior: contain;
     padding: 6px;
-    border: 1px solid rgba(var(--accent-rgb), 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: var(--radius-lg);
     background: rgba(24, 24, 24, 0.97);
     box-shadow: 0 18px 42px rgba(0, 0, 0, 0.36);
@@ -9921,7 +9921,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     display: grid;
     gap: 8px;
     padding: 10px;
-    border: 1px solid rgba(var(--accent-rgb), 0.12);
+    border: 1px solid var(--frame);
     border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.03);
 }
@@ -9953,7 +9953,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 .reader-category-chip {
     max-width: 100%;
     padding: 4px 8px;
-    border: 1px solid rgba(var(--accent-rgb), 0.14);
+    border: 1px solid var(--frame);
     border-radius: var(--radius-sm);
     background: rgba(255, 255, 255, 0.07);
     color: var(--text-secondary);
@@ -9985,7 +9985,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     justify-content: space-between;
     gap: 18px;
     padding: 24px 28px 18px;
-    border-bottom: 1px solid rgba(var(--accent-rgb), 0.1);
+    border-bottom: 1px solid var(--hairline-1);
     background: rgba(255, 255, 255, 0.03);
 }
 
@@ -10032,7 +10032,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 
 .promptlab-category-board-column {
     min-height: 360px;
-    border: 1px solid rgba(var(--accent-rgb), 0.13);
+    border: 1px solid var(--frame);
     border-radius: var(--radius-lg);
     background: rgba(18, 18, 18, 0.56);
     overflow: hidden;
@@ -10069,7 +10069,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     align-items: center;
     gap: 8px;
     padding: 12px 14px;
-    border-bottom: 1px solid rgba(var(--accent-rgb), 0.09);
+    border-bottom: 1px solid var(--hairline-1);
 }
 
 .promptlab-category-board-title {
@@ -10112,7 +10112,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     max-width: 100%;
     min-height: 32px;
     padding: 6px 10px;
-    border: 1px solid rgba(var(--accent-rgb), 0.18);
+    border: 1px solid var(--frame);
     border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.92);
     color: #1C1C1C;
@@ -10153,7 +10153,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     justify-content: space-between;
     gap: 14px;
     padding: 16px 28px 20px;
-    border-top: 1px solid rgba(var(--accent-rgb), 0.1);
+    border-top: 1px solid var(--hairline-1);
     color: var(--text-muted);
     font-size: 13px;
 }
@@ -10219,7 +10219,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     padding: 10px 14px;
     white-space: nowrap;
     background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(var(--accent-rgb), 0.08);
+    border: 1px solid var(--frame);
     border-radius: var(--radius-xl);
     color: var(--text-secondary);
     font-size: 14px;
@@ -10311,7 +10311,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 .modal-tool-drawer {
     flex: 1 1 160px;
     min-width: 0;
-    border: 1px solid rgba(var(--accent-rgb), 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.025);
 }
