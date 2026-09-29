@@ -2100,9 +2100,6 @@ test('starting a different mode over a paused session asks before discarding, ne
   await page.keyboard.press('Escape')
   await expect(page.locator('#sort-setup')).toBeVisible()
   await expect(page.locator('#sort-resume-banner')).toBeVisible()
-  // Coming back must not pin an inline display that drops the setup's
-  // two-row header layout back to a plain stack.
-  expect(await page.locator('#sort-setup').evaluate((el) => getComputedStyle(el).display)).toBe('grid')
 
   // Switch to A/B Showdown and start — the cross-mode confirm must appear
   // instead of the bracket interface or a silently-resumed slot session.

@@ -134,9 +134,7 @@
                 ? t('collections.favorites', 'Favorites')
                 : (collection.name || '');
             const count = Number(collection.item_count || 0);
-            const icon = isFavorites
-                ? '♥'
-                : '<svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg>';
+            const icon = isFavorites ? '♥' : '📁';
 
             const renameBtn = isFavorites ? '' : (
                 `<button type="button" class="collection-row-action" data-action="rename" `
@@ -360,7 +358,7 @@
                 const name = collection.slug === FAVORITES_SLUG
                     ? t('collections.favorites', 'Favorites')
                     : (collection.name || '');
-                const icon = collection.slug === FAVORITES_SLUG ? '♥' : 'i-folder';
+                const icon = collection.slug === FAVORITES_SLUG ? '♥' : '📁';
                 menu.appendChild(this._pickerItem(icon, name, () => {
                     menu.remove();
                     this._addToCollection(collection.id, name, ids, selectionToken);
@@ -372,7 +370,7 @@
             separator.setAttribute('role', 'separator');
             menu.appendChild(separator);
 
-            menu.appendChild(this._pickerItem('i-plus', t('collections.new', 'New collection…'), async () => {
+            menu.appendChild(this._pickerItem('＋', t('collections.new', 'New collection…'), async () => {
                 menu.remove();
                 const created = await this.createPrompt();
                 if (created?.id != null) {
@@ -394,17 +392,7 @@
             const iconEl = document.createElement('span');
             iconEl.className = 'context-menu-icon';
             iconEl.setAttribute('aria-hidden', 'true');
-            if (/^i-[a-z0-9-]+$/.test(icon)) {
-                // A sprite name: draw the app's line icon, as the tile menu does.
-                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                svg.setAttribute('class', 'icon');
-                const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-                use.setAttribute('href', `#${icon}`);
-                svg.appendChild(use);
-                iconEl.appendChild(svg);
-            } else {
-                iconEl.textContent = icon;
-            }
+            iconEl.textContent = icon;
 
             const labelEl = document.createElement('span');
             labelEl.className = 'context-menu-label';

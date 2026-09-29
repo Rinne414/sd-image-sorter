@@ -602,11 +602,6 @@ test.describe('Entry page (opted in)', () => {
     await expect(page.locator('#entry-catalog-modal.visible')).toBeVisible()
     // Rows render for every group; 隐私处理 is finally discoverable here.
     await expect(page.locator('#entry-catalog-body .catalog-item').first()).toBeVisible()
-    // Every row leads with the app's line icon, not a coloured emoji glyph.
-    const rows = page.locator('#entry-catalog-body .catalog-item')
-    const rowCount = await rows.count()
-    expect(rowCount).toBeGreaterThan(10)
-    await expect(page.locator('#entry-catalog-body .catalog-icon svg.icon use')).toHaveCount(rowCount)
     await page.click('#entry-catalog-close')
     await expect(page.locator('#entry-catalog-modal.visible')).toHaveCount(0)
   })

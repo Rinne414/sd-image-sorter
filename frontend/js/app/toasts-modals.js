@@ -485,16 +485,7 @@ function showPipelineNextStep(opts = {}) {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'btn btn-small ' + (i === 0 ? 'btn-primary' : 'btn-ghost');
-        if (a.icon) {
-            const icon = document.createElement('span');
-            icon.className = 'pns-action-icon';
-            icon.setAttribute('aria-hidden', 'true');
-            _setSpriteIcon(icon, a.icon);
-            btn.appendChild(icon);
-        }
-        const label = document.createElement('span');
-        label.textContent = a.label || '';
-        btn.appendChild(label);
+        btn.textContent = (a.icon ? a.icon + ' ' : '') + (a.label || '');
         btn.addEventListener('click', () => {
             hidePipelineNextStep();
             _runPipelineNextStepAction(a.action);

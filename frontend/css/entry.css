@@ -233,7 +233,7 @@ body.entry-active {
 .entry-version {
     font-family: var(--font-mono);
     font-size: var(--fs-footnote);
-    color: var(--muted);
+    color: rgba(var(--accent-rgb), 0.4);
     margin-left: 10px;
 }
 
@@ -244,27 +244,26 @@ body.entry-active {
     gap: 18px;
     font-family: var(--font-mono);
     font-size: var(--fs-footnote);
-    color: var(--muted);
+    color: rgba(var(--accent-rgb), 0.45);
 }
 
 .entry-system .sys-accent {
-    color: var(--text-2);
+    color: var(--blue);
 }
 
 .entry-settings-btn {
     background: none;
     border: none;
-    padding: 6px;
+    padding: 4px 6px;
     font-size: 13px;
-    color: var(--text-2);
+    color: rgba(var(--accent-rgb), 0.6);
     cursor: pointer;
-    border-radius: 8px;
-    transition: color var(--duration-fast) ease, background var(--duration-fast) ease;
+    border-radius: var(--r-ctl);
 }
 
 .entry-settings-btn:hover {
     color: var(--text);
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.06);
 }
 
 /* --- mosaic column --- */
@@ -282,7 +281,7 @@ body.entry-active {
     /* "safe": when the tiles are taller than the box (1280x720, 1366x768) they
        start below the top bar instead of overflowing up under it. */
     justify-content: safe center;
-    gap: 8px;
+    gap: 10px;
     z-index: 2;
 }
 
@@ -292,130 +291,77 @@ body.entry-active {
     align-items: stretch;
 }
 
-/* Tier labels — structure stated in words, not in size jitter (FB-2).
-   Plain secondary text: an amber, tracked, uppercase eyebrow was decoration on
-   a page whose only amber should be the one action it offers. The space above
-   it is what separates the groups, not a box around them. */
+/* Tier labels — structure stated in words, not in size jitter (FB-2). */
 .entry-eyebrow {
-    font-size: 13px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-footnote);
     font-weight: 600;
-    color: var(--text-2);
-    padding: 0 4px;
-    margin: 14px 0 -2px;
+    letter-spacing: 2.4px;
+    text-transform: uppercase;
+    color: rgba(var(--accent-rgb), 0.35);
+    padding: 2px 2px 0;
+    margin-bottom: -6px;
     user-select: none;
 }
 
-.entry-eyebrow:first-of-type {
-    margin-top: 0;
-}
-
-/* Three zones instead of eleven equal boxes (owner 2026-09-30: the column
-   "looks a bit ugly, too square"). The squareness was the outlines: the art on
-   the left has no frame at all while every tile on the right drew one, so the
-   eye read rectangles instead of content. Nothing here draws an outline now.
-   Weight comes from surface and size:
-     missions  one raised block, three rows, 17px titles  — today's menu
-     library   one raised card, big count, the page's single amber action
-     tools     no panel, a two-column list of compact rows led by an icon
-   The raised surfaces stay opaque enough that a bright cover never washes the
-   labels out. Corners stay small on purpose: bigger radii would turn the
-   column into a generic card wall. */
 .entry-tile {
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    padding: 0;
+    /* The hero art sits behind this column. At 0.76 a bright cover washed the
+       tile labels out; film mode already special-cased itself to 0.93 for the
+       same reason, so the base tile now carries that opacity too. The hero
+       still reads through, the labels stay legible against any cover. */
+    background: rgba(14, 14, 14, 0.93);
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: var(--r-card);
+    padding: 13px 16px;
     display: flex;
     flex-direction: column;
     gap: 4px;
     cursor: pointer;
     text-align: left;
     color: var(--text);
-    font: inherit;
-    transition: background var(--duration-fast) ease;
+    transition: border-color 150ms ease, background 150ms ease;
 }
 
-.entry-missions,
-.entry-library-home {
-    background: rgba(23, 23, 25, 0.9);
-    border-radius: 8px;
+.entry-tile:hover {
+    border-color: var(--border-strong);
+    background: rgba(24, 24, 24, 0.96);
 }
 
-.entry-page:has(.hero-film) :is(.entry-missions, .entry-library-home) {
-    background: rgba(23, 23, 25, 0.96);
+/* Film mode runs bright strips behind the tiles; lift the tile surface opacity
+   so the strips don't bleed through the tile labels (批量整理 / 所有功能). */
+.entry-page:has(.hero-film) .entry-tile {
+    background: rgba(14, 14, 14, 0.93);
 }
-
-/* --- missions: one block, three rows ------------------------------------ */
-.entry-missions {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-.entry-missions .entry-tile {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas:
-        "head output"
-        "steps steps";
-    align-items: baseline;
-    column-gap: 14px;
-    row-gap: 4px;
-    padding: 15px 22px 14px;
-}
-
-.entry-missions .entry-tile + .entry-tile {
-    border-top: 1px solid var(--hairline-1);
-}
-
-.entry-missions .entry-tile:hover,
-.entry-missions .entry-tile:focus-visible {
-    background: rgba(255, 255, 255, 0.045);
-}
-
-.entry-page .entry-missions .entry-tile:focus-visible {
-    outline-offset: -2px;
+.entry-page:has(.hero-film) .entry-tile:hover {
+    background: rgba(18, 18, 18, 0.95);
 }
 
 .entry-tile .tile-head {
-    grid-area: head;
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: 9px;
 }
 
 .entry-tile .tile-title {
-    font-size: 17px;
-    font-weight: 600;
-    letter-spacing: 0.01em;
+    font-size: 16px;
+    font-weight: 900;
 }
 
 .entry-tile .tile-arrow {
-    font-size: 15px;
-    color: var(--text-2);
-    transition: color var(--duration-fast) ease, transform var(--duration-fast) ease;
-}
-
-.entry-tile:hover .tile-arrow,
-.entry-tile:focus-visible .tile-arrow {
-    color: var(--text);
-    transform: translateX(3px);
+    margin-left: auto;
+    font-size: 14px;
+    color: rgba(var(--accent-rgb), 0.5);
 }
 
 .entry-tile .tile-output {
-    grid-area: output;
-    min-width: 0;
-    font-size: 13px;
-    color: var(--text-2);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 11px;
+    color: rgba(var(--accent-rgb), 0.68);
 }
 
 .entry-tile .tile-steps {
-    grid-area: steps;
-    font-size: 12px;
-    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-footnote);
+    color: rgba(var(--accent-rgb), 0.5);
 }
 
 /* continue (anchor) slab — accent tier */
@@ -582,133 +528,39 @@ body.entry-active {
 /* mission tiles: one geometry per tier, rows flush (FB-2) */
 .entry-mission-lora,
 .entry-mission-organize,
-.entry-mission-pixiv {
+.entry-mission-pixiv { flex: 1; }
+
+/* function tiles: equal cards inside each row; the live numbers still talk,
+   at one calm size instead of four */
+.entry-fn {
     flex: 1;
+    padding: 14px 16px 12px;
+    gap: 3px;
+    justify-content: flex-start;
 }
 
-/* --- tools: a two-column list, no panel ---------------------------------
-   Each row is icon, name, a one-line description, then any live count. The
-   hover fill is the only affordance a row needs. */
-.entry-tools {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 2px 8px;
-    padding: 8px;
-    border-radius: 8px;
-    background: rgba(23, 23, 25, 0.9);
-}
-
-.entry-page:has(.hero-film) .entry-tools {
-    background: rgba(23, 23, 25, 0.96);
-}
-
-.entry-tools .entry-fn {
-    flex-direction: row;
-    align-items: center;
+.entry-fn .fn-head {
+    display: flex;
+    align-items: baseline;
     gap: 10px;
-    min-height: 40px;
-    padding: 8px 12px;
-    border-radius: 5px;
-    background: transparent;
 }
 
-.entry-tools .entry-fn:hover,
-.entry-tools .entry-fn:focus-visible {
-    background: rgba(255, 255, 255, 0.06);
-}
-
-.entry-tools .fn-head {
-    display: contents;
-}
-
-.entry-tools .fn-icon {
-    order: -1;
-    display: inline-flex;
-    color: var(--text-2);
-    transition: color var(--duration-fast) ease;
-}
-
-.entry-tools .entry-fn:hover .fn-icon {
+.entry-fn .fn-count {
+    font-family: var(--font-numeral);
+    font-weight: 500;
+    line-height: 1;
+    font-size: 26px;
     color: var(--text);
 }
 
-.entry-tools .fn-title {
-    flex: 0 0 auto;
-    font-weight: 500;
-    font-size: 14px;
-    white-space: nowrap;
+.entry-fn .fn-title {
+    font-weight: 900;
+    font-size: 15px;
 }
 
-.entry-tools .fn-sub {
-    flex: 1 1 auto;
-    min-width: 0;
-    font-size: 12px;
-    color: var(--muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.entry-tools .fn-count {
-    order: 2;
-    font-family: var(--font-mono);
-    font-weight: 500;
-    line-height: 1;
-    font-size: 12px;
-    color: var(--text-2);
-}
-
-.entry-tools .fn-count:empty {
-    display: none;
-}
-
-.entry-fn-models .fn-models-badge {
-    order: 3;
-}
-
-.entry-fn-catalog .fn-title {
-    color: var(--text-2);
-}
-
-/* The column is a fixed-height flex box. Nothing in it may shrink: a squeezed
-   missions block clips its last row (Pixiv) out of sight at 1366x768. On
-   laptop-height screens the rows tighten instead, so the whole column still
-   fits between the top bar and the bottom of the window. */
-.entry-mosaic > * {
-    flex-shrink: 0;
-}
-
-@media (max-height: 860px) {
-    .entry-eyebrow {
-        margin-top: 8px;
-    }
-
-    .entry-missions .entry-tile {
-        padding: 10px 20px 10px;
-        row-gap: 2px;
-    }
-
-    .entry-tile .tile-title {
-        font-size: 16px;
-    }
-
-    .entry-fn-xl {
-        padding: 14px 20px 14px;
-        gap: 6px;
-    }
-
-    .entry-fn-xl .fn-count {
-        font-size: 32px;
-    }
-
-    .entry-tools {
-        padding: 6px;
-    }
-
-    .entry-tools .entry-fn {
-        min-height: 34px;
-        padding: 6px 12px;
-    }
+.entry-fn .fn-sub {
+    font-size: 11px;
+    color: rgba(var(--accent-rgb), 0.55);
 }
 
 /* Empty-library scan CTA on the Library tile: lift it out of the quiet-subtitle
@@ -757,7 +609,7 @@ body.entry-active {
     color: var(--text, #F9F3EB);
     font: inherit;
     font-size: 18px;
-    font-weight: 600;
+    font-weight: 900;
     line-height: 1.2;
     cursor: pointer;
     text-align: left;
@@ -785,14 +637,14 @@ body.entry-active {
     font-weight: 500;
     font-size: 26px;
     line-height: 1;
-    color: var(--text);
+    color: rgba(var(--accent-rgb), 0.92);
 }
 
 .entry-library-sub {
     margin: 0;
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1.45;
-    color: var(--text-2);
+    color: rgba(var(--accent-rgb), 0.55);
 }
 
 .entry-library-sub.is-cta {
@@ -810,8 +662,8 @@ body.entry-active {
 
 .entry-library-enter {
     border: none;
-    border-radius: 8px;
-    padding: 9px 20px;
+    border-radius: var(--r-ctl, 10px);
+    padding: 9px 18px;
     background: var(--blue, #DBB180);
     color: var(--on-accent, #161616);
     font: inherit;
@@ -825,21 +677,21 @@ body.entry-active {
 }
 
 .entry-library-manage {
-    border: none;
-    border-radius: 8px;
-    padding: 9px 14px;
-    background: rgba(255, 255, 255, 0.06);
-    color: var(--text-2);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--r-ctl, 10px);
+    padding: 8px 12px;
+    background: transparent;
+    color: rgba(var(--accent-rgb), 0.7);
     font: inherit;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
-    transition: color var(--duration-fast) ease, background var(--duration-fast) ease;
 }
 
 .entry-library-manage:hover {
-    color: var(--text);
-    background: rgba(255, 255, 255, 0.11);
+    color: var(--text, #F9F3EB);
+    border-color: rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.04);
 }
 
 .entry-library-menu {
@@ -1014,13 +866,19 @@ body.entry-active {
 /* Library XL tile — the app's home gets the biggest button
    (owner FB 2026-07-07; replaces the removed dashed free-mode row). */
 .entry-fn-xl {
-    padding: 20px 24px 20px;
-    gap: 8px;
+    padding: 20px 20px 16px;
 }
 
 .entry-fn-xl .fn-count {
     font-size: 40px;
-    font-weight: 600;
+}
+
+.entry-fn-xl .fn-title {
+    font-size: 18px;
+}
+
+.entry-fn-xl .fn-sub {
+    font-size: 12px;
 }
 
 /* function catalog modal — rows built by modules/entry-catalog.js */
@@ -1034,16 +892,19 @@ body.entry-active {
 }
 
 .catalog-group-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-2);
-    margin: 14px 4px 4px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-footnote);
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(var(--accent-rgb), 0.45);
+    margin: 10px 2px 2px;
 }
 
 .catalog-group {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
 }
 
 .catalog-item {
@@ -1051,29 +912,24 @@ body.entry-active {
     align-items: center;
     gap: 12px;
     width: 100%;
-    background: transparent;
-    border: 0;
-    border-radius: var(--r-ctl);
-    padding: 9px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--r-card);
+    padding: 10px 14px;
     cursor: pointer;
     color: var(--text);
     text-align: left;
-    transition: background var(--duration-fast) ease;
+    transition: border-color 150ms ease, background 150ms ease;
 }
 
-.catalog-item:hover,
-.catalog-item:focus-visible {
-    background: rgba(255, 255, 255, 0.06);
+.catalog-item:hover {
+    border-color: rgba(var(--blue-rgb), 0.55);
+    background: rgba(var(--blue-rgb), 0.08);
 }
 
 .catalog-icon {
-    display: inline-flex;
+    font-size: 18px;
     flex: 0 0 auto;
-    color: var(--text-2);
-}
-
-.catalog-item:hover .catalog-icon {
-    color: var(--text);
 }
 
 .catalog-copy {
@@ -1085,24 +941,22 @@ body.entry-active {
 
 .catalog-name {
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 700;
 }
 
 .catalog-desc {
-    font-size: 12px;
-    color: var(--muted);
+    font-size: 11px;
+    color: rgba(var(--accent-rgb), 0.55);
 }
 
 .catalog-arrow {
     margin-left: auto;
     font-size: 14px;
-    color: var(--muted);
-    transition: color var(--duration-fast) ease, transform var(--duration-fast) ease;
+    color: rgba(var(--accent-rgb), 0.4);
 }
 
 .catalog-item:hover .catalog-arrow {
-    color: var(--text);
-    transform: translateX(3px);
+    color: var(--blue);
 }
 
 .entry-free-all .free-all-label {

@@ -1244,20 +1244,18 @@
     align-items: flex-start;
     gap: 10px;
     padding: 8px 10px;
-    border: 1px solid transparent;
+    border: 1px solid rgba(255,255,255,0.08);
     border-radius: 8px;
-    background: rgba(255,255,255,0.03);
     cursor: pointer;
     margin-bottom: 6px;
-    transition: background 0.12s ease;
+    transition: background 0.12s ease, border-color 0.12s ease;
 }
 #view-dataset .dataset-preset-row:hover {
-    background: rgba(255,255,255,0.055);
+    background: rgba(255,255,255,0.03);
 }
-/* The chosen option is a neutral lift; the radio dot already says which. */
 #view-dataset .dataset-preset-row:has(input:checked) {
-    background: rgba(255,255,255,0.085);
-    border-color: transparent;
+    background: rgba(var(--accent-primary-rgb), 0.10);
+    border-color: rgba(var(--accent-primary-rgb), 0.45);
 }
 #view-dataset .dataset-preset-row[hidden] { display: none; }
 #view-dataset .dataset-preset-row > input[type="radio"] {
@@ -2421,7 +2419,7 @@
     flex-direction: column;
     background: var(--surface-1, rgba(28, 28, 28, 0.5));
     border: 1px solid var(--border-color, rgba(255,255,255,0.08));
-    border-radius: var(--r-panel);
+    border-radius: 12px;
     padding: 12px;
     min-height: 0;
     overflow: hidden;
@@ -2913,7 +2911,7 @@
     padding: 12px;
     background: rgba(17, 17, 17, 0.72);
     border: 1px solid var(--border-color, rgba(255,255,255,0.12));
-    border-radius: var(--r-panel);
+    border-radius: 12px;
     overflow: hidden;
 }
 #view-dataset .dataset-split-head,
@@ -2956,7 +2954,7 @@
     padding: 10px;
     background: rgba(28, 28, 28, 0.72);
     border: 1px solid rgba(166, 166, 166, 0.18);
-    border-radius: var(--r-panel);
+    border-radius: 10px;
     overflow-y: auto;
 }
 #view-dataset .dataset-split-position {

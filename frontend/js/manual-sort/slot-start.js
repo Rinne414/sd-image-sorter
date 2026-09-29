@@ -461,7 +461,7 @@ function rollbackSortingUi() {
     ManualSortState.active = false;
     document.removeEventListener('keydown', handleSortKeypress);
     hideSortInterfaces();
-    $('#sort-setup').style.display = '';
+    $('#sort-setup').style.display = 'block';
     updateHistoryControlState({ undo_available: false, redo_available: false });
 }
 

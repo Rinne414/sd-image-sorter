@@ -77,7 +77,7 @@
 
 .vlm-model-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 8px; }
 .vlm-model-card {
-    padding: 12px; border-radius: var(--r-panel); border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 12px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.03);
 }
 .vlm-model-card.installed { border-color: rgba(var(--success-rgb), 0.3); }
@@ -397,7 +397,7 @@
 
 .export-queue-count {
     background: var(--bg-tertiary, rgba(255,255,255,0.06));
-    border-radius: var(--r-panel);
+    border-radius: 10px;
     padding: 2px 8px;
     font-variant-numeric: tabular-nums;
 }
@@ -1045,9 +1045,9 @@
     gap: 8px;
     margin: 8px 0 12px;
     padding: 4px;
-    border-radius: var(--r-panel);
+    border-radius: 14px;
     background: rgba(28, 28, 28, 0.55);
-    border: 1px solid var(--frame);
+    border: 1px solid rgba(var(--accent-rgb), 0.10);
     flex-wrap: wrap;
 }
 
@@ -1058,7 +1058,7 @@
     justify-content: center;
     gap: 8px;
     padding: 10px 14px;
-    border-radius: var(--r-panel);
+    border-radius: 10px;
     border: 1px solid transparent;
     background: transparent;
     color: var(--text-secondary);
@@ -1123,7 +1123,7 @@
     min-height: 72px;
     padding: 13px 15px;
     border: 1px solid rgba(var(--accent-primary-rgb), 0.28);
-    border-radius: var(--r-panel);
+    border-radius: 12px;
     background: rgba(19, 19, 19, 0.86);
     color: var(--text-primary);
     font: inherit;
@@ -1176,7 +1176,7 @@
     display: inline-flex;
     align-items: center;
     padding: 0 12px;
-    border: 1px solid var(--frame);
+    border: 1px solid rgba(var(--accent-rgb), 0.14);
     border-radius: 999px;
     color: var(--accent-primary);
     background: rgba(var(--accent-primary-rgb), 0.10);
@@ -1203,8 +1203,8 @@
     align-items: flex-start;
     gap: 10px;
     padding: 12px 13px;
-    border: 1px solid var(--frame);
-    border-radius: var(--r-panel);
+    border: 1px solid rgba(var(--accent-rgb), 0.12);
+    border-radius: 10px;
     background: rgba(19, 19, 19, 0.72);
     color: var(--text-secondary);
     font: inherit;
@@ -1349,8 +1349,8 @@
     align-items: center;
     margin: 8px 0 12px;
     padding: 0;
-    border: 1px solid var(--frame);
-    border-radius: var(--r-panel);
+    border: 1px solid rgba(var(--accent-rgb), 0.12);
+    border-radius: 12px;
     background: transparent;
 }
 
@@ -1507,9 +1507,9 @@
     align-items: flex-start;
     gap: 12px;
     padding: 14px 16px;
-    border-radius: var(--r-panel);
+    border-radius: 12px;
     background: rgba(26, 26, 26, 0.5);
-    border: 1px solid var(--frame);
+    border: 1px solid rgba(var(--accent-rgb), 0.10);
     margin-bottom: 12px;
 }
 
@@ -1611,7 +1611,7 @@
     padding: 10px 12px;
     border: 1px solid rgba(var(--warning-rgb), 0.32);
     border-left: 3px solid var(--warning);
-    border-radius: var(--r-panel);
+    border-radius: 10px;
     background: rgba(var(--warning-rgb), 0.06);
 }
 

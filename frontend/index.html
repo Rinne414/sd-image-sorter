@@ -190,7 +190,7 @@
             </article>
 
             <div class="entry-eyebrow"><span data-i18n="entry.groupMissions">Missions</span></div>
-            <div class="entry-missions">
+            <div class="entry-row">
                 <button type="button" class="entry-tile entry-mission-lora" id="entry-mission-lora">
                     <span class="tile-head">
                         <span class="tile-title" data-i18n="entry.missionLoraTitle">LoRA Dataset</span>
@@ -207,6 +207,9 @@
                     <span class="tile-output" data-i18n="entry.missionOrganizeOutput">Sort a messy pile into folders</span>
                     <span class="tile-steps" data-i18n="entry.missionOrganizeSteps">Auto-sort first, finish by hand with WASD</span>
                 </button>
+            </div>
+
+            <div class="entry-row">
                 <button type="button" class="entry-tile entry-mission-pixiv" id="entry-mission-pixiv">
                     <span class="tile-head">
                         <span class="tile-title" data-i18n="entry.missionPixivTitle">Pixiv Set Publishing</span>
@@ -245,11 +248,10 @@
                     <div class="entry-library-menu" id="entry-library-menu" role="listbox" hidden></div>
                 </div>
             </div>
-            <div class="entry-tools">
+            <div class="entry-row">
                 <button type="button" class="entry-tile entry-fn entry-fn-censor" id="entry-fn-censor">
                     <span class="fn-head">
                         <span class="fn-count" id="entry-count-censor"></span>
-                        <span class="fn-icon" aria-hidden="true"><svg class="icon"><use href="#i-grid"/></svg></span>
                         <span class="fn-title" data-i18n="entry.tileCensor">Censor Editor</span>
                     </span>
                     <span class="fn-sub" data-i18n="entry.tileCensorSub">Brush, detect, and export safely</span>
@@ -257,14 +259,15 @@
                 <button type="button" class="entry-tile entry-fn entry-fn-sort" id="entry-fn-sort">
                     <span class="fn-head">
                         <span class="fn-count" id="entry-count-sort"></span>
-                        <span class="fn-icon" aria-hidden="true"><svg class="icon"><use href="#i-folders"/></svg></span>
                         <span class="fn-title" data-i18n="entry.tileSort">Manual Sort</span>
                     </span>
                     <span class="fn-sub" id="entry-sub-sort" data-i18n="entry.tileSortIdle">Sort a batch with WASD</span>
                 </button>
+            </div>
+
+            <div class="entry-row">
                 <button type="button" class="entry-tile entry-fn entry-fn-reader" id="entry-fn-reader">
                     <span class="fn-head">
-                        <span class="fn-icon" aria-hidden="true"><svg class="icon"><use href="#i-book"/></svg></span>
                         <span class="fn-title" data-i18n="entry.tileReader">Reader</span>
                     </span>
                     <span class="fn-sub" data-i18n="entry.tileReaderSub">Drop an image to read its params</span>
@@ -273,22 +276,22 @@
                      tool tabs where nobody found it — surface it on the main page. -->
                 <button type="button" class="entry-tile entry-fn entry-fn-privacy" id="entry-fn-privacy">
                     <span class="fn-head">
-                        <span class="fn-icon" aria-hidden="true"><svg class="icon"><use href="#i-eye-off"/></svg></span>
                         <span class="fn-title" data-i18n="tools.obfuscation">Privacy Tools</span>
                     </span>
                     <span class="fn-sub" data-i18n="entry.tilePrivacySub">Obfuscate images for upload · restore back</span>
                 </button>
                 <button type="button" class="entry-tile entry-fn entry-fn-similar" id="entry-fn-similar">
                     <span class="fn-head">
-                        <span class="fn-icon" aria-hidden="true"><svg class="icon"><use href="#i-search"/></svg></span>
                         <span class="fn-title" data-i18n="entry.tileSimilar">Find Similar</span>
                     </span>
                     <span class="fn-sub" data-i18n="entry.tileSimilarSub">Search by image · near look-alikes</span>
                 </button>
+            </div>
+
+            <div class="entry-row">
                 <button type="button" class="entry-tile entry-fn entry-fn-models" id="entry-fn-models">
                     <span class="fn-head">
                         <span class="fn-count" id="entry-count-models"></span>
-                        <span class="fn-icon" aria-hidden="true"><svg class="icon"><use href="#i-package"/></svg></span>
                         <span class="fn-title" data-i18n="entry.tileModels">Model Center</span>
                         <span class="fn-models-badge" id="entry-models-badge" data-i18n="entry.tileModelsBadge" hidden>Start here</span>
                     </span>
@@ -298,7 +301,6 @@
                      the survivor is a catalog listing every function + its usage. -->
                 <button type="button" class="entry-tile entry-fn entry-fn-catalog" id="entry-all-tools">
                     <span class="fn-head">
-                        <span class="fn-icon" aria-hidden="true"><svg class="icon"><use href="#i-menu"/></svg></span>
                         <span class="fn-title" data-i18n="entry.tileCatalog">All Features</span>
                     </span>
                     <span class="fn-sub" data-i18n="entry.tileCatalogSub">Everything this app can do, in one list</span>
@@ -7253,7 +7255,7 @@
                 </button>
                 <div class="filter-modal-hero" style="padding: 0; gap: 0; margin-bottom: 8px;">
                         <div class="filter-modal-hero-copy" style="gap: 2px;">
-                        <h3 id="filter-modal-title" data-i18n="filter.filterImages" style="margin: 0;">Filter Images</h3>
+                        <h3 id="filter-modal-title" data-i18n="filter.filterImages" style="font-size: 18px; margin: 0;">Filter Images</h3>
                     </div>
                     <div class="filter-modal-hero-actions" style="gap: 6px;">
                         <span id="filter-modal-selection-summary" style="font-size: 12px; color: var(--text-muted); max-width: 300px;"></span>

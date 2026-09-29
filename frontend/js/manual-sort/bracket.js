@@ -539,7 +539,7 @@ async function finishBracketSorting(result) {
     const winnerName = bracketImageName(winner);
 
     hideSortInterfaces();
-    $('#sort-setup').style.display = '';
+    $('#sort-setup').style.display = 'block';
 
     const destLabel = await collectBracketWinner(winner);
 

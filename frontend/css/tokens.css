@@ -27,38 +27,34 @@
 
 :root {
     /* ===== Surfaces — true neutral graphite (R=G=B, no hue cast) ===== */
-    --bg: #0D0D0E;              /* app canvas */
-    --surface-1: #171719;       /* panels: 10 above the canvas, so no outline is needed */
-    --surface-2: #212124;       /* raised: modals, menus, a selected segment */
-    --surface-3: #2B2B2F;       /* pressed / neutral selected */
-    --stage: #08080A;           /* deep stage behind images */
-    --border: #2A2A2E;          /* standard 1px hairline */
-    --border-strong: #3B3B40;   /* input hover/focus edge */
+    --bg: #0E0E0F;              /* app canvas */
+    --surface-1: #151517;       /* panels */
+    --surface-2: #1C1C1E;       /* raised: modals, menus */
+    --surface-3: #232326;       /* hover / pressed */
+    --stage: #09090A;           /* deep stage behind images */
+    --border: #2B2B2E;          /* standard 1px hairline */
+    --border-strong: #3A3A3E;   /* emphasised divider, input outline */
     --hairline-1: #1F1F22;      /* table/list row separators */
-    --hairline-2: #27272B;      /* resting input edge */
-    /* The resting outline the older sheets drew around panels, cards and
-       chips (a faint amber hairline in ~140 rules). Surfaces separate by
-       lightness now, so it is off; one value turns every one back on. */
-    --frame: transparent;
+    --hairline-2: #26262A;
     --scrim: rgba(0, 0, 0, 0.72);
 
     /* ===== Text — hierarchy by weight/size, contrast measured on --bg ===== */
-    --text: #ECECEE;            /* 16.3:1 */
-    --text-2: #A9A9AF;          /* 8.2:1 */
-    --muted: #86868C;           /* 5.4:1 — still AA at 12px */
-    --text-disabled: #565660;   /* non-interactive only */
+    --text: #E8E8EA;            /* 15.8:1 */
+    --text-2: #A6A6AB;          /* 7.96:1 */
+    --muted: #8A8A90;           /* 5.62:1 — still AA at 12px */
+    --text-disabled: #5A5A60;   /* non-interactive only */
 
     /* ===== The one accent: restrained amber =====
        Chosen for the instrument-panel register of real desktop tools. It is
        deliberately outside the cyan/violet/magenta range that reads as
        generated. 6.42:1 as text on --bg; 6.42:1 for --on-accent ink on the
        solid fill, so it works as text AND as a button surface. */
-    --accent: #CF8B3D;
-    --accent-rgb: 207, 139, 61;
-    --accent-bright: #DE9B4D;   /* hover: +1 step */
-    --accent-deep: #B47530;     /* active: -1 step */
-    --accent-soft: rgba(207, 139, 61, 0.14);   /* selected row/tile wash */
-    --accent-line: rgba(207, 139, 61, 0.5);    /* selected outline */
+    --accent: #C8873C;
+    --accent-rgb: 200, 135, 60;
+    --accent-bright: #D8974C;   /* hover: +1 step */
+    --accent-deep: #AE7231;     /* active: -1 step */
+    --accent-soft: rgba(200, 135, 60, 0.12);   /* selected row/tile wash */
+    --accent-line: rgba(200, 135, 60, 0.45);   /* selected outline */
     --on-accent: #17120A;       /* ink on a solid accent fill */
 
     /* ===== Status — data, always paired with a glyph ===== */
@@ -86,11 +82,10 @@
 
     /* ===== Radii — small and deliberate. Uniformly large corners are a
        generated-UI tell and cost usable pixels in a dense tool. ===== */
-    --r-ctl: 5px;               /* buttons, inputs, chips, tabs */
-    --r-card: 8px;              /* panels, cards */
-    --r-panel: 8px;             /* the older sheets' 10-28px corners collapse here */
-    --r-tile: 3px;              /* image tiles, ticks, keycaps */
-    --r-modal: 8px;
+    --r-ctl: 4px;               /* buttons, inputs */
+    --r-card: 5px;              /* panels, cards */
+    --r-tile: 3px;              /* image tiles */
+    --r-modal: 6px;
     --r-pill: 999px;            /* genuinely round things only: toggles, dots */
 
     /* ===== Type — one UI stack, resolved from the OS.
@@ -177,7 +172,7 @@
     --surface-hover: var(--surface-3);
     --surface-active: var(--accent-soft);
     --surface-danger: rgba(var(--danger-rgb), 0.12);
-    --control-bg: #101012;              /* fields are sunk below panels; buttons are raised */
+    --control-bg: #101012;              /* inputs sit a step below panels */
     --control-bg-hover: #17171A;
     --toolbar-bg: var(--surface-1);
     --modal-bg: var(--surface-2);
@@ -254,11 +249,11 @@
 
     /* radii: the legacy ladder collapses onto the small Graphite steps */
     --radius-xs: 3px;
-    --radius-sm: 5px;
-    --radius-md: 5px;
-    --radius-lg: 8px;
-    --radius-xl: 8px;
-    --radius-2xl: 8px;
+    --radius-sm: 4px;
+    --radius-md: 4px;
+    --radius-lg: 5px;
+    --radius-xl: 6px;
+    --radius-2xl: 6px;
     --radius-3xl: 8px;
     --radius-full: 999px;
     --nav-height: 56px;
@@ -472,36 +467,26 @@ textarea:focus-visible,
 }
 
 /* Neutral buttons only — never restate background on bare .btn or it
-   stomps .btn-primary (same specificity, later wins).
-   Secondary (the default) is a neutral wash with no outline; ghost is text
-   that gains the wash on hover. Fill, not an outline, tells them apart —
-   an outlined ghost looked like an input field. */
-.btn:not(.btn-primary):not(.btn-grad):not(.danger):not(.btn-danger):not(.btn-ghost),
-.btn-secondary {
-    background: rgba(255, 255, 255, 0.07);
+   stomps .btn-primary (same specificity, later wins). */
+.btn:not(.btn-primary):not(.btn-grad):not(.danger):not(.btn-danger),
+.btn-help {
+    background: var(--wash);
     color: var(--text);
-    border-color: transparent;
 }
 
-.btn:not(.btn-primary):not(.btn-grad):not(.danger):not(.btn-danger):not(.btn-ghost):hover:not(:disabled),
-.btn-secondary:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.11);
-    border-color: transparent;
-    color: var(--text);
-    box-shadow: none;
-}
-
+.btn-secondary,
 .btn-help,
 .btn-ghost {
     background: transparent;
     color: var(--text-2);
-    border-color: transparent;
+    border-color: var(--border);
 }
 
+.btn-secondary:hover:not(:disabled),
 .btn-help:hover:not(:disabled),
 .btn-ghost:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.07);
-    border-color: transparent;
+    background: var(--wash-hover);
+    border-color: var(--border-strong);
     color: var(--text);
     box-shadow: none;
 }
@@ -630,29 +615,26 @@ textarea:focus-visible,
 }
 
 /* Idle select toggle is a mode switch, not the screen's primary CTA —
-   keep it quiet until armed. Armed it reads like a filter chip that is on
-   (amber wash, amber text), not like a second primary action beside Move. */
+   keep it quiet until armed (then pink = user decision). */
 #btn-toggle-select.btn-primary:not(.selection-active):not([aria-pressed="true"]) {
-    background: rgba(255, 255, 255, 0.07);
+    background: var(--wash);
     color: var(--text);
-    border-color: transparent;
+    border-color: var(--border);
     box-shadow: none;
 }
 
 #btn-toggle-select.btn-primary:not(.selection-active):not([aria-pressed="true"]):hover {
-    background: rgba(255, 255, 255, 0.11);
-    border-color: transparent;
+    background: rgba(var(--pink-rgb), 0.10);
+    border-color: rgba(var(--pink-rgb), 0.40);
     color: var(--text);
 }
 
 #btn-toggle-select.selection-active,
-#btn-toggle-select[aria-pressed="true"],
-#btn-toggle-select.selection-active:hover,
-#btn-toggle-select[aria-pressed="true"]:hover {
-    background: var(--accent-soft);
-    border-color: transparent;
-    color: var(--accent);
-    box-shadow: none;
+#btn-toggle-select[aria-pressed="true"] {
+    background: var(--pink);
+    border-color: var(--pink-active);
+    color: var(--on-accent);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
 }
 
 .dataset-import-gallery-grid .import-thumb.multi-selected,
@@ -1316,7 +1298,7 @@ a:hover,
 
 #view-censor .queue-selection-count,
 #view-censor #queue-selection-count {
-    color: var(--text-2);
+    color: var(--pink);
     font-family: var(--font-mono);
     font-size: var(--fs-data);
 }
@@ -1523,7 +1505,7 @@ a:hover,
 }
 
 #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-pane {
-    border-color: transparent;
+    border-color: rgba(var(--blue-rgb), 0.22);
     background: var(--surface-1);
 }
 
@@ -1722,14 +1704,9 @@ a:hover,
 
 /* Project save = secondary chrome, not competing primary. */
 #view-dataset #btn-dataset-project-save {
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid transparent;
-    color: var(--text);
-}
-
-#view-dataset #btn-dataset-project-save:disabled {
-    background: rgba(255, 255, 255, 0.035);
-    color: var(--text-disabled);
+    background: var(--wash);
+    border: 1px solid var(--border);
+    color: var(--text-2);
 }
 
 /* AI / tag surfaces in dataset editor stay purple-quiet. */
@@ -1828,7 +1805,7 @@ html.gallery-comfort-room #view-gallery .gallery-header,
 html.gallery-comfort-room #view-gallery .gallery-search-row,
 #view-gallery.is-comfort-room .gallery-header,
 #view-gallery.is-comfort-room .gallery-search-row {
-    border-color: transparent;
+    border-color: var(--hairline-2);
     background: transparent;
 }
 
@@ -2015,11 +1992,11 @@ html.gallery-comfort-peeking {
    the delta is a couple of points per channel, the accent never changes, and
    neither variant reintroduces a blue/violet cast. */
 html[data-comfort-warmth="cool"] {
-    --bg: #0C0D0F;
-    --surface-1: #16171A;
-    --surface-2: #202125;
-    --surface-3: #2A2B30;
-    --stage: #07080A;
+    --bg: #0D0E10;
+    --surface-1: #141518;
+    --surface-2: #1B1C1F;
+    --surface-3: #222327;
+    --stage: #08090A;
     --text: #E7E9EC;
     --text-2: #A3A6AC;
 }
@@ -2029,10 +2006,10 @@ html[data-comfort-warmth="neutral"] {
 }
 
 html[data-comfort-warmth="warm"] {
-    --bg: #0F0E0C;
-    --surface-1: #191816;
-    --surface-2: #23211E;
-    --surface-3: #2D2B27;
+    --bg: #100F0D;
+    --surface-1: #171614;
+    --surface-2: #1E1D1A;
+    --surface-3: #262421;
     --stage: #0A0A09;
     --text: #EAE8E4;
     --text-2: #A9A59E;
@@ -2170,7 +2147,7 @@ html.comfort-view-switching .view.active {
 #view-dataset.is-comfort-room .dataset-editor-pane,
 #view-dataset.is-comfort-room .dataset-export-pane {
     background: var(--surface-1);
-    border-color: transparent;
+    border-color: var(--hairline-2);
 }
 
 #view-dataset.is-comfort-room .dataset-header {
@@ -2920,1228 +2897,4 @@ li > .icon {
         transition-duration: 1ms !important;
         scroll-behavior: auto !important;
     }
-}
-
-
-/* ==========================================================================
-   Surfaces v2 (2026-09-30) — lightness separates, outlines do not.
-
-   Owner: "the buttons, borders and colours are ugly, nothing looks designed".
-   Every panel, every card inside it and every field inside that drew its own
-   1px outline, because the surface steps were only 7 apart and a raised
-   panel was invisible without one. The ladder above is 10 apart now, so:
-     - a panel is a lighter surface on the canvas, with no outline;
-     - a section inside a panel lies flat on it and is separated by space or
-       one top hairline, never by a second box;
-     - a well (preview grid, image stage) sinks below the panel;
-     - a field keeps one quiet hairline, because it must look enterable;
-     - only floating layers (modal, menu, popover) keep a ring and a shadow.
-   Check: from any point there are at most two closed rectangles upward
-   (panel > field). Rules are prefixed with #app (or a top-level modal) so
-   they win over the ID-scoped view rules in the older sheets.
-   ========================================================================== */
-
-/* Level 1 — panels on the canvas */
-:is(#app, body > .modal) :is(
-    .filter-sidebar,
-    .gallery-header,
-    .autosep-pane,
-    .sort-setup,
-    .similar-header,
-    .similar-panel,
-    .similar-tabs,
-    .promptlab-browser,
-    .promptlab-builder,
-    .promptlab-output-panel,
-    .artist-stats,
-    .artist-controls,
-    .artist-results,
-    .artist-details,
-    .dataset-queue-pane,
-    .dataset-editor-pane,
-    .dataset-export-pane,
-    .dataset-folder-bar,
-    .censor-toolbar-v2,
-    .censor-side-card,
-    .censor-tab-bar,
-    .censor-review,
-    .zoom-controls-v2,
-    .reverse-pane
-) {
-    border-color: transparent;
-    box-shadow: none;
-}
-
-:is(#app, body > .modal) :is(
-    .gallery-header,
-    .autosep-pane,
-    .sort-setup,
-    .artist-stats,
-    .artist-controls,
-    .artist-results,
-    .artist-details,
-    .dataset-queue-pane,
-    .dataset-editor-pane,
-    .dataset-export-pane,
-    .censor-toolbar-v2,
-    .censor-side-card,
-    .reverse-pane
-) {
-    background: var(--surface-1);
-}
-
-/* Level 2 — sections that lie flat on their panel */
-:is(#app, body > .modal) :is(
-    .filter-summary,
-    .filter-summary-compact,
-    .control-section,
-    .dataset-card,
-    .artist-detail-content,
-    .autosep-action-block,
-    .sort-mode-switch,
-    .sort-preset-bar,
-    .reverse-draft-card,
-    .reverse-tipo-card,
-    .reverse-modes,
-    .sidebar-filter-item,
-    .tagger-scope-note,
-    .preview-section,
-    .selection-panel,
-    .settings-home-panel,
-    .model-manager-bulk-actions,
-    .audit-section
-) {
-    border: 0 solid transparent;
-    box-shadow: none;
-    background: transparent;
-}
-
-/* ...divided from the section above by one hairline, not boxed */
-:is(#app, body > .modal) .control-section + .control-section,
-:is(#app, body > .modal) .dataset-card + .dataset-card,
-:is(#app, body > .modal) .autosep-action-block + .autosep-action-block,
-:is(#app, body > .modal) .reverse-draft-card + .reverse-tipo-card,
-:is(#app, body > .modal) .audit-section + .audit-section {
-    border-top: 1px solid var(--hairline-1);
-    border-radius: 0;
-}
-
-/* Wells sink below the panel instead of drawing a frame */
-:is(#app, body > .modal) :is(
-    .autosep-preview-list,
-    .dataset-export-preview,
-    .censor-canvas-wrapper-v2
-) {
-    border-color: transparent;
-    box-shadow: none;
-}
-
-:is(#app, body > .modal) :is(.autosep-preview-list, .dataset-export-preview) {
-    background: var(--control-bg);
-}
-
-/* Empty states are text on the surface they sit on, not another box */
-:is(#app, body > .modal) :is(
-    .autosep-preview-empty,
-    .empty-state,
-    .no-image-state-v2,
-    .queue-empty-state-v2
-) {
-    border-color: transparent;
-    box-shadow: none;
-    background: transparent;
-}
-
-/* Drop zones keep a dashed edge (it says "drop here"), in neutral grey */
-:is(#app, body > .modal) :is(
-    .reader-drop-zone,
-    .obfuscate-drop-zone,
-    .reverse-drop-zone,
-    .dataset-dropzone,
-    .similar-upload-dropzone
-) {
-    border: 1px dashed var(--border-strong);
-    background: rgba(255, 255, 255, 0.015);
-    box-shadow: none;
-}
-
-/* Cards inside a modal are a quiet wash on the modal, no outline */
-:is(#app, body > .modal) :is(.model-card, .tagger-model-panel, .health-recommendation) {
-    border-color: transparent;
-    box-shadow: none;
-    background: rgba(255, 255, 255, 0.035);
-}
-
-/* Floating layers: the ring lives in --shadow-modal / --shadow-float */
-:is(#app, body > .modal) .modal-content {
-    border-color: transparent;
-}
-
-/* A range track must read on any surface. The base rule painted it with
-   --bg-card, which is now the panel colour, so on a panel the track vanished
-   and only the thumb showed. background-color (not the shorthand) keeps any
-   value-fill gradient a slider paints on top. */
-:is(#app, body > .modal) input[type="range"] {
-    background-color: rgba(255, 255, 255, 0.13);
-}
-
-/* Sidebar list rows (collections) are rows, not cards: no outline at rest,
-   a wash on hover, a neutral lift when current. */
-:is(#app, body > .modal) .collection-row {
-    background: transparent;
-    border-color: transparent;
-    border-radius: 5px;
-}
-
-:is(#app, body > .modal) .collection-row:hover {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: transparent;
-}
-
-:is(#app, body > .modal) .collection-row.is-active {
-    background: var(--surface-3);
-    border-color: transparent;
-    box-shadow: none;
-}
-
-/* ==========================================================================
-   Controls v2 (2026-09-30) — three button tiers, told apart by fill.
-
-     primary    amber fill, dark ink — the one action a screen is for
-     secondary  neutral wash, no outline — the default button
-     ghost      text only; a wash appears on hover — toolbars, icons, menus
-     danger     red text at rest; a red fill only as a dialog's confirming act
-
-   Tabs and segmented switches: the container draws nothing, the chosen
-   segment is a neutral lift in white text. Amber is not "selected" here;
-   it is spent on the primary action, on filter chips that are on, and on
-   the top bar's you-are-here underline.
-
-   Focus is a white ring. An amber ring disappears on an amber button and
-   makes a neutral button look selected.
-   ========================================================================== */
-
-:is(#app, body > .modal) :is(.btn, .btn-help) {
-    border-color: transparent;
-    border-radius: 5px;
-    box-shadow: none;
-    font-weight: 500;
-}
-
-:is(#app, body > .modal) .btn-primary {
-    font-weight: 600;
-}
-
-:is(#app, body > .modal) :is(.btn-ghost, .btn-help)[aria-pressed="true"]:not(.btn-primary),
-:is(#app, body > .modal) .btn-ghost.btn-icon-only.active {
-    background: var(--surface-3);
-    color: var(--text);
-}
-
-/* disabled reads as disabled, not as a faded copy of the live colour */
-:is(#app, body > .modal) :is(.btn, .btn-help):disabled {
-    opacity: 1;
-    background: rgba(255, 255, 255, 0.035);
-    color: var(--text-disabled);
-}
-
-:is(#app, body > .modal) :is(.btn-ghost, .btn-help):disabled {
-    background: transparent;
-}
-
-/* danger */
-:is(#app, body > .modal) :is(.btn.danger, .btn-danger, .btn-ghost.danger):not(.btn-primary) {
-    background: transparent;
-    border-color: transparent;
-    color: var(--danger-ink);
-}
-
-:is(#app, body > .modal) :is(.btn.danger, .btn-danger, .btn-ghost.danger):not(.btn-primary):hover:not(:disabled) {
-    background: rgba(var(--danger-rgb), 0.12);
-    border-color: transparent;
-    color: var(--danger-ink-hover);
-}
-
-:is(#app, body > .modal) .btn-primary.danger {
-    background: var(--danger);
-    border-color: transparent;
-    color: #1A0B0B;
-    font-weight: 600;
-}
-
-:is(#app, body > .modal) .btn-primary.danger:hover:not(:disabled) {
-    background: #E57B76;
-    color: #1A0B0B;
-}
-
-/* focus: one white ring on every control */
-:is(#app, body > .modal) :is(button, .btn, a, summary, [role="tab"], [role="button"], .gallery-item):focus-visible {
-    outline: 2px solid rgba(236, 236, 238, 0.85);
-    outline-offset: 2px;
-    box-shadow: none;
-}
-
-/* A dialog moves focus to its close button when it opens. That is focus,
-   not keyboard focus, so it must not draw a ring. */
-:is(#app, body > .modal) .modal-close:focus:not(:focus-visible) {
-    outline: none;
-    background: transparent;
-    box-shadow: none;
-}
-
-/* --- tabs and segmented switches ---------------------------------------- */
-:is(#app, body > .modal) :is(
-    .settings-modal-tabs,
-    .tagger-tabs,
-    .censor-tab-bar,
-    .reader-tools-tabs,
-    .sorting-sub-tabs,
-    .promptlab-tabs,
-    .similar-tabs,
-    .mass-tag-tabs,
-    .sepcon-view-tabs,
-    .sort-mode-switch,
-    .segmented-control,
-    .vlm-segmented,
-    .view-toggle,
-    .aspect-quick-toggle,
-    .gallery-scope-control,
-    .library-tabs,
-    .modal-color-mode-switch
-) {
-    border-color: transparent;
-    background: transparent;
-    box-shadow: none;
-}
-
-:is(#app, body > .modal) :is(
-    .settings-modal-tab,
-    .tagger-tab,
-    .censor-tab,
-    .reader-tool-tab,
-    .sorting-sub-tab,
-    .promptlab-tab,
-    .similar-tab,
-    .mass-tag-tab,
-    .sepcon-view-tab,
-    .sort-mode-btn,
-    .toggle-btn,
-    .vlm-segmented-btn,
-    .dataset-tab,
-    .aspect-quick-btn,
-    .scope-btn
-) {
-    border-color: transparent;
-    border-radius: 5px;
-    background: transparent;
-    box-shadow: none;
-    color: var(--text-2);
-}
-
-:is(#app, body > .modal) :is(
-    .settings-modal-tab,
-    .tagger-tab,
-    .censor-tab,
-    .reader-tool-tab,
-    .sorting-sub-tab,
-    .promptlab-tab,
-    .similar-tab,
-    .mass-tag-tab,
-    .sepcon-view-tab,
-    .sort-mode-btn,
-    .toggle-btn,
-    .vlm-segmented-btn,
-    .dataset-tab,
-    .aspect-quick-btn,
-    .scope-btn
-):hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: var(--text);
-}
-
-:is(#app, body > .modal) :is(
-    .settings-modal-tab,
-    .tagger-tab,
-    .censor-tab,
-    .reader-tool-tab,
-    .sorting-sub-tab,
-    .promptlab-tab,
-    .similar-tab,
-    .mass-tag-tab,
-    .sepcon-view-tab,
-    .sort-mode-btn,
-    .toggle-btn,
-    .vlm-segmented-btn,
-    .dataset-tab,
-    .aspect-quick-btn,
-    .scope-btn
-):is(.active, .is-active, [aria-selected="true"], [aria-pressed="true"]) {
-    /* colour and fill only: a heavier weight would widen the label and
-       shift its neighbours when the choice changes */
-    background: rgba(255, 255, 255, 0.09);
-    border-color: transparent;
-    box-shadow: none;
-    color: var(--text);
-}
-
-:is(#app, body > .modal) .segmented-option span {
-    border-color: transparent;
-    background: transparent;
-    box-shadow: none;
-    color: var(--text-2);
-}
-
-:is(#app, body > .modal) .segmented-option input:checked + span {
-    background: rgba(255, 255, 255, 0.09);
-    border-color: transparent;
-    box-shadow: none;
-    color: var(--text);
-}
-
-#app #model-manager-modal .settings-modal-tabs {
-    background: var(--surface-2);
-}
-
-/* --- top bar ------------------------------------------------------------ */
-/* You-are-here is the amber underline alone; the tab itself stays quiet. */
-#app .nav-tab.active,
-#app .nav-tab[aria-selected="true"] {
-    background: transparent;
-    border-color: transparent;
-    box-shadow: none;
-    color: var(--text);
-}
-
-#app :is(.nav-tab, .nav-tools-toggle, .nav-library-chip) {
-    border-color: transparent;
-    box-shadow: none;
-}
-
-#app .nav-library-chip {
-    background: rgba(255, 255, 255, 0.05);
-    color: var(--text-2);
-}
-
-#app .nav-library-chip:hover {
-    background: rgba(255, 255, 255, 0.09);
-    color: var(--text);
-}
-
-#app .nav-tools-toggle.active {
-    background: transparent;
-    color: var(--text);
-}
-
-/* --- filter chips: amber means "this filter is on" ----------------------- */
-#app :is(.gen-tab, .gallery-chip) {
-    border-color: transparent;
-    background: rgba(255, 255, 255, 0.05);
-    box-shadow: none;
-    color: var(--text-2);
-}
-
-#app :is(.gen-tab, .gallery-chip):hover {
-    background: rgba(255, 255, 255, 0.09);
-    color: var(--text);
-}
-
-#app :is(.gen-tab, .gallery-chip):is(.active, .is-active, [aria-selected="true"], [aria-pressed="true"]) {
-    background: var(--accent-soft);
-    border-color: transparent;
-    color: var(--accent);
-}
-
-/* Small utility buttons that never took .btn: text-and-icon ghosts. */
-:is(#app, body > .modal) :is(
-    .gallery-search-side-btn,
-    .btn-icon-small,
-    .censor-help-toggle,
-    .btn-group-action,
-    .guide-btn
-) {
-    border-color: transparent;
-    background: transparent;
-    box-shadow: none;
-    color: var(--text-2);
-}
-
-:is(#app, body > .modal) :is(
-    .gallery-search-side-btn,
-    .btn-icon-small,
-    .censor-help-toggle,
-    .btn-group-action,
-    .guide-btn
-):hover {
-    background: rgba(255, 255, 255, 0.07);
-    color: var(--text);
-}
-
-/* Gallery view modes are a segmented switch like the others. */
-#app .view-btn {
-    border-color: transparent;
-    background: transparent;
-    box-shadow: none;
-    color: var(--text-2);
-}
-
-#app .view-btn:hover {
-    background: rgba(255, 255, 255, 0.07);
-    color: var(--text);
-}
-
-#app .view-btn:is(.active, [aria-pressed="true"]) {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: transparent;
-    box-shadow: none;
-    color: var(--text);
-}
-
-/* Censor tool palette: tools are secondary-weight tiles; the chosen tool is
-   a neutral lift, because amber belongs to Save. */
-#view-censor .censor-workspace-v2 .tool-btn-v2 {
-    border-color: transparent;
-    background: rgba(255, 255, 255, 0.04);
-    box-shadow: none;
-}
-
-#view-censor .censor-workspace-v2 .tool-btn-v2:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: transparent;
-}
-
-#view-censor .censor-workspace-v2 .tool-btn-v2.active {
-    background: var(--surface-3);
-    border-color: transparent;
-    box-shadow: none;
-    color: var(--text);
-}
-
-/* ==========================================================================
-   Amber budget v2 (2026-09-30)
-
-   Amber may mark only: the one primary action of a view, a filter or
-   selection that is on (chip, thumbnail outline, checkbox tick), progress
-   and filled stars, the top bar's you-are-here underline, and inline links.
-   It may not colour labels, kickers, step numbers, counters, parameter keys,
-   badges, secondary buttons or card edges. Everything below was spending it
-   on one of those.
-   ========================================================================== */
-
-/* Kickers and small titles are labels */
-#app :is(
-    .filter-panel-kicker,
-    .tagger-model-current-kicker,
-    .tagger-model-panel-title,
-    .dataset-import-card-kicker,
-    .model-card-setup-steps > summary
-) {
-    color: var(--text-2);
-    background: transparent;
-    border-color: transparent;
-}
-
-/* Step numbers: neutral discs; the current step is a white disc */
-#app :is(.dataset-tab-num, .dataset-step-number) {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: transparent;
-    color: var(--text-2);
-}
-
-#app .dataset-tab:is(.active, .is-active, [aria-selected="true"]) .dataset-tab-num,
-#app .dataset-workflow-step.is-active strong {
-    background: var(--text);
-    color: var(--bg);
-}
-
-#app .dataset-workflow-step.is-active {
-    background: rgba(255, 255, 255, 0.07);
-    border-color: transparent;
-    color: var(--text);
-}
-
-/* Counters and read-outs are data */
-#app :is(
-    .dataset-selection-summary,
-    .queue-selection-count,
-    .zoom-level-v2,
-    .promptlab-stat-number,
-    .dataset-empty-arrow
-) {
-    color: var(--text-2);
-}
-
-#app :is(.queue-selection-count, .sort-scope-count) {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: transparent;
-    color: var(--text-2);
-}
-
-/* Parameter keys in the image popup */
-#app #modal-key-params .key-param strong {
-    color: var(--text-2);
-}
-
-/* Badges and quiet status chips */
-#app .model-card-badge {
-    background: rgba(255, 255, 255, 0.07);
-    color: var(--text-2);
-}
-
-/* Promotional / ready banners: a neutral panel, not an amber frame */
-#app :is(.smart-tag-hint-banner, .model-health-banner) {
-    background: rgba(255, 255, 255, 0.035);
-    border-color: transparent;
-    box-shadow: none;
-}
-
-#app .smart-tag-hint-banner-icon {
-    background: rgba(255, 255, 255, 0.07);
-    color: var(--text-2);
-}
-
-/* The banner's button is the way into another tool, not this dialog's goal */
-#app #btn-tag-modal-smart-tag-go.btn-primary {
-    background: rgba(255, 255, 255, 0.09);
-    color: var(--text);
-    font-weight: 500;
-}
-
-#app #btn-tag-modal-smart-tag-go.btn-primary:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.14);
-    color: var(--text);
-}
-
-/* Current-model picker in the tag dialog */
-#app .tagger-model-current {
-    border-color: transparent;
-    background: rgba(255, 255, 255, 0.035);
-}
-
-#app .tagger-model-current-action {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: transparent;
-    color: var(--text);
-}
-
-/* "Select everything matching" is a scope action, not a second primary */
-#app .filter-sidebar #btn-select-all.btn-primary,
-#app .selection-panel #btn-select-all.btn-primary {
-    background: rgba(255, 255, 255, 0.07);
-    border-color: transparent;
-    color: var(--text);
-}
-
-#app .filter-sidebar #btn-select-all.btn-primary:hover:not(:disabled),
-#app .selection-panel #btn-select-all.btn-primary:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.11);
-}
-
-/* Generator toggles in the filter editor: the tick carries "on", the tile
-   stays neutral. Fourteen amber tiles made the default state look alarming. */
-#app :is(.filter-toggle-grid, .filter-list) .checkbox-label {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: transparent;
-    color: var(--text-2);
-}
-
-#app :is(.filter-toggle-grid, .filter-list) .checkbox-label:has(input:checked) {
-    background: rgba(255, 255, 255, 0.07);
-    border-color: transparent;
-    color: var(--text);
-}
-
-/* Small secondary actions that were dressed as amber pills */
-#app :is(.reader-paste-btn, .dataset-queue-mode-btn.active, .reverse-mode-option) {
-    border-color: transparent;
-}
-
-#app .reader-paste-btn {
-    background: rgba(255, 255, 255, 0.07);
-    color: var(--text);
-}
-
-#app .reader-paste-btn:hover {
-    background: rgba(255, 255, 255, 0.11);
-}
-
-#app .dataset-queue-mode-btn.active {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text);
-}
-
-#app .reverse-mode-option:has(input:checked) {
-    background: rgba(255, 255, 255, 0.07);
-}
-
-#view-censor .censor-shortcuts-disclosure > summary {
-    background: transparent;
-    border-color: transparent;
-    color: var(--text-2);
-}
-
-/* "Needs setup" status: a neutral panel with a warning-coloured badge */
-#app .scope-status-card.is-warning {
-    background: rgba(255, 255, 255, 0.035);
-    border-color: transparent;
-}
-
-#app .scope-status-card.is-warning .scope-status-badge {
-    background: rgba(var(--warning-rgb), 0.12);
-    color: var(--warning);
-}
-
-/* The negative prompt is text, not an error */
-#app #image-modal #modal-negative-text {
-    color: var(--text-2);
-}
-
-/* ==========================================================================
-   Flatten v2 (2026-09-30) — no lifted tile inside a lifted panel.
-
-   Once surfaces were separated by lightness, every small filled box left
-   inside a panel became louder than the hairline it replaced. Rows inside a
-   panel are divided by a hairline; statistics read as a line of numbers with
-   a label, the way the entry page shows its library count — not as a row of
-   dashboard tiles.
-   ========================================================================== */
-
-/* Auto-Separate filter list: rows, not seven small boxes */
-#app #autosep-filter-summary .summary-item {
-    background: transparent;
-    border-radius: 0;
-    border: 0;
-    border-top: 1px solid var(--hairline-1);
-}
-
-#app #autosep-filter-summary .summary-item:first-child {
-    border-top: 0;
-}
-
-/* Filter editor: the nine counts are one line of label + value */
-#app .filter-modal-stat-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 22px;
-    padding: 2px 0 4px;
-    background: transparent;
-}
-
-#app .filter-modal-stat-grid .filter-stat-card {
-    display: inline-flex;
-    flex-direction: row;
-    align-items: baseline;
-    gap: 6px;
-    min-width: 0;
-    padding: 0;
-    background: transparent;
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
-}
-
-#app .filter-modal-stat-grid .filter-stat-label {
-    font-size: 12px;
-    font-weight: 500;
-    text-transform: none;
-    letter-spacing: 0;
-    color: var(--muted);
-}
-
-#app .filter-modal-stat-grid .filter-stat-value {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text);
-}
-
-/* Model Center: "9 ready · 9 need attention · 18 tracked" */
-#app #model-manager-summary {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 28px;
-    background: transparent;
-}
-
-#app #model-manager-summary .model-manager-stat {
-    display: inline-flex;
-    flex-direction: row;
-    align-items: baseline;
-    gap: 8px;
-    padding: 0;
-    background: transparent;
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
-}
-
-#app #model-manager-summary .model-manager-stat strong {
-    font-size: 22px;
-    font-weight: 600;
-    color: var(--text);
-}
-
-#app #model-manager-summary .model-manager-stat span {
-    font-size: 12px;
-    color: var(--muted);
-}
-
-/* Big-number statistics (Style Finder, Similar, Prompt Helper): the number
-   carries the row, the label sits under it, no tiles. */
-#app :is(.artist-stats, #similar-stats, .promptlab-stats-grid):not([hidden]) {
-    display: flex;
-    flex-wrap: wrap;
-    background: transparent;
-    border: 0;
-    box-shadow: none;
-    padding: 4px 4px 8px;
-    gap: 40px;
-}
-
-#app :is(.artist-stats, #similar-stats) .stat-card,
-#app .promptlab-stat-card {
-    align-items: flex-start;
-    min-width: 0;
-    padding: 0;
-    background: transparent;
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
-    flex: 0 0 auto;
-}
-
-#app :is(.artist-stats, #similar-stats) .stat-number,
-#app .promptlab-stat-number {
-    font-size: 28px;
-    font-weight: 600;
-    line-height: 1.1;
-    color: var(--text);
-    font-variant-numeric: tabular-nums;
-}
-
-#app :is(.artist-stats, #similar-stats) .stat-label,
-#app .promptlab-stat-label {
-    font-size: 12px;
-    color: var(--muted);
-}
-
-/* Chips next to square buttons are 5px, not pills: a row of pills beside
-   square icon buttons read as a generic chip UI. 999px stays for toggles
-   and status dots. */
-#app :is(.gen-tab, .gallery-chip, .nav-library-chip, .aspect-quick-btn) {
-    border-radius: var(--r-ctl);
-}
-
-/* ==========================================================================
-   Type v2 (2026-09-30) — one voice per role.
-
-   Screen titles ran from 14px to 30px depending on who built the page, and
-   section titles were barely bigger than labels. Now:
-     screen title   20 / 600  (Auto-Separate already had it; the rest follow)
-     dialog title   16 / 600
-     section title  13 / 600, white
-     label          12 / 500, secondary grey
-   Size and weight carry the hierarchy; colour stays neutral.
-   ========================================================================== */
-
-#app :is(
-    .view-title,
-    .page-title,
-    .workspace-title,
-    #view-autosep .panel-title,
-    #view-manual .setup-title,
-    #view-reader .reader-tools-title,
-    #view-dataset .dataset-title,
-    #view-similar .similar-header h3
-) {
-    font-size: 20px;
-    font-weight: 600;
-    letter-spacing: 0;
-    line-height: 1.25;
-    color: var(--text);
-}
-
-:is(#app, body > .modal) :is(
-    .modal-header h2,
-    .modal-header h3,
-    .modal-title,
-    .guide-modal-title,
-    #filter-modal-title,
-    #tag-modal-title,
-    #model-manager-title
-) {
-    font-size: 16px;
-    font-weight: 600;
-    letter-spacing: 0;
-    color: var(--text);
-}
-
-:is(#app, body > .modal) :is(
-    .panel-title,
-    .sidebar-title,
-    .results-header h3,
-    .censor-side-card-title,
-    .sidebar-title-v2,
-    .reverse-card-title,
-    .promptlab-browser-header h4,
-    .promptlab-builder-header h4,
-    .promptlab-output-header h4,
-    .artist-controls h3,
-    .artist-results h3,
-    .artist-details h3,
-    .filter-panel h4,
-    .promptlab-stats-col h4,
-    .dataset-card-title,
-    .dataset-pane-head strong
-):not(#view-autosep .autosep-shell-title-block .panel-title) {
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0;
-    color: var(--text);
-}
-
-/* ==========================================================================
-   Finish v2 (2026-09-30) — the last amber and a few stray controls.
-   ========================================================================== */
-
-/* In selection mode "Move" is the action; Import steps back while it lasts. */
-#app:has(#btn-toggle-select[aria-pressed="true"]) #btn-scan.btn-primary {
-    background: rgba(255, 255, 255, 0.07);
-    color: var(--text);
-    font-weight: 500;
-}
-
-#app:has(#btn-toggle-select[aria-pressed="true"]) #btn-scan.btn-primary:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.11);
-    color: var(--text);
-}
-
-/* The armed Select toggle: a neutral lift with white text (the check glyph
-   already says "on"), so the screen keeps one amber action. */
-#btn-toggle-select.selection-active,
-#btn-toggle-select[aria-pressed="true"],
-#btn-toggle-select.selection-active:hover,
-#btn-toggle-select[aria-pressed="true"]:hover {
-    background: var(--surface-3);
-    color: var(--text);
-}
-
-/* Filter editor generator ticks: all fourteen are on by default, so the
-   tick is white on grey here; amber stays for filters that narrow results. */
-#app :is(.filter-toggle-grid, .filter-list) .checkbox-label input:checked + .checkbox-custom {
-    background: var(--text);
-    border-color: transparent;
-    color: var(--bg);
-}
-
-#app :is(.filter-toggle-grid, .filter-list) .checkbox-label input:checked + .checkbox-custom::after {
-    color: var(--bg);
-}
-
-/* Sub-section headings inside a filter panel sit one step below the panel
-   title, not above it. */
-#app .filter-panel :is(h5, .filter-section-header h5) {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-2);
-    letter-spacing: 0;
-}
-
-/* Toggles in Settings: one pressed look for every on/off button */
-#app #model-manager-modal .settings-row .btn[aria-pressed="true"] {
-    background: var(--surface-3);
-    color: var(--text);
-}
-
-#app #model-manager-modal .settings-row .btn[aria-pressed="false"] {
-    background: rgba(255, 255, 255, 0.05);
-    color: var(--text-2);
-}
-
-/* Dataset header: Save As is a button, not a label */
-#app #view-dataset #btn-dataset-project-save-as {
-    background: rgba(255, 255, 255, 0.07);
-    color: var(--text);
-}
-
-#app #view-dataset #btn-dataset-project-save-as:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.11);
-}
-
-/* Dataset import: the gallery import button is sized to its words */
-#app #view-dataset #btn-dataset-import-gallery {
-    width: auto;
-    align-self: flex-start;
-    min-height: 36px;
-    padding-inline: 18px;
-}
-
-/* ==========================================================================
-   Manual Sort setup (2026-09-30): a work surface, not a landing page.
-
-   The header was a centred stack (title, sentence, mode, presets, count,
-   Start) that pushed the WASD slots below the fold at 1366x768. The title
-   and its sentence now sit left, the scope count and Start sit right on the
-   same two rows, and mode + presets follow as full-width rows — so the
-   slots start about 150px higher. Start stays in view and never overlaps
-   the mode switch, presets or the filter summary (manual-sort-pins).
-   ========================================================================== */
-#app #view-manual #sort-setup {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    column-gap: 24px;
-    row-gap: 12px;
-    align-items: center;
-    padding: 20px 24px 24px;
-    text-align: left;
-    box-shadow: none;
-}
-
-#app #view-manual #sort-setup > * {
-    grid-column: 1 / -1;
-}
-
-#app #view-manual #sort-setup > .setup-title {
-    grid-column: 1;
-    grid-row: 1;
-    margin: 0;
-    text-align: left;
-}
-
-#app #view-manual #sort-setup > .setup-description {
-    grid-column: 1;
-    grid-row: 2;
-    margin: 0;
-    text-align: left;
-}
-
-#app #view-manual #sort-setup > .sort-setup-actions {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 12px;
-    width: auto;
-    margin: 0;
-    text-align: left;
-}
-
-#app #view-manual #sort-setup > .sort-setup-actions #btn-start-sorting {
-    margin: 0;
-}
-
-#app #view-manual #sort-setup > .sort-setup-actions #sort-resume-banner {
-    flex-basis: 100%;
-    width: auto;
-    margin: 0;
-}
-
-#app #view-manual #sort-setup > .sort-mode-switch,
-#app #view-manual #sort-setup > .sort-preset-bar {
-    margin: 0;
-    padding: 0;
-}
-
-#app #view-manual .sort-preset-select {
-    min-height: 32px;
-    padding: 0 10px;
-    border: 1px solid var(--hairline-2);
-    border-radius: var(--r-ctl);
-    background: var(--control-bg);
-    color: var(--text);
-}
-
-#app #view-manual .sort-preset-select:hover {
-    border-color: var(--border-strong);
-}
-
-/* The manual filter summary reads as label/value pairs, not a tile grid */
-#app #manual-sort-filter-summary .summary-item {
-    background: transparent;
-    border: 0;
-    border-top: 1px solid var(--hairline-1);
-    border-radius: 0;
-}
-
-/* Inside the folder import card the path row is a field row, not a second
-   panel on the panel. */
-#app #view-dataset .dataset-import-card .dataset-folder-bar {
-    background: transparent;
-    padding-inline: 0;
-}
-
-/* .form-input was only ever styled inside Dataset Maker; everywhere else
-   (Reverse Prompt's target select, for one) it rendered as a bare native
-   control. One quiet field look for all of them — zero specificity, so the
-   dataset's own field rules still win where they exist. */
-:where(#app, body > .modal) :where(.form-input) {
-    min-height: 32px;
-    padding: 6px 10px;
-    border: 1px solid var(--hairline-2);
-    border-radius: var(--r-ctl);
-    background: var(--control-bg);
-    color: var(--text);
-    font: inherit;
-    font-size: 13px;
-}
-
-:where(#app, body > .modal) :where(.form-input):hover {
-    border-color: var(--border-strong);
-}
-
-:where(#app, body > .modal) :where(.form-input):focus-visible {
-    outline: 2px solid rgba(236, 236, 238, 0.85);
-    outline-offset: 1px;
-}
-
-/* Censor sliders are 18px tall so the thumb has a hit area; painting that
-   whole box made a heavy grey bar. Draw a centred 4px line instead. */
-#app #view-censor .slider-v2 {
-    background-color: transparent;
-    background-image: linear-gradient(rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.14));
-    background-position: center;
-    background-size: 100% 4px;
-    background-repeat: no-repeat;
-}
-
-/* Context menu line icons sit in the same 18px column the emoji used,
-   in secondary grey so the label leads. */
-.context-menu-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-2);
-}
-
-.context-menu-item:hover .context-menu-icon,
-.context-menu-item:focus-visible .context-menu-icon {
-    color: var(--text);
-}
-
-.context-menu-item.is-danger .context-menu-icon {
-    color: inherit;
-}
-
-#pipeline-next-step .pns-action-icon {
-    display: inline-flex;
-    margin-right: 6px;
-}
-
-/* Keycaps: this app is driven from the keyboard (WASD, B/P/E/G, D, ?), so a
-   key reads as one physical key everywhere — graphite cap, small corners, a
-   single dark bottom edge like a real keycap. Not a glow, not a pill. */
-:is(#app, body > .modal, #keyboard-shortcuts-panel) :is(kbd, .shortcut-key) {
-    background: var(--surface-3);
-    border: 0;
-    border-radius: var(--r-tile);
-    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    color: var(--text);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 600;
-}
-
-.shortcuts-group-title .icon {
-    width: 14px;
-    height: 14px;
-    margin-right: 6px;
-    color: var(--text-2);
-}
-
-#keyboard-shortcuts-panel .shortcuts-group-title {
-    color: var(--text);
-    font-size: 13px;
-    font-weight: 600;
-}
-
-/* ==========================================================================
-   Round 3 (2026-09-30) — fixes from the second design review.
-   ========================================================================== */
-
-/* A disabled dataset export CTA is off, not a large tan block: the
-   #view-dataset primary rule painted amber over the :disabled state. */
-#app #view-dataset .dataset-export-cta:disabled,
-#app #view-dataset .dataset-export-cta.btn-primary:disabled {
-    background: var(--surface-3);
-    color: var(--text-disabled);
-    opacity: 1;
-    filter: none;
-    box-shadow: none;
-}
-
-/* Filter editor panel headers: the help sentence goes under the title
-   instead of squeezing it into two lines (and over it in the rating panel). */
-#app .filter-panel-header {
-    flex: 0 0 auto;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 4px;
-}
-
-#app .filter-panel-header .filter-panel-help {
-    flex: 0 0 auto;
-    max-width: none;
-    margin: 0;
-    font-size: 12px;
-    color: var(--muted);
-    text-align: left;
-}
-
-/* Keys in the shortcuts panel are sized to the key, left in a fixed column
-   so the descriptions still line up. */
-#keyboard-shortcuts-panel .shortcut-item {
-    display: grid;
-    grid-template-columns: 112px minmax(0, 1fr);
-    align-items: center;
-    gap: 12px;
-}
-
-#keyboard-shortcuts-panel .shortcut-key {
-    justify-self: start;
-    min-width: 28px;
-    width: auto;
-    padding: 3px 8px;
-}
-
-/* Status and folder labels are information, not actions */
-#app .scope-status-card.is-warning .scope-status-badge {
-    background: rgba(255, 255, 255, 0.07);
-    color: var(--text-2);
-}
-
-#app #image-modal .modal-file-subfolder {
-    color: var(--text-2);
-}
-
-/* The active generator tab's count is part of the chip, not a second badge */
-#app .gen-tab .gen-count {
-    background: transparent;
-    padding: 0 0 0 2px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--muted);
-}
-
-#app .gen-tab:is(.active, [aria-selected="true"]) .gen-count {
-    background: transparent;
-    color: inherit;
-    opacity: 0.8;
-}
-
-/* Similar: the page is not a panel around its own panels */
-#app #view-similar .similar-header {
-    background: transparent;
-    padding: 4px 0 0;
-}
-
-/* Manual Sort "synced" status: a neutral chip; green stays in the glyph */
-#app #manual-sort-scope-status.is-synced {
-    border-color: transparent;
-    background: rgba(255, 255, 255, 0.035);
-}
-
-#app #manual-sort-scope-status.is-synced .scope-status-badge {
-    background: rgba(255, 255, 255, 0.07);
-    color: var(--text-2);
 }

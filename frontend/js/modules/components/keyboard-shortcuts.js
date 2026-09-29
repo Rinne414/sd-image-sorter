@@ -47,15 +47,14 @@ const KeyboardShortcutsPanel = (function () {
     }
 
     function getSectionLabel(section) {
-        // Same line icons as the matching top-bar tabs.
         const labels = {
-            global: { key: 'shortcuts.section.global', fallback: 'Global', icon: 'i-globe' },
-            gallery: { key: 'shortcuts.section.gallery', fallback: 'Gallery', icon: 'i-image' },
-            manual: { key: 'shortcuts.section.manual', fallback: 'Manual Sort', icon: 'i-folders' },
-            censor: { key: 'shortcuts.section.censor', fallback: 'Censor Edit', icon: 'i-grid' },
+            global: { key: 'shortcuts.section.global', fallback: 'Global', icon: '🌐' },
+            gallery: { key: 'shortcuts.section.gallery', fallback: 'Gallery', icon: '🖼️' },
+            manual: { key: 'shortcuts.section.manual', fallback: 'Manual Sort', icon: '🎮' },
+            censor: { key: 'shortcuts.section.censor', fallback: 'Censor Edit', icon: '🔳' },
         };
-        const label = labels[section] || { key: section, fallback: section, icon: 'i-settings' };
-        return `<svg class="icon" aria-hidden="true"><use href="#${label.icon}"/></svg> ${t(label.key, label.fallback)}`;
+        const label = labels[section] || { key: section, fallback: section, icon: '⌨️' };
+        return `${label.icon} ${t(label.key, label.fallback)}`;
     }
 
     function renderPanel(panel) {
@@ -71,7 +70,7 @@ const KeyboardShortcutsPanel = (function () {
         panel.innerHTML = `
             <div class="shortcuts-panel-content">
                 <div class="shortcuts-panel-header">
-                    <h3>${t('shortcuts.title', 'Keyboard Shortcuts')}</h3>
+                    <h3>⌨️ ${t('shortcuts.title', 'Keyboard Shortcuts')}</h3>
                     <button class="shortcuts-panel-close" aria-label="${t('common.close', 'Close')}">&times;</button>
                 </div>
                 <div class="shortcuts-panel-body">${bodyHtml}</div>

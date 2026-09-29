@@ -51,8 +51,8 @@ Object.assign(window.Gallery, {
         const tagCopySource = { imageId: image.id, image };
 
         const items = [
-            { label: t('gallery.contextPreview', 'Preview'), icon: 'image', action: () => this.openPreview(image.id) },
-            { label: isSelected ? t('gallery.contextDeselectImage', 'Deselect Image') : t('gallery.contextSelectImage', 'Select Image'), icon: isSelected ? 'close' : 'check', action: () => {
+            { label: t('gallery.contextPreview', 'Preview'), icon: '\u{1F5BC}', action: () => this.openPreview(image.id) },
+            { label: isSelected ? t('gallery.contextDeselectImage', 'Deselect Image') : t('gallery.contextSelectImage', 'Select Image'), icon: isSelected ? '\u2715' : '\u2713', action: () => {
                 if (tokenActive) {
                     this.toggleSelection(image.id);
                     return;
@@ -60,7 +60,7 @@ Object.assign(window.Gallery, {
                 this._setContextImageSelection(image.id, !isSelected);
             } },
             { type: 'separator' },
-            { label: t('gallery.contextCopyTags', 'Copy Tags'), icon: 'tag', action: async () => {
+            { label: t('gallery.contextCopyTags', 'Copy Tags'), icon: '\u{1F3F7}', action: async () => {
                 const copy = window.TagCategoryCopy;
                 if (!copy) {
                     app.showToast?.(t('modal.copyFailed', 'Failed to copy text'), 'error');
@@ -69,7 +69,7 @@ Object.assign(window.Gallery, {
                 const tags = await copy.getTagsFromSource(tagCopySource);
                 await copy.copyTags(tags, t('modal.tagsCopied', 'Tags copied'));
             }},
-            { label: t('gallery.contextCopyTagCategory', 'Copy Tag Category...'), icon: 'clipboard', action: (event) => {
+            { label: t('gallery.contextCopyTagCategory', 'Copy Tag Category...'), icon: '\u25BE', action: (event) => {
                 if (!window.TagCategoryCopy?.showMenu) {
                     app.showToast?.(t('modal.copyFailed', 'Failed to copy text'), 'error');
                     return;
@@ -85,32 +85,32 @@ Object.assign(window.Gallery, {
             { label: this.isFavorited(image.id)
                 ? t('collections.contextUnfavorite', 'Remove from Favorites')
                 : t('collections.contextFavorite', 'Add to Favorites'),
-              icon: 'heart',
+              icon: this.isFavorited(image.id) ? '\u{1F494}' : '♥',
               action: () => this.toggleFavorite(image.id) },
-            { label: labelWithScope('collections.contextAddTo', 'Add to collection…'), icon: 'layers',
+            { label: labelWithScope('collections.contextAddTo', 'Add to collection…'), icon: '\u{1F4DA}',
               action: () => window.CollectionsUI?.openAddToCollectionPicker?.(actionImageIds) },
             { type: 'separator' },
-            { label: labelWithScope('gallery.contextMoveImage', 'Move...'), icon: 'folder', action: () => app.moveOrCopyGalleryImages?.(actionImageIds, 'move', { source: 'context' }) },
-            { label: labelWithScope('gallery.contextCopyImage', 'Copy...'), icon: 'file', action: () => app.moveOrCopyGalleryImages?.(actionImageIds, 'copy', { source: 'context' }) },
+            { label: labelWithScope('gallery.contextMoveImage', 'Move...'), icon: '\u{1F4C1}', action: () => app.moveOrCopyGalleryImages?.(actionImageIds, 'move', { source: 'context' }) },
+            { label: labelWithScope('gallery.contextCopyImage', 'Copy...'), icon: '\u{1F4C4}', action: () => app.moveOrCopyGalleryImages?.(actionImageIds, 'copy', { source: 'context' }) },
             { type: 'separator' },
-            { label: labelWithScope('gallery.contextSendToCensor', 'Send to Censor'), icon: 'grid', action: () => {
+            { label: labelWithScope('gallery.contextSendToCensor', 'Send to Censor'), icon: '\u{1F533}', action: () => {
                 if (typeof app.addToCensorQueue === 'function') {
                     app.addToCensorQueue(actionImageIds);
                 } else {
                     app.showToast?.(t('gallery.contextSendToCensorFailed', 'Failed to send image to Edit'), 'error');
                 }
             }},
-            { label: labelWithScope('modal.addToDataset', 'Add to dataset'), icon: 'package', action: () => app.addToDatasetMaker?.(actionImageIds, { switchView: true, showToast: true }) },
-            { label: t('gallery.contextFindSimilar', 'Find Similar'), icon: 'search', action: () => app.openSimilarFromImage?.(image.id) },
-            { label: t('gallery.contextNearDuplicates', 'Find near-duplicates (CLIP)'), icon: 'images', action: () => window.ClipTools?.near?.(image.id) },
+            { label: labelWithScope('modal.addToDataset', 'Add to dataset'), icon: '\u{1F4E6}', action: () => app.addToDatasetMaker?.(actionImageIds, { switchView: true, showToast: true }) },
+            { label: t('gallery.contextFindSimilar', 'Find Similar'), icon: '\u{1F50E}', action: () => app.openSimilarFromImage?.(image.id) },
+            { label: t('gallery.contextNearDuplicates', 'Find near-duplicates (CLIP)'), icon: '\u{1F46F}', action: () => window.ClipTools?.near?.(image.id) },
             actionCount === 2
-                ? { label: t('gallery.contextCompareTwo', 'Compare 2 images (CLIP)'), icon: 'scale', action: () => window.ClipTools?.compare?.(actionImageIds[0], actionImageIds[1]) }
+                ? { label: t('gallery.contextCompareTwo', 'Compare 2 images (CLIP)'), icon: '⚖️', action: () => window.ClipTools?.compare?.(actionImageIds[0], actionImageIds[1]) }
                 : null,
-            { label: t('gallery.contextPromptHelper', 'Prompt Helper'), icon: 'flask', action: () => app.openPromptBuildFromImage?.(image.id) },
-            { label: t('gallery.contextReadMetadata', 'Metadata / Info'), icon: 'book', action: () => app.openReaderFromImage?.(image.id, image.filename || '') },
-            { label: t('gallery.contextReversePrompt', 'Send to Reverse Prompt'), icon: 'wand', action: () => app.openReversePromptFromImage?.(image.id, image.filename || '') },
-            { label: labelWithScope('gallery.contextPrivacy', 'Send to Privacy Tools'), icon: 'eye-off', action: () => app.openPrivacyFromImages?.(actionImageIds) },
-            checkpointFilterValue ? { label: t('gallery.contextFilterCheckpoint', 'Filter by Checkpoint'), icon: 'filter', action: () => {
+            { label: t('gallery.contextPromptHelper', 'Prompt Helper'), icon: '\u{1F9EA}', action: () => app.openPromptBuildFromImage?.(image.id) },
+            { label: t('gallery.contextReadMetadata', 'Metadata / Info'), icon: '\u{1F4D6}', action: () => app.openReaderFromImage?.(image.id, image.filename || '') },
+            { label: t('gallery.contextReversePrompt', 'Send to Reverse Prompt'), icon: '\u{1F504}', action: () => app.openReversePromptFromImage?.(image.id, image.filename || '') },
+            { label: labelWithScope('gallery.contextPrivacy', 'Send to Privacy Tools'), icon: '\u{1F6E1}', action: () => app.openPrivacyFromImages?.(actionImageIds) },
+            checkpointFilterValue ? { label: t('gallery.contextFilterCheckpoint', 'Filter by Checkpoint'), icon: '\u{1F50D}', action: () => {
                 if (app.AppState) {
                     app.updateFilters?.((filters) => {
                         if (!filters.checkpoints.includes(checkpointFilterValue)) {
@@ -122,10 +122,10 @@ Object.assign(window.Gallery, {
                 }
             }} : null,
             { type: 'separator' },
-            { label: t('gallery.contextOpenFolder', 'Open in Folder'), icon: 'folders', action: () => {
+            { label: t('gallery.contextOpenFolder', 'Open in Folder'), icon: '\u{1F4C2}', action: () => {
                 app.API?.openFolder?.(image.id);
             }},
-            { label: t('gallery.contextCopyPath', 'Copy Path'), icon: 'link', action: () => {
+            { label: t('gallery.contextCopyPath', 'Copy Path'), icon: '\u{1F4CB}', action: () => {
                 if (typeof app.copyTextToClipboard === 'function') {
                     app.copyTextToClipboard(image.path || '', t('gallery.pathCopied', 'Path copied'));
                 } else {
@@ -134,8 +134,8 @@ Object.assign(window.Gallery, {
                 }
             }},
             { type: 'separator' },
-            { label: labelWithScope('gallery.contextRemoveFromGallery', 'Remove from Gallery'), icon: 'broom', danger: true, action: () => app.removeGalleryImagesByIds?.(actionImageIds) },
-            { label: labelWithScope('gallery.contextMoveToTrash', 'Move to Trash...'), icon: 'trash', danger: true, action: () => app.deleteGalleryImagesByIds?.(actionImageIds) },
+            { label: labelWithScope('gallery.contextRemoveFromGallery', 'Remove from Gallery'), icon: '\u{1F9F9}', danger: true, action: () => app.removeGalleryImagesByIds?.(actionImageIds) },
+            { label: labelWithScope('gallery.contextMoveToTrash', 'Move to Trash...'), icon: '\u{1F5D1}', danger: true, action: () => app.deleteGalleryImagesByIds?.(actionImageIds) },
         ].filter(Boolean);
 
         items.forEach((item) => {
@@ -152,18 +152,10 @@ Object.assign(window.Gallery, {
             button.className = `context-menu-item${item.danger ? ' is-danger' : ''}`;
             button.setAttribute('role', 'menuitem');
 
-            // Line icons from the page's SVG sprite, the same set the top bar
-            // and action bar use (the menu used to be the one place still
-            // drawing coloured emoji).
             const icon = document.createElement('span');
             icon.className = 'context-menu-icon';
             icon.setAttribute('aria-hidden', 'true');
-            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.setAttribute('class', 'icon');
-            const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-            use.setAttribute('href', `#i-${item.icon}`);
-            svg.appendChild(use);
-            icon.appendChild(svg);
+            icon.textContent = item.icon;
 
             const label = document.createElement('span');
             label.className = 'context-menu-label';

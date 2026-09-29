@@ -243,13 +243,13 @@
     justify-content: space-between;
     gap: 14px;
     padding: 14px;
-    border: 1px solid var(--frame);
-    border-radius: var(--r-panel);
+    border: 1px solid rgba(var(--accent-rgb), 0.10);
+    border-radius: 14px;
     /* Was a two-colour list left over from a gradient; a colour can only be
        the last background layer, so the declaration was dropped and the
        cards had no surface at all. */
     background: var(--surface-1);
-    box-shadow: none;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
 }
 .dataset-import-card-gallery { grid-area: gallery; }
 .dataset-import-card-folder { grid-area: folder; }

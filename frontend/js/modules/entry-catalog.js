@@ -67,32 +67,32 @@
         {
             titleKey: 'catalog.groupCore', titleFallback: 'Core views',
             items: [
-                { icon: '#i-image', nameKey: 'nav.gallery', name: 'Gallery', descKey: 'catalog.gallery', desc: 'Browse, filter, pick, and batch-process every indexed image', run: () => goView('gallery') },
-                { icon: '#i-book', nameKey: 'nav.reader', name: 'Reader', descKey: 'catalog.reader', desc: 'Drop an image to read its prompt, model, and generation parameters', run: () => goView('reader') },
-                { icon: '#i-folders', nameKey: 'nav.sorting', name: 'Organize', descKey: 'catalog.sorting', desc: 'Auto-separate by filters, then hand-sort a batch with WASD keys', run: () => goView('sorting') },
-                { icon: '#i-grid', nameKey: 'nav.censor', name: 'Censor Edit', descKey: 'catalog.censor', desc: 'Brush/pen censoring, AI detection, review conveyor, safe export', run: () => goView('censor') },
-                { icon: '#i-search', nameKey: 'nav.similar', name: 'Find Similar', descKey: 'catalog.similar', desc: 'Search by image, text, or upload; find near-duplicates. Needs CLIP via Prepare.', run: () => goView('similar') },
-                { icon: '#i-package', nameKey: 'nav.dataset', name: 'Dataset', descKey: 'catalog.dataset', desc: 'Build a LoRA training set: captions, Smart Tag, and paired image + .txt export', run: () => goView('dataset') },
+                { icon: '🖼️', nameKey: 'nav.gallery', name: 'Gallery', descKey: 'catalog.gallery', desc: 'Browse, filter, pick, and batch-process every indexed image', run: () => goView('gallery') },
+                { icon: '📖', nameKey: 'nav.reader', name: 'Reader', descKey: 'catalog.reader', desc: 'Drop an image to read its prompt, model, and generation parameters', run: () => goView('reader') },
+                { icon: '🗂️', nameKey: 'nav.sorting', name: 'Organize', descKey: 'catalog.sorting', desc: 'Auto-separate by filters, then hand-sort a batch with WASD keys', run: () => goView('sorting') },
+                { icon: '🔳', nameKey: 'nav.censor', name: 'Censor Edit', descKey: 'catalog.censor', desc: 'Brush/pen censoring, AI detection, review conveyor, safe export', run: () => goView('censor') },
+                { icon: '🔎', nameKey: 'nav.similar', name: 'Find Similar', descKey: 'catalog.similar', desc: 'Search by image, text, or upload; find near-duplicates. Needs CLIP via Prepare.', run: () => goView('similar') },
+                { icon: '📦', nameKey: 'nav.dataset', name: 'Dataset', descKey: 'catalog.dataset', desc: 'Build a LoRA training set: captions, Smart Tag, and paired image + .txt export', run: () => goView('dataset') },
             ],
         },
         {
             titleKey: 'catalog.groupPipelines', titleFallback: 'Pipelines',
             items: [
-                { icon: '#i-target', nameKey: 'entry.missionLoraTitle', name: 'LoRA Dataset', descKey: 'catalog.lora', desc: 'Pick, tag and caption, then export a kohya-ready training set', run: () => enterMission('lora', 'entry-mission-lora') },
-                { icon: '#i-upload', nameKey: 'entry.missionPixivTitle', name: 'Pixiv Set Publishing', descKey: 'catalog.pixiv', desc: 'Pick, censor and rename, then export a ready-to-post set', run: () => enterMission('pixiv', 'entry-mission-pixiv') },
-                { icon: '#i-layers', nameKey: 'entry.missionOrganizeTitle', name: 'Batch Organize', descKey: 'catalog.organize', desc: 'Move a mountain of images into clean folders, with undo', run: () => enterMission('organize', 'entry-mission-organize') },
+                { icon: '🎯', nameKey: 'entry.missionLoraTitle', name: 'LoRA Dataset', descKey: 'catalog.lora', desc: 'Pick, tag and caption, then export a kohya-ready training set', run: () => enterMission('lora', 'entry-mission-lora') },
+                { icon: '📤', nameKey: 'entry.missionPixivTitle', name: 'Pixiv Set Publishing', descKey: 'catalog.pixiv', desc: 'Pick, censor and rename, then export a ready-to-post set', run: () => enterMission('pixiv', 'entry-mission-pixiv') },
+                { icon: '🧺', nameKey: 'entry.missionOrganizeTitle', name: 'Batch Organize', descKey: 'catalog.organize', desc: 'Move a mountain of images into clean folders, with undo', run: () => enterMission('organize', 'entry-mission-organize') },
             ],
         },
         {
             titleKey: 'catalog.groupTools', titleFallback: 'Tools',
             items: [
-                { icon: '#i-eye-off', nameKey: 'tools.obfuscation', name: 'Privacy Tools', descKey: 'catalog.obfuscation', desc: 'Obfuscate images for upload sites and restore them back (inside Reader)', run: () => openReaderTool('obfuscation') },
-                { icon: '#i-broom', nameKey: 'dup.navTitle', name: 'Duplicate Cleanup', descKey: 'catalog.dup', desc: 'Scan the whole library for duplicates and clean them in one pass', run: () => { goView('gallery'); window.requestAnimationFrame(() => clickWhenReady('nav-tools-dup-cleaner', 10)); } },
+                { icon: '🛡️', nameKey: 'tools.obfuscation', name: 'Privacy Tools', descKey: 'catalog.obfuscation', desc: 'Obfuscate images for upload sites and restore them back (inside Reader)', run: () => openReaderTool('obfuscation') },
+                { icon: '🧹', nameKey: 'dup.navTitle', name: 'Duplicate Cleanup', descKey: 'catalog.dup', desc: 'Scan the whole library for duplicates and clean them in one pass', run: () => { goView('gallery'); window.requestAnimationFrame(() => clickWhenReady('nav-tools-dup-cleaner', 10)); } },
                 { icon: '#i-wand', nameKey: 'nav.reverse', name: 'Reverse Prompt', descKey: 'catalog.reverse', desc: 'Drop one image. If the file stored a prompt, that record is shown first; you can still infer from pixels to compare.', run: () => goView('reverse') },
-                { icon: '#i-flask', nameKey: 'nav.promptlab', name: 'Prompt Helper', descKey: 'catalog.promptlab', desc: 'Build prompts from your library: weights, templates, negatives', run: () => goView('promptlab') },
-                { icon: '#i-brush', nameKey: 'nav.artist', name: 'Style Finder', descKey: 'catalog.artist', desc: 'Identify artists with a similar style', run: () => goView('artist') },
-                { icon: '#i-cpu', nameKey: 'entry.tileModels', name: 'Model Center', descKey: 'catalog.models', desc: 'Download and manage the AI models used by tagging, similarity, artist, censor, and captions', run: () => openSettingsTab('models') },
-                { icon: '#i-settings', nameKey: 'settings.tabGeneral', name: 'Settings', descKey: 'catalog.settings', desc: 'Sound, entry page, UI scale, language, disk cache, updates', run: () => openSettingsTab('general') },
+                { icon: '🧪', nameKey: 'nav.promptlab', name: 'Prompt Helper', descKey: 'catalog.promptlab', desc: 'Build prompts from your library: weights, templates, negatives', run: () => goView('promptlab') },
+                { icon: '🖌️', nameKey: 'nav.artist', name: 'Style Finder', descKey: 'catalog.artist', desc: 'Identify artists with a similar style', run: () => goView('artist') },
+                { icon: '📦', nameKey: 'entry.tileModels', name: 'Model Center', descKey: 'catalog.models', desc: 'Download and manage the AI models used by tagging, similarity, artist, censor, and captions', run: () => openSettingsTab('models') },
+                { icon: '⚙️', nameKey: 'settings.tabGeneral', name: 'Settings', descKey: 'catalog.settings', desc: 'Sound, entry page, UI scale, language, disk cache, updates', run: () => openSettingsTab('general') },
             ],
         },
     ];
@@ -106,8 +106,8 @@
         icon.className = 'catalog-icon';
         icon.setAttribute('aria-hidden', 'true');
         if (String(item.icon || '').startsWith('#i-')) {
-            // Every entry names a sprite symbol, the same line icons the top
-            // bar uses; a bare glyph still falls through to textContent.
+            // Graphite entries name a sprite symbol. The legacy emoji rows below
+            // still take the textContent path and are retired separately.
             const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             svg.setAttribute('class', 'icon');
             svg.setAttribute('aria-hidden', 'true');

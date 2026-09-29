@@ -496,7 +496,7 @@ function finishSorting() {
 
     // Return to setup
     hideSortInterfaces();
-    $('#sort-setup').style.display = '';
+    $('#sort-setup').style.display = 'block';
 
     window.App.API.delete('/api/sort/session').catch(e => {
         if (window.Logger) Logger.warn('Failed to clean up sort session:', e);
@@ -518,7 +518,7 @@ function exitSorting() {
     updateHistoryControlState({ undo_available: false, redo_available: false });
 
     hideSortInterfaces();
-    $('#sort-setup').style.display = '';
+    $('#sort-setup').style.display = 'block';
 
     const remaining = Math.max(0, ManualSortState.total - ManualSortState.index);
     if (remaining > 0) {

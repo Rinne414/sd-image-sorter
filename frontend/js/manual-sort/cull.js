@@ -299,7 +299,7 @@ async function finishCullSorting(result) {
     window.AudioManager?.play('finish');
 
     hideSortInterfaces();
-    $('#sort-setup').style.display = '';
+    $('#sort-setup').style.display = 'block';
 
     const map = ManualSortState.cullDecisions || new Map();
     let keptCount = 0;
