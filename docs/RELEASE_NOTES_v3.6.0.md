@@ -60,11 +60,11 @@ Full CI on the final tree (2026-09-29): lock freshness, runtime dependencies, se
 
 | Asset | SHA-256 |
 |---|---|
-| `sd-image-sorter-v3.6.0-windows-portable.zip` | `ea8d3fb81d553601dd39d817beb791785b49ad21ebac713adeb6f27f80f551e0` |
-| `sd-image-sorter-v3.6.0-app-patch.zip` | `765e807c9293a27756524bc6f16f0c7cf0cb8bc2f57f77d796c1f22394f78084` |
-| `sd-image-sorter-v3.6.0-linux.tar.gz` | `f52d33159c48dc4dd18bdf5bc7dd2767ae32e92bebfef99963a2c4ee98c8bd3b` |
-| `sd-image-sorter-v3.6.0-linux-portable-x86_64.tar.gz` | `c13d789c7221ed05d4a91965e79a2cd21a55ad3022ed0c67fb402dde453b9f21` |
-| `sd-image-sorter-v3.6.0-linux-portable-aarch64.tar.gz` | `34dfdddf41ac0888ce6aedd568c9d7b0a779a41cea06c796dbe5c0dfb11ab458` |
-| `sd-image-sorter-v3.6.0-release-manifest.json` | `c42d4d49d7a944b298d65f57152674c6807889fdf55632073678b561d97f6f52` |
+| `sd-image-sorter-v3.6.0-windows-portable.zip` | `84b147a60ace19453c7be93bb4b535393d4c9333b722062d4e96886cd4f5ccf9` |
+| `sd-image-sorter-v3.6.0-app-patch.zip` | `b17596b22694a709559482c4d6da20530726daa9fddca8a93d3e6e1c34057cb9` |
+| `sd-image-sorter-v3.6.0-linux.tar.gz` | `ae18b6d071e8ea3f45c908e893b7c5e8c4456aa1978687fcd04b03d99957bc8b` |
+| `sd-image-sorter-v3.6.0-linux-portable-x86_64.tar.gz` | `9e6a777188ba568cc28ec87023529eeab0696e8108278119dc05e7e0ee22855a` |
+| `sd-image-sorter-v3.6.0-linux-portable-aarch64.tar.gz` | `28da87d8b356371eb853a44e0135bd5cccca838b2da49542ae5204e41cc00c54` |
+| `sd-image-sorter-v3.6.0-release-manifest.json` | `c76d753d6f4bdf9b86867fc0a010c7d5d18b772da11b0ec849657ea300c65a2a` |
 
 The manifest contains the five archive checksums; its own checksum is recorded above. / manifest 内含五个归档校验和，其自身校验和记录于上表。
