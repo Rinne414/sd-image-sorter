@@ -1847,9 +1847,11 @@ textarea:focus,
     top: 0;
     right: 0;
     bottom: 0;
-    width: 28px;
+    width: 36px;
     pointer-events: none;
-    background: transparent;
+    /* Fades the last chip into the toolbar so a cut chip reads as "more to
+       the right", not as a layout fault. nav-toolbar.js drives the opacity. */
+    background: linear-gradient(to right, transparent, var(--toolbar-bg, var(--surface-1)));
     opacity: var(--generator-overflow-end, 0);
     transition: opacity 120ms ease;
     z-index: 2;
