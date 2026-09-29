@@ -355,6 +355,29 @@ test('tag autocomplete suggests from the library and accepts via keyboard', asyn
   await expect(page.locator('#entry-page')).toBeHidden()
 })
 
+test('a half-typed tag: value is not applied until it is a real tag', async ({ page }) => {
+  await openGallery(page)
+  const input = page.locator('#gallery-search-input')
+  const suggest = page.locator('#gallery-search-suggest')
+  const partial = FIXTURE_TAG.slice(0, -4)
+
+  await input.click()
+  await input.pressSequentially(`tag:${partial}`, { delay: 20 })
+  await expect(suggest).toBeVisible({ timeout: 5000 })
+  // Longer than the apply debounce: the half word must not reach the store
+  // (it used to, emptying the gallery and toasting "added tag:…" mid-word).
+  await page.waitForTimeout(900)
+  expect((await filterState(page)).tags).not.toContain(partial)
+  expect((await filterState(page)).tags).not.toContain(FIXTURE_TAG)
+
+  // Finishing the word makes it a real tag: applied without Enter.
+  await input.pressSequentially(FIXTURE_TAG.slice(-4), { delay: 20 })
+  await expect.poll(async () => (await filterState(page)).tags).toContain(FIXTURE_TAG)
+
+  await page.locator('#gallery-search-clear').click()
+  await expect.poll(async () => (await filterState(page)).tags.includes(FIXTURE_TAG)).toBe(false)
+})
+
 test('help button opens the syntax doc; filter button opens the filter modal', async ({ page }) => {
   await openGallery(page)
 

@@ -390,6 +390,7 @@
                 .slice(0, SUGGEST_LIMIT)
                 .map((value) => ({ value, count: null }));
             renderSuggest(items, ctx);
+            if (typedValueIsKnown(items, ctx)) scheduleApply(input.value);
             return;
         }
 
@@ -407,10 +408,32 @@
             // The caret may have moved while the request was in flight.
             const fresh = window.GallerySearchQuery.suggestionContext(input.value, input.selectionStart);
             if (!fresh || fresh.prefix !== ctx.prefix || fresh.key !== ctx.key) return;
-            renderSuggest(normalizeLibraryItems(data).slice(0, SUGGEST_LIMIT), fresh);
+            const items = normalizeLibraryItems(data).slice(0, SUGGEST_LIMIT);
+            renderSuggest(items, fresh);
+            if (typedValueIsKnown(items, fresh)) scheduleApply(input.value);
         } catch (e) {
             if (e && e.name !== 'AbortError') hideSuggest();
         }
+    }
+
+    function scheduleApply(value) {
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+            searchTimer = null;
+            applySearch(value);
+        }, SEARCH_DEBOUNCE_MS);
+    }
+
+    /** The key:value token the caret is inside, when it takes suggestions. */
+    function midTokenContext(input) {
+        if (!window.GallerySearchQuery) return null;
+        return window.GallerySearchQuery.suggestionContext(input.value, input.selectionStart);
+    }
+
+    /** Typed value equals a suggestion (case-insensitive) -> the token is complete. */
+    function typedValueIsKnown(items, ctx) {
+        const prefix = String(ctx && ctx.prefix || '').toLowerCase();
+        return !!prefix && items.some((item) => String(item.value).toLowerCase() === prefix);
     }
 
     function scheduleSuggest() {
@@ -517,15 +540,18 @@
                 applySearch(input.value);
             }
         });
+        // A value the caret is still inside (tag:blu|) is not applied while it
+        // is being typed: the exact tag "blu" matches nothing, so the gallery
+        // emptied out and toasted "added tag:blu" mid-word. It applies once
+        // the token is complete: a space, Enter, an accepted suggestion, or a
+        // typed value that IS one of the suggestions (refreshSuggest).
         input.addEventListener('input', () => {
             syncClearButton(input, clearBtn);
             renderSearchPreview(input.value, parseQuery(input.value));
             scheduleSuggest();
-            if (searchTimer) clearTimeout(searchTimer);
-            searchTimer = setTimeout(() => {
-                searchTimer = null;
-                applySearch(input.value);
-            }, SEARCH_DEBOUNCE_MS);
+            if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
+            if (midTokenContext(input)) return;
+            scheduleApply(input.value);
         });
         // Caret moves without input (click / arrow keys) re-anchor suggestions.
         input.addEventListener('click', scheduleSuggest);
