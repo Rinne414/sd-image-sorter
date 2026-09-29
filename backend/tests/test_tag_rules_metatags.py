@@ -12,7 +12,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from tag_rules import categorize_tag  # noqa: E402
+from tag_rules import categorize_tag, strip_prompt_emphasis  # noqa: E402
 
 CATEGORIES = {
     "character", "artist", "outfit", "pose", "body", "expression",
@@ -377,3 +377,38 @@ def test_every_result_is_a_known_category():
     ]
     for tag in sample:
         assert categorize_tag(tag) in CATEGORIES
+
+
+# Prompt tags arrive with A1111/NovelAI emphasis still on them. Before this,
+# "(masterpiece:1.2)", "((smile))" and "(1girl:1.3)" all fell to "unknown",
+# so the reader's "tags by category" view filed most weighted tags nowhere.
+@pytest.mark.parametrize(
+    "weighted, plain",
+    [
+        ("(masterpiece:1.2)", "masterpiece"),
+        ("((masterpiece))", "masterpiece"),
+        ("[masterpiece]", "masterpiece"),
+        ("{{masterpiece}}", "masterpiece"),
+        ("(smile:1.1)", "smile"),
+        ("(1girl:1.3)", "1girl"),
+        ("( standing : 0.8 )", "standing"),
+        ("((best quality:1.2))", "best quality"),
+        ("1.2::best quality::", "best quality"),
+        ("-1::smile ::", "smile"),
+        ("(artist:foo:1.2)", "artist:foo"),
+    ],
+)
+def test_prompt_emphasis_does_not_change_the_category(weighted, plain):
+    assert categorize_tag(weighted) == categorize_tag(plain)
+    assert categorize_tag(weighted) != "unknown"
+
+
+def test_brackets_that_belong_to_the_tag_are_kept():
+    # Only a bracket pair that wraps the WHOLE tag is emphasis.
+    assert strip_prompt_emphasis("(o)_(o)") == "(o)_(o)"
+    assert strip_prompt_emphasis(":)") == ":)"
+    # A1111 escapes literal parentheses; the booru tag has plain ones.
+    assert strip_prompt_emphasis("hatsune miku \\(cosplay\\)") == "hatsune miku (cosplay)"
+    assert strip_prompt_emphasis("(saber \\(fate\\):1.1)") == "saber (fate)"
+    # A colon suffix outside emphasis brackets is part of the tag.
+    assert strip_prompt_emphasis("score:8") == "score:8"

@@ -331,6 +331,49 @@ def _fallback_known_booru_general_category(
     return "meta"
 
 
+_EMPHASIS_CLOSERS = {"(": ")", "[": "]", "{": "}"}
+_EMPHASIS_WEIGHT = re.compile(r"^(?P<body>.+?)\s*:\s*-?\d+(?:\.\d+)?$")
+_NAI_WEIGHT_PREFIX = re.compile(r"^-?\d+(?:\.\d+)?::")
+_NAI_WEIGHT_SUFFIX = re.compile(r"\s*::$")
+
+
+def _brackets_wrap_whole(text: str) -> bool:
+    """True when text[0] is closed by text[-1], not by an earlier bracket."""
+    opener, closer = text[0], _EMPHASIS_CLOSERS[text[0]]
+    depth = 0
+    for index, char in enumerate(text):
+        if char == "\\":
+            continue
+        if index > 0 and text[index - 1] == "\\":
+            continue
+        if char == opener:
+            depth += 1
+        elif char == closer:
+            depth -= 1
+            if depth == 0:
+                return index == len(text) - 1
+    return False
+
+
+def strip_prompt_emphasis(tag: str) -> str:
+    """Return the tag inside A1111 / NovelAI emphasis syntax.
+
+    ``(tag:1.2)``, ``((tag))``, ``[tag]``, ``{{tag}}`` and ``1.2::tag::`` all
+    name ``tag``. Only a bracket pair wrapping the whole tag counts, so tags
+    such as ``(o)_(o)`` keep their brackets; A1111 escaped parentheses become
+    the literal ones booru tags use.
+    """
+    text = str(tag).strip()
+    text = _NAI_WEIGHT_SUFFIX.sub("", _NAI_WEIGHT_PREFIX.sub("", text)).strip()
+    while len(text) >= 2 and text[0] in _EMPHASIS_CLOSERS and _brackets_wrap_whole(text):
+        text = text[1:-1].strip()
+        weighted = _EMPHASIS_WEIGHT.match(text)
+        if weighted:
+            text = weighted.group("body").strip()
+    text = text.replace("\\(", "(").replace("\\)", ")")
+    return text or str(tag).strip()
+
+
 def categorize_tag(tag: str) -> str:
     """
     Categorize a single tag into a semantic category.
@@ -338,6 +381,8 @@ def categorize_tag(tag: str) -> str:
     Returns one of: character, artist, outfit, pose, body, expression,
     background, action, style, quality, meta, rating, angle, unknown
     """
+    # Prompt tags keep their emphasis syntax; the category is the tag's.
+    tag = strip_prompt_emphasis(tag)
     tag_lower = tag.lower().replace(" ", "_")
     clean_tag = tag_lower.replace("_(", "(").replace(")_", ")")
     clean_tokens = {

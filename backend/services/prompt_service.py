@@ -10,7 +10,7 @@ from fastapi import HTTPException
 
 import database as db
 from prompt_generator import get_generator as default_get_generator
-from tag_rules import categorize_tags_batch
+from tag_rules import categorize_tags_batch, strip_prompt_emphasis
 
 
 _RECIPE_TOKEN_EXCLUDES = (
@@ -146,7 +146,7 @@ def _normalize_prompt_resource_ref(value: Any) -> str:
 
 
 def _normalize_tag_lookup_key(value: Any) -> str:
-    return str(value or "").strip().lower().replace(" ", "_")
+    return strip_prompt_emphasis(str(value or "")).lower().replace(" ", "_")
 
 
 class PromptService:

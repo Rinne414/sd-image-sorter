@@ -81,13 +81,15 @@ class TestPromptsRouter:
 
         response = test_client.post(
             "/api/prompts/categorize",
-            json=["school uniform", "standing"],
+            json=["school uniform", "standing", "(school uniform:1.2)"],
         )
 
         assert response.status_code == 200
         results = {item["tag"]: item["category"] for item in response.json()["results"]}
         assert results["school uniform"] == "style"
         assert results["standing"] == "pose"
+        # The user's choice follows the tag into weighted prompt syntax.
+        assert results["(school uniform:1.2)"] == "style"
 
     def test_generate_prompt_uses_generator_output(self, test_client, monkeypatch):
         from routers import prompts as prompts_router
