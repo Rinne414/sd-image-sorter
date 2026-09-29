@@ -2826,6 +2826,7 @@ window.I18nLang_zhCN = {
     'models.installedVariants': '已安装变体',
     'models.path': '当前位置',
     'models.runtimePath': '运行文件',
+    'models.location': '文件位置',
     'models.source': '下载来源',
     'models.variant': '版本',
     'models.groupFallback': '功能',

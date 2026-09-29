@@ -2579,6 +2579,18 @@ textarea:focus,
     word-break: break-all;
 }
 
+/* Paths fold behind one line (hover names them); open shows them in full. */
+.model-card-location summary {
+    width: fit-content;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.model-card-location[open] summary {
+    margin-bottom: 4px;
+}
+
 .model-card-setup-steps {
     margin-top: 4px;
 }

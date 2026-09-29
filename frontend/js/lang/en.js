@@ -2650,6 +2650,7 @@ window.I18nLang_en = {
     'models.installedVariants': 'Installed variants',
     'models.path': 'Current path',
     'models.runtimePath': 'Runtime files',
+    'models.location': 'File location',
     'models.source': 'Source',
     'models.variant': 'Variant',
     'models.groupFallback': 'Feature',

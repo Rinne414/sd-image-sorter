@@ -89,6 +89,18 @@ function renderModelManager(models = []) {
         const variantOptions = Array.isArray(model.variants) ? model.variants.map((variant) => `
             <option value="${escapeHtml(variant)}"${variant === defaultVariant ? ' selected' : ''}>${escapeHtml(variant)}</option>
         `).join('') : '';
+        // Full paths wrapped to three lines on every card and pushed the card's
+        // action below the fold; they are rarely needed, so they fold away.
+        const locationLines = [
+            model.path ? [appT('models.path', 'Current path'), model.path] : null,
+            model.runtime_path ? [appT('models.runtimePath', 'Runtime files'), model.runtime_path] : null,
+        ].filter(Boolean);
+        const locationBlock = locationLines.length ? `
+                <details class="model-card-location">
+                    <summary title="${escapeHtml(locationLines.map(([, value]) => value).join('\n'))}">${escapeHtml(appT('models.location', 'File location'))}</summary>
+                    ${locationLines.map(([label, value]) => `<div class="model-card-path">${escapeHtml(label)}:<code>${escapeHtml(value)}</code></div>`).join('')}
+                </details>
+            ` : '';
         const installedVariants = Array.isArray(model.installed_variants) && model.installed_variants.length
             ? `<div class="model-card-hint">${escapeHtml(appT('models.installedVariants', 'Installed variants'))}: ${escapeHtml(model.installed_variants.join(', '))}</div>`
             : '';
@@ -112,8 +124,7 @@ function renderModelManager(models = []) {
                     <span class="model-card-status ${statusClass}">${escapeHtml(statusLabel)}</span>
                 </div>
                 <div class="model-card-message">${escapeHtml(model.message_key ? appT(model.message_key, model.message || '', model.message_params || {}) : (model.message || ''))}</div>
-                ${model.path ? `<div class="model-card-path">${escapeHtml(appT('models.path', 'Current path'))}:<code>${escapeHtml(model.path)}</code></div>` : ''}
-                ${model.runtime_path ? `<div class="model-card-path">${escapeHtml(appT('models.runtimePath', 'Runtime files'))}:<code>${escapeHtml(model.runtime_path)}</code></div>` : ''}
+                ${locationBlock}
                 ${installedVariants}
                 ${sourceOptions ? `
                     <label class="model-card-hint">

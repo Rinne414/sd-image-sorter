@@ -1011,4 +1011,28 @@ test.describe('Model Manager', () => {
     await expect(page.locator('.model-card-status.is-downloaded')).toHaveCount(0)
     await expect(page.getByText(/^Downloaded$/)).toHaveCount(0)
   })
+
+  // Full file paths wrapped to three lines on every card and pushed Prepare /
+  // Recheck below the fold at 1366x768. They are rarely needed, so they fold
+  // behind one line that still names the path on hover.
+  test('model file locations fold behind a one-line disclosure', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await openModelManager(page)
+
+    const locations = page.locator('.model-card .model-card-location')
+    expect(await locations.count(), 'cards that report a path').toBeGreaterThan(0)
+    const first = locations.first()
+    await expect(first).not.toHaveAttribute('open', '')
+    await expect(first.locator('.model-card-path').first()).toBeHidden()
+
+    const path = await first.locator('.model-card-path code').first().textContent()
+    await expect(first.locator('summary')).toHaveAttribute('title', new RegExp(escapeRegExp(path || '')))
+
+    await first.locator('summary').click()
+    await expect(first.locator('.model-card-path').first()).toBeVisible()
+  })
 })
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
