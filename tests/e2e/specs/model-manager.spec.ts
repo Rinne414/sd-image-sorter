@@ -1026,6 +1026,17 @@ test.describe('Model Manager', () => {
       await expect(page.locator('#model-manager-title')).toHaveText(title)
       await expect(header.locator('.modal-description')).toHaveCount(0)
     }
+
+    // Both the tab bar and Close are pinned while the dialog scrolls; the bar
+    // must end left of the button instead of sliding under it.
+    await page.locator('[data-settings-tab="models"]').click()
+    await page.evaluate(() => { document.querySelector('#model-manager-modal .modal-content')!.scrollTop = 400 })
+    const gap = await page.evaluate(() => {
+      const tabs = document.getElementById('settings-modal-tabs')!.getBoundingClientRect()
+      const close = document.getElementById('model-manager-close')!.getBoundingClientRect()
+      return Math.round(close.left - tabs.right)
+    })
+    expect(gap, 'space between the tab bar and Close').toBeGreaterThanOrEqual(0)
   })
 
   // Full file paths wrapped to three lines on every card and pushed Prepare /
