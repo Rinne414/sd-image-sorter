@@ -3725,3 +3725,71 @@ li > .icon {
 #app :is(.gen-tab, .gallery-chip, .nav-library-chip, .aspect-quick-btn) {
     border-radius: var(--r-ctl);
 }
+
+/* ==========================================================================
+   Type v2 (2026-09-30) — one voice per role.
+
+   Screen titles ran from 14px to 30px depending on who built the page, and
+   section titles were barely bigger than labels. Now:
+     screen title   20 / 600  (Auto-Separate already had it; the rest follow)
+     dialog title   16 / 600
+     section title  13 / 600, white
+     label          12 / 500, secondary grey
+   Size and weight carry the hierarchy; colour stays neutral.
+   ========================================================================== */
+
+#app :is(
+    .view-title,
+    .page-title,
+    .workspace-title,
+    #view-autosep .panel-title,
+    #view-manual .setup-title,
+    #view-reader .reader-tools-title,
+    #view-dataset .dataset-title,
+    #view-similar .similar-header h3
+) {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 1.25;
+    color: var(--text);
+}
+
+:is(#app, body > .modal) :is(
+    .modal-header h2,
+    .modal-header h3,
+    .modal-title,
+    .guide-modal-title,
+    #filter-modal-title,
+    #tag-modal-title,
+    #model-manager-title
+) {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0;
+    color: var(--text);
+}
+
+:is(#app, body > .modal) :is(
+    .panel-title,
+    .sidebar-title,
+    .results-header h3,
+    .censor-side-card-title,
+    .sidebar-title-v2,
+    .reverse-card-title,
+    .promptlab-browser-header h4,
+    .promptlab-builder-header h4,
+    .promptlab-output-header h4,
+    .artist-controls h3,
+    .artist-results h3,
+    .artist-details h3,
+    .filter-panel h4,
+    .promptlab-stats-col h4,
+    .dataset-card-title,
+    .dataset-pane-head strong
+):not(#view-autosep .autosep-shell-title-block .panel-title) {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0;
+    color: var(--text);
+}
