@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from tag_rules import (
     categorize_tag,
+    strip_prompt_emphasis,
     get_exclusion_targets,
     BUILTIN_TAG_SETS,
     BUILTIN_EXCLUSION_RULES,
@@ -321,7 +322,8 @@ class PromptGenerator:
 
     def _category_of(self, tag: str) -> str:
         """A tag's category, honouring the user's own category choices."""
-        return self._category_overrides.get(self._normalize_lookup_key(tag)) or categorize_tag(tag)
+        key = self._normalize_lookup_key(strip_prompt_emphasis(tag))
+        return self._category_overrides.get(key) or categorize_tag(tag)
 
     def _exclusions(self, active_tag_set: Set[str], rules: List[dict]) -> Set[str]:
         """Tags the rules exclude now; a category target covers its whole category."""

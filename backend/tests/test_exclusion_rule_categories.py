@@ -40,6 +40,13 @@ def test_a_category_target_waits_for_its_condition():
     assert "smile" not in excluded
 
 
+def test_the_users_category_choice_follows_a_weighted_tag():
+    generator = PromptGenerator()
+    generator._category_overrides = {"my_custom_face": "expression"}
+
+    assert generator._category_of("(my custom face:1.2)") == "expression"
+
+
 def test_a_tag_moved_into_the_category_is_excluded_too():
     excluded = get_exclusion_targets(
         {"from_behind"},

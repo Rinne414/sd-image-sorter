@@ -332,8 +332,8 @@ def _fallback_known_booru_general_category(
 
 
 _EMPHASIS_CLOSERS = {"(": ")", "[": "]", "{": "}"}
-_EMPHASIS_WEIGHT = re.compile(r"^(?P<body>.+?)\s*:\s*-?\d+(?:\.\d+)?$")
-_NAI_WEIGHT_PREFIX = re.compile(r"^-?\d+(?:\.\d+)?::")
+_EMPHASIS_WEIGHT = re.compile(r"^(?P<body>.+?)\s*:\s*-?(?:\d+(?:\.\d+)?|\.\d+)$")
+_NAI_WEIGHT_PREFIX = re.compile(r"^-?(?:\d+(?:\.\d+)?|\.\d+)::")
 _NAI_WEIGHT_SUFFIX = re.compile(r"\s*::$")
 
 
@@ -370,7 +370,10 @@ def strip_prompt_emphasis(tag: str) -> str:
         weighted = _EMPHASIS_WEIGHT.match(text)
         if weighted:
             text = weighted.group("body").strip()
-    text = text.replace("\\(", "(").replace("\\)", ")")
+    # A1111 escapes come in pairs; a lone backslash belongs to the tag
+    # (Danbooru's "\\(^o^)/").
+    if "\\(" in text and "\\)" in text:
+        text = text.replace("\\(", "(").replace("\\)", ")")
     return text or str(tag).strip()
 
 

@@ -396,6 +396,7 @@ def test_every_result_is_a_known_category():
         ("1.2::best quality::", "best quality"),
         ("-1::smile ::", "smile"),
         ("(artist:foo:1.2)", "artist:foo"),
+        ("(smile:.5)", "smile"),
     ],
 )
 def test_prompt_emphasis_does_not_change_the_category(weighted, plain):
@@ -412,3 +413,5 @@ def test_brackets_that_belong_to_the_tag_are_kept():
     assert strip_prompt_emphasis("(saber \\(fate\\):1.1)") == "saber (fate)"
     # A colon suffix outside emphasis brackets is part of the tag.
     assert strip_prompt_emphasis("score:8") == "score:8"
+    # A real tag with one literal backslash is not an A1111 escape pair.
+    assert strip_prompt_emphasis("\\(^o^)/") == "\\(^o^)/"
