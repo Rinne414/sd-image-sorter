@@ -968,7 +968,7 @@ def test_core_requirements_exclude_heavy_ai_packages():
         for line in onnxruntime_lines
     )
     assert any(
-        line.startswith("onnxruntime==1.20.1") and 'sys_platform == "win32"' in line
+        line.startswith("onnxruntime==1.21.0") and 'sys_platform == "win32"' in line
         for line in onnxruntime_lines
     )
     assert any(
@@ -1056,7 +1056,7 @@ def test_dev_requirements_keep_platform_specific_wheels_guarded():
         for line in normalized_lines
     )
     assert any(
-        line.startswith("onnxruntime==1.20.1")
+        line.startswith("onnxruntime==1.21.0")
         and 'python_full_version < "3.13"' in line
         and 'sys_platform == "win32"' in line
         for line in normalized_lines

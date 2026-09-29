@@ -138,6 +138,24 @@ class TestDetectionErrorMapper:
         )
         assert exc.status_code == 503
 
+    def test_opset_mismatch_names_both_numbers_and_the_way_out(self):
+        # onnxruntime 1.20.1 refusing a PyTorch 2.9 / Ultralytics export (opset 22).
+        raw = (
+            "[ONNXRuntimeError] : 1 : FAIL : Load model from C:\\m\\wenaka_yolov8s-seg.onnx failed:"
+            "D:\\a\\_work\\1\\s\\onnxruntime\\core/graph/model_load_utils.h:56 "
+            "onnxruntime::model_load_utils::ValidateOpsetForDomain ONNX Runtime only *guarantees* "
+            "support for models stamped with official released onnx opset versions. Opset 22 is under "
+            "development and support for this is limited. The operator schemas and or other functionality "
+            "may change before next ONNX release and in this case ONNX Runtime will not guarantee backward "
+            "compatibility. Current official support for domain ai.onnx is till opset 21."
+        )
+        exc = CensorService._detection_error_to_http(RuntimeError(raw))
+        assert exc.status_code == 503
+        assert "opset 22" in exc.detail and "opset 21" in exc.detail
+        assert "opset=17" in exc.detail
+        assert "ValidateOpsetForDomain" not in exc.detail
+        assert "最多只能读 opset 21" in exc.detail
+
     def test_unknown_error_stays_500_but_echoes_cause(self):
         # The fallback is no longer cause-free: the real message survives.
         exc = CensorService._detection_error_to_http(ValueError("some weird failure"))

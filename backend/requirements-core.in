@@ -5,11 +5,16 @@ uvloop>=0.19.0; sys_platform != "win32"
 # onnxruntime: Python 3.12 stays on the existing tested pins. Python 3.13 uses
 # current platform wheels. macOS pins 1.23.2, the newest release with both
 # x86_64 and arm64 cp313 wheels; newer releases are arm64-only.
+# Windows CPU moved 1.20.1 -> 1.21.0 (2026-09-29): 1.20.1 reads ONNX opset 21
+# at most and refused every YOLO exported by current PyTorch/Ultralytics
+# (opset 22), so the censor's YOLO silently fell back to NudeNet only. 1.21.0
+# is the same version the Windows GPU package already pins, and loads those
+# files (checked on the owner's models).
 onnxruntime==1.25.0; sys_platform == "linux" and python_version < "3.13"
 onnxruntime>=1.20.0; sys_platform == "linux" and python_version >= "3.13"
 onnxruntime==1.19.2; sys_platform == "darwin" and python_version < "3.13"
 onnxruntime==1.23.2; sys_platform == "darwin" and python_version >= "3.13"
-onnxruntime==1.20.1; sys_platform == "win32" and python_version < "3.13"
+onnxruntime==1.21.0; sys_platform == "win32" and python_version < "3.13"
 onnxruntime>=1.20.0; sys_platform == "win32" and python_version >= "3.13"
 # Security floor: Pillow 12.3.0 fixes multiple untrusted-image parsing issues.
 Pillow>=12.3.0

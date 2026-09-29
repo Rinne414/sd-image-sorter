@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import traceback
 from contextlib import contextmanager
 from pathlib import Path
@@ -172,7 +173,16 @@ class _DetectionMixin:
         return len(points) >= 3
 
     @staticmethod
-    def _detection_error_to_http(exc: Exception) -> HTTPException:
+    def _onnxruntime_version() -> str:
+        try:
+            import onnxruntime  # type: ignore
+
+            return str(getattr(onnxruntime, "__version__", "?"))
+        except Exception:
+            return "?"
+
+    @classmethod
+    def _detection_error_to_http(cls, exc: Exception) -> HTTPException:
         """Map an unexpected detection failure to a categorized, actionable HTTP error.
 
         Distinguishes the three causes users can actually act on instead of a
@@ -216,6 +226,28 @@ class _DetectionMixin:
                     "A required detection dependency is missing. Install it and "
                     f"restart the app, then retry. ({message}) / "
                     f"缺少检测所需的依赖，请安装后重启应用再重试。（{message}）"
+                ),
+            )
+
+        # (1b) The model was exported for a newer ONNX opset than the installed
+        # ONNX Runtime reads (current PyTorch/Ultralytics export opset 22;
+        # onnxruntime <= 1.20 stops at 21). Name the two numbers and the way out.
+        if "opset" in lowered and ("validateopsetfordomain" in lowered or "official support" in lowered):
+            exported = re.search(r"opset\s+(\d+)\s+is under development", lowered)
+            supported = re.search(r"till opset\s+(\d+)", lowered)
+            exported_text = exported.group(1) if exported else "?"
+            supported_text = supported.group(1) if supported else "?"
+            runtime_version = cls._onnxruntime_version()
+            return HTTPException(
+                status_code=503,
+                detail=(
+                    f"This model was exported for ONNX opset {exported_text}, but the installed "
+                    f"ONNX Runtime {runtime_version} reads opset {supported_text} at most. Update "
+                    "onnxruntime (Model Center > Prepare the GPU runtime, or pip install -U onnxruntime) "
+                    "or re-export the model with a lower opset (ultralytics: opset=17). / "
+                    f"这个模型是按 ONNX opset {exported_text} 导出的，而已安装的 ONNX Runtime {runtime_version} "
+                    f"最多只能读 opset {supported_text}。请更新 onnxruntime（模型中心 > 准备 GPU 运行库，"
+                    "或 pip install -U onnxruntime），或用更低的 opset 重新导出模型（ultralytics: opset=17）。"
                 ),
             )
 
