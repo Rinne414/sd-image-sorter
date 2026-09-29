@@ -368,9 +368,9 @@ async function pollAutosepMoveProgress(expectedTotal, destination) {
                             icon: 'i-folders',
                             title: _formatAutoSepI18n('flow.sortDoneTitle', 'Sorting done. What next?'),
                             actions: [
-                                { icon: '🔳', label: _formatAutoSepI18n('nav.censor', 'Censor Edit'), action: 'view:censor' },
-                                { icon: '📦', label: _formatAutoSepI18n('nav.dataset', 'Dataset'), action: 'view:dataset' },
-                                { icon: '🖼️', label: _formatAutoSepI18n('nav.gallery', 'Gallery'), action: 'view:gallery' },
+                                { icon: 'i-grid', label: _formatAutoSepI18n('nav.censor', 'Censor Edit'), action: 'view:censor' },
+                                { icon: 'i-package', label: _formatAutoSepI18n('nav.dataset', 'Dataset'), action: 'view:dataset' },
+                                { icon: 'i-image', label: _formatAutoSepI18n('nav.gallery', 'Gallery'), action: 'view:gallery' },
                             ],
                         });
                     }

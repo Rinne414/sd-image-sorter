@@ -4004,3 +4004,8 @@ li > .icon {
 .context-menu-item.is-danger .context-menu-icon {
     color: inherit;
 }
+
+#pipeline-next-step .pns-action-icon {
+    display: inline-flex;
+    margin-right: 6px;
+}

@@ -603,8 +603,8 @@ async function pollTagProgress(retryCount = 0) {
                         ? appT('flow.tagDoneTitle', 'Tagged {count} images. What next?').replace('{count}', String(_taggedCount))
                         : appT('flow.tagDoneTitleZero', 'Tagging complete. What next?'),
                     actions: [
-                        { icon: '🗂️', label: appT('nav.sorting', 'Organize'), action: 'view:sorting' },
-                        { icon: '📦', label: appT('nav.dataset', 'Dataset'), action: 'view:dataset' },
+                        { icon: 'i-folders', label: appT('nav.sorting', 'Organize'), action: 'view:sorting' },
+                        { icon: 'i-package', label: appT('nav.dataset', 'Dataset'), action: 'view:dataset' },
                     ],
                 });
             }
