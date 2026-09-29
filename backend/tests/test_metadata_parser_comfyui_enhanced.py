@@ -445,6 +445,41 @@ class TestImpactPackPipes:
         assert pos == "1girl, red scarf, snowy street"
         assert neg == "worst quality, blurry"
 
+    def test_pipe_behind_a_switch_follows_the_selected_branch(self):
+        """Owner workflow: FromBasicPipe_v2 fed by ComfySwitchNode choosing
+        between two ToBasicPipe branches; the literal switch picks the branch."""
+        parser = MetadataParser()
+        nodes = {
+            "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "m.safetensors"}},
+            "2": {"class_type": "CLIPTextEncode", "inputs": {"text": "1girl, red scarf, plain branch", "clip": ["1", 1]}},
+            "3": {"class_type": "CLIPTextEncode", "inputs": {"text": "1girl, red scarf, artist branch", "clip": ["1", 1]}},
+            "4": {"class_type": "CLIPTextEncode", "inputs": {"text": "worst quality, blurry", "clip": ["1", 1]}},
+            "5": {"class_type": "ToBasicPipe", "inputs": {
+                "model": ["1", 0], "clip": ["1", 1], "vae": ["1", 2], "positive": ["2", 0], "negative": ["4", 0]}},
+            "6": {"class_type": "ToBasicPipe", "inputs": {
+                "model": ["1", 0], "clip": ["1", 1], "vae": ["1", 2], "positive": ["3", 0], "negative": ["4", 0]}},
+            "7": {"class_type": "easy boolean", "inputs": {"value": False}},
+            "8": {"class_type": "ComfySwitchNode", "inputs": {"switch": False, "on_false": ["5", 0], "on_true": ["6", 0]}},
+            "9": {"class_type": "FromBasicPipe_v2", "inputs": {"basic_pipe": ["8", 0]}},
+            "10": {"class_type": "AnimaFlowCorrectiveSampler", "inputs": {
+                "seed": 1, "steps": 30, "cfg": 4.0, "model": ["9", 1], "positive": ["9", 4], "negative": ["9", 5]}},
+        }
+        pos, neg = parser._trace_sampler_prompts(nodes)
+        assert pos == "1girl, red scarf, plain branch"
+        assert neg == "worst quality, blurry"
+        nodes["8"]["inputs"]["switch"] = True
+        pos, _neg = parser._trace_sampler_prompts(nodes)
+        assert pos == "1girl, red scarf, artist branch"
+
+    def test_pipe_behind_an_unknown_passthrough_still_resolves(self):
+        parser = MetadataParser()
+        nodes = self._pipe_graph("FromBasicPipe", 3, 4)
+        nodes["11"] = {"class_type": "SomeCustomPipeCache", "inputs": {"pipe_in": ["4", 0], "label": "x"}}
+        nodes["5"]["inputs"]["basic_pipe"] = ["11", 0]
+        pos, neg = parser._trace_sampler_prompts(nodes)
+        assert pos == "1girl, red scarf, snowy street"
+        assert neg == "worst quality, blurry"
+
 
 class TestTagGeneratorBanLists:
     """A tag generator's ban/exclude list is wired from the negative prompt;

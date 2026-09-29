@@ -258,6 +258,15 @@ class ComfyUITextTraceMixin:
                 continue
             pipe_keys = self.COMFYUI_PIPE_BUILDER_INPUTS.get(class_type)
             if pipe_keys is None:
+                # A pipe passing through a node we do not know (a switch
+                # between two ToBasicPipe branches, a custom pass-through):
+                # try each link that could carry the pipe, the branch a
+                # literal switch selects first, and keep the first that
+                # resolves the channel.
+                for candidate in self._pipe_passthrough_candidates(inputs):
+                    traced = self._trace_pipe_channel(candidate, channel, nodes, visited, depth, side)
+                    if traced:
+                        return traced
                 return []
             wired = inputs.get(channel)
             if isinstance(wired, (list, tuple)) and len(wired) >= 2:
@@ -279,6 +288,25 @@ class ComfyUITextTraceMixin:
                     continue
             ref = next((inputs.get(key) for key in pipe_keys if isinstance(inputs.get(key), (list, tuple))), None)
         return []
+
+    def _pipe_passthrough_candidates(self, inputs: Dict[str, Any]) -> List[Any]:
+        """Link inputs of an unknown node that may carry a pipe, best first.
+
+        ``switch``/``boolean`` literals pick between ``on_true``/``on_false``
+        (ComfySwitchNode and friends); every other non-plumbing link follows
+        in declaration order.
+        """
+        links = [(key, val) for key, val in inputs.items()
+                 if isinstance(val, (list, tuple)) and len(val) >= 2
+                 and str(key).lower() not in self.COMFYUI_COND_BRIDGE_EXCLUDE_KEYS
+                 and str(key).lower() not in self.COMFYUI_IMAGE_BRIDGE_KEYS]
+        ordered: List[Any] = []
+        switch = inputs.get("switch", inputs.get("boolean"))
+        if isinstance(switch, bool):
+            chosen = "on_true" if switch else "on_false"
+            ordered.extend(val for key, val in links if key == chosen)
+        ordered.extend(val for key, val in links if val not in ordered)
+        return ordered
 
     def _extract_text_from_node(self, node_id: str, nodes: Dict[str, dict], visited: Set[str], depth: int = 0) -> List[str]:
         """Extract text from a specific node, following connections as needed."""
