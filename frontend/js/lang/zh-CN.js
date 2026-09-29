@@ -313,7 +313,6 @@ window.I18nLang_zhCN = {
     'comfort.zenExit': '退出禅模式',
     'comfort.warmthTitle': '房间色温',
     'comfort.warmthBody': '冷工作室、中性、或略暖的深色',
-    'comfort.warmthGraphiteOnly': '只有石墨主题能调色温，黑 + 蓝保持纯中性',
     'comfort.warmthLabel': '色调',
     'comfort.warmthCool': '冷',
     'comfort.warmthNeutral': '中性',
@@ -3112,16 +3111,6 @@ window.I18nLang_zhCN = {
     'a11y.skipToMain': '跳到主要内容',
     'lang.current': '中文',
     'lang.switchLabel': '切换语言',
-    'theme.open': '配色',
-    'theme.openTooltip': '选择界面配色',
-    'theme.settingsTitle': '界面配色',
-    'theme.settingsBody': '都是深色，底色和强调色不同',
-    'theme.graphite': '石墨',
-    'theme.graphiteHint': '深灰底，琥珀色强调',
-    'theme.ink': '黑 + 蓝',
-    'theme.inkHint': '纯黑底，钢蓝强调',
-    'theme.dusk': '暮色',
-    'theme.duskHint': '紫调底色，蜜桃与长春花蓝',
 
     // ========================
     // Scan Validation Feedback

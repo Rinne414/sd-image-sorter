@@ -266,66 +266,6 @@
     color-scheme: dark;
 }
 
-/* Black + Blue — true-neutral black, one steel-blue accent.
-   Panels stay R=G=B (a blue-tinted dark chrome is the loudest generated-UI
-   tell). The blue is instrument-steel, not Tailwind blue-600 or electric cyan. */
-html[data-theme="ink"] {
-    color-scheme: dark;
-    --bg: #090909;
-    --surface-1: #141414;
-    --surface-2: #1B1B1B;
-    --surface-3: #242424;
-    --stage: #050505;
-    --border: #2C2C2C;
-    --border-strong: #3C3C3C;
-    --hairline-1: #1E1E1E;
-    --hairline-2: #262626;
-    --scrim: rgba(0, 0, 0, 0.76);
-    --text: #E8E8EA;
-    --text-2: #A6A6AB;
-    --muted: #8A8A90;
-    --text-disabled: #56565C;
-    --accent: #3A6F98;
-    --accent-rgb: 58, 111, 152;
-    --accent-bright: #4A82AD;
-    --accent-deep: #2C5A7C;
-    --accent-soft: rgba(58, 111, 152, 0.14);
-    --accent-line: rgba(58, 111, 152, 0.48);
-    --on-accent: #F2F6FA;
-    --success: #5FB37E;
-    --success-rgb: 95, 179, 126;
-    --warning: #DFB750;
-    --warning-rgb: 223, 183, 80;
-    --danger: #DE6B66;
-    --danger-rgb: 222, 107, 102;
-    --purple: #B7B7BD;
-    --purple-rgb: 183, 183, 189;
-    --purple-hover: #C9C9CE;
-    --purple-active: #9C9CA3;
-    --tag-chip-bg: rgba(255, 255, 255, 0.055);
-    --control-bg: #0C0C0C;
-    --control-bg-hover: #161616;
-    --empty-bg: rgba(255, 255, 255, 0.02);
-    --progress-track: rgba(255, 255, 255, 0.08);
-    --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(255, 255, 255, 0.05);
-    --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.58), 0 0 0 1px rgba(255, 255, 255, 0.04);
-    --wash-faint: rgba(255, 255, 255, 0.02);
-    --wash: rgba(255, 255, 255, 0.03);
-    --wash-hover: rgba(255, 255, 255, 0.06);
-    --wash-strong: rgba(255, 255, 255, 0.08);
-    --ink-faint: rgba(255, 255, 255, 0.22);
-    --scrollbar-thumb: rgba(255, 255, 255, 0.16);
-    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.26);
-    --chrome-float: rgba(27, 27, 27, 0.94);
-    --chrome-float-deep: rgba(9, 9, 9, 0.94);
-    --chrome-on-image: rgba(9, 9, 9, 0.72);
-    --chrome-sidebar: rgba(20, 20, 20, 0.92);
-    --chrome-sidebar-soft: rgba(20, 20, 20, 0.72);
-    --chrome-zen: rgba(9, 9, 9, 0.82);
-    --danger-ink: #ffb4b1;
-    --danger-ink-hover: #ffd0ce;
-}
-
 /* ==========================================================================
    Base overrides owned by Phase 1
    ========================================================================== */
@@ -2051,7 +1991,7 @@ html.gallery-comfort-peeking {
    perceptible temperature shift of the SAME graphite, not two extra themes:
    the delta is a couple of points per channel, the accent never changes, and
    neither variant reintroduces a blue/violet cast. */
-html[data-theme="graphite"][data-comfort-warmth="cool"] {
+html[data-comfort-warmth="cool"] {
     --bg: #0D0E10;
     --surface-1: #141518;
     --surface-2: #1B1C1F;
@@ -2061,11 +2001,11 @@ html[data-theme="graphite"][data-comfort-warmth="cool"] {
     --text-2: #A3A6AC;
 }
 
-html[data-theme="graphite"][data-comfort-warmth="neutral"] {
+html[data-comfort-warmth="neutral"] {
     /* Graphite defaults are already dead neutral; identity. */
 }
 
-html[data-theme="graphite"][data-comfort-warmth="warm"] {
+html[data-comfort-warmth="warm"] {
     --bg: #100F0D;
     --surface-1: #171614;
     --surface-2: #1E1D1A;
@@ -2080,8 +2020,8 @@ html[data-theme="graphite"][data-comfort-warmth="warm"] {
 }
 
 /* Remap legacy tokens when warmth overrides canonicals. */
-html[data-theme="graphite"][data-comfort-warmth="cool"],
-html[data-theme="graphite"][data-comfort-warmth="warm"] {
+html[data-comfort-warmth="cool"],
+html[data-comfort-warmth="warm"] {
     --bg-dark: var(--bg);
     --bg-card: var(--surface-1);
     --bg-card-solid: var(--surface-1);
@@ -2104,8 +2044,8 @@ html[data-theme="graphite"][data-comfort-warmth="warm"] {
     --border-color: var(--border);
 }
 
-html[data-theme="graphite"][data-comfort-warmth="cool"] body,
-html[data-theme="graphite"][data-comfort-warmth="warm"] body {
+html[data-comfort-warmth="cool"] body,
+html[data-comfort-warmth="warm"] body {
     background: var(--bg);
     color: var(--text);
 }
@@ -2734,76 +2674,7 @@ li > .icon {
     line-height: 1.45;
 }
 
-.theme-menu {
-    position: fixed;
-    z-index: 2700;
-    display: grid;
-    gap: 2px;
-    min-width: 228px;
-    padding: 4px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: var(--r-card);
-    box-shadow: var(--shadow-float);
-}
-
-.theme-choice {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 7px 8px;
-    border: 0;
-    border-radius: var(--r-ctl);
-    background: transparent;
-    color: var(--text);
-    text-align: left;
-    cursor: pointer;
-    font: inherit;
-}
-
-.theme-choice:hover {
-    background: var(--surface-3);
-}
-
-.theme-choice.is-current {
-    background: var(--accent-soft);
-    box-shadow: inset 0 0 0 1px var(--accent-line);
-}
-
-.theme-choice-copy {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    min-width: 0;
-}
-
-.theme-choice-hint {
-    color: var(--muted);
-    font-size: var(--fs-footnote);
-    line-height: 1.35;
-}
-
-.theme-swatch {
-    flex: 0 0 18px;
-    width: 18px;
-    height: 18px;
-    border-radius: 3px;
-    border: 1px solid var(--border);
-}
-
-.theme-swatch[data-theme-swatch="graphite"] {
-    background: #0E0E0F;
-    box-shadow: inset 0 0 0 2px #C8873C;
-}
-
-.theme-swatch[data-theme-swatch="ink"] {
-    background: #090909;
-    box-shadow: inset 0 0 0 2px #3A6F98;
-}
-
 .btn[hidden],
-.theme-menu[hidden],
 .missing-panel[hidden],
 .helper-text[hidden],
 .sepcon-health-results[hidden],
@@ -3026,110 +2897,4 @@ li > .icon {
         transition-duration: 1ms !important;
         scroll-behavior: auto !important;
     }
-}
-
-/* Dusk — derived from the owner's own library (2026-09-24).
-   2,500 images sampled from the main library (L:/Pictures/AAA Reference):
-   lit areas lean warm (skin / coral / peach, hue 0-60 = 42% of the colour),
-   shadows lean violet (dark neutrals ~hue 315; periwinkle 240-285 = 26%),
-   green and cyan are almost absent (<1.5%). The palette keeps that split:
-   plum-ink surfaces from the shadows, warm text from the highlights, a peach
-   accent for actions and a periwinkle accent for selection. */
-html[data-theme="dusk"] {
-    color-scheme: dark;
-    --bg: #100D13;
-    --surface-1: #18141B;
-    --surface-2: #211C24;
-    --surface-3: #2B252F;
-    --stage: #09060B;
-    --border: #322C37;
-    --border-strong: #443D48;
-    --hairline-1: #1D1821;
-    --hairline-2: #251F29;
-    --scrim: rgba(9, 6, 11, 0.76);
-    --text: #F0E7E5;
-    --text-2: #C4B7B4;
-    --muted: #9F949E;
-    --text-disabled: #5F5663;
-
-    /* warm light: actions */
-    --accent: #F3A582;
-    --accent-rgb: 243, 165, 130;
-    --accent-bright: #FEB38F;
-    --accent-deep: #DE8D6C;
-    --accent-soft: rgba(243, 165, 130, 0.13);
-    --accent-line: rgba(243, 165, 130, 0.48);
-    --on-accent: #26120C;
-
-    /* cool shadow: what the user picked */
-    --pink: #96A7E7;
-    --pink-rgb: 150, 167, 231;
-    --pink-hover: #A9B8F0;
-    --pink-active: #8194D9;
-    /* AI output: the library's pink family */
-    --purple: #ECA7BD;
-    --purple-rgb: 236, 167, 189;
-    --purple-hover: #F3B9CB;
-    --purple-active: #DC93AB;
-
-    --success: #8EC899;
-    --success-rgb: 142, 200, 153;
-    --warning: #E8C270;
-    --warning-rgb: 232, 194, 112;
-    --danger: #E1556F;
-    --danger-rgb: 225, 85, 111;
-    --danger-ink: #FFB8C4;
-    --danger-ink-hover: #FFD2DA;
-
-    --control-bg: #140F17;
-    --control-bg-hover: #1B161F;
-    --tag-chip-bg: rgba(240, 231, 229, 0.055);
-    --wash-faint: rgba(240, 231, 229, 0.02);
-    --wash: rgba(240, 231, 229, 0.035);
-    --wash-hover: rgba(240, 231, 229, 0.065);
-    --wash-strong: rgba(240, 231, 229, 0.09);
-    --ink-faint: rgba(240, 231, 229, 0.22);
-    --scrollbar-thumb: rgba(240, 231, 229, 0.14);
-    --scrollbar-thumb-hover: rgba(240, 231, 229, 0.24);
-    --chrome-float: rgba(33, 28, 36, 0.95);
-    --chrome-float-deep: rgba(16, 13, 19, 0.95);
-    --chrome-on-image: rgba(16, 13, 19, 0.72);
-    --chrome-sidebar: rgba(24, 20, 27, 0.93);
-    --chrome-sidebar-soft: rgba(24, 20, 27, 0.74);
-    --chrome-zen: rgba(16, 13, 19, 0.84);
-    --progress-track: rgba(240, 231, 229, 0.08);
-    --shadow-modal: 0 16px 48px rgba(6, 3, 9, 0.62), 0 0 0 1px rgba(240, 231, 229, 0.06);
-    --shadow-float: 0 8px 24px rgba(6, 3, 9, 0.52), 0 0 0 1px rgba(240, 231, 229, 0.05);
-
-    /* cut corners (Blue Archive / Arknights / Star Rail share them) */
-    --cut: 7px;
-    --cut-sm: 5px;
-}
-
-/* Shapes: a cut top-left + bottom-right on primary actions, one small cut on
-   ordinary buttons, an octagon on chips. Browsers without corner-shape fall
-   back to the same radii as ordinary rounded corners. */
-html[data-theme="dusk"] .btn {
-    border-radius: var(--cut-sm) 3px 3px 3px;
-    corner-shape: bevel round round round;
-}
-html[data-theme="dusk"] .btn-primary {
-    border-radius: var(--cut) 3px;
-    corner-shape: bevel round;
-}
-html[data-theme="dusk"] :is(.gallery-chip, .aspect-quick-btn, .gen-tab) {
-    border-radius: var(--cut-sm);
-    corner-shape: bevel;
-}
-html[data-theme="dusk"] .nav-tab {
-    border-radius: 3px;
-}
-html[data-theme="dusk"] :is(.nav-tab, .gen-tab)[aria-selected="true"] {
-    border-radius: var(--cut) 3px;
-    corner-shape: bevel round;
-}
-
-.theme-swatch[data-theme-swatch="dusk"] {
-    background: linear-gradient(135deg, #100D13 0 55%, #211C24 55% 100%);
-    box-shadow: inset 0 0 0 2px #F3A582, inset 0 0 0 4px #96A7E7;
 }

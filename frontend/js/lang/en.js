@@ -311,7 +311,6 @@ window.I18nLang_en = {
     'comfort.zenExit': 'Exit zen',
     'comfort.warmthTitle': 'Room warmth',
     'comfort.warmthBody': 'Cool studio, neutral, or slightly warm dark',
-    'comfort.warmthGraphiteOnly': 'Only Graphite can be retinted; Black + Blue stays neutral',
     'comfort.warmthLabel': 'Tone',
     'comfort.warmthCool': 'Cool',
     'comfort.warmthNeutral': 'Neutral',
@@ -2945,16 +2944,6 @@ window.I18nLang_en = {
     'a11y.skipToMain': 'Skip to main content',
     'lang.current': 'EN',
     'lang.switchLabel': 'Switch language',
-    'theme.open': 'Color theme',
-    'theme.openTooltip': 'Choose a color theme',
-    'theme.settingsTitle': 'Color theme',
-    'theme.settingsBody': 'All dark; the base and accent colours differ',
-    'theme.graphite': 'Graphite',
-    'theme.graphiteHint': 'Dark grey, amber accent',
-    'theme.ink': 'Black + Blue',
-    'theme.inkHint': 'True black, steel blue',
-    'theme.dusk': 'Dusk',
-    'theme.duskHint': 'Plum base, peach and periwinkle',
 
     // ========================
     // Scan Validation Feedback

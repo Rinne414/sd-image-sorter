@@ -96,7 +96,6 @@ Maker family.
   behavior to them
 - **`js/lang/en.js`, `js/lang/zh-CN.js`**: locale packs with **identical key
   sets** — that symmetry is a contract enforced by a test
-- **`js/theme.js`**: the Graphite / Black+Blue palette picker
 
 Stylesheets load `styles.css` first, then the feature sheets, then
 **`css/tokens.css` LAST — and that ordering is load-bearing.** `tokens.css` is

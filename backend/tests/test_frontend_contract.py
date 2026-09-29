@@ -4115,89 +4115,40 @@ def _hex_rgb(css_block: str, token: str) -> tuple[int, int, int]:
     return int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16)
 
 
-THEME_IDS = ("graphite", "ink", "dusk")
-THEME_LOCALE_KEYS = (
-    "theme.open",
-    "theme.openTooltip",
-    "theme.settingsTitle",
-    "theme.settingsBody",
-    "theme.graphite",
-    "theme.graphiteHint",
-    "theme.ink",
-    "theme.inkHint",
-    "theme.dusk",
-    "theme.duskHint",
-)
+def test_there_is_one_palette_and_no_theme_picker():
+    """One colour palette, done well, instead of three near-identical ones.
 
-
-def test_the_theme_picker_offers_only_palettes_that_are_actually_styled():
-    """Every offered palette must be dark, because only dark ones are finished.
-
-    A light palette needs every sheet to flip, not just ``tokens.css``: the
-    other 21 stylesheets hold ~1,570 rules with hardcoded dark values and no
-    ``data-theme`` selector, so a white canvas would show black holes in
-    Censor and Dataset. Graphite, ink and dusk are all dark, so they are safe to
-    offer; ``paper`` is deliberately absent and this test keeps it absent
-    until those sheets are converged.
+    The owner (2026-09-30) judged Graphite, Black + Blue and Dusk to be the
+    same design with slightly different colours and asked to keep one. The
+    picker, its menu, the Settings select, the palette blocks and their
+    locale keys all go, so nothing on screen offers a choice that no longer
+    exists. The unshipped light palette stays absent as well.
     """
     repo_root = Path(__file__).resolve().parents[2]
     index = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
     tokens = (repo_root / "frontend" / "css" / "tokens.css").read_text(encoding="utf-8")
-    theme_js = (repo_root / "frontend" / "js" / "theme.js").read_text(encoding="utf-8")
 
-    assert 'data-theme="graphite"' in index
-    assert "sd-image-sorter-theme" in index
-    assert 'src="/static/js/theme.js"' in index
-    assert 'id="theme-menu"' in index
-    # The top bar's palette icon repeated Settings › colour theme (owner
-    # 2026-09-28); the entry page button and the Settings select remain.
-    assert 'id="btn-theme-toggle"' not in index
-    assert "btn-theme-toggle" not in theme_js
-    assert 'id="entry-theme-btn"' in index
-    assert 'id="settings-theme"' in index
-    assert ".theme-menu[hidden]" in tokens
-
-    for theme_id in THEME_IDS:
-        assert f'data-theme-id="{theme_id}"' in index
-    assert 'html[data-theme="ink"]' in tokens
-    assert 'html[data-theme="dusk"]' in tokens
-
-    # The unshipped light palette must not be reachable from any surface.
-    assert 'data-theme-id="paper"' not in index
-    assert "paper: 1" not in index
-    assert 'html[data-theme="paper"]' not in tokens
-    assert 'data-theme-swatch="paper"' not in tokens
-    assert "'paper'" not in theme_js
-
-    assert "var THEMES = ['graphite', 'ink', 'dusk']" in theme_js
-    assert "DEFAULT_THEME = 'graphite'" in theme_js
-    assert "if (!allowed(id)) id = DEFAULT_THEME" in theme_js
+    assert not (repo_root / "frontend" / "js" / "theme.js").exists()
+    for gone in (
+        "theme.js",
+        'id="theme-menu"',
+        'id="entry-theme-btn"',
+        'id="settings-theme"',
+        "data-theme-id=",
+        "data-theme=",
+        "sd-image-sorter-theme",
+    ):
+        assert gone not in index, f"index.html still has {gone}"
+    for gone in ("data-theme", "theme-swatch", "theme-choice", ".theme-menu"):
+        assert gone not in tokens, f"tokens.css still has {gone}"
 
     for pack_name, pack in _locale_pack_sources(repo_root).items():
-        for key in THEME_LOCALE_KEYS:
-            assert re.search(
-                rf"^\s*'{re.escape(key)}'\s*:", pack, re.MULTILINE
-            ), f"{pack_name} is missing {key}"
-        assert not re.search(r"^\s*'theme\.paper'\s*:", pack, re.MULTILINE), (
-            f"{pack_name} still translates the unshipped paper palette"
+        assert not re.search(r"^\s*'theme\.", pack, re.MULTILINE), (
+            f"{pack_name} still translates a colour theme"
         )
 
     for overlay in ("--wash:", "--wash-hover:", "--chrome-float:", "--danger-ink:"):
         assert overlay in tokens, f"missing overlay token {overlay}"
-
-    ink = _css_block(tokens, 'html[data-theme="ink"]')
-    for required in ("--wash:", "--chrome-float:", "--danger-ink:", "--shadow-modal:"):
-        assert required in ink, f"ink is missing {required}"
-
-    # True-neutral black surfaces with one steel-blue accent. A blue-tinted
-    # dark chrome is the loudest generated-UI tell, so the background stays
-    # R=G=B and only the accent carries hue.
-    ink_accent = _hex_rgb(ink, "--accent")
-    ink_bg = _hex_rgb(ink, "--bg")
-    assert ink_accent[2] > ink_accent[0] + 20 and ink_accent[1] > ink_accent[0]
-    assert max(ink_bg) - min(ink_bg) <= 2
-    assert max(ink_bg) <= 0x12
-    assert "#2F6FBD" not in ink
 
     unification = tokens.split("App-wide unification pass", 1)[1]
     assert "rgba(255, 255, 255, 0.03)" not in unification
@@ -4217,10 +4168,8 @@ def test_the_overlay_tokens_kept_the_depths_that_were_actually_different():
     tokens = (repo_root / "frontend" / "css" / "tokens.css").read_text(encoding="utf-8")
 
     root = _css_block(tokens, ":root")
-    ink = _css_block(tokens, 'html[data-theme="ink"]')
-    for palette_name, palette in (("root", root), ("ink", ink)):
-        for step in ("--wash-faint:", "--wash:", "--wash-strong:"):
-            assert step in palette, f"{palette_name} is missing {step}"
+    for step in ("--wash-faint:", "--wash:", "--wash-strong:"):
+        assert step in root, f":root is missing {step}"
 
     def _rule(selector: str) -> str:
         return _css_block(tokens, selector)
@@ -4244,63 +4193,11 @@ def test_the_overlay_tokens_kept_the_depths_that_were_actually_different():
     assert "var(--chrome-float-deep)" not in export_bar
 
 
-def test_the_theme_picker_is_reachable_from_settings_not_only_the_nav_icon():
-    """Settings is where a user looks for appearance, so it must be offered there.
+def test_room_warmth_retints_the_one_palette():
+    """Warmth is a comfort setting on the single palette, so it always applies.
 
-    The nav icon and the entry-page button are both unlabelled glyphs. The
-    Appearance group in Settings already owns UI scale, zen and warmth; a
-    palette that is only reachable from an icon is a palette most users never
-    find.
-    """
-    repo_root = Path(__file__).resolve().parents[2]
-    index = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    theme_js = (repo_root / "frontend" / "js" / "theme.js").read_text(encoding="utf-8")
-
-    assert 'id="settings-theme"' in index
-    assert 'data-i18n="theme.settingsTitle"' in index
-    for theme_id in THEME_IDS:
-        assert f'<option value="{theme_id}"' in index
-
-    assert "settings-theme" in theme_js, "theme.js must wire the settings control"
-
-
-def test_the_theme_menu_announces_against_the_button_that_opens_it():
-    """The entry-page button is the picker's only anchor, so it labels it.
-
-    The top bar's palette icon repeated Settings › colour theme and was
-    removed (owner 2026-09-28). ``#theme-menu`` is labelled by the entry
-    button and ``aria-expanded`` follows that button, so a screen reader is
-    never told about a control that no longer exists.
-    """
-    repo_root = Path(__file__).resolve().parents[2]
-    index = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
-    theme_js = (repo_root / "frontend" / "js" / "theme.js").read_text(encoding="utf-8")
-
-    entry_button = re.search(r"<button[^>]*id=\"entry-theme-btn\".*?>", index, re.S)
-    assert entry_button, "entry-theme-btn is missing"
-    entry_markup = entry_button.group(0)
-    for attribute in (
-        'aria-haspopup="listbox"',
-        'aria-expanded="false"',
-        'aria-controls="theme-menu"',
-    ):
-        assert attribute in entry_markup, f"entry-theme-btn is missing {attribute}"
-
-    menu = re.search(r"<div[^>]*id=\"theme-menu\"[^>]*>", index)
-    assert menu, "theme-menu is missing"
-    assert 'aria-labelledby="entry-theme-btn"' in menu.group(0)
-
-    assert "var ANCHOR_ID = 'entry-theme-btn'" in theme_js
-    assert "setAttribute('aria-expanded'" in theme_js
-
-
-def test_room_warmth_says_it_is_graphite_only_instead_of_silently_doing_nothing():
-    """Warmth retints graphite's surfaces, so ink must disable it, not ignore it.
-
-    The warmth selectors are scoped to ``[data-theme="graphite"]`` because ink
-    is deliberately R=G=B true black. Left ungated the select would still
-    accept a choice, still persist it, and change nothing on screen — the
-    dead-control failure this codebase keeps finding.
+    With one palette there is nothing to scope it to and nothing to disable:
+    the select must stay live and its rules must match on ``<html>`` alone.
     """
     repo_root = Path(__file__).resolve().parents[2]
     tokens = (repo_root / "frontend" / "css" / "tokens.css").read_text(encoding="utf-8")
@@ -4308,18 +4205,10 @@ def test_room_warmth_says_it_is_graphite_only_instead_of_silently_doing_nothing(
         repo_root / "frontend" / "js" / "comfort-app.js"
     ).read_text(encoding="utf-8")
 
-    assert 'html[data-theme="graphite"][data-comfort-warmth="cool"]' in tokens
-    assert (
-        re.search(r'^html\[data-comfort-warmth="cool"\]', tokens, re.MULTILINE) is None
-    ), "an unscoped warmth rule would retint ink as well"
-
-    assert "themeChanged" in comfort, (
-        "comfort-app must react to a palette change, not read it once at boot"
-    )
-    assert "disabled" in comfort
-    assert "comfort.warmthGraphiteOnly" in comfort
-
+    for warmth in ("cool", "warm"):
+        assert f'html[data-comfort-warmth="{warmth}"] {{' in tokens
+    assert "warmthApplies" not in comfort
+    assert "select.disabled" not in comfort
+    assert "comfort.warmthGraphiteOnly" not in comfort
     for pack_name, pack in _locale_pack_sources(repo_root).items():
-        assert re.search(
-            r"^\s*'comfort\.warmthGraphiteOnly'\s*:", pack, re.MULTILINE
-        ), f"{pack_name} is missing comfort.warmthGraphiteOnly"
+        assert "comfort.warmthGraphiteOnly" not in pack, pack_name
