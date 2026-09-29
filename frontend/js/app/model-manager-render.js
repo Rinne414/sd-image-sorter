@@ -147,7 +147,7 @@ function renderModelManager(models = []) {
                 <div class="model-card-actions">
                     ${status === 'needs_restart'
                         ? `<button class="btn btn-primary btn-restart-model" data-model-id="${safeId}" data-model-name="${escapeHtml(model.name || model.id)}">${escapeHtml(appT('models.restartNowAndContinue', 'Restart now and continue'))}</button>`
-                        : (model.download_supported ? `<button class="btn ${status === 'ready' ? 'btn-ghost' : 'btn-primary'} btn-prepare-model" data-model-id="${safeId}">${escapeHtml(status === 'ready' ? appT('models.repair', 'Recheck / Repair') : appT('models.prepare', 'Prepare / Download'))}</button>` : '')}
+                        : (model.download_supported ? `<button class="btn ${status === 'ready' ? 'btn-ghost' : 'btn-secondary'} btn-prepare-model" data-model-id="${safeId}">${escapeHtml(status === 'ready' ? appT('models.repair', 'Recheck / Repair') : appT('models.prepare', 'Prepare / Download'))}</button>` : '')}
                     ${!model.download_supported && status !== 'ready' ? `<span class="model-card-hint">${escapeHtml(appT('models.noAutoDownload', 'Can\'t download automatically. Follow the manual steps above'))}</span>` : ''}
                     ${externalLinks}
                 </div>

@@ -3827,9 +3827,22 @@ li > .icon {
 /* Filter editor generator ticks: all fourteen are on by default, so the
    tick is white on grey here; amber stays for filters that narrow results. */
 #app :is(.filter-toggle-grid, .filter-list) .checkbox-label input:checked + .checkbox-custom {
-    background: var(--surface-3);
+    background: var(--text);
     border-color: transparent;
-    color: var(--text);
+    color: var(--bg);
+}
+
+#app :is(.filter-toggle-grid, .filter-list) .checkbox-label input:checked + .checkbox-custom::after {
+    color: var(--bg);
+}
+
+/* Sub-section headings inside a filter panel sit one step below the panel
+   title, not above it. */
+#app .filter-panel :is(h5, .filter-section-header h5) {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-2);
+    letter-spacing: 0;
 }
 
 /* Toggles in Settings: one pressed look for every on/off button */
@@ -4039,4 +4052,96 @@ li > .icon {
     color: var(--text);
     font-size: 13px;
     font-weight: 600;
+}
+
+/* ==========================================================================
+   Round 3 (2026-09-30) — fixes from the second design review.
+   ========================================================================== */
+
+/* A disabled dataset export CTA is off, not a large tan block: the
+   #view-dataset primary rule painted amber over the :disabled state. */
+#app #view-dataset .dataset-export-cta:disabled,
+#app #view-dataset .dataset-export-cta.btn-primary:disabled {
+    background: var(--surface-3);
+    color: var(--text-disabled);
+    opacity: 1;
+    filter: none;
+    box-shadow: none;
+}
+
+/* Filter editor panel headers: the help sentence goes under the title
+   instead of squeezing it into two lines (and over it in the rating panel). */
+#app .filter-panel-header {
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+}
+
+#app .filter-panel-header .filter-panel-help {
+    flex: 0 0 auto;
+    max-width: none;
+    margin: 0;
+    font-size: 12px;
+    color: var(--muted);
+    text-align: left;
+}
+
+/* Keys in the shortcuts panel are sized to the key, left in a fixed column
+   so the descriptions still line up. */
+#keyboard-shortcuts-panel .shortcut-item {
+    display: grid;
+    grid-template-columns: 112px minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+}
+
+#keyboard-shortcuts-panel .shortcut-key {
+    justify-self: start;
+    min-width: 28px;
+    width: auto;
+    padding: 3px 8px;
+}
+
+/* Status and folder labels are information, not actions */
+#app .scope-status-card.is-warning .scope-status-badge {
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text-2);
+}
+
+#app #image-modal .modal-file-subfolder {
+    color: var(--text-2);
+}
+
+/* The active generator tab's count is part of the chip, not a second badge */
+#app .gen-tab .gen-count {
+    background: transparent;
+    padding: 0 0 0 2px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+}
+
+#app .gen-tab:is(.active, [aria-selected="true"]) .gen-count {
+    background: transparent;
+    color: inherit;
+    opacity: 0.8;
+}
+
+/* Similar: the page is not a panel around its own panels */
+#app #view-similar .similar-header {
+    background: transparent;
+    padding: 4px 0 0;
+}
+
+/* Manual Sort "synced" status: a neutral chip; green stays in the glyph */
+#app #manual-sort-scope-status.is-synced {
+    border-color: transparent;
+    background: rgba(255, 255, 255, 0.035);
+}
+
+#app #manual-sort-scope-status.is-synced .scope-status-badge {
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text-2);
 }
