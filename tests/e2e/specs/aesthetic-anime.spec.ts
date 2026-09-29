@@ -1,4 +1,23 @@
+import fs from 'node:fs'
+import path from 'node:path'
+
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { createTestImage } from '../fixtures/test-helpers'
+
+// The spec may be the first of its shard, so the gallery may be empty:
+// seed one picture of its own and scan it before any test opens the grid.
+const fixtureDir = path.join(__dirname, '..', '..', '..', '.tmp', 'manual-test', 'aesthetic-anime')
+
+test.beforeAll(async ({ request }) => {
+  fs.mkdirSync(fixtureDir, { recursive: true })
+  await createTestImage(fixtureDir, 'aesthetic-anime-seed.png', { generator: 'nai', prompt: 'seed picture' })
+  const response = await request.post('/api/scan', { data: { folder_path: fixtureDir, recursive: true } })
+  expect(response.ok()).toBeTruthy()
+  await expect.poll(async () => {
+    const progress = await (await request.get('/api/scan/progress')).json()
+    return String(progress.status || '')
+  }, { timeout: 60_000 }).toBe('done')
+})
 
 /**
  * deepghs anime aesthetic (2026-09-28): an optional grade from masterpiece to
