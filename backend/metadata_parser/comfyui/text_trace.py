@@ -67,15 +67,16 @@ class ComfyUITextTraceMixin:
                     if pos_ref is None:
                         pos_ref = guider_inputs.get("cond")
 
-            # Trace positive conditioning
+            # Trace positive conditioning. A hires or refiner pass reuses the
+            # same conditioning, so a text already collected is not repeated.
             if pos_ref:
                 texts = self._trace_to_text(pos_ref, nodes, set(), side="positive")
-                positive_texts.extend(texts)
+                positive_texts.extend(t for t in texts if t not in positive_texts)
 
             # Trace negative conditioning
             if neg_ref:
                 texts = self._trace_to_text(neg_ref, nodes, set(), side="negative")
-                negative_texts.extend(texts)
+                negative_texts.extend(t for t in texts if t not in negative_texts)
 
         pos_result = "\n".join(positive_texts) if positive_texts else None
         neg_result = "\n".join(negative_texts) if negative_texts else None
@@ -192,8 +193,91 @@ class ComfyUITextTraceMixin:
 
         if isinstance(ref, list) and len(ref) >= 2:
             target_id = str(ref[0])
+            target = nodes.get(target_id) or {}
+            slots = self.COMFYUI_FROM_PIPE_OUTPUTS.get(str(target.get("class_type") or ""))
+            if slots is not None:
+                return self._trace_pipe_output(target_id, ref[1], slots, nodes, visited, depth, side)
             return self._extract_text_from_node_with_source(target_id, nodes, visited, depth, side=side)
 
+        return []
+
+    def _trace_pipe_output(self, node_id: str, slot: Any, slots: Dict[int, str], nodes: Dict[str, dict],
+                           visited: Set[str], depth: int, side: Optional[str]) -> List[Dict[str, Any]]:
+        """Text behind one output slot of an Impact Pack From*Pipe node.
+
+        Only the positive/negative slots carry a prompt; model/clip/vae slots
+        yield nothing instead of fanning out over the whole pipe (which put
+        the negative prompt inside the positive).
+        """
+        try:
+            channel = slots.get(int(slot))
+        except (TypeError, ValueError):
+            channel = None
+        if channel is None or channel in ("basic_pipe", "detailer_pipe", "refiner_basic_pipe"):
+            # No channel, or a pipe passthrough slot: no text lives here.
+            return []
+        node = nodes.get(node_id) or {}
+        inputs = node.get("inputs", {}) if isinstance(node.get("inputs"), dict) else {}
+        pipe_ref = next((val for val in inputs.values() if isinstance(val, (list, tuple)) and len(val) >= 2), None)
+        return self._trace_pipe_channel(pipe_ref, channel, nodes, visited, depth + 1, side)
+
+    def _trace_pipe_channel(self, pipe_ref: Any, channel: str, nodes: Dict[str, dict], visited: Set[str],
+                            depth: int, side: Optional[str]) -> List[Dict[str, Any]]:
+        """Follow a pipe link upstream to the node that set ``channel``.
+
+        Builders (ToBasicPipe) and editors (EditBasicPipe) that wire the
+        channel are its source; editors that leave it alone pass the question
+        on to the pipe they took in. Refiner channels come from the refiner
+        pipe input where a builder has one.
+        """
+        channel_side = "negative" if "negative" in channel else "positive"
+        seen: Set[str] = set()
+        ref = pipe_ref
+        while isinstance(ref, (list, tuple)) and len(ref) >= 2 and depth < 40:
+            node_id = str(ref[0])
+            if node_id in seen:
+                return []
+            seen.add(node_id)
+            node = nodes.get(node_id) or {}
+            class_type = str(node.get("class_type") or "")
+            inputs = node.get("inputs", {}) if isinstance(node.get("inputs"), dict) else {}
+            depth += 1
+            if class_type in ("Reroute", "ReroutePrimitive"):
+                ref = next((val for val in inputs.values() if isinstance(val, (list, tuple))), None)
+                continue
+            slots = self.COMFYUI_FROM_PIPE_OUTPUTS.get(class_type)
+            if slots is not None:
+                # A pipe passthrough slot (FromBasicPipe_v2 slot 0, DetailerPipeToBasicPipe).
+                try:
+                    out_name = slots.get(int(ref[1]))
+                except (TypeError, ValueError):
+                    out_name = None
+                if out_name == "refiner_basic_pipe" and channel in ("positive", "negative"):
+                    channel = "refiner_" + channel
+                ref = next((val for val in inputs.values() if isinstance(val, (list, tuple)) and len(val) >= 2), None)
+                continue
+            pipe_keys = self.COMFYUI_PIPE_BUILDER_INPUTS.get(class_type)
+            if pipe_keys is None:
+                return []
+            wired = inputs.get(channel)
+            if isinstance(wired, (list, tuple)) and len(wired) >= 2:
+                nested = set(visited)
+                nested.add(node_id)
+                return self._trace_to_text_with_source(wired, nodes, nested, depth, side=side or channel_side)
+            if isinstance(wired, str) and wired.strip():
+                return [{
+                    "text": wired.strip(),
+                    "source_node_id": node_id,
+                    "source_class_type": class_type,
+                    "source_key": channel,
+                }]
+            if channel.startswith("refiner_"):
+                refiner_key = next((key for key in pipe_keys if "refiner" in key), None)
+                if refiner_key is not None:
+                    ref = inputs.get(refiner_key)
+                    channel = channel[len("refiner_"):]
+                    continue
+            ref = next((inputs.get(key) for key in pipe_keys if isinstance(inputs.get(key), (list, tuple))), None)
         return []
 
     def _extract_text_from_node(self, node_id: str, nodes: Dict[str, dict], visited: Set[str], depth: int = 0) -> List[str]:

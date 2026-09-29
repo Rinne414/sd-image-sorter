@@ -161,7 +161,44 @@ class ParserVocabularyMixin:
         "mask", "pixels", "sigmas", "sampler", "noise", "guider",
         "clip_vision", "control_net", "controlnet", "提示词", "系统提示词",
         "system", "system_prompt",
+        # Tag generators (TIPO, WD14Tagger, ...) take a "do not emit" list on
+        # these inputs, usually wired from the NEGATIVE prompt. Their text
+        # output is made at run time, so walking these links to find it only
+        # drags the negative into the positive.
+        "ban_tags", "banned_tags", "exclude_tags", "excluded_tags",
+        "blacklist", "blacklist_tags", "remove_tags", "negative_tags",
     )
+
+    # ComfyUI-Impact-Pack pipe nodes (modules/impact/pipe.py, read from the
+    # installed package): a pipe bundles model/clip/vae/positive/negative, so
+    # which OUTPUT SLOT a link leaves from decides whether it carries the
+    # positive or the negative conditioning. Slot -> channel name.
+    COMFYUI_FROM_PIPE_OUTPUTS = {
+        "FromBasicPipe": {3: "positive", 4: "negative"},
+        "FromBasicPipe_v2": {0: "basic_pipe", 4: "positive", 5: "negative"},
+        "FromDetailerPipe": {3: "positive", 4: "negative"},
+        "FromDetailerPipe_v2": {0: "detailer_pipe", 4: "positive", 5: "negative"},
+        "FromDetailerPipeSDXL": {
+            0: "detailer_pipe", 4: "positive", 5: "negative",
+            12: "refiner_positive", 13: "refiner_negative",
+        },
+        # Two pipes out: the base pipe and the refiner pipe.
+        "DetailerPipeToBasicPipe": {0: "basic_pipe", 1: "refiner_basic_pipe"},
+    }
+    # Nodes that BUILD or EDIT a pipe: their positive/negative inputs (when
+    # wired) are the channel's source; otherwise the channel comes from the
+    # pipe they take in. Value = the input keys that carry the incoming pipe.
+    COMFYUI_PIPE_BUILDER_INPUTS = {
+        "ToBasicPipe": (),
+        "ToDetailerPipe": (),
+        "ToDetailerPipeSDXL": (),
+        "EditBasicPipe": ("basic_pipe",),
+        "EditDetailerPipe": ("detailer_pipe",),
+        "EditDetailerPipeSDXL": ("detailer_pipe",),
+        "BasicPipeToDetailerPipe": ("basic_pipe",),
+        "BasicPipeToDetailerPipeSDXL": ("base_basic_pipe", "refiner_basic_pipe_opt"),
+        "AnyPipeToBasic": ("any_pipe",),
+    }
 
     COMFYUI_MODEL_FILE_EXTENSIONS = (
         ".safetensors",

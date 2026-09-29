@@ -384,5 +384,89 @@ class TestConditioningBridge:
         assert neg is None
 
 
+class TestImpactPackPipes:
+    """Impact Pack pipes carry positive and negative in numbered output slots
+    (modules/impact/pipe.py): the slot a link leaves from is the channel."""
+
+    @staticmethod
+    def _pipe_graph(from_pipe: str, pos_slot: int, neg_slot: int):
+        return {
+            "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "m.safetensors"}},
+            "2": {"class_type": "CLIPTextEncode", "inputs": {"text": "1girl, red scarf, snowy street", "clip": ["1", 1]}},
+            "3": {"class_type": "CLIPTextEncode", "inputs": {"text": "worst quality, blurry", "clip": ["1", 1]}},
+            "4": {"class_type": "ToBasicPipe", "inputs": {
+                "model": ["1", 0], "clip": ["1", 1], "vae": ["1", 2], "positive": ["2", 0], "negative": ["3", 0]}},
+            "5": {"class_type": from_pipe, "inputs": {"basic_pipe": ["4", 0]}},
+            "6": {"class_type": "KSampler", "inputs": {
+                "seed": 1, "steps": 20, "cfg": 5.0, "sampler_name": "euler", "scheduler": "normal", "denoise": 1.0,
+                "model": ["5", 0], "positive": ["5", pos_slot], "negative": ["5", neg_slot]}},
+        }
+
+    def test_from_basic_pipe_slots_three_and_four(self):
+        parser = MetadataParser()
+        pos, neg = parser._trace_sampler_prompts(self._pipe_graph("FromBasicPipe", 3, 4))
+        assert pos == "1girl, red scarf, snowy street"
+        assert neg == "worst quality, blurry"
+
+    def test_from_basic_pipe_v2_shifts_the_slots_by_one(self):
+        parser = MetadataParser()
+        pos, neg = parser._trace_sampler_prompts(self._pipe_graph("FromBasicPipe_v2", 4, 5))
+        assert pos == "1girl, red scarf, snowy street"
+        assert neg == "worst quality, blurry"
+
+    def test_model_slot_of_a_pipe_carries_no_text(self):
+        parser = MetadataParser()
+        nodes = self._pipe_graph("FromBasicPipe", 3, 4)
+        # A sampler fed from the pipe's MODEL slot on the positive input is a
+        # miswired graph; the tracer must not invent a prompt from the pipe.
+        nodes["6"]["inputs"]["positive"] = ["5", 0]
+        pos, neg = parser._trace_sampler_prompts(nodes)
+        assert pos is None
+        assert neg == "worst quality, blurry"
+
+    def test_edit_basic_pipe_override_wins_over_the_builder(self):
+        parser = MetadataParser()
+        nodes = self._pipe_graph("FromBasicPipe", 3, 4)
+        nodes["7"] = {"class_type": "CLIPTextEncode", "inputs": {"text": "1girl, red scarf, rooftop, sunset", "clip": ["1", 1]}}
+        nodes["8"] = {"class_type": "EditBasicPipe", "inputs": {"basic_pipe": ["4", 0], "positive": ["7", 0]}}
+        nodes["5"]["inputs"]["basic_pipe"] = ["8", 0]
+        pos, neg = parser._trace_sampler_prompts(nodes)
+        assert pos == "1girl, red scarf, rooftop, sunset"
+        assert neg == "worst quality, blurry"  # untouched channel comes from the builder
+
+    def test_two_passes_on_one_pipe_list_the_prompt_once(self):
+        parser = MetadataParser()
+        nodes = self._pipe_graph("FromBasicPipe", 3, 4)
+        nodes["9"] = {"class_type": "FromBasicPipe", "inputs": {"basic_pipe": ["4", 0]}}
+        nodes["10"] = {"class_type": "KSampler", "inputs": {
+            "seed": 2, "steps": 12, "cfg": 5.0, "sampler_name": "euler", "scheduler": "normal", "denoise": 0.5,
+            "model": ["9", 0], "positive": ["9", 3], "negative": ["9", 4]}}
+        pos, neg = parser._trace_sampler_prompts(nodes)
+        assert pos == "1girl, red scarf, snowy street"
+        assert neg == "worst quality, blurry"
+
+
+class TestTagGeneratorBanLists:
+    """A tag generator's ban/exclude list is wired from the negative prompt;
+    following it would put the negative inside the positive."""
+
+    def test_ban_tags_link_is_not_walked_into_the_positive(self):
+        parser = MetadataParser()
+        nodes = {
+            "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "m.safetensors"}},
+            "2": {"class_type": "CLIPTextEncode", "inputs": {"text": "worst quality, blurry, watermark", "clip": ["1", 1]}},
+            "3": {"class_type": "ShowText|pysssss", "inputs": {"text": ["2", 0], "text_0": "worst quality, blurry, watermark"}},
+            "4": {"class_type": "TIPO", "inputs": {"tags": "1girl, red scarf", "nl_prompt": "", "ban_tags": ["3", 0],
+                                                    "tipo_model": "x.gguf", "seed": 1}},
+            "5": {"class_type": "ShowText|pysssss", "inputs": {"text": ["4", 0], "text_0": "1girl, red scarf, snowy street, lantern light"}},
+            "6": {"class_type": "CLIPTextEncode", "inputs": {"text": ["5", 0], "clip": ["1", 1]}},
+            "7": {"class_type": "KSampler", "inputs": {"positive": ["6", 0], "negative": ["2", 0]}},
+        }
+        pos, neg = parser._trace_sampler_prompts(nodes)
+        assert pos == "1girl, red scarf, snowy street, lantern light"
+        assert "blurry" not in pos
+        assert neg == "worst quality, blurry, watermark"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
