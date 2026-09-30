@@ -6681,7 +6681,8 @@
                      updateExportModalTitle() write textContent, which would wipe
                      a sibling <svg> out of the heading itself. -->
                 <h3 id="export-title"><svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg> <span id="export-title-text" data-i18n="modal.exportPrompts">Combined Export</span></h3>
-                <p class="modal-description" id="export-count">This export includes only 0 selected images.</p>
+                <!-- Filled with the translated count when the dialog opens. -->
+                <p class="modal-description" id="export-count"></p>
                 <small class="helper-text" data-i18n="export.scopeHelp">Only the images selected in Gallery are included here.</small>
                 <div class="form-group export-format-group">
                     <label for="export-format" data-i18n="export.formatLabel">Output Format</label>
@@ -6812,7 +6813,8 @@
             <div class="modal-content modal-large batch-export-shell">
                 <button class="modal-close" id="btn-close-batch-export" aria-label="Close caption export" data-i18n-aria="a11y.closeBatchExport"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
                 <h3><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg> <span id="batch-export-title-text" data-i18n="batchExport.title">Same-name .txt Captions</span></h3>
-                <p class="modal-description" id="batch-export-count">This batch export includes only 0 selected images.</p>
+                <!-- Filled with the translated count when the dialog opens. -->
+                <p class="modal-description" id="batch-export-count"></p>
                 <small class="helper-text" data-i18n="batchExport.scopeHelp">This only writes files for the images selected in Gallery.</small>
 
                 <div class="form-group">
