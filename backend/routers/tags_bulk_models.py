@@ -92,6 +92,16 @@ class BulkTagFilterContract(BaseModel):
     collectionId: Optional[int] = Field(default=None, ge=1)
     folder: Optional[str] = Field(default=None, max_length=4096)
     hasMetadata: Optional[bool] = None
+    # Gallery filters the selection-token contract (SelectionIdsRequest) carries;
+    # without them an edit by filter touched more pictures than the Gallery showed.
+    scope: Optional[str] = Field(default=None, pattern="^(current_session|library)$")
+    noCaption: Optional[bool] = None
+    aestheticUnscored: Optional[bool] = None
+    minSaturation: Optional[float] = Field(default=None, ge=0, le=255)
+    maxSaturation: Optional[float] = Field(default=None, ge=0, le=255)
+    seed: Optional[int] = None
+    dateFrom: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    dateTo: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
     @model_validator(mode="after")
     def normalize_contract(self) -> "BulkTagFilterContract":

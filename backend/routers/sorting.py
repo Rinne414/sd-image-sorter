@@ -629,10 +629,19 @@ async def start_sort_session(
             brightness_distribution=request.brightness_distribution,
             exclude_prompts=request.exclude_prompts,
             exclude_colors=request.exclude_colors,
+            color_hues=request.color_hues,
+            exclude_color_hues=request.exclude_color_hues,
             collection_id=request.collection_id,
             scope=request.scope,
             folder=request.folder,
             has_metadata=request.has_metadata,
+            no_caption=request.no_caption,
+            aesthetic_unscored=request.aesthetic_unscored,
+            min_saturation=request.min_saturation,
+            max_saturation=request.max_saturation,
+            seed=request.seed,
+            date_from=request.date_from,
+            date_to=request.date_to,
         )
 
     return service.start_sort_session(

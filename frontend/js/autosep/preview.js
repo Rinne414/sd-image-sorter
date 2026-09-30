@@ -51,6 +51,15 @@ function getAutoSepFilterSignature(filters) {
         collectionId: contract.collectionId ?? null,
         folder: contract.folder || null,
         hasMetadata: contract.hasMetadata ?? null,
+        colorHues: contract.colorHues || [],
+        excludeColorHues: contract.excludeColorHues || [],
+        noCaption: contract.noCaption ?? null,
+        aestheticUnscored: contract.aestheticUnscored ?? null,
+        minSaturation: contract.minSaturation ?? null,
+        maxSaturation: contract.maxSaturation ?? null,
+        seed: contract.seed ?? null,
+        dateFrom: contract.dateFrom || null,
+        dateTo: contract.dateTo || null,
     });
 }
 
@@ -200,6 +209,15 @@ function _buildAutoSepImageQuery(filters, cursor = null, limit = 500) {
         scope: 'library',
         folder: contract.folder || null,
         hasMetadata: typeof contract.hasMetadata === 'boolean' ? contract.hasMetadata : null,
+        colorHues: contract.colorHues?.length > 0 ? contract.colorHues : null,
+        excludeColorHues: contract.excludeColorHues?.length > 0 ? contract.excludeColorHues : null,
+        noCaption: contract.noCaption === true ? true : null,
+        aestheticUnscored: contract.aestheticUnscored === true ? true : null,
+        minSaturation: contract.minSaturation ?? null,
+        maxSaturation: contract.maxSaturation ?? null,
+        seed: contract.seed ?? null,
+        dateFrom: contract.dateFrom || null,
+        dateTo: contract.dateTo || null,
         limit,
         cursor,
     };
@@ -359,7 +377,11 @@ async function updateAutoSepPreview() {
         filters.brightnessMin != null || filters.brightnessMax != null ||
         Boolean(filters.colorTemperature) || Boolean(filters.brightnessDistribution) ||
         Boolean(filters.collectionId) || Boolean(filters.folder) ||
-        typeof filters.hasMetadata === 'boolean';
+        typeof filters.hasMetadata === 'boolean' ||
+        (filters.colorHues?.length > 0) || (filters.excludeColorHues?.length > 0) ||
+        filters.noCaption === true || filters.aestheticUnscored === true ||
+        filters.minSaturation != null || filters.maxSaturation != null ||
+        filters.seed != null || Boolean(filters.dateFrom) || Boolean(filters.dateTo);
 
     // When no filters are set, still allow preview (matches ALL images)
     // but mark the state so the UI can show a warning

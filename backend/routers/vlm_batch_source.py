@@ -74,6 +74,16 @@ def _filters_to_selection_kwargs(filters: Dict[str, Any]) -> Dict[str, Any]:
         "collection_id": pick("collectionId", "collection_id"),
         "folder": pick("folder"),
         "has_metadata": pick("hasMetadata", "has_metadata"),
+        # The confirm dialog counts with the whole Gallery filter; the batch must
+        # caption that same set (a paid API bills per picture).
+        "scope": pick("scope"),
+        "no_caption": pick("noCaption", "no_caption"),
+        "aesthetic_unscored": pick("aestheticUnscored", "aesthetic_unscored"),
+        "min_saturation": pick("minSaturation", "min_saturation"),
+        "max_saturation": pick("maxSaturation", "max_saturation"),
+        "seed": pick("seed"),
+        "date_from": pick("dateFrom", "date_from"),
+        "date_to": pick("dateTo", "date_to"),
     }
 
 

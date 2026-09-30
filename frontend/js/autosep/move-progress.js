@@ -523,22 +523,9 @@ async function executeAutoSeparateWithProgress() {
                         checkpoints: contract.excludeCheckpoints?.length > 0 ? contract.excludeCheckpoints : null,
                         loras: contract.excludeLoras?.length > 0 ? contract.excludeLoras : null,
                     },
-                    // v3.3.x gallery-scope parity: collection/folder/star-rating/
-                    // exclude-prompts/colors/brightness must constrain the move
-                    // exactly like they constrained the previewed gallery view.
-                    {
-                        excludePrompts: contract.excludePrompts,
-                        excludeColors: contract.excludeColors,
-                        minUserRating: contract.minUserRating,
-                        brightnessMin: contract.brightnessMin,
-                        brightnessMax: contract.brightnessMax,
-                        colorTemperature: contract.colorTemperature,
-                        brightnessDistribution: contract.brightnessDistribution,
-                        collectionId: contract.collectionId,
-                        scope: contract.scope,
-                        folder: contract.folder,
-                        hasMetadata: contract.hasMetadata,
-                    },
+                    // Gallery-scope parity: every remaining filter must constrain
+                    // the move exactly like it constrained the previewed view.
+                    buildAutoSepScopeFilters(contract),
                     splitBy,
                 );
 

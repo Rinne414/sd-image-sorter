@@ -98,6 +98,14 @@ class SortSessionMixin:
         scope: Optional[str] = None,
         folder: Optional[str] = None,
         has_metadata: Optional[bool] = None,
+        # Aurora Phase 3 + file-date Gallery filters (same trailing-kwarg rule).
+        no_caption: Optional[bool] = None,
+        aesthetic_unscored: Optional[bool] = None,
+        min_saturation: Optional[float] = None,
+        max_saturation: Optional[float] = None,
+        seed: Optional[int] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Start a manual sort session."""
         operation_mode = self._validate_file_operation(operation_mode)
@@ -181,6 +189,13 @@ class SortSessionMixin:
             scope=scope,
             folder=folder.strip() if folder else None,
             has_metadata=has_metadata,
+            no_caption=no_caption,
+            aesthetic_unscored=aesthetic_unscored,
+            min_saturation=min_saturation,
+            max_saturation=max_saturation,
+            seed=seed,
+            date_from=date_from,
+            date_to=date_to,
         )
         # DB-level filter already excludes images marked unreadable.
         # Per-image verification runs lazily in get_current_sort_image so

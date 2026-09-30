@@ -38,7 +38,10 @@ const DEFAULT_AUTOSEP_FILTER_STATE = {
   maxAesthetic: null as number | null,
 }
 
-async function seedAutoSepFilterState(page: Page, overrides: Partial<typeof DEFAULT_AUTOSEP_FILTER_STATE> = {}) {
+async function seedAutoSepFilterState(
+  page: Page,
+  overrides: Partial<typeof DEFAULT_AUTOSEP_FILTER_STATE> & Record<string, unknown> = {},
+) {
   const state = { ...DEFAULT_AUTOSEP_FILTER_STATE, ...overrides }
   await page.addInitScript((payload) => {
     try {
@@ -4879,6 +4882,85 @@ test.describe('Smoke Tests', () => {
     await page.locator('#btn-confirm-ok').click()
 
     await expect.poll(() => batchMovePayload?.artist).toBe('Mock Artist')
+  })
+
+  test('auto-separate keeps the date, saturation, caption, seed, hue and unscored filters it copied', async ({ page }) => {
+    // Found 2026-09-30: these Gallery filters were dropped on the way to the
+    // move, so "since June + ComfyUI" moved every ComfyUI picture.
+    await mockImageAsset(page, 1)
+    await seedAutoSepFilterState(page, {
+      generators: ['comfyui'],
+      dateFrom: '2026-06-01',
+      dateTo: '2026-09-30',
+      minSaturation: 20,
+      maxSaturation: 120,
+      noCaption: true,
+      aestheticUnscored: true,
+      seed: 4242,
+      colorHues: ['blue'],
+      excludeColorHues: ['green'],
+    })
+
+    let previewParams: URLSearchParams | null = null
+    let batchMovePayload: any = null
+
+    await page.route('**/api/images**', async (route) => {
+      const url = new URL(route.request().url())
+      if (url.pathname !== '/api/images') {
+        await route.continue()
+        return
+      }
+      previewParams = url.searchParams
+      await route.fulfill({
+        json: {
+          images: [buildMockGalleryImage(1, { filename: 'june-comfy.png' })],
+          total: 1,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+    await page.route('**/api/batch-move', async (route) => {
+      batchMovePayload = route.request().postDataJSON()
+      await route.fulfill({ json: { status: 'started', total: 1, count: 1 } })
+    })
+    await page.route('**/api/batch-move/progress', async (route) => {
+      await route.fulfill({
+        json: { status: 'done', current: 1, total: 1, moved: 1, errors: 0, message: 'Completed! Moved 1 images.' },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await openSortingSubView(page, 'autosep')
+    await page.locator('#btn-preview-autosep').click()
+    await expect.poll(() => previewParams?.get('date_from') ?? null).toBe('2026-06-01')
+    expect(previewParams!.get('date_to')).toBe('2026-09-30')
+    expect(previewParams!.get('min_saturation')).toBe('20')
+    expect(previewParams!.get('max_saturation')).toBe('120')
+    expect(previewParams!.get('no_caption')).toBe('true')
+    expect(previewParams!.get('aesthetic_unscored')).toBe('true')
+    expect(previewParams!.get('seed')).toBe('4242')
+    expect(previewParams!.get('color_hues')).toBe('blue')
+    expect(previewParams!.get('exclude_color_hues')).toBe('green')
+
+    await page.locator('#autosep-destination').fill(MOCK_AUTOSEP_DESTINATION)
+    await page.locator('#btn-execute-autosep').click()
+    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+    await page.locator('#btn-confirm-ok').click()
+
+    await expect.poll(() => batchMovePayload?.date_from ?? null).toBe('2026-06-01')
+    expect(batchMovePayload).toMatchObject({
+      generators: ['comfyui'],
+      date_to: '2026-09-30',
+      min_saturation: 20,
+      max_saturation: 120,
+      no_caption: true,
+      aesthetic_unscored: true,
+      seed: 4242,
+      color_hues: ['blue'],
+      exclude_color_hues: ['green'],
+    })
   })
 
   test('auto-separate should surface start errors instead of polling a non-existent batch job', async ({ page }) => {

@@ -169,7 +169,9 @@ class BatchMoveMixin:
         folder_scope = request.folder.strip() if request.folder else None
         has_metadata = request.has_metadata
 
-        total_count = db.get_filtered_image_count(
+        # One filter set for the count and the moved id snapshot, so the two
+        # can never disagree about which pictures match.
+        filter_kwargs: Dict[str, Any] = dict(
             generators=generators,
             tags=tags,
             tag_mode=tag_mode,
@@ -205,7 +207,17 @@ class BatchMoveMixin:
             scope=request.scope,
             folder=folder_scope,
             has_metadata=has_metadata,
+            # Aurora Phase 3 + file-date Gallery filters: without them the move
+            # touched more pictures than the Gallery showed.
+            no_caption=request.no_caption,
+            aesthetic_unscored=request.aesthetic_unscored,
+            min_saturation=request.min_saturation,
+            max_saturation=request.max_saturation,
+            seed=request.seed,
+            date_from=request.date_from,
+            date_to=request.date_to,
         )
+        total_count = db.get_filtered_image_count(**filter_kwargs)
 
         if total_count == 0:
             return {"message": "没有符合筛选条件的图片 / No images match the filters", "count": 0}
@@ -298,41 +310,7 @@ class BatchMoveMixin:
 
                 snapshot_path = self._write_id_snapshot(db.iter_filtered_image_id_chunks(
                     chunk_size=_svc().BATCH_MOVE_FETCH_CHUNK,
-                    generators=generators,
-                    tags=tags,
-                    tag_mode=tag_mode,
-                    ratings=ratings,
-                    checkpoints=checkpoints,
-                    loras=loras,
-                    search_query=search_query,
-                    prompt_terms=prompts,
-                    prompt_match_mode=prompt_match_mode,
-                    artist=artist,
-                    min_width=request.min_width,
-                    max_width=request.max_width,
-                    min_height=request.min_height,
-                    max_height=request.max_height,
-                    aspect_ratio=request.aspect_ratio,
-                    min_aesthetic=request.min_aesthetic,
-                    max_aesthetic=request.max_aesthetic,
-                    exclude_tags=exclude_tags,
-                    exclude_generators=exclude_generators,
-                    exclude_ratings=exclude_ratings,
-                    exclude_checkpoints=exclude_checkpoints,
-                    exclude_loras=exclude_loras,
-                    exclude_prompts=exclude_prompts,
-                    exclude_colors=exclude_colors,
-                    color_hues=color_hues,
-                    exclude_color_hues=exclude_color_hues,
-                    min_user_rating=min_user_rating,
-                    brightness_min=brightness_min,
-                    brightness_max=brightness_max,
-                    color_temperature=color_temperature,
-                    brightness_distribution=brightness_distribution,
-                    collection_id=collection_id,
-                    scope=request.scope,
-                    folder=folder_scope,
-                    has_metadata=has_metadata,
+                    **filter_kwargs,
                 ))
                 saw_any_ids = False
                 try:

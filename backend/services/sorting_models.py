@@ -373,6 +373,16 @@ class SortFilterRequest(BaseModel):
     folder: Optional[str] = Field(default=None, max_length=PATH_MAX_LENGTH)
     # v3.3.2: "has SD generation parameters" scope (True/False; None = all)
     has_metadata: Optional[bool] = None
+    # Aurora Phase 3 + file-date Gallery filters, as the selection-token
+    # contract (SelectionIdsRequest) carries them. Without them a move or a
+    # sort session touched more pictures than the Gallery showed.
+    no_caption: Optional[bool] = None
+    aesthetic_unscored: Optional[bool] = None
+    min_saturation: Optional[float] = Field(default=None, ge=0, le=255)
+    max_saturation: Optional[float] = Field(default=None, ge=0, le=255)
+    seed: Optional[int] = None
+    date_from: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    date_to: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
     @field_validator("aspect_ratio")
     @classmethod
@@ -494,6 +504,16 @@ class BatchMoveRequest(SortFilterRequest):
             self.collection_id,
             self.folder,
             self.has_metadata,
+            self.color_hues,
+            self.exclude_color_hues,
+            self.min_saturation,
+            self.max_saturation,
+            self.seed,
+            self.date_from,
+            self.date_to,
+            # Only True narrows the set; False is "no restriction" in the DB layer.
+            self.no_caption or None,
+            self.aesthetic_unscored or None,
         )
         # ``self.aspect_ratio`` is acceptable as a filter even though it has
         # only 3 valid values (square / landscape / portrait); ``ratings``

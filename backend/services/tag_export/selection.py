@@ -107,84 +107,19 @@ def iter_selection_token_id_chunks(
 
 
 def _iter_decoded_filter_id_chunks(filters: Dict[str, Any], chunk_size: int) -> Iterator[List[int]]:
+    # Lazy import: services.image.selection imports this package at top level.
+    from services.image.selection import selection_contract_db_filters
+
     yield from db.iter_filtered_image_id_chunks(
         chunk_size=chunk_size,
         query_page_size=EXPORT_FILTER_QUERY_PAGE_SIZE,
-        generators=filters.get("generators") or None,
-        tags=filters.get("tags") or None,
-        tag_mode=filters.get("tagMode") or filters.get("tag_mode") or "and",
-        ratings=filters.get("ratings") or None,
-        checkpoints=filters.get("checkpoints") or None,
-        loras=filters.get("loras") or None,
-        search_query=filters.get("search") or None,
         sort_by=filters.get("sortBy") or "newest",
-        min_width=filters.get("minWidth"),
-        max_width=filters.get("maxWidth"),
-        min_height=filters.get("minHeight"),
-        max_height=filters.get("maxHeight"),
-        prompt_terms=filters.get("prompts") or None,
-        prompt_match_mode=filters.get("promptMatchMode") or filters.get("prompt_match_mode") or PROMPT_MATCH_MODE_EXACT,
-        aspect_ratio=filters.get("aspectRatio"),
-        artist=filters.get("artist"),
-        min_aesthetic=filters.get("minAesthetic"),
-        max_aesthetic=filters.get("maxAesthetic"),
-        min_user_rating=filters.get("minUserRating") or filters.get("min_user_rating"),
-        excluded_image_ids=filters.get("excludedImageIds") or None,
-        brightness_min=filters.get("brightnessMin"),
-        brightness_max=filters.get("brightnessMax"),
-        color_temperature=filters.get("colorTemperature"),
-        brightness_distribution=filters.get("brightnessDistribution"),
-        exclude_tags=filters.get("excludeTags") or None,
-        exclude_generators=filters.get("excludeGenerators") or None,
-        exclude_ratings=filters.get("excludeRatings") or None,
-        exclude_checkpoints=filters.get("excludeCheckpoints") or None,
-        exclude_loras=filters.get("excludeLoras") or None,
-        exclude_prompts=filters.get("excludePrompts") or None,
-        exclude_colors=filters.get("excludeColors") or None,
-        color_hues=filters.get("colorHues") or None,
-        exclude_color_hues=filters.get("excludeColorHues") or None,
-        collection_id=filters.get("collectionId") or filters.get("collection_id"),
-        folder=filters.get("folder"),
-        has_metadata=filters.get("hasMetadata"),
+        **selection_contract_db_filters(filters),
     )
 
 
 def count_selection_token_ids(selection_token: str) -> int:
+    from services.image.selection import selection_contract_db_filters
+
     filters = _decode_selection_token(selection_token)
-    return db.get_filtered_image_count(
-        generators=filters.get("generators") or None,
-        tags=filters.get("tags") or None,
-        tag_mode=filters.get("tagMode") or filters.get("tag_mode") or "and",
-        ratings=filters.get("ratings") or None,
-        checkpoints=filters.get("checkpoints") or None,
-        loras=filters.get("loras") or None,
-        search_query=filters.get("search") or None,
-        min_width=filters.get("minWidth"),
-        max_width=filters.get("maxWidth"),
-        min_height=filters.get("minHeight"),
-        max_height=filters.get("maxHeight"),
-        prompt_terms=filters.get("prompts") or None,
-        prompt_match_mode=filters.get("promptMatchMode") or filters.get("prompt_match_mode") or PROMPT_MATCH_MODE_EXACT,
-        aspect_ratio=filters.get("aspectRatio"),
-        artist=filters.get("artist"),
-        min_aesthetic=filters.get("minAesthetic"),
-        max_aesthetic=filters.get("maxAesthetic"),
-        min_user_rating=filters.get("minUserRating") or filters.get("min_user_rating"),
-        excluded_image_ids=filters.get("excludedImageIds") or None,
-        brightness_min=filters.get("brightnessMin"),
-        brightness_max=filters.get("brightnessMax"),
-        color_temperature=filters.get("colorTemperature"),
-        brightness_distribution=filters.get("brightnessDistribution"),
-        exclude_tags=filters.get("excludeTags") or None,
-        exclude_generators=filters.get("excludeGenerators") or None,
-        exclude_ratings=filters.get("excludeRatings") or None,
-        exclude_checkpoints=filters.get("excludeCheckpoints") or None,
-        exclude_loras=filters.get("excludeLoras") or None,
-        exclude_prompts=filters.get("excludePrompts") or None,
-        exclude_colors=filters.get("excludeColors") or None,
-        color_hues=filters.get("colorHues") or None,
-        exclude_color_hues=filters.get("excludeColorHues") or None,
-        collection_id=filters.get("collectionId") or filters.get("collection_id"),
-        folder=filters.get("folder"),
-        has_metadata=filters.get("hasMetadata"),
-    )
+    return db.get_filtered_image_count(**selection_contract_db_filters(filters))

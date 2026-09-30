@@ -53,6 +53,17 @@ function serializeManualSortFilters(filters) {
         scope: 'library',
         folder: source.folder ? String(source.folder).trim() : null,
         hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
+        colorHues: [...(source.colorHues || [])],
+        excludeColorHues: [...(source.excludeColorHues || [])],
+        noCaption: source.noCaption === true ? true : null,
+        aestheticUnscored: source.aestheticUnscored === true ? true : null,
+        minSaturation: source.minSaturation ?? null,
+        maxSaturation: source.maxSaturation ?? null,
+        seed: source.seed !== null && source.seed !== '' && Number.isFinite(Number(source.seed))
+            ? Number(source.seed)
+            : null,
+        dateFrom: source.dateFrom || null,
+        dateTo: source.dateTo || null,
     };
 }
 
@@ -114,6 +125,16 @@ function buildManualSortScopeFilters(contract) {
         scope: contract.scope || 'library',
         folder: contract.folder || null,
         hasMetadata: typeof contract.hasMetadata === 'boolean' ? contract.hasMetadata : null,
+        // Hue, Aurora Phase 3 and file-date filters (dropped here before).
+        colorHues: contract.colorHues?.length > 0 ? contract.colorHues : null,
+        excludeColorHues: contract.excludeColorHues?.length > 0 ? contract.excludeColorHues : null,
+        noCaption: contract.noCaption === true ? true : null,
+        aestheticUnscored: contract.aestheticUnscored === true ? true : null,
+        minSaturation: contract.minSaturation ?? null,
+        maxSaturation: contract.maxSaturation ?? null,
+        seed: contract.seed ?? null,
+        dateFrom: contract.dateFrom || null,
+        dateTo: contract.dateTo || null,
     };
 }
 
@@ -225,6 +246,15 @@ function getManualSortScopeSignature(filters) {
         scope: contract.scope || 'library',
         folder: contract.folder || null,
         hasMetadata: contract.hasMetadata ?? null,
+        colorHues: contract.colorHues || [],
+        excludeColorHues: contract.excludeColorHues || [],
+        noCaption: contract.noCaption ?? null,
+        aestheticUnscored: contract.aestheticUnscored ?? null,
+        minSaturation: contract.minSaturation ?? null,
+        maxSaturation: contract.maxSaturation ?? null,
+        seed: contract.seed ?? null,
+        dateFrom: contract.dateFrom || null,
+        dateTo: contract.dateTo || null,
     });
 }
 

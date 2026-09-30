@@ -1,10 +1,10 @@
 /**
- * autosep/serialize.js — autosep.js decomposition.
- * Extracted VERBATIM (byte-identical) from frontend/js/autosep.js, pre-split
- * lines 490-547: serializeAutoSepFilters — the full v3.3.x gallery-scope
- * shape (the nine scope keys are pinned by test_frontend_contract's
- * sorting-payloads test; the same keys recur on purpose in preview.js and
- * move-progress.js — do not DRY) — and buildAutoSepFilterContract.
+ * autosep/serialize.js — autosep.js decomposition (from frontend/js/autosep.js,
+ * pre-split lines 490-547; buildAutoSepScopeFilters added 2026-09-30):
+ * serializeAutoSepFilters — the full Gallery filter shape (every key is checked
+ * by test_filter_scope_parity; the same keys recur on purpose in preview.js) —
+ * buildAutoSepScopeFilters (the bundle move-progress.js sends) and
+ * buildAutoSepFilterContract.
  * Classic script: loads after autosep/state-constants.js (base).
  */
 function serializeAutoSepFilters(filters) {
@@ -49,6 +49,46 @@ function serializeAutoSepFilters(filters) {
         scope: 'library',
         folder: source.folder ? String(source.folder).trim() : null,
         hasMetadata: typeof source.hasMetadata === 'boolean' ? source.hasMetadata : null,
+        // Hue, Aurora Phase 3 and file-date filters: dropped here before, so a
+        // move touched more pictures than the gallery showed.
+        colorHues: [...(source.colorHues || [])],
+        excludeColorHues: [...(source.excludeColorHues || [])],
+        noCaption: source.noCaption === true ? true : null,
+        aestheticUnscored: source.aestheticUnscored === true ? true : null,
+        minSaturation: source.minSaturation ?? null,
+        maxSaturation: source.maxSaturation ?? null,
+        seed: source.seed !== null && source.seed !== '' && Number.isFinite(Number(source.seed))
+            ? Number(source.seed)
+            : null,
+        dateFrom: source.dateFrom || null,
+        dateTo: source.dateTo || null,
+    };
+}
+
+// The gallery-scope keys API.batchMove takes as one bundle (every filter that
+// is not one of its positional arguments).
+function buildAutoSepScopeFilters(contract) {
+    return {
+        excludePrompts: contract.excludePrompts,
+        excludeColors: contract.excludeColors,
+        minUserRating: contract.minUserRating,
+        brightnessMin: contract.brightnessMin,
+        brightnessMax: contract.brightnessMax,
+        colorTemperature: contract.colorTemperature,
+        brightnessDistribution: contract.brightnessDistribution,
+        collectionId: contract.collectionId,
+        scope: contract.scope,
+        folder: contract.folder,
+        hasMetadata: contract.hasMetadata,
+        colorHues: contract.colorHues,
+        excludeColorHues: contract.excludeColorHues,
+        noCaption: contract.noCaption,
+        aestheticUnscored: contract.aestheticUnscored,
+        minSaturation: contract.minSaturation,
+        maxSaturation: contract.maxSaturation,
+        seed: contract.seed,
+        dateFrom: contract.dateFrom,
+        dateTo: contract.dateTo,
     };
 }
 

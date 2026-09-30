@@ -221,6 +221,14 @@ def _filter_contract_db_kwargs(filters: BulkTagFilterContract) -> Dict[str, Any]
         "collection_id": filters.collectionId,
         "folder": filters.folder,
         "has_metadata": filters.hasMetadata,
+        "scope": filters.scope,
+        "no_caption": filters.noCaption,
+        "aesthetic_unscored": filters.aestheticUnscored,
+        "min_saturation": filters.minSaturation,
+        "max_saturation": filters.maxSaturation,
+        "seed": filters.seed,
+        "date_from": filters.dateFrom,
+        "date_to": filters.dateTo,
     }
 
 

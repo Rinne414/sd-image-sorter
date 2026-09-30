@@ -2090,7 +2090,10 @@ def test_sorting_payloads_carry_v33x_gallery_scope_filters():
         assert field in autosep_source, f"serializeAutoSepFilters misses {field}"
 
     assert "scope: 'library'" in autosep_preview_source
-    assert "scope: contract.scope," in autosep_move_source
+    # The move sends the scope bundle built in serialize.js; every Gallery
+    # filter in it is checked by test_filter_scope_parity.
+    assert "buildAutoSepScopeFilters(contract)" in autosep_move_source
+    assert "scope: contract.scope," in autosep_source
 
     # Manual Sort routes the same scope bundle through every start path
     # (slot/bracket/cull) and the minimap preview query.
