@@ -43,6 +43,7 @@ class FakeIdentifier:
         self.fail_on = fail_on
         self.on_call = on_call
         self.calls: list[str] = []
+        self.batches: list[list[str]] = []
         self.loads = 0
 
     def load(self):
@@ -89,6 +90,61 @@ class FakeIdentifier:
         return self.extract_style_vector(image_path, priority), self.identification_for(
             image_path, top_k, threshold
         )
+
+    def extract_style_vectors_and_identifications(
+        self, items, *, top_k: int = 5, threshold: float = 0.03, priority: int = 0
+    ):
+        """One forward for a batch of (path, decoded image) pairs; a bad
+        picture fails the whole batch, exactly like a real forward would."""
+        self.batches.append([path for path, _image in items])
+        return [
+            self.extract_style_vector_and_identification(
+                path, top_k=top_k, threshold=threshold, priority=priority
+            )
+            for path, _image in items
+        ]
+
+
+class NanOnce(FakeIdentifier):
+    """One picture gets a non-finite vector (what pack_style_vector refuses)."""
+
+    def _poison(self, path, vector):
+        if path.endswith("img2.png"):
+            vector = np.array(vector, dtype=np.float32, copy=True)
+            vector[0] = np.nan
+        return vector
+
+    def extract_style_vectors_and_identifications(self, items, **kwargs):
+        answers = super().extract_style_vectors_and_identifications(items, **kwargs)
+        return [
+            (self._poison(path, vector), raw)
+            for (path, _input), (vector, raw) in zip(items, answers)
+        ]
+
+    def extract_style_vector_and_identification(self, image_path, **kwargs):
+        vector, raw = super().extract_style_vector_and_identification(
+            image_path, **kwargs
+        )
+        return self._poison(image_path, vector), raw
+
+
+class TensorFakeIdentifier(FakeIdentifier):
+    """A Kaloscope-like identifier: the worker transforms pictures for it."""
+
+    def __init__(self):
+        super().__init__()
+        self.prepared = 0
+        self.input_kinds: list[str] = []
+
+    def prepare_style_input(self, image):
+        self.prepared += 1
+        return np.zeros((3, 4, 4), dtype=np.float32)
+
+    def extract_style_vectors_and_identifications(self, items, **kwargs):
+        self.input_kinds.extend(
+            type(model_input).__name__ for _path, model_input in items
+        )
+        return super().extract_style_vectors_and_identifications(items, **kwargs)
 
 
 def _make_images(test_db, tmp_path, count: int, prefix: str = "img") -> list[int]:
@@ -406,8 +462,13 @@ class TestExtraction:
         assert started["total"] == 2
         assert service.get_stats("kaloscope", model_path=str(weights_a))["pending"] == 0
 
-    def test_cancel_stops_after_current_image(self, test_db, tmp_path):
-        ids = _make_images(test_db, tmp_path, 4)
+    def test_cancel_stops_after_current_batch(self, test_db, tmp_path, monkeypatch):
+        """A cancel lands within one batch: the batch in flight finishes,
+        the next one never starts (and its prepared pictures are dropped)."""
+        from services import style_vector_service as svc_mod
+
+        monkeypatch.setattr(svc_mod, "EXTRACTION_BATCH_SIZE", 4)
+        ids = _make_images(test_db, tmp_path, 12)
         holder = {}
 
         def cancel_on_first(_identifier, _path):
@@ -422,8 +483,8 @@ class TestExtraction:
         progress = service.get_progress()
         assert progress["running"] is False
         assert progress["step"] == "cancelled"
-        assert progress["processed"] == 1 and progress["written"] == 1
-        assert set(_rows(test_db)) == {ids[0]}
+        assert progress["processed"] == 4 and progress["written"] == 4
+        assert set(_rows(test_db)) == set(ids[:4])
         assert service.request_cancel() is False, "nothing left to cancel"
 
     def test_pause_waits_and_resume_continues(self, test_db, tmp_path):
@@ -610,6 +671,7 @@ class TestExtraction:
         ids = _make_images(test_db, tmp_path, 1)
         identifier = FakeIdentifier()
         identifier.extract_style_vector_and_identification = None
+        identifier.extract_style_vectors_and_identifications = None
         service = _service(identifier)
         tasks = BackgroundTasks()
         service.start_extraction(tasks, space="kaloscope")
@@ -666,6 +728,299 @@ class TestExtraction:
             after["stale"],
         ) == (3, 3, 0, 0)
         assert after["model_version"] == CANONICAL_VERSION
+
+
+def _prediction_rows(test_db):
+    with test_db.get_db() as conn:
+        return {
+            int(row["image_id"]): (
+                row["artist"],
+                row["confidence"],
+                row["top_predictions"],
+            )
+            for row in conn.execute(
+                "SELECT image_id, artist, confidence, top_predictions FROM artist_predictions"
+            )
+        }
+
+
+def _vector_rows(test_db):
+    return {
+        image_id: (
+            row["model_version"],
+            row["content_fingerprint"],
+            bytes(row["vector"]),
+        )
+        for image_id, row in _rows(test_db).items()
+    }
+
+
+class TestBatching:
+    """S1b: the worker feeds the model whole batches, prepares the next
+    batch while the GPU works, and still answers picture by picture."""
+
+    def test_pictures_reach_the_model_in_batches(self, test_db, tmp_path, monkeypatch):
+        from services import style_vector_service as svc_mod
+
+        monkeypatch.setattr(svc_mod, "EXTRACTION_BATCH_SIZE", 4)
+        ids = _make_images(test_db, tmp_path, 10)
+        identifier = FakeIdentifier()
+        service = _service(identifier)
+        tasks = BackgroundTasks()
+        service.start_extraction(tasks, space="kaloscope")
+        _run_scheduled(tasks)
+
+        progress = service.get_progress()
+        assert progress["step"] == "done"
+        assert (progress["processed"], progress["written"], progress["errors"]) == (
+            10,
+            10,
+            0,
+        )
+        assert [len(batch) for batch in identifier.batches] == [4, 4, 2]
+        assert set(_rows(test_db)) == set(ids)
+        assert set(_prediction_rows(test_db)) == set(ids)
+
+    def test_batch_and_single_runs_store_identical_rows(
+        self, test_db, tmp_path, monkeypatch
+    ):
+        from services import style_vector_service as svc_mod
+
+        ids = _make_images(test_db, tmp_path, 9)
+        monkeypatch.setattr(svc_mod, "EXTRACTION_BATCH_SIZE", 1)
+        single = _service(FakeIdentifier())
+        tasks = BackgroundTasks()
+        single.start_extraction(tasks, space="kaloscope")
+        _run_scheduled(tasks)
+        single_vectors = _vector_rows(test_db)
+        single_predictions = _prediction_rows(test_db)
+        assert set(single_vectors) == set(ids)
+
+        with test_db.get_db() as conn:
+            conn.execute("DELETE FROM image_style_vectors")
+            conn.execute("DELETE FROM artist_predictions")
+        monkeypatch.setattr(svc_mod, "EXTRACTION_BATCH_SIZE", 4)
+        batched = _service(FakeIdentifier())
+        tasks = BackgroundTasks()
+        batched.start_extraction(tasks, space="kaloscope")
+        _run_scheduled(tasks)
+        assert _vector_rows(test_db) == single_vectors
+        assert _prediction_rows(test_db) == single_predictions
+
+    def test_one_bad_picture_in_a_batch_costs_one_error_only(
+        self, test_db, tmp_path, monkeypatch
+    ):
+        """The batch forward fails as a whole; the worker retries the
+        batch picture by picture, so the good ones are stored and the bad
+        one is reported once."""
+        from services import style_vector_service as svc_mod
+
+        monkeypatch.setattr(svc_mod, "EXTRACTION_BATCH_SIZE", 4)
+        ids = _make_images(test_db, tmp_path, 6)
+        identifier = FakeIdentifier(fail_on="img2.png")
+        service = _service(identifier)
+        tasks = BackgroundTasks()
+        service.start_extraction(tasks, space="kaloscope")
+        _run_scheduled(tasks)
+
+        progress = service.get_progress()
+        assert progress["step"] == "done"
+        assert (progress["processed"], progress["written"], progress["errors"]) == (
+            6,
+            5,
+            1,
+        )
+        assert set(_rows(test_db)) == set(ids) - {ids[2]}
+        issues = [issue for issue in progress["recent_issues"] if "img2.png" in issue]
+        assert len(issues) == 1
+        # the first batch was attempted whole, then retried one by one through
+        # the same batch interface (size 1, the already decoded picture): the
+        # bad picture was seen twice (in the batch, then alone), no more.
+        first_batch = identifier.batches[0]
+        assert [path.endswith(f"img{i}.png") for i, path in enumerate(first_batch)] == [
+            True
+        ] * 4
+        assert identifier.calls.count(first_batch[2]) == 2
+        assert [len(batch) for batch in identifier.batches] == [4, 1, 1, 1, 1, 2]
+
+    def test_one_non_finite_vector_costs_one_error_and_no_rollback(
+        self, test_db, tmp_path, monkeypatch
+    ):
+        """Reviewer probe: a vector the store refuses (NaN) is one error;
+        the other pictures of its batch are still written."""
+        from services import style_vector_service as svc_mod
+
+        monkeypatch.setattr(svc_mod, "EXTRACTION_BATCH_SIZE", 4)
+        ids = _make_images(test_db, tmp_path, 10)
+        service = _service(NanOnce())
+        tasks = BackgroundTasks()
+        service.start_extraction(tasks, space="kaloscope")
+        _run_scheduled(tasks)
+        progress = service.get_progress()
+        assert progress["step"] == "done"
+        assert (progress["processed"], progress["written"], progress["errors"]) == (
+            10,
+            9,
+            1,
+        )
+        assert set(_rows(test_db)) == set(ids) - {ids[2]}
+        assert sum("img2.png" in issue for issue in progress["recent_issues"]) == 1
+        # refused before the store saw it: the worker's own message, not the packer's
+        assert any(
+            svc_mod.STYLE_VECTOR_BAD_VECTOR_ERROR in issue
+            for issue in progress["recent_issues"]
+        )
+
+    def test_a_failing_prediction_write_costs_one_error_only(
+        self, test_db, tmp_path, monkeypatch
+    ):
+        """An exception while writing one picture's prediction rolls back
+        that picture only (its vector included); the batch goes on."""
+        from services import style_vector_service as svc_mod
+
+        monkeypatch.setattr(svc_mod, "EXTRACTION_BATCH_SIZE", 4)
+        ids = _make_images(test_db, tmp_path, 10)
+        real = svc_mod.write_artist_predictions
+
+        def flaky(cursor, predictions):
+            if any(p["image_id"] == ids[2] for p in predictions):
+                raise RuntimeError("disk full")
+            return real(cursor, predictions)
+
+        monkeypatch.setattr(svc_mod, "write_artist_predictions", flaky)
+        service = _service(FakeIdentifier())
+        tasks = BackgroundTasks()
+        service.start_extraction(tasks, space="kaloscope")
+        _run_scheduled(tasks)
+        progress = service.get_progress()
+        assert progress["step"] == "done"
+        assert (progress["processed"], progress["written"], progress["errors"]) == (
+            10,
+            9,
+            1,
+        )
+        assert set(_rows(test_db)) == set(ids) - {ids[2]}
+        assert set(_prediction_rows(test_db)) == set(ids) - {ids[2]}
+
+    def test_prepared_tensors_reach_the_model_instead_of_pictures(
+        self, test_db, tmp_path, monkeypatch
+    ):
+        """An identifier that offers prepare_style_input gets its own
+        transformed inputs (made on the helper threads), not PIL images."""
+        from services import style_vector_service as svc_mod
+
+        monkeypatch.setattr(svc_mod, "EXTRACTION_BATCH_SIZE", 4)
+        ids = _make_images(test_db, tmp_path, 5)
+        identifier = TensorFakeIdentifier()
+        service = _service(identifier)
+        tasks = BackgroundTasks()
+        service.start_extraction(tasks, space="kaloscope")
+        _run_scheduled(tasks)
+        assert service.get_progress()["written"] == 5
+        assert identifier.prepared == 5
+        assert identifier.input_kinds and all(
+            kind == "ndarray" for kind in identifier.input_kinds
+        )
+        assert set(_rows(test_db)) == set(ids)
+
+    def test_pause_takes_effect_between_batches(self, test_db, tmp_path, monkeypatch):
+        from services import style_vector_service as svc_mod
+
+        monkeypatch.setattr(svc_mod, "EXTRACTION_BATCH_SIZE", 4)
+        _make_images(test_db, tmp_path, 8)
+        holder = {}
+        seen = []
+
+        def pause_on_first(_identifier, path):
+            seen.append(path)
+            if len(seen) == 1:
+                holder["service"].request_pause()
+                threading.Timer(0.3, holder["service"].request_resume).start()
+
+        service = _service(FakeIdentifier(on_call=pause_on_first))
+        holder["service"] = service
+        tasks = BackgroundTasks()
+        service.start_extraction(tasks, space="kaloscope")
+        started = time.time()
+        _run_scheduled(tasks)
+        assert time.time() - started >= 0.25
+        progress = service.get_progress()
+        assert progress["step"] == "done" and progress["written"] == 8
+
+    def test_unchanged_file_skips_the_pixel_hash(self, test_db, tmp_path, monkeypatch):
+        """A row whose stored mtime/size still match the file keeps the
+        scanner's fingerprint without re-hashing the pixels (the scanner's
+        own unchanged rule, image_manager_gates._source_fingerprint_matches);
+        a file that changed on disk is hashed again."""
+        import os
+
+
+        ids = _make_images(test_db, tmp_path, 3)
+        hashed = []
+        from services import style_vector_prepare as prepare_mod
+
+        real = prepare_mod.compute_image_content_fingerprint
+
+        def counting(path):
+            hashed.append(path)
+            return real(path)
+
+        monkeypatch.setattr(prepare_mod, "compute_image_content_fingerprint", counting)
+        # rows 0 and 1 were scanned with a fingerprint and a source stat;
+        # row 2 has a fingerprint but its file was rewritten since.
+        with test_db.get_db() as conn:
+            for index, image_id in enumerate(ids):
+                path = tmp_path / f"img{index}.png"
+                stat = os.stat(path)
+                conn.execute(
+                    "UPDATE images SET content_fingerprint = ?, source_mtime_ns = ?, source_size = ? WHERE id = ?",
+                    (real(str(path)), stat.st_mtime_ns, stat.st_size, image_id),
+                )
+        Image.new("RGB", (24, 24), (1, 2, 3)).save(tmp_path / "img2.png")
+
+        service = _service(FakeIdentifier())
+        tasks = BackgroundTasks()
+        service.start_extraction(tasks, space="kaloscope")
+        _run_scheduled(tasks)
+        progress = service.get_progress()
+        assert (progress["written"], progress["errors"]) == (2, 1)
+        assert [os.path.basename(path) for path in hashed] == ["img2.png"]
+        assert set(_rows(test_db)) == {ids[0], ids[1]}
+
+    def test_stats_follow_the_users_model_settings(self, test_db, tmp_path):
+        """A local checkpoint names its own version: vectors made with it are
+        not "other_version" for the user who runs it."""
+        ids = _make_images(test_db, tmp_path, 2)
+        local = tmp_path / "my-kaloscope.pth"
+        local.write_bytes(b"local weights")
+        local_version = ai.kaloscope_style_vector_model_version(str(local))
+        assert local_version != CANONICAL_VERSION
+        with test_db.get_db() as conn:
+            from db_style_vectors import upsert_style_vector
+
+            for image_id in ids:
+                conn.execute(
+                    "UPDATE images SET content_fingerprint = 'fp' WHERE id = ?",
+                    (image_id,),
+                )
+                upsert_style_vector(
+                    conn.cursor(),
+                    image_id=image_id,
+                    space="kaloscope",
+                    model_version=local_version,
+                    content_fingerprint="fp",
+                    vector=_vector_for("x"),
+                )
+        service = _service(FakeIdentifier())
+        default = service.get_stats("kaloscope")
+        assert (default["vectors"], default["other_version"], default["pending"]) == (
+            2,
+            2,
+            2,
+        )
+        mine = service.get_stats("kaloscope", model_path=str(local))
+        assert (mine["vectors"], mine["other_version"], mine["pending"]) == (2, 0, 0)
+        assert mine["model_version"] == local_version
 
 
 class TestModelRefusals:

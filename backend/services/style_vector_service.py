@@ -28,7 +28,10 @@ import logging
 import os
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional
+from concurrent.futures import Future, ThreadPoolExecutor
+from typing import Any, Callable, Dict, List, Optional, Sequence
+
+import numpy as np
 
 import database as db
 from ai_runtime_guard import PRIORITY_BATCH
@@ -44,13 +47,15 @@ from db_style_vectors import (
     upsert_style_vector,
 )
 from exceptions import OperationInProgressError, ServiceError, ValidationError
-from image_fingerprint import compute_image_content_fingerprint
 from library_context import current_library_sql
-from services.derived_state_service import (
-    initialize_image_content_fingerprint,
-    write_artist_predictions,
+from services.derived_state_service import write_artist_predictions
+from services.style_vector_prepare import (  # noqa: F401 - re-exported names
+    STYLE_VECTOR_FINGERPRINT_ERROR,
+    STYLE_VECTOR_STALE_ERROR,
+    PendingRow,
+    PreparedPicture as _Prepared,
+    prepare_picture,
 )
-from utils.source_paths import resolve_existing_indexed_image_path
 
 logger = logging.getLogger(__name__)
 
@@ -62,15 +67,31 @@ STYLE_VECTOR_UNSUPPORTED_ERROR = (
     "cannot provide a feature vector. / 画风向量需要 Kaloscope 2.0 画风识别模型，"
     "当前加载的模型无法输出特征向量。"
 )
-STYLE_VECTOR_FINGERPRINT_ERROR = "Could not fingerprint the image pixels."
-STYLE_VECTOR_STALE_ERROR = (
-    "The image changed since it was scanned; rescan the folder and try again."
+STYLE_VECTOR_BAD_VECTOR_ERROR = (
+    "The model answered a non-finite or empty style vector for this image."
 )
 _PAUSE_POLL_SECONDS = 0.1
-_GC_EVERY = 8
 _RECENT_ISSUES = 10
+# Throughput (S1b, measured on a 3090 with 200 pictures): one forward per
+# picture ran at 3.9 pictures/s with the GPU busy 29% of the time; the
+# forward alone reaches ~50 pictures/s at batch 4-8, and decoding + hashing
+# the next batch on helper threads overlaps the GPU work. Pause and cancel
+# are answered between batches, so one batch bounds their reaction time.
+EXTRACTION_BATCH_SIZE = 8
+# Helper threads that resolve, fingerprint, decode and transform the
+# pictures of the NEXT batch (one picture per task, so this many run at
+# once) while the GPU works on the current one; bounded: this many threads
+# plus the worker itself.
+_PREPARE_THREADS = 2
+# gc.collect() cost ~100 ms a call; once per this many pictures is plenty.
+_GC_EVERY_IMAGES = 64
+# Memory: at most two batches are alive, the one on the GPU and the one
+# prepared ahead (2 x EXTRACTION_BATCH_SIZE = 16 pictures). With Kaloscope
+# each prepared picture is its 3x448x448 float32 input (~2.4 MB) and the
+# decoded image is dropped right after the transform; an identifier without
+# prepare_style_input keeps the decoded RGB image instead (a 4K picture is
+# ~25 MB, so 16 of them ~400 MB).
 
-PendingRow = tuple[int, str, Optional[str], Optional[str]]
 
 
 def _weights_path_load_would_use(model_path: Optional[str]) -> Optional[str]:
@@ -365,92 +386,267 @@ class StyleVectorService:
             raise ServiceError(STYLE_VECTOR_UNSUPPORTED_ERROR)
         return identifier
 
-    def _extract_one(
-        self,
-        identifier,
-        *,
-        space: str,
-        model_version: str,
-        image_id: int,
-        indexed_path: str,
-        stored_fingerprint: Optional[str] = None,
-        stored_version: Optional[str] = None,
-        with_artist: bool = True,
-    ) -> str:
-        """Return ``"kept"`` when the stored vector still fits, ``"written"`` otherwise.
-
-        With ``with_artist`` the vector and the artist prediction of the
-        same forward land in one transaction; the prediction row is built by
-        the Style Finder's own ``normalize_identification`` and written by
-        ``write_artist_predictions``, so both entrances produce the same row.
-        """
-        image_path = resolve_existing_indexed_image_path(
-            indexed_path, backend_file=__file__
+    # ------------------------------------------------------- GPU stage
+    def _identify_batch(self, identifier, batch: List[_Prepared], with_artist: bool):
+        """(vector, raw identification | None) per prepared picture, or an
+        exception in that slot. One forward for the whole batch when the
+        identifier offers it; a batch that fails as a whole is retried one
+        picture at a time so a single bad picture costs one error only."""
+        combined_batch = getattr(
+            identifier, "extract_style_vectors_and_identifications", None
         )
-        if not image_path:
+        if with_artist and callable(combined_batch) and len(batch) > 1:
             try:
-                db.mark_image_unreadable(image_id, "File not found")
-            except Exception:
-                logger.debug(
-                    "Failed to mark image %s unreadable during style extraction",
-                    image_id,
+                outputs = combined_batch(
+                    [(item.image_path, item.payload) for item in batch],
+                    top_k=ARTIST_INDEX_TOP_K,
+                    threshold=ARTIST_THRESHOLD_DEFAULT,
+                    priority=PRIORITY_BATCH,
                 )
-            raise FileNotFoundError(f"Image file not found for image {image_id}")
+                if len(outputs) == len(batch):
+                    return [(vector, raw) for vector, raw in outputs]
+                logger.warning(
+                    "Batched style extraction answered %d of %d pictures; retrying one by one",
+                    len(outputs),
+                    len(batch),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Batched style extraction failed (%s); retrying one by one", exc
+                )
+        results = []
+        for item in batch:
+            try:
+                results.append(self._identify_one(identifier, item, with_artist))
+            except Exception as exc:
+                results.append(exc)
+        return results
 
-        fingerprint = str(compute_image_content_fingerprint(image_path) or "").strip()
-        if not fingerprint:
-            raise ServiceError(STYLE_VECTOR_FINGERPRINT_ERROR)
-        with db.get_db() as conn:
-            current = initialize_image_content_fingerprint(
-                conn.cursor(), image_id=image_id, content_fingerprint=fingerprint
-            )
-        if not current:
-            raise ServiceError(STYLE_VECTOR_STALE_ERROR)
-        if stored_fingerprint == fingerprint and stored_version == model_version:
-            # The scan had forgotten the fingerprint but the pixels are the
-            # same: the stored vector is still right, no need to run the model.
-            return "kept"
-
-        combined = getattr(identifier, "extract_style_vector_and_identification", None)
-        prediction: Optional[Dict[str, Any]] = None
-        if with_artist and callable(combined):
-            vector, raw = combined(
-                image_path,
+    @staticmethod
+    def _identify_one(identifier, item: _Prepared, with_artist: bool):
+        """One picture: the batch interface with a batch of one, fed the
+        already prepared input (no second decode, no re-read of a file that
+        may have changed meanwhile); older identifiers take a path."""
+        combined_batch = getattr(
+            identifier, "extract_style_vectors_and_identifications", None
+        )
+        if with_artist and callable(combined_batch) and item.payload is not None:
+            outputs = combined_batch(
+                [(item.image_path, item.payload)],
                 top_k=ARTIST_INDEX_TOP_K,
                 threshold=ARTIST_THRESHOLD_DEFAULT,
                 priority=PRIORITY_BATCH,
             )
-            if not raw.get("error"):
-                from services.artist_service import normalize_identification
-
-                normalized = normalize_identification(raw)
-                prediction = {
-                    "image_id": image_id,
-                    "artist": normalized["artist"],
-                    "confidence": normalized["confidence"],
-                    "top_predictions": normalized["top_predictions"],
-                    "content_fingerprint": fingerprint,
-                }
-        else:
-            vector = identifier.extract_style_vector(
-                image_path, priority=PRIORITY_BATCH
+            if len(outputs) != 1:
+                raise ServiceError(STYLE_VECTOR_UNSUPPORTED_ERROR)
+            vector, raw = outputs[0]
+            return vector, raw
+        combined = getattr(identifier, "extract_style_vector_and_identification", None)
+        if with_artist and callable(combined):
+            return combined(
+                item.image_path,
+                top_k=ARTIST_INDEX_TOP_K,
+                threshold=ARTIST_THRESHOLD_DEFAULT,
+                priority=PRIORITY_BATCH,
             )
+        return identifier.extract_style_vector(
+            item.image_path, priority=PRIORITY_BATCH
+        ), None
 
+    @staticmethod
+    def _check_vector(vector) -> None:
+        """What the store would refuse, caught before the transaction."""
+        array = np.asarray(vector, dtype=np.float32).reshape(-1)
+        if array.size == 0 or not np.all(np.isfinite(array)):
+            raise ServiceError(STYLE_VECTOR_BAD_VECTOR_ERROR)
+        if float(np.linalg.norm(array)) <= 0.0:
+            raise ServiceError(STYLE_VECTOR_BAD_VECTOR_ERROR)
+
+    @staticmethod
+    def _prediction_for(item: _Prepared, raw) -> Optional[Dict[str, Any]]:
+        """The Style Finder's own row for this picture (its normaliser, its writer)."""
+        if not raw or raw.get("error"):
+            return None
+        from services.artist_service import normalize_identification
+
+        normalized = normalize_identification(raw)
+        return {
+            "image_id": item.image_id,
+            "artist": normalized["artist"],
+            "confidence": normalized["confidence"],
+            "top_predictions": normalized["top_predictions"],
+            "content_fingerprint": item.fingerprint,
+        }
+
+    def _extract_batch(
+        self,
+        identifier,
+        batch: List[_Prepared],
+        *,
+        space: str,
+        model_version: str,
+        with_artist: bool,
+    ) -> List[Any]:
+        """Per picture: ``"kept"``, ``"written"`` or the exception to report.
+
+        Vectors and predictions of a batch land in one transaction, each
+        picture inside its own SAVEPOINT: a vector the store refuses, a
+        fingerprint the scan replaced meanwhile (``STYLE_VECTOR_STALE_ERROR``)
+        or a failing prediction write costs that picture only, and its
+        partial rows are rolled back while the others stay.
+        """
+        outcomes: List[Any] = [
+            item.error or ("kept" if item.kept else None) for item in batch
+        ]
+        todo = [index for index, outcome in enumerate(outcomes) if outcome is None]
+        if not todo:
+            return outcomes
+        answers = self._identify_batch(
+            identifier, [batch[index] for index in todo], with_artist
+        )
+        for item in batch:
+            item.close()
         with db.get_db() as conn:
             cursor = conn.cursor()
-            written = upsert_style_vector(
-                cursor,
-                image_id=image_id,
-                space=space,
-                model_version=model_version,
-                content_fingerprint=fingerprint,
-                vector=vector,
-            )
-            if written and prediction is not None:
-                write_artist_predictions(cursor, [prediction])
+            for index, answer in zip(todo, answers):
+                item = batch[index]
+                if isinstance(answer, Exception):
+                    outcomes[index] = answer
+                    continue
+                vector, raw = answer
+                try:
+                    self._check_vector(vector)
+                    cursor.execute("SAVEPOINT style_item")
+                    try:
+                        outcomes[index] = self._write_one(
+                            cursor,
+                            item,
+                            vector,
+                            raw,
+                            space=space,
+                            model_version=model_version,
+                            with_artist=with_artist,
+                        )
+                        cursor.execute("RELEASE SAVEPOINT style_item")
+                    except Exception:
+                        cursor.execute("ROLLBACK TO SAVEPOINT style_item")
+                        cursor.execute("RELEASE SAVEPOINT style_item")
+                        raise
+                except Exception as exc:  # this picture only
+                    outcomes[index] = exc
+        return outcomes
+
+    def _write_one(
+        self, cursor, item: _Prepared, vector, raw, *, space, model_version, with_artist
+    ):
+        written = upsert_style_vector(
+            cursor,
+            image_id=item.image_id,
+            space=space,
+            model_version=model_version,
+            content_fingerprint=item.fingerprint,
+            vector=vector,
+        )
         if not written:
             raise ServiceError(STYLE_VECTOR_STALE_ERROR)
+        prediction = self._prediction_for(item, raw) if with_artist else None
+        if prediction is not None:
+            write_artist_predictions(cursor, [prediction])
         return "written"
+
+    def _run_batches(
+        self,
+        identifier,
+        rows: Sequence[PendingRow],
+        *,
+        space: str,
+        model_version: str,
+        with_artist: bool,
+    ) -> tuple[int, int, int, int, bool]:
+        """Walk the rows batch by batch; returns (processed, written, kept, errors, cancelled).
+
+        The next batch's CPU work (resolve, fingerprint, decode) runs on
+        helper threads while the model works on the current one. Pause and
+        cancel are checked before each batch: a cancel drops the batch that
+        was prepared ahead without counting it.
+        """
+        size = max(1, int(EXTRACTION_BATCH_SIZE))
+        batches = [rows[start : start + size] for start in range(0, len(rows), size)]
+        processed = written = kept = errors = 0
+        cancelled = False
+        executor = ThreadPoolExecutor(
+            max_workers=_PREPARE_THREADS, thread_name_prefix="style-index-prepare"
+        )
+        # One task per picture, so _PREPARE_THREADS pictures are prepared at once.
+        submit = lambda rows: [  # noqa: E731
+            executor.submit(prepare_picture, row, model_version, identifier)
+            for row in rows
+        ]
+        ahead: List[Future] = []
+        try:
+            if batches:
+                ahead = submit(batches[0])
+            for index, batch_rows in enumerate(batches):
+                self._wait_while_paused()
+                if self._is_cancelled():
+                    cancelled = True
+                    break
+                prepared = [future.result() for future in ahead]
+                ahead = submit(batches[index + 1]) if index + 1 < len(batches) else []
+                first = prepared[0].name
+                label = (
+                    first if len(prepared) == 1 else f"{first} (+{len(prepared) - 1})"
+                )
+                self._update(current_item=first, message=f"Extracting {label}")
+                outcomes = self._extract_batch(
+                    identifier,
+                    prepared,
+                    space=space,
+                    model_version=model_version,
+                    with_artist=with_artist,
+                )
+                for item, outcome in zip(prepared, outcomes):
+                    if outcome == "kept":
+                        kept += 1
+                    elif outcome == "written":
+                        written += 1
+                    else:  # one bad image must not stop the batch
+                        errors += 1
+                        logger.warning(
+                            "Style vector failed for image %s: %s",
+                            item.image_id,
+                            outcome,
+                        )
+                        self._note_issue(f"{item.name}: {outcome}")
+                    processed += 1
+                self._update(
+                    processed=processed, written=written, kept=kept, errors=errors
+                )
+                if (
+                    processed // _GC_EVERY_IMAGES
+                    != (processed - len(prepared)) // _GC_EVERY_IMAGES
+                ):
+                    self._release_memory()
+        finally:
+            executor.shutdown(wait=True, cancel_futures=True)
+            for future in ahead:  # a batch prepared ahead of a cancel: dropped
+                if future.done() and not future.cancelled():
+                    try:
+                        future.result().close()
+                    except Exception:
+                        pass
+        return processed, written, kept, errors, cancelled
+
+    @staticmethod
+    def _release_memory() -> None:
+        gc.collect()
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
 
     def _finish_cancelled(
         self, processed: int, total: int, written: int, kept: int
@@ -490,50 +686,13 @@ class StyleVectorService:
 
             processed = written = kept = errors = 0
             cancelled = False
-            for image_id, indexed_path, stored_fingerprint, stored_version in rows:
-                self._wait_while_paused()
-                if self._is_cancelled():
-                    cancelled = True
-                    break
-                current_item = os.path.basename(indexed_path or "") or str(image_id)
-                self._update(
-                    current_item=current_item, message=f"Extracting {current_item}"
-                )
-                try:
-                    outcome = self._extract_one(
-                        identifier,
-                        space=space,
-                        model_version=model_version,
-                        image_id=image_id,
-                        indexed_path=indexed_path,
-                        stored_fingerprint=stored_fingerprint,
-                        stored_version=stored_version,
-                        with_artist=with_artist,
-                    )
-                    if outcome == "kept":
-                        kept += 1
-                    else:
-                        written += 1
-                except Exception as exc:  # one bad image must not stop the batch
-                    errors += 1
-                    logger.warning(
-                        "Style vector failed for image %s: %s", image_id, exc
-                    )
-                    self._note_issue(f"{current_item}: {exc}")
-                finally:
-                    processed += 1
-                    self._update(
-                        processed=processed, written=written, kept=kept, errors=errors
-                    )
-                    if processed % _GC_EVERY == 0:
-                        gc.collect()
-                        try:
-                            import torch
-
-                            if torch.cuda.is_available():
-                                torch.cuda.empty_cache()
-                        except Exception:
-                            pass
+            processed, written, kept, errors, cancelled = self._run_batches(
+                identifier,
+                rows,
+                space=space,
+                model_version=model_version,
+                with_artist=with_artist,
+            )
 
             if cancelled:
                 self._finish_cancelled(processed, len(rows), written, kept)

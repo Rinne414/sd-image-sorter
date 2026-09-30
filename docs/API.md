@@ -1588,6 +1588,8 @@ model.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `space` | string | `kaloscope` | Vector space; only `kaloscope` is accepted (400 otherwise) |
+| `model_source` | string | `huggingface` | `huggingface`, `modelscope` or `local`: the user's Style Finder model setting |
+| `model_path` | string | null | Local checkpoint (required and must exist when `model_source` is `local`, 400 otherwise). A local file names its own vector version, so a local-model user's vectors are not counted as `other_version` |
 
 **Response:**
 ```json

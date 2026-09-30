@@ -945,6 +945,97 @@ class ArtistIdentifier:
         self._result_from_probs(result, probs, top_k, threshold)
         return vector, result
 
+    def prepare_style_input(self, image: Image.Image):
+        """The model's input tensor for one decoded picture (the same
+        transform the forward paths apply), so a caller can do this CPU
+        work on its own threads and hand the batch method tensors."""
+        self.load()
+        if self._backend != "kaloscope" or self._transform is None:
+            raise RuntimeError(ARTIST_STYLE_VECTOR_BACKEND_ERROR)
+        return self._transform(image)
+
+    def extract_style_vectors_and_identifications(
+        self,
+        items,
+        *,
+        top_k: int = 5,
+        threshold: float = ARTIST_THRESHOLD_DEFAULT,
+        priority: int = PRIORITY_NORMAL,
+    ) -> List[Tuple[np.ndarray, Dict[str, Any]]]:
+        """extract_style_vector_and_identification for a batch of pictures:
+        ONE forward for all of them.
+
+        ``items`` are (path, input) pairs where the input is a decoded PIL
+        image or the tensor ``prepare_style_input`` made from it (the path
+        only names the picture in errors). Eval-mode BatchNorm scores every
+        sample on its own, so the vectors and answers equal the
+        single-picture path's (the style index checks this against the real
+        model). A distillation head takes the single-picture path per item;
+        an empty batch answers [].
+        """
+        import torch
+
+        self.load()
+        if not self._has_live_model():
+            raise RuntimeError(self._load_error or ARTIST_NOT_PREPARED_ERROR)
+        model = self._model
+        head = getattr(model, "head", None)
+        head_bn = getattr(head, "bn", None)
+        head_l = getattr(head, "l", None)
+        if (
+            self._backend != "kaloscope"
+            or self._transform is None
+            or head_bn is None
+            or head_l is None
+        ):
+            raise RuntimeError(ARTIST_STYLE_VECTOR_BACKEND_ERROR)
+        items = list(items)
+        if not items:
+            return []
+        if getattr(model, "distillation", False):
+            answers = []
+            for _path, image in items:
+                if isinstance(image, torch.Tensor):
+                    raise RuntimeError(ARTIST_STYLE_VECTOR_BACKEND_ERROR)
+                vector = self._run_kaloscope_style_vector(image, priority)
+                result = self._new_identification_result()
+                self._result_from_probs(
+                    result, self._run_kaloscope(image, priority), top_k, threshold
+                )
+                answers.append((vector, result))
+            return answers
+
+        batch = torch.stack(
+            [
+                image if isinstance(image, torch.Tensor) else self._transform(image)
+                for _path, image in items
+            ]
+        )
+        device = next(model.parameters()).device
+        with torch.no_grad(), exclusive_ai_runtime(
+            "artist-kaloscope-style-vector", priority=priority
+        ):
+            features = model(batch.to(device), return_features=True)
+            if isinstance(features, tuple):
+                features = features[0]
+            normalized = head_bn(features)
+            logits = head_l(normalized)
+            probs = (
+                torch.nn.functional.softmax(logits.float(), dim=1)
+                .detach()
+                .cpu()
+                .numpy()
+            )
+            vectors = normalized.detach().float().cpu().numpy().astype(np.float32, copy=False)
+        if vectors.ndim != 2 or vectors.shape[0] != len(items) or vectors.shape[1] == 0:
+            raise RuntimeError(ARTIST_STYLE_VECTOR_BACKEND_ERROR)
+        answers = []
+        for index in range(len(items)):
+            result = self._new_identification_result()
+            self._result_from_probs(result, probs[index], top_k, threshold)
+            answers.append((vectors[index], result))
+        return answers
+
     def supports_style_vectors(self) -> bool:
         """True only for a loaded Kaloscope (LSNet) model with its head BN.
 

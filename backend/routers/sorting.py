@@ -91,6 +91,13 @@ def _get_aesthetic_service_for_clear() -> AestheticService:
     return get_aesthetic_service()
 
 
+def _get_style_vector_service_for_clear():
+    """Resolve the router-owned style-index (style map) service without an import cycle."""
+    from routers.style_map import get_style_vector_service
+
+    return get_style_vector_service()
+
+
 def _status_probe_http_error(job: str, error: Exception) -> HTTPException:
     error_message = str(error).strip() or error.__class__.__name__
     return HTTPException(
@@ -112,6 +119,7 @@ def _require_clear_gallery_jobs_idle(
     tagging_service: TaggingService,
     pipeline_service: TaggingPipelineService,
     aesthetic_service: AestheticService,
+    style_vector_service=None,
 ) -> None:
     active_jobs: list[str] = []
 
@@ -186,6 +194,19 @@ def _require_clear_gallery_jobs_idle(
             active_jobs.append("aesthetic")
     except Exception as exc:
         raise _status_probe_http_error("aesthetic", exc) from exc
+
+    # The style index (style map) writes image_style_vectors and
+    # artist_predictions rows while it runs.
+    try:
+        if style_vector_service is None:
+            style_vector_service = _get_style_vector_service_for_clear()
+        style_index_running = style_vector_service.is_running()
+        if not isinstance(style_index_running, bool):
+            raise TypeError("style index state must be a boolean")
+        if style_index_running:
+            active_jobs.append("style_index")
+    except Exception as exc:
+        raise _status_probe_http_error("style_index", exc) from exc
 
     if active_jobs:
         raise HTTPException(

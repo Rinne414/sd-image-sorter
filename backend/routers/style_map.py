@@ -13,7 +13,9 @@ from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response
 from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import ValidationError as PydanticValidationError
 
+from exceptions import ValidationError
 from routers.artists import ArtistModelConfig
 from services.service_provider import ServiceProvider
 from services.style_map_service import STYLE_MAP_SPACES, StyleMapService
@@ -154,12 +156,29 @@ async def cancel_vectors(
 @router.get(
     "/vectors/stats",
     summary="How many images of the current library have a style vector",
+    description=(
+        "Counts follow the user's Style Finder model settings: a local "
+        "checkpoint names its own vector version, so `other_version` means "
+        "vectors from OTHER weights than the ones the user runs."
+    ),
 )
 def vectors_stats(
     space: str = Query("kaloscope", pattern=_SPACE_PATTERN),
+    model_source: str = Query(
+        "huggingface", pattern="^(huggingface|modelscope|local)$"
+    ),
+    model_path: Optional[str] = Query(None, max_length=4096),
     service: StyleVectorService = Depends(get_style_vector_service),
 ):
-    return service.get_stats(space)
+    try:
+        config = ArtistModelConfig(model_source=model_source, model_path=model_path)
+    except PydanticValidationError as exc:
+        raise ValidationError(
+            "; ".join(str(err.get("msg", "")) for err in exc.errors())
+            or "Invalid model settings",
+            field="model_path",
+        ) from exc
+    return service.get_stats(space, model_path=config.model_path)
 
 
 @router.get(

@@ -2860,6 +2860,7 @@ window.I18nLang_zhCN = {
     'restartBusy.job.tagging': '打标',
     'restartBusy.job.captions': '生成描述',
     'restartBusy.job.aesthetic': '美学评分',
+    'restartBusy.job.styleIndex': '建立画风索引',
     'restartBusy.job.fileMoves': '移动文件',
     'restartBusy.job.background': '后台任务',
     'restartBusy.job.modelSetup': '模型下载',

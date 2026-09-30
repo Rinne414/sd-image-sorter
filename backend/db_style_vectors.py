@@ -105,14 +105,28 @@ def pending_style_vector_rows(
     library_sql: str,
     library_params: Sequence,
     image_ids: Optional[Iterable[int]] = None,
-) -> list[tuple[int, str, Optional[str], Optional[str]]]:
-    """Return (image_id, path, stored_fingerprint, stored_version) rows that need a vector.
+) -> list[
+    tuple[
+        int,
+        str,
+        Optional[str],
+        Optional[str],
+        Optional[str],
+        Optional[int],
+        Optional[int],
+    ]
+]:
+    """Return the rows that need a vector, as
+    (image_id, path, stored_fingerprint, stored_version, image_fingerprint, source_mtime_ns, source_size).
 
     ``stored_*`` describe the vector the image already has (None when it has
-    none) so the worker can keep it when the pixels turn out unchanged.
+    none) so the worker can keep it when the pixels turn out unchanged; the
+    image's own fingerprint and source stat let the worker skip re-hashing a
+    file the scanner would call unchanged.
     """
     base = f"""
-        SELECT i.id, i.path, v.content_fingerprint, v.model_version
+        SELECT i.id, i.path, v.content_fingerprint, v.model_version,
+               i.content_fingerprint, i.source_mtime_ns, i.source_size
         FROM images i
         LEFT JOIN image_style_vectors v ON v.image_id = i.id AND v.space = ?
         WHERE {library_sql}
@@ -120,12 +134,26 @@ def pending_style_vector_rows(
           AND {_PENDING_CLAUSE}
     """
     params: list = [str(space), *library_params, str(model_version)]
+
+    def pending_row(row):
+        mtime = row[5]
+        size = row[6]
+        return (
+            int(row[0]),
+            str(row[1] or ""),
+            row[2],
+            row[3],
+            row[4],
+            int(mtime) if mtime is not None else None,
+            int(size) if size is not None else None,
+        )
+
     if image_ids is None:
         rows = cursor.execute(base + " ORDER BY i.id", params).fetchall()
-        return [(int(row[0]), str(row[1] or ""), row[2], row[3]) for row in rows]
+        return [pending_row(row) for row in rows]
 
     wanted = sorted({int(value) for value in image_ids})
-    out: list[tuple[int, str, Optional[str], Optional[str]]] = []
+    out = []
     for start in range(0, len(wanted), _LOOKUP_CHUNK):
         chunk = wanted[start : start + _LOOKUP_CHUNK]
         placeholders = ",".join("?" * len(chunk))
@@ -133,7 +161,7 @@ def pending_style_vector_rows(
             base + f" AND i.id IN ({placeholders}) ORDER BY i.id",
             [*params, *chunk],
         ).fetchall()
-        out.extend((int(row[0]), str(row[1] or ""), row[2], row[3]) for row in rows)
+        out.extend(pending_row(row) for row in rows)
     return out
 
 

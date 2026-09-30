@@ -208,6 +208,7 @@ const RESTART_BUSY_JOB_NAMES = {
     tagging: ['restartBusy.job.tagging', 'tagging'],
     captions: ['restartBusy.job.captions', 'captioning'],
     aesthetic: ['restartBusy.job.aesthetic', 'aesthetic scoring'],
+    style_index: ['restartBusy.job.styleIndex', 'the style index'],
     file_moves: ['restartBusy.job.fileMoves', 'moving files'],
     background_jobs: ['restartBusy.job.background', 'a background task'],
     model_setup: ['restartBusy.job.modelSetup', 'a model download'],

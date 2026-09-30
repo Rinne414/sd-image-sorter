@@ -2684,6 +2684,7 @@ window.I18nLang_en = {
     'restartBusy.job.tagging': 'tagging',
     'restartBusy.job.captions': 'captioning',
     'restartBusy.job.aesthetic': 'aesthetic scoring',
+    'restartBusy.job.styleIndex': 'the style index',
     'restartBusy.job.fileMoves': 'moving files',
     'restartBusy.job.background': 'a background task',
     'restartBusy.job.modelSetup': 'a model download',

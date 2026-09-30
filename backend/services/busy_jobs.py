@@ -25,13 +25,14 @@ _PLAIN_IDS = {
     "ai_dispatch": "tagging",
     "vlm_caption": "captions",
     "aesthetic": "aesthetic",
+    "style_index": "style_index",
 }
 # AI runtime work that one of these already names is not listed twice.
-_AI_WORK_IDS = {"tagging", "captions", "aesthetic"}
+_AI_WORK_IDS = {"tagging", "captions", "aesthetic", "style_index"}
 
 
 def _gallery_jobs() -> List[str]:
-    """Scan, AI tagging, Gallery route jobs and aesthetic scoring.
+    """Scan, AI tagging, Gallery route jobs, aesthetic scoring and the style index.
 
     Reuses the Clear Gallery check, which reports running jobs through its 409.
     """
@@ -110,8 +111,8 @@ _SOURCES: tuple[Callable[[], List[str]], ...] = (
 def collect_busy_jobs() -> List[str]:
     """Plain ids of the jobs running now, without duplicates, in a stable order.
 
-    Ids: scan, tagging, captions, aesthetic, file_moves, background_jobs,
-    model_setup, ai.
+    Ids: scan, tagging, captions, aesthetic, style_index, file_moves,
+    background_jobs, model_setup, ai.
     """
     jobs: List[str] = []
     for source in _SOURCES:

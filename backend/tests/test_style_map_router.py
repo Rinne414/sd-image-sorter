@@ -72,14 +72,15 @@ class FakeStyleVectorService:
         self.calls.append(("cancel",))
         return self.running
 
-    def get_stats(self, space):
+    def get_stats(self, space, model_path=None):
+        self.calls.append(("stats", space, model_path))
         return {
             "space": space,
             "images": 3,
             "vectors": 1,
             "pending": 2,
             "stale": 0,
-            "model_version": "fake",
+            "model_version": "fake" if not model_path else f"local:{model_path}",
         }
 
 
@@ -227,6 +228,26 @@ def test_stats_endpoint(test_client, fake_service):
     )
     assert response.status_code == 200
     assert response.json()["pending"] == 2
+
+
+def test_stats_pass_the_local_model_path_to_the_service(
+    test_client, fake_service, tmp_path
+):
+    local = tmp_path / "weights.pth"
+    local.write_bytes(b"w")
+    response = test_client.get(
+        "/api/style-map/vectors/stats",
+        params={
+            "space": "kaloscope",
+            "model_source": "local",
+            "model_path": str(local),
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert fake_service.calls[-1] == ("stats", "kaloscope", str(local.resolve()))
+    # the default (Hugging Face) settings pass no path
+    test_client.get("/api/style-map/vectors/stats", params={"space": "kaloscope"})
+    assert fake_service.calls[-1] == ("stats", "kaloscope", None)
 
 
 def test_stats_rejects_unknown_space(test_client, fake_service):
