@@ -522,6 +522,7 @@ class SelectionMixin:
         color_hues: Optional[List[str]] = None,
         exclude_color_hues: Optional[List[str]] = None,
         collection_id: Optional[int] = None,
+        scope: Optional[str] = None,
         folder: Optional[str] = None,
         has_metadata: Optional[bool] = None,
         # Aurora Phase 3 gallery filters
@@ -571,6 +572,7 @@ class SelectionMixin:
             color_hues=color_hues,
             exclude_color_hues=exclude_color_hues,
             collection_id=collection_id,
+            scope=scope,
             folder=folder,
             has_metadata=has_metadata,
             no_caption=no_caption,

@@ -255,6 +255,29 @@ def test_vlm_batch_filters_reach_the_selection_with_every_gallery_filter():
     assert not _missing(kwargs, [_snake(key) for key in _canonical_keys()])
 
 
+@pytest.mark.parametrize("route_name", ["create_selection_token", "get_selection_ids", "count_filtered_images"])
+def test_select_all_routes_forward_every_gallery_filter(route_name):
+    """The POST routes behind "select all matches", its fallback and its count."""
+    from routers.images_parts import export, selection
+    from routers.images_parts.models import SelectionTokenRequest
+
+    route = getattr(selection, route_name, None) or getattr(export, route_name)
+    seen = {}
+
+    class FakeService:
+        def __getattr__(self, _name):
+            def capture(**kwargs):
+                seen.update(kwargs)
+                return {}
+
+            return capture
+
+    request = SelectionTokenRequest(**{key: SAMPLE_VALUES[key] for key in _canonical_keys()})
+    asyncio.run(route(request=request, service=FakeService()))
+
+    assert not _missing(seen, [_snake(key) for key in _canonical_keys()])
+
+
 # ---------------------------------------------------------------------------
 # Selection tokens: "select all matches" encodes the filter into a token that
 # delete, move, remove, tag edits, Smart Tag, VLM and exports read back.
