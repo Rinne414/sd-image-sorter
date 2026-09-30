@@ -62,6 +62,34 @@ class FakeIdentifier:
             raise RuntimeError("cannot read this one")
         return _vector_for(image_path, "v")
 
+    def identification_for(self, image_path: str, top_k: int, threshold: float) -> dict:
+        """What identify_with_threshold would answer for this picture."""
+        name = "modare" if "img0" in image_path else "undefined"
+        confidence = 0.42 if name != "undefined" else 0.01
+        return {
+            "artist": name,
+            "confidence": confidence,
+            "confidence_level": "high" if name != "undefined" else "none",
+            "candidate_artist": name if name != "undefined" else None,
+            "out_of_vocabulary_likely": name == "undefined",
+            "vocabulary_size": 4,
+            "advisory": "",
+            "top_predictions": [{"artist": "modare", "confidence": confidence}][:top_k],
+            "model_loaded": True,
+        }
+
+    def extract_style_vector_and_identification(
+        self,
+        image_path: str,
+        *,
+        top_k: int = 5,
+        threshold: float = 0.03,
+        priority: int = 0,
+    ):
+        return self.extract_style_vector(image_path, priority), self.identification_for(
+            image_path, top_k, threshold
+        )
+
 
 def _make_images(test_db, tmp_path, count: int, prefix: str = "img") -> list[int]:
     ids = []
@@ -512,6 +540,81 @@ class TestExtraction:
         assert started["total"] == 2
         _run_scheduled(tasks)
         assert set(_rows(test_db)) == {ids[1], ids[3]}
+
+    def test_index_writes_the_artist_prediction_exactly_like_the_finder(
+        self, test_db, tmp_path
+    ):
+        """One forward, two rows: the vector and the same artist_predictions
+        row the Style Finder page writes (normalize_identification ->
+        write_artist_predictions), so the two entrances never disagree."""
+        from services.artist_service import normalize_identification
+        from services.derived_state_service import write_artist_predictions
+
+        ids = _make_images(test_db, tmp_path, 2)
+        identifier = FakeIdentifier()
+        service = _service(identifier)
+        tasks = BackgroundTasks()
+        service.start_extraction(tasks, space="kaloscope")
+        _run_scheduled(tasks)
+        with test_db.get_db() as conn:
+            rows = {
+                int(row[0]): (row[1], row[2], row[3])
+                for row in conn.execute(
+                    "SELECT image_id, artist, confidence, top_predictions FROM artist_predictions"
+                )
+            }
+        assert set(rows) == set(ids)
+        assert rows[ids[0]][0] == "modare" and rows[ids[1]][0] == "undefined"
+
+        # The Finder's own write for the same picture produces the same row.
+        raw = identifier.identification_for(str(tmp_path / "img0.png"), 5, 0.03)
+        normalized = normalize_identification(raw)
+        with test_db.get_db() as conn:
+            fingerprint = conn.execute(
+                "SELECT content_fingerprint FROM images WHERE id = ?", (ids[0],)
+            ).fetchone()[0]
+            write_artist_predictions(
+                conn.cursor(),
+                [
+                    {
+                        "image_id": ids[0],
+                        "artist": normalized["artist"],
+                        "confidence": normalized["confidence"],
+                        "top_predictions": normalized["top_predictions"],
+                        "content_fingerprint": fingerprint,
+                    }
+                ],
+            )
+            finder_row = conn.execute(
+                "SELECT artist, confidence, top_predictions FROM artist_predictions WHERE image_id = ?",
+                (ids[0],),
+            ).fetchone()
+        assert tuple(finder_row) == rows[ids[0]]
+
+    def test_with_artist_off_writes_vectors_only(self, test_db, tmp_path):
+        ids = _make_images(test_db, tmp_path, 2)
+        service = _service(FakeIdentifier())
+        tasks = BackgroundTasks()
+        service.start_extraction(tasks, space="kaloscope", with_artist=False)
+        _run_scheduled(tasks)
+        assert set(_rows(test_db)) == set(ids)
+        with test_db.get_db() as conn:
+            assert (
+                conn.execute("SELECT COUNT(*) FROM artist_predictions").fetchone()[0]
+                == 0
+            )
+
+    def test_identifier_without_the_combined_method_still_indexes(
+        self, test_db, tmp_path
+    ):
+        ids = _make_images(test_db, tmp_path, 1)
+        identifier = FakeIdentifier()
+        identifier.extract_style_vector_and_identification = None
+        service = _service(identifier)
+        tasks = BackgroundTasks()
+        service.start_extraction(tasks, space="kaloscope")
+        _run_scheduled(tasks)
+        assert set(_rows(test_db)) == set(ids)
 
     def test_selection_token_and_image_ids_are_exclusive(self, test_db, tmp_path):
         ids = _make_images(test_db, tmp_path, 1)

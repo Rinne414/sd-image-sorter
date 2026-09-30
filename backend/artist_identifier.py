@@ -691,17 +691,7 @@ class ArtistIdentifier:
         """
         self.load()
 
-        result: Dict[str, Any] = {
-            "artist": "undefined",
-            "confidence": 0.0,
-            "top_predictions": [],
-            "model_loaded": self._has_live_model(),
-            "confidence_level": ARTIST_CONFIDENCE_NONE,
-            "candidate_artist": None,
-            "out_of_vocabulary_likely": False,
-            "vocabulary_size": self.vocabulary_size,
-            "advisory": "",
-        }
+        result = self._new_identification_result()
 
         if not self._has_live_model():
             result["error"] = (
@@ -724,70 +714,99 @@ class ArtistIdentifier:
                 # PyTorch/Transformers inference
                 predictions = self._run_torch_classifier(image, priority)
 
-            # Get top predictions
-            top_indices = np.argsort(predictions)[::-1][:top_k]
-
-            for raw_idx in top_indices:
-                idx = int(raw_idx)
-                if self._has_class_mapping and idx < len(self.artists):
-                    artist_name = self.artists[idx]
-                else:
-                    # No real label source (e.g. a local ONNX / generic torch
-                    # model without a class_mapping.csv or embedded id2label).
-                    # Surface the raw class index instead of inventing a name.
-                    artist_name = f"class_{idx}"
-                confidence = float(predictions[idx])
-                result["top_predictions"].append({
-                    "artist": artist_name,
-                    "confidence": round(confidence, 4),
-                })
-
-            if not self._has_class_mapping:
-                # Refuse to label: raw class indices are not artist names, so we
-                # must not pass the top prediction off as an identified artist.
-                top_conf = (
-                    float(result["top_predictions"][0]["confidence"])
-                    if result["top_predictions"]
-                    else 0.0
-                )
-                result["artist"] = "undefined"
-                result["confidence"] = top_conf
-                result["error"] = (
-                    "No artist label mapping found for this local model "
-                    "(expected a class_mapping.csv beside the model file, or an "
-                    "embedded id2label). Predictions are raw class indices, not "
-                    "artist names. / "
-                    "此本地模型未找到画师标签映射（需在模型文件旁放置 "
-                    "class_mapping.csv，或模型自带 id2label）。下面是原始类别索引，"
-                    "并非真实画师名。"
-                )
-                return result
-
-            # Tier the answer instead of asserting whatever clears a threshold.
-            if result["top_predictions"]:
-                top = result["top_predictions"][0]
-                confidence = float(top["confidence"])
-                level = classify_artist_confidence(confidence, threshold=threshold)
-                result["confidence"] = confidence
-                result["confidence_level"] = level
-                result["artist"] = (
-                    top["artist"] if level == ARTIST_CONFIDENCE_HIGH else "undefined"
-                )
-                # Below the floor the top-1 is right ~2% of the time, so naming
-                # it is worse than saying nothing; the raw ranking stays in
-                # top_predictions for anyone who explicitly wants to inspect it.
-                result["candidate_artist"] = (
-                    top["artist"] if level != ARTIST_CONFIDENCE_NONE else None
-                )
-                result["out_of_vocabulary_likely"] = level != ARTIST_CONFIDENCE_HIGH
-                result["advisory"] = artist_confidence_advisory(
-                    level, vocabulary_size=result["vocabulary_size"]
-                )
+            self._result_from_probs(result, predictions, top_k, threshold)
 
         except Exception as e:
             logger.error(f"Error identifying {image_path}: {e}")
             result["error"] = str(e)
 
+        return result
+
+    def _new_identification_result(self) -> Dict[str, Any]:
+        """The answer skeleton every identification starts from."""
+        result: Dict[str, Any] = {
+            "artist": "undefined",
+            "confidence": 0.0,
+            "top_predictions": [],
+            "model_loaded": self._has_live_model(),
+            "confidence_level": ARTIST_CONFIDENCE_NONE,
+            "candidate_artist": None,
+            "out_of_vocabulary_likely": False,
+            "vocabulary_size": self.vocabulary_size,
+            "advisory": "",
+        }
+        return result
+
+    def _result_from_probs(
+        self,
+        result: Dict[str, Any],
+        predictions: np.ndarray,
+        top_k: int,
+        threshold: float,
+    ) -> Dict[str, Any]:
+        """Fill ``result`` from class probabilities: top_k names, then the
+        confidence tier. Shared by identify_with_threshold and the style
+        index's one-forward path, so both entrances tier alike.
+        """
+        # Get top predictions
+        top_indices = np.argsort(predictions)[::-1][:top_k]
+
+        for raw_idx in top_indices:
+            idx = int(raw_idx)
+            if self._has_class_mapping and idx < len(self.artists):
+                artist_name = self.artists[idx]
+            else:
+                # No real label source (e.g. a local ONNX / generic torch
+                # model without a class_mapping.csv or embedded id2label).
+                # Surface the raw class index instead of inventing a name.
+                artist_name = f"class_{idx}"
+            confidence = float(predictions[idx])
+            result["top_predictions"].append({
+                "artist": artist_name,
+                "confidence": round(confidence, 4),
+            })
+
+        if not self._has_class_mapping:
+            # Refuse to label: raw class indices are not artist names, so we
+            # must not pass the top prediction off as an identified artist.
+            top_conf = (
+                float(result["top_predictions"][0]["confidence"])
+                if result["top_predictions"]
+                else 0.0
+            )
+            result["artist"] = "undefined"
+            result["confidence"] = top_conf
+            result["error"] = (
+                "No artist label mapping found for this local model "
+                "(expected a class_mapping.csv beside the model file, or an "
+                "embedded id2label). Predictions are raw class indices, not "
+                "artist names. / "
+                "此本地模型未找到画师标签映射（需在模型文件旁放置 "
+                "class_mapping.csv，或模型自带 id2label）。下面是原始类别索引，"
+                "并非真实画师名。"
+            )
+            return result
+
+        # Tier the answer instead of asserting whatever clears a threshold.
+        if result["top_predictions"]:
+            top = result["top_predictions"][0]
+            confidence = float(top["confidence"])
+            level = classify_artist_confidence(confidence, threshold=threshold)
+            result["confidence"] = confidence
+            result["confidence_level"] = level
+            result["artist"] = (
+                top["artist"] if level == ARTIST_CONFIDENCE_HIGH else "undefined"
+            )
+            # Below the floor the top-1 is right ~2% of the time, so naming
+            # it is worse than saying nothing; the raw ranking stays in
+            # top_predictions for anyone who explicitly wants to inspect it.
+            result["candidate_artist"] = (
+                top["artist"] if level != ARTIST_CONFIDENCE_NONE else None
+            )
+            result["out_of_vocabulary_likely"] = level != ARTIST_CONFIDENCE_HIGH
+            result["advisory"] = artist_confidence_advisory(
+                level, vocabulary_size=result["vocabulary_size"]
+            )
         return result
 
     def _run_onnx(
@@ -879,6 +898,52 @@ class ArtistIdentifier:
         with Image.open(image_path) as source_image:
             image = source_image.convert("RGB")
         return self._run_kaloscope_style_vector(image, priority)
+
+    def extract_style_vector_and_identification(
+        self,
+        image_path: str,
+        *,
+        top_k: int = 5,
+        threshold: float = ARTIST_THRESHOLD_DEFAULT,
+        priority: int = PRIORITY_NORMAL,
+    ) -> Tuple[np.ndarray, Dict[str, Any]]:
+        """The style vector AND the artist answer of one picture from ONE forward.
+
+        Kaloscope's head is ``BN_Linear(bn, l)``: the class logits are exactly
+        ``head.l`` applied to the head-BN features the style vector already is,
+        so the style index gets the Style Finder's answer for free. The answer
+        is built by the same ``_result_from_probs`` as identify_with_threshold.
+        """
+        import torch
+
+        self.load()
+        if not self._has_live_model():
+            raise RuntimeError(self._load_error or ARTIST_NOT_PREPARED_ERROR)
+        head_l = getattr(getattr(self._model, "head", None), "l", None)
+        if head_l is None:
+            raise RuntimeError(ARTIST_STYLE_VECTOR_BACKEND_ERROR)
+        with Image.open(image_path) as source_image:
+            image = source_image.convert("RGB")
+        vector = self._run_kaloscope_style_vector(image, priority)
+        if getattr(self._model, "distillation", False):
+            # A distillation head scores from more than head.l(bn(features)):
+            # take the classifier's own forward rather than guess its wiring.
+            probs = self._run_kaloscope(image, priority)
+        else:
+            device = next(self._model.parameters()).device
+            with torch.no_grad(), exclusive_ai_runtime(
+                "artist-kaloscope-head", priority=priority
+            ):
+                logits = head_l(torch.from_numpy(vector).to(device).unsqueeze(0))[0]
+                probs = (
+                    torch.nn.functional.softmax(logits.float(), dim=0)
+                    .detach()
+                    .cpu()
+                    .numpy()
+                )
+        result = self._new_identification_result()
+        self._result_from_probs(result, probs, top_k, threshold)
+        return vector, result
 
     def supports_style_vectors(self) -> bool:
         """True only for a loaded Kaloscope (LSNet) model with its head BN.

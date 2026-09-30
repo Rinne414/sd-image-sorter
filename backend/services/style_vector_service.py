@@ -46,12 +46,17 @@ from db_style_vectors import (
 from exceptions import OperationInProgressError, ServiceError, ValidationError
 from image_fingerprint import compute_image_content_fingerprint
 from library_context import current_library_sql
-from services.derived_state_service import initialize_image_content_fingerprint
+from services.derived_state_service import (
+    initialize_image_content_fingerprint,
+    write_artist_predictions,
+)
 from utils.source_paths import resolve_existing_indexed_image_path
 
 logger = logging.getLogger(__name__)
 
 STYLE_VECTOR_SPACES = ("kaloscope",)
+# top_k the Style Finder page sends for a batch (frontend/js/artist/identify.js).
+ARTIST_INDEX_TOP_K = 5
 STYLE_VECTOR_UNSUPPORTED_ERROR = (
     "Style vectors need the Kaloscope 2.0 artist model; the loaded artist model "
     "cannot provide a feature vector. / 画风向量需要 Kaloscope 2.0 画风识别模型，"
@@ -254,9 +259,14 @@ class StyleVectorService:
         model_source: str = "huggingface",
         model_path: Optional[str] = None,
         selection_token: Optional[str] = None,
+        with_artist: bool = True,
     ) -> Dict[str, Any]:
         """Queue the job for every pending image (or the given ids, or the
-        pictures of a Gallery filter token) and return its size."""
+        pictures of a Gallery filter token) and return its size.
+
+        ``with_artist`` (default on): the same forward also identifies the
+        artist and stores it exactly as the Style Finder page does.
+        """
         normalized = self._require_space(space)
         model_version = _model_version_for(model_path)
         if selection_token:
@@ -314,6 +324,7 @@ class StyleVectorService:
             use_gpu,
             model_source,
             model_path,
+            with_artist,
         )
         return {"status": "started", "total": len(rows), "space": normalized}
 
@@ -364,8 +375,15 @@ class StyleVectorService:
         indexed_path: str,
         stored_fingerprint: Optional[str] = None,
         stored_version: Optional[str] = None,
+        with_artist: bool = True,
     ) -> str:
-        """Return ``"kept"`` when the stored vector still fits, ``"written"`` otherwise."""
+        """Return ``"kept"`` when the stored vector still fits, ``"written"`` otherwise.
+
+        With ``with_artist`` the vector and the artist prediction of the
+        same forward land in one transaction; the prediction row is built by
+        the Style Finder's own ``normalize_identification`` and written by
+        ``write_artist_predictions``, so both entrances produce the same row.
+        """
         image_path = resolve_existing_indexed_image_path(
             indexed_path, backend_file=__file__
         )
@@ -393,17 +411,43 @@ class StyleVectorService:
             # same: the stored vector is still right, no need to run the model.
             return "kept"
 
-        vector = identifier.extract_style_vector(image_path, priority=PRIORITY_BATCH)
+        combined = getattr(identifier, "extract_style_vector_and_identification", None)
+        prediction: Optional[Dict[str, Any]] = None
+        if with_artist and callable(combined):
+            vector, raw = combined(
+                image_path,
+                top_k=ARTIST_INDEX_TOP_K,
+                threshold=ARTIST_THRESHOLD_DEFAULT,
+                priority=PRIORITY_BATCH,
+            )
+            if not raw.get("error"):
+                from services.artist_service import normalize_identification
+
+                normalized = normalize_identification(raw)
+                prediction = {
+                    "image_id": image_id,
+                    "artist": normalized["artist"],
+                    "confidence": normalized["confidence"],
+                    "top_predictions": normalized["top_predictions"],
+                    "content_fingerprint": fingerprint,
+                }
+        else:
+            vector = identifier.extract_style_vector(
+                image_path, priority=PRIORITY_BATCH
+            )
 
         with db.get_db() as conn:
+            cursor = conn.cursor()
             written = upsert_style_vector(
-                conn.cursor(),
+                cursor,
                 image_id=image_id,
                 space=space,
                 model_version=model_version,
                 content_fingerprint=fingerprint,
                 vector=vector,
             )
+            if written and prediction is not None:
+                write_artist_predictions(cursor, [prediction])
         if not written:
             raise ServiceError(STYLE_VECTOR_STALE_ERROR)
         return "written"
@@ -428,6 +472,7 @@ class StyleVectorService:
         use_gpu: Optional[bool],
         model_source: str,
         model_path: Optional[str],
+        with_artist: bool = True,
     ) -> None:
         try:
             if self._is_cancelled():
@@ -463,6 +508,7 @@ class StyleVectorService:
                         indexed_path=indexed_path,
                         stored_fingerprint=stored_fingerprint,
                         stored_version=stored_version,
+                        with_artist=with_artist,
                     )
                     if outcome == "kept":
                         kept += 1

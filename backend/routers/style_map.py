@@ -63,6 +63,14 @@ class StartVectorsRequest(ArtistModelConfig):
             raise ValueError("image_ids must be positive")
         return value
 
+    with_artist: bool = Field(
+        default=True,
+        description=(
+            "Also store the Style Finder's artist prediction from the same "
+            "forward pass (same model, threshold and row format as identify)."
+        ),
+    )
+
     @model_validator(mode="after")
     def one_scope_only(self):
         if self.image_ids is not None and self.selection_token:
@@ -111,6 +119,7 @@ def start_vectors(
         model_source=request.model_source,
         model_path=request.model_path,
         selection_token=request.selection_token,
+        with_artist=request.with_artist,
     )
 
 
@@ -195,3 +204,27 @@ def style_map_layout_status(
     service: StyleMapService = Depends(get_style_map_service),
 ):
     return service.layout_status(space, selection_token=selection_token)
+
+
+@router.get(
+    "/regions",
+    summary="Regions of the filtered library's map, with representative pictures and labels",
+    description=(
+        "k-means regions of the map GET /api/style-map/points last returned for "
+        "the same space and filter (PCA or, once ready, UMAP coordinates): each "
+        "region's centre, size, 1-2 representative pictures, significantly "
+        "over-represented WD14 style tags and dominant confident artists. "
+        "`not_started` until points has been requested for this map. Cached per "
+        "map; recomputed when tags or artist predictions changed since."
+    ),
+)
+def style_map_regions(
+    space: str = Query("kaloscope", pattern=_MAP_SPACE_PATTERN),
+    selection_token: Optional[str] = Query(None, max_length=65536),
+    refresh: bool = Query(False, description="Recompute even when cached"),
+    service: StyleMapService = Depends(get_style_map_service),
+):
+    payload = service.regions_json(
+        space, selection_token=selection_token, refresh=refresh
+    )
+    return Response(content=payload, media_type="application/json")

@@ -62,6 +62,7 @@ from services.style_map_math import (
     merge_near_duplicates,
     pca_layout,
 )
+from services.style_map_regions import RegionsCache, regions_body
 from services.style_map_umap import (
     UMAP_INPUT_DIM,
     UMAP_INSTALL_MODEL_ID,
@@ -132,6 +133,7 @@ class StyleMapService:
         self._layouts: "OrderedDict[tuple, tuple[np.ndarray, np.ndarray, str, float]]" = OrderedDict()
         # layout key -> the ready response body (without the cached flag)
         self._rendered: Dict[tuple, bytes] = {}
+        self._regions = RegionsCache(_LAYOUT_MEMORY_ENTRIES)
         self._umap_jobs: "OrderedDict[tuple, _LayoutJob]" = OrderedDict()
         self._umap_queue: Deque[tuple] = deque()
         self._umap_thread: Optional[threading.Thread] = None
@@ -226,6 +228,7 @@ class StyleMapService:
         with self._umap_lock:
             self._layouts.clear()
             self._rendered.clear()
+            self._regions.clear()
 
     # ------------------------------------------------------------------ main
     def _map_key(
@@ -304,6 +307,49 @@ class StyleMapService:
             "method": "umap" if state["status"] == "ready" else STYLE_MAP_METHOD,
             "umap": state,
         }
+
+    # --------------------------------------------------------------- regions
+    def regions_json(
+        self,
+        space: str,
+        selection_token: Optional[str] = None,
+        *,
+        refresh: bool = False,
+    ) -> bytes:
+        """Regions of the map ``points`` last computed for this space and filter,
+        on the coordinates the page shows (UMAP once ready, PCA before). Cached
+        per layout key, method and label version (tags / artist predictions
+        written later invalidate it), dropped with the layout; one computation
+        per map at a time; ``not_started`` until points ran for this map."""
+        normalized, _model_version, _ids, key = self._map_key(space, selection_token)
+        entry = self._cache_get(key)
+        with self._cache_lock:
+            inputs = self._inputs.get(key)
+        if entry is None or inputs is None:
+            idle = {"status": "not_started", "space": normalized, "regions": []}
+            return json.dumps(idle, separators=(",", ":")).encode("utf-8")
+        layout_key = self._layout_key(key)
+        ready = None
+        if style_map_umap.umap_available():
+            ready = self._ready_layout(layout_key, inputs.rep_ids)
+        method = "umap" if ready is not None else STYLE_MAP_METHOD
+        body, cached = self._regions.get_or_build(
+            layout_key,
+            method,
+            lambda: regions_body(
+                entry[0],
+                space=normalized,
+                method=method,
+                xyz=ready[1] if ready is not None else None,
+                features=inputs.features,
+            ),
+            refresh=refresh,
+        )
+        return body + (b',"cached":true}' if cached else b',"cached":false}')
+
+    def regions(self, space: str, **kwargs) -> Dict:
+        """Dict form of :meth:`regions_json` (tests and in-process callers)."""
+        return json.loads(self.regions_json(space, **kwargs))
 
     @staticmethod
     def _with_umap(payload: bytes, umap_state: Dict[str, Any], tail: bytes) -> bytes:
@@ -496,15 +542,18 @@ class StyleMapService:
             self._layouts[layout_key] = (ids, xyz, source, elapsed)
             self._layouts.move_to_end(layout_key)
             self._rendered.pop(layout_key, None)
+            self._regions.drop(layout_key)
             while len(self._layouts) > _LAYOUT_MEMORY_ENTRIES:
                 evicted, _layout = self._layouts.popitem(last=False)
                 self._rendered.pop(evicted, None)
+                self._regions.drop(evicted)
             return self._layouts[layout_key]
 
     def _forget_layout(self, layout_key: tuple) -> None:
         with self._umap_lock:
             self._layouts.pop(layout_key, None)
             self._rendered.pop(layout_key, None)
+            self._regions.drop(layout_key)
         style_map_umap.discard_layout(layout_key)
 
     def _ensure_worker(self) -> None:

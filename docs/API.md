@@ -1523,6 +1523,7 @@ Start style-vector extraction for the pending images of the current library.
 | `model_source` | string | `huggingface` | `huggingface`, `modelscope` or `local` (same contract as `/api/artists/identify`) |
 | `model_path` | string | null | Local checkpoint; required (and must exist) when `model_source` is `local` |
 | `use_gpu` | bool | null | `null` = the Style Finder default (`ARTIST_USE_GPU`); `false` forces CPU |
+| `with_artist` | bool | `true` | Also write the Style Finder's artist prediction (`artist_predictions`, same model, threshold and row format as `/api/artists/identify`) from the same forward pass, in the same transaction as the vector; `false` writes vectors only. Only pictures the job actually runs the model for get a prediction: a picture whose stored vector still fits (`kept`) is not re-identified, so to add predictions for an already indexed library use the Style Finder page's batch (`POST /api/artists/identify-batch`). A picture the job does run overwrites its existing prediction row with the default threshold (0.03) and `top_k` 5 |
 
 **Response:**
 ```json
@@ -1698,6 +1699,61 @@ is `umap` once the layout is ready and `pca` otherwise. Before `points` ran
 for this filter (in this process, or in an earlier one that left the layout
 on disk) `umap.status` is `not_started`. Cheap enough to poll every few
 seconds while a layout is `queued` or `computing`.
+
+**Errors:** 400 for an unknown `space` or an invalid `selection_token`.
+
+#### GET /api/style-map/regions
+Regions of the map `points` last returned for the same `space` and
+`selection_token`: a fixed-seed k-means (k = round(sqrt(n/30)) clamped to
+6..12) on the coordinates the page shows (the UMAP layout once `ready`,
+the PCA axes before; `method` says which). Each region carries its centre,
+`size` (points), `members_total` (pictures including merged near-duplicates),
+1-2 `representatives` (image ids nearest the centre, the second one visibly
+different), `tagged` (points the tagger has seen) and two kinds of labels:
+
+- `tags`: WD14 style tags from a fixed whitelist (rendering / medium words
+  such as `monochrome`, `sketch`, `pixel_art`), counted over the region's
+  TAGGED points only. A (region, tag) pair is tested when at least 4 points
+  carry the tag and the region has at least 10 tagged points; the
+  hypergeometric tail p (computed with `math.lgamma`, no scipy) of every
+  tested pair of the map goes through a Benjamini-Hochberg correction and the
+  label needs `q` < 0.01 plus an effect: `ratio` (region rate / map rate)
+  >= 3, or `rate` >= 0.6 with `rate` at least 0.25 above the map's (for a
+  style that is a large share of the whole map, where the ratio cannot reach
+  3). At most two per region, ordered by `q`.
+- `artists`: the Style Finder's confident tier only (`artist_predictions`
+  with confidence >= 0.20, never `undefined`). The region needs at least 5
+  confident points and at least 5% of its points confident (`high_total`);
+  then an artist is reported when it covers >= 25% of those with at least 3
+  points; at most two.
+
+Regions of most libraries carry no label (a region without a distinctive
+style tag or a dominant artist is normal); the representatives are the label
+then. `status` is `not_started` until `points` ran for this map in this
+process. Cached in memory per layout key and method together with a label
+version (row counts and newest ids of `tags` and `artist_predictions`), so a
+tagging run or a Style Finder batch after the map was built is picked up on
+the next request (`cached` is `true` only on an unchanged repeat); dropped
+whenever the layout is. One computation per map runs at a time.
+
+**Parameters:** `space`, `selection_token` as for `points`; `refresh=true`
+recomputes even when the cache is current.
+
+**Response:**
+```json
+{
+  "status": "ok", "space": "kaloscope", "method": "umap",
+  "model_version": "kaloscope-2.0:sha256:...",
+  "k": 8, "seed": 0, "algo_version": 1,
+  "regions": [
+    {"id": 3, "center": [0.12, -0.41, 0.08], "size": 412, "members_total": 430,
+     "representatives": [1021, 877], "tagged": 240,
+     "tags": [{"tag": "monochrome", "count": 12, "tagged": 240, "rate": 0.05, "ratio": 4.1, "p": 0.00021, "q": 0.0025}],
+     "artists": [{"artist": "modare", "count": 3, "high_total": 4, "share": 0.75}]}
+  ],
+  "cached": false
+}
+```
 
 **Errors:** 400 for an unknown `space` or an invalid `selection_token`.
 

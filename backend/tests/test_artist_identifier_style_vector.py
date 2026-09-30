@@ -79,6 +79,42 @@ def test_style_vector_is_head_bn_of_features(tmp_path):
     )
 
 
+def test_vector_and_identification_come_from_one_forward(tmp_path):
+    """S3b.1: the style index also identifies the artist, without a second
+    pass through the model, and with exactly the answer identify gives."""
+    identifier = _kaloscope_identifier()
+    image = _png(tmp_path)
+    expected = identifier.identify_with_threshold(image, top_k=3, threshold=0.03)
+    identifier._model.calls.clear()
+
+    vector, result = identifier.extract_style_vector_and_identification(
+        image, top_k=3, threshold=0.03
+    )
+
+    assert identifier._model.calls == [True], "features once; logits from head.l"
+    assert np.allclose(vector, identifier.extract_style_vector(image), atol=1e-6)
+    for key in (
+        "artist",
+        "confidence",
+        "confidence_level",
+        "candidate_artist",
+        "top_predictions",
+        "out_of_vocabulary_likely",
+        "advisory",
+    ):
+        assert result[key] == expected[key], key
+    assert "error" not in result
+
+
+def test_result_from_probs_is_the_shared_tiering_step():
+    identifier = _kaloscope_identifier()
+    probs = np.array([0.1, 0.6, 0.2, 0.1], dtype=np.float32)
+    via_helper = identifier._new_identification_result()
+    identifier._result_from_probs(via_helper, probs, top_k=2, threshold=0.03)
+    assert via_helper["artist"] == "b" and via_helper["confidence_level"] == "high"
+    assert [p["artist"] for p in via_helper["top_predictions"]] == ["b", "c"]
+
+
 def test_supports_style_vectors_tells_the_truth():
     identifier = _kaloscope_identifier()
     assert identifier.supports_style_vectors() is True

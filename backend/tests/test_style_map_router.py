@@ -39,6 +39,7 @@ class FakeStyleVectorService:
         model_source="huggingface",
         model_path=None,
         selection_token=None,
+        with_artist=True,
     ):
         self.calls.append(
             (
@@ -49,6 +50,7 @@ class FakeStyleVectorService:
                 model_source,
                 model_path,
                 selection_token,
+                with_artist,
             )
         )
         if self.running:
@@ -122,7 +124,7 @@ def test_start_passes_request_to_service(test_client, fake_service):
     assert response.json()["status"] == "started"
     assert response.json()["total"] == 5
     assert fake_service.calls == [
-        ("start", "kaloscope", [3, 4], False, "huggingface", None, None)
+        ("start", "kaloscope", [3, 4], False, "huggingface", None, None, True)
     ]
 
 
@@ -131,6 +133,16 @@ def test_start_defaults_to_kaloscope_and_whole_library(test_client, fake_service
     assert response.status_code == 200, response.text
     assert fake_service.calls[0][1:3] == ("kaloscope", None)
     assert fake_service.calls[0][6] is None
+    # the artist prediction rides along by default (same model, one forward)
+    assert fake_service.calls[0][7] is True
+
+
+def test_start_can_leave_the_artist_prediction_out(test_client, fake_service):
+    response = test_client.post(
+        "/api/style-map/vectors/start", json={"with_artist": False}
+    )
+    assert response.status_code == 200, response.text
+    assert fake_service.calls[0][7] is False
 
 
 def test_start_passes_the_selection_token_to_the_service(test_client, fake_service):
@@ -140,7 +152,7 @@ def test_start_passes_the_selection_token_to_the_service(test_client, fake_servi
     )
     assert response.status_code == 200, response.text
     assert fake_service.calls == [
-        ("start", "kaloscope", None, None, "huggingface", None, "tok.abc")
+        ("start", "kaloscope", None, None, "huggingface", None, "tok.abc", True)
     ]
 
 
