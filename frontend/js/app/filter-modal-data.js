@@ -730,8 +730,11 @@ function loadFilterPreset(name) {
     }
 
     // Apply preset via shared filter setter so FilterStore stays in sync.
+    // Start from the defaults, not the current filter: a preset saved before
+    // a filter existed must not keep today's value of it (the smart folder
+    // count, which sends the preset alone, would disagree with the gallery).
     setAppFilters({
-        ...AppState.filters,
+        ...createDefaultFilterState(),
         ...preset,
     });
 

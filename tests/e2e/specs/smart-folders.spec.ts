@@ -131,6 +131,40 @@ test('pin toggle surfaces a live-count sidebar entry that applies the preset', a
   )).toEqual([])
 })
 
+test('a smart folder saved before newer filters replaces them instead of stacking', async ({ page }) => {
+  // The count uses the preset alone (missing keys = no filter); the click
+  // used to stack it on the current filter, so a date / saturation / anime
+  // filter set now stayed on and the gallery showed fewer than the count.
+  const countRequests: Array<Record<string, unknown>> = []
+  await mockRoutes(page, countRequests)
+  await page.addInitScript(({ presetsKey, pinsKey, presetName }) => {
+    window.localStorage.setItem(presetsKey, JSON.stringify({
+      [presetName]: { tags: ['neon'], tagMode: 'and' },
+    }))
+    window.localStorage.setItem(pinsKey, JSON.stringify([presetName]))
+  }, { presetsKey: PRESETS_KEY, pinsKey: PINS_KEY, presetName: PRESET_NAME })
+
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+  await page.evaluate(() => {
+    const App = (window as any).App
+    App.setFilters({
+      ...App.AppState.filters,
+      dateFrom: '2026-06-01',
+      minSaturation: 30,
+      animeGrades: ['best'],
+      minWaifu: 6,
+    })
+  })
+
+  await page.locator(`.smart-folder-row[data-smart-folder="${PRESET_NAME}"]`).click()
+
+  await expect.poll(async () => page.evaluate(() => {
+    const f = (window as any).App.AppState.filters
+    return { tags: f.tags, dateFrom: f.dateFrom, minSaturation: f.minSaturation, animeGrades: f.animeGrades, minWaifu: f.minWaifu }
+  })).toEqual({ tags: ['neon'], dateFrom: null, minSaturation: null, animeGrades: [], minWaifu: null })
+})
+
 test('more than 8 pins collapse into a manage-presets overflow link', async ({ page }) => {
   const countRequests: Array<Record<string, unknown>> = []
   await mockRoutes(page, countRequests)
