@@ -121,6 +121,48 @@ like a temporary viewer or two peer "session vs permanent" galleries.
     (gradients, glow, multi-accent chrome, ambient blur), it is wrong even
     if tokens already exist for it.
 
+### Craft layer — "looks designed by a person" (owner review 2026-09-30)
+
+The owner's words: 这些问题就是 AI 设计前端时常会有的毛病 — the goal is a UI
+that looks like someone sat down and designed it, not something generated and
+left as-is. These rules came from concrete screens the owner flagged; they are
+checked on every screen, not only the one that was reported.
+
+16. **A toggle goes both ways and says where it goes.** A button that switches
+    a view or format names the state you will get, and its label flips after
+    the click (查看为 SD 文本 ⇄ 查看 NovelAI 格式). Labels set from JS must
+    survive the i18n re-apply: move the `data-i18n` key with the text.
+17. **One button never gets a row of its own.** If a single control wraps onto
+    a new line, make it compact (icon + tooltip, like 重新读取) or rebalance the
+    row. An almost-empty row reads as unfinished.
+18. **Space is for content.** A scroll box never sits above empty space: let a
+    list grow into the free height of its card or column before it scrolls.
+    Wasted space is space the user could have scrolled through.
+19. **No "unformatted" blocks.** Content hugs its size: tags and chips never
+    stretch to fill a taller cell (grids that stretch rows need
+    `align-content: start`). Headers in a row of cards line up at the top.
+    Titles do not wrap because a sibling took the space; descriptions never
+    overlap titles; a block does not repeat its own heading.
+20. **Customizable means customizable.** Where users can choose (tab bar,
+    columns, presets), offer every option that makes sense with good
+    defaults, including order — never a hand-picked subset (rule 3).
+21. **Colours mean what they say.** A colour swatch shows the real colour.
+    Data palettes (hue filter, WASD directions, tag categories) are exempt
+    from rule 12; never build a data colour from `--blue` / `--purple`, which
+    resolve to the accent.
+22. **Keep the look the owner likes.** Rounded corners (radius tokens
+    10 / 12 / 14 / 16px), visible card frames, the amber accent, buttons that
+    look like buttons, some depth. A flat, borderless, square, grey pass was
+    rejected on 2026-09-30 and reverted. Change the look with one sample and
+    before/after screenshots (1366×768 and 1920×1080) first, never site-wide
+    while the owner is away.
+
+Screen review checklist (rules 16–21): a button alone on its row; anything
+stretched taller than its content or headers out of line; text wrapping
+awkwardly or overlapping; a scroll box with empty space below it; a toggle
+whose label does not flip; a swatch showing amber instead of its colour; an
+option list that hides choices for no reason.
+
 Do NOT:
 - Add an entrance whose behavior differs from the existing entrance to the
   same feature (rule 11).
