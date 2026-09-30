@@ -120,6 +120,16 @@ OPTIONAL_DEPENDENCY_GROUPS: dict[str, tuple[str, ...]] = {
     # Video censoring: imageio-ffmpeg (BSD-2) ships its own ffmpeg binary, so
     # nothing has to be installed system-wide. Pure wheel, no dependencies.
     "video": ("imageio-ffmpeg==0.6.0",),
+    # Style map layout (UMAP). numba/llvmlite are native wheels, so a Prepare
+    # while umap was never imported still loads in this process.
+    "umap": (
+        "umap-learn>=0.5.12",
+        "pynndescent>=0.6.0",
+        "numba>=0.67.0",
+        "llvmlite>=0.49.0",
+        "scikit-learn>=1.9.1",
+        "scipy>=1.17.1",
+    ),
     "translation": ("translators==6.0.4",),
     # tipo-kgen imports torch/transformers at module load even for GGUF.
     # llama-cpp-python is installed separately from the official CPU wheel
@@ -221,6 +231,7 @@ GROUP_IMPORTS: dict[str, tuple[str, ...]] = {
     "cl-tagger-v2": ("huggingface_hub",),
     "rembg": ("rembg",),
     "video": ("imageio_ffmpeg",),
+    "umap": ("umap", "pynndescent", "numba", "llvmlite", "sklearn", "scipy"),
     "translation": ("translators",),
     "tipo": ("torch", "transformers", "huggingface_hub", "kgen"),
 }
@@ -239,6 +250,12 @@ IMPORT_TO_PACKAGE_HINT: dict[str, str] = {
     "translators": "translators==6.0.4",
     "kgen": "tipo-kgen>=0.3.1",
     "llama_cpp": "llama-cpp-python>=0.3.24",
+    "umap": "umap-learn>=0.5.12",
+    "pynndescent": "pynndescent>=0.6.0",
+    "numba": "numba>=0.67.0",
+    "llvmlite": "llvmlite>=0.49.0",
+    "sklearn": "scikit-learn>=1.9.1",
+    "scipy": "scipy>=1.17.1",
 }
 
 

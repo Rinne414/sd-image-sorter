@@ -154,7 +154,7 @@ def _brute_force_groups(ids, x, threshold):
 # --------------------------------------------------------------------- math
 class TestLayoutMath:
     def test_near_duplicates_merge_into_the_smallest_id(self):
-        from services.style_map_service import merge_near_duplicates
+        from services.style_map_math import merge_near_duplicates
 
         base = _random_units(5, seed=1)
         ids = np.array([50, 10, 30, 20, 40, 11, 12], dtype=np.int64)
@@ -180,7 +180,7 @@ class TestLayoutMath:
         assert list(rep_rows) == [1, 3, 2, 4, 0]
 
     def test_merge_is_reproducible_regardless_of_input_order(self):
-        from services.style_map_service import merge_near_duplicates
+        from services.style_map_math import merge_near_duplicates
 
         x = _random_units(40, seed=3)
         rng = np.random.default_rng(4)
@@ -200,7 +200,7 @@ class TestLayoutMath:
         """Groups of points spread around cos 0.95: the candidate search plus
         full-dimension confirmation must give the all-pairs single-linkage result
         (representatives AND member counts), across several blocks."""
-        from services.style_map_service import merge_near_duplicates
+        from services.style_map_math import merge_near_duplicates
 
         x, ids = _clustered(seed=seed, groups=60, members=40, dim=512)
         expected_reps, expected_members, pairs = _brute_force_groups(ids, x, 0.95)
@@ -222,7 +222,7 @@ class TestLayoutMath:
         bounded by the joins that still change a group."""
         import tracemalloc
 
-        from services.style_map_service import merge_near_duplicates
+        from services.style_map_math import merge_near_duplicates
 
         n, dim = 12000, 64
         rng = np.random.default_rng(41)
@@ -248,7 +248,7 @@ class TestLayoutMath:
         assert elapsed < 5.0, elapsed
         # Once the first slab has joined everything, no later pair needs
         # confirming: the work stays near one slab's worth, not n^2 / 2.
-        from services.style_map_service import _SUB_ROWS
+        from services.style_map_math import _SUB_ROWS
 
         assert stats["candidate_pairs"] < 4 * _SUB_ROWS * n, stats
         assert stats["duplicate_pairs"] < 4 * _SUB_ROWS * n, stats
@@ -263,7 +263,7 @@ class TestLayoutMath:
         the gathered-columns branch; without them it is the contiguous one."""
         import tracemalloc
 
-        from services.style_map_service import merge_near_duplicates
+        from services.style_map_math import merge_near_duplicates
 
         dense, dim = 1200, 256
         rng = np.random.default_rng(30)
@@ -301,7 +301,7 @@ class TestLayoutMath:
         assert elapsed < 10.0, elapsed
 
     def test_unlocatable_points_have_a_dominant_component(self):
-        from services.style_map_service import find_unlocatable
+        from services.style_map_math import find_unlocatable
 
         x = _random_units(6, seed=7)
         x[2] = _unit(np.eye(DIM)[3] * 5 + 0.01 * x[2])  # one component ~1
@@ -310,7 +310,7 @@ class TestLayoutMath:
         assert mask.tolist() == [False, False, True, False, True, False]
 
     def test_pca_layout_shape_range_and_variance(self):
-        from services.style_map_service import pca_layout
+        from services.style_map_math import pca_layout
 
         rng = np.random.default_rng(8)
         # Anisotropic cloud: three strong directions, then noise.
@@ -329,7 +329,7 @@ class TestLayoutMath:
         assert np.allclose(xyz.mean(axis=0), 0, atol=1e-3)
 
     def test_pca_layout_handles_tiny_inputs(self):
-        from services.style_map_service import pca_layout
+        from services.style_map_math import pca_layout
 
         xyz, explained = pca_layout(_random_units(1, seed=9))
         assert xyz.shape == (1, 3) and np.all(xyz == 0)

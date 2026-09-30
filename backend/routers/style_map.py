@@ -161,3 +161,21 @@ def style_map_points(
         space, selection_token=selection_token, refresh=refresh
     )
     return Response(content=payload, media_type="application/json")
+
+
+@router.get(
+    "/layout-status",
+    summary="State of the optional UMAP layout of the filtered library",
+    description=(
+        "The `umap` field of GET /api/style-map/points without computing the "
+        "map: `unavailable` (umap-learn not installed; the map uses PCA), "
+        "`too_few_points`, `not_started`, `queued`, `computing`, `ready` or "
+        "`failed`. Poll it while a layout is being fitted."
+    ),
+)
+def style_map_layout_status(
+    space: str = Query("kaloscope", pattern=_MAP_SPACE_PATTERN),
+    selection_token: Optional[str] = Query(None, max_length=65536),
+    service: StyleMapService = Depends(get_style_map_service),
+):
+    return service.layout_status(space, selection_token=selection_token)

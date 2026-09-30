@@ -115,6 +115,24 @@ def _video_ffmpeg_health() -> Dict[str, Any]:
         else "Not installed. Click Prepare / Download (~31 MB) or start a video job to be asked.",
     }
 
+def _umap_runtime_available() -> bool:
+    from services.style_map_umap import umap_available
+
+    return umap_available()
+
+
+def _umap_health() -> Dict[str, Any]:
+    """The optional UMAP layout of the style map (PCA is used without it)."""
+    ready = _umap_runtime_available()
+    return {
+        "available": ready,
+        "message_key": "models.styleMapUmap.ready" if ready else "models.styleMapUmap.missing",
+        "message": "The UMAP layout for the style map is ready."
+        if ready
+        else "Not installed. Click Prepare / Download (~90 MB) so that pictures placed together on the map really look alike.",
+    }
+
+
 def _clip_model_loaded() -> bool:
     """Check whether the FastEmbed CLIP model singleton is already loaded in memory."""
     try:
@@ -661,6 +679,7 @@ def get_model_health() -> Dict[str, Any]:
         "aesthetic_waifu": aesthetic.waifu_health(),
         "aesthetic_anime": anime_aesthetic.health(),
         "video_ffmpeg": _video_ffmpeg_health(),
+        "umap": _umap_health(),
         "cl_tagger_v2": {
             "available": bool(cl_tagger_v2_checkpoint) and not cl_tagger_v2_missing,
             "model_name": "cl-tagger-v2",

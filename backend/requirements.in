@@ -83,6 +83,15 @@ send2trash>=1.8.3
 # is not affected, and the cap is lifted when the computation ends. Pure
 # Python, BSD-3; the same helper scikit-learn uses.
 threadpoolctl>=3.1.0
+# Style map layout (optional install group "umap", Model Center card
+# style-map-umap): umap-learn with its native numba/llvmlite JIT stack.
+# Listed here so the locked versions become the floor Prepare installs;
+# the core package never ships it.
+umap-learn>=0.5.12
+pynndescent>=0.6.0
+numba>=0.67.0
+llvmlite>=0.49.0
+scikit-learn>=1.9.1
 # Security floor: urllib3 2.6.3 is flagged by pip-audit (CVE-2026-44431/44432).
 urllib3>=2.7.0
 # Security floor: idna <3.15 is flagged by pip-audit (CVE-2026-45409, CPU-DoS

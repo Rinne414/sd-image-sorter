@@ -1343,6 +1343,8 @@ window.I18nLang_zhCN = {
     'mediaCensor.doneFrames': '完成 · {count} 帧打了码',
     'models.videoFfmpeg.ready': '视频打码用的 ffmpeg 已就绪。',
     'models.videoFfmpeg.missing': '还没有安装。点击准备 / 下载（约 31 MB），或开始处理视频时按提示安装。',
+    'models.styleMapUmap.ready': '画风地图布局（UMAP）已就绪，地图上靠在一起的图会真的相像。',
+    'models.styleMapUmap.missing': '还没有安装。画风地图布局（UMAP）让地图上靠在一起的图真的相像；点击准备 / 下载（约 90 MB，占用约 200 MB 磁盘）。',
     'censor.faceGuard': '脸部保护',
     'censor.faceGuardHelpToggle': '关于脸部保护',
     'censor.faceGuardHelp': '装了二次元脸部模型（模型中心「Anime Censor + Face Guard」）后，把其实是脸的检测结果跳过，例如被误认成私处的嘴巴。脸上的阴茎或精液永远不会跳过。',

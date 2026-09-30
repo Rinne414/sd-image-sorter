@@ -331,6 +331,18 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
             "paths": {},
         }, dependency_result)
 
+    if normalized_model_id == "style-map-umap":
+        dependency_result = _svc().ensure_group("umap")
+        restart_result = _svc()._dependency_restart_result(normalized_model_id, dependency_result)
+        if restart_result:
+            return restart_result
+        return _svc()._with_dependency_result({
+            "status": "ok",
+            "model_id": normalized_model_id,
+            "message": "The UMAP layout for the style map is ready.",
+            "paths": {},
+        }, dependency_result)
+
     if normalized_model_id in ("aesthetic-waifu", "aesthetic-anime"):
         # Both optional scores run inside aesthetic scoring, so the Aesthetic
         # Predictor is prepared first (a no-op when it is already ready).

@@ -820,6 +820,7 @@ def test_get_status_wraps_inventory_and_health(monkeypatch):
         "censor-legacy",
         "censor-anime",
         "video-ffmpeg",
+        "style-map-umap",
         "censor-nudenet",
         "sam3",
     ]

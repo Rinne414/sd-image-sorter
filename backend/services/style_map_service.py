@@ -20,6 +20,15 @@ contract every "act on the matches" path reads) into one point per picture:
 Results are cached as JSON bytes per (library, space, model version, filter,
 member ids, vector version); one layout is computed at a time and a
 concurrent request for the same key waits for it instead of recomputing.
+
+UMAP (slice S2b.1) is an optional install group (Model Center card
+``style-map-umap``). When umap-learn is importable and the map has enough
+representatives, the PCA answer is returned at once and a background job
+fits UMAP on the representatives' projection onto the first
+``UMAP_INPUT_DIM`` principal axes; once ready, ``points`` carry the UMAP
+coordinates (``method: "umap"``) and the layout is kept in memory and on
+disk (``state/style-map/``) so a restart does not refit. The ``umap`` field
+of every response and ``GET /api/style-map/layout-status`` report the job.
 """
 
 from __future__ import annotations
@@ -29,11 +38,11 @@ import json
 import logging
 import threading
 import time
-from collections import OrderedDict
-from typing import Any, Dict, List, Optional
+from collections import OrderedDict, deque
+from dataclasses import dataclass, field
+from typing import Any, Deque, Dict, List, Optional
 
 import numpy as np
-from threadpoolctl import threadpool_limits
 
 import database as db
 from artist_identifier import kaloscope_style_vector_model_version
@@ -41,298 +50,68 @@ from config import CLIP_MODEL_NAME
 from db_style_vectors import unpack_style_vector
 from exceptions import ValidationError
 from library_context import get_current_library_id
+from optional_dependencies import OPTIONAL_DEPENDENCY_GROUPS
+from services import style_map_umap
 from services.image.selection import selection_contract_db_filters
+from services.style_map_math import (
+    _CANDIDATE_DIM,
+    STYLE_MAP_BLAS_THREADS,
+    _top_components,
+    blas_budget,
+    find_unlocatable,
+    merge_near_duplicates,
+    pca_layout,
+)
+from services.style_map_umap import (
+    UMAP_INPUT_DIM,
+    UMAP_INSTALL_MODEL_ID,
+    UMAP_MIN_POINTS,
+    fit_umap_layout,
+    map_rules,
+    umap_params,
+)
+
+__all__ = ["STYLE_MAP_BLAS_THREADS", "StyleMapService"]
 from similarity_math import bytes_to_embedding
 
 logger = logging.getLogger(__name__)
 
 STYLE_MAP_SPACES = ("kaloscope", "clip")
 STYLE_MAP_METHOD = "pca"
-NEAR_DUPLICATE_COS = 0.95
-UNLOCATABLE_MAX_COMPONENT = 0.5
 POINT_DECIMALS = 3
 POINTS_LAYOUT = ["id", "x", "y", "z", "members"]
-# BLAS threads for the map's matmuls, applied only while a layout is computed
-# (owner's choice: the rest of the process keeps its default threads).
-STYLE_MAP_BLAS_THREADS = 4
-_CANDIDATE_DIM = 256
-_BOUND_MARGIN = 1e-3  # float32 slack on the candidate bound
-_BLOCK_ROWS = 1024
-# Rows per candidate slab. Small slabs keep the (rows x n) gram and mask
-# tiny and let the "already grouped" filter run between slabs.
-_SUB_ROWS = 128
-# k-means clusters used only to order the candidate-search walk.
-_CLUSTER_ORDER_K = 64
 _ID_CHUNK = 500
 _ID_PAGE = 5000
 _CACHE_ENTRIES = 8
-_COV_BLOCK_ROWS = 8192
-# Above this share of remaining columns, confirm against the contiguous slice
-# instead of gathering the candidate columns (a gather would copy them).
-_GATHER_SHARE = 0.5
+STYLE_MAP_METHODS = ("pca", "umap")
+_LAYOUT_MEMORY_ENTRIES = 8
+# Finished job records kept for status answers (queued ones are never dropped).
+_JOB_HISTORY = 32
+# Maps waiting behind the running fit. A user flicking through filters must
+# not line up ten fits nobody is looking at: older queued maps are forgotten
+# and come back only when asked for again.
+_QUEUE_LIMIT = 2
 
 
-# ------------------------------------------------------------------ pure math
-def unit_rows(x: np.ndarray) -> np.ndarray:
-    x = np.asarray(x, dtype=np.float32)
-    norms = np.linalg.norm(x, axis=1, keepdims=True)
-    return x / np.maximum(norms, 1e-8)
+@dataclass
+class _MapInputs:
+    """What a UMAP fit of a cached PCA map needs, kept beside its JSON."""
+
+    rep_ids: np.ndarray
+    # reps x UMAP_INPUT_DIM in float16 (a 50k library costs ~6 MB per entry).
+    features: np.ndarray
 
 
-def find_unlocatable(
-    x: np.ndarray, max_component: float = UNLOCATABLE_MAX_COMPONENT
-) -> np.ndarray:
-    """Rows of a unit matrix that one component dominates (cannot be placed)."""
-    if len(x) == 0:
-        return np.zeros(0, dtype=bool)
-    return np.abs(x).max(axis=1) > max_component
-
-
-def _top_components(x: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray, float]:
-    """Top-k principal directions of ``x`` (rows), all eigenvalues and total variance."""
-    n, d = x.shape
-    mean = x.mean(axis=0)
-    if n <= d:
-        _u, s, vt = np.linalg.svd(x - mean, full_matrices=False)
-        eig = s.astype(np.float64) ** 2
-        comps = vt[:k]
-    else:
-        # Covariance accumulated block by block in float32 BLAS: no centered
-        # or float64 copy of the whole matrix (50k x 2048 would be 800 MB each).
-        cov = np.zeros((d, d), dtype=np.float64)
-        for start in range(0, n, _COV_BLOCK_ROWS):
-            block = x[start : start + _COV_BLOCK_ROWS] - mean
-            cov += block.T @ block
-        w, v = np.linalg.eigh(cov)
-        order = np.argsort(w)[::-1]
-        eig = np.maximum(w[order], 0.0)
-        comps = v[:, order[:k]].T
-    comps = np.ascontiguousarray(comps, dtype=np.float32)
-    # Deterministic sign: the largest loading of each axis points positive.
-    for row in comps:
-        pivot = int(np.argmax(np.abs(row)))
-        if row[pivot] < 0:
-            row *= -1
-    return comps, eig, float(eig.sum())
-
-
-def _find_roots(parent: np.ndarray, idx: np.ndarray) -> np.ndarray:
-    """Vectorised find with pointer jumping (no path compression needed)."""
-    roots = parent[idx]
-    while True:
-        above = parent[roots]
-        if np.array_equal(above, roots):
-            return roots
-        roots = above
-
-
-def _union_pairs(parent: np.ndarray, i: np.ndarray, j: np.ndarray) -> None:
-    """Union every (i, j) pair; the smallest index of a group stays its root.
-
-    Min-label propagation over the pairs' roots until stable, all in numpy:
-    no Python loop per pair, and no scipy (not part of the core install).
-    """
-    if i.size == 0:
-        return
-    ri = _find_roots(parent, i)
-    rj = _find_roots(parent, j)
-    nodes = np.unique(np.concatenate([ri, rj]))
-    while True:
-        before = parent[nodes].copy()
-        low = np.minimum(parent[ri], parent[rj])
-        np.minimum.at(parent, ri, low)
-        np.minimum.at(parent, rj, low)
-        parent[nodes] = parent[parent[nodes]]
-        if np.array_equal(parent[nodes], before):
-            return
-
-
-def _cluster_order(
-    proj: np.ndarray, k: int = _CLUSTER_ORDER_K, iterations: int = 6
-) -> np.ndarray:
-    """A permutation that walks the rows cluster by cluster (k-means on ``proj``).
-
-    Deterministic (fixed seed); small inputs keep their order. Only the walk
-    order of the candidate search depends on it, never the result.
-    """
-    n = len(proj)
-    if n <= 4 * k:
-        return np.arange(n)
-    rng = np.random.default_rng(0)
-    centers = proj[rng.choice(n, k, replace=False)].astype(np.float32)
-    labels = np.zeros(n, dtype=np.int64)
-    for _ in range(iterations):
-        # argmin |p - c|^2 == argmax (p.c - |c|^2 / 2)
-        scores = proj @ centers.T - 0.5 * (centers**2).sum(axis=1)[None, :]
-        labels = np.argmax(scores, axis=1)
-        counts = np.bincount(labels, minlength=k)
-        sums = np.zeros_like(centers)
-        np.add.at(sums, labels, proj)
-        filled = counts > 0
-        centers[filled] = sums[filled] / counts[filled, None]
-    return np.argsort(labels, kind="stable")
-
-
-def merge_near_duplicates(
-    ids: np.ndarray,
-    x: np.ndarray,
-    *,
-    threshold: float = NEAR_DUPLICATE_COS,
-    candidate_dim: int = _CANDIDATE_DIM,
-    block_rows: int = _BLOCK_ROWS,
-    components: Optional[np.ndarray] = None,
-    stats: Optional[Dict[str, Any]] = None,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Single-linkage groups over cosine > ``threshold``; the smallest id represents a group.
-
-    Returns ``(rep_ids, rep_rows, members)`` sorted by representative id, where
-    ``rep_rows`` indexes the input ``x``. Candidates come from a
-    ``candidate_dim`` PCA projection (``components`` may be passed in) with
-    the exact bound ``p_i.p_j >= threshold - |q_i||q_j|`` (p = projected part,
-    q = dropped part, loosened per block to the block's largest |q| and by a
-    float32 margin), then every candidate is confirmed in full dimension with
-    one block matmul against the candidate columns -- never a gathered row
-    per pair -- so the result equals an all-pairs search.
-    """
-    ids = np.asarray(ids, dtype=np.int64)
-    x = np.asarray(x, dtype=np.float32)
-    n = len(ids)
-    if n == 0:
-        empty = np.zeros(0, dtype=np.int64)
-        return empty, empty.copy(), empty.copy()
-    order = np.argsort(ids, kind="stable")
-    if np.array_equal(order, np.arange(n)):
-        xs = x  # already id-sorted: no 400 MB copy for a 50k library
-    else:
-        xs = x[order]
-    if n == 1:
-        return ids[order], order, np.ones(1, dtype=np.int64)
-
-    d = xs.shape[1]
-    k = min(int(candidate_dim), d, n)
-    if k < d:
-        if components is not None and components.shape[0] >= k:
-            comps = np.ascontiguousarray(components[:k], dtype=np.float32)
-        else:
-            comps, _eig, _total = _top_components(xs, k)
-        proj = xs @ comps.T  # p_i (retained part), not re-normalised
-        retained = (proj.astype(np.float64) ** 2).sum(axis=1)
-        dropped = np.sqrt(np.maximum(1.0 - retained, 0.0))  # float64 |q_i|
-    else:
-        proj = xs
-        dropped = np.zeros(n, dtype=np.float64)
-
-    # Walk the rows in cluster order (a cheap k-means on the projection), so a
-    # slab's candidate columns concentrate in a few clusters instead of being
-    # spread over the whole library: the confirmation then gathers thousands
-    # of columns per slab, not all of them. Grouping is order-independent and
-    # the representative is still the smallest id of each group.
-    perm = _cluster_order(proj)
-    pp = proj[perm]
-    dp = dropped[perm]
-    parent = np.arange(n, dtype=np.int64)
-    candidates = 0
-    confirmed = 0
-    sub_rows = max(1, min(int(block_rows), _SUB_ROWS))
-    for start in range(0, n, block_rows):
-        stop = min(start + block_rows, n)
-        width = stop - start
-        # Upper triangle only: this block's rows against columns start..n.
-        # One big matmul per block keeps BLAS efficient; the confirmation
-        # below walks the block in small slabs.
-        gram = pp[start:stop] @ pp[start:].T  # (b, n - start)
-        bound = (
-            threshold - _BOUND_MARGIN - float(dp[start:stop].max()) * dp[start:]
-        ).astype(np.float32)
-        mask = gram >= bound
-        del gram
-        mask[:, :width] &= np.triu(np.ones((width, width), dtype=bool), 1)
-        for s0 in range(start, stop, sub_rows):
-            s1 = min(s0 + sub_rows, stop)
-            rows = s1 - s0
-            # Columns before s0 are already False (upper triangle).
-            sub = mask[s0 - start : s1 - start, s0 - start :]
-            # Pairs already in one group need no confirmation: without this,
-            # a library of near-duplicates confirms and unions every pair of
-            # every slab, and the hit arrays grow with n^2 (reviewer probe:
-            # 24k points -> 1.9 GB). Roots are refreshed per slab because the
-            # previous slab's unions change them.
-            roots = _find_roots(parent, np.arange(s0, n))
-            sub = sub & (roots[:rows, None] != roots[None, :])
-            cols = np.nonzero(sub.any(axis=0))[0]
-            if cols.size == 0:
-                continue
-            candidates += int(np.count_nonzero(sub))
-            # Full-dimension confirmation as ONE matmul against the candidate
-            # columns (or the contiguous slice when most columns are candidates).
-            slab = xs[perm[s0:s1]]
-            if cols.size > _GATHER_SHARE * (n - s0):
-                full = slab @ xs[perm[s0:]].T
-                hit_r, hit_c = np.nonzero(sub & (full > threshold))
-            else:
-                full = slab @ xs[perm[s0 + cols]].T
-                hit_r, hit_local = np.nonzero(sub[:, cols] & (full > threshold))
-                hit_c = cols[hit_local]
-            del full, sub
-            if hit_r.size == 0:
-                continue
-            confirmed += int(hit_r.size)
-            _union_pairs(parent, hit_r + s0, hit_c + s0)
-        del mask
-
-    roots = _find_roots(parent, np.arange(n))  # in walk order
-    # Representative = smallest id of the group = smallest id-sorted row.
-    min_sorted_row = np.full(n, n, dtype=np.int64)
-    np.minimum.at(min_sorted_row, roots, perm)
-    group_roots = np.unique(roots)
-    rep_sorted_rows = min_sorted_row[group_roots]
-    by_id = np.argsort(rep_sorted_rows, kind="stable")
-    rep_sorted_rows = rep_sorted_rows[by_id]
-    members = np.bincount(roots, minlength=n)[group_roots][by_id]
-    if stats is not None:
-        stats.update(
-            {
-                "candidate_pairs": candidates,
-                "duplicate_pairs": confirmed,
-                "candidate_dim": k,
-            }
-        )
-    return ids[order][rep_sorted_rows], order[rep_sorted_rows], members.astype(np.int64)
-
-
-def pca_layout(
-    x: np.ndarray,
-    *,
-    components: Optional[np.ndarray] = None,
-    eigenvalues: Optional[np.ndarray] = None,
-    total_variance: Optional[float] = None,
-) -> tuple[np.ndarray, List[float]]:
-    """3-D PCA coordinates scaled to [-1, 1] and the explained-variance ratios.
-
-    With ``components`` (and their eigenvalues) the axes come from a fit made
-    elsewhere -- the service fits once on every placeable picture and reuses
-    the axes for the candidate search and this layout.
-    """
-    x = np.asarray(x, dtype=np.float32)
-    n = len(x)
-    if n < 2:
-        return np.zeros((n, 3), dtype=np.float32), [0.0, 0.0, 0.0]
-    if components is None or eigenvalues is None or total_variance is None:
-        comps, eig, total = _top_components(x, 3)
-    else:
-        comps, eig, total = (
-            np.asarray(components[:3], dtype=np.float32),
-            np.asarray(eigenvalues),
-            float(total_variance),
-        )
-    xyz = x @ comps.T - x.mean(axis=0) @ comps.T  # no centered copy of x
-    if xyz.shape[1] < 3:
-        xyz = np.pad(xyz, ((0, 0), (0, 3 - xyz.shape[1])))
-    peak = float(np.abs(xyz).max()) or 1.0
-    xyz = (xyz / peak).astype(np.float32)
-    ratios = [float(v) / total if total > 0 else 0.0 for v in eig[:3]]
-    ratios += [0.0] * (3 - len(ratios))
-    return xyz, [round(r, 4) for r in ratios]
+@dataclass
+class _LayoutJob:
+    key: tuple
+    rep_ids: np.ndarray
+    features: Optional[np.ndarray]
+    status: str = "queued"
+    error: str = ""
+    queued_at: float = field(default_factory=time.time)
+    started_at: float = 0.0
+    finished_at: float = 0.0
 
 
 # ------------------------------------------------------------------- service
@@ -341,10 +120,22 @@ class StyleMapService:
 
     def __init__(self) -> None:
         self._cache: "OrderedDict[tuple, tuple[bytes, int]]" = OrderedDict()
+        # Same keys as _cache, evicted together: the UMAP inputs of each map.
+        self._inputs: Dict[tuple, _MapInputs] = {}
         self._stamp = 0
         self._cache_lock = threading.Lock()
         self._compute_lock = threading.Lock()
         self.last_stats: Dict[str, Any] = {}
+        # UMAP: ready layouts (memory), job records, one worker at a time.
+        self._umap_lock = threading.Lock()
+        # layout key -> (rep_ids, xyz, source, elapsed_s)
+        self._layouts: "OrderedDict[tuple, tuple[np.ndarray, np.ndarray, str, float]]" = OrderedDict()
+        # layout key -> the ready response body (without the cached flag)
+        self._rendered: Dict[tuple, bytes] = {}
+        self._umap_jobs: "OrderedDict[tuple, _LayoutJob]" = OrderedDict()
+        self._umap_queue: Deque[tuple] = deque()
+        self._umap_thread: Optional[threading.Thread] = None
+        self._umap_running = False
 
     # ---------------------------------------------------------------- inputs
     @staticmethod
@@ -418,31 +209,28 @@ class StyleMapService:
                 self._cache.move_to_end(key)
             return entry
 
-    def _cache_put(self, key: tuple, value: bytes) -> None:
+    def _cache_put(self, key: tuple, value: bytes, inputs: _MapInputs) -> None:
         with self._cache_lock:
             self._stamp += 1
             self._cache[key] = (value, self._stamp)
             self._cache.move_to_end(key)
+            self._inputs[key] = inputs
             while len(self._cache) > _CACHE_ENTRIES:
-                self._cache.popitem(last=False)
+                evicted, _entry = self._cache.popitem(last=False)
+                self._inputs.pop(evicted, None)
 
     def clear_cache(self) -> None:
         with self._cache_lock:
             self._cache.clear()
+            self._inputs.clear()
+        with self._umap_lock:
+            self._layouts.clear()
+            self._rendered.clear()
 
     # ------------------------------------------------------------------ main
-    @staticmethod
-    def _with_cached_flag(payload: bytes, cached: bool) -> bytes:
-        return payload[:-1] + (b',"cached":true}' if cached else b',"cached":false}')
-
-    def points_json(
-        self,
-        space: str,
-        selection_token: Optional[str] = None,
-        *,
-        refresh: bool = False,
-    ) -> bytes:
-        """The response as JSON bytes (what the route returns); ``refresh`` skips the cache read."""
+    def _map_key(
+        self, space: str, selection_token: Optional[str]
+    ) -> tuple[str, str, List[int], tuple]:
         normalized = self._require_space(space)
         contract = self._contract(selection_token)
         model_version = self._model_version(normalized)
@@ -454,23 +242,38 @@ class StyleMapService:
             self._member_hash(ids),
             self._vector_version(normalized, model_version),
         )
-        if not refresh:
-            entry = self._cache_get(key)
-            if entry is not None:
-                return self._with_cached_flag(entry[0], True)
+        return normalized, model_version, ids, key
+
+    def points_json(
+        self,
+        space: str,
+        selection_token: Optional[str] = None,
+        *,
+        refresh: bool = False,
+    ) -> bytes:
+        """The response as JSON bytes (what the route returns); ``refresh`` skips the cache read."""
+        normalized, model_version, ids, key = self._map_key(space, selection_token)
+        entry = None if refresh else self._cache_get(key)
+        cached = entry is not None
+        if entry is None:
+            with self._cache_lock:
+                waited_since = self._stamp
+            with self._compute_lock:
+                entry = self._cache_get(key)
+                # A refresh that queued behind another computation of the same
+                # map takes that fresh result instead of recomputing it again.
+                if entry is not None and (not refresh or entry[1] > waited_since):
+                    cached = True
+                else:
+                    with blas_budget():
+                        result, inputs = self._compute(normalized, model_version, ids)
+                    payload = json.dumps(result, separators=(",", ":")).encode("utf-8")
+                    self._cache_put(key, payload, inputs)
+                    entry = (payload, 0)
         with self._cache_lock:
-            waited_since = self._stamp
-        with self._compute_lock:
-            entry = self._cache_get(key)
-            # A refresh that queued behind another computation of the same
-            # map takes that fresh result instead of recomputing it again.
-            if entry is not None and (not refresh or entry[1] > waited_since):
-                return self._with_cached_flag(entry[0], True)
-            with threadpool_limits(limits=STYLE_MAP_BLAS_THREADS, user_api="blas"):
-                result = self._compute(normalized, model_version, ids)
-            payload = json.dumps(result, separators=(",", ":")).encode("utf-8")
-            self._cache_put(key, payload)
-        return self._with_cached_flag(payload, False)
+            inputs = self._inputs.get(key)
+        umap_state = self._umap_state(key, inputs, retry=refresh)
+        return self._render(entry[0], umap_state, cached)
 
     def points(
         self,
@@ -481,6 +284,296 @@ class StyleMapService:
     ) -> Dict[str, Any]:
         """Dict form of :meth:`points_json` (tests and in-process callers)."""
         return json.loads(self.points_json(space, selection_token, refresh=refresh))
+
+    def layout_status(
+        self, space: str, selection_token: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """The UMAP job state of this map without computing the PCA map.
+
+        Before ``points`` ran for the map (in this process or an earlier one
+        whose layout is on disk) the state is ``not_started``.
+        """
+        normalized, _model_version, _ids, key = self._map_key(space, selection_token)
+        with self._cache_lock:
+            inputs = self._inputs.get(key)
+        state = self._umap_state(key, inputs, retry=False)
+        state.pop("_layout", None)
+        state.pop("_layout_key", None)
+        return {
+            "space": normalized,
+            "method": "umap" if state["status"] == "ready" else STYLE_MAP_METHOD,
+            "umap": state,
+        }
+
+    @staticmethod
+    def _with_umap(payload: bytes, umap_state: Dict[str, Any], tail: bytes) -> bytes:
+        umap_json = json.dumps(umap_state, separators=(",", ":")).encode("utf-8")
+        return payload[:-1] + b',"umap":' + umap_json + tail
+
+    def _render(
+        self, payload: bytes, umap_state: Dict[str, Any], cached: bool
+    ) -> bytes:
+        """The PCA JSON plus the ``umap`` and ``cached`` fields; with a ready
+        layout the points carry the UMAP coordinates instead.
+
+        The ready body is built once per layout and kept (a 50k map is
+        ~1.4 MB of JSON; parsing and dumping it per request is wasted work).
+        A layout whose ids do not match the points is never drawn: the map
+        falls back to PCA and the layout is forgotten.
+        """
+        layout = umap_state.pop("_layout", None)
+        layout_key = umap_state.pop("_layout_key", None)
+        tail = b',"cached":true}' if cached else b',"cached":false}'
+        if layout is None:
+            return self._with_umap(payload, umap_state, tail)
+        with self._umap_lock:
+            body = self._rendered.get(layout_key)
+        if body is not None:
+            return body + tail
+        ids, xyz = layout
+        result = json.loads(payload)
+        if len(ids) != len(result["points"]) or any(
+            point[0] != image_id
+            for point, image_id in zip(result["points"], ids.tolist())
+        ):
+            logger.warning(
+                "Style map: UMAP layout (%d ids) does not match the map (%d points); using PCA",
+                len(ids),
+                len(result["points"]),
+            )
+            self._forget_layout(layout_key)
+            fallback = {
+                name: value
+                for name, value in umap_state.items()
+                if name not in ("source", "elapsed_s")
+            }
+            fallback["status"] = "not_started"
+            return self._with_umap(payload, fallback, tail)
+        rounded = np.round(xyz.astype(np.float64), POINT_DECIMALS).tolist()
+        result["method"] = "umap"
+        result["points"] = [
+            [point[0], x, y, z, point[4]]
+            for point, (x, y, z) in zip(result["points"], rounded)
+        ]
+        result["umap"] = umap_state
+        body = json.dumps(result, separators=(",", ":")).encode("utf-8")[:-1]
+        with self._umap_lock:
+            self._rendered[layout_key] = body
+        return body + tail
+
+    # ------------------------------------------------------------------ umap
+    @staticmethod
+    def _layout_key(key: tuple) -> tuple:
+        """The map's cache key plus the fit parameters and the rules that
+        picked the representatives (so a rule change never reuses a layout)."""
+        params = umap_params()
+        rules = map_rules()
+        return key + (
+            ("umap",) + tuple(params[name] for name in sorted(params)),
+            ("map",) + tuple(rules[name] for name in sorted(rules)),
+        )
+
+    def _umap_state(
+        self, key: tuple, inputs: Optional[_MapInputs], *, retry: bool
+    ) -> Dict[str, Any]:
+        """The ``umap`` field of a response; queues a fit when one is due.
+
+        ``_layout`` (ids and xyz in point order) and ``_layout_key``, both
+        stripped by the callers, carry a ready layout so ``_render`` does
+        not look it up twice.
+        """
+        n_reps = int(len(inputs.rep_ids)) if inputs is not None else 0
+        state: Dict[str, Any] = {
+            "status": "not_started",
+            "points": n_reps,
+            "min_points": UMAP_MIN_POINTS,
+            "params": umap_params(),
+        }
+        # Through the module so the probe can be swapped (tests, Prepare).
+        if not style_map_umap.umap_available():
+            state["status"] = "unavailable"
+            state["install"] = {
+                "model_id": UMAP_INSTALL_MODEL_ID,
+                "packages": list(OPTIONAL_DEPENDENCY_GROUPS["umap"]),
+            }
+            return state
+        layout_key = self._layout_key(key)
+        ready = self._ready_layout(
+            layout_key, inputs.rep_ids if inputs is not None else None
+        )
+        if ready is not None:
+            ids, xyz, source, elapsed = ready
+            state.update(
+                status="ready",
+                source=source,
+                elapsed_s=round(elapsed, 3),
+                _layout=(ids, xyz),
+                _layout_key=layout_key,
+            )
+            return state
+        with self._umap_lock:
+            job = self._umap_jobs.get(layout_key)
+            if job is not None and job.status in ("queued", "computing"):
+                if not self._umap_running:
+                    self._ensure_worker()  # self-heal: a worker died with work left
+                state["status"] = job.status
+                state["queued_at"] = job.queued_at
+                if job.started_at:
+                    state["started_at"] = job.started_at
+                return state
+            if job is not None and job.status == "failed" and not retry:
+                state.update(status="failed", error=job.error)
+                return state
+            if inputs is None:
+                return state  # not_started: no PCA map of this filter yet
+            if n_reps < UMAP_MIN_POINTS:
+                state["status"] = "too_few_points"
+                return state
+            job = _LayoutJob(layout_key, inputs.rep_ids, inputs.features)
+            self._umap_jobs[layout_key] = job
+            self._umap_jobs.move_to_end(layout_key)  # a retried key is newest again
+            self._umap_queue.append(layout_key)
+            self._trim_jobs()
+            self._ensure_worker()
+            state["status"] = "queued"
+            state["queued_at"] = job.queued_at
+        return state
+
+    def _trim_jobs(self) -> None:
+        """Forget the oldest queued maps beyond the queue limit and the
+        oldest finished records beyond the history (caller holds ``_umap_lock``).
+
+        A queued or computing job is never evicted from the records: the
+        worker looks its record up by key when it starts on it.
+        """
+        while len(self._umap_queue) > _QUEUE_LIMIT:
+            dropped = self._umap_queue.popleft()
+            self._umap_jobs.pop(dropped, None)  # back to not_started
+        finished = [
+            key
+            for key, job in self._umap_jobs.items()
+            if job.status in ("ready", "failed")
+        ]
+        for key in finished[: max(0, len(self._umap_jobs) - _JOB_HISTORY)]:
+            self._umap_jobs.pop(key, None)
+
+    def _ready_layout(
+        self, layout_key: tuple, rep_ids: Optional[np.ndarray]
+    ) -> Optional[tuple[np.ndarray, np.ndarray, str, float]]:
+        """(ids, xyz, source, elapsed_s) from memory or disk; None when there
+        is none. With ``rep_ids`` (the map's representatives) the layout must
+        cover exactly those ids, wherever it came from; a mismatch is
+        forgotten, memory and disk, so it cannot be drawn later either."""
+        with self._umap_lock:
+            hit = self._layouts.get(layout_key)
+            if hit is not None:
+                self._layouts.move_to_end(layout_key)
+        if hit is None:
+            loaded = style_map_umap.load_layout(layout_key)
+            if loaded is None:
+                return None
+            ids, xyz, elapsed = loaded
+            hit = self._remember_layout(layout_key, ids, xyz, "disk", elapsed)
+        if rep_ids is not None and not np.array_equal(hit[0], rep_ids):
+            logger.warning(
+                "Style map: cached UMAP layout (%d ids) does not match the map (%d); dropping it",
+                len(hit[0]),
+                len(rep_ids),
+            )
+            self._forget_layout(layout_key)
+            return None
+        return hit
+
+    def _remember_layout(
+        self,
+        layout_key: tuple,
+        ids: np.ndarray,
+        xyz: np.ndarray,
+        source: str,
+        elapsed: float,
+    ) -> tuple[np.ndarray, np.ndarray, str, float]:
+        with self._umap_lock:
+            self._layouts[layout_key] = (ids, xyz, source, elapsed)
+            self._layouts.move_to_end(layout_key)
+            self._rendered.pop(layout_key, None)
+            while len(self._layouts) > _LAYOUT_MEMORY_ENTRIES:
+                evicted, _layout = self._layouts.popitem(last=False)
+                self._rendered.pop(evicted, None)
+            return self._layouts[layout_key]
+
+    def _forget_layout(self, layout_key: tuple) -> None:
+        with self._umap_lock:
+            self._layouts.pop(layout_key, None)
+            self._rendered.pop(layout_key, None)
+        style_map_umap.discard_layout(layout_key)
+
+    def _ensure_worker(self) -> None:
+        """Start the single worker unless one is draining the queue (caller holds ``_umap_lock``)."""
+        if self._umap_running:
+            return
+        self._umap_running = True
+        self._umap_thread = threading.Thread(
+            target=self._umap_worker, name="style-map-umap", daemon=True
+        )
+        self._umap_thread.start()
+
+    def _umap_worker(self) -> None:
+        """Drain the queue one fit at a time. Whatever happens, the running
+        flag is cleared on exit so the next request can start a worker."""
+        exited_cleanly = False
+        try:
+            while True:
+                with self._umap_lock:
+                    if not self._umap_queue:
+                        # Cleared in the same locked section that saw the
+                        # empty queue: a map queued between "queue empty"
+                        # and the flag going down would find running still
+                        # True, start no worker and wait forever.
+                        self._umap_running = False
+                        exited_cleanly = True
+                        return
+                    layout_key = self._umap_queue.popleft()
+                    job = self._umap_jobs.get(layout_key)
+                    if job is None:
+                        continue  # forgotten meanwhile
+                    job.status = "computing"
+                    job.started_at = time.time()
+                self._run_job(layout_key, job)
+        finally:
+            # After a clean return the flag may already belong to a newer
+            # worker started in the gap, so only an exception exit touches
+            # it: lower it and hand any waiting maps to a fresh worker.
+            if not exited_cleanly:
+                with self._umap_lock:
+                    self._umap_running = False
+                    if self._umap_queue:
+                        self._ensure_worker()
+
+    def _run_job(self, layout_key: tuple, job: _LayoutJob) -> None:
+        started = time.perf_counter()
+        try:
+            if job.features is None:
+                raise RuntimeError("layout inputs were dropped")
+            xyz = fit_umap_layout(job.features)
+            elapsed = time.perf_counter() - started
+            style_map_umap.store_layout(layout_key, job.rep_ids, xyz, elapsed)
+            self._remember_layout(layout_key, job.rep_ids, xyz, "memory", elapsed)
+            with self._umap_lock:
+                job.status = "ready"
+                job.finished_at = time.time()
+            logger.info(
+                "Style map: UMAP layout of %d points ready in %.1f s",
+                len(job.rep_ids),
+                elapsed,
+            )
+        except Exception as exc:  # the job must report, not die silently
+            logger.exception("Style map: UMAP layout failed")
+            with self._umap_lock:
+                job.status = "failed"
+                job.error = f"{type(exc).__name__}: {exc}"
+                job.finished_at = time.time()
+        finally:
+            job.features = None
 
     # --------------------------------------------------------------- compute
     def _filtered_ids(self, contract: Dict[str, Any]) -> List[int]:
@@ -559,9 +652,16 @@ class StyleMapService:
         # blobs were sorted by id, so matrix rows are already in id order.
         return np.asarray(found_ids, dtype=np.int64), matrix
 
+    @staticmethod
+    def _empty_inputs() -> _MapInputs:
+        return _MapInputs(
+            np.zeros(0, dtype=np.int64), np.zeros((0, UMAP_INPUT_DIM), dtype=np.float16)
+        )
+
     def _compute(
         self, space: str, model_version: str, ids: List[int]
-    ) -> Dict[str, Any]:
+    ) -> tuple[Dict[str, Any], _MapInputs]:
+        """The PCA response and the UMAP inputs (representatives' projection)."""
         timings: Dict[str, Any] = {}
         t0 = time.perf_counter()
         base = {
@@ -577,12 +677,12 @@ class StyleMapService:
             "points": [],
         }
         if not ids:
-            return {**base, "status": "empty"}
+            return {**base, "status": "empty"}, self._empty_inputs()
         vector_ids, matrix = self._load_vectors(space, model_version, ids)
         timings["read_s"] = round(time.perf_counter() - t0, 3)
         base["missing_vectors"] = len(ids) - len(vector_ids)
         if len(vector_ids) == 0:
-            return {**base, "status": "no_vectors"}
+            return {**base, "status": "no_vectors"}, self._empty_inputs()
 
         unlocatable = find_unlocatable(matrix)
         base["unlocatable"] = [int(value) for value in vector_ids[unlocatable]]
@@ -593,7 +693,7 @@ class StyleMapService:
             keep_ids, keep = vector_ids, matrix  # nothing to drop: no copy
         del matrix
         if len(keep_ids) == 0:
-            return {**base, "status": "no_vectors"}
+            return {**base, "status": "no_vectors"}, self._empty_inputs()
 
         # One covariance + eigh for both the candidate search and the layout.
         t1 = time.perf_counter()
@@ -610,10 +710,17 @@ class StyleMapService:
         timings.update(merge_stats)
 
         t3 = time.perf_counter()
-        xyz, explained = pca_layout(
-            keep[rep_rows], components=comps, eigenvalues=eig, total_variance=total
-        )
+        reps = keep[rep_rows]
+        mean = keep.mean(axis=0)
         del keep
+        xyz, explained = pca_layout(
+            reps, components=comps, eigenvalues=eig, total_variance=total
+        )
+        # UMAP's input: the representatives on the first UMAP_INPUT_DIM axes
+        # (no centred copy of reps; the mean is subtracted after projecting).
+        axes = comps[: min(UMAP_INPUT_DIM, len(comps))]
+        features = (reps @ axes.T - mean @ axes.T).astype(np.float16)
+        del reps
         timings["layout_s"] = round(time.perf_counter() - t3, 3)
         xyz = np.round(xyz.astype(np.float64), POINT_DECIMALS)
         points = [
@@ -632,10 +739,11 @@ class StyleMapService:
             len(points),
             timings,
         )
-        return {
+        result = {
             **base,
             "status": "ok",
             "merged_away": int(len(keep_ids) - len(rep_ids)),
             "explained_variance": explained,
             "points": points,
         }
+        return result, _MapInputs(np.asarray(rep_ids, dtype=np.int64), features)

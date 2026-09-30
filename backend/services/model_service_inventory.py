@@ -137,6 +137,7 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
     aesthetic_waifu = health.get("aesthetic_waifu", {})
     aesthetic_anime = health.get("aesthetic_anime", {})
     video_ffmpeg = health.get("video_ffmpeg", {})
+    umap = health.get("umap", {})
     florence2 = health.get("florence2", {})
     cl_tagger_v2 = health.get("cl_tagger_v2", {})
     installed_wd14 = [item["name"] for item in health["wd14"]["installed_models"] if item["available"]]
@@ -735,6 +736,28 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
             "setup_steps": [
                 "Click Prepare / Download to install imageio-ffmpeg (~31 MB), which brings its own ffmpeg.",
                 "Only needed to censor videos; GIFs work without it.",
+            ],
+        },
+        {
+            "id": "style-map-umap",
+            "name": "UMAP layout (style map)",
+            "group": "Search",
+            "group_key": "models.group.search",
+            "available": bool(umap.get("available")),
+            **with_status(
+                is_ready=bool(umap.get("available")),
+                is_downloaded=bool(umap.get("available")),
+            ),
+            "message": umap.get("message") or "Not installed.",
+            "message_key": umap.get("message_key") or "models.styleMapUmap.missing",
+            "path": "",
+            "download_supported": True,
+            "external_links": [
+                {"label": "umap-learn", "url": "https://github.com/lmcinnes/umap"},
+            ],
+            "setup_steps": [
+                "Click Prepare / Download to install umap-learn with numba and llvmlite (~90 MB download, ~200 MB on disk).",
+                "The style map keeps working without it (PCA axes); with it, pictures placed together really look alike.",
             ],
         },
         {

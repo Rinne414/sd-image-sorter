@@ -1332,6 +1332,8 @@ window.I18nLang_en = {
     'mediaCensor.doneFrames': 'Done · {count} frame(s) censored',
     'models.videoFfmpeg.ready': 'ffmpeg for video censoring is ready.',
     'models.videoFfmpeg.missing': 'Not installed. Click Prepare / Download (~31 MB) or start a video job to be asked.',
+    'models.styleMapUmap.ready': 'The UMAP layout for the style map is ready: pictures placed together really look alike.',
+    'models.styleMapUmap.missing': 'Not installed. The UMAP layout makes pictures placed together on the style map really look alike; click Prepare / Download (~90 MB, ~200 MB on disk).',
     'censor.faceGuard': 'Face guard',
     'censor.faceGuardHelpToggle': 'About face guard',
     'censor.faceGuardHelp': 'With the anime face model (Model Center, "Anime Censor + Face Guard"), detections that are really a face, such as a mouth read as a private part, are skipped. A penis or cum on a face is never skipped.',

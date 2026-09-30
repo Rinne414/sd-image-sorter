@@ -1627,14 +1627,41 @@ One 3-D point per picture of the current Gallery filter, for the style map.
   "explained_variance": [0.0557, 0.0395, 0.0285],
   "points_layout": ["id", "x", "y", "z", "members"],
   "points": [[17, -0.412, 0.088, 0.301, 1], [23, 0.155, -0.720, 0.044, 3]],
+  "umap": {
+    "status": "queued",
+    "points": 12302,
+    "min_points": 21,
+    "params": {"n_neighbors": 15, "min_dist": 0.1, "metric": "cosine", "input_dim": 64, "random_state": 0},
+    "queued_at": 1790000000.0
+  },
   "cached": false
 }
 ```
 
 `points` is a compact array (about 30 bytes per point): the representative
-picture's `id`, its coordinates on the three principal axes scaled to
-[-1, 1] and rounded to 3 decimals, and `members`, how many pictures the point
-stands for. Pictures linked by cosine > 0.95 form one connected group (single
+picture's `id`, its coordinates scaled to [-1, 1] and rounded to 3 decimals
+(the three principal axes when `method` is `pca`, the UMAP embedding when it
+is `umap`), and `members`, how many pictures the point stands for.
+
+`method` is `pca` until the optional UMAP layout is ready. UMAP (umap-learn,
+the Model Center card `style-map-umap`, install group `umap`, ~90 MB) makes
+pictures placed together really look alike (measured kNN recall@10 0.38 vs
+0.12 for the principal axes on the owner's library). Because a fit takes
+seconds to a minute and its first use in a process pays a 15-20 s import and
+JIT cost, the PCA map is returned at once and the fit runs in the background:
+`umap.status` is `unavailable` (not installed; `umap.install` names the card
+and packages), `too_few_points` (fewer representatives than `min_points`;
+the map stays PCA), `queued`, `computing`, `ready` (`source` is `memory` or
+`disk`, `elapsed_s` the fit time) or `failed` (`error`; `refresh=true`
+retries). Poll `layout-status` or `points` again; once ready, `points`
+carry the UMAP coordinates and `method` is `umap` (`explained_variance`
+still describes the principal axes). The fit uses only the representatives
+(after the near-duplicate merge, without the unlocatable pictures),
+projected on the first `params.input_dim` principal axes, with a fixed
+`random_state`, so the same data gives the same map. Ready layouts are kept
+in memory and on disk under `state/style-map/` (the newest 4 per library and
+space, 64 MB in all), keyed by the same cache key plus `params`, so a restart
+does not refit; one fit runs at a time and further maps queue behind it. Pictures linked by cosine > 0.95 form one connected group (single
 linkage: every member has such a link to some other member, so a member and
 the representative can be further apart than 0.95); the representative is the
 smallest id of the group and `merged_away` counts the pictures folded away.
@@ -1659,6 +1686,16 @@ or leaving the filter changes the id list; `refresh=true` bypasses the cache.
 computed at a time; a concurrent request for the same map waits for it and
 then reuses it. Only the current official Kaloscope weights are mapped in
 this slice.
+
+**Errors:** 400 for an unknown `space` or an invalid `selection_token`.
+
+#### GET /api/style-map/layout-status
+The `umap` field of `points` for the same `space` and `selection_token`,
+without computing the PCA map: `{"space", "method", "umap"}` where `method`
+is `umap` once the layout is ready and `pca` otherwise. Before `points` ran
+for this filter (in this process, or in an earlier one that left the layout
+on disk) `umap.status` is `not_started`. Cheap enough to poll every few
+seconds while a layout is `queued` or `computing`.
 
 **Errors:** 400 for an unknown `space` or an invalid `selection_token`.
 

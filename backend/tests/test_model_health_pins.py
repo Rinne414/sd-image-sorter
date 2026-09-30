@@ -638,6 +638,7 @@ def test_health_top_level_and_censor_key_sets(monkeypatch, tmp_path):
         "aesthetic_waifu",
         "aesthetic_anime",
         "video_ffmpeg",
+        "umap",
         "censor",
         "artist",
     }
