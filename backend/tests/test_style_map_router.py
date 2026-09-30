@@ -38,9 +38,18 @@ class FakeStyleVectorService:
         use_gpu=None,
         model_source="huggingface",
         model_path=None,
+        selection_token=None,
     ):
         self.calls.append(
-            ("start", space, image_ids, use_gpu, model_source, model_path)
+            (
+                "start",
+                space,
+                image_ids,
+                use_gpu,
+                model_source,
+                model_path,
+                selection_token,
+            )
         )
         if self.running:
             raise OperationInProgressError("Style vector extraction")
@@ -113,7 +122,7 @@ def test_start_passes_request_to_service(test_client, fake_service):
     assert response.json()["status"] == "started"
     assert response.json()["total"] == 5
     assert fake_service.calls == [
-        ("start", "kaloscope", [3, 4], False, "huggingface", None)
+        ("start", "kaloscope", [3, 4], False, "huggingface", None, None)
     ]
 
 
@@ -121,6 +130,27 @@ def test_start_defaults_to_kaloscope_and_whole_library(test_client, fake_service
     response = test_client.post("/api/style-map/vectors/start", json={})
     assert response.status_code == 200, response.text
     assert fake_service.calls[0][1:3] == ("kaloscope", None)
+    assert fake_service.calls[0][6] is None
+
+
+def test_start_passes_the_selection_token_to_the_service(test_client, fake_service):
+    """The style map page scopes the index to the current Gallery filter."""
+    response = test_client.post(
+        "/api/style-map/vectors/start", json={"selection_token": "tok.abc"}
+    )
+    assert response.status_code == 200, response.text
+    assert fake_service.calls == [
+        ("start", "kaloscope", None, None, "huggingface", None, "tok.abc")
+    ]
+
+
+def test_start_refuses_both_image_ids_and_a_selection_token(test_client, fake_service):
+    response = test_client.post(
+        "/api/style-map/vectors/start",
+        json={"image_ids": [1], "selection_token": "tok.abc"},
+    )
+    assert response.status_code == 400, response.text
+    assert fake_service.calls == []
 
 
 @pytest.mark.parametrize(

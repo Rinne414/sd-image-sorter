@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from routers.artists import ArtistModelConfig
 from services.service_provider import ServiceProvider
@@ -47,12 +47,27 @@ class StartVectorsRequest(ArtistModelConfig):
         description="Restrict the job to these images; omit to cover the whole library.",
     )
 
+    selection_token: Optional[str] = Field(
+        default=None,
+        max_length=65536,
+        description=(
+            "Restrict the job to the current Gallery filter (a token from "
+            "POST /api/images/selection-token); exclusive with image_ids."
+        ),
+    )
+
     @field_validator("image_ids")
     @classmethod
     def positive_image_ids(cls, value):
         if value is not None and any(int(image_id) <= 0 for image_id in value):
             raise ValueError("image_ids must be positive")
         return value
+
+    @model_validator(mode="after")
+    def one_scope_only(self):
+        if self.image_ids is not None and self.selection_token:
+            raise ValueError("Give either image_ids or selection_token, not both")
+        return self
 
 
 class StyleVectorProgress(BaseModel):
@@ -95,6 +110,7 @@ def start_vectors(
         use_gpu=request.use_gpu,
         model_source=request.model_source,
         model_path=request.model_path,
+        selection_token=request.selection_token,
     )
 
 

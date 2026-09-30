@@ -29,8 +29,9 @@
     const TABS_KEY = 'aurora-nav-tabs';
     const MISSION_KEY = 'aurora-nav-mission';
 
-    const ALL_VIEWS = ['gallery', 'reader', 'sorting', 'censor', 'similar', 'dataset', 'promptlab', 'artist', 'reverse'];
-    const DEFAULT_TABS = ['gallery', 'reader', 'sorting', 'censor', 'similar'];
+    const ALL_VIEWS = ['gallery', 'reader', 'sorting', 'censor', 'similar', 'dataset', 'promptlab', 'artist', 'stylemap', 'reverse'];
+    // Owner 2026-09-30: the Style Map is a default tab (sixth, after Similar).
+    const DEFAULT_TABS = ['gallery', 'reader', 'sorting', 'censor', 'similar', 'stylemap'];
     const LOCKED_TABS = ['gallery'];
     const CUSTOM_VIEWS = ALL_VIEWS.filter((view) => !LOCKED_TABS.includes(view));
 

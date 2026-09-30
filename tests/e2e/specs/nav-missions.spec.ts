@@ -100,27 +100,30 @@ test('customize offers every view, and the bar follows the order set with the ar
   await page.click('#nav-tools-toggle')
   await page.click('#nav-tools-customize')
   const modal = page.locator('#nav-customize-modal')
-  await expect(modal.locator('[data-custom-row]')).toHaveCount(9)
+  await expect(modal.locator('[data-custom-row]')).toHaveCount(10)
   await expect(modal.locator('input[data-custom-view="gallery"]')).toBeDisabled()
+  // S3: the Style Map is an advanced tool like Style Finder — offered here too.
+  await expect(modal.locator('input[data-custom-view="stylemap"]')).toHaveCount(1)
 
   await modal.locator('input[data-custom-view="artist"]').check()
   await expect(page.locator('#nav-tab-artist')).toBeVisible()
-  // Newly ticked views join the end of the bar; move Style Finder to the front.
-  for (let i = 0; i < 4; i += 1) {
+  // Newly ticked views join the end of the bar (after the six defaults, Style
+  // Map included since 2026-09-30); move Style Finder to the front.
+  for (let i = 0; i < 5; i += 1) {
     await modal.locator('button[data-custom-view="artist"][data-custom-move="up"]').click()
   }
   await expect(modal.locator('button[data-custom-view="artist"][data-custom-move="up"]')).toBeDisabled()
-  expect(await barOrder()).toEqual(['gallery', 'artist', 'reader', 'sorting', 'censor', 'similar'])
+  expect(await barOrder()).toEqual(['gallery', 'artist', 'reader', 'sorting', 'censor', 'similar', 'stylemap'])
 
   await page.click('#nav-customize-close')
   await page.reload()
   await expect(page.locator('#view-gallery')).toBeVisible()
-  expect(await barOrder()).toEqual(['gallery', 'artist', 'reader', 'sorting', 'censor', 'similar'])
+  expect(await barOrder()).toEqual(['gallery', 'artist', 'reader', 'sorting', 'censor', 'similar', 'stylemap'])
 
   await page.click('#nav-tools-toggle')
   await page.click('#nav-tools-customize')
   await page.click('#nav-customize-reset')
-  expect(await barOrder()).toEqual(['gallery', 'reader', 'sorting', 'censor', 'similar'])
+  expect(await barOrder()).toEqual(['gallery', 'reader', 'sorting', 'censor', 'similar', 'stylemap'])
 })
 
 test('the bar re-measures when its free width shrinks after load, and tools that leave it stay in More', async ({ page }) => {

@@ -91,6 +91,7 @@
                 { icon: '#i-wand', nameKey: 'nav.reverse', name: 'Reverse Prompt', descKey: 'catalog.reverse', desc: 'Drop one image. If the file stored a prompt, that record is shown first; you can still infer from pixels to compare.', run: () => goView('reverse') },
                 { icon: '🧪', nameKey: 'nav.promptlab', name: 'Prompt Helper', descKey: 'catalog.promptlab', desc: 'Build prompts from your library: weights, templates, negatives', run: () => goView('promptlab') },
                 { icon: '🖌️', nameKey: 'nav.artist', name: 'Style Finder', descKey: 'catalog.artist', desc: 'Identify artists with a similar style', run: () => goView('artist') },
+                { icon: '🧭', nameKey: 'nav.stylemap', name: 'Style Map', descKey: 'catalog.stylemap', desc: 'Your library as a 3-D cloud where pictures drawn alike sit together. Build the style index first.', run: () => goView('stylemap') },
                 { icon: '📦', nameKey: 'entry.tileModels', name: 'Model Center', descKey: 'catalog.models', desc: 'Download and manage the AI models used by tagging, similarity, artist, censor, and captions', run: () => openSettingsTab('models') },
                 { icon: '⚙️', nameKey: 'settings.tabGeneral', name: 'Settings', descKey: 'catalog.settings', desc: 'Sound, entry page, UI scale, language, disk cache, updates', run: () => openSettingsTab('general') },
             ],

@@ -411,6 +411,15 @@ Invariants:
 - The DEFAULT base set must fit at 1366×768 without the ladder eating tabs.
 - Mirror-like new elements need a `[hidden]{display:none}` guard — `.nav-tab`'s
   own display rule beats the UA `[hidden]` rule (recurring trap).
+- Style Map (`stylemap`, 2026-09-30) is the SIXTH default tab (owner's
+  choice: "预设放上顶栏"), after Similar. Measured with the default set of six
+  at 1366×768: zh stays on the compact-labels rung, en additionally takes the
+  brand-compaction rung; no tab is tucked at either. It is a plain core tab
+  (NOT `nav-priority-advanced`: with that class the ladder tucked it at
+  1366 en before trying the brand rung), keeps a dataset-style mirror
+  `#nav-tools-stylemap` (`data-mirror-view`, `hidden`, shown by
+  nav-missions.js only while the customize checklist tucks the direct tab)
+  and is in `ALL_VIEWS` for the customize checklist.
 
 Nav actions (right side):
 - Below 1500px, `.nav-actions .btn:not(.btn-icon-only)` shows icons only (label hidden).

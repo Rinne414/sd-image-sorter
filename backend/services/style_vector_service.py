@@ -185,6 +185,30 @@ class StyleVectorService:
             )
         return normalized
 
+    @staticmethod
+    def _ids_from_selection_token(selection_token: str) -> List[int]:
+        """Every picture of the filter the token stands for (id order is
+        irrelevant here: the pending query sorts by id)."""
+        from fastapi import HTTPException
+
+        from services.image.selection import selection_contract_db_filters
+        from services.image_service import ImageService
+
+        try:
+            contract = ImageService()._decode_selection_token(selection_token)
+        except HTTPException as exc:  # the decoder speaks HTTP; this layer does not
+            raise ValidationError(
+                str(exc.detail or "Invalid selection token"), field="selection_token"
+            ) from exc
+        ids: List[int] = []
+        for chunk in db.iter_filtered_image_id_chunks(
+            chunk_size=5000,
+            sort_by="newest",
+            **selection_contract_db_filters(contract),
+        ):
+            ids.extend(int(value) for value in chunk)
+        return ids
+
     def _pending_rows(
         self,
         *,
@@ -229,10 +253,22 @@ class StyleVectorService:
         use_gpu: Optional[bool] = None,
         model_source: str = "huggingface",
         model_path: Optional[str] = None,
+        selection_token: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Queue the job for every pending image (or the given ids) and return its size."""
+        """Queue the job for every pending image (or the given ids, or the
+        pictures of a Gallery filter token) and return its size."""
         normalized = self._require_space(space)
         model_version = _model_version_for(model_path)
+        if selection_token:
+            if image_ids is not None:
+                raise ValidationError(
+                    "Give either image_ids or selection_token, not both",
+                    field="selection_token",
+                )
+            # Decoded and expanded server side (the same contract every
+            # filtered action reads) before the slot is claimed, so a bad
+            # token never leaves a job marked running.
+            image_ids = self._ids_from_selection_token(selection_token)
         with self._lock:
             if self._progress["running"]:
                 raise OperationInProgressError("Style vector extraction")

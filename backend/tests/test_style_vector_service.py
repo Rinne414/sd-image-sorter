@@ -488,6 +488,51 @@ class TestExtraction:
         _run_scheduled(tasks)
         assert set(_rows(test_db)) == {ids[2]}
 
+    def test_selection_token_limits_the_run_to_the_gallery_filter(
+        self, test_db, tmp_path
+    ):
+        """One token, the same decode path as every other filtered action:
+        no id list travels from the browser."""
+        from services.image_service import ImageService
+
+        ids = _make_images(test_db, tmp_path, 4)
+        with test_db.get_db() as conn:
+            conn.execute(
+                "UPDATE images SET generator = 'nai' WHERE id IN (?, ?)",
+                (ids[1], ids[3]),
+            )
+        token = ImageService().create_selection_token(generators=["nai"])[
+            "selection_token"
+        ]
+        service = _service(FakeIdentifier())
+        tasks = BackgroundTasks()
+        started = service.start_extraction(
+            tasks, space="kaloscope", selection_token=token
+        )
+        assert started["total"] == 2
+        _run_scheduled(tasks)
+        assert set(_rows(test_db)) == {ids[1], ids[3]}
+
+    def test_selection_token_and_image_ids_are_exclusive(self, test_db, tmp_path):
+        ids = _make_images(test_db, tmp_path, 1)
+        service = _service(FakeIdentifier())
+        with pytest.raises(ValidationError):
+            service.start_extraction(
+                BackgroundTasks(),
+                space="kaloscope",
+                image_ids=ids,
+                selection_token="tok.abc",
+            )
+        assert service.get_progress()["running"] is False
+
+    def test_invalid_selection_token_is_a_validation_error(self, test_db):
+        service = _service(FakeIdentifier())
+        with pytest.raises(ValidationError):
+            service.start_extraction(
+                BackgroundTasks(), space="kaloscope", selection_token="bad!"
+            )
+        assert service.get_progress()["running"] is False
+
     def test_rejects_unknown_space(self, test_db):
         service = _service(FakeIdentifier())
         with pytest.raises(ValidationError):

@@ -265,7 +265,7 @@ Eagle、Billfish 是通用素材库，不列入这张 SD 工作流细表。详�
 1. 在 [Releases 页面](https://github.com/Rinne414/sd-image-sorter/releases/latest) 下载 `windows-portable.zip`
 2. 解压到任意目录
 3. 双击 `run-portable.bat`
-4. 浏览器会自动打开 `http://localhost:8487`
+4. 浏览器会自动打开 `http://localhost:8487`（请用近两年的桌面浏览器：Chrome / Edge 89+、Firefox 108+、Safari 16.4+；画风地图需要 WebGL）
 5. 首次使用请点击右上角 **Setup Now** 下载所需的 AI 模型
 
 ### Linux
@@ -687,7 +687,7 @@ Every build lives under **Assets** on the **[Releases page](https://github.com/R
 1. Download `windows-portable.zip` from the [Releases page](https://github.com/Rinne414/sd-image-sorter/releases/latest)
 2. Extract it anywhere
 3. Double-click `run-portable.bat`
-4. Your browser opens `http://localhost:8487`
+4. Your browser opens `http://localhost:8487` (use a desktop browser from the last two years: Chrome / Edge 89+, Firefox 108+, Safari 16.4+; the Style Map needs WebGL)
 5. First time? Click **Setup Now** (top-right) to download the AI models you need
 
 On NVIDIA machines, first launch may spend extra time at `Checking Windows ONNX Runtime package state...` while installing CUDA / cuDNN runtime wheels. The launcher now shows real pip progress there; it is not frozen.

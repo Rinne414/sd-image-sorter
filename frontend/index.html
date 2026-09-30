@@ -29,6 +29,7 @@
     <link rel="stylesheet" href="/static/css/entry.css">
     <link rel="stylesheet" href="/static/css/ai-busy.css">
     <link rel="stylesheet" href="/static/css/reverse-prompt.css">
+    <link rel="stylesheet" href="/static/css/style-map.css">
     <!-- tokens.css must stay the LAST stylesheet: it owns the Graphite palette
          and remaps every legacy token defined by the sheets above. -->
     <link rel="stylesheet" href="/static/css/tokens.css">
@@ -449,6 +450,16 @@
                         <span class="tab-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-brush"/></svg></span>
                         <span class="tab-text" data-i18n="nav.artist">Style Finder</span>
                     </button>
+                    <!-- Style Map (画风地图): the sixth DEFAULT tab (owner 2026-09-30).
+                         A plain core tab, not nav-priority-advanced: that class
+                         would let the ladder tuck it at 1366 en before the
+                         brand-compaction rung (measured). Its More mirror
+                         appears only when the customize checklist unticks it. -->
+                    <button class="nav-tab" id="nav-tab-stylemap" data-view="stylemap" role="tab" aria-selected="false" aria-controls="view-stylemap"
+                            data-i18n-title="nav.stylemap" title="Style Map">
+                        <span class="tab-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-compass"/></svg></span>
+                        <span class="tab-text" data-i18n="nav.stylemap">Style Map</span>
+                    </button>
                     <!-- v3.4.3: Prompt Helper + Style Finder stay in the main bar
                          when space allows. The More menu is only a responsive fallback
                          for narrow windows and long translations. Items stay .nav-tab
@@ -479,6 +490,15 @@
                                     data-i18n-title="nav.artist" title="Style Finder">
                                 <span class="tab-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-brush"/></svg></span>
                                 <span class="tab-text" data-i18n="nav.artist">Style Finder</span>
+                            </button>
+                            <!-- Style Map mirror: data-mirror-view, NOT data-view (page
+                                 objects click plain [data-view=...] locators). Like the
+                                 dataset mirror, nav-missions.js shows it only while the
+                                 customize checklist has tucked the direct tab. -->
+                            <button class="nav-tab nav-tools-item nav-custom-mirror" id="nav-tools-stylemap" data-mirror-view="stylemap" type="button" hidden
+                                    data-i18n-title="nav.stylemap" title="Style Map">
+                                <span class="tab-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-compass"/></svg></span>
+                                <span class="tab-text" data-i18n="nav.stylemap">Style Map</span>
                             </button>
                             <!-- Owner 2026-07-07: mirrors for tucked core tabs (dataset
                                  leaves the default bar; the customize checklist can tuck
@@ -3813,6 +3833,86 @@
                                 <button class="btn btn-ghost btn-small" id="btn-artist-load-more" type="button" data-i18n="common.loadMore">Load More</button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Style Map (画风地图, slice S3): the filtered library as a 3-D point
+                 cloud of style vectors (GET /api/style-map/points). Driven by the
+                 ES modules in js/style-map/ (window.StyleMap); texts that JS
+                 writes live in elements WITHOUT data-i18n so the ui-refresh
+                 re-apply cannot reset them. -->
+            <section id="view-stylemap" class="view" role="tabpanel" aria-labelledby="nav-tab-stylemap">
+                <div class="stylemap-container">
+                    <div class="stylemap-toolbar">
+                        <label class="stylemap-field">
+                            <span data-i18n="stylemap.space">Space</span>
+                            <select id="stylemap-space" class="input-field">
+                                <option value="kaloscope" data-i18n="stylemap.spaceKaloscope">Style Finder model</option>
+                                <option value="clip" data-i18n="stylemap.spaceClip">Similarity model</option>
+                                <option value="csd" disabled data-i18n="stylemap.spaceCsd">CSD (not available yet)</option>
+                            </select>
+                        </label>
+                        <div class="stylemap-layout" id="stylemap-layout" role="status" aria-live="polite">
+                            <span class="stylemap-dot" id="stylemap-layout-dot" aria-hidden="true"></span>
+                            <span id="stylemap-layout-text"></span>
+                            <button class="btn btn-secondary btn-small" id="stylemap-install-umap" type="button" hidden data-i18n="stylemap.installUmap">Install UMAP (~90 MB)</button>
+                            <button class="btn btn-ghost btn-small" id="stylemap-retry-layout" type="button" hidden data-i18n="stylemap.retryLayout">Retry</button>
+                        </div>
+                        <div class="stylemap-index" id="stylemap-index">
+                            <button class="btn btn-primary" id="stylemap-build-btn" type="button" data-i18n="stylemap.buildIndex">Build style index</button>
+                            <div class="stylemap-index-progress" id="stylemap-index-progress" hidden>
+                                <div class="progress-bar"><div class="progress-fill" id="stylemap-index-fill" style="width: 0%"></div></div>
+                                <span class="progress-text" id="stylemap-index-text"></span>
+                                <button class="btn btn-secondary btn-small" id="stylemap-index-pause" type="button" data-state="running"></button>
+                                <button class="btn btn-ghost btn-small" id="stylemap-index-cancel" type="button" data-i18n="stylemap.cancel">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="stylemap-scope" id="stylemap-scope"></p>
+                    <p class="stylemap-error" id="stylemap-error" hidden></p>
+                    <div class="stylemap-body">
+                        <div class="stylemap-canvas-card" id="stylemap-canvas-card">
+                            <canvas id="stylemap-canvas"></canvas>
+                            <span class="stylemap-loading" id="stylemap-loading" hidden data-i18n="common.loading">Loading...</span>
+                            <div class="workspace-start-card stylemap-empty" id="stylemap-empty" hidden>
+                                <div class="workspace-start-copy">
+                                    <span class="workspace-start-eyebrow" id="stylemap-empty-eyebrow"></span>
+                                    <h3 id="stylemap-empty-title"></h3>
+                                    <p class="workspace-start-description" id="stylemap-empty-text"></p>
+                                </div>
+                                <div class="workspace-start-actions">
+                                    <!-- Proxies #stylemap-build-btn (rule 11); the toolbar's
+                                         primary is hidden while this card shows (rule 12). -->
+                                    <button class="btn btn-primary" id="stylemap-empty-build" type="button" data-i18n="stylemap.buildIndex">Build style index</button>
+                                    <button class="btn btn-secondary" id="stylemap-empty-similar" type="button" hidden data-i18n="stylemap.goSimilar">Open Find Similar</button>
+                                </div>
+                            </div>
+                            <!-- No WebGL: the scene cannot be built; this card says why. -->
+                            <div class="workspace-start-card stylemap-empty" id="stylemap-unsupported" hidden>
+                                <div class="workspace-start-copy">
+                                    <h3 data-i18n="stylemap.webglTitle">The style map needs WebGL (graphics acceleration)</h3>
+                                    <p class="workspace-start-description" data-i18n="stylemap.webglText">The browser did not provide WebGL. Common causes: an old graphics driver, hardware acceleration turned off in the browser, or a remote desktop session. Update the driver or turn hardware acceleration back on, then open this page again.</p>
+                                    <p class="workspace-start-description stylemap-unsupported-detail" id="stylemap-unsupported-detail"></p>
+                                </div>
+                            </div>
+                            <button class="btn btn-ghost btn-small stylemap-reset-view" id="stylemap-reset-view" type="button" data-i18n="stylemap.resetView">Reset view</button>
+                        </div>
+                        <aside class="stylemap-side">
+                            <div class="stylemap-preview" id="stylemap-preview">
+                                <div class="stylemap-preview-box">
+                                    <div class="stylemap-preview-hint" id="stylemap-preview-hint" data-i18n="stylemap.hoverHint">Point at a dot to preview the picture</div>
+                                    <img id="stylemap-preview-img" alt="" hidden>
+                                </div>
+                                <div class="stylemap-preview-name" id="stylemap-preview-name"></div>
+                                <div class="stylemap-preview-members" id="stylemap-preview-members"></div>
+                            </div>
+                            <ul class="stylemap-help">
+                                <li data-i18n="stylemap.helpRotate">Drag to rotate, wheel to zoom, right-drag to pan.</li>
+                                <li data-i18n="stylemap.helpMembers">One dot can stand for several near-identical pictures.</li>
+                                <li data-i18n="stylemap.helpNear">Only dots that sit together mean something; distances across the map do not.</li>
+                            </ul>
+                        </aside>
                     </div>
                 </div>
             </section>
@@ -8110,6 +8210,13 @@
          boot sequence and the sealed window.App facade assembly) -->
     <script src="/static/js/app.js"></script>
     <script src="/static/js/library-workspace.js"></script>
+    <!-- Style Map (S3): the app's first ES modules. three.js is ESM-only; the
+         import map resolves OrbitControls' bare "three" specifier to the
+         vendored build (frontend/js/vendor/three, MIT, see NOTICE.txt).
+         Module scripts run after every classic script above, so window.App
+         is already built and sealed; js/style-map/boot.js only reads it. -->
+    <script type="importmap">{"imports": {"three": "/static/js/vendor/three/three.module.js"}}</script>
+    <script type="module" src="/static/js/style-map/boot.js"></script>
     <script src="/static/js/entry-page.js"></script>
     <script src="/static/js/folder-browser.js"></script>
     <script src="/static/js/tag-category-copy.js"></script>

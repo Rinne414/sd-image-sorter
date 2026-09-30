@@ -121,6 +121,11 @@ function switchView(viewName) {
         if (window.ArtistIdent && typeof window.ArtistIdent.init === 'function') {
             window.ArtistIdent.init();
         }
+    } else if (viewName === 'stylemap') {
+        // ES module (js/style-map/boot.js); it watches the view's class for leave.
+        if (window.StyleMap && typeof window.StyleMap.init === 'function') {
+            window.StyleMap.init();
+        }
     } else if (viewName === 'censor') {
         if (typeof window.initCensorEdit === 'function') window.initCensorEdit();
     } else if (viewName === 'sorting') {

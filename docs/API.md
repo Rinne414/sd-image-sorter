@@ -1519,6 +1519,7 @@ Start style-vector extraction for the pending images of the current library.
 |-----------|------|---------|-------------|
 | `space` | string | `kaloscope` | Vector space; only `kaloscope` is accepted |
 | `image_ids` | int[] | null | Restrict the job to these images (1-5,000,000 positive IDs); omit for the whole library |
+| `selection_token` | string | null | Restrict the job to the current Gallery filter: a token from `POST /api/images/selection-token`, decoded and expanded on the server (the style map page sends this, so no id list travels). Exclusive with `image_ids` |
 | `model_source` | string | `huggingface` | `huggingface`, `modelscope` or `local` (same contract as `/api/artists/identify`) |
 | `model_path` | string | null | Local checkpoint; required (and must exist) when `model_source` is `local` |
 | `use_gpu` | bool | null | `null` = the Style Finder default (`ARTIST_USE_GPU`); `false` forces CPU |
@@ -1531,8 +1532,9 @@ Start style-vector extraction for the pending images of the current library.
 `status` is `idle` with `total: 0` when nothing is pending (no job is queued).
 
 **Errors:** 409 when a job is already running; 400 for an unknown `space`,
-empty or non-positive `image_ids`, a `local` source without a `model_path`,
-or a `model_path` that is missing or cannot be read.
+empty or non-positive `image_ids`, `image_ids` together with
+`selection_token`, an invalid `selection_token`, a `local` source without a
+`model_path`, or a `model_path` that is missing or cannot be read.
 
 #### GET /api/style-map/vectors/progress
 Poll the running (or last) job.
