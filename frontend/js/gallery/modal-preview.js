@@ -269,7 +269,7 @@ ${String(value)}`)
         document.querySelector('#modal-tags-list').style.color = 'var(--text-muted)';
         $('#btn-toggle-prompt-format').disabled = true;
         $('#btn-toggle-prompt-format').dataset.i18n = 'modal.viewAsSD';
-        $('#btn-toggle-prompt-format').textContent = this._t('modal.viewAsSD', null, 'View as SD format');
+        $('#btn-toggle-prompt-format').textContent = this._t('modal.viewAsSD', null, 'View as SD');
         ['#modal-loras-section', '#modal-negative-section', '#modal-characters-section', '#modal-params-section', '#modal-model-assets-section', '#modal-img2img-section', '#modal-nodes-section', '#modal-caption-section'].forEach(selector => {
             const element = document.querySelector(selector);
             if (element) {

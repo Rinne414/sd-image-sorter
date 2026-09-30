@@ -212,8 +212,8 @@ Object.assign(window.Gallery, {
         const nextFormat = promptView.targetFormat === 'original' ? alternateTarget : promptView.sourceFormat;
         toggleBtn.disabled = !hasPrompt || !nextFormat;
         if (!hasPrompt) setLabel(toggleBtn, 'modal.noPrompt', 'No prompt');
-        else if (nextFormat === 'sd') setLabel(toggleBtn, 'modal.viewAsSD', 'View as SD format');
-        else if (nextFormat === 'nai') setLabel(toggleBtn, 'modal.viewAsNAI', 'View as NovelAI format');
+        else if (nextFormat === 'sd') setLabel(toggleBtn, 'modal.viewAsSD', 'View as SD');
+        else if (nextFormat === 'nai') setLabel(toggleBtn, 'modal.viewAsNAI', 'View as NovelAI');
         else setLabel(toggleBtn, 'modal.promptOriginal', 'Original format');
         toggleBtn.title = toggleBtn.textContent;
         toggleBtn.setAttribute('aria-label', toggleBtn.textContent);

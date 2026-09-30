@@ -5825,8 +5825,11 @@ textarea:focus,
     width: 100%;
 }
 
+/* Read Again and Edit are icon buttons at the end of the one row; Edit used
+   to wrap onto a line of its own (owner 2026-09-30, DESIGN.md rule 17). */
 #image-modal .modal-action-primary {
-    grid-template-columns: minmax(92px, 1.25fr) minmax(82px, 1fr) minmax(82px, 1fr) 36px;
+    /* The format button's longest label must fit at 1366 (about 130px). */
+    grid-template-columns: minmax(0, 1.6fr) minmax(64px, 1fr) minmax(64px, 1fr) 36px 36px;
 }
 
 .modal-action-secondary {
@@ -5864,12 +5867,18 @@ textarea:focus,
     flex: initial;
 }
 
-#image-modal #btn-reparse-metadata {
+#image-modal #btn-reparse-metadata,
+#image-modal #btn-edit-metadata {
     justify-content: center;
     padding-inline: 0;
 }
 
-#image-modal #btn-reparse-metadata .ui-label {
+#image-modal #btn-edit-metadata > .icon {
+    margin-right: 0;
+}
+
+#image-modal #btn-reparse-metadata .ui-label,
+#image-modal #btn-edit-metadata > span {
     clip: rect(0 0 0 0);
     clip-path: inset(50%);
     height: 1px;

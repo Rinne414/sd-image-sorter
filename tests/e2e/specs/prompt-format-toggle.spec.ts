@@ -39,30 +39,50 @@ const header = (page: Page) => page.locator('.modal-prompt h4 .section-toggle-la
 
 test('a NovelAI prompt switches to SD and back, and the labels follow', async ({ page }) => {
   await openPreviewAs(page, 'novelai', NAI_PROMPT)
-  await expect(button(page)).toHaveText('View as SD format')
+  await expect(button(page)).toHaveText('View as SD')
   await expect(header(page)).toHaveText('Prompt (NovelAI format)')
 
   await button(page).click()
   await reapplyTranslations(page)
   await expect(page.locator('#modal-prompt-text')).toContainText('(masterpiece')
-  await expect(button(page)).toHaveText('View as NovelAI format')
+  await expect(button(page)).toHaveText('View as NovelAI')
   await expect(header(page)).toHaveText('Prompt (SD format)')
 
   await button(page).click()
   await reapplyTranslations(page)
   await expect(page.locator('#modal-prompt-text')).toHaveText(NAI_PROMPT)
-  await expect(button(page)).toHaveText('View as SD format')
+  await expect(button(page)).toHaveText('View as SD')
   await expect(header(page)).toHaveText('Prompt (NovelAI format)')
 })
 
 test('an SD prompt offers NovelAI first', async ({ page }) => {
   await openPreviewAs(page, 'webui', SD_PROMPT)
-  await expect(button(page)).toHaveText('View as NovelAI format')
+  await expect(button(page)).toHaveText('View as NovelAI')
   await expect(header(page)).toHaveText('Prompt (SD format)')
 
   await button(page).click()
   await reapplyTranslations(page)
   await expect(page.locator('#modal-prompt-text')).toContainText('masterpiece::')
-  await expect(button(page)).toHaveText('View as SD format')
+  await expect(button(page)).toHaveText('View as SD')
   await expect(header(page)).toHaveText('Prompt (NovelAI format)')
+})
+
+test('the preview action buttons share one row and no label is cut off at 1366x768', async ({ page }) => {
+  await openPreviewAs(page, 'novelai', NAI_PROMPT)
+  // The longer label is the one that has to fit.
+  await button(page).click()
+  await expect(button(page)).toHaveText('View as NovelAI')
+  const layout = await page.evaluate(() => {
+    const kids = [...document.querySelectorAll('#image-modal .modal-action-primary > *')]
+      .filter((el) => (el as HTMLElement).offsetParent !== null) as HTMLElement[]
+    return {
+      count: kids.length,
+      rows: new Set(kids.map((el) => Math.round(el.getBoundingClientRect().top))).size,
+      cut: kids.filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.id || el.className),
+    }
+  })
+  expect(layout.count).toBe(5)
+  expect(layout.rows).toBe(1)
+  expect(layout.cut).toEqual([])
+  await expect(page.locator('#btn-edit-metadata')).toHaveAttribute('title', /\S/)
 })

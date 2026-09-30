@@ -1932,8 +1932,8 @@ window.I18nLang_en = {
     // ========================
     'modal.prev': 'Prev',
     'modal.next': 'Next',
-    'modal.viewAsSD': 'View as SD format',
-    'modal.viewAsNAI': 'View as NovelAI format',
+    'modal.viewAsSD': 'View as SD',
+    'modal.viewAsNAI': 'View as NovelAI',
     'modal.noPrompt': 'No prompt',
     'modal.promptUnrecoverable': 'Couldn\'t recover a prompt from this file. It may be generated at run time (wildcards, dynamic prompts) or stripped on export.',
     // Closed-source AI provider hint shown in the image-detail modal
