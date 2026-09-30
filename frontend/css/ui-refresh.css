@@ -3969,12 +3969,37 @@ html:has(#view-gallery.active) {
 }
 
 /* Compare mode */
+/* Image A | the arrow over Compare | image B. Compare used to sit alone past
+   B's right edge, level with nothing (DESIGN.md rule 17). */
 .promptlab-compare-selectors {
-    display: flex;
-    gap: 12px;
-    align-items: flex-end;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    gap: 10px 16px;
     margin-bottom: 16px;
+}
+
+.promptlab-compare-selectors > div:first-of-type {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+}
+
+.promptlab-compare-selectors > div:last-of-type {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+}
+
+.promptlab-compare-selectors > span {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: end;
+    justify-self: center;
+}
+
+.promptlab-compare-selectors > #pl-compare-go {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: center;
 }
 
 .promptlab-compare-pick {

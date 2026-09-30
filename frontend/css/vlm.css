@@ -137,7 +137,9 @@
 }
 .export-preview-header {
     display: grid;
-    grid-template-columns: auto minmax(180px, 1fr) auto;
+    /* Title, help, Refresh and Open Editor on one line; Open Editor used to
+       wrap onto a row of its own (DESIGN.md rule 17). */
+    grid-template-columns: auto minmax(180px, 1fr) auto auto;
     align-items: center;
     gap: 10px;
     margin-bottom: 10px;

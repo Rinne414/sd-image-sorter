@@ -1198,8 +1198,19 @@ button.censor-batch-outcome-badge:focus-visible {
     background: var(--surface-1);
 }
 
+/* Six presets as two even rows of three; a wrapping row left HDR alone on
+   a line of its own (DESIGN.md rule 17). */
 .censor-filter-presets {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
     margin-top: 10px;
+}
+
+.censor-filter-presets > .btn {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
 }
 
 .censor-filter-apply-group {
