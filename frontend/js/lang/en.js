@@ -2522,6 +2522,7 @@ window.I18nLang_en = {
     'library.loadPromptsFailed': 'Failed to load prompt library',
     'library.loadLorasFailed': 'Failed to load LoRA library',
     'library.close': 'Close',
+    'library.showAll': 'Show all',
 
     // ========================
     // Common / Shared

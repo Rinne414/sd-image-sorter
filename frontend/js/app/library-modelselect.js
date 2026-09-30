@@ -145,12 +145,16 @@ const libraryData = {
     returnFilterOptions: null,
     optionData: null,
     searchRequestId: 0,
+    // The first LIBRARY_DISPLAY_LIMIT rows come fast; "Show all" lifts the cap
+    // for this tab (owner 2026-09-30: never hide the user's own data).
+    showAll: false,
 };
 
 function openTagsLibrary(options = {}) {
     libraryData.filterState = options.filterState || null;
     libraryData.returnFilterOptions = options.returnFilterOptions || null;
     libraryData.optionData = options.optionData || null;
+    libraryData.showAll = false;
     const searchInput = $('#library-search');
     if (searchInput) {
         searchInput.value = '';
@@ -173,6 +177,7 @@ function finishTagsLibraryInteraction() {
 
 function switchLibraryTab(tab) {
     libraryData.currentTab = tab;
+    libraryData.showAll = false;
     const searchInput = $('#library-search');
     if (searchInput) {
         searchInput.value = '';
@@ -207,41 +212,44 @@ function switchLibraryTab(tab) {
 
 async function fetchLibraryFacet(tab, { sortBy = 'frequency', query = '', optionData = null } = {}) {
     const normalizedQuery = String(query || '').trim();
+    // null = no cap: the API omits the limit and returns every row.
+    const limit = libraryData.showAll ? null : LIBRARY_DISPLAY_LIMIT;
+    const upTo = (rows) => (limit == null ? rows.slice() : rows.slice(0, limit));
     if (optionData && !normalizedQuery) {
         if (tab === 'tags' && optionData.tags?.length) {
-            return { items: optionData.tags.slice(0, LIBRARY_DISPLAY_LIMIT), total: optionData.tags.length };
+            return { items: upTo(optionData.tags), total: optionData.tags.length };
         }
         if (tab === 'loras' && optionData.loras?.length) {
-            return { items: optionData.loras.slice(0, LIBRARY_DISPLAY_LIMIT), total: optionData.loras.length };
+            return { items: upTo(optionData.loras), total: optionData.loras.length };
         }
         if (tab === 'prompts' && optionData.prompts?.length) {
-            return { items: optionData.prompts.slice(0, LIBRARY_DISPLAY_LIMIT), total: optionData.prompts.length };
+            return { items: upTo(optionData.prompts), total: optionData.prompts.length };
         }
     }
 
     if (tab === 'tags') {
         const result = await API.getTagsLibrary(sortBy, {
-            limit: LIBRARY_DISPLAY_LIMIT,
+            limit,
             query: normalizedQuery || null,
         });
         return { items: result.tags || [], total: result.total || 0 };
     }
     if (tab === 'loras') {
         const result = await API.getLorasLibrary({
-            limit: LIBRARY_DISPLAY_LIMIT,
+            limit,
             query: normalizedQuery || null,
         });
         return { items: result.loras || [], total: result.total || 0 };
     }
     if (tab === 'checkpoints') {
         const result = await API.getCheckpointsLibrary({
-            limit: LIBRARY_DISPLAY_LIMIT,
+            limit,
             query: normalizedQuery || null,
         });
         return { items: result.checkpoints || [], total: result.total || 0 };
     }
     const result = await API.getPromptsLibrary({
-        limit: LIBRARY_DISPLAY_LIMIT,
+        limit,
         query: normalizedQuery || null,
     });
     return { items: result.prompts || [], total: result.total || 0 };
@@ -274,6 +282,8 @@ function setLibraryStatsText(tab, shownCount, totalCount) {
         return translated && translated !== key ? translated : (fallback || key);
     };
     const isLimited = shownCount < totalCount;
+    const showAll = $('#btn-library-show-all');
+    if (showAll) showAll.hidden = !isLimited;
     const params = { shown: shownCount, total: totalCount, count: totalCount };
     if (tab === 'tags') {
         statsText.textContent = isLimited
@@ -521,6 +531,17 @@ const runLibrarySearch = debounce(async (context) => {
         Logger.error('Library search error:', error);
     }
 }, 200);
+
+// Lift the display cap for the current tab and reload the same view
+// (browse or search).
+function showAllLibraryRows() {
+    libraryData.showAll = true;
+    if (($('#library-search')?.value || '').trim()) {
+        filterLibraryContent();
+    } else {
+        loadLibraryContent();
+    }
+}
 
 function filterLibraryContent() {
     runLibrarySearch({

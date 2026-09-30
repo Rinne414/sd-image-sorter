@@ -2698,6 +2698,7 @@ window.I18nLang_zhCN = {
     'library.loadPromptsFailed': '加载提示词库失败',
     'library.loadLorasFailed': '加载 LoRA 库失败',
     'library.close': '关闭',
+    'library.showAll': '显示全部',
 
     // ========================
     // Common / Shared

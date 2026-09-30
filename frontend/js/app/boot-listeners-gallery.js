@@ -344,6 +344,7 @@ function initBootListenersGallery() {
     $('#btn-close-tags-library-2')?.addEventListener('click', finishTagsLibraryInteraction);
     $('#library-search')?.addEventListener('input', filterLibraryContent);
     $('#library-sort')?.addEventListener('change', loadLibraryContent);
+    $('#btn-library-show-all')?.addEventListener('click', showAllLibraryRows);
     // Library tab switching
     $('#library-tab-tags')?.addEventListener('click', () => switchLibraryTab('tags'));
     $('#library-tab-prompts')?.addEventListener('click', () => switchLibraryTab('prompts'));
