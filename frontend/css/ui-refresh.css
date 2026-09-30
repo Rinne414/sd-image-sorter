@@ -4374,6 +4374,30 @@ html:has(#view-gallery.active) {
     min-height: 500px;
 }
 
+/* In the 340px output column the four buttons wrapped three-and-one, leaving
+   Validate alone; two even rows of two instead (DESIGN.md rule 17). */
+.promptlab-random-layout .promptlab-gen-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* The 260px browser column squeezed the title of "Prompt data tools" to three
+   broken lines beside its hint; title on one line, hint under it. */
+.promptlab-browser .guided-advanced-summary {
+    flex-wrap: wrap;
+}
+
+.promptlab-browser .guided-advanced-summary > span:first-child {
+    flex: 1 1 auto;
+    white-space: nowrap;
+}
+
+.promptlab-browser .guided-advanced-hint {
+    order: 3;
+    flex: 1 0 100%;
+    text-align: left;
+}
+
 .promptlab-admin-panel {
     margin-top: 12px;
 }
@@ -6561,6 +6585,28 @@ html.lang-zh #view-censor .queue-action-btn span {
 
     .promptlab-output-panel {
         grid-column: 1 / -1;
+    }
+
+    /* Random mode has its own grid. It kept three columns while the output
+       took a full-width second row, so the third column sat empty and both
+       rows squeezed the tag browser's category list to nothing (1366x768).
+       The browser keeps the full height on the left; slots and output stack
+       on the right. */
+    .promptlab-random-layout {
+        grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .promptlab-random-layout > .promptlab-browser {
+        grid-row: 1 / span 2;
+    }
+
+    .promptlab-random-layout > .promptlab-output-panel {
+        grid-column: 2;
+    }
+
+    .promptlab-random-layout .promptlab-gen-buttons {
+        grid-template-columns: repeat(4, max-content);
     }
 }
 

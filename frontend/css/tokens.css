@@ -1769,6 +1769,15 @@ html.gallery-comfort-room #view-gallery .gallery-container::before,
     display: none;
 }
 
+/* A slider needs a visible track. The base rule painted it --bg-card, the
+   colour of most cards, so only the thumb showed: a dot floating in the
+   middle of nowhere (censor adjustments, detection threshold, prompt slot
+   weights). Sliders with their own track styling keep it. */
+input[type="range"] {
+    background: rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+}
+
 /* The action bar is excluded: it is position:fixed (ui-refresh.css), and this
    ID-weighted rule used to turn it back into a flow element parked after the
    whole grid, i.e. never on screen. The toolbar likewise keeps its
