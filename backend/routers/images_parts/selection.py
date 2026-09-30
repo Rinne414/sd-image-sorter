@@ -82,6 +82,9 @@ async def create_selection_token(
         min_saturation=request.minSaturation,
         max_saturation=request.maxSaturation,
         seed=request.seed,
+        anime_grades=request.animeGrades,
+        min_waifu=request.minWaifu,
+        max_waifu=request.maxWaifu,
         chunk_size=request.chunkSize,
     )
 

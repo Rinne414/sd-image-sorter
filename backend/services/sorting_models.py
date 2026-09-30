@@ -6,7 +6,7 @@ from typing import Dict, List, Literal, Optional, TypedDict, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from constants import VALID_ASPECT_RATIOS
+from constants import VALID_ASPECT_RATIOS, normalize_anime_grades
 
 
 DIMENSION_MIN = 1
@@ -383,6 +383,17 @@ class SortFilterRequest(BaseModel):
     seed: Optional[int] = None
     date_from: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     date_to: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    # Optional anime aesthetic scores (deepghs grade, Waifu Scorer V3).
+    anime_grades: Optional[List[str]] = Field(default=None, max_length=7)
+    min_waifu: Optional[float] = Field(default=None, ge=0, le=10)
+    max_waifu: Optional[float] = Field(default=None, ge=0, le=10)
+
+    @field_validator("anime_grades")
+    @classmethod
+    def validate_anime_grades(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v is None:
+            return None
+        return normalize_anime_grades(v) or None
 
     @field_validator("aspect_ratio")
     @classmethod
@@ -428,6 +439,13 @@ class SortFilterRequest(BaseModel):
     def validate_max_aesthetic(cls, v: Optional[float], info) -> Optional[float]:
         if v is not None and info.data.get("min_aesthetic") is not None and v < info.data["min_aesthetic"]:
             raise ValueError("max_aesthetic cannot be less than min_aesthetic")
+        return v
+
+    @field_validator("max_waifu")
+    @classmethod
+    def validate_max_waifu(cls, v: Optional[float], info) -> Optional[float]:
+        if v is not None and info.data.get("min_waifu") is not None and v < info.data["min_waifu"]:
+            raise ValueError("max_waifu cannot be less than min_waifu")
         return v
 
 
@@ -511,6 +529,9 @@ class BatchMoveRequest(SortFilterRequest):
             self.seed,
             self.date_from,
             self.date_to,
+            self.anime_grades,
+            self.min_waifu,
+            self.max_waifu,
             # Only True narrows the set; False is "no restriction" in the DB layer.
             self.no_caption or None,
             self.aesthetic_unscored or None,

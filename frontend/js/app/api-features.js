@@ -405,6 +405,9 @@ Object.assign(API, {
             seed: scopeFilters?.seed ?? null,
             date_from: scopeFilters?.dateFrom || null,
             date_to: scopeFilters?.dateTo || null,
+            anime_grades: scopeFilters?.animeGrades?.length ? scopeFilters.animeGrades : null,
+            min_waifu: scopeFilters?.minWaifu ?? null,
+            max_waifu: scopeFilters?.maxWaifu ?? null,
             destination_folder: destinationFolder,
             operation,
             // B3-②: optional subfolder split under destination (generator/checkpoint/rating).
@@ -465,6 +468,9 @@ Object.assign(API, {
             seed: scopeFilters?.seed ?? null,
             date_from: scopeFilters?.dateFrom || null,
             date_to: scopeFilters?.dateTo || null,
+            anime_grades: scopeFilters?.animeGrades?.length ? scopeFilters.animeGrades : null,
+            min_waifu: scopeFilters?.minWaifu ?? null,
+            max_waifu: scopeFilters?.maxWaifu ?? null,
             // v3.3.1: per-slot collection ids ({ key: collectionId|null }).
             collection_slots: (collectionSlots && typeof collectionSlots === 'object') ? collectionSlots : null,
             // v3.3.2 WB-S3: session mode. "slot" = WASD folder sort (default);

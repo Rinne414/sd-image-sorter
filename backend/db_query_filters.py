@@ -465,6 +465,31 @@ def _apply_aesthetic_filter(conditions: List[str], params: List[Any],
     return conditions, params
 
 
+def _apply_anime_aesthetic_filter(conditions: List[str], params: List[Any],
+                                  anime_grades: Optional[List[str]],
+                                  min_waifu: Optional[float],
+                                  max_waifu: Optional[float]) -> tuple:
+    """Filter by the optional anime aesthetic scores.
+
+    ``anime_grades`` keeps pictures whose deepghs grade is ANY of the listed
+    ones (an empty list is no filter). ``min_waifu`` / ``max_waifu`` range over
+    the Waifu Scorer V3 score. Like the LAION range, a picture without that
+    score never matches a set filter.
+    """
+    grades = [grade for grade in (anime_grades or []) if grade]
+    if grades:
+        placeholders = ",".join("?" * len(grades))
+        conditions.append(f"i.aesthetic_anime_grade IN ({placeholders})")
+        params.extend(grades)
+    if min_waifu is not None:
+        conditions.append("i.aesthetic_waifu IS NOT NULL AND i.aesthetic_waifu >= ?")
+        params.append(float(min_waifu))
+    if max_waifu is not None:
+        conditions.append("i.aesthetic_waifu IS NOT NULL AND i.aesthetic_waifu <= ?")
+        params.append(float(max_waifu))
+    return conditions, params
+
+
 def _apply_date_filter(conditions: List[str], params: List[Any],
                        date_from: Optional[str],
                        date_to: Optional[str]) -> tuple:

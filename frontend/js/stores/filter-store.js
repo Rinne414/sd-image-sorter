@@ -20,6 +20,22 @@
         return [...new Set((values || []).filter((v) => DOMINANT_HUES.includes(v)))];
     }
 
+    // deepghs anime aesthetic grades, best first (backend constants.ANIME_AESTHETIC_GRADES).
+    const ANIME_GRADES = Object.freeze([
+        'masterpiece', 'best', 'great', 'good', 'normal', 'low', 'worst',
+    ]);
+
+    function sanitizeAnimeGrades(values) {
+        return [...new Set((values || []).filter((v) => ANIME_GRADES.includes(v)))];
+    }
+
+    function sanitizeWaifuScore(value) {
+        const score = Number(value);
+        return value !== null && value !== '' && Number.isFinite(score) && score >= 0 && score <= 10
+            ? score
+            : null;
+    }
+
     function createDefaultFilterState() {
         return {
             generators: [...DEFAULT_FILTER_GENERATORS],
@@ -88,6 +104,11 @@
             // caught it (fix flipped in app-core-pins.spec.ts).
             dateFrom: null,
             dateTo: null,
+            // Optional anime aesthetic scores: deepghs grades (ANY of) and the
+            // Waifu Scorer V3 range. Same two-allowlist rule as the date range.
+            animeGrades: [],
+            minWaifu: null,
+            maxWaifu: null,
         };
     }
 
@@ -157,6 +178,9 @@
             // allowlist entries (anything not YYYY-MM-DD becomes null).
             dateFrom: /^\d{4}-\d{2}-\d{2}$/.test(String(source.dateFrom || '')) ? String(source.dateFrom) : null,
             dateTo: /^\d{4}-\d{2}-\d{2}$/.test(String(source.dateTo || '')) ? String(source.dateTo) : null,
+            animeGrades: sanitizeAnimeGrades(source.animeGrades),
+            minWaifu: sanitizeWaifuScore(source.minWaifu),
+            maxWaifu: sanitizeWaifuScore(source.maxWaifu),
         };
     }
 

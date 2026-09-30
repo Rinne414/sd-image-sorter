@@ -20,6 +20,7 @@ from typing import List, Literal, Optional, TypedDict
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 import database as db
+from constants import normalize_anime_grades
 from services.tag_export_service import (
     PROMPT_MATCH_MODE_CONTAINS,
     PROMPT_MATCH_MODE_EXACT,
@@ -102,6 +103,14 @@ class BulkTagFilterContract(BaseModel):
     seed: Optional[int] = None
     dateFrom: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     dateTo: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    animeGrades: List[str] = Field(default_factory=list, max_length=7)
+    minWaifu: Optional[float] = Field(default=None, ge=0, le=10)
+    maxWaifu: Optional[float] = Field(default=None, ge=0, le=10)
+
+    @field_validator("animeGrades")
+    @classmethod
+    def validate_anime_grades(cls, v: List[str]) -> List[str]:
+        return normalize_anime_grades(v)
 
     @model_validator(mode="after")
     def normalize_contract(self) -> "BulkTagFilterContract":

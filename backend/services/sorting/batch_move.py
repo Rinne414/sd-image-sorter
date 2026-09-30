@@ -216,6 +216,9 @@ class BatchMoveMixin:
             seed=request.seed,
             date_from=request.date_from,
             date_to=request.date_to,
+            anime_grades=request.anime_grades,
+            min_waifu=request.min_waifu,
+            max_waifu=request.max_waifu,
         )
         total_count = db.get_filtered_image_count(**filter_kwargs)
 

@@ -48,6 +48,9 @@ function createDefaultFilterState() {
         excludeColorHues: [],
         folder: null,
         hasMetadata: null,
+        animeGrades: [],
+        minWaifu: null,
+        maxWaifu: null,
     };
 }
 
@@ -106,6 +109,9 @@ function cloneFilterState(filters) {
         minSaturation: source.minSaturation ?? null,
         maxSaturation: source.maxSaturation ?? null,
         seed: source.seed ?? null,
+        animeGrades: [...(source.animeGrades || [])],
+        minWaifu: source.minWaifu ?? null,
+        maxWaifu: source.maxWaifu ?? null,
     };
 }
 
@@ -198,6 +204,10 @@ function buildSelectionFilterRequest(filters = AppState?.filters || createDefaul
         minSaturation: source.minSaturation ?? null,
         maxSaturation: source.maxSaturation ?? null,
         seed: source.seed ?? null,
+        // Optional anime aesthetic scores (deepghs grade, Waifu Scorer V3)
+        animeGrades: [...(source.animeGrades || [])],
+        minWaifu: source.minWaifu ?? null,
+        maxWaifu: source.maxWaifu ?? null,
     };
 }
 
@@ -245,7 +255,24 @@ function buildAdvancedFilterContract(filters = AppState?.filters || createDefaul
         scope: request.scope || 'library',
         folder: request.folder || null,
         hasMetadata: request.hasMetadata ?? null,
+        ...buildNewerFilterSignatureKeys(request),
     };
+}
+
+// Filters added after scope signatures were first saved join the contract only
+// when set, so a signature saved before they existed still matches an
+// unfiltered gallery while a set filter still reads as a difference.
+function buildNewerFilterSignatureKeys(request) {
+    const keys = {};
+    if (request.noCaption === true) keys.noCaption = true;
+    if (request.aestheticUnscored === true) keys.aestheticUnscored = true;
+    if (request.minSaturation != null) keys.minSaturation = request.minSaturation;
+    if (request.maxSaturation != null) keys.maxSaturation = request.maxSaturation;
+    if (request.seed != null) keys.seed = request.seed;
+    if (request.animeGrades?.length) keys.animeGrades = request.animeGrades;
+    if (request.minWaifu != null) keys.minWaifu = request.minWaifu;
+    if (request.maxWaifu != null) keys.maxWaifu = request.maxWaifu;
+    return keys;
 }
 
 function getAdvancedFilterContractSignature(filters = AppState?.filters || createDefaultFilterState()) {

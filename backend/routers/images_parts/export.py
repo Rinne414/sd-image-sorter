@@ -108,6 +108,9 @@ async def get_selection_ids(
         min_saturation=request.minSaturation,
         max_saturation=request.maxSaturation,
         seed=request.seed,
+        anime_grades=request.animeGrades,
+        min_waifu=request.minWaifu,
+        max_waifu=request.maxWaifu,
     )
 
 
@@ -173,4 +176,7 @@ async def count_filtered_images(
         min_saturation=request.minSaturation,
         max_saturation=request.maxSaturation,
         seed=request.seed,
+        anime_grades=request.animeGrades,
+        min_waifu=request.minWaifu,
+        max_waifu=request.maxWaifu,
     )

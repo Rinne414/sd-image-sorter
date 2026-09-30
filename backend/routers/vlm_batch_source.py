@@ -84,6 +84,9 @@ def _filters_to_selection_kwargs(filters: Dict[str, Any]) -> Dict[str, Any]:
         "seed": pick("seed"),
         "date_from": pick("dateFrom", "date_from"),
         "date_to": pick("dateTo", "date_to"),
+        "anime_grades": pick("animeGrades", "anime_grades"),
+        "min_waifu": pick("minWaifu", "min_waifu"),
+        "max_waifu": pick("maxWaifu", "max_waifu"),
     }
 
 

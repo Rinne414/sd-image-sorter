@@ -203,6 +203,9 @@ const API = {
         if (filters.minSaturation != null) params.set('min_saturation', filters.minSaturation);
         if (filters.maxSaturation != null) params.set('max_saturation', filters.maxSaturation);
         if (filters.seed != null) params.set('seed', filters.seed);
+        if (filters.animeGrades?.length) params.set('anime_grades', filters.animeGrades.join(','));
+        if (filters.minWaifu != null) params.set('min_waifu', filters.minWaifu);
+        if (filters.maxWaifu != null) params.set('max_waifu', filters.maxWaifu);
         return params;
     },
 
@@ -270,6 +273,9 @@ const API = {
         if (filters.minSaturation != null) params.set('min_saturation', filters.minSaturation);
         if (filters.maxSaturation != null) params.set('max_saturation', filters.maxSaturation);
         if (filters.seed != null) params.set('seed', filters.seed);
+        if (filters.animeGrades?.length) params.set('anime_grades', filters.animeGrades.join(','));
+        if (filters.minWaifu != null) params.set('min_waifu', filters.minWaifu);
+        if (filters.maxWaifu != null) params.set('max_waifu', filters.maxWaifu);
 
         return this.get(`/api/images?${params}`, options);
     },

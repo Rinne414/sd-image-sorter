@@ -7020,6 +7020,23 @@ html.lang-zh #view-censor .queue-action-btn span {
     text-wrap: balance;
 }
 
+/* Anime grade picks: one wrapping row of chips that hug their word, not the
+   88px cards the size and hue choices use (seven words, no icon). */
+.anime-aesthetic-heading {
+    margin: 16px 0 8px;
+}
+
+.anime-grade-choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.anime-grade-choices .filter-choice-card {
+    min-height: 0;
+    padding: 7px 14px;
+    border-radius: 12px;
+}
 html.lang-zh .filter-panel-header h4,
 html.lang-zh .filter-choice-card span:last-child,
 html.lang-zh #view-censor .section-title,

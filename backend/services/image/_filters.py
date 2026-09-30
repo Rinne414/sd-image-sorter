@@ -13,6 +13,7 @@ from typing import Any, List, Optional
 
 from fastapi import HTTPException
 
+from constants import normalize_anime_grades
 from services.image._constants import (
     PROMPT_MATCH_MODE_EXACT,
     VALID_PROMPT_MATCH_MODES,
@@ -185,3 +186,11 @@ def _sanitize_filter_values(items: Any) -> Optional[List[str]]:
 
     sanitized = _sanitize_filter_value(str(items))
     return [sanitized] if sanitized else None
+
+
+def _coerce_anime_grades(value: Any) -> List[str]:
+    """Anime grade filter values from a list or a comma string; an unknown grade is a 400."""
+    try:
+        return normalize_anime_grades(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

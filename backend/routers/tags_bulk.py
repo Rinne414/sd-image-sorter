@@ -229,6 +229,9 @@ def _filter_contract_db_kwargs(filters: BulkTagFilterContract) -> Dict[str, Any]
         "seed": filters.seed,
         "date_from": filters.dateFrom,
         "date_to": filters.dateTo,
+        "anime_grades": _list_or_none(filters.animeGrades),
+        "min_waifu": filters.minWaifu,
+        "max_waifu": filters.maxWaifu,
     }
 
 

@@ -106,6 +106,9 @@ class SortSessionMixin:
         seed: Optional[int] = None,
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
+        anime_grades: Optional[Any] = None,
+        min_waifu: Optional[float] = None,
+        max_waifu: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Start a manual sort session."""
         operation_mode = self._validate_file_operation(operation_mode)
@@ -196,6 +199,9 @@ class SortSessionMixin:
             seed=seed,
             date_from=date_from,
             date_to=date_to,
+            anime_grades=self._coerce_sort_filter_values(anime_grades),
+            min_waifu=min_waifu,
+            max_waifu=max_waifu,
         )
         # DB-level filter already excludes images marked unreadable.
         # Per-image verification runs lazily in get_current_sort_image so

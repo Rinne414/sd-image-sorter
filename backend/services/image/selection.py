@@ -33,6 +33,7 @@ from services.image._filters import (
     _coerce_optional_date_filter,
     _coerce_optional_float_filter,
     _coerce_optional_int_filter,
+    _coerce_anime_grades,
     _coerce_optional_string_filter,
     _coerce_prompt_match_mode,
     _coerce_selection_id_list,
@@ -114,6 +115,9 @@ def selection_contract_db_filters(contract: Dict[str, Any]) -> Dict[str, Any]:
         "min_saturation": contract.get("minSaturation"),
         "max_saturation": contract.get("maxSaturation"),
         "seed": contract.get("seed"),
+        "anime_grades": contract.get("animeGrades"),
+        "min_waifu": contract.get("minWaifu"),
+        "max_waifu": contract.get("maxWaifu"),
     }
 
 
@@ -208,6 +212,9 @@ class SelectionMixin:
         min_saturation: Optional[float] = None,
         max_saturation: Optional[float] = None,
         seed: Optional[int] = None,
+        anime_grades: Optional[Any] = None,
+        min_waifu: Optional[float] = None,
+        max_waifu: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Build the canonical filter contract encoded into selection tokens."""
         sort_by = _coerce_optional_string_filter(sort_by, "sortBy") or "newest"
@@ -297,6 +304,9 @@ class SelectionMixin:
             "minSaturation": _coerce_optional_float_filter(min_saturation, "minSaturation"),
             "maxSaturation": _coerce_optional_float_filter(max_saturation, "maxSaturation"),
             "seed": _coerce_optional_int_filter(seed, "seed"),
+            "animeGrades": _coerce_anime_grades(anime_grades),
+            "minWaifu": _coerce_optional_float_filter(min_waifu, "minWaifu"),
+            "maxWaifu": _coerce_optional_float_filter(max_waifu, "maxWaifu"),
             # File-time day range (timeline-eval memo 2026-07-12): filters on
             # first-seen mtime, deliberately NOT called "generation date".
             "dateFrom": date_from,
@@ -405,6 +415,9 @@ class SelectionMixin:
                 min_saturation=filters.get("minSaturation"),
                 max_saturation=filters.get("maxSaturation"),
                 seed=filters.get("seed"),
+                anime_grades=filters.get("animeGrades"),
+                min_waifu=filters.get("minWaifu"),
+                max_waifu=filters.get("maxWaifu"),
                 date_from=filters.get("dateFrom"),
                 date_to=filters.get("dateTo"),
             )
@@ -517,6 +530,9 @@ class SelectionMixin:
         min_saturation: Optional[float] = None,
         max_saturation: Optional[float] = None,
         seed: Optional[int] = None,
+        anime_grades: Optional[Any] = None,
+        min_waifu: Optional[float] = None,
+        max_waifu: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Resolve the full filtered-result ID set in current gallery sort order."""
         contract = self._build_selection_filter_contract(
@@ -562,6 +578,9 @@ class SelectionMixin:
             min_saturation=min_saturation,
             max_saturation=max_saturation,
             seed=seed,
+            anime_grades=anime_grades,
+            min_waifu=min_waifu,
+            max_waifu=max_waifu,
         )
         image_ids = self._selection_ids_from_contract(
             contract,

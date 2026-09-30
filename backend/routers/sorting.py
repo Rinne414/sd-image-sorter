@@ -642,6 +642,9 @@ async def start_sort_session(
             seed=request.seed,
             date_from=request.date_from,
             date_to=request.date_to,
+            anime_grades=request.anime_grades,
+            min_waifu=request.min_waifu,
+            max_waifu=request.max_waifu,
         )
 
     return service.start_sort_session(

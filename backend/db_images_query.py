@@ -46,6 +46,7 @@ from db_query import (
     _apply_saturation_filter,
     _apply_no_caption_filter,
     _apply_seed_filter,
+    _apply_anime_aesthetic_filter,
     _apply_user_rating_filter,
     _apply_color_filter,
     _apply_artist_filter,
@@ -114,6 +115,9 @@ def get_images(
     min_saturation: Optional[float] = None,
     max_saturation: Optional[float] = None,
     seed: Optional[int] = None,
+    anime_grades: Optional[List[str]] = None,
+    min_waifu: Optional[float] = None,
+    max_waifu: Optional[float] = None,
 ) ->List[Dict[str, Any]]:
     """
     Get images with optional filters.
@@ -220,6 +224,9 @@ def get_images(
         )
         conditions, params = _apply_no_caption_filter(conditions, params, no_caption)
         conditions, params = _apply_seed_filter(conditions, params, seed)
+        conditions, params = _apply_anime_aesthetic_filter(
+            conditions, params, anime_grades, min_waifu, max_waifu
+        )
 
         # Apply v3.2.1 color filters
         conditions, params = _apply_color_filter(
@@ -328,6 +335,9 @@ def get_filtered_image_count(
     min_saturation: Optional[float] = None,
     max_saturation: Optional[float] = None,
     seed: Optional[int] = None,
+    anime_grades: Optional[List[str]] = None,
+    min_waifu: Optional[float] = None,
+    max_waifu: Optional[float] = None,
 ) ->int:
     """Get count of images matching filters without loading image data.
 
@@ -417,6 +427,9 @@ def get_filtered_image_count(
         )
         conditions, params = _apply_no_caption_filter(conditions, params, no_caption)
         conditions, params = _apply_seed_filter(conditions, params, seed)
+        conditions, params = _apply_anime_aesthetic_filter(
+            conditions, params, anime_grades, min_waifu, max_waifu
+        )
 
         # Apply v3.2.1 color filters
         conditions, params = _apply_color_filter(
@@ -506,6 +519,9 @@ def get_filtered_image_ids(
     min_saturation: Optional[float] = None,
     max_saturation: Optional[float] = None,
     seed: Optional[int] = None,
+    anime_grades: Optional[List[str]] = None,
+    min_waifu: Optional[float] = None,
+    max_waifu: Optional[float] = None,
 ) ->List[int]:
     """Get list of image IDs matching filters without loading full image data.
 
@@ -603,6 +619,9 @@ def get_filtered_image_ids(
         )
         conditions, params = _apply_no_caption_filter(conditions, params, no_caption)
         conditions, params = _apply_seed_filter(conditions, params, seed)
+        conditions, params = _apply_anime_aesthetic_filter(
+            conditions, params, anime_grades, min_waifu, max_waifu
+        )
 
         # Apply v3.2.1 color filters
         conditions, params = _apply_color_filter(

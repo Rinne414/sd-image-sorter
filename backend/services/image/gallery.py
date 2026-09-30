@@ -21,6 +21,7 @@ import database as db
 from constants import VALID_ASPECT_RATIOS
 from services.image._constants import DEFAULT_PAGE_SIZE, PROMPT_MATCH_MODE_EXACT
 from services.image._filters import (
+    _coerce_anime_grades,
     _coerce_prompt_match_mode,
     _sanitize_filter_value,
     _sanitize_filter_values,
@@ -201,6 +202,9 @@ class GalleryMixin:
         min_saturation: Optional[float] = None,
         max_saturation: Optional[float] = None,
         seed: Optional[int] = None,  # generation seed inside metadata_json
+        anime_grades: Optional[Any] = None,
+        min_waifu: Optional[float] = None,
+        max_waifu: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Retrieve images with optional filtering using cursor-based pagination.
@@ -273,6 +277,7 @@ class GalleryMixin:
         ex_color_list = _sanitize_filter_values(exclude_colors)
         color_hue_list = _sanitize_filter_values(color_hues)
         ex_color_hue_list = _sanitize_filter_values(exclude_color_hues)
+        anime_grades = _coerce_anime_grades(anime_grades)
 
         cursor_payload = None
         if cursor:
@@ -299,6 +304,9 @@ class GalleryMixin:
                     min_saturation=min_saturation,
                     max_saturation=max_saturation,
                     seed=seed,
+                    anime_grades=anime_grades,
+                    min_waifu=min_waifu,
+                    max_waifu=max_waifu,
                     generators=gen_list,
                     tags=tag_list,
                     tag_mode=tag_mode,
@@ -383,6 +391,9 @@ class GalleryMixin:
                 min_saturation=min_saturation,
                 max_saturation=max_saturation,
                 seed=seed,
+                anime_grades=anime_grades,
+                min_waifu=min_waifu,
+                max_waifu=max_waifu,
                 generators=gen_list,
                 tags=tag_list,
                 tag_mode=tag_mode,
@@ -445,6 +456,9 @@ class GalleryMixin:
             min_saturation=min_saturation,
             max_saturation=max_saturation,
             seed=seed,
+            anime_grades=anime_grades,
+            min_waifu=min_waifu,
+            max_waifu=max_waifu,
             generators=gen_list,
             tags=tag_list,
             tag_mode=tag_mode,
@@ -536,6 +550,9 @@ class GalleryMixin:
         min_saturation: Optional[float] = None,
         max_saturation: Optional[float] = None,
         seed: Optional[int] = None,
+        anime_grades: Optional[Any] = None,
+        min_waifu: Optional[float] = None,
+        max_waifu: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Return the exact count of images matching the same filters as GET /api/images.
 
@@ -561,6 +578,7 @@ class GalleryMixin:
 
         color_temperature = _sanitize_filter_value(color_temperature).lower() if color_temperature else None
         brightness_distribution = _sanitize_filter_value(brightness_distribution).lower() if brightness_distribution else None
+        anime_grades = _coerce_anime_grades(anime_grades)
 
         total = db.get_filtered_image_count(
             generators=_sanitize_filter_values(generators),
@@ -605,6 +623,9 @@ class GalleryMixin:
             min_saturation=min_saturation,
             max_saturation=max_saturation,
             seed=seed,
+            anime_grades=anime_grades,
+            min_waifu=min_waifu,
+            max_waifu=max_waifu,
         )
         return {"total": int(total)}
 

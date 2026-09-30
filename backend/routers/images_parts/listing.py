@@ -360,6 +360,16 @@ async def get_images(
         default=None,
         description="Match images generated with this exact seed (read from metadata_json). Aurora Phase 3.",
     ),
+    anime_grades: Optional[str] = Query(
+        default=None,
+        description="Comma-separated deepghs anime grades to keep (ANY match): masterpiece/best/great/good/normal/low/worst. Pictures without a grade never match.",
+    ),
+    min_waifu: Optional[float] = Query(
+        default=None, ge=0, le=10, description="Minimum Waifu Scorer V3 score (0-10). Pictures without it never match."
+    ),
+    max_waifu: Optional[float] = Query(
+        default=None, ge=0, le=10, description="Maximum Waifu Scorer V3 score (0-10). Pictures without it never match."
+    ),
     service: ImageService = Depends(get_image_service),
 ):
     """Retrieve images with optional filtering using cursor-based pagination."""
@@ -432,6 +442,9 @@ async def get_images(
         min_saturation=min_saturation,
         max_saturation=max_saturation,
         seed=seed,
+        anime_grades=anime_grades,
+        min_waifu=min_waifu,
+        max_waifu=max_waifu,
     )
 
 

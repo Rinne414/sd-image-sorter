@@ -415,6 +415,9 @@ def iter_filtered_image_id_chunks(
     min_saturation: Optional[float] = None,
     max_saturation: Optional[float] = None,
     seed: Optional[int] = None,
+    anime_grades: Optional[List[str]] = None,
+    min_waifu: Optional[float] = None,
+    max_waifu: Optional[float] = None,
 ) -> Iterator[List[int]]:
     """Yield filtered image IDs in bounded consumer chunks.
 
@@ -485,6 +488,9 @@ def iter_filtered_image_id_chunks(
             min_saturation=min_saturation,
             max_saturation=max_saturation,
             seed=seed,
+            anime_grades=anime_grades,
+            min_waifu=min_waifu,
+            max_waifu=max_waifu,
             fetch_chunk_size=normalized_query_page_size,
             offset=offset,
             limit=normalized_query_page_size,

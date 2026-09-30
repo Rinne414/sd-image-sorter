@@ -295,6 +295,13 @@ async function openFilterModal(options = {}) {
     $$('input[name="color-hue"]').forEach(cb => {
         cb.checked = (filterState.colorHues || []).includes(cb.value);
     });
+    $$('input[name="anime-grade"]').forEach(cb => {
+        cb.checked = (filterState.animeGrades || []).includes(cb.value);
+    });
+    const waifuMinInput = $('#filter-waifu-min');
+    const waifuMaxInput = $('#filter-waifu-max');
+    if (waifuMinInput) waifuMinInput.value = filterState.minWaifu ?? '';
+    if (waifuMaxInput) waifuMaxInput.value = filterState.maxWaifu ?? '';
     $$('input[name="brightness-distribution"]').forEach(radio => {
         radio.checked = radio.value === (filterState.brightnessDistribution || '');
     });

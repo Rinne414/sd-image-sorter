@@ -62,6 +62,9 @@ function serializeAutoSepFilters(filters) {
             : null,
         dateFrom: source.dateFrom || null,
         dateTo: source.dateTo || null,
+        animeGrades: [...(source.animeGrades || [])],
+        minWaifu: source.minWaifu ?? null,
+        maxWaifu: source.maxWaifu ?? null,
     };
 }
 
@@ -89,6 +92,9 @@ function buildAutoSepScopeFilters(contract) {
         seed: contract.seed,
         dateFrom: contract.dateFrom,
         dateTo: contract.dateTo,
+        animeGrades: contract.animeGrades,
+        minWaifu: contract.minWaifu,
+        maxWaifu: contract.maxWaifu,
     };
 }
 

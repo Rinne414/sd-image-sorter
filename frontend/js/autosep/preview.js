@@ -60,6 +60,9 @@ function getAutoSepFilterSignature(filters) {
         seed: contract.seed ?? null,
         dateFrom: contract.dateFrom || null,
         dateTo: contract.dateTo || null,
+        animeGrades: contract.animeGrades || [],
+        minWaifu: contract.minWaifu ?? null,
+        maxWaifu: contract.maxWaifu ?? null,
     });
 }
 
@@ -218,6 +221,9 @@ function _buildAutoSepImageQuery(filters, cursor = null, limit = 500) {
         seed: contract.seed ?? null,
         dateFrom: contract.dateFrom || null,
         dateTo: contract.dateTo || null,
+        animeGrades: contract.animeGrades?.length > 0 ? contract.animeGrades : null,
+        minWaifu: contract.minWaifu ?? null,
+        maxWaifu: contract.maxWaifu ?? null,
         limit,
         cursor,
     };
@@ -381,7 +387,8 @@ async function updateAutoSepPreview() {
         (filters.colorHues?.length > 0) || (filters.excludeColorHues?.length > 0) ||
         filters.noCaption === true || filters.aestheticUnscored === true ||
         filters.minSaturation != null || filters.maxSaturation != null ||
-        filters.seed != null || Boolean(filters.dateFrom) || Boolean(filters.dateTo);
+        filters.seed != null || Boolean(filters.dateFrom) || Boolean(filters.dateTo) ||
+        (filters.animeGrades?.length > 0) || filters.minWaifu != null || filters.maxWaifu != null;
 
     // When no filters are set, still allow preview (matches ALL images)
     // but mark the state so the UI can show a warning

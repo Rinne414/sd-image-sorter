@@ -87,6 +87,9 @@ async def count_images(
     min_saturation: Optional[float] = Query(default=None, ge=0, le=255),
     max_saturation: Optional[float] = Query(default=None, ge=0, le=255),
     seed: Optional[int] = Query(default=None, description="Match images generated with this exact seed."),
+    anime_grades: Optional[str] = Query(default=None, description="Comma-separated deepghs anime grades to keep (ANY match)."),
+    min_waifu: Optional[float] = Query(default=None, ge=0, le=10),
+    max_waifu: Optional[float] = Query(default=None, ge=0, le=10),
     service: ImageService = Depends(get_image_service),
 ):
     """Return the exact number of images matching the given filters."""
@@ -146,4 +149,7 @@ async def count_images(
         min_saturation=min_saturation,
         max_saturation=max_saturation,
         seed=seed,
+        anime_grades=anime_grades,
+        min_waifu=min_waifu,
+        max_waifu=max_waifu,
     )

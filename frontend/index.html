@@ -7444,6 +7444,29 @@
                                 <button class="btn btn-ghost btn-small aesthetic-quick" data-min="" data-max="4" data-i18n="filter.aestheticLow">Low (&lt;4)</button>
                                 <button class="btn btn-ghost btn-small aesthetic-quick" data-min="" data-max="" data-unscored="1" data-i18n="filter.aestheticUnscored">Unscored</button>
                             </div>
+                            <!-- Optional anime aesthetic scores (deepghs grade, Waifu Scorer V3).
+                                 Pictures without that score never match a set filter. -->
+                            <h5 class="anime-aesthetic-heading" data-i18n="filter.animeGradeTitle" title="Only pictures scored with the optional Anime Aesthetic Grade model (Model Center) have a grade." data-i18n-title="filter.animeGradeHint">Anime grade</h5>
+                            <div class="anime-grade-choices" role="group" aria-label="Anime grade" id="filter-anime-grades">
+                                <label class="filter-choice"><input type="checkbox" name="anime-grade" value="masterpiece"><span class="filter-choice-card"><span>masterpiece</span></span></label>
+                                <label class="filter-choice"><input type="checkbox" name="anime-grade" value="best"><span class="filter-choice-card"><span>best</span></span></label>
+                                <label class="filter-choice"><input type="checkbox" name="anime-grade" value="great"><span class="filter-choice-card"><span>great</span></span></label>
+                                <label class="filter-choice"><input type="checkbox" name="anime-grade" value="good"><span class="filter-choice-card"><span>good</span></span></label>
+                                <label class="filter-choice"><input type="checkbox" name="anime-grade" value="normal"><span class="filter-choice-card"><span>normal</span></span></label>
+                                <label class="filter-choice"><input type="checkbox" name="anime-grade" value="low"><span class="filter-choice-card"><span>low</span></span></label>
+                                <label class="filter-choice"><input type="checkbox" name="anime-grade" value="worst"><span class="filter-choice-card"><span>worst</span></span></label>
+                            </div>
+                            <h5 class="anime-aesthetic-heading" data-i18n="filter.waifuTitle" title="Only pictures scored with the optional Waifu Scorer V3 model (Model Center) have this score, from 0 to 10." data-i18n-title="filter.waifuHint">Waifu score</h5>
+                            <div class="dimension-grid" role="group">
+                                <label class="dimension-field">
+                                    <span class="dimension-label" data-i18n="filter.aestheticMin">Min score</span>
+                                    <input type="number" id="filter-waifu-min" class="input-field" placeholder="0" min="0" max="10" step="0.5" aria-label="Minimum Waifu score">
+                                </label>
+                                <label class="dimension-field">
+                                    <span class="dimension-label" data-i18n="filter.aestheticMax">Max score</span>
+                                    <input type="number" id="filter-waifu-max" class="input-field" placeholder="10" min="0" max="10" step="0.5" aria-label="Maximum Waifu score">
+                                </label>
+                            </div>
                         </section>
 
                         <!-- File-time date range (timeline-eval memo 2026-07-12 §4).

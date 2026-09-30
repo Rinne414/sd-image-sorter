@@ -49,6 +49,7 @@ from db_query import (
     _apply_saturation_filter,
     _apply_no_caption_filter,
     _apply_seed_filter,
+    _apply_anime_aesthetic_filter,
     _apply_user_rating_filter,
     _apply_color_filter,
     _apply_artist_filter,
@@ -117,6 +118,9 @@ def get_images_paginated(
     min_saturation: Optional[float] = None,
     max_saturation: Optional[float] = None,
     seed: Optional[int] = None,
+    anime_grades: Optional[List[str]] = None,
+    min_waifu: Optional[float] = None,
+    max_waifu: Optional[float] = None,
 ) ->Dict[str, Any]:
     """
     Get images with cursor-based pagination for efficient handling of large datasets.
@@ -216,6 +220,9 @@ def get_images_paginated(
         )
         conditions, params = _apply_no_caption_filter(conditions, params, no_caption)
         conditions, params = _apply_seed_filter(conditions, params, seed)
+        conditions, params = _apply_anime_aesthetic_filter(
+            conditions, params, anime_grades, min_waifu, max_waifu
+        )
 
         # Apply v3.2.1 color filters
         conditions, params = _apply_color_filter(
@@ -339,6 +346,9 @@ def get_images_paginated(
                 min_saturation=min_saturation,
                 max_saturation=max_saturation,
                 seed=seed,
+                anime_grades=anime_grades,
+                min_waifu=min_waifu,
+                max_waifu=max_waifu,
                 brightness_min=brightness_min,
                 brightness_max=brightness_max,
                 color_temperature=color_temperature,
@@ -402,6 +412,9 @@ def _get_filtered_count(
     min_saturation: Optional[float] = None,
     max_saturation: Optional[float] = None,
     seed: Optional[int] = None,
+    anime_grades: Optional[List[str]] = None,
+    min_waifu: Optional[float] = None,
+    max_waifu: Optional[float] = None,
     # v3.2.1 color filters + v3.2.2 per-item exclude filters. Added here so the
     # cursor-pagination first-page COUNT matches the page query (it previously
     # omitted these, so an active color/exclude filter under newest/oldest sort
@@ -481,6 +494,9 @@ def _get_filtered_count(
     )
     conditions, params = _apply_no_caption_filter(conditions, params, no_caption)
     conditions, params = _apply_seed_filter(conditions, params, seed)
+    conditions, params = _apply_anime_aesthetic_filter(
+        conditions, params, anime_grades, min_waifu, max_waifu
+    )
 
     # Apply v3.2.1 color filters (mirror get_filtered_image_count so the
     # cursor-path total matches the page query).

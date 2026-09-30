@@ -81,6 +81,9 @@ SAMPLE_VALUES = {
     "seed": 12345,
     "dateFrom": "2026-01-01",
     "dateTo": "2026-09-30",
+    "animeGrades": ["best"],
+    "minWaifu": 5.0,
+    "maxWaifu": 9.0,
 }
 
 # The database layer names two filters differently from the request layer.

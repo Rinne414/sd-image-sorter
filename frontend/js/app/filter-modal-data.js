@@ -139,6 +139,14 @@ async function runFilterCountPreview() {
     } catch (e) { /* aborted / offline — keep the last label */ }
 }
 
+// Waifu Scorer V3 bound from the panel. A typed value outside 0-10 is clamped,
+// not dropped, so "15" still means "the top of the scale" instead of silently
+// widening the filter to every picture.
+function readWaifuBound(selector) {
+    const raw = parseFloat($(selector)?.value);
+    return Number.isFinite(raw) ? Math.min(10, Math.max(0, raw)) : null;
+}
+
 function updateFilterModalSummary() {
     const selectionSummary = $('#filter-modal-selection-summary');
     const summaryHint = $('#filter-modal-summary-hint');
@@ -191,13 +199,34 @@ function updateFilterModalSummary() {
     setCount('filter-modal-count-dimensions', dimensionCount > 0 ? String(dimensionCount) : t('filter.any', null, 'Any'));
     setCount('filter-modal-count-colors', colorCount > 0 ? String(colorCount) : t('filter.any', null, 'Any'));
 
-    // Aesthetic stat
+    // Aesthetic stat: the LAION range, then the anime grade picks and the
+    // Waifu range read live from the panel.
     const aestheticMin = filterState.minAesthetic;
     const aestheticMax = filterState.maxAesthetic;
-    const aestheticLabel = (aestheticMin || aestheticMax)
-        ? `${aestheticMin ?? '0'} - ${aestheticMax ?? '10'}`
-        : t('filter.any', null, 'Any');
+    const animeGradeCount = $$('input[name="anime-grade"]:checked').length;
+    const waifuMin = readWaifuBound('#filter-waifu-min');
+    const waifuMax = readWaifuBound('#filter-waifu-max');
+    const hasWaifuRange = waifuMin != null || waifuMax != null;
+    const aestheticParts = [];
+    if ($('.aesthetic-quick-filters')?.dataset.unscored === '1') {
+        aestheticParts.push(t('filter.aestheticUnscored', null, 'Unscored'));
+    } else if (aestheticMin || aestheticMax) {
+        aestheticParts.push(`${aestheticMin ?? '0'} - ${aestheticMax ?? '10'}`);
+    }
+    if (animeGradeCount > 0) {
+        aestheticParts.push(t('filter.animeGradeCount', { count: animeGradeCount }, `${animeGradeCount} grades`));
+    }
+    if (hasWaifuRange) {
+        // Short forms so the stat card fits: 6+, ≤4, 6–9.
+        let waifuRange = `${waifuMin}–${waifuMax}`;
+        if (waifuMax == null) waifuRange = `${waifuMin}+`;
+        if (waifuMin == null) waifuRange = `≤${waifuMax}`;
+        aestheticParts.push(`Waifu ${waifuRange}`);
+    }
+    const aestheticLabel = aestheticParts.length > 0 ? aestheticParts.join(' · ') : t('filter.any', null, 'Any');
     setCount('filter-modal-count-aesthetic', aestheticLabel);
+    // The card truncates a long combination; hovering shows all of it.
+    document.getElementById('filter-modal-count-aesthetic')?.setAttribute('title', aestheticLabel);
 
     const activeGroupCount = [
         generatorCount !== generatorTotal,
@@ -207,7 +236,8 @@ function updateFilterModalSummary() {
         checkpointCount > 0,
         loraCount > 0,
         dimensionCount > 0,
-        colorCount > 0
+        colorCount > 0,
+        aestheticParts.length > 0
     ].filter(Boolean).length;
 
     if (selectionSummary) {
@@ -479,6 +509,11 @@ function readFilterModalDomInto(filterState) {
         filterState.maxAesthetic = null;
     }
 
+    // Optional anime aesthetic scores: any of the ticked grades, Waifu range.
+    filterState.animeGrades = Array.from($$('input[name="anime-grade"]:checked'), cb => cb.value);
+    filterState.minWaifu = readWaifuBound('#filter-waifu-min');
+    filterState.maxWaifu = readWaifuBound('#filter-waifu-max');
+
     // v3.3.3 WIRING-01: minimum user star rating (1-5; '' = any).
     filterState.minUserRating = parseInt($('#filter-user-rating-min')?.value, 10) || null;
 
@@ -595,6 +630,11 @@ function resetAllFilters() {
     if (brightnessMaxInput) brightnessMaxInput.value = '';
     $$('input[name="color-temperature"]').forEach(r => r.checked = r.value === '');
     $$('input[name="color-hue"]').forEach(cb => cb.checked = false);
+    $$('input[name="anime-grade"]').forEach(cb => cb.checked = false);
+    ['#filter-waifu-min', '#filter-waifu-max'].forEach((selector) => {
+        const input = $(selector);
+        if (input) input.value = '';
+    });
     $$('input[name="brightness-distribution"]').forEach(r => r.checked = r.value === '');
     renderModalActiveTags();
     renderModalActivePrompts();

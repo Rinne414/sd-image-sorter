@@ -64,6 +64,9 @@ function serializeManualSortFilters(filters) {
             : null,
         dateFrom: source.dateFrom || null,
         dateTo: source.dateTo || null,
+        animeGrades: [...(source.animeGrades || [])],
+        minWaifu: source.minWaifu ?? null,
+        maxWaifu: source.maxWaifu ?? null,
     };
 }
 
@@ -135,6 +138,9 @@ function buildManualSortScopeFilters(contract) {
         seed: contract.seed ?? null,
         dateFrom: contract.dateFrom || null,
         dateTo: contract.dateTo || null,
+        animeGrades: contract.animeGrades?.length > 0 ? contract.animeGrades : null,
+        minWaifu: contract.minWaifu ?? null,
+        maxWaifu: contract.maxWaifu ?? null,
     };
 }
 
@@ -255,6 +261,9 @@ function getManualSortScopeSignature(filters) {
         seed: contract.seed ?? null,
         dateFrom: contract.dateFrom || null,
         dateTo: contract.dateTo || null,
+        animeGrades: contract.animeGrades || [],
+        minWaifu: contract.minWaifu ?? null,
+        maxWaifu: contract.maxWaifu ?? null,
     });
 }
 

@@ -55,6 +55,7 @@ from db_query_filters import (
     _apply_saturation_filter,
     _apply_no_caption_filter,
     _apply_seed_filter,
+    _apply_anime_aesthetic_filter,
     _apply_user_rating_filter,
     _HAS_METADATA_CLAUSE,
     _apply_metadata_presence_filter,

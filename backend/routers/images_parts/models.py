@@ -144,6 +144,11 @@ class SelectionIdsRequest(BaseModel):
     # File-time day range, YYYY-MM-DD inclusive (timeline-eval memo §4)
     dateFrom: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     dateTo: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    # Optional anime aesthetic scores (deepghs grade, Waifu Scorer V3); the
+    # grade names are checked where the filter contract is built (400).
+    animeGrades: List[str] = Field(default_factory=list, max_length=7)
+    minWaifu: Optional[float] = Field(default=None, ge=0, le=10)
+    maxWaifu: Optional[float] = Field(default=None, ge=0, le=10)
 
     @model_validator(mode="after")
     def validate_prompt_match_mode(self):
