@@ -2110,9 +2110,8 @@ window.I18nLang_zhCN = {
     // ========================
     'modal.prev': '上一张',
     'modal.next': '下一张',
-    'modal.viewAsSD': '查看为 SD 文本',
-    'modal.viewAsNAI': '查看 NAI 格式',
-    'modal.viewOriginal': '查看原始格式',
+    'modal.viewAsSD': '查看为 SD 格式',
+    'modal.viewAsNAI': '查看为 NovelAI 格式',
     'modal.noPrompt': '无提示词',
     'modal.promptUnrecoverable': '没能从文件里读出提示词。可能是运行时才生成的（比如 wildcard、动态提示词），或者导出时被去掉了。',
     // 闭源 AI 厂商（Gemini / gpt-image）的提示信息：当前只读了文件
@@ -2147,6 +2146,8 @@ window.I18nLang_zhCN = {
     'modal.loras': 'LoRAs',
     'modal.prompt': '提示词',
     'modal.promptOriginal': '提示词（原始）',
+    'modal.promptSD': '提示词（SD 格式）',
+    'modal.promptNAI': '提示词（NovelAI 格式）',
     'modal.sidecarCaption': '附带描述文本',
     'modal.sidecarCaptionHelp': '来自图片旁边的 .txt/.json 文件，不是 Stable Diffusion 的生成提示词。',
     'modal.negativePrompt': '反向提示词',

@@ -184,34 +184,39 @@ Object.assign(window.Gallery, {
             negSection.style.display = promptView.negativeText ? '' : 'none';
         }
         this._applyModalSidecarCaption(this._lastModalImage);
-        if (promptHeader) {
-            const fallbackLabel = promptView.targetFormat === 'original'
-                ? 'Prompt (Original format)'
-                : `Prompt (${promptView.formatLabel} format)`;
-            // Write into the label span so the collapse icon survives.
-            const headerLabel = promptHeader.querySelector('.section-toggle-label');
-            (headerLabel || promptHeader).textContent = this._t(promptView.headerKey || 'modal.prompt', null, fallbackLabel);
-        }
-        if (toggleBtn) {
-            const hasPrompt = !!(promptView.promptText || promptView.negativeText || (promptView.characterPrompts && promptView.characterPrompts.length));
-            toggleBtn.disabled = !hasPrompt || (promptView.targetFormat === 'original' && !alternateTarget);
-            if (!hasPrompt) {
-                toggleBtn.textContent = this._t('modal.noPrompt', null, 'No prompt');
-            } else if (promptView.targetFormat === 'original') {
-                if (alternateTarget === 'sd') {
-                    toggleBtn.textContent = this._t('modal.viewAsSD', null, 'View as SD format');
-                } else if (alternateTarget === 'nai') {
-                    toggleBtn.textContent = this._t('modal.viewAsNAI', null, 'View as NAI format');
-                } else {
-                    toggleBtn.textContent = this._t('modal.promptOriginal', null, 'Original format');
-                }
-            } else {
-                toggleBtn.textContent = this._t('modal.viewOriginal', null, 'View original format');
-            }
-            toggleBtn.title = toggleBtn.textContent;
-            toggleBtn.setAttribute('aria-label', toggleBtn.textContent);
-        }
+        this._applyPromptFormatLabels(promptView, promptHeader, toggleBtn, alternateTarget);
         this._modalPromptView = promptView;
+    },
+
+    /**
+     * The header names the format on screen; the button names the format a
+     * click switches to (NovelAI <-> SD, both ways). Each label carries its
+     * key in data-i18n, or the next translation pass writes the old text back.
+     */
+    _applyPromptFormatLabels(promptView, promptHeader, toggleBtn, alternateTarget) {
+        const setLabel = (el, key, fallback) => {
+            el.dataset.i18n = key;
+            el.textContent = this._t(key, null, fallback);
+        };
+        const shownFormat = promptView.targetFormat === 'original' ? promptView.sourceFormat : promptView.targetFormat;
+        // Write into the label span so the collapse icon survives.
+        const headerLabel = promptHeader?.querySelector('.section-toggle-label');
+        if (headerLabel) {
+            if (shownFormat === 'nai') setLabel(headerLabel, 'modal.promptNAI', 'Prompt (NovelAI format)');
+            else if (shownFormat === 'sd') setLabel(headerLabel, 'modal.promptSD', 'Prompt (SD format)');
+            else setLabel(headerLabel, 'modal.prompt', 'Prompt');
+        }
+        if (!toggleBtn) return;
+
+        const hasPrompt = !!(promptView.promptText || promptView.negativeText || (promptView.characterPrompts && promptView.characterPrompts.length));
+        const nextFormat = promptView.targetFormat === 'original' ? alternateTarget : promptView.sourceFormat;
+        toggleBtn.disabled = !hasPrompt || !nextFormat;
+        if (!hasPrompt) setLabel(toggleBtn, 'modal.noPrompt', 'No prompt');
+        else if (nextFormat === 'sd') setLabel(toggleBtn, 'modal.viewAsSD', 'View as SD format');
+        else if (nextFormat === 'nai') setLabel(toggleBtn, 'modal.viewAsNAI', 'View as NovelAI format');
+        else setLabel(toggleBtn, 'modal.promptOriginal', 'Original format');
+        toggleBtn.title = toggleBtn.textContent;
+        toggleBtn.setAttribute('aria-label', toggleBtn.textContent);
     },
 
     /**

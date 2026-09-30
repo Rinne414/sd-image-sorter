@@ -1932,9 +1932,8 @@ window.I18nLang_en = {
     // ========================
     'modal.prev': 'Prev',
     'modal.next': 'Next',
-    'modal.viewAsSD': 'View as SD text',
-    'modal.viewAsNAI': 'View as NAI',
-    'modal.viewOriginal': 'View Original',
+    'modal.viewAsSD': 'View as SD format',
+    'modal.viewAsNAI': 'View as NovelAI format',
     'modal.noPrompt': 'No prompt',
     'modal.promptUnrecoverable': 'Couldn\'t recover a prompt from this file. It may be generated at run time (wildcards, dynamic prompts) or stripped on export.',
     // Closed-source AI provider hint shown in the image-detail modal
@@ -1970,6 +1969,8 @@ window.I18nLang_en = {
     'modal.loras': 'LoRAs',
     'modal.prompt': 'Prompt',
     'modal.promptOriginal': 'Prompt (Original)',
+    'modal.promptSD': 'Prompt (SD format)',
+    'modal.promptNAI': 'Prompt (NovelAI format)',
     'modal.sidecarCaption': 'Sidecar Caption',
     'modal.sidecarCaptionHelp': 'Read from a .txt/.json file next to the image. This is not a Stable Diffusion generation prompt.',
     'modal.negativePrompt': 'Negative Prompt',

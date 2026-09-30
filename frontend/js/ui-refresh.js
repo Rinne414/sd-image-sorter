@@ -148,7 +148,9 @@
             // only the label carries text, so the collapse icon survives.
             var label = el.querySelector('.section-toggle-label');
             if (label) {
-                label.textContent = this._t(key);
+                // A label whose owner moved its key (the prompt header names
+                // the format on screen) keeps that key.
+                label.textContent = this._t(label.dataset.i18n || key);
                 return;
             }
 

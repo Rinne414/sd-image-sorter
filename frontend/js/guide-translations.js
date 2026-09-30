@@ -179,8 +179,6 @@
         'common.questionable': 'Questionable',
         'common.explicit': 'Explicit',
 
-        'modal.promptSD': 'Prompt (SD)',
-        'modal.promptNAI': 'Prompt (NAI)',
         'modal.character': 'Character',
         'modal.negativeShort': 'Neg',
         'modal.noTags': 'No tags. Run WD14 tagger first.',
@@ -377,8 +375,6 @@
         'common.questionable': '可疑',
         'common.explicit': '露骨',
 
-        'modal.promptSD': '提示词（SD）',
-        'modal.promptNAI': '提示词（NAI）',
         'modal.character': '角色',
         'modal.negativeShort': '负向',
         'modal.noTags': '暂无标签，请先运行 WD14 标记。',
