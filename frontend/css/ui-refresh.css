@@ -4237,6 +4237,10 @@ textarea:focus,
 
 .promptlab-build-category-group {
     display: grid;
+    /* The row stretches every card to the tallest one; keep the header and
+       chips at their own height at the top instead of spreading them out
+       (owner 2026-09-30, DESIGN.md rule 19). */
+    align-content: start;
     gap: 8px;
     padding: 10px;
     border: 1px solid rgba(var(--accent-rgb), 0.12);
@@ -4245,17 +4249,18 @@ textarea:focus,
 }
 
 .promptlab-build-category-group-head {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between;
+    gap: 6px;
 }
 
 .promptlab-build-category-toggle {
     display: inline-flex;
     align-items: center;
     min-width: 0;
-    gap: 7px;
+    gap: 6px;
+    white-space: nowrap;
     color: var(--text-primary);
     font-size: 13px;
     font-weight: 750;
@@ -4263,12 +4268,24 @@ textarea:focus,
 
 .promptlab-build-category-mini-actions {
     display: inline-flex;
-    gap: 5px;
+    flex: 0 0 auto;
+    gap: 4px;
+}
+
+.promptlab-build-category-mini-actions .btn-icon-only {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    min-height: 28px;
+    padding: 0;
+    justify-content: center;
 }
 
 .promptlab-build-category-chip-list {
     display: flex;
     flex-wrap: wrap;
+    align-content: flex-start;
+    align-items: flex-start;
     gap: 6px;
     min-height: 28px;
 }

@@ -157,6 +157,8 @@ Object.assign(window.PromptLab, {
         }
 
         workbench.hidden = false;
+        const copyLabel = this._escapeValue(this._t('reader.copy', 'Copy'));
+        const findLabel = this._escapeValue(this._t('tagCategory.find', 'Find'));
         groupsContainer.innerHTML = groups.map(({ group, tags }) => {
             const label = this._getBuildGroupLabel(group);
             const encodedGroup = this._safeDataValue(group.id);
@@ -170,8 +172,8 @@ Object.assign(window.PromptLab, {
                             <span class="tag-category-copy-count">${tags.length}</span>
                         </label>
                         <span class="promptlab-build-category-mini-actions">
-                            <button class="btn btn-ghost btn-small" type="button" data-build-category-copy="${encodedGroup}">${this._escapeValue(this._t('reader.copy', 'Copy'))}</button>
-                            <button class="btn btn-ghost btn-small" type="button" data-build-category-find="${encodedGroup}">${this._escapeValue(this._t('tagCategory.find', 'Find'))}</button>
+                            <button class="btn btn-ghost btn-small btn-icon-only" type="button" data-build-category-copy="${encodedGroup}" title="${copyLabel}" aria-label="${copyLabel}"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"/></svg></button>
+                            <button class="btn btn-ghost btn-small btn-icon-only" type="button" data-build-category-find="${encodedGroup}" title="${findLabel}" aria-label="${findLabel}"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg></button>
                         </span>
                     </div>
                     <div class="promptlab-build-category-chip-list">
