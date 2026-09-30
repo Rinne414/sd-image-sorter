@@ -5288,9 +5288,11 @@ textarea:focus,
 }
 
 .filter-panel-header {
+    /* Title first, the explanation under it (DESIGN.md rule 19): side by
+       side, both wrapped awkwardly and the help could run into the title. */
     display: flex;
-    justify-content: space-between;
-    gap: 16px;
+    flex-direction: column;
+    gap: 4px;
     align-items: flex-start;
 }
 
@@ -5359,7 +5361,7 @@ textarea:focus,
 }
 
 .filter-panel-help {
-    flex: 0 1 260px;
+    flex: none;
     color: var(--text-muted);
     font-size: 13px;
     line-height: 1.55;
@@ -5573,6 +5575,55 @@ textarea:focus,
     margin-top: 12px;
     padding-top: 12px;
     border-top: 1px solid rgba(var(--accent-rgb), 0.08);
+}
+
+/* An empty tray kept its margin, padding and divider as a blank band. */
+#modal-active-tags:empty,
+#modal-active-prompts:empty {
+    display: none;
+}
+
+/* The panel's gap spaces its sections; the old section margin doubled it
+   (44px between sections, 28px of blank under the last one). */
+.filter-panel > .filter-section {
+    margin-bottom: 0;
+}
+
+/* Owner 2026-09-30 (DESIGN.md rule 18): the right column stopped where its
+   panels ended and the model / LoRA lists scrolled in a short box above
+   empty space. The column now takes the row's full height and the lists
+   grow into the free height before they scroll; today's size is the floor. */
+/* The row is as tall as its content (the grid itself is the scroll box, so
+   an auto row stopped at the visible height), and only the right column
+   stretches to it: the left one flows in CSS columns, which at a fixed
+   height spill extra columns over the right side. */
+.filter-modal-grid {
+    grid-template-rows: max-content;
+}
+
+.filter-modal-grid > .filter-column-secondary {
+    align-self: stretch;
+}
+
+.filter-column-secondary > .filter-panel:last-child {
+    flex: 1 1 auto;
+}
+
+.filter-column-secondary .filter-list-grid {
+    flex: 1 1 auto;
+    align-items: stretch;
+}
+
+.filter-column-secondary .filter-list-grid > .filter-section {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.filter-modal-grid .filter-column-secondary .filter-list {
+    flex: 1 1 0;
+    min-height: clamp(180px, 32vh, 420px);
+    max-height: none;
 }
 
 .filter-modal-shell .active-tag {
@@ -6857,7 +6908,9 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 
 .filter-panel-help {
-    max-width: 36ch;
+    /* Under the title now, so it can use the panel's width; the old 36ch
+       cap left a lone "分。" on its own line. */
+    max-width: 60ch;
     line-height: 1.55;
 }
 

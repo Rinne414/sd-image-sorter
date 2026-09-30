@@ -533,7 +533,7 @@
                 'generator.unknown',
                 'generator.others'
             ]);
-            this._setText('#dimensions-heading', 'filter.dimensions');
+            this._setText('#dimensions-heading', 'filter.aspect');
             this._setPlaceholder('#filter-min-width', 'filter.widthMin');
             this._setPlaceholder('#filter-max-width', 'filter.widthMax');
             this._setPlaceholder('#filter-min-height', 'filter.heightMin');

@@ -103,10 +103,19 @@
     flex-shrink: 0;
     background: #767676;
 }
-.hue-dot-red    { background: var(--danger); }
+/* Each dot shows the hue it filters by. This is a data palette, exempt from
+   the one-accent rule (DESIGN.md rule 21); cyan, blue, purple and pink used
+   to borrow warm caption colours and all read as amber. */
+.hue-dot-red    { background: #E5534B; }
+.hue-dot-orange { background: #F0883E; }
+.hue-dot-yellow { background: #E3B341; }
 .hue-dot-green  { background: #4A9D69; }
-.hue-dot-purple { background: var(--accent); } /* data-viz hue, not a UI accent (banned-accent contract) */
+.hue-dot-cyan   { background: #39C5CF; }
+.hue-dot-blue   { background: #4C8DF6; }
+.hue-dot-purple { background: #A371F7; }
+.hue-dot-pink   { background: #F778BA; }
 .hue-dot-brown  { background: #7D5323; }
+.hue-dot-gray   { background: #8B8B8B; }
 .hue-dot-white  { background: #FDFAF7; border: 1px solid rgba(255, 255, 255, 0.35); }
 .hue-dot-black  { background: #0D0D0D; border: 1px solid rgba(255, 255, 255, 0.30); }
 
