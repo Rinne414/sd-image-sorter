@@ -1603,6 +1603,65 @@ model.
 fingerprint no longer matches the image row (or the row has none);
 `other_version` = vectors computed by different weights.
 
+#### GET /api/style-map/points
+One 3-D point per picture of the current Gallery filter, for the style map.
+
+**Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `space` | string | `kaloscope` | `kaloscope` (style vectors of the current official weights) or `clip` (`images.embedding`, the Similarity index) |
+| `selection_token` | string | null | A token from `POST /api/images/selection-token`: the whole Gallery filter contract, the same one `selection-ids`, `count` and the bulk actions read. Omit it for the whole current library (`X-SD-Library-Id`) |
+| `refresh` | bool | false | Recompute even when a cached layout exists (the result replaces the cache entry) |
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "space": "kaloscope",
+  "method": "pca",
+  "model_version": "kaloscope:448-90.13/best_checkpoint.pth:head.bn",
+  "total_images": 12853,
+  "missing_vectors": 120,
+  "unlocatable": [4021, 9877],
+  "merged_away": 431,
+  "explained_variance": [0.0557, 0.0395, 0.0285],
+  "points_layout": ["id", "x", "y", "z", "members"],
+  "points": [[17, -0.412, 0.088, 0.301, 1], [23, 0.155, -0.720, 0.044, 3]],
+  "cached": false
+}
+```
+
+`points` is a compact array (about 30 bytes per point): the representative
+picture's `id`, its coordinates on the three principal axes scaled to
+[-1, 1] and rounded to 3 decimals, and `members`, how many pictures the point
+stands for. Pictures linked by cosine > 0.95 form one connected group (single
+linkage: every member has such a link to some other member, so a member and
+the representative can be further apart than 0.95); the representative is the
+smallest id of the group and `merged_away` counts the pictures folded away.
+`unlocatable` lists the pictures whose unit vector is dominated by one
+component (> 0.5, a few broken renders the model answers with a single huge
+activation); they are not placed and do not take part in the fit.
+`missing_vectors` counts pictures of the filter that have no vector for this
+space (run `vectors/start`, or the Similarity index for `clip`). The three
+axes are fitted on every placeable picture of the filter and
+`explained_variance` is the share of variance on each; `points` carries the
+coordinates of the representatives. `status` is `ok`, `empty` (the filter
+matches nothing) or `no_vectors` (nothing placeable); the last two return an
+empty `points`.
+
+The layout is cached per (library, space, model version, the sorted list of
+filtered picture ids, vector version). The vector version is the row count,
+the sum of image ids and the latest `updated_at` of the space's vectors
+(written with millisecond precision, so a rewrite inside the same second is
+seen; `clip` uses count, sum and max of the embedded ids). A picture entering
+or leaving the filter changes the id list; `refresh=true` bypasses the cache.
+`cached` says whether the response came from the cache. One layout is
+computed at a time; a concurrent request for the same map waits for it and
+then reuses it. Only the current official Kaloscope weights are mapped in
+this slice.
+
+**Errors:** 400 for an unknown `space` or an invalid `selection_token`.
+
 ### Obfuscation
 
 Output is always a PNG, so generation metadata survives the protect/restore

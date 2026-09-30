@@ -139,6 +139,43 @@ class TestPacking:
             pack_style_vector(bad)
 
 
+class TestUpdatedAt:
+    def test_upsert_stamps_milliseconds(self, test_db, tmp_path):
+        """Second precision let a rewrite inside the same second look unchanged
+        to the style map cache; the upsert stamps milliseconds itself."""
+        import re
+
+        from db_style_vectors import upsert_style_vector
+
+        (image_id,) = _make_images(test_db, tmp_path, 1)
+        with test_db.get_db() as conn:
+            conn.execute(
+                "UPDATE images SET content_fingerprint = 'A' WHERE id = ?", (image_id,)
+            )
+        stamps = []
+        for seed in ("x", "y"):
+            with test_db.get_db() as conn:
+                assert upsert_style_vector(
+                    conn.cursor(),
+                    image_id=image_id,
+                    space="kaloscope",
+                    model_version="v",
+                    content_fingerprint="A",
+                    vector=_vector_for(seed),
+                )
+                stamps.append(
+                    conn.execute(
+                        "SELECT updated_at FROM image_style_vectors WHERE image_id = ?",
+                        (image_id,),
+                    ).fetchone()[0]
+                )
+        for stamp in stamps:
+            assert re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}", stamp), (
+                stamp
+            )
+        assert stamps[1] >= stamps[0]
+
+
 class TestFingerprintGate:
     def test_upsert_refuses_a_fingerprint_the_scan_does_not_know(
         self, test_db, tmp_path

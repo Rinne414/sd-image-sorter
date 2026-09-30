@@ -60,7 +60,7 @@ def upsert_style_vector(
         """
         INSERT INTO image_style_vectors
             (image_id, space, model_version, content_fingerprint, dim, dtype, vector, updated_at)
-        SELECT ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP
+        SELECT ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%f', 'now')
         WHERE EXISTS (
             SELECT 1 FROM images WHERE id = ? AND content_fingerprint = ?
         )
@@ -70,7 +70,7 @@ def upsert_style_vector(
             dim = excluded.dim,
             dtype = excluded.dtype,
             vector = excluded.vector,
-            updated_at = CURRENT_TIMESTAMP
+            updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now')
         """,
         (
             int(image_id),

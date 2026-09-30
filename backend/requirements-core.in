@@ -41,6 +41,12 @@ socksio>=1.0.0
 slowapi>=0.1.9
 psutil>=5.9.0
 send2trash>=1.8.3
+# threadpoolctl: while the style map computes a layout it caps the process's
+# OpenBLAS threads at four (threadpool_limits, user_api="blas"); numpy BLAS
+# calls from other requests share that cap for those seconds, torch (OpenMP)
+# is not affected, and the cap is lifted when the computation ends. Pure
+# Python, BSD-3; the same helper scikit-learn uses.
+threadpoolctl>=3.1.0
 # Security floor: anyio 4.14.2 fixes CVE-2026-63374 (a TLS connection to an
 # internationalized host name accepts a certificate for its IDNA 2003 form;
 # the VLM and translate clients use httpx.AsyncClient on anyio) and
