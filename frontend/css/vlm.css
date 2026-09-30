@@ -135,6 +135,22 @@
     border: 1px solid var(--border-color);
     min-width: 0;
 }
+.vlm-model-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.vlm-model-row > .input-field {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.vlm-model-row > .btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
 .export-preview-header {
     display: grid;
     /* Title, help, Refresh and Open Editor on one line; Open Editor used to

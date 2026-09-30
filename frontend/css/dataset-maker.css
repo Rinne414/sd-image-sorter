@@ -385,19 +385,26 @@
 #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-lora-prune-hint {
     display: none;
 }
+/* The count on its own line, the three buttons as one even row under it;
+   wrapping left Remove selected alone on a line (DESIGN.md rule 17). */
 #view-dataset .dataset-queue-toolbar {
     flex: 0 0 auto;
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: center;
-    flex-wrap: wrap;
     gap: 6px;
     padding: 0 0 8px;
     margin-bottom: 8px;
     border-bottom: 1px solid rgba(255,255,255,0.06);
 }
+#view-dataset .dataset-queue-toolbar > .btn {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 6px;
+    justify-content: center;
+}
 #view-dataset .dataset-selection-summary {
-    flex: 1 1 auto;
-    min-width: 90px;
+    grid-column: 1 / -1;
     color: var(--text-secondary, #A6A6A6);
     font-size: 12px;
 }
