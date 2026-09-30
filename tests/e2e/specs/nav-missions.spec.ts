@@ -86,6 +86,80 @@ test.describe('Nav — customizable tabs and mission mode', () => {
   })
 })
 
+test('customize offers every view, and the bar follows the order set with the arrows', async ({ page }) => {
+  // Owner 2026-09-30: "we already make it customizable, why limit users?"
+  // The checklist used to offer 5 of the 8 views and no order.
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+  await expect(page.locator('#view-gallery')).toBeVisible()
+  const barOrder = () => page.evaluate(() =>
+    [...document.querySelectorAll('.nav-tabs > .nav-tab[data-view]')]
+      .filter((tab) => (tab as HTMLElement).offsetParent !== null)
+      .map((tab) => (tab as HTMLElement).dataset.view))
+
+  await page.click('#nav-tools-toggle')
+  await page.click('#nav-tools-customize')
+  const modal = page.locator('#nav-customize-modal')
+  await expect(modal.locator('[data-custom-row]')).toHaveCount(9)
+  await expect(modal.locator('input[data-custom-view="gallery"]')).toBeDisabled()
+
+  await modal.locator('input[data-custom-view="artist"]').check()
+  await expect(page.locator('#nav-tab-artist')).toBeVisible()
+  // Newly ticked views join the end of the bar; move Style Finder to the front.
+  for (let i = 0; i < 4; i += 1) {
+    await modal.locator('button[data-custom-view="artist"][data-custom-move="up"]').click()
+  }
+  await expect(modal.locator('button[data-custom-view="artist"][data-custom-move="up"]')).toBeDisabled()
+  expect(await barOrder()).toEqual(['gallery', 'artist', 'reader', 'sorting', 'censor', 'similar'])
+
+  await page.click('#nav-customize-close')
+  await page.reload()
+  await expect(page.locator('#view-gallery')).toBeVisible()
+  expect(await barOrder()).toEqual(['gallery', 'artist', 'reader', 'sorting', 'censor', 'similar'])
+
+  await page.click('#nav-tools-toggle')
+  await page.click('#nav-tools-customize')
+  await page.click('#nav-customize-reset')
+  expect(await barOrder()).toEqual(['gallery', 'reader', 'sorting', 'censor', 'similar'])
+})
+
+test('the bar re-measures when its free width shrinks after load, and tools that leave it stay in More', async ({ page }) => {
+  // The width ladder only re-measured on window resize, so when the library
+  // chip later got a big library's count the last tab slid under the actions
+  // with More off screen. Its Reverse Prompt rung also had no CSS rule, and
+  // that tool's More entry was hidden as "in the bar".
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await page.addInitScript(() => {
+    localStorage.setItem('sd-image-sorter-lang', 'zh-CN')
+    localStorage.setItem('aurora-nav-tabs', JSON.stringify(
+      ['gallery', 'artist', 'reverse', 'promptlab', 'dataset', 'similar', 'censor', 'sorting', 'reader']))
+  })
+  await page.goto('/')
+  await page.waitForFunction(() => document.documentElement.dataset.appReady === '1')
+  await page.waitForTimeout(500)
+  // What a large library's count does to the chip, after the first measure.
+  await page.evaluate(() => {
+    const chip = document.getElementById('nav-library-chip')!
+    chip.hidden = false
+    document.getElementById('nav-library-chip-label')!.textContent = '主图库 · 12853'
+  })
+
+  await expect.poll(() => page.evaluate(() => {
+    const box = document.querySelector('.nav-tabs')!.getBoundingClientRect()
+    return [...document.querySelectorAll('.nav-tabs > .nav-tab[data-view], #nav-tools-toggle')]
+      .filter((el) => (el as HTMLElement).offsetParent !== null)
+      .filter((el) => el.getBoundingClientRect().right > box.right + 1)
+      .map((el) => el.id)
+  })).toEqual([])
+
+  await page.click('#nav-tools-toggle')
+  for (const view of ['reverse', 'promptlab', 'artist']) {
+    if (!(await page.locator(`#nav-tab-${view}`).isVisible())) {
+      await expect(page.locator(`#nav-tools-${view}`), view).toBeVisible()
+    }
+  }
+})
+
 test('the nav width check measures final tab widths, not a running transition', async ({ page }) => {
   // Seen at 1366 px after leaving a mission: the debounced re-measure ran
   // while the tabs were still animating, read the old narrow widths, dropped

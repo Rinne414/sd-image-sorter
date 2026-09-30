@@ -5398,36 +5398,10 @@
                 <div class="modal-header">
                     <div>
                         <h2 id="nav-customize-title" data-i18n="navCustom.title">Customize tabs</h2>
-                        <p class="modal-description" data-i18n="navCustom.body">Pick which views stay in the top bar. Everything else waits under More. The Library is always shown.</p>
+                        <p class="modal-description" data-i18n="navCustom.body">Tick the views to keep in the top bar and set their order with the arrows; the rest wait under More.</p>
                     </div>
                 </div>
-                <div class="nav-customize-list">
-                    <label class="nav-customize-row">
-                        <input type="checkbox" data-custom-view="reader">
-                        <span class="row-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span>
-                        <span data-i18n="nav.reader">Read Image</span>
-                    </label>
-                    <label class="nav-customize-row">
-                        <input type="checkbox" data-custom-view="sorting">
-                        <span class="row-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-folders"/></svg></span>
-                        <span data-i18n="nav.sorting">Organize</span>
-                    </label>
-                    <label class="nav-customize-row">
-                        <input type="checkbox" data-custom-view="censor">
-                        <span class="row-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></span>
-                        <span data-i18n="nav.censor">Censor Edit</span>
-                    </label>
-                    <label class="nav-customize-row">
-                        <input type="checkbox" data-custom-view="similar">
-                        <span class="row-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg></span>
-                        <span data-i18n="nav.similar">Find Similar</span>
-                    </label>
-                    <label class="nav-customize-row">
-                        <input type="checkbox" data-custom-view="dataset">
-                        <span class="row-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-package"/></svg></span>
-                        <span data-i18n="nav.dataset">Dataset</span>
-                    </label>
-                </div>
+                <div class="nav-customize-list" id="nav-customize-list"></div>
                 <div class="nav-customize-foot">
                     <button type="button" class="btn btn-ghost btn-small" id="nav-customize-reset" data-i18n="navCustom.reset">Restore defaults</button>
                 </div>

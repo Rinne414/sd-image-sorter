@@ -10,12 +10,11 @@
  *    bar shows ONLY that mission's tabs in pipeline order with step badges,
  *    plus a chip whose ✕ exits back to the user's own set.
  * 2. Base set (persisted, customizable): a checklist under More decides which
- *    core views stay in the bar. The Library is always shown. Dataset is out
- *    of the default set (owner 2026-07-07) — reached via the LoRA mission,
- *    its More mirror, or the function catalog. Reverse Prompt / Prompt Helper
- *    / Style Finder also stay out of the default bar (More + catalog +
- *    entry tiles) so Gallery remains the only home. Users who already saved
- *    a custom set keep it.
+ *    views stay in the bar and in what order (owner 2026-09-30: every view,
+ *    reorderable — "why limit users here?"). The Library is always shown,
+ *    first. Dataset, Reverse Prompt, Prompt Helper and Style Finder are out
+ *    of the default set (More + catalog + entry tiles reach them). Users who
+ *    already saved a custom set keep it.
  * 3. Contextual reveal: the active view's tab is always shown, so an open
  *    view never lacks its highlighted tab.
  *
@@ -33,7 +32,7 @@
     const ALL_VIEWS = ['gallery', 'reader', 'sorting', 'censor', 'similar', 'dataset', 'promptlab', 'artist', 'reverse'];
     const DEFAULT_TABS = ['gallery', 'reader', 'sorting', 'censor', 'similar'];
     const LOCKED_TABS = ['gallery'];
-    const CUSTOM_VIEWS = ['reader', 'sorting', 'censor', 'similar', 'dataset'];
+    const CUSTOM_VIEWS = ALL_VIEWS.filter((view) => !LOCKED_TABS.includes(view));
 
     // Steps shown by the chip's panel. Several steps can live in one view
     // (Pixiv: censor, order and export all happen in Censor Edit), so the bar
@@ -264,8 +263,23 @@
         chip.hidden = false;
     }
 
+    // The bar follows the saved order: chosen tabs right after the Library, in
+    // order; the rest keep their places behind them. Nodes only move when they
+    // are out of place, so a re-apply on every tab click is not a DOM churn.
+    function orderTabs(order) {
+        let anchor = document.getElementById('nav-tab-gallery');
+        if (!anchor) return;
+        order.forEach((view) => {
+            const tab = LOCKED_TABS.includes(view) ? null : document.getElementById(`nav-tab-${view}`);
+            if (!tab) return;
+            if (anchor.nextElementSibling !== tab) anchor.after(tab);
+            anchor = tab;
+        });
+    }
+
     function apply() {
         const missionKey = activeMission();
+        orderTabs(baseTabs());
         const visible = missionKey ? MISSIONS[missionKey].tabs.slice() : baseTabs();
         const active = currentView();
         if (active && !visible.includes(active)) visible.push(active);
@@ -277,14 +291,13 @@
 
         document.querySelectorAll('[data-mirror-view]').forEach((mirror) => {
             const view = mirror.dataset.mirrorView;
-            // Only mirrors for tabs THIS module tucks. A view outside ALL_VIEWS
-            // (Reverse Prompt) has its direct tab hidden by the width ladder
-            // instead, so `visible` says nothing about whether its tab is on
-            // screen — and because the active view is pushed into `visible`,
-            // hiding on that basis removed the open view's only remaining entry
-            // from the menu the user had just used to get there. That mirror's
-            // own ladder rule owns its visibility.
-            if (!ALL_VIEWS.includes(view)) return;
+            // Only mirrors whose tab this module alone decides. The width ladder
+            // can also take away the advanced tools (Reverse Prompt, Prompt
+            // Helper, Style Finder) on a narrow bar, so `visible` says nothing
+            // about whether their tab is on screen; hiding on that basis removed
+            // their only entrance. Their mirrors' CSS rules own visibility.
+            const tab = document.getElementById(`nav-tab-${view}`);
+            if (!ALL_VIEWS.includes(view) || tab?.matches('.nav-priority-tool, .nav-priority-advanced')) return;
             mirror.hidden = visible.includes(view);
         });
 
@@ -301,37 +314,117 @@
     // Customize modal (自定义标签栏)
     // ------------------------------------------------------------------
 
-    function syncCustomizeChecks() {
-        const tabs = baseTabs();
-        document.querySelectorAll('#nav-customize-modal [data-custom-view]').forEach((box) => {
-            box.checked = tabs.includes(box.dataset.customView);
-        });
+    function moveButton(view, label, direction) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `btn btn-ghost btn-small btn-icon-only nav-customize-${direction}`;
+        button.dataset.customMove = direction;
+        button.dataset.customView = view;
+        const text = direction === 'up'
+            ? t('navCustom.moveUp', 'Move up')
+            : t('navCustom.moveDown', 'Move down');
+        button.title = text;
+        button.setAttribute('aria-label', `${text}: ${label}`);
+        button.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#i-arrow-up"/></svg>';
+        return button;
+    }
+
+    // One row per view, built from its own nav tab so the icon and name always
+    // match the bar: the Library (fixed, first), the chosen views in bar
+    // order with up/down, then the views waiting under More.
+    function customizeRow(view, chosen, index) {
+        const tab = document.getElementById(`nav-tab-${view}`);
+        const labelKey = tab?.querySelector('.tab-text')?.dataset.i18n || `nav.${view}`;
+        const label = t(labelKey, view);
+        const locked = LOCKED_TABS.includes(view);
+        const on = locked || chosen.includes(view);
+
+        const row = document.createElement('div');
+        row.className = 'nav-customize-row';
+        row.classList.toggle('is-on', on);
+        row.classList.toggle('is-locked', locked);
+        row.dataset.customRow = view;
+
+        const pick = document.createElement('label');
+        pick.className = 'nav-customize-pick';
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.dataset.customView = view;
+        box.checked = on;
+        box.disabled = locked;
+        const icon = document.createElement('span');
+        icon.className = 'row-icon';
+        icon.setAttribute('aria-hidden', 'true');
+        const iconHref = tab?.querySelector('use')?.getAttribute('href') || '#i-image';
+        icon.innerHTML = `<svg class="icon" aria-hidden="true"><use href="${iconHref}"/></svg>`;
+        const name = document.createElement('span');
+        name.textContent = label;
+        pick.append(box, icon, name);
+        row.appendChild(pick);
+
+        const side = document.createElement('span');
+        side.className = 'nav-customize-move';
+        if (locked) {
+            side.classList.add('nav-customize-note');
+            side.textContent = t('navCustom.galleryFixed', 'Always first');
+        } else {
+            const up = moveButton(view, label, 'up');
+            const down = moveButton(view, label, 'down');
+            up.disabled = !on || index === 0;
+            down.disabled = !on || index === chosen.length - 1;
+            side.append(up, down);
+        }
+        row.appendChild(side);
+        return row;
+    }
+
+    function renderCustomize() {
+        const list = document.getElementById('nav-customize-list');
+        if (!list) return;
+        const chosen = baseTabs().filter((view) => !LOCKED_TABS.includes(view));
+        const rest = CUSTOM_VIEWS.filter((view) => !chosen.includes(view));
+        list.replaceChildren(
+            ...LOCKED_TABS.map((view) => customizeRow(view, chosen, -1)),
+            ...chosen.map((view, index) => customizeRow(view, chosen, index)),
+            ...rest.map((view) => customizeRow(view, chosen, -1)),
+        );
+    }
+
+    function saveCustomize(chosen, focusSelector) {
+        setBaseTabs([...LOCKED_TABS, ...chosen]);
+        renderCustomize();
+        if (focusSelector) document.querySelector(`#nav-customize-list ${focusSelector}`)?.focus();
+    }
+
+    function toggleView(view, on) {
+        const chosen = baseTabs().filter((item) => !LOCKED_TABS.includes(item) && item !== view);
+        if (on) chosen.push(view);
+        saveCustomize(chosen, `input[data-custom-view="${view}"]`);
+    }
+
+    function moveView(view, direction) {
+        const chosen = baseTabs().filter((item) => !LOCKED_TABS.includes(item));
+        const from = chosen.indexOf(view);
+        const to = from + (direction === 'up' ? -1 : 1);
+        if (from === -1 || to < 0 || to >= chosen.length) return;
+        [chosen[from], chosen[to]] = [chosen[to], chosen[from]];
+        // Keep the keyboard on the arrow that was pressed, or on the other one
+        // once the row reaches an end and this arrow turns off.
+        const other = direction === 'up' ? 'down' : 'up';
+        const atEnd = to === 0 || to === chosen.length - 1;
+        saveCustomize(chosen, `[data-custom-view="${view}"][data-custom-move="${atEnd ? other : direction}"]`);
     }
 
     function openCustomize() {
         const modal = document.getElementById('nav-customize-modal');
         if (!modal) return;
-        syncCustomizeChecks();
+        renderCustomize();
         modal.classList.add('visible');
     }
 
     function closeCustomize() {
         const modal = document.getElementById('nav-customize-modal');
         if (modal) modal.classList.remove('visible');
-    }
-
-    function collectCustomizeSelection() {
-        const picked = LOCKED_TABS.slice();
-        CUSTOM_VIEWS.forEach((view) => {
-            const box = document.querySelector(`#nav-customize-modal [data-custom-view="${view}"]`);
-            if (box && box.checked) picked.push(view);
-        });
-        // Prompt Helper / Style Finder are not in the checklist: carry their
-        // current membership over so saving never silently drops them.
-        baseTabs().forEach((view) => {
-            if (!picked.includes(view) && !CUSTOM_VIEWS.includes(view)) picked.push(view);
-        });
-        return picked;
     }
 
     function wireCustomize() {
@@ -344,14 +437,22 @@
         }
         const modal = document.getElementById('nav-customize-modal');
         if (!modal) return;
-        modal.querySelectorAll('[data-custom-view]').forEach((box) => {
-            box.addEventListener('change', () => setBaseTabs(collectCustomizeSelection()));
-        });
+        const list = document.getElementById('nav-customize-list');
+        if (list) {
+            list.addEventListener('change', (event) => {
+                const box = event.target.closest('input[data-custom-view]');
+                if (box && !box.disabled) toggleView(box.dataset.customView, box.checked);
+            });
+            list.addEventListener('click', (event) => {
+                const button = event.target.closest('button[data-custom-move]');
+                if (button && !button.disabled) moveView(button.dataset.customView, button.dataset.customMove);
+            });
+        }
         const reset = document.getElementById('nav-customize-reset');
         if (reset) {
             reset.addEventListener('click', () => {
                 setBaseTabs(DEFAULT_TABS.slice());
-                syncCustomizeChecks();
+                renderCustomize();
             });
         }
         const close = document.getElementById('nav-customize-close');
@@ -394,11 +495,13 @@
         window.addEventListener('languageChanged', () => {
             renderChip(activeMission());
             renderSteps();
+            renderCustomize();
         });
 
         wireCustomize();
         wireSteps();
         apply();
+        renderCustomize();
     }
 
     if (document.readyState === 'loading') {

@@ -10284,6 +10284,13 @@ html.lang-zh #view-censor .queue-action-btn span {
     display: none !important;
 }
 
+/* The ladder's first rung: Reverse Prompt leaves a bar that does not fit
+   (its More mirror shows again, reverse-prompt.css). The rung had no rule
+   while Reverse Prompt could not be added to the bar. */
+.nav-bar.nav-priority-tools-overflow .nav-priority-tool {
+    display: none !important;
+}
+
 .nav-tools-toggle {
     display: flex;
     align-items: center;
@@ -12405,11 +12412,10 @@ html .nav-bar.nav-measuring * {
 .nav-customize-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 9px 12px;
+    gap: 6px;
+    padding-right: 8px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: var(--r-card, 10px);
-    cursor: pointer;
     font-size: 13px;
     transition: border-color 120ms ease, background 120ms ease;
 }
@@ -12419,12 +12425,66 @@ html .nav-bar.nav-measuring * {
     background: rgba(var(--blue-rgb), 0.06);
 }
 
+/* Views waiting under More read quieter than the ones in the bar. */
+.nav-customize-row:not(.is-on) {
+    color: var(--text-muted);
+}
+
+.nav-customize-pick {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 9px 12px;
+    cursor: pointer;
+}
+
+.nav-customize-row.is-locked .nav-customize-pick {
+    cursor: default;
+}
+
 .nav-customize-row input[type='checkbox'] {
     accent-color: var(--accent-primary);
 }
 
 .nav-customize-row .row-icon {
     font-size: 14px;
+}
+
+.nav-customize-move {
+    display: inline-flex;
+    flex: 0 0 auto;
+    gap: 2px;
+}
+
+.nav-customize-move .btn-icon-only {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    min-height: 28px;
+    padding: 0;
+    justify-content: center;
+}
+
+.nav-customize-move .btn-icon-only:disabled {
+    opacity: 0.3;
+}
+
+/* A view that is not in the bar has no place to move; keep the space so the
+   rows stay aligned. */
+.nav-customize-row:not(.is-on) .nav-customize-move {
+    visibility: hidden;
+}
+
+.nav-customize-down .icon {
+    transform: rotate(180deg);
+}
+
+.nav-customize-note {
+    color: var(--text-muted);
+    font-size: 12px;
+    padding-right: 4px;
 }
 
 .nav-customize-foot {

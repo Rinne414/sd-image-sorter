@@ -96,6 +96,23 @@ document.addEventListener('DOMContentLoaded', () => {
         updateNavigationOverflowState();
         syncGeneratorRailOverflow();
     });
+    // The tabs' free width also changes without a window resize: a view adds
+    // header buttons (the tabs box shrinks) or the library chip inside it gets
+    // its count (the box keeps its size, its content grows). The last measure
+    // then left a tab clipped under the actions with More off screen.
+    // Re-measure when either changes size, a frame later so the ladder's own
+    // class changes do not re-enter the observer in the same frame.
+    const navTabsBox = document.querySelector('.nav-tabs');
+    if (navTabsBox && 'ResizeObserver' in window) {
+        let navMeasureFrame = 0;
+        const navObserver = new ResizeObserver(() => {
+            cancelAnimationFrame(navMeasureFrame);
+            navMeasureFrame = requestAnimationFrame(() => updateNavigationOverflowState());
+        });
+        [navTabsBox, document.getElementById('nav-library-chip'), document.getElementById('nav-mission-chip')]
+            .filter(Boolean)
+            .forEach((el) => navObserver.observe(el));
+    }
     updateNavigationOverflowState();
     syncGeneratorRailOverflow();
     window.addEventListener('load', updateNavigationOverflowState, { once: true });
