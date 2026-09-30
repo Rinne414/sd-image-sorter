@@ -86,3 +86,31 @@ test('the preview action buttons share one row and no label is cut off at 1366x7
   expect(layout.cut).toEqual([])
   await expect(page.locator('#btn-edit-metadata')).toHaveAttribute('title', /\S/)
 })
+
+test('the tag list toggle keeps "Show Less" while open, through a translation pass', async ({ page }) => {
+  // It kept its original data-i18n key, so the next pass turned "Show Less"
+  // back into "Show More" while the long list was open.
+  await page.route(/\/api\/images\/\d+$/, async (route) => {
+    const response = await route.fetch()
+    const body = await response.json()
+    body.tags = Array.from({ length: 60 }, (_, i) => ({ tag: `tag_${i}`, confidence: 0.9 - i / 100, category: 'general' }))
+    await route.fulfill({ response, json: body })
+  })
+  await page.addInitScript(() => {
+    localStorage.setItem('sd-image-sorter-lang', 'en')
+    localStorage.setItem('sd-sorter-entry-skip-session', '1')
+  })
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible({ timeout: 20_000 })
+  await page.locator('#gallery-grid .gallery-item').first().click()
+  const toggle = page.locator('#btn-toggle-all-tags')
+  await expect(toggle).toBeVisible({ timeout: 10_000 })
+  await expect(toggle).toHaveText('Show More')
+
+  await toggle.click()
+  await reapplyTranslations(page)
+  await expect(toggle).toHaveText('Show Less')
+  await toggle.click()
+  await reapplyTranslations(page)
+  await expect(toggle).toHaveText('Show More')
+})

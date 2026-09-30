@@ -641,9 +641,9 @@
         if (cancelBtn) {
             cancelBtn.hidden = !busy;
             cancelBtn.disabled = !!options.cancelling;
-            cancelBtn.textContent = options.cancelling
-                ? this._t('dataset.exportCancelling', 'Cancelling...')
-                : this._t('common.cancel', 'Cancel');
+            const cancelKey = options.cancelling ? 'dataset.exportCancelling' : 'common.cancel';
+            cancelBtn.dataset.i18n = cancelKey;
+            cancelBtn.textContent = this._t(cancelKey, options.cancelling ? 'Cancelling...' : 'Cancel');
         }
         if (!busy) this._updateExportEnabled();
     };
@@ -681,9 +681,9 @@
             const cancelling = this._exportCancelRequested === true;
             cancelBtn.hidden = !['starting', 'queued', 'running'].includes(view.status) && !cancelling;
             cancelBtn.disabled = cancelling;
-            cancelBtn.textContent = cancelling
-                ? this._t('dataset.exportCancelling', 'Cancelling...')
-                : this._t('common.cancel', 'Cancel');
+            const cancelKey = cancelling ? 'dataset.exportCancelling' : 'common.cancel';
+            cancelBtn.dataset.i18n = cancelKey;
+            cancelBtn.textContent = this._t(cancelKey, cancelling ? 'Cancelling...' : 'Cancel');
         }
     };
 

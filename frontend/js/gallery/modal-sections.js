@@ -638,9 +638,11 @@ Object.assign(window.Gallery, {
         const toggleBtn = document.querySelector('#btn-toggle-all-tags');
         if (toggleBtn) {
             toggleBtn.style.display = otherTags.length > 40 ? '' : 'none';
-            toggleBtn.textContent = this.showAllTags
-                ? this._t('modal.showLess', null, 'Show Less')
-                : this._t('modal.showMore', null, 'Show More');
+            // The key moves with the words, or the next translation pass turns
+            // "Show Less" back into "Show More" while the list is open.
+            const toggleKey = this.showAllTags ? 'modal.showLess' : 'modal.showMore';
+            toggleBtn.dataset.i18n = toggleKey;
+            toggleBtn.textContent = this._t(toggleKey, null, this.showAllTags ? 'Show Less' : 'Show More');
         }
     },
 

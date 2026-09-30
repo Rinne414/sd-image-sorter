@@ -244,7 +244,7 @@
             this._setButton('#btn-autosep-filters', 'gallery.editFilters', 'i-search', 'gallery.editFilters');
             this._setText('#autosep-scope-note', 'autosep.scopeNote');
             this._setText('#view-autosep .filter-section:nth-of-type(2) h4', 'autosep.destination');
-            this._setButton('#btn-browse-destination', 'common.browse', null, 'common.browse');
+            this._setButton('#btn-browse-destination', 'scan.browse', null, 'common.browse');
             this._setPlaceholder('#autosep-destination', 'modal.folderPath');
             this._setText('#view-autosep .preview-section h4', 'autosep.preview');
             this._setText('#autosep-preview .stat-label', 'common.images', 'images');

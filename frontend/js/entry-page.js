@@ -448,6 +448,7 @@
 
         if (sortCount) sortCount.textContent = resumable ? String(session.remaining ?? '') : '';
         if (sortSub) {
+            sortSub.dataset.i18nLocked = '1';
             sortSub.textContent = resumable
                 ? t('entry.tileSortSub', {}, 'Left from last time · pick it back up')
                 : t('entry.tileSortIdle', {}, 'Sort a batch with WASD');
@@ -620,6 +621,7 @@
             if (badge) badge.hidden = !coreMissing;
             const sub = el('entry-sub-models');
             if (sub) {
+                sub.dataset.i18nLocked = '1';
                 sub.textContent = coreMissing
                     ? t('entry.tileModelsMissing', {}, 'The core tagger isn\'t installed. Download it here first')
                     : t('entry.tileModelsSub', {}, 'Download & manage the AI models');

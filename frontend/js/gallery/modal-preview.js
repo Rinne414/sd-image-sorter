@@ -525,7 +525,6 @@ ${String(value)}`)
         this._applyModalPromptView(this._buildPromptView(image, parsedData, 'original'));
         this._applyModalSectionStates();
         $('#modal-loading-state').style.display = 'none';
-        $('#btn-toggle-all-tags').textContent = this._t('modal.showMore', null, 'Show More');
         this._restoreModalInfoScrollState(this._pendingModalInfoScrollState);
 
         // Extract and display color distribution
