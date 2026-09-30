@@ -5267,6 +5267,7 @@ window.I18nLang_zhCN = {
     'stylemap.indexDoneErrors': '完成：新增 {n} 张，{errors} 张失败',
     'stylemap.indexBusy': '已有画风索引在进行。',
     'stylemap.indexNothing': '筛选中的图都已经有画风数据。',
+    'stylemap.indexNeedsLocalPath': '画风识别页选了本机模型但没有填路径，先去填好再建立画风索引。',
     'stylemap.hoverHint': '把鼠标移到点上预览那张图',
     'stylemap.members': '代表 {n} 张几乎相同的图',
     'stylemap.helpRotate': '拖动旋转 · 滚轮缩放 · 右键平移',

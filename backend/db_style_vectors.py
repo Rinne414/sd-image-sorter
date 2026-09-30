@@ -198,3 +198,33 @@ def style_vector_counts(
         "stale": int(row[3] or 0),
         "other_version": int(row[4] or 0),
     }
+
+
+def vector_signature(
+    cursor: sqlite3.Cursor, *, space: str, model_version: str
+) -> tuple:
+    """A value that changes whenever a vector of ``space`` is added, removed or
+    rewritten (the style map's cache key reads it).
+
+    Count + sum of ids catches adds/removes/swaps; MAX(updated_at) (written by
+    the upsert with millisecond precision) catches a rewrite of an existing
+    row, even inside the same second. clip has no timestamp: its signature is
+    count + sum + max id plus the source stat sums, like the Similarity cache's
+    own (a recomputed embedding follows a rescan that saw new pixels, which
+    rewrites source_mtime_ns / source_size; the clear in between also blanks
+    content_fingerprint).
+    """
+    if space == "clip":
+        row = cursor.execute(
+            "SELECT COUNT(*), SUM(id), MAX(id), "
+            "SUM(COALESCE(source_mtime_ns, 0)), SUM(COALESCE(source_size, 0)), "
+            "SUM(content_fingerprint IS NULL) "
+            "FROM images WHERE embedding IS NOT NULL"
+        ).fetchone()
+    else:
+        row = cursor.execute(
+            "SELECT COUNT(*), SUM(image_id), MAX(updated_at) FROM image_style_vectors "
+            "WHERE space = ? AND model_version = ?",
+            ("kaloscope", str(model_version)),
+        ).fetchone()
+    return tuple(int(v) if isinstance(v, (int, float)) else str(v or "") for v in row)

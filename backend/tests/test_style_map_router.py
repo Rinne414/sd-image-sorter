@@ -250,6 +250,167 @@ def test_stats_pass_the_local_model_path_to_the_service(
     assert fake_service.calls[-1] == ("stats", "kaloscope", None)
 
 
+class FakeStyleMapService:
+    """Records the model path every map route hands the service."""
+
+    def __init__(self):
+        self.calls = []
+
+    def points_json(
+        self, space, selection_token=None, *, refresh=False, model_path=None
+    ):
+        self.calls.append(("points", space, model_path))
+        return b'{"status":"ok","points":[]}'
+
+    def layout_status(self, space, selection_token=None, *, model_path=None):
+        self.calls.append(("layout", space, model_path))
+        return {"space": space, "method": "pca", "umap": {"status": "not_started"}}
+
+    def regions_json(
+        self, space, selection_token=None, *, refresh=False, model_path=None
+    ):
+        self.calls.append(("regions", space, model_path))
+        return b'{"status":"not_started","regions":[]}'
+
+
+@pytest.fixture
+def fake_map_service(test_client):
+    from routers import style_map as style_map_router
+
+    service = FakeStyleMapService()
+    style_map_router.set_style_map_service(service)
+    yield service
+    style_map_router.set_style_map_service(None)
+
+
+def test_map_routes_pass_the_users_model_settings(
+    test_client, fake_map_service, tmp_path
+):
+    """points, layout-status and regions read the Style Finder's model
+    settings, so a local-weights user sees the map of THEIR vectors."""
+    local = tmp_path / "weights.pth"
+    local.write_bytes(b"w")
+    params = {"space": "kaloscope", "model_source": "local", "model_path": str(local)}
+    for route in ("points", "layout-status", "regions"):
+        response = test_client.get(f"/api/style-map/{route}", params=params)
+        assert response.status_code == 200, (route, response.text)
+    assert [call[2] for call in fake_map_service.calls] == [str(local.resolve())] * 3
+    fake_map_service.calls.clear()
+    for route in ("points", "layout-status", "regions"):
+        assert (
+            test_client.get(
+                f"/api/style-map/{route}", params={"space": "kaloscope"}
+            ).status_code
+            == 200
+        )
+    assert [call[2] for call in fake_map_service.calls] == [None] * 3
+    missing = {
+        "space": "kaloscope",
+        "model_source": "local",
+        "model_path": str(tmp_path / "nope.pth"),
+    }
+    for route in ("points", "layout-status", "regions"):
+        assert (
+            test_client.get(f"/api/style-map/{route}", params=missing).status_code
+            == 400
+        )
+
+
+def _record_filesystem_access(monkeypatch):
+    """Every path probe the model settings validator (routers.artists, shared
+    by every style-map route) makes lands in the returned list. (pydantic
+    turns an AssertionError raised inside a validator into a 400, so a
+    raising guard alone would not prove anything.)"""
+    from routers import artists as artists_router
+
+    touched = []
+
+    class _RecordingPath(Path):
+        def _touched(self, *_args, **_kwargs):
+            touched.append(str(self))
+            raise RuntimeError("model_path must not touch the filesystem")
+
+        resolve = is_file = stat = exists = _touched
+
+    monkeypatch.setattr(artists_router, "Path", _RecordingPath)
+    return touched
+
+
+MAP_ROUTES = ("points", "layout-status", "regions")
+
+
+@pytest.mark.parametrize("route", MAP_ROUTES + ("vectors/stats",))
+def test_routes_refuse_non_checkpoint_paths_before_touching_the_filesystem(
+    test_client, fake_service, fake_map_service, monkeypatch, tmp_path, route
+):
+    """A local path that is not a .pth/.pt/.onnx checkpoint is refused by
+    its name alone: no existence or content check, so the routes are no
+    oracle for arbitrary files."""
+    secret = tmp_path / "notes.txt"
+    secret.write_text("x", encoding="utf-8")
+    touched = _record_filesystem_access(monkeypatch)
+    response = test_client.get(
+        f"/api/style-map/{route}",
+        params={"space": "kaloscope", "model_source": "local", "model_path": str(secret)},
+    )
+    assert response.status_code == 400, response.text
+    assert ".onnx" in response.text  # the message names the accepted formats
+    assert touched == []
+    assert fake_service.calls == [] and fake_map_service.calls == []
+
+
+@pytest.mark.parametrize("route", MAP_ROUTES + ("vectors/stats",))
+@pytest.mark.parametrize("source", ["huggingface", "modelscope"])
+def test_routes_ignore_the_model_path_unless_the_source_is_local(
+    test_client, fake_service, fake_map_service, monkeypatch, route, source
+):
+    """Hugging Face / ModelScope settings carry no path; one sent anyway is
+    dropped unread."""
+    touched = _record_filesystem_access(monkeypatch)
+    response = test_client.get(
+        f"/api/style-map/{route}",
+        params={"space": "kaloscope", "model_source": source, "model_path": "C:/secret/file.pth"},
+    )
+    assert response.status_code == 200, response.text
+    assert touched == []
+    calls = fake_service.calls + fake_map_service.calls
+    assert [call[2] for call in calls] == [None]
+
+
+@pytest.mark.parametrize("route", MAP_ROUTES)
+def test_clip_space_needs_no_kaloscope_weights(
+    test_client, fake_map_service, tmp_path, route
+):
+    """The CLIP map reads images.embedding, never Kaloscope vectors: a local
+    checkpoint that was moved away must not take the CLIP map down."""
+    response = test_client.get(
+        f"/api/style-map/{route}",
+        params={
+            "space": "clip",
+            "model_source": "local",
+            "model_path": str(tmp_path / "gone.pth"),
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert [call[1:] for call in fake_map_service.calls] == [("clip", None)]
+
+
+def test_start_refuses_non_checkpoint_paths_before_touching_the_filesystem(
+    test_client, fake_service, monkeypatch, tmp_path
+):
+    secret = tmp_path / "notes.txt"
+    secret.write_text("x", encoding="utf-8")
+    touched = _record_filesystem_access(monkeypatch)
+    response = test_client.post(
+        "/api/style-map/vectors/start",
+        json={"model_source": "local", "model_path": str(secret)},
+    )
+    assert response.status_code == 400, response.text
+    assert ".onnx" in response.text
+    assert touched == []
+    assert fake_service.calls == []
+
+
 def test_stats_rejects_unknown_space(test_client, fake_service):
     response = test_client.get("/api/style-map/vectors/stats", params={"space": "clip"})
     assert response.status_code == 400

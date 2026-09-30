@@ -2686,6 +2686,42 @@ class TestArtistsRouterValidation:
 
         assert response.status_code == 400
 
+    @pytest.mark.parametrize("source", ["local", "huggingface"])
+    def test_identify_batch_refuses_non_checkpoint_paths_before_touching_the_filesystem(
+        self, test_client, monkeypatch, tmp_path, source
+    ):
+        """Only .pth/.pt/.onnx (what _load_local_model opens) pass, judged by
+        the name alone: an existing .txt is refused without any stat, so the
+        endpoint is no existence oracle for arbitrary files."""
+        from pathlib import Path
+
+        from routers import artists as artists_router
+
+        secret = tmp_path / "secret.txt"
+        secret.write_text("x", encoding="utf-8")
+
+        # pydantic turns an AssertionError raised inside a validator into a
+        # 400, so the guard records every touch instead of only raising.
+        touched = []
+
+        class _RecordingPath(Path):
+            def _touched(self, *_args, **_kwargs):
+                touched.append(str(self))
+                raise RuntimeError("model_path must not touch the filesystem")
+
+            resolve = is_file = stat = exists = _touched
+
+        monkeypatch.setattr(artists_router, "Path", _RecordingPath)
+
+        response = test_client.post(
+            "/api/artists/identify-batch",
+            json={"image_ids": [1], "model_source": source, "model_path": str(secret)},
+        )
+
+        assert response.status_code == 400, response.text
+        assert ".onnx" in response.text
+        assert touched == []
+
     def test_identify_returns_503_when_model_is_unavailable(self, test_client, monkeypatch, tmp_path):
         from routers import artists as artists_router
         from PIL import Image

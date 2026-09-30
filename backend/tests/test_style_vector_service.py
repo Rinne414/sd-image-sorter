@@ -954,7 +954,6 @@ class TestBatching:
         a file that changed on disk is hashed again."""
         import os
 
-
         ids = _make_images(test_db, tmp_path, 3)
         hashed = []
         from services import style_vector_prepare as prepare_mod
@@ -1021,6 +1020,74 @@ class TestBatching:
         mine = service.get_stats("kaloscope", model_path=str(local))
         assert (mine["vectors"], mine["other_version"], mine["pending"]) == (2, 0, 0)
         assert mine["model_version"] == local_version
+
+
+class TestModelSettings:
+    """S1c: the index runs the model the Style Finder page is set to, so a
+    local-weights user's predictions are never overwritten by the official
+    model's answers (and the vectors are stamped with that model's version)."""
+
+    def test_start_builds_the_identifier_from_the_users_settings(
+        self, test_db, tmp_path
+    ):
+        from services.style_vector_service import StyleVectorService
+
+        ids = _make_images(test_db, tmp_path, 2)
+        local = tmp_path / "my-kaloscope.pth"
+        local.write_bytes(b"local weights")
+        seen = []
+        identifier = FakeIdentifier()
+
+        def getter(**kwargs):
+            seen.append(kwargs)
+            return identifier
+
+        service = StyleVectorService(identifier_getter=getter)
+        tasks = BackgroundTasks()
+        service.start_extraction(
+            tasks,
+            space="kaloscope",
+            model_source="local",
+            model_path=str(local),
+            use_gpu=False,
+        )
+        _run_scheduled(tasks)
+        assert seen == [
+            {
+                "model_path": str(local),
+                "model_source": "local",
+                "threshold": ai.ARTIST_THRESHOLD_DEFAULT,
+                "use_gpu": False,
+            }
+        ]
+        local_version = ai.kaloscope_style_vector_model_version(str(local))
+        rows = _rows(test_db)
+        assert set(rows) == set(ids)
+        assert {row["model_version"] for row in rows.values()} == {local_version}
+        assert set(_prediction_rows(test_db)) == set(ids)
+
+    def test_default_settings_build_the_official_identifier(self, test_db, tmp_path):
+        from services.style_vector_service import StyleVectorService
+
+        _make_images(test_db, tmp_path, 1)
+        seen = []
+        service = StyleVectorService(
+            identifier_getter=lambda **kw: seen.append(kw) or FakeIdentifier()
+        )
+        tasks = BackgroundTasks()
+        service.start_extraction(tasks, space="kaloscope")
+        _run_scheduled(tasks)
+        assert seen == [
+            {
+                "model_path": None,
+                "model_source": "huggingface",
+                "threshold": ai.ARTIST_THRESHOLD_DEFAULT,
+                "use_gpu": None,
+            }
+        ]
+        assert {row["model_version"] for row in _rows(test_db).values()} == {
+            CANONICAL_VERSION
+        }
 
 
 class TestModelRefusals:

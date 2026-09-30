@@ -93,7 +93,6 @@ _GC_EVERY_IMAGES = 64
 # ~25 MB, so 16 of them ~400 MB).
 
 
-
 def _weights_path_load_would_use(model_path: Optional[str]) -> Optional[str]:
     """The local file ``ArtistIdentifier.load()`` will open, or None for the official weights.
 
@@ -105,6 +104,11 @@ def _weights_path_load_would_use(model_path: Optional[str]) -> Optional[str]:
         return None
     candidate = os.path.expanduser(str(model_path).strip())
     return candidate if candidate and os.path.isfile(candidate) else None
+
+
+def style_vector_model_version(model_path: Optional[str]) -> str:
+    """The vector version the user's model settings name (the map reads it too)."""
+    return _model_version_for(model_path)
 
 
 def _model_version_for(model_path: Optional[str]) -> str:

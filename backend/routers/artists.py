@@ -42,6 +42,12 @@ _batch_start_lock = threading.Lock()
 
 # ============== Request/Response Models ==============
 
+# What ArtistIdentifier._load_local_model can open. Judged by the name alone,
+# before any filesystem access, so the validators are no existence oracle for
+# arbitrary files (and load() opens model_path whatever model_source says).
+LOCAL_ARTIST_MODEL_SUFFIXES = frozenset({".pth", ".pt", ".onnx"})
+
+
 class ArtistModelConfig(BaseModel):
     model_source: str = Field("huggingface", pattern="^(huggingface|modelscope|local)$")
     model_path: Optional[str] = None
@@ -59,6 +65,10 @@ class ArtistModelConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_local_model_path(self):
+        if self.model_path:
+            suffix = os.path.splitext(self.model_path)[1].lower()
+            if suffix not in LOCAL_ARTIST_MODEL_SUFFIXES:
+                raise ValueError("Local model file must be a .pth, .pt or .onnx checkpoint")
         if self.model_source == "local":
             if not self.model_path:
                 raise ValueError("Local model path is required when model_source is 'local'")

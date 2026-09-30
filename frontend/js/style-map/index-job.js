@@ -20,9 +20,10 @@ function toast(message, level) {
 }
 
 export class IndexJob {
-    constructor({ getSpace, getToken, onChange, onDone }) {
+    constructor({ getSpace, getToken, getModelSettings, onChange, onDone }) {
         this.getSpace = getSpace;
         this.getToken = getToken;
+        this.getModelSettings = typeof getModelSettings === 'function' ? getModelSettings : () => ({});
         this.onChange = typeof onChange === 'function' ? onChange : () => {};
         this.onDone = typeof onDone === 'function' ? onDone : () => {};
         this.state = {
@@ -61,7 +62,17 @@ export class IndexJob {
             toast(t('stylemap.indexBusy', 'A style index job is already running.'), 'info');
             return;
         }
-        const body = { space: this.getSpace() };
+        // The Style Finder's model settings ride along: the index runs the
+        // weights the user identifies with, never the official ones over them.
+        // "Local" with no file named is refused there too: nothing is sent.
+        let settings;
+        try {
+            settings = this.getModelSettings();
+        } catch (_error) {
+            toast(t('stylemap.indexNeedsLocalPath', 'The Style Finder page is set to a local model but names no file. Fill in the path there, then build the style index.'), 'error');
+            return;
+        }
+        const body = { space: this.getSpace(), ...settings };
         const token = this.getToken();
         if (token) body.selection_token = token;
         // The page is open when the button is clicked; leaving it while the

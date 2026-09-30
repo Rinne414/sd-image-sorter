@@ -38,6 +38,42 @@ get_style_map_service = _style_map_service_provider.get
 set_style_map_service = _style_map_service_provider.set
 
 
+def _model_path_from_query(
+    space: str = Query("kaloscope", pattern=_MAP_SPACE_PATTERN),
+    model_source: str = Query(
+        "huggingface",
+        pattern="^(huggingface|modelscope|local)$",
+        description="The user's Style Finder model setting",
+    ),
+    model_path: Optional[str] = Query(
+        None,
+        max_length=4096,
+        description="Local checkpoint (.pth/.pt/.onnx); required and must exist when "
+        "model_source is local, ignored otherwise",
+    ),
+) -> Optional[str]:
+    """The Style Finder model settings as query parameters (the page shares
+    them with the Style Finder), validated the way its own requests are: a
+    local checkpoint names its own vector version, so every map route reads
+    the vectors of the weights the user actually runs.
+
+    Only the kaloscope space has weights to name (the CLIP map reads
+    ``images.embedding`` and must not go down with a moved checkpoint), and
+    only a local source carries a path: anything else is dropped unread, so
+    the routes are no existence oracle for arbitrary files."""
+    if space != "kaloscope" or model_source != "local":
+        return None
+    try:
+        config = ArtistModelConfig(model_source="local", model_path=model_path)
+    except PydanticValidationError as exc:
+        raise ValidationError(
+            "; ".join(str(err.get("msg", "")) for err in exc.errors())
+            or "Invalid model settings",
+            field="model_path",
+        ) from exc
+    return config.model_path
+
+
 class StartVectorsRequest(ArtistModelConfig):
     """Model selection is the Style Finder contract (source, local path, use_gpu)."""
 
@@ -164,21 +200,10 @@ async def cancel_vectors(
 )
 def vectors_stats(
     space: str = Query("kaloscope", pattern=_SPACE_PATTERN),
-    model_source: str = Query(
-        "huggingface", pattern="^(huggingface|modelscope|local)$"
-    ),
-    model_path: Optional[str] = Query(None, max_length=4096),
+    model_path: Optional[str] = Depends(_model_path_from_query),
     service: StyleVectorService = Depends(get_style_vector_service),
 ):
-    try:
-        config = ArtistModelConfig(model_source=model_source, model_path=model_path)
-    except PydanticValidationError as exc:
-        raise ValidationError(
-            "; ".join(str(err.get("msg", "")) for err in exc.errors())
-            or "Invalid model settings",
-            field="model_path",
-        ) from exc
-    return service.get_stats(space, model_path=config.model_path)
+    return service.get_stats(space, model_path=model_path)
 
 
 @router.get(
@@ -198,11 +223,12 @@ def style_map_points(
     refresh: bool = Query(
         False, description="Recompute even when a cached layout exists"
     ),
+    model_path: Optional[str] = Depends(_model_path_from_query),
     service: StyleMapService = Depends(get_style_map_service),
 ):
     # The service caches the serialised payload; hand the bytes through.
     payload = service.points_json(
-        space, selection_token=selection_token, refresh=refresh
+        space, selection_token=selection_token, refresh=refresh, model_path=model_path
     )
     return Response(content=payload, media_type="application/json")
 
@@ -220,9 +246,12 @@ def style_map_points(
 def style_map_layout_status(
     space: str = Query("kaloscope", pattern=_MAP_SPACE_PATTERN),
     selection_token: Optional[str] = Query(None, max_length=65536),
+    model_path: Optional[str] = Depends(_model_path_from_query),
     service: StyleMapService = Depends(get_style_map_service),
 ):
-    return service.layout_status(space, selection_token=selection_token)
+    return service.layout_status(
+        space, selection_token=selection_token, model_path=model_path
+    )
 
 
 @router.get(
@@ -241,9 +270,10 @@ def style_map_regions(
     space: str = Query("kaloscope", pattern=_MAP_SPACE_PATTERN),
     selection_token: Optional[str] = Query(None, max_length=65536),
     refresh: bool = Query(False, description="Recompute even when cached"),
+    model_path: Optional[str] = Depends(_model_path_from_query),
     service: StyleMapService = Depends(get_style_map_service),
 ):
     payload = service.regions_json(
-        space, selection_token=selection_token, refresh=refresh
+        space, selection_token=selection_token, refresh=refresh, model_path=model_path
     )
     return Response(content=payload, media_type="application/json")

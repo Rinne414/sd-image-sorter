@@ -46,9 +46,42 @@ export function createStyleMap() {
     const root = () => document.getElementById('view-stylemap');
     const isViewActive = () => Boolean(root()?.classList.contains('active'));
 
+    const OFFICIAL_MODEL = { model_source: 'huggingface', model_path: null, use_gpu: null };
+
+    /**
+     * The Style Finder page's model settings (source, local checkpoint, GPU),
+     * read from that page's controls exactly as it reads them for its own
+     * requests (ArtistIdent is a static script, always present), so the index
+     * runs the same weights as identification and the map shows the vectors
+     * of those weights. Throws like the Finder does when the source is local
+     * but no file is named: the index job must not start on the official
+     * weights then, or it overwrites the user's own identification results.
+     */
+    function modelSettings() {
+        const finder = window.ArtistIdent;
+        if (!finder || typeof finder._getIdentifyModelConfig !== 'function') return { ...OFFICIAL_MODEL };
+        return finder._getIdentifyModelConfig();
+    }
+
+    /** Reading is harmless: a half-filled local setting shows the official map. */
+    function readModelSettings() {
+        try {
+            return modelSettings();
+        } catch (_error) {
+            return { ...OFFICIAL_MODEL };
+        }
+    }
+
     function query(extra = {}) {
         const params = new URLSearchParams({ space: state.space });
         if (state.token) params.set('selection_token', state.token);
+        // Only the Kaloscope space has weights to name; the CLIP map reads
+        // the Similarity index and must stay up when a local file is gone.
+        if (state.space === 'kaloscope') {
+            const settings = readModelSettings();
+            params.set('model_source', settings.model_source);
+            if (settings.model_path) params.set('model_path', settings.model_path);
+        }
         for (const [key, value] of Object.entries(extra)) params.set(key, String(value));
         return params.toString();
     }
@@ -237,6 +270,7 @@ export function createStyleMap() {
         state.job = new IndexJob({
             getSpace: () => state.space,
             getToken: () => state.token,
+            getModelSettings: modelSettings,
             onChange: (job) => {
                 state.panel.renderJob(job);
                 if (state.points) state.panel.renderEmpty(state.points, state.space, job.isRunning());

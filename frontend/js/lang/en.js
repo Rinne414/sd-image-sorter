@@ -5270,6 +5270,7 @@ window.I18nLang_en = {
     'stylemap.indexDoneErrors': 'Done: {n} pictures added, {errors} failed',
     'stylemap.indexBusy': 'A style index job is already running.',
     'stylemap.indexNothing': 'Every picture in the filter already has style data.',
+    'stylemap.indexNeedsLocalPath': 'The Style Finder page is set to a local model but names no file. Fill in the path there, then build the style index.',
     'stylemap.hoverHint': 'Point at a dot to preview the picture',
     'stylemap.members': 'Stands for {n} near-identical pictures',
     'stylemap.helpRotate': 'Drag to rotate · wheel to zoom · right-drag to pan',

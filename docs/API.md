@@ -1419,6 +1419,8 @@ Identify artist for one image.
 | `image_id` | int | required | Image ID to identify |
 | `threshold` | float | 0.03 | Extra confidence floor (0.0-1.0); tightens only |
 | `top_k` | int | 5 | Number of top predictions to return (1-20) |
+| `model_source` | string | `huggingface` | `huggingface`, `modelscope` or `local` |
+| `model_path` | string | null | Local checkpoint; must end in `.pth`, `.pt` or `.onnx` (checked before the file is touched, whatever the source) and must exist when `model_source=local`; 400 otherwise |
 
 **Response:**
 ```json
@@ -1450,6 +1452,7 @@ Start batch identification.
 | `image_ids` | int[] | required | List of image IDs |
 | `threshold` | float | 0.03 | Extra confidence floor; tightens only |
 | `top_k` | int | 5 | Number of predictions per image |
+| `model_source`, `model_path` | | | Same rules as `POST /api/artists/identify` |
 
 Each `results[]` entry carries `artist`, `confidence`, `confidence_level`, and `candidate_artist`.
 
@@ -1521,7 +1524,7 @@ Start style-vector extraction for the pending images of the current library.
 | `image_ids` | int[] | null | Restrict the job to these images (1-5,000,000 positive IDs); omit for the whole library |
 | `selection_token` | string | null | Restrict the job to the current Gallery filter: a token from `POST /api/images/selection-token`, decoded and expanded on the server (the style map page sends this, so no id list travels). Exclusive with `image_ids` |
 | `model_source` | string | `huggingface` | `huggingface`, `modelscope` or `local` (same contract as `/api/artists/identify`) |
-| `model_path` | string | null | Local checkpoint; required (and must exist) when `model_source` is `local` |
+| `model_path` | string | null | Local checkpoint, `.pth`/`.pt`/`.onnx`; required (and must exist) when `model_source` is `local`. Any other file name is 400 before the file is looked at |
 | `use_gpu` | bool | null | `null` = the Style Finder default (`ARTIST_USE_GPU`); `false` forces CPU |
 | `with_artist` | bool | `true` | Also write the Style Finder's artist prediction (`artist_predictions`, same model, threshold and row format as `/api/artists/identify`) from the same forward pass, in the same transaction as the vector; `false` writes vectors only. Only pictures the job actually runs the model for get a prediction: a picture whose stored vector still fits (`kept`) is not re-identified, so to add predictions for an already indexed library use the Style Finder page's batch (`POST /api/artists/identify-batch`). A picture the job does run overwrites its existing prediction row with the default threshold (0.03) and `top_k` 5 |
 
@@ -1535,7 +1538,8 @@ Start style-vector extraction for the pending images of the current library.
 **Errors:** 409 when a job is already running; 400 for an unknown `space`,
 empty or non-positive `image_ids`, `image_ids` together with
 `selection_token`, an invalid `selection_token`, a `local` source without a
-`model_path`, or a `model_path` that is missing or cannot be read.
+`model_path`, or a `model_path` that is not a `.pth`/`.pt`/`.onnx` file, is
+missing or cannot be read.
 
 #### GET /api/style-map/vectors/progress
 Poll the running (or last) job.
@@ -1589,7 +1593,7 @@ model.
 |-----------|------|---------|-------------|
 | `space` | string | `kaloscope` | Vector space; only `kaloscope` is accepted (400 otherwise) |
 | `model_source` | string | `huggingface` | `huggingface`, `modelscope` or `local`: the user's Style Finder model setting |
-| `model_path` | string | null | Local checkpoint (required and must exist when `model_source` is `local`, 400 otherwise). A local file names its own vector version, so a local-model user's vectors are not counted as `other_version` |
+| `model_path` | string | null | Local checkpoint, `.pth`/`.pt`/`.onnx` (required and must exist when `model_source` is `local`, 400 otherwise; any other file name is 400 before the file is looked at; ignored unless `model_source` is `local`). A local file names its own vector version, so a local-model user's vectors are not counted as `other_version` |
 
 **Response:**
 ```json
@@ -1614,9 +1618,11 @@ One 3-D point per picture of the current Gallery filter, for the style map.
 **Parameters:**
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `space` | string | `kaloscope` | `kaloscope` (style vectors of the current official weights) or `clip` (`images.embedding`, the Similarity index) |
+| `space` | string | `kaloscope` | `kaloscope` (style vectors of the weights the user's Style Finder settings name: the official ones, or a local checkpoint) or `clip` (`images.embedding`, the Similarity index) |
 | `selection_token` | string | null | A token from `POST /api/images/selection-token`: the whole Gallery filter contract, the same one `selection-ids`, `count` and the bulk actions read. Omit it for the whole current library (`X-SD-Library-Id`) |
 | `refresh` | bool | false | Recompute even when a cached layout exists (the result replaces the cache entry) |
+| `model_source` | string | `huggingface` | The user's Style Finder model setting (`huggingface`, `modelscope`, `local`); the page sends the same settings the Style Finder uses, in the `kaloscope` space only |
+| `model_path` | string | null | Local checkpoint, `.pth`/`.pt`/`.onnx` (required and must exist when `model_source` is `local`, 400 otherwise; any other file name is 400 before the file is looked at). Read only when `space` is `kaloscope` and `model_source` is `local`, ignored otherwise. It names its own vector version, so the map shows the vectors of the weights the user runs; maps of other weights are separate cache entries |
 
 **Response:**
 ```json
@@ -1689,20 +1695,28 @@ seen; `clip` uses count, sum and max of the embedded ids). A picture entering
 or leaving the filter changes the id list; `refresh=true` bypasses the cache.
 `cached` says whether the response came from the cache. One layout is
 computed at a time; a concurrent request for the same map waits for it and
-then reuses it. Only the current official Kaloscope weights are mapped in
-this slice.
+then reuses it. The `kaloscope` map follows the weights named by
+`model_source`/`model_path` (the Style Finder settings); each set of weights
+has its own map and cache.
 
-**Errors:** 400 for an unknown `space` or an invalid `selection_token`.
+**Errors:** 400 for an unknown `space`, an invalid `selection_token`, or a
+`model_path` that is not a `.pth`/`.pt`/`.onnx` file, is missing or cannot be
+read (`kaloscope` space with `model_source=local` only).
 
 #### GET /api/style-map/layout-status
-The `umap` field of `points` for the same `space` and `selection_token`,
-without computing the PCA map: `{"space", "method", "umap"}` where `method`
-is `umap` once the layout is ready and `pca` otherwise. Before `points` ran
-for this filter (in this process, or in an earlier one that left the layout
-on disk) `umap.status` is `not_started`. Cheap enough to poll every few
-seconds while a layout is `queued` or `computing`.
+The `umap` field of `points` for the same `space`, `selection_token`,
+`model_source` and `model_path`, without computing the PCA map:
+`{"space", "method", "umap"}` where `method` is `umap` once the layout is
+ready and `pca` otherwise. Before `points` ran for this filter (in this
+process, or in an earlier one that left the layout on disk) `umap.status` is
+`not_started`. Cheap enough to poll every few seconds while a layout is
+`queued` or `computing`.
 
-**Errors:** 400 for an unknown `space` or an invalid `selection_token`.
+**Parameters:** `space`, `selection_token`, `model_source`, `model_path` as for `points`.
+
+**Errors:** 400 for an unknown `space`, an invalid `selection_token`, or a
+`model_path` that is not a `.pth`/`.pt`/`.onnx` file, is missing or cannot be
+read (`kaloscope` space with `model_source=local` only).
 
 #### GET /api/style-map/regions
 Regions of the map `points` last returned for the same `space` and
@@ -1738,7 +1752,7 @@ tagging run or a Style Finder batch after the map was built is picked up on
 the next request (`cached` is `true` only on an unchanged repeat); dropped
 whenever the layout is. One computation per map runs at a time.
 
-**Parameters:** `space`, `selection_token` as for `points`; `refresh=true`
+**Parameters:** `space`, `selection_token`, `model_source`, `model_path` as for `points`; `refresh=true`
 recomputes even when the cache is current.
 
 **Response:**
@@ -1757,7 +1771,9 @@ recomputes even when the cache is current.
 }
 ```
 
-**Errors:** 400 for an unknown `space` or an invalid `selection_token`.
+**Errors:** 400 for an unknown `space`, an invalid `selection_token`, or a
+`model_path` that is not a `.pth`/`.pt`/`.onnx` file, is missing or cannot be
+read (`kaloscope` space with `model_source=local` only).
 
 ### Obfuscation
 

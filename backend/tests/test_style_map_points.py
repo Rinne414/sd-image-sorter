@@ -92,6 +92,48 @@ def _service():
     return StyleMapService()
 
 
+class TestModelSettings:
+    """S1c: the map reads the vectors of the weights the user runs."""
+
+    def test_points_layout_and_regions_follow_the_users_local_weights(
+        self, test_db, tmp_path, monkeypatch
+    ):
+        from artist_identifier import kaloscope_style_vector_model_version
+        from services import style_map_service
+
+        monkeypatch.setattr(
+            style_map_service.style_map_umap, "umap_available", lambda: False
+        )
+        local = tmp_path / "my-kaloscope.pth"
+        local.write_bytes(b"local weights")
+        local_version = kaloscope_style_vector_model_version(str(local))
+        ids = _make_images(test_db, tmp_path, 9)
+        _store_kaloscope(
+            test_db, ids[:6], _random_units(6, seed=1), version=local_version
+        )
+        _store_kaloscope(test_db, ids[6:], _random_units(3, seed=2))
+        service = _service()
+
+        official = service.points("kaloscope")
+        assert official["model_version"] == _official_version()
+        assert {p[0] for p in official["points"]} == set(ids[6:])
+        assert official["missing_vectors"] == 6
+
+        mine = service.points("kaloscope", model_path=str(local))
+        assert mine["model_version"] == local_version
+        assert {p[0] for p in mine["points"]} == set(ids[:6])
+        assert mine["missing_vectors"] == 3
+        # the two maps are two cache entries, not one overwritten by the other
+        assert service.points("kaloscope")["cached"] is True
+        assert service.points("kaloscope", model_path=str(local))["cached"] is True
+
+        status = service.layout_status("kaloscope", model_path=str(local))
+        assert status["space"] == "kaloscope"
+        regions = service.regions("kaloscope", model_path=str(local))
+        assert regions["status"] == "ok" and regions["model_version"] == local_version
+        assert sum(region["size"] for region in regions["regions"]) == 6
+
+
 def _clustered(*, seed: int, groups: int, members: int, dim: int):
     """Groups whose members sit at cos ~0.965-0.985 from their centre, so
     member pairs land on both sides of 0.95; ids are shuffled."""

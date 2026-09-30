@@ -45,9 +45,8 @@ from typing import Any, Deque, Dict, List, Optional
 import numpy as np
 
 import database as db
-from artist_identifier import kaloscope_style_vector_model_version
 from config import CLIP_MODEL_NAME
-from db_style_vectors import unpack_style_vector
+from db_style_vectors import unpack_style_vector, vector_signature
 from exceptions import ValidationError
 from library_context import get_current_library_id
 from optional_dependencies import OPTIONAL_DEPENDENCY_GROUPS
@@ -63,6 +62,7 @@ from services.style_map_math import (
     pca_layout,
 )
 from services.style_map_regions import RegionsCache, regions_body
+from services.style_vector_service import style_vector_model_version
 from services.style_map_umap import (
     UMAP_INPUT_DIM,
     UMAP_INSTALL_MODEL_ID,
@@ -160,40 +160,21 @@ class StyleMapService:
         return ImageService()._decode_selection_token(selection_token)
 
     @staticmethod
-    def _model_version(space: str) -> str:
+    def _model_version(space: str, model_path: Optional[str] = None) -> str:
+        """The vector version this map reads: the user's Style Finder weights
+        (a local checkpoint names its own version), else the official ones."""
         if space == "clip":
             return f"clip:{CLIP_MODEL_NAME}"
-        return kaloscope_style_vector_model_version(None)
+        return style_vector_model_version(model_path)
 
     @staticmethod
     def _vector_version(space: str, model_version: str) -> tuple:
-        """Changes whenever a vector of this space is added, removed or rewritten.
-
-        Count + sum of ids catches adds/removes/swaps; MAX(updated_at) (written
-        by the upsert with millisecond precision) catches a rewrite of an
-        existing row, even inside the same second. clip has no timestamp: its
-        signature is count + sum + max id, like the Similarity cache's own.
-        """
+        """Changes whenever a vector of this space is added, removed or rewritten
+        (``db_style_vectors.vector_signature``)."""
         with db.get_db() as conn:
-            if space == "clip":
-                # A recomputed embedding follows a rescan that saw new pixels,
-                # which rewrites source_mtime_ns / source_size (the clear in
-                # between also blanks content_fingerprint); those move the sums.
-                row = conn.execute(
-                    "SELECT COUNT(*), SUM(id), MAX(id), "
-                    "SUM(COALESCE(source_mtime_ns, 0)), SUM(COALESCE(source_size, 0)), "
-                    "SUM(content_fingerprint IS NULL) "
-                    "FROM images WHERE embedding IS NOT NULL"
-                ).fetchone()
-            else:
-                row = conn.execute(
-                    "SELECT COUNT(*), SUM(image_id), MAX(updated_at) FROM image_style_vectors "
-                    "WHERE space = ? AND model_version = ?",
-                    ("kaloscope", model_version),
-                ).fetchone()
-        return tuple(
-            int(v) if isinstance(v, (int, float)) else str(v or "") for v in row
-        )
+            return vector_signature(
+                conn.cursor(), space=space, model_version=model_version
+            )
 
     @staticmethod
     def _member_hash(ids: List[int]) -> str:
@@ -232,11 +213,14 @@ class StyleMapService:
 
     # ------------------------------------------------------------------ main
     def _map_key(
-        self, space: str, selection_token: Optional[str]
+        self,
+        space: str,
+        selection_token: Optional[str],
+        model_path: Optional[str] = None,
     ) -> tuple[str, str, List[int], tuple]:
         normalized = self._require_space(space)
         contract = self._contract(selection_token)
-        model_version = self._model_version(normalized)
+        model_version = self._model_version(normalized, model_path)
         ids = self._filtered_ids(contract)
         key = (
             get_current_library_id(),
@@ -253,9 +237,13 @@ class StyleMapService:
         selection_token: Optional[str] = None,
         *,
         refresh: bool = False,
+        model_path: Optional[str] = None,
     ) -> bytes:
-        """The response as JSON bytes (what the route returns); ``refresh`` skips the cache read."""
-        normalized, model_version, ids, key = self._map_key(space, selection_token)
+        """JSON bytes (what the route returns). ``refresh`` skips the cache read;
+        ``model_path`` = the user's local checkpoint (None: official weights)."""
+        normalized, model_version, ids, key = self._map_key(
+            space, selection_token, model_path
+        )
         entry = None if refresh else self._cache_get(key)
         cached = entry is not None
         if entry is None:
@@ -278,25 +266,25 @@ class StyleMapService:
         umap_state = self._umap_state(key, inputs, retry=refresh)
         return self._render(entry[0], umap_state, cached)
 
-    def points(
+    def points(self, space: str, selection_token=None, **kwargs) -> Dict[str, Any]:
+        """Dict form of :meth:`points_json` (tests and in-process callers)."""
+        return json.loads(self.points_json(space, selection_token, **kwargs))
+
+    def layout_status(
         self,
         space: str,
         selection_token: Optional[str] = None,
         *,
-        refresh: bool = False,
-    ) -> Dict[str, Any]:
-        """Dict form of :meth:`points_json` (tests and in-process callers)."""
-        return json.loads(self.points_json(space, selection_token, refresh=refresh))
-
-    def layout_status(
-        self, space: str, selection_token: Optional[str] = None
+        model_path: Optional[str] = None,
     ) -> Dict[str, Any]:
         """The UMAP job state of this map without computing the PCA map.
 
         Before ``points`` ran for the map (in this process or an earlier one
         whose layout is on disk) the state is ``not_started``.
         """
-        normalized, _model_version, _ids, key = self._map_key(space, selection_token)
+        normalized, _model_version, _ids, key = self._map_key(
+            space, selection_token, model_path
+        )
         with self._cache_lock:
             inputs = self._inputs.get(key)
         state = self._umap_state(key, inputs, retry=False)
@@ -315,13 +303,16 @@ class StyleMapService:
         selection_token: Optional[str] = None,
         *,
         refresh: bool = False,
+        model_path: Optional[str] = None,
     ) -> bytes:
         """Regions of the map ``points`` last computed for this space and filter,
         on the coordinates the page shows (UMAP once ready, PCA before). Cached
         per layout key, method and label version (tags / artist predictions
         written later invalidate it), dropped with the layout; one computation
         per map at a time; ``not_started`` until points ran for this map."""
-        normalized, _model_version, _ids, key = self._map_key(space, selection_token)
+        normalized, _model_version, _ids, key = self._map_key(
+            space, selection_token, model_path
+        )
         entry = self._cache_get(key)
         with self._cache_lock:
             inputs = self._inputs.get(key)

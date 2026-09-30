@@ -311,6 +311,89 @@ test.describe('Style Map', () => {
     expect(pointsCalls).toBe(beforePoints + 1)
   })
 
+  test('reads the map and builds the index with the Style Finder model settings', async ({ page }) => {
+    await mockSelectionToken(page)
+    await mockProgressIdle(page)
+    const pointsUrls: string[] = []
+    const regionsUrls: string[] = []
+    const starts: Array<Record<string, unknown>> = []
+    await page.route('**/api/style-map/points**', (route) => {
+      pointsUrls.push(route.request().url())
+      return route.fulfill({ json: pointsBody() })
+    })
+    await page.route('**/api/style-map/regions**', (route) => {
+      regionsUrls.push(route.request().url())
+      return route.fulfill({ json: regionsBody() })
+    })
+    await page.route('**/api/style-map/vectors/start', (route) => {
+      starts.push(route.request().postDataJSON())
+      return route.fulfill({ json: { status: 'idle', total: 0, space: 'kaloscope' } })
+    })
+    await mockThumbnails(page)
+    // The user saved local weights on the Style Finder page (its own store).
+    await page.addInitScript(() => {
+      localStorage.setItem('sd-image-sorter-artist-defaults-v1', JSON.stringify({
+        version: 1, savedAt: '2026-10-01T00:00:00Z', modelSource: 'local', modelPath: 'D:/models/my-kaloscope.pth', threshold: 0.03, useGpu: false,
+      }))
+    })
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await page.goto('/')
+    const map = new StyleMapPage(page)
+    await map.open()
+    await expect.poll(() => map.pointCount()).toBe(30)
+    await expect.poll(() => regionsUrls.length).toBeGreaterThan(0)
+    const settings = 'model_source=local&model_path=D%3A%2Fmodels%2Fmy-kaloscope.pth'
+    expect(pointsUrls[0]).toContain(settings)
+    expect(regionsUrls[0]).toContain(settings)
+    await map.buildButton.click()
+    await expect.poll(() => starts.length).toBe(1)
+    expect(starts[0]).toMatchObject({ space: 'kaloscope', model_source: 'local', model_path: 'D:/models/my-kaloscope.pth', use_gpu: false })
+    // The CLIP space reads the Similarity index, not Kaloscope: no model settings ride along.
+    await map.spaceSelect.selectOption('clip')
+    await expect.poll(() => pointsUrls.length).toBe(2)
+    expect(pointsUrls[1]).toContain('space=clip')
+    expect(pointsUrls[1]).not.toContain('model_source')
+    expect(pointsUrls[1]).not.toContain('model_path')
+  })
+
+  test('refuses to build the index while the Style Finder says local but names no file', async ({ page }) => {
+    await mockSelectionToken(page)
+    await mockProgressIdle(page)
+    const pointsUrls: string[] = []
+    let starts = 0
+    await page.route('**/api/style-map/points**', (route) => {
+      pointsUrls.push(route.request().url())
+      return route.fulfill({ json: pointsBody() })
+    })
+    await page.route('**/api/style-map/regions**', (route) => route.fulfill({ json: regionsBody() }))
+    await page.route('**/api/style-map/vectors/start', (route) => {
+      starts += 1
+      return route.fulfill({ json: { status: 'started', total: 3, space: 'kaloscope' } })
+    })
+    await mockThumbnails(page)
+    // Saved on the Style Finder page: local weights, path left blank.
+    await page.addInitScript(() => {
+      localStorage.setItem('sd-image-sorter-artist-defaults-v1', JSON.stringify({
+        version: 1, savedAt: '2026-10-01T00:00:00Z', modelSource: 'local', modelPath: '', threshold: 0.03, useGpu: true,
+      }))
+    })
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await page.goto('/')
+    const map = new StyleMapPage(page)
+    await map.open()
+    await expect.poll(() => map.pointCount()).toBe(30)
+    // Reading falls back to the official weights (never a half-filled local setting).
+    expect(pointsUrls[0]).toContain('model_source=huggingface')
+    expect(pointsUrls[0]).not.toContain('model_path')
+    // Building must not: the official weights would overwrite the user's own
+    // identification results. Nothing is sent and the page says why.
+    await map.buildButton.click()
+    await expect(page.locator('.toast')).toContainText(/Style Finder page|画风识别页/)
+    await page.waitForTimeout(500)
+    expect(starts).toBe(0)
+    await expect(map.progressRow).toBeHidden()
+  })
+
   test('loads under a random Gallery order by asking for a fixed order token', async ({ page }) => {
     await mockProgressIdle(page)
     const tokenBodies: Array<Record<string, unknown>> = []
