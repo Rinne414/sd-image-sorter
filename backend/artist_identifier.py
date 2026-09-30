@@ -239,6 +239,61 @@ _EXPECTED_ARTIST_FILE_SHA256: Dict[str, Tuple[str, ...]] = {
     ),
 }
 
+# Style vectors (style map): the 2048-d feature the Kaloscope classifier scores
+# from, taken after ``head.bn`` so it is the exact input of the class layer.
+STYLE_VECTOR_LAYER = "head.bn"
+ARTIST_STYLE_VECTOR_BACKEND_ERROR = (
+    "Style vectors need the Kaloscope 2.0 (LSNet) artist model; the loaded "
+    "artist model has no feature layer. / 画风向量需要 Kaloscope 2.0 画风识别模型，"
+    "当前加载的模型没有特征层。"
+)
+
+
+# (resolved path, size, mtime_ns) -> sha256 of a local checkpoint, so the
+# 2.8 GB file is hashed once per process, not on every stats/start call.
+_local_checkpoint_digests: Dict[Tuple[str, int, int], str] = {}
+
+
+def _local_checkpoint_digest(model_path: str) -> str:
+    """sha256 of a local checkpoint file; ValueError when it is not a readable regular file.
+
+    Regular files only: a FIFO or a device node would make sha256 read forever.
+    """
+    resolved = Path(os.path.expanduser(str(model_path))).resolve()
+    if not resolved.is_file():
+        raise ValueError(f"Local model file not found: {model_path}")
+    try:
+        stat = resolved.stat()
+        key = (str(resolved), int(stat.st_size), int(stat.st_mtime_ns))
+        digest = _local_checkpoint_digests.get(key)
+        if digest is None:
+            digest = _sha256_file(resolved)
+            _local_checkpoint_digests[key] = digest
+    except OSError as exc:
+        raise ValueError(f"Local model file could not be read: {model_path} ({exc})") from exc
+    return digest
+
+
+def kaloscope_style_vector_model_version(model_path: Optional[str] = None) -> str:
+    """Name the weights + layer a style vector comes from.
+
+    Stored beside every vector so different weights make the old rows "to
+    extract" again instead of being mixed with them. A local file is named
+    by its digest, not its file name: a local copy of the pinned official
+    checkpoint shares the official version, and two different files that
+    are both called best_checkpoint.pth do not. A path that is not a
+    readable regular file raises ValueError: a name-based version would
+    bring the same-name collision back. Pure: never constructs or loads an
+    identifier.
+    """
+    if not model_path:
+        return f"kaloscope:{ARTIST_KALOSCOPE_CHECKPOINT}:{STYLE_VECTOR_LAYER}"
+    digest = _local_checkpoint_digest(model_path)
+    official = _EXPECTED_ARTIST_FILE_SHA256.get(ARTIST_KALOSCOPE_CHECKPOINT, ())
+    if digest in official:
+        return f"kaloscope:{ARTIST_KALOSCOPE_CHECKPOINT}:{STYLE_VECTOR_LAYER}"
+    return f"kaloscope-local:{digest[:16]}:{STYLE_VECTOR_LAYER}"
+
 
 class ArtistIdentifier:
     """
@@ -426,6 +481,16 @@ class ArtistIdentifier:
 
     def _has_live_model(self) -> bool:
         return self._model not in (None, "placeholder")
+
+    @property
+    def model_loaded(self) -> bool:
+        """True once real weights are live (not the leftover placeholder)."""
+        return self._has_live_model()
+
+    @property
+    def load_error(self) -> Optional[str]:
+        """Why the last load() left the model unloaded, if it did."""
+        return self._load_error
 
     def load(self):
         """Load the model (lazy loading)."""
@@ -770,6 +835,68 @@ class ArtistIdentifier:
 
         probs = torch.nn.functional.softmax(logits, dim=0)
         return probs.detach().cpu().numpy()
+
+    def _run_kaloscope_style_vector(
+        self, image: Image.Image, priority: int = PRIORITY_NORMAL
+    ) -> np.ndarray:
+        """Return the head-BN feature vector the Kaloscope classifier scores from.
+
+        Sibling of ``_run_kaloscope``: same transform, device and runtime
+        lane, but asks LSNetArtist for ``return_features=True`` (the 2048-d
+        projection output) and passes it through ``head.bn`` instead of the
+        class layer. Any other backend refuses: there is no feature layer to
+        read, and an empty answer would silently poison the style map.
+        """
+        import torch
+
+        model = self._model
+        head_bn = getattr(getattr(model, "head", None), "bn", None)
+        if self._backend != "kaloscope" or self._transform is None or head_bn is None:
+            raise RuntimeError(ARTIST_STYLE_VECTOR_BACKEND_ERROR)
+
+        tensor = self._transform(image).unsqueeze(0)
+        device = next(model.parameters()).device
+        with torch.no_grad(), exclusive_ai_runtime(
+            "artist-kaloscope-style-vector", priority=priority
+        ):
+            features = model(tensor.to(device), return_features=True)
+            if isinstance(features, tuple):
+                features = features[0]
+            normalized = head_bn(features)
+
+        vector = normalized[0].detach().float().cpu().numpy().astype(np.float32, copy=False)
+        if vector.ndim != 1 or vector.size == 0:
+            raise RuntimeError(ARTIST_STYLE_VECTOR_BACKEND_ERROR)
+        return vector
+
+    def extract_style_vector(
+        self, image_path: str, priority: int = PRIORITY_NORMAL
+    ) -> np.ndarray:
+        """Style vector (float32, 2048-d for Kaloscope 2.0) of one image file."""
+        self.load()
+        if not self._has_live_model():
+            raise RuntimeError(self._load_error or ARTIST_NOT_PREPARED_ERROR)
+        with Image.open(image_path) as source_image:
+            image = source_image.convert("RGB")
+        return self._run_kaloscope_style_vector(image, priority)
+
+    def supports_style_vectors(self) -> bool:
+        """True only for a loaded Kaloscope (LSNet) model with its head BN.
+
+        The style-vector job checks this once before touching any image, so
+        an ONNX / transformers model or an unprepared runtime fails the job
+        up front instead of failing every image.
+        """
+        if not self._has_live_model() or self._backend != "kaloscope":
+            return False
+        if self._transform is None:
+            return False
+        return getattr(getattr(self._model, "head", None), "bn", None) is not None
+
+    @property
+    def style_vector_model_version(self) -> str:
+        """Weights + layer identity stored beside every style vector."""
+        return kaloscope_style_vector_model_version(self.model_path)
 
     def _run_torch_classifier(
         self, image: Image.Image, priority: int = PRIORITY_NORMAL

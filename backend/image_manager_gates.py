@@ -116,6 +116,7 @@ def _has_cached_derived_state(existing: Optional[Dict[str, Any]]) -> bool:
         existing.get("aesthetic_score") is not None,
         bool(existing.get("has_embedding")),
         bool(existing.get("has_artist_predictions")),
+        bool(existing.get("has_style_vectors")),
     ])
 
 

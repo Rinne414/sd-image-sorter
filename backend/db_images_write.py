@@ -136,6 +136,7 @@ def _clear_image_derived_state(cursor: sqlite3.Cursor, image_id: int) -> None:
     cursor.execute("DELETE FROM tag_scores WHERE image_id = ?", (image_id,))
     cursor.execute("DELETE FROM tag_writer_provenance WHERE image_id = ?", (image_id,))
     cursor.execute("DELETE FROM artist_predictions WHERE image_id = ?", (image_id,))
+    cursor.execute("DELETE FROM image_style_vectors WHERE image_id = ?", (image_id,))
 
 def _sync_image_loras(
     cursor: sqlite3.Cursor,
@@ -232,7 +233,8 @@ def _upsert_image_record(
                        tagged_at, ai_caption, aesthetic_score,
                        COALESCE(library_id, 'main') AS library_id,
                        CASE WHEN embedding IS NOT NULL THEN 1 ELSE 0 END AS has_embedding,
-                       EXISTS(SELECT 1 FROM artist_predictions ap WHERE ap.image_id = images.id) AS has_artist_predictions
+                       EXISTS(SELECT 1 FROM artist_predictions ap WHERE ap.image_id = images.id) AS has_artist_predictions,
+                       EXISTS(SELECT 1 FROM image_style_vectors sv WHERE sv.image_id = images.id) AS has_style_vectors
                 FROM images
                 WHERE {query_clause}
                 """,
@@ -569,7 +571,8 @@ def update_image_metadata(
             SELECT id, source_mtime_ns, source_size, content_fingerprint,
                    tagged_at, ai_caption, aesthetic_score,
                    CASE WHEN embedding IS NOT NULL THEN 1 ELSE 0 END AS has_embedding,
-                   EXISTS(SELECT 1 FROM artist_predictions ap WHERE ap.image_id = images.id) AS has_artist_predictions
+                   EXISTS(SELECT 1 FROM artist_predictions ap WHERE ap.image_id = images.id) AS has_artist_predictions,
+                   EXISTS(SELECT 1 FROM image_style_vectors sv WHERE sv.image_id = images.id) AS has_style_vectors
             FROM images
             WHERE id = ?
             """,

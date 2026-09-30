@@ -141,7 +141,8 @@ def _get_existing_images_by_paths(
                    content_fingerprint, sidecar_fingerprint, tagged_at, ai_caption, aesthetic_score,
                    COALESCE(library_id, 'main') AS library_id,
                    CASE WHEN embedding IS NOT NULL THEN 1 ELSE 0 END AS has_embedding,
-                   EXISTS(SELECT 1 FROM artist_predictions ap WHERE ap.image_id = images.id) AS has_artist_predictions
+                   EXISTS(SELECT 1 FROM artist_predictions ap WHERE ap.image_id = images.id) AS has_artist_predictions,
+                   EXISTS(SELECT 1 FROM image_style_vectors sv WHERE sv.image_id = images.id) AS has_style_vectors
             FROM images
             WHERE {query_clause}
             """,

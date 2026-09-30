@@ -1489,6 +1489,120 @@ An artist that is absent can never be predicted, so every identification over th
 #### DELETE /api/artists/clear
 Clear the artist predictions of the current library's images (`X-SD-Library-Id`); other libraries keep theirs. Returns `message` and `cleared` (rows removed). 409 while a batch runs.
 
+### Style Map
+
+Style vectors are the 2048-d feature the Kaloscope 2.0 classifier scores from
+(the `head.bn` output of the LSNet model), stored per image in
+`image_style_vectors` as an L2-normalised float16 blob together with the
+weights version (`model_version`) and the pixel digest (`content_fingerprint`)
+they were computed from. The only `space` today is `kaloscope`; CLIP vectors
+stay in `images.embedding` (see Similarity) and are not copied.
+
+The extraction job is a background task (see Background Tasks): one job at a
+time, scoped to the current library (`X-SD-Library-Id`). It processes only
+images that have no vector for the space, or whose vector came from other
+weights or other pixels (a rescan recorded a different fingerprint). It can be
+paused, resumed and cancelled between images. The model must already be
+prepared in the Model Center; the job never downloads anything, and a model
+that is not Kaloscope (ONNX / transformers) or fails to load ends the job with
+`step: "error"` before any image is touched.
+
+`model_version` is `kaloscope:<checkpoint>:head.bn` for the pinned official
+weights, or `kaloscope-local:<sha256[:16]>:head.bn` for a local `model_path`
+(a local copy whose digest matches the pinned file shares the official name).
+
+#### POST /api/style-map/vectors/start
+Start style-vector extraction for the pending images of the current library.
+
+**Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `space` | string | `kaloscope` | Vector space; only `kaloscope` is accepted |
+| `image_ids` | int[] | null | Restrict the job to these images (1-5,000,000 positive IDs); omit for the whole library |
+| `model_source` | string | `huggingface` | `huggingface`, `modelscope` or `local` (same contract as `/api/artists/identify`) |
+| `model_path` | string | null | Local checkpoint; required (and must exist) when `model_source` is `local` |
+| `use_gpu` | bool | null | `null` = the Style Finder default (`ARTIST_USE_GPU`); `false` forces CPU |
+
+**Response:**
+```json
+{"status": "started", "total": 128, "space": "kaloscope"}
+```
+
+`status` is `idle` with `total: 0` when nothing is pending (no job is queued).
+
+**Errors:** 409 when a job is already running; 400 for an unknown `space`,
+empty or non-positive `image_ids`, a `local` source without a `model_path`,
+or a `model_path` that is missing or cannot be read.
+
+#### GET /api/style-map/vectors/progress
+Poll the running (or last) job.
+
+**Response:**
+```json
+{
+  "running": true,
+  "paused": false,
+  "space": "kaloscope",
+  "total": 128,
+  "processed": 40,
+  "written": 37,
+  "kept": 2,
+  "errors": 1,
+  "step": "extracting",
+  "message": "Extracting img_0041.png",
+  "current_item": "img_0041.png",
+  "started_at": 1790747286.3,
+  "updated_at": 1790747304.6,
+  "recent_issues": ["img_0007.png: Image file not found for image 7"]
+}
+```
+
+`written` counts vectors stored by the model in this run, `kept` counts images
+whose stored vector was confirmed still valid without running the model (the
+scan had forgotten the fingerprint but the pixels were unchanged), `errors`
+counts images that failed (one bad image never stops the batch; the last ten
+reasons are in `recent_issues`). `step` is one of `idle`, `queued`,
+`loading_runtime`, `extracting`, `done`, `cancelled`, `error`; a run in which
+every image failed ends as `error`, not `done`.
+
+#### POST /api/style-map/vectors/pause
+Pause the running job after the current image. Returns `{"status": "paused"}`
+or `{"status": "not_running"}`.
+
+#### POST /api/style-map/vectors/resume
+Resume a paused job. Returns `{"status": "resumed"}` or `{"status": "not_running"}`.
+
+#### POST /api/style-map/vectors/cancel
+Cancel the running job after the current image (also while paused, or before
+the worker has loaded the model). Returns `{"status": "cancelled"}` or
+`{"status": "not_running"}`.
+
+#### GET /api/style-map/vectors/stats
+Coverage of one space over the current library's readable images. Builds no
+model.
+
+**Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `space` | string | `kaloscope` | Vector space; only `kaloscope` is accepted (400 otherwise) |
+
+**Response:**
+```json
+{
+  "space": "kaloscope",
+  "model_version": "kaloscope:448-90.13/best_checkpoint.pth:head.bn",
+  "images": 12853,
+  "vectors": 50,
+  "pending": 12803,
+  "stale": 0,
+  "other_version": 0
+}
+```
+
+`pending` = images the next `start` would process; `stale` = vectors whose
+fingerprint no longer matches the image row (or the row has none);
+`other_version` = vectors computed by different weights.
+
 ### Obfuscation
 
 Output is always a PNG, so generation metadata survives the protect/restore

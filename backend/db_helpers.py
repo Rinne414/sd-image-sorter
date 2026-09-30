@@ -648,6 +648,7 @@ def _has_derived_state(row: Optional[Dict[str, Any]]) -> bool:
         _row_value(row, "aesthetic_score") is not None,
         bool(_row_value(row, "has_embedding")),
         bool(_row_value(row, "has_artist_predictions")),
+        bool(_row_value(row, "has_style_vectors")),
     ])
 
 
