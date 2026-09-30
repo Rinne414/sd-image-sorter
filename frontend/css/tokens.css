@@ -1771,9 +1771,10 @@ html.gallery-comfort-room #view-gallery .gallery-container::before,
 
 /* The action bar is excluded: it is position:fixed (ui-refresh.css), and this
    ID-weighted rule used to turn it back into a flow element parked after the
-   whole grid, i.e. never on screen. */
-html.gallery-comfort-room #view-gallery .gallery-container > *:not(.gallery-action-bar),
-#view-gallery.is-comfort-room .gallery-container > *:not(.gallery-action-bar) {
+   whole grid, i.e. never on screen. The toolbar likewise keeps its
+   position:sticky (it stays pinned under the top bar). */
+html.gallery-comfort-room #view-gallery .gallery-container > *:not(.gallery-action-bar):not(.gallery-toolbar),
+#view-gallery.is-comfort-room .gallery-container > *:not(.gallery-action-bar):not(.gallery-toolbar) {
     position: relative;
     z-index: 1;
 }

@@ -1658,6 +1658,24 @@ textarea:focus,
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
 }
 
+/* Pinned under the top bar while the grid scrolls (owner 2026-09-30). The
+   page background covers the tiles passing underneath; a soft edge says the
+   grid continues below it. */
+.gallery-toolbar {
+    position: sticky;
+    top: var(--nav-height);
+    z-index: 30;
+    margin: 0 -2px 4px;
+    padding: 0 2px 8px;
+    background: var(--bg);
+    box-shadow: 0 10px 12px -12px rgba(0, 0, 0, 0.8);
+}
+
+/* A tile brought into view (keyboard focus, resume) stops below the toolbar. */
+html:has(#view-gallery.active) {
+    scroll-padding-top: calc(var(--nav-height) + var(--gallery-toolbar-h, 0px) + 8px);
+}
+
 .gallery-header-left,
 .view-options {
     display: flex;

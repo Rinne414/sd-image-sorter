@@ -937,6 +937,10 @@
                         <ul class="missing-panel-list" id="gallery-missing-panel-list"></ul>
                         <p class="missing-panel-note" id="gallery-missing-panel-note" data-i18n="missing.filesAreKept">Clearing a record never deletes a file. If the files come back, re-scan the folder and the images return.</p>
                     </div>
+                    <!-- Owner 2026-09-30: the toolbar (count, generators, view,
+                         search) stays pinned under the top bar while the grid
+                         scrolls. -->
+                    <div class="gallery-toolbar" id="gallery-toolbar">
                     <div class="gallery-header">
                         <div class="gallery-header-left">
                             <!-- Mobile Filter Toggle (shown in header on mobile) -->
@@ -1090,6 +1094,7 @@
                     <!-- Search v2: live "understood as" chips — what the query parsed
                          into, plus ⚠ chips for known keys with bad values. -->
                     <div class="gallery-search-preview" id="gallery-search-preview" hidden aria-live="polite"></div>
+                    </div>
                     <div id="color-backfill-banner" class="color-backfill-banner" hidden role="status" aria-live="polite">
                         <div class="color-backfill-banner-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-palette"/></svg></div>
                         <div class="color-backfill-banner-copy">

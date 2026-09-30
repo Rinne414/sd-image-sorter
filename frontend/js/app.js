@@ -113,6 +113,13 @@ document.addEventListener('DOMContentLoaded', () => {
             .filter(Boolean)
             .forEach((el) => navObserver.observe(el));
     }
+    // The pinned gallery toolbar's height feeds the page's scroll padding.
+    const galleryToolbar = document.getElementById('gallery-toolbar');
+    if (galleryToolbar && 'ResizeObserver' in window) {
+        new ResizeObserver(() => {
+            document.documentElement.style.setProperty('--gallery-toolbar-h', `${galleryToolbar.offsetHeight}px`);
+        }).observe(galleryToolbar);
+    }
     updateNavigationOverflowState();
     syncGeneratorRailOverflow();
     window.addEventListener('load', updateNavigationOverflowState, { once: true });
