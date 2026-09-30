@@ -21,6 +21,9 @@ export class StyleMapPage {
   readonly previewImage: Locator
   readonly previewHint: Locator
   readonly resetViewButton: Locator
+  readonly landmarksToggle: Locator
+  readonly landmarksLayer: Locator
+  readonly landmarks: Locator
 
   constructor(page: Page) {
     this.page = page
@@ -42,6 +45,14 @@ export class StyleMapPage {
     this.previewImage = page.locator('#stylemap-preview-img')
     this.previewHint = page.locator('#stylemap-preview-hint')
     this.resetViewButton = page.locator('#stylemap-reset-view')
+    this.landmarksToggle = page.locator('#stylemap-landmarks-toggle')
+    this.landmarksLayer = page.locator('#stylemap-canvas-card .stylemap-landmarks')
+    this.landmarks = page.locator('#stylemap-canvas-card .stylemap-landmark')
+  }
+
+  /** The landmark card of one region id. */
+  landmark(regionId: number): Locator {
+    return this.page.locator(`#stylemap-canvas-card .stylemap-landmark[data-region="${regionId}"]`)
   }
 
   /** Open the view through whichever entrance the bar shows at this width. */

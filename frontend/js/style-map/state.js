@@ -12,6 +12,7 @@
 import { StyleMapScene } from './scene.js';
 import { StyleMapPanel } from './panel.js';
 import { IndexJob } from './index-job.js';
+import { RegionLandmarks, assignRegions, readLandmarksPreference, writeLandmarksPreference } from './regions.js';
 import { t, formatError } from './text.js';
 
 const LAYOUT_POLL_MS = 3000;
@@ -36,6 +37,10 @@ export function createStyleMap() {
         panel: null,
         scene: null,
         job: null,
+        regions: null,
+        regionLabels: null,
+        landmarks: null,
+        landmarksOn: readLandmarksPreference(),
     };
 
     const root = () => document.getElementById('view-stylemap');
@@ -79,14 +84,65 @@ export function createStyleMap() {
         state.panel.renderLayout(state.umapState || points.umap || {}, points.method);
         state.panel.renderEmpty(points, state.space, state.job.isRunning());
         state.panel.renderJob(state.job);
+        state.panel.renderLandmarksToggle(state.landmarksOn);
+        state.landmarks.repaintText();
     }
 
     function applyPoints(points) {
         state.points = points;
         state.umapState = points.umap || {};
         state.scene.setPoints(points.points || [], points.points_layout);
+        // The regions belong to these coordinates: drop the old ones and ask
+        // again (a PCA -> UMAP switch arrives as a new points answer).
+        applyRegions(null);
+        state.regionsRetried = false;
         repaint();
         scheduleLayoutPoll(points.umap?.status);
+        if (points.status === 'ok' && Array.isArray(points.points) && points.points.length > 0) {
+            loadRegions();
+        }
+    }
+
+    function applyRegions(body) {
+        state.regions = body;
+        const regions = body?.regions || [];
+        state.regionLabels = regions.length ? assignRegions(state.scene.geometry.getAttribute('position'), regions) : null;
+        state.scene.setFocus(null, null);
+        state.landmarks.setRegions(regions);
+        state.landmarks.place(state.scene.view());
+    }
+
+    /** Regions of the map just drawn; answered from the server's cache when unchanged. */
+    async function loadRegions() {
+        const seq = state.seq;
+        try {
+            const body = await app().API.get(`/api/style-map/regions?${query()}`);
+            if (seq !== state.seq || !isViewActive()) return;
+            // not_started: the server no longer holds this map (restarted or
+            // evicted); a points call rebuilds it and asks for regions again.
+            if (body?.status === 'not_started') {
+                if (!state.regionsRetried) {
+                    state.regionsRetried = true;
+                    await refresh();
+                }
+                return;
+            }
+            // Regions of another layout (UMAP finished between the points
+            // and the regions request): UMAP centres on a PCA cloud would
+            // mislead; the layout poll fetches both again.
+            if (body?.method && state.points?.method && body.method !== state.points.method) return;
+            applyRegions(body);
+        } catch (_error) {
+            // the map stays usable without landmarks; the next points answer retries
+        }
+    }
+
+    function setLandmarks(on) {
+        state.landmarksOn = Boolean(on);
+        writeLandmarksPreference(state.landmarksOn);
+        state.landmarks.setVisible(state.landmarksOn);
+        state.landmarks.place(state.scene.view());
+        state.panel.renderLandmarksToggle(state.landmarksOn);
     }
 
     async function refresh({ force = false } = {}) {
@@ -165,6 +221,7 @@ export function createStyleMap() {
         try {
             state.scene = new StyleMapScene(view.querySelector('#stylemap-canvas'), {
                 onHover: (hit) => state.panel.renderHover(hit),
+                onCameraChange: (camera) => state.landmarks?.place(camera),
             });
         } catch (error) {
             // No WebGL (old driver, hardware acceleration off, remote desktop):
@@ -173,6 +230,10 @@ export function createStyleMap() {
             state.panel.showUnsupported(formatError(error));
             return;
         }
+        state.landmarks = new RegionLandmarks(view.querySelector('#stylemap-canvas-card'), {
+            onHoverRegion: (index) => state.scene.setFocus(state.regionLabels, index),
+        });
+        state.landmarks.setVisible(state.landmarksOn);
         state.job = new IndexJob({
             getSpace: () => state.space,
             getToken: () => state.token,
@@ -190,11 +251,14 @@ export function createStyleMap() {
             onInstall: installUmap,
             onRetry: () => refresh({ force: true }),
             onResetView: () => state.scene.resetView(),
+            onToggleLandmarks: () => setLandmarks(!state.landmarksOn),
             onBuild: () => state.job.start(),
             onPause: () => state.job.pause(),
             onResume: () => state.job.resume(),
             onCancel: () => state.job.cancel(),
         });
+        // The switch shows the stored preference before the first map arrives.
+        state.panel.renderLandmarksToggle(state.landmarksOn);
         // The Gallery filter is the map's scope (not the ticked pictures);
         // rapid changes are debounced into one points request.
         window.addEventListener('gallery-filters-changed', onFilterChanged);
@@ -220,6 +284,7 @@ export function createStyleMap() {
         clearTimeout(state.debounceTimer);
         state.scene?.pause();
         state.job?.stopPolling();
+        state.landmarks?.hover(-1);
     }
 
     return { init, dispose, refresh, _state: state };

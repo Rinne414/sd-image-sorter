@@ -3870,7 +3870,11 @@
                             </div>
                         </div>
                     </div>
-                    <p class="stylemap-scope" id="stylemap-scope"></p>
+                    <div class="stylemap-subbar">
+                        <p class="stylemap-scope" id="stylemap-scope"></p>
+                        <!-- Words follow the state (rule 16): panel.js swaps key + text. -->
+                        <button class="btn btn-ghost btn-small" id="stylemap-landmarks-toggle" type="button" aria-pressed="true" data-i18n="stylemap.landmarksHide">Hide region landmarks</button>
+                    </div>
                     <p class="stylemap-error" id="stylemap-error" hidden></p>
                     <div class="stylemap-body">
                         <div class="stylemap-canvas-card" id="stylemap-canvas-card">
@@ -3912,6 +3916,7 @@
                                 <li data-i18n="stylemap.helpRotate">Drag to rotate, wheel to zoom, right-drag to pan.</li>
                                 <li data-i18n="stylemap.helpMembers">One dot can stand for several near-identical pictures.</li>
                                 <li data-i18n="stylemap.helpNear">Only dots that sit together mean something; distances across the map do not.</li>
+                                <li data-i18n="stylemap.helpLandmarks">Region landmarks are mostly pictures; a style or artist is named only when it is clear.</li>
                             </ul>
                         </aside>
                     </div>

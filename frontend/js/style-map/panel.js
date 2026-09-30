@@ -57,6 +57,7 @@ export class StyleMapPanel {
             emptyBuild: $('stylemap-empty-build'),
             emptySimilar: $('stylemap-empty-similar'),
             resetView: $('stylemap-reset-view'),
+            landmarksToggle: $('stylemap-landmarks-toggle'),
             unsupported: $('stylemap-unsupported'),
             unsupportedDetail: $('stylemap-unsupported-detail'),
             previewHint: $('stylemap-preview-hint'),
@@ -74,6 +75,7 @@ export class StyleMapPanel {
         el.install?.addEventListener('click', () => handlers.onInstall());
         el.retry?.addEventListener('click', () => handlers.onRetry());
         el.resetView?.addEventListener('click', () => handlers.onResetView());
+        el.landmarksToggle?.addEventListener('click', () => handlers.onToggleLandmarks());
         el.build?.addEventListener('click', () => handlers.onBuild());
         // Rule 11: the card's button is a proxy of the toolbar's, not a fork.
         el.emptyBuild?.addEventListener('click', () => el.build?.click());
@@ -163,6 +165,19 @@ export class StyleMapPanel {
         build.classList.toggle('btn-secondary', !pending);
         build.setAttribute('data-i18n', key);
         build.textContent = t(key, pending ? 'Build style index' : 'Refresh style index');
+    }
+
+    /**
+     * The landmarks switch names the action, so its words flip with the
+     * state (rule 16) and its i18n key moves with them.
+     */
+    renderLandmarksToggle(on) {
+        const { landmarksToggle } = this.el;
+        if (!landmarksToggle) return;
+        const key = on ? 'stylemap.landmarksHide' : 'stylemap.landmarksShow';
+        landmarksToggle.setAttribute('data-i18n', key);
+        landmarksToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+        landmarksToggle.textContent = t(key, on ? 'Hide region landmarks' : 'Show region landmarks');
     }
 
     /** The start card replaces the toolbar's primary button (one solid primary per screen). */

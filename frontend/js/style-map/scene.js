@@ -95,9 +95,16 @@ function ringTexture(color) {
 }
 
 export class StyleMapScene {
-    constructor(canvas, { onHover } = {}) {
+    constructor(canvas, { onHover, onCameraChange } = {}) {
         this.canvas = canvas;
         this.onHover = typeof onHover === 'function' ? onHover : () => {};
+        // Fired after a frame whose camera differs from the previous one:
+        // the landmark overlay re-projects then, and only then.
+        this.onCameraChange = typeof onCameraChange === 'function' ? onCameraChange : () => {};
+        this.cameraStamp = new Float32Array(34); // view (16) + projection (16) + canvas size (2)
+        // Region focus (a hovered landmark): dots of that region take the
+        // bright colour, every other dot the dim one; null = plain map.
+        this.focus = null;
         this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
         this.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
         this.renderer.setPixelRatio(this.pixelRatio);
@@ -112,6 +119,8 @@ export class StyleMapScene {
 
         this.baseColor = colorFrom('--text-2', '#A6A6AB');
         this.hoverColor = colorFrom('--accent', '#C8873C');
+        this.brightColor = colorFrom('--text', '#E8E8EA');
+        this.dimColor = this.baseColor.clone().multiplyScalar(0.45);
         this.ids = new Int32Array(0);
         this.members = new Uint16Array(0);
         this.count = 0;
@@ -220,6 +229,7 @@ export class StyleMapScene {
             sizes[i] = base * (1 + MEMBER_SIZE_BONUS * Math.min(group - 1, 3) / 3);
         }
         this.hovered = -1;
+        this.focus = null;
         this.ring.visible = false;
         this.ids = ids;
         this.members = members;
@@ -450,6 +460,71 @@ export class StyleMapScene {
         this.material.uniforms.fogNear.value = Math.max(0.01, distance - this.radius);
         this.material.uniforms.fogFar.value = distance + this.radius;
         this.renderer.render(this.scene, this.camera);
+        if (this.cameraMoved()) this.onCameraChange(this.view());
+    }
+
+    /**
+     * True when the view or projection matrix, or the canvas size, changed
+     * since the last frame (a proportional resize keeps the projection but
+     * moves every projected pixel).
+     */
+    cameraMoved() {
+        const view = this.camera.matrixWorldInverse.elements;
+        const projection = this.camera.projectionMatrix.elements;
+        let moved = false;
+        for (let i = 0; i < 16; i += 1) {
+            if (this.cameraStamp[i] !== view[i] || this.cameraStamp[16 + i] !== projection[i]) {
+                moved = true;
+                this.cameraStamp[i] = view[i];
+                this.cameraStamp[16 + i] = projection[i];
+            }
+        }
+        const size = [this.canvas.clientWidth, this.canvas.clientHeight];
+        for (let i = 0; i < 2; i += 1) {
+            if (this.cameraStamp[32 + i] !== size[i]) {
+                moved = true;
+                this.cameraStamp[32 + i] = size[i];
+            }
+        }
+        return moved;
+    }
+
+    /**
+     * What an overlay needs to project world points onto the canvas. Sizes
+     * are the canvas's own CSS pixels (clientWidth), the space the overlay's
+     * transforms live in; a client rect would carry the root zoom that
+     * ui-scale.js applies on 2560+ screens and push every card outward.
+     */
+    view() {
+        return {
+            camera: this.camera,
+            width: this.canvas.clientWidth,
+            height: this.canvas.clientHeight,
+            near: this.material.uniforms.fogNear.value,
+            far: this.material.uniforms.fogFar.value,
+        };
+    }
+
+    /**
+     * Light one region: `labels[i]` is the region of dot i (Int8Array from
+     * regions.js), `region` the one to show, null to restore the plain map.
+     */
+    setFocus(labels, region) {
+        const colors = this.geometry.getAttribute('color');
+        if (!colors) return;
+        this.focus = region === null || region === undefined || !labels ? null : { labels, region };
+        for (let i = 0; i < this.count; i += 1) {
+            const color = this.colorAt(i);
+            colors.setXYZ(i, color.r, color.g, color.b);
+        }
+        if (this.hovered >= 0) colors.setXYZ(this.hovered, this.hoverColor.r, this.hoverColor.g, this.hoverColor.b);
+        colors.needsUpdate = true;
+        this.requestRender();
+    }
+
+    colorAt(index) {
+        if (!this.focus) return this.baseColor;
+        return this.focus.labels[index] === this.focus.region ? this.brightColor : this.dimColor;
     }
 
     pick() {
@@ -476,7 +551,10 @@ export class StyleMapScene {
         const colors = this.geometry.getAttribute('color');
         const positions = this.geometry.getAttribute('position');
         if (!colors || !positions) return;
-        if (this.hovered >= 0) colors.setXYZ(this.hovered, this.baseColor.r, this.baseColor.g, this.baseColor.b);
+        if (this.hovered >= 0) {
+            const restore = this.colorAt(this.hovered);
+            colors.setXYZ(this.hovered, restore.r, restore.g, restore.b);
+        }
         if (index >= 0) {
             colors.setXYZ(index, this.hoverColor.r, this.hoverColor.g, this.hoverColor.b);
             this.ring.position.set(positions.getX(index), positions.getY(index), positions.getZ(index));

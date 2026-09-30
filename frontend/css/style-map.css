@@ -137,6 +137,19 @@
     color: var(--text-2);
 }
 
+/* Second row: the scope line left, the landmarks switch right. */
+.stylemap-subbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 28px;
+}
+
+.stylemap-subbar > .btn {
+    flex: 0 0 auto;
+}
+
 .stylemap-scope {
     margin: 0;
     font-size: 13px;
@@ -144,6 +157,134 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
+}
+
+/* Region landmarks: an HTML overlay over the canvas; regions.js projects
+   each card to its region's centre (transform only, nothing lays out). The
+   layer itself lets pointer events through to the canvas; a card catches
+   them so it can open on hover. Nothing here is clickable (default cursor). */
+.stylemap-landmarks {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    /* Card metrics come from regions.js (CARD_SIZES) as variables on this
+       layer: 96 px pictures on a big canvas, 64 px on a small one. */
+    --landmark-thumb: 96px;
+    --landmark-pad: 8px;
+    --landmark-gap: 6px;
+    --landmark-font: 12px;
+    --landmark-card-w: 128px;
+}
+
+.stylemap-landmarks[hidden] {
+    display: none;
+}
+
+.stylemap-landmark {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: var(--landmark-card-w);
+    box-sizing: border-box;
+    padding: var(--landmark-pad);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--landmark-gap);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    box-shadow: var(--shadow-float);
+    transform-origin: 0 0;
+    pointer-events: auto;
+    cursor: default;
+    will-change: transform;
+}
+
+.stylemap-landmark[hidden] {
+    display: none;
+}
+
+.stylemap-landmark.is-compact {
+    width: calc(var(--landmark-thumb) + 2 * var(--landmark-pad));
+}
+
+.stylemap-landmarks.is-small .stylemap-landmark {
+    border-radius: 10px;
+}
+
+.stylemap-landmark-thumbs {
+    display: flex;
+    gap: var(--landmark-pad);
+}
+
+.stylemap-landmark-thumbs img {
+    display: block;
+    width: var(--landmark-thumb);
+    height: var(--landmark-thumb);
+    object-fit: cover;
+    border-radius: 8px;
+    background: var(--surface-3);
+}
+
+/* The second picture belongs to the open card only (it stays loaded once
+   fetched, so re-opening costs nothing). */
+.stylemap-landmark:not(.is-open) .stylemap-landmark-thumbs img:nth-child(2) {
+    display: none;
+}
+
+.stylemap-landmark-text {
+    width: 100%;
+    font-size: var(--landmark-font);
+    line-height: 1.3;
+    color: var(--text);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stylemap-landmark.is-compact .stylemap-landmark-text {
+    display: none;
+}
+
+/* Hovered: on top, full size, the second picture and every label. */
+.stylemap-landmark.is-open {
+    z-index: 2;
+    width: auto;
+    min-width: var(--landmark-card-w);
+    /* two pictures side by side plus the card's padding and some text room */
+    max-width: calc(2 * var(--landmark-thumb) + 3 * var(--landmark-pad) + 24px);
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-float);
+}
+
+.stylemap-landmark.is-open .stylemap-landmark-text {
+    display: none; /* the detail block repeats it in full */
+}
+
+.stylemap-landmark-detail {
+    width: 100%;
+    display: grid;
+    gap: 3px;
+    font-size: var(--landmark-font);
+    line-height: 1.35;
+    color: var(--text-2);
+    text-align: center;
+}
+
+.stylemap-landmark-detail[hidden] {
+    display: none;
+}
+
+.stylemap-landmark-tags {
+    color: var(--text);
+}
+
+.stylemap-landmark-count {
+    color: var(--muted);
 }
 
 .stylemap-error {

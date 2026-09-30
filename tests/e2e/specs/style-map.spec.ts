@@ -31,6 +31,38 @@ function pointsBody(overrides: Record<string, unknown> = {}) {
   }
 }
 
+/** Three regions: labels + artist, nothing to say, artist only (S3b.2 landmarks). */
+function regionsBody(overrides: Record<string, unknown> = {}) {
+  return {
+    status: 'ok',
+    space: 'kaloscope',
+    method: 'pca',
+    model_version: 'kaloscope:test',
+    k: 3,
+    seed: 0,
+    algo_version: 1,
+    regions: [
+      { id: 0, center: [-0.4, 0.2, 0.1], size: 12, members_total: 14, representatives: [9003, 9008], tagged: 12,
+        tags: [{ tag: 'monochrome', count: 6, tagged: 12, rate: 0.5, ratio: 4.1, p: 0.0002, q: 0.001 }],
+        artists: [{ artist: 'modare', count: 5, high_total: 6, share: 0.833 }] },
+      { id: 1, center: [0.3, -0.3, 0.2], size: 10, members_total: 10, representatives: [9012], tagged: 0, tags: [], artists: [] },
+      { id: 2, center: [0.1, 0.4, -0.3], size: 8, members_total: 8, representatives: [9020, 9025], tagged: 8, tags: [],
+        artists: [{ artist: 'meion', count: 3, high_total: 4, share: 0.75 }] },
+    ],
+    cached: false,
+    ...overrides,
+  }
+}
+
+const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
+
+async function mockThumbnails(page: Page, onRequest: (url: string) => void = () => {}) {
+  await page.route('**/api/image-thumbnail/**', (route) => {
+    onRequest(route.request().url())
+    return route.fulfill({ status: 200, contentType: 'image/png', body: PNG_1PX })
+  })
+}
+
 async function mockSelectionToken(page: Page) {
   await page.route('**/api/images/selection-token', (route) =>
     route.fulfill({ json: { selection_token: 'tok.e2e', total_estimate: 33 } }))
@@ -301,6 +333,233 @@ test.describe('Style Map', () => {
     expect(tokenBodies.length).toBeGreaterThan(0)
     expect(tokenBodies.every((body) => body.sortBy === 'newest')).toBe(true)
     await expect(page.locator('#stylemap-error')).toBeHidden()
+  })
+
+  test('draws at most k landmark cards without empty text rows; the switch flips its words, remembers, and stops the thumbnails', async ({ page }) => {
+    await mockSelectionToken(page)
+    await mockProgressIdle(page)
+    await page.route('**/api/style-map/points**', (route) => route.fulfill({ json: pointsBody() }))
+    await page.route('**/api/style-map/regions**', (route) => route.fulfill({ json: regionsBody() }))
+    let landmarkThumbnails = 0
+    // Landmark pictures are the mock's 90xx ids at size=256; the Gallery grid
+    // behind the view fetches its own (smaller, real) thumbnails.
+    await mockThumbnails(page, (url) => { if (/\/api\/image-thumbnail\/90\d\d\?size=256/.test(url)) { landmarkThumbnails += 1 } })
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await page.goto('/')
+    const map = new StyleMapPage(page)
+    await map.open()
+    await expect.poll(() => map.pointCount()).toBe(30)
+    await expect(map.landmarksLayer).toBeVisible()
+    // One card per region, never more than k; a region with nothing to say
+    // shows its picture only (no empty text row).
+    await expect(map.landmarks).toHaveCount(3)
+    expect(await map.landmarks.count()).toBeLessThanOrEqual(regionsBody().k)
+    await expect(map.landmark(0).locator('.stylemap-landmark-text')).toHaveText(/monochrome|单色/)
+    await expect(map.landmark(1).locator('.stylemap-landmark-text')).toHaveCount(0)
+    // Closed: the artist's name only; the coverage sits in the open card.
+    await expect(map.landmark(2).locator('.stylemap-landmark-text')).toContainText('meion')
+    await expect(map.landmark(2).locator('.stylemap-landmark-text')).not.toContainText('3/4')
+    await expect.poll(() => landmarkThumbnails, { message: () => landmarkUrls.join('\n') }).toBe(3)
+    // Nothing on the card pretends to be clickable.
+    expect(await map.landmark(0).evaluate((el) => getComputedStyle(el).cursor)).not.toBe('pointer')
+
+    // The switch names the action and flips with the state (rule 16).
+    await expect(map.landmarksToggle).toHaveText(/隐藏区域标记|Hide region landmarks/)
+    await expect(map.landmarksToggle).toHaveAttribute('aria-pressed', 'true')
+    await map.landmarksToggle.click()
+    await expect(map.landmarksToggle).toHaveText(/显示区域标记|Show region landmarks/)
+    await expect(map.landmarksToggle).toHaveAttribute('aria-pressed', 'false')
+    await expect(map.landmarksLayer).toBeHidden()
+
+    // Off is remembered across a reload, and an off map never asks for the
+    // landmark thumbnails (only the hover preview's 512 size is the page's).
+    landmarkThumbnails = 0
+    await page.reload()
+    await map.open()
+    await expect.poll(() => map.pointCount()).toBe(30)
+    await expect(map.landmarksToggle).toHaveText(/显示区域标记|Show region landmarks/)
+    await expect(map.landmarksLayer).toBeHidden()
+    await page.waitForTimeout(600)
+    expect(landmarkThumbnails).toBe(0)
+    await map.landmarksToggle.click()
+    await expect(map.landmarksLayer).toBeVisible()
+    await expect(map.landmarks).toHaveCount(3)
+    await expect.poll(() => landmarkThumbnails).toBe(3)
+  })
+
+  test('hovering a landmark opens it and lights that region\'s dots', async ({ page }) => {
+    await mockSelectionToken(page)
+    await mockProgressIdle(page)
+    await page.route('**/api/style-map/points**', (route) => route.fulfill({ json: pointsBody() }))
+    await page.route('**/api/style-map/regions**', (route) => route.fulfill({ json: regionsBody() }))
+    await mockThumbnails(page)
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await page.goto('/')
+    const map = new StyleMapPage(page)
+    await map.open()
+    await expect(map.landmarks).toHaveCount(3)
+    const card = map.landmark(0)
+    await card.hover()
+    await expect(card).toHaveClass(/is-open/)
+    // The open card: second picture, every label, the picture count.
+    await expect(card.locator('.stylemap-landmark-thumbs img')).toHaveCount(2)
+    await expect(card.locator('.stylemap-landmark-artist')).toContainText('modare')
+    await expect(card.locator('.stylemap-landmark-artist')).toContainText('5/6')
+    await expect(card.locator('.stylemap-landmark-tags')).toHaveText(/monochrome|单色/)
+    await expect(card.locator('.stylemap-landmark-count')).toContainText('14')
+    // Dots of region 0 are brighter than every other dot; leaving restores them.
+    const contrast = () => page.evaluate(() => {
+      const state = (window as any).StyleMap._state
+      const colors = state.scene.geometry.getAttribute('color')
+      const labels: Int8Array = state.regionLabels
+      const inside = labels.indexOf(0)
+      const outside = labels.findIndex((label: number) => label !== 0)
+      return { focus: state.scene.focus?.region ?? null, inside: colors.getX(inside), outside: colors.getX(outside) }
+    })
+    await expect.poll(async () => (await contrast()).focus).toBe(0)
+    const lit = await contrast()
+    expect(lit.inside).toBeGreaterThan(lit.outside)
+    await page.mouse.move(5, 5)
+    await expect(card).not.toHaveClass(/is-open/)
+    await expect.poll(async () => (await contrast()).focus).toBeNull()
+    const plain = await contrast()
+    expect(plain.inside).toBeCloseTo(plain.outside, 5)
+  })
+
+  test('the wheel over a landmark card zooms the map instead of scrolling the page', async ({ page }) => {
+    await mockSelectionToken(page)
+    await mockProgressIdle(page)
+    await page.route('**/api/style-map/points**', (route) => route.fulfill({ json: pointsBody() }))
+    await page.route('**/api/style-map/regions**', (route) => route.fulfill({ json: regionsBody() }))
+    await mockThumbnails(page)
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await page.goto('/')
+    const map = new StyleMapPage(page)
+    await map.open()
+    await expect(map.landmarks).toHaveCount(3)
+    const distance = () => page.evaluate(() => {
+      const scene = (window as any).StyleMap._state.scene
+      return scene.camera.position.distanceTo(scene.controls.target)
+    })
+    const card = map.landmark(0)
+    await card.hover()
+    await expect(card).toHaveClass(/is-open/)
+    const before = await distance()
+    await page.mouse.wheel(0, -240)
+    await expect.poll(distance, { timeout: 3000 }).not.toBeCloseTo(before, 3)
+    expect(await distance()).toBeLessThan(before)
+    expect(await page.evaluate(() => window.scrollY)).toBe(0)
+  })
+
+  test('drops the regions of a map that was replaced while they were loading', async ({ page }) => {
+    await mockSelectionToken(page)
+    await mockProgressIdle(page)
+    await page.route('**/api/style-map/points**', (route) => route.fulfill({ json: pointsBody() }))
+    await mockThumbnails(page)
+    let regionsCalls = 0
+    await page.route('**/api/style-map/regions**', async (route) => {
+      regionsCalls += 1
+      if (regionsCalls === 1) {
+        // The first map's regions are slow; the filter changes meanwhile.
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+        return route.fulfill({ json: regionsBody({ regions: regionsBody().regions.map((region) => ({ ...region, id: region.id + 100 })) }) })
+      }
+      return route.fulfill({ json: regionsBody() })
+    })
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await page.goto('/')
+    const map = new StyleMapPage(page)
+    await map.open()
+    await expect.poll(() => map.pointCount()).toBe(30)
+    await expect.poll(() => regionsCalls).toBe(1)
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('gallery-filters-changed')))
+    await expect.poll(() => regionsCalls, { timeout: 5000 }).toBe(2)
+    await expect(map.landmarks).toHaveCount(3)
+    // The stale answer lands at ~1.5 s: it must not replace the new map's cards.
+    await page.waitForTimeout(1800)
+    const ids = await map.landmarks.evaluateAll((cards) => cards.map((card) => (card as HTMLElement).dataset.region))
+    expect(ids).toEqual(['0', '1', '2'])
+  })
+
+  test('landmark cards use small pictures on a small canvas and large ones on a big canvas', async ({ page }) => {
+    await mockSelectionToken(page)
+    await mockProgressIdle(page)
+    await page.route('**/api/style-map/points**', (route) => route.fulfill({ json: pointsBody() }))
+    await page.route('**/api/style-map/regions**', (route) => route.fulfill({ json: regionsBody() }))
+    await mockThumbnails(page)
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.goto('/')
+    const map = new StyleMapPage(page)
+    await map.open()
+    await expect(map.landmarks).toHaveCount(3)
+    // The card's own CSS width (the depth scale is a transform on top of it).
+    const thumbWidth = () => map.landmark(0).locator('.stylemap-landmark-thumbs img').first()
+      .evaluate((img) => Math.round(parseFloat(getComputedStyle(img).width)))
+    // The canvas, not the window, decides: 1366x768 leaves it ~570 px tall.
+    const canvas = await map.canvas.evaluate((el) => ({ w: el.clientWidth, h: el.clientHeight }))
+    expect(Math.min(canvas.w, canvas.h)).toBeLessThan(700)
+    await expect(map.landmarksLayer).toHaveClass(/is-small/)
+    await expect.poll(thumbWidth).toBe(64)
+    // Growing the window past the threshold re-lays the cards out at full size.
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await expect(map.landmarksLayer).not.toHaveClass(/is-small/)
+    await expect.poll(thumbWidth).toBe(96)
+    // The open card stays whole on the small canvas.
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await expect.poll(thumbWidth).toBe(64)
+    const card = map.landmark(0)
+    await card.hover()
+    await expect(card).toHaveClass(/is-open/)
+    const fit = await page.evaluate(() => {
+      const open = document.querySelector('.stylemap-landmark.is-open')!.getBoundingClientRect()
+      const box = document.querySelector('#stylemap-canvas-card')!.getBoundingClientRect()
+      return open.left >= box.left - 0.5 && open.right <= box.right + 0.5 && open.top >= box.top - 0.5 && open.bottom <= box.bottom + 0.5
+    })
+    expect(fit).toBe(true)
+  })
+
+  test('asks for regions again when the layout switches from PCA to UMAP, and calls points first on not_started', async ({ page }) => {
+    await mockSelectionToken(page)
+    await mockProgressIdle(page)
+    await mockThumbnails(page)
+    let statusReply = 'computing'
+    let regionsReply: 'not_started' | 'ok' = 'not_started'
+    const regionsCalls: string[] = []
+    let pointsCalls = 0
+    await page.route('**/api/style-map/layout-status**', (route) =>
+      route.fulfill({ json: { space: 'kaloscope', method: statusReply === 'ready' ? 'umap' : 'pca', umap: { status: statusReply, points: 30, min_points: 21, params: UMAP_PARAMS } } }))
+    await page.route('**/api/style-map/points**', (route) => {
+      pointsCalls += 1
+      const ready = statusReply === 'ready'
+      return route.fulfill({ json: pointsBody({
+        method: ready ? 'umap' : 'pca',
+        umap: ready
+          ? { status: 'ready', points: 30, min_points: 21, params: UMAP_PARAMS, source: 'memory', elapsed_s: 4.2 }
+          : { status: 'computing', points: 30, min_points: 21, params: UMAP_PARAMS, queued_at: 1 },
+      }) })
+    })
+    await page.route('**/api/style-map/regions**', (route) => {
+      regionsCalls.push(statusReply)
+      if (regionsReply === 'not_started') {
+        regionsReply = 'ok'
+        return route.fulfill({ json: { status: 'not_started', space: 'kaloscope', regions: [] } })
+      }
+      return route.fulfill({ json: regionsBody({ method: statusReply === 'ready' ? 'umap' : 'pca' }) })
+    })
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await page.goto('/')
+    const map = new StyleMapPage(page)
+    await map.open()
+    // not_started: the page calls points again, then regions again (once).
+    await expect(map.landmarks).toHaveCount(3)
+    expect(pointsCalls).toBe(2)
+    expect(regionsCalls.length).toBe(2)
+    // The UMAP coordinates arrive as a new points answer: fresh regions.
+    statusReply = 'ready'
+    await expect.poll(() => pointsCalls, { timeout: 8000 }).toBe(3)
+    await expect.poll(() => regionsCalls.length, { timeout: 8000 }).toBe(3)
+    expect(regionsCalls[2]).toBe('ready')
+    await expect(map.landmarks).toHaveCount(3)
   })
 
   test('stops polling the index job after leaving the page, even mid-flight', async ({ page }) => {
