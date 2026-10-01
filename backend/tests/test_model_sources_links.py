@@ -685,3 +685,29 @@ def test_detect_keeps_working_while_a_generation_runs(isolated, monkeypatch):
     finally:
         release.set()
     assert model_sources_store.wait_for_scans(timeout=5)
+
+
+@needs_links
+def test_a_pinned_snapshot_folder_that_links_to_unc_is_not_read(
+    isolated, tmp_path, unc_spy
+):
+    import aesthetic
+
+    pin = aesthetic.WAIFU_HEAD_FILE
+    snapshots = (
+        isolated.home
+        / ".cache"
+        / "huggingface"
+        / "hub"
+        / ("models--" + pin.repo.replace("/", "--"))
+        / "snapshots"
+    )
+    write(snapshots / "0ldrevision" / pin.remote_path, b"x" * 10)
+    nas = tmp_path / "nas_snap"
+    write(nas / pin.remote_path, b"x" * 10)
+    link("/D", snapshots / pin.revision, unc_of(nas))
+
+    payload = make_service(isolated).detect()
+
+    assert request_thread_unc_calls(unc_spy) == []
+    assert payload["matches"] == []

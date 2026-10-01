@@ -236,7 +236,7 @@ def _match_hf_spec(ctx: _Context, spec: _HfSpec, report: MatchReport) -> None:
         _match_any_snapshot(ctx, spec, dirs, report)
         return
     pinned = snapshots / spec.revision
-    if not pinned.is_dir():
+    if not ctx.may_read(pinned) or not pinned.is_dir():
         others = ", ".join(d.name[:8] for d in dirs)
         report.rejected.append(
             ctx.reject(
