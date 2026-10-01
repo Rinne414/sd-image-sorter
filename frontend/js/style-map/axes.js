@@ -80,6 +80,8 @@ class AxisLabels {
         this.layer = document.createElement('div');
         this.layer.className = 'stylemap-axis-labels';
         this.layer.hidden = true;
+        // The card says the same in words; the overlay is a visual aid.
+        this.layer.setAttribute('aria-hidden', 'true');
         // Right after the canvas: the landmark cards (added later) stay above.
         const canvas = card.querySelector('canvas');
         if (canvas) canvas.after(this.layer);
