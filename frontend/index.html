@@ -30,6 +30,7 @@
     <link rel="stylesheet" href="/static/css/ai-busy.css">
     <link rel="stylesheet" href="/static/css/reverse-prompt.css">
     <link rel="stylesheet" href="/static/css/style-map.css">
+    <link rel="stylesheet" href="/static/css/style-map-locate.css">
     <!-- tokens.css must stay the LAST stylesheet: it owns the Graphite palette
          and remaps every legacy token defined by the sheets above. -->
     <link rel="stylesheet" href="/static/css/tokens.css">
@@ -3894,6 +3895,19 @@
                     <div class="stylemap-subbar">
                         <p class="stylemap-scope" id="stylemap-scope"></p>
                         <div class="stylemap-subbar-tools">
+                            <!-- S4f: find a picture on the map with the Gallery search language;
+                                 texts are written by js/style-map/locate.js (no data-i18n). -->
+                            <div class="stylemap-locate" id="stylemap-locate" role="search">
+                                <svg class="icon stylemap-locate-icon" aria-hidden="true"><use href="#i-search"/></svg>
+                                <input type="text" class="input-field stylemap-locate-input" id="stylemap-locate-input" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="stylemap-locate-list" aria-autocomplete="list" autocomplete="off" spellcheck="false">
+                                <button class="stylemap-locate-clear" id="stylemap-locate-clear" type="button" hidden>&times;</button>
+                                <div class="stylemap-locate-pop" id="stylemap-locate-pop" hidden>
+                                    <p class="stylemap-locate-status" id="stylemap-locate-status" role="status" aria-live="polite" hidden></p>
+                                    <button class="btn btn-secondary btn-small stylemap-locate-action" id="stylemap-locate-action" type="button" hidden></button>
+                                    <ul class="stylemap-locate-list" id="stylemap-locate-list" role="listbox"></ul>
+                                    <p class="stylemap-locate-foot" id="stylemap-locate-foot" hidden></p>
+                                </div>
+                            </div>
                             <!-- Words follow the state (rule 16): panel.js swaps key + text. -->
                             <button class="btn btn-ghost btn-small" id="stylemap-landmarks-toggle" type="button" aria-pressed="true" data-i18n="stylemap.landmarksHide">Hide region landmarks</button>
                             <!-- Box select switch for trackpads (Shift + drag does the same); words follow the state (rule 16). -->
@@ -3957,7 +3971,9 @@
                                     <input type="file" id="stylemap-near-file" accept="image/*" hidden>
                                 </div>
                                 <p class="stylemap-near-status" id="stylemap-near-status" role="status" aria-live="polite" hidden></p>
+                                <button class="btn btn-secondary btn-small stylemap-near-action" id="stylemap-near-action" type="button" hidden></button>
                                 <div class="stylemap-near-body">
+                                    <p class="stylemap-near-for" id="stylemap-near-for" hidden></p>
                                     <ul class="stylemap-near-list" id="stylemap-near-list"></ul>
                                     <p class="stylemap-near-note" id="stylemap-near-note" hidden></p>
                                 </div>
@@ -5927,6 +5943,7 @@
                                                     <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="dataset" title="Add to dataset" data-i18n-title="modal.addToDataset"><svg class="icon" aria-hidden="true"><use href="#i-package"/></svg> <span data-i18n="nav.dataset">Dataset</span></button>
                                                     <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="collection" title="Add to collection" data-i18n-title="collections.contextAddTo"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg> <span data-i18n="modal.collection">Collection</span></button>
                                                     <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="prompt" title="Open in Prompt Helper" data-i18n-title="gallery.contextPromptHelper"><svg class="icon" aria-hidden="true"><use href="#i-flask"/></svg> <span data-i18n="modal.promptHelper">Prompt</span></button>
+                                                    <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="stylemap" title="View on the Style Map" data-i18n-title="gallery.contextViewOnStyleMap"><svg class="icon" aria-hidden="true"><use href="#i-compass"/></svg> <span data-i18n="nav.stylemap">Style Map</span></button>
                                                     <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="reader" title="Open in full Reader" data-i18n-title="modal.openInReader"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg> <span data-i18n="modal.fullReader">Full Reader</span></button>
                                                 </div>
                                             </div>

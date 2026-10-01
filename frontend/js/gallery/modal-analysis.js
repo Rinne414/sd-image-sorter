@@ -53,6 +53,10 @@ Object.assign(window.Gallery, {
                 app.openReaderFromImage?.(id, filename);
                 closeModal();
                 break;
+            case 'stylemap':
+                window.StyleMap?.locateImage?.(id);
+                closeModal();
+                break;
             default:
                 break;
         }

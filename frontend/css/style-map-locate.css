@@ -1,0 +1,189 @@
+/* Style Map: find one picture on the map (S4f).
+   - the "Locate a picture" box in the sub bar and its result list
+   - the extra status tones and the button of the nearest-pictures card */
+
+.stylemap-locate {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 0 1 auto;
+    width: 220px;
+    min-width: 0;
+}
+
+.stylemap-locate-icon {
+    position: absolute;
+    left: 9px;
+    width: 14px;
+    height: 14px;
+    color: var(--muted);
+    pointer-events: none;
+}
+
+.stylemap-locate-input.input-field {
+    width: 100%;
+    min-width: 0;
+    height: 32px;
+    min-height: 32px; /* as tall as the small buttons beside it */
+    padding: 0 26px 0 28px;
+    font-size: 12.5px;
+    box-sizing: border-box;
+}
+
+.stylemap-locate-clear {
+    position: absolute;
+    right: 3px;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.stylemap-locate-clear:hover {
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.stylemap-locate-clear:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+/* The result list opens under the box, right edge aligned (the box sits at the
+   right end of the bar), and scrolls inside its own height. */
+.stylemap-locate-pop {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 30;
+    box-sizing: border-box;
+    width: 360px;
+    max-width: calc(100vw - 48px);
+    max-height: min(420px, calc(var(--ui-viewport-height, 100vh) - 200px));
+    overflow-y: auto;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-1);
+    box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
+}
+
+.stylemap-locate-pop[hidden] {
+    display: none;
+}
+
+.stylemap-locate-status,
+.stylemap-locate-foot {
+    margin: 0;
+    padding: 6px 8px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-2);
+}
+
+.stylemap-locate-status[data-tone="error"] {
+    color: var(--danger);
+}
+
+.stylemap-locate-status[data-tone="warn"] {
+    color: var(--text);
+}
+
+.stylemap-locate-foot {
+    color: var(--muted);
+    font-size: 11.5px;
+}
+
+.stylemap-locate-action {
+    margin: 2px 8px 6px;
+}
+
+.stylemap-locate-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.stylemap-locate-count {
+    padding: 4px 8px 6px;
+    font-size: 11.5px;
+    color: var(--muted);
+}
+
+.stylemap-locate-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 5px 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 12.5px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.stylemap-locate-row:hover,
+.stylemap-locate-row.is-active {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.stylemap-locate-thumb {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    object-fit: cover;
+    background: var(--surface-3);
+}
+
+.stylemap-locate-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.stylemap-locate-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.stylemap-locate-flag {
+    color: var(--muted);
+    font-size: 11.5px;
+    line-height: 1.3;
+}
+
+/* Nearest-pictures card: the heading of a library lookup, the status tones
+   the Gallery handoff adds and the status line's own button. */
+.stylemap-near-for {
+    margin: 0 0 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+}
+
+.stylemap-near-for[hidden],
+.stylemap-near-action[hidden] {
+    display: none;
+}
+
+.stylemap-near-status[data-tone="warn"] {
+    color: var(--text);
+}
+
+.stylemap-near-action {
+    flex: 0 0 auto;
+    align-self: flex-start;
+}

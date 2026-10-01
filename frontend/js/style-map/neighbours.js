@@ -28,6 +28,7 @@ function el(tag, className, text) {
 async function failureOf(response) {
     const body = await response.json().catch(() => ({}));
     const detail = String(body?.detail || body?.error || '');
+    if (response.status === 404) return ['stylemap.locateErrGone', 'This picture is no longer in the library', {}];
     if (response.status === 413) return ['stylemap.nearErrTooLarge', 'The picture is too large (50 MB at most)', {}];
     if (response.status === 409) {
         return ['stylemap.nearErrBusy', 'Another AI task is running; try again in a moment', {}];
@@ -60,8 +61,12 @@ export class NeighbourCard {
             list: $('stylemap-near-list'),
             body: root.querySelector('.stylemap-near-body'),
             note: $('stylemap-near-note'),
+            action: $('stylemap-near-action'),
+            heading: $('stylemap-near-for'),
         };
         this.file = null;
+        this.libraryId = null; // a library picture asked about from the Gallery (S4f), instead of a file
+        this.marker = null; // one extra ring (the search box's pick), {x, y, z, sig}
         this.previewUrl = null;
         this.result = null;
         this.resultSig = null;
@@ -123,7 +128,8 @@ export class NeighbourCard {
             this.abortRun();
             this.result = null;
             this.resultSig = null;
-            this.scene?.setRings([]);
+            this.marker = null;
+            this.paint([]);
         }
         this.render();
     }
@@ -134,11 +140,13 @@ export class NeighbourCard {
      * again; with none, nothing to do.
      */
     mapChanged(signature) {
+        if (this.marker && this.marker.sig !== signature) this.marker = null;
         if (this.available && this.result && signature === this.resultSig) {
             this.drawRings(); // a new points answer cleared the rings of the same map
             return;
         }
-        if (!this.available || !this.file) return;
+        if (this.marker) this.paint([]);
+        if (!this.available || (!this.file && this.libraryId === null)) return;
         if (signature === this.resultSig || signature === this.runSig || this.refreshing) return;
         this.run(false);
     }
@@ -146,12 +154,51 @@ export class NeighbourCard {
     clear() {
         this.abortRun();
         this.file = null;
+        this.libraryId = null;
         this.result = null;
         this.resultSig = null;
         this.activeId = null;
         this.status = null;
+        this.marker = null;
         this.revokePreview();
-        this.scene?.setRings([]);
+        this.paint([]);
+        this.render();
+    }
+
+    /** One extra ring for a picture the search box found (null removes it). */
+    setMarker(position) {
+        const signature = this.host.getRequest()?.signature;
+        this.marker = position && signature ? { x: position.x, y: position.y, z: position.z, sig: signature } : null;
+        this.drawRings();
+    }
+
+    /** The rings of the lookup plus the search box's marker. */
+    paint(rings) {
+        const extra = this.marker ? [{ kind: 'query', x: this.marker.x, y: this.marker.y, z: this.marker.z }] : [];
+        this.scene?.setRings([...rings, ...extra]);
+    }
+
+    /**
+     * Ask what is most like a library picture (S4f): the same card and rings
+     * as a dropped file, ranked by the picture's stored vector.
+     */
+    lookupLibrary(imageId) {
+        this.abortRun();
+        this.file = null;
+        this.revokePreview();
+        this.libraryId = Number(imageId);
+        this.activeId = null;
+        this.focusQuery = true; // the camera turns to the picture's own dot
+        this.run(false);
+    }
+
+    /** A sentence with an optional button, in the card's status line (no lookup in flight). */
+    explain(key, fallback, tone, action = null) {
+        this.abortRun();
+        this.result = null;
+        this.resultSig = null;
+        this.paint([]);
+        this.status = { key, fallback, params: {}, tone, action };
         this.render();
     }
 
@@ -178,6 +225,7 @@ export class NeighbourCard {
             return;
         }
         this.file = file;
+        this.libraryId = null;
         this.revokePreview();
         this.previewUrl = URL.createObjectURL(file);
         this.activeId = null;
@@ -189,15 +237,39 @@ export class NeighbourCard {
         this.focusQuery = false;
         this.result = null;
         this.resultSig = null;
-        this.scene?.setRings([]);
+        this.paint([]);
         this.status = { key, fallback, params, tone: 'error' };
         this.render();
     }
 
-    /** One upload; a map the server lost (not_started) is rebuilt once and asked again. */
+    /** The first Kaloscope use loads the model: say so when the answer is slow. */
+    armSlowModelHint(seq) {
+        this.slowTimer = setTimeout(() => {
+            if (seq !== this.seq) return;
+            this.status = {
+                key: 'stylemap.nearLoadingModel',
+                fallback: 'Loading the Style Finder model; the first time takes about {seconds} seconds...',
+                params: { seconds: COLD_SECONDS },
+                tone: 'busy',
+            };
+            this.renderStatus();
+        }, SLOW_MODEL_MS);
+    }
+
+    /** The one request of a lookup: an upload, or the stored vector of a library picture. */
+    fetchAnswer(request, signal) {
+        if (this.libraryId !== null) {
+            return fetch(`/api/style-map/near?${request.query}&image_id=${this.libraryId}`, { signal });
+        }
+        const body = new FormData();
+        body.append('file', this.file, this.file.name || 'upload');
+        return fetch(`/api/style-map/query?${request.query}`, { method: 'POST', body, signal });
+    }
+
+    /** One lookup; a map the server lost (not_started) is rebuilt once and asked again. */
     async run(retried) {
         const request = this.host.getRequest();
-        if (!request || !this.file) return;
+        if (!request || (!this.file && this.libraryId === null)) return;
         this.abortRun();
         const seq = this.seq;
         this.runSig = request.signature;
@@ -205,28 +277,11 @@ export class NeighbourCard {
         this.abort = controller;
         this.status = { key: 'stylemap.nearWorking', fallback: 'Finding the nearest pictures...', params: {}, tone: 'busy' };
         this.result = null;
-        this.scene?.setRings([]);
+        this.paint([]);
         this.render();
-        if (request.space === 'kaloscope') {
-            this.slowTimer = setTimeout(() => {
-                if (seq !== this.seq) return;
-                this.status = {
-                    key: 'stylemap.nearLoadingModel',
-                    fallback: 'Loading the Style Finder model; the first time takes about {seconds} seconds...',
-                    params: { seconds: COLD_SECONDS },
-                    tone: 'busy',
-                };
-                this.renderStatus();
-            }, SLOW_MODEL_MS);
-        }
+        if (this.file && request.space === 'kaloscope') this.armSlowModelHint(seq);
         try {
-            const body = new FormData();
-            body.append('file', this.file, this.file.name || 'upload');
-            const response = await fetch(`/api/style-map/query?${request.query}`, {
-                method: 'POST',
-                body,
-                signal: controller.signal,
-            });
+            const response = await this.fetchAnswer(request, controller.signal);
             if (seq !== this.seq) return;
             if (!response.ok) {
                 const [key, fallback, params] = await failureOf(response);
@@ -247,7 +302,8 @@ export class NeighbourCard {
                 if (seq === this.seq) await this.run(true);
                 return;
             }
-            this.accept(answer, request);
+            if (answer?.status === 'no_vector') this.explainNoVector(request.space);
+            else this.accept(answer, request);
         } catch (error) {
             if (seq !== this.seq || error?.name === 'AbortError') return;
             this.fail('stylemap.nearErr', 'The lookup failed: {error}', { error: String(error?.message || error) });
@@ -260,10 +316,56 @@ export class NeighbourCard {
         }
     }
 
+    /** The picture has no vector in this space: say so, with the way to get one. */
+    explainNoVector(space) {
+        const clip = space === 'clip';
+        this.explain(
+            clip ? 'stylemap.locateNoClip' : 'stylemap.locateNoVector',
+            clip
+                ? 'This picture has no similarity data yet; build the similarity index on the Find Similar page.'
+                : 'This picture has no style data yet; build the style index first.',
+            'warn',
+            clip
+                ? { key: 'stylemap.goSimilar', fallback: 'Open Find Similar', run: () => this.host.openSimilar() }
+                : { key: 'stylemap.buildIndex', fallback: 'Build style index', run: () => this.host.buildIndex() },
+        );
+    }
+
+    /** The Gallery filter leaves nothing on the map: offer to clear it. */
+    explainOutside() {
+        this.explain(
+            'stylemap.locateOutsideAll',
+            'The current Gallery filter leaves no picture on this map, so this picture has no dot.',
+            'warn',
+            { key: 'stylemap.locateShowAll', fallback: 'Show all pictures', run: () => this.host.showAll() },
+        );
+    }
+
+    /** What to tell about where a library picture is (null: it sits on its own dot). */
+    locationStatus(me) {
+        if (!me) return null;
+        if (!me.in_filter) {
+            return {
+                key: 'stylemap.locateOutside',
+                fallback: 'Not in the current Gallery filter, so it has no dot. Its closest matches are listed anyway.',
+                tone: 'warn',
+                action: { key: 'stylemap.locateShowAll', fallback: 'Show all pictures', run: () => this.host.showAll() },
+            };
+        }
+        if (!me.located) {
+            return { key: 'stylemap.locateUnplaced', fallback: "This picture can't be placed on the map.", tone: 'warn' };
+        }
+        if (me.merged) {
+            return { key: 'stylemap.locateMerged', fallback: 'This picture is merged into the same dot as another picture.', tone: 'info' };
+        }
+        return null;
+    }
+
     accept(answer, request) {
         this.result = answer;
         this.resultSig = request.signature;
-        this.status = null;
+        const where = this.libraryId !== null ? this.locationStatus(answer.self) : null;
+        this.status = where ? { ...where, params: {} } : null;
         this.drawRings();
         if (this.focusQuery && answer.query) {
             this.activeId = 'query';
@@ -286,7 +388,7 @@ export class NeighbourCard {
             drawn.add(dot);
             rings.push({ kind: n.weak ? 'far' : 'near', x: n.x, y: n.y, z: n.z });
         }
-        this.scene?.setRings(rings);
+        this.paint(rings);
     }
 
     /** Turn the camera to a row's point and show its picture. */
@@ -322,7 +424,7 @@ export class NeighbourCard {
         drop.classList.toggle('is-fill', !hasResult);
         drop.setAttribute('aria-disabled', this.available ? 'false' : 'true');
         drop.tabIndex = this.available ? 0 : -1;
-        clear.hidden = !this.file;
+        clear.hidden = !this.file && this.libraryId === null;
         const clearLabel = t('stylemap.nearClear', 'Clear');
         clear.title = clearLabel;
         clear.setAttribute('aria-label', clearLabel);
@@ -337,14 +439,26 @@ export class NeighbourCard {
         if (!s) return;
         status.textContent = t(s.key, s.fallback, s.params);
         status.dataset.tone = s.tone;
+        this.renderAction(s.action);
+    }
+
+    /** The status line's one button (build the index, show all pictures ...). */
+    renderAction(action) {
+        const { action: button } = this.el;
+        button.hidden = !action;
+        if (!action) return;
+        button.textContent = t(action.key, action.fallback);
+        button.onclick = action.run;
     }
 
     renderList() {
-        const { list, note } = this.el;
+        const { list, note, heading } = this.el;
         list.replaceChildren();
         const answer = this.result;
         this.el.body.hidden = !answer;
         note.hidden = !answer;
+        heading.hidden = !answer || this.libraryId === null;
+        heading.textContent = t('stylemap.locateFor', 'Most like this picture');
         if (!answer) return;
         list.append(this.queryRow(answer));
         const neighbours = answer.neighbors || [];
@@ -355,6 +469,11 @@ export class NeighbourCard {
         }
         const placed = Boolean(answer.query);
         const threshold = Number(answer.weak_threshold).toFixed(SCORE_DECIMALS);
+        if (this.libraryId !== null) {
+            note.textContent = t('stylemap.locateNote', 'Scores are cosine similarity; grey ones below {threshold} are not really close.', { threshold });
+            this.markActive();
+            return;
+        }
         note.textContent = placed
             ? t('stylemap.nearNote', 'Your picture is placed next to its three closest matches, so the spot is an estimate. Scores are cosine similarity; grey ones below {threshold} are not really close.', { threshold })
             : t('stylemap.nearNoPlace', 'None of the closest pictures is in the current filter, so your picture is not marked on the map.');
@@ -368,11 +487,14 @@ export class NeighbourCard {
         button.dataset.id = 'query';
         const thumb = el('img', 'stylemap-near-thumb');
         thumb.alt = '';
-        if (this.previewUrl) thumb.src = this.previewUrl;
+        const ofLibrary = this.libraryId !== null;
+        if (ofLibrary) thumb.src = `/api/image-thumbnail/${this.libraryId}?size=${THUMBNAIL_SIZE}`;
+        else if (this.previewUrl) thumb.src = this.previewUrl;
         const text = el('span', 'stylemap-near-text');
+        const flag = ofLibrary ? t('stylemap.locateThis', 'This picture') : t('stylemap.nearQuery', 'Your picture');
         text.append(
-            el('span', 'stylemap-near-name', this.file?.name || t('stylemap.nearQuery', 'Your picture')),
-            el('span', 'stylemap-near-flag', t('stylemap.nearQuery', 'Your picture')),
+            el('span', 'stylemap-near-name', (ofLibrary ? answer.self?.filename : this.file?.name) || flag),
+            el('span', 'stylemap-near-flag', flag),
         );
         button.append(thumb, text);
         const position = answer.query ? [answer.query.x, answer.query.y, answer.query.z] : null;

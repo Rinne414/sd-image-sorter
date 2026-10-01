@@ -15,6 +15,7 @@ import { IndexJob } from './index-job.js';
 import { RegionLandmarks, assignRegions, readLandmarksPreference, writeLandmarksPreference } from './regions.js';
 import { ColorLegend, buildPointColors, readColorPreference, writeColorPreference } from './colors.js';
 import { NeighbourCard } from './neighbours.js';
+import { MapLocator } from './locate.js';
 import { BoxSelector } from './lasso.js';
 import { MapSelection } from './selection.js';
 import { t, formatError } from './text.js';
@@ -53,6 +54,7 @@ export function createStyleMap() {
         legend: null,
         colorSeq: 0,
         colorStats: null,
+        pendingLookup: null, // a Gallery picture to look up once the map is on screen (S4f)
     };
 
     const root = () => document.getElementById('view-stylemap');
@@ -129,6 +131,7 @@ export function createStyleMap() {
     /** Repaint every JS-written text from the current state (also on language switch). */
     function repaint() {
         state.near?.render();
+        state.locate?.render();
         const points = state.points;
         if (!points || !state.panel) return;
         state.panel.renderScope(points);
@@ -161,6 +164,8 @@ export function createStyleMap() {
         scheduleLayoutPoll(points.umap?.status);
         state.near?.setAvailable(hasPoints && Boolean(points.map_id));
         if (hasPoints) state.near?.mapChanged(mapSignature());
+        state.locate?.mapChanged(hasPoints ? mapSignature() : null);
+        consumePendingLookup(points, hasPoints);
         if (hasPoints) {
             if (!state.colors) state.panel.showColorsNote(t('stylemap.colorsLoading', 'Loading colours...'));
             loadRegions();
@@ -182,6 +187,49 @@ export function createStyleMap() {
     /** What the dropped-picture card keys its answer by: the map and its coordinates. */
     function mapSignature() {
         return `${state.space}|${state.points?.map_id || ''}|${state.points?.method || ''}`;
+    }
+
+    /** The map on screen as the locate box and the Gallery handoff see it; null while there is none. */
+    function locateMap() {
+        if (state.points?.status !== 'ok' || !state.points.map_id || !state.scene.count) return null;
+        return { space: state.space, mapId: state.points.map_id, signature: mapSignature() };
+    }
+
+    /** Clear the Gallery filter (the map's scope) so a picture it hides can be shown. */
+    function showAllPictures() {
+        const a = app();
+        a?.updateFilters?.((filters) => Object.assign(filters, a.createDefaultFilterState()));
+        a?.markGalleryNeedsRefresh?.();
+        a?.updateFilterSummary?.(); // fires gallery-filters-changed: the map refreshes
+    }
+
+    /**
+     * "View on the Style Map" from the Gallery (context menu, image window):
+     * show the map, turn to the picture's dot and list what is most like it.
+     * The lookup waits for the points answer of the map that is about to
+     * appear; a map that has no points explains why in the same card.
+     */
+    function locateImage(imageId) {
+        const id = Number(imageId);
+        if (!Number.isFinite(id) || id <= 0) return false;
+        state.pendingLookup = id;
+        if (!isViewActive()) {
+            app()?.switchView?.('stylemap'); // init() asks for the points; applyPoints consumes the lookup
+            return true;
+        }
+        if (state.points) consumePendingLookup(state.points, Boolean(locateMap()));
+        return true;
+    }
+
+    function consumePendingLookup(points, hasPoints) {
+        const id = state.pendingLookup;
+        if (id === null || !state.near) return;
+        state.pendingLookup = null;
+        state.near.lookupLibrary(id);
+        if (hasPoints) return;
+        // An empty map: the Gallery filter hides everything, or nothing is indexed yet.
+        if (points?.total_images === 0) state.near.explainOutside();
+        else state.near.explainNoVector(state.space);
     }
 
     /** The dropped-picture card's view of the map on screen; null while there is none. */
@@ -420,10 +468,22 @@ export function createStyleMap() {
             onModeChange: (armed) => state.panel.renderBoxToggle(armed),
         });
         state.panel.setColorBy(state.colorBy);
+        const preview = (id) => state.panel.renderHover({ id, members: 1 });
         state.near = new NeighbourCard(view, {
             getRequest: nearRequest,
             refreshMap: () => refresh(),
-            preview: (id) => state.panel.renderHover({ id, members: 1 }),
+            preview,
+            buildIndex: () => state.job.start(),
+            openSimilar: () => app()?.switchView?.('similar'),
+            showAll: showAllPictures,
+        }, state.scene);
+        state.locate = new MapLocator(view, {
+            getApp: app,
+            getMap: locateMap,
+            refreshMap: () => refresh(),
+            preview,
+            mark: (position) => state.near.setMarker(position),
+            showAll: showAllPictures,
         }, state.scene);
         state.job = new IndexJob({
             getSpace: () => state.space,
@@ -489,5 +549,5 @@ export function createStyleMap() {
         state.legend?.closePop();
     }
 
-    return { init, dispose, refresh, setColorBy, retryColors, _state: state };
+    return { init, dispose, refresh, setColorBy, retryColors, locateImage, _state: state };
 }
