@@ -166,6 +166,11 @@ async function layoutCheck(page: Page) {
 }
 
 test.describe('Style Map: locate a picture from the Gallery', () => {
+  // The axis meanings (S4e) are not under test here: an empty answer keeps the real backend out of it.
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/api/style-map/axes**', (route) => route.fulfill({ json: { status: 'empty', space: 'kaloscope', layout: 'pca', axes: {} } }))
+  })
+
   for (const [width, height, lang] of [[1366, 768, 'en'], [1920, 1080, 'zh-CN'], [2560, 1440, 'en']] as const) {
     test(`the Gallery context menu opens the map on the picture, ringed, with its nearest list at ${width}x${height} (${lang})`, async ({ page }) => {
       const spy = await mockBase(page)
@@ -331,6 +336,11 @@ test.describe('Style Map: locate a picture from the Gallery', () => {
 })
 
 test.describe('Style Map: the Locate a picture box', () => {
+  // The axis meanings (S4e) are not under test here: an empty answer keeps the real backend out of it.
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/api/style-map/axes**', (route) => route.fulfill({ json: { status: 'empty', space: 'kaloscope', layout: 'pca', axes: {} } }))
+  })
+
   async function typeQuery(page: Page, text: string) {
     const input = page.locator('#stylemap-locate-input')
     await input.click()

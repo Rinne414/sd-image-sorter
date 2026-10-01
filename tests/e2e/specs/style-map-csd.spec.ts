@@ -93,6 +93,11 @@ async function openCsd(page: Page, width: number, height: number, lang = 'en') {
 }
 
 test.describe('Style Map CSD space', () => {
+  // The axis meanings (S4e) are not under test here: an empty answer keeps the real backend out of it.
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/api/style-map/axes**', (route) => route.fulfill({ json: { status: 'empty', space: 'kaloscope', layout: 'pca', axes: {} } }))
+  })
+
   for (const [width, height, lang] of [[1366, 768, 'en'], [1920, 1080, 'zh-CN'], [2560, 1440, 'en']] as const) {
     test(`offers CSD, builds its index and shows the CSD map at ${width}x${height} (${lang})`, async ({ page }) => {
       const seen = await mockCsd(page, { indexed: false })
