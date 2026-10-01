@@ -2036,11 +2036,15 @@ to 3 decimals), `legend` is empty and `range` is `[min, max]` over the
 scored pictures (`null` when none is scored). In both kinds a picture
 without a value is `null` (the page draws it grey) and `missing` counts them.
 `status` is `not_started` (empty arrays) until `points` ran for this map in
-this process. A 50k-point map answers in about 450 KB.
+this process (the page then asks for `points` again). A 50k-point map
+answers in about 380-560 KB (categories at the low end, scores at the high
+end) in roughly 0.4 s, most of it the filter query that locates the cached
+map.
 
 **Errors:** 400 for an unknown `space` or `by`, an invalid `selection_token`,
-or a `model_path` that is not a `.pth`/`.pt`/`.onnx` file, is missing or
-cannot be read (`kaloscope` space with `model_source=local` only).
+or a `model_path` that is not a `.pth`/`.pt`/`.onnx` file, is a network path
+outside a trusted model folder, is missing or cannot be read (`kaloscope`
+space with `model_source=local` only).
 
 ### Obfuscation
 

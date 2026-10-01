@@ -41,15 +41,15 @@
     min-width: 150px;
 }
 
-/* The status line is capped (its words can end in an ellipsis; the legend's
-   chips cannot), so at 1366 the legend still shows real chips: 28% of the
-   row is ~370 px there and more than the line needs at 1920. */
+/* The status line keeps its (short) words whole at 1366 and the legend takes
+   the rest; its full sentence is the tooltip. The cap is a last resort for
+   a long failure text, where an ellipsis beats a hidden legend. */
 .stylemap-layout {
     display: inline-flex;
     align-items: center;
     gap: 8px;
     flex: 0 1 auto;
-    max-width: 28%;
+    max-width: 44%;
     min-width: 0;
     color: var(--text-2);
     font-size: 13px;

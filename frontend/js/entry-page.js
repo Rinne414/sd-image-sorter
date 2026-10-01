@@ -778,6 +778,8 @@
         '#gallery-search-suggest:not([hidden])',
         '.caption-autocomplete-dropdown:not([hidden])',
         '#btn-toggle-select[data-state="selecting"]',
+        // The style map's open legend list (colors.js) closes on ESC itself.
+        '.stylemap-legend-pop',
     ].join(', ');
 
     function editingTarget(target) {

@@ -5296,6 +5296,8 @@ window.I18nLang_zhCN = {
     'stylemap.legendNoScores': '还没有评分',
     'stylemap.legendPictures': '{n} 张',
     'stylemap.colorsError': '点的颜色读取失败',
+    'stylemap.colorsLoading': '正在读取颜色…',
+    'stylemap.layoutPcaNoUmapShort': '布局：PCA，未装 UMAP',
     'stylemap.tag.blurry': '模糊',
     'stylemap.tag.comic': '漫画',
     'stylemap.tag.monochrome': '单色',

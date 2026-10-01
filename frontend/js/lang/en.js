@@ -5299,6 +5299,8 @@ window.I18nLang_en = {
     'stylemap.legendNoScores': 'No scores yet',
     'stylemap.legendPictures': '{n} pictures',
     'stylemap.colorsError': 'Dot colours could not be loaded',
+    'stylemap.colorsLoading': 'Loading colours...',
+    'stylemap.layoutPcaNoUmapShort': 'Layout: PCA, UMAP not installed',
     'stylemap.tag.blurry': 'blurry',
     'stylemap.tag.comic': 'comic',
     'stylemap.tag.monochrome': 'monochrome',

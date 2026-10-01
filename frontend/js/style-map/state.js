@@ -143,12 +143,16 @@ export function createStyleMap() {
         // again (a PCA -> UMAP switch arrives as a new points answer).
         applyRegions(null);
         state.regionsRetried = false;
-        // Colours are per picture, not per layout, but the ids may have
-        // changed with the filter: grey until the new answer lands.
-        applyColors(null);
+        state.colorsRetried = false;
+        // Colours are per picture, not per layout: the previous answer is
+        // laid over the new ids at once (a picture that left or joined the
+        // filter is grey until the fresh answer lands), so a refresh of a
+        // 50k map does not flash grey while the server answers.
+        applyColors(state.colors?.by === state.colorBy ? state.colors : null);
         repaint();
         scheduleLayoutPoll(points.umap?.status);
         if (points.status === 'ok' && Array.isArray(points.points) && points.points.length > 0) {
+            if (!state.colors) state.panel.showColorsNote(t('stylemap.colorsLoading', 'Loading colours...'));
             loadRegions();
             loadColors();
         }
@@ -165,9 +169,11 @@ export function createStyleMap() {
 
     /**
      * Ask for the chosen field's values of the map just drawn. Never
-     * refetches points: a colour change touches this request only. A
-     * not_started answer means the server lost this map; the regions path
-     * already asks for points again, which brings the colours with it.
+     * refetches points for a colour change. A not_started answer means the
+     * server no longer holds this map (restarted, evicted, or the library
+     * changed under it): points are asked for again, and that answer asks
+     * for the colours. A failure leaves the dots grey and says so in the
+     * legend row; the select never shows a field the dots do not.
      */
     async function loadColors() {
         const seq = state.seq;
@@ -176,11 +182,23 @@ export function createStyleMap() {
         try {
             const body = await app().API.get(`/api/style-map/colors?${query({ by })}`);
             if (seq !== state.seq || colorSeq !== state.colorSeq || !isViewActive()) return;
-            if (body?.status !== 'ok') return;
+            if (body?.status === 'not_started') {
+                applyColors(null);
+                // One rebuild per points answer: a server that keeps losing
+                // the map must not loop; the row then says the colours failed.
+                if (!state.colorsRetried) {
+                    state.colorsRetried = true;
+                    await refresh();
+                    return;
+                }
+                throw new Error('not_started');
+            }
+            if (body?.status !== 'ok') throw new Error(String(body?.status || 'bad answer'));
             applyColors(body);
         } catch (_error) {
             if (seq === state.seq && colorSeq === state.colorSeq) {
-                state.panel.showColorsError(t('stylemap.colorsError', 'Dot colours could not be loaded'));
+                applyColors(null);
+                state.panel.showColorsNote(t('stylemap.colorsError', 'Dot colours could not be loaded'));
             }
         }
     }
@@ -190,7 +208,12 @@ export function createStyleMap() {
         state.colorBy = by;
         writeColorPreference(by);
         state.panel.setColorBy(by);
-        if (state.points?.status === 'ok' && state.scene.count > 0) loadColors();
+        if (state.points?.status !== 'ok' || state.scene.count === 0) return;
+        // Grey and "loading" until the new field's answer lands: the dots
+        // must never show one field while the select names another.
+        applyColors(null);
+        state.panel.showColorsNote(t('stylemap.colorsLoading', 'Loading colours...'));
+        loadColors();
     }
 
     function applyRegions(body) {

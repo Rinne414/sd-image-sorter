@@ -25,7 +25,7 @@ export const NO_DATA_HEX = '#5A5A60';
 export const RAMP_HEX = ['#443983', '#21918C', '#FDE725'];
 export const OTHER_KEY = '__other__';
 const STORAGE_KEY = 'sd-stylemap-color-by';
-const MORE_BUTTON_ROOM = 56; // px kept for the "+N" button when chips are folded
+const MORE_BUTTON_ROOM = 48; // px kept for the "+N" / "Fewer" button when chips are folded
 const CHIP_GAP = 6;
 
 export function readColorPreference() {
@@ -225,10 +225,16 @@ export class ColorLegend {
         if (this.body) this.render(this.body, this.by);
     }
 
-    /** Hide the chips past the row's width and show "+N" for them. */
+    /**
+     * Hide the chips past the row's width and show "+N" for them: as many
+     * chips as fit beside the button, never fewer (rule 18: no dead space).
+     * A re-fold (row resized) closes an open list first, so the button's
+     * words and the list never disagree.
+     */
     fold() {
         const { host } = this;
         if (!host || !this.body || this.body.kind === 'scale') return;
+        this.closePop();
         const chips = [...host.querySelectorAll(':scope > .stylemap-legend-chip')];
         if (this.moreButton) {
             this.moreButton.remove();
@@ -237,33 +243,28 @@ export class ColorLegend {
         chips.forEach((chip) => { chip.hidden = false; });
         const width = host.clientWidth;
         if (!width || chips.length === 0) return;
-        let used = 0;
-        let fits = chips.length;
-        for (let i = 0; i < chips.length; i += 1) {
-            used += chips[i].offsetWidth + (i ? CHIP_GAP : 0);
-            if (used > width) {
-                fits = i;
-                break;
-            }
-        }
-        if (fits === chips.length) return;
-        // The button needs its own room: drop one more chip if the row is tight.
-        while (fits > 0 && used > width - MORE_BUTTON_ROOM) {
-            fits -= 1;
-            used -= chips[fits].offsetWidth + CHIP_GAP;
-        }
-        chips.forEach((chip, index) => { chip.hidden = index >= fits; });
-        const hidden = chips.length - fits;
+        const widths = chips.map((chip) => chip.offsetWidth);
+        const rowWidth = (count) => widths.slice(0, count).reduce((sum, w, i) => sum + w + (i ? CHIP_GAP : 0), 0);
+        if (rowWidth(chips.length) <= width) return;
+        // The button is measured with its widest words (the open state's),
+        // so flipping to "Fewer" never pushes it out of the row.
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'stylemap-legend-more';
-        button.dataset.hidden = String(hidden);
         button.setAttribute('aria-expanded', 'false');
+        button.textContent = t('stylemap.legendLess', 'Fewer');
+        host.append(button);
+        const room = Math.max(button.offsetWidth, MORE_BUTTON_ROOM);
+        // The largest prefix whose chips, plus the gap and the button, fit.
+        let fits = 0;
+        while (fits < chips.length && rowWidth(fits + 1) + CHIP_GAP + room <= width) fits += 1;
+        chips.forEach((chip, index) => { chip.hidden = index >= fits; });
+        const hidden = chips.length - fits;
+        button.dataset.hidden = String(hidden);
         button.textContent = t('stylemap.legendMore', '+{n}', { n: hidden });
         button.title = t('stylemap.legendMoreTitle', 'Show all {n} categories', { n: chips.length });
         button.addEventListener('click', () => (this.pop ? this.closePop() : this.openPop()));
         this.moreButton = button;
-        host.append(button);
     }
 
     openPop() {

@@ -99,8 +99,8 @@ export class StyleMapPanel {
         if (this.el.colorBy && this.el.colorBy.value !== by) this.el.colorBy.value = by;
     }
 
-    /** The map stays usable in grey; the legend row says why it is empty. */
-    showColorsError(message) {
+    /** The map stays grey meanwhile; the legend row says why (loading, failed). */
+    showColorsNote(message) {
         const { legend } = this.el;
         if (!legend) return;
         const note = document.createElement('span');
@@ -157,13 +157,20 @@ export class StyleMapPanel {
         if (!layout) return;
         const status = umap?.status || (method === 'umap' ? 'ready' : 'not_started');
         const [key, fallback, tone] = LAYOUT_TEXT[status] || LAYOUT_TEXT.not_started;
-        layoutText.textContent = t(key, fallback);
+        const sentence = t(key, fallback);
+        // The line shows the short form; the whole sentence (and a failure's
+        // error) is the tooltip, so a narrow row never hides the words.
+        layoutText.textContent = status === 'unavailable'
+            ? t('stylemap.layoutPcaNoUmapShort', 'Layout: PCA, UMAP not installed')
+            : sentence;
         layoutDot.className = `stylemap-dot ${tone}`;
         layout.dataset.status = status;
-        if (install) install.hidden = status !== 'unavailable';
+        if (install) {
+            install.hidden = status !== 'unavailable';
+            install.title = sentence;
+        }
         if (retry) retry.hidden = status !== 'failed';
-        if (status === 'failed' && umap?.error) layout.title = String(umap.error);
-        else layout.removeAttribute('title');
+        layout.title = status === 'failed' && umap?.error ? `${sentence}\n${umap.error}` : sentence;
     }
 
     /**

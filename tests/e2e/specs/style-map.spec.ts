@@ -95,20 +95,42 @@ async function mockColors(page: Page, onRequest: (url: URL) => void = () => {}, 
   })
 }
 
-/** Every visible chip of the legend sits on one line inside the row (no wrap, no overflow). */
+/**
+ * Every visible chip of the legend sits on one line inside the row (no wrap,
+ * no overflow), and when chips are folded the row holds as many as fit: one
+ * more chip (plus the gap and the button) would not fit (rule 18).
+ */
 async function legendRowCheck(map: StyleMapPage) {
   return map.page.evaluate(() => {
     const host = document.querySelector('#stylemap-legend') as HTMLElement
-    const chips = [...host.querySelectorAll(':scope > .stylemap-legend-chip, :scope > .stylemap-legend-more')]
-      .filter((el) => !(el as HTMLElement).hidden)
-      .map((el) => el.getBoundingClientRect())
+    const all = [...host.querySelectorAll(':scope > .stylemap-legend-chip')] as HTMLElement[]
+    const button = host.querySelector(':scope > .stylemap-legend-more') as HTMLElement | null
+    const visible = all.filter((el) => !el.hidden)
+    const rects = [...visible, ...(button ? [button] : [])].map((el) => el.getBoundingClientRect())
     const row = host.getBoundingClientRect()
-    const tops = new Set(chips.map((r) => Math.round(r.top)))
+    const tops = new Set(rects.map((r) => Math.round(r.top)))
+    // Width the row would need with one more chip shown (measured unhidden,
+    // then restored) beside the button at its widest ("Fewer", the open state).
+    let maximal = true
+    if (button && visible.length < all.length) {
+      const gap = 6
+      const next = all[visible.length]
+      next.hidden = false
+      const widths = [...visible, next].map((el) => el.offsetWidth)
+      next.hidden = true
+      const label = button.textContent
+      button.textContent = (window as any).appT('stylemap.legendLess', 'Fewer')
+      const room = Math.max(button.offsetWidth, 48)
+      button.textContent = label
+      const needed = widths.reduce((sum, w, i) => sum + w + (i ? gap : 0), 0) + gap + room
+      maximal = needed > host.clientWidth
+    }
     return {
-      chips: chips.length,
+      chips: rects.length,
       oneRow: tops.size <= 1,
-      inside: chips.every((r) => r.left >= row.left - 0.5 && r.right <= row.right + 0.5),
+      inside: rects.every((r) => r.left >= row.left - 0.5 && r.right <= row.right + 0.5),
       overflow: host.scrollWidth > host.clientWidth + 1,
+      maximal,
       toolbarWraps: (document.querySelector('.stylemap-toolbar') as HTMLElement).getBoundingClientRect().height > 48,
       pageOverflow: document.documentElement.scrollWidth > window.innerWidth,
     }
@@ -825,21 +847,25 @@ test.describe('Style Map', () => {
     expect(colorsUrls[3].searchParams.get('by')).toBe('folder')
   })
 
-  test('folds a long legend into a +N button that opens the full list, one row at 1366 and 1920', async ({ page }) => {
+  test('folds a long legend into a +N button that opens the full list, one row at 1366 and 1920, in both languages', async ({ page }) => {
     await mockSelectionToken(page)
     await mockProgressIdle(page)
     await page.route('**/api/style-map/points**', (route) => route.fulfill({ json: pointsBody() }))
     await page.route('**/api/style-map/regions**', (route) => route.fulfill({ json: regionsBody() }))
     await mockThumbnails(page)
-    // 14 generators: the server folds the two smallest into "other" (13 entries).
+    // 14 artists (long names, the tightest case): the server folds the
+    // smallest ones into "other" (13 entries).
     await page.route('**/api/style-map/colors**', (route) => {
-      const body = colorsBody('generator', { categories: 12 })
+      const body = colorsBody('artist', { categories: 12 })
+      body.legend = body.legend.map((entry, i) => ({ ...entry, key: `artist_${i}_(long_name_${i})`, label: `artist_${i}_(long_name_${i})` }))
       body.legend.push({ key: '__other__', label: '', count: 3 })
       return route.fulfill({ json: body })
     })
-    for (const [width, height] of [[1366, 768], [1920, 1080]] as const) {
+    for (const [width, height, lang] of [[1366, 768, 'en'], [1366, 768, 'zh-CN'], [1920, 1080, 'zh-CN']] as const) {
       await page.setViewportSize({ width, height })
       await page.goto('/')
+      await page.evaluate((code) => localStorage.setItem('sd-image-sorter-lang', code), lang)
+      await page.reload()
       const map = new StyleMapPage(page)
       await map.open()
       await expect.poll(() => map.pointCount()).toBe(30)
@@ -848,7 +874,13 @@ test.describe('Style Map', () => {
       expect(folded).toBeGreaterThan(0)
       const shown = await map.legendChips.count()
       expect(shown + folded).toBe(14) // 13 legend entries + the no-data chip
-      expect(await legendRowCheck(map)).toMatchObject({ oneRow: true, inside: true, overflow: false, toolbarWraps: false, pageOverflow: false })
+      // Rule 18: never an empty row beside a "+N"; the row holds as many
+      // chips as fit, and one more would overflow.
+      expect(shown).toBeGreaterThan(0)
+      expect(await legendRowCheck(map)).toMatchObject({ oneRow: true, inside: true, overflow: false, maximal: true, toolbarWraps: false, pageOverflow: false })
+      // The status line keeps whole words and carries its full sentence as tooltip.
+      expect(await map.layoutText.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true)
+      await expect(map.layoutStatus).toHaveAttribute('title', /UMAP/)
       // Open: every entry, the "other" one named; the button's words flip (rule 16).
       await map.legendMore.click()
       await expect(map.legendPop).toBeVisible()
@@ -860,6 +892,96 @@ test.describe('Style Map', () => {
       await expect(map.legendPop).toHaveCount(0)
       await expect(map.legendMore).toHaveText(`+${folded}`)
     }
+  })
+
+  test('a colour change that the server cannot answer leaves the dots grey and says so; not_started rebuilds the map once', async ({ page }) => {
+    await mockSelectionToken(page)
+    await mockProgressIdle(page)
+    let pointsCalls = 0
+    await page.route('**/api/style-map/points**', (route) => {
+      pointsCalls += 1
+      return route.fulfill({ json: pointsBody() })
+    })
+    await page.route('**/api/style-map/regions**', (route) => route.fulfill({ json: regionsBody() }))
+    await mockThumbnails(page)
+    let mode: 'ok' | 'not_started' | 'error' = 'ok'
+    const colorsCalls: string[] = []
+    await page.route('**/api/style-map/colors**', (route) => {
+      const by = new URL(route.request().url()).searchParams.get('by') || 'generator'
+      colorsCalls.push(`${mode}:${by}`)
+      if (mode === 'error') return route.fulfill({ status: 500, json: { detail: 'boom' } })
+      if (mode === 'not_started') {
+        mode = 'ok' // the rebuilt map answers
+        return route.fulfill({ json: { status: 'not_started', space: 'kaloscope', by, kind: 'category', ids: [], values: [], legend: [], range: null, missing: 0 } })
+      }
+      return route.fulfill({ json: colorsBody(by) })
+    })
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await page.goto('/')
+    const map = new StyleMapPage(page)
+    await map.open()
+    await expect.poll(() => map.pointCount()).toBe(30)
+    await expect.poll(() => colorsCalls.length).toBe(1)
+    expectRgb(await map.dotColor(1), FIRST_CATEGORY_RGB)
+
+    // The server lost the map (a picture was added meanwhile): points are
+    // asked for again, then the colours of the new field.
+    mode = 'not_started'
+    await map.colorBySelect.selectOption('folder')
+    await expect.poll(() => pointsCalls).toBe(2)
+    await expect.poll(() => colorsCalls.length).toBe(3)
+    expect(colorsCalls.slice(1)).toEqual(['not_started:folder', 'ok:folder'])
+    await expect(map.legendChips.first()).toContainText('set A')
+    expectRgb(await map.dotColor(1), FIRST_CATEGORY_RGB)
+
+    // A failure: the select names the new field, the dots are grey (never
+    // the old field's colours) and the row says the colours failed.
+    mode = 'error'
+    await map.colorBySelect.selectOption('artist')
+    await expect.poll(() => colorsCalls.length).toBe(4)
+    await expect(map.colorBySelect).toHaveValue('artist')
+    await expect(map.legend).toContainText(/读取失败|could not be loaded/)
+    expectRgb(await map.dotColor(1), NO_DATA_RGB)
+    expectRgb(await map.dotColor(2), NO_DATA_RGB)
+    expect(pointsCalls).toBe(2)
+    await expect(map.legendRamp).toHaveCount(0)
+  })
+
+  test('ESC closes the open legend list without opening the entry page', async ({ page }) => {
+    // The suite skips the entry page (aurora-entry-skip=1); this test wants it.
+    await page.addInitScript(() => {
+      if (!window.sessionStorage.getItem('stylemap-entry-booted')) {
+        window.sessionStorage.setItem('stylemap-entry-booted', '1')
+        window.localStorage.removeItem('aurora-entry-skip')
+      }
+    })
+    await mockSelectionToken(page)
+    await mockProgressIdle(page)
+    await page.route('**/api/style-map/points**', (route) => route.fulfill({ json: pointsBody() }))
+    await page.route('**/api/style-map/regions**', (route) => route.fulfill({ json: regionsBody() }))
+    await mockThumbnails(page)
+    await page.route('**/api/style-map/colors**', (route) => {
+      const body = colorsBody('generator', { categories: 12 })
+      body.legend.push({ key: '__other__', label: '', count: 3 })
+      return route.fulfill({ json: body })
+    })
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.goto('/')
+    await expect(page.locator('#entry-page')).toBeVisible()
+    await page.locator('#entry-fn-gallery').click()
+    await expect(page.locator('#entry-page')).toBeHidden()
+    const map = new StyleMapPage(page)
+    await map.open()
+    await expect.poll(() => map.pointCount()).toBe(30)
+    await map.legendMore.click()
+    await expect(map.legendPop).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(map.legendPop).toHaveCount(0)
+    await expect(page.locator('#entry-page')).toBeHidden()
+    await expect(map.view).toHaveClass(/active/)
+    // A second ESC with nothing open is the entry page's as before.
+    await page.keyboard.press('Escape')
+    await expect(page.locator('#entry-page')).toBeVisible()
   })
 
   test('repaints 50k dots from a colours answer in under 50 ms', async ({ page }, testInfo) => {
