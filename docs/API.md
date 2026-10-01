@@ -1997,6 +1997,51 @@ recomputes even when the cache is current.
 `model_path` that is not a `.pth`/`.pt`/`.onnx` file, is missing or cannot be
 read (`kaloscope` space with `model_source=local` only).
 
+#### GET /api/style-map/colors
+One colour value per point of the map `points` last returned for the same
+`space` and `selection_token`, in point order (`ids` are the representatives
+of that map; a merged near-duplicate group shows its representative's own
+value). The page colours the dots it already holds from this answer: the
+layout is never refetched for a colour change, and this answer is never part
+of the cached points payload (tagging, scoring or a Style Finder batch change
+it; it is read fresh on every call).
+
+**Parameters:** `space`, `selection_token`, `model_source`, `model_path` as for `points`, plus:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `by` | string | `generator` | `generator` (`images.generator`), `folder` (the directory of `images.path`), `artist` (the Style Finder's stored prediction, `artist_predictions`; `undefined` means no data), `aesthetic_score` (LAION), `aesthetic_waifu` (Waifu Scorer), `aesthetic_anime` (deepghs anime aesthetic) |
+
+**Response:**
+```json
+{
+  "status": "ok", "space": "kaloscope", "model_version": "kaloscope-2.0:sha256:...",
+  "by": "generator", "kind": "category",
+  "ids": [17, 23, 41],
+  "values": [0, 1, null],
+  "legend": [{"key": "comfyui", "label": "comfyui", "count": 304}, {"key": "nai", "label": "nai", "count": 116}],
+  "range": null,
+  "missing": 1
+}
+```
+
+`kind` is `category` for `generator`, `folder` and `artist`: `values` are
+indexes into `legend`, which lists the 12 largest categories by picture count
+(ties by key) and, when more exist, one last entry with key `__other__`
+holding the rest (its `count` is their total; the page names it). A folder's
+`key` is its full path with `/` separators and its `label` the last segment
+(the page shows the label and puts the key in the tooltip). `kind` is `scale`
+for the three aesthetic fields: `values` are the scores themselves (rounded
+to 3 decimals), `legend` is empty and `range` is `[min, max]` over the
+scored pictures (`null` when none is scored). In both kinds a picture
+without a value is `null` (the page draws it grey) and `missing` counts them.
+`status` is `not_started` (empty arrays) until `points` ran for this map in
+this process. A 50k-point map answers in about 450 KB.
+
+**Errors:** 400 for an unknown `space` or `by`, an invalid `selection_token`,
+or a `model_path` that is not a `.pth`/`.pt`/`.onnx` file, is missing or
+cannot be read (`kaloscope` space with `model_source=local` only).
+
 ### Obfuscation
 
 Output is always a PNG, so generation metadata survives the protect/restore

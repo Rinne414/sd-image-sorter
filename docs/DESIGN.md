@@ -493,6 +493,20 @@ Registered data-viz palettes:
 - **Generator badges** (`image-reader.css` `.gen-*`): third-party branding hues.
 - **Prompt Lab diff coding** (`ui-refresh.css`): common=green, A=blue tint,
   B=amber tint (only-b was another accent-primary remap casualty, fixed).
+- **Style map point colouring** (`frontend/js/style-map/colors.js`, S4a,
+  2026-10-01): the dots of the 3-D map encode a data field the user picks
+  (generator, folder, artist, three aesthetic scores). Twelve fixed category
+  hues, chosen to stay clear of pure blue, purple, pink and the amber accent:
+  red `#D8524B`, salmon `#E8927C`, olive `#A9A331`, yellow-green `#7FB83C`,
+  green `#36A853`, deep green `#1E7F55`, mint `#5FC9A6`, teal `#239E9A`, cyan
+  `#3BA7D1`, slate `#1F6F8E`, brown `#8B5E3C`, mustard `#E0C84D`; the folded
+  "other" category is a light grey `#9A9A94`. Continuous values use a
+  colour-blind-safe viridis ramp in three stops `#443983 -> #21918C ->
+  #FDE725` (the ramp is data, the violet end is not a UI accent). No data is
+  the neutral dark grey `#5A5A60`, also the dots' colour before any field
+  loads. The legend chips show these same hex values. Hover and selection
+  on the map keep `--accent` (rule 12: that IS the selection meaning); the
+  module never reads `--blue` or `--purple`.
 
 Audit checklist for new hardcoded colors:
 1. Does it encode data (category, direction, diff-side, brand)? → register here.

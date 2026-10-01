@@ -3854,6 +3854,21 @@
                                 <option value="csd" disabled data-i18n="stylemap.spaceCsd">CSD (not available yet)</option>
                             </select>
                         </label>
+                        <!-- Rule 20: every colourable field is listed; the legend
+                             (colors.js) sits right after it, one row, "+N" at the end
+                             when the row is short. -->
+                        <label class="stylemap-field">
+                            <span data-i18n="stylemap.colorBy">Dot colour</span>
+                            <select id="stylemap-color-by" class="input-field">
+                                <option value="generator" data-i18n="stylemap.colorGenerator">Generator</option>
+                                <option value="folder" data-i18n="stylemap.colorFolder">Folder</option>
+                                <option value="artist" data-i18n="stylemap.colorArtist">Artist</option>
+                                <option value="aesthetic_score" data-i18n="stylemap.colorAestheticScore">Aesthetic (LAION)</option>
+                                <option value="aesthetic_waifu" data-i18n="stylemap.colorAestheticWaifu">Aesthetic (Waifu)</option>
+                                <option value="aesthetic_anime" data-i18n="stylemap.colorAestheticAnime">Anime aesthetic</option>
+                            </select>
+                        </label>
+                        <div class="stylemap-legend" id="stylemap-legend"></div>
                         <div class="stylemap-layout" id="stylemap-layout" role="status" aria-live="polite">
                             <span class="stylemap-dot" id="stylemap-layout-dot" aria-hidden="true"></span>
                             <span id="stylemap-layout-text"></span>

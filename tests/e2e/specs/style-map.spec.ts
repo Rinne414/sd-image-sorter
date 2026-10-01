@@ -54,6 +54,67 @@ function regionsBody(overrides: Record<string, unknown> = {}) {
   }
 }
 
+/**
+ * Colours (S4a) of the 30 mock points: `categories` generators in turn, the
+ * last point (id 30) without data; scores 3..8 with id 30 unscored.
+ */
+function colorsBody(by: string, { categories = 5, ids = Array.from({ length: 30 }, (_, i) => i + 1), missing = true } = {}) {
+  const missingId = missing ? ids[ids.length - 1] : -1
+  if (by.startsWith('aesthetic')) {
+    const values = ids.map((id, i) => (id === missingId ? null : 3 + (5 * i) / Math.max(1, ids.length - 2)))
+    const present = values.filter((v): v is number => v !== null)
+    return { status: 'ok', space: 'kaloscope', model_version: 'kaloscope:test', by, kind: 'scale', ids, values, legend: [], range: [Math.min(...present), Math.max(...present)], missing: values.length - present.length }
+  }
+  const names = Array.from({ length: categories }, (_, i) => (by === 'folder' ? `L:/pics/set ${String.fromCharCode(65 + i)}` : `gen${i}`))
+  const counts = new Array(categories).fill(0)
+  const values = ids.map((id, i) => {
+    if (id === missingId) return null
+    const slot = i % categories
+    counts[slot] += 1
+    return slot
+  })
+  const legend = names.map((name, i) => ({ key: name, label: by === 'folder' ? name.split('/').pop() : name, count: counts[i] }))
+    .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key))
+  const order = new Map(legend.map((entry, i) => [names.indexOf(entry.key), i]))
+  return { status: 'ok', space: 'kaloscope', model_version: 'kaloscope:test', by, kind: 'category', ids, values: values.map((v) => (v === null ? null : order.get(v))), legend, range: null, missing: values.filter((v) => v === null).length }
+}
+
+const NO_DATA_RGB = [0x5a / 255, 0x5a / 255, 0x60 / 255]
+const FIRST_CATEGORY_RGB = [0xd8 / 255, 0x52 / 255, 0x4b / 255]
+const RAMP_START_RGB = [0x44 / 255, 0x39 / 255, 0x83 / 255]
+
+function expectRgb(actual: number[], expected: number[]) {
+  for (let i = 0; i < 3; i += 1) expect(actual[i]).toBeCloseTo(expected[i], 3)
+}
+
+async function mockColors(page: Page, onRequest: (url: URL) => void = () => {}, options: { categories?: number; missing?: boolean } = {}) {
+  await page.route('**/api/style-map/colors**', (route) => {
+    const url = new URL(route.request().url())
+    onRequest(url)
+    return route.fulfill({ json: colorsBody(url.searchParams.get('by') || 'generator', options) })
+  })
+}
+
+/** Every visible chip of the legend sits on one line inside the row (no wrap, no overflow). */
+async function legendRowCheck(map: StyleMapPage) {
+  return map.page.evaluate(() => {
+    const host = document.querySelector('#stylemap-legend') as HTMLElement
+    const chips = [...host.querySelectorAll(':scope > .stylemap-legend-chip, :scope > .stylemap-legend-more')]
+      .filter((el) => !(el as HTMLElement).hidden)
+      .map((el) => el.getBoundingClientRect())
+    const row = host.getBoundingClientRect()
+    const tops = new Set(chips.map((r) => Math.round(r.top)))
+    return {
+      chips: chips.length,
+      oneRow: tops.size <= 1,
+      inside: chips.every((r) => r.left >= row.left - 0.5 && r.right <= row.right + 0.5),
+      overflow: host.scrollWidth > host.clientWidth + 1,
+      toolbarWraps: (document.querySelector('.stylemap-toolbar') as HTMLElement).getBoundingClientRect().height > 48,
+      pageOverflow: document.documentElement.scrollWidth > window.innerWidth,
+    }
+  })
+}
+
 const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
 
 async function mockThumbnails(page: Page, onRequest: (url: string) => void = () => {}) {
@@ -520,6 +581,8 @@ test.describe('Style Map', () => {
     await mockProgressIdle(page)
     await page.route('**/api/style-map/points**', (route) => route.fulfill({ json: pointsBody() }))
     await page.route('**/api/style-map/regions**', (route) => route.fulfill({ json: regionsBody() }))
+    // One category for every dot: the focus contrast below compares bases.
+    await mockColors(page, () => {}, { categories: 1, missing: false })
     await mockThumbnails(page)
     await page.setViewportSize({ width: 1920, height: 1080 })
     await page.goto('/')
@@ -688,6 +751,139 @@ test.describe('Style Map', () => {
     await expect.poll(() => regionsCalls.length, { timeout: 8000 }).toBe(3)
     expect(regionsCalls[2]).toBe('ready')
     await expect(map.landmarks).toHaveCount(3)
+  })
+
+  test('colours the dots by the chosen field without asking for points again, greys dots without data, and remembers the choice', async ({ page }) => {
+    await mockSelectionToken(page)
+    await mockProgressIdle(page)
+    let pointsCalls = 0
+    await page.route('**/api/style-map/points**', (route) => {
+      pointsCalls += 1
+      return route.fulfill({ json: pointsBody() })
+    })
+    await page.route('**/api/style-map/regions**', (route) => route.fulfill({ json: regionsBody() }))
+    await mockThumbnails(page)
+    const colorsUrls: URL[] = []
+    await mockColors(page, (url) => colorsUrls.push(url))
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await page.goto('/')
+    const map = new StyleMapPage(page)
+    await map.open()
+    await expect.poll(() => map.pointCount()).toBe(30)
+    // Rule 20: every colourable field is offered.
+    await expect(map.colorBySelect.locator('option')).toHaveCount(6)
+    expect(await map.colorBySelect.locator('option').evaluateAll((opts) => opts.map((o) => (o as HTMLOptionElement).value)))
+      .toEqual(['generator', 'folder', 'artist', 'aesthetic_score', 'aesthetic_waifu', 'aesthetic_anime'])
+    // The default field is the generator and its request carries the map's scope.
+    await expect(map.colorBySelect).toHaveValue('generator')
+    await expect.poll(() => colorsUrls.length).toBe(1)
+    expect(colorsUrls[0].searchParams.get('by')).toBe('generator')
+    expect(colorsUrls[0].searchParams.get('selection_token')).toBe('tok.e2e')
+    expect(colorsUrls[0].searchParams.get('space')).toBe('kaloscope')
+    // Legend: one chip per category (5) plus the grey "no data" chip, one row.
+    await expect(map.legendChips).toHaveCount(6)
+    await expect(map.legendChips.first()).toContainText('gen0')
+    await expect(map.legendChips.last()).toContainText(/无数据|No data/)
+    await expect(map.legendChips.last()).toContainText('1')
+    expect(await legendRowCheck(map)).toMatchObject({ oneRow: true, inside: true, overflow: false, toolbarWraps: false, pageOverflow: false })
+    // Dots: the first category's hue, the unscored dot the no-data grey.
+    expectRgb(await map.dotColor(1), FIRST_CATEGORY_RGB)
+    expectRgb(await map.dotColor(30), NO_DATA_RGB)
+    // The legend swatch is the dot's own colour.
+    const swatch = await map.legendChips.first().locator('.stylemap-swatch').evaluate((el) => getComputedStyle(el).backgroundColor)
+    expect(swatch).toBe('rgb(216, 82, 75)')
+
+    // Switching the field asks for colours only; the layout stays.
+    await map.colorBySelect.selectOption('aesthetic_score')
+    await expect.poll(() => colorsUrls.length).toBe(2)
+    expect(colorsUrls[1].searchParams.get('by')).toBe('aesthetic_score')
+    expect(pointsCalls).toBe(1)
+    await expect(map.legendRamp).toBeVisible()
+    await expect(map.legend.locator('.stylemap-legend-min')).toHaveText('3.00')
+    await expect(map.legend.locator('.stylemap-legend-max')).toHaveText('8.00')
+    await expect(map.legendChips).toHaveCount(1) // the no-data chip only
+    await expect.poll(async () => (await map.dotColor(1))[0]).toBeCloseTo(RAMP_START_RGB[0], 3)
+    expectRgb(await map.dotColor(1), RAMP_START_RGB)
+    expectRgb(await map.dotColor(30), NO_DATA_RGB)
+    const stats = await page.evaluate(() => (window as any).StyleMap._state.colorStats)
+    expect(stats.by).toBe('aesthetic_score')
+    expect(stats.points).toBe(30)
+
+    // Folder chips show the last segment and carry the full path as tooltip.
+    await map.colorBySelect.selectOption('folder')
+    await expect.poll(() => colorsUrls.length).toBe(3)
+    await expect(map.legendChips.first()).toContainText('set A')
+    await expect(map.legendChips.first()).toHaveAttribute('title', /L:\/pics\/set A/)
+    expect(pointsCalls).toBe(1)
+
+    // The choice survives a reload and is the first thing asked for.
+    await page.reload()
+    await map.open()
+    await expect.poll(() => map.pointCount()).toBe(30)
+    await expect(map.colorBySelect).toHaveValue('folder')
+    await expect.poll(() => colorsUrls.length).toBe(4)
+    expect(colorsUrls[3].searchParams.get('by')).toBe('folder')
+  })
+
+  test('folds a long legend into a +N button that opens the full list, one row at 1366 and 1920', async ({ page }) => {
+    await mockSelectionToken(page)
+    await mockProgressIdle(page)
+    await page.route('**/api/style-map/points**', (route) => route.fulfill({ json: pointsBody() }))
+    await page.route('**/api/style-map/regions**', (route) => route.fulfill({ json: regionsBody() }))
+    await mockThumbnails(page)
+    // 14 generators: the server folds the two smallest into "other" (13 entries).
+    await page.route('**/api/style-map/colors**', (route) => {
+      const body = colorsBody('generator', { categories: 12 })
+      body.legend.push({ key: '__other__', label: '', count: 3 })
+      return route.fulfill({ json: body })
+    })
+    for (const [width, height] of [[1366, 768], [1920, 1080]] as const) {
+      await page.setViewportSize({ width, height })
+      await page.goto('/')
+      const map = new StyleMapPage(page)
+      await map.open()
+      await expect.poll(() => map.pointCount()).toBe(30)
+      await expect(map.legendMore).toBeVisible()
+      const folded = Number(await map.legendMore.getAttribute('data-hidden'))
+      expect(folded).toBeGreaterThan(0)
+      const shown = await map.legendChips.count()
+      expect(shown + folded).toBe(14) // 13 legend entries + the no-data chip
+      expect(await legendRowCheck(map)).toMatchObject({ oneRow: true, inside: true, overflow: false, toolbarWraps: false, pageOverflow: false })
+      // Open: every entry, the "other" one named; the button's words flip (rule 16).
+      await map.legendMore.click()
+      await expect(map.legendPop).toBeVisible()
+      await expect(map.legendPop.locator('.stylemap-legend-chip')).toHaveCount(14)
+      await expect(map.legendPop).toContainText(/其他|Other/)
+      await expect(map.legendMore).toHaveText(/收起|Fewer/)
+      await expect(map.legendMore).toHaveAttribute('aria-expanded', 'true')
+      await page.keyboard.press('Escape')
+      await expect(map.legendPop).toHaveCount(0)
+      await expect(map.legendMore).toHaveText(`+${folded}`)
+    }
+  })
+
+  test('repaints 50k dots from a colours answer in under 50 ms', async ({ page }, testInfo) => {
+    await mockSelectionToken(page)
+    await mockProgressIdle(page)
+    const n = 50000
+    const rows = Array.from({ length: n }, (_, i) => [i + 1, ((i * 7919) % 2000) / 1000 - 1, ((i * 104729) % 2000) / 1000 - 1, ((i * 1299709) % 2000) / 1000 - 1, 1])
+    await page.route('**/api/style-map/points**', (route) => route.fulfill({ json: pointsBody({ total_images: n, missing_vectors: 0, unlocatable: [], points: rows, umap: { status: 'unavailable', points: n, min_points: 21, params: UMAP_PARAMS } }) }))
+    await page.route('**/api/style-map/regions**', (route) => route.fulfill({ json: { status: 'ok', space: 'kaloscope', method: 'pca', k: 0, seed: 0, algo_version: 1, regions: [], cached: false } }))
+    const ids = rows.map((row) => row[0] as number)
+    const body = colorsBody('generator', { categories: 12, ids })
+    const bytes = Buffer.byteLength(JSON.stringify(body))
+    await page.route('**/api/style-map/colors**', (route) => route.fulfill({ json: body }))
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await page.goto('/')
+    const map = new StyleMapPage(page)
+    await map.open()
+    await expect.poll(() => map.pointCount(), { timeout: 30000 }).toBe(n)
+    await expect.poll(() => page.evaluate(() => (window as any).StyleMap._state.colorStats?.by), { timeout: 30000 }).toBe('generator')
+    const stats = await page.evaluate(() => (window as any).StyleMap._state.colorStats)
+    testInfo.annotations.push({ type: 'perf', description: `50k recolour ${stats.ms.toFixed(1)} ms; colours JSON ${bytes} bytes` })
+    expect(stats.points).toBe(n)
+    expect(stats.ms).toBeLessThan(50)
+    expectRgb(await map.dotColor(n), NO_DATA_RGB)
   })
 
   test('stops polling the index job after leaving the page, even mid-flight', async ({ page }) => {

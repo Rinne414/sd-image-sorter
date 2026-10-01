@@ -13,6 +13,7 @@ import { StyleMapScene } from './scene.js';
 import { StyleMapPanel } from './panel.js';
 import { IndexJob } from './index-job.js';
 import { RegionLandmarks, assignRegions, readLandmarksPreference, writeLandmarksPreference } from './regions.js';
+import { ColorLegend, buildPointColors, readColorPreference, writeColorPreference } from './colors.js';
 import { t, formatError } from './text.js';
 
 const LAYOUT_POLL_MS = 3000;
@@ -41,6 +42,13 @@ export function createStyleMap() {
         regionLabels: null,
         landmarks: null,
         landmarksOn: readLandmarksPreference(),
+        // Dot colours: the chosen field, the last answer and its legend;
+        // colorStats records how long the last repaint took (ms, points).
+        colorBy: readColorPreference(),
+        colors: null,
+        legend: null,
+        colorSeq: 0,
+        colorStats: null,
     };
 
     const root = () => document.getElementById('view-stylemap');
@@ -124,6 +132,7 @@ export function createStyleMap() {
         state.panel.renderJob(state.job);
         state.panel.renderLandmarksToggle(state.landmarksOn);
         state.landmarks.repaintText();
+        state.legend.repaintText();
     }
 
     function applyPoints(points) {
@@ -134,11 +143,54 @@ export function createStyleMap() {
         // again (a PCA -> UMAP switch arrives as a new points answer).
         applyRegions(null);
         state.regionsRetried = false;
+        // Colours are per picture, not per layout, but the ids may have
+        // changed with the filter: grey until the new answer lands.
+        applyColors(null);
         repaint();
         scheduleLayoutPoll(points.umap?.status);
         if (points.status === 'ok' && Array.isArray(points.points) && points.points.length > 0) {
             loadRegions();
+            loadColors();
         }
+    }
+
+    /** Paint one colours answer onto the dots the scene holds (null: grey, no legend). */
+    function applyColors(body) {
+        state.colors = body;
+        const started = performance.now();
+        state.scene.setBaseColors(body ? buildPointColors(body, state.scene.ids) : null);
+        state.colorStats = { ms: performance.now() - started, points: state.scene.count, by: body?.by || null };
+        state.legend.render(body, body?.by || state.colorBy);
+    }
+
+    /**
+     * Ask for the chosen field's values of the map just drawn. Never
+     * refetches points: a colour change touches this request only. A
+     * not_started answer means the server lost this map; the regions path
+     * already asks for points again, which brings the colours with it.
+     */
+    async function loadColors() {
+        const seq = state.seq;
+        const colorSeq = ++state.colorSeq;
+        const by = state.colorBy;
+        try {
+            const body = await app().API.get(`/api/style-map/colors?${query({ by })}`);
+            if (seq !== state.seq || colorSeq !== state.colorSeq || !isViewActive()) return;
+            if (body?.status !== 'ok') return;
+            applyColors(body);
+        } catch (_error) {
+            if (seq === state.seq && colorSeq === state.colorSeq) {
+                state.panel.showColorsError(t('stylemap.colorsError', 'Dot colours could not be loaded'));
+            }
+        }
+    }
+
+    function setColorBy(by) {
+        if (!by || by === state.colorBy) return;
+        state.colorBy = by;
+        writeColorPreference(by);
+        state.panel.setColorBy(by);
+        if (state.points?.status === 'ok' && state.scene.count > 0) loadColors();
     }
 
     function applyRegions(body) {
@@ -272,6 +324,8 @@ export function createStyleMap() {
             onHoverRegion: (index) => state.scene.setFocus(state.regionLabels, index),
         });
         state.landmarks.setVisible(state.landmarksOn);
+        state.legend = new ColorLegend(view.querySelector('#stylemap-legend'));
+        state.panel.setColorBy(state.colorBy);
         state.job = new IndexJob({
             getSpace: () => state.space,
             getToken: () => state.token,
@@ -287,6 +341,7 @@ export function createStyleMap() {
                 state.space = space;
                 refresh();
             },
+            onColorByChange: setColorBy,
             onInstall: installUmap,
             onRetry: () => refresh({ force: true }),
             onResetView: () => state.scene.resetView(),
@@ -324,7 +379,8 @@ export function createStyleMap() {
         state.scene?.pause();
         state.job?.stopPolling();
         state.landmarks?.hover(-1);
+        state.legend?.closePop();
     }
 
-    return { init, dispose, refresh, _state: state };
+    return { init, dispose, refresh, setColorBy, _state: state };
 }

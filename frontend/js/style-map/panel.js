@@ -37,6 +37,8 @@ export class StyleMapPanel {
         const $ = (id) => root.querySelector(`#${id}`);
         this.el = {
             space: $('stylemap-space'),
+            colorBy: $('stylemap-color-by'),
+            legend: $('stylemap-legend'),
             layout: $('stylemap-layout'),
             layoutDot: $('stylemap-layout-dot'),
             layoutText: $('stylemap-layout-text'),
@@ -72,6 +74,7 @@ export class StyleMapPanel {
     bind(handlers) {
         const { el } = this;
         el.space?.addEventListener('change', () => handlers.onSpaceChange(el.space.value));
+        el.colorBy?.addEventListener('change', () => handlers.onColorByChange(el.colorBy.value));
         el.install?.addEventListener('click', () => handlers.onInstall());
         el.retry?.addEventListener('click', () => handlers.onRetry());
         el.resetView?.addEventListener('click', () => handlers.onResetView());
@@ -89,6 +92,21 @@ export class StyleMapPanel {
 
     setLoading(flag) {
         if (this.el.loading) this.el.loading.hidden = !flag;
+    }
+
+    /** Show the remembered colour field in the select. */
+    setColorBy(by) {
+        if (this.el.colorBy && this.el.colorBy.value !== by) this.el.colorBy.value = by;
+    }
+
+    /** The map stays usable in grey; the legend row says why it is empty. */
+    showColorsError(message) {
+        const { legend } = this.el;
+        if (!legend) return;
+        const note = document.createElement('span');
+        note.className = 'stylemap-legend-chip is-nodata';
+        note.textContent = message;
+        legend.replaceChildren(note);
     }
 
     /** WebGL could not be set up: one explanatory card, no map controls. */

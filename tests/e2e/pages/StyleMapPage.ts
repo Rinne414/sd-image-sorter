@@ -24,6 +24,12 @@ export class StyleMapPage {
   readonly landmarksToggle: Locator
   readonly landmarksLayer: Locator
   readonly landmarks: Locator
+  readonly colorBySelect: Locator
+  readonly legend: Locator
+  readonly legendChips: Locator
+  readonly legendMore: Locator
+  readonly legendPop: Locator
+  readonly legendRamp: Locator
 
   constructor(page: Page) {
     this.page = page
@@ -48,6 +54,22 @@ export class StyleMapPage {
     this.landmarksToggle = page.locator('#stylemap-landmarks-toggle')
     this.landmarksLayer = page.locator('#stylemap-canvas-card .stylemap-landmarks')
     this.landmarks = page.locator('#stylemap-canvas-card .stylemap-landmark')
+    this.colorBySelect = page.locator('#stylemap-color-by')
+    this.legend = page.locator('#stylemap-legend')
+    this.legendChips = page.locator('#stylemap-legend > .stylemap-legend-chip:visible')
+    this.legendMore = page.locator('#stylemap-legend .stylemap-legend-more')
+    this.legendPop = page.locator('.stylemap-toolbar .stylemap-legend-pop')
+    this.legendRamp = page.locator('#stylemap-legend .stylemap-legend-ramp')
+  }
+
+  /** The dot colour (r, g, b in 0..1) of the picture with this id, straight from the geometry. */
+  async dotColor(id: number): Promise<[number, number, number]> {
+    return this.page.evaluate((imageId) => {
+      const scene = (window as any).StyleMap._state.scene
+      const index = Array.from(scene.ids as Int32Array).indexOf(imageId)
+      const colors = scene.geometry.getAttribute('color')
+      return [colors.getX(index), colors.getY(index), colors.getZ(index)]
+    }, id)
   }
 
   /** The landmark card of one region id. */

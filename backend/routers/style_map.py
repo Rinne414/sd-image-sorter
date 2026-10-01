@@ -19,6 +19,7 @@ from artist_identifier import ARTIST_THRESHOLD_DEFAULT
 from exceptions import ValidationError
 from routers.artists import ArtistModelConfig, resolve_local_artist_model
 from services.service_provider import ServiceProvider
+from services.style_map_colors import STYLE_MAP_COLOR_FIELDS
 from services.style_map_service import STYLE_MAP_SPACES, StyleMapService
 from services.style_vector_service import STYLE_VECTOR_SPACES, StyleVectorService
 
@@ -34,6 +35,7 @@ get_style_vector_service = _style_vector_service_provider.get
 set_style_vector_service = _style_vector_service_provider.set
 
 _MAP_SPACE_PATTERN = "^(" + "|".join(STYLE_MAP_SPACES) + ")$"
+_COLOR_BY_PATTERN = "^(" + "|".join(STYLE_MAP_COLOR_FIELDS) + ")$"
 _style_map_service_provider = ServiceProvider(StyleMapService)
 get_style_map_service = _style_map_service_provider.get
 set_style_map_service = _style_map_service_provider.set
@@ -302,5 +304,31 @@ def style_map_regions(
 ):
     payload = service.regions_json(
         space, selection_token=selection_token, refresh=refresh, model_path=model_path
+    )
+    return Response(content=payload, media_type="application/json")
+
+
+@router.get(
+    "/colors",
+    summary="One colour value per point of the filtered library's map",
+    description=(
+        "For the representatives of the map GET /api/style-map/points last "
+        "returned for the same space and filter, in point order: a category "
+        "index into `legend` (`generator`, `folder`, `artist`; the 12 largest "
+        "categories, the rest as one `__other__` entry, null without data) or "
+        "a number with its `range` (`aesthetic_score`, `aesthetic_waifu`, "
+        "`aesthetic_anime`; null when unscored). Read fresh on every call, "
+        "never cached with the layout; `not_started` until points ran."
+    ),
+)
+def style_map_colors(
+    space: str = Query("kaloscope", pattern=_MAP_SPACE_PATTERN),
+    selection_token: Optional[str] = Query(None, max_length=65536),
+    by: str = Query("generator", pattern=_COLOR_BY_PATTERN),
+    model_path: Optional[str] = Depends(_model_path_from_query),
+    service: StyleMapService = Depends(get_style_map_service),
+):
+    payload = service.colors_json(
+        space, selection_token=selection_token, by=by, model_path=model_path
     )
     return Response(content=payload, media_type="application/json")

@@ -324,6 +324,10 @@ class FakeStyleMapService:
         self.calls.append(("regions", space, model_path))
         return b'{"status":"not_started","regions":[]}'
 
+    def colors_json(self, space, selection_token=None, *, by, model_path=None):
+        self.calls.append(("colors", space, model_path, by, selection_token))
+        return b'{"status":"not_started","by":"' + by.encode() + b'","ids":[]}'
+
 
 @pytest.fixture
 def fake_map_service(test_client):
@@ -343,25 +347,25 @@ def test_map_routes_pass_the_users_model_settings(
     local = tmp_path / "weights.pth"
     local.write_bytes(b"w")
     params = {"space": "kaloscope", "model_source": "local", "model_path": str(local)}
-    for route in ("points", "layout-status", "regions"):
+    for route in MAP_ROUTES:
         response = test_client.get(f"/api/style-map/{route}", params=params)
         assert response.status_code == 200, (route, response.text)
-    assert [call[2] for call in fake_map_service.calls] == [str(local.resolve())] * 3
+    assert [call[2] for call in fake_map_service.calls] == [str(local.resolve())] * 4
     fake_map_service.calls.clear()
-    for route in ("points", "layout-status", "regions"):
+    for route in MAP_ROUTES:
         assert (
             test_client.get(
                 f"/api/style-map/{route}", params={"space": "kaloscope"}
             ).status_code
             == 200
         )
-    assert [call[2] for call in fake_map_service.calls] == [None] * 3
+    assert [call[2] for call in fake_map_service.calls] == [None] * 4
     missing = {
         "space": "kaloscope",
         "model_source": "local",
         "model_path": str(tmp_path / "nope.pth"),
     }
-    for route in ("points", "layout-status", "regions"):
+    for route in MAP_ROUTES:
         assert (
             test_client.get(f"/api/style-map/{route}", params=missing).status_code
             == 400
@@ -388,7 +392,7 @@ def _record_filesystem_access(monkeypatch):
     return touched
 
 
-MAP_ROUTES = ("points", "layout-status", "regions")
+MAP_ROUTES = ("points", "layout-status", "regions", "colors")
 
 
 @pytest.mark.parametrize("route", MAP_ROUTES + ("vectors/stats",))
@@ -444,7 +448,39 @@ def test_clip_space_needs_no_kaloscope_weights(
         },
     )
     assert response.status_code == 200, response.text
-    assert [call[1:] for call in fake_map_service.calls] == [("clip", None)]
+    assert [call[1:3] for call in fake_map_service.calls] == [("clip", None)]
+
+
+def test_colors_route_passes_field_token_and_model_settings(
+    test_client, fake_map_service, tmp_path
+):
+    """S4a: `by` and the token reach the service; an unknown field is 400
+    before the service is asked, and the route is sync like the others."""
+    import inspect
+
+    from routers import style_map
+    from services.style_map_colors import STYLE_MAP_COLOR_FIELDS
+
+    assert not inspect.iscoroutinefunction(style_map.style_map_colors)
+    for by in STYLE_MAP_COLOR_FIELDS:
+        response = test_client.get(
+            "/api/style-map/colors",
+            params={"space": "clip", "by": by, "selection_token": "tok.abc"},
+        )
+        assert response.status_code == 200, (by, response.text)
+        assert response.json()["by"] == by
+    assert [call[1:] for call in fake_map_service.calls] == [
+        ("clip", None, by, "tok.abc") for by in STYLE_MAP_COLOR_FIELDS
+    ]
+    fake_map_service.calls.clear()
+    # the default field is the generator (always has data)
+    assert test_client.get("/api/style-map/colors").status_code == 200
+    assert fake_map_service.calls[-1][3] == "generator"
+    fake_map_service.calls.clear()
+    for bad in ("rating", "", "aesthetic", "generator folder"):
+        response = test_client.get("/api/style-map/colors", params={"by": bad})
+        assert response.status_code == 400, (bad, response.text)
+    assert fake_map_service.calls == []
 
 
 def test_start_refuses_non_checkpoint_paths_before_touching_the_filesystem(

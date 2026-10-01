@@ -4,12 +4,18 @@
  * hover that reports the picture under the pointer. Dots are round sprites
  * (a small shader: size attenuates with distance, dots that stand for more
  * pictures are a little larger), the camera fits the cloud from an oblique
- * angle and refits when the canvas changes shape. Colours come from the
- * Graphite tokens; the hovered dot takes the accent (the focus meaning the
- * accent has everywhere else) plus a ring.
+ * angle and refits when the canvas changes shape. Every dot has its own
+ * base colour (colors.js: the data field the user picked; the no-data grey
+ * before any answer arrives); a region focus brightens or dims that base,
+ * and the hovered dot takes the accent (the focus meaning the accent has
+ * everywhere else) plus a ring.
  */
 import * as THREE from '../vendor/three/three.module.js';
 import { OrbitControls } from '../vendor/three/OrbitControls.js';
+import { NO_DATA_RGB } from './colors.js';
+
+const FOCUS_LIGHTEN = 0.35; // dots of the lit region move this far toward white
+const FOCUS_DIM = 0.45; // every other dot keeps this share of its colour
 
 // World-unit dot size ~ 0.6 / sqrt(n): ~10 px dots with gaps at 500
 // points on a 1920 canvas, ~1.5 px dots that still draw the shape at 50k.
@@ -25,6 +31,7 @@ const CORE_LOW = 0.02; // percentile box that counts as "the cloud" for the fit 
 const CORE_HIGH = 0.98;
 const VIEW_DIRECTION = new THREE.Vector3(1, 0.5, 1.2).normalize();
 const FOV = 50;
+const WHITE = new THREE.Color(1, 1, 1);
 
 const VERTEX_SHADER = `
     attribute float size;
@@ -117,10 +124,11 @@ export class StyleMapScene {
         this.controls.minDistance = 0.2;
         this.controls.maxDistance = 20;
 
-        this.baseColor = colorFrom('--text-2', '#A6A6AB');
         this.hoverColor = colorFrom('--accent', '#C8873C');
-        this.brightColor = colorFrom('--text', '#E8E8EA');
-        this.dimColor = this.baseColor.clone().multiplyScalar(0.45);
+        // Per-dot base colours (3 floats each), written by setBaseColors;
+        // the no-data grey until a colours answer arrives.
+        this.baseColors = new Float32Array(0);
+        this.scratch = new THREE.Color();
         this.ids = new Int32Array(0);
         this.members = new Uint16Array(0);
         this.count = 0;
@@ -212,7 +220,7 @@ export class StyleMapScene {
         const sizes = new Float32Array(count);
         const ids = new Int32Array(count);
         const members = new Uint16Array(count);
-        const { r, g, b } = this.baseColor;
+        const [r, g, b] = NO_DATA_RGB;
         const base = basePointSize(count);
         for (let i = 0; i < count; i += 1) {
             const row = rows[i];
@@ -235,6 +243,7 @@ export class StyleMapScene {
         this.members = members;
         this.sizes = sizes;
         this.count = count;
+        this.baseColors = colors.slice();
         // A fresh geometry per map; the old one's GPU buffers are freed.
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -510,9 +519,35 @@ export class StyleMapScene {
      * regions.js), `region` the one to show, null to restore the plain map.
      */
     setFocus(labels, region) {
+        this.focus = region === null || region === undefined || !labels ? null : { labels, region };
+        this.repaintColors();
+    }
+
+    /**
+     * Give every dot its own base colour: `rgb` holds 3 floats per dot in
+     * point order (colors.js builds it from a colours answer). An array of
+     * the wrong length is ignored; null restores the no-data grey.
+     */
+    setBaseColors(rgb) {
+        if (rgb === null || rgb === undefined) {
+            const [r, g, b] = NO_DATA_RGB;
+            for (let i = 0; i < this.count; i += 1) {
+                this.baseColors[i * 3] = r;
+                this.baseColors[i * 3 + 1] = g;
+                this.baseColors[i * 3 + 2] = b;
+            }
+        } else if (rgb.length === this.count * 3) {
+            this.baseColors.set(rgb);
+        } else {
+            return;
+        }
+        this.repaintColors();
+    }
+
+    /** Write base colour, focus and hover of every dot into the geometry (one pass). */
+    repaintColors() {
         const colors = this.geometry.getAttribute('color');
         if (!colors) return;
-        this.focus = region === null || region === undefined || !labels ? null : { labels, region };
         for (let i = 0; i < this.count; i += 1) {
             const color = this.colorAt(i);
             colors.setXYZ(i, color.r, color.g, color.b);
@@ -522,9 +557,18 @@ export class StyleMapScene {
         this.requestRender();
     }
 
+    /** The dot's shown colour (without hover): its base, lit or dimmed by the focus. */
     colorAt(index) {
-        if (!this.focus) return this.baseColor;
-        return this.focus.labels[index] === this.focus.region ? this.brightColor : this.dimColor;
+        const base = this.baseColors;
+        const at = index * 3;
+        this.scratch.setRGB(base[at], base[at + 1], base[at + 2], THREE.LinearSRGBColorSpace);
+        if (!this.focus) return this.scratch;
+        if (this.focus.labels[index] === this.focus.region) {
+            this.scratch.lerp(WHITE, FOCUS_LIGHTEN);
+        } else {
+            this.scratch.multiplyScalar(FOCUS_DIM);
+        }
+        return this.scratch;
     }
 
     pick() {
