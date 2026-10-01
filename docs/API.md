@@ -1641,7 +1641,7 @@ Identify artist for one image.
 | `threshold` | float | 0.03 | Extra confidence floor (0.0-1.0); tightens only |
 | `top_k` | int | 5 | Number of top predictions to return (1-20) |
 | `model_source` | string | `huggingface` | `huggingface`, `modelscope` or `local` |
-| `model_path` | string | null | Local checkpoint, read only when `model_source=local` (ignored, set to null, for `huggingface`/`modelscope`): must end in `.pth`, `.pt` or `.onnx` and, if a network (UNC) path, lie inside a trusted model folder (both checked before the file is touched), and must exist; 400 otherwise. A `.pth`/`.pt` without `class_mapping.csv` beside it loads only from the program's models folders or a trusted folder (see `/api/models/trusted-folders`) |
+| `model_path` | string | null | Local checkpoint, read only when `model_source=local` (ignored, set to null, for `huggingface`/`modelscope`): must end in `.pth`, `.pt` or `.onnx` and, if a network (UNC) path, lie inside a trusted model folder (both checked before the file is touched), and must exist; 400 otherwise. The existence check runs in the threadpool, not while the request body is parsed, so a trusted NAS that is offline delays only this request (about one SMB timeout), never the rest of the app. A `.pth`/`.pt` without `class_mapping.csv` beside it loads only from the program's models folders or a trusted folder (see `/api/models/trusted-folders`) |
 
 **Response:**
 ```json

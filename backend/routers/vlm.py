@@ -618,7 +618,7 @@ async def caption_batch(request: BatchCaptionRequest):
 
 
 @router.get("/caption-batch/progress")
-async def batch_progress():
+def batch_progress():
     from services.tagging_pipeline_service import KIND_VLM, get_tagging_pipeline_service
 
     # Read the queue BEFORE the batch state: if the dispatcher starts a

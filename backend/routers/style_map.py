@@ -17,7 +17,7 @@ from pydantic import ValidationError as PydanticValidationError
 
 from artist_identifier import ARTIST_THRESHOLD_DEFAULT
 from exceptions import ValidationError
-from routers.artists import ArtistModelConfig
+from routers.artists import ArtistModelConfig, resolve_local_artist_model
 from services.service_provider import ServiceProvider
 from services.style_map_service import STYLE_MAP_SPACES, StyleMapService
 from services.style_vector_service import STYLE_VECTOR_SPACES, StyleVectorService
@@ -72,7 +72,12 @@ def _model_path_from_query(
             or "Invalid model settings",
             field="model_path",
         ) from exc
-    return config.model_path
+    # A sync dependency runs in the threadpool: the file check belongs here,
+    # not in the validator (SEC1f).
+    try:
+        return resolve_local_artist_model(config.model_path)
+    except ValueError as exc:
+        raise ValidationError(str(exc), field="model_path") from exc
 
 
 class StartVectorsRequest(ArtistModelConfig):
@@ -162,13 +167,21 @@ def start_vectors(
 ):
     # OperationInProgressError -> 409 and ValidationError -> 400 through the
     # app-wide SDImageSorterError handler.
+    # A def handler runs in the threadpool: resolve the local checkpoint here
+    # (the validator stays pure, SEC1f), before anything is queued.
+    model_path = request.model_path
+    if model_path is not None:
+        try:
+            model_path = resolve_local_artist_model(model_path)
+        except ValueError as exc:
+            raise ValidationError(str(exc), field="model_path") from exc
     return service.start_extraction(
         background_tasks,
         space=request.space,
         image_ids=request.image_ids,
         use_gpu=request.use_gpu,
         model_source=request.model_source,
-        model_path=request.model_path,
+        model_path=model_path,
         selection_token=request.selection_token,
         with_artist=request.with_artist,
         threshold=request.threshold,

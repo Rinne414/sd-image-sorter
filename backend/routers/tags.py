@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 
 from services.service_provider import ServiceProvider
 from services.state_compat import MutableStateProxy
@@ -480,7 +481,11 @@ async def start_tagging(
     pipeline: TaggingPipelineService = Depends(get_tagging_pipeline_service),
 ):
     """Start tagging images with WD14 tagger."""
-    return pipeline.start_gallery_tagging(request, background_tasks, legacy_service=service)
+    # The request validation resolves the custom model / tags paths (a file
+    # on an offline NAS takes an SMB timeout): threadpool, not the loop.
+    return await run_in_threadpool(
+        pipeline.start_gallery_tagging, request, background_tasks, legacy_service=service
+    )
 
 
 @router.post(
@@ -527,7 +532,7 @@ def get_tag_scope_count(
 
 
 @router.get("/tag/progress")
-async def get_tag_progress(
+def get_tag_progress(
     service: TaggingService = Depends(get_tagging_service),
     pipeline: TaggingPipelineService = Depends(get_tagging_pipeline_service),
 ):
@@ -580,7 +585,7 @@ async def reset_tag_progress(
         }
     },
 )
-async def get_pipeline_queue(
+def get_pipeline_queue(
     pipeline: TaggingPipelineService = Depends(get_tagging_pipeline_service),
 ):
     """Return the shared AI-job pipeline queue snapshot (all kinds)."""

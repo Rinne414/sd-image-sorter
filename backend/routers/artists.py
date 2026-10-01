@@ -4,6 +4,7 @@ Artist Identification API Router for SD Image Sorter.
 Endpoints for identifying artist/style in images using LSNet-style classification.
 """
 import os
+import errno
 import logging
 import threading
 from pathlib import Path
@@ -82,11 +83,60 @@ class ArtistModelConfig(BaseModel):
         rejection = model_roots.network_path_rejection(self.model_path)
         if rejection:
             raise ValueError(rejection)
-        normalized_path = Path(os.path.expanduser(self.model_path)).resolve()
-        if not normalized_path.is_file():
-            raise ValueError("Local model file not found")
-        self.model_path = str(normalized_path)
+        # Pure up to here. Whether the file exists is resolve_local_artist_model's
+        # job, run in the threadpool by every handler: body validation runs on
+        # the event loop, and a trusted NAS that is offline answers in ~21 s,
+        # which would stall thumbnails and progress polls for everyone.
+        self.model_path = os.path.expanduser(self.model_path)
         return self
+
+
+_NETWORK_WINERRORS = frozenset({53, 64, 67, 121, 1231})
+_NETWORK_ERRNOS = frozenset(
+    code
+    for code in (
+        getattr(errno, name, None)
+        for name in ("ENETUNREACH", "EHOSTUNREACH", "ETIMEDOUT")
+    )
+    if code is not None
+)
+
+
+def _os_error_message(exc: OSError) -> str:
+    """A short, path-free reason for a failed model file check (the full
+    error goes to the log)."""
+    if isinstance(exc, PermissionError):
+        return "没有权限读取这个模型文件 / Permission denied reading this model file"
+    if (
+        getattr(exc, "winerror", None) in _NETWORK_WINERRORS
+        or exc.errno in _NETWORK_ERRNOS
+    ):
+        return "网络位置无法访问 / The network location cannot be reached"
+    return "Local model file not found"
+
+
+def resolve_local_artist_model(model_path: str) -> str:
+    """The resolved path of a validated local checkpoint; ValueError when it
+    is not a file. Touches the filesystem: call it from the threadpool."""
+    try:
+        normalized_path = Path(model_path).resolve()
+        is_file = normalized_path.is_file()
+    except OSError as exc:  # an unreachable share answers with an OS error
+        logger.warning("Artist model path check failed: %r", exc)
+        raise ValueError(_os_error_message(exc)) from exc
+    if not is_file:
+        raise ValueError("Local model file not found")
+    return str(normalized_path)
+
+
+async def _resolved_model_path(request: ArtistModelConfig) -> Optional[str]:
+    """resolve_local_artist_model off the loop; a missing file is a 400."""
+    if request.model_path is None:
+        return None
+    try:
+        return await run_in_threadpool(resolve_local_artist_model, request.model_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 class IdentifyRequest(ArtistModelConfig):
@@ -264,6 +314,7 @@ async def identify_artist(
     Raises:
         HTTPException 404: Image not found or file missing on disk
     """
+    model_path = await _resolved_model_path(request)
     try:
         result = await run_in_threadpool(
             service.identify_image,
@@ -271,7 +322,7 @@ async def identify_artist(
             threshold=request.threshold,
             top_k=request.top_k,
             model_source=request.model_source,
-            model_path=request.model_path,
+            model_path=model_path,
             use_gpu=request.use_gpu,
         )
     except ImageNotFoundError as exc:
@@ -331,6 +382,7 @@ async def identify_batch(
     Note:
         Only one batch can run at a time.
     """
+    model_path = await _resolved_model_path(request)
     with _batch_start_lock:
         # Check-and-start under one lock so two concurrent requests cannot
         # both observe "not running" and start twice (same single-lock start
@@ -347,7 +399,7 @@ async def identify_batch(
         request.threshold,
         request.top_k,
         request.model_source,
-        request.model_path,
+        model_path,
         request.use_gpu,
     )
 

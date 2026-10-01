@@ -380,15 +380,19 @@ class TestArtistModelConfig:
     def test_a_local_trusted_network_path_goes_on_to_the_file_check(
         self, roots, monkeypatch
     ):
-        from pydantic import ValidationError as PydanticValidationError
         from routers import artists as artists_router
         from routers.artists import ArtistModelConfig
 
         model_roots.add_trusted_model_folder(NAS)
         touched = _record_path_access(monkeypatch, artists_router)
-        # the guard raises RuntimeError, which pydantic does not convert
-        with pytest.raises((PydanticValidationError, RuntimeError)):
-            ArtistModelConfig(model_source="local", model_path=NAS + r"\lsnet\best.pth")
+        # SEC1f: the validator is pure (it runs on the event loop); the
+        # existence check is resolve_local_artist_model, in the threadpool.
+        config = ArtistModelConfig(
+            model_source="local", model_path=NAS + r"\lsnet\best.pth"
+        )
+        assert touched == []
+        with pytest.raises(RuntimeError):  # the guard raises on the first probe
+            artists_router.resolve_local_artist_model(config.model_path)
         assert touched  # the network rule passed; the existence check ran
 
 

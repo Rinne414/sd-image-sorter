@@ -136,6 +136,20 @@ def _exception_detail(exc: BaseException) -> str:
     return str(exc) or exc.__class__.__name__
 
 
+def _prevalidate_gallery_request(legacy_service: Any, request: Any) -> None:
+    """Run the gallery request's path checks before any job lock is taken.
+
+    The checks resolve user-supplied model paths, which on an offline NAS
+    takes an SMB timeout; the start lock and the gallery transition lock are
+    also taken by the progress polls on the event loop, so waiting on the
+    network under them would stall every poll. The locked start validates
+    again, which is quick once the share has answered.
+    """
+    validate = getattr(legacy_service, "_validate_tag_request", None)
+    if validate is not None:
+        validate(request)
+
+
 def _with_owner(payload: Dict[str, Any], mode: str) -> Dict[str, Any]:
     out = dict(payload or {})
     out["pipeline_owner"] = PIPELINE_OWNER
@@ -373,6 +387,7 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
         *,
         legacy_service: "TaggingService",
     ) -> Dict[str, Any]:
+        _prevalidate_gallery_request(legacy_service, request)
         with gallery_job_transition(), _start_lock:
             smart_state, smart_msg = _probe_smart("AI Tag")
             if smart_state == _PROBE_UNKNOWN:
@@ -729,10 +744,17 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
         calls this in a poll loop; tests call it directly for
         deterministic lifecycle coverage.
         """
+        dropped, checked_head = self._check_head_outside_lock()
+        if dropped:
+            return True
         with gallery_job_transition(), _start_lock:
             if not self._queue:
                 return False
             head = self._queue[0]
+            if head.kind == KIND_GALLERY and head is not checked_head:
+                # The head changed (or was busy) since the lock-free check:
+                # the next poll checks it before any lock is taken.
+                return False
             # Restored-from-disk entries carry no live handles; re-bind the
             # gallery service (used both by the probe and the gallery start).
             legacy_service = head.legacy_service or self._resolve_legacy_service()
@@ -745,20 +767,7 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
             try:
                 self._start_queued_entry(entry)
             except BaseException as exc:  # noqa: BLE001 — a failed start must never wedge the queue
-                detail = _exception_detail(exc)
-                logger.exception(
-                    "Queued %s job %s failed to start; continuing with the next queued job",
-                    entry.kind,
-                    entry.queue_id,
-                )
-                self._last_start_errors[entry.kind] = {
-                    "kind": entry.kind,
-                    "queue_id": entry.queue_id,
-                    "error": detail,
-                    "at": _utc_now_iso(),
-                }
-                # A failed start drops the entry (it is not running).
-                self._running_entry = None
+                self._record_failed_start(entry, exc)
             else:
                 logger.info("Queued %s job %s auto-started", entry.kind, entry.queue_id)
                 self._last_start_errors.pop(entry.kind, None)
@@ -773,6 +782,52 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
+
+    def _record_failed_start(self, entry: _QueuedPipelineJob, exc: BaseException) -> None:
+        """Remember why ``entry`` failed to start. Caller holds ``_start_lock``
+        and has already removed the entry from the queue."""
+        logger.error(
+            "Queued %s job %s failed to start; continuing with the next queued job",
+            entry.kind,
+            entry.queue_id,
+            exc_info=exc,
+        )
+        self._last_start_errors[entry.kind] = {
+            "kind": entry.kind,
+            "queue_id": entry.queue_id,
+            "error": _exception_detail(exc),
+            "at": _utc_now_iso(),
+        }
+        # A failed start drops the entry (it is not running).
+        self._running_entry = None
+
+    def _check_head_outside_lock(self) -> tuple[bool, Optional[_QueuedPipelineJob]]:
+        """Path-check the head gallery job with no lock held (see
+        ``_prevalidate_gallery_request``); drop it as a failed start when the
+        checks refuse it. Returns ``(dropped, checked_head)``: ``checked_head``
+        is the gallery job that passed, None when nothing was checked."""
+        with _start_lock:
+            head = self._queue[0] if self._queue else None
+            if head is None or head.kind != KIND_GALLERY:
+                return False, None
+            legacy_service = head.legacy_service or self._resolve_legacy_service()
+        if self._runtime_busy_or_unknown(legacy_service):
+            return False, None  # nothing starts now; the next poll checks it
+        token = set_current_library_id(head.library_id)
+        try:
+            _prevalidate_gallery_request(legacy_service, head.payload)
+            return False, head
+        except BaseException as exc:  # noqa: BLE001 — a bad queued job must never wedge the queue
+            failure = exc
+        finally:
+            reset_current_library_id(token)
+        with gallery_job_transition(), _start_lock:
+            if not self._queue or self._queue[0] is not head:
+                return False, None  # cancelled or replaced while the share answered
+            self._queue.pop(0)
+            self._record_failed_start(head, failure)
+            self._persist_state_locked()
+        return True, None
 
     def _runtime_busy_or_unknown(self, legacy_service: Any) -> bool:
         states = (
