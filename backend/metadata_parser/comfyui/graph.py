@@ -498,6 +498,34 @@ class ComfyUIGraphMixin:
         "noise", "sampler", "upscale_model", "control_net", "lora_stack",
     })
 
+    # A model link normally leads to loaders and LoRA stacks; these class-name
+    # markers keep them a barrier.
+    _MODEL_SOURCE_MARKERS = ("lora", "load", "checkpoint")
+    _PATCH_TEXT_KEY_PREFIXES = ("text", "prompt", "string", "artist", "cond")
+
+    def _is_text_bearing_model_patch(self, node: Any, nodes: Dict[str, dict]) -> bool:
+        """A node met on a model link that conditions on text of its own.
+
+        AttentionCouple (``cond_1``/``cond_2``) and artist cross-attention
+        (``artist_N``) patch the model yet carry prompt text the sampler's
+        positive input never reaches. Loaders and LoRA stacks do not count,
+        and neither does a patch that only rewrites model settings.
+        """
+        if not isinstance(node, dict) or not isinstance(node.get("inputs"), dict):
+            return False
+        class_type = str(node.get("class_type") or "").lower()
+        if any(marker in class_type for marker in self._MODEL_SOURCE_MARKERS):
+            return False
+        for key, value in node["inputs"].items():
+            lowered = str(key).lower()
+            if lowered in self._NON_TEXT_LINK_KEYS:
+                continue
+            if any(ref in nodes for ref in self._iter_comfyui_input_refs(value)):
+                return True
+            if isinstance(value, str) and value.strip() and lowered.startswith(self._PATCH_TEXT_KEY_PREFIXES):
+                return True
+        return False
+
     def _comfyui_prompt_eligible_nodes(self, nodes: Dict[str, dict]) -> Tuple[Set[str], Set[str]]:
         """Which nodes may hold the prompt, and which must never contribute text.
 
@@ -506,7 +534,9 @@ class ComfyUIGraphMixin:
 
         1. With a generation root (see ``_is_comfyui_generation_root``):
            every node upstream of a root through a link that can carry text
-           (not model/clip/vae/latent links, see ``_NON_TEXT_LINK_KEYS``), plus nodes consuming an upstream
+           (not model/clip/vae/latent links, see ``_NON_TEXT_LINK_KEYS``; a model link is
+           followed into a patch node that holds text of its own, see
+           ``_is_text_bearing_model_patch``), plus nodes consuming an upstream
            value (ShowText displays of the executed prompt). An instruct node
            is a barrier: kept as an anchor for its displays, it contributes
            no text and nothing behind its instruction inputs is reached.
@@ -530,9 +560,10 @@ class ComfyUIGraphMixin:
             walk_refs[node_id] = [
                 ref
                 for key, value in inputs.items()
-                if str(key).lower() not in self._NON_TEXT_LINK_KEYS
+                if str(key).lower() not in self._NON_TEXT_LINK_KEYS or str(key).lower() == "model"
                 for ref in self._iter_comfyui_input_refs(value)
                 if ref in nodes and ref != node_id
+                and (str(key).lower() != "model" or self._is_text_bearing_model_patch(nodes[ref], nodes))
             ]
             consumed.update(refs)
         instruct = {

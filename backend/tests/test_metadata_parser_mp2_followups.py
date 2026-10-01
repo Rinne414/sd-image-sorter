@@ -73,3 +73,68 @@ class TestLoraStringsAreNotTraced:
         graph["alt"] = {"class_type": "PrimitiveStringMultiline", "inputs": {"value": SCENE}}
         result = _parse(tmp_path, "fallthrough.png", graph)
         assert result["prompt"] == SCENE
+
+
+REGION_LEFT = (
+    "1girl, long silver hair, school uniform, standing on the left side of the frame, "
+    "smiling, looking at viewer, detailed eyes, soft light"
+)
+REGION_RIGHT = (
+    "1boy, short black hair, dark jacket, standing on the right side of the frame, "
+    "calm expression, hands in pockets, detailed clothes"
+)
+
+
+def _patched_model_graph(patch: dict) -> dict:
+    """A sampler whose positive input is a runtime-only dead end and whose text
+    reaches it only through a model patch node (regional / artist conditioning)."""
+    return {
+        "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": "base.safetensors"}},
+        "lora": {
+            "class_type": "LoraLoader",
+            "inputs": {"lora_name": "x.safetensors", "strength_model": 1.0, "model": ["unet", 0]},
+        },
+        "left": {"class_type": "CLIPTextEncode", "inputs": {"text": REGION_LEFT, "clip": ["lora", 1]}},
+        "right": {"class_type": "CLIPTextEncode", "inputs": {"text": REGION_RIGHT, "clip": ["lora", 1]}},
+        "patch": patch,
+        "base": {"class_type": "RuntimeOnlyNode", "inputs": {"seed": 3}},
+        "ks": {
+            "class_type": "KSampler",
+            "inputs": {"model": ["patch", 0], "positive": ["base", 0], "negative": ["base", 0], "seed": 1, "steps": 20},
+        },
+    }
+
+
+class TestTextBehindAModelPatchIsHarvested:
+    def test_attention_couple_regions_reach_the_prompt(self, tmp_path: Path):
+        patch = {
+            "class_type": "AttentionCouplePPM",
+            "inputs": {"model": ["lora", 0], "base_cond": ["base", 0], "cond_1": ["left", 0], "cond_2": ["right", 0]},
+        }
+        result = _parse(tmp_path, "couple.png", _patched_model_graph(patch))
+        assert result["prompt"] in (REGION_LEFT, REGION_RIGHT), result["prompt"]
+
+    def test_artist_cross_attention_text_reaches_the_prompt(self, tmp_path: Path):
+        patch = {
+            "class_type": "AnimaArtistCrossAttn",
+            "inputs": {"model": ["lora", 0], "artist_1": ["left", 0], "artist_2": ["right", 0], "strength": 1.0},
+        }
+        result = _parse(tmp_path, "artist.png", _patched_model_graph(patch))
+        assert result["prompt"] in (REGION_LEFT, REGION_RIGHT), result["prompt"]
+
+    def test_a_plain_model_patch_does_not_pull_text_in(self, tmp_path: Path):
+        """A patch with no text of its own, and a LoRA loader's string, stay out."""
+        graph = _patched_model_graph(
+            {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": ["lora", 0], "shift": 3.0}}
+        )
+        graph["lora"]["inputs"]["text"] = LORA_STACK
+        result = _parse(tmp_path, "plain.png", graph)
+        assert not result["prompt"], result["prompt"]
+
+    def test_a_lora_loader_on_the_model_path_stays_a_barrier(self, tmp_path: Path):
+        graph = _patched_model_graph(
+            {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": ["lora", 0], "shift": 3.0}}
+        )
+        graph["lora"]["inputs"]["clip"] = ["left", 0]  # a loader never makes its inputs prompts
+        result = _parse(tmp_path, "barrier.png", graph)
+        assert not result["prompt"], result["prompt"]
