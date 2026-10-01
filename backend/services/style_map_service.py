@@ -106,8 +106,6 @@ _QUEUE_LIMIT = 2
 class StyleMapService(
     StyleMapColorsMixin,
     StyleMapAxesMixin,
-    StyleMapColorsMixin,
-    StyleMapAxesMixin,
     StyleMapCustomAxesMixin,
     StyleMapQueryMixin,
     StyleMapMembersMixin,
