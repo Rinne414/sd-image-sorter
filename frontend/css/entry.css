@@ -1004,7 +1004,10 @@ body.entry-active {
     flex-direction: column;
     gap: 18px;
     z-index: 2;
-    max-width: min(760px, calc(100vw - 760px));
+    /* No fixed 760px cap: the mosaic already starts 760px from the right
+       edge, and the cap left the English privacy note wrapped into two
+       ragged lines at 1920+ while the space beside it stood empty. */
+    max-width: calc(100vw - 760px);
     /* content-box so the scrim padding below does NOT eat into the width the
        greeting/stat row had before — at 1366 that squeezed the hero line and
        wrapped the cover-mode switch labels onto two lines. */
@@ -1103,15 +1106,18 @@ body.entry-active {
     min-width: 0;
 }
 
+/* Stretched to its column (a non-stretched grid item keeps its full nowrap
+   text width and ran back over the switch), and wrapping instead of
+   ellipsizing: the English note is wider than the column at every desktop
+   width, and the half it cut off was the point ("only cloud VLM captioning
+   sends them"). */
 .entry-identity .hero-local-note {
     grid-area: note;
     min-width: 0;
-    justify-self: end;
+    align-self: center;
     text-align: right;
-    line-height: 28px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    line-height: 1.45;
+    text-wrap: pretty;
 }
 
 .entry-identity .hero-link {

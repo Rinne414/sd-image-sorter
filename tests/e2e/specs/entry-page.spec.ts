@@ -596,6 +596,46 @@ test.describe('Entry page (opted in)', () => {
     expect(await page.evaluate(() => window.localStorage.getItem('aurora-entry-hero-off'))).toBe('1')
   })
 
+  // The local-processing note shares a row with the cover-mode switch. The
+  // English note is wider than its column at every desktop width, and a
+  // non-stretched grid item keeps its full text width, so it ran back over
+  // the switch and the two blurred into one line.
+  for (const lang of ['en', 'zh-CN'] as const) {
+    for (const [width, height] of [[1280, 720], [1366, 768], [1920, 1080], [2560, 1440]] as const) {
+      test(`the local-processing note never runs over the cover-mode switch (${lang}, ${width}x${height})`, async ({ page }) => {
+        await resizeAndSettleUiScale(page, { width, height })
+        await page.evaluate((code) => (window as any).I18n.setLang(code), lang)
+        const switcher = page.locator('#entry-hero-mode-switch')
+        const note = page.locator('.identity-hero-line .hero-local-note')
+        await expect(switcher).toBeVisible()
+        await expect(note).toBeVisible()
+
+        const boxes = await page.evaluate(() => {
+          const rect = (selector: string) => {
+            const box = document.querySelector(selector)!.getBoundingClientRect()
+            return { left: box.left, right: box.right, top: box.top, bottom: box.bottom }
+          }
+          return { switcher: rect('#entry-hero-mode-switch'), note: rect('.identity-hero-line .hero-local-note') }
+        })
+        const overlapX = Math.min(boxes.switcher.right, boxes.note.right) - Math.max(boxes.switcher.left, boxes.note.left)
+        const overlapY = Math.min(boxes.switcher.bottom, boxes.note.bottom) - Math.max(boxes.switcher.top, boxes.note.top)
+        expect(overlapX <= 0 || overlapY <= 0, `switch ${JSON.stringify(boxes.switcher)} vs note ${JSON.stringify(boxes.note)}`).toBe(true)
+        expect(boxes.note.right).toBeLessThanOrEqual(width)
+        expect(boxes.note.bottom).toBeLessThanOrEqual(height)
+        // Wrapped, never clipped: the second half of the note is the privacy point.
+        const clipped = await note.evaluate((el) => el.scrollWidth > el.clientWidth)
+        expect(clipped).toBe(false)
+        // Where there is room (1920 and up) the note stays on the switch's line
+        // instead of breaking into two ragged lines beside empty space.
+        if (width >= 1920) {
+          const noteHeight = boxes.note.bottom - boxes.note.top
+          const switchHeight = boxes.switcher.bottom - boxes.switcher.top
+          expect(noteHeight, `note ${JSON.stringify(boxes.note)} vs switch ${JSON.stringify(boxes.switcher)}`).toBeLessThanOrEqual(switchHeight)
+        }
+      })
+    }
+  }
+
   test('model-center tile shows readiness and lands on the AI Models tab', async ({ page }) => {
     const tile = page.locator('#entry-fn-models')
     await expect(tile).toBeVisible()
