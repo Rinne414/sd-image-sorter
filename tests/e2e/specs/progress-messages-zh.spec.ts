@@ -398,3 +398,59 @@ test('Auto-Separate move progress and cancel read in Chinese, not the bilingual 
   expect(await toast.textContent()).not.toContain('Cancelled')
   await page.screenshot({ path: shotPath(testInfo, 'autosep-cancelled-zh-1366.png') })
 })
+
+test('artist identification progress and failure read in Chinese', async ({ page }, testInfo) => {
+  test.setTimeout(120000)
+  await page.setViewportSize({ width: 1366, height: 768 })
+
+  const base = {
+    running: true,
+    total: 0,
+    processed: 0,
+    errors: 0,
+    results: [],
+    step: 'starting',
+    message: 'Preparing artist identification...',
+    message_key: 'preparing',
+    message_detail: '',
+    current_item: null,
+  }
+  let payload: Record<string, unknown> = base
+  await page.route('**/api/artists/batch-progress', (route) => route.fulfill({ json: payload }))
+
+  await openMainPage(page)
+  await page.evaluate(() => { void (window as any).ArtistIdent.resumeBatchProgress() })
+  const text = page.locator('#artist-progress-text')
+  await expect(text).toHaveText('正在准备画师识别...', { timeout: 15000 })
+
+  payload = {
+    ...base,
+    total: 5,
+    processed: 2,
+    step: 'identifying',
+    message: 'Identifying x.png',
+    message_key: 'identifying_item',
+    current_item: 'x.png',
+  }
+  await expect(text).toContainText('2/5', { timeout: 15000 })
+  const running = (await text.textContent()) || ''
+  expect(running).toContain('2/5')
+  expect(running).toContain('x.png')
+  expect(running).not.toMatch(/Identifying|identified|Artist ID/)
+  await page.waitForTimeout(450)
+  await page.screenshot({ path: shotPath(testInfo, 'artist-running-zh-1366.png') })
+
+  payload = {
+    ...base,
+    running: false,
+    total: 5,
+    step: 'error',
+    message: 'Artist identification failed: model missing',
+    message_key: 'error',
+    message_detail: 'model missing',
+  }
+  const toast = page.locator('.toast', { hasText: '画师识别失败' }).first()
+  await expect(toast).toBeVisible({ timeout: 15000 })
+  expect(await toast.textContent()).not.toContain('Artist identification failed')
+  await page.screenshot({ path: shotPath(testInfo, 'artist-failed-zh-1366.png') })
+})

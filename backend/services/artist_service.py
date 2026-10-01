@@ -159,6 +159,8 @@ class ArtistService:
             "results": [],
             "step": "idle",
             "message": "",
+            "message_key": "",
+            "message_detail": "",
             "current_item": None,
             "started_at": None,
             "updated_at": None,
@@ -196,6 +198,8 @@ class ArtistService:
                 "results": [],
                 "step": "starting",
                 "message": "Preparing artist identification...",
+                "message_key": "preparing",
+                "message_detail": "",
                 "current_item": None,
                 "started_at": now,
                 "updated_at": now,
@@ -207,6 +211,8 @@ class ArtistService:
                 self._batch_progress["step"] = update["step"]
             if "message" in update:
                 self._batch_progress["message"] = update["message"]
+            if "message_key" in update:
+                self._batch_progress["message_key"] = update["message_key"]
             if "current_item" in update:
                 self._batch_progress["current_item"] = update["current_item"]
             if "result" in update:
@@ -229,6 +235,7 @@ class ArtistService:
                 f"Completed artist identification: {result['processed']}/{result['total']} processed"
                 + (f", {result['errors']} failed." if result["errors"] else ".")
             )
+            self._batch_progress["message_key"] = "done"
             self._batch_progress["current_item"] = None
             self._batch_progress["updated_at"] = time.time()
 
@@ -237,6 +244,8 @@ class ArtistService:
             self._batch_progress["running"] = False
             self._batch_progress["step"] = "error"
             self._batch_progress["message"] = f"Artist identification failed: {exc}"
+            self._batch_progress["message_key"] = "error"
+            self._batch_progress["message_detail"] = str(exc)
             self._batch_progress["current_item"] = None
             self._batch_progress["updated_at"] = time.time()
 
@@ -250,6 +259,8 @@ class ArtistService:
             "results": list(state.get("results", []) or []),
             "step": state.get("step"),
             "message": state.get("message"),
+            "message_key": str(state.get("message_key") or ""),
+            "message_detail": str(state.get("message_detail") or ""),
             "current_item": state.get("current_item"),
             "started_at": state.get("started_at"),
             "updated_at": state.get("updated_at"),
@@ -408,6 +419,7 @@ class ArtistService:
         emit({
             "step": "loading_runtime",
             "message": "Loading artist runtime...",
+            "message_key": "loading_runtime",
         })
 
         identifier = self._identifier(
@@ -433,6 +445,7 @@ class ArtistService:
         emit({
             "step": "identifying",
             "message": f"Identifying {len(image_ids)} image(s)...",
+            "message_key": "identifying",
         })
 
         results: List[Dict[str, Any]] = []
@@ -454,6 +467,7 @@ class ArtistService:
                 emit({
                     "current_item": current_item,
                     "message": f"Identifying {current_item}",
+                    "message_key": "identifying_item",
                 })
 
                 if not image_path:

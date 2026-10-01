@@ -1704,7 +1704,7 @@ Each `results[]` entry carries `artist`, `confidence`, `confidence_level`, and `
 
 #### GET /api/artists/batch-progress
 Get identification progress.
-The response includes step-oriented status fields such as `message`, `current_item`, `started_at`, and `updated_at` for frontend diagnostics.
+The response includes step-oriented status fields such as `message`, `current_item`, `started_at`, and `updated_at` for frontend diagnostics. `message` is an English display string kept for API compatibility; clients localise from `message_key` (`preparing`, `loading_runtime`, `identifying`, `identifying_item`, `done`, `error`) and the counters, and `message_detail` carries the raw error text for `error`.
 
 #### GET /api/artists/models
 List artist models.

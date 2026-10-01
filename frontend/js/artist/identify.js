@@ -68,7 +68,7 @@ Object.assign(window.ArtistIdent, {
         if (String(progress?.step || '') === 'error') {
             return {
                 level: 'error',
-                message: String(progress?.message || '').trim()
+                message: this.statusText(progress)
                     || this.tText('Artist identification failed.', '画师识别失败。'),
             };
         }
@@ -132,6 +132,40 @@ Object.assign(window.ArtistIdent, {
 
     // ============== Identification ==============
 
+    // The backend still sends an English `message` for API compatibility; the UI
+    // builds its own sentence from message_key + the counters so it follows the
+    // language. The raw error text of an `error` state is shown as received.
+    statusText(progress = {}) {
+        switch (progress.message_key) {
+            case 'preparing':
+                return this.tKey('artist.msg.preparing', 'Preparing artist identification...', '正在准备画师识别...');
+            case 'loading_runtime':
+                return this.tKey('artist.loadingModel', 'Loading artist model...', '正在载入画师模型...');
+            case 'identifying':
+                return this.tKey('artist.msg.identifying', 'Identifying {count} image(s)...', '正在识别 {count} 张图片...', {
+                    count: Number(progress.total || 0),
+                });
+            case 'identifying_item':
+                return this.tKey('artist.msg.identifyingItem', 'Identifying: {item}', '正在识别：{item}', {
+                    item: progress.current_item || '',
+                });
+            case 'done':
+                return this.tKey('artist.msg.done', 'Artist identification finished: {processed}/{total} processed, {errors} failed', '画师识别结束：已处理 {processed}/{total}，失败 {errors}', {
+                    processed: Number(progress.processed || 0),
+                    total: Number(progress.total || 0),
+                    errors: Number(progress.errors || 0),
+                });
+            case 'error': {
+                const failed = this.tKey('artist.identificationFailed', 'Artist identification failed', '画师识别失败');
+                const detail = progress.message_detail && typeof window.formatUserError === 'function'
+                    ? window.formatUserError(progress.message_detail) : '';
+                return detail ? `${failed}: ${detail}` : failed;
+            }
+            default:
+                return '';
+        }
+    },
+
     updateProgressUi(progress = {}) {
         const progressContainer = document.getElementById('artist-progress-container');
         const progressFill = document.getElementById('artist-progress-fill');
@@ -155,10 +189,13 @@ Object.assign(window.ArtistIdent, {
                     completed,
                     total,
                     tracker: this.progressTracker,
-                    defaultMessage: `${processed} identified${errors > 0 ? `, ${errors} error(s)` : ''}`,
-                    primaryLabel: 'Artist ID'
+                    defaultMessage: this.tKey('artist.progressDefault', '{processed} identified, {errors} failed', '已识别 {processed} 张，失败 {errors} 张', {
+                        processed,
+                        errors,
+                    }),
+                    primaryLabel: this.tKey('artist.progressPrimary', 'Artist ID', '画师识别')
                 })
-                : (progress.message || 'Preparing artist identification...');
+                : (this.statusText(progress) || this.tKey('artist.msg.preparing', 'Preparing artist identification...', '正在准备画师识别...'));
             const currentItem = progress.current_item ? ` · ${progress.current_item}` : '';
             progressText.textContent = `${progressLabel}${currentItem}`;
         }
@@ -315,7 +352,7 @@ Object.assign(window.ArtistIdent, {
                     if (progressFill) progressFill.style.width = `${percent}%`;
                     if (progressText) {
                         if (processed === 0 && progress.step === 'loading_runtime') {
-                            progressText.textContent = progress.message || this.tKey('artist.loadingModel', 'Loading artist model...', '正在载入画师模型...');
+                            progressText.textContent = this.statusText(progress) || this.tKey('artist.loadingModel', 'Loading artist model...', '正在载入画师模型...');
                         } else {
                             const progressLabel = window.App.buildProgressText({
                                 progress,

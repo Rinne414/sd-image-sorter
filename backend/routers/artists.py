@@ -175,6 +175,10 @@ class BatchProgress(BaseModel):
     results: List[dict]
     step: Optional[str] = None
     message: Optional[str] = None
+    # Stable key the UI localises from; ``message`` stays English for API
+    # compatibility. ``message_detail`` is the raw error text for ``error``.
+    message_key: str = ""
+    message_detail: str = ""
     current_item: Optional[str] = None
     started_at: Optional[float] = None
     updated_at: Optional[float] = None
