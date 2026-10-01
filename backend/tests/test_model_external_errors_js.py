@@ -108,6 +108,18 @@ def test_the_tipo_sentence_survives_a_caller_context_too(world):
     )
 
 
+def test_a_wrapped_sentence_that_carries_a_path_is_not_shown_as_written():
+    message = (
+        "Failed to load C:/Users/x/secret.onnx: The file in ComfyUI is gone or changed. "
+        "Rescan in Model Center. / see C:/Users/x"
+    )
+
+    result = shown(message, "Tagging failed")
+
+    assert "secret" not in result["en"] and "secret" not in result["zh-CN"]
+    assert "C:/Users" not in result["en"] and "C:/Users" not in result["zh-CN"]
+
+
 def test_other_long_messages_still_collapse_to_the_generic_text():
     result = shown("x" * 200, "Tagging failed")
 
