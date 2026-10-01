@@ -36,17 +36,15 @@ def _cached_found_digest(found_path: str, mtime_ns: int, size: int) -> Optional[
 
     Paging through reviews, reopening the modal and repeated listings all ask
     for the same files; the key changes with the file, so a rewritten file is
-    hashed again. None (unreadable) is cached too: a broken file does not get
-    re-read on every page load.
+    hashed again. A read failure is NOT remembered: it raises, and
+    ``lru_cache`` never caches an exception, so a file that was locked, being
+    scanned by an antivirus, or still a cloud placeholder is tried again on
+    the next listing instead of reading as "unknown" until the next restart.
     """
-    try:
-        from image_fingerprint import compute_image_content_fingerprint
+    from image_fingerprint import compute_image_content_fingerprint
 
-        text = str(compute_image_content_fingerprint(found_path) or "").strip().lower()
-        return text or None
-    except Exception as exc:
-        logger.debug("Could not fingerprint repair candidate %s: %s", found_path, exc)
-        return None
+    text = str(compute_image_content_fingerprint(found_path) or "").strip().lower()
+    return text or None
 
 
 def _svc():
@@ -78,9 +76,12 @@ class RepairReviewMixin:
         """Pixel digest of a found file (cached), or None when it cannot be read."""
         try:
             stat_result = os.stat(found_path)
-        except OSError:
+            return _cached_found_digest(
+                found_path, int(stat_result.st_mtime_ns), int(stat_result.st_size)
+            )
+        except Exception as exc:
+            logger.debug("Could not fingerprint repair candidate %s: %s", found_path, exc)
             return None
-        return _cached_found_digest(found_path, int(stat_result.st_mtime_ns), int(stat_result.st_size))
 
     # ------------------------------------------------------------------
     # Roadmap-C: missing-file repair review (resolve ambiguous matches)

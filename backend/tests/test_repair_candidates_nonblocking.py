@@ -185,6 +185,28 @@ def test_a_rewritten_found_file_is_hashed_again(test_db, tmp_path, hash_calls):
     assert len(hash_calls) == 2
 
 
+def test_a_transient_read_failure_is_not_remembered(test_db, tmp_path, monkeypatch):
+    """Locked by another process, an antivirus scan, a cloud placeholder: the
+    first listing answers None, the next one (file unchanged) hashes again and
+    answers for real instead of staying None until the process restarts."""
+    from services.image_service import ImageService
+
+    _seed_reviews(test_db, tmp_path, 1, source=_small_png(tmp_path / "src.png"))
+    service = ImageService()
+    real = image_fingerprint.compute_image_content_fingerprint
+
+    def locked(*_args, **_kwargs):
+        raise PermissionError("locked by another process")
+
+    monkeypatch.setattr(image_fingerprint, "compute_image_content_fingerprint", locked)
+    while_locked = [c["pixels_match"] for c in service.get_repair_candidates(limit=20)["items"][0]["candidates"]]
+    monkeypatch.setattr(image_fingerprint, "compute_image_content_fingerprint", real)
+    afterwards = [c["pixels_match"] for c in service.get_repair_candidates(limit=20)["items"][0]["candidates"]]
+
+    assert while_locked == [None, None]
+    assert afterwards == [False, False]
+
+
 def test_pages_above_fifty_carry_no_verdicts_and_hash_nothing(
     test_db, tmp_path, hash_calls
 ):
