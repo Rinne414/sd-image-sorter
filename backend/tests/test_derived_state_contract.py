@@ -117,6 +117,15 @@ EXPECTED_DERIVED_IMAGE_UPDATE_STATEMENTS = Counter({
         "content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
     ): 1,
     (
+        # Rescan of a changed file whose rehash failed (tests/
+        # test_rescan_forgets_stale_fingerprint.py): the two rewrite statements
+        # above COALESCE the fingerprint, which kept a digest of the old pixels
+        # next to the new mtime/size whenever the row had nothing derived to
+        # clear. This writer only ever NULLs; it never advances a fingerprint.
+        "db_images_write.py",
+        "UPDATE images SET content_fingerprint = NULL WHERE id = ?",
+    ): 1,
+    (
         "db_tags.py",
         "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, ai_caption = COALESCE(?, ai_caption), "
         "nl_caption = COALESCE(?, nl_caption), "

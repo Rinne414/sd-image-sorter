@@ -682,3 +682,37 @@ def _should_clear_derived_state(
         return True
 
     return False
+
+
+def _should_forget_content_fingerprint(
+    existing_row: Optional[Dict[str, Any]],
+    record: Dict[str, Any],
+    *,
+    source_changed: bool,
+) -> bool:
+    """The file changed but this write brings no new fingerprint: drop the old one.
+
+    ``_should_clear_derived_state`` answers False for a row with nothing derived,
+    so the scan upsert and the metadata rewrite used to keep the stored
+    fingerprint through ``COALESCE(?, content_fingerprint)`` while storing the
+    new mtime and size. The scanner and the style index treat a matching
+    mtime/size pair as "same pixels, keep the fingerprint"
+    (``image_manager_gates._source_fingerprint_matches``,
+    ``style_vector_prepare.fingerprint_for``), so that row described the new
+    pixels with a digest of the old ones for good. A NULL is never matched; every
+    pipeline that needs the fingerprint hashes the file again.
+
+    A ``pending`` placeholder does not consume the new mtime/size either, so it
+    keeps the fingerprint too: the backfill for the same scan decides.
+    """
+    if not source_changed:
+        return False
+
+    metadata_status = str(record.get("metadata_status") or "complete").strip().lower()
+    if metadata_status == "pending":
+        return False
+
+    if _normalize_content_fingerprint(record.get("content_fingerprint")) is not None:
+        return False
+
+    return _normalize_content_fingerprint(_row_value(existing_row, "content_fingerprint")) is not None

@@ -75,6 +75,7 @@ from db_helpers import (
     _row_to_dict,
     _is_source_fingerprint_changed,
     _should_clear_derived_state,
+    _should_forget_content_fingerprint,
 )
 
 
@@ -103,6 +104,19 @@ def _clear_image_pixel_caches(cursor: sqlite3.Cursor, image_id: int) -> None:
             ai_rating_confidence = NULL
         WHERE id = ?
         """,
+        (image_id,),
+    )
+
+
+def _forget_content_fingerprint(cursor: sqlite3.Cursor, image_id: int) -> None:
+    """Drop a fingerprint that no longer describes the file on disk.
+
+    Only the digest goes: the row has nothing derived (otherwise
+    ``_clear_image_derived_state`` ran instead), so there is nothing else to
+    invalidate, and the user's own fields are not pixel data.
+    """
+    cursor.execute(
+        "UPDATE images SET content_fingerprint = NULL WHERE id = ?",
         (image_id,),
     )
 
@@ -303,6 +317,12 @@ def _upsert_image_record(
                 _clear_image_pixel_caches(cursor, image_id)
             else:
                 _clear_image_derived_state(cursor, image_id)
+        elif _should_forget_content_fingerprint(
+            existing_row, record, source_changed=source_changed
+        ):
+            # The COALESCE below would otherwise keep a digest of pixels that
+            # are gone next to the mtime/size of the pixels that replaced them.
+            _forget_content_fingerprint(cursor, image_id)
 
         # sidecar_fingerprint is COALESCEd rather than assigned: a NULL in the
         # record means the caller could not question the filesystem about
@@ -616,6 +636,17 @@ def update_image_metadata(
                 _clear_image_pixel_caches(cursor, image_id)
             else:
                 _clear_image_derived_state(cursor, image_id)
+        elif _should_forget_content_fingerprint(
+            existing_row,
+            {
+                "metadata_status": metadata_status,
+                "content_fingerprint": content_fingerprint,
+            },
+            source_changed=source_changed,
+        ):
+            # Same reason as the scan upsert: a changed file with no new digest
+            # must not keep the old one through the COALESCE below.
+            _forget_content_fingerprint(cursor, image_id)
         cursor.execute(
             """
             UPDATE images
