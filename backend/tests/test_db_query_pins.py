@@ -290,8 +290,11 @@ class TestSqlConstants:
         )
 
     def test_reconnect_candidate_columns_are_bare_and_narrow(self):
+        # content_fingerprint: the reconnect pixel checks compare it; without it
+        # they compared against None (tests/test_reconnect_pixel_verification.py).
         assert _RECONNECT_CANDIDATE_COLUMNS == (
-            "id, path, filename, file_size, source_size, source_mtime_ns, source_file_mtime"
+            "id, path, filename, file_size, source_size, source_mtime_ns, source_file_mtime, "
+            "content_fingerprint"
         )
 
     def test_full_columns_are_i_aliased_and_bare_columns_are_not(self):

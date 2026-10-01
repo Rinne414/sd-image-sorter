@@ -177,6 +177,10 @@ _IMAGE_COLUMNS_BARE = _format_image_column_list(_IMAGE_COLUMNS_BASE_FIELDS)
 # Minimal columns the missing-file reconnect flow consumes per candidate
 # (id/path/filename plus the size + mtime fields used by image_service
 # match logic). Kept narrow so large libraries do not load full rows.
+# content_fingerprint is what the pixel checks in
+# services/image/reconnect.py compare against; without it every candidate
+# read as "no fingerprint" and the "confirm uncertain matches by reading
+# image pixels" switch never did anything.
 _RECONNECT_CANDIDATE_FIELDS = (
     "id",
     "path",
@@ -185,6 +189,7 @@ _RECONNECT_CANDIDATE_FIELDS = (
     "source_size",
     "source_mtime_ns",
     "source_file_mtime",
+    "content_fingerprint",
 )
 _RECONNECT_CANDIDATE_COLUMNS = _format_image_column_list(_RECONNECT_CANDIDATE_FIELDS)
 

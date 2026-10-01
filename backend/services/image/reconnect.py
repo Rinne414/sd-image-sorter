@@ -144,6 +144,54 @@ class ReconnectMixin:
         text = str(value or "").strip().lower()
         return text or None
 
+    @staticmethod
+    def _found_fingerprint_reader(found_path: str) -> Callable[[], Optional[str]]:
+        """A reader for the found file's pixel digest that hashes at most once."""
+        cache: Dict[str, Optional[str]] = {}
+
+        def read() -> Optional[str]:
+            if "value" not in cache:
+                try:
+                    from image_fingerprint import compute_image_content_fingerprint
+
+                    cache["value"] = ReconnectMixin._normalized_fingerprint(
+                        compute_image_content_fingerprint(found_path)
+                    )
+                except Exception as exc:
+                    logger.debug("Could not fingerprint reconnect candidate %s: %s", found_path, exc)
+                    cache["value"] = None
+            return cache["value"]
+
+        return read
+
+    @staticmethod
+    def _stat_match_pixel_verdict(
+        candidate: Dict[str, Any],
+        expected_mtime_ns: Optional[int],
+        stat_result: os.stat_result,
+        found_fingerprint: Callable[[], Optional[str]],
+    ) -> str:
+        """``same`` / ``different`` / ``unverified`` for a size-and-mtime match.
+
+        The mtime tolerance exists for file systems and copies that round
+        timestamps, and the relink then records the found file's exact mtime:
+        an approximate match is written down as an exact one, derived state
+        included. When the row has a pixel fingerprint, an approximate match is
+        checked against the found file's pixels before it is trusted. A match
+        exact to the nanosecond is trusted as before, without reading the file:
+        hashing every moved file would turn a plain library move into a full
+        re-read. Rows without a fingerprint cannot be checked.
+        """
+        stored = ReconnectMixin._normalized_fingerprint(candidate.get("content_fingerprint"))
+        if not stored or expected_mtime_ns is None:
+            return "unverified"
+        if int(expected_mtime_ns) == int(stat_result.st_mtime_ns):
+            return "unverified"
+        found = found_fingerprint()
+        if not found:
+            return "unverified"
+        return "same" if found == stored else "different"
+
     def _find_reconnect_match(
         self,
         found_path: str,
@@ -154,8 +202,10 @@ class ReconnectMixin:
     ) -> tuple[Optional[Dict[str, Any]], str]:
         """Find a safe row match for one discovered file."""
         stat_matches: List[Dict[str, Any]] = []
+        pixel_verified: List[Dict[str, Any]] = []
         fingerprint_candidates: List[Dict[str, Any]] = []
         name_size_only: List[Dict[str, Any]] = []
+        found_fingerprint = self._found_fingerprint_reader(found_path)
 
         for candidate in candidates:
             expected_size = self._candidate_expected_size(candidate)
@@ -164,6 +214,17 @@ class ReconnectMixin:
 
             expected_mtime_ns = self._candidate_expected_mtime_ns(candidate)
             if self._mtime_matches(expected_mtime_ns, stat_result):
+                verdict = "unverified"
+                if verify_uncertain:
+                    verdict = self._stat_match_pixel_verdict(
+                        candidate, expected_mtime_ns, stat_result, found_fingerprint
+                    )
+                if verdict == "different":
+                    # Same name, size and nearly the same date, but not these
+                    # pixels: a different picture, left for a normal scan.
+                    continue
+                if verdict == "same":
+                    pixel_verified.append(candidate)
                 stat_matches.append(candidate)
                 continue
 
@@ -174,23 +235,22 @@ class ReconnectMixin:
             if expected_mtime_ns is None and not self._normalized_fingerprint(candidate.get("content_fingerprint")):
                 name_size_only.append(candidate)
 
+        # A match proven by pixels outranks one that could not be checked.
+        if len(pixel_verified) == 1:
+            return pixel_verified[0], "fingerprint"
+        if len(pixel_verified) > 1:
+            return None, "ambiguous"
         if len(stat_matches) == 1:
             return stat_matches[0], "stat"
         if len(stat_matches) > 1:
             return None, "ambiguous"
 
         if fingerprint_candidates:
-            try:
-                from image_fingerprint import compute_image_content_fingerprint
-
-                found_fingerprint = self._normalized_fingerprint(compute_image_content_fingerprint(found_path))
-            except Exception as exc:
-                logger.debug("Could not fingerprint reconnect candidate %s: %s", found_path, exc)
-                found_fingerprint = None
-            if found_fingerprint:
+            found_fingerprint_value = found_fingerprint()
+            if found_fingerprint_value:
                 verified = [
                     candidate for candidate in fingerprint_candidates
-                    if self._normalized_fingerprint(candidate.get("content_fingerprint")) == found_fingerprint
+                    if self._normalized_fingerprint(candidate.get("content_fingerprint")) == found_fingerprint_value
                 ]
                 if len(verified) == 1:
                     return verified[0], "fingerprint"
