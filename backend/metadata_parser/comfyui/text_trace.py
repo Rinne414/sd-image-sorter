@@ -72,12 +72,12 @@ class ComfyUITextTraceMixin:
             # Trace positive conditioning. A hires or refiner pass reuses the
             # same conditioning, so a text already collected is not repeated.
             if pos_ref:
-                texts = self._trace_to_text(pos_ref, nodes, set(), side="positive")
+                texts = self._trace_texts(pos_ref, nodes, side="positive")
                 positive_texts.extend(t for t in texts if t not in positive_texts)
 
             # Trace negative conditioning
             if neg_ref:
-                texts = self._trace_to_text(neg_ref, nodes, set(), side="negative")
+                texts = self._trace_texts(neg_ref, nodes, side="negative")
                 negative_texts.extend(t for t in texts if t not in negative_texts)
 
         pos_result = "\n".join(positive_texts) if positive_texts else None
@@ -101,7 +101,7 @@ class ComfyUITextTraceMixin:
         classified_pos: List[str] = []
         classified_neg: List[str] = []
         for node_id, _node in clip_nodes:
-            texts = self._trace_to_text(node_id, nodes, set())
+            texts = self._trace_texts(node_id, nodes)
             for text in texts:
                 if self._looks_like_negative_prompt(text):
                     classified_neg.append(text)
@@ -118,14 +118,14 @@ class ComfyUITextTraceMixin:
         elif len(clip_nodes) == 2 and classified_neg and not classified_pos:
             negative_texts.extend(classified_neg)
         elif len(clip_nodes) == 2 and not classified_neg:
-            positive_texts.extend(self._trace_to_text(clip_nodes[0][0], nodes, set()))
-            negative_texts.extend(self._trace_to_text(clip_nodes[1][0], nodes, set()))
+            positive_texts.extend(self._trace_texts(clip_nodes[0][0], nodes))
+            negative_texts.extend(self._trace_texts(clip_nodes[1][0], nodes))
         elif len(clip_nodes) == 1:
             if classified_neg and not classified_pos:
                 negative_texts.extend(classified_neg)
             else:
                 positive_texts.extend(
-                    classified_pos or self._trace_to_text(clip_nodes[0][0], nodes, set())
+                    classified_pos or self._trace_texts(clip_nodes[0][0], nodes)
                 )
         elif len(clip_nodes) > 2:
             positive_texts.extend(classified_pos)

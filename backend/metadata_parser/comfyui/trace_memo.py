@@ -30,6 +30,8 @@ class _Frame:
 class _MemoState(threading.local):
     nodes: Optional[Dict[str, dict]] = None
     size = -1
+    # True while a trace may return strings that are only LoRA tags.
+    keep_tag_stacks = False
 
     def __init__(self) -> None:
         self.cache: Dict[Any, Any] = {}
@@ -52,6 +54,36 @@ class ComfyUITraceMemoMixin:
             state.frames = []
         return state
 
+    @staticmethod
+    def _is_tag_stack_text(text: Any) -> bool:
+        """A LoraManager trigger-word string is just ``<lora:...>`` tags, not a
+        prompt, so a trace that reaches one carries on to the next source.
+
+        Only whole tag stacks count: a formula test would also drop real
+        fragments such as ``(artist name:1.4),1=2,`` or a lone ``,``."""
+        from prompt_text_scorer import looks_like_tag_stack
+
+        return isinstance(text, str) and looks_like_tag_stack(text)
+
+    def _trace_texts_with_source(self, ref: Any, nodes: Dict[str, dict], side: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Trace one prompt input from the top, skipping LoRA-tag strings.
+
+        A prompt that really is only LoRA tags still comes back: when the
+        filtered trace finds nothing it is repeated with the strings allowed.
+        """
+        state = self._trace_memo_state(nodes)
+        traced = self._trace_to_text_with_source(ref, nodes, set(), side=side)
+        if traced:
+            return traced
+        state.keep_tag_stacks = True
+        try:
+            return self._trace_to_text_with_source(ref, nodes, set(), side=side)
+        finally:
+            state.keep_tag_stacks = False
+
+    def _trace_texts(self, ref: Any, nodes: Dict[str, dict], side: Optional[str] = None) -> List[str]:
+        return [item["text"] for item in self._trace_texts_with_source(ref, nodes, side) if item.get("text")]
+
     def _trace_memo_note_depth(self, depth: int) -> None:
         for frame in self._trace_memo.frames:
             if depth > frame.max_depth:
@@ -71,7 +103,7 @@ class ComfyUITraceMemoMixin:
             frame.touched.add(node_id)
         self._trace_memo_note_depth(depth)
 
-        key = (node_id, side)
+        key = (node_id, side, state.keep_tag_stacks)
         entry = state.cache.get(key)
         if entry is not None:
             result, touched, hits, start, height = entry
@@ -93,6 +125,8 @@ class ComfyUITraceMemoMixin:
             )
         finally:
             frames.pop()
+        if not state.keep_tag_stacks:
+            result = [item for item in result if not self._is_tag_stack_text(item.get("text"))]
         # frames hold only this walk's ancestors, which were all updated as it ran
         state.cache[key] = (
             [dict(item) for item in result],

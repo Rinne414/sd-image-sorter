@@ -321,7 +321,7 @@ class ComfyUIExtractMixin:
             source_key = "text" if "text" in inputs else ("prompt" if "prompt" in inputs else "user_prompt")
 
             if isinstance(text, (list, tuple)):
-                traced_info = self._trace_to_text_with_source(text, nodes, set())
+                traced_info = self._trace_texts_with_source(text, nodes)
                 traced_texts = [item["text"] for item in traced_info if item.get("text")]
                 text = "\n".join(traced_texts) if traced_texts else None
                 if traced_info:

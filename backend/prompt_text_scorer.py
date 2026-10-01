@@ -250,13 +250,17 @@ def looks_like_formula(text: str) -> bool:
     return bool(visible) and sum(1 for ch in visible if ch.isalpha()) < len(visible) * MIN_LETTER_RATIO
 
 
+def looks_like_tag_stack(text: str) -> bool:
+    """Nothing but ``<lora:...>`` tags (a LoRA stack or trigger-word string)."""
+    stripped = str(text or "").strip()
+    return bool(_LORA_TAG_RE.search(stripped)) and not tokenize_prompt_text(stripped)
+
+
 def looks_like_formula_or_tag_stack(text: str) -> bool:
     """Strings the harvest must not score as a prompt: a formula, or nothing
     but ``<lora:...>`` tags."""
     stripped = str(text or "").strip()
-    if looks_like_formula(stripped):
-        return True
-    return bool(_LORA_TAG_RE.search(stripped)) and not tokenize_prompt_text(stripped)
+    return looks_like_formula(stripped) or looks_like_tag_stack(stripped)
 
 
 def score_prompt_likeness(text: str, vocab: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
