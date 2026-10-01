@@ -25,7 +25,6 @@ def csd_card(health: Dict[str, Any]) -> Dict[str, Any]:
         "download_supported": True,
         "external_links": [
             {"label": "Model", "url": csd_weights.CSD_LINK},
-            {"label": "Paper", "url": "https://arxiv.org/abs/2404.01292"},
         ],
         "note": (
             f"License {csd_weights.CSD_LICENSE} (Somepalli et al., University of Maryland). "

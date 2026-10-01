@@ -101,7 +101,7 @@ test.describe('Style Map CSD space', () => {
       const map = await openCsd(page, width, height, lang)
 
       await expect(map.spaceSelect.locator('option[value="csd"]')).toBeEnabled()
-      await expect(map.spaceSelect.locator('option[value="csd"]')).toHaveText(lang === 'en' ? 'CSD style descriptors (optional)' : 'CSD 画风描述（可选）')
+      await expect(map.spaceSelect.locator('option[value="csd"]')).toHaveText(lang === 'en' ? 'CSD (optional)' : 'CSD（可选）')
       // No index yet: the start card names the CSD index and the one primary is its button.
       await expect(map.emptyCard).toBeVisible()
       await expect(map.emptyBuildButton).toHaveText(lang === 'en' ? 'Build CSD index' : '建立 CSD 索引')
@@ -173,7 +173,7 @@ test.describe('Style Map CSD space', () => {
       }]
       await route.fulfill({ response, json: body })
     })
-    await page.setViewportSize({ width: 1920, height: 1080 })
+    await page.setViewportSize({ width: 1366, height: 768 })
     await page.goto('/')
     await page.evaluate(() => localStorage.setItem('sd-image-sorter-lang', 'zh-CN'))
     await page.reload()
@@ -187,5 +187,8 @@ test.describe('Style Map CSD space', () => {
     await expect(card.locator('.model-card-message')).toContainText('2.44 GB')
     await expect(card.locator('.btn-prepare-model')).toBeVisible()
     await expect(card.locator('a[href*="tomg-group-umd/CSD-ViT-L"]')).toBeVisible()
+    // One row of actions (rule 17): the link sits beside the button, not alone below it.
+    const rows = await card.locator('.model-card-actions > *').evaluateAll((els) => new Set(els.map((el) => Math.round(el.getBoundingClientRect().top))).size)
+    expect(rows).toBe(1)
   })
 })

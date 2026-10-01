@@ -146,7 +146,7 @@ class TestFiles:
     def own(self, tmp_path, monkeypatch):
         monkeypatch.setattr(csd_weights, "models_dir", lambda: tmp_path / "csd")
         monkeypatch.setattr(
-            csd_weights.model_external, "prefer_own", lambda own, _id: own
+            csd_weights.model_external, "usable_path", lambda *_a, **_k: None
         )
         return tmp_path / "csd"
 
@@ -193,7 +193,7 @@ class TestFiles:
         trusted.parent.mkdir()
         trusted.write_bytes(b"trusted")
         monkeypatch.setattr(
-            csd_weights.model_external, "prefer_own", lambda _own, _id: trusted
+            csd_weights.model_external, "usable_path", lambda *_a, **_k: str(trusted)
         )
         assert csd_weights.weights_in_use() == trusted
         assert csd_weights.is_installed() is True
@@ -203,6 +203,11 @@ class TestFiles:
 
     def test_health_tells_missing_needs_runtime_and_ready(self, own, monkeypatch):
         monkeypatch.setattr(csd_weights, "runtime_available", lambda: True)
+        monkeypatch.setattr(
+            csd_weights,
+            "CSD_FILE",
+            dataclasses.replace(csd_weights.CSD_FILE, size_bytes=1),
+        )
         missing = csd_weights.health()
         assert missing["available"] is False
         assert missing["message_key"] == "models.csd.missing"
@@ -222,3 +227,100 @@ class TestFiles:
 
     def test_pinned_download_is_the_module_used(self):
         assert csd_weights.pinned_download is pinned_download
+
+
+class TestOwnFileSize:
+    @pytest.fixture
+    def own(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(csd_weights, "models_dir", lambda: tmp_path / "csd")
+        monkeypatch.setattr(
+            csd_weights.model_external, "usable_path", lambda *_a, **_k: None
+        )
+        monkeypatch.setattr(csd_weights, "runtime_available", lambda: True)
+        (tmp_path / "csd").mkdir()
+        return tmp_path / "csd" / csd_weights.CSD_FILENAME
+
+    def test_a_cut_off_own_file_is_not_installed_and_the_card_says_so(self, own):
+        own.write_bytes(b"x" * 10)  # not the pinned 2.4 GB
+        assert csd_weights.is_installed() is False
+        health = csd_weights.health()
+        assert health["available"] is False
+        assert health["message_key"] == "models.csd.incomplete"
+        assert health["model_path"] is None
+
+    def test_prepare_replaces_a_wrong_sized_own_file(self, own, monkeypatch):
+        payload = b"the real bytes"
+        pin = dataclasses.replace(
+            csd_weights.CSD_FILE, sha256=_sha(payload), size_bytes=len(payload)
+        )
+        monkeypatch.setattr(csd_weights, "CSD_FILE", pin)
+        own.write_bytes(b"short")
+
+        def download(url, target, timeout=0):
+            target.write_bytes(payload)
+            return target
+
+        csd_weights.prepare(download)
+
+        assert own.read_bytes() == payload
+        assert csd_weights.is_installed() is True
+        assert csd_weights.health()["message_key"] == "models.csd.ready"
+
+    def test_a_wrong_sized_own_file_gives_way_to_a_trusted_copy(
+        self, own, monkeypatch, tmp_path
+    ):
+        trusted = tmp_path / "hub" / "pytorch_model.bin"
+        trusted.parent.mkdir()
+        trusted.write_bytes(b"trusted")
+        own.write_bytes(b"short")
+        monkeypatch.setattr(
+            csd_weights.model_external, "usable_path", lambda *_a, **_k: str(trusted)
+        )
+        assert csd_weights.weights_in_use() == trusted
+        assert csd_weights.is_installed() is True
+
+    def test_the_pinned_size_is_what_counts(self, own, monkeypatch):
+        monkeypatch.setattr(
+            csd_weights,
+            "CSD_FILE",
+            dataclasses.replace(csd_weights.CSD_FILE, size_bytes=5),
+        )
+        own.write_bytes(b"12345")
+        assert csd_weights.is_installed() is True
+        assert csd_weights.weights_in_use() == own
+
+
+class TestTorchFloor:
+    @pytest.mark.parametrize(
+        "version,safe",
+        [((2, 5, 1), False), ((2, 4, 0), False), ((2, 6, 0), True), ((2, 13, 0), True), ((3, 0, 0), True), (None, False)],
+    )
+    def test_the_floor_is_torch_2_6(self, version, safe):
+        assert csd_weights.torch_is_safe(version) is safe
+
+    def test_the_version_is_read_without_the_local_suffix(self, monkeypatch):
+        monkeypatch.setattr(
+            csd_weights.importlib.metadata, "version", lambda name: "2.13.0+cu126"
+        )
+        assert csd_weights.torch_version() == (2, 13, 0)
+
+    def test_an_old_torch_never_reads_the_checkpoint(self, tmp_path, monkeypatch):
+        path = tmp_path / "ckpt.bin"
+        torch.save({"model_state_dict": {"module.last_layer_style": torch.ones(2, 2)}}, path)
+        monkeypatch.setattr(csd_weights, "torch_version", lambda: (2, 5, 1))
+        loads = []
+        monkeypatch.setattr(torch, "load", lambda *a, **k: loads.append(1))
+
+        with pytest.raises(csd_weights.CsdWeightsError, match="torch 2.6"):
+            csd_weights.load_state_dict_file(path)
+
+        assert loads == []  # torch.load was never called
+
+    def test_the_runtime_is_not_available_with_an_old_torch(self, monkeypatch):
+        monkeypatch.setattr(csd_weights, "torch_version", lambda: (2, 4, 0))
+        assert csd_weights.runtime_available() is False
+
+    def test_the_aesthetic_group_that_carries_csd_asks_for_torch_2_6(self):
+        import optional_dependencies as deps
+
+        assert "torch>=2.6.0" in deps.OPTIONAL_DEPENDENCY_GROUPS["aesthetic"]

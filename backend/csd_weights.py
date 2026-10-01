@@ -16,10 +16,12 @@ health card and the checkpoint reader / key mapping. The model itself lives in
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import importlib.util
 import logging
+import re
 from pathlib import Path
-from typing import Any, Callable, Dict, Mapping, Tuple
+from typing import Any, Callable, Dict, Mapping, Optional, Tuple
 
 import model_external
 import pinned_download
@@ -47,6 +49,16 @@ _STYLE_KEY = "last_layer_style"
 _IGNORED_KEYS = ("last_layer_content",)
 
 
+# torch 2.4 - 2.5.1 can be made to run code by a crafted checkpoint even with
+# weights_only=True (CVE-2025-32434, fixed in 2.6), so older torch never loads one.
+MIN_TORCH = (2, 6)
+TORCH_TOO_OLD_ERROR = (
+    "CSD needs torch 2.6 or newer to read its checkpoint safely. Click Prepare / Download "
+    "for CSD in the Model Center to update it. / CSD 需要 torch 2.6 或更新版本才能安全读取权重："
+    "请到模型中心点击 CSD 的「准备 / 下载」更新依赖。"
+)
+
+
 class CsdWeightsError(RuntimeError):
     """The CSD checkpoint is unreadable, not a safe checkpoint, or not shaped as expected."""
 
@@ -60,27 +72,69 @@ def model_path() -> Path:
     return models_dir() / CSD_FILENAME
 
 
+def _own_file_complete() -> bool:
+    """The program's own file has exactly the pinned size (a cut-off or other
+    build is not used; Prepare replaces it)."""
+    try:
+        return model_path().stat().st_size == CSD_FILE.size_bytes
+    except OSError:
+        return False
+
+
+def _own_file_incomplete() -> bool:
+    return pinned_download.is_present(model_path()) and not _own_file_complete()
+
+
 def weights_in_use() -> Path:
-    """The file to read: the program's own, else a trusted copy (a Hugging Face
-    cache or ComfyUI folder), else the own path (where Prepare puts it)."""
-    return model_external.prefer_own(model_path(), CSD_SPACE)
+    """The file to read: the program's own when it is the pinned size, else a
+    trusted copy (a Hugging Face cache or ComfyUI folder), else the own path
+    (where Prepare puts it)."""
+    if _own_file_complete():
+        return model_path()
+    external = model_external.usable_path(CSD_SPACE)
+    return Path(external) if external else model_path()
 
 
 def is_installed() -> bool:
-    return pinned_download.is_present(weights_in_use())
+    path = weights_in_use()
+    if path == model_path() and _own_file_incomplete():
+        return False
+    return pinned_download.is_present(path)
+
+
+def torch_version() -> Optional[Tuple[int, ...]]:
+    """The installed torch as numbers (``2.13.0+cu126`` -> (2, 13, 0)), None when absent."""
+    try:
+        raw = importlib.metadata.version("torch")
+    except importlib.metadata.PackageNotFoundError:
+        return None
+    return tuple(int(part) for part in re.findall(r"\d+", raw.split("+")[0])[:3])
+
+
+_INSTALLED = object()
+
+
+def torch_is_safe(version: Any = _INSTALLED) -> bool:
+    """Whether ``version`` (default: the installed torch; None = no torch) is new enough."""
+    found = torch_version() if version is _INSTALLED else version
+    return found is not None and found >= MIN_TORCH
 
 
 def runtime_available() -> bool:
-    """torch and open_clip, the Aesthetic runtime group, are importable."""
-    return all(
-        importlib.util.find_spec(name) is not None for name in ("torch", "open_clip")
-    )
+    """open_clip and a torch new enough to read the checkpoint safely (the
+    Aesthetic runtime group) are installed."""
+    return importlib.util.find_spec("open_clip") is not None and torch_is_safe()
 
 
 def health() -> Dict[str, Any]:
     path = weights_in_use()
     installed = is_installed()
-    if not installed:
+    if _own_file_incomplete() and path == model_path():
+        key, message = (
+            "models.csd.incomplete",
+            "The CSD file is incomplete or from another version. Click Prepare / Download to replace it.",
+        )
+    elif not installed:
         key, message = (
             "models.csd.missing",
             "Optional, not downloaded yet: about 2.44 GB from tomg-group-umd/CSD-ViT-L (license CC-BY-4.0). Needs torch; Prepare / Download sets it up.",
@@ -88,7 +142,7 @@ def health() -> Dict[str, Any]:
     elif not runtime_available():
         key, message = (
             "models.csd.needsRuntime",
-            "Downloaded. It also needs the torch runtime: click Prepare / Download.",
+            "Downloaded. It also needs torch 2.6 or newer and open_clip: click Prepare / Download.",
         )
     else:
         key, message = (
@@ -148,6 +202,9 @@ def _allowed_pickle_globals() -> list:
 def load_state_dict_file(path: Path) -> Mapping[str, Any]:
     """The ``model_state_dict`` of the checkpoint, read without running pickled code."""
     import torch
+
+    if not torch_is_safe(torch_version()):
+        raise CsdWeightsError(TORCH_TOO_OLD_ERROR)
 
     def read(**extra):
         with torch.serialization.safe_globals(_allowed_pickle_globals()):

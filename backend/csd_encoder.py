@@ -52,8 +52,16 @@ CSD_NO_GPU_MEMORY_ERROR = (
 )
 
 
-def build_backbone():
+def build_backbone(
+    *,
+    layers: int = 24,
+    width: int = FEATURE_DIM,
+    heads: int = 16,
+    image_size: int = INPUT_SIZE,
+    patch_size: int = 14,
+):
     """The CLIP ViT-L/14 visual tower (QuickGELU, no projection) as shapes only.
+    The arguments exist so tests can build a small tower of the same layout.
 
     Built on the meta device: no memory and no random initialisation, because
     the checkpoint's tensors are assigned into it (``load_state_dict(assign=True)``).
@@ -63,11 +71,11 @@ def build_backbone():
 
     with torch.device("meta"):
         visual = VisionTransformer(
-            image_size=INPUT_SIZE,
-            patch_size=14,
-            width=FEATURE_DIM,
-            layers=24,
-            heads=16,
+            image_size=image_size,
+            patch_size=patch_size,
+            width=width,
+            layers=layers,
+            heads=heads,
             mlp_ratio=4.0,
             output_dim=CSD_EMBED_DIM,
             act_layer=QuickGELU,
@@ -91,6 +99,7 @@ class CsdEncoder:
         self._transform: Any = None
         self._load_lock = threading.Lock()
         self.load_error: Optional[str] = None
+        self._backbone_factory = build_backbone
 
     # ----------------------------------------------------------------- state
     @property
@@ -141,7 +150,7 @@ class CsdEncoder:
             backbone_state, style = csd_weights.split_state_dict(
                 csd_weights.load_state_dict_file(csd_weights.weights_in_use())
             )
-            backbone = build_backbone()
+            backbone = self._backbone_factory()
             backbone.load_state_dict(backbone_state, strict=True, assign=True)
             del backbone_state
             backbone.requires_grad_(False)
@@ -153,7 +162,8 @@ class CsdEncoder:
                     for param in backbone.parameters():
                         param.data = param.data.clone()
             self._backbone = backbone.to(device=device, dtype=dtype).eval()
-            self._style = style.to(device=device, dtype=torch.float32).contiguous()
+            # clone: a CPU tensor must not stay a view of the memory-mapped file
+            self._style = style.to(device=device, dtype=torch.float32).clone()
             self._device, self._dtype = device, dtype
         logger.info("CSD loaded on %s (%s)", self._device, self._dtype)
 
@@ -232,6 +242,11 @@ class CsdEncoder:
             return []
         batch = self._stack(items)
         with exclusive_ai_runtime("csd-style-vector", priority=priority):
+            # Another GPU model (a tagger) may have evicted CSD since the last
+            # batch. Loading happens under this lease, so nothing can evict it
+            # again before the forward: one reload per batch, never a loop.
+            if not self.model_loaded:
+                self.load()
             vectors = self.embed_batch(batch)
         return [(vector, None) for vector in vectors]
 
@@ -264,7 +279,10 @@ def get_csd_encoder(use_gpu: Optional[bool] = None) -> CsdEncoder:
         if _encoder is not None and _encoder.use_gpu == wanted:
             return _encoder
         if _encoder is not None:
-            _encoder.release()
+            # the lease is held by a running forward: wait for it, never free
+            # the model under it
+            with exclusive_ai_runtime("csd-switch-device"):
+                _encoder.release()
         _encoder = CsdEncoder(use_gpu=wanted)
         return _encoder
 

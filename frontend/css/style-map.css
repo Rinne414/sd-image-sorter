@@ -258,6 +258,14 @@
     overflow: hidden;
 }
 
+/* 1366: the bar gives its width to the layout status next to it, which would
+   otherwise be cut mid-sentence while an index runs. */
+@media (max-width: 1500px) {
+    .stylemap-index-progress .progress-bar {
+        width: 80px;
+    }
+}
+
 .stylemap-index-progress .progress-fill {
     height: 100%;
     border-radius: 999px;

@@ -210,3 +210,190 @@ class TestSingleton:
         second = csd_encoder.get_csd_encoder(use_gpu=True)
         assert second is not first and second.use_gpu is True
         monkeypatch.setattr(csd_encoder, "_encoder", None)
+
+
+# ----------------------------------------------------- the real load() path
+TINY = dict(layers=2, width=32, heads=2, image_size=28, patch_size=14)
+TINY_EMBED = 8
+
+
+def _tiny_state(extra=None, drop=None):
+    shapes = {
+        key: tuple(value.shape)
+        for key, value in csd_encoder.build_backbone(**TINY).state_dict().items()
+    }
+    generator = torch.Generator().manual_seed(0)
+    state = {
+        f"module.backbone.{key}": torch.randn(shape, generator=generator)
+        for key, shape in shapes.items()
+    }
+    state["module.last_layer_style"] = torch.randn(32, TINY_EMBED, generator=generator)
+    state["module.last_layer_content"] = torch.randn(32, TINY_EMBED, generator=generator)
+    for key in extra or ():
+        state[key] = torch.ones(2)
+    for key in drop or ():
+        del state[key]
+    return state
+
+
+@pytest.fixture
+def tiny(tmp_path, monkeypatch):
+    """An encoder whose load() reads a tiny checkpoint through the real path."""
+    path = tmp_path / "tiny.bin"
+
+    def write(**kwargs):
+        torch.save({"model_state_dict": _tiny_state(**kwargs), "iter": 1}, path)
+
+    write()
+    monkeypatch.setattr(csd_weights, "is_installed", lambda: True)
+    monkeypatch.setattr(csd_weights, "weights_in_use", lambda: path)
+    monkeypatch.setattr(csd_weights, "runtime_available", lambda: True)
+    encoder = csd_encoder.CsdEncoder(use_gpu=False)
+    encoder._backbone_factory = lambda: csd_encoder.build_backbone(**TINY)
+    encoder.write = write
+    encoder.path = path
+    return encoder
+
+
+def _pictures(count=2):
+    """Prepared 28x28 inputs (the tiny tower's size), as the job's helper threads make them."""
+    generator = torch.Generator().manual_seed(5)
+    return [(f"p{i}.png", torch.rand(3, 28, 28, generator=generator)) for i in range(count)]
+
+
+class TestRealLoad:
+    def test_load_builds_a_working_encoder_from_a_checkpoint(self, tiny):
+        tiny.load()
+        assert tiny.model_loaded is True
+        vectors = tiny.embed_batch(torch.zeros(2, 3, 28, 28))
+        assert vectors.shape == (2, TINY_EMBED)
+        assert np.allclose(np.linalg.norm(vectors, axis=1), 1.0, atol=1e-5)
+
+    def test_a_missing_backbone_key_fails_the_load(self, tiny):
+        tiny.write(drop=["module.backbone.ln_post.weight"])
+        with pytest.raises(RuntimeError, match="ln_post"):
+            tiny.load()
+        assert tiny.model_loaded is False and tiny.load_error
+
+    def test_an_unexpected_backbone_key_fails_the_load(self, tiny):
+        tiny.write(extra=["module.backbone.not_a_layer.weight"])
+        with pytest.raises(RuntimeError, match="not_a_layer"):
+            tiny.load()
+        assert tiny.model_loaded is False
+
+    def test_a_wrongly_shaped_key_fails_the_load(self, tiny):
+        state = _tiny_state()
+        state["module.backbone.conv1.weight"] = torch.ones(3, 3)
+        torch.save({"model_state_dict": state}, tiny.path)
+        with pytest.raises(RuntimeError):
+            tiny.load()
+
+    def test_the_style_head_does_not_stay_a_view_of_the_checkpoint_file(self, tiny):
+        tiny.load()
+        assert tiny._style.is_contiguous()
+        # a clone owns its memory: not a storage that maps the file
+        assert tiny._style.untyped_storage().data_ptr() != 0
+        assert all(not p.is_shared() for p in tiny._backbone.parameters())
+
+    def test_the_file_can_be_replaced_after_release(self, tiny):
+        import gc
+
+        tiny.load()
+        tiny.release()
+        gc.collect()
+        tiny.write()  # rewriting the file would fail on Windows while it is mapped
+        tiny.path.unlink()
+        assert not tiny.path.exists()
+
+    def test_the_file_can_be_replaced_while_the_model_is_loaded_on_cpu(self, tiny):
+        import gc
+
+        tiny.load()
+        gc.collect()
+        tiny.write()
+        assert tiny.model_loaded is True
+
+
+class TestEvictionDuringAJob:
+    def test_a_batch_after_the_model_was_released_loads_it_again(self, tiny):
+        first = tiny.extract_style_vectors_and_identifications(_pictures(), priority=100)
+        # a tagger claiming the GPU releases the resident model between batches
+        tiny.release()
+        assert tiny.model_loaded is False
+
+        second = tiny.extract_style_vectors_and_identifications(_pictures(), priority=100)
+
+        assert tiny.model_loaded is True
+        for (a, _), (b, _) in zip(first, second):
+            assert np.allclose(a, b, atol=1e-5)
+
+    def test_a_job_keeps_going_when_evicted_after_every_batch(self, tiny):
+        loads = []
+        original = tiny._load_locked
+
+        def counting():
+            loads.append(1)
+            original()
+
+        tiny._load_locked = counting
+        for _batch in range(4):
+            answers = tiny.extract_style_vectors_and_identifications(
+                _pictures(), priority=100
+            )
+            assert len(answers) == 2
+            tiny.release()
+        assert len(loads) == 4  # one reload per batch, no loop
+
+    def test_a_reload_that_fails_raises_once_instead_of_retrying(self, tiny):
+        tiny.extract_style_vectors_and_identifications(_pictures(), priority=100)
+        tiny.release()
+        tiny.write(drop=["module.backbone.ln_post.weight"])
+        attempts = []
+        original = tiny._load_locked
+
+        def counting():
+            attempts.append(1)
+            original()
+
+        tiny._load_locked = counting
+        with pytest.raises(RuntimeError):
+            tiny.extract_style_vectors_and_identifications(_pictures(), priority=100)
+        assert len(attempts) == 1
+
+
+class TestSwitchingDevice:
+    def test_the_old_model_is_not_freed_under_a_running_forward(self, monkeypatch):
+        import threading
+        import time
+
+        from ai_runtime_guard import exclusive_ai_runtime
+
+        monkeypatch.setattr(csd_encoder, "_encoder", None)
+        old = csd_encoder.get_csd_encoder(use_gpu=False)
+        old._backbone, old._style = torch.nn.Identity(), torch.ones(1, 1)
+        holding, release_forward = threading.Event(), threading.Event()
+        released_at, forward_ended_at = [], []
+
+        def forward():
+            with exclusive_ai_runtime("a-running-forward"):
+                holding.set()
+                release_forward.wait(5)
+                forward_ended_at.append(time.monotonic())
+
+        runner = threading.Thread(target=forward)
+        runner.start()
+        holding.wait(5)
+        real_release = old.release
+        old.release = lambda: (released_at.append(time.monotonic()), real_release())
+        switcher = threading.Thread(
+            target=lambda: csd_encoder.get_csd_encoder(use_gpu=True)
+        )
+        switcher.start()
+        time.sleep(0.4)
+        assert released_at == []  # still waiting for the forward
+        release_forward.set()
+        runner.join(5)
+        switcher.join(5)
+
+        assert len(released_at) == 1 and released_at[0] >= forward_ended_at[0]
+        monkeypatch.setattr(csd_encoder, "_encoder", None)
