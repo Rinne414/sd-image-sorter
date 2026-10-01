@@ -82,18 +82,25 @@ const regionsBody = () => ({
   regions: [{ id: 0, center: [0, 0, 0], size: 30, members_total: 30, representatives: [1], tagged: 0, tags: [{ tag: 'monochrome', count: 5, tagged: 10, rate: 0.5, ratio: 4, p: 0.001, q: 0.001 }], artists: [] }],
 })
 
-type Seen = { posts: Array<{ url: string; body: any }>; axesGets: number; points: number }
+type Seen = { posts: Array<{ url: string; body: any }>; axesGets: number; points: number; umap: boolean; hold: Promise<void> | null }
 
 async function mockAll(page: Page, custom: (body: any) => unknown = () => customBody(), collide = false): Promise<Seen> {
-  const seen: Seen = { posts: [], axesGets: 0, points: 0 }
+  const seen: Seen = { posts: [], axesGets: 0, points: 0, umap: false, hold: null }
   await page.route('**/api/images/selection-token', (route) => route.fulfill({ json: { selection_token: 'tok.e2e', total_estimate: 33 } }))
   await page.route('**/api/style-map/vectors/progress', (route) =>
     route.fulfill({ json: { running: false, paused: false, total: 0, processed: 0, written: 0, kept: 0, errors: 0, step: 'idle', message: '', recent_issues: [] } }))
-  await page.route('**/api/style-map/points**', (route) => { seen.points += 1; return route.fulfill({ json: pointsBody(collide) }) })
+  await page.route('**/api/style-map/points**', (route) => {
+    seen.points += 1
+    // After the UMAP fit finished the same map is answered with its UMAP layout (another layout, so another request).
+    const body: any = pointsBody(collide)
+    if (seen.umap) { body.method = 'umap'; body.umap = { status: 'ready', source: 'memory', elapsed_s: 1, points: 30, min_points: 21, params: UMAP_PARAMS } }
+    return route.fulfill({ json: body })
+  })
   await page.route('**/api/style-map/axes**', (route) => { seen.axesGets += 1; return route.fulfill({ json: weakAxesBody() }) })
-  await page.route('**/api/style-map/custom-axes**', (route) => {
+  await page.route('**/api/style-map/custom-axes**', async (route) => {
     const body = route.request().postDataJSON()
     seen.posts.push({ url: route.request().url(), body })
+    if (seen.hold) await seen.hold
     return route.fulfill({ json: custom(body) })
   })
   await page.route('**/api/style-map/regions**', (route) => route.fulfill({ json: regionsBody() }))
@@ -433,6 +440,31 @@ test.describe('Style Map custom axes', () => {
     await expect.poll(() => seen.points).toBe(before + 2)
     expect(await dotAt(page, 1)).toEqual(moved(1).map((v) => Math.round(v * 1000) / 1000))
     expect(seen.posts).toHaveLength(2)
+  })
+
+  test('while a reloaded map waits for its custom layout, the dots stay on the last custom layout (L3)', async ({ page }) => {
+    const seen = await mockAll(page)
+    await openMap(page, 1366, 768, 'en')
+    await openCustomTab(page, WORDS.en)
+    await define(page, 'x', [1, 3, 5], [2, 4, 6])
+    await page.locator('.stylemap-custom-apply').click()
+    const round = (v: number[]) => v.map((n) => Math.round(n * 1000) / 1000)
+    await expect.poll(() => dotAt(page, 1)).toEqual(round(moved(1)))
+    // The UMAP fit finishes: the same map comes back in another layout, and its custom answer is held back.
+    let release: () => void = () => {}
+    seen.hold = new Promise<void>((resolve) => { release = resolve })
+    seen.umap = true
+    const postsBefore = seen.posts.length
+    await page.evaluate(() => (window as any).StyleMap.refresh())
+    await expect.poll(() => seen.posts.length).toBe(postsBefore + 1)
+    expect(seen.posts[postsBefore].body.layout).toBe('umap')
+    // Before that answer arrives the dots must still be on the custom layout, never the model's.
+    expect(await dotAt(page, 1)).toEqual(round(moved(1)))
+    expect(await dotAt(page, 2)).toEqual(round(moved(2)))
+    await expect(page.locator('.stylemap-custom-note[data-tone="busy"]')).toBeVisible()
+    release()
+    await expect(page.locator('.stylemap-custom-note[data-tone="ok"]')).toBeVisible()
+    expect(await dotAt(page, 1)).toEqual(round(moved(1)))
   })
 
   test('a dropped picture cannot be marked under custom axes and says so (L2)', async ({ page }) => {
