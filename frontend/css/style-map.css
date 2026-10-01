@@ -521,10 +521,6 @@
     overflow: hidden;
 }
 
-.stylemap-help {
-    flex: 0 0 auto;
-}
-
 /* Cards hug their content and stack at the top of the column (rule 19: no
    block stretched past its content). The preview box follows the picture's
    own proportions, capped so a tall picture never runs the column over. */
@@ -588,6 +584,7 @@
 }
 
 .stylemap-help {
+    flex: 0 0 auto;
     margin: 0;
     padding: 9px 14px;
     border: 1px solid var(--border);

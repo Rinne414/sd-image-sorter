@@ -38,13 +38,16 @@ function queryBody(overrides: Record<string, unknown> = {}) {
     [9001, 0.52, 'outside_filter.png', false],
     [20, 0.2, 'far_a.png', true], [21, 0.12, 'far_b.png', true],
   ]
+  const neighbors: any[] = rows.map(([id, score, filename, inFilter]) => ({
+    id, score, filename, weak: score < 0.32, in_filter: inFilter, merged: false,
+    ...(inFilter ? coord(id) : { x: null, y: null, z: null }),
+  }))
+  // A picture merged into the dot of id 3 (S4c review): same position, one shared ring.
+  neighbors.splice(1, 0, { id: 301, score: 0.89, filename: 'merged_twin.png', weak: false, in_filter: true, merged: true, ...coord(3) })
   return {
     status: 'ok',
     query: { x: 0.1, y: 0.05, z: -0.1 },
-    neighbors: rows.map(([id, score, filename, inFilter]) => ({
-      id, score, filename, weak: score < 0.32, in_filter: inFilter,
-      ...(inFilter ? coord(id) : { x: null, y: null, z: null }),
-    })),
+    neighbors,
     weak_threshold: 0.32, model_version: 'kaloscope:test', ...overrides,
   }
 }
@@ -154,7 +157,7 @@ test.describe('Style Map nearest pictures', () => {
       await expect(page.locator('#stylemap-near-clear')).toBeHidden()
 
       await pickFile(page)
-      await expect(page.locator('.stylemap-near-row')).toHaveCount(8) // the query row + 7 neighbours
+      await expect(page.locator('.stylemap-near-row')).toHaveCount(9) // the query row + 8 neighbours
       expect(uploads).toHaveLength(1)
       const url = new URL(uploads[0].url)
       expect(uploads[0].type).toContain('multipart/form-data')
@@ -168,10 +171,14 @@ test.describe('Style Map nearest pictures', () => {
 
       // Rows best first; far rows carry the grey flag, the outside-the-filter row says so.
       const scores = await page.locator('.stylemap-near-row:not(.is-query) .stylemap-near-score').allTextContents()
-      expect(scores).toEqual(['0.91', '0.84', '0.77', '0.61', '0.52', '0.20', '0.12'])
+      expect(scores).toEqual(['0.91', '0.89', '0.84', '0.77', '0.61', '0.52', '0.20', '0.12'])
       const far = page.locator('.stylemap-near-row[data-weak="true"]')
       await expect(far).toHaveCount(2)
       await expect(far.first()).toContainText(lang === 'en' ? 'far away' : '离得很远')
+      // A merged picture says so, is still in the filter and shares its dot's ring (7 rings above, not 8).
+      const merged = page.locator('.stylemap-near-row[data-id="301"]')
+      await expect(merged).toHaveAttribute('data-in-filter', 'true')
+      await expect(merged).toContainText(lang === 'en' ? 'merged into the same dot as another picture' : '和另一张合并在同一点')
       const outside = page.locator('.stylemap-near-row[data-in-filter="false"]')
       await expect(outside).toHaveCount(1)
       await expect(outside).toContainText(lang === 'en' ? 'not in the current filter' : '不在当前筛选里')
@@ -236,7 +243,7 @@ test.describe('Style Map nearest pictures', () => {
     await expect(status).toContainText('Loading the Style Finder model', { timeout: 4000 })
     expect(await ringKinds(page)).toEqual([])
     release()
-    await expect(page.locator('.stylemap-near-row')).toHaveCount(8)
+    await expect(page.locator('.stylemap-near-row')).toHaveCount(9)
     await expect(status).toBeHidden()
   })
 
@@ -313,14 +320,14 @@ test.describe('Style Map nearest pictures', () => {
     await openMap(page, 1366, 768)
     const callsBefore = pointsCalls
     await pickFile(page)
-    await expect(page.locator('.stylemap-near-row')).toHaveCount(8)
+    await expect(page.locator('.stylemap-near-row')).toHaveCount(9)
     expect(pointsCalls).toBe(callsBefore + 1)
     expect(asked).toEqual(['kaloscope', 'kaloscope'])
 
     await page.selectOption('#stylemap-space', 'clip')
     await expect.poll(() => asked.length).toBe(3)
     expect(asked[2]).toBe('clip')
-    await expect(page.locator('.stylemap-near-row')).toHaveCount(8)
+    await expect(page.locator('.stylemap-near-row')).toHaveCount(9)
   })
 
   test('one rings pool: a second drop replaces the markers, never adds to them', async ({ page }) => {
@@ -328,7 +335,7 @@ test.describe('Style Map nearest pictures', () => {
     let call = 0
     await page.route('**/api/style-map/query**', (route) => {
       call += 1
-      const body = call === 1 ? queryBody() : queryBody({ query: null, neighbors: queryBody().neighbors.slice(0, 2) })
+      const body = call === 1 ? queryBody() : queryBody({ query: null, neighbors: queryBody().neighbors.slice(0, 3) })
       return route.fulfill({ json: body })
     })
     await openMap(page, 1366, 768)

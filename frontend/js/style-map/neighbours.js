@@ -277,8 +277,13 @@ export class NeighbourCard {
         const answer = this.result;
         const rings = [];
         if (answer?.query) rings.push({ kind: 'query', ...answer.query });
+        // One ring per dot: a picture merged into another one's dot shares its ring.
+        const drawn = new Set();
         for (const n of answer?.neighbors || []) {
-            if (n.in_filter) rings.push({ kind: n.weak ? 'far' : 'near', x: n.x, y: n.y, z: n.z });
+            const dot = `${n.x},${n.y},${n.z}`;
+            if (!n.in_filter || drawn.has(dot)) continue;
+            drawn.add(dot);
+            rings.push({ kind: n.weak ? 'far' : 'near', x: n.x, y: n.y, z: n.z });
         }
         this.scene?.setRings(rings);
     }
@@ -395,6 +400,7 @@ export class NeighbourCard {
         text.append(nameNode);
         const flags = [];
         if (n.weak) flags.push(t('stylemap.nearFar', 'far away'));
+        if (n.merged) flags.push(t('stylemap.nearMerged', 'merged into the same dot as another picture'));
         if (!n.in_filter) flags.push(t('stylemap.nearOutside', 'not in the current filter'));
         if (flags.length) text.append(el('span', 'stylemap-near-flag', flags.join(' · ')));
         const score = el('span', 'stylemap-near-score', Number(n.score).toFixed(SCORE_DECIMALS));

@@ -5369,6 +5369,7 @@ window.I18nLang_en = {
     'stylemap.helpTitle': 'How to read the map',
     'stylemap.nearTitle': 'Drop a picture, find the nearest',
     'stylemap.nearEmpty': 'The nearest pictures are listed here and ringed on the map.',
+    'stylemap.nearMerged': 'merged into the same dot as another picture',
     'stylemap.nearClear': 'Clear',
     'stylemap.nearDrop': 'Drop a picture here',
     'stylemap.nearDropSub': 'or click to choose · uses the model of this map',
