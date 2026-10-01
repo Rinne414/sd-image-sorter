@@ -8,8 +8,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 import services.tagging_service as tsvc
 from services.tagging_service import TaggingService
 from tests.test_tagging_pins_worker import (  # noqa: F401  (fixtures and helpers)
@@ -18,8 +16,12 @@ from tests.test_tagging_pins_worker import (  # noqa: F401  (fixtures and helper
     _add_image,
     _payload,
     _run_worker,
-    fake_tagger_env,
 )
+from tests import test_tagging_pins_worker as _fixture_source
+
+# Re-exported for pytest; an alias, so the test parameters do not read as
+# a redefinition of an unused import (ruff F811).
+fake_tagger_env = _fixture_source.fake_tagger_env
 
 
 def _keys(messages):

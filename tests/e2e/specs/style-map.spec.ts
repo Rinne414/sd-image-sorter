@@ -64,7 +64,7 @@ function colorsBody(by: string, { categories = 5, ids = Array.from({ length: 30 
   if (by.startsWith('aesthetic')) {
     const values = ids.map((id, i) => (id === missingId ? null : 3 + (5 * i) / Math.max(1, ids.length - 2)))
     const present = values.filter((v): v is number => v !== null)
-    return { status: 'ok', space: 'kaloscope', model_version: 'kaloscope:test', by, kind: 'scale', ids, values, legend: [], range: [Math.min(...present), Math.max(...present)], missing: values.length - present.length }
+    return { status: 'ok', space: 'kaloscope', model_version: 'kaloscope:test', by, kind: 'scale', ids, values, legend: [] as Array<{ key: string; label: string | undefined; count: number }>, range: [Math.min(...present), Math.max(...present)], missing: values.length - present.length }
   }
   const names = Array.from({ length: categories }, (_, i) => (by === 'folder' ? `L:/pics/set ${String.fromCharCode(65 + i)}` : `gen${i}`))
   const counts = new Array(categories).fill(0)
@@ -585,7 +585,7 @@ test.describe('Style Map', () => {
     // Closed: the artist's name only; the coverage sits in the open card.
     await expect(map.landmark(2).locator('.stylemap-landmark-text')).toContainText('meion')
     await expect(map.landmark(2).locator('.stylemap-landmark-text')).not.toContainText('3/4')
-    await expect.poll(() => landmarkThumbnails, { message: () => landmarkUrls.join('\n') }).toBe(3)
+    await expect.poll(() => landmarkThumbnails).toBe(3)
     // Nothing on the card pretends to be clickable.
     expect(await map.landmark(0).evaluate((el) => getComputedStyle(el).cursor)).not.toBe('pointer')
 

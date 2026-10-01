@@ -408,6 +408,11 @@ async function installMockedBackgroundProgress(
         processed: step.processed ?? 0,
         current: step.processed ?? 0,
         message: step.status === 'error' ? 'Synthetic scan failure' : step.status,
+        // A failed scan carries message_key 'error' and the ScanError text in
+        // message_detail (sorting/scan.py); the UI builds its sentence from them.
+        ...(step.status === 'error'
+          ? { message_key: 'error', message_detail: 'Synthetic scan failure' }
+          : {}),
       }
     }
   }, {

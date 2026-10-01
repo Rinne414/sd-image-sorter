@@ -138,7 +138,7 @@ const dotAt = (page: Page, id: number) => page.evaluate((target) => {
   return [p.getX(index), p.getY(index), p.getZ(index)].map((v: number) => Math.round(v * 1000) / 1000)
 }, id)
 
-async function openCustomTab(page: Page, words: (typeof WORDS)['en']) {
+async function openCustomTab(page: Page, words: (typeof WORDS)[keyof typeof WORDS]) {
   await page.locator('#stylemap-axes-toggle').click()
   await page.locator('.stylemap-axes-tab[data-mode="custom"]').click()
   await expect(page.locator('.stylemap-axes-tab[data-mode="custom"]')).toHaveText(words.tabCustom)

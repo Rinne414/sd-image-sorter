@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import pytest
-from fastapi import BackgroundTasks
 
 from exceptions import ScanCancelledError
 from services import sorting_service as sorting_module

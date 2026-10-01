@@ -434,7 +434,9 @@ test.describe('Style Map box selection', () => {
     await map.open()
     await expect.poll(() => map.pointCount(), { timeout: 30000 }).toBe(n)
     const stats = await page.evaluate(async () => {
-      const { projectPoints, dotsInRect } = await import('/static/js/style-map/lasso.js')
+      // A served URL, not a repo module: a non-literal specifier keeps tsc from resolving it.
+      const lassoModule = '/static/js/style-map/lasso.js'
+      const { projectPoints, dotsInRect } = await import(lassoModule)
       const scene = (window as any).StyleMap._state.scene
       const positions = scene.geometry.getAttribute('position').array
       const runs: number[] = []

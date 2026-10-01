@@ -19,8 +19,10 @@ const EMPTY = 'D:\\old-models'
 const MODEL_FILE =
   'I:\\ComfyUI-aki-v1.6\\ComfyUI\\custom_nodes\\comfyui-WD14-Tagger\\models\\wd-eva02-large-tagger-v3.onnx'
 const GB = 1024 ** 3
+// A named literal: the desktop-viewport contract cannot resolve VIEWPORTS[0].
+const START_VIEWPORT = { width: 1366, height: 768 } as const
 const VIEWPORTS = [
-  { width: 1366, height: 768 },
+  START_VIEWPORT,
   { width: 1920, height: 1080 },
   { width: 2560, height: 1440 },
 ] as const
@@ -667,7 +669,7 @@ test.describe('screenshots', () => {
         origin: 'env', is_network: true, trusted: false, network_not_trusted: true,
       }))
       await mockBackend(page, server)
-      await page.setViewportSize(VIEWPORTS[0])
+      await page.setViewportSize(START_VIEWPORT)
       await openCenter(page, lang)
 
       for (const viewport of VIEWPORTS) {
@@ -696,7 +698,7 @@ test.describe('screenshots', () => {
       server.suggestions = [suggestion(COMFY, 'comfyui', 5, 5.9 * GB)]
       server.needsConfirm = 'drive_root'
       await mockBackend(page, server)
-      await page.setViewportSize(VIEWPORTS[0])
+      await page.setViewportSize(START_VIEWPORT)
       await openCenter(page, lang)
 
       for (const viewport of VIEWPORTS) {

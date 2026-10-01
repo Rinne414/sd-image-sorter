@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
-from types import SimpleNamespace
 
 import pytest
 

@@ -359,9 +359,13 @@ test('_buildCompletionToast picks error/warning/success by branch and the whole-
     // the pre-tiering shape the backend no longer emits.
     const high = { artist: 'greg', confidence: 0.71, confidence_level: 'high' }
     return {
-      // step:'error' returns the raw backend message even though results exist and
-      // errors===0 (the documented crash-before-count ordering).
-      crash: A._buildCompletionToast({ step: 'error', message: 'kaboom', results: [high], errors: 0 }, 5),
+      // step:'error' wins even though results exist and errors===0 (the
+      // documented crash-before-count ordering). The backend sends
+      // message_key 'error' + message_detail (finish_batch_progress_error) and
+      // the UI builds the sentence in the UI language around the cause.
+      crash: A._buildCompletionToast({
+        step: 'error', message_key: 'error', message_detail: 'kaboom', results: [high], errors: 0,
+      }, 5),
       // per-image errors -> warning.
       withErrors: A._buildCompletionToast({ results: [high], errors: 2, total: 3 }, 3),
       // nothing reached the confident tier -> warning, and the message must not
@@ -381,7 +385,7 @@ test('_buildCompletionToast picks error/warning/success by branch and the whole-
   })
 
   expect(probe.crash.level).toBe('error')
-  expect(probe.crash.message).toBe('kaboom')
+  expect(probe.crash.message).toBe('Artist identification failed: kaboom')
   expect(probe.withErrors.level).toBe('warning')
   expect(probe.noConfident.level).toBe('warning')
   expect(probe.noConfident.message).toContain('1 unconfirmed candidate')

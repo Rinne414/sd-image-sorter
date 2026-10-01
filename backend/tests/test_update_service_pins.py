@@ -568,6 +568,9 @@ def test_restart_app_writes_manifest_and_launches_restart_only_worker(
     monkeypatch.setattr(us, "PACKAGE_ROOT", tmp_path)
     monkeypatch.setattr(us, "UPDATE_DIR", tmp_path / "update")
     monkeypatch.delenv("SD_IMAGE_SORTER_LAUNCHER", raising=False)
+    # Under SD_SORTER_TESTING=1 restart_app returns before launching the
+    # worker; another test in the same process may have left it set.
+    monkeypatch.delenv("SD_SORTER_TESTING", raising=False)
     launcher_name = "run.bat" if us.sys.platform == "win32" else "run.sh"
     launcher = tmp_path / launcher_name
     launcher.write_text("echo restart\n", encoding="utf-8")

@@ -294,7 +294,7 @@ test.describe('Style Map nearest pictures', () => {
     await expect(page.locator('.stylemap-near-row[data-id="8"]')).not.toContainText('not in the current filter')
     await expect(page.locator('.stylemap-near-row[data-id="9001"]')).toContainText('not in the current filter')
     // One ring (the placed dot) plus the query point: the dot-less picture draws none.
-    expect((await ringKinds(page)).filter((kind) => kind.startsWith('near'))).toHaveLength(1)
+    expect((await ringKinds(page)).filter((kind: string) => kind.startsWith('near'))).toHaveLength(1)
     await page.evaluate(() => localStorage.setItem('sd-image-sorter-lang', 'zh-CN'))
     await page.reload()
     await new StyleMapPage(page).open()

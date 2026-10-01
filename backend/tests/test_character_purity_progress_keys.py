@@ -15,8 +15,12 @@ from tests.test_character_purity import (  # noqa: F401  (fixtures and helpers)
     _install_fake,
     _reset_purity_job_state,
     _wait_for_job,
-    purity_images,
 )
+from tests import test_character_purity as _fixture_source
+
+# Re-exported for pytest; an alias, so the test parameters do not read as
+# a redefinition of an unused import (ruff F811).
+purity_images = _fixture_source.purity_images
 
 
 def _start(test_client, ids, **extra):

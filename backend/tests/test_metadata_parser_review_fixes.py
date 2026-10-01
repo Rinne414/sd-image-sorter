@@ -5,7 +5,6 @@ Every fixture is synthetic.
 
 from __future__ import annotations
 
-import copy
 from pathlib import Path
 
 from metadata_parser import MetadataParser, parse_image
