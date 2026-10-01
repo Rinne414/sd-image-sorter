@@ -16,6 +16,8 @@
 import * as THREE from '../vendor/three/three.module.js';
 import { t } from './text.js';
 import { AxesPanel } from './axes-panel.js';
+import { CustomAxes } from './custom-axes.js';
+import { CustomAxesView } from './custom-axes-view.js';
 
 const STORAGE_KEY = 'sd-stylemap-axis-labels';
 const AXES = ['x', 'y', 'z'];
@@ -99,14 +101,24 @@ class AxisLabels {
         if (this.visible && this.lastView) this.place(this.lastView);
     }
 
+    /**
+     * The user's own axes ({x: {a, b}} names of the two ends of every defined
+     * axis) or null. While set, only those axes are labelled, with those names.
+     */
+    setCustom(names) {
+        this.customNames = names || null;
+    }
+
     /** New answer (or null: no labels). */
     setData(body, layout) {
         this.data = body?.axes ? body : null;
         this.layout = layout;
         this.items = [];
         this.layer.replaceChildren();
-        if (this.data) {
+        const custom = this.customNames;
+        if (custom || this.data) {
             for (const axis of AXES) {
+                if (custom && !custom[axis]) continue;
                 for (const end of ['low', 'high']) this.items.push(this.createLabel(axis, end));
             }
             this.layer.append(...this.items.map((item) => item.node));
@@ -222,6 +234,19 @@ class AxisLabels {
 
     /** The label's words: axis letter, a direction arrow, the end's strongest tags or a dash. */
     writeText(item, arrow, arrowLast) {
+        if (this.customNames) {
+            const names = this.customNames[item.axis];
+            const name = (item.end === 'low' ? names?.a : names?.b)
+                || (item.end === 'low' ? t('stylemap.customEndA', 'End A') : t('stylemap.customEndB', 'End B'));
+            const text = arrowLast ? `${name} ${arrow}` : `${arrow} ${name}`;
+            item.node.classList.remove('is-weak');
+            item.node.classList.add('is-custom');
+            if (item.content !== text) {
+                item.text.textContent = text;
+                item.content = text;
+            }
+            return;
+        }
         const entry = this.data?.axes?.[item.axis];
         const words = entry?.weak ? null : endText(entry?.[item.end]);
         const content = words ? (arrowLast ? `${words} ${arrow}` : `${arrow} ${words}`) : '—';
@@ -260,10 +285,16 @@ export class StyleMapAxes {
         this.labelsButton = root.querySelector('#stylemap-axes-labels-toggle');
         const card = root.querySelector('#stylemap-canvas-card');
         this.labels = new AxisLabels(card, scene);
+        // The user's own axes (S4g): definitions, request and the card's tab.
+        this.custom = new CustomAxes({ ...host.custom, reloadModel: () => this.mapChanged(), onChange: () => this.render() });
+        this.customView = new CustomAxesView(this.custom, {
+            hasSelection: () => host.custom.getSelection().length > 0,
+        });
         this.panel = new AxesPanel(card, {
             pick: (id) => this.pick(id),
             retry: () => this.retry(),
             tagText: axisTagName,
+            customView: this.customView,
             onClose: () => this.renderToggle(),
         });
         this.labelsOn = readLabelsPreference();
@@ -282,6 +313,12 @@ export class StyleMapAxes {
     /** The user's own action re-arms the one rebuild a lost map gets. */
     armRetries() {
         this.retried = false;
+        this.custom.armRetries();
+    }
+
+    /** The picked dots changed: the card's add buttons follow. */
+    refreshSelection() {
+        if (this.panel.open && this.panel.mode === 'custom') this.panel.paint();
     }
 
     setOpen(flag) {
@@ -326,14 +363,24 @@ export class StyleMapAxes {
     render() {
         this.renderToggle();
         this.renderLabelsToggle();
-        this.panel.render({ status: this.status, data: this.data, layout: this.layout });
-        this.labels.setData(this.status === 'ok' ? this.data : null, this.layout);
+        const names = this.custom.names();
+        this.panel.render({ status: this.status, data: this.data, layout: this.layout, customApplied: Boolean(names) });
+        // Your own axes replace the model's labels on the grid, with your names.
+        this.labels.setCustom(names);
+        this.labels.setData(names || this.status !== 'ok' ? null : this.data, this.layout);
     }
 
     /** A new map is on screen (space, filter, PCA -> UMAP): ask for its axes. */
     mapChanged() {
         this.seq += 1;
         this.data = null;
+        if (this.custom.applied) {
+            // The model's meanings describe the original layout: not asked for.
+            this.status = 'idle';
+            this.render();
+            this.custom.mapChanged();
+            return;
+        }
         const request = this.host.getRequest();
         this.layout = request?.layout || 'pca';
         this.status = request ? 'loading' : 'idle';
@@ -399,7 +446,7 @@ export class StyleMapAxes {
     pick(id) {
         this.host.preview(id);
         const position = this.positionOf(id);
-        if (position) this.scene.flyTo(position);
+        if (position) this.scene.flyTo(position, 380, { exact: true });
     }
 
     /** Camera moved: the labels follow. */

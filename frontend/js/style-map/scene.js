@@ -603,9 +603,26 @@ export class StyleMapScene {
      * x, y, z}; an empty list removes every marker.
      */
     setRings(items) {
-        if (!items.length) this.rings.clear();
-        else this.rings.show(items, basePointSize(this.count));
+        // With custom axes on, a ring sits on the dot's NEW position; a point
+        // that is not a dot of the map (a dropped picture's estimate) is left out.
+        const shown = this.remap
+            ? items.map((item) => {
+                const at = this.remap([item.x, item.y, item.z]);
+                return at ? { ...item, x: at[0], y: at[1], z: at[2] } : null;
+            }).filter(Boolean)
+            : items;
+        if (!shown.length) this.rings.clear();
+        else this.rings.show(shown, basePointSize(this.count));
         this.requestRender();
+    }
+
+    /**
+     * Custom axes move every dot. Lookups (rings, fly-to) still speak the
+     * coordinates the server computed; `fn` turns such a position into the
+     * dot's shown one (null when it is not a dot), `null` switches it off.
+     */
+    setRemap(fn) {
+        this.remap = typeof fn === 'function' ? fn : null;
     }
 
     /**
@@ -613,7 +630,11 @@ export class StyleMapScene {
      * so the distance and the viewing angle stay) glides there; a user's
      * reduced-motion setting jumps instead.
      */
-    flyTo(xyz, durationMs = 380) {
+    flyTo(xyz, durationMs = 380, { exact = false } = {}) {
+        if (this.remap && !exact) {
+            xyz = this.remap(xyz);
+            if (!xyz) return;
+        }
         cancelAnimationFrame(this.flight);
         this.flownTo = true;
         const delta = new THREE.Vector3(...xyz).sub(this.controls.target);

@@ -22,7 +22,8 @@ export class MapSelection {
      * @param view     #view-stylemap
      * @param options  {getScene, getMap: () => ({space, mapId} | null)}
      */
-    constructor(view, { getScene, getMap } = {}) {
+    constructor(view, { getScene, getMap, onChange } = {}) {
+        this.onChange = typeof onChange === 'function' ? onChange : () => {};
         this.getScene = getScene;
         this.getMap = getMap;
         const $ = (id) => view.querySelector(`#${id}`);
@@ -235,6 +236,7 @@ export class MapSelection {
         if (!bar) return;
         bar.hidden = !this.active || this.ids.length === 0;
         if (count) count.textContent = t('stylemap.selCount', '{n} selected', { n: this.ids.length.toLocaleString() });
+        this.onChange();
     }
 
     repaintText() {

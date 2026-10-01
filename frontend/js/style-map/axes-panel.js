@@ -47,12 +47,34 @@ export class AxesPanel {
         this.close.addEventListener('click', () => this.setOpen(false, true));
         const head = el('div', 'stylemap-axes-head');
         head.append(this.title, this.close);
+        // Two tabs: the axes the model computed, or the user's own (S4g).
+        this.mode = 'model';
+        this.tabs = el('div', 'stylemap-axes-tabs');
+        this.tabs.setAttribute('role', 'tablist');
+        this.tabModel = this.makeTab('model');
+        this.tabCustom = this.makeTab('custom');
+        this.tabs.append(this.tabModel, this.tabCustom);
         this.note = el('p', 'stylemap-axes-note');
         this.body = el('div', 'stylemap-axes-body');
-        this.root.append(head, this.note, this.body);
+        this.root.append(head, this.tabs, this.note, this.body);
         card.append(this.root);
         this.onKeydown = (event) => this.handleKey(event);
         this.view = { status: 'idle', data: null, layout: 'pca' };
+    }
+
+    makeTab(mode) {
+        const tab = el('button', 'stylemap-axes-tab');
+        tab.type = 'button';
+        tab.setAttribute('role', 'tab');
+        tab.dataset.mode = mode;
+        tab.addEventListener('click', () => this.setMode(mode));
+        return tab;
+    }
+
+    setMode(mode) {
+        if (mode === this.mode) return;
+        this.mode = mode;
+        if (this.open) this.paint();
     }
 
     /** Esc closes the card; a box drag in progress and form fields keep their own Esc. */
@@ -83,11 +105,33 @@ export class AxesPanel {
     }
 
     paint() {
-        const { status, data, layout } = this.view;
+        const { status, data, layout, customApplied } = this.view;
         this.title.textContent = t('stylemap.axesTitle', 'What the axes mean');
         const closeLabel = t('stylemap.axesClose', 'Close');
         this.close.title = closeLabel;
         this.close.setAttribute('aria-label', closeLabel);
+        for (const [tab, key, fallback] of [
+            [this.tabModel, 'stylemap.axesTabModel', 'Model axes'],
+            [this.tabCustom, 'stylemap.axesTabCustom', 'My axes'],
+        ]) {
+            const on = tab.dataset.mode === this.mode;
+            tab.textContent = t(key, fallback);
+            tab.classList.toggle('is-on', on);
+            tab.setAttribute('aria-selected', on ? 'true' : 'false');
+        }
+        if (this.mode === 'custom') {
+            this.note.textContent = t('stylemap.customNote', 'Name what an axis means with example pictures: the map is laid out by "more like end B than end A".');
+            this.note.classList.remove('is-umap');
+            this.body.replaceChildren(this.host.customView.render());
+            return;
+        }
+        if (customApplied) {
+            this.note.textContent = '';
+            this.note.classList.remove('is-umap');
+            const line = el('div', 'stylemap-axes-state', t('stylemap.customHiddenModel', 'Your own axes are on, so the model’s axis meanings (they describe the original layout) are hidden. Press "Back to the model layout" in My axes to see them again.'));
+            this.body.replaceChildren(line);
+            return;
+        }
         this.note.textContent = layout === 'umap'
             ? t('stylemap.axesUmapNote', 'UMAP: directions are not fixed, only distances mean something')
             : t('stylemap.axesNote', 'Pictures at the two ends of each axis, and the tags that set the ends apart');

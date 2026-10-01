@@ -213,3 +213,169 @@
     color: var(--text-2);
     font-size: 12.5px;
 }
+
+/* --------------------------------------------------- my axes (S4g) */
+.stylemap-axes-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-1);
+}
+
+.stylemap-axes-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 4px 8px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-2);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.stylemap-axes-tab.is-on {
+    color: var(--accent);
+    border-color: var(--accent-line);
+    background: var(--accent-soft);
+    font-weight: 600;
+}
+
+.stylemap-axes-tab:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+.stylemap-custom {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.stylemap-custom-axis {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.stylemap-custom-axis-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.stylemap-custom-clear {
+    min-height: 0;
+    padding: 0 6px;
+    font-size: 11px;
+}
+
+.stylemap-custom-end {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.stylemap-custom .stylemap-custom-name.input-field {
+    width: 100%;
+    box-sizing: border-box;
+    height: 28px;
+    min-height: 0;
+    padding: 0 8px;
+    font-size: 12px;
+}
+
+.stylemap-custom-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    min-height: 0;
+}
+
+.stylemap-custom-chip {
+    position: relative;
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--surface-1);
+}
+
+.stylemap-custom-chip img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.stylemap-custom-chip-x {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    border: 0;
+    border-bottom-left-radius: 6px;
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    font-size: 12px;
+    line-height: 14px;
+    cursor: pointer;
+}
+
+.stylemap-custom-add {
+    align-self: flex-start;
+    max-width: 100%;
+    white-space: normal;
+    text-align: left;
+}
+
+/* Apply and Back stay in view at the bottom of the scrolling card. */
+.stylemap-custom-actions {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    gap: 8px;
+    padding: 6px 0 2px;
+    background: var(--surface-2);
+}
+
+.stylemap-custom-actions .btn {
+    flex: 1 1 0;
+    min-width: 0;
+    white-space: normal;
+}
+
+.stylemap-custom-note {
+    margin: 0;
+    color: var(--text-2);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.stylemap-custom-note[data-tone="error"] {
+    color: var(--danger, #d9625a);
+}
+
+.stylemap-custom-note[data-tone="warn"] {
+    color: var(--accent);
+}
+
+.stylemap-custom-note[data-tone="ok"] {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.stylemap-axis-label.is-custom {
+    border-color: var(--accent-line);
+}
+
+/* The picked-dots bar sits at the bottom of the canvas: the card stops above it. */
+.stylemap-canvas-card:has(.stylemap-selbar:not([hidden])) .stylemap-axes-panel {
+    max-height: calc(100% - 24px - 62px);
+}

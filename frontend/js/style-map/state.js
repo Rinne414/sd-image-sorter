@@ -158,6 +158,8 @@ export function createStyleMap() {
     }
 
     function applyPoints(points) {
+        state.customActive = false;
+        state.scene.setRemap(null);
         state.points = points;
         state.umapState = points.umap || {};
         state.scene.setPoints(points.points || [], points.points_layout);
@@ -266,6 +268,51 @@ export function createStyleMap() {
         return { query: params.toString(), signature: mapSignature(), layout };
     }
 
+    /** What the custom-axes request names: the map on screen, the model settings, the coordinates shown. */
+    function customMapRequest() {
+        if (state.points?.status !== 'ok' || !state.points.map_id) return null;
+        const params = new URLSearchParams(mapQuery());
+        params.delete('selection_token');
+        params.delete('map_id');
+        return {
+            query: params.toString(),
+            body: { space: state.space, map_id: state.points.map_id, layout: state.points.method === 'umap' ? 'umap' : 'pca' },
+        };
+    }
+
+    const dotKey = (x, y, z) => `${Number(x).toFixed(3)},${Number(y).toFixed(3)},${Number(z).toFixed(3)}`;
+
+    /**
+     * Lay the dots out along the user's axes (S4g) or, with null, back along the
+     * layout the server computed. Lookups (rings, fly-to) keep speaking the
+     * server's coordinates: the scene turns them into the dots' shown ones.
+     * Region landmarks describe the original layout, so they stay hidden.
+     */
+    function showCustom(body) {
+        const points = state.points;
+        if (!body) {
+            if (!state.customActive) return;
+            state.customActive = false;
+            state.scene.setRemap(null);
+            if (points) applyPoints(points);
+            return;
+        }
+        const original = points?.points || [];
+        if (body.ids.length !== original.length || body.ids.some((id, i) => id !== original[i][0])) return;
+        const moved = new Map();
+        const rows = original.map((row, i) => {
+            const [x, y, z] = body.coords[i];
+            moved.set(dotKey(row[1], row[2], row[3]), [x, y, z]);
+            return [row[0], x, y, z, row[4]];
+        });
+        state.customActive = true;
+        state.scene.setPoints(rows, points.points_layout);
+        state.scene.setRemap((xyz) => moved.get(dotKey(...xyz)) || null);
+        state.picks?.mapChanged();
+        applyRegions(null);
+        if (state.colors?.by === state.colorBy) applyColors(state.colors);
+    }
+
     /**
      * The one-shot retries of regions and colours (a not_started answer asks
      * for points again once) are armed only by the user's own actions: a
@@ -349,6 +396,8 @@ export function createStyleMap() {
     }
 
     function applyRegions(body) {
+        // Custom axes on: the regions describe the original layout, never shown over it.
+        if (state.customActive) body = null;
         state.regions = body;
         const regions = body?.regions || [];
         state.regionLabels = regions.length ? assignRegions(state.scene.geometry.getAttribute('position'), regions) : null;
@@ -490,6 +539,7 @@ export function createStyleMap() {
         state.picks = new MapSelection(view, {
             getScene: () => state.scene,
             getMap: () => ({ space: state.space, mapId: state.points?.map_id }),
+            onChange: () => state.axes?.refreshSelection(),
         });
         state.box = new BoxSelector(view.querySelector('#stylemap-canvas'), state.scene, {
             onBox: (indices) => state.picks.pickBox(indices),
@@ -519,6 +569,14 @@ export function createStyleMap() {
             refreshMap: () => refresh(),
             preview: (id) => state.panel.renderHover({ id, members: 1 }),
             isActive: isViewActive,
+            custom: {
+                getMap: customMapRequest,
+                getSelection: () => [...(state.picks?.repIds || [])],
+                show: showCustom,
+                refreshMap: () => refresh(),
+                isActive: isViewActive,
+                libraryId: () => window.LibraryWorkspace?.getCurrentLibraryId?.(),
+            },
         }, state.scene);
         state.job = new IndexJob({
             getSpace: () => state.space,
