@@ -11,10 +11,12 @@ from .assets import ComfyUIAssetsMixin
 from .extract import ComfyUIExtractMixin
 from .graph import ComfyUIGraphMixin
 from .text_trace import ComfyUITextTraceMixin
+from .trace_memo import ComfyUITraceMemoMixin
 
 __all__ = [
     "ComfyUIAssetsMixin",
     "ComfyUIExtractMixin",
     "ComfyUIGraphMixin",
     "ComfyUITextTraceMixin",
+    "ComfyUITraceMemoMixin",
 ]

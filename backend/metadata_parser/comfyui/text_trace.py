@@ -180,6 +180,7 @@ class ComfyUITextTraceMixin:
     def _trace_to_text_with_source(self, ref: Any, nodes: Dict[str, dict], visited: Set[str], depth: int = 0,
                                    side: Optional[str] = None) -> List[Dict[str, Any]]:
         """Trace text and keep source node metadata."""
+        self._trace_memo_note_depth(depth)
         if depth > 20:
             return []
 
@@ -244,6 +245,7 @@ class ComfyUITextTraceMixin:
             class_type = str(node.get("class_type") or "")
             inputs = node.get("inputs", {}) if isinstance(node.get("inputs"), dict) else {}
             depth += 1
+            self._trace_memo_note_depth(depth)
             if class_type in ("Reroute", "ReroutePrimitive"):
                 ref = next((val for val in inputs.values() if isinstance(val, (list, tuple))), None)
                 continue
@@ -522,7 +524,7 @@ class ComfyUITextTraceMixin:
 
         return texts
 
-    def _extract_text_from_node_with_source(self, node_id: str, nodes: Dict[str, dict], visited: Set[str], depth: int = 0,
+    def _extract_text_from_node_with_source_uncached(self, node_id: str, nodes: Dict[str, dict], visited: Set[str], depth: int = 0,
                                              side: Optional[str] = None) -> List[Dict[str, Any]]:
         """Extract text plus source metadata from a node.
 

@@ -49,6 +49,7 @@ from .comfyui import (
     ComfyUIExtractMixin,
     ComfyUIGraphMixin,
     ComfyUITextTraceMixin,
+    ComfyUITraceMemoMixin,
 )
 from .constants import ParserVocabularyMixin
 from .exif_xmp import ExifXmpMixin
@@ -303,6 +304,7 @@ class MetadataParser(
     ComfyUIAssetsMixin,
     ComfyUIGraphMixin,
     ComfyUITextTraceMixin,
+    ComfyUITraceMemoMixin,
 ):
     """Parse metadata from SD-generated images to detect source and extract prompts."""
 
