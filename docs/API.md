@@ -1239,6 +1239,15 @@ depth-2 drive scan, and the Hugging Face caches (`HF_HUB_CACHE`,
 `HF_HOME/hub`, the user's global `~/.cache/huggingface/hub` and each ComfyUI
 install's `models/hub`).
 
+`SD_IMAGE_SORTER_MODEL_SOURCE_DISCOVERY=0` (also `false`, `no`, `off`) switches
+off the *automatic* finding: `COMFYUI_PATH` (and the untrusted-network hint for
+it), the fixed install folders, the drive scan (no background thread starts,
+`scan.status` stays `never`) and every Hugging Face cache location. Folders in
+the trusted list, and the `models/hub` of a trusted ComfyUI, are still read.
+The Playwright server (`tests/e2e/playwright.config.ts`) and the pytest suite
+(`conftest.py`) set it, so the machine they run on, and its ComfyUI, cannot
+change what Model Center shows or make the tests scan the user's drives.
+
 A match is **adopted** (listed in `matches`, saved for the loaders) only when
 `model_roots.is_under_allowed_model_root` accepts its path: the program's own
 models folders or a trusted folder, the same rule the loaders apply, so a card

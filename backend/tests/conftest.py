@@ -117,6 +117,14 @@ def _isolate_hardware_probe_cache():
 
 
 @pytest.fixture(autouse=True)
+def _no_automatic_model_source_discovery(monkeypatch):
+    """The suite never looks for a ComfyUI install or the global Hugging Face
+    cache on the machine it runs on (tests that exercise discovery pass their
+    own env and home explicitly)."""
+    monkeypatch.setenv("SD_IMAGE_SORTER_MODEL_SOURCE_DISCOVERY", "0")
+
+
+@pytest.fixture(autouse=True)
 def _isolate_external_model_store(tmp_path, monkeypatch):
     """Give every test an empty trusted-model index.
 

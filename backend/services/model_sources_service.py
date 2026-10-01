@@ -123,6 +123,8 @@ class ModelSourcesService:
         """Start the drive scan + network pass: once per process, on
         ``rescan``, or whenever a pending root has no cached result and no
         job is running (a NAS trusted after the first job)."""
+        if not model_sources.discovery_enabled(self._env):
+            return  # no automatic finding: no drive scan either
         if not (force or self._background_scan):
             return
         if uncached and not model_sources_store.is_scan_running():
@@ -256,6 +258,8 @@ class ModelSourcesService:
         that is not trusted: never read, but listed so Model Center can offer
         to trust it (a pure string check; nothing touches the network)."""
         env = os.environ if self._env is None else self._env
+        if not model_sources.discovery_enabled(env):
+            return []
         text = str(env.get("COMFYUI_PATH") or "").strip()
         if not text or not model_source_paths.is_network_path(text):
             return []

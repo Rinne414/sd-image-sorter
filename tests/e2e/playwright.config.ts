@@ -281,6 +281,9 @@ export default defineConfig({
       SD_IMAGE_SORTER_DB_PATH: e2eDatabasePath,
       SD_IMAGE_SORTER_DISABLE_ENV_FILES: '1',
       SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY: '1',
+      // Never look for a ComfyUI install or the global Hugging Face cache on the
+      // machine that runs the tests; the Model Center answers come from the specs.
+      SD_IMAGE_SORTER_MODEL_SOURCE_DISCOVERY: '0',
       SD_IMAGE_SORTER_ARTIST_RUNTIME_ZIP_URL: pathToFileURL(artistRuntimeZip).href,
       SD_IMAGE_SORTER_ARTIST_CHECKPOINT_URL: pathToFileURL(artistCheckpoint).href,
       SD_IMAGE_SORTER_ARTIST_CLASS_MAPPING_URL: pathToFileURL(artistMapping).href,

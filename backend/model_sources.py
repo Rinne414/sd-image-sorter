@@ -68,6 +68,23 @@ from model_source_paths import (
 
 logger = logging.getLogger(__name__)
 
+# Set to 0 to switch off the *automatic* finding (COMFYUI_PATH, fixed install
+# folders, the drive scan, the global Hugging Face cache). Folders the user
+# added to the trusted list are still read. The end-to-end tests and CI set it
+# so the machine they run on cannot change what Model Center shows.
+DISCOVERY_ENV = "SD_IMAGE_SORTER_MODEL_SOURCE_DISCOVERY"
+
+
+def discovery_enabled(env: Optional[Mapping[str, str]] = None) -> bool:
+    environment = os.environ if env is None else env
+    return str(environment.get(DISCOVERY_ENV, "1")).strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
 KIND_COMFYUI = "comfyui"
 KIND_HF_CACHE = "hf_cache"
 KIND_FOLDER = "folder"
@@ -573,15 +590,20 @@ def detect_source_roots(
             origin=ORIGIN_TRUSTED,
             trusted_rank=rank,
         )
-    collector.add(
-        str(environment.get("COMFYUI_PATH") or ""), kind=KIND_COMFYUI, origin=ORIGIN_ENV
-    )
+    if discovery_enabled(environment):
+        collector.add(
+            str(environment.get("COMFYUI_PATH") or ""),
+            kind=KIND_COMFYUI,
+            origin=ORIGIN_ENV,
+        )
+    else:
+        probe, scan_cache = False, ()
     if probe:
         for found in probe_known_locations(env=environment, home=home):
             collector.add(found, kind=KIND_COMFYUI, origin=ORIGIN_PROBE)
     for cached in scan_cache:
         collector.add(cached, kind=KIND_COMFYUI, origin=ORIGIN_SCAN)
-    for hub in hf_cache_roots(env=environment, home=home):
+    for hub in hf_cache_roots(env=environment, home=home) if discovery_enabled(environment) else ():
         collector.add(hub, kind=KIND_HF_CACHE, origin=ORIGIN_HF_DEFAULT)
     for hub, rank in _comfyui_hub_candidates(collector.roots):
         collector.add(
