@@ -2130,6 +2130,14 @@ html.comfort-zen #view-censor .censor-sidebar-v2.right {
 }
 
 /* --- View room enter (censor / dataset / gallery / …) --- */
+/* A room plays the comfort enter only. Without this, dropping
+   comfort-room-enter-active 320ms later fell back to .view.active's
+   uiRefreshEnter (ui-refresh.css), which replayed a second slide from
+   opacity 0 on every view switch. */
+.view.comfort-room-enter {
+    animation: none;
+}
+
 .view.comfort-room-enter-active {
     animation: comfortRoomEnter 160ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
 }

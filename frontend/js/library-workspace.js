@@ -14,7 +14,11 @@
     // Name the backend seeds for the default library (db_libraries.py, migration 037).
     const DEFAULT_LIBRARY_SEED_NAME = 'Main library';
     const MENU_VIEWPORT_GAP_PX = 12;
+    const MENU_SWITCHER_GAP_PX = 4;
     const MENU_MIN_HEIGHT_PX = 160;
+    // offsetTop is a rounded integer, so a menu parked right under the
+    // button row can measure up to half a pixel into it; that is not cover.
+    const MENU_COVER_TOLERANCE_PX = 1;
 
     // This tab's library, read from the shared key once. Only a switch made in
     // this tab changes it; another tab (V3.5 or V4) writing the key never
@@ -309,7 +313,10 @@
         }
 
         const menu = document.getElementById('entry-library-menu');
-        if (menu && !menu.hidden) renderMenu(menu);
+        if (menu && !menu.hidden) {
+            renderMenu(menu);
+            fitMenuToViewport(menu);
+        }
     }
 
     function renderMenu(menu) {
@@ -733,14 +740,54 @@
         }
     }
 
-    // The entry page clips overflow, so a long menu (many libraries, a
-    // selection to move) scrolls inside the window instead of running off
-    // its bottom and hiding the last item, "Clear current library…".
+    // The entry page clips overflow, so a menu that would run off the window
+    // bottom first slides up over the tile's lower half (never above the
+    // library name that anchors it), then, if it still does not fit, scrolls
+    // inside the window. At 1366x768 three libraries already cut off the
+    // last item, "Clear current library…", when the menu only scrolled.
     function fitMenuToViewport(menu) {
         menu.style.maxHeight = '';
+        menu.style.top = '';
+        const limit = window.innerHeight - MENU_VIEWPORT_GAP_PX;
+        const rect = menu.getBoundingClientRect();
+        const overflow = rect.bottom - limit;
+        const switcher = document.getElementById('entry-library-switcher');
+        const actions = document.querySelector('.entry-library-actions');
+        if (overflow > 0 && switcher) {
+            const ceiling = switcher.getBoundingClientRect().bottom + MENU_SWITCHER_GAP_PX;
+            const maxLift = Math.max(0, rect.top - ceiling);
+            let lift = Math.min(overflow, maxLift);
+            if (lift > 0 && actions) {
+                // The tile's buttons (Enter library, Manage libraries…) are
+                // either left whole or covered whole: a button showing its
+                // top 90% but swallowing clicks reads as broken. Cover it
+                // only when the menu can clear the row without passing the
+                // library name; otherwise stop above the row and scroll.
+                const row = actions.getBoundingClientRect();
+                const liftedTop = rect.top - lift;
+                if (liftedTop > row.top && liftedTop < row.bottom) {
+                    const coverRow = rect.top - (row.top - MENU_SWITCHER_GAP_PX);
+                    lift = coverRow <= maxLift ? coverRow : Math.max(0, rect.top - row.bottom);
+                }
+            }
+            if (lift > 0) menu.style.top = `${menu.offsetTop - lift}px`;
+        }
         const top = menu.getBoundingClientRect().top;
-        const room = window.innerHeight - top - MENU_VIEWPORT_GAP_PX;
-        menu.style.maxHeight = `${Math.max(MENU_MIN_HEIGHT_PX, room)}px`;
+        menu.style.maxHeight = `${Math.max(MENU_MIN_HEIGHT_PX, limit - top)}px`;
+        // Covered buttons leave the Tab order and the click path until
+        // closeMenu(): otherwise Tab from the switcher landed on a button
+        // nobody could see, and Enter left for the gallery. Focus that sat on
+        // one of them (the menu opened from Manage libraries… by keyboard)
+        // moves into the menu first instead of dropping to the body.
+        if (actions) {
+            const covers = top < actions.getBoundingClientRect().bottom - MENU_COVER_TOLERANCE_PX;
+            if (covers && actions.contains(document.activeElement)) {
+                const current = menu.querySelector('.entry-library-menu-item.is-current')
+                    || menu.querySelector('.entry-library-menu-item');
+                if (current) current.focus();
+            }
+            actions.inert = covers;
+        }
     }
 
     function openMenu() {
@@ -760,6 +807,8 @@
         const switcher = document.getElementById('entry-library-switcher');
         if (menu) menu.hidden = true;
         if (switcher) switcher.setAttribute('aria-expanded', 'false');
+        const actions = document.querySelector('.entry-library-actions');
+        if (actions) actions.inert = false;
     }
 
     function toggleMenu() {

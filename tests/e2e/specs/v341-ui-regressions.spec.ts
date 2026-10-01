@@ -2,6 +2,8 @@ import fsSync from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 
+import type { APIRequestContext } from '@playwright/test'
+
 import { expect, test, type Page } from '../fixtures/click-ledger'
 
 /**
@@ -276,6 +278,116 @@ test('with many libraries the menu scrolls inside the window and its clear item 
   } finally {
     for (const id of created) await request.delete(`/api/libraries/${encodeURIComponent(id)}`)
   }
+})
+
+/** Two extra libraries, so the menu (three rows + create/export/note/clear) outgrows the room under the tile. */
+async function withThreeLibraries(request: APIRequestContext, run: () => Promise<void>) {
+  const created: string[] = []
+  try {
+    for (let index = 0; index < 2; index += 1) {
+      const response = await request.post('/api/libraries', { data: { name: `v341 lift ${index} ${Date.now()}` } })
+      expect(response.ok()).toBe(true)
+      created.push((await response.json()).library.id)
+    }
+    await run()
+  } finally {
+    for (const id of created) await request.delete(`/api/libraries/${encodeURIComponent(id)}`)
+  }
+}
+
+// With three libraries the menu no longer fits under the tile at laptop
+// sizes. It lifts over the tile's lower half (never above the library name)
+// instead of scrolling inside the window with its last item out of sight.
+for (const [width, height] of [[1280, 720], [1366, 768]] as const) {
+  test(`with three libraries the menu lifts over the tile and shows its clear item whole at ${width}x${height}`, async ({ page, request }) => {
+    await page.setViewportSize({ width, height })
+    await withThreeLibraries(request, async () => {
+      await openMainPage(page)
+      await page.locator('#nav-library-chip').click()
+      const menu = page.locator('#entry-library-menu')
+      await expect(menu.locator('.entry-library-menu-item')).toHaveCount(3)
+
+      const fit = await page.evaluate(() => {
+        const node = document.getElementById('entry-library-menu')!
+        return {
+          top: node.getBoundingClientRect().top,
+          switcherBottom: document.getElementById('entry-library-switcher')!.getBoundingClientRect().bottom,
+          scrolls: node.scrollHeight > node.clientHeight,
+        }
+      })
+      expect(fit.scrolls).toBe(false)
+      expect(fit.top).toBeGreaterThanOrEqual(fit.switcherBottom)
+      await expect(menu.locator('.entry-library-menu-clear')).toBeInViewport({ ratio: 1 })
+    })
+  })
+}
+
+test('the buttons a lifted menu covers leave the Tab order until it closes', async ({ page, request }) => {
+  // 1280x720: the lifted menu covers Enter library and Manage libraries….
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await withThreeLibraries(request, async () => {
+    await openMainPage(page)
+    await page.locator('#nav-library-chip').click()
+    const menu = page.locator('#entry-library-menu')
+    await expect(menu).toBeVisible()
+    const covered = await page.evaluate(() => {
+      const menuTop = document.getElementById('entry-library-menu')!.getBoundingClientRect().top
+      return document.getElementById('entry-fn-gallery')!.getBoundingClientRect().bottom > menuTop
+    })
+    expect(covered).toBe(true)
+
+    await page.locator('#entry-library-switcher').focus()
+    await page.keyboard.press('Tab')
+    const focused = () => page.evaluate(() => {
+      const active = document.activeElement
+      return active?.closest('#entry-library-menu') ? 'menu' : active?.id || active?.tagName
+    })
+    expect(await focused()).toBe('menu')
+
+    // Closed again, the tile's buttons are back.
+    await page.keyboard.press('Escape')
+    await expect(menu).toBeHidden()
+    await page.locator('#entry-library-switcher').focus()
+    await page.keyboard.press('Tab')
+    expect(await focused()).toBe('entry-fn-gallery')
+
+    // Opened from Manage libraries… by keyboard, focus moves into the menu
+    // (onto the current library) rather than dropping to the body.
+    await page.locator('#entry-library-manage').focus()
+    await page.keyboard.press('Enter')
+    await expect(menu).toBeVisible()
+    await expect(menu.locator('.entry-library-menu-item.is-current')).toBeFocused()
+  })
+})
+
+test('Enter library is either left whole or covered whole by the lifted menu, never clipped and dead', async ({ page, request }) => {
+  // 1366x768 in English: the first lift stopped 3px into the button row, so
+  // Enter library showed 91% of itself while its clicks went nowhere.
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await withThreeLibraries(request, async () => {
+    await openMainPage(page)
+    await page.locator('#nav-library-chip').click()
+    const menu = page.locator('#entry-library-menu')
+    await expect(menu.locator('.entry-library-menu-item')).toHaveCount(3)
+
+    const boxes = await page.evaluate(() => {
+      const rect = (id: string) => {
+        const box = document.getElementById(id)!.getBoundingClientRect()
+        return { left: box.left, right: box.right, top: box.top, bottom: box.bottom }
+      }
+      return { menu: rect('entry-library-menu'), enter: rect('entry-fn-gallery') }
+    })
+    const exposedBottom = Math.min(boxes.enter.bottom, boxes.menu.top)
+    if (exposedBottom - boxes.enter.top >= 1) {
+      // Some of the button shows: clicking what shows must enter the library.
+      await page.mouse.click((boxes.enter.left + boxes.enter.right) / 2, (boxes.enter.top + exposedBottom) / 2)
+      await expect(page.locator('#entry-page')).toBeHidden()
+      await expect(page.locator('#view-gallery')).toBeVisible()
+    } else {
+      expect(boxes.menu.top, `menu ${JSON.stringify(boxes.menu)} vs button ${JSON.stringify(boxes.enter)}`)
+        .toBeLessThanOrEqual(boxes.enter.top)
+    }
+  })
 })
 
 test('the library menu closes when the window is resized, like the colour picker', async ({ page }) => {

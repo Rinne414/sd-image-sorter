@@ -94,8 +94,15 @@ test.describe('at 1366px', () => {
     await injectDetail(page, { aesthetic_anime: null, aesthetic_anime_pct: null, aesthetic_anime_grade: null })
     await openGallery(page)
 
+    // The row starts hidden and the filename comes from the grid, so both
+    // checks would pass before the injected detail arrives, leaving its fetch
+    // still running when the page closes. Wait for the detail and check a
+    // field only it fills: the row stays hidden on the hydrated preview.
+    const detail = page.waitForResponse((response) => /\/api\/images\/\d+$/.test(new URL(response.url()).pathname))
     await page.locator('#gallery-grid .gallery-item').first().click()
+    expect((await detail).ok()).toBe(true)
     await expect(page.locator('#modal-filename')).not.toHaveText('')
+    await expect(page.locator('#modal-file-path')).not.toHaveText('')
     await expect(page.locator('#modal-anime-item')).toBeHidden()
   })
 

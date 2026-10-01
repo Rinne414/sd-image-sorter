@@ -136,8 +136,14 @@ with sqlite3.connect(Path(${JSON.stringify(runtimeDatabasePath)})) as conn:
 
 /** A readable ComfyUI row whose file exists, so the gallery's file check keeps it readable. */
 function insertReachableComfyRow(): void {
-  // A different existing file from insertReachableMissingTextRow: images.path is UNIQUE.
-  const imagePath = path.join(repoRoot, 'tests', 'e2e', 'fixtures', 'censor-nudenet-public-domain.jpg')
+  // Its own copy of a checked-in picture: images.path is UNIQUE, and
+  // manual-regression.spec.ts indexes the checked-in file itself, so a row
+  // on that path collided with the one it leaves behind.
+  const sourcePath = path.join(repoRoot, 'tests', 'e2e', 'fixtures', 'censor-nudenet-public-domain.jpg')
+  const imageDir = path.join(repoRoot, '.tmp', 'manual-test', 'metadata-repair')
+  const imagePath = path.join(imageDir, 'v350-meta-comfy-present.jpg')
+  fsSync.mkdirSync(imageDir, { recursive: true })
+  fsSync.copyFileSync(sourcePath, imagePath)
   const script = `
 import sqlite3
 from pathlib import Path
@@ -147,7 +153,7 @@ with sqlite3.connect(Path(${JSON.stringify(runtimeDatabasePath)})) as conn:
         """
         INSERT INTO images (path, filename, generator, prompt, width, height, file_size,
                             is_readable, metadata_status, created_at)
-        VALUES (?, 'v350-meta-comfy-present.png', 'comfyui', 'a prompt read at scan time', 1440, 900, 1000, 1, 'complete', CURRENT_TIMESTAMP)
+        VALUES (?, 'v350-meta-comfy-present.jpg', 'comfyui', 'a prompt read at scan time', 1440, 900, 1000, 1, 'complete', CURRENT_TIMESTAMP)
         """,
         (${JSON.stringify(imagePath)},),
     )

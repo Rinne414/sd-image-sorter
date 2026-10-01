@@ -108,19 +108,25 @@ test('a tab whose library is deleted elsewhere moves to one that exists the way 
   await page.setViewportSize({ width: 1366, height: 768 })
   await boot(page)
   const gone = await makeLibrary(page, `会被删除 ${Date.now()}`)
-  await page.goto('/')
-  await expect(page.locator('#view-gallery')).toBeVisible()
-  await page.evaluate((id) => (window as any).LibraryWorkspace.setCurrentLibraryId(id, { reloadGallery: false }), gone)
-  await expect.poll(() => currentLibrary(page)).toBe(gone)
+  try {
+    await page.goto('/')
+    await expect(page.locator('#view-gallery')).toBeVisible()
+    await page.evaluate((id) => (window as any).LibraryWorkspace.setCurrentLibraryId(id, { reloadGallery: false }), gone)
+    await expect.poll(() => currentLibrary(page)).toBe(gone)
 
-  // another window deletes it
-  await dropLibrary(page, gone)
-  const confirm = await clearConfirmText(page)
-  expect(confirm).toContain('主图库')
-  await expect(page.locator('.toast.warning .toast-message')).toContainText('已不存在')
-  expect(await currentLibrary(page)).toBe('main')
-  expect(await nextRequestLibrary(page)).toBe('main')
-  await expect(page.locator('#nav-library-chip-label')).toContainText('主图库')
+    // another window deletes it
+    await dropLibrary(page, gone)
+    const confirm = await clearConfirmText(page)
+    expect(confirm).toContain('主图库')
+    await expect(page.locator('.toast.warning .toast-message')).toContainText('已不存在')
+    expect(await currentLibrary(page)).toBe('main')
+    expect(await nextRequestLibrary(page)).toBe('main')
+    await expect(page.locator('#nav-library-chip-label')).toContainText('主图库')
+  } finally {
+    // A failure before the delete above used to leave the library behind in
+    // the shared e2e database, where later specs then saw a longer menu.
+    await dropLibrary(page, gone)
+  }
 })
 
 test('Style Finder: clearing results says it clears the current library only, in both languages', async ({ page }) => {
