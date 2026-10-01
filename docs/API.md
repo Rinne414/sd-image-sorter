@@ -1133,10 +1133,18 @@ judged against local roots only; a network path is compared purely, by
 Add a folder: `{"path": "...", "confirm": false}`. A local folder must exist
 (400 otherwise). A network folder must be a well-formed `\\server\share\...`
 (any slash spelling; `\\?\`, `\\.\`, `\??\`, `server@port` forms and an empty
-share are 400) and is stored as written, never probed. A very broad local
-folder (a drive root, the home folder or its parent, `SystemRoot`,
-`Program Files`, `ProgramData`) answers
-`400 {"error", "type": "ConfirmationRequired", "needs_confirm": true, "reason": "drive_root"|"home"|"users_root"|"system"}`
+share are 400) and is stored as written, never probed. A mapped network drive
+(`Z:\models` pointing at `\\nas\share\models`) is stored as the share it
+resolves to, so files on that drive are matched by the same share rule and the
+list never has to touch the drive again. A very broad local folder (a drive
+root, the home folder or its parent, `SystemRoot`, `Program Files`,
+`ProgramData` or any folder inside them) answers
+`400 {"error", "type": "ConfirmationRequired", "needs_confirm": true, "reason": "drive_root"|"share_root"|"home"|"users_root"|"system"}`
+(`share_root`: a whole network share, e.g. a drive mapped to `\\nas\share`; on
+Linux `/usr`, `/etc`, `/bin`, `/lib`, `/var` guard their subfolders while
+`/opt` and `/srv` only guard themselves, so `/opt/ComfyUI/models` needs no
+confirmation). A settings file that exists but cannot be read or parsed is
+never overwritten: the change answers an error and the file is left as it is.
 until the same request is sent with `"confirm": true` (Model Center shows the
 reason and asks). Duplicates (case-insensitive for UNC) are ignored. Answers
 the same payload as `GET`.

@@ -28,6 +28,9 @@ and nothing in config.py's remaining body reads them.
 import json
 import logging
 import os
+import tempfile
+import threading
+import time
 
 # NOTE(decomposition): keep the historical logger channel ("config") so log
 # routing and output stay identical to the pre-split single-file module.
@@ -122,12 +125,70 @@ def _read_app_settings() -> dict:
     return data if isinstance(data, dict) else {}
 
 
+APP_SETTINGS_UNREADABLE_ERROR = (
+    "The app settings file {path} exists but cannot be read ({why}); this change "
+    "was not saved so the file is left untouched. / 设置文件 {path} 存在但无法读取"
+    "（{why}），这次修改已放弃，原文件未动。"
+)
+
+
+def _read_app_settings_for_update() -> dict:
+    """The settings to modify and write back. Unlike the display read, a file
+    that exists but cannot be read or parsed is an error here: writing the
+    defaults back would silently drop every other key."""
+    path = _cfg().APP_SETTINGS_CONFIG_PATH
+    if not path.exists():
+        return {}
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise OSError(APP_SETTINGS_UNREADABLE_ERROR.format(path=path, why=exc)) from exc
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise OSError(APP_SETTINGS_UNREADABLE_ERROR.format(path=path, why=f"invalid JSON: {exc}")) from exc
+    if not isinstance(data, dict):
+        raise OSError(APP_SETTINGS_UNREADABLE_ERROR.format(path=path, why="not a JSON object"))
+    return data
+
+
+# Every save_* below is a read-modify-write of the same file; the routes run
+# on threadpool workers, so two of them interleaving would write a stale
+# copy of the other's key back (a removed trusted folder reappearing).
+_app_settings_lock = threading.RLock()
+# Windows refuses to replace a file another program holds open (an editor,
+# a sync client); a short retry covers the usual momentary hold.
+_REPLACE_ATTEMPTS = 5
+_REPLACE_RETRY_SECONDS = 0.1
+
+
 def _write_app_settings(settings: dict) -> None:
-    _cfg().CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    _cfg().APP_SETTINGS_CONFIG_PATH.write_text(
-        json.dumps(settings, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
+    """Write the whole file atomically: a temp file beside it, then
+    os.replace, so a crash or a concurrent reader never sees a half file."""
+    path = _cfg().APP_SETTINGS_CONFIG_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(settings, indent=2, sort_keys=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+        for attempt in range(_REPLACE_ATTEMPTS):
+            try:
+                os.replace(tmp_name, path)
+                return
+            except PermissionError as exc:
+                if attempt == _REPLACE_ATTEMPTS - 1:
+                    raise OSError(
+                        f"Could not update app settings {path}: the file is in use by "
+                        f"another program ({exc}). / 无法更新设置文件 {path}：文件正被其他"
+                        "程序占用，请关闭占用它的程序后重试。"
+                    ) from exc
+                time.sleep(_REPLACE_RETRY_SECONDS)
+    finally:
+        try:
+            os.unlink(tmp_name)
+        except FileNotFoundError:
+            pass
 
 
 def _normalize_thumbnail_cache_max_mb(value: object, *, default: int = DEFAULT_THUMBNAIL_CACHE_MAX_MB) -> int:
@@ -159,9 +220,10 @@ def get_thumbnail_cache_max_mb() -> int:
 
 def save_thumbnail_cache_max_mb(max_mb: int) -> int:
     normalized = _normalize_thumbnail_cache_max_mb(max_mb)
-    settings = _read_app_settings()
-    settings["thumbnail_cache_max_mb"] = normalized
-    _write_app_settings(settings)
+    with _app_settings_lock:
+        settings = _read_app_settings_for_update()
+        settings["thumbnail_cache_max_mb"] = normalized
+        _write_app_settings(settings)
     return normalized
 
 
@@ -183,8 +245,18 @@ def get_trusted_model_folders() -> list[str]:
 
 
 def save_trusted_model_folders(folders: list[str]) -> list[str]:
-    normalized = _normalize_trusted_model_folders(list(folders))
-    settings = _read_app_settings()
-    settings["trusted_model_folders"] = normalized
-    _write_app_settings(settings)
-    return normalized
+    return update_trusted_model_folders(lambda _current: list(folders))
+
+
+def update_trusted_model_folders(update) -> list[str]:
+    """Read the list, apply ``update(current) -> new``, save: all under the
+    settings lock, so two changes running together never undo each other.
+    Returns the stored list."""
+    with _app_settings_lock:
+        settings = _read_app_settings_for_update()
+        current = _normalize_trusted_model_folders(settings.get("trusted_model_folders"))
+        new = _normalize_trusted_model_folders(list(update(list(current))))
+        if new != current:
+            settings["trusted_model_folders"] = new
+            _write_app_settings(settings)
+    return new

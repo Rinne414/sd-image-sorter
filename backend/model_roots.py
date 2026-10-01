@@ -42,6 +42,7 @@ WIDE_FOLDER_ERROR = (
 )
 _WIDE_REASONS_ZH = {
     "drive_root": "整个磁盘",
+    "share_root": "整个网络共享（share）",
     "home": "用户主目录",
     "users_root": "所有用户的目录",
     "system": "系统文件夹",
@@ -65,6 +66,13 @@ _CONFIGURED_MODEL_DIR_NAMES = (
 # \\server\share: a real host name (not the ? / . device namespaces, no
 # user@port WebDAV forms) and a non-empty share.
 _UNC_DRIVE_RE = re.compile(r"^\\\\([A-Za-z0-9][A-Za-z0-9._-]*)\\([^\\]+)$")
+
+
+# POSIX: the real system trees guard their subfolders; /opt and /srv are
+# where programs live (/opt/ComfyUI/models is a normal choice), so only the
+# folders themselves ask for a confirmation.
+_POSIX_DEEP_SYSTEM_DIRS = ("/usr", "/etc", "/bin", "/lib", "/var")
+_POSIX_SHALLOW_SYSTEM_DIRS = ("/opt", "/srv")
 
 
 class NeedsConfirmation(ValueError):
@@ -149,6 +157,29 @@ def _same_folder(first: str, second: str) -> bool:
     )
 
 
+def _system_folder_reason(folder, deep_roots, shallow_roots) -> Optional[str]:
+    """``system`` when the folder is one of the system roots, or inside a
+    deep one; pure path comparison (any PurePath flavour)."""
+    for root in deep_roots:
+        if folder == root or folder.is_relative_to(root):
+            return "system"
+    for root in shallow_roots:
+        if folder == root:
+            return "system"
+    return None
+
+
+def _share_root_check(key: PureWindowsPath, *, confirm: bool) -> None:
+    """A whole network share (``\\nas\share``) is as broad as a drive."""
+    if len(key.parts) == 1 and not confirm:
+        raise NeedsConfirmation(
+            WIDE_FOLDER_ERROR.format(
+                reason="share_root", reason_zh=_WIDE_REASONS_ZH["share_root"]
+            ),
+            "share_root",
+        )
+
+
 def _wide_folder_reason(folder: Path) -> Optional[str]:
     """Why a local folder is too broad to trust without a confirmation."""
     if folder == Path(folder.anchor):
@@ -162,7 +193,7 @@ def _wide_folder_reason(folder: Path) -> Optional[str]:
             return "home"
         if folder == home.parent and home.parent != Path(home.anchor):
             return "users_root"
-    system_dirs = [
+    deep_values = [
         os.environ.get(name, "")
         for name in (
             "SystemRoot",
@@ -172,17 +203,23 @@ def _wide_folder_reason(folder: Path) -> Optional[str]:
             "ProgramData",
         )
     ]
+    shallow_values: list[str] = []
     if os.name != "nt":
-        system_dirs += ["/usr", "/etc", "/bin", "/lib", "/var", "/opt"]
-    for value in system_dirs:
-        if not value:
-            continue
-        try:
-            if folder == Path(value).resolve():
-                return "system"
-        except OSError:
-            continue
-    return None
+        deep_values += list(_POSIX_DEEP_SYSTEM_DIRS)
+        shallow_values += list(_POSIX_SHALLOW_SYSTEM_DIRS)
+
+    def _resolved(values):
+        roots = []
+        for value in values:
+            if not value:
+                continue
+            try:
+                roots.append(Path(value).resolve())
+            except OSError:
+                continue
+        return roots
+
+    return _system_folder_reason(folder, _resolved(deep_values), _resolved(shallow_values))
 
 
 def _normalize_new_folder(raw: str, *, confirm: bool) -> str:
@@ -195,10 +232,20 @@ def _normalize_new_folder(raw: str, *, confirm: bool) -> str:
         key = _network_key(text)
         if key is None:
             raise ValueError(MALFORMED_NETWORK_FOLDER_ERROR)
+        _share_root_check(key, confirm=confirm)
         return str(key)
     folder = Path(os.path.expanduser(text)).resolve()
     if not folder.is_dir():
         raise ValueError(f"Folder does not exist: {text} / 文件夹不存在：{text}")
+    if is_network_path(str(folder)):
+        # A mapped network drive (Z:\models): stored as the share it points
+        # at, which is what every candidate on that drive resolves to and
+        # what the list may compare without ever touching the network.
+        key = _network_key(folder)
+        if key is None:
+            raise ValueError(MALFORMED_NETWORK_FOLDER_ERROR)
+        _share_root_check(key, confirm=confirm)
+        return str(key)
     reason = _wide_folder_reason(folder)
     if reason and not confirm:
         raise NeedsConfirmation(
@@ -211,27 +258,45 @@ def _normalize_new_folder(raw: str, *, confirm: bool) -> str:
 def add_trusted_model_folder(raw: str, *, confirm: bool = False) -> List[str]:
     """Add a folder (deduplicated). A local one must exist and, when it is a
     drive, the home or a system folder, needs ``confirm``. Returns the list."""
+    # The folder checks (resolve, is_dir: a NAS may hang) run outside the
+    # settings lock; read -> compute -> save runs inside it.
     normalized = _normalize_new_folder(raw, confirm=confirm)
-    folders = list_trusted_model_folders()
-    if not any(_same_folder(normalized, folder) for folder in folders):
-        _config().save_trusted_model_folders(folders + [normalized])
-    return list_trusted_model_folders()
+
+    def _add(folders: List[str]) -> List[str]:
+        if any(_same_folder(normalized, folder) for folder in folders):
+            return folders
+        return folders + [normalized]
+
+    return list(_config().update_trusted_model_folders(_add))
 
 
 def remove_trusted_model_folder(raw: str) -> List[str]:
     """Remove a folder; KeyError when it is not in the list. Returns the list."""
     text = str(raw or "").strip()
-    if is_network_path(text):
-        key_path = _network_key(text)
-        key = str(key_path) if key_path is not None else text
-    else:
-        key = os.path.expanduser(text)
-    folders = list_trusted_model_folders()
-    kept = [folder for folder in folders if not _same_folder(key, folder)]
-    if len(kept) == len(folders):
+    key = os.path.expanduser(text)
+    if not is_network_path(text):
+        # The user's spelling of a mapped drive (Z:\models) names the share
+        # the list stores: resolve it once (outside the lock) to compare.
+        try:
+            resolved = Path(key).resolve()
+        except (OSError, ValueError):
+            resolved = None
+        if resolved is not None and is_network_path(str(resolved)):
+            key = str(resolved)
+    if is_network_path(key):
+        key_path = _network_key(key)
+        key = str(key_path) if key_path is not None else key
+    found = {"removed": False}
+
+    def _remove(folders: List[str]) -> List[str]:
+        kept = [folder for folder in folders if not _same_folder(key, folder)]
+        found["removed"] = len(kept) != len(folders)
+        return kept
+
+    remaining = list(_config().update_trusted_model_folders(_remove))
+    if not found["removed"]:
         raise KeyError(text)
-    _config().save_trusted_model_folders(kept)
-    return list_trusted_model_folders()
+    return remaining
 
 
 def describe_trusted_model_folders() -> List[Dict[str, object]]:
@@ -297,18 +362,27 @@ def is_under_allowed_model_root(
         return key is not None and any(
             key.is_relative_to(root) for root in _network_roots()
         )
-    local_roots = _local_roots()
     try:
         resolved = Path(os.path.expanduser(text)).resolve()
     except (OSError, ValueError):
         return False
+    if is_network_path(str(resolved)):
+        # A mapped network drive: the file lives on a share, so it is judged
+        # like a UNC path, purely, against the trusted network folders.
+        key = _network_key(resolved)
+        return key is not None and any(
+            key.is_relative_to(root) for root in _network_roots()
+        )
+    local_roots = _local_roots()
     for extra in extra_roots:
         if is_network_path(extra):
             continue
         try:
-            local_roots.append(Path(os.path.expanduser(str(extra))).resolve())
+            extra_resolved = Path(os.path.expanduser(str(extra))).resolve()
         except (OSError, ValueError):
             continue
+        if not is_network_path(str(extra_resolved)):
+            local_roots.append(extra_resolved)
     return any(resolved.is_relative_to(root) for root in local_roots)
 
 

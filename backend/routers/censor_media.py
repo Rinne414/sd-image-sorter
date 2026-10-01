@@ -7,6 +7,7 @@ page polls a job for per-file progress.
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 from typing import List, Optional
 
@@ -21,14 +22,19 @@ from utils.path_validation import ALLOWED_MODEL_EXTENSIONS, validate_folder_path
 router = APIRouter(prefix="/api/censor/media", tags=["censor"])
 
 _jobs: Optional[MediaCensorJobs] = None
+# The routes are plain ``def`` and run on threadpool workers: two first
+# requests arriving together must not build two job registries.
+_jobs_lock = threading.Lock()
 
 
 def get_jobs() -> MediaCensorJobs:
     global _jobs
     if _jobs is None:
-        from services import video_censor
+        with _jobs_lock:
+            if _jobs is None:
+                from services import video_censor
 
-        _jobs = MediaCensorJobs(video_censor=video_censor.censor_video)
+                _jobs = MediaCensorJobs(video_censor=video_censor.censor_video)
     return _jobs
 
 
