@@ -928,6 +928,12 @@
                 </button>
 
                 <div class="gallery-container">
+                    <!-- "Show only these pictures" from the Style Map (js/gallery-pin.js). JS writes the words. -->
+                    <div class="gallery-banner gallery-banner-pin" id="gallery-pin-banner" role="status" aria-live="polite" hidden>
+                        <span class="gallery-banner-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-pin"/></svg></span>
+                        <strong class="gallery-banner-title" id="gallery-pin-banner-title"></strong>
+                        <button type="button" class="btn btn-ghost btn-small" id="gallery-pin-banner-clear" aria-label="Remove this filter" title="Remove this filter"><span aria-hidden="true">&times;</span></button>
+                    </div>
                     <div class="gallery-banner gallery-banner-warning" id="gallery-unreadable-banner" role="status" aria-live="polite" hidden>
                         <span class="gallery-banner-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg></span>
                         <div class="gallery-banner-copy">
@@ -8305,6 +8311,7 @@
     <script src="/static/js/comfort-app.js"></script>
     <script src="/static/js/gallery.js"></script>
     <script src="/static/js/collections-ui.js"></script>
+    <script src="/static/js/gallery-pin.js"></script>
     <script src="/static/js/modules/smart-folders.js"></script>
     <script src="/static/js/folder-tree.js"></script>
     <script src="/static/js/sidebar-sections.js"></script>

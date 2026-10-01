@@ -208,31 +208,32 @@ test.describe('Style Map box selection', () => {
     const expected = sorted(inside.flatMap((id) => (id === MERGED_ID ? MERGED_MEMBERS : [id])))
     await dragBox(page, box)
     await expect(page.locator('#stylemap-selbar')).toBeVisible()
+    // Censor and the Gallery both store the pick as a pinned set first (js/gallery-pin.js).
+    const pinRequests: Array<{ image_ids: number[] }> = []
+    await page.route('**/api/collections/pinned', (route) => {
+      pinRequests.push(route.request().postDataJSON())
+      return route.fulfill({ json: { collection_id: 777, count: expected.length } })
+    })
 
     await page.locator('#stylemap-sel-censor').click()
     await page.locator('#stylemap-sel-dataset').click()
     await page.locator('#stylemap-sel-collection').click()
     const calls = await page.evaluate(() => (window as any).__calls)
-    expect(sorted(calls.censor[0])).toEqual(expected)
+    // Censor reads a selection token in chunks: the token names the pinned set of exactly these ids.
+    expect(calls.censor[0]).toMatchObject({ selectionToken: 'tok.e2e', total: expected.length })
+    expect(sorted(pinRequests[0].image_ids)).toEqual(expected)
     expect(sorted(calls.dataset[0])).toEqual(expected)
     expect(calls.collection).toHaveLength(1)
     // The picker reads the shared selection: no token, the same ids.
     expect(await selectedIds(page)).toEqual(expected)
 
-    // switchView is called with the full selection in the store. (A fresh Gallery
-    // load afterwards keeps only the ids on its first page: gallery-load.js prunes
-    // "stale" explicit ids; that is the Gallery's existing rule, not under test here.)
-    await page.evaluate(() => {
-      const app = (window as any).App
-      const original = app.switchView
-      app.switchView = (view: string) => {
-        ;(window as any).__switch = { view, selected: app.AppState.selectedIds.size }
-        return original(view)
-      }
-    })
+    // The Gallery opens on a pinned set of exactly these ids (js/gallery-pin.js).
     await page.locator('#stylemap-sel-gallery').click()
     await expect(page.locator('#view-gallery')).toHaveClass(/active/)
-    expect(await page.evaluate(() => (window as any).__switch)).toEqual({ view: 'gallery', selected: expected.length })
+    expect(pinRequests).toHaveLength(2)
+    expect(sorted(pinRequests[1].image_ids)).toEqual(expected)
+    await expect(page.locator('#gallery-pin-banner')).toBeVisible()
+    expect(await page.evaluate(() => (window as any).App.AppState.filters.collectionId)).toBe(777)
   })
 
   test('clear empties the selection and the bar; the Gallery mode it found before is restored', async ({ page }) => {

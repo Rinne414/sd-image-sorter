@@ -929,3 +929,18 @@
     flex: 0 0 auto;
     white-space: nowrap;
 }
+
+/* Gallery banner: "N from the Style Map" (js/gallery-pin.js). */
+.gallery-banner-pin {
+    align-items: center;
+    gap: 10px;
+}
+
+.gallery-banner-pin .gallery-banner-title {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.gallery-banner-pin.is-gone .gallery-banner-title {
+    color: var(--text-2);
+}

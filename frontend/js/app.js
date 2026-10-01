@@ -231,6 +231,7 @@ function buildAppContext() {
         sendToCensor: addToCensorQueue,
         addToDatasetMaker,
         addSelectionToCollectionPicker,
+        selectAllFilteredResults,
         openPromptBuildFromImage,
         openReaderFromImage,
         openReversePromptFromImage,

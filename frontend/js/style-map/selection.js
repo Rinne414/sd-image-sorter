@@ -47,10 +47,32 @@ export class MapSelection {
     bind() {
         const { el } = this;
         el.collection?.addEventListener('click', () => app()?.addSelectionToCollectionPicker?.());
-        el.censor?.addEventListener('click', () => app()?.addToCensorQueue?.([...this.ids]));
+        el.censor?.addEventListener('click', () => this.sendToCensor());
         el.dataset?.addEventListener('click', () => app()?.addToDatasetMaker?.([...this.ids]));
-        el.gallery?.addEventListener('click', () => app()?.switchView?.('gallery'));
+        el.gallery?.addEventListener('click', () => this.openInGallery());
         el.clear?.addEventListener('click', () => this.clear());
+    }
+
+    /** The Gallery shows only these pictures (js/gallery-pin.js), all of them selected. */
+    async openInGallery() {
+        try {
+            await window.GalleryPin.open([...this.ids]);
+        } catch (error) {
+            app()?.showToast?.(formatError(error), 'error');
+        }
+    }
+
+    /**
+     * Censor reads a selection token in chunks, so a big pick is handed over as
+     * a token (its pictures stored as a pinned set) instead of one huge id list.
+     */
+    async sendToCensor() {
+        try {
+            const source = await window.GalleryPin.tokenFor([...this.ids]);
+            app()?.addToCensorQueue?.(source || [...this.ids]);
+        } catch (error) {
+            app()?.showToast?.(formatError(error), 'error');
+        }
     }
 
     get active() {
