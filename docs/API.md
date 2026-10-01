@@ -1082,6 +1082,12 @@ Set collection membership for one image. Body carries `image_id` and a `member` 
 #### POST /api/collections/{collection_id}/items/bulk
 Set collection membership for many images in one call. Body carries either `image_ids` (explicit list) or `selection_token` (a token from `POST /api/images/selection-token` covering a filtered scope), plus a `member` flag. Favorites membership is diverted to the path-anchored favorites store. Returns `{ "success": bool, "added": int, "removed": int, "requested": int }`.
 
+#### POST /api/collections/pinned
+Store pictures as a hidden "show only these" set. JSON body `{"image_ids": [..]}` (at least one id, no upper limit). Returns `{"collection_id": 12, "count": 80}`; `count` is how many of the ids exist in the active library (duplicates, unknown ids and other libraries' pictures are left out). The set is an ordinary collection row with a `~pin-` slug: it is not listed by `GET /api/collections`, and the Gallery opens it with the existing `collection_id` filter, so listing, counting, selection tokens, bulk actions, Auto-Separate and Manual Sort all see exactly those pictures with no second filter. Only the newest 8 sets per library are kept.
+
+#### GET /api/collections/pinned/{collection_id}
+`{"exists": true, "collection_id": 12, "count": 80}`; `exists: false` (count 0, status 200) when the set was pruned or deleted, belongs to another library (`X-SD-Library-Id`), or is an ordinary collection. The Style Map banner uses it to say a set is no longer available instead of silently showing the whole Gallery.
+
 #### GET /api/collections/favorites/ids
 List the ids of all favorited images (plus `count`) for fast client-side heart-state hydration.
 

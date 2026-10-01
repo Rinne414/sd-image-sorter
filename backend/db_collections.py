@@ -22,6 +22,11 @@ from utils.source_paths import (
 )
 
 
+# Hidden collections that hold a "show only these pictures" set (db_pinned_sets.py).
+# slugify never yields "~", so no user collection can collide with the prefix.
+PINNED_SLUG_PREFIX = "~pin-"
+
+
 def _favorite_path_identity(path: str) -> tuple[str, int]:
     """Return the canonical Favorites key and match mode."""
     normalized = normalize_indexed_image_path(path)
@@ -382,11 +387,11 @@ def list_collections() -> List[Dict[str, Any]]:
             FROM collections c
             LEFT JOIN collection_items ci ON ci.collection_id = c.id
             LEFT JOIN images i ON i.id = ci.source_image_id AND {img_sql}
-            WHERE {lib_sql}
+            WHERE {lib_sql} AND c.slug NOT LIKE ?
             GROUP BY c.id
             ORDER BY c.created_at DESC, c.id DESC
             """,
-            img_params + lib_params,
+            img_params + lib_params + (f"{PINNED_SLUG_PREFIX}%",),
         )
         collections = [_row_to_dict(row) for row in cursor.fetchall()]
     # Favorites is path-anchored (not a collection_items snapshot), so report its

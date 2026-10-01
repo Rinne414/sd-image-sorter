@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
 import database as db
+import db_pinned_sets
 from services.tag_export_service import iter_selection_token_id_chunks
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,10 @@ class BulkMembershipRequest(BaseModel):
         return self
 
 
+class PinnedSetRequest(BaseModel):
+    image_ids: List[int] = Field(..., min_length=1)
+
+
 # PLACEHOLDER_ENDPOINTS
 
 
@@ -77,6 +82,26 @@ async def create_collection(request: CreateCollectionRequest):
         return db.create_collection(request.name, request.folder_path)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/pinned")
+def create_pinned_set(request: PinnedSetRequest):
+    """Store pictures as a hidden "show only these" set and return its collection
+    id: the Gallery opens it with the ordinary collection filter (``collection_id``).
+    """
+    made = db_pinned_sets.create_pinned_set(request.image_ids)
+    return {"collection_id": made["id"], "count": made["count"]}
+
+
+@router.get("/pinned/{collection_id}")
+def get_pinned_set(collection_id: int):
+    """Whether a pinned set still exists in the active library, and its size."""
+    found = db_pinned_sets.get_pinned_set(collection_id)
+    return {
+        "exists": found is not None,
+        "collection_id": collection_id,
+        "count": found["count"] if found else 0,
+    }
 
 
 @router.patch("/{collection_id}")
