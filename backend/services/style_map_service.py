@@ -39,7 +39,7 @@ import logging
 import threading
 import time
 from collections import OrderedDict, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Deque, Dict, List, Optional
 
 import numpy as np
@@ -103,6 +103,7 @@ class _MapInputs:
     rep_ids: np.ndarray
     # reps x UMAP_INPUT_DIM in float16 (a 50k library costs ~6 MB per entry).
     features: np.ndarray
+    filter_ids: Optional[np.ndarray] = None  # every id of the filter (S4c: who is on the map)
 
 
 @dataclass
@@ -266,7 +267,7 @@ class StyleMapService(StyleMapColorsMixin, StyleMapQueryMixin):
                     with blas_budget():
                         result, inputs = self._compute(normalized, model_version, ids)
                     payload = json.dumps(result, separators=(",", ":")).encode("utf-8")
-                    self._cache_put(key, payload, inputs)
+                    self._cache_put(key, payload, replace(inputs, filter_ids=np.asarray(sorted(ids), dtype=np.int64)))
                     entry = (payload, 0)
         with self._cache_lock:
             inputs = self._inputs.get(key)

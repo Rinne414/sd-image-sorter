@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from upload_limit import UploadSizeLimitMiddleware
 
 from config import (
     CORS_ORIGIN_REGEX,
@@ -317,6 +318,8 @@ async def library_workspace_middleware(request: Request, call_next):
 
 def configure_security_middleware(app: FastAPI) -> None:
     """Attach CORS, local-only, rate-limit, and security-header middleware."""
+    # Innermost: runs after the request guards, before any body is parsed.
+    app.add_middleware(UploadSizeLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=CORS_ORIGIN_REGEX,

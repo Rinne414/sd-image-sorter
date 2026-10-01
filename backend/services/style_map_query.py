@@ -41,7 +41,9 @@ MAX_K = 100
 CENTRE_NEIGHBOURS = 3
 SCORE_DECIMALS = 4
 COORD_DECIMALS = 3
-# Below this cosine a neighbour is "far away": drawn grey and dashed. CLIP uses
+# Below this cosine a neighbour is "far away": drawn grey and dashed. The
+# Kaloscope value is empirical, from ONE 529 picture library: re-check it on
+# a large (about 27k) library before trusting it there. CLIP uses
 # the Similar page's 0.5. Kaloscope cosines run lower (random pairs of a 529
 # picture library: median 0.11, 95th percentile 0.318; the best other picture
 # of a library picture: 5th percentile 0.311), so 0.32 is "no better than
@@ -103,9 +105,13 @@ def build_answer(
     filenames: Dict[int, str],
     weak_threshold: float,
     model_version: Optional[str],
+    merged: Optional[set] = None,
 ) -> Dict[str, Any]:
     """The response body for ranked (id, score) pairs on a map whose point
-    coordinates are ``coords`` (ids missing from it are not in the filter)."""
+    coordinates are ``coords`` (ids missing from it are not in the filter).
+    ``merged`` are the ids that are not points themselves but were merged into
+    one: ``coords`` holds their representative's position."""
+    merged = merged or set()
     neighbours: List[Dict[str, Any]] = []
     placed: List[_PLACED] = []
     for image_id, score in ranked:
@@ -121,6 +127,7 @@ def build_answer(
                 "z": xyz[2] if xyz else None,
                 "weak": bool(score < weak_threshold),
                 "in_filter": xyz is not None,
+                "merged": image_id in merged,
                 "filename": filenames.get(image_id, ""),
             }
         )
@@ -137,6 +144,39 @@ def build_answer(
         "weak_threshold": weak_threshold,
         "model_version": model_version,
     }
+
+
+def assign_to_representatives(
+    ids: np.ndarray,
+    matrix: np.ndarray,
+    member_ids: Sequence[int],
+    rep_ids: Sequence[int],
+) -> Dict[int, int]:
+    """member id -> the representative (of ``rep_ids``) it is most similar to.
+
+    A merged near-duplicate group keeps no member list, so a member is
+    matched to its group by cosine against every representative (chunked
+    over the library matrix, never a copy of it)."""
+    positions = {int(image_id): row for row, image_id in enumerate(ids.tolist())}
+    members = [m for m in member_ids if int(m) in positions]
+    if not members or len(rep_ids) == 0:
+        return {}
+    wanted = np.array([positions[int(m)] for m in members])
+    queries = matrix[wanted].astype(np.float32)
+    is_rep = np.isin(ids, np.asarray(list(rep_ids), dtype=np.int64))
+    best = np.full(len(members), -np.inf, dtype=np.float32)
+    best_row = np.zeros(len(members), dtype=np.int64)
+    for start in range(0, len(ids), _MATRIX_CHUNK):
+        rows = np.flatnonzero(is_rep[start : start + _MATRIX_CHUNK]) + start
+        if not len(rows):
+            continue
+        sims = matrix[rows].astype(np.float32) @ queries.T
+        top = sims.argmax(axis=0)
+        gain = sims[top, np.arange(len(members))]
+        better = gain > best
+        best[better] = gain[better]
+        best_row[better] = rows[top[better]]
+    return {int(m): int(ids[best_row[i]]) for i, m in enumerate(members)}
 
 
 def not_started_answer(space: str) -> Dict[str, Any]:
@@ -321,6 +361,29 @@ class StyleMapQueryMixin:
                 }
         return {int(p[0]): (float(p[1]), float(p[2]), float(p[3])) for p in points}
 
+    def _place_members(
+        self,
+        key: tuple,
+        space: str,
+        ranked: Sequence[Tuple[int, float]],
+        coords: Dict[int, Tuple[float, float, float]],
+    ) -> Tuple[Dict[int, Tuple[float, float, float]], set]:
+        """``coords`` plus the neighbours that are in the filter but were
+        merged into a representative (placed at its dot) and their ids."""
+        with self._cache_lock:
+            inputs = self._inputs.get(key)
+        filter_ids = getattr(inputs, "filter_ids", None)
+        loose = [i for i, _score in ranked if i not in coords]
+        if filter_ids is None or not loose or not coords:
+            return coords, set()
+        inside = [i for i in loose if np.isin(i, filter_ids)]
+        if not inside:
+            return coords, set()
+        ids, matrix = self._library_matrix(space, key[2])
+        owner = assign_to_representatives(ids, matrix, inside, list(coords))
+        placed = {**coords, **{m: coords[rep] for m, rep in owner.items()}}
+        return placed, set(owner)
+
     def _rank_for(
         self,
         space: str,
@@ -367,11 +430,15 @@ class StyleMapQueryMixin:
                 "use_gpu": use_gpu,
             },
         )
+        coords, merged = self._place_members(
+            key, normalized, ranked, self._displayed_coords(key, entry[0])
+        )
         body = build_answer(
             ranked,
-            self._displayed_coords(key, entry[0]),
+            coords,
             filenames=_filenames([image_id for image_id, _ in ranked]),
             weak_threshold=WEAK_THRESHOLDS[normalized],
             model_version=key[2],
+            merged=merged,
         )
         return json.dumps(body, separators=(",", ":")).encode("utf-8")

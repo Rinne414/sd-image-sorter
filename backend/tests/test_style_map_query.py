@@ -444,3 +444,106 @@ class TestModelNotPrepared:
             style_map_router.set_style_map_service(None)
         assert response.status_code == 503
         assert "not prepared" in response.text
+
+
+class TestMergedMembers:
+    """A near-duplicate merged into a representative is on the map, at that
+    representative's dot; only a picture outside the filter is not."""
+
+    @staticmethod
+    def _library(test_db, tmp_path):
+        ids = _make_images(test_db, tmp_path, 6)
+        vectors = _random_units(6, seed=41)
+        noise = _random_units(1, seed=99)[0] * 0.02
+        vectors[1] = _unit(vectors[0] + noise)  # id 2 merges into id 1 (smallest id)
+        _store_kaloscope(test_db, ids, vectors)
+        return ids, vectors
+
+    def test_pure_assignment_picks_the_nearest_representative(self):
+        ids = np.array([1, 2, 3, 4], dtype=np.int64)
+        matrix = np.array([[1, 0], [0.99, 0.14], [0, 1], [0.1, 0.99]], dtype=np.float32)
+        matrix /= np.linalg.norm(matrix, axis=1, keepdims=True)
+        found = query_mod.assign_to_representatives(ids, matrix, [2, 4], [1, 3])
+        assert found == {2: 1, 4: 3}
+
+    def test_merged_member_is_flagged_and_sits_on_its_representative(
+        self, test_db, tmp_path, no_umap, fake_vector
+    ):
+        ids, vectors = self._library(test_db, tmp_path)
+        service = _service()
+        points = service.points("kaloscope")
+        placed = {p[0]: tuple(p[1:4]) for p in points["points"]}
+        assert ids[1] not in placed and ids[0] in placed  # merged away
+        fake_vector["vector"] = vectors[1]
+
+        body = _query(service, points["map_id"])
+
+        member = next(n for n in body["neighbors"] if n["id"] == ids[1])
+        assert member["in_filter"] is True and member["merged"] is True
+        assert (member["x"], member["y"], member["z"]) == placed[ids[0]]
+        rep = next(n for n in body["neighbors"] if n["id"] == ids[0])
+        assert rep["merged"] is False and rep["in_filter"] is True
+        # both near-identical pictures count for the query point
+        assert (body["query"]["x"], body["query"]["y"], body["query"]["z"]) == pytest.approx(
+            placed[ids[0]], abs=0.2
+        )
+        assert all(n["in_filter"] for n in body["neighbors"])
+
+    def test_merged_members_weigh_in_the_centre(self):
+        coords = {1: (0.0, 0.0, 0.0), 2: (0.0, 0.0, 0.0), 3: (3.0, 0.0, 0.0)}
+        body = query_mod.build_answer(
+            [(2, 0.9), (1, 0.9), (3, 0.9)],
+            coords,
+            filenames={},
+            weak_threshold=0.3,
+            model_version="v",
+            merged={2},
+        )
+        assert body["query"]["x"] == pytest.approx(1.0, abs=1e-3)
+        assert [n["merged"] for n in body["neighbors"]] == [True, False, False]
+
+    def test_outside_the_filter_stays_unplaced_next_to_a_merged_one(
+        self, test_db, tmp_path, no_umap, fake_vector
+    ):
+        from services.image_service import ImageService
+
+        ids, vectors = self._library(test_db, tmp_path)
+        for image_id in ids[:3]:
+            with test_db.get_db() as conn:
+                conn.execute("UPDATE images SET generator = 'nai' WHERE id = ?", (image_id,))
+        token = ImageService().create_selection_token(generators=["nai"])["selection_token"]
+        service = _service()
+        points = service.points("kaloscope", selection_token=token)
+        fake_vector["vector"] = vectors[1]
+
+        body = _query(service, points["map_id"])
+
+        by_id = {n["id"]: n for n in body["neighbors"]}
+        assert by_id[ids[1]]["merged"] is True and by_id[ids[1]]["in_filter"] is True
+        assert by_id[ids[4]]["in_filter"] is False and by_id[ids[4]]["merged"] is False
+        assert by_id[ids[4]]["x"] is None
+
+
+class TestBusyRuntime:
+    def test_a_busy_ai_runtime_is_a_409(self, test_client, tmp_path, no_umap, monkeypatch):
+        from ai_runtime_guard import AiRuntimeBusyError
+        from routers import style_map as style_map_router
+
+        def busy(image, **_kwargs):
+            raise AiRuntimeBusyError("another job holds the runtime")
+
+        monkeypatch.setattr(query_mod, "kaloscope_query_vector", busy)
+        service = style_map_service.StyleMapService()
+        style_map_router.set_style_map_service(service)
+        try:
+            ids = _make_images(test_client.test_db, tmp_path, 4)
+            _store_kaloscope(test_client.test_db, ids, _random_units(4, seed=7))
+            handle = service.points("kaloscope")["map_id"]
+            response = test_client.post(
+                "/api/style-map/query",
+                params={"space": "kaloscope", "map_id": handle},
+                files={"file": ("drop.png", _png(), "image/png")},
+            )
+        finally:
+            style_map_router.set_style_map_service(None)
+        assert response.status_code == 409
