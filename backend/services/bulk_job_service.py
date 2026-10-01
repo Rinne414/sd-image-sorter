@@ -99,6 +99,8 @@ class _BulkJob:
     error_count: int = 0
     error_samples: List[str] = field(default_factory=list)
     message: str = ""
+    # Stable key the UI can localise from; ``message`` stays English.
+    message_key: str = ""
     result: Dict[str, Any] = field(default_factory=dict)
     queued_cancel_result: Optional[Dict[str, Any]] = None
     created_at: float = field(default_factory=time.time)
@@ -119,6 +121,7 @@ class _BulkJob:
             "error_count": self.error_count,
             "error_samples": list(self.error_samples),
             "message": self.message,
+            "message_key": self.message_key,
             # Copy list values too: _merge_result extends lists in place, so a
             # shallow dict copy would share them with the mutating worker.
             "result": {
@@ -228,7 +231,9 @@ class BulkJobService:
     # ------------------------------------------------------------------
     # Registry / lifecycle
     # ------------------------------------------------------------------
-    def create_job(self, kind: str, *, total: int = 0, message: str = "") -> str:
+    def create_job(
+        self, kind: str, *, total: int = 0, message: str = "", message_key: str = ""
+    ) -> str:
         """Register a new queued job and return its durable id.
 
         ``total`` is optional: pass it when the resolved id count is already
@@ -240,7 +245,11 @@ class BulkJobService:
         job_id = uuid.uuid4().hex
         with self._lock:
             self._jobs[job_id] = _BulkJob(
-                id=job_id, kind=kind, total=int(total or 0), message=message
+                id=job_id,
+                kind=kind,
+                total=int(total or 0),
+                message=message,
+                message_key=message_key,
             )
             self._prune_unlocked()
         return job_id

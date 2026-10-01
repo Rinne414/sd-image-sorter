@@ -70,6 +70,7 @@ class SortingStateMixin:
             "message": "",
             "message_key": "",
             "message_item": "",
+            "message_detail": "",
             "missing_text_notice": False,
             "current_item": None,
             "recent_errors": [],

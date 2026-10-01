@@ -295,6 +295,7 @@ class JobsMixin:
                     errors=current_state.get("errors", 0),
                     message=f"Error monitoring tagging worker: {error}",
                     message_key="monitor_error",
+                    message_args={"detail": str(error)},
                     run_id=run_id,
                 ),
                 run_id=run_id,

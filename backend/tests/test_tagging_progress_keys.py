@@ -132,3 +132,41 @@ def test_start_response_has_started_key(test_db, monkeypatch) -> None:
 
     assert result["message_key"] == "started"
     assert service.get_progress()["message_key"] == "preparing"
+
+
+def test_gpu_fallback_and_runtime_notice_carry_their_reason(
+    fake_tagger_env, monkeypatch, tmp_path: Path
+) -> None:
+    image_id = _add_image(tmp_path, "gpu.png")
+    payload = _payload([image_id])
+    payload["startup_notice"] = "Auto runtime is using the highest batched throughput."
+    payload["effective_use_gpu"] = True
+    payload["request"]["use_gpu"] = True
+
+    messages = _run_worker(payload)
+    notice = next(m for m in messages if m.get("message_key") == "runtime_notice")
+    assert notice["message_args"]["notice"].startswith("Auto runtime")
+    failed = [m for m in messages if m.get("message_key") == "gpu_load_failed"]
+    for message in failed:
+        assert message["message_args"]["reason"]
+
+
+def test_monitor_error_carries_the_raw_detail() -> None:
+    import inspect
+
+    from services.tagging import jobs
+
+    source = inspect.getsource(jobs)
+    assert 'message_key="monitor_error"' in source
+    assert 'message_args={"detail": str(error)}' in source.split('message_key="monitor_error"')[1][:120]
+
+
+def test_bulk_job_snapshot_carries_the_message_key() -> None:
+    from services.bulk_job_service import BulkJobService
+
+    service = BulkJobService()
+    job_id = service.create_job(
+        "export_sidecars", total=3, message="Exporting 3 images...", message_key="exporting"
+    )
+
+    assert service.get_job(job_id)["message_key"] == "exporting"

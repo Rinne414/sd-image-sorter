@@ -680,6 +680,7 @@ class ScanMixin:
                             "message": failure_message,
                             "message_key": "error",
                             "message_item": "",
+                            "message_detail": e.message if isinstance(e, ScanError) else "",
                             "current_item": current_state.get("current_item"),
                             "recent_errors": current_state.get("recent_errors", []),
                             "started_at": current_state.get("started_at"),

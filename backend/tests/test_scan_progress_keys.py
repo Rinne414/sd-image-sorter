@@ -198,3 +198,33 @@ def test_response_models_declare_the_key_fields():
     assert "message_key" in ScanStartResponse.model_fields
     for name in ("message_key", "message_item", "missing_text_notice"):
         assert name in ScanProgressResponse.model_fields
+
+
+def test_scan_error_carries_the_actionable_cause(test_db, tmp_path, monkeypatch, test_client):
+    from exceptions import ScanError
+
+    service = _service()
+
+    def refuse(folder, recursive, progress_cb, **kwargs):
+        raise ScanError(
+            message="Image indexing completed, but Library Root persistence failed. Check database write access and scan this folder again.",
+            path=None,
+            details={},
+        )
+
+    _scan_with(monkeypatch, service, tmp_path, refuse)
+    progress = service.get_scan_progress()
+    assert progress["message_key"] == "error"
+    assert "Check database write access" in progress["message_detail"]
+    body = test_client.get("/api/scan/progress").json()
+    assert "Check database write access" in body["message_detail"]
+
+
+def test_unexpected_scan_error_has_no_detail(test_db, tmp_path, monkeypatch):
+    service = _service()
+
+    def boom(folder, recursive, progress_cb, **kwargs):
+        raise RuntimeError("secret internals")
+
+    _scan_with(monkeypatch, service, tmp_path, boom)
+    assert service.get_scan_progress()["message_detail"] == ""

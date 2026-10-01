@@ -110,7 +110,12 @@ function scanStatusText(progress) {
             ? fill('scan.msg.cancelledAt', 'Import cancelled at {current}/{total}.', { current, total })
             : fill('scan.cancelledAfterCount', 'Import cancelled after {count} scanned.', { count: current });
         case 'done': return _scanDoneText(progress);
-        case 'error': return appT('scan.failedStatus', 'Import failed');
+        case 'error': {
+            const failed = appT('scan.failedStatus', 'Import failed');
+            const detail = progress.message_detail && typeof window.formatUserError === 'function'
+                ? window.formatUserError(progress.message_detail) : '';
+            return detail ? `${failed}: ${detail}` : failed;
+        }
         case 'aborted': return appT('scan.msg.aborted', 'Import ended unexpectedly');
         default: return '';
     }

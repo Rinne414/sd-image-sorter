@@ -199,6 +199,8 @@ class ScanProgressResponse(BaseModel):
     # stays the bilingual display string for API compatibility.
     message_key: str = ""
     message_item: str = ""
+    # Raw, actionable cause of a ScanError (shown as received after the localised sentence).
+    message_detail: str = ""
     missing_text_notice: bool = False
     current_item: Optional[str]
     started_at: Optional[float]

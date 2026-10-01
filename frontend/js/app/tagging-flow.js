@@ -491,6 +491,12 @@ function tagStatusText(progress) {
     const current = Number(progress.processed ?? progress.current ?? 0);
     const total = Number(progress.total || 0);
     const device = args.device === 'gpu' ? 'GPU' : 'CPU';
+    // Raw cause text is shown as received, after the localised sentence; formatUserError
+    // folds anything long or carrying a path into its generic line.
+    const withCause = (text, cause) => {
+        const shown = cause && typeof window.formatUserError === 'function' ? window.formatUserError(cause) : '';
+        return shown ? `${text} ${shown}` : text;
+    };
     switch (key) {
         case 'preparing': return appT('tagger.progressPreparing', 'Preparing tagger...');
         case 'loading_custom': return appT('tagger.msg.loadingCustom', 'Loading custom model...');
@@ -498,7 +504,7 @@ function tagStatusText(progress) {
         case 'loading_backend': return fill('tagger.msg.loadingBackend', 'Loading {model} on {device}...', { model: args.model || '', device });
         case 'loading_model': return fill('tagger.msg.loadingModel', 'Loading model on {device}...', { device });
         case 'runtime_notice': return appT('tagger.msg.runtimeNotice', 'Applying the runtime settings for this run...');
-        case 'gpu_load_failed': return appT('tagger.msg.gpuLoadFailed', 'GPU load failed. Continuing on CPU instead.');
+        case 'gpu_load_failed': return withCause(appT('tagger.msg.gpuLoadFailed', 'GPU load failed. Continuing on CPU instead.'), args.reason);
         case 'collecting': return appT('tagger.msg.collecting', 'Collecting the image list...');
         case 'tagging_started': return fill('tagger.msg.taggingStarted', 'Model loaded. Images to tag: {total}', { total });
         case 'skipped_unreadable': return fill('tagger.msg.skippedUnreadable', 'Skipped an unreadable image: {item}', { item: args.item || '' });
@@ -513,7 +519,7 @@ function tagStatusText(progress) {
         case 'tagging_batch': return fill('tagger.msg.taggingBatch', 'Tagging images {start}-{end}/{total}: {first} ... {last}', { ...args, total });
         case 'tagging_one': return fill('tagger.msg.taggingOne', 'Tagging image {start}/{total}: {first}', { ...args, total });
         case 'runtime_adjusted': return appT('tagger.msg.runtimeAdjusted', 'The runtime was adjusted automatically to keep the run stable.');
-        case 'gpu_inference_failed': return appT('tagger.msg.gpuInferenceFailed', 'GPU inference failed. Continuing on CPU...');
+        case 'gpu_inference_failed': return withCause(appT('tagger.msg.gpuInferenceFailed', 'GPU inference failed. Continuing on CPU...'), args.reason);
         case 'image_done': return args.item || '';
         case 'batch_error': return fill('tagger.msg.batchError', 'A batch failed. Images processed: {current}/{total}', { current, total });
         case 'cancelling': return fill('tagger.progressCancelling', 'Cancelling... {current}/{total}', { current, total: Math.max(total, current) });
@@ -528,9 +534,9 @@ function tagStatusText(progress) {
             return errors > 0 ? base + fill('tagger.progressErrorSuffix', ', {errors} failed', { errors }) : base;
         }
         case 'worker_crashed': return appT('tagger.msg.workerCrashed', 'The tagger process stopped unexpectedly. The program is still running, but this tagging run was stopped.');
-        case 'monitor_error': return appT('tagger.msg.monitorError', 'Lost track of the tagging process. This tagging run was stopped.');
         case 'setup_failed': return appT('tagger.msg.setupFailed', 'Tagging could not start. Check available system resources and the log, then try again.');
-        case 'schedule_failed': return appT('tagger.msg.scheduleFailed', 'Could not schedule the tagging task.');
+        case 'schedule_failed': return withCause(appT('tagger.msg.scheduleFailed', 'Could not schedule the tagging task.'), args.detail);
+        case 'monitor_error': return withCause(appT('tagger.msg.monitorError', 'Lost track of the tagging process. This tagging run was stopped.'), args.detail);
         case 'torii_loading': return fill('tagger.msg.toriiLoading', 'ToriiGate is still loading. Elapsed: {seconds} s. This stage can use a lot of RAM/VRAM before the first image starts.', { seconds: Number(args.seconds || 0) });
         case 'error': {
             const failed = appT('tagger.msg.failed', 'Tagging failed');
@@ -645,6 +651,9 @@ async function pollTagProgress(retryCount = 0) {
         }
 
         $('#tag-progress-text').textContent = progressText;
+        // The runtime advisory is a long paragraph: keep it one hover away instead of in the line.
+        $('#tag-progress-text').title = progress.message_key === 'runtime_notice'
+            ? String(progress.message_args?.notice || '') : '';
         _tagLastProgressPercent = percent;
         _tagLastProgressText = progressText;
 

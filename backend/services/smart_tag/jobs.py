@@ -77,6 +77,12 @@ class SmartTagJobState:
         self.message = text
         self.message_key = key
         self.message_args = dict(args)
+        self.note_device_fallback()
+
+    def note_device_fallback(self) -> None:
+        """Flag a caption model that ran on the CPU instead of the GPU asked for."""
+        if self.caption_device_note:
+            self.message_args["device_note"] = "cpu_fallback"
 
     def snapshot(self) -> Dict[str, Any]:
         return {

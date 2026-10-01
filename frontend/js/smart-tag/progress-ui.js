@@ -159,6 +159,12 @@
     // it follows the language. An unknown key falls back to a generic localized
     // line. Raw provider errors (`detail`) are shown as received.
     function smartTagStatusText(snap) {
+        const text = smartTagKeyText(snap);
+        if (!text || !snap.message_args || snap.message_args.device_note !== 'cpu_fallback') return text;
+        return `${text} ${smartTagT('smartTag.msg.cpuFallback', 'The caption model ran on the CPU because no usable NVIDIA GPU (CUDA) was found, so captions are slower.')}`;
+    }
+
+    function smartTagKeyText(snap) {
         const key = snap && snap.message_key;
         if (!key) return '';
         const args = snap.message_args || {};

@@ -170,3 +170,21 @@ def test_queue_lookup_answers_carry_keys(monkeypatch) -> None:
 
     assert answer["status"] == "unknown"
     assert answer["message_key"] == "queued_unknown"
+
+
+def test_device_fallback_is_flagged_on_later_messages_and_the_terminal_state(
+    stubbed_sources,
+) -> None:
+    job = SmartTagJobState(job_id="cpu")
+    job.set_message("phase2", "Phase 2/2", count=1, captioner="Florence-2 Base")
+    assert "device_note" not in job.message_args
+
+    job.caption_device_note = "Florence-2 ran on the CPU because there is no CUDA GPU."
+    job.set_message("captioning_progress", "VLM captioning 1/2")
+    assert job.message_args["device_note"] == "cpu_fallback"
+
+    _run_pipeline_with_note = SmartTagJobState(job_id="cpu-done")
+    _run_pipeline_with_note.caption_device_note = "x"
+    _run_pipeline(_run_pipeline_with_note, _request([1, 2]))
+    assert _run_pipeline_with_note.message_key == "done"
+    assert _run_pipeline_with_note.message_args["device_note"] == "cpu_fallback"

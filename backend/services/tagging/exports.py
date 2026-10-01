@@ -410,6 +410,7 @@ class ExportsMixin:
             JOB_KIND_EXPORT_SIDECARS,
             total=total,
             message=f"Exporting {total} images...",
+            message_key="exporting",
         )
 
         def worker(handle) -> None:

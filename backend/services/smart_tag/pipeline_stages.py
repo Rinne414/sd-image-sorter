@@ -132,6 +132,7 @@ def _finish_job(
         else:
             job.message_key = "failed_all"
             job.message_args = {"detail": last_error}
+    job.note_device_fallback()
 
 
 def _process_one_image(

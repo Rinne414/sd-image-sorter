@@ -564,7 +564,12 @@ def _tagging_worker_run(
             runtime_backend_reason = "CPU mode was requested for this run."
 
         if startup_notice:
-            send("running", startup_notice, key="runtime_notice")
+            send(
+                "running",
+                startup_notice,
+                key="runtime_notice",
+                args={"notice": startup_notice},
+            )
 
         if effective_use_gpu and not getattr(tagger, "use_gpu", False):
             gpu_fallback_announced = True
@@ -572,6 +577,7 @@ def _tagging_worker_run(
                 "running",
                 f"GPU load failed. Continuing on CPU instead. Reason: {runtime_backend_reason}",
                 key="gpu_load_failed",
+                args={"reason": runtime_backend_reason},
             )
 
         if cancel_event.is_set():
@@ -904,6 +910,7 @@ def _tagging_worker_run(
                             "running",
                             f"GPU inference failed. Continuing on CPU... Reason: {runtime_backend_reason}",
                             key="gpu_inference_failed",
+                            args={"reason": runtime_backend_reason},
                         )
 
                     source_change_errors: Dict[int, Optional[str]] = {}

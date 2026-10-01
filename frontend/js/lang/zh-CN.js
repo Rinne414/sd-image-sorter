@@ -4474,6 +4474,7 @@ window.I18nLang_zhCN = {
     'smartTag.msg.failedCaptionProfile': '描述方案 {profile} 对全部 {count} 张图片都失败了',
     'smartTag.msg.failed': 'Smart Tag 失败',
     'smartTag.msg.queuedUnknown': '这个排队中的 Smart Tag 任务已查不到了（程序重启过，或结果已被清除）。',
+    'smartTag.msg.cpuFallback': '描述模型在 CPU 上运行（没有可用的 NVIDIA 显卡 CUDA），所以描述较慢。',
     'smartTag.msg.generic': 'Smart Tag 正在运行...',
     'smartTag.failedToast': 'Smart Tag 失败：{reason}{extra}',
     'smartTag.unknownError': '未知错误',

@@ -177,10 +177,12 @@ test('mid-import and failure states show Chinese, and survive a translation re-a
     step: 'error',
     message: '扫描失败：x / Scan failed: x',
     message_key: 'error',
+    message_detail: 'Library Root persistence failed. Check database write access.',
   }
   const toast = page.locator('.toast', { hasText: '导入失败' }).first()
   await expect(toast).toBeVisible({ timeout: 15000 })
   expect(await toast.textContent()).not.toContain('Scan failed')
+  expect(await toast.textContent()).toContain('Check database write access')
   await page.screenshot({ path: shotPath(testInfo, 'scan-failed-zh-1366.png') })
 
   override = null
@@ -243,6 +245,24 @@ test('tagging progress and finish text read in Chinese and survive a translation
     message_args: { device: 'gpu' },
   })
   await expect(progressText).toContainText('正在用 GPU 载入模型...', { timeout: 15000 })
+
+  payload = tagProgress({
+    status: 'running',
+    message: 'GPU load failed. Continuing on CPU instead. Reason: The ONNX runtime has no GPU provider on this machine.',
+    message_key: 'gpu_load_failed',
+    message_args: { reason: 'The ONNX runtime has no GPU provider on this machine.' },
+  })
+  await expect(progressText).toContainText('GPU 载入失败，改用 CPU 继续。', { timeout: 15000 })
+  expect((await progressText.textContent() || '').length).toBeGreaterThan('GPU 载入失败，改用 CPU 继续。'.length + 4)
+
+  payload = tagProgress({
+    status: 'running',
+    message: 'Auto runtime is using the highest batched throughput.',
+    message_key: 'runtime_notice',
+    message_args: { notice: 'Auto runtime is using the highest batched throughput.' },
+  })
+  await expect(progressText).toContainText('正在应用本次运行的运行时设置', { timeout: 15000 })
+  await expect(progressText).toHaveAttribute('title', 'Auto runtime is using the highest batched throughput.')
 
   payload = tagProgress({
     status: 'done',
@@ -348,11 +368,12 @@ test('Smart Tag progress and failure read in Chinese', async ({ page }, testInfo
     failed: 2,
     message: 'Smart Tag failed for all 2 image(s). Last error: disk is full',
     message_key: 'failed_all',
-    message_args: { detail: 'disk is full' },
+    message_args: { detail: 'disk is full', device_note: 'cpu_fallback' },
   }
   const toast = page.locator('.toast', { hasText: 'Smart Tag 对全部 2 张图片都失败了' }).first()
   await expect(toast).toBeVisible({ timeout: 15000 })
   expect(await toast.textContent()).toContain('disk is full')
+  expect(await toast.textContent()).toContain('描述模型在 CPU 上运行')
   await page.screenshot({ path: shotPath(testInfo, 'smart-tag-failed-zh-1366.png') })
 })
 

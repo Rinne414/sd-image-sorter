@@ -4474,6 +4474,7 @@ window.I18nLang_en = {
     'smartTag.msg.failedCaptionProfile': 'Caption profile {profile} failed for all {count} images',
     'smartTag.msg.failed': 'Smart Tag failed',
     'smartTag.msg.queuedUnknown': 'This queued Smart Tag run is no longer known (the program restarted or its result was dropped).',
+    'smartTag.msg.cpuFallback': 'The caption model ran on the CPU because no usable NVIDIA GPU (CUDA) was found, so captions are slower.',
     'smartTag.msg.generic': 'Smart Tag is working...',
     'smartTag.failedToast': 'Smart Tag failed: {reason}{extra}',
     'smartTag.unknownError': 'unknown error',
