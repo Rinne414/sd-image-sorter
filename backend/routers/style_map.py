@@ -397,6 +397,49 @@ def style_map_axes(
     return Response(content=payload, media_type="application/json")
 
 
+class StyleMapCustomAxesRequest(BaseModel):
+    space: str = Field("kaloscope", pattern=_MAP_SPACE_PATTERN)
+    selection_token: Optional[str] = Field(None, max_length=65536)
+    map_id: Optional[str] = Field(None, pattern=MAP_ID_PATTERN, description=_MAP_ID_DOC)
+    layout: str = Field("pca", pattern="^(" + "|".join(AXES_LAYOUTS) + ")$")
+    axes: dict = Field(
+        ...,
+        description='{"x": {"a": [image ids], "b": [image ids]}, "y": null, "z": null}',
+    )
+
+
+@router.post(
+    "/custom-axes",
+    summary="Re-lay the map along axes defined by example pictures",
+    description=(
+        "Each defined axis (x, y or z) takes two groups of example pictures, `a` "
+        "(low end) and `b` (high end), at least 2 each: the direction is the "
+        "mean unit vector of `b` minus that of `a`, zero halfway between the two "
+        "groups, scaled like the PCA layout. The other axes keep the layout "
+        "`layout` names with the custom ones regressed out. Returns every dot's "
+        "new coordinates in points order, per axis leave-one-out agreement "
+        "(`agree` of `total`, `separable`), `missing_ids` (outside the current "
+        "library or without a vector) and `warnings` (parallel axes). 400 when "
+        "a picture is in both ends of an axis or an end has fewer than 2 "
+        "examples; `not_started` when the map is unknown or evicted."
+    ),
+)
+def style_map_custom_axes(
+    request: StyleMapCustomAxesRequest,
+    model_path: Optional[str] = Depends(_model_path_from_query),
+    service: StyleMapService = Depends(get_style_map_service),
+):
+    payload = service.custom_axes_json(
+        request.space,
+        selection_token=request.selection_token,
+        model_path=model_path,
+        map_id=request.map_id,
+        layout=request.layout,
+        axes=request.axes,
+    )
+    return Response(content=payload, media_type="application/json")
+
+
 class StyleMapMembersRequest(BaseModel):
     space: str = Field("kaloscope", pattern=_MAP_SPACE_PATTERN)
     selection_token: Optional[str] = Field(None, max_length=65536)

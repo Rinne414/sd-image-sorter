@@ -2141,6 +2141,61 @@ invalid `selection_token`, or a `model_path` that is not a
 `.pth`/`.pt`/`.onnx` file, is missing or cannot be read (`kaloscope` space with
 `model_source=local` only).
 
+#### POST /api/style-map/custom-axes
+Re-lays the map along axes the user defines with example pictures (slice S4g).
+Per axis (`x`, `y`, `z`; `null` or absent = not defined) two groups of examples,
+`a` (the low end) and `b` (the high end), at least 2 each, no upper limit:
+
+```json
+{"space": "kaloscope", "map_id": "...", "layout": "pca",
+ "axes": {"x": {"a": [12, 40, 77], "b": [5, 9, 31]}, "y": null, "z": null}}
+```
+
+The direction is `normalize(mean(unit vectors of b) - mean(unit vectors of a))`
+in the space's style-vector space; a picture's coordinate is its unit vector
+dotted with it, zero halfway between the two groups' mean scores, divided by
+the largest |coordinate| of the map (the PCA layout's scale, so the grid looks
+the same). The undefined axes keep the layout `layout` names (`pca`, or the
+ready `umap` fit) with every custom coordinate regressed out (Gram-Schmidt on
+the coordinate columns) and are scaled back to peak 1, so a custom axis is not
+repeated on the others. Coordinates are computed from the pictures' stored
+vectors in chunks (nothing like the PCA map's covariance matrix is built).
+
+**Response:**
+```json
+{
+  "status": "ok", "space": "kaloscope", "layout": "pca", "model_version": "...",
+  "ids": [3, 8, 9], "coords": [[0.12, -0.4, 0.07], [0.9, 0.1, -0.2], [-0.6, 0.3, 0.5]],
+  "axes": {
+    "x": {"applied": true, "reason": null, "a_used": [12, 40, 77], "b_used": [5, 9, 31],
+          "missing_ids": [], "agree": 6, "total": 6, "separable": true},
+    "y": null, "z": null
+  },
+  "warnings": [{"code": "axes_parallel", "axes": ["x", "y"], "cos": 0.94}]
+}
+```
+
+`ids` and `coords` are in the order of the `points` answer of the same map (the
+representatives). Per defined axis: `agree` / `total` is leave-one-out
+agreement (each example is left out, the direction and zero are recomputed from
+the rest, and it must still fall on its own side); `separable` is true when at
+least 80% agree (the page tells the user the two groups are hard to tell apart
+otherwise). `missing_ids` are examples outside the current library
+(`X-SD-Library-Id`) or without a vector in this space; they are ignored, and an
+end left with fewer than 2 usable examples leaves the axis not applied
+(`applied: false`, `reason: "too_few_examples"`; `identical_ends` when the two
+groups have the same mean). `warnings` lists defined axes whose directions
+have |cos| above 0.9. `status` is `not_started` for an unknown, evicted or
+other-library map and `layout_not_ready` for `umap` before its fit is done
+(`ids`, `coords` empty).
+
+**Parameters:** `model_source`, `model_path` as query parameters (as for
+`points`).
+
+**Errors:** 400 for an unknown `space` / `layout` / axis name, an invalid
+`map_id`, a picture that is in both ends of an axis, or an end with fewer than
+2 example pictures (the message names the axis).
+
 #### GET /api/style-map/colors
 One colour value per point of the map `points` last returned for the same
 `space` and `selection_token`, in point order (`ids` are the representatives

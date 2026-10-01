@@ -62,6 +62,7 @@ from services.style_map_math import (
     pca_layout,
 )
 from services.style_map_axes import StyleMapAxesMixin
+from services.style_map_custom_axes import StyleMapCustomAxesMixin
 from services.style_map_colors import StyleMapColorsMixin, map_handle
 from services.style_map_locate import StyleMapLocateMixin
 from services.style_map_members import StyleMapMembersMixin
@@ -105,6 +106,9 @@ _QUEUE_LIMIT = 2
 class StyleMapService(
     StyleMapColorsMixin,
     StyleMapAxesMixin,
+    StyleMapColorsMixin,
+    StyleMapAxesMixin,
+    StyleMapCustomAxesMixin,
     StyleMapQueryMixin,
     StyleMapMembersMixin,
     StyleMapLocateMixin,
