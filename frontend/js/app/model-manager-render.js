@@ -2,6 +2,40 @@
  * Model Manager status and preparation card rendering.
  * Classic script sharing the app global lexical environment.
  */
+const _MODEL_EXTERNAL_MESSAGE = /^models\.external\./;
+
+function _modelFileWentMissing(model) {
+    return _MODEL_EXTERNAL_MESSAGE.test(String(model.message_key || ''));
+}
+
+/** The backend names the folder kind in English; the page says it in the UI language. */
+function _modelMessageParams(model) {
+    const params = Object.assign({}, model.message_params || {});
+    if (_modelFileWentMissing(model) && params.kind && window.ModelSources) {
+        params.source = window.ModelSources.kindLabel(params.kind);
+    }
+    return params;
+}
+
+/** "Source: ComfyUI · I:\...\model.onnx (size matches)" for a card served from a trusted folder. */
+function _modelSourceLine(model) {
+    const source = model.source;
+    if (!source || !window.ModelSources) return '';
+    const kind = window.ModelSources.kindLabel(source.kind);
+    const variantSources = model.variant_sources && typeof model.variant_sources === 'object'
+        ? Object.keys(model.variant_sources)
+        : [];
+    const network = source.is_network ? ` · ${appT('models.sourceNetwork', 'network drive')}` : '';
+    const text = variantSources.length > 1
+        ? appT('models.sourceLineVariants', 'Source: {kind} · {names}', { kind, names: variantSources.join(', ') })
+        : appT('models.sourceLine', 'Source: {kind} · {path} ({verify})', {
+            kind,
+            path: window.ModelSources.shortPath(source.path),
+            verify: window.ModelSources.verifyLabel(source.verify),
+        });
+    return `<div class="model-card-hint model-card-source" title="${escapeHtml(source.path)}">${escapeHtml(text + network)}</div>`;
+}
+
 function renderModelManager(models = []) {
     const summaryEl = $('#model-manager-summary');
     const gridEl = $('#model-manager-grid');
@@ -44,7 +78,8 @@ function renderModelManager(models = []) {
             mirrorRow = document.createElement('div');
             mirrorRow.id = 'model-mirror-row';
             mirrorRow.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:10px 14px;margin-bottom:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(var(--accent-rgb), 0.08);border-radius:12px;';
-            gridEl.parentElement.insertBefore(mirrorRow, gridEl);
+            // Download source, then the folders models may be read from, then the cards.
+            gridEl.parentElement.insertBefore(mirrorRow, document.getElementById('model-sources-section') || gridEl);
         }
         const opts = (mirrorData?.options || ['auto', 'hf-mirror', 'modelscope']).map(
             o => `<option value="${escapeHtml(o)}"${o === current ? ' selected' : ''}>${escapeHtml(labels[o] || o)}</option>`
@@ -101,6 +136,9 @@ function renderModelManager(models = []) {
                     ${locationLines.map(([label, value]) => `<div class="model-card-path">${escapeHtml(label)}:<code>${escapeHtml(value)}</code></div>`).join('')}
                 </details>
             ` : '';
+        // MS1c: a model used from a trusted folder (ComfyUI, an HF cache) says so;
+        // the full path sits in the location fold above.
+        const sourceLine = _modelSourceLine(model);
         const installedVariants = Array.isArray(model.installed_variants) && model.installed_variants.length
             ? `<div class="model-card-hint">${escapeHtml(appT('models.installedVariants', 'Installed variants'))}: ${escapeHtml(model.installed_variants.join(', '))}</div>`
             : '';
@@ -123,7 +161,8 @@ function renderModelManager(models = []) {
                     </div>
                     <span class="model-card-status ${statusClass}">${escapeHtml(statusLabel)}</span>
                 </div>
-                <div class="model-card-message">${escapeHtml(model.message_key ? appT(model.message_key, model.message || '', model.message_params || {}) : (model.message || ''))}</div>
+                <div class="model-card-message">${escapeHtml(model.message_key ? appT(model.message_key, model.message || '', _modelMessageParams(model)) : (model.message || ''))}</div>
+                ${sourceLine}
                 ${locationBlock}
                 ${installedVariants}
                 ${sourceOptions ? `
@@ -147,7 +186,7 @@ function renderModelManager(models = []) {
                 <div class="model-card-actions">
                     ${status === 'needs_restart'
                         ? `<button class="btn btn-primary btn-restart-model" data-model-id="${safeId}" data-model-name="${escapeHtml(model.name || model.id)}">${escapeHtml(appT('models.restartNowAndContinue', 'Restart now and continue'))}</button>`
-                        : (model.download_supported ? `<button class="btn btn-primary btn-prepare-model" data-model-id="${safeId}">${escapeHtml(status === 'ready' ? appT('models.repair', 'Recheck / Repair') : appT('models.prepare', 'Prepare / Download'))}</button>` : '')}
+                        : (model.download_supported ? `<button class="btn btn-primary btn-prepare-model" data-model-id="${safeId}">${escapeHtml(status === 'ready' ? appT('models.repair', 'Recheck / Repair') : (_modelFileWentMissing(model) ? appT('models.downloadToProgramFolder', 'Download to the program folder') : appT('models.prepare', 'Prepare / Download')))}</button>` : '')}
                     ${!model.download_supported && status !== 'ready' ? `<span class="model-card-hint">${escapeHtml(appT('models.noAutoDownload', 'Can\'t download automatically. Follow the manual steps above'))}</span>` : ''}
                     ${externalLinks}
                 </div>

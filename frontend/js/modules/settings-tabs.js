@@ -47,6 +47,7 @@
         });
         const modalContent = document.querySelector('#model-manager-modal .modal-content');
         if (modalContent) modalContent.scrollTop = 0;
+        document.dispatchEvent(new CustomEvent('settings-tab-activated', { detail: { tab: tabName } }));
 
         if (tabName === 'audit') {
             // The audit <details> stays for its summary copy, but inside a

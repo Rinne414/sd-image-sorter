@@ -2418,6 +2418,90 @@ html:has(#view-gallery.active) {
     gap: 14px;
 }
 
+/* MS1c: the folders models may be read from (ComfyUI, a Hugging Face cache,
+   a NAS). One card above the model grid; rows hug their content. */
+.model-sources-section:not(:empty) {
+    margin-bottom: 14px;
+}
+.model-sources-card {
+    gap: 10px;
+}
+.model-sources-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 14px;
+    flex-wrap: wrap;
+}
+.model-sources-head-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.model-sources-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.model-sources-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.14);
+}
+.model-sources-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: rgba(var(--accent-success-rgb), 0.9);
+}
+.model-sources-dot.is-wait {
+    background: transparent;
+    box-shadow: inset 0 0 0 2px var(--text-muted);
+}
+.model-sources-dot.is-off {
+    background: rgba(var(--accent-tertiary-rgb), 0.9);
+}
+.model-sources-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.model-sources-path {
+    font-size: 12px;
+    color: var(--text-primary);
+    word-break: break-all;
+}
+.model-sources-meta {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+.model-sources-add {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.model-sources-add[hidden] {
+    display: none;
+}
+.model-sources-add .input-field {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    padding: 7px 10px;
+}
+.model-card-source {
+    overflow-wrap: anywhere;
+}
+
 /* MODELS-07: full-width section dividers inside the model grid (Essentials /
    Additional). grid-column: 1 / -1 makes each heading span every column. */
 .model-manager-section {

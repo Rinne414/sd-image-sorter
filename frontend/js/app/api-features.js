@@ -124,6 +124,39 @@ Object.assign(API, {
         return this.post('/api/models/mirror', { mirror });
     },
 
+    // MS1c: folders models may be read from (ComfyUI, an HF cache, a NAS).
+    async getModelSources({ rescan = false } = {}) {
+        return this.get(`/api/models/sources/detect${rescan ? '?rescan=1' : ''}`);
+    },
+
+    async getTrustedModelFolders() {
+        return this.get('/api/models/trusted-folders');
+    },
+
+    async addTrustedModelFolder(path, confirm = false) {
+        return this.post('/api/models/trusted-folders', { path, confirm });
+    },
+
+    // DELETE carries the folder in its body, which API.delete() does not send.
+    async removeTrustedModelFolder(path) {
+        const response = await fetch(`${API_BASE}/api/models/trusted-folders`, {
+            method: 'DELETE',
+            headers: _libraryFetchHeaders({
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+            }),
+            body: JSON.stringify({ path }),
+        });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            const error = new Error(formatApiError(response.status, errorData));
+            error.apiStatus = response.status;
+            error.apiData = errorData;
+            throw error;
+        }
+        return response.json();
+    },
+
     async prepareModel(modelId, options = {}) {
         return this.post('/api/models/prepare', {
             model_id: modelId,

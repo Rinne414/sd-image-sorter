@@ -31,6 +31,10 @@ async function openModelManager(initialTab) {
     // Setup open.
     bindDatasetAuditLazyInit();
 
+    // The folders models may be read from; the card and the one-time
+    // "add the ComfyUI I found?" question load beside the status call.
+    window.ModelSources?.open();
+
     try {
         const result = await API.getModelStatus();
         renderModelManager(result.models || []);
