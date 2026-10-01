@@ -92,8 +92,9 @@ pynndescent>=0.6.0
 numba>=0.67.0
 llvmlite>=0.49.0
 scikit-learn>=1.9.1
-# Security floor: urllib3 2.6.3 is flagged by pip-audit (CVE-2026-44431/44432).
-urllib3>=2.7.0
+# Security floor: urllib3 2.6.3 is flagged by pip-audit (CVE-2026-44431/44432),
+# 2.7.0 by PYSEC-2026-4175/4176/4177 (fixed in 2.8.0).
+urllib3>=2.8.0
 # Security floor: idna <3.15 is flagged by pip-audit (CVE-2026-45409, CPU-DoS
 # on crafted hostnames). Transitive via anyio/httpx/requests.
 idna>=3.15
