@@ -59,7 +59,17 @@ set "TMP=%TMP_DIR%"
 REM -- If the user requested a lightweight runtime reset from Feature Setup,
 REM -- consume that request before activating Python. Never delete data/, models, or DB.
 set "VENV_REBUILD_MARKER=%STATE_DIR%\rebuild-core-venv.json"
+REM -- Why dependencies get (re)installed is recorded by backend\launcher_log.py
+REM -- (screen line + data\logs\launcher.log). The decision points below only set
+REM -- REASON_CODE; the single logging call sits after the import check.
+set "LAUNCHER_LOG_DIR=%DATA_DIR%\logs"
+set "IMPORT_ERR_FILE=%TMP_DIR%\import-error.txt"
+set "REASON_CODE="
+set "REASON_FILE="
+set "REASON_OLD="
+set "REASON_NEW="
 if exist "!VENV_REBUILD_MARKER!" (
+    set "REASON_CODE=rebuild_requested"
     echo [INFO] Lightweight runtime rebuild requested.
     echo        Removing backend\venv only; user data, models, cache settings, and images.db stay untouched.
     if exist "backend\venv" (
@@ -159,6 +169,7 @@ if "!SD_IMAGE_SORTER_INSTALL_FULL_AI!"=="1" (
 )
 
 if !FIRST_RUN! EQU 1 (
+    if not defined REASON_CODE set "REASON_CODE=first_run"
     echo ==========================================
     echo   First run - setting up environment...
     echo   Lightweight setup installs core runtime first.
@@ -177,11 +188,12 @@ if !FIRST_RUN! EQU 1 (
     set NEED_INSTALL=1
 ) else (
     if not exist "backend\.requirements_hash" (
+        if not defined REASON_CODE set "REASON_CODE=hash_missing"
         set NEED_INSTALL=1
     ) else (
         where certutil >nul 2>&1
         if errorlevel 1 (
-            echo [INFO] certutil not found. Refreshing dependencies to stay in sync.
+            if not defined REASON_CODE set "REASON_CODE=certutil_missing"
             set NEED_INSTALL=1
         ) else (
             for /f "skip=1 tokens=* delims=" %%H in ('certutil -hashfile "!INSTALL_REQUIREMENTS!" MD5 ^| findstr /r /v "hash of file CertUtil"') do (
@@ -190,7 +202,12 @@ if !FIRST_RUN! EQU 1 (
             set "NEW_HASH=!NEW_HASH: =!"
             set /p OLD_HASH=<backend\.requirements_hash
             if /I not "!NEW_HASH!"=="!OLD_HASH!" (
-                echo [INFO] !INSTALL_REQUIREMENTS! changed. Updating dependencies...
+                if not defined REASON_CODE (
+                    set "REASON_CODE=hash_changed"
+                    set "REASON_FILE=!INSTALL_REQUIREMENTS!"
+                    set "REASON_OLD=!OLD_HASH!"
+                    set "REASON_NEW=!NEW_HASH!"
+                )
                 set NEED_INSTALL=1
             )
         )
@@ -198,12 +215,21 @@ if !FIRST_RUN! EQU 1 (
 )
 
 if !NEED_INSTALL! EQU 0 (
-    backend\venv\Scripts\python.exe -c "import fastapi, PIL, numpy, onnxruntime" >nul 2>&1
-    if errorlevel 1 (
-        echo [INFO] Python runtime packages look incomplete. Reinstalling dependencies...
+    if exist "!IMPORT_ERR_FILE!" del "!IMPORT_ERR_FILE!" >nul 2>&1
+    set "PYTHONIOENCODING=utf-8"
+    backend\venv\Scripts\python.exe -c "import fastapi, PIL, numpy, onnxruntime" >nul 2>"!IMPORT_ERR_FILE!"
+    set "IMPORT_EXIT=!ERRORLEVEL!"
+    set "PYTHONIOENCODING="
+    if not "!IMPORT_EXIT!"=="0" (
+        set "REASON_CODE=import_failed"
         set NEED_INSTALL=1
     )
 )
+
+REM -- Record the decision (reason=none when nothing needs installing). Logging is
+REM -- best effort: a missing helper or a locked log file never stops the launch.
+if not defined REASON_CODE set "REASON_CODE=none"
+"!PYTHON_CMD!" backend\launcher_log.py --launcher=run.bat --reason=!REASON_CODE! --file="!REASON_FILE!" --old=!REASON_OLD! --new=!REASON_NEW! --detail-file="!IMPORT_ERR_FILE!" --log-dir="!LAUNCHER_LOG_DIR!" 2>nul
 
 if !NEED_INSTALL! EQU 1 (
     REM -- Probe the fastest reachable PyPI mirror BEFORE installing.

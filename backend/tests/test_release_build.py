@@ -51,7 +51,9 @@ def test_write_portable_launcher_uses_clean_crlf_endings(tmp_path):
     assert b"if not exist \"!PYTHON_CMD!\" (" in launcher_bytes
     assert b"import fastapi, PIL, numpy, onnxruntime" in launcher_bytes
     import_probe_lines = [line for line in launcher_bytes.splitlines() if b'-c "import ' in line]
-    assert import_probe_lines == [b'    "!PYTHON_CMD!" -c "import fastapi, PIL, numpy, onnxruntime" >nul 2>&1']
+    assert import_probe_lines == [
+        b'    "!PYTHON_CMD!" -c "import fastapi, PIL, numpy, onnxruntime" >nul 2>"!IMPORT_ERR_FILE!"'
+    ]
     for optional_import in (b"sam3", b"decord", b"iopath", b"pycocotools", b"cv2"):
         assert optional_import not in import_probe_lines[0]
     assert b"requirements-core.txt" in launcher_bytes
@@ -1896,3 +1898,109 @@ def test_lazy_release_qa_uses_windows_node_for_windows_python(monkeypatch):
 
     assert node.lower().endswith("node.exe")
     assert str(captured["candidates"][0]).endswith("node.exe")
+
+
+LAUNCHER_REASON_CODES = {
+    "run.bat": ("first_run", "hash_missing", "hash_changed", "certutil_missing", "import_failed", "rebuild_requested", "none"),
+    "run.sh": ("first_run", "hash_missing", "hash_changed", "certutil_missing", "import_failed", "rebuild_requested", "none"),
+    "run-portable.bat": ("hash_missing", "hash_changed", "certutil_missing", "import_failed", "rebuild_requested", "none"),
+    "run-portable.sh": ("hash_missing", "hash_changed", "certutil_missing", "import_failed", "rebuild_requested", "none"),
+}
+
+
+def _launcher_texts(tmp_path) -> dict[str, str]:
+    release_builder = load_release_builder()
+    return {
+        "run.bat": (ROOT / "run.bat").read_text(encoding="utf-8"),
+        "run.sh": (ROOT / "run.sh").read_text(encoding="utf-8"),
+        "run-portable.bat": release_builder.write_portable_launcher(tmp_path).read_text(encoding="utf-8"),
+        "run-portable.sh": release_builder.write_linux_portable_launcher(tmp_path).read_text(encoding="utf-8"),
+    }
+
+
+@pytest.mark.parametrize("launcher", sorted(LAUNCHER_REASON_CODES))
+def test_launchers_log_every_reinstall_reason(tmp_path, launcher):
+    """Each launcher must say WHY it reinstalls (or that it does not) via launcher_log.py."""
+    text = _launcher_texts(tmp_path)[launcher]
+
+    assert "launcher_log.py" in text
+    assert f"--launcher={launcher}" in text
+    assert "--reason=" in text and "--log-dir=" in text and "--detail-file=" in text
+    for code in LAUNCHER_REASON_CODES[launcher]:
+        # run.bat family: set "REASON_CODE=code"; sh family: REASON_CODE="code" or :=code
+        assert any(
+            marker in text for marker in (f"REASON_CODE={code}", f'REASON_CODE="{code}"', f"REASON_CODE:={code}")
+        ), f"{launcher} never records reason={code}"
+
+
+def _run_launcher_log(tmp_path, *args):
+    import subprocess
+
+    return subprocess.run(
+        [sys.executable, str(ROOT / "backend" / "launcher_log.py"), f"--log-dir={tmp_path / 'logs'}", *args],
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+
+
+def test_launcher_log_writes_reason_line_and_bilingual_screen_message(tmp_path):
+    result = _run_launcher_log(
+        tmp_path,
+        "--launcher=run-portable.bat",
+        "--reason=hash_changed",
+        "--file=backend\\requirements-core.txt",
+        "--old=0f3a5f070a9f681de7cf1c4428c66545",
+        "--new=1b2c3d4e5f60718293a4b5c6d7e8f901",
+    )
+
+    assert result.returncode == 0
+    screen = result.stdout.decode("ascii", errors="replace")
+    assert "Dependencies need a recheck" in screen
+    assert "0f3a5f07" in screen and "1b2c3d4e" in screen
+    log_text = (tmp_path / "logs" / "launcher.log").read_text(encoding="utf-8")
+    assert re.fullmatch(
+        r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d run-portable\.bat reason=hash_changed "
+        r"detail=file=backend\\requirements-core\.txt old=0f3a5f070a9f681de7cf1c4428c66545 "
+        r"new=1b2c3d4e5f60718293a4b5c6d7e8f901\n",
+        log_text,
+    )
+
+
+def test_launcher_log_import_failed_keeps_last_error_line_with_special_characters(tmp_path):
+    last_line = "ModuleNotFoundError: No module named 'fastapi' & (100%) ^ <x> | !y! \u627e\u4e0d\u5230\u6a21\u7d44"
+    err = tmp_path / "import-err.txt"
+    err.write_bytes(
+        ('Traceback (most recent call last):\n  File "<string>", line 1\n' + last_line + "\n").encode("utf-8")
+    )
+
+    result = _run_launcher_log(tmp_path, "--launcher=run.bat", "--reason=import_failed", f"--detail-file={err}")
+
+    assert result.returncode == 0
+    log_text = (tmp_path / "logs" / "launcher.log").read_text(encoding="utf-8")
+    assert f"reason=import_failed detail={last_line}" in log_text
+    assert log_text.count("\n") == 1
+    assert not err.exists()
+
+
+def test_launcher_log_none_is_silent_and_rotates_over_one_megabyte(tmp_path):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    (log_dir / "launcher.log").write_bytes(b"x" * (1024 * 1024 + 1))
+
+    result = _run_launcher_log(tmp_path, "--launcher=run.sh", "--reason=none")
+
+    assert result.returncode == 0
+    assert result.stdout == b""
+    assert (log_dir / "launcher.log.1").stat().st_size == 1024 * 1024 + 1
+    assert "run.sh reason=none detail=-" in (log_dir / "launcher.log").read_text(encoding="utf-8")
+
+
+def test_launcher_log_never_fails_when_the_log_cannot_be_written(tmp_path):
+    blocked = tmp_path / "logs"
+    blocked.write_text("a file where the log directory should be", encoding="utf-8")
+
+    result = _run_launcher_log(tmp_path, "--launcher=run.bat", "--reason=hash_missing")
+
+    assert result.returncode == 0
+    assert b"Dependencies need a recheck" in result.stdout

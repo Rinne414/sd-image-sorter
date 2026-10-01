@@ -675,7 +675,17 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             "\n"
             "REM -- If Feature Setup requested a lightweight runtime reset, clear only pip-installed packages.\n"
             "set \"RUNTIME_REBUILD_MARKER=!STATE_DIR!\\rebuild-core-venv.json\"\n"
+            "REM -- Why dependencies get (re)installed is recorded by backend\\launcher_log.py\n"
+            "REM    (screen line + data\\logs\\launcher.log). The decision points below only set\n"
+            "REM    REASON_CODE; the single logging call sits after the import check.\n"
+            "set \"LAUNCHER_LOG_DIR=!DATA_DIR!\\logs\"\n"
+            "set \"IMPORT_ERR_FILE=!TMP_DIR!\\import-error.txt\"\n"
+            "set \"REASON_CODE=\"\n"
+            "set \"REASON_FILE=\"\n"
+            "set \"REASON_OLD=\"\n"
+            "set \"REASON_NEW=\"\n"
             "if exist \"!RUNTIME_REBUILD_MARKER!\" (\n"
+            "    set \"REASON_CODE=rebuild_requested\"\n"
             "    echo [INFO] Lightweight runtime rebuild requested.\n"
             "    echo        Clearing embedded Python packages only; data, images.db, models, and caches stay untouched.\n"
             "    if exist \"!PYTHON_DIR!\\Lib\\site-packages\" rmdir /s /q \"!PYTHON_DIR!\\Lib\\site-packages\"\n"
@@ -715,11 +725,12 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             "set \"OLD_HASH=\"\n"
             "\n"
             "if not exist \"backend\\.requirements_hash\" (\n"
+            "    if not defined REASON_CODE set \"REASON_CODE=hash_missing\"\n"
             "    set NEED_INSTALL=1\n"
             ") else (\n"
             "    where certutil >nul 2>&1\n"
             "    if errorlevel 1 (\n"
-            "        echo [INFO] certutil not found. Refreshing dependencies to stay in sync.\n"
+            "        if not defined REASON_CODE set \"REASON_CODE=certutil_missing\"\n"
             "        set NEED_INSTALL=1\n"
             "    ) else (\n"
             "        set \"INSTALL_REQUIREMENTS=backend\\requirements-core.txt\"\n"
@@ -730,19 +741,33 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             "        set \"NEW_HASH=!NEW_HASH: =!\"\n"
             "        set /p OLD_HASH=<backend\\.requirements_hash\n"
             "        if /I not \"!NEW_HASH!\"==\"!OLD_HASH!\" (\n"
-            "            echo [INFO] !INSTALL_REQUIREMENTS! changed. Updating embedded dependencies...\n"
+            "            if not defined REASON_CODE (\n"
+            "                set \"REASON_CODE=hash_changed\"\n"
+            "                set \"REASON_FILE=!INSTALL_REQUIREMENTS!\"\n"
+            "                set \"REASON_OLD=!OLD_HASH!\"\n"
+            "                set \"REASON_NEW=!NEW_HASH!\"\n"
+            "            )\n"
             "            set NEED_INSTALL=1\n"
             "        )\n"
             "    )\n"
             ")\n"
             "\n"
             "if !NEED_INSTALL! EQU 0 (\n"
-            "    \"!PYTHON_CMD!\" -c \"import fastapi, PIL, numpy, onnxruntime\" >nul 2>&1\n"
-            "    if errorlevel 1 (\n"
-            "        echo [INFO] Embedded packages look incomplete or inconsistent. Reinstalling dependencies...\n"
+            "    if exist \"!IMPORT_ERR_FILE!\" del \"!IMPORT_ERR_FILE!\" >nul 2>&1\n"
+            "    set \"PYTHONIOENCODING=utf-8\"\n"
+            "    \"!PYTHON_CMD!\" -c \"import fastapi, PIL, numpy, onnxruntime\" >nul 2>\"!IMPORT_ERR_FILE!\"\n"
+            "    set \"IMPORT_EXIT=!ERRORLEVEL!\"\n"
+            "    set \"PYTHONIOENCODING=\"\n"
+            "    if not \"!IMPORT_EXIT!\"==\"0\" (\n"
+            "        set \"REASON_CODE=import_failed\"\n"
             "        set NEED_INSTALL=1\n"
             "    )\n"
             ")\n"
+            "\n"
+            "REM -- Record the decision (reason=none when nothing needs installing). Logging is\n"
+            "REM    best effort: a missing helper or a locked log file never stops the launch.\n"
+            "if not defined REASON_CODE set \"REASON_CODE=none\"\n"
+            "\"!PYTHON_CMD!\" backend\\launcher_log.py --launcher=run-portable.bat --reason=!REASON_CODE! --file=\"!REASON_FILE!\" --old=!REASON_OLD! --new=!REASON_NEW! --detail-file=\"!IMPORT_ERR_FILE!\" --log-dir=\"!LAUNCHER_LOG_DIR!\" 2>nul\n"
             "\n"
             "if !NEED_INSTALL! EQU 1 (\n"
             "    echo [INFO] Preparing Python build tools for source-only packages...\n"
@@ -1020,7 +1045,17 @@ echo "[OK] Using bundled Python: $PYTHON_CMD"
 # Mirrors run-portable.bat: only clears installed Python packages, never
 # deletes data/, models, settings, or images.db.
 RUNTIME_REBUILD_MARKER="$STATE_DIR/rebuild-core-venv.json"
+# Why dependencies get (re)installed is recorded by backend/launcher_log.py
+# (screen line + data/logs/launcher.log). The decision points below only set
+# REASON_CODE; the single logging call sits after the import check.
+LAUNCHER_LOG_DIR="$DATA_DIR/logs"
+IMPORT_ERR_FILE="$TMP_DIR/import-error.txt"
+REASON_CODE=""
+REASON_FILE=""
+REASON_OLD=""
+REASON_NEW=""
 if [ -f "$RUNTIME_REBUILD_MARKER" ]; then
+    REASON_CODE="rebuild_requested"
     echo "[INFO] Lightweight runtime rebuild requested."
     echo "       Clearing bundled Python packages only; data, images.db, models, and caches stay untouched."
     SITE_PACKAGES="$PYTHON_DIR/lib/python3.13/site-packages"
@@ -1056,31 +1091,43 @@ OLD_HASH=""
 
 if [ ! -f "backend/.requirements_hash" ]; then
     NEED_INSTALL=1
-elif command -v sha256sum >/dev/null 2>&1; then
-    NEW_HASH="$(sha256sum "$INSTALL_REQUIREMENTS" | awk '{print $1}')"
-    OLD_HASH="$(cat backend/.requirements_hash 2>/dev/null || true)"
-    if [ "$NEW_HASH" != "$OLD_HASH" ]; then
-        echo "[INFO] $INSTALL_REQUIREMENTS changed. Updating bundled dependencies..."
-        NEED_INSTALL=1
+    : "${REASON_CODE:=hash_missing}"
+elif command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1; then
+    if command -v sha256sum >/dev/null 2>&1; then
+        NEW_HASH="$(sha256sum "$INSTALL_REQUIREMENTS" | awk '{print $1}')"
+    else
+        NEW_HASH="$(shasum -a 256 "$INSTALL_REQUIREMENTS" | awk '{print $1}')"
     fi
-elif command -v shasum >/dev/null 2>&1; then
-    NEW_HASH="$(shasum -a 256 "$INSTALL_REQUIREMENTS" | awk '{print $1}')"
     OLD_HASH="$(cat backend/.requirements_hash 2>/dev/null || true)"
     if [ "$NEW_HASH" != "$OLD_HASH" ]; then
-        echo "[INFO] $INSTALL_REQUIREMENTS changed. Updating bundled dependencies..."
         NEED_INSTALL=1
+        if [ -z "$REASON_CODE" ]; then
+            REASON_CODE="hash_changed"
+            REASON_FILE="$INSTALL_REQUIREMENTS"
+            REASON_OLD="$OLD_HASH"
+            REASON_NEW="$NEW_HASH"
+        fi
     fi
 else
-    echo "[INFO] sha256sum/shasum not found. Refreshing dependencies to stay in sync."
     NEED_INSTALL=1
+    : "${REASON_CODE:=certutil_missing}"
+    REASON_FILE="sha256sum/shasum not found"
 fi
 
 if [ "$NEED_INSTALL" = "0" ]; then
-    if ! "$PYTHON_CMD" -c "import fastapi, PIL, numpy, onnxruntime" >/dev/null 2>&1; then
-        echo "[INFO] Bundled packages look incomplete or inconsistent. Reinstalling..."
+    rm -f "$IMPORT_ERR_FILE"
+    if ! PYTHONIOENCODING=utf-8 "$PYTHON_CMD" -c "import fastapi, PIL, numpy, onnxruntime" >/dev/null 2>"$IMPORT_ERR_FILE"; then
+        REASON_CODE="import_failed"
         NEED_INSTALL=1
     fi
 fi
+
+# Record the decision (reason=none when nothing needs installing). Logging is
+# best effort: a missing helper or a locked log file never stops the launch.
+: "${REASON_CODE:=none}"
+"$PYTHON_CMD" backend/launcher_log.py --launcher=run-portable.sh --reason="$REASON_CODE" \\
+    --file="$REASON_FILE" --old="$REASON_OLD" --new="$REASON_NEW" \\
+    --detail-file="$IMPORT_ERR_FILE" --log-dir="$LAUNCHER_LOG_DIR" 2>/dev/null || true
 
 if [ "$NEED_INSTALL" = "1" ]; then
     echo "[INFO] Preparing Python build tools for source-only packages..."

@@ -65,7 +65,17 @@ export TMP="${TMP_DIR}"
 
 # ── Consume Feature Setup runtime rebuild request before Python starts ──
 VENV_REBUILD_MARKER="${STATE_DIR}/rebuild-core-venv.json"
+# Why dependencies get (re)installed is recorded by backend/launcher_log.py
+# (screen line + data/logs/launcher.log). The decision points below only set
+# REASON_CODE; the single logging call sits after the import check.
+LAUNCHER_LOG_DIR="${DATA_DIR}/logs"
+IMPORT_ERR_FILE="${TMP_DIR}/import-error.txt"
+REASON_CODE=""
+REASON_FILE=""
+REASON_OLD=""
+REASON_NEW=""
 if [ -f "${VENV_REBUILD_MARKER}" ]; then
+    REASON_CODE="rebuild_requested"
     echo "[INFO] Lightweight runtime rebuild requested."
     echo "       Removing backend/venv only; user data, models, cache settings, and images.db stay untouched."
     if [ -d "backend/venv" ]; then
@@ -193,12 +203,14 @@ REQUIREMENTS_HASH_FILE="backend/.requirements_hash"
 # On first run, always install
 if [ "$FIRST_RUN" -eq 1 ]; then
     NEED_INSTALL=1
+    : "${REASON_CODE:=first_run}"
 fi
 
 # Check if the selected requirements file changed since last install
 if [ "$NEED_INSTALL" -eq 0 ]; then
     if [ ! -f "${REQUIREMENTS_HASH_FILE}" ]; then
         NEED_INSTALL=1
+        : "${REASON_CODE:=hash_missing}"
     else
         # Generate current hash
         if command -v md5sum &> /dev/null; then
@@ -208,13 +220,20 @@ if [ "$NEED_INSTALL" -eq 0 ]; then
         else
             # Fallback: always reinstall if no hash tool available
             NEED_INSTALL=1
+            : "${REASON_CODE:=certutil_missing}"
+            REASON_FILE="md5sum/md5 not found"
         fi
 
         if [ "$NEED_INSTALL" -eq 0 ]; then
             OLD_HASH=$(cat "${REQUIREMENTS_HASH_FILE}")
             if [ "$NEW_HASH" != "$OLD_HASH" ]; then
-                echo "[INFO] ${INSTALL_REQUIREMENTS} has changed since last install."
                 NEED_INSTALL=1
+                if [ -z "${REASON_CODE}" ]; then
+                    REASON_CODE="hash_changed"
+                    REASON_FILE="${INSTALL_REQUIREMENTS}"
+                    REASON_OLD="${OLD_HASH}"
+                    REASON_NEW="${NEW_HASH}"
+                fi
             fi
         fi
     fi
@@ -222,11 +241,19 @@ fi
 
 # ── Install/update dependencies ─────────────────────────────────
 if [ "$NEED_INSTALL" -eq 0 ]; then
-    if ! backend/venv/bin/python -c "modules=['fastapi','PIL','numpy','onnxruntime']; [__import__(module) for module in modules]" >/dev/null 2>&1; then
-        echo "[INFO] Python runtime packages look incomplete. Reinstalling dependencies..."
+    rm -f "${IMPORT_ERR_FILE}"
+    if ! PYTHONIOENCODING=utf-8 backend/venv/bin/python -c "modules=['fastapi','PIL','numpy','onnxruntime']; [__import__(module) for module in modules]" >/dev/null 2>"${IMPORT_ERR_FILE}"; then
+        REASON_CODE="import_failed"
         NEED_INSTALL=1
     fi
 fi
+
+# Record the decision (reason=none when nothing needs installing). Logging is
+# best effort: a missing helper or a locked log file never stops the launch.
+: "${REASON_CODE:=none}"
+"$PYTHON_CMD" backend/launcher_log.py --launcher=run.sh --reason="${REASON_CODE}" \
+    --file="${REASON_FILE}" --old="${REASON_OLD}" --new="${REASON_NEW}" \
+    --detail-file="${IMPORT_ERR_FILE}" --log-dir="${LAUNCHER_LOG_DIR}" 2>/dev/null || true
 
 if [ "$NEED_INSTALL" -eq 1 ]; then
     if [ "$FIRST_RUN" -eq 1 ]; then
