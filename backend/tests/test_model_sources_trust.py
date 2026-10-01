@@ -156,13 +156,14 @@ def test_only_files_under_allowed_roots_are_adopted_rest_become_suggestions(
     assert suggestion["kind"] == "comfyui"
     assert suggestion["origin"] == "scan"
     assert suggestion["version"] == "0.36.0"
-    assert sorted(
+    # VIT is already adopted from the trusted root, so only convnext is offered.
+    assert [
         (m["model_id"], m["variant"], m["verify"]) for m in suggestion["models"]
-    ) == [
+    ] == [
         ("wd14", CONVNEXT, "sha"),
-        ("wd14", VIT, "sha"),
     ]
-    assert suggestion["reusable_bytes"] == len(model) + len(convnext) + 2 * len(csv)
+    assert suggestion["reusable_bytes"] == len(convnext) + len(csv)
+    assert payload["suggested_reusable_bytes"] == len(convnext) + len(csv)
     sources = {s["path"]: s for s in payload["sources"]}
     assert sources[str(found)]["trusted"] is False
     assert sources[str(found)]["model_count"] == 2
@@ -326,8 +327,10 @@ def test_a_junction_to_a_network_target_under_models_is_not_read(
 
 
 def test_is_network_path_uses_model_roots_spellings_and_drive_types(monkeypatch):
-    for spelling in (r"\\nas\share", "//nas/share", r"\/nas/share", r"\??\C:\x"):
+    for spelling in (r"\\nas\share", "//nas/share", r"\/nas/share", r"\??\UNC\nas\x"):
         assert model_sources.is_network_path(spelling) is True
+    # NT-prefixed local paths (what readlink returns for a junction) are local.
+    assert model_sources.is_network_path(r"\??\C:\x") is False
     monkeypatch.setattr(
         model_source_paths,
         "_drive_type",
@@ -605,7 +608,7 @@ def test_tipo_sha_mismatch_is_rejected_and_a_real_sha_match_is_sha(
 
 
 def test_trusted_network_folder_is_never_touched_by_detect(isolated, monkeypatch):
-    unc = BS * 2 + "nas-offline" + BS + "models"
+    unc = BS * 2 + "nas-offline" + BS + "models" + BS + "comfy"
     model_roots.add_trusted_model_folder(unc)
     touched = []
     real_isdir = os.path.isdir
@@ -633,7 +636,7 @@ def test_trusted_network_folder_is_never_touched_by_detect(isolated, monkeypatch
 def test_background_job_judges_network_roots_and_detect_reports_the_cache(
     isolated, monkeypatch
 ):
-    unc = BS * 2 + "nas-offline" + BS + "models"
+    unc = BS * 2 + "nas-offline" + BS + "models" + BS + "comfy"
     model_roots.add_trusted_model_folder(unc)
     seen = []
 

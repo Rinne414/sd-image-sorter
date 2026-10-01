@@ -1222,15 +1222,22 @@ are returned as `suggestions`, one row per folder that would have to be
 trusted, so the Model Center can ask "found ComfyUI with 8.5 GB usable, add
 it?".
 
-The request thread never touches a network path (UNC, a mapped or removable
-drive, a Linux network mount, or a symlink/junction that leads to one, even
-inside a local root). Network roots are judged by the background job that also
-runs the drive scan; their cached result is served with `network_pending:
-false` and `network_scanned_at`, or `network_pending: true` while there is
-none. The drive scan runs once per process on a background thread; `rescan=1`
-only starts it again (never inline) and the response carries the cache plus
-`scan.status = "running"`. Folders named in an `extra_model_paths.yaml` that
-lie on a network path are dropped.
+The request thread never touches a network path. Every root, every
+`extra_model_paths` folder and every candidate folder is walked from the drive
+root one component at a time with `lstat` + `readlink` (local metadata only):
+a symlink or junction whose target is a network location (UNC in any spelling
+including `\\?\UNC\...`, a mapped or removable drive, a Linux network mount)
+turns a *trusted* entry into a pending network root and drops everything else
+(`COMFYUI_PATH`, `HF_HUB_CACHE`, probed and cached roots, yaml folders). A
+link to a local folder is followed; the root or folder is then reported by its
+real path, which is the folder the user would have to trust. Network roots are
+judged by the background job that also runs the drive scan; their cached
+result is served with `network_pending: false` and `network_scanned_at`, or
+`network_pending: true` while there is none, and a pending root without a
+cached result starts a new background generation on its own when no job is
+running (a NAS trusted later). The drive scan runs once per process on a
+background thread; `rescan=1` only starts it again (never inline) and the
+response carries the cache plus `scan.status = "running"`.
 
 Response shape:
 
@@ -1255,6 +1262,7 @@ Response shape:
      "models": [{"model_id": "florence2", "variant": "base", "verify": "revision", "size_bytes": 468554144}],
      "reusable_bytes": 468554144}
   ],
+  "suggested_reusable_bytes": 468554144,
   "rejected": [
     {"model_id": "tipo", "variant": null, "path": "I:\\...\\TIPOv2-1B-A200M-Q8_0.gguf",
      "source": "I:\\ComfyUI-aki-v1.6\\ComfyUI", "reason": "version_mismatch", "detail": "..."}
@@ -1267,7 +1275,12 @@ Response shape:
 
 `kind`: `comfyui` | `hf_cache` | `folder`. `origin`: `trusted` | `env` | `probe` |
 `scan` | `hf_default` | `comfyui_hub`. `folder` is the folder a suggestion would
-ask the user to trust (the root, or an `extra_model_paths` folder outside it).
+ask the user to trust: the root, an `extra_model_paths` folder outside it, or
+the real target of a junction/symlink inside it. Suggestions hold one copy per
+model: models already adopted from a trusted place are not offered again, a
+model found in several untrusted folders is offered once (best copy), and the
+program's own `DATA_DIR/hf` cache is never offered. `suggested_reusable_bytes`
+is the deduplicated total across all suggestion rows.
 `verify` (strongest first): `sha` (SHA-256
 equals the pin; files up to 500 MB on local disks, digests cached by size and
 mtime), `revision` (Hugging Face snapshot folder named after the pinned commit
@@ -1287,7 +1300,9 @@ opened or hashed; the other candidates are still judged). `scan.status`:
 still going, and an older generation never overwrites a newer result. Only the
 WD14 runtime family of taggers is matched (OppaiOracle is not). The
 `CONFIG_DIR/model_sources.json` index is quarantined as `.bak` when it cannot
-be parsed and the endpoint keeps answering.
+be parsed, discarded when its `version` is not the one this build writes, and
+a malformed cached network result is logged and treated as pending; the
+endpoint keeps answering in every case.
 
 #### GET /api/models/bulk-bundle
 Inventory of models available to the selectable bulk-download flow. Florence-2

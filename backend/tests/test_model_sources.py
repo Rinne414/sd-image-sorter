@@ -280,11 +280,9 @@ def test_detect_source_roots_queues_network_entries_without_touching_them(
     )
     assert touched == []
     assert [r.kind for r in roots] == []
-    assert [(p.origin, p.kind) for p in pending] == [
-        ("trusted", "auto"),
-        ("env", "comfyui"),
-        ("hf_default", "hf_cache"),
-    ]
+    # Only a trusted entry earns a background look; network paths found any
+    # other way (env, caches) are dropped, and the two spellings collapse.
+    assert [(p.origin, p.kind) for p in pending] == [("trusted", "auto")]
     assert pending[0].trusted_rank == 0
 
 
@@ -325,7 +323,9 @@ def test_background_scan_runs_once_per_process_and_persists(tmp_path, monkeypatc
         return [str(root)]
 
     monkeypatch.setattr(model_sources, "scan_drives_for_comfyui", fake_scan)
-    monkeypatch.setattr(model_sources_store, "_scan_state", model_sources_store._ScanState())
+    monkeypatch.setattr(
+        model_sources_store, "_scan_state", model_sources_store._ScanState()
+    )
 
     first = model_sources_store.start_background_scan(
         store, work=work_calls.append, on_done=done.set

@@ -211,13 +211,14 @@ def _kaloscope_runtime(ctx: _Context) -> Tuple[Optional[Path], str]:
     return None, "runtime_missing"
 
 
-def _kaloscope_mapping(checkpoint: Path) -> Path:
-    """class_mapping.csv beside the checkpoint, or one level up (the HF layout)."""
+def _kaloscope_mapping(ctx: _Context, checkpoint: Path) -> Path:
+    """class_mapping.csv beside the checkpoint, or one level up (the HF layout);
+    both looked at through the read policy only."""
     beside = checkpoint.parent / KALOSCOPE_CLASS_MAPPING_NAME
     above = checkpoint.parent.parent / KALOSCOPE_CLASS_MAPPING_NAME
-    return (
-        beside if _stat_file(beside) is not None or _stat_file(above) is None else above
-    )
+    if ctx.stat_file(beside) is not None or ctx.stat_file(above) is None:
+        return beside
+    return above
 
 
 def _match_kaloscope_checkpoint(
@@ -242,7 +243,7 @@ def _match_kaloscope_checkpoint(
             ctx.reject("artist", KALOSCOPE_VARIANT, checkpoint, reason, detail)
         )
         return
-    mapping = _kaloscope_mapping(checkpoint)
+    mapping = _kaloscope_mapping(ctx, checkpoint)
     reason, detail = ctx.check_companion(mapping, mapping_pins)
     if reason:
         report.rejected.append(

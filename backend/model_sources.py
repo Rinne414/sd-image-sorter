@@ -40,6 +40,7 @@ import logging
 import ntpath
 import os
 import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import (
@@ -53,14 +54,16 @@ from typing import (
     Tuple,
 )
 
-import model_roots
 from model_source_paths import (
+    KIND_LOCAL,
+    KIND_NETWORK,
     _same_path,
+    _windows_form,
     is_network_path,
     is_reparse_entry,
-    judge_path,
     list_fixed_drives,
     normalize_path,
+    resolve_local_chain,
 )
 
 logger = logging.getLogger(__name__)
@@ -143,7 +146,7 @@ class PendingRoot:
 
 def source_key(path: object) -> str:
     """One comparable spelling for a root path, local or UNC, with or without a trailing slash."""
-    normalized = ntpath.normpath(model_roots._windows_form(path))
+    normalized = ntpath.normpath(_windows_form(path))
     return os.path.normcase(normalized.rstrip("\\") or normalized)
 
 
@@ -152,12 +155,27 @@ def source_key(path: object) -> str:
 # ---------------------------------------------------------------------------
 
 
-def is_comfyui_root(path: Path | str) -> bool:
-    root = Path(path)
+def _local_file(path: str) -> bool:
+    kind, real = resolve_local_chain(path)
+    return kind == KIND_LOCAL and os.path.isfile(real)
+
+
+def _entry_exists(path: str) -> bool:
+    """lstat succeeds: a folder, or a link of any kind (never followed here)."""
     try:
-        return (root / "folder_paths.py").is_file() and (root / "models").is_dir()
+        os.lstat(path)
     except OSError:
         return False
+    return True
+
+
+def is_comfyui_root(path: Path | str) -> bool:
+    """``folder_paths.py`` is a local file (links followed only while local)
+    and a ``models`` entry exists; nothing behind a network link is read."""
+    root = str(path)
+    return _local_file(os.path.join(root, "folder_paths.py")) and _entry_exists(
+        os.path.join(root, "models")
+    )
 
 
 def resolve_comfyui_root(path: Path | str) -> Optional[Path]:
@@ -260,11 +278,18 @@ def load_extra_model_paths(yaml_path: Path | str) -> Dict[str, List[str]]:
     return folders
 
 
-def _drop_network_folders(folders: Dict[str, List[str]]) -> Dict[str, List[str]]:
-    kept = {
-        name: [p for p in paths if not is_network_path(p)]
-        for name, paths in folders.items()
-    }
+def _resolve_extra_folders(
+    folders: Dict[str, List[str]], *, network_allowed: bool
+) -> Dict[str, List[str]]:
+    """Each yaml folder through the link gate: local ones by their real path,
+    network ones only when allowed, missing ones dropped."""
+    kept: Dict[str, List[str]] = {}
+    for name, paths in folders.items():
+        for raw in paths:
+            kind, real = resolve_local_chain(raw)
+            if kind == KIND_LOCAL or (kind == KIND_NETWORK and network_allowed):
+                if real not in kept.setdefault(name, []):
+                    kept[name].append(real)
     return {name: paths for name, paths in kept.items() if paths}
 
 
@@ -285,9 +310,10 @@ def _comfyui_source_root(
     if comfy is None:
         return None
     comfy_path = os.path.normpath(str(comfy))
-    extra = load_extra_model_paths(comfy / "extra_model_paths.yaml")
-    if not network_allowed:
-        extra = _drop_network_folders(extra)
+    extra = _resolve_extra_folders(
+        load_extra_model_paths(comfy / "extra_model_paths.yaml"),
+        network_allowed=network_allowed,
+    )
     return SourceRoot(
         path=comfy_path,
         kind=KIND_COMFYUI,
@@ -308,13 +334,16 @@ def build_source_root(
     network_allowed: bool = False,
 ) -> Optional[SourceRoot]:
     """Classify one path. ``None`` when it does not exist, is not what ``kind``
-    says, or is a network path while ``network_allowed`` is False (then it is
-    not even stat'ed)."""
+    says, or reaches the network (directly or through a link) while
+    ``network_allowed`` is False: then nothing behind the link is stat'ed.
+    The root's path is the real folder every local link leads to."""
     try:
-        path = normalize_path(raw_path)
+        chain_kind, path = resolve_local_chain(normalize_path(raw_path))
     except (TypeError, ValueError):
         return None
-    if is_network_path(path) and not network_allowed:
+    if chain_kind == KIND_NETWORK and not network_allowed:
+        return None
+    if chain_kind != KIND_LOCAL and chain_kind != KIND_NETWORK:
         return None
     if not os.path.isdir(path):
         return None
@@ -407,9 +436,11 @@ def probe_known_locations(
     environment = os.environ if env is None else env
     home_dir = Path.home() if home is None else Path(home)
     found: List[str] = []
-    for candidate in _probe_candidates(environment, home_dir):
-        if not candidate.is_dir():
+    for raw_candidate in _probe_candidates(environment, home_dir):
+        kind, real = resolve_local_chain(str(raw_candidate))
+        if kind != KIND_LOCAL or not os.path.isdir(real):
             continue
+        candidate = Path(real)
         if resolve_comfyui_root(candidate) is not None:
             found.append(str(candidate))
             continue
@@ -437,6 +468,7 @@ def _scan_children(folder: str) -> List[str]:
                 and not entry.name.startswith(".")
                 and not is_reparse_entry(entry)
                 and _is_dir_no_follow(entry)
+                and not (sys.platform != "win32" and is_network_path(entry.path))
             ]
     except OSError:
         return []
@@ -482,15 +514,23 @@ class _RootCollector:
         text = str(raw or "").strip()
         if not text:
             return
-        if is_network_path(text):
+        chain_kind, real = resolve_local_chain(normalize_path(text))
+        if chain_kind == KIND_NETWORK:
+            # Only a trusted entry earns a background look; anything else
+            # that leads to the network (directly or through a link) is dropped.
+            if trusted_rank >= UNTRUSTED_RANK:
+                logger.debug("Skipping network model source %s (%s)", text, origin)
+                return
             pending = PendingRoot(
                 path=text, kind=kind, origin=origin, trusted_rank=trusted_rank
             )
             if not any(p.key == pending.key for p in self.pending):
                 self.pending.append(pending)
             return
+        if chain_kind != KIND_LOCAL:
+            return
         root = build_source_root(
-            text, kind=kind, origin=origin, trusted_rank=trusted_rank
+            real, kind=kind, origin=origin, trusted_rank=trusted_rank
         )
         if root is not None and not any(
             _same_path(r.path, root.path) for r in self.roots
@@ -504,10 +544,9 @@ def _comfyui_hub_candidates(roots: Sequence[SourceRoot]) -> List[Tuple[str, int]
     for root in roots:
         if root.kind != KIND_COMFYUI:
             continue
-        hub = os.path.join(root.path, "models", "hub")
-        readable, _ = judge_path(root.path, hub, network_allowed=False)
-        if readable:
-            hubs.append((hub, root.trusted_rank))
+        kind, real = resolve_local_chain(os.path.join(root.path, "models", "hub"))
+        if kind == KIND_LOCAL:
+            hubs.append((real, root.trusted_rank))
     return hubs
 
 

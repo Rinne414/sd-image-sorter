@@ -170,7 +170,10 @@ def _snapshot_dirs(ctx: _Context, repo: str) -> Tuple[Path, List[Path]]:
     if not ctx.may_read(snapshots):
         return snapshots, []
     try:
-        dirs = sorted((d for d in snapshots.iterdir() if d.is_dir()), reverse=True)
+        dirs = sorted(
+            (d for d in snapshots.iterdir() if ctx.may_read(d) and d.is_dir()),
+            reverse=True,
+        )
     except OSError:
         dirs = []
     return snapshots, dirs

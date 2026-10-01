@@ -20,10 +20,11 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import model_matchers
 import model_roots
+import model_source_paths
 import model_sources
 import model_sources_store
 
@@ -113,10 +114,19 @@ class ModelSourcesService:
             store.save_network_result(item.key, payload, generation=generation)
 
     def _start_background(
-        self, pending: Sequence[model_sources.PendingRoot], *, force: bool
+        self,
+        pending: Sequence[model_sources.PendingRoot],
+        *,
+        force: bool,
+        uncached: bool,
     ) -> None:
+        """Start the drive scan + network pass: once per process, on
+        ``rescan``, or whenever a pending root has no cached result and no
+        job is running (a NAS trusted after the first job)."""
         if not (force or self._background_scan):
             return
+        if uncached and not model_sources_store.is_scan_running():
+            force = True
         model_sources_store.start_background_scan(
             self.store,
             work=lambda generation: self._scan_network_roots(pending, generation),
@@ -129,11 +139,13 @@ class ModelSourcesService:
         self,
         pending: Sequence[model_sources.PendingRoot],
         report: model_matchers.MatchReport,
-    ) -> List[Dict[str, Any]]:
-        """Source rows for network roots from the background cache; pending when there is none yet."""
+    ) -> Tuple[List[Dict[str, Any]], bool]:
+        """Source rows for network roots from the background cache, and whether
+        any of them still has no usable result. A malformed cached entry is
+        logged and treated as pending; it never takes the request down."""
         sources: List[Dict[str, Any]] = []
+        uncached = False
         for item in pending:
-            cached = self.store.network_result(item.key)
             row = {
                 "path": item.path,
                 "kind": item.kind,
@@ -141,25 +153,24 @@ class ModelSourcesService:
                 "is_network": True,
                 "version": None,
                 "trusted": item.trusted_rank < model_sources.UNTRUSTED_RANK,
-                "network_pending": cached is None,
-                "network_scanned_at": None
-                if cached is None
-                else cached.get("scanned_at"),
+                "network_pending": True,
+                "network_scanned_at": None,
             }
-            if cached is not None:
-                root = cached.get("root") or {}
-                row["kind"] = root.get("kind") or item.kind
-                row["version"] = root.get("version")
-                report.matches.extend(
-                    model_matchers.ExternalMatch.from_dict(m)
-                    for m in cached.get("matches") or []
+            try:
+                cached = self.store.network_result(item.key)
+                if cached is not None:
+                    _apply_cached_network(cached, item, row, report)
+            except Exception as exc:  # the cache is a file anyone can edit
+                logger.warning(
+                    "Cached network result for %s unusable (%s); scanning again",
+                    item.path,
+                    exc,
                 )
-                report.rejected.extend(
-                    model_matchers.RejectedCandidate(**r)
-                    for r in cached.get("rejected") or []
-                )
+                row["network_pending"] = True
+                row["network_scanned_at"] = None
+            uncached = uncached or row["network_pending"]
             sources.append(row)
-        return sources
+        return sources, uncached
 
     def _match_local(
         self, roots: Sequence[model_sources.SourceRoot]
@@ -183,13 +194,14 @@ class ModelSourcesService:
             scan_cache=store.scan_roots(),
             probe=self._probe,
         )
-        self._start_background(pending, force=rescan)
         report = self._match_local(roots)
-        network_sources = self._cached_network(pending, report)
+        network_sources, uncached = self._cached_network(pending, report)
+        self._start_background(pending, force=rescan, uncached=uncached)
 
         chosen = model_matchers.select_best(m for m in report.matches if m.trusted)
         store.save_matches(m.to_dict() for m in chosen)
-        suggestions = _suggestions([m for m in report.matches if not m.trusted], roots)
+        suggested = self._suggestion_candidates(report.matches, chosen)
+        suggestions = _suggestions(suggested, roots)
         counts = _counts_by_source(report.matches)
         sources = []
         for root in roots:
@@ -207,10 +219,77 @@ class ModelSourcesService:
             "sources": sources,
             "matches": [m.to_dict() for m in chosen],
             "suggestions": suggestions,
+            "suggested_reusable_bytes": sum(m.total_bytes for m in suggested),
             "rejected": [r.to_dict() for r in report.rejected],
             "reusable_bytes": sum(m.total_bytes for m in chosen),
             "scan": scan,
         }
+
+    def _suggestion_candidates(
+        self,
+        matches: Sequence[model_matchers.ExternalMatch],
+        chosen: Sequence[model_matchers.ExternalMatch],
+    ) -> List[model_matchers.ExternalMatch]:
+        """Untrusted matches worth offering: not already adopted from a trusted
+        place, one copy per model across all folders, and never from the
+        program's own Hugging Face cache (``DATA_DIR/hf``)."""
+        adopted = {(m.model_id, m.variant) for m in chosen}
+        own_hf = _program_hf_cache()
+        candidates = [
+            m
+            for m in matches
+            if not m.trusted
+            and (m.model_id, m.variant) not in adopted
+            and not (own_hf and _under(m.folder, own_hf))
+        ]
+        return model_matchers.select_best(candidates)
+
+
+def _program_hf_cache() -> Optional[str]:
+    """``DATA_DIR/hf``, the cache the launcher points ``HF_HOME`` at."""
+    try:
+        import config
+
+        kind, real = model_source_paths.resolve_local_chain(
+            os.path.join(str(config.DATA_DIR), "hf")
+        )
+    except Exception as exc:  # config is import-time state; never fail detect over it
+        logger.warning("Program HF cache location unknown: %s", exc)
+        return None
+    return real if kind == model_source_paths.KIND_LOCAL else None
+
+
+def _under(path: str, base: str) -> bool:
+    key = os.path.normcase(os.path.normpath(path))
+    base_key = os.path.normcase(os.path.normpath(base))
+    return key == base_key or key.startswith(base_key.rstrip(os.sep) + os.sep)
+
+
+def _apply_cached_network(
+    cached: Mapping[str, Any],
+    item: model_sources.PendingRoot,
+    row: Dict[str, Any],
+    report: model_matchers.MatchReport,
+) -> None:
+    """Fill a source row from one cached background result; raises on bad shapes."""
+    if not isinstance(cached, Mapping):
+        raise ValueError(f"cached result is a {type(cached).__name__}, not an object")
+    root = cached.get("root")
+    if root is not None and not isinstance(root, dict):
+        raise ValueError("root is not an object")
+    matches = [
+        model_matchers.ExternalMatch.from_dict(m) for m in cached.get("matches") or ()
+    ]
+    rejected = [
+        model_matchers.RejectedCandidate(**r) for r in cached.get("rejected") or ()
+    ]
+    row["network_pending"] = False
+    row["network_scanned_at"] = cached.get("scanned_at")
+    if root:
+        row["kind"] = root.get("kind") or item.kind
+        row["version"] = root.get("version")
+    report.matches.extend(matches)
+    report.rejected.extend(rejected)
 
 
 def _counts_by_source(
@@ -225,17 +304,17 @@ def _counts_by_source(
 
 
 def _suggestions(
-    untrusted: Sequence[model_matchers.ExternalMatch],
+    suggested: Sequence[model_matchers.ExternalMatch],
     roots: Sequence[model_sources.SourceRoot],
 ) -> List[Dict[str, Any]]:
-    """One row per folder that would have to be trusted, with what it holds."""
+    """One row per folder that would have to be trusted, with what it holds
+    (``suggested`` is already one copy per model)."""
     by_path = {os.path.normcase(r.path): r for r in roots}
     groups: Dict[str, List[model_matchers.ExternalMatch]] = {}
-    for match in untrusted:
+    for match in suggested:
         groups.setdefault(match.folder, []).append(match)
     rows: List[Dict[str, Any]] = []
-    for folder, matches in groups.items():
-        best = model_matchers.select_best(matches)
+    for folder, best in groups.items():
         root = by_path.get(os.path.normcase(folder))
         rows.append(
             {

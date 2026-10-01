@@ -65,6 +65,14 @@ class ModelSourcesStore:
         if not isinstance(data, dict):
             self._quarantine(f"holds a {type(data).__name__}, not an object")
             return self._empty()
+        if data.get("version") != self.VERSION:
+            logger.info(
+                "model_sources.json at %s is version %r, this build writes %r; starting fresh",
+                self.path,
+                data.get("version"),
+                self.VERSION,
+            )
+            return self._empty()
         base = self._empty()
         for key in base:
             value = data.get(key)
@@ -184,10 +192,11 @@ class ModelSourcesStore:
             self._data["network"][key] = dict(payload, generation=generation)
             self._save()
 
-    def network_result(self, key: str) -> Optional[Dict[str, Any]]:
+    def network_result(self, key: str) -> Optional[Any]:
+        """The cached result as stored (the caller validates its shape), or None."""
         with self._lock:
             value = self._data["network"].get(key)
-        return dict(value) if isinstance(value, dict) else None
+        return dict(value) if isinstance(value, dict) else value
 
 
 class _ScanState:
@@ -284,6 +293,11 @@ def start_background_scan(
         state.running[generation] = thread
     thread.start()
     return generation
+
+
+def is_scan_running() -> bool:
+    with _scan_state.lock:
+        return bool(_scan_state.running)
 
 
 def wait_for_scans(timeout: float = 30.0) -> bool:

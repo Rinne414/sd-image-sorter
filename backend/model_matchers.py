@@ -60,6 +60,7 @@ from typing import (
 )
 
 import model_roots
+import model_source_paths
 import model_sources
 from model_sources import KIND_COMFYUI, KIND_FOLDER, KIND_HF_CACHE, SourceRoot
 from tagger_models import TAGGER_MODELS
@@ -253,6 +254,12 @@ def _plain_children(folder: Path) -> List[Path]:
         return []
 
 
+def _under(path: str, base: str) -> bool:
+    key = os.path.normcase(path)
+    base_key = os.path.normcase(base)
+    return key == base_key or key.startswith(base_key.rstrip(os.sep) + os.sep)
+
+
 class _Context:
     """One root's matching state: read policy, hashing policy, digest cache, trust."""
 
@@ -268,13 +275,17 @@ class _Context:
         self.trust_check = trust_check or model_roots.is_under_allowed_model_root
         self.network_allowed = network_allowed or root.is_network
         self._verdicts: Dict[str, Tuple[bool, bool]] = {}
+        # Already resolved by the link gate: the root and its yaml folders.
+        self.bases: List[str] = [root.path] + [
+            p for paths in root.extra_model_paths.values() for p in paths
+        ]
 
     # read policy ---------------------------------------------------------
 
     def judge(self, path: Path) -> Tuple[bool, bool]:
         """(readable, is_network) for a path under this root."""
-        return model_sources.judge_path(
-            self.root.path,
+        return model_source_paths.judge_path(
+            self.bases,
             str(path),
             network_allowed=self.network_allowed,
             cache=self._verdicts,
@@ -315,16 +326,31 @@ class _Context:
         seen: set = set()
         for candidate in raw:
             key = os.path.normcase(str(candidate.path))
-            if key in seen or not self.may_read(candidate.path):
+            if key in seen:
                 continue
-            try:
-                if not candidate.path.is_dir():
-                    continue
-            except OSError:
+            resolved = self._candidate_folder(candidate)
+            if resolved is None:
                 continue
             seen.add(key)
-            dirs.append(candidate)
+            dirs.append(resolved)
         return dirs
+
+    def _candidate_folder(self, candidate: _CandidateDir) -> Optional[_CandidateDir]:
+        """The candidate through the link gate; its ``folder`` is the real folder
+        a suggestion would ask the user to trust (a junction's target, not the
+        junction)."""
+        kind, real = model_source_paths.resolve_local_chain(str(candidate.path))
+        if kind == model_source_paths.KIND_MISSING:
+            return None
+        if kind == model_source_paths.KIND_NETWORK and not self.network_allowed:
+            return None
+        try:
+            if not candidate.path.is_dir():
+                return None
+        except OSError:
+            return None
+        folder = self.root.path if _under(real, self.root.path) else real
+        return _CandidateDir(candidate.path, folder)
 
     # hashing -------------------------------------------------------------
 
