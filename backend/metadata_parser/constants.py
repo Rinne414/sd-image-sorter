@@ -9,7 +9,7 @@
 # __init__.py (stage 3); see tests/test_metadata_parser_pins.py.
 from typing import Optional, Dict, Tuple, Set
 
-PARSED_METADATA_VERSION = 10
+PARSED_METADATA_VERSION = 11
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 _MAX_PNG_CHUNK_BYTES = 64 * 1024 * 1024       # 64 MB – generous cap for any single PNG chunk
 _MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024    # 64 MB – cap for zlib-decompressed text data
@@ -143,6 +143,20 @@ class ParserVocabularyMixin:
         "SamplerCustomAdvanced",
         "AnimaFlowCorrectiveSampler",
     }
+
+    # A node with a system-prompt input is an instruct model (LLM / VLM):
+    # its text inputs are instructions and its output is written at run
+    # time, so nothing on it, and nothing behind its instruction inputs, is
+    # the prompt. Displays of its OUTPUT further down the graph still are.
+    COMFYUI_INSTRUCT_INPUT_KEYS = (
+        "system_prompt", "system", "系统提示词", "system_message", "sys_prompt",
+    )
+
+    # Sampler signature for custom all-in-one generator nodes without
+    # "Sampler" in their class name: a seed and a step count on one node
+    # (English or Chinese widget names).
+    COMFYUI_SEED_INPUT_KEYS = ("seed", "noise_seed", "种子")
+    COMFYUI_STEPS_INPUT_KEYS = ("steps", "步数")
 
     # Image-typed link inputs used to bridge across runtime VLM/inference
     # nodes (e.g. QwenTE_ImageInfer) whose own text output is generated at

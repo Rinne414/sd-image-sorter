@@ -97,8 +97,11 @@ class TestNegativeClassifier:
 
 
 def _fake_anima_nodes():
-    """Positive text lives in plain Text nodes reachable only via custom
-    links; the negative is a literal CLIPTextEncode. Includes decoys."""
+    """Positive text lives in plain Text nodes reachable only via a custom
+    link key the tracer does not read (``anima_cond``); the negative is a
+    literal CLIPTextEncode. Includes decoys. Text that reaches no sampler at
+    all is never a prompt (test_metadata_parser_false_positives), so the
+    custom link is wired, as it is in the real workflow this mirrors."""
     return {
         "1": {"class_type": "AnimaBoosterLoader",
               "inputs": {"model_name": "Anima\\anime\\model.safetensors"}},
@@ -114,7 +117,8 @@ def _fake_anima_nodes():
                                   "watermark, text, blurry", "clip": ["11", 1]}},
         "21": {"class_type": "KSampler",
                "inputs": {"seed": 1, "sampler_name": "dpmpp_2m_sde",
-                          "scheduler": "sgm_uniform"}},
+                          "scheduler": "sgm_uniform",
+                          "anima_cond": ["14", 0], "negative": ["20", 0]}},
     }
 
 

@@ -9,7 +9,7 @@
 # __init__.py (stage 3); see tests/test_metadata_parser_pins.py.
 import json
 import re
-from typing import Dict, Any, Tuple, List, Optional
+from typing import Dict, Any, Tuple, List, Optional, Set
 
 class ComfyUIGraphMixin:
     """ComfyUI graph walk: activity roots, upstream distances, input-ref/key-path helpers."""
@@ -309,6 +309,27 @@ class ComfyUIGraphMixin:
                 if cache:
                     inputs.setdefault("text_0", cache)
 
+            # A text input that is a LINK keeps the last value it carried as
+            # its widget (ComfyUI serializes widgets at queue time). Pair the
+            # two by position; a single linked text widget pairs with a
+            # single string widget. The tracer reads this cache only after
+            # the live upstream chain yields nothing.
+            link_cache: Dict[str, str] = {}
+            linked_text_inputs = [
+                inp for inp in widget_inputs
+                if str(inp.get("name")) in self._TEXT_WIDGET_INPUT_NAMES
+                and inp.get("name") in inputs
+            ]
+            if linked_text_inputs and isinstance(widgets, list):
+                if len(widget_inputs) == len(widgets):
+                    for inp, raw in zip(widget_inputs, widgets):
+                        if inp in linked_text_inputs:
+                            text = self._unwrap_comfyui_widget_text(raw)
+                            if text:
+                                link_cache[str(inp["name"])] = text
+                elif len(linked_text_inputs) == 1 and len(string_widgets) == 1:
+                    link_cache[str(linked_text_inputs[0]["name"])] = string_widgets[0]
+
             if not any(isinstance(value, str) and value.strip() for value in inputs.values()):
                 prompt_widget = self._first_prompt_like_widget(string_widgets)
                 if prompt_widget:
@@ -318,14 +339,219 @@ class ComfyUIGraphMixin:
             if looks_negative and "positive" in inputs and "negative" not in inputs:
                 inputs["negative"] = inputs["positive"]
 
+            ui_inputs = [inp for inp in (node.get("inputs") or []) if isinstance(inp, dict)]
+            ui_outputs = node.get("outputs")
             prompt_data[node_id] = {
                 "class_type": class_type,
                 "inputs": inputs,
                 "widgets_values": widgets,
                 "_bus_name": self._comfyui_bus_name(node),
+                # Structure the API shape has no room for: execution mode
+                # (2 muted / 4 bypassed), every declared input name (an
+                # unlinked system_prompt widget still marks an instruct
+                # node), slot types, and "declared with no outputs" (notes).
+                "_ui_mode": node.get("mode"),
+                "_ui_input_names": [str(inp.get("name")) for inp in ui_inputs if inp.get("name")],
+                "_ui_io": {
+                    "inputs": [str(inp.get("type")) for inp in ui_inputs],
+                    "outputs": [
+                        str(out.get("type"))
+                        for out in (ui_outputs if isinstance(ui_outputs, list) else [])
+                        if isinstance(out, dict)
+                    ],
+                },
+                "_ui_no_outputs": isinstance(ui_outputs, list) and not ui_outputs,
+                "_ui_link_cache": link_cache,
             }
 
         return prompt_data or None
+
+    # Input names under which a consumer takes TEXT. A system-prompt node
+    # whose output lands on one of these is a text generator (LLM / VLM);
+    # one whose output goes to a sampler as conditioning is an encoder that
+    # merely carries a system prompt (NewBie, LLM-adapter encoders).
+    # ``positive``/``negative`` are a sampler's conditioning slots, not text.
+    _TEXT_SINK_INPUT_NAMES = (_TEXT_WIDGET_INPUT_NAMES - {"positive", "negative"}) | {
+        "custom_prompt", "user_text", "input_text", "text_a", "text_b", "text_c",
+        "string_a", "string_b", "string1", "string2", "populated_text",
+    }
+
+    def _has_comfyui_system_prompt_input(self, node: Dict[str, Any]) -> bool:
+        if not isinstance(node, dict):
+            return False
+        inputs = node.get("inputs") if isinstance(node.get("inputs"), dict) else {}
+        names = {str(key).lower() for key in inputs}
+        names.update(str(name).lower() for name in (node.get("_ui_input_names") or []))
+        return any(key in names for key in self.COMFYUI_INSTRUCT_INPUT_KEYS)
+
+    def _comfyui_output_reaches_text_input(self, nodes: Dict[str, dict], node_id: str) -> bool:
+        """Walk consumers downstream: does this node's output land on a text input?
+
+        Stops at generation roots; passes through anything else (PreviewAny,
+        switches), so an LLM -> preview -> primitive.value chain is text.
+        """
+        consumers: Dict[str, List[Tuple[str, str]]] = {}
+        for consumer_id, consumer in nodes.items():
+            inputs = consumer.get("inputs") if isinstance(consumer, dict) and isinstance(consumer.get("inputs"), dict) else {}
+            for key, value in inputs.items():
+                for ref in self._iter_comfyui_input_refs(value):
+                    consumers.setdefault(ref, []).append((consumer_id, str(key).lower()))
+        seen: Set[str] = {node_id}
+        queue = [node_id]
+        while queue:
+            current = queue.pop()
+            for consumer_id, key in consumers.get(current, []):
+                if key in self._TEXT_SINK_INPUT_NAMES or self._is_numbered_text_key(key):
+                    return True
+                if consumer_id in seen:
+                    continue
+                seen.add(consumer_id)
+                consumer = nodes.get(consumer_id)
+                if isinstance(consumer, dict) and self._is_comfyui_generation_root(consumer):
+                    continue
+                queue.append(consumer_id)
+        return False
+
+    def _is_comfyui_instruct_node(
+        self,
+        node: Dict[str, Any],
+        nodes: Optional[Dict[str, dict]] = None,
+        node_id: Optional[str] = None,
+    ) -> bool:
+        """True for an LLM/VLM that WRITES text: a system-prompt node whose output is text.
+
+        Decided by structure: the UI graph's declared output types when
+        present (STRING out = generator), else by where the output lands in
+        the API graph (a text input = generator; a sampler's conditioning =
+        encoder). Without any graph context a system-prompt node counts as a
+        generator.
+        """
+        if not self._has_comfyui_system_prompt_input(node):
+            return False
+        io = node.get("_ui_io") if isinstance(node.get("_ui_io"), dict) else {}
+        outputs = [str(item).upper() for item in (io.get("outputs") or [])]
+        if outputs:
+            return "STRING" in outputs
+        if nodes is None or node_id is None:
+            return True
+        return self._comfyui_output_reaches_text_input(nodes, str(node_id))
+
+    def _is_comfyui_generation_root(self, node: Dict[str, Any]) -> bool:
+        """True for a node that turns conditioning into pixels.
+
+        KSampler-family and custom ``*Sampler`` classes, a node with a model
+        and positive/negative inputs, a node carrying both a seed and a step
+        count (all-in-one generators), or a UI node that takes MODEL and
+        emits IMAGE/LATENT.
+        """
+        if not isinstance(node, dict):
+            return False
+        class_type = str(node.get("class_type") or "")
+        inputs = node.get("inputs") if isinstance(node.get("inputs"), dict) else {}
+        if self._is_comfyui_sampler_node(class_type, inputs):
+            return True
+        if "model" in inputs and ("positive" in inputs or "negative" in inputs):
+            return True
+        names = {str(key).lower() for key in inputs}
+        if names & set(self.COMFYUI_SEED_INPUT_KEYS) and names & set(self.COMFYUI_STEPS_INPUT_KEYS):
+            return True
+        io = node.get("_ui_io") or {}
+        return "MODEL" in (io.get("inputs") or []) and bool(
+            {"IMAGE", "LATENT"} & set(io.get("outputs") or [])
+        )
+
+    def _is_comfyui_prompt_to_image_node(self, node: Dict[str, Any], consumed_as_image: bool) -> bool:
+        """A node that takes a ``prompt`` and emits an image: a generation step
+        without a sampler of its own (cloud / API image nodes)."""
+        if not isinstance(node, dict):
+            return False
+        inputs = node.get("inputs") if isinstance(node.get("inputs"), dict) else {}
+        names = {str(key).lower() for key in inputs}
+        names.update(str(name).lower() for name in (node.get("_ui_input_names") or []))
+        if "prompt" not in names:
+            return False
+        io = node.get("_ui_io") if isinstance(node.get("_ui_io"), dict) else {}
+        return consumed_as_image or "IMAGE" in [str(item).upper() for item in (io.get("outputs") or [])]
+
+    def _comfyui_prompt_eligible_nodes(self, nodes: Dict[str, dict]) -> Tuple[Set[str], Set[str]]:
+        """Which nodes may hold the prompt, and which must never contribute text.
+
+        The sampler trace is exact; the scored harvest behind it is not, so
+        the harvest only sees text that can have reached a generation step:
+
+        1. With a generation root (see ``_is_comfyui_generation_root``):
+           every node upstream of a root, plus nodes consuming an upstream
+           value (ShowText displays of the executed prompt). An instruct node
+           is a barrier: kept as an anchor for its displays, it contributes
+           no text and nothing behind its instruction inputs is reached.
+        2. Without a root, text encoders play that role.
+        3. Without either, this graph has no generation step: only standalone
+           text holders (no links in or out) are kept, because such a graph
+           is a prompt container, not a pipeline. Text wired into a pipeline
+           that generates nothing (overlays, filters, device names) is a
+           setting of that pipeline.
+
+        Bypassed/muted UI nodes and note nodes (declared without outputs)
+        never contribute.
+        """
+        link_refs: Dict[str, List[str]] = {}
+        consumed: Set[str] = set()
+        for node_id, node in nodes.items():
+            inputs = node.get("inputs") if isinstance(node, dict) and isinstance(node.get("inputs"), dict) else {}
+            refs = [ref for ref in self._iter_comfyui_input_refs(inputs) if ref in nodes and ref != node_id]
+            link_refs[node_id] = refs
+            consumed.update(refs)
+        instruct = {
+            node_id for node_id, node in nodes.items()
+            if self._is_comfyui_instruct_node(node, nodes, node_id)
+        }
+        image_consumed: Set[str] = set()
+        for node in nodes.values():
+            inputs = node.get("inputs") if isinstance(node, dict) and isinstance(node.get("inputs"), dict) else {}
+            for key, value in inputs.items():
+                lowered = str(key).lower()
+                if lowered in self.COMFYUI_IMAGE_BRIDGE_KEYS or lowered.startswith("image"):
+                    image_consumed.update(ref for ref in self._iter_comfyui_input_refs(value) if ref in nodes)
+        roots = [node_id for node_id, node in nodes.items() if self._is_comfyui_generation_root(node)]
+        roots.extend(
+            node_id for node_id, node in nodes.items()
+            if node_id not in roots
+            and self._is_comfyui_prompt_to_image_node(node, node_id in image_consumed)
+        )
+        if not roots:
+            roots = [
+                node_id for node_id, node in nodes.items()
+                if isinstance(node, dict)
+                and any(marker in str(node.get("class_type") or "") for marker in self.COMFYUI_TEXT_NODE_TYPES)
+            ]
+        eligible: Set[str] = set()
+        if roots:
+            queue = list(roots)
+            while queue:
+                node_id = queue.pop()
+                if node_id in eligible:
+                    continue
+                eligible.add(node_id)
+                if node_id in instruct:
+                    continue
+                queue.extend(link_refs.get(node_id, []))
+            for node_id, refs in link_refs.items():
+                if node_id in eligible or node_id in instruct:
+                    continue
+                if any(ref in eligible for ref in refs):
+                    eligible.add(node_id)
+        else:
+            eligible = {
+                node_id for node_id, refs in link_refs.items()
+                if not refs and node_id not in consumed and node_id not in instruct
+            }
+        for node_id in list(eligible):
+            node = nodes.get(node_id)
+            if not isinstance(node, dict):
+                continue
+            if node.get("_ui_mode") in (2, 4) or node.get("_ui_no_outputs"):
+                eligible.discard(node_id)
+        return eligible, instruct
 
     def _first_prompt_like_widget(self, string_widgets: List[str]) -> Optional[str]:
         """Pick the first widget string that reads as a prompt, any node class."""

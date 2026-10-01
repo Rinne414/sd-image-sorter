@@ -65,7 +65,9 @@ class ComfyUITextTraceMixin:
                     pos_ref = guider_inputs.get("positive")
                     neg_ref = guider_inputs.get("negative")
                     if pos_ref is None:
-                        pos_ref = guider_inputs.get("cond")
+                        # Core BasicGuider carries one ``conditioning``;
+                        # some custom guiders spell it ``cond``.
+                        pos_ref = guider_inputs.get("conditioning", guider_inputs.get("cond"))
 
             # Trace positive conditioning. A hires or refiner pass reuses the
             # same conditioning, so a text already collected is not repeated.
@@ -333,6 +335,18 @@ class ComfyUITextTraceMixin:
         if bus_texts is not None:
             return bus_texts
 
+        # A text-writing instruct model's inputs are instructions, not the
+        # prompt (see _is_comfyui_instruct_node); only its image links may
+        # lead back to a queue-time literal such as a DanbooruGallery selection.
+        if self._is_comfyui_instruct_node(node, nodes, node_id):
+            for key in self.COMFYUI_IMAGE_BRIDGE_KEYS:
+                val = inputs.get(key)
+                if isinstance(val, (list, tuple)) and len(val) >= 2:
+                    sub_texts = self._trace_to_text(val, nodes, visited, depth + 1)
+                    if sub_texts:
+                        return sub_texts
+            return []
+
         # Text encoder nodes — graph position is the classifier (IIB /
         # sd-prompt-reader): whatever string sits on an encoder input is the
         # prompt, tags or natural language. Flux/SD3 use t5xxl; SDXL uses
@@ -501,6 +515,9 @@ class ComfyUITextTraceMixin:
                         texts.extend(sub_texts)
                         break
 
+        if not texts:
+            texts = [item["text"] for item in self._cached_link_text_with_source(node_id, node)]
+
         return texts
 
     def _extract_text_from_node_with_source(self, node_id: str, nodes: Dict[str, dict], visited: Set[str], depth: int = 0,
@@ -537,6 +554,21 @@ class ComfyUITextTraceMixin:
         )
         if bus_results is not None:
             return bus_results
+
+        # Text-writing instruct model (system prompt in, text out): its text
+        # inputs are instructions and its output is generated at run time.
+        # Only the image bridge may continue; the conditioning bridge must
+        # not walk into its instruction links.
+        if self._is_comfyui_instruct_node(node, nodes, node_id):
+            bridge_visited = set(visited)
+            bridge_visited.add(node_id)
+            for key in self.COMFYUI_IMAGE_BRIDGE_KEYS:
+                val = inputs.get(key)
+                if isinstance(val, (list, tuple)) and len(val) >= 2:
+                    traced = self._trace_to_text_with_source(val, nodes, bridge_visited, depth + 1, side=side)
+                    if traced:
+                        return traced
+            return []
 
         # DanbooruGallery nodes - selection_data is a QUEUE-TIME literal that
         # reflects the CURRENT run's selected post(s).
@@ -717,6 +749,23 @@ class ComfyUITextTraceMixin:
             if traced:
                 return traced
 
+        # Nothing upstream is recoverable (runtime text: LLM, VLM, wildcard).
+        # The UI workflow keeps the last value this node's linked text input
+        # carried; like a ShowText cache it is the executed prompt of the
+        # queued run, so it is the fallback of last resort.
+        return self._cached_link_text_with_source(node_id, node)
+
+    def _cached_link_text_with_source(self, node_id: str, node: dict) -> List[Dict[str, Any]]:
+        """The queue-time widget value of a linked text input, if the UI graph kept one."""
+        cache = node.get("_ui_link_cache") if isinstance(node.get("_ui_link_cache"), dict) else {}
+        for key, text in cache.items():
+            if isinstance(text, str) and text.strip():
+                return [{
+                    "text": text.strip(),
+                    "source_node_id": node_id,
+                    "source_class_type": str(node.get("class_type") or ""),
+                    "source_key": f"{key} (widget cache)",
+                }]
         return []
 
     def _collect_text_from_nodes(self, nodes: Dict[str, dict]) -> Tuple[Optional[str], Optional[str]]:
@@ -734,7 +783,15 @@ class ComfyUITextTraceMixin:
         try:
             from prompt_text_scorer import harvest_prompt_candidates, pick_positive_negative
 
-            candidates = harvest_prompt_candidates(nodes, self.COMFYUI_TEXT_NODE_TYPES)
+            # Only text that can have reached a generation step is scored;
+            # see _comfyui_prompt_eligible_nodes for the rule.
+            eligible, skipped = self._comfyui_prompt_eligible_nodes(nodes)
+            candidates = harvest_prompt_candidates(
+                nodes,
+                self.COMFYUI_TEXT_NODE_TYPES,
+                eligible_ids=eligible,
+                skip_ids=skipped,
+            )
             return pick_positive_negative(candidates)
         except Exception as exc:  # scorer must never take the parser down
             logger.debug("prompt text harvest failed: %s", exc)
@@ -913,18 +970,7 @@ class ComfyUITextTraceMixin:
             if pos or neg:
                 return (pos, neg)
 
-        nodes = workflow.get("nodes", [])
-        if not isinstance(nodes, list):
-            return (None, None)
-
-        synthetic: Dict[str, dict] = {}
-        for node in nodes:
-            if not isinstance(node, dict) or node.get("id") is None:
-                continue
-            synthetic[str(node["id"])] = {
-                "class_type": str(node.get("type") or node.get("class_type") or ""),
-                "inputs": {},
-                "widgets_values": node.get("widgets_values"),
-            }
-        return self._collect_text_from_nodes(synthetic)
+        # No second pass over the nodes with their links stripped: that would
+        # score note and overlay text as if nothing was wired anywhere.
+        return (None, None)
 

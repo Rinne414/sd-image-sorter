@@ -114,7 +114,15 @@ class ExifXmpMixin:
             return {}
 
     def _extract_gif_comment_metadata(self, img: Image.Image) -> dict:
-        """Extract SD metadata from lightweight GIF comment fields."""
+        """Extract SD metadata from lightweight GIF comment fields.
+
+        A GIF comment is not a ComfyUI ``prompt`` chunk. It becomes one only
+        when it holds ComfyUI structure (an API node map, a UI ``nodes`` list,
+        or a video saver's envelope wrapping both); A1111 ``parameters`` text
+        keeps its fast path. Anything else, JSON or prose, stays ``Comment``
+        and the generic detectors decide (vendor JSON -> unknown, prompt-shaped
+        text -> others) instead of every chat sticker reading as ComfyUI.
+        """
         comment = getattr(img, "info", {}).get("comment")
         if comment is None:
             return {}
@@ -123,7 +131,33 @@ class ExifXmpMixin:
             return {}
         if "Steps:" in text and "Sampler:" in text:
             return {"Comment": text, "parameters": text}
-        return {"Comment": text, "prompt": text}
+        chunks = self._comfyui_chunks_from_json_text(text)
+        if chunks:
+            return chunks
+        return {"Comment": text}
+
+    def _comfyui_chunks_from_json_text(self, text: str) -> dict:
+        """``prompt`` / ``workflow`` chunks when ``text`` is ComfyUI-shaped JSON."""
+        stripped = text.strip()
+        if not stripped.startswith("{"):
+            return {}
+        try:
+            data = json.loads(stripped)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        if self._looks_like_comfyui_prompt_dict(data):
+            return {"prompt": stripped}
+        if isinstance(data.get("nodes"), list) and data["nodes"]:
+            return {"workflow": stripped}
+        chunks: Dict[str, Any] = {}
+        if self._looks_like_comfyui_prompt_dict(data.get("prompt")):
+            chunks["prompt"] = json.dumps(data["prompt"])
+        workflow = data.get("workflow")
+        if isinstance(workflow, dict) and isinstance(workflow.get("nodes"), list) and workflow["nodes"]:
+            chunks["workflow"] = json.dumps(workflow)
+        return chunks
 
     def _extract_tiff_xmp(self, img: Image.Image) -> dict:
         """Extract XMP packet text from TIFF tag 700 when present."""

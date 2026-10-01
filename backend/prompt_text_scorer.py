@@ -17,6 +17,7 @@ Everything fails open: with no vocabulary available, structure alone decides.
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -29,6 +30,9 @@ PROMPT_SCORE_FLOOR = 0.35
 MIN_CANDIDATE_LENGTH = 12
 # Bonus when the string came out of a text-encoder-ish node.
 TEXT_NODE_BONUS = 0.15
+# Share of visible characters that must be letters (any script) for a
+# string to be prose at all; below it the string is a formula, id or hash.
+MIN_LETTER_RATIO = 0.5
 
 _WEIGHT_SYNTAX_RE = re.compile(r"[()\[\]{}]|:\d+(?:\.\d+)?")
 _LORA_TAG_RE = re.compile(r"<[^<>]*>")
@@ -45,6 +49,8 @@ NON_PROMPT_KEYS = frozenset({
     "filename_prefix", "filename", "font", "font_name", "preset",
     "upscale_method", "method", "mode", "device", "output_format",
     "extension", "path", "directory", "folder", "custom_layer_filter",
+    # System-role inputs of LLM/VLM/encoder nodes: instructions, never prompt.
+    "system_prompt", "system", "系统提示词", "system_message", "sys_prompt",
 })
 
 # Node class_types whose strings are never generation prompts (tagger dumps,
@@ -59,6 +65,37 @@ HARVEST_SKIP_CLASS_MARKERS = (
 )
 
 _BUS_NODE_TYPES = frozenset({"GetNode", "Get", "SetNode", "Set", "Reroute"})
+
+# Keys whose string values inside a JSON payload are prompt text: a
+# ``[{"text": ...}]`` prompt list, a gallery selection record's ``prompt``.
+_JSON_PROMPT_KEYS = frozenset({"text", "prompt", "positive", "caption"})
+_JSON_PAYLOAD_MAX_DEPTH = 6
+
+
+def _json_prompt_strings(text: str) -> List[str]:
+    """Prompt-role strings inside a JSON payload, in document order."""
+    try:
+        data = json.loads(text)
+    except (ValueError, TypeError):
+        return []
+    found: List[str] = []
+
+    def walk(value: Any, depth: int) -> None:
+        if depth > _JSON_PAYLOAD_MAX_DEPTH:
+            return
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if isinstance(item, str):
+                    if str(key).lower() in _JSON_PROMPT_KEYS and item.strip():
+                        found.append(item)
+                else:
+                    walk(item, depth + 1)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item, depth + 1)
+
+    walk(data, 0)
+    return found
 
 
 def _source_chain_has_tagger(
@@ -183,6 +220,9 @@ def looks_like_non_prompt_value(text: str) -> bool:
         return True
     if re.fullmatch(r"[\d\s.,:x×-]+", stripped):
         return True
+    visible = [ch for ch in stripped if not ch.isspace()]
+    if visible and sum(1 for ch in visible if ch.isalpha()) < len(visible) * MIN_LETTER_RATIO:
+        return True
     # kjnodes Set/Get bus titles and other UI labels, not generation text.
     if "【" in stripped and "】" in stripped and not re.search(r"[,，、]", stripped):
         return True
@@ -219,10 +259,10 @@ def is_negative_prompt_text(text: str) -> bool:
 
 
 def _widget_strings_for_harvest(value: Any) -> List[str]:
-    """Flatten ShowText-style nested string widgets; skip JSON/token stacks."""
+    """Flatten ShowText-style nested string widgets; skip token stacks."""
     if isinstance(value, str):
         stripped = value.strip()
-        if not stripped or stripped[:1] in "{[":
+        if not stripped:
             return []
         return [stripped]
     if isinstance(value, (list, tuple)):
@@ -236,24 +276,41 @@ def _widget_strings_for_harvest(value: Any) -> List[str]:
 
 
 def harvest_prompt_candidates(nodes: Dict[str, dict],
-                              text_node_types: Iterable[str]) -> List[Dict[str, Any]]:
+                              text_node_types: Iterable[str],
+                              eligible_ids: Optional[Iterable[str]] = None,
+                              skip_ids: Optional[Iterable[str]] = None) -> List[Dict[str, Any]]:
     """Collect every plausible prompt string from inputs AND widgets.
 
     No node-type knowledge required — that is the point. `text_node_types`
     only adds a small prior bonus for encoder-ish nodes. Custom prompt UIs
     that store text only in ``widgets_values`` (unknown class names) are
     still harvested.
+
+    ``eligible_ids`` restricts the walk to nodes whose text can have reached
+    a generation step (the caller computes that from the graph); ``skip_ids``
+    are nodes that never contribute text (instruct models). Both default to
+    "every node" so the scorer stays usable on bare node maps.
     """
     type_markers = tuple(text_node_types or ())
+    eligible = None if eligible_ids is None else {str(item) for item in eligible_ids}
+    skipped = {str(item) for item in (skip_ids or ())}
     vocab = _vocab_index()
     candidates: List[Dict[str, Any]] = []
     seen_texts: set = set()
 
-    def push(text: str, node_id: str, class_type: str, key: str, is_text_node: bool) -> None:
+    def push(text: str, node_id: str, class_type: str, key: str, is_text_node: bool,
+             depth: int = 0) -> None:
         stripped = text.strip()
         if not stripped or stripped in seen_texts:
             return
         if str(key).lower() in NON_PROMPT_KEYS:
+            return
+        if stripped[:1] in "{[":
+            # A JSON payload is a container, not a prompt: score the
+            # prompt-role strings inside it (one level of nesting).
+            if depth == 0:
+                for nested in _json_prompt_strings(stripped):
+                    push(nested, node_id, class_type, f"{key}.text", is_text_node, depth + 1)
             return
         if looks_like_non_prompt_value(stripped):
             return
@@ -271,6 +328,10 @@ def harvest_prompt_candidates(nodes: Dict[str, dict],
 
     for node_id, node in nodes.items():
         if not isinstance(node, dict):
+            continue
+        if eligible is not None and str(node_id) not in eligible:
+            continue
+        if str(node_id) in skipped:
             continue
         class_type = str(node.get("class_type") or node.get("type") or "")
         if any(marker in class_type for marker in HARVEST_SKIP_CLASS_MARKERS):
