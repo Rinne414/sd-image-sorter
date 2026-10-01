@@ -7,6 +7,7 @@ Methods moved verbatim from services/image_service.py (decomposition
 """
 
 import io
+import logging
 import os
 from datetime import datetime
 from email.utils import format_datetime
@@ -19,6 +20,8 @@ from PIL import UnidentifiedImageError
 import database as db
 from thumbnail_cache import generate_placeholder_thumbnail
 from utils.path_validation import ALLOWED_IMAGE_EXTENSIONS, normalize_user_path, validate_file_path
+
+logger = logging.getLogger("services.image_service")
 
 
 def _svc():
@@ -40,6 +43,22 @@ def get_thumbnail_async(*args, **kwargs):
 class RepairReviewMixin:
     """Roadmap-C repair-review slice of ImageService (assembled in services/image_service.py)."""
 
+    @staticmethod
+    def _normalized_fingerprint(value: Any) -> Optional[str]:
+        text = str(value or "").strip().lower()
+        return text or None
+
+    @classmethod
+    def _found_file_digest(cls, found_path: str) -> Optional[str]:
+        """Pixel digest of a found file, or None when it cannot be read."""
+        try:
+            from image_fingerprint import compute_image_content_fingerprint
+
+            return cls._normalized_fingerprint(compute_image_content_fingerprint(found_path))
+        except Exception as exc:
+            logger.debug("Could not fingerprint repair candidate %s: %s", found_path, exc)
+            return None
+
     # ------------------------------------------------------------------
     # Roadmap-C: missing-file repair review (resolve ambiguous matches)
     # ------------------------------------------------------------------
@@ -60,6 +79,13 @@ class RepairReviewMixin:
         current path/size and whether the candidate's own file is still missing.
         Candidate ids that no longer exist (deleted since the run) are skipped.
         ``status='all'`` lists every status; otherwise it scopes to one status.
+
+        ``pixels_match`` per candidate says whether the candidate's stored pixel
+        fingerprint equals the found file's: ``True`` / ``False``, or ``None``
+        when the candidate has no fingerprint, the found file is gone, or it
+        could not be hashed. Cost: the found file is hashed at most once per
+        listed review, and only when some candidate has a fingerprint, so one
+        page costs at most ``limit`` full-image reads (UI pages are 20).
         """
         normalized_status = str(status or "pending").strip().lower() or "pending"
         scope = None if normalized_status == "all" else normalized_status
@@ -69,25 +95,40 @@ class RepairReviewMixin:
         for review in listing["items"]:
             candidate_ids = review.get("candidate_ids") or []
             rows_by_id = db.get_images_by_ids(candidate_ids) if candidate_ids else {}
+            found_path = review.get("found_path") or ""
+            found_exists = bool(found_path) and os.path.isfile(found_path)
+            found_digest = (
+                self._found_file_digest(found_path)
+                if found_exists and any(
+                    self._normalized_fingerprint(row.get("content_fingerprint"))
+                    for row in rows_by_id.values()
+                )
+                else None
+            )
             candidates: List[Dict[str, Any]] = []
             for image_id in candidate_ids:
                 row = rows_by_id.get(image_id)
                 if not row:
                     continue  # candidate deleted since the run; drop it
                 candidate_path = row.get("path") or ""
+                stored_digest = self._normalized_fingerprint(row.get("content_fingerprint"))
                 candidates.append({
                     "image_id": image_id,
                     "path": candidate_path,
                     "file_size": row.get("file_size"),
                     "source_mtime_ns": row.get("source_mtime_ns"),
                     "still_missing": not (bool(candidate_path) and os.path.isfile(candidate_path)),
+                    "pixels_match": (
+                        (stored_digest == found_digest)
+                        if stored_digest and found_digest
+                        else None
+                    ),
                 })
-            found_path = review.get("found_path") or ""
             items.append({
                 "review_id": review.get("id"),
                 "filename": review.get("filename"),
                 "found_path": found_path,
-                "found_exists": bool(found_path) and os.path.isfile(found_path),
+                "found_exists": found_exists,
                 "candidate_count": review.get("candidate_count"),
                 "run_started_at": review.get("run_started_at"),
                 "status": review.get("status"),

@@ -39,6 +39,38 @@ def _svc():
     return image_service
 
 
+class _FoundFingerprint:
+    """The found file's pixel digest: hashed at most once, and only on demand.
+
+    ``read()`` hashes the file the first time it is asked; ``peek()`` only
+    reports a digest that an earlier ``read()`` produced, so an exact-mtime
+    candidate can be compared when the digest happens to be known without
+    ever causing the file to be read for its own sake.
+    """
+
+    def __init__(self, found_path: str) -> None:
+        self._found_path = found_path
+        self._value: Optional[str] = None
+        self._read_done = False
+
+    def peek(self) -> Optional[str]:
+        return self._value
+
+    def read(self) -> Optional[str]:
+        if not self._read_done:
+            self._read_done = True
+            try:
+                from image_fingerprint import compute_image_content_fingerprint
+
+                self._value = ReconnectMixin._normalized_fingerprint(
+                    compute_image_content_fingerprint(self._found_path)
+                )
+            except Exception as exc:
+                logger.debug("Could not fingerprint reconnect candidate %s: %s", self._found_path, exc)
+                self._value = None
+        return self._value
+
+
 class ReconnectMixin:
     """Missing-file reconnect slice of ImageService (assembled in services/image_service.py)."""
 
@@ -59,6 +91,7 @@ class ReconnectMixin:
             "ambiguous": 0,
             "review_pending_total": 0,
             "conflicts": 0,
+            "pixel_mismatch": 0,
             "skipped": 0,
             "errors": 0,
             "message": "",
@@ -145,31 +178,11 @@ class ReconnectMixin:
         return text or None
 
     @staticmethod
-    def _found_fingerprint_reader(found_path: str) -> Callable[[], Optional[str]]:
-        """A reader for the found file's pixel digest that hashes at most once."""
-        cache: Dict[str, Optional[str]] = {}
-
-        def read() -> Optional[str]:
-            if "value" not in cache:
-                try:
-                    from image_fingerprint import compute_image_content_fingerprint
-
-                    cache["value"] = ReconnectMixin._normalized_fingerprint(
-                        compute_image_content_fingerprint(found_path)
-                    )
-                except Exception as exc:
-                    logger.debug("Could not fingerprint reconnect candidate %s: %s", found_path, exc)
-                    cache["value"] = None
-            return cache["value"]
-
-        return read
-
-    @staticmethod
     def _stat_match_pixel_verdict(
         candidate: Dict[str, Any],
         expected_mtime_ns: Optional[int],
         stat_result: os.stat_result,
-        found_fingerprint: Callable[[], Optional[str]],
+        found_fingerprint: "_FoundFingerprint",
     ) -> str:
         """``same`` / ``different`` / ``unverified`` for a size-and-mtime match.
 
@@ -178,16 +191,18 @@ class ReconnectMixin:
         an approximate match is written down as an exact one, derived state
         included. When the row has a pixel fingerprint, an approximate match is
         checked against the found file's pixels before it is trusted. A match
-        exact to the nanosecond is trusted as before, without reading the file:
-        hashing every moved file would turn a plain library move into a full
-        re-read. Rows without a fingerprint cannot be checked.
+        exact to the nanosecond is never hashed for its own sake (hashing every
+        moved file would turn a plain library move into a full re-read), but
+        when another candidate already made this file's digest known, it is
+        compared too. Rows without a fingerprint cannot be checked.
         """
         stored = ReconnectMixin._normalized_fingerprint(candidate.get("content_fingerprint"))
         if not stored or expected_mtime_ns is None:
             return "unverified"
         if int(expected_mtime_ns) == int(stat_result.st_mtime_ns):
-            return "unverified"
-        found = found_fingerprint()
+            found = found_fingerprint.peek()
+        else:
+            found = found_fingerprint.read()
         if not found:
             return "unverified"
         return "same" if found == stored else "different"
@@ -199,13 +214,22 @@ class ReconnectMixin:
         candidates: List[Dict[str, Any]],
         *,
         verify_uncertain: bool,
-    ) -> tuple[Optional[Dict[str, Any]], str]:
-        """Find a safe row match for one discovered file."""
+    ) -> tuple[Optional[Dict[str, Any]], str, List[Dict[str, Any]]]:
+        """Find a safe row match for one discovered file.
+
+        Returns ``(match, reason, pixel_mismatches)``. ``pixel_mismatches`` are
+        the candidates whose stored fingerprint proved that the found file is a
+        different picture although name, size and (nearly) date agreed; they
+        are reported, never relinked, and left for a normal scan.
+        """
         stat_matches: List[Dict[str, Any]] = []
+        exact_unchecked: List[tuple[Dict[str, Any], Optional[int]]] = []
         pixel_verified: List[Dict[str, Any]] = []
+        pixel_mismatches: List[Dict[str, Any]] = []
+        exact_suspects: List[Dict[str, Any]] = []
         fingerprint_candidates: List[Dict[str, Any]] = []
         name_size_only: List[Dict[str, Any]] = []
-        found_fingerprint = self._found_fingerprint_reader(found_path)
+        found_fingerprint = _FoundFingerprint(found_path)
 
         for candidate in candidates:
             expected_size = self._candidate_expected_size(candidate)
@@ -214,17 +238,27 @@ class ReconnectMixin:
 
             expected_mtime_ns = self._candidate_expected_mtime_ns(candidate)
             if self._mtime_matches(expected_mtime_ns, stat_result):
+                is_exact = expected_mtime_ns is not None and int(expected_mtime_ns) == int(stat_result.st_mtime_ns)
                 verdict = "unverified"
                 if verify_uncertain:
                     verdict = self._stat_match_pixel_verdict(
                         candidate, expected_mtime_ns, stat_result, found_fingerprint
                     )
                 if verdict == "different":
-                    # Same name, size and nearly the same date, but not these
-                    # pixels: a different picture, left for a normal scan.
+                    if is_exact:
+                        # Exact date, different pixels: the stored fingerprint
+                        # may simply be stale, so the user decides (review).
+                        exact_suspects.append(candidate)
+                    else:
+                        # Same name, size and nearly the same date, but not
+                        # these pixels: a different picture.
+                        pixel_mismatches.append(candidate)
                     continue
                 if verdict == "same":
                     pixel_verified.append(candidate)
+                elif is_exact and verify_uncertain:
+                    # The digest may become known later in this loop.
+                    exact_unchecked.append((candidate, expected_mtime_ns))
                 stat_matches.append(candidate)
                 continue
 
@@ -235,34 +269,47 @@ class ReconnectMixin:
             if expected_mtime_ns is None and not self._normalized_fingerprint(candidate.get("content_fingerprint")):
                 name_size_only.append(candidate)
 
+        # Exact matches seen before the digest was known get their comparison
+        # now; a mismatch is a question for the user, not a verdict.
+        for candidate, expected_mtime_ns in exact_unchecked:
+            verdict = self._stat_match_pixel_verdict(
+                candidate, expected_mtime_ns, stat_result, found_fingerprint
+            )
+            if verdict == "same":
+                pixel_verified.append(candidate)
+            elif verdict == "different":
+                exact_suspects.append(candidate)
+        if exact_suspects:
+            return None, "ambiguous", pixel_mismatches
+
         # A match proven by pixels outranks one that could not be checked.
         if len(pixel_verified) == 1:
-            return pixel_verified[0], "fingerprint"
+            return pixel_verified[0], "fingerprint", pixel_mismatches
         if len(pixel_verified) > 1:
-            return None, "ambiguous"
+            return None, "ambiguous", pixel_mismatches
         if len(stat_matches) == 1:
-            return stat_matches[0], "stat"
+            return stat_matches[0], "stat", pixel_mismatches
         if len(stat_matches) > 1:
-            return None, "ambiguous"
+            return None, "ambiguous", pixel_mismatches
 
         if fingerprint_candidates:
-            found_fingerprint_value = found_fingerprint()
+            found_fingerprint_value = found_fingerprint.read()
             if found_fingerprint_value:
                 verified = [
                     candidate for candidate in fingerprint_candidates
                     if self._normalized_fingerprint(candidate.get("content_fingerprint")) == found_fingerprint_value
                 ]
                 if len(verified) == 1:
-                    return verified[0], "fingerprint"
+                    return verified[0], "fingerprint", pixel_mismatches
                 if len(verified) > 1:
-                    return None, "ambiguous"
+                    return None, "ambiguous", pixel_mismatches
 
         if len(name_size_only) == 1:
-            return name_size_only[0], "name_size"
+            return name_size_only[0], "name_size", pixel_mismatches
         if len(name_size_only) > 1:
-            return None, "ambiguous"
+            return None, "ambiguous", pixel_mismatches
 
-        return None, "none"
+        return None, "none", pixel_mismatches
 
     @staticmethod
     def _iter_reconnect_image_files(search_folder: str, recursive: bool, stop_requested: Optional[Callable[[], bool]] = None):
@@ -330,6 +377,7 @@ class ReconnectMixin:
             "ambiguous": 0,
             "review_pending_total": 0,
             "conflicts": 0,
+            "pixel_mismatch": 0,
             "skipped": 0,
             "errors": 0,
             "still_missing": 0,
@@ -392,12 +440,15 @@ class ReconnectMixin:
 
             try:
                 stat_result = os.stat(found_path)
-                match, reason = self._find_reconnect_match(
+                match, reason, pixel_mismatches = self._find_reconnect_match(
                     found_path,
                     stat_result,
                     candidate_rows,
                     verify_uncertain=verify_uncertain,
                 )
+                # Same name and size, nearly the same date, other pixels: these
+                # rows stay missing and the found file is left for a scan.
+                result["pixel_mismatch"] += len(pixel_mismatches)
                 resolved_found_path = os.path.abspath(found_path)
                 if match and resolved_found_path not in used_found_paths:
                     image_id = int(match["id"])
@@ -554,6 +605,7 @@ class ReconnectMixin:
                 matched=matched,
                 ambiguous=ambiguous,
                 conflicts=conflicts,
+                pixel_mismatch=int(snapshot.get("pixel_mismatch", 0) or 0),
                 skipped=int(snapshot.get("skipped", 0) or 0),
                 errors=errors,
                 message=f"Checked {checked} files. Reconnected {matched}/{missing_total} missing files.",
@@ -596,6 +648,7 @@ class ReconnectMixin:
                         "ambiguous": result.get("ambiguous", 0),
                         "review_pending_total": result.get("review_pending_total", 0),
                         "conflicts": result.get("conflicts", 0),
+                        "pixel_mismatch": result.get("pixel_mismatch", 0),
                         "skipped": result.get("skipped", 0),
                         "errors": result.get("errors", 0),
                         "message": (
