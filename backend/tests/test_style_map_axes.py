@@ -80,6 +80,14 @@ class TestAxes:
         assert y["high"]["tags"] == [] and z["low"]["tags"] == []
         assert "1girl" not in _tags(x["high"]) + _tags(x["low"])
 
+    def test_a_tag_on_a_small_share_of_one_end_does_not_name_the_axis(self, test_db):
+        ids, xyz = _scene(test_db, seed=11)
+        order = np.argsort(xyz[:, 0])
+        high = order[-int(N * 0.2) :]  # the outer fifth: 80 pictures
+        _tag_all(test_db, np.array(ids)[high[:8]], "black_collar")  # 10% vs 0%
+        axes = axes_mod.axes_of_points(_points(ids, xyz))["axes"]
+        assert axes["x"]["weak"] is True and axes["x"]["high"]["tags"] == []
+
     def test_the_tag_on_the_low_end_lands_on_low(self, test_db):
         ids, xyz = _scene(test_db, seed=3)
         _tag_all(test_db, np.array(ids)[np.argsort(xyz[:, 1])[: int(N * 0.25)]], "sketch")

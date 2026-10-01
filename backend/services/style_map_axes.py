@@ -51,9 +51,14 @@ from services.style_map_regions import (
     hypergeom_tail,
 )
 
-AXES_ALGO_VERSION = 1
+AXES_ALGO_VERSION = 2
 AXIS_NAMES: Tuple[str, ...] = ("x", "y", "z")
 AXES_LAYOUTS: Tuple[str, ...] = ("pca", "umap")
+# A tag names an axis end only when it describes a real share of that end:
+# the regions' rules also let a tag on 6% of one end and none of the other
+# through (significant, but no meaning for the whole direction).
+LABEL_MIN_RATE = 0.25
+LABEL_MIN_GAIN = 0.15
 END_SHARE = 0.20
 REP_SHARE = 0.10
 REPS_PER_END = 3
@@ -226,8 +231,11 @@ def _separating_tests(
                 if rate <= other_rate:
                     continue
                 ratio = rate / other_rate if other_rate > 0 else float("inf")
-                strong = ratio >= TAG_MIN_RATIO or (
-                    rate >= TAG_MIN_RATE and rate - other_rate >= TAG_MIN_RATE_GAIN
+                strong = (
+                    ratio >= TAG_MIN_RATIO
+                    or (rate >= TAG_MIN_RATE and rate - other_rate >= TAG_MIN_RATE_GAIN)
+                ) and (
+                    rate >= LABEL_MIN_RATE and rate - other_rate >= LABEL_MIN_GAIN
                 )
                 p = (
                     hypergeom_tail(count, n_low + n_high, c_low + c_high, n_end)

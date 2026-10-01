@@ -2082,7 +2082,9 @@ the largest):
   from the outer 20% at the other end. The statistics are the regions' own
   (hypergeometric tail over TAGGED pictures only, one Benjamini-Hochberg
   correction over every admissible test of the map, `q` < 0.01, `ratio` >= 3
-  or `rate` >= 0.6 with a `gain` of at least 0.25 over `other_rate`); a tag is
+  or `rate` >= 0.6 with a `gain` of at least 0.25 over `other_rate`), and the tag
+  must describe a real share of the end (`rate` >= 0.25 and `gain` >= 0.15, so a
+  tag on 6% of one end and none of the other names nothing); a tag is
   admissible when at least 4 pictures of the end carry it and both ends have
   at least 10 tagged pictures. Tag counts are taken on at most 4000 pictures
   per end, evenly spread over the end's ranks (smaller maps are counted
@@ -2118,7 +2120,7 @@ unchanged repeat); dropped whenever the layout is.
 {
   "status": "ok", "space": "kaloscope", "layout": "pca",
   "model_version": "kaloscope-2.0:sha256:...",
-  "algo_version": 1, "points": 1447,
+  "algo_version": 2, "points": 1447,
   "axes": {
     "x": {"weak": false, "strength": 0.62,
           "low":  {"representatives": [88, 91, 412], "size": 289, "tagged": 289,
