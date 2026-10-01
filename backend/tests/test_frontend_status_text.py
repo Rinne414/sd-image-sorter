@@ -126,14 +126,14 @@ def test_gpu_fallback_gives_the_concrete_reason(lang, reason_key, must_contain):
     assert not any(word in result["text"] for word in GENERIC_ZH + GENERIC_EN)
 
 
-def test_gpu_inference_fallback_names_its_reason_in_both_languages():
+def test_gpu_inference_fallback_does_not_repeat_its_generic_reason():
     zh, en = (
         _run(lang, [_gpu("gpu_inference_failed", "inference_failed")])[0]["text"]
         for lang in ("zh-CN", "en")
     )
 
-    assert "GPU 推理失败，改用 CPU 继续：GPU 推理失败。" == zh
-    assert en.startswith("GPU inference failed. Continuing on CPU: ")
+    assert zh == "GPU 推理失败，改用 CPU 继续..."
+    assert en == "GPU inference failed. Continuing on CPU..."
 
 
 def test_the_raw_formatter_would_have_hidden_these_causes():

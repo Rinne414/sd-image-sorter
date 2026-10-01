@@ -528,7 +528,8 @@ function tagStatusText(progress) {
         case 'tagging_batch': return fill('tagger.msg.taggingBatch', 'Tagging images {start}-{end}/{total}: {first} ... {last}', { ...args, total });
         case 'tagging_one': return fill('tagger.msg.taggingOne', 'Tagging image {start}/{total}: {first}', { ...args, total });
         case 'runtime_adjusted': return appT('tagger.msg.runtimeAdjusted', 'The runtime was adjusted automatically to keep the run stable.');
-        case 'gpu_inference_failed': return withReason('tagger.msg.gpuInferenceFailed', 'GPU inference failed. Continuing on CPU...', args.reason_key);
+        // The generic inference_failed reason only restates this sentence.
+        case 'gpu_inference_failed': return withReason('tagger.msg.gpuInferenceFailed', 'GPU inference failed. Continuing on CPU...', args.reason_key === 'inference_failed' ? '' : args.reason_key);
         case 'image_done': return args.item || '';
         case 'batch_error': return fill('tagger.msg.batchError', 'A batch failed. Images processed: {current}/{total}', { current, total });
         case 'cancelling': return fill('tagger.progressCancelling', 'Cancelling... {current}/{total}', { current, total: Math.max(total, current) });
