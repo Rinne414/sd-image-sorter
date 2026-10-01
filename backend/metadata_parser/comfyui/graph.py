@@ -387,7 +387,10 @@ class ComfyUIGraphMixin:
         return any(key in names for key in self.COMFYUI_INSTRUCT_INPUT_KEYS)
 
     # The consumer map of the graph a thread parsed last. Holding the graph
-    # itself (compared by identity) keeps its id from being reused.
+    # itself (compared by identity) keeps its id from being reused. This
+    # assumes a graph dict is only mutated while it is built (extract.py and
+    # the UI conversion here); an in-place edit that keeps its length would
+    # get the old map back.
     _consumer_map_cache = threading.local()
 
     def _comfyui_consumer_map(self, nodes: Dict[str, dict]) -> Dict[str, List[Tuple[str, str]]]:
