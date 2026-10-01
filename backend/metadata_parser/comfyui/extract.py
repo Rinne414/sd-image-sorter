@@ -166,46 +166,31 @@ class ComfyUIExtractMixin:
             if fallback:
                 prompt_nodes = fallback
 
-        # Fallback — fill ONLY the missing side. The old unconditional
-        # unpack overwrote a traced negative with the fallback's (possibly
-        # None) value whenever the positive was missing.
-        # Also upgrade a traced fragment to a longer completed form found
-        # elsewhere (ShowText executed cache, concat result).
+        # Prompt sources, best first: the API graph's sampler trace, the scored
+        # harvest of the API graph, the UI workflow's sampler trace, the scored
+        # harvest of the UI graph. A source fills ONLY a side nothing before it
+        # found (the old unconditional unpack overwrote a traced negative with
+        # a fallback's possibly-None value). A traced fragment is upgraded to
+        # a longer completed form found elsewhere (ShowText executed cache,
+        # concat result).
         fallback_pos, fallback_neg = self._collect_text_from_nodes(nodes)
-        if not positive_text:
-            positive_text = fallback_pos
-        elif fallback_pos and self._is_completed_prompt_form(fallback_pos, positive_text):
-            positive_text = fallback_pos
-        if not negative_text:
-            negative_text = fallback_neg
-        elif fallback_neg and self._is_completed_prompt_form(fallback_neg, negative_text):
-            negative_text = fallback_neg
+        positive_text = self._fill_prompt_side(positive_text, fallback_pos, negative_text)
+        negative_text = self._fill_prompt_side(negative_text, fallback_neg, positive_text)
 
         # Saved WebP/JPEG often embed a *subgraph* API ``prompt`` (upscale /
         # SaveImage only) plus the full UI ``workflow`` that still has CLIP
         # widgets. Tracing the subgraph yields nothing; fill from the UI graph.
+        converted = None
         if (not positive_text or not negative_text) and workflow_data:
             converted = self._workflow_ui_to_prompt_data(workflow_data)
-            if converted:
-                ui_pos, ui_neg = self._trace_sampler_prompts(converted)
-                if not ui_pos or not ui_neg:
-                    harvest_pos, harvest_neg = self._collect_text_from_nodes(converted)
-                    if not ui_pos:
-                        ui_pos = harvest_pos
-                    elif harvest_pos and self._is_completed_prompt_form(harvest_pos, ui_pos):
-                        ui_pos = harvest_pos
-                    if not ui_neg:
-                        ui_neg = harvest_neg
-                    elif harvest_neg and self._is_completed_prompt_form(harvest_neg, ui_neg):
-                        ui_neg = harvest_neg
-                if not positive_text:
-                    positive_text = ui_pos
-                elif ui_pos and self._is_completed_prompt_form(ui_pos, positive_text):
-                    positive_text = ui_pos
-                if not negative_text:
-                    negative_text = ui_neg
-                elif ui_neg and self._is_completed_prompt_form(ui_neg, negative_text):
-                    negative_text = ui_neg
+        if converted:
+            ui_pos, ui_neg = self._trace_sampler_prompts(converted)
+            positive_text = self._fill_prompt_side(positive_text, ui_pos, negative_text)
+            negative_text = self._fill_prompt_side(negative_text, ui_neg, positive_text)
+            if not positive_text or not negative_text:
+                harvest_pos, harvest_neg = self._collect_text_from_nodes(converted)
+                positive_text = self._fill_prompt_side(positive_text, harvest_pos, negative_text)
+                negative_text = self._fill_prompt_side(negative_text, harvest_neg, positive_text)
 
         workflow_assets = self._extract_comfyui_model_assets_from_workflow_widgets(workflow_data)
 
@@ -287,6 +272,35 @@ class ComfyUIExtractMixin:
                 img2img_info,
                 model_assets,
                 civitai_resources)
+
+    def _upgrade_to_completed_form(self, current: Optional[str], candidate: Optional[str]) -> Optional[str]:
+        """``candidate`` when it is the longer completed form of ``current``."""
+        if current and candidate and self._is_completed_prompt_form(candidate, current):
+            return candidate
+        return current
+
+    def _is_same_prompt_text(self, first: str, second: str) -> bool:
+        """Equal, or one is the other with more appended (a LoRA tag, a suffix)."""
+        return (
+            first.strip() == second.strip()
+            or self._is_completed_prompt_form(first, second)
+            or self._is_completed_prompt_form(second, first)
+        )
+
+    def _fill_prompt_side(
+        self, current: Optional[str], candidate: Optional[str], other_side: Optional[str]
+    ) -> Optional[str]:
+        """Fill an empty prompt side from ``candidate``, or upgrade a filled one.
+
+        The same text on both sides is one side's text found twice, so a
+        candidate equal to (or an extension of) the other side never fills
+        this one.
+        """
+        if current:
+            return self._upgrade_to_completed_form(current, candidate)
+        if candidate and other_side and self._is_same_prompt_text(candidate, other_side):
+            return current
+        return candidate or current
 
     def _collect_prompt_nodes(self, nodes: Dict[str, dict]) -> List[Dict[str, Any]]:
         """Collect all text-bearing nodes for multi-node prompt breakdown."""

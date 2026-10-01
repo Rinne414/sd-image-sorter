@@ -230,13 +230,33 @@ def looks_like_non_prompt_value(text: str) -> bool:
         return True
     if re.fullmatch(r"[\d\s.,:x×-]+", stripped):
         return True
-    visible = [ch for ch in stripped if not ch.isspace()]
-    if visible and sum(1 for ch in visible if ch.isalpha()) < len(visible) * MIN_LETTER_RATIO:
-        return True
     # kjnodes Set/Get bus titles and other UI labels, not generation text.
     if "【" in stripped and "】" in stripped and not re.search(r"[,，、]", stripped):
         return True
     return False
+
+
+def looks_like_formula(text: str) -> bool:
+    """A formula, id or hash: mostly non-letters.
+
+    A string holding ``<lora:...>`` tags is exempt: a LoRA stack is mostly
+    digits and punctuation yet its node's widget still has to reach LoRA
+    extraction, so it is judged by ``looks_like_formula_or_tag_stack`` instead.
+    """
+    stripped = str(text or "").strip()
+    if _LORA_TAG_RE.search(stripped):
+        return False
+    visible = [ch for ch in stripped if not ch.isspace()]
+    return bool(visible) and sum(1 for ch in visible if ch.isalpha()) < len(visible) * MIN_LETTER_RATIO
+
+
+def looks_like_formula_or_tag_stack(text: str) -> bool:
+    """Strings the harvest must not score as a prompt: a formula, or nothing
+    but ``<lora:...>`` tags."""
+    stripped = str(text or "").strip()
+    if looks_like_formula(stripped):
+        return True
+    return bool(_LORA_TAG_RE.search(stripped)) and not tokenize_prompt_text(stripped)
 
 
 def score_prompt_likeness(text: str, vocab: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
@@ -322,7 +342,7 @@ def harvest_prompt_candidates(nodes: Dict[str, dict],
                 for nested in _json_prompt_strings(stripped):
                     push(nested, node_id, class_type, f"{key}.text", is_text_node, depth + 1)
             return
-        if looks_like_non_prompt_value(stripped):
+        if looks_like_non_prompt_value(stripped) or looks_like_formula_or_tag_stack(stripped):
             return
         result = score_prompt_likeness(stripped, vocab)
         score = result["score"] + (TEXT_NODE_BONUS if is_text_node else 0.0)
@@ -355,7 +375,7 @@ def harvest_prompt_candidates(nodes: Dict[str, dict],
         for key, value in inputs.items():
             if isinstance(value, str):
                 push(value, node_id, class_type, key, is_text_node)
-        if class_type in _BUS_NODE_TYPES:
+        if class_type in _BUS_NODE_TYPES or node.get("_ui_linked_text_widget"):
             continue
         for index, text in enumerate(_widget_strings_for_harvest(node.get("widgets_values"))):
             push(text, node_id, class_type, f"widgets_values[{index}]", is_text_node)

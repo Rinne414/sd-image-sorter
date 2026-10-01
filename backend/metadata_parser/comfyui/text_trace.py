@@ -324,6 +324,11 @@ class ComfyUITextTraceMixin:
         inputs = node.get("inputs", {})
         texts = []
 
+        # ConditioningZeroOut blanks the conditioning it is given: whatever
+        # text sits behind it is not part of this side's prompt.
+        if "ConditioningZeroOut" in class_type:
+            return []
+
         # FluxGuidance / similar: the prompt is on the conditioning input.
         # Infinite Image Browser skips through this node explicitly.
         if "Guidance" in class_type:
@@ -417,7 +422,7 @@ class ComfyUITextTraceMixin:
         # literal only when upstream derivation yields nothing. If the cache
         # is a longer completed form of the upstream fragments (concat of
         # Get/Set buses), keep the cache — that is the executed prompt.
-        elif "ShowText" in class_type:
+        elif self._is_comfyui_display_node(class_type):
             texts.extend(self._resolve_showtext_texts(inputs, nodes, visited, depth))
 
         # DanbooruGallery nodes - selection_data is a QUEUE-TIME literal, so
@@ -515,9 +520,6 @@ class ComfyUITextTraceMixin:
                         texts.extend(sub_texts)
                         break
 
-        if not texts:
-            texts = [item["text"] for item in self._cached_link_text_with_source(node_id, node)]
-
         return texts
 
     def _extract_text_from_node_with_source(self, node_id: str, nodes: Dict[str, dict], visited: Set[str], depth: int = 0,
@@ -537,6 +539,9 @@ class ComfyUITextTraceMixin:
 
         class_type = node.get("class_type", "")
         inputs = node.get("inputs", {})
+
+        if "ConditioningZeroOut" in class_type:
+            return []
 
         if "Guidance" in class_type:
             nested_visited = set(visited)
@@ -585,11 +590,11 @@ class ComfyUITextTraceMixin:
         # ShowText display caches (text_0) are serialized at QUEUE time and
         # can be STALE; prefer the live upstream link, cache as fallback only.
         # A cache that is a completed form of the upstream fragments wins.
-        if "ShowText" in class_type:
+        if self._is_comfyui_display_node(class_type):
             nested_visited = set(visited)
             nested_visited.add(node_id)
             upstream: List[Dict[str, Any]] = []
-            for key in ["text", "string"]:
+            for key in ["text", "string", "source"]:
                 val = inputs.get(key)
                 if isinstance(val, (list, tuple)):
                     upstream.extend(
@@ -750,22 +755,6 @@ class ComfyUITextTraceMixin:
                 return traced
 
         # Nothing upstream is recoverable (runtime text: LLM, VLM, wildcard).
-        # The UI workflow keeps the last value this node's linked text input
-        # carried; like a ShowText cache it is the executed prompt of the
-        # queued run, so it is the fallback of last resort.
-        return self._cached_link_text_with_source(node_id, node)
-
-    def _cached_link_text_with_source(self, node_id: str, node: dict) -> List[Dict[str, Any]]:
-        """The queue-time widget value of a linked text input, if the UI graph kept one."""
-        cache = node.get("_ui_link_cache") if isinstance(node.get("_ui_link_cache"), dict) else {}
-        for key, text in cache.items():
-            if isinstance(text, str) and text.strip():
-                return [{
-                    "text": text.strip(),
-                    "source_node_id": node_id,
-                    "source_class_type": str(node.get("class_type") or ""),
-                    "source_key": f"{key} (widget cache)",
-                }]
         return []
 
     def _collect_text_from_nodes(self, nodes: Dict[str, dict]) -> Tuple[Optional[str], Optional[str]]:
@@ -835,7 +824,7 @@ class ComfyUITextTraceMixin:
     ) -> List[str]:
         """Live upstream first; cache wins only as fallback or completed form."""
         upstream_texts: List[str] = []
-        for key in ["text", "string"]:
+        for key in ["text", "string", "source"]:
             val = inputs.get(key)
             if isinstance(val, (list, tuple)):
                 upstream_texts.extend(

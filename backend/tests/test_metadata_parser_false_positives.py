@@ -529,9 +529,11 @@ class TestLlmInstructionsAreNotPrompts:
         assert "Analyze the image carefully" not in prompt
         assert not prompt, prompt
 
-    def test_cached_generated_prompt_on_the_conditioning_path_wins(
+    def test_stale_widget_value_on_the_conditioning_path_is_not_adopted(
         self, tmp_path: Path
     ):
+        """A linked input keeps the value typed before it was wired; the upstream
+        result is never written back, so that widget is not the executed prompt."""
         result = parse_image(
             _write_png(
                 tmp_path,
@@ -544,7 +546,7 @@ class TestLlmInstructionsAreNotPrompts:
         )
 
         assert result["generator"] == "comfyui"
-        assert result["prompt"] == CACHED_GENERATED_PROMPT
+        assert not result["prompt"], result["prompt"]
 
     def test_instruct_node_text_inputs_are_never_traced(self):
         parser = MetadataParser()

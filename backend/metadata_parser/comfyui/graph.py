@@ -9,6 +9,7 @@
 # __init__.py (stage 3); see tests/test_metadata_parser_pins.py.
 import json
 import re
+import threading
 from typing import Dict, Any, Tuple, List, Optional, Set
 
 class ComfyUIGraphMixin:
@@ -139,6 +140,15 @@ class ComfyUIGraphMixin:
         "part3",
         "part4",
     }
+
+    # Nodes that show the value of their upstream input and keep it as a
+    # widget when the workflow is saved.
+    _DISPLAY_NODE_MARKERS = ("showtext", "previewany", "showanything", "displayany")
+
+    @classmethod
+    def _is_comfyui_display_node(cls, class_type: Any) -> bool:
+        lowered = str(class_type or "").lower()
+        return any(marker in lowered for marker in cls._DISPLAY_NODE_MARKERS)
 
     @staticmethod
     def _unwrap_comfyui_widget_text(value: Any) -> Optional[str]:
@@ -304,33 +314,23 @@ class ComfyUIGraphMixin:
                 else:
                     inputs[text_widget_inputs[0]["name"]] = string_widgets[0]
 
-            if "ShowText" in class_type:
+            # Only a display node stores the value that reached it. A linked
+            # input on any other node keeps whatever was typed before it was
+            # wired (the upstream result is never written back), so that
+            # widget is not read.
+            if self._is_comfyui_display_node(class_type):
                 cache = self._unwrap_comfyui_widget_text(widgets)
                 if cache:
                     inputs.setdefault("text_0", cache)
 
-            # A text input that is a LINK keeps the last value it carried as
-            # its widget (ComfyUI serializes widgets at queue time). Pair the
-            # two by position; a single linked text widget pairs with a
-            # single string widget. The tracer reads this cache only after
-            # the live upstream chain yields nothing.
-            link_cache: Dict[str, str] = {}
-            linked_text_inputs = [
-                inp for inp in widget_inputs
-                if str(inp.get("name")) in self._TEXT_WIDGET_INPUT_NAMES
+            has_linked_text_input = any(
+                str(inp.get("name")) in self._TEXT_WIDGET_INPUT_NAMES
                 and inp.get("name") in inputs
-            ]
-            if linked_text_inputs and isinstance(widgets, list):
-                if len(widget_inputs) == len(widgets):
-                    for inp, raw in zip(widget_inputs, widgets):
-                        if inp in linked_text_inputs:
-                            text = self._unwrap_comfyui_widget_text(raw)
-                            if text:
-                                link_cache[str(inp["name"])] = text
-                elif len(linked_text_inputs) == 1 and len(string_widgets) == 1:
-                    link_cache[str(linked_text_inputs[0]["name"])] = string_widgets[0]
-
-            if not any(isinstance(value, str) and value.strip() for value in inputs.values()):
+                for inp in widget_inputs
+            )
+            if not has_linked_text_input and not any(
+                isinstance(value, str) and value.strip() for value in inputs.values()
+            ):
                 prompt_widget = self._first_prompt_like_widget(string_widgets)
                 if prompt_widget:
                     inputs.setdefault("text", prompt_widget)
@@ -361,7 +361,9 @@ class ComfyUIGraphMixin:
                     ],
                 },
                 "_ui_no_outputs": isinstance(ui_outputs, list) and not ui_outputs,
-                "_ui_link_cache": link_cache,
+                # A linked text input keeps a stale hand-typed widget value:
+                # the text harvest must not score this node's widgets.
+                "_ui_linked_text_widget": has_linked_text_input,
             }
 
         return prompt_data or None
@@ -384,18 +386,31 @@ class ComfyUIGraphMixin:
         names.update(str(name).lower() for name in (node.get("_ui_input_names") or []))
         return any(key in names for key in self.COMFYUI_INSTRUCT_INPUT_KEYS)
 
-    def _comfyui_output_reaches_text_input(self, nodes: Dict[str, dict], node_id: str) -> bool:
-        """Walk consumers downstream: does this node's output land on a text input?
+    # The consumer map of the graph a thread parsed last. Holding the graph
+    # itself (compared by identity) keeps its id from being reused.
+    _consumer_map_cache = threading.local()
 
-        Stops at generation roots; passes through anything else (PreviewAny,
-        switches), so an LLM -> preview -> primitive.value chain is text.
-        """
+    def _comfyui_consumer_map(self, nodes: Dict[str, dict]) -> Dict[str, List[Tuple[str, str]]]:
+        """For each node id, the (consumer id, input key) pairs that read its output."""
+        cached = getattr(self._consumer_map_cache, "entry", None)
+        if cached is not None and cached[0] is nodes and cached[1] == len(nodes):
+            return cached[2]
         consumers: Dict[str, List[Tuple[str, str]]] = {}
         for consumer_id, consumer in nodes.items():
             inputs = consumer.get("inputs") if isinstance(consumer, dict) and isinstance(consumer.get("inputs"), dict) else {}
             for key, value in inputs.items():
                 for ref in self._iter_comfyui_input_refs(value):
                     consumers.setdefault(ref, []).append((consumer_id, str(key).lower()))
+        self._consumer_map_cache.entry = (nodes, len(nodes), consumers)
+        return consumers
+
+    def _comfyui_output_reaches_text_input(self, nodes: Dict[str, dict], node_id: str) -> bool:
+        """Walk consumers downstream: does this node's output land on a text input?
+
+        Stops at generation roots; passes through anything else (PreviewAny,
+        switches), so an LLM -> preview -> primitive.value chain is text.
+        """
+        consumers = self._comfyui_consumer_map(nodes)
         seen: Set[str] = {node_id}
         queue = [node_id]
         while queue:
@@ -473,6 +488,13 @@ class ComfyUIGraphMixin:
         io = node.get("_ui_io") if isinstance(node.get("_ui_io"), dict) else {}
         return consumed_as_image or "IMAGE" in [str(item).upper() for item in (io.get("outputs") or [])]
 
+    # Link inputs that never carry prompt text. What sits behind them (a
+    # LoRA manager's string, a note feeding the model) is not a prompt.
+    _NON_TEXT_LINK_KEYS = frozenset({
+        "model", "clip", "vae", "latent_image", "latent", "samples", "sigmas",
+        "noise", "sampler", "upscale_model", "control_net", "lora_stack",
+    })
+
     def _comfyui_prompt_eligible_nodes(self, nodes: Dict[str, dict]) -> Tuple[Set[str], Set[str]]:
         """Which nodes may hold the prompt, and which must never contribute text.
 
@@ -480,7 +502,8 @@ class ComfyUIGraphMixin:
         the harvest only sees text that can have reached a generation step:
 
         1. With a generation root (see ``_is_comfyui_generation_root``):
-           every node upstream of a root, plus nodes consuming an upstream
+           every node upstream of a root through a link that can carry text
+           (not model/clip/vae/latent links, see ``_NON_TEXT_LINK_KEYS``), plus nodes consuming an upstream
            value (ShowText displays of the executed prompt). An instruct node
            is a barrier: kept as an anchor for its displays, it contributes
            no text and nothing behind its instruction inputs is reached.
@@ -495,11 +518,19 @@ class ComfyUIGraphMixin:
         never contribute.
         """
         link_refs: Dict[str, List[str]] = {}
+        walk_refs: Dict[str, List[str]] = {}
         consumed: Set[str] = set()
         for node_id, node in nodes.items():
             inputs = node.get("inputs") if isinstance(node, dict) and isinstance(node.get("inputs"), dict) else {}
             refs = [ref for ref in self._iter_comfyui_input_refs(inputs) if ref in nodes and ref != node_id]
             link_refs[node_id] = refs
+            walk_refs[node_id] = [
+                ref
+                for key, value in inputs.items()
+                if str(key).lower() not in self._NON_TEXT_LINK_KEYS
+                for ref in self._iter_comfyui_input_refs(value)
+                if ref in nodes and ref != node_id
+            ]
             consumed.update(refs)
         instruct = {
             node_id for node_id, node in nodes.items()
@@ -534,8 +565,8 @@ class ComfyUIGraphMixin:
                 eligible.add(node_id)
                 if node_id in instruct:
                     continue
-                queue.extend(link_refs.get(node_id, []))
-            for node_id, refs in link_refs.items():
+                queue.extend(walk_refs.get(node_id, []))
+            for node_id, refs in walk_refs.items():
                 if node_id in eligible or node_id in instruct:
                     continue
                 if any(ref in eligible for ref in refs):
@@ -560,13 +591,14 @@ class ComfyUIGraphMixin:
         try:
             from prompt_text_scorer import (
                 PROMPT_SCORE_FLOOR,
+                looks_like_formula,
                 looks_like_non_prompt_value,
                 score_prompt_likeness,
             )
         except Exception:
             return None
         for text in string_widgets:
-            if looks_like_non_prompt_value(text):
+            if looks_like_non_prompt_value(text) or looks_like_formula(text):
                 continue
             if score_prompt_likeness(text)["score"] >= PROMPT_SCORE_FLOOR:
                 return text
