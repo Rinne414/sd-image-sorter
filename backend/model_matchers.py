@@ -1,8 +1,15 @@
 """Which files in a source root are the exact models this program pins (MS1a).
 
-One matcher per model family. Each returns ``ExternalMatch`` rows (adopt
-this file) and ``RejectedCandidate`` rows (looks related, but is not the
-pinned model, so the Model Center can say *why* instead of staying silent).
+One matcher per model family. Each returns ``ExternalMatch`` rows (the
+pinned model is here) and ``RejectedCandidate`` rows (looks related, but is
+not the pinned model, so the Model Center can say *why* instead of staying
+silent).
+
+A match is **trusted**, and only then adopted, when
+``model_roots.is_under_allowed_model_root`` accepts its path: the same rule
+the loaders apply (SEC1b), so a card that shows "ready" never points at a
+file the loader would refuse. Untrusted matches become suggestions ("found
+ComfyUI with 8.5 GB usable, trust it?").
 
 Verification levels, strongest first:
 
@@ -21,6 +28,15 @@ hashed when a pin exists, even on network drives.
 A different version is never adopted (TIPO v2 vs v2.1, another Florence
 snapshot); it is reported as ``version_mismatch``. SAM3 checkpoints in Meta's
 format are not matched at all: the loader needs the transformers folder.
+Only the WD14 runtime family of ``TAGGER_MODELS`` is matched; OppaiOracle
+needs its preprocessing/threshold sidecars and nobody has shown a ComfyUI
+install carrying it, so it is left out until there is a real case.
+
+Network rules: a folder or file that reaches a network location (UNC, mapped
+or removable drive, Linux network mount, or a symlink/junction to one) is
+never opened on the request thread; ``network_allowed`` is set only by the
+background pass over trusted network roots. A single unreadable file becomes
+a ``unreadable`` rejection, never an exception out of the matcher.
 """
 
 from __future__ import annotations
@@ -28,10 +44,22 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Protocol, Sequence, Tuple
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Protocol,
+    Sequence,
+    Tuple,
+)
 
+import model_roots
 import model_sources
 from model_sources import KIND_COMFYUI, KIND_FOLDER, KIND_HF_CACHE, SourceRoot
 from tagger_models import TAGGER_MODELS
@@ -55,6 +83,7 @@ REASON_COMPANION = "companion_mismatch"
 REASON_INCOMPLETE = "incomplete"
 REASON_VERSION = "version_mismatch"
 REASON_UNVERIFIED = "unverified"
+REASON_UNREADABLE = "unreadable"
 
 # Kaloscope 2.0 checkpoint (HF HEAD 2026-10-01: X-Linked-Size / X-Linked-ETag).
 KALOSCOPE_CHECKPOINT_SIZE_BYTES = 2_937_892_740
@@ -64,6 +93,9 @@ KALOSCOPE_CHECKPOINT_SHA256 = (
 KALOSCOPE_CHECKPOINT_NAME = "best_checkpoint.pth"
 KALOSCOPE_CLASS_MAPPING_NAME = "class_mapping.csv"
 KALOSCOPE_VARIANT = "kaloscope2.0"
+
+# TAGGER_MODELS entries without a runtime_backend run on the WD14 ONNX tagger.
+WD14_RUNTIME_BACKEND = "wd14"
 
 
 @dataclass(frozen=True)
@@ -109,14 +141,18 @@ _TIPO_COMFY_SUBDIRS = ("models/kgen", "models/kgen/gguf")
 _TIPO_FOLDER_SUBDIRS = ("", "kgen", "tipo")
 _TIPO_EXTRA_KEYS = ("kgen",)
 
+TrustCheck = Callable[[str], bool]
+
 
 @dataclass(frozen=True)
 class ExternalMatch:
     model_id: str
     variant: Optional[str]
     path: str
-    source: str
+    source: str  # the root it was found under
+    folder: str  # the folder that would have to be trusted (root, or an extra_model_paths folder)
     source_kind: str
+    origin: str
     verify: str
     size_bytes: int
     mtime_ns: int
@@ -127,22 +163,22 @@ class ExternalMatch:
     # Bytes the user does not have to download: the primary file plus its
     # companion files (a snapshot folder already counts everything inside).
     total_bytes: int = 0
+    # model_roots.is_under_allowed_model_root(path): the loaders' own rule.
+    trusted: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            "model_id": self.model_id,
-            "variant": self.variant,
-            "path": self.path,
-            "source": self.source,
-            "source_kind": self.source_kind,
-            "verify": self.verify,
-            "size_bytes": self.size_bytes,
-            "total_bytes": self.total_bytes,
-            "mtime_ns": self.mtime_ns,
-            "companions": list(self.companions),
-            "notes": list(self.notes),
-            "is_network": self.is_network,
-        }
+        data = {f.name: getattr(self, f.name) for f in fields(self)}
+        data["companions"] = list(self.companions)
+        data["notes"] = list(self.notes)
+        return data
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "ExternalMatch":
+        known = {f.name for f in fields(cls)}
+        values = {k: v for k, v in data.items() if k in known}
+        values["companions"] = tuple(values.get("companions") or ())
+        values["notes"] = tuple(values.get("notes") or ())
+        return cls(**values)
 
 
 @dataclass(frozen=True)
@@ -155,14 +191,7 @@ class RejectedCandidate:
     detail: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
-            "model_id": self.model_id,
-            "variant": self.variant,
-            "path": self.path,
-            "source": self.source,
-            "reason": self.reason,
-            "detail": self.detail,
-        }
+        return {f.name: getattr(self, f.name) for f in fields(self)}
 
 
 @dataclass
@@ -181,6 +210,12 @@ class DigestCache(Protocol):
     def remember_digest(
         self, path: str, size: int, mtime_ns: int, digest: str
     ) -> None: ...
+
+
+@dataclass(frozen=True)
+class _CandidateDir:
+    path: Path
+    folder: str  # what a suggestion would ask the user to trust
 
 
 # ---------------------------------------------------------------------------
@@ -207,14 +242,94 @@ def _stat_file(path: Path) -> Optional[os.stat_result]:
     return result if result.st_size > 0 else None
 
 
-class _Context:
-    """One root's matching state: hashing policy and the digest cache."""
+def _plain_children(folder: Path) -> List[Path]:
+    """Entries that are not symlinks or junctions, sorted; empty on error."""
+    try:
+        with os.scandir(folder) as entries:
+            return sorted(
+                Path(e.path) for e in entries if not model_sources.is_reparse_entry(e)
+            )
+    except OSError:
+        return []
 
-    def __init__(self, root: SourceRoot, digest_cache: Optional[DigestCache]) -> None:
+
+class _Context:
+    """One root's matching state: read policy, hashing policy, digest cache, trust."""
+
+    def __init__(
+        self,
+        root: SourceRoot,
+        digest_cache: Optional[DigestCache],
+        trust_check: Optional[TrustCheck] = None,
+        network_allowed: bool = False,
+    ) -> None:
         self.root = root
         self.cache = digest_cache
+        self.trust_check = trust_check or model_roots.is_under_allowed_model_root
+        self.network_allowed = network_allowed or root.is_network
+        self._verdicts: Dict[str, Tuple[bool, bool]] = {}
+
+    # read policy ---------------------------------------------------------
+
+    def judge(self, path: Path) -> Tuple[bool, bool]:
+        """(readable, is_network) for a path under this root."""
+        return model_sources.judge_path(
+            self.root.path,
+            str(path),
+            network_allowed=self.network_allowed,
+            cache=self._verdicts,
+        )
+
+    def may_read(self, path: Path) -> bool:
+        return self.judge(path)[0]
+
+    def stat_file(self, path: Path) -> Optional[os.stat_result]:
+        """stat only when the read policy allows it."""
+        if not self.may_read(path):
+            return None
+        return _stat_file(path)
+
+    def candidate_dirs(
+        self,
+        comfy_subdirs: Sequence[str],
+        folder_subdirs: Sequence[str],
+        extra_keys: Sequence[str],
+    ) -> List[_CandidateDir]:
+        base = Path(self.root.path)
+        raw: List[_CandidateDir] = []
+        if self.root.kind == KIND_COMFYUI:
+            raw.extend(
+                _CandidateDir(base / sub, self.root.path) for sub in comfy_subdirs
+            )
+            for key in extra_keys:
+                raw.extend(
+                    _CandidateDir(Path(p), p)
+                    for p in self.root.extra_model_paths.get(key, ())
+                )
+        elif self.root.kind == KIND_FOLDER:
+            raw.extend(
+                _CandidateDir((base / sub) if sub else base, self.root.path)
+                for sub in folder_subdirs
+            )
+        dirs: List[_CandidateDir] = []
+        seen: set = set()
+        for candidate in raw:
+            key = os.path.normcase(str(candidate.path))
+            if key in seen or not self.may_read(candidate.path):
+                continue
+            try:
+                if not candidate.path.is_dir():
+                    continue
+            except OSError:
+                continue
+            seen.add(key)
+            dirs.append(candidate)
+        return dirs
+
+    # hashing -------------------------------------------------------------
 
     def sha256(self, path: Path, stat: os.stat_result) -> str:
+        """Digest, from the cache when size and mtime match; raises OSError."""
         key = str(path)
         if self.cache is not None:
             cached = self.cache.cached_digest(key, stat.st_size, stat.st_mtime_ns)
@@ -225,8 +340,13 @@ class _Context:
             self.cache.remember_digest(key, stat.st_size, stat.st_mtime_ns, digest)
         return digest
 
-    def can_hash_model(self, stat: os.stat_result) -> Tuple[bool, Optional[str]]:
-        if self.root.is_network:
+    def is_network_file(self, path: Path) -> bool:
+        return self.root.is_network or self.judge(path)[1]
+
+    def can_hash_model(
+        self, path: Path, stat: os.stat_result
+    ) -> Tuple[bool, Optional[str]]:
+        if self.is_network_file(path):
             return False, "hash_skipped_network"
         if stat.st_size > SHA_LIMIT_BYTES:
             return False, "hash_skipped_large"
@@ -236,15 +356,18 @@ class _Context:
         self, path: Path, pins: Sequence[str]
     ) -> Tuple[Optional[str], str]:
         """(reason, detail) for a required companion file; reason ``None`` when fine."""
-        stat = _stat_file(path)
+        stat = self.stat_file(path)
         if stat is None:
             return (
                 REASON_MISSING_COMPANION,
-                f"{path.name} is missing or empty next to the model",
+                f"{path.name} is missing, empty or not readable next to the model",
             )
         if not pins or stat.st_size > COMPANION_HASH_LIMIT_BYTES:
             return None, ""
-        digest = self.sha256(path, stat)
+        try:
+            digest = self.sha256(path, stat)
+        except OSError as exc:
+            return REASON_UNREADABLE, f"{path.name} could not be read: {exc}"
         if digest not in pins:
             return (
                 REASON_COMPANION,
@@ -252,29 +375,7 @@ class _Context:
             )
         return None, ""
 
-    def candidate_dirs(
-        self,
-        comfy_subdirs: Sequence[str],
-        folder_subdirs: Sequence[str],
-        extra_keys: Sequence[str],
-    ) -> List[Path]:
-        base = Path(self.root.path)
-        raw: List[Path] = []
-        if self.root.kind == KIND_COMFYUI:
-            raw.extend(base / sub for sub in comfy_subdirs)
-            for key in extra_keys:
-                raw.extend(Path(p) for p in self.root.extra_model_paths.get(key, ()))
-        elif self.root.kind == KIND_FOLDER:
-            raw.extend((base / sub) if sub else base for sub in folder_subdirs)
-        dirs: List[Path] = []
-        seen: set = set()
-        for folder in raw:
-            key = os.path.normcase(str(folder))
-            if key in seen or not folder.is_dir():
-                continue
-            seen.add(key)
-            dirs.append(folder)
-        return dirs
+    # results -------------------------------------------------------------
 
     def match(
         self,
@@ -285,6 +386,7 @@ class _Context:
         verify: str,
         companions: Iterable[str] = (),
         notes: Iterable[str] = (),
+        folder: Optional[str] = None,
     ) -> ExternalMatch:
         companion_paths = tuple(companions)
         total = stat.st_size
@@ -298,16 +400,26 @@ class _Context:
             variant=variant,
             path=str(path),
             source=self.root.path,
+            folder=folder or self.root.path,
             source_kind=self.root.kind,
+            origin=self.root.origin,
             verify=verify,
             size_bytes=stat.st_size,
             mtime_ns=stat.st_mtime_ns,
             companions=companion_paths,
             notes=tuple(notes),
             trusted_rank=self.root.trusted_rank,
-            is_network=self.root.is_network,
+            is_network=self.is_network_file(path),
             total_bytes=total,
+            trusted=self._is_trusted(path),
         )
+
+    def _is_trusted(self, path: Path) -> bool:
+        try:
+            return bool(self.trust_check(str(path)))
+        except Exception as exc:  # the loader rule must never take detection down
+            logger.warning("Trust check failed for %s: %s", path, exc)
+            return False
 
     def reject(
         self,
@@ -343,10 +455,13 @@ def _verify_pinned_file(
         )
     if not sha256:
         return None, "", []
-    allowed, note = ctx.can_hash_model(stat)
+    allowed, note = ctx.can_hash_model(path, stat)
     if not allowed:
         return None, "", [note] if note else []
-    digest = ctx.sha256(path, stat)
+    try:
+        digest = ctx.sha256(path, stat)
+    except OSError as exc:
+        return REASON_UNREADABLE, f"{path.name} could not be read: {exc}", []
     if digest != sha256:
         return (
             REASON_SHA,
@@ -357,241 +472,23 @@ def _verify_pinned_file(
 
 
 # ---------------------------------------------------------------------------
-# WD14 family (TAGGER_MODELS entries with a size pin)
+# WD14 family (TAGGER_MODELS entries on the WD14 runtime with a size pin)
 # ---------------------------------------------------------------------------
 
 
-def _wd14_layouts(
-    folder: Path, variant: str, entry: Dict[str, Any]
-) -> List[Tuple[Path, Path, Dict[str, Path]]]:
-    """(model, tags, external-data) candidates: ComfyUI flat ``<variant>.onnx`` and app ``<variant>/<model_file>``."""
-    model_file = str(entry.get("model_file") or "")
-    tags_file = str(entry.get("tags_file") or "")
-    external = {
-        name: folder / variant / name for name in entry.get("external_data_files") or ()
-    }
-    layouts: List[Tuple[Path, Path, Dict[str, Path]]] = []
-    if model_file and tags_file:
-        layouts.append(
-            (folder / variant / model_file, folder / variant / tags_file, external)
-        )
-    if model_file.endswith(".onnx") and tags_file.endswith(".csv") and not external:
-        layouts.append((folder / f"{variant}.onnx", folder / f"{variant}.csv", {}))
-    return layouts
+def is_wd14_runtime_entry(entry: Mapping[str, Any]) -> bool:
+    return (
+        str(entry.get("runtime_backend") or WD14_RUNTIME_BACKEND)
+        == WD14_RUNTIME_BACKEND
+    )
 
 
 def _wd14_entries() -> List[Tuple[str, Dict[str, Any]]]:
     return [
         (name, entry)
         for name, entry in TAGGER_MODELS.items()
-        if entry.get("size_bytes")
+        if entry.get("size_bytes") and is_wd14_runtime_entry(entry)
     ]
-
-
-def match_wd14(ctx: _Context) -> MatchReport:
-    report = MatchReport()
-    folders = ctx.candidate_dirs(
-        _WD14_COMFY_SUBDIRS, _WD14_FOLDER_SUBDIRS, _WD14_EXTRA_KEYS
-    )
-    for folder in folders:
-        for variant, entry in _wd14_entries():
-            for model_path, tags_path, external in _wd14_layouts(
-                folder, variant, entry
-            ):
-                stat = _stat_file(model_path)
-                if stat is None:
-                    continue
-                _match_wd14_file(
-                    ctx, report, variant, entry, model_path, stat, tags_path, external
-                )
-    return report
-
-
-def _match_wd14_file(
-    ctx: _Context,
-    report: MatchReport,
-    variant: str,
-    entry: Dict[str, Any],
-    model_path: Path,
-    stat: os.stat_result,
-    tags_path: Path,
-    external: Dict[str, Path],
-) -> None:
-    reason, detail, notes = _verify_pinned_file(
-        ctx, model_path, stat, entry.get("size_bytes"), entry.get("sha256")
-    )
-    if reason:
-        report.rejected.append(ctx.reject("wd14", variant, model_path, reason, detail))
-        return
-    tags_pin = entry.get("tags_sha256")
-    reason, detail = ctx.check_companion(tags_path, (tags_pin,) if tags_pin else ())
-    if reason:
-        report.rejected.append(ctx.reject("wd14", variant, model_path, reason, detail))
-        return
-    companions = [str(tags_path)]
-    pins = entry.get("external_data_pins") or {}
-    for name, path in external.items():
-        ext_stat = _stat_file(path)
-        if ext_stat is None:
-            report.rejected.append(
-                ctx.reject(
-                    "wd14",
-                    variant,
-                    model_path,
-                    REASON_MISSING_COMPANION,
-                    f"{name} is missing",
-                )
-            )
-            return
-        pin = pins.get(name) or {}
-        ext_reason, ext_detail, ext_notes = _verify_pinned_file(
-            ctx, path, ext_stat, pin.get("size_bytes"), pin.get("sha256")
-        )
-        if ext_reason:
-            report.rejected.append(
-                ctx.reject(
-                    "wd14", variant, model_path, ext_reason, f"{name}: {ext_detail}"
-                )
-            )
-            return
-        notes.extend(f"{name}:{n}" for n in ext_notes)
-        companions.append(str(path))
-    verify = VERIFY_SHA if "sha_verified" in notes else VERIFY_SIZE
-    report.matches.append(
-        ctx.match("wd14", variant, model_path, stat, verify, companions, notes)
-    )
-
-
-# ---------------------------------------------------------------------------
-# Kaloscope 2.0 (artist)
-# ---------------------------------------------------------------------------
-
-
-def _walk_for_name(folder: Path, name: str, depth: int) -> List[Path]:
-    found: List[Path] = []
-    try:
-        children = sorted(folder.iterdir())
-    except OSError:
-        return found
-    for child in children:
-        if child.name == name and _stat_file(child) is not None:
-            found.append(child)
-        elif depth > 0 and child.is_dir() and not child.name.startswith("."):
-            found.extend(_walk_for_name(child, name, depth - 1))
-    return found
-
-
-def read_git_head_commit(repo: Path) -> Optional[str]:
-    """The commit a checkout is at, from ``.git/HEAD`` (direct, loose ref or packed-refs)."""
-    git_dir = repo / ".git"
-    try:
-        head = (git_dir / "HEAD").read_text(encoding="utf-8").strip()
-    except OSError:
-        return None
-    if not head.startswith("ref:"):
-        return head.lower() if len(head) == 40 else None
-    ref = head[4:].strip()
-    try:
-        return (git_dir / ref).read_text(encoding="utf-8").strip().lower()
-    except OSError:
-        pass
-    try:
-        for line in (git_dir / "packed-refs").read_text(encoding="utf-8").splitlines():
-            parts = line.strip().split()
-            if len(parts) == 2 and parts[1] == ref:
-                return parts[0].lower()
-    except OSError:
-        return None
-    return None
-
-
-def _kaloscope_runtime(ctx: _Context) -> Tuple[Optional[Path], str]:
-    import artist_identifier
-
-    base = Path(ctx.root.path)
-    candidates = (
-        [base / "custom_nodes" / "comfyui-lsnet"]
-        if ctx.root.kind == KIND_COMFYUI
-        else [base / "comfyui-lsnet", base / "comfyui-lsnet-runtime"]
-    )
-    for runtime in candidates:
-        if not (runtime / "lsnet_model").is_dir():
-            continue
-        commit = read_git_head_commit(runtime)
-        if commit == artist_identifier.ARTIST_LSNET_RUNTIME_REVISION.lower():
-            return runtime, "runtime_revision_verified"
-        return runtime, "runtime_revision_unverified"
-    return None, "runtime_missing"
-
-
-def match_kaloscope(ctx: _Context) -> MatchReport:
-    import artist_identifier
-
-    report = MatchReport()
-    folders = ctx.candidate_dirs(
-        _KALOSCOPE_COMFY_SUBDIRS, _KALOSCOPE_FOLDER_SUBDIRS, _KALOSCOPE_EXTRA_KEYS
-    )
-    mapping_pins = tuple(
-        artist_identifier._EXPECTED_ARTIST_FILE_SHA256.get(
-            KALOSCOPE_CLASS_MAPPING_NAME, ()
-        )
-    )
-    seen: set = set()
-    for folder in folders:
-        for checkpoint in _walk_for_name(
-            folder, KALOSCOPE_CHECKPOINT_NAME, _KALOSCOPE_WALK_DEPTH
-        ):
-            key = os.path.normcase(str(checkpoint))
-            if key in seen:
-                continue
-            seen.add(key)
-            stat = _stat_file(checkpoint)
-            if stat is None:
-                continue
-            reason, detail, notes = _verify_pinned_file(
-                ctx,
-                checkpoint,
-                stat,
-                KALOSCOPE_CHECKPOINT_SIZE_BYTES,
-                KALOSCOPE_CHECKPOINT_SHA256,
-            )
-            if reason:
-                report.rejected.append(
-                    ctx.reject("artist", KALOSCOPE_VARIANT, checkpoint, reason, detail)
-                )
-                continue
-            mapping = next(
-                (
-                    p
-                    for p in (
-                        checkpoint.parent / KALOSCOPE_CLASS_MAPPING_NAME,
-                        checkpoint.parent.parent / KALOSCOPE_CLASS_MAPPING_NAME,
-                    )
-                    if _stat_file(p) is not None
-                ),
-                checkpoint.parent / KALOSCOPE_CLASS_MAPPING_NAME,
-            )
-            reason, detail = ctx.check_companion(mapping, mapping_pins)
-            if reason:
-                report.rejected.append(
-                    ctx.reject("artist", KALOSCOPE_VARIANT, checkpoint, reason, detail)
-                )
-                continue
-            runtime, runtime_note = _kaloscope_runtime(ctx)
-            companions = [str(mapping)] + ([str(runtime)] if runtime else [])
-            verify = VERIFY_SHA if "sha_verified" in notes else VERIFY_SIZE
-            report.matches.append(
-                ctx.match(
-                    "artist",
-                    KALOSCOPE_VARIANT,
-                    checkpoint,
-                    stat,
-                    verify,
-                    companions,
-                    notes + [runtime_note],
-                )
-            )
-    return report
 
 
 # ---------------------------------------------------------------------------
@@ -599,23 +496,27 @@ def match_kaloscope(ctx: _Context) -> MatchReport:
 # ---------------------------------------------------------------------------
 
 
+def _files_with_suffix(
+    ctx: _Context, folder: Path, suffixes: Sequence[str]
+) -> List[Tuple[Path, os.stat_result]]:
+    files: List[Tuple[Path, os.stat_result]] = []
+    for path in _plain_children(folder):
+        if path.suffix.lower() not in suffixes:
+            continue
+        stat = ctx.stat_file(path)
+        if stat is not None:
+            files.append((path, stat))
+    return files
+
+
 def match_privacy_yolo(ctx: _Context) -> MatchReport:
     from model_health_paths import _infer_yolo_model_profile
 
     report = MatchReport()
-    for folder in ctx.candidate_dirs(
+    for candidate in ctx.candidate_dirs(
         _YOLO_COMFY_SUBDIRS, _YOLO_FOLDER_SUBDIRS, _YOLO_EXTRA_KEYS
     ):
-        try:
-            files = sorted(
-                p for p in folder.iterdir() if p.suffix.lower() in _YOLO_SUFFIXES
-            )
-        except OSError:
-            continue
-        for path in files:
-            stat = _stat_file(path)
-            if stat is None:
-                continue
+        for path, stat in _files_with_suffix(ctx, candidate.path, _YOLO_SUFFIXES):
             # Class names would need the ultralytics runtime; the file name is
             # the only evidence available without loading weights.
             profile = _infer_yolo_model_profile([], path.name)
@@ -628,6 +529,7 @@ def match_privacy_yolo(ctx: _Context) -> MatchReport:
                         stat,
                         VERIFY_NAME,
                         notes=[profile["id"]],
+                        folder=candidate.folder,
                     )
                 )
             else:
@@ -643,46 +545,61 @@ def match_privacy_yolo(ctx: _Context) -> MatchReport:
     return report
 
 
+def _tipo_pin_for(path: Path) -> Optional[Tuple[str, FilePin]]:
+    """The pinned build a file name claims to be (exact, or kgen's ``<repo>_<file>`` naming)."""
+    for variant, pin in TIPO_FILE_PINS.items():
+        if path.name == pin.filename or path.name.endswith("_" + pin.filename):
+            return variant, pin
+    return None
+
+
 def match_tipo(ctx: _Context) -> MatchReport:
     report = MatchReport()
-    for folder in ctx.candidate_dirs(
+    expected = ", ".join(p.filename for p in TIPO_FILE_PINS.values())
+    for candidate in ctx.candidate_dirs(
         _TIPO_COMFY_SUBDIRS, _TIPO_FOLDER_SUBDIRS, _TIPO_EXTRA_KEYS
     ):
-        try:
-            files = sorted(
-                p
-                for p in folder.iterdir()
-                if p.suffix.lower() == ".gguf" and "tipo" in p.name.lower()
-            )
-        except OSError:
-            continue
-        for path in files:
-            stat = _stat_file(path)
-            if stat is None:
+        for path, stat in _files_with_suffix(ctx, candidate.path, (".gguf",)):
+            if "tipo" not in path.name.lower():
                 continue
-            for variant, pin in TIPO_FILE_PINS.items():
-                name_ok = path.name == pin.filename or path.name.endswith(
-                    "_" + pin.filename
-                )
-                if name_ok and stat.st_size == pin.size_bytes:
-                    _, _, notes = _verify_pinned_file(
-                        ctx, path, stat, pin.size_bytes, pin.sha256
-                    )
-                    verify = VERIFY_SHA if "sha_verified" in notes else VERIFY_SIZE
-                    report.matches.append(
-                        ctx.match("tipo", variant, path, stat, verify, notes=notes)
-                    )
-                    break
-            else:
+            claimed = _tipo_pin_for(path)
+            if claimed is None:
                 report.rejected.append(
                     ctx.reject(
                         "tipo",
                         None,
                         path,
                         REASON_VERSION,
-                        f"not the pinned {', '.join(p.filename for p in TIPO_FILE_PINS.values())} build ({stat.st_size} bytes)",
+                        f"not the pinned {expected} build ({stat.st_size} bytes)",
                     )
                 )
+                continue
+            variant, pin = claimed
+            reason, detail, notes = _verify_pinned_file(
+                ctx, path, stat, pin.size_bytes, pin.sha256
+            )
+            if reason == REASON_SIZE:
+                reason, detail = (
+                    REASON_VERSION,
+                    f"named like {pin.filename} but {detail}",
+                )
+            if reason:
+                report.rejected.append(
+                    ctx.reject("tipo", variant, path, reason, detail)
+                )
+                continue
+            verify = VERIFY_SHA if "sha_verified" in notes else VERIFY_SIZE
+            report.matches.append(
+                ctx.match(
+                    "tipo",
+                    variant,
+                    path,
+                    stat,
+                    verify,
+                    notes=notes,
+                    folder=candidate.folder,
+                )
+            )
     return report
 
 
@@ -691,24 +608,46 @@ def match_tipo(ctx: _Context) -> MatchReport:
 # ---------------------------------------------------------------------------
 
 
-def match_root(
-    root: SourceRoot, *, digest_cache: Optional[DigestCache] = None
-) -> MatchReport:
-    """Every match and rejection inside one root."""
-    ctx = _Context(root, digest_cache)
-    report = MatchReport()
-    from model_matchers_hf import match_hf_cache  # split module; imports this one
+def match_hf_cache(ctx: _Context) -> MatchReport:
+    from model_matchers_hf import (
+        match_hf_cache as _match,
+    )  # split module; imports this one
 
+    return _match(ctx)
+
+
+def _run_matcher(
+    matcher: Callable[[_Context], MatchReport], ctx: _Context, report: MatchReport
+) -> None:
+    try:
+        report.extend(matcher(ctx))
+    except Exception as exc:  # one broken folder must not hide the others
+        logger.warning("%s failed under %s: %s", matcher.__name__, ctx.root.path, exc)
+
+
+def match_root(
+    root: SourceRoot,
+    *,
+    digest_cache: Optional[DigestCache] = None,
+    trust_check: Optional[TrustCheck] = None,
+    network_allowed: bool = False,
+) -> MatchReport:
+    """Every match and rejection inside one root.
+
+    ``trust_check`` defaults to ``model_roots.is_under_allowed_model_root``;
+    ``network_allowed`` is set only by the background pass over network roots.
+    """
+    ctx = _Context(root, digest_cache, trust_check, network_allowed)
+    report = MatchReport()
     if root.kind == KIND_HF_CACHE:
-        report.extend(match_hf_cache(ctx))
+        _run_matcher(match_hf_cache, ctx, report)
         return report
+    from model_matchers_tagger import match_kaloscope, match_wd14  # split module
+
     for matcher in (match_wd14, match_kaloscope, match_privacy_yolo, match_tipo):
-        try:
-            report.extend(matcher(ctx))
-        except Exception as exc:  # one broken folder must not hide the others
-            logger.warning("%s failed under %s: %s", matcher.__name__, root.path, exc)
+        _run_matcher(matcher, ctx, report)
     if root.kind == KIND_FOLDER and model_sources._looks_like_hf_cache(Path(root.path)):
-        report.extend(match_hf_cache(ctx))
+        _run_matcher(match_hf_cache, ctx, report)
     return report
 
 

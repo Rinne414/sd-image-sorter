@@ -1209,10 +1209,28 @@ drive-scan result are saved in `CONFIG_DIR/model_sources.json`.
 
 Roots come from the trusted-folder list (`/api/models/trusted-folders`, in
 list order), `COMFYUI_PATH`, Comfy Desktop's fixed install folders, the cached
-depth-2 drive scan (started once per process on a background thread; query
-`rescan=1` runs it again synchronously), and the Hugging Face caches
-(`HF_HUB_CACHE`, `HF_HOME/hub`, the user's global `~/.cache/huggingface/hub`
-and each ComfyUI install's `models/hub`).
+depth-2 drive scan, and the Hugging Face caches (`HF_HUB_CACHE`,
+`HF_HOME/hub`, the user's global `~/.cache/huggingface/hub` and each ComfyUI
+install's `models/hub`).
+
+A match is **adopted** (listed in `matches`, saved for the loaders) only when
+`model_roots.is_under_allowed_model_root` accepts its path: the program's own
+models folders or a trusted folder, the same rule the loaders apply, so a card
+that says "ready" never points at a file the loader would refuse. Models found
+in roots that are not trusted (an auto-detected ComfyUI, the global HF cache)
+are returned as `suggestions`, one row per folder that would have to be
+trusted, so the Model Center can ask "found ComfyUI with 8.5 GB usable, add
+it?".
+
+The request thread never touches a network path (UNC, a mapped or removable
+drive, a Linux network mount, or a symlink/junction that leads to one, even
+inside a local root). Network roots are judged by the background job that also
+runs the drive scan; their cached result is served with `network_pending:
+false` and `network_scanned_at`, or `network_pending: true` while there is
+none. The drive scan runs once per process on a background thread; `rescan=1`
+only starts it again (never inline) and the response carries the cache plus
+`scan.status = "running"`. Folders named in an `extra_model_paths.yaml` that
+lie on a network path are dropped.
 
 Response shape:
 
@@ -1220,26 +1238,37 @@ Response shape:
 {
   "sources": [
     {"path": "I:\\ComfyUI-aki-v1.6\\ComfyUI", "kind": "comfyui", "origin": "trusted",
-     "is_network": false, "version": "0.36.0", "trusted": true, "model_count": 4}
+     "is_network": false, "version": "0.36.0", "trusted": true, "model_count": 4,
+     "network_pending": false, "network_scanned_at": null}
   ],
   "matches": [
     {"model_id": "wd14", "variant": "wd-eva02-large-tagger-v3",
      "path": "I:\\...\\wd-eva02-large-tagger-v3.onnx", "source": "I:\\ComfyUI-aki-v1.6\\ComfyUI",
-     "source_kind": "comfyui", "verify": "size", "size_bytes": 1260435999, "total_bytes": 1260744467, "mtime_ns": 0,
+     "folder": "I:\\ComfyUI-aki-v1.6\\ComfyUI", "source_kind": "comfyui", "origin": "trusted",
+     "verify": "size", "size_bytes": 1260435999, "total_bytes": 1260744467, "mtime_ns": 0,
      "companions": ["I:\\...\\wd-eva02-large-tagger-v3.csv"], "notes": ["hash_skipped_large"],
-     "is_network": false}
+     "trusted_rank": 0, "is_network": false, "trusted": true}
+  ],
+  "suggestions": [
+    {"root": "C:\\Users\\me\\.cache\\huggingface\\hub", "kind": "hf_cache", "origin": "hf_default",
+     "version": null,
+     "models": [{"model_id": "florence2", "variant": "base", "verify": "revision", "size_bytes": 468554144}],
+     "reusable_bytes": 468554144}
   ],
   "rejected": [
     {"model_id": "tipo", "variant": null, "path": "I:\\...\\TIPOv2-1B-A200M-Q8_0.gguf",
      "source": "I:\\ComfyUI-aki-v1.6\\ComfyUI", "reason": "version_mismatch", "detail": "..."}
   ],
   "reusable_bytes": 6780000000,
-  "scan": {"status": "done", "scanned_at": 1790000000.0, "error": null, "roots": ["I:\\ComfyUI-aki-v1.6\\ComfyUI"]}
+  "scan": {"status": "done", "scanned_at": 1790000000.0, "error": null, "completed_generation": 1,
+           "roots": ["I:\\ComfyUI-aki-v1.6\\ComfyUI"]}
 }
 ```
 
 `kind`: `comfyui` | `hf_cache` | `folder`. `origin`: `trusted` | `env` | `probe` |
-`scan` | `hf_default` | `comfyui_hub`. `verify` (strongest first): `sha` (SHA-256
+`scan` | `hf_default` | `comfyui_hub`. `folder` is the folder a suggestion would
+ask the user to trust (the root, or an `extra_model_paths` folder outside it).
+`verify` (strongest first): `sha` (SHA-256
 equals the pin; files up to 500 MB on local disks, digests cached by size and
 mtime), `revision` (Hugging Face snapshot folder named after the pinned commit
 with every required file present), `size` (byte size equals the pin: big files
@@ -1252,8 +1281,13 @@ then `sha`/`revision` over `size` over `name`, then local disk over network.
 `rejected.reason`: `size_mismatch`, `sha_mismatch`, `missing_companion`,
 `companion_mismatch`, `incomplete`, `version_mismatch` (another build, e.g. an
 older TIPO; never adopted), `unverified` (a YOLO file whose classes were not
-checked; listed as a candidate only). `scan.status`: `never` | `running` |
-`done` | `error`.
+checked; listed as a candidate only), `unreadable` (the file could not be
+opened or hashed; the other candidates are still judged). `scan.status`:
+`never` | `running` | `done` | `error`; `running` while any scan generation is
+still going, and an older generation never overwrites a newer result. Only the
+WD14 runtime family of taggers is matched (OppaiOracle is not). The
+`CONFIG_DIR/model_sources.json` index is quarantined as `.bak` when it cannot
+be parsed and the endpoint keeps answering.
 
 #### GET /api/models/bulk-bundle
 Inventory of models available to the selectable bulk-download flow. Florence-2

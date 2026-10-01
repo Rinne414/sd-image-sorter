@@ -228,8 +228,9 @@ def detect_model_sources(
 ):
     """Pinned models already on this PC: ComfyUI installs, Hugging Face caches, trusted folders.
 
-    Read-only. Plain def: hashing and the optional drive rescan are blocking
-    file work and must not sit on the event loop.
+    Read-only. Plain def: hashing is blocking file work and must not sit on
+    the event loop. ``rescan=1`` only restarts the background drive scan;
+    network roots are judged there too and served from the cache.
     """
     return service.detect(rescan=rescan)
 

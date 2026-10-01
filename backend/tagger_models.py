@@ -28,8 +28,9 @@ changing the hash - the thresholds here were tuned against these weights.
 the pinned revision (X-Linked-Size / X-Linked-ETag, 2026-10-01) and the
 installed copies' sha256; ``model_matchers`` uses them to recognise the
 same file inside a ComfyUI install or a Hugging Face cache without
-downloading it again. Entries without ``size_bytes`` are never matched
-externally.
+downloading it again. Only entries on the WD14 runtime (no
+``runtime_backend``) with a ``size_bytes`` are matched externally; OppaiOracle
+and the other backends are not, see ``model_matchers``.
 """
 
 TAGGER_MODELS: dict = {
@@ -272,8 +273,6 @@ TAGGER_MODELS: dict = {
         "repo_subfolder": "V1.1_onnx",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
-        "size_bytes": 993_246_982,
-        "sha256": "8567852deb135eccfe4b8445d48e4476ee8846436486679adc0642cfeda07d13",
         "extra_files": ["preprocessing.json", "pr_thresholds.json", "config.json"],
         "runtime_backend": "oppai-oracle",
         "runtime_safety_tier": "heavy",

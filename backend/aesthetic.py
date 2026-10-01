@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
 from pathlib import Path
 
+import aesthetic_backbone
 import anime_aesthetic
 import pinned_download
 
@@ -64,12 +65,9 @@ _MIN_AESTHETIC_CUDA_FREE_MB = 3800
 _AESTHETIC_HEAD_FILENAME = "sa_0_4_vit_l_14_linear.pth"
 # Bumped when stored scores stop being comparable: 2 = CLIP built with QuickGELU.
 AESTHETIC_SCORE_VERSION = 2
-_AESTHETIC_BACKBONE_REPO_DIR = "models--timm--vit_large_patch14_clip_224.openai"
-_AESTHETIC_BACKBONE_FILENAMES = (
-    "open_clip_model.safetensors",
-    "pytorch_model.bin",
-    "ViT-L-14.pt",
-)
+# Shared with model_matchers_hf through the dependency-free aesthetic_backbone.
+_AESTHETIC_BACKBONE_REPO_DIR = aesthetic_backbone.BACKBONE_REPO_DIR
+_AESTHETIC_BACKBONE_FILENAMES = aesthetic_backbone.BACKBONE_FILENAMES
 
 WAIFU_HEAD_FILENAME = "waifu_scorer_v3.safetensors"
 WAIFU_HEAD_FILE = pinned_download.PinnedFile(

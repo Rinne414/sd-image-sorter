@@ -19,6 +19,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import model_matchers  # noqa: E402
 import model_sources  # noqa: E402
+import model_matchers_tagger  # noqa: E402
+import model_sources_store  # noqa: E402
 from tagger_models import TAGGER_MODELS  # noqa: E402
 
 EVA02 = "wd-eva02-large-tagger-v3"
@@ -130,6 +132,24 @@ def rejected_for(report, model_id: str, variant: str | None = None):
         for r in report.rejected
         if r.model_id == model_id and (variant is None or r.variant == variant)
     ]
+
+
+@pytest.fixture(autouse=True)
+def _isolated_config(tmp_path, monkeypatch):
+    """The default trust check reads config; keep it off the real settings file."""
+    import config
+
+    project = tmp_path / "project"
+    data = tmp_path / "data"
+    (project / "models").mkdir(parents=True)
+    (data / "models").mkdir(parents=True)
+    (data / "config").mkdir()
+    monkeypatch.setattr(config, "PROJECT_ROOT", project)
+    monkeypatch.setattr(config, "DATA_DIR", data)
+    monkeypatch.setattr(config, "CONFIG_DIR", data / "config")
+    monkeypatch.setattr(
+        config, "APP_SETTINGS_CONFIG_PATH", data / "config" / "app-settings.json"
+    )
 
 
 @pytest.fixture
@@ -394,7 +414,7 @@ def test_kaloscope_runtime_revision_resolves_packed_refs(comfy, monkeypatch):
     )
 
     assert (
-        model_matchers.read_git_head_commit(runtime)
+        model_matchers_tagger.read_git_head_commit(runtime)
         == artist_identifier.ARTIST_LSNET_RUNTIME_REVISION
     )
 
@@ -704,7 +724,9 @@ def make_match(**overrides):
         variant=VIT,
         path="C:/a/model.onnx",
         source="C:/a",
+        folder="C:/a",
         source_kind="comfyui",
+        origin="scan",
         verify="size",
         size_bytes=1,
         mtime_ns=1,
@@ -761,7 +783,7 @@ def test_digest_cache_prevents_rehashing_unchanged_files(comfy, tmp_path, monkey
     pin_variant(monkeypatch, CONVNEXT, model, csv)
     write(comfy / WD14_NODE_DIR / f"{CONVNEXT}.onnx", model)
     write(comfy / WD14_NODE_DIR / f"{CONVNEXT}.csv", csv)
-    store = model_sources.ModelSourcesStore(tmp_path / "model_sources.json")
+    store = model_sources_store.ModelSourcesStore(tmp_path / "model_sources.json")
     hashed = []
     real = model_matchers._hash_file
 
@@ -812,10 +834,10 @@ def test_pixai_v1_external_data_pin():
     assert pins["model.onnx.data"]["sha256"].startswith("4de1c25a")
 
 
-def test_oppai_oracle_size_pin_present():
+def test_oppai_oracle_carries_no_external_pins():
+    # Not detected externally (MEDIUM-5): no size pin so nothing can match it by accident.
     entry = TAGGER_MODELS["oppai-oracle-v1.1"]
-    assert entry["size_bytes"] == 993_246_982
-    assert entry["sha256"].startswith("8567852d")
+    assert "size_bytes" not in entry and "sha256" not in entry
 
 
 def test_kaloscope_and_tipo_pins_match_ledger():

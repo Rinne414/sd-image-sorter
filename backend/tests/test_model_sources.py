@@ -20,6 +20,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import model_sources  # noqa: E402
+import model_sources_store  # noqa: E402
 
 
 def make_comfyui_root(path: Path) -> Path:
@@ -217,10 +218,11 @@ def test_detect_source_roots_trusted_first_env_probe_then_hf(tmp_path):
     ]
     env = {"COMFYUI_PATH": str(env_comfy), "USERPROFILE": str(home)}
 
-    roots = model_sources.detect_source_roots(
+    roots, pending = model_sources.detect_source_roots(
         trusted, env=env, home=home, scan_cache=[str(scanned)]
     )
 
+    assert pending == []
     by_path = {r.path: r for r in roots}
     order = [r.path for r in roots]
     assert order[:2] == [str(trusted_comfy), str(nas)]
@@ -249,23 +251,41 @@ def test_detect_source_roots_trusted_first_env_probe_then_hf(tmp_path):
 
 
 def test_detect_source_roots_skips_missing_and_non_comfy_entries(tmp_path):
-    roots = model_sources.detect_source_roots(
+    roots, pending = model_sources.detect_source_roots(
         [{"path": str(tmp_path / "gone"), "kind": "comfyui"}],
         env={"COMFYUI_PATH": str(tmp_path / "not-comfy")},
         home=tmp_path / "home",
     )
-    assert roots == []
+    assert roots == [] and pending == []
 
 
-def test_trusted_folder_provider_defaults_to_empty_and_is_replaceable():
-    try:
-        assert list(model_sources.get_trusted_folders()) == []
-        model_sources.set_trusted_folder_provider(
-            lambda: [{"path": "x", "kind": "folder"}]
-        )
-        assert model_sources.get_trusted_folders()[0]["path"] == "x"
-    finally:
-        model_sources.set_trusted_folder_provider(None)
+def test_detect_source_roots_queues_network_entries_without_touching_them(
+    tmp_path, monkeypatch
+):
+    unc = "\\\\nas\\models"
+    touched = []
+    real_isdir = os.path.isdir
+
+    def recording_isdir(path):
+        if str(path).startswith("\\\\"):
+            touched.append(str(path))
+        return real_isdir(path)
+
+    monkeypatch.setattr(model_sources.os.path, "isdir", recording_isdir)
+    roots, pending = model_sources.detect_source_roots(
+        [{"path": unc, "kind": "auto"}, {"path": unc + "\\", "kind": "auto"}],
+        env={"COMFYUI_PATH": "//nas2/comfy", "HF_HUB_CACHE": r"\\nas3\hub"},
+        home=tmp_path / "home",
+        probe=False,
+    )
+    assert touched == []
+    assert [r.kind for r in roots] == []
+    assert [(p.origin, p.kind) for p in pending] == [
+        ("trusted", "auto"),
+        ("env", "comfyui"),
+        ("hf_default", "hf_cache"),
+    ]
+    assert pending[0].trusted_rank == 0
 
 
 def test_network_or_removable_paths_are_flagged():
@@ -275,7 +295,7 @@ def test_network_or_removable_paths_are_flagged():
 
 
 # ---------------------------------------------------------------------------
-# T2 drive scan: depth 2, name match, once per process, persisted with mtime
+# T2 drive scan: depth 2, name match, background generations, persisted
 # ---------------------------------------------------------------------------
 
 
@@ -292,13 +312,12 @@ def test_scan_drives_matches_comfy_names_two_levels_deep_only(tmp_path):
     assert found == sorted({str(aki), str(direct)})
 
 
-def test_background_scan_runs_once_per_process_and_persists_with_mtime(
-    tmp_path, monkeypatch
-):
+def test_background_scan_runs_once_per_process_and_persists(tmp_path, monkeypatch):
     drive = tmp_path / "drive"
     root = make_comfyui_root(drive / "ComfyUI")
-    store = model_sources.ModelSourcesStore(tmp_path / "model_sources.json")
+    store = model_sources_store.ModelSourcesStore(tmp_path / "model_sources.json")
     calls = []
+    work_calls = []
     done = threading.Event()
 
     def fake_scan(drives=None):
@@ -306,45 +325,51 @@ def test_background_scan_runs_once_per_process_and_persists_with_mtime(
         return [str(root)]
 
     monkeypatch.setattr(model_sources, "scan_drives_for_comfyui", fake_scan)
-    monkeypatch.setattr(model_sources, "_scan_state", model_sources._ScanState())
+    monkeypatch.setattr(model_sources_store, "_scan_state", model_sources_store._ScanState())
 
-    first = model_sources.ensure_background_scan(store, on_done=done.set)
-    assert first is True
+    first = model_sources_store.start_background_scan(
+        store, work=work_calls.append, on_done=done.set
+    )
+    assert first == 1
     assert done.wait(5)
-    second = model_sources.ensure_background_scan(store, on_done=done.set)
-    assert second is False
+    second = model_sources_store.start_background_scan(store, on_done=done.set)
+    assert second is None
     assert len(calls) == 1
+    assert work_calls == [1]  # the extra work ran with the generation number
 
     saved = json.loads((tmp_path / "model_sources.json").read_text(encoding="utf-8"))
-    assert saved["scan"]["roots"][0]["path"] == str(root)
-    assert saved["scan"]["roots"][0]["mtime_ns"] == root.stat().st_mtime_ns
+    assert saved["scan"]["roots"] == [str(root)]
     assert saved["scan"]["scanned_at"] > 0
     assert store.scan_roots() == [str(root)]
-    assert model_sources.scan_status()["status"] == "done"
+    assert model_sources_store.scan_status()["status"] == "done"
+    assert model_sources_store.scan_status()["completed_generation"] == 1
 
 
 def test_store_drops_cached_roots_that_vanished(tmp_path):
     root = make_comfyui_root(tmp_path / "ComfyUI")
-    store = model_sources.ModelSourcesStore(tmp_path / "model_sources.json")
+    store = model_sources_store.ModelSourcesStore(tmp_path / "model_sources.json")
     store.save_scan([str(root), str(tmp_path / "gone")], scanned_at=1.0)
     assert store.scan_roots() == [str(root)]
 
 
 def test_store_digest_cache_keyed_by_size_and_mtime(tmp_path):
-    store = model_sources.ModelSourcesStore(tmp_path / "model_sources.json")
+    store = model_sources_store.ModelSourcesStore(tmp_path / "model_sources.json")
     store.remember_digest("C:/x/model.onnx", 10, 20, "abc")
     assert store.cached_digest("C:/x/model.onnx", 10, 20) == "abc"
     assert store.cached_digest("C:/x/model.onnx", 11, 20) is None
     assert store.cached_digest("C:/x/model.onnx", 10, 21) is None
-    reloaded = model_sources.ModelSourcesStore(tmp_path / "model_sources.json")
+    reloaded = model_sources_store.ModelSourcesStore(tmp_path / "model_sources.json")
     assert reloaded.cached_digest("C:/x/model.onnx", 10, 20) == "abc"
 
 
 def test_store_survives_corrupt_file(tmp_path):
     path = tmp_path / "model_sources.json"
     path.write_text("{not json", encoding="utf-8")
-    store = model_sources.ModelSourcesStore(path)
+    store = model_sources_store.ModelSourcesStore(path)
     assert store.scan_roots() == []
+    assert (tmp_path / "model_sources.json.bak").read_text(
+        encoding="utf-8"
+    ) == "{not json"
     store.save_scan([], scanned_at=2.0)
     assert json.loads(path.read_text(encoding="utf-8"))["scan"]["scanned_at"] == 2.0
 
