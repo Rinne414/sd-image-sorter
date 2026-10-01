@@ -91,6 +91,7 @@ class SortingStateMixin:
             "current": 0,
             "total": 0,
             "message": "",
+            "message_key": "",
             "errors": 0,
             "moved": 0,
             "current_item": None,
@@ -109,6 +110,7 @@ class SortingStateMixin:
             "current": 0,
             "total": 0,
             "message": "",
+            "message_key": "",
             "errors": 0,
             "moved": 0,
             "current_item": None,
@@ -579,6 +581,7 @@ class SortingStateMixin:
                 if total > 0
                 else f"Cancelling batch {verb}..."
             )
+            self._batch_move_progress["message_key"] = "cancelling"
             self._batch_move_progress["updated_at"] = time.time()
             return {"status": "cancelling", "message": "Batch move cancellation requested"}
 
@@ -661,6 +664,7 @@ class SortingStateMixin:
                 if total > 0
                 else f"Cancelling {verb}..."
             )
+            self._move_progress["message_key"] = "cancelling"
             self._move_progress["updated_at"] = time.time()
             return {"status": "cancelling", "message": "Move cancellation requested"}
 

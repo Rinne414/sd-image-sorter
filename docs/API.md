@@ -914,7 +914,7 @@ Move or copy selected images synchronously. Request body includes `image_ids`, `
 Start a background move/copy job for the same request body as `/api/move`, returning immediately so the UI can show a progress bar. Responds `409` if a move job is already running. Use this for large selections where the synchronous endpoint would block.
 
 #### GET /api/move/progress
-Get background move/copy progress: `running`, `total`, `processed`, `moved`, `copied`, `errors`, `step`, `message`, and the final per-image `results` when done. Progress is guarded by a run-id epoch so a newly started job never reports a stale previous job's state.
+Get background move/copy progress: `running`, `total`, `processed`, `moved`, `copied`, `errors`, `step`, `message`, and the final per-image `results` when done. Progress is guarded by a run-id epoch so a newly started job never reports a stale previous job's state. `message` is a bilingual display string kept for API compatibility; clients localise from `message_key` (`starting`, `processing`, `done`, `cancelling`, `cancelled`, `no_images`, `error`) and the counters (`current`, `total`, `moved`, `errors`, `operation`). The start response carries `message_key: "started"`.
 
 #### POST /api/move/cancel
 Cooperatively cancel an in-flight background move/copy. The worker checks the cancel flag at per-image boundaries, finishes any file already mid-write, and reports `status: "cancelled"` with partial counts.
@@ -926,7 +926,7 @@ Reset stuck background move progress.
 Move all images matching filters. JSON filter payloads accept `prompt_match_mode` (`exact` or `contains`, default `exact`) alongside `prompts`.
 
 #### GET /api/batch-move/progress
-Get batch move progress.
+Get batch move progress. `message` is a bilingual display string kept for API compatibility; clients localise from `message_key` (`starting`, `processing`, `done`, `cancelling`, `cancelled`, `no_images`, `error`) and the counters (`current`, `total`, `moved`, `errors`, `operation`). The start response carries `message_key: "started"`.
 
 #### POST /api/batch-move/cancel
 Cooperatively cancel an in-flight batch move/copy. The worker checks the cancel flag at chunk and per-image boundaries, finishes any image already mid-write, and reports `status: "cancelled"` with the partial counts so the UI can show "Cancelled at X/N" instead of pinning the progress bar at the last running message.

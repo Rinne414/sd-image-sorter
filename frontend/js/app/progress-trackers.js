@@ -108,7 +108,11 @@ function buildProgressText({
     if (meta.etaText) parts.push(appT('progress.eta', 'ETA {time}').replace('{time}', meta.etaText));
     else if (meta.elapsedText) parts.push(appT('progress.elapsed', 'Elapsed {time}').replace('{time}', meta.elapsedText));
 
-    const detail = progress.current_item || progress.message || defaultMessage;
+    // A progress carrying message_key is localised by the caller (its
+    // defaultMessage); the raw backend sentence is never shown for it.
+    const detail = progress.current_item
+        || (progress.message_key ? '' : progress.message)
+        || defaultMessage;
     if (detail) parts.push(detail);
 
     return parts.join(' · ');

@@ -355,3 +355,46 @@ test('Smart Tag progress and failure read in Chinese', async ({ page }, testInfo
   expect(await toast.textContent()).toContain('disk is full')
   await page.screenshot({ path: shotPath(testInfo, 'smart-tag-failed-zh-1366.png') })
 })
+
+test('Auto-Separate move progress and cancel read in Chinese, not the bilingual backend sentence', async ({ page }, testInfo) => {
+  test.setTimeout(120000)
+  await page.setViewportSize({ width: 1366, height: 768 })
+
+  const base = {
+    status: 'running',
+    step: 'moving',
+    current: 3,
+    total: 10,
+    errors: 0,
+    moved: 3,
+    current_item: null,
+    recent_errors: [],
+    operation: 'move',
+    message: '已处理 / Processed: a.png (3/10)',
+    message_key: 'processing',
+  }
+  let payload: Record<string, unknown> = base
+  await page.route('**/api/batch-move/progress', (route) => route.fulfill({ json: payload }))
+
+  await openMainPage(page)
+  await page.evaluate(() => {
+    ;(window as any).__pollDone = (window as any).pollAutosepMoveProgress(10, 'D:/out')
+  })
+  const text = page.locator('#autosep-move-text')
+  await expect(text).toContainText('3/10', { timeout: 15000 })
+  const shown = (await text.textContent()) || ''
+  expect(shown).not.toContain('Processed')
+  expect(shown).not.toContain('已处理 /')
+  expect(shown).toContain('已移动 3 张')
+
+  payload = {
+    ...base,
+    status: 'cancelled',
+    message: '已取消（3/10），已移动 3 张 / Cancelled at 3/10. Moved 3 images so far.',
+    message_key: 'cancelled',
+  }
+  const toast = page.locator('.toast', { hasText: '已取消移动，已经移动了 3 张图片' }).first()
+  await expect(toast).toBeVisible({ timeout: 15000 })
+  expect(await toast.textContent()).not.toContain('Cancelled')
+  await page.screenshot({ path: shotPath(testInfo, 'autosep-cancelled-zh-1366.png') })
+})

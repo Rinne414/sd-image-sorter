@@ -223,7 +223,11 @@ class BatchMoveMixin:
         total_count = db.get_filtered_image_count(**filter_kwargs)
 
         if total_count == 0:
-            return {"message": "没有符合筛选条件的图片 / No images match the filters", "count": 0}
+            return {
+                "message": "没有符合筛选条件的图片 / No images match the filters",
+                "message_key": "no_images",
+                "count": 0,
+            }
 
         # Run actual move in background with progress tracking. The
         # cancel event is allocated under the same lock as run_id so
@@ -242,6 +246,7 @@ class BatchMoveMixin:
                 "current": 0,
                 "total": total_count,
                 "message": f"正在准备{'复制' if operation == 'copy' else '移动'} {total_count} 张图片 / Starting {operation} of {total_count} images...",
+                "message_key": "starting",
                 "errors": 0,
                 "moved": 0,
                 "current_item": None,
@@ -298,6 +303,7 @@ class BatchMoveMixin:
                             "total": total_count,
                             "errors": len(errors),
                             "moved": moved,
+                            "message_key": "cancelled",
                             "message": (
                                 f"已取消（{processed}/{total_count}），已{'复制' if operation == 'copy' else '移动'} {moved} 张 / "
                                 f"Cancelled at {processed}/{total_count}. "
@@ -385,6 +391,7 @@ class BatchMoveMixin:
                                 errors=len(errors),
                                 moved=moved,
                                 message=f"已处理 / Processed: {filename} ({processed}/{total_count})",
+                                message_key="processing",
                                 current_item=filename,
                                 recent_errors=errors[-3:],
                                 operation=operation,
@@ -406,6 +413,7 @@ class BatchMoveMixin:
                             "current": 0,
                             "total": 0,
                             "message": "没有符合筛选条件的图片 / No images match the filters",
+                            "message_key": "no_images",
                             "errors": 0,
                             "moved": 0,
                             "current_item": None,
@@ -428,6 +436,7 @@ class BatchMoveMixin:
                         "errors": len(errors),
                         "moved": moved,
                         "message": f"完成！已{'复制' if operation == 'copy' else '移动'} {moved} 张图片 / Done! {completed_verb} {moved} images." + (f" {len(errors)} 张失败 / {len(errors)} errors." if errors else ""),
+                        "message_key": "done",
                         "current_item": None,
                         "recent_errors": errors[-3:],
                         "operation": operation,
@@ -456,6 +465,7 @@ class BatchMoveMixin:
                         "errors": errors_count,
                         "moved": moved_count,
                         "message": "批量移动因内部错误失败 / Batch move failed due to an internal error",
+                        "message_key": "error",
                         "current_item": None,
                         "recent_errors": self._batch_move_progress.get("recent_errors", []) if run_id == self._batch_move_run_id else [],
                         "operation": operation,
@@ -480,6 +490,7 @@ class BatchMoveMixin:
         return {
             "status": "started",
             "message": f"后台{'复制' if operation == 'copy' else '移动'} {total_count} 张图片中 / {progress_verb} {total_count} images in background",
+            "message_key": "started",
             "total": total_count,
             "count": total_count,
             "operation": operation,

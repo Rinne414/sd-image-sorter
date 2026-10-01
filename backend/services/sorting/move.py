@@ -407,7 +407,13 @@ class MoveMixin:
         image_ids = self._expand_move_request_ids(request)
         total_count = len(image_ids)
         if total_count == 0:
-            return {"status": "done", "message": "没有需要移动的图片 / No images to move", "results": [], "total": 0}
+            return {
+                "status": "done",
+                "message": "没有需要移动的图片 / No images to move",
+                "message_key": "no_images",
+                "results": [],
+                "total": 0,
+            }
 
         cancel_event = threading.Event()
         with self._move_lock:
@@ -421,6 +427,7 @@ class MoveMixin:
                 "current": 0,
                 "total": total_count,
                 "message": f"正在准备{'复制' if operation == 'copy' else '移动'} {total_count} 张图片 / Starting {operation} of {total_count} images...",
+                "message_key": "starting",
                 "errors": 0,
                 "moved": 0,
                 "current_item": None,
@@ -450,6 +457,7 @@ class MoveMixin:
                             "total": total_count,
                             "errors": len(errors),
                             "moved": moved,
+                            "message_key": "cancelled",
                             "message": (
                                 f"已取消（{processed}/{total_count}），已{'复制' if operation == 'copy' else '移动'} {moved} 张 / "
                                 f"Cancelled at {processed}/{total_count}. "
@@ -500,6 +508,7 @@ class MoveMixin:
                             errors=len(errors),
                             moved=moved,
                             message=f"已处理 / Processed: {filename} ({processed}/{total_count})",
+                            message_key="processing",
                             current_item=filename,
                             recent_errors=errors[-3:],
                             operation=operation,
@@ -518,6 +527,7 @@ class MoveMixin:
                         "errors": len(errors),
                         "moved": moved,
                         "message": f"完成！已{'复制' if operation == 'copy' else '移动'} {moved} 张图片 / Done! {completed_verb} {moved} images." + (f" {len(errors)} 张失败 / {len(errors)} errors." if errors else ""),
+                        "message_key": "done",
                         "current_item": None,
                         "recent_errors": errors[-3:],
                         "operation": operation,
@@ -541,6 +551,7 @@ class MoveMixin:
                         "errors": len(errors),
                         "moved": moved,
                         "message": "移动因内部错误失败 / Move failed due to an internal error",
+                        "message_key": "error",
                         "current_item": None,
                         "recent_errors": errors[-3:],
                         "operation": operation,
@@ -561,6 +572,7 @@ class MoveMixin:
         return {
             "status": "started",
             "message": f"后台{'复制' if operation == 'copy' else '移动'} {total_count} 张图片中 / {progress_verb} {total_count} images in background",
+            "message_key": "started",
             "total": total_count,
             "count": total_count,
             "operation": operation,

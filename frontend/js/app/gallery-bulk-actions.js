@@ -392,7 +392,7 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
             }
             if (finalProgress?.status === 'error') {
                 showToast(
-                    finalProgress.message || appT('selection.moveCopyFailed', 'Failed to {operation} selected images')
+                    (finalProgress.message_key ? '' : finalProgress.message) || appT('selection.moveCopyFailed', 'Failed to {operation} selected images')
                         .replace('{operation}', operationLabel.toLowerCase()),
                     'error'
                 );

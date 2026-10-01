@@ -331,7 +331,7 @@ async function pollAutosepMoveProgress(expectedTotal, destination) {
                         );
                     } else if (errorCount > 0) {
                         window.App.showToast(
-                            progress.message || _formatAutoSepI18n(
+                            _formatAutoSepI18n(
                                 operationMode === 'copy' ? 'autosep.copyNoneFailed' : 'autosep.moveNoneFailed',
                                 operationMode === 'copy' ? 'No images were copied. {errors} failed.' : 'No images were moved. {errors} failed.',
                                 {
@@ -342,7 +342,7 @@ async function pollAutosepMoveProgress(expectedTotal, destination) {
                         );
                     } else {
                         window.App.showToast(
-                            progress.message || _formatAutoSepI18n(
+                            _formatAutoSepI18n(
                                 operationMode === 'copy' ? 'autosep.copyNone' : 'autosep.moveNone',
                                 operationMode === 'copy' ? 'No images were copied' : 'No images were moved'
                             ),
@@ -384,7 +384,7 @@ async function pollAutosepMoveProgress(expectedTotal, destination) {
                 const errorCount = Number(progress.errors || 0);
                 const operationMode = normalizeAutoSepOperationMode(progress.operation || getAutoSepOperationMode());
                 window.App.showToast(
-                    progress.message || _formatAutoSepI18n(
+                    _formatAutoSepI18n(
                         operationMode === 'copy' ? 'autosep.copyCancelled' : 'autosep.moveCancelled',
                         operationMode === 'copy'
                             ? 'Copy cancelled. {count} images copied so far.'
@@ -406,7 +406,7 @@ async function pollAutosepMoveProgress(expectedTotal, destination) {
                 hideAutosepMoveProgress();
                 const operationMode = normalizeAutoSepOperationMode(progress.operation || getAutoSepOperationMode());
                 window.App.showToast(
-                    progress.message || _formatAutoSepI18n(
+                    _formatAutoSepI18n(
                         operationMode === 'copy' ? 'autosep.copyFailed' : 'autosep.moveFailed',
                         operationMode === 'copy' ? 'Failed to copy images' : 'Failed to move images'
                     ),
@@ -534,7 +534,7 @@ async function executeAutoSeparateWithProgress() {
                 }
                 if (startResult?.status !== 'started') {
                     throw new Error(
-                        startResult?.message || _formatAutoSepI18n(
+                        (startResult?.message_key ? '' : startResult?.message) || _formatAutoSepI18n(
                             operationMode === 'copy' ? 'autosep.copyFailed' : 'autosep.moveFailed',
                             operationMode === 'copy' ? 'Failed to copy images' : 'Failed to move images'
                         )
