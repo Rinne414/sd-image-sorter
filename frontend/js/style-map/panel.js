@@ -60,6 +60,7 @@ export class StyleMapPanel {
             emptySimilar: $('stylemap-empty-similar'),
             resetView: $('stylemap-reset-view'),
             landmarksToggle: $('stylemap-landmarks-toggle'),
+            boxToggle: $('stylemap-box-toggle'),
             unsupported: $('stylemap-unsupported'),
             unsupportedDetail: $('stylemap-unsupported-detail'),
             previewHint: $('stylemap-preview-hint'),
@@ -79,6 +80,7 @@ export class StyleMapPanel {
         el.retry?.addEventListener('click', () => handlers.onRetry());
         el.resetView?.addEventListener('click', () => handlers.onResetView());
         el.landmarksToggle?.addEventListener('click', () => handlers.onToggleLandmarks());
+        el.boxToggle?.addEventListener('click', () => handlers.onToggleBox());
         el.build?.addEventListener('click', () => handlers.onBuild());
         // Rule 11: the card's button is a proxy of the toolbar's, not a fork.
         el.emptyBuild?.addEventListener('click', () => el.build?.click());
@@ -214,6 +216,17 @@ export class StyleMapPanel {
         landmarksToggle.setAttribute('data-i18n', key);
         landmarksToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
         landmarksToggle.textContent = t(key, on ? 'Hide region landmarks' : 'Show region landmarks');
+    }
+
+    /** The box-select switch says the state it is in (rule 16), like the landmarks switch. */
+    renderBoxToggle(on) {
+        const { boxToggle } = this.el;
+        if (!boxToggle) return;
+        const key = on ? 'stylemap.boxSelectOn' : 'stylemap.boxSelectOff';
+        boxToggle.setAttribute('data-i18n', key);
+        boxToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+        boxToggle.classList.toggle('is-on', on);
+        boxToggle.textContent = t(key, on ? 'Box select: on' : 'Box select: off');
     }
 
     /** The start card replaces the toolbar's primary button (one solid primary per screen). */

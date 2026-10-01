@@ -230,6 +230,7 @@ function buildAppContext() {
         addToCensorQueue,
         sendToCensor: addToCensorQueue,
         addToDatasetMaker,
+        addSelectionToCollectionPicker,
         openPromptBuildFromImage,
         openReaderFromImage,
         openReversePromptFromImage,

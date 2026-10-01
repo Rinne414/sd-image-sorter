@@ -867,3 +867,65 @@
     justify-content: center;
     padding: 16px;
 }
+
+/* Box selection (Shift + drag, or the toolbar switch). */
+.stylemap-subbar-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+
+.stylemap-subbar-tools .btn.btn-ghost.is-on {
+    color: var(--accent);
+    border-color: var(--accent-line);
+    background: var(--accent-soft);
+}
+
+.stylemap-canvas-card canvas.is-box-select {
+    cursor: crosshair;
+}
+
+.stylemap-lasso {
+    position: absolute;
+    z-index: 3;
+    box-sizing: border-box;
+    border: 1.5px dashed var(--accent);
+    border-radius: 6px;
+    background: var(--accent-soft);
+    pointer-events: none;
+}
+
+.stylemap-selbar {
+    position: absolute;
+    z-index: 4;
+    left: 50%;
+    bottom: 14px;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: calc(100% - 24px);
+    padding: 7px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 14px;
+    background: var(--surface-2);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}
+
+.stylemap-selbar[hidden] {
+    display: none;
+}
+
+.stylemap-selbar-count {
+    margin-right: 4px;
+    color: var(--text);
+    font-weight: 600;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.stylemap-selbar .btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}

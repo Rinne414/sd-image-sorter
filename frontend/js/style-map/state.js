@@ -15,6 +15,8 @@ import { IndexJob } from './index-job.js';
 import { RegionLandmarks, assignRegions, readLandmarksPreference, writeLandmarksPreference } from './regions.js';
 import { ColorLegend, buildPointColors, readColorPreference, writeColorPreference } from './colors.js';
 import { NeighbourCard } from './neighbours.js';
+import { BoxSelector } from './lasso.js';
+import { MapSelection } from './selection.js';
 import { t, formatError } from './text.js';
 
 const LAYOUT_POLL_MS = 3000;
@@ -136,12 +138,15 @@ export function createStyleMap() {
         state.panel.renderLandmarksToggle(state.landmarksOn);
         state.landmarks.repaintText();
         state.legend.repaintText();
+        state.picks?.repaintText();
+        state.panel.renderBoxToggle(Boolean(state.box?.armed));
     }
 
     function applyPoints(points) {
         state.points = points;
         state.umapState = points.umap || {};
         state.scene.setPoints(points.points || [], points.points_layout);
+        state.picks?.mapChanged();
         // The regions belong to these coordinates: drop the old ones and ask
         // again (a PCA -> UMAP switch arrives as a new points answer).
         applyRegions(null);
@@ -405,6 +410,15 @@ export function createStyleMap() {
         });
         state.landmarks.setVisible(state.landmarksOn);
         state.legend = new ColorLegend(view.querySelector('#stylemap-legend'));
+        state.picks = new MapSelection(view, {
+            getScene: () => state.scene,
+            getMap: () => ({ space: state.space, mapId: state.points?.map_id }),
+        });
+        state.box = new BoxSelector(view.querySelector('#stylemap-canvas'), state.scene, {
+            onBox: (indices) => state.picks.pickBox(indices),
+            onToggle: (index) => state.picks.toggle(index),
+            onModeChange: (armed) => state.panel.renderBoxToggle(armed),
+        });
         state.panel.setColorBy(state.colorBy);
         state.near = new NeighbourCard(view, {
             getRequest: nearRequest,
@@ -438,6 +452,7 @@ export function createStyleMap() {
             },
             onResetView: () => state.scene.resetView(),
             onToggleLandmarks: () => setLandmarks(!state.landmarksOn),
+            onToggleBox: () => state.box.setArmed(!state.box.armed),
             onBuild: () => state.job.start(),
             onPause: () => state.job.pause(),
             onResume: () => state.job.resume(),

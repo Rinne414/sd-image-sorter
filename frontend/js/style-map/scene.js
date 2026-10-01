@@ -134,6 +134,9 @@ export class StyleMapScene {
         this.members = new Uint16Array(0);
         this.count = 0;
         this.hovered = -1;
+        // Dots picked by a box selection (1 per picked dot, in point order);
+        // they take the accent colour. null = nothing picked.
+        this.selected = null;
         this.center = new THREE.Vector3();
         this.radius = 1;
 
@@ -242,6 +245,7 @@ export class StyleMapScene {
         }
         this.hovered = -1;
         this.focus = null;
+        this.selected = null;
         this.ring.visible = false;
         this.rings.clear();
         this.ids = ids;
@@ -569,12 +573,23 @@ export class StyleMapScene {
         this.requestRender();
     }
 
-    /** The dot's shown colour (without hover): its base, lit or dimmed by the focus. */
+    /** Mark the picked dots: `flags` holds 1 per picked dot in point order; null clears. */
+    setSelected(flags) {
+        this.selected = flags && flags.length === this.count ? flags : null;
+        this.repaintColors();
+    }
+
+    /** The dot's shown colour (without hover): picked = accent, else its base, lit or dimmed by the focus or a pick. */
     colorAt(index) {
+        if (this.selected && this.selected[index]) return this.scratch.copy(this.hoverColor);
         const base = this.baseColors;
         const at = index * 3;
         this.scratch.setRGB(base[at], base[at + 1], base[at + 2], THREE.LinearSRGBColorSpace);
-        if (!this.focus) return this.scratch;
+        if (!this.focus) {
+            // With a box pick, the dots left out step back so the pick reads at a glance.
+            if (this.selected) this.scratch.multiplyScalar(FOCUS_DIM);
+            return this.scratch;
+        }
         if (this.focus.labels[index] === this.focus.region) {
             this.scratch.lerp(WHITE, FOCUS_LIGHTEN);
         } else {

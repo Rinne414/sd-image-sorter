@@ -780,6 +780,10 @@
         '#btn-toggle-select[data-state="selecting"]',
         // The style map's open legend list (colors.js) closes on ESC itself.
         '.stylemap-legend-pop',
+        // Style map: a box drag in progress and a finished pick (its action
+        // bar) both own ESC (style-map/lasso.js, style-map/selection.js).
+        '.stylemap-lasso:not([hidden])',
+        '.stylemap-selbar:not([hidden])',
     ].join(', ');
 
     function editingTarget(target) {

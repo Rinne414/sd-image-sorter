@@ -3887,8 +3887,12 @@
                     </div>
                     <div class="stylemap-subbar">
                         <p class="stylemap-scope" id="stylemap-scope"></p>
-                        <!-- Words follow the state (rule 16): panel.js swaps key + text. -->
-                        <button class="btn btn-ghost btn-small" id="stylemap-landmarks-toggle" type="button" aria-pressed="true" data-i18n="stylemap.landmarksHide">Hide region landmarks</button>
+                        <div class="stylemap-subbar-tools">
+                            <!-- Words follow the state (rule 16): panel.js swaps key + text. -->
+                            <button class="btn btn-ghost btn-small" id="stylemap-landmarks-toggle" type="button" aria-pressed="true" data-i18n="stylemap.landmarksHide">Hide region landmarks</button>
+                            <!-- Box select switch for trackpads (Shift + drag does the same); words follow the state (rule 16). -->
+                            <button class="btn btn-ghost btn-small" id="stylemap-box-toggle" type="button" aria-pressed="false" data-i18n="stylemap.boxSelectOff" data-i18n-title="stylemap.boxSelectTip" title="Drag a box on the map to pick dots (Shift + drag does the same)">Box select: off</button>
+                        </div>
                     </div>
                     <p class="stylemap-error" id="stylemap-error" hidden></p>
                     <div class="stylemap-body">
@@ -3917,6 +3921,15 @@
                                 </div>
                             </div>
                             <button class="btn btn-ghost btn-small stylemap-reset-view" id="stylemap-reset-view" type="button" data-i18n="stylemap.resetView">Reset view</button>
+                            <!-- Box-selection actions: each button calls the tool's own existing function (style-map/selection.js). -->
+                            <div class="stylemap-selbar" id="stylemap-selbar" role="toolbar" hidden aria-label="Selected dots" data-i18n-aria="stylemap.selBarAria">
+                                <span class="stylemap-selbar-count" id="stylemap-selbar-count"></span>
+                                <button class="btn btn-secondary btn-small" id="stylemap-sel-collection" type="button" data-i18n="selection.addToCollection">Add to collection…</button>
+                                <button class="btn btn-secondary btn-small" id="stylemap-sel-censor" type="button" data-i18n="stylemap.selCensor">Send to Censor</button>
+                                <button class="btn btn-secondary btn-small" id="stylemap-sel-dataset" type="button" data-i18n="stylemap.selDataset">Send to Dataset Maker</button>
+                                <button class="btn btn-ghost btn-small" id="stylemap-sel-gallery" type="button" data-i18n="stylemap.selGallery">View in Gallery</button>
+                                <button class="btn btn-ghost btn-small" id="stylemap-sel-clear" type="button" data-i18n="common.clear">Clear</button>
+                            </div>
                         </div>
                         <aside class="stylemap-side">
                             <div class="stylemap-preview" id="stylemap-preview">
@@ -3951,6 +3964,7 @@
                                 <details>
                                     <summary data-i18n="stylemap.helpTitle">More about the map</summary>
                                     <ul>
+                                        <li data-i18n="stylemap.helpSelect">Shift + drag picks the dots in a box.</li>
                                         <li data-i18n="stylemap.helpMembers">One dot can stand for several near-identical pictures.</li>
                                         <li data-i18n="stylemap.helpLandmarks">Region landmarks are mostly pictures; a style or artist is named only when it is clear.</li>
                                     </ul>
