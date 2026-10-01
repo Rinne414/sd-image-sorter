@@ -181,6 +181,7 @@ def merge_near_duplicates(
     block_rows: int = _BLOCK_ROWS,
     components: Optional[np.ndarray] = None,
     stats: Optional[Dict[str, Any]] = None,
+    groups: Optional[Dict[str, np.ndarray]] = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Single-linkage groups over cosine > ``threshold``; the smallest id represents a group.
 
@@ -192,12 +193,19 @@ def merge_near_duplicates(
     float32 margin), then every candidate is confirmed in full dimension with
     one block matmul against the candidate columns -- never a gathered row
     per pair -- so the result equals an all-pairs search.
+
+    When ``groups`` is a dict it receives the group table: ``member_ids``
+    (every input id, group by group in representative order, ids ascending
+    inside a group) and ``offsets`` (group g owns
+    ``member_ids[offsets[g]:offsets[g + 1]]``).
     """
     ids = np.asarray(ids, dtype=np.int64)
     x = np.asarray(x, dtype=np.float32)
     n = len(ids)
     if n == 0:
         empty = np.zeros(0, dtype=np.int64)
+        if groups is not None:
+            groups.update(member_ids=empty.copy(), offsets=np.zeros(1, dtype=np.int64))
         return empty, empty.copy(), empty.copy()
     order = np.argsort(ids, kind="stable")
     if np.array_equal(order, np.arange(n)):
@@ -205,6 +213,10 @@ def merge_near_duplicates(
     else:
         xs = x[order]
     if n == 1:
+        if groups is not None:
+            groups.update(
+                member_ids=ids[order].copy(), offsets=np.array([0, 1], dtype=np.int64)
+            )
         return ids[order], order, np.ones(1, dtype=np.int64)
 
     d = xs.shape[1]
@@ -288,6 +300,15 @@ def merge_near_duplicates(
     by_id = np.argsort(rep_sorted_rows, kind="stable")
     rep_sorted_rows = rep_sorted_rows[by_id]
     members = np.bincount(roots, minlength=n)[group_roots][by_id]
+    if groups is not None:
+        rank = np.empty(n, dtype=np.int64)  # walk position of a root -> group number
+        rank[group_roots[by_id]] = np.arange(len(group_roots))
+        row_group = np.empty(n, dtype=np.int64)  # id-sorted row -> group number
+        row_group[perm] = rank[roots]
+        groups.update(
+            member_ids=ids[order][np.argsort(row_group, kind="stable")],
+            offsets=np.concatenate(([0], np.cumsum(members))).astype(np.int64),
+        )
     if stats is not None:
         stats.update(
             {

@@ -279,7 +279,10 @@ class _MapInputs:
     rep_ids: np.ndarray
     # reps x UMAP_INPUT_DIM in float16 (a 50k library costs ~6 MB per entry).
     features: np.ndarray
-    filter_ids: Optional[np.ndarray] = None  # every id of the filter (S4c: who is on the map)
+    # S4b: the near-duplicate group table (see merge_near_duplicates): every
+    # located id ordered by group in rep_ids order, and the group boundaries.
+    member_ids: Optional[np.ndarray] = None
+    member_offsets: Optional[np.ndarray] = None
 
 
 @dataclass

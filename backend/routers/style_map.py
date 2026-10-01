@@ -355,6 +355,42 @@ def style_map_colors(
     return Response(content=payload, media_type="application/json")
 
 
+class StyleMapMembersRequest(BaseModel):
+    space: str = Field("kaloscope", pattern=_MAP_SPACE_PATTERN)
+    selection_token: Optional[str] = Field(None, max_length=65536)
+    map_id: Optional[str] = Field(None, pattern=MAP_ID_PATTERN, description=_MAP_ID_DOC)
+    rep_ids: List[int] = Field(
+        ..., description="Points of the map (representatives) to expand"
+    )
+
+
+@router.post(
+    "/members",
+    summary="Every picture behind the given dots of the map",
+    description=(
+        "The map draws one representative per near-duplicate group. For the "
+        "representatives in `rep_ids` this returns all pictures they stand "
+        "for (the representatives included), so a box selection acts on "
+        "every picture and not only on the visible dots. An id that is not a "
+        "point of the map expands to nothing. `not_started` (no ids) when "
+        "the map is not cached in this process or belongs to another library."
+    ),
+)
+def style_map_members(
+    body: StyleMapMembersRequest,
+    model_path: Optional[str] = Depends(_model_path_from_query),
+    service: StyleMapService = Depends(get_style_map_service),
+):
+    payload = service.members_json(
+        body.space,
+        body.rep_ids,
+        selection_token=body.selection_token,
+        model_path=model_path,
+        map_id=body.map_id,
+    )
+    return Response(content=payload, media_type="application/json")
+
+
 @router.post(
     "/query",
     summary="Nearest pictures of a dropped picture, placed on the map",

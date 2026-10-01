@@ -32,6 +32,7 @@ from PIL import Image, UnidentifiedImageError
 import database as db
 from exceptions import ServiceError, ValidationError
 from library_context import get_current_library_id
+from services.style_map_members import owners
 
 logger = logging.getLogger(__name__)
 
@@ -144,42 +145,6 @@ def build_answer(
         "weak_threshold": weak_threshold,
         "model_version": model_version,
     }
-
-
-def assign_to_representatives(
-    ids: np.ndarray,
-    matrix: np.ndarray,
-    member_ids: Sequence[int],
-    rep_ids: Sequence[int],
-) -> Dict[int, int]:
-    """member id -> the representative (of ``rep_ids``) it is most similar to.
-
-    A merged near-duplicate group keeps no member list, so a member is
-    matched to its group by cosine against every representative (chunked
-    over the library matrix, never a copy of it). The position is
-    approximate: merging is single-linkage, so the tail of a chain can sit
-    closer to a neighbouring group's representative and borrow its dot.
-    It still reads as ``merged``, never as outside the filter."""
-    positions = {int(image_id): row for row, image_id in enumerate(ids.tolist())}
-    members = [m for m in member_ids if int(m) in positions]
-    if not members or len(rep_ids) == 0:
-        return {}
-    wanted = np.array([positions[int(m)] for m in members])
-    queries = matrix[wanted].astype(np.float32)
-    is_rep = np.isin(ids, np.asarray(list(rep_ids), dtype=np.int64))
-    best = np.full(len(members), -np.inf, dtype=np.float32)
-    best_row = np.zeros(len(members), dtype=np.int64)
-    for start in range(0, len(ids), _MATRIX_CHUNK):
-        rows = np.flatnonzero(is_rep[start : start + _MATRIX_CHUNK]) + start
-        if not len(rows):
-            continue
-        sims = matrix[rows].astype(np.float32) @ queries.T
-        top = sims.argmax(axis=0)
-        gain = sims[top, np.arange(len(members))]
-        better = gain > best
-        best[better] = gain[better]
-        best_row[better] = rows[top[better]]
-    return {int(m): int(ids[best_row[i]]) for i, m in enumerate(members)}
 
 
 def not_started_answer(space: str) -> Dict[str, Any]:
@@ -367,24 +332,19 @@ class StyleMapQueryMixin:
     def _place_members(
         self,
         key: tuple,
-        space: str,
         ranked: Sequence[Tuple[int, float]],
         coords: Dict[int, Tuple[float, float, float]],
     ) -> Tuple[Dict[int, Tuple[float, float, float]], set]:
-        """``coords`` plus the neighbours that are in the filter but were
-        merged into a representative (placed at its dot) and their ids."""
+        """``coords`` plus the neighbours that were merged into a
+        representative (placed at its dot, from the map's group table) and
+        their ids. A picture outside the filter is in no group."""
         with self._cache_lock:
             inputs = self._inputs.get(key)
-        filter_ids = getattr(inputs, "filter_ids", None)
         loose = [i for i, _score in ranked if i not in coords]
-        if filter_ids is None or not loose or not coords:
+        if inputs is None or inputs.member_ids is None or not loose or not coords:
             return coords, set()
-        inside = [i for i in loose if np.isin(i, filter_ids)]
-        if not inside:
-            return coords, set()
-        ids, matrix = self._library_matrix(space, key[2])
-        owner = assign_to_representatives(ids, matrix, inside, list(coords))
-        placed = {**coords, **{m: coords[rep] for m, rep in owner.items()}}
+        owner = owners(inputs.rep_ids, inputs.member_ids, inputs.member_offsets, loose)
+        placed = {**coords, **{m: coords[rep] for m, rep in owner.items() if rep in coords}}
         return placed, set(owner)
 
     def _rank_for(
@@ -434,7 +394,7 @@ class StyleMapQueryMixin:
             },
         )
         coords, merged = self._place_members(
-            key, normalized, ranked, self._displayed_coords(key, entry[0])
+            key, ranked, self._displayed_coords(key, entry[0])
         )
         body = build_answer(
             ranked,

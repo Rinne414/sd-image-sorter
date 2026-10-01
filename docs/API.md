@@ -2086,6 +2086,33 @@ outside a trusted model folder, is missing or cannot be read (`kaloscope`
 space with `model_source=local` only).
 
 
+#### POST /api/style-map/members
+Expand the dots of the map into every picture they stand for. The map shows
+one representative per near-duplicate group (`members` in `points` is the
+group size); a box selection must act on the whole group. JSON body:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `space` | string | `kaloscope` | `kaloscope` or `clip` |
+| `map_id` | string | null | The handle of the map the page shows (32 hex characters, 400 otherwise) |
+| `selection_token` | string | null | Locates the map from the filter when no `map_id` is sent |
+| `rep_ids` | integer[] | required | Points (representatives) of the map; no size limit |
+
+`model_source` / `model_path` are query parameters as for `points`.
+
+**Response:**
+```json
+{"status": "ok", "space": "kaloscope", "ids": [10, 11, 12, 20]}
+```
+
+`ids` lists every member of the given representatives (the representatives
+included), group by group in map order, ids ascending inside a group. An id
+that is not a representative of this map expands to nothing. The table is
+the one the map was computed with, kept beside the cached layout:
+`status: "not_started"` (empty `ids`) when the map is not cached in this
+process (evicted, restarted) or the handle is sent under another library
+(`X-SD-Library-Id`); nothing is read across libraries.
+
 #### POST /api/style-map/query
 Drop a picture on the Style Map and find the nearest pictures of the current
 library: `multipart/form-data` with one `file` (an image of at most 50 MB,
@@ -2124,8 +2151,8 @@ picture's (the first call loads the model: about 7-15 s, then about 0.1 s);
 have a position on the map (`null` when none has). A neighbour outside the
 current Gallery filter is listed with `in_filter: false` and no coordinates. A
 neighbour that is a member of a merged near-duplicate dot has
-`merged: true` and borrows that dot's position (approximate under the
-single-linkage merge). `weak` marks a score below `weak_threshold`: 0.5 for
+`merged: true` and sits on that dot (looked up in the map's group table,
+the same one `members` expands). `weak` marks a score below `weak_threshold`: 0.5 for
 `clip` (the Similar page's threshold) and 0.32 for `kaloscope` (an empirical
 value from a 529-picture library, where a random pair's 95th percentile and
 each picture's nearest-other 5th percentile both sit near 0.32).

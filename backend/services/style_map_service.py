@@ -39,7 +39,6 @@ import logging
 import threading
 import time
 from collections import OrderedDict, deque
-from dataclasses import replace
 from typing import Any, Deque, Dict, List, Optional
 
 import numpy as np
@@ -62,6 +61,7 @@ from services.style_map_math import (
     pca_layout,
 )
 from services.style_map_colors import StyleMapColorsMixin, map_handle
+from services.style_map_members import StyleMapMembersMixin
 from services.style_map_query import StyleMapQueryMixin
 from services.style_map_regions import RegionsCache, regions_body
 from services.style_vector_service import style_vector_model_version
@@ -99,7 +99,7 @@ _QUEUE_LIMIT = 2
 
 
 # ------------------------------------------------------------------- service
-class StyleMapService(StyleMapColorsMixin, StyleMapQueryMixin):
+class StyleMapService(StyleMapColorsMixin, StyleMapQueryMixin, StyleMapMembersMixin):
     """Computes and caches the 3-D layout of the filtered library (point
     colours of a cached map: ``colors_json`` from the mixin)."""
 
@@ -247,7 +247,7 @@ class StyleMapService(StyleMapColorsMixin, StyleMapQueryMixin):
                     with blas_budget():
                         result, inputs = self._compute(normalized, model_version, ids)
                     payload = json.dumps(result, separators=(",", ":")).encode("utf-8")
-                    self._cache_put(key, payload, replace(inputs, filter_ids=np.asarray(sorted(ids), dtype=np.int64)))
+                    self._cache_put(key, payload, inputs)
                     entry = (payload, 0)
         with self._cache_lock:
             inputs = self._inputs.get(key)
@@ -685,8 +685,12 @@ class StyleMapService(StyleMapColorsMixin, StyleMapQueryMixin):
 
     @staticmethod
     def _empty_inputs() -> _MapInputs:
+        empty = np.zeros(0, dtype=np.int64)
         return _MapInputs(
-            np.zeros(0, dtype=np.int64), np.zeros((0, UMAP_INPUT_DIM), dtype=np.float16)
+            empty,
+            np.zeros((0, UMAP_INPUT_DIM), dtype=np.float16),
+            empty.copy(),
+            np.zeros(1, dtype=np.int64),
         )
 
     def _compute(
@@ -734,8 +738,9 @@ class StyleMapService(StyleMapColorsMixin, StyleMapQueryMixin):
 
         t2 = time.perf_counter()
         merge_stats: Dict[str, Any] = {}
+        group_table: Dict[str, np.ndarray] = {}
         rep_ids, rep_rows, members = merge_near_duplicates(
-            keep_ids, keep, components=comps, stats=merge_stats
+            keep_ids, keep, components=comps, stats=merge_stats, groups=group_table
         )
         timings["merge_s"] = round(time.perf_counter() - t2, 3)
         timings.update(merge_stats)
@@ -777,4 +782,9 @@ class StyleMapService(StyleMapColorsMixin, StyleMapQueryMixin):
             "explained_variance": explained,
             "points": points,
         }
-        return result, _MapInputs(np.asarray(rep_ids, dtype=np.int64), features)
+        return result, _MapInputs(
+            np.asarray(rep_ids, dtype=np.int64),
+            features,
+            group_table["member_ids"],
+            group_table["offsets"],
+        )

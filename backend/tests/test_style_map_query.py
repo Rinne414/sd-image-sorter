@@ -459,13 +459,6 @@ class TestMergedMembers:
         _store_kaloscope(test_db, ids, vectors)
         return ids, vectors
 
-    def test_pure_assignment_picks_the_nearest_representative(self):
-        ids = np.array([1, 2, 3, 4], dtype=np.int64)
-        matrix = np.array([[1, 0], [0.99, 0.14], [0, 1], [0.1, 0.99]], dtype=np.float32)
-        matrix /= np.linalg.norm(matrix, axis=1, keepdims=True)
-        found = query_mod.assign_to_representatives(ids, matrix, [2, 4], [1, 3])
-        assert found == {2: 1, 4: 3}
-
     def test_merged_member_is_flagged_and_sits_on_its_representative(
         self, test_db, tmp_path, no_umap, fake_vector
     ):
