@@ -156,7 +156,10 @@ def assign_to_representatives(
 
     A merged near-duplicate group keeps no member list, so a member is
     matched to its group by cosine against every representative (chunked
-    over the library matrix, never a copy of it)."""
+    over the library matrix, never a copy of it). The position is
+    approximate: merging is single-linkage, so the tail of a chain can sit
+    closer to a neighbouring group's representative and borrow its dot.
+    It still reads as ``merged``, never as outside the filter."""
     positions = {int(image_id): row for row, image_id in enumerate(ids.tolist())}
     members = [m for m in member_ids if int(m) in positions]
     if not members or len(rep_ids) == 0:
