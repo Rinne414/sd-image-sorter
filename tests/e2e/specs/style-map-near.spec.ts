@@ -51,11 +51,11 @@ function queryBody(overrides: Record<string, unknown> = {}) {
     [20, 0.2, 'far_a.png', true], [21, 0.12, 'far_b.png', true],
   ]
   const neighbors: any[] = rows.map(([id, score, filename, inFilter]) => ({
-    id, score, filename, weak: score < 0.32, in_filter: inFilter, merged: false,
+    id, score, filename, weak: score < 0.32, in_filter: inFilter, located: inFilter, merged: false,
     ...(inFilter ? coord(id) : { x: null, y: null, z: null }),
   }))
   // A picture merged into the dot of id 3 (S4c review): same position, one shared ring.
-  neighbors.splice(1, 0, { id: 301, score: 0.89, filename: 'merged_twin.png', weak: false, in_filter: true, merged: true, ...coord(3) })
+  neighbors.splice(1, 0, { id: 301, score: 0.89, filename: 'merged_twin.png', weak: false, in_filter: true, located: true, merged: true, ...coord(3) })
   return {
     status: 'ok',
     query: { x: 0.1, y: 0.05, z: -0.1 },
@@ -271,6 +271,31 @@ test.describe('Style Map nearest pictures', () => {
     release()
     await expect(page.locator('.stylemap-near-row')).toHaveCount(9)
     await expect(status).toBeHidden()
+  })
+
+  test('a picture in the filter that has no dot says it cannot be placed, not that it is outside the filter', async ({ page }) => {
+    await mockBase(page)
+    const body = queryBody()
+    body.neighbors = [
+      { id: 7, score: 0.9, filename: 'placed.png', weak: false, in_filter: true, located: true, merged: false, ...coord(7) },
+      { id: 8, score: 0.8, filename: 'no_dot.png', weak: false, in_filter: true, located: false, merged: false, x: null, y: null, z: null },
+      { id: 9001, score: 0.7, filename: 'outside.png', weak: false, in_filter: false, located: false, merged: false, x: null, y: null, z: null },
+    ]
+    await page.route('**/api/style-map/query**', (route) => route.fulfill({ json: body }))
+    await openMap(page, 1366, 768, 'en')
+    await pickFile(page)
+    await expect(page.locator('.stylemap-near-row')).toHaveCount(4) // the dropped picture's own row plus three neighbours
+    await expect(page.locator('.stylemap-near-row[data-id="8"]')).toContainText("can't be placed on the map")
+    await expect(page.locator('.stylemap-near-row[data-id="8"]')).not.toContainText('not in the current filter')
+    await expect(page.locator('.stylemap-near-row[data-id="9001"]')).toContainText('not in the current filter')
+    // One ring (the placed dot) plus the query point: the dot-less picture draws none.
+    expect((await ringKinds(page)).filter((kind) => kind.startsWith('near'))).toHaveLength(1)
+    await page.evaluate(() => localStorage.setItem('sd-image-sorter-lang', 'zh-CN'))
+    await page.reload()
+    await new StyleMapPage(page).open()
+    await expect.poll(() => page.evaluate(() => (window as any).StyleMap?._state?.scene?.count ?? -1)).toBe(30)
+    await pickFile(page)
+    await expect(page.locator('.stylemap-near-row[data-id="8"]')).toContainText('这张图无法放到地图上')
   })
 
   test('a failed upload says why and leaves the map unmarked: too large, not a picture, busy, model not prepared', async ({ page }) => {

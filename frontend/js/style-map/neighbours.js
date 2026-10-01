@@ -282,7 +282,7 @@ export class NeighbourCard {
         const drawn = new Set();
         for (const n of answer?.neighbors || []) {
             const dot = `${n.x},${n.y},${n.z}`;
-            if (!n.in_filter || drawn.has(dot)) continue;
+            if (!n.located || drawn.has(dot)) continue;
             drawn.add(dot);
             rings.push({ kind: n.weak ? 'far' : 'near', x: n.x, y: n.y, z: n.z });
         }
@@ -405,10 +405,11 @@ export class NeighbourCard {
         if (n.weak) flags.push(t('stylemap.nearFar', 'far away'));
         if (n.merged) flags.push(t('stylemap.nearMerged', 'merged into the same dot as another picture'));
         if (!n.in_filter) flags.push(t('stylemap.nearOutside', 'not in the current filter'));
+        else if (!n.located) flags.push(t('stylemap.nearUnplaced', "can't be placed on the map"));
         if (flags.length) text.append(el('span', 'stylemap-near-flag', flags.join(' · ')));
         const score = el('span', 'stylemap-near-score', Number(n.score).toFixed(SCORE_DECIMALS));
         button.append(thumb, text, score);
-        const position = n.in_filter ? [n.x, n.y, n.z] : null;
+        const position = n.located ? [n.x, n.y, n.z] : null;
         button.addEventListener('click', () => this.pick(n.id, position));
         item.append(button);
         return item;

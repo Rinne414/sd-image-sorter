@@ -152,7 +152,7 @@ test.describe('Style Map: view in Gallery', () => {
     await page.locator('#stylemap-sel-gallery').click()
     await expect(page.locator('#gallery-pin-banner')).toBeVisible()
     const pinned = await appState(page)
-    const removed = await request.delete(`/api/collections/${pinned.collectionId}`)
+    const removed = await request.delete(`/api/collections/pinned/${pinned.collectionId}`)
     expect(removed.ok()).toBeTruthy()
 
     await page.reload()
@@ -163,6 +163,25 @@ test.describe('Style Map: view in Gallery', () => {
     await page.locator('#gallery-pin-banner-clear').click()
     await expect(page.locator('#gallery-pin-banner')).toBeHidden()
     await expect.poll(async () => (await appState(page)).total).toBeGreaterThanOrEqual(COUNT)
+  })
+
+  test('a pin removed while it is on screen turns the banner into "no longer available" on the next load', async ({ page, request }) => {
+    const ids = await seedPictures(request)
+    await mockStyleMap(page, ids)
+    await openStyleMap(page, 'en')
+    await pickEverything(page)
+    await page.locator('#stylemap-sel-gallery').click()
+    await expect(page.locator('#gallery-pin-banner-title')).toHaveText(`${COUNT} from the Style Map`)
+    await expect.poll(async () => (await appState(page)).total).toBe(COUNT)
+    const pinned = await appState(page)
+    expect((await request.delete(`/api/collections/pinned/${pinned.collectionId}`)).ok()).toBeTruthy()
+
+    await page.evaluate(() => (window as any).App.loadImages())
+
+    await expect.poll(async () => (await appState(page)).total).toBe(0)
+    await expect(page.locator('#gallery-pin-banner-title')).toHaveText('This set of pictures is no longer available')
+    await page.locator('#gallery-pin-banner-clear').click()
+    await expect(page.locator('#gallery-pin-banner')).toBeHidden()
   })
 
   test('Send to Censor hands over a selection token that names exactly the picked pictures', async ({ page, request }) => {

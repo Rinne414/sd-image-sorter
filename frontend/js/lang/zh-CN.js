@@ -5506,6 +5506,7 @@ window.I18nLang_zhCN = {
     'stylemap.nearLoadingModel': '正在加载画风识别模型，第一次约需 {seconds} 秒…',
     'stylemap.nearFar': '离得很远',
     'stylemap.nearOutside': '不在当前筛选里',
+    'stylemap.nearUnplaced': '这张图无法放到地图上',
     'stylemap.nearNote': '你的图放在最像的三张旁边，所以位置只是估计。相似度是余弦值；低于 {threshold} 的用灰色标出，表示图库里没有真正相近的。',
     'stylemap.nearNoPlace': '最像的几张都不在当前筛选里，所以地图上没有标出你的图。',
     'stylemap.nearNothing': '图库里还没有可以比较的画风数据。',

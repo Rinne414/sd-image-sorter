@@ -97,13 +97,14 @@
      * A selection token for `ids`: they are stored as a pinned set and the
      * token names it (the same tokens "select all matching" makes), so a tool
      * that accepts a token reads the ids server side in chunks instead of
-     * receiving tens of thousands of ids in one call. null when nothing could
-     * be stored.
+     * receiving tens of thousands of ids in one call. The set is a "token"
+     * set (kept 30 days, not pruned by Gallery views: the tool pages through
+     * it lazily). null when nothing could be stored.
      */
     async function tokenFor(ids) {
         const api = app();
         if (!api || !ids?.length) return null;
-        const made = await api.API.post('/api/collections/pinned', { image_ids: ids });
+        const made = await api.API.post('/api/collections/pinned', { image_ids: ids, purpose: 'token' });
         if (!made?.count) return null;
         const created = await api.API.createSelectionToken({ collectionId: made.collection_id, sortBy: 'newest' });
         if (!created?.selection_token) return null;
@@ -168,6 +169,11 @@
         restoreFromStorage();
         document.getElementById('gallery-pin-banner-clear')?.addEventListener('click', clear);
         global.addEventListener('gallery-filters-changed', dropIfReplaced);
+        // A pin that is on screen but loads nothing may have been removed meanwhile.
+        global.addEventListener('gallery-images-loaded', (event) => {
+            const empty = Number(app()?.AppState?.pagination?.total) === 0;
+            if (state.id !== null && !state.gone && !event.detail?.appendMode && empty) verify();
+        });
         document.addEventListener('i18n-applied', render);
         document.addEventListener('languageChanged', render);
         render();

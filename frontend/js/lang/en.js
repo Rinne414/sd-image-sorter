@@ -5509,6 +5509,7 @@ window.I18nLang_en = {
     'stylemap.nearLoadingModel': 'Loading the Style Finder model; the first time takes about {seconds} seconds...',
     'stylemap.nearFar': 'far away',
     'stylemap.nearOutside': 'not in the current filter',
+    'stylemap.nearUnplaced': "can't be placed on the map",
     'stylemap.nearNote': 'Your picture is placed next to its three closest matches, so the spot is an estimate. Scores are cosine similarity; grey ones below {threshold} are not really close.',
     'stylemap.nearNoPlace': 'None of the closest pictures is in the current filter, so your picture is not marked on the map.',
     'stylemap.nearNothing': 'The library has no style data to compare with yet.',
