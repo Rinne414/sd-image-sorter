@@ -84,6 +84,10 @@ class _DownloadMixin:
             if external is not None:
                 logger.info("Using %s from a trusted folder: %s", self.model_name, external[0])
                 return external
+            # It was used from a trusted folder and is gone or changed there:
+            # say so instead of silently downloading a second copy. Prepare
+            # (the user's "download to the program folder") clears the record.
+            model_external.require_available("wd14", self.model_name, self.model_name)
 
         # Check if model exists and is valid
         needs_download = False

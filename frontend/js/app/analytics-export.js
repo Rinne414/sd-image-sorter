@@ -9,11 +9,15 @@
 // AbortController for confirm modal to prevent listener accumulation
 let _confirmAbort = null;
 
-function showConfirm(title, message, onOk, onCancel) {
+// options.tone: 'danger' (default, the red confirm button) or 'primary' (a plain
+// amber confirm button for questions that are not destructive).
+function showConfirm(title, message, onOk, onCancel, options = {}) {
     lockDynamicI18nText('#confirm-title', 'modal.confirm');
     lockDynamicI18nText('#confirm-message', 'modal.confirmAction');
     $('#confirm-title').textContent = title || appT('modal.confirm', 'Are you sure?');
     $('#confirm-message').textContent = message || appT('modal.confirmAction', 'This action cannot be undone.');
+    // The button is shared: set its tone on every open, so one dialog never leaks into the next.
+    $('#btn-confirm-ok').classList.toggle('danger', options.tone !== 'primary');
 
     // Each dialog answers exactly once. Anything but OK counts as Cancel:
     // the Cancel button, the backdrop, Escape, or a newer dialog replacing

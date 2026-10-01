@@ -204,6 +204,21 @@ class ModelSourcesStore:
         with self._lock:
             return [dict(m) for m in self._data.get("matches") or [] if isinstance(m, dict)]
 
+    def forget(
+        self, model_id: str, variant: Optional[str] = None, *, any_variant: bool = False
+    ) -> None:
+        """Drop a model's recorded and lost entries (its trusted file is no longer expected)."""
+
+        def keep(entry: Any) -> bool:
+            if not isinstance(entry, dict) or entry.get("model_id") != model_id:
+                return True
+            return not (any_variant or (entry.get("variant") or None) == (variant or None))
+
+        with self._lock:
+            for key in ("matches", "lost"):
+                self._data[key] = [e for e in self._data.get(key) or [] if keep(e)]
+            self._save()
+
     def lost(self) -> List[Dict[str, Any]]:
         """Trusted matches an earlier ``detect`` recorded that are no longer found."""
         with self._lock:

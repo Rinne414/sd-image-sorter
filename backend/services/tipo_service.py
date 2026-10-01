@@ -481,6 +481,7 @@ def _ensure_model_loaded(model_key: str) -> Dict[str, Any]:
     target = _weight_in_use(model_key, models.model_dir)
     try:
         if not target.is_file():
+            model_external.require_available("tipo", model_key, f"TIPO {model_key}")
             logger.info(
                 "TIPO: downloading %s/%s (%s) into %s",
                 spec.repo,
@@ -492,6 +493,8 @@ def _ensure_model_loaded(model_key: str) -> Dict[str, Any]:
         models.load_model(str(target), gguf=True, device="cpu")
     except TipoError:
         raise
+    except model_external.ExternalModelUnavailable as exc:
+        raise TipoError(str(exc)) from exc
     except Exception as exc:
         raise TipoError(
             f"TIPO model load failed: {exc} / TIPO 模型加载失败：{exc}"

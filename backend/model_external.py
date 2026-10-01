@@ -54,6 +54,17 @@ def _store() -> model_sources_store.ModelSourcesStore:
     return get_model_sources_service().store
 
 
+class ExternalModelUnavailable(FileNotFoundError):
+    """A model that was used from a trusted folder is gone or changed there."""
+
+
+_KIND_LABELS_ZH = {
+    "comfyui": "ComfyUI",
+    "hf_cache": "Hugging Face 缓存",
+    "folder": "信任文件夹",
+}
+
+
 @dataclass(frozen=True)
 class Resolution:
     """One recorded external model and whether it is still what was recorded."""
@@ -197,14 +208,23 @@ def problem(model_id: str, variant: Optional[str] = None) -> Optional[Resolution
     return lost(model_id, variant)
 
 
+# What was last logged for a path: a stale file is reported when its state
+# changes, not on every status refresh.
+_warned_state: Dict[str, str] = {}
+
+
 def usable(
     model_id: str, variant: Optional[str] = None, *, check_network: bool = False
 ) -> Optional[Resolution]:
-    """The recorded file when it is still what was recorded; a stale one is logged and refused."""
+    """The recorded file when it is still what was recorded; a stale one is logged once and refused."""
     found = lookup(model_id, variant, check_network=check_network)
     if found is None:
         return None
-    if not found.is_ok:
+    if found.is_ok:
+        _warned_state.pop(found.path, None)
+        return found
+    if _warned_state.get(found.path) != found.state:
+        _warned_state[found.path] = found.state
         logger.warning(
             "%s file in %s is %s, not using it: %s",
             model_id,
@@ -212,8 +232,7 @@ def usable(
             found.state,
             found.path,
         )
-        return None
-    return found
+    return None
 
 
 def usable_path(
@@ -280,3 +299,25 @@ def source_for_path(
     if found is None or not found.is_ok or not _same_file(path, found.path):
         return None
     return found.source_info()
+
+
+def require_available(model_id: str, variant: Optional[str], display_name: str) -> None:
+    """Raise when this model was used from a trusted folder and is now gone or
+    changed there. A fresh install (nothing recorded) passes, so its normal
+    first-use download is unchanged."""
+    broken = problem(model_id, variant)
+    if broken is None:
+        return
+    gone = broken.state == STATE_GONE
+    raise ExternalModelUnavailable(
+        f"The {display_name} in {broken.source_label} is {'gone' if gone else 'changed'}: "
+        f"{broken.path}. Rescan in Model Center, or download it to the program folder. / "
+        f"{_KIND_LABELS_ZH.get(broken.source_kind, _KIND_LABELS_ZH['folder'])} 里的 "
+        f"{display_name} 已{'不见' if gone else '变更'}：{broken.path}。"
+        "请到模型中心重新扫描，或下载到程序文件夹。"
+    )
+
+
+def forget(model_id: str, variant: Optional[str] = None, *, any_variant: bool = False) -> None:
+    """The user chose to download to the program folder: stop treating the old trusted file as expected."""
+    _store().forget(model_id, variant, any_variant=any_variant)

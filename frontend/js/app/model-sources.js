@@ -267,12 +267,7 @@
 
     function confirmDialog({ title, message, okText, cancelText, align = 'left' }) {
         return new Promise((resolve) => {
-            // The shared dialog's confirm button is styled as a danger action; these questions are not.
-            const okButton = $('#btn-confirm-ok');
-            const hadDanger = okButton.classList.contains('danger');
-            okButton.classList.remove('danger');
             const restore = () => {
-                if (hadDanger) okButton.classList.add('danger');
                 unlockDynamicI18nText('#btn-confirm-ok', 'modal.yes', 'Yes, proceed');
                 unlockDynamicI18nText('#btn-confirm-cancel', 'modal.cancel', 'Cancel');
                 const messageEl = document.getElementById('confirm-message');
@@ -281,7 +276,7 @@
                     messageEl.style.textAlign = '';
                 }
             };
-            showConfirm(title, message, () => { restore(); resolve(true); }, () => { restore(); resolve(false); });
+            showConfirm(title, message, () => { restore(); resolve(true); }, () => { restore(); resolve(false); }, { tone: 'primary' });
             const messageEl = document.getElementById('confirm-message');
             if (messageEl) {
                 messageEl.style.whiteSpace = 'pre-line';

@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
 
+import model_external
 from model_download_sources import log_model_artifact_status
 
 
@@ -49,6 +50,8 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
         from tagger import DEFAULT_MODEL, WD14Tagger
 
         model_name = variant or DEFAULT_MODEL
+        # Prepare is the user's choice to download into the program folder.
+        model_external.forget("wd14", model_name)
         tagger = WD14Tagger(model_name=model_name, use_gpu=False)
         model_path, tags_path = tagger._get_model_paths()
         result = {
@@ -497,6 +500,7 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
         return _svc()._with_dependency_result(result, dependency_result)
 
     if normalized_model_id == "tipo":
+        model_external.forget("tipo", any_variant=True)
         dependency_result = _svc().ensure_group("tipo")
         restart_result = _svc()._dependency_restart_result(
             normalized_model_id, dependency_result

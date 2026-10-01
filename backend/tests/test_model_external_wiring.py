@@ -240,13 +240,9 @@ def test_tagger_loads_the_trusted_copy_without_downloading(world, own, monkeypat
     assert tags_path.endswith(f"{DEFAULT}.csv")
 
 
-def test_tagger_downloads_into_its_own_folder_when_the_trusted_copy_changed(
-    world, own, monkeypatch, caplog
-):
+def _recording_hub(monkeypatch):
     import tagger
 
-    path = add_default_wd14(world)
-    path.write_bytes(b"different")
     calls = []
 
     def record(**kwargs):
@@ -254,16 +250,145 @@ def test_tagger_downloads_into_its_own_folder_when_the_trusted_copy_changed(
         raise RuntimeError("network off")
 
     monkeypatch.setattr(tagger, "hf_hub", SimpleNamespace(hf_hub_download=record))
-    instance = tagger.WD14Tagger(
+    return calls
+
+
+def _default_tagger(own):
+    import tagger
+
+    return tagger.WD14Tagger(
         model_name=DEFAULT, model_dir=str(own / "wd14"), use_gpu=False
     )
 
-    with caplog.at_level("WARNING"), pytest.raises(Exception):
-        instance._get_model_paths()
 
-    assert calls, "the changed copy must not be used; the normal download runs"
-    assert all(str(world.root) not in call["local_dir"] for call in calls)
-    assert any(str(path) in r.getMessage() for r in caplog.records)
+def test_tagger_does_not_download_when_the_trusted_copy_changed(world, own, monkeypatch):
+    path = add_default_wd14(world)
+    path.write_bytes(b"different")
+    calls = _recording_hub(monkeypatch)
+
+    with pytest.raises(model_external.ExternalModelUnavailable) as raised:
+        _default_tagger(own)._get_model_paths()
+
+    message = str(raised.value)
+    assert not calls, "a second copy must not be downloaded behind the user's back"
+    assert str(path) in message
+    assert "is changed" in message
+    assert "已变更" in message and "模型中心" in message
+    zh_part = message.replace(str(path), "").split(" / ")[-1]
+    assert "app" not in zh_part.lower()
+
+
+def test_tagger_does_not_download_when_the_trusted_copy_is_gone(world, own, monkeypatch):
+    path = add_default_wd14(world)
+    path.unlink()
+    world.store.save_matches([])  # the next detect no longer finds it
+    calls = _recording_hub(monkeypatch)
+
+    with pytest.raises(model_external.ExternalModelUnavailable) as raised:
+        _default_tagger(own)._get_model_paths()
+
+    assert not calls
+    assert "is gone" in str(raised.value) and "已不见" in str(raised.value)
+
+
+def test_fresh_install_still_downloads_on_first_use(world, own, monkeypatch):
+    calls = _recording_hub(monkeypatch)
+
+    with pytest.raises(RuntimeError, match="network off"):
+        _default_tagger(own)._get_model_paths()
+
+    assert calls and all(str(world.root) not in call["local_dir"] for call in calls)
+
+
+def test_prepare_downloads_into_the_program_folder_after_the_copy_was_lost(
+    world, own, monkeypatch
+):
+    path = add_default_wd14(world)
+    path.write_bytes(b"different")
+    calls = _recording_hub(monkeypatch)
+    model_external.forget("wd14", DEFAULT)
+
+    with pytest.raises(RuntimeError, match="network off"):
+        _default_tagger(own)._get_model_paths()
+
+    assert calls and all(str(world.root) not in call["local_dir"] for call in calls)
+    assert model_external.problem("wd14", DEFAULT) is None
+
+
+def test_the_prepare_button_downloads_after_the_copy_was_lost(world, own, monkeypatch):
+    from services import model_service, model_service_prepare
+
+    path = add_default_wd14(world)
+    path.unlink()
+    world.store.save_matches([])
+    calls = _recording_hub(monkeypatch)
+    monkeypatch.setattr(
+        model_service, "_repair_wd14_onnxruntime_if_possible", lambda: {"attempted": False}
+    )
+    import tagger
+
+    monkeypatch.setattr(
+        tagger,
+        "get_wd14_model_dir",
+        lambda: str(own / "wd14"),
+    )
+
+    with pytest.raises(RuntimeError, match="network off"):
+        model_service_prepare._prepare_model(None, "wd14", variant=DEFAULT)
+
+    assert calls
+
+
+def test_a_corrupt_trusted_file_is_never_deleted(world, own, monkeypatch):
+    path = add_default_wd14(world)
+    instance = _default_tagger(own)
+    monkeypatch.setattr(
+        instance,
+        "_create_verified_session",
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("INVALID_PROTOBUF")),
+    )
+
+    with pytest.raises(RuntimeError, match="never changes it"):
+        instance._create_session(str(path), "tags.csv", None, [])
+
+    assert path.exists()
+
+
+def test_tipo_does_not_download_when_its_trusted_weight_vanished(world, own, monkeypatch):
+    from services import tipo_service
+
+    weight = world.add_file("tipo", "v2.1", "models/kgen/TIPO.gguf", GGUF, verify="sha")
+    weight.unlink()
+    calls = []
+    monkeypatch.setattr(tipo_service, "_download_weight", lambda *a, **k: calls.append(a))
+    fake_models = SimpleNamespace(model_dir=None, text_model=None)
+    monkeypatch.setattr(tipo_service, "_import_kgen", lambda: {"models": fake_models})
+    monkeypatch.setattr(tipo_service, "_loaded_model_key", None)
+
+    with pytest.raises(tipo_service.TipoError, match="is gone"):
+        tipo_service._ensure_model_loaded("v2.1")
+
+    assert not calls
+
+
+def test_tipo_fresh_install_still_downloads(world, own, monkeypatch):
+    from services import tipo_service
+
+    calls = []
+
+    def fake_download(spec, dest_dir):
+        calls.append(spec)
+        raise tipo_service.TipoError("network off")
+
+    monkeypatch.setattr(tipo_service, "_download_weight", fake_download)
+    fake_models = SimpleNamespace(model_dir=None, text_model=None)
+    monkeypatch.setattr(tipo_service, "_import_kgen", lambda: {"models": fake_models})
+    monkeypatch.setattr(tipo_service, "_loaded_model_key", None)
+
+    with pytest.raises(tipo_service.TipoError, match="network off"):
+        tipo_service._ensure_model_loaded("v2.1")
+
+    assert calls
 
 
 # ---------------------------------------------------- folder-style models

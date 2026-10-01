@@ -247,3 +247,37 @@ def test_corrupt_index_rows_do_not_break_lookups(world):
 
     assert model_external.lookup("aesthetic-waifu") is None
     assert model_external.problem("aesthetic-waifu") is None
+
+
+def test_a_stale_file_is_logged_once_per_state_not_on_every_refresh(world, caplog):
+    path = world.add_file("aesthetic-waifu", None, "w.safetensors")
+    path.unlink()
+    model_external._warned_state.clear()
+
+    with caplog.at_level(logging.WARNING):
+        for _ in range(5):
+            assert model_external.usable_path("aesthetic-waifu") is None
+
+    assert len([r for r in caplog.records if str(path) in r.getMessage()]) == 1
+
+    path.write_bytes(b"weights")
+    assert model_external.usable_path("aesthetic-waifu") is None  # changed: new state, logs again
+    assert len([r for r in caplog.records if str(path) in r.getMessage()]) == 2
+
+
+def test_require_available_passes_for_a_fresh_install_and_an_intact_file(world):
+    model_external.require_available("florence2", "base", "Florence-2")
+    world.add_file("aesthetic-waifu", None, "w.safetensors")
+    model_external.require_available("aesthetic-waifu", None, "Waifu head")
+
+
+def test_forget_drops_the_recorded_and_the_lost_entry(world):
+    path = world.add_file("aesthetic-waifu", None, "w.safetensors")
+    path.unlink()
+    with pytest.raises(model_external.ExternalModelUnavailable):
+        model_external.require_available("aesthetic-waifu", None, "Waifu head")
+
+    model_external.forget("aesthetic-waifu")
+
+    model_external.require_available("aesthetic-waifu", None, "Waifu head")
+    assert world.store.matches() == [] and world.store.lost() == []

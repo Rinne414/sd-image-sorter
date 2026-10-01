@@ -587,6 +587,23 @@ test.describe('the one-time question', () => {
     await expect(dialog.locator('#confirm-message')).toContainText('never changes ComfyUI')
   })
 
+  test('the question uses the plain button and a real danger confirm afterwards is still red', async ({ page }) => {
+    await mockBackend(page, withComfyFound())
+    await openCenter(page)
+    const ok = page.locator('#btn-confirm-ok')
+    await expect(ok).toBeVisible()
+    await expect(ok).not.toHaveClass(/danger/)
+    const plain = await ok.evaluate((el) => getComputedStyle(el).color)
+    await page.locator('#btn-confirm-cancel').click()
+    await expect(page.locator('#confirm-modal')).toBeHidden()
+
+    await page.evaluate(() => (window as any).showConfirm('Delete?', 'This cannot be undone.', () => {}))
+    await expect(ok).toBeVisible()
+    await expect(ok).toHaveClass(/danger/)
+    const red = await ok.evaluate((el) => getComputedStyle(el).color)
+    expect(red).not.toBe(plain)
+  })
+
   test('the buttons of the shared confirm dialog are restored afterwards', async ({ page }) => {
     await mockBackend(page, withComfyFound())
     await openCenter(page)

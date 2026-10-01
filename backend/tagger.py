@@ -302,6 +302,18 @@ class WD14Tagger(
                 "INVALID_PROTOBUF" in error_msg
                 or "Protobuf parsing failed" in error_msg
             ):
+                import model_external
+
+                if model_external.source_for_path("wd14", self.model_name, model_path):
+                    # A file in a trusted folder (ComfyUI) is read-only for this
+                    # program: never delete it, never "repair" it.
+                    raise RuntimeError(
+                        f"The {self.model_name} file in a trusted folder cannot be read: "
+                        f"{model_path}. The program never changes it; repair it there or "
+                        "download the model to the program folder from Model Center. / "
+                        f"信任文件夹里的 {self.model_name} 无法读取：{model_path}。"
+                        "程序不会修改它，请在原处修复，或到模型中心下载到程序文件夹。"
+                    ) from e
                 logger.error(f"Model file is corrupted: {model_path}")
                 logger.info("Attempting to delete and re-download...")
 
