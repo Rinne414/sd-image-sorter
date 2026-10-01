@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from artist_identifier import ARTIST_THRESHOLD_DEFAULT
 from exceptions import OperationInProgressError
 
 
@@ -40,6 +41,7 @@ class FakeStyleVectorService:
         model_path=None,
         selection_token=None,
         with_artist=True,
+        threshold=ARTIST_THRESHOLD_DEFAULT,
     ):
         self.calls.append(
             (
@@ -51,6 +53,7 @@ class FakeStyleVectorService:
                 model_path,
                 selection_token,
                 with_artist,
+                threshold,
             )
         )
         if self.running:
@@ -125,7 +128,17 @@ def test_start_passes_request_to_service(test_client, fake_service):
     assert response.json()["status"] == "started"
     assert response.json()["total"] == 5
     assert fake_service.calls == [
-        ("start", "kaloscope", [3, 4], False, "huggingface", None, None, True)
+        (
+            "start",
+            "kaloscope",
+            [3, 4],
+            False,
+            "huggingface",
+            None,
+            None,
+            True,
+            ARTIST_THRESHOLD_DEFAULT,
+        )
     ]
 
 
@@ -153,8 +166,47 @@ def test_start_passes_the_selection_token_to_the_service(test_client, fake_servi
     )
     assert response.status_code == 200, response.text
     assert fake_service.calls == [
-        ("start", "kaloscope", None, None, "huggingface", None, "tok.abc", True)
+        (
+            "start",
+            "kaloscope",
+            None,
+            None,
+            "huggingface",
+            None,
+            "tok.abc",
+            True,
+            ARTIST_THRESHOLD_DEFAULT,
+        )
     ]
+
+
+def test_start_passes_the_style_finder_threshold_to_the_service(
+    test_client, fake_service
+):
+    """S1d: the page's slider travels with the start request; default = the
+    Finder's own default, so an old client without the field changes nothing."""
+    response = test_client.post(
+        "/api/style-map/vectors/start", json={"threshold": 0.12}
+    )
+    assert response.status_code == 200, response.text
+    assert fake_service.calls[0][8] == pytest.approx(0.12)
+
+
+def test_start_threshold_has_the_identify_batch_range(test_client, fake_service):
+    """Same bounds as IdentifyBatchRequest.threshold (0.0 .. 1.0)."""
+    from routers.artists import IdentifyBatchRequest
+    from routers.style_map import StartVectorsRequest
+
+    ours = StartVectorsRequest.model_fields["threshold"]
+    theirs = IdentifyBatchRequest.model_fields["threshold"]
+    assert ours.default == theirs.default == ARTIST_THRESHOLD_DEFAULT
+    assert [repr(m) for m in ours.metadata] == [repr(m) for m in theirs.metadata]
+    for bad in (-0.01, 1.01, "high"):
+        response = test_client.post(
+            "/api/style-map/vectors/start", json={"threshold": bad}
+        )
+        assert response.status_code == 400, (bad, response.text)
+    assert fake_service.calls == []
 
 
 def test_start_refuses_both_image_ids_and_a_selection_token(test_client, fake_service):

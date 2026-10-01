@@ -44,6 +44,7 @@ class FakeIdentifier:
         self.on_call = on_call
         self.calls: list[str] = []
         self.batches: list[list[str]] = []
+        self.thresholds: list[float] = []
         self.loads = 0
 
     def load(self):
@@ -64,20 +65,31 @@ class FakeIdentifier:
         return _vector_for(image_path, "v")
 
     def identification_for(self, image_path: str, top_k: int, threshold: float) -> dict:
-        """What identify_with_threshold would answer for this picture."""
-        name = "modare" if "img0" in image_path else "undefined"
-        confidence = 0.42 if name != "undefined" else 0.01
+        """What identify_with_threshold would answer for this picture: the
+        top-1 score tiered by the real classify_artist_confidence with the
+        caller's floor, exactly as ArtistIdentifier._result_from_probs does."""
+        self.thresholds.append(float(threshold))
+        confidence = 0.42 if "img0" in image_path else 0.01
+        level = ai.classify_artist_confidence(confidence, threshold=threshold)
+        name = "modare" if level == ai.ARTIST_CONFIDENCE_HIGH else "undefined"
+        candidate = "modare" if level != ai.ARTIST_CONFIDENCE_NONE else None
         return {
             "artist": name,
             "confidence": confidence,
-            "confidence_level": "high" if name != "undefined" else "none",
-            "candidate_artist": name if name != "undefined" else None,
-            "out_of_vocabulary_likely": name == "undefined",
+            "confidence_level": level,
+            "candidate_artist": candidate,
+            "out_of_vocabulary_likely": level != ai.ARTIST_CONFIDENCE_HIGH,
             "vocabulary_size": 4,
             "advisory": "",
             "top_predictions": [{"artist": "modare", "confidence": confidence}][:top_k],
             "model_loaded": True,
         }
+
+    def identify_with_threshold(
+        self, image_path: str, top_k: int, threshold: float, priority: int = 0
+    ) -> dict:
+        """The Style Finder's own entrance (ArtistService.run_batch_identification)."""
+        return self.identification_for(image_path, top_k, threshold)
 
     def extract_style_vector_and_identification(
         self,
@@ -651,6 +663,81 @@ class TestExtraction:
                 (ids[0],),
             ).fetchone()
         assert tuple(finder_row) == rows[ids[0]]
+
+    def test_threshold_reaches_every_prediction(self, test_db, tmp_path, monkeypatch):
+        """S1d: the Style Finder page's slider value, not the default floor,
+        is what the index tiers each picture with (batched and one-by-one)."""
+        from services import style_vector_service as svc_mod
+
+        monkeypatch.setattr(svc_mod, "EXTRACTION_BATCH_SIZE", 2)
+        _make_images(test_db, tmp_path, 3)
+        identifier = FakeIdentifier()
+        service = _service(identifier)
+        tasks = BackgroundTasks()
+        service.start_extraction(tasks, space="kaloscope", threshold=0.12)
+        _run_scheduled(tasks)
+        assert service.get_progress()["step"] == "done"
+        assert identifier.thresholds == [0.12, 0.12, 0.12]
+
+    def test_default_threshold_is_the_finders_default(self, test_db, tmp_path):
+        _make_images(test_db, tmp_path, 1)
+        identifier = FakeIdentifier()
+        service = _service(identifier)
+        tasks = BackgroundTasks()
+        service.start_extraction(tasks, space="kaloscope")
+        _run_scheduled(tasks)
+        assert identifier.thresholds == [ai.ARTIST_THRESHOLD_DEFAULT]
+
+    def test_a_higher_threshold_writes_a_different_row(self, test_db, tmp_path):
+        """Above the confident floor the slider decides whether a 0.42 match
+        is asserted or stored as undefined: the row must follow the slider,
+        or the index silently overwrites what the Finder page would write."""
+        ids = _make_images(test_db, tmp_path, 1)
+        service = _service(FakeIdentifier())
+        tasks = BackgroundTasks()
+        service.start_extraction(tasks, space="kaloscope", threshold=0.5)
+        _run_scheduled(tasks)
+        strict = _prediction_rows(test_db)
+        assert strict[ids[0]][0] == "undefined"
+
+        with test_db.get_db() as conn:
+            conn.execute("DELETE FROM image_style_vectors")
+            conn.execute("DELETE FROM artist_predictions")
+        service = _service(FakeIdentifier())
+        tasks = BackgroundTasks()
+        service.start_extraction(tasks, space="kaloscope")
+        _run_scheduled(tasks)
+        lenient = _prediction_rows(test_db)
+        assert lenient[ids[0]][0] == "modare"
+        assert lenient[ids[0]][1:] == strict[ids[0]][1:]
+
+    @pytest.mark.parametrize("threshold", [0.03, 0.12, 0.5])
+    def test_index_and_identify_batch_write_the_same_rows_at_one_threshold(
+        self, test_db, tmp_path, threshold
+    ):
+        """The map's index and POST /api/artists/identify-batch, given the
+        same threshold, store byte-identical artist_predictions rows."""
+        from services.artist_service import ArtistService
+
+        ids = _make_images(test_db, tmp_path, 2)
+        index_identifier = FakeIdentifier()
+        service = _service(index_identifier)
+        tasks = BackgroundTasks()
+        service.start_extraction(tasks, space="kaloscope", threshold=threshold)
+        _run_scheduled(tasks)
+        from_index = _prediction_rows(test_db)
+        assert set(from_index) == set(ids)
+
+        with test_db.get_db() as conn:
+            conn.execute("DELETE FROM artist_predictions")
+        finder_identifier = FakeIdentifier()
+        finder = ArtistService(identifier_getter=lambda **kwargs: finder_identifier)
+        result = finder.run_batch_identification(
+            image_ids=ids, threshold=threshold, top_k=5
+        )
+        assert result.get("errors", 0) == 0, result
+        assert finder_identifier.thresholds == index_identifier.thresholds
+        assert _prediction_rows(test_db) == from_index
 
     def test_with_artist_off_writes_vectors_only(self, test_db, tmp_path):
         ids = _make_images(test_db, tmp_path, 2)

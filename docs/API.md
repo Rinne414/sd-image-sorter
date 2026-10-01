@@ -1546,7 +1546,8 @@ Start style-vector extraction for the pending images of the current library.
 | `model_source` | string | `huggingface` | `huggingface`, `modelscope` or `local` (same contract as `/api/artists/identify`) |
 | `model_path` | string | null | Local checkpoint, `.pth`/`.pt`/`.onnx`; required (and must exist) when `model_source` is `local`. Any other file name is 400 before the file is looked at |
 | `use_gpu` | bool | null | `null` = the Style Finder default (`ARTIST_USE_GPU`); `false` forces CPU |
-| `with_artist` | bool | `true` | Also write the Style Finder's artist prediction (`artist_predictions`, same model, threshold and row format as `/api/artists/identify`) from the same forward pass, in the same transaction as the vector; `false` writes vectors only. Only pictures the job actually runs the model for get a prediction: a picture whose stored vector still fits (`kept`) is not re-identified, so to add predictions for an already indexed library use the Style Finder page's batch (`POST /api/artists/identify-batch`). A picture the job does run overwrites its existing prediction row with the default threshold (0.03) and `top_k` 5 |
+| `with_artist` | bool | `true` | Also write the Style Finder's artist prediction (`artist_predictions`, same model, threshold and row format as `/api/artists/identify`) from the same forward pass, in the same transaction as the vector; `false` writes vectors only. Only pictures the job actually runs the model for get a prediction: a picture whose stored vector still fits (`kept`) is not re-identified, so to add predictions for an already indexed library use the Style Finder page's batch (`POST /api/artists/identify-batch`). A picture the job does run overwrites its existing prediction row with `threshold` and `top_k` 5 (the Style Finder page sends a fixed `top_k` of 5) |
+| `threshold` | float | `0.03` | Confidence floor for the stored artist prediction, 0.0-1.0 (same field and range as `/api/artists/identify-batch`). The style map page sends the Style Finder page's slider value, so the index writes the rows an identify-batch at that setting would write: above 0.20 it decides whether a confident match is stored by name or as `undefined`. Ignored when `with_artist` is `false` |
 
 **Response:**
 ```json
@@ -1557,9 +1558,9 @@ Start style-vector extraction for the pending images of the current library.
 
 **Errors:** 409 when a job is already running; 400 for an unknown `space`,
 empty or non-positive `image_ids`, `image_ids` together with
-`selection_token`, an invalid `selection_token`, a `local` source without a
-`model_path`, or a `model_path` that is not a `.pth`/`.pt`/`.onnx` file, is
-missing or cannot be read.
+`selection_token`, an invalid `selection_token`, a `threshold` outside
+0.0-1.0, a `local` source without a `model_path`, or a `model_path` that is
+not a `.pth`/`.pt`/`.onnx` file, is missing or cannot be read.
 
 #### GET /api/style-map/vectors/progress
 Poll the running (or last) job.

@@ -15,6 +15,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
 
+from artist_identifier import ARTIST_THRESHOLD_DEFAULT
 from exceptions import ValidationError
 from routers.artists import ArtistModelConfig
 from services.service_provider import ServiceProvider
@@ -109,6 +110,18 @@ class StartVectorsRequest(ArtistModelConfig):
         ),
     )
 
+    # Same field as IdentifyBatchRequest.threshold: the Style Finder page's
+    # slider, so the index tiers (and stores) the artist the way that page does.
+    threshold: float = Field(
+        ARTIST_THRESHOLD_DEFAULT,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Confidence floor for the stored artist prediction; send the Style "
+            "Finder page's threshold so both entrances write the same rows."
+        ),
+    )
+
     @model_validator(mode="after")
     def one_scope_only(self):
         if self.image_ids is not None and self.selection_token:
@@ -158,6 +171,7 @@ def start_vectors(
         model_path=request.model_path,
         selection_token=request.selection_token,
         with_artist=request.with_artist,
+        threshold=request.threshold,
     )
 
 

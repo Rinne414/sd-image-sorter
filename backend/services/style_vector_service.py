@@ -60,7 +60,9 @@ from services.style_vector_prepare import (  # noqa: F401 - re-exported names
 logger = logging.getLogger(__name__)
 
 STYLE_VECTOR_SPACES = ("kaloscope",)
-# top_k the Style Finder page sends for a batch (frontend/js/artist/identify.js).
+# top_k the Style Finder page sends for a batch (frontend/js/artist/identify.js
+# _getIdentifyPayload): fixed there, so fixed here. The threshold is the page's
+# slider and travels with every start request instead.
 ARTIST_INDEX_TOP_K = 5
 STYLE_VECTOR_UNSUPPORTED_ERROR = (
     "Style vectors need the Kaloscope 2.0 artist model; the loaded artist model "
@@ -285,12 +287,15 @@ class StyleVectorService:
         model_path: Optional[str] = None,
         selection_token: Optional[str] = None,
         with_artist: bool = True,
+        threshold: float = ARTIST_THRESHOLD_DEFAULT,
     ) -> Dict[str, Any]:
         """Queue the job for every pending image (or the given ids, or the
         pictures of a Gallery filter token) and return its size.
 
         ``with_artist`` (default on): the same forward also identifies the
-        artist and stores it exactly as the Style Finder page does.
+        artist and stores it exactly as the Style Finder page does, tiered
+        with ``threshold`` (the page's slider, so the row the index writes
+        is the row an identify-batch at the same setting would write).
         """
         normalized = self._require_space(space)
         model_version = _model_version_for(model_path)
@@ -350,6 +355,7 @@ class StyleVectorService:
             model_source,
             model_path,
             with_artist,
+            float(threshold),
         )
         return {"status": "started", "total": len(rows), "space": normalized}
 
@@ -368,6 +374,9 @@ class StyleVectorService:
         that is not Kaloscope, or a stub without a feature layer ends the
         job here with a clear message instead of failing every image.
         """
+        # The singleton is built with the default floor exactly as
+        # ArtistService._identifier builds it (the request threshold is
+        # passed per call, never baked into the shared model).
         identifier = self._identifier_getter(
             model_path=model_path,
             model_source=model_source,
@@ -391,7 +400,13 @@ class StyleVectorService:
         return identifier
 
     # ------------------------------------------------------- GPU stage
-    def _identify_batch(self, identifier, batch: List[_Prepared], with_artist: bool):
+    def _identify_batch(
+        self,
+        identifier,
+        batch: List[_Prepared],
+        with_artist: bool,
+        threshold: float = ARTIST_THRESHOLD_DEFAULT,
+    ):
         """(vector, raw identification | None) per prepared picture, or an
         exception in that slot. One forward for the whole batch when the
         identifier offers it; a batch that fails as a whole is retried one
@@ -404,7 +419,7 @@ class StyleVectorService:
                 outputs = combined_batch(
                     [(item.image_path, item.payload) for item in batch],
                     top_k=ARTIST_INDEX_TOP_K,
-                    threshold=ARTIST_THRESHOLD_DEFAULT,
+                    threshold=threshold,
                     priority=PRIORITY_BATCH,
                 )
                 if len(outputs) == len(batch):
@@ -421,13 +436,20 @@ class StyleVectorService:
         results = []
         for item in batch:
             try:
-                results.append(self._identify_one(identifier, item, with_artist))
+                results.append(
+                    self._identify_one(identifier, item, with_artist, threshold)
+                )
             except Exception as exc:
                 results.append(exc)
         return results
 
     @staticmethod
-    def _identify_one(identifier, item: _Prepared, with_artist: bool):
+    def _identify_one(
+        identifier,
+        item: _Prepared,
+        with_artist: bool,
+        threshold: float = ARTIST_THRESHOLD_DEFAULT,
+    ):
         """One picture: the batch interface with a batch of one, fed the
         already prepared input (no second decode, no re-read of a file that
         may have changed meanwhile); older identifiers take a path."""
@@ -438,7 +460,7 @@ class StyleVectorService:
             outputs = combined_batch(
                 [(item.image_path, item.payload)],
                 top_k=ARTIST_INDEX_TOP_K,
-                threshold=ARTIST_THRESHOLD_DEFAULT,
+                threshold=threshold,
                 priority=PRIORITY_BATCH,
             )
             if len(outputs) != 1:
@@ -450,7 +472,7 @@ class StyleVectorService:
             return combined(
                 item.image_path,
                 top_k=ARTIST_INDEX_TOP_K,
-                threshold=ARTIST_THRESHOLD_DEFAULT,
+                threshold=threshold,
                 priority=PRIORITY_BATCH,
             )
         return identifier.extract_style_vector(
@@ -490,6 +512,7 @@ class StyleVectorService:
         space: str,
         model_version: str,
         with_artist: bool,
+        threshold: float = ARTIST_THRESHOLD_DEFAULT,
     ) -> List[Any]:
         """Per picture: ``"kept"``, ``"written"`` or the exception to report.
 
@@ -506,7 +529,7 @@ class StyleVectorService:
         if not todo:
             return outcomes
         answers = self._identify_batch(
-            identifier, [batch[index] for index in todo], with_artist
+            identifier, [batch[index] for index in todo], with_artist, threshold
         )
         for item in batch:
             item.close()
@@ -566,6 +589,7 @@ class StyleVectorService:
         space: str,
         model_version: str,
         with_artist: bool,
+        threshold: float = ARTIST_THRESHOLD_DEFAULT,
     ) -> tuple[int, int, int, int, bool]:
         """Walk the rows batch by batch; returns (processed, written, kept, errors, cancelled).
 
@@ -608,6 +632,7 @@ class StyleVectorService:
                     space=space,
                     model_version=model_version,
                     with_artist=with_artist,
+                    threshold=threshold,
                 )
                 for item, outcome in zip(prepared, outcomes):
                     if outcome == "kept":
@@ -673,6 +698,7 @@ class StyleVectorService:
         model_source: str,
         model_path: Optional[str],
         with_artist: bool = True,
+        threshold: float = ARTIST_THRESHOLD_DEFAULT,
     ) -> None:
         try:
             if self._is_cancelled():
@@ -696,6 +722,7 @@ class StyleVectorService:
                 space=space,
                 model_version=model_version,
                 with_artist=with_artist,
+                threshold=threshold,
             )
 
             if cancelled:

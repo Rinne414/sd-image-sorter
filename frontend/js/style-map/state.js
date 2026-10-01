@@ -49,18 +49,23 @@ export function createStyleMap() {
     const OFFICIAL_MODEL = { model_source: 'huggingface', model_path: null, use_gpu: null };
 
     /**
-     * The Style Finder page's model settings (source, local checkpoint, GPU),
-     * read from that page's controls exactly as it reads them for its own
-     * requests (ArtistIdent is a static script, always present), so the index
-     * runs the same weights as identification and the map shows the vectors
-     * of those weights. Throws like the Finder does when the source is local
-     * but no file is named: the index job must not start on the official
-     * weights then, or it overwrites the user's own identification results.
+     * The Style Finder page's model settings (source, local checkpoint, GPU)
+     * and its threshold slider, read from that page's controls exactly as it
+     * reads them for its own requests (artist/identify.js _getIdentifyPayload;
+     * ArtistIdent is a static script, always present), so the index runs the
+     * same weights as identification, tiers the artist with the same floor
+     * and the map shows the vectors of those weights. Throws like the Finder
+     * does when the source is local but no file is named: the index job must
+     * not start on the official weights then, or it overwrites the user's own
+     * identification results. Without the slider (no Finder) the field is
+     * left out and the server applies the Finder's default.
      */
     function modelSettings() {
         const finder = window.ArtistIdent;
         if (!finder || typeof finder._getIdentifyModelConfig !== 'function') return { ...OFFICIAL_MODEL };
-        return finder._getIdentifyModelConfig();
+        const settings = finder._getIdentifyModelConfig();
+        if (typeof finder.getThresholdValue !== 'function') return settings;
+        return { ...settings, threshold: finder.getThresholdValue() };
     }
 
     /** Reading is harmless: a half-filled local setting shows the official map. */

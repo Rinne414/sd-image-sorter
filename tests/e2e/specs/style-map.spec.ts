@@ -356,6 +356,51 @@ test.describe('Style Map', () => {
     expect(pointsUrls[1]).not.toContain('model_path')
   })
 
+  test('builds the index with the Style Finder threshold so both entrances store the same rows', async ({ page }) => {
+    await mockSelectionToken(page)
+    await mockProgressIdle(page)
+    const pointsUrls: string[] = []
+    const starts: Array<Record<string, unknown>> = []
+    await page.route('**/api/style-map/points**', (route) => {
+      pointsUrls.push(route.request().url())
+      return route.fulfill({ json: pointsBody() })
+    })
+    await page.route('**/api/style-map/regions**', (route) => route.fulfill({ json: regionsBody() }))
+    await page.route('**/api/style-map/vectors/start', (route) => {
+      starts.push(route.request().postDataJSON())
+      return route.fulfill({ json: { status: 'idle', total: 0, space: 'kaloscope' } })
+    })
+    await mockThumbnails(page)
+    // The user raised the "Discard results below" slider on the Style Finder
+    // page and saved it (the page's own store; applied to the slider at boot).
+    await page.addInitScript(() => {
+      localStorage.setItem('sd-image-sorter-artist-defaults-v1', JSON.stringify({
+        version: 1, savedAt: '2026-10-01T00:00:00Z', modelSource: 'huggingface', modelPath: '', threshold: 0.12, useGpu: true,
+      }))
+    })
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await page.goto('/')
+    await expect(page.locator('#artist-threshold')).toHaveValue('0.12')
+    const map = new StyleMapPage(page)
+    await map.open()
+    await expect.poll(() => map.pointCount()).toBe(30)
+    // The map reads vectors by weights only: the slider never rides on GET.
+    expect(pointsUrls[0]).not.toContain('threshold')
+    await map.buildButton.click()
+    await expect.poll(() => starts.length).toBe(1)
+    expect(starts[0]).toMatchObject({ space: 'kaloscope', model_source: 'huggingface', use_gpu: true, threshold: 0.12 })
+
+    // Moving the slider afterwards is enough: the next build reads it live,
+    // the same way the Finder page reads it for identify-batch.
+    await page.locator('#artist-threshold').evaluate((input) => {
+      (input as HTMLInputElement).value = '0.22'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await map.buildButton.click()
+    await expect.poll(() => starts.length).toBe(2)
+    expect(starts[1]).toMatchObject({ threshold: 0.22 })
+  })
+
   test('refuses to build the index while the Style Finder says local but names no file', async ({ page }) => {
     await mockSelectionToken(page)
     await mockProgressIdle(page)
