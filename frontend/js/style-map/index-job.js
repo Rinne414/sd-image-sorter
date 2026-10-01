@@ -34,6 +34,7 @@ export class IndexJob {
             written: 0,
             errors: 0,
             message: '',
+            step: '',
             startedAt: null,
             done: null,
         };
@@ -132,6 +133,7 @@ export class IndexJob {
             written: Number(p?.written || 0),
             errors: Number(p?.errors || 0),
             message: String(p?.message || ''),
+            step: String(p?.step || ''),
         });
         if (running && !this.state.startedAt) {
             this.state.startedAt = p?.started_at ? Number(p.started_at) * 1000 : Date.now();
@@ -146,7 +148,16 @@ export class IndexJob {
 
     finish() {
         this.wasRunning = false;
-        const { written, errors } = this.state;
+        const { written, errors, step, message: failure } = this.state;
+        if (step === 'error' && failure) {
+            // The whole job failed (a model that is not prepared, no GPU memory):
+            // the reason is the answer, not "Done: 0 pictures added".
+            this.state.startedAt = null;
+            toast(failure, 'error');
+            this.onChange(this);
+            this.onDone();
+            return;
+        }
         this.state.done = { written, errors, at: Date.now() };
         this.state.startedAt = null;
         const message = errors > 0

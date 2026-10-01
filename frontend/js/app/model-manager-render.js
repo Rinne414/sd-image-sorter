@@ -157,7 +157,7 @@ function renderModelManager(models = []) {
                 <div class="model-card-header">
                     <div>
                         <div class="model-card-group">${escapeHtml(model.group_key ? appT(model.group_key, model.group || appT('models.groupFallback', 'Feature')) : (model.group || appT('models.groupFallback', 'Feature')))}${model.recommended ? ` <span class="model-card-badge" title="${escapeHtml(appT('models.recommendedTooltip', 'Included in “Download all recommended models”'))}">${escapeHtml(appT('models.recommended', 'Recommended'))}</span>` : ''}</div>
-                        <div class="model-card-title">${escapeHtml(model.name || model.id)}</div>
+                        <div class="model-card-title">${escapeHtml(model.name_key ? appT(model.name_key, model.name || model.id) : (model.name || model.id))}</div>
                     </div>
                     <span class="model-card-status ${statusClass}">${escapeHtml(statusLabel)}</span>
                 </div>

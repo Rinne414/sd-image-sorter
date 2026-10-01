@@ -11,6 +11,7 @@ import { t, formatRemaining } from './text.js';
 const THUMBNAIL_SIZE = 512;
 const NAME_CACHE_LIMIT = 64;
 const NAME_MAX_CHARS = 28;
+const INDEXED_SPACES = ['kaloscope', 'csd']; // spaces with their own index job
 
 function middleEllipsis(text, max) {
     const value = String(text || '');
@@ -196,13 +197,17 @@ export class StyleMapPanel {
         const { build } = this.el;
         if (!build) return;
         // Nothing to index when the filter matches no picture at all.
-        build.hidden = space !== 'kaloscope' || jobRunning || points.status === 'empty';
+        build.hidden = !INDEXED_SPACES.includes(space) || jobRunning || points.status === 'empty';
         const pending = Number(points.missing_vectors || 0) > 0 || points.status !== 'ok';
-        const key = pending ? 'stylemap.buildIndex' : 'stylemap.refreshIndex';
+        const csd = space === 'csd';
+        const key = pending
+            ? (csd ? 'stylemap.buildIndexCsd' : 'stylemap.buildIndex')
+            : (csd ? 'stylemap.refreshIndexCsd' : 'stylemap.refreshIndex');
+        const fallback = pending ? (csd ? 'Build CSD index' : 'Build style index') : (csd ? 'Refresh CSD index' : 'Refresh style index');
         build.classList.toggle('btn-primary', pending);
         build.classList.toggle('btn-secondary', !pending);
         build.setAttribute('data-i18n', key);
-        build.textContent = t(key, pending ? 'Build style index' : 'Refresh style index');
+        build.textContent = t(key, fallback);
     }
 
     /**
@@ -243,8 +248,14 @@ export class StyleMapPanel {
         empty.hidden = false;
         if (build) build.hidden = true;
         const isKaloscope = space === 'kaloscope';
-        if (emptyBuild) emptyBuild.hidden = !isKaloscope || jobRunning;
-        if (emptySimilar) emptySimilar.hidden = isKaloscope;
+        const isIndexed = INDEXED_SPACES.includes(space);
+        if (emptyBuild) {
+            emptyBuild.hidden = !isIndexed || jobRunning;
+            const buildKey = space === 'csd' ? 'stylemap.buildIndexCsd' : 'stylemap.buildIndex';
+            emptyBuild.setAttribute('data-i18n', buildKey);
+            emptyBuild.textContent = t(buildKey, space === 'csd' ? 'Build CSD index' : 'Build style index');
+        }
+        if (emptySimilar) emptySimilar.hidden = isIndexed;
         if (emptyEyebrow) {
             emptyEyebrow.textContent = jobRunning
                 ? t('stylemap.emptyEyebrowRunning', 'In progress')
@@ -257,6 +268,13 @@ export class StyleMapPanel {
             emptyText.textContent = jobRunning
                 ? t('stylemap.emptyTextRunning', 'The map fills in once the pictures have their style vectors; you can keep browsing meanwhile.')
                 : t('stylemap.emptyText', 'Each picture in the filter gets a style vector; the map has nothing to draw before that. It uses the Style Finder model (Kaloscope), and a GPU makes it much faster.');
+        } else if (space === 'csd') {
+            emptyTitle.textContent = jobRunning
+                ? t('stylemap.emptyTitleRunning', 'Building the style index')
+                : t('stylemap.emptyTitleCsd', 'Build the CSD index first');
+            emptyText.textContent = jobRunning
+                ? t('stylemap.emptyTextRunning', 'The map fills in once the pictures have their style vectors; you can keep browsing meanwhile.')
+                : t('stylemap.emptyTextCsd', 'CSD places pictures by how they are drawn. It is an optional model: prepare it in the Model Center first (about 2.4 GB), then build the index here. A GPU makes it much faster.');
         } else {
             emptyTitle.textContent = t('stylemap.emptyTitleClip', 'The Similarity index is empty');
             emptyText.textContent = t('stylemap.emptyTextClip', 'This space uses the Similarity index (CLIP). Build it in Find Similar, then come back.');

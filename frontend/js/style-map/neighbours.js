@@ -246,13 +246,16 @@ export class NeighbourCard {
         this.render();
     }
 
-    /** The first Kaloscope use loads the model: say so when the answer is slow. */
-    armSlowModelHint(seq) {
+    /** The first use of a model (Kaloscope or CSD) loads it: say so when the answer is slow. */
+    armSlowModelHint(seq, space = 'kaloscope') {
+        const csd = space === 'csd';
         this.slowTimer = setTimeout(() => {
             if (seq !== this.seq) return;
             this.status = {
-                key: 'stylemap.nearLoadingModel',
-                fallback: 'Loading the Style Finder model; the first time takes about {seconds} seconds...',
+                key: csd ? 'stylemap.nearLoadingCsd' : 'stylemap.nearLoadingModel',
+                fallback: csd
+                    ? 'Loading the CSD model; the first time takes about {seconds} seconds...'
+                    : 'Loading the Style Finder model; the first time takes about {seconds} seconds...',
                 params: { seconds: COLD_SECONDS },
                 tone: 'busy',
             };
@@ -283,7 +286,7 @@ export class NeighbourCard {
         this.result = null;
         this.paint([]);
         this.render();
-        if (this.file && request.space === 'kaloscope') this.armSlowModelHint(seq);
+        if (this.file && (request.space === 'kaloscope' || request.space === 'csd')) this.armSlowModelHint(seq, request.space);
         try {
             const response = await this.fetchAnswer(request, controller.signal);
             if (seq !== this.seq) return;

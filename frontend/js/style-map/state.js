@@ -82,6 +82,16 @@ export function createStyleMap() {
         return { ...settings, threshold: finder.getThresholdValue() };
     }
 
+    /**
+     * What the index job sends. CSD has no Style Finder weights to name (one
+     * pinned file), so only the GPU choice rides along and a half-filled
+     * local Style Finder setting cannot block it.
+     */
+    function indexSettings() {
+        if (state.space === 'csd') return { use_gpu: readModelSettings().use_gpu };
+        return modelSettings();
+    }
+
     /** Reading is harmless: a half-filled local setting shows the official map. */
     function readModelSettings() {
         try {
@@ -236,7 +246,7 @@ export function createStyleMap() {
     function nearRequest() {
         if (state.points?.status !== 'ok' || !state.points.map_id) return null;
         const extra = { k: NEAR_K };
-        const gpu = state.space === 'kaloscope' ? readModelSettings().use_gpu : null;
+        const gpu = state.space === 'kaloscope' || state.space === 'csd' ? readModelSettings().use_gpu : null;
         if (gpu !== null && gpu !== undefined) extra.use_gpu = gpu;
         // map_id names the map; the (long) filter token would only lengthen the URL.
         const params = new URLSearchParams(mapQuery(extra));
@@ -491,7 +501,7 @@ export function createStyleMap() {
         state.job = new IndexJob({
             getSpace: () => state.space,
             getToken: () => state.token,
-            getModelSettings: modelSettings,
+            getModelSettings: indexSettings,
             onChange: (job) => {
                 state.panel.renderJob(job);
                 if (state.points) state.panel.renderEmpty(state.points, state.space, job.isRunning());

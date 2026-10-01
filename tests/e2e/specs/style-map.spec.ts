@@ -224,8 +224,9 @@ test.describe('Style Map', () => {
     await expect(map.installButton).toBeVisible()
     await expect(map.emptyCard).toBeHidden()
     await expect(map.buildButton).toBeVisible()
-    // The CSD space is announced but not offered.
-    await expect(map.spaceSelect.locator('option[value="csd"]')).toHaveAttribute('disabled', '')
+    // The CSD space is offered (S5): enabled, with its own name.
+    await expect(map.spaceSelect.locator('option[value="csd"]')).toBeEnabled()
+    await expect(map.spaceSelect.locator('option[value="csd"]')).toContainText(/CSD/)
 
     // Install goes through the app's first-use model flow for the umap card.
     const prepared: unknown[] = []
