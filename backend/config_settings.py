@@ -113,9 +113,9 @@ def _read_app_settings() -> dict:
     if not _cfg().APP_SETTINGS_CONFIG_PATH.exists():
         return {}
     try:
-        raw = _cfg().APP_SETTINGS_CONFIG_PATH.read_text(encoding="utf-8")
-    except OSError as exc:
-        logger.warning("Could not read app settings %s: %s", _cfg().APP_SETTINGS_CONFIG_PATH, exc)
+        raw = _cfg().APP_SETTINGS_CONFIG_PATH.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeDecodeError) as exc:
+        logger.warning("Could not read app settings %s (corrupt or unreadable): %s", _cfg().APP_SETTINGS_CONFIG_PATH, exc)
         return {}
     try:
         data = json.loads(raw)
@@ -125,30 +125,67 @@ def _read_app_settings() -> dict:
     return data if isinstance(data, dict) else {}
 
 
-APP_SETTINGS_UNREADABLE_ERROR = (
-    "The app settings file {path} exists but cannot be read ({why}); this change "
-    "was not saved so the file is left untouched. / 设置文件 {path} 存在但无法读取"
-    "（{why}），这次修改已放弃，原文件未动。"
+# What the page shows. errors.js keeps a short sentence that carries no
+# drive path and no errno word; anything longer or more technical collapses
+# to a generic "Failed to save" line. The path and the errno go to the log.
+SETTINGS_FILE_BUSY_ERROR = (
+    "The settings file is in use by another program. Close it and try again. / "
+    "设置文件正被其他程序占用，请关闭占用它的程序后重试。"
+)
+SETTINGS_FILE_UNREADABLE_ERROR = (
+    "The settings file could not be read, so this change was not saved. / "
+    "设置文件无法读取，这次修改没有保存。"
 )
 
 
+def _set_aside_corrupt_settings(path, why: str) -> None:
+    """Rename a settings file that is not a JSON object (a power cut mid-write
+    leaves an empty or truncated file) to ``<name>.corrupt-<stamp>`` so the
+    data is kept for a look, and the write can go on from the defaults."""
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    aside = path.with_name(f"{path.name}.corrupt-{stamp}")
+    counter = 1
+    while aside.exists():
+        counter += 1
+        aside = path.with_name(f"{path.name}.corrupt-{stamp}-{counter}")
+    try:
+        os.replace(path, aside)
+    except OSError as exc:
+        logger.warning("Could not set aside the corrupt app settings %s (%s): %s", path, why, exc)
+        raise OSError(SETTINGS_FILE_UNREADABLE_ERROR) from exc
+    logger.warning(
+        "App settings file %s is corrupt (%s); kept as %s and starting from the defaults",
+        path,
+        why,
+        aside.name,
+    )
+
+
 def _read_app_settings_for_update() -> dict:
-    """The settings to modify and write back. Unlike the display read, a file
-    that exists but cannot be read or parsed is an error here: writing the
-    defaults back would silently drop every other key."""
+    """The settings to modify and write back. A file that cannot be read
+    (locked) is an error here: writing the defaults back would silently drop
+    every other key. A file that is not a JSON object is set aside (kept)
+    and the update continues from the defaults, so a damaged file never
+    wedges the app."""
     path = _cfg().APP_SETTINGS_CONFIG_PATH
     if not path.exists():
         return {}
     try:
-        raw = path.read_text(encoding="utf-8")
+        raw = path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError as exc:
+        _set_aside_corrupt_settings(path, f"not UTF-8 text ({exc.reason})")
+        return {}
     except OSError as exc:
-        raise OSError(APP_SETTINGS_UNREADABLE_ERROR.format(path=path, why=exc)) from exc
+        logger.warning("Could not read app settings %s for an update (errno %s): %s", path, exc.errno, exc)
+        raise OSError(SETTINGS_FILE_UNREADABLE_ERROR) from exc
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise OSError(APP_SETTINGS_UNREADABLE_ERROR.format(path=path, why=f"invalid JSON: {exc}")) from exc
+        _set_aside_corrupt_settings(path, f"invalid JSON: {exc}")
+        return {}
     if not isinstance(data, dict):
-        raise OSError(APP_SETTINGS_UNREADABLE_ERROR.format(path=path, why="not a JSON object"))
+        _set_aside_corrupt_settings(path, "not a JSON object")
+        return {}
     return data
 
 
@@ -172,17 +209,24 @@ def _write_app_settings(settings: dict) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(payload)
+            # A power cut right after the replace must not leave an empty
+            # file: the bytes reach the disk before the name does.
+            handle.flush()
+            os.fsync(handle.fileno())
         for attempt in range(_REPLACE_ATTEMPTS):
             try:
                 os.replace(tmp_name, path)
                 return
             except PermissionError as exc:
                 if attempt == _REPLACE_ATTEMPTS - 1:
-                    raise OSError(
-                        f"Could not update app settings {path}: the file is in use by "
-                        f"another program ({exc}). / 无法更新设置文件 {path}：文件正被其他"
-                        "程序占用，请关闭占用它的程序后重试。"
-                    ) from exc
+                    logger.warning(
+                        "Could not replace app settings %s after %d attempts (errno %s): %s",
+                        path,
+                        _REPLACE_ATTEMPTS,
+                        exc.errno,
+                        exc,
+                    )
+                    raise OSError(SETTINGS_FILE_BUSY_ERROR) from exc
                 time.sleep(_REPLACE_RETRY_SECONDS)
     finally:
         try:

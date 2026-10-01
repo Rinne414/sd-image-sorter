@@ -405,18 +405,44 @@ def get_cache_status() -> Dict[str, Any]:
     }
 
 
+LIMIT_CLEANUP_FAILED_WARNING = (
+    "The limit was saved, but the thumbnail cache could not be cleaned right now; "
+    "it will be applied later. / 上限已保存，但缩略图缓存暂时无法清理，稍后会再执行。"
+)
+
+
 def update_cache_settings(*, thumbnail_cache_max_mb: int) -> Dict[str, Any]:
     """Persist cache-related settings and immediately apply safe limits."""
     from config import save_thumbnail_cache_max_mb
     from thumbnail_cache import enforce_cache_size_limit, get_cache_stats as get_thumbnail_cache_stats
 
+    # Only the save may fail the request (the router answers 503 for an
+    # OSError here). Once the limit is stored, a cleanup or a stats read that
+    # fails is logged and reported as a warning: the page must not say the
+    # save failed when it did not.
     saved_limit = save_thumbnail_cache_max_mb(thumbnail_cache_max_mb)
-    cleanup = enforce_cache_size_limit(force=True)
-    return {
+    warning = None
+    try:
+        cleanup = enforce_cache_size_limit(force=True)
+    except OSError as exc:
+        logging.getLogger(__name__).warning(
+            "Thumbnail cache cleanup after saving the limit failed: %s", exc
+        )
+        cleanup = {}
+        warning = LIMIT_CLEANUP_FAILED_WARNING
+    try:
+        stats = get_thumbnail_cache_stats()
+    except OSError as exc:
+        logging.getLogger(__name__).warning("Thumbnail cache stats after saving the limit failed: %s", exc)
+        stats = {}
+    result: Dict[str, Any] = {
         "settings": {"thumbnail_cache_max_mb": saved_limit},
-        "thumbnail_cache": get_thumbnail_cache_stats(),
+        "thumbnail_cache": stats,
         "limit_cleanup": cleanup,
     }
+    if warning:
+        result["limit_cleanup_warning"] = warning
+    return result
 
 
 def clean_caches(keys: List[str]) -> Dict[str, Any]:

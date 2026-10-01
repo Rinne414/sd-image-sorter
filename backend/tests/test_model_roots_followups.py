@@ -398,18 +398,21 @@ class TestUnreadableSettingsFile:
     be overwritten with a fresh one (every other key would be lost)."""
 
     @pytest.mark.parametrize("content", ["{not json", "[1, 2]"])
-    def test_a_write_is_abandoned_with_a_clear_error(self, roots, content):
+    def test_a_corrupt_file_is_kept_aside_and_the_write_goes_on(self, roots, content):
+        """SEC1e (F2): a damaged file (a power cut mid-write) is renamed to
+        app-settings.json.corrupt-<stamp>, never overwritten in place, and
+        the change is saved into a fresh file."""
         import config
 
         roots.settings.write_text(content, encoding="utf-8")
-        with pytest.raises(OSError) as exc:
-            config.save_thumbnail_cache_max_mb(5)
-        assert "app-settings" in str(exc.value) and "设置文件" in str(exc.value)
-        with pytest.raises(OSError):
-            model_roots.add_trusted_model_folder(NAS)
-        assert roots.settings.read_text(encoding="utf-8") == content
-        # reading for display still falls back to the defaults, as before
-        assert config.get_trusted_model_folders() == []
+        assert config.save_thumbnail_cache_max_mb(5) == 5
+        assert model_roots.add_trusted_model_folder(NAS) == [NAS]
+        kept = list(roots.settings.parent.glob("app-settings.json.corrupt-*"))
+        assert len(kept) == 1 and kept[0].read_text(encoding="utf-8") == content
+        assert json.loads(roots.settings.read_text(encoding="utf-8")) == {
+            "thumbnail_cache_max_mb": 5,
+            "trusted_model_folders": [NAS],
+        }
 
     def test_an_unreadable_file_is_not_overwritten(self, roots, monkeypatch):
         import config

@@ -1144,7 +1144,22 @@ root, the home folder or its parent, `SystemRoot`, `Program Files`,
 Linux `/usr`, `/etc`, `/bin`, `/lib`, `/var` guard their subfolders while
 `/opt` and `/srv` only guard themselves, so `/opt/ComfyUI/models` needs no
 confirmation). A settings file that exists but cannot be read or parsed is
-never overwritten: the change answers an error and the file is left as it is.
+never overwritten in place: a file that cannot be read (locked by another
+program) makes the change answer `503` with the reason and leaves the file as
+it is; a file that is empty, not JSON or not an object (a power cut mid-write)
+is kept as `app-settings.json.corrupt-<stamp>` beside it (warning logged) and
+the change is saved into a fresh file. Every write goes through a temp file
+that is flushed and fsync'ed before it replaces the settings file. `POST`/`DELETE`
+here and `POST /api/disk/settings` answer `503 {"error": <reason>}` when the
+write fails. `<reason>` is a short bilingual sentence without a path or an
+errno (the page shows it as written; the path and errno go to the server
+log): "The settings file is in use by another program. Close it and try
+again." or "The settings file could not be read, so this change was not
+saved.". The file is read as UTF-8 (a BOM is accepted); a file in another
+encoding (GBK, UTF-16) counts as damaged and is set aside like invalid JSON.
+`POST /api/disk/settings` fails only when the limit could not be saved; a
+cleanup or stats failure after a successful save answers `200` with
+`limit_cleanup_warning` (a short sentence) and an empty `limit_cleanup`.
 until the same request is sent with `"confirm": true` (Model Center shows the
 reason and asks). Duplicates (case-insensitive for UNC) are ignored. Answers
 the same payload as `GET`.

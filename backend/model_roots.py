@@ -170,7 +170,7 @@ def _system_folder_reason(folder, deep_roots, shallow_roots) -> Optional[str]:
 
 
 def _share_root_check(key: PureWindowsPath, *, confirm: bool) -> None:
-    """A whole network share (``\\nas\share``) is as broad as a drive."""
+    r"""A whole network share (``\\nas\share``) is as broad as a drive."""
     if len(key.parts) == 1 and not confirm:
         raise NeedsConfirmation(
             WIDE_FOLDER_ERROR.format(

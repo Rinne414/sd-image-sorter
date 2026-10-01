@@ -9,7 +9,7 @@ auto-delete anything; the user gets to see and choose.
 import logging
 from typing import List
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from services import disk_service
@@ -39,7 +39,12 @@ def cache_status():
 @router.post("/settings", summary="Update disk/cache settings")
 def update_settings(request: CacheSettingsRequest):
     """Persist cache limits and apply safe cleanup immediately."""
-    return disk_service.update_cache_settings(thumbnail_cache_max_mb=request.thumbnail_cache_max_mb)
+    try:
+        return disk_service.update_cache_settings(thumbnail_cache_max_mb=request.thumbnail_cache_max_mb)
+    except OSError as exc:
+        # only the save raises here (the service degrades cleanup and stats
+        # to a warning): the settings file is locked or cannot be replaced
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.post("/runtime/rebuild-core", summary="Schedule lightweight Python environment rebuild")

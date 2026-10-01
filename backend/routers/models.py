@@ -143,6 +143,9 @@ def add_trusted_folder(request: TrustedFolderRequest):
         ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        # the settings file is locked or cannot be replaced: the message says so
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return _trusted_folders_payload()
 
 
@@ -157,6 +160,8 @@ def remove_trusted_folder(request: TrustedFolderRequest):
             status_code=404,
             detail="This folder is not in the trusted list / 这个文件夹不在信任清单里",
         ) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return _trusted_folders_payload()
 
 
