@@ -62,6 +62,7 @@ from services.style_map_math import (
     pca_layout,
 )
 from services.style_map_colors import StyleMapColorsMixin, map_handle
+from services.style_map_query import StyleMapQueryMixin
 from services.style_map_regions import RegionsCache, regions_body
 from services.style_vector_service import style_vector_model_version
 from services.style_map_umap import (
@@ -117,7 +118,7 @@ class _LayoutJob:
 
 
 # ------------------------------------------------------------------- service
-class StyleMapService(StyleMapColorsMixin):
+class StyleMapService(StyleMapColorsMixin, StyleMapQueryMixin):
     """Computes and caches the 3-D layout of the filtered library (point
     colours of a cached map: ``colors_json`` from the mixin)."""
 

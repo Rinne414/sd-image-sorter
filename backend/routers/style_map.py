@@ -11,7 +11,8 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, Response, UploadFile
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
 
@@ -20,6 +21,7 @@ from exceptions import ValidationError
 from routers.artists import ArtistModelConfig, resolve_local_artist_model
 from services.service_provider import ServiceProvider
 from services.style_map_colors import MAP_ID_PATTERN, STYLE_MAP_COLOR_FIELDS
+from services.style_map_query import DEFAULT_K, MAX_K, read_capped_upload
 from services.style_map_service import STYLE_MAP_SPACES, StyleMapService
 from services.style_vector_service import STYLE_VECTOR_SPACES, StyleVectorService
 
@@ -349,5 +351,48 @@ def style_map_colors(
         by=by,
         model_path=model_path,
         map_id=map_id,
+    )
+    return Response(content=payload, media_type="application/json")
+
+
+@router.post(
+    "/query",
+    summary="Nearest pictures of a dropped picture, placed on the map",
+    description=(
+        "Rank the current library against one uploaded picture (an image of "
+        "at most 50 MB; it is read into memory and never stored) and place "
+        "the answer on the map GET /api/style-map/points last returned. "
+        "`kaloscope` compares Kaloscope style vectors (the first call loads "
+        "the model, about 13 s); `clip` uses the Similar page's search. The "
+        "query point sits at the similarity-weighted centre of its three "
+        "nearest neighbours on the map; neighbours outside the current "
+        "filter are listed with `in_filter: false` and no coordinates. "
+        "`not_started` (nothing computed) when the map is not cached."
+    ),
+)
+async def style_map_query(
+    file: UploadFile = File(..., description="The picture to look up"),
+    space: str = Query("kaloscope", pattern=_MAP_SPACE_PATTERN),
+    selection_token: Optional[str] = Query(None, max_length=65536),
+    map_id: Optional[str] = Query(
+        None, pattern=MAP_ID_PATTERN, description=_MAP_ID_DOC
+    ),
+    k: int = Query(DEFAULT_K, ge=1, le=MAX_K, description="Neighbours to return"),
+    model_source: str = Query("huggingface", pattern="^(huggingface|modelscope|local)$"),
+    use_gpu: Optional[bool] = Query(None),
+    model_path: Optional[str] = Depends(_model_path_from_query),
+    service: StyleMapService = Depends(get_style_map_service),
+):
+    data = await read_capped_upload(file)
+    payload = await run_in_threadpool(
+        service.query_neighbors_json,
+        space,
+        data,
+        selection_token=selection_token,
+        map_id=map_id,
+        k=k,
+        model_path=model_path,
+        model_source=model_source,
+        use_gpu=use_gpu,
     )
     return Response(content=payload, media_type="application/json")
