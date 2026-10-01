@@ -2183,6 +2183,74 @@ vector, an unknown `space`, a malformed `map_id` or `selection_token`, or a
 runtime; 413 for a file over 50 MB; 503 when the Kaloscope model is not
 prepared (the message says how to prepare it).
 
+#### GET /api/style-map/near
+The nearest pictures of one LIBRARY picture on the map: the same answer as
+`POST /api/style-map/query`, ranked by the picture's stored vector (Kaloscope
+style vector or CLIP embedding), so nothing is uploaded and no model runs.
+
+**Parameters (query string):** `image_id` (required), `space`, `map_id`,
+`selection_token`, `k` (1-100, default 20), `model_source`, `model_path` as
+for `query`.
+
+**Response:** the `query` body without the picture itself in `neighbors`, plus
+
+```json
+{
+  "status": "ok",
+  "query": {"x": 0.412, "y": -0.208, "z": 0.133},
+  "self": {"id": 17, "filename": "a.png", "in_filter": true, "located": true, "merged": false, "x": 0.412, "y": -0.208, "z": 0.133},
+  "neighbors": [ ... ]
+}
+```
+
+`self` says where the picture is: on its own dot, on its group's dot
+(`merged: true`, looked up in the map's group table), in the filter without a
+dot (`in_filter: true`, `located: false`) or outside the current Gallery
+filter (`in_filter: false`, no coordinates). `query` is the picture's own dot
+(`null` when it has none). `status: "no_vector"` (no neighbours, `self` with
+only `id` and `filename`) when the picture has no vector in this space;
+`status: "not_started"` (`self: null`) when the map is not cached in this
+process or the handle is sent under another library. 404 for an unknown
+picture; 400 for a malformed `map_id`.
+
+#### POST /api/style-map/locate
+Find pictures of the map by a Gallery search. The search is the Gallery's own
+filter contract: the page parses the search box with the Gallery grammar
+(`tag:`, `prompt:`, free text over file names ...), creates a token with
+`POST /api/images/selection-token` and sends it here. JSON body:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `space` | string | `kaloscope` | `kaloscope` or `clip` |
+| `map_id` | string | null | The handle of the map the page shows |
+| `selection_token` | string | null | Locates the map from the filter when no `map_id` is sent |
+| `search_token` | string | required | A selection token of the search (400 when invalid) |
+| `limit` | integer | 50 | Results to return, 1-50 |
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "space": "kaloscope",
+  "total": 3,
+  "results": [
+    {"id": 17, "filename": "a.png", "x": 0.43, "y": -0.2, "z": 0.12, "merged": false},
+    {"id": 23, "filename": "b.png", "x": 0.43, "y": -0.2, "z": 0.12, "merged": true}
+  ],
+  "outside_filter": 0,
+  "without_data": 0
+}
+```
+
+The matches are intersected with every picture the map's dots stand for
+(merged members included, newest first). `total` counts all matches on the
+map, `results` holds at most `limit`. A merged picture shares its
+representative's position. When nothing is on the map, `outside_filter`
+counts matches that the current Gallery filter keeps off it and
+`without_data` matches that have no style data yet, so the page can say why.
+`status: "not_started"` (no results) when the map is not cached in this
+process or the handle is sent under another library.
+
 ### Obfuscation
 
 Output is always a PNG, so generation metadata survives the protect/restore

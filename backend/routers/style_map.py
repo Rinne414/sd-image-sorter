@@ -21,6 +21,7 @@ from exceptions import ValidationError
 from routers.artists import ArtistModelConfig, resolve_local_artist_model
 from services.service_provider import ServiceProvider
 from services.style_map_colors import MAP_ID_PATTERN, STYLE_MAP_COLOR_FIELDS
+from services.style_map_locate import MAX_RESULTS
 from services.style_map_query import DEFAULT_K, MAX_K, read_capped_upload
 from services.style_map_service import STYLE_MAP_SPACES, StyleMapService
 from services.style_vector_service import STYLE_VECTOR_SPACES, StyleVectorService
@@ -430,5 +431,89 @@ async def style_map_query(
         model_path=model_path,
         model_source=model_source,
         use_gpu=use_gpu,
+    )
+    return Response(content=payload, media_type="application/json")
+
+
+@router.get(
+    "/near",
+    summary="Nearest pictures of one library picture, placed on the map",
+    description=(
+        "Rank the current library against the STORED vector of library "
+        "picture `image_id` (Kaloscope style vector or CLIP embedding; no "
+        "upload, no model run) and place the answer on the map named by "
+        "`map_id`. Same body as POST /api/style-map/query without the "
+        "picture itself in `neighbors`, plus `self`: where that picture is "
+        "(`in_filter`, `located`, `merged` into another dot, coordinates) and "
+        "`query` set to its own dot when it has one. `no_vector` when the "
+        "picture has no vector in this space, `not_started` when the map is "
+        "not cached in this process or belongs to another library, 404 for an "
+        "unknown picture."
+    ),
+)
+def style_map_near(
+    image_id: int = Query(..., ge=1, description="The library picture"),
+    space: str = Query("kaloscope", pattern=_MAP_SPACE_PATTERN),
+    selection_token: Optional[str] = Query(None, max_length=65536),
+    map_id: Optional[str] = Query(
+        None, pattern=MAP_ID_PATTERN, description=_MAP_ID_DOC
+    ),
+    k: int = Query(DEFAULT_K, ge=1, le=MAX_K, description="Neighbours to return"),
+    model_path: Optional[str] = Depends(_model_path_from_query),
+    service: StyleMapService = Depends(get_style_map_service),
+):
+    payload = service.near_json(
+        space,
+        image_id,
+        selection_token=selection_token,
+        map_id=map_id,
+        k=k,
+        model_path=model_path,
+    )
+    return Response(content=payload, media_type="application/json")
+
+
+class StyleMapLocateRequest(BaseModel):
+    space: str = Field("kaloscope", pattern=_MAP_SPACE_PATTERN)
+    selection_token: Optional[str] = Field(None, max_length=65536)
+    map_id: Optional[str] = Field(None, pattern=MAP_ID_PATTERN, description=_MAP_ID_DOC)
+    search_token: str = Field(
+        ...,
+        min_length=1,
+        max_length=65536,
+        description=(
+            "A POST /api/images/selection-token token of the Gallery search "
+            "(filename, tags, prompts ...); the Gallery's own grammar"
+        ),
+    )
+    limit: int = Field(MAX_RESULTS, ge=1, le=MAX_RESULTS)
+
+
+@router.post(
+    "/locate",
+    summary="Find pictures of the map by a Gallery search",
+    description=(
+        "The pictures of the map named by `map_id` that match the Gallery "
+        "search of `search_token`, newest first, at most 50, each with its dot "
+        "(`merged`: the picture is hidden behind another dot and shares its "
+        "position). `total` counts every match on the map. `outside_filter` "
+        "counts matches the current Gallery filter keeps off the map and "
+        "`without_data` matches that have no style data yet, so an empty "
+        "answer can say why. `not_started` when the map is not cached in this "
+        "process or belongs to another library."
+    ),
+)
+def style_map_locate(
+    body: StyleMapLocateRequest,
+    model_path: Optional[str] = Depends(_model_path_from_query),
+    service: StyleMapService = Depends(get_style_map_service),
+):
+    payload = service.locate_json(
+        body.space,
+        body.search_token,
+        selection_token=body.selection_token,
+        map_id=body.map_id,
+        model_path=model_path,
+        limit=body.limit,
     )
     return Response(content=payload, media_type="application/json")
