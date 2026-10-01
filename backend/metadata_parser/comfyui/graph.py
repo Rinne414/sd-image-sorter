@@ -501,7 +501,13 @@ class ComfyUIGraphMixin:
     # A model link normally leads to loaders and LoRA stacks; these class-name
     # markers keep them a barrier.
     _MODEL_SOURCE_MARKERS = ("lora", "load", "checkpoint")
-    _PATCH_TEXT_KEY_PREFIXES = ("text", "prompt", "string", "artist", "cond")
+    # Link inputs of a patch node that carry conditioning or text (cond_1,
+    # artist_2, conditioning, text, positive, prompt); other links (hooks,
+    # ipadapter, image, mask) do not make a patch a text source.
+    _PATCH_TEXT_LINK_KEY_RE = re.compile(r"^(cond(itioning)?|artist|text|positive|negative|prompt)(_?\d+)?$")
+    # A literal counts only under a per-region key; a lone ``text`` or
+    # ``prompt`` widget on a patch is a setting (a hook description).
+    _PATCH_TEXT_LITERAL_KEY_RE = re.compile(r"^(cond|artist)_?\d+$")
 
     def _is_text_bearing_model_patch(self, node: Any, nodes: Dict[str, dict]) -> bool:
         """A node met on a model link that conditions on text of its own.
@@ -509,7 +515,8 @@ class ComfyUIGraphMixin:
         AttentionCouple (``cond_1``/``cond_2``) and artist cross-attention
         (``artist_N``) patch the model yet carry prompt text the sampler's
         positive input never reaches. Loaders and LoRA stacks do not count,
-        and neither does a patch that only rewrites model settings.
+        and neither does a patch whose other inputs are settings, hooks or
+        images.
         """
         if not isinstance(node, dict) or not isinstance(node.get("inputs"), dict):
             return False
@@ -520,10 +527,15 @@ class ComfyUIGraphMixin:
             lowered = str(key).lower()
             if lowered in self._NON_TEXT_LINK_KEYS:
                 continue
-            if any(ref in nodes for ref in self._iter_comfyui_input_refs(value)):
+            if self._PATCH_TEXT_LINK_KEY_RE.match(lowered) and any(
+                ref in nodes for ref in self._iter_comfyui_input_refs(value)
+            ):
                 return True
-            if isinstance(value, str) and value.strip() and lowered.startswith(self._PATCH_TEXT_KEY_PREFIXES):
-                return True
+            if isinstance(value, str) and self._PATCH_TEXT_LITERAL_KEY_RE.match(lowered):
+                from prompt_text_scorer import looks_like_non_prompt_value
+
+                if not looks_like_non_prompt_value(value):
+                    return True
         return False
 
     def _comfyui_prompt_eligible_nodes(self, nodes: Dict[str, dict]) -> Tuple[Set[str], Set[str]]:

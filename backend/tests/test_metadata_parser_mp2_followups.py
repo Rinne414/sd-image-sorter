@@ -197,3 +197,85 @@ class TestRuntimeSourceReadsItsDisplayNode:
         del graph["show"]["inputs"]["text_0"]
         pos, _neg = MetadataParser()._trace_sampler_prompts(graph)
         assert pos is None
+
+
+class TestModelPatchSettingsAreNotText:
+    """Only conditioning/text LINKS (cond_N, artist_N, ...) make a patch a text source."""
+
+    def _positive(self, tmp_path: Path, name: str, patch: dict, extra: dict | None = None) -> str | None:
+        graph = _patched_model_graph(patch)
+        graph.update(extra or {})
+        return _parse(tmp_path, name, graph)["prompt"]
+
+    def test_hook_description_text_is_not_a_prompt(self, tmp_path: Path):
+        patch = {
+            "class_type": "SetClipHooks",
+            "inputs": {
+                "model": ["lora", 0],
+                "hooks": ["hk", 0],
+                "text": "apply to all conditioning, schedule per step",
+            },
+        }
+        hook = {"hk": {"class_type": "CreateHookLora", "inputs": {"lora_name": "detail.safetensors"}}}
+        assert not self._positive(tmp_path, "hook.png", patch, hook)
+
+    def test_a_prompt_style_setting_is_not_a_prompt(self, tmp_path: Path):
+        patch = {
+            "class_type": "ModelPatchWithText",
+            "inputs": {"model": ["lora", 0], "prompt_style": "1girl, solo, detailed background, soft shadows, warm light"},
+        }
+        assert not self._positive(tmp_path, "style.png", patch)
+
+    def test_non_conditioning_links_do_not_make_a_patch_a_text_source(self, tmp_path: Path):
+        patch = {
+            "class_type": "IPAdapterAdvanced",
+            "inputs": {"model": ["lora", 0], "image": ["left", 0], "weight": 0.8},
+        }
+        assert not self._positive(tmp_path, "ipadapter.png", patch)
+
+    def test_a_per_region_literal_is_still_read(self, tmp_path: Path):
+        patch = {
+            "class_type": "AnimaArtistCrossAttn",
+            "inputs": {"model": ["lora", 0], "artist_1": REGION_LEFT, "strength": 1.0},
+        }
+        assert self._positive(tmp_path, "literal.png", patch) == REGION_LEFT
+
+
+class TestRuntimeSourceTieBreak:
+    def _graph(self, shows: list[tuple[str, int]]) -> dict:
+        """``shows``: (stored value, number of downstream consumers) per display of ``gen``."""
+        graph = _runtime_source_graph(display_value=None)
+        for index, (value, consumers) in enumerate(shows):
+            graph[f"show{index}"] = {
+                "class_type": "ShowText",
+                "inputs": {"text": ["gen", 0], "text_0": value},
+            }
+            for extra in range(consumers):
+                graph[f"use{index}_{extra}"] = {"class_type": "Note", "inputs": {"text": [f"show{index}", 0]}}
+        return graph
+
+    def test_equal_values_are_one_answer(self):
+        graph = self._graph([(EXECUTED_PROMPT, 0), (EXECUTED_PROMPT, 0)])
+        pos, _neg = MetadataParser()._trace_sampler_prompts(graph)
+        assert pos == EXECUTED_PROMPT
+
+    def test_different_values_go_to_the_most_consumed_display(self):
+        other = EXECUTED_PROMPT.replace("violet", "green")
+        graph = self._graph([(other, 0), (EXECUTED_PROMPT, 2)])
+        pos, _neg = MetadataParser()._trace_sampler_prompts(graph)
+        assert pos == EXECUTED_PROMPT
+
+    def test_a_tie_between_different_values_reads_nothing(self):
+        other = EXECUTED_PROMPT.replace("violet", "green")
+        graph = self._graph([(other, 1), (EXECUTED_PROMPT, 1)])
+        pos, _neg = MetadataParser()._trace_sampler_prompts(graph)
+        assert pos is None
+
+
+class TestRuntimeSourceNameMatching:
+    def test_llm_matches_as_a_word_not_a_substring(self):
+        parser = MetadataParser()
+        for class_type in ("LLMChat", "Ollama Chat", "my_llm_node", "PromptExpand", "VLM Caption"):
+            assert parser._is_runtime_text_source({"class_type": class_type, "inputs": {}}, {}, "1"), class_type
+        for class_type in ("AllMightyNode", "BallMaskLLumina", "SmallModelPatch", "ZML_SelectText"):
+            assert not parser._is_runtime_text_source({"class_type": class_type, "inputs": {}}, {}, "1"), class_type
