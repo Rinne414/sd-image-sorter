@@ -754,10 +754,11 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             "\n"
             "if !NEED_INSTALL! EQU 0 (\n"
             "    if exist \"!IMPORT_ERR_FILE!\" del \"!IMPORT_ERR_FILE!\" >nul 2>&1\n"
+            "    set \"PREV_PYTHONIOENCODING=!PYTHONIOENCODING!\"\n"
             "    set \"PYTHONIOENCODING=utf-8\"\n"
             "    \"!PYTHON_CMD!\" -c \"import fastapi, PIL, numpy, onnxruntime\" >nul 2>\"!IMPORT_ERR_FILE!\"\n"
             "    set \"IMPORT_EXIT=!ERRORLEVEL!\"\n"
-            "    set \"PYTHONIOENCODING=\"\n"
+            "    set \"PYTHONIOENCODING=!PREV_PYTHONIOENCODING!\"\n"
             "    if not \"!IMPORT_EXIT!\"==\"0\" (\n"
             "        set \"REASON_CODE=import_failed\"\n"
             "        set NEED_INSTALL=1\n"
@@ -768,6 +769,7 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             "REM    best effort: a missing helper or a locked log file never stops the launch.\n"
             "if not defined REASON_CODE set \"REASON_CODE=none\"\n"
             "\"!PYTHON_CMD!\" backend\\launcher_log.py --launcher=run-portable.bat --reason=!REASON_CODE! --file=\"!REASON_FILE!\" --old=!REASON_OLD! --new=!REASON_NEW! --detail-file=\"!IMPORT_ERR_FILE!\" --log-dir=\"!LAUNCHER_LOG_DIR!\" 2>nul\n"
+            "if errorlevel 1 if /I not \"!REASON_CODE!\"==\"none\" echo [INFO] Dependency check reason=!REASON_CODE! (launcher_log.py unavailable)\n"
             "\n"
             "if !NEED_INSTALL! EQU 1 (\n"
             "    echo [INFO] Preparing Python build tools for source-only packages...\n"
@@ -1127,11 +1129,13 @@ fi
 : "${REASON_CODE:=none}"
 "$PYTHON_CMD" backend/launcher_log.py --launcher=run-portable.sh --reason="$REASON_CODE" \\
     --file="$REASON_FILE" --old="$REASON_OLD" --new="$REASON_NEW" \\
-    --detail-file="$IMPORT_ERR_FILE" --log-dir="$LAUNCHER_LOG_DIR" 2>/dev/null || true
+    --detail-file="$IMPORT_ERR_FILE" --log-dir="$LAUNCHER_LOG_DIR" 2>/dev/null || {
+    [ "$REASON_CODE" = "none" ] || echo "[INFO] Dependency check reason=$REASON_CODE (launcher_log.py unavailable)"
+}
 
 if [ "$NEED_INSTALL" = "1" ]; then
     echo "[INFO] Preparing Python build tools for source-only packages..."
-    "$PYTHON_CMD" -m pip install --upgrade --no-warn-script-location pip setuptools wheel || {
+    "$PYTHON_CMD" backend/launcher_pip.py install --upgrade --no-warn-script-location pip setuptools wheel || {
         echo "[ERROR] Failed to install Python build tools." >&2
         exit 1
     }
@@ -1140,7 +1144,7 @@ if [ "$NEED_INSTALL" = "1" ]; then
     else
         echo "[INFO] Installing lightweight core dependencies. Heavy AI packages install on Prepare."
     fi
-    "$PYTHON_CMD" -m pip install --no-build-isolation --no-warn-script-location \\
+    "$PYTHON_CMD" backend/launcher_pip.py install --no-build-isolation --no-warn-script-location \\
         -r "$INSTALL_REQUIREMENTS" || {
         echo "[ERROR] Failed to install dependencies." >&2
         exit 1

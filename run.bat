@@ -216,10 +216,11 @@ if !FIRST_RUN! EQU 1 (
 
 if !NEED_INSTALL! EQU 0 (
     if exist "!IMPORT_ERR_FILE!" del "!IMPORT_ERR_FILE!" >nul 2>&1
+    set "PREV_PYTHONIOENCODING=!PYTHONIOENCODING!"
     set "PYTHONIOENCODING=utf-8"
     backend\venv\Scripts\python.exe -c "import fastapi, PIL, numpy, onnxruntime" >nul 2>"!IMPORT_ERR_FILE!"
     set "IMPORT_EXIT=!ERRORLEVEL!"
-    set "PYTHONIOENCODING="
+    set "PYTHONIOENCODING=!PREV_PYTHONIOENCODING!"
     if not "!IMPORT_EXIT!"=="0" (
         set "REASON_CODE=import_failed"
         set NEED_INSTALL=1
@@ -230,6 +231,7 @@ REM -- Record the decision (reason=none when nothing needs installing). Logging 
 REM -- best effort: a missing helper or a locked log file never stops the launch.
 if not defined REASON_CODE set "REASON_CODE=none"
 "!PYTHON_CMD!" backend\launcher_log.py --launcher=run.bat --reason=!REASON_CODE! --file="!REASON_FILE!" --old=!REASON_OLD! --new=!REASON_NEW! --detail-file="!IMPORT_ERR_FILE!" --log-dir="!LAUNCHER_LOG_DIR!" 2>nul
+if errorlevel 1 if /I not "!REASON_CODE!"=="none" echo [INFO] Dependency check reason=!REASON_CODE! (launcher_log.py unavailable)
 
 if !NEED_INSTALL! EQU 1 (
     REM -- Probe the fastest reachable PyPI mirror BEFORE installing.

@@ -2004,3 +2004,42 @@ def test_launcher_log_never_fails_when_the_log_cannot_be_written(tmp_path):
 
     assert result.returncode == 0
     assert b"Dependencies need a recheck" in result.stdout
+
+
+def test_linux_portable_launcher_installs_through_launcher_pip(tmp_path):
+    """A GPU onnxruntime must not be flipped back to CPU by a bare `pip install -r`."""
+    text = _launcher_texts(tmp_path)["run-portable.sh"]
+
+    assert "-m pip install" not in text
+    assert text.count("backend/launcher_pip.py install") == 2
+    assert 'backend/launcher_pip.py install --no-build-isolation --no-warn-script-location \\\n        -r "$INSTALL_REQUIREMENTS"' in text
+
+
+@pytest.mark.parametrize("launcher", sorted(LAUNCHER_REASON_CODES))
+def test_launchers_print_the_reason_when_the_log_helper_is_unavailable(tmp_path, launcher):
+    text = _launcher_texts(tmp_path)[launcher]
+
+    assert "(launcher_log.py unavailable)" in text
+
+
+@pytest.mark.parametrize("launcher", ["run.bat", "run-portable.bat"])
+def test_bat_launchers_restore_the_users_pythonioencoding(tmp_path, launcher):
+    text = _launcher_texts(tmp_path)[launcher]
+
+    assert 'set "PREV_PYTHONIOENCODING=!PYTHONIOENCODING!"' in text
+    assert 'set "PYTHONIOENCODING=!PREV_PYTHONIOENCODING!"' in text
+    assert 'set "PYTHONIOENCODING="\n' not in text
+
+
+def test_launcher_log_returns_zero_for_a_missing_reason_argument(tmp_path):
+    import subprocess
+
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "backend" / "launcher_log.py"), f"--log-dir={tmp_path / 'logs'}"],
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert not (tmp_path / "logs").exists()

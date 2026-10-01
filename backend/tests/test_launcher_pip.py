@@ -159,3 +159,37 @@ def test_non_cpu_onnxruntime_installed_uses_metadata_not_import(monkeypatch):
 
     assert launcher_pip.non_cpu_onnxruntime_installed() is True
     assert seen == ["onnxruntime-gpu", "onnxruntime-directml"]
+
+
+def test_remove_stale_filtered_files_only_removes_old_launcher_copies(tmp_path):
+    old = tmp_path / ".launcher-filtered-old.txt"
+    fresh = tmp_path / ".launcher-filtered-fresh.txt"
+    other = tmp_path / "requirements-core.txt"
+    for path in (old, fresh, other):
+        path.write_text("x", encoding="utf-8")
+    two_days_ago = launcher_pip.time.time() - 2 * 24 * 60 * 60
+    launcher_pip.os.utime(old, (two_days_ago, two_days_ago))
+
+    launcher_pip.remove_stale_filtered_files(tmp_path)
+
+    assert not old.exists()
+    assert fresh.exists() and other.exists()
+
+
+def test_prepare_pip_args_deletes_the_temp_file_when_writing_it_fails(tmp_path, monkeypatch):
+    requirements = tmp_path / "requirements-core.txt"
+    requirements.write_text(REQUIREMENTS_WITH_ORT, encoding="utf-8")
+    spare_temp = tmp_path / "spare-temp"
+    spare_temp.mkdir()
+    monkeypatch.setattr(launcher_pip, "non_cpu_onnxruntime_installed", lambda: True)
+    monkeypatch.setattr(launcher_pip.tempfile, "gettempdir", lambda: str(spare_temp))
+
+    def failing_fdopen(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(launcher_pip.os, "fdopen", failing_fdopen)
+    args = ["install", "-r", str(requirements)]
+
+    assert launcher_pip.prepare_pip_args(args) == (args, None)
+    assert list(tmp_path.glob(".launcher-filtered-*")) == []
+    assert list(spare_temp.glob(".launcher-filtered-*")) == []

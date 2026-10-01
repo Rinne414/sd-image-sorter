@@ -253,7 +253,9 @@ fi
 : "${REASON_CODE:=none}"
 "$PYTHON_CMD" backend/launcher_log.py --launcher=run.sh --reason="${REASON_CODE}" \
     --file="${REASON_FILE}" --old="${REASON_OLD}" --new="${REASON_NEW}" \
-    --detail-file="${IMPORT_ERR_FILE}" --log-dir="${LAUNCHER_LOG_DIR}" 2>/dev/null || true
+    --detail-file="${IMPORT_ERR_FILE}" --log-dir="${LAUNCHER_LOG_DIR}" 2>/dev/null || {
+    [ "${REASON_CODE}" = "none" ] || echo "[INFO] Dependency check reason=${REASON_CODE} (launcher_log.py unavailable)"
+}
 
 if [ "$NEED_INSTALL" -eq 1 ]; then
     if [ "$FIRST_RUN" -eq 1 ]; then

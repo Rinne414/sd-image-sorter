@@ -511,13 +511,17 @@ def repair_windows_onnxruntime(*, stream_pip: bool = False) -> Dict[str, Any]:
     pinned_dml_version = _release_runtime_version("onnxruntime-directml")
     cuda_runtime_needs_refresh = False
 
-    # Step 0: nothing installed at all (fresh portable extract on Windows).
-    # `requirements-core.txt` does not pin onnxruntime on Windows because we
-    # need to choose the variant based on detected GPU vendor — but the
-    # historical Step 1/2/3/4 logic only handled cases where AT LEAST one
-    # variant was already installed. Without this branch, fresh portables
-    # silently skip the install and the first WD14 / NudeNet / CLIP attempt
-    # fails with `No module named 'onnxruntime'`.
+    # Step 0: nothing installed at all (fresh portable extract, or the
+    # packages were cleared by a runtime rebuild).
+    # `requirements-core.txt` pins the CPU `onnxruntime` on Windows, so a
+    # normal first install already has a variant; this branch covers the
+    # cases where none is present. It also picks the GPU/DirectML variant
+    # from the detected vendor, which the plain requirements pin cannot do.
+    # Without this branch the Step 1/2/3/4 logic, which assumes AT LEAST one
+    # variant is installed, would skip the install and the first WD14 /
+    # NudeNet / CLIP attempt would fail with `No module named 'onnxruntime'`.
+    # launcher_pip.py keeps a later `pip install -r` from putting the CPU pin
+    # back over an installed GPU/DirectML build.
     if not cpu_version and not gpu_version and not dml_version:
         # When CIM didn't detect a usable GPU vendor (VM, RDP, headless
         # CI, broken WMI), fall back to CPU runtime — small, always

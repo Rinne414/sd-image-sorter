@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Sequence
 from importlib import metadata
 from pathlib import Path
@@ -24,6 +25,8 @@ PIP_MARKER_IGNORE_PREFIX = "Ignoring "
 # would make the next repair remove it again and re-download the GPU wheel.
 NON_CPU_ORT_DISTRIBUTIONS = ("onnxruntime-gpu", "onnxruntime-directml")
 CPU_ORT_LINE_RE = re.compile(r"^\s*onnxruntime\s*(?:[=<>!~;]|$)", re.IGNORECASE)
+FILTERED_FILE_PREFIX = ".launcher-filtered-"
+STALE_FILTERED_SECONDS = 24 * 60 * 60
 GPU_ORT_SKIP_MESSAGE = (
     "[INFO] 已装 GPU 版 onnxruntime，跳过 CPU 版 / "
     "GPU onnxruntime present, CPU onnxruntime skipped"
@@ -65,6 +68,25 @@ def filter_cpu_onnxruntime(requirements_text: str) -> tuple[str, int]:
     return "".join(kept), removed
 
 
+def remove_stale_filtered_files(
+    directory: Path,
+    max_age_seconds: float = STALE_FILTERED_SECONDS,
+    now: float | None = None,
+) -> None:
+    """Delete filtered copies left by a killed run (kill -9, closed window)."""
+    cutoff = (time.time() if now is None else now) - max_age_seconds
+    try:
+        candidates = list(directory.glob(FILTERED_FILE_PREFIX + "*.txt"))
+    except OSError:
+        return
+    for candidate in candidates:
+        try:
+            if candidate.stat().st_mtime < cutoff:
+                candidate.unlink()
+        except OSError:
+            continue
+
+
 def _requirements_arg_index(pip_args: Sequence[str]) -> int | None:
     if not pip_args or pip_args[0] != "install":
         return None
@@ -93,12 +115,20 @@ def prepare_pip_args(pip_args: list[str]) -> tuple[list[str], Path | None]:
     for directory in (source.resolve().parent, Path(tempfile.gettempdir())):
         try:
             handle, name = tempfile.mkstemp(
-                prefix=".launcher-filtered-", suffix=".txt", dir=directory
+                prefix=FILTERED_FILE_PREFIX, suffix=".txt", dir=directory
             )
         except OSError:
             continue
-        with os.fdopen(handle, "w", encoding="utf-8", newline="") as stream:
-            stream.write(filtered)
+        try:
+            with os.fdopen(handle, "w", encoding="utf-8", newline="") as stream:
+                stream.write(filtered)
+        except OSError:
+            try:
+                os.close(handle)  # still open if fdopen itself failed
+            except OSError:
+                pass
+            Path(name).unlink(missing_ok=True)
+            continue
         try:
             print(GPU_ORT_SKIP_MESSAGE, flush=True)
         except UnicodeEncodeError:  # redirected output in a legacy code page
@@ -153,6 +183,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("Usage: python launcher_pip.py <pip arguments...>", file=sys.stderr)
         return 2
 
+    remove_stale_filtered_files(Path(__file__).resolve().parent)
     pip_args, temp_requirements = prepare_pip_args(pip_args)
     try:
         return _run_pip(pip_args)
