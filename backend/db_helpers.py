@@ -638,6 +638,24 @@ def _is_source_fingerprint_changed(existing_row: Optional[Dict[str, Any]], recor
     )
 
 
+def _is_source_fingerprint_unverifiable(
+    existing_row: Optional[Dict[str, Any]], record: Dict[str, Any]
+) -> bool:
+    """The stored mtime/size pair is (partly) missing, and this write brings both.
+
+    Rows upgraded from before the pair was stored. ``_is_source_fingerprint_changed``
+    calls them unchanged (nothing to compare), while the scanner's
+    ``_source_fingerprint_matches`` calls them changed and re-parses the file; the
+    write that follows is the first to record the pair.
+    """
+    if not existing_row or _has_source_fingerprint(existing_row):
+        return False
+    return (
+        _normalize_source_fingerprint(record.get("source_mtime_ns")) is not None
+        and _normalize_source_fingerprint(record.get("source_size")) is not None
+    )
+
+
 def _has_derived_state(row: Optional[Dict[str, Any]]) -> bool:
     """Return True when the row currently has derived data cached."""
     if not row:
@@ -704,9 +722,19 @@ def _should_forget_content_fingerprint(
 
     A ``pending`` placeholder does not consume the new mtime/size either, so it
     keeps the fingerprint too: the backfill for the same scan decides.
+
+    A row with no stored mtime/size pair cannot be compared at all; when this
+    write records the pair for the first time without a new digest, the old
+    fingerprint is as unverifiable as a changed one and goes the same way.
+    Rows with derived state are left alone on that path: deleting machine
+    output on a guess is a product choice ``_should_clear_derived_state``
+    already makes, and the fingerprint that describes it stays with it.
     """
     if not source_changed:
-        return False
+        if _has_derived_state(existing_row):
+            return False
+        if not _is_source_fingerprint_unverifiable(existing_row, record):
+            return False
 
     metadata_status = str(record.get("metadata_status") or "complete").strip().lower()
     if metadata_status == "pending":

@@ -606,6 +606,16 @@ def update_image_metadata(
             },
         )
         mark_unreadable = (is_readable is False)
+        stored_source_mtime_ns = source_mtime_ns
+        stored_source_size = source_size
+        if metadata_status_normalized == "pending":
+            # Same rule as _upsert_image_record: a placeholder must not consume
+            # the new mtime/size, or the backfill that follows could no longer
+            # tell that the file changed. Both derived-state predicates exempt
+            # "pending" on that assumption. No caller passes "pending" here
+            # today; the guard keeps the two rewrite paths on one rule.
+            stored_source_mtime_ns = None
+            stored_source_size = None
         existing_fingerprint = _normalize_content_fingerprint(_row_value(existing_row, "content_fingerprint"))
         incoming_fingerprint = _normalize_content_fingerprint(content_fingerprint)
         can_preserve_derived_state = bool(
@@ -639,6 +649,8 @@ def update_image_metadata(
         elif _should_forget_content_fingerprint(
             existing_row,
             {
+                "source_mtime_ns": source_mtime_ns,
+                "source_size": source_size,
                 "metadata_status": metadata_status,
                 "content_fingerprint": content_fingerprint,
             },
@@ -701,8 +713,8 @@ def update_image_metadata(
                 model_hash,
                 None if is_readable is None else (1 if is_readable else 0),
                 read_error,
-                source_mtime_ns,
-                source_size,
+                stored_source_mtime_ns,
+                stored_source_size,
                 metadata_status,
                 content_fingerprint,
                 # L3 invariant: a successful re-parse clears the stored raw
