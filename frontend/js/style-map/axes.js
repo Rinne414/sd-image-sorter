@@ -226,7 +226,9 @@ class AxisLabels {
         const words = entry?.weak ? null : endText(entry?.[item.end]);
         const content = words ? (arrowLast ? `${words} ${arrow}` : `${arrow} ${words}`) : '—';
         item.node.classList.toggle('is-weak', !words);
-        const full = (entry?.[item.end]?.tags || []).map(axisTagName).join(' · ');
+        const full = entry?.weak
+            ? t('stylemap.axesWeak', 'No clear style difference along this axis')
+            : (entry?.[item.end]?.tags || []).map(axisTagName).join(' · ');
         const note = this.layout === 'umap'
             ? t('stylemap.axesUmapNote', 'UMAP: directions are not fixed, only distances mean something')
             : '';
@@ -348,7 +350,13 @@ export class StyleMapAxes {
         const seq = this.seq;
         try {
             const body = await window.App.API.get(`/api/style-map/axes?${request.query}`);
-            if (seq !== this.seq || !this.host.isActive()) return;
+            if (seq !== this.seq) return;
+            if (!this.host.isActive()) {
+                // Left the page meanwhile: coming back asks for the map again.
+                this.status = 'idle';
+                this.render();
+                return;
+            }
             if (body?.status === 'not_started') {
                 // The server no longer holds this map: one rebuild per user
                 // action (a points answer calls mapChanged again).

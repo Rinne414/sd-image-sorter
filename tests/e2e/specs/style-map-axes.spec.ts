@@ -180,6 +180,8 @@ test.describe('Style Map axis meanings', () => {
       expect(labels.byKey['z-low']).toBe('—')
       expect(labels.byKey['y-high']).toBe('—')
       expect(labels.weak.sort()).toEqual(['y-high', 'z-high', 'z-low'])
+      // A weak axis explains its dash on hover.
+      await expect(page.locator('.stylemap-axis-label[data-axis="z"][data-end="low"]')).toHaveAttribute('title', words.weak)
       // No UMAP: no note on a label.
       await expect(page.locator('.stylemap-axis-label[data-axis="x"][data-end="low"]')).not.toHaveAttribute('title', /UMAP/)
 

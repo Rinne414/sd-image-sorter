@@ -336,3 +336,19 @@ class TestService:
                 ), params
         finally:
             style_map_router.set_style_map_service(None)
+
+
+def test_pictures_without_any_tag_are_not_in_the_tagged_denominator(test_db):
+    """Half the pictures have no tag row at all: the rate of a tag is taken over
+    the TAGGED pictures (about 1.0 here), not over every picture (about 0.5)."""
+    n = 1000
+    ids = np.array(_add_images(test_db, n))
+    xyz = np.random.default_rng(1).uniform(-1, 1, size=(n, 3))
+    tagged_ids = ids[: n // 2]
+    _tag_all(test_db, tagged_ids, "1girl")
+    top_y = ids[np.argsort(xyz[:, 1])[-300:]]
+    _tag_all(test_db, np.intersect1d(top_y, tagged_ids), "monochrome")
+    axes = axes_mod.axes_of_points(_points(ids, xyz))["axes"]
+    assert not axes["y"]["weak"] and _tags(axes["y"]["high"]) == ["monochrome"]
+    assert axes["y"]["high"]["tags"][0]["rate"] > 0.9
+    assert axes["y"]["high"]["tagged"] < axes["y"]["high"]["size"]
