@@ -167,6 +167,14 @@ test.describe('Style Map nearest pictures', () => {
       await expect(page.locator('.stylemap-near-row')).toHaveCount(0)
       expect(await ringKinds(page)).toEqual([])
       await expect(page.locator('#stylemap-near-clear')).toBeHidden()
+      // Idle: the zone is the card, not a strip above empty space (rule 18): at least 60% of the card's content height.
+      const idleShare = await page.evaluate(() => {
+        const card = document.querySelector('#stylemap-near') as HTMLElement
+        const style = getComputedStyle(card)
+        const inner = card.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)
+        return (document.querySelector('#stylemap-drop') as HTMLElement).getBoundingClientRect().height / ((inner || 1))
+      })
+      expect(idleShare).toBeGreaterThanOrEqual(0.6)
 
       await pickFile(page)
       await expect(page.locator('.stylemap-near-row')).toHaveCount(9) // the query row + 8 neighbours

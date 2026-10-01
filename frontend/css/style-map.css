@@ -855,3 +855,15 @@
     font-size: 16px;
     line-height: 1;
 }
+.stylemap-near-body[hidden] {
+    display: none;
+}
+
+/* Nothing to list: the zone is the card (rule 18), its words in the middle. */
+.stylemap-drop.is-fill {
+    flex: 1 1 auto;
+    min-height: 0;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}

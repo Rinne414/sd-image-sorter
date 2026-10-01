@@ -5365,7 +5365,6 @@ window.I18nLang_zhCN = {
     'stylemap.colorsRetry': '重试',
     'stylemap.helpTitle': '更多说明',
     'stylemap.nearTitle': '丢一张图，找最像的',
-    'stylemap.nearEmpty': '最像的图会列在这里，同时在地图上用圈标出。',
     'stylemap.nearMerged': '和另一张合并在同一点',
     'stylemap.nearClear': '清除',
     'stylemap.nearDrop': '拖一张图到这里',

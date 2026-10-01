@@ -58,6 +58,7 @@ export class NeighbourCard {
             file: $('stylemap-near-file'),
             status: $('stylemap-near-status'),
             list: $('stylemap-near-list'),
+            body: root.querySelector('.stylemap-near-body'),
             note: $('stylemap-near-note'),
         };
         this.file = null;
@@ -313,9 +314,12 @@ export class NeighbourCard {
         dropSub.textContent = this.available
             ? t('stylemap.nearDropSub', 'or click to choose · uses the model of this map')
             : t('stylemap.nearDropOff', 'Needs a map first: build the style index, or pick a space that has data');
-        // Once a picture was dropped the zone shrinks to its title: the list needs the room.
-        dropSub.hidden = Boolean(this.file) && this.available;
-        drop.classList.toggle('is-compact', dropSub.hidden);
+        // With nothing to list the zone fills the card (all of it takes a drop);
+        // once there is a result it shrinks to one line and the list gets the room.
+        const hasResult = Boolean(this.result);
+        dropSub.hidden = hasResult;
+        drop.classList.toggle('is-compact', hasResult);
+        drop.classList.toggle('is-fill', !hasResult);
         drop.setAttribute('aria-disabled', this.available ? 'false' : 'true');
         drop.tabIndex = this.available ? 0 : -1;
         clear.hidden = !this.file;
@@ -339,13 +343,9 @@ export class NeighbourCard {
         const { list, note } = this.el;
         list.replaceChildren();
         const answer = this.result;
-        if (!answer) {
-            // Nothing to list yet: say what will appear (a status line replaces it).
-            note.hidden = Boolean(this.status);
-            note.textContent = t('stylemap.nearEmpty', 'The nearest pictures are listed here and ringed on the map.');
-            return;
-        }
-        note.hidden = false;
+        this.el.body.hidden = !answer;
+        note.hidden = !answer;
+        if (!answer) return;
         list.append(this.queryRow(answer));
         const neighbours = answer.neighbors || [];
         for (const n of neighbours) list.append(this.neighbourRow(n));
