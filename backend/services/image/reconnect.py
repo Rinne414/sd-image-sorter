@@ -280,6 +280,11 @@ class ReconnectMixin:
             elif verdict == "different":
                 exact_suspects.append(candidate)
         if exact_suspects:
+            if len(pixel_verified) == 1:
+                # One candidate proven by pixels wins; the suspect, whose
+                # stored digest says "not this file", stays missing untouched.
+                return pixel_verified[0], "fingerprint", pixel_mismatches + exact_suspects
+            # No proof for anyone: the user decides.
             return None, "ambiguous", pixel_mismatches
 
         # A match proven by pixels outranks one that could not be checked.
@@ -390,6 +395,10 @@ class ReconnectMixin:
         used_image_ids: set[int] = set()
         accounted_image_ids: set[int] = set()
         target_candidate_ids: set[int] = set()
+        # Rows a found file was refused for because the pixels differ. Counted
+        # as distinct rows that are STILL missing at the end: a row later
+        # relinked to its real file, or handed to review, is not one of them.
+        pixel_rejected_ids: set[int] = set()
         used_found_paths: set[str] = set()
         last_emit = 0.0
         # Roadmap-C review persistence counters (bounded per run).
@@ -405,6 +414,7 @@ class ReconnectMixin:
         def refresh_scoped_missing_counts() -> None:
             result["missing_total"] = len(target_candidate_ids)
             result["still_missing"] = max(0, len(target_candidate_ids - accounted_image_ids))
+            result["pixel_mismatch"] = len(pixel_rejected_ids - accounted_image_ids)
 
         def emit(force: bool = False, current_item: Optional[str] = None) -> None:
             nonlocal last_emit
@@ -446,9 +456,13 @@ class ReconnectMixin:
                     candidate_rows,
                     verify_uncertain=verify_uncertain,
                 )
-                # Same name and size, nearly the same date, other pixels: these
-                # rows stay missing and the found file is left for a scan.
-                result["pixel_mismatch"] += len(pixel_mismatches)
+                # Same name and size, nearly the same date, other pixels: the
+                # found file is left for a scan; the row counts only while it
+                # ends the run still missing.
+                pixel_rejected_ids.update(
+                    candidate_id(row) for row in pixel_mismatches if candidate_id(row) > 0
+                )
+                refresh_scoped_missing_counts()
                 resolved_found_path = os.path.abspath(found_path)
                 if match and resolved_found_path not in used_found_paths:
                     image_id = int(match["id"])

@@ -6,6 +6,7 @@ Methods moved verbatim from services/image_service.py (decomposition
 (latent bare-import seam).
 """
 
+import functools
 import io
 import logging
 import os
@@ -22,6 +23,30 @@ from thumbnail_cache import generate_placeholder_thumbnail
 from utils.path_validation import ALLOWED_IMAGE_EXTENSIONS, normalize_user_path, validate_file_path
 
 logger = logging.getLogger("services.image_service")
+
+# Pages larger than this carry no pixel verdicts: a page of found files is
+# hashed on request, and 50 full-image reads is the most one request may cost.
+PIXEL_VERDICT_MAX_LIMIT = 50
+_FOUND_DIGEST_CACHE_SIZE = 2048
+
+
+@functools.lru_cache(maxsize=_FOUND_DIGEST_CACHE_SIZE)
+def _cached_found_digest(found_path: str, mtime_ns: int, size: int) -> Optional[str]:
+    """Pixel digest of a found file, remembered per (path, mtime, size).
+
+    Paging through reviews, reopening the modal and repeated listings all ask
+    for the same files; the key changes with the file, so a rewritten file is
+    hashed again. None (unreadable) is cached too: a broken file does not get
+    re-read on every page load.
+    """
+    try:
+        from image_fingerprint import compute_image_content_fingerprint
+
+        text = str(compute_image_content_fingerprint(found_path) or "").strip().lower()
+        return text or None
+    except Exception as exc:
+        logger.debug("Could not fingerprint repair candidate %s: %s", found_path, exc)
+        return None
 
 
 def _svc():
@@ -48,16 +73,14 @@ class RepairReviewMixin:
         text = str(value or "").strip().lower()
         return text or None
 
-    @classmethod
-    def _found_file_digest(cls, found_path: str) -> Optional[str]:
-        """Pixel digest of a found file, or None when it cannot be read."""
+    @staticmethod
+    def _found_file_digest(found_path: str) -> Optional[str]:
+        """Pixel digest of a found file (cached), or None when it cannot be read."""
         try:
-            from image_fingerprint import compute_image_content_fingerprint
-
-            return cls._normalized_fingerprint(compute_image_content_fingerprint(found_path))
-        except Exception as exc:
-            logger.debug("Could not fingerprint repair candidate %s: %s", found_path, exc)
+            stat_result = os.stat(found_path)
+        except OSError:
             return None
+        return _cached_found_digest(found_path, int(stat_result.st_mtime_ns), int(stat_result.st_size))
 
     # ------------------------------------------------------------------
     # Roadmap-C: missing-file repair review (resolve ambiguous matches)
@@ -84,12 +107,17 @@ class RepairReviewMixin:
         fingerprint equals the found file's: ``True`` / ``False``, or ``None``
         when the candidate has no fingerprint, the found file is gone, or it
         could not be hashed. Cost: the found file is hashed at most once per
-        listed review, and only when some candidate has a fingerprint, so one
-        page costs at most ``limit`` full-image reads (UI pages are 20).
+        listed review, only when some candidate has a fingerprint, and the
+        digest is cached in-process per (path, mtime, size), so paging back
+        and reopening cost nothing. A page with ``limit`` above
+        ``PIXEL_VERDICT_MAX_LIMIT`` (50) carries ``None`` for every candidate
+        and hashes nothing: 50 full-image reads is the most one request may
+        cost (UI pages are 20). The router runs this off the event loop.
         """
         normalized_status = str(status or "pending").strip().lower() or "pending"
         scope = None if normalized_status == "all" else normalized_status
         listing = db.list_reconnect_reviews(status=scope, limit=limit, offset=offset)
+        want_verdicts = int(limit) <= PIXEL_VERDICT_MAX_LIMIT
 
         items: List[Dict[str, Any]] = []
         for review in listing["items"]:
@@ -99,7 +127,7 @@ class RepairReviewMixin:
             found_exists = bool(found_path) and os.path.isfile(found_path)
             found_digest = (
                 self._found_file_digest(found_path)
-                if found_exists and any(
+                if want_verdicts and found_exists and any(
                     self._normalized_fingerprint(row.get("content_fingerprint"))
                     for row in rows_by_id.values()
                 )

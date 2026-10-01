@@ -8,6 +8,7 @@ IS the route registration order (single-segment static GET routes must
 register before ``GET /api/images/{image_id}`` or they 422-shadow).
 """
 from fastapi import BackgroundTasks, Depends, Query
+from starlette.concurrency import run_in_threadpool
 
 from routers.images import (
     ClearMissingImagesRequest,
@@ -62,6 +63,11 @@ reviews (the run never touches those rows). This lists them, enriched with each
 candidate's current row (path / size / mtime) and whether the candidate's own
 file is still missing on disk. Candidate ids deleted since the run are omitted.
 
+`pixels_match` per candidate compares the candidate's stored pixel fingerprint
+with the found file: `true` / `false`, or `null` when the candidate has no
+fingerprint, the found file is gone or unreadable, **or `limit` is above 50**
+(a large page is never hashed; digests are cached per file in-process).
+
 Declared above `GET /api/images/{image_id}` so the dynamic-id route does not
 shadow it.
     """,
@@ -105,8 +111,13 @@ async def get_repair_candidates(
     ),
     service: ImageService = Depends(get_image_service),
 ):
-    """List persisted ambiguous-match reviews with enriched candidate rows."""
-    return service.get_repair_candidates(limit=limit, offset=offset, status=status)
+    """List persisted ambiguous-match reviews with enriched candidate rows.
+
+    Off the event loop: the listing may hash up to ``limit`` found files.
+    """
+    return await run_in_threadpool(
+        service.get_repair_candidates, limit=limit, offset=offset, status=status
+    )
 
 
 @router.post(

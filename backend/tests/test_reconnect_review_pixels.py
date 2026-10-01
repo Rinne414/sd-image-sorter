@@ -120,7 +120,9 @@ def test_exact_candidate_with_known_different_digest_goes_to_review(
     assert result["matched"] == 0
     assert result["ambiguous"] == 1
     assert result["review_pending_total"] == 1
-    assert result["pixel_mismatch"] == 1
+    # B was refused by pixels but the whole group went to review, so it is
+    # accounted for there and not reported a second time.
+    assert result["pixel_mismatch"] == 0
     assert _path_of(test_db, a_id) == str(old_a)
     assert _path_of(test_db, b_id) == str(old_b)
     review = test_db.list_reconnect_reviews(status=test_db.REVIEW_STATUS_PENDING)[

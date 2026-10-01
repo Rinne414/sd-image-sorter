@@ -560,7 +560,9 @@ List ambiguous missing-file matches awaiting review (v3.5.0, Roadmap-C). During 
 | `offset` | int | 0 | Pagination offset |
 | `status` | string | `pending` | `pending`, `resolved`, `conflict`, or `all` |
 
-Each item carries the review row plus candidates enriched from the live images table (`image_id`, current `path`, `file_size`, `source_mtime_ns`, `still_missing`) and `found_exists` for the discovered file. Candidate ids deleted since the run are omitted.
+Each item carries the review row plus candidates enriched from the live images table (`image_id`, current `path`, `file_size`, `source_mtime_ns`, `still_missing`, `pixels_match`) and `found_exists` for the discovered file. Candidate ids deleted since the run are omitted.
+
+`pixels_match` compares the candidate's stored pixel fingerprint with the found file: `true` / `false`, or `null` when the candidate has no fingerprint, the found file is gone or unreadable, **or `limit` is above 50**. Each found file is hashed at most once per listed review and the digest is cached in-process per `(path, mtime, size)`, so a page costs at most `limit` full-image reads the first time and nothing afterwards; the endpoint runs that work off the event loop.
 
 Example response:
 
@@ -578,7 +580,7 @@ Example response:
       "status": "pending",
       "resolution": null,
       "candidates": [
-        { "image_id": 3, "path": "D:/old/same.png", "file_size": 2048, "source_mtime_ns": 1700000000000000000, "still_missing": true }
+        { "image_id": 3, "path": "D:/old/same.png", "file_size": 2048, "source_mtime_ns": 1700000000000000000, "still_missing": true, "pixels_match": true }
       ]
     }
   ]
