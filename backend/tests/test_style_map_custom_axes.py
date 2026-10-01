@@ -91,6 +91,21 @@ class TestMath:
         agree, total = custom_mod.leave_one_out(np.vstack([a, vectors[-1:]]), b)
         assert total == 11 and agree < total
 
+    def test_closed_form_leave_one_out_equals_refitting_each_example(self):
+        rng = np.random.default_rng(11)
+        for n_a, n_b in ((2, 2), (3, 7), (12, 5)):
+            a = _unit(rng.normal(size=(n_a, 16)).astype(np.float32) + 0.4)
+            b = _unit(rng.normal(size=(n_b, 16)).astype(np.float32) - 0.2)
+            brute = 0
+            for own, other, sign in ((a, b, -1.0), (b, a, 1.0)):
+                for row in range(len(own)):
+                    rest = np.delete(own, row, axis=0)
+                    pair = (rest, other) if sign < 0 else (other, rest)
+                    found = custom_mod.axis_direction(*pair)
+                    if found and sign * (float(own[row] @ found[0]) - found[1]) > 0:
+                        brute += 1
+            assert custom_mod.leave_one_out(a, b) == (brute, n_a + n_b)
+
     def test_residual_axes_remove_the_custom_column_from_the_others(self):
         rng = np.random.default_rng(2)
         base = rng.uniform(-1, 1, size=(500, 3))
@@ -231,7 +246,7 @@ class TestService:
 
     def test_a_picture_in_both_ends_and_a_short_end_are_400s(self, service_map):
         service, ids, side, points = service_map
-        with pytest.raises(ValidationError, match="both ends"):
+        with pytest.raises(ValidationError, match="both boxes"):
             service.custom_axes(
                 "kaloscope",
                 map_id=points["map_id"],
@@ -271,6 +286,34 @@ class TestService:
             == "layout_not_ready"
         )
 
+    def test_malformed_definitions_are_400s_not_500s(self, test_client, monkeypatch):
+        from routers import style_map as style_map_router
+
+        monkeypatch.setattr(style_map_service.style_map_umap, "umap_available", lambda: False)
+        style_map_router.set_style_map_service(style_map_service.StyleMapService())
+        try:
+            ids = _add_images(test_client.test_db, 40)
+            _store_kaloscope(test_client.test_db, ids, _vectors()[0][:40])
+            map_id = test_client.get("/api/style-map/points", params={"space": "kaloscope"}).json()["map_id"]
+            for axes in (
+                {"x": [1, 2]},
+                {"x": "abc"},
+                {"x": 5},
+                {"x": {"a": 5, "b": ids[:2]}},
+                {"x": {"a": "12", "b": ids[:2]}},
+                {"x": {"a": [None, ids[0]], "b": ids[1:3]}},
+                {"x": {"a": [True, ids[0]], "b": ids[1:3]}},
+                {"x": {"a": ["7", ids[0]], "b": ids[1:3]}},
+                {"x": {"a": [1.5, ids[0]], "b": ids[1:3]}},
+            ):
+                response = test_client.post(
+                    "/api/style-map/custom-axes",
+                    json={"space": "kaloscope", "map_id": map_id, "axes": axes},
+                )
+                assert response.status_code == 400, (axes, response.status_code, response.text)
+        finally:
+            style_map_router.set_style_map_service(None)
+
     def test_route_and_its_400s(self, test_client, monkeypatch):
         from routers import style_map as style_map_router
 
@@ -302,7 +345,7 @@ class TestService:
                     "axes": {"x": {"a": ids[:2], "b": ids[1:3]}},
                 },
             )
-            assert both.status_code == 400 and "both ends" in both.text
+            assert both.status_code == 400 and "both boxes" in both.text
             assert (
                 test_client.post(
                     "/api/style-map/custom-axes",

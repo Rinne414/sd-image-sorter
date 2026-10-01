@@ -65,22 +65,38 @@ def axis_direction(
     return direction, middle
 
 
+def _loo_disagreements(own: np.ndarray, other_mean: np.ndarray) -> np.ndarray:
+    """Per example of ``own``: True when it stays on its own side with itself
+    left out. In closed form, no per-example refit: with ``w`` the own mean
+    without example x and ``m`` the other mean, the direction is +-(m - w), the
+    midpoint (w + m) / 2 and x stays on its side iff
+    ``x.m - x.w - (m.m - w.w) / 2 < 0`` (the same for either end). Every term
+    comes from a few dot products, so n examples cost O(n * D)."""
+    n = len(own)
+    if n < 2:
+        return np.zeros(n, dtype=bool)
+    total = own.sum(axis=0, dtype=np.float64)
+    x = own.astype(np.float64)
+    xs = x @ total
+    xx = np.einsum("ij,ij->i", x, x)
+    xm = x @ other_mean
+    ss = float(total @ total)
+    sm = float(total @ other_mean)
+    mm = float(other_mean @ other_mean)
+    xw = (xs - xx) / (n - 1)
+    ww = (ss - 2.0 * xs + xx) / (n - 1) ** 2
+    wm = (sm - xm) / (n - 1)
+    separated = (mm - 2.0 * wm + ww) >= 1e-16  # the two means still differ (axis_direction's limit)
+    return separated & ((xm - xw - 0.5 * (mm - ww)) < 0)
+
+
 def leave_one_out(a_vectors: np.ndarray, b_vectors: np.ndarray) -> Tuple[int, int]:
     """(agree, total): examples that stay on their own side when they are left
-    out of the direction and the midpoint."""
-    agree = 0
-    for own, other, sign in ((a_vectors, b_vectors, -1.0), (b_vectors, a_vectors, 1.0)):
-        for row in range(len(own)):
-            rest = np.delete(own, row, axis=0)
-            if len(rest) == 0:
-                continue
-            pair = (rest, other) if sign < 0 else (other, rest)
-            result = axis_direction(pair[0], pair[1])
-            if result is None:
-                continue
-            direction, middle = result
-            if sign * (float(own[row] @ direction) - middle) > 0:
-                agree += 1
+    out of the direction and the midpoint (closed form, O(n * D))."""
+    mean_a = a_vectors.mean(axis=0, dtype=np.float64)
+    mean_b = b_vectors.mean(axis=0, dtype=np.float64)
+    agree = int(_loo_disagreements(a_vectors, mean_b).sum())
+    agree += int(_loo_disagreements(b_vectors, mean_a).sum())
     return agree, len(a_vectors) + len(b_vectors)
 
 
@@ -139,19 +155,24 @@ def parse_definitions(
             )
         if value is None:
             continue
+        if not isinstance(value, dict):
+            raise ValidationError(
+                f"Axis {name}: expected an object like {{\"a\": [ids], \"b\": [ids]}}",
+                field="axes",
+            )
         a = _unique_ids(value.get("a"), name, "a")
         b = _unique_ids(value.get("b"), name, "b")
         both = sorted(set(a) & set(b))
         if both:
             raise ValidationError(
-                f"Axis {name}: picture(s) {both[:5]} are in both ends. "
-                "A picture can only be an example of one end of an axis.",
+                f"Axis {name}: picture(s) {both[:5]} are in both boxes. "
+                "A picture can only be an example of one box of an axis.",
                 field="axes",
             )
-        for end, ids in (("A", a), ("B", b)):
+        for end, ids in (("left", a), ("right", b)):
             if len(ids) < MIN_EXAMPLES:
                 raise ValidationError(
-                    f"Axis {name}: end {end} needs at least {MIN_EXAMPLES} example pictures, got {len(ids)}",
+                    f"Axis {name}: the {end} box needs at least {MIN_EXAMPLES} example pictures, got {len(ids)}",
                     field="axes",
                 )
         definitions[name] = (a, b)
@@ -159,21 +180,23 @@ def parse_definitions(
 
 
 def _unique_ids(raw: Any, axis: str, end: str) -> List[int]:
+    """The ids of one end, each once, in the order given; every item must be a
+    whole number (a bool, a string or null is not an image id)."""
     if not isinstance(raw, (list, tuple)):
         raise ValidationError(
             f"Axis {axis}: end {end} must be a list of image ids", field="axes"
         )
-    seen: List[int] = []
+    seen: set = set()
+    ordered: List[int] = []
     for item in raw:
-        try:
-            value = int(item)
-        except (TypeError, ValueError):
+        if isinstance(item, bool) or not isinstance(item, int):
             raise ValidationError(
                 f"Axis {axis}: {item!r} is not an image id", field="axes"
-            ) from None
-        if value not in seen:
-            seen.append(value)
-    return seen
+            )
+        if item not in seen:
+            seen.add(item)
+            ordered.append(item)
+    return ordered
 
 
 def library_ids(ids: Sequence[int]) -> set:
