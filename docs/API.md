@@ -2061,6 +2061,81 @@ evicted or belongs to another library).
 `model_path` that is not a `.pth`/`.pt`/`.onnx` file, is missing or cannot be
 read (`kaloscope` space with `model_source=local` only).
 
+#### GET /api/style-map/axes
+What the two ends of each axis of the map stand for, so the page can name the
+directions of the cloud. The map is the one `points` returned (named by
+`map_id`), on the coordinates the page shows: `layout=pca` (the default) reads
+the PCA axes, `layout=umap` the ready UMAP fit (`layout_not_ready` while it is
+queued, computing or gone). UMAP axes have no fixed direction (a refit may
+rotate or flip them), so the page tells the user that only distances mean
+something there; the labels here are still true for the layout shown.
+
+Per axis `x`, `y`, `z` and per end (`low` = the smallest coordinates, `high` =
+the largest):
+
+- `representatives`: 3 image ids from the outer 10% of the axis, nearest the
+  median of that tenth (so a far outlier is never picked) and visibly
+  different from each other (cosine of the PCA features below 0.9, as for the
+  regions). Merged near-duplicates are represented by their representative
+  point; every point counts once.
+- `tags`: up to 3 WD14 general tags that separate the outer 20% at this end
+  from the outer 20% at the other end. The statistics are the regions' own
+  (hypergeometric tail over TAGGED pictures only, one Benjamini-Hochberg
+  correction over every admissible test of the map, `q` < 0.01, `ratio` >= 3
+  or `rate` >= 0.6 with a `gain` of at least 0.25 over `other_rate`); a tag is
+  admissible when at least 4 pictures of the end carry it and both ends have
+  at least 10 tagged pictures. Tag counts are taken on at most 4000 pictures
+  per end, evenly spread over the end's ranks (smaller maps are counted
+  whole). Rating, meta, artist and character tags never label an axis
+  (character names say who is drawn, not how). `zh` is the Chinese display
+  name from the bundled vocabulary (null when it has none or only a Japanese
+  one). A tag row counts whatever its source (tagger, sidecar, manual), and a
+  picture is tagged when it has any tag row.
+- `size` (points in the end) and `tagged` (of those, with any tag).
+
+`weak` is `true` when no tag separates the two ends of the axis: the page then
+says the direction has no clear shared trait and never invents a label.
+`strength` is the largest `gain` (rate at the labelled end minus rate at the
+other end) among the reported tags, 0 when `weak`. Maps with fewer than 30
+points are `weak` on every axis.
+
+`status` is `not_started` when the map is unknown, evicted or belongs to
+another library (`axes` is then empty), `empty` for a map without points.
+Cached in memory per layout key, layout and label version (the `tags` and
+`artist_predictions` fingerprint the regions use), so a tagging run after the
+map was built is picked up on the next request (`cached` is `true` only on an
+unchanged repeat); dropped whenever the layout is.
+
+**Parameters:** `space`, `selection_token`, `model_source`, `model_path` as for `points`, plus:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `map_id` | string | null | The handle the `points` answer carried (32 hex characters, 400 otherwise); the page always sends it |
+| `layout` | string | `pca` | `pca` or `umap`: the coordinates the page shows (400 otherwise) |
+
+**Response:**
+```json
+{
+  "status": "ok", "space": "kaloscope", "layout": "pca",
+  "model_version": "kaloscope-2.0:sha256:...",
+  "algo_version": 1, "points": 1447,
+  "axes": {
+    "x": {"weak": false, "strength": 0.62,
+          "low":  {"representatives": [88, 91, 412], "size": 289, "tagged": 289,
+                   "tags": [{"tag": "monochrome", "zh": "单色调", "count": 190, "tagged": 289, "rate": 0.657, "other_rate": 0.038, "gain": 0.619, "ratio": 17.3, "q": 1e-40}]},
+          "high": {"representatives": [3, 17, 25], "size": 289, "tagged": 289, "tags": []}},
+    "y": {"weak": true, "strength": 0.0, "low": {"...": "..."}, "high": {"...": "..."}},
+    "z": {"...": "..."}
+  },
+  "cached": false
+}
+```
+
+**Errors:** 400 for an unknown `space`, an invalid `map_id` or `layout`, an
+invalid `selection_token`, or a `model_path` that is not a
+`.pth`/`.pt`/`.onnx` file, is missing or cannot be read (`kaloscope` space with
+`model_source=local` only).
+
 #### GET /api/style-map/colors
 One colour value per point of the map `points` last returned for the same
 `space` and `selection_token`, in point order (`ids` are the representatives

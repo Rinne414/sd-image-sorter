@@ -20,6 +20,7 @@ from artist_identifier import ARTIST_THRESHOLD_DEFAULT
 from exceptions import ValidationError
 from routers.artists import ArtistModelConfig, resolve_local_artist_model
 from services.service_provider import ServiceProvider
+from services.style_map_axes import AXES_LAYOUTS
 from services.style_map_colors import MAP_ID_PATTERN, STYLE_MAP_COLOR_FIELDS
 from services.style_map_locate import MAX_RESULTS
 from services.style_map_query import DEFAULT_K, MAX_K, read_capped_upload
@@ -352,6 +353,46 @@ def style_map_colors(
         by=by,
         model_path=model_path,
         map_id=map_id,
+    )
+    return Response(content=payload, media_type="application/json")
+
+
+@router.get(
+    "/axes",
+    summary="What the two ends of each axis of the map stand for",
+    description=(
+        "For the map GET /api/style-map/points last returned (named by "
+        "`map_id`), on the coordinates the page shows (`layout` pca, or the "
+        "ready umap fit): per axis x/y/z and per end (`low`, `high`) three "
+        "representative pictures from the outer tenth, up to three WD14 "
+        "general tags that separate the outer fifth at one end from the other "
+        "(same BH + effect-size rule as /regions; rating, meta and character "
+        "tags excluded), a `weak` flag when nothing separates the ends and a "
+        "`strength` (largest rate difference). `not_started` when the map is "
+        "unknown or evicted, `layout_not_ready` for umap before its fit is "
+        "done. Cached per map, layout and label version."
+    ),
+)
+def style_map_axes(
+    space: str = Query("kaloscope", pattern=_MAP_SPACE_PATTERN),
+    selection_token: Optional[str] = Query(None, max_length=65536),
+    map_id: Optional[str] = Query(
+        None, pattern=MAP_ID_PATTERN, description=_MAP_ID_DOC
+    ),
+    layout: str = Query(
+        "pca",
+        pattern="^(" + "|".join(AXES_LAYOUTS) + ")$",
+        description="Coordinates the page shows: pca or umap",
+    ),
+    model_path: Optional[str] = Depends(_model_path_from_query),
+    service: StyleMapService = Depends(get_style_map_service),
+):
+    payload = service.axes_json(
+        space,
+        selection_token=selection_token,
+        model_path=model_path,
+        map_id=map_id,
+        layout=layout,
     )
     return Response(content=payload, media_type="application/json")
 

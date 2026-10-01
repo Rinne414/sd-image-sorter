@@ -227,6 +227,17 @@ def get_vocab_tag_index() -> Optional[Dict[str, int]]:
     return _VOCAB_INDEX
 
 
+def tag_category_and_zh(tag: str) -> Tuple[str, Optional[str], bool]:
+    """(app category, first Chinese/Japanese alias, in the vocabulary) of one
+    tag from the bundled vocabulary: one dict lookup, for callers that label
+    many tags."""
+    _ensure_loaded()
+    q_norm = _normalize_tag(tag)
+    idx = (_VOCAB_INDEX or {}).get(q_norm)
+    code = (_VOCAB or [])[idx][2] if idx is not None else 0
+    return _category_for(q_norm, code), (_ZH_DISPLAY or {}).get(q_norm), idx is not None
+
+
 def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
