@@ -24,6 +24,7 @@ def test_stream_filtered_pip_output_hides_platform_marker_noise(capsys):
 
 
 def test_main_runs_current_python_pip_with_filtered_stream(monkeypatch, capsys):
+    monkeypatch.setattr(launcher_pip, "non_cpu_onnxruntime_installed", lambda: False)
     calls = []
 
     class FakeProcess:
@@ -70,3 +71,91 @@ def test_main_runs_current_python_pip_with_filtered_stream(monkeypatch, capsys):
 def test_main_requires_pip_arguments(capsys):
     assert launcher_pip.main([]) == 2
     assert "Usage: python launcher_pip.py" in capsys.readouterr().err
+
+
+REQUIREMENTS_WITH_ORT = (
+    "fastapi==0.136.1\n"
+    "onnxruntime==9.9.9 ; sys_platform != 'no-such-platform'\n"
+    "onnxruntime==1.0.0 ; sys_platform == 'no-such-platform'\n"
+    "onnxruntime-gpu==1.21.0 ; sys_platform != 'no-such-platform'\n"
+    "    # via onnxruntime\n"
+    "pillow==11.0.0\n"
+)
+
+
+def test_filter_cpu_onnxruntime_drops_only_the_pin_for_this_platform():
+    filtered, removed = launcher_pip.filter_cpu_onnxruntime(REQUIREMENTS_WITH_ORT)
+
+    assert removed == 1
+    assert "onnxruntime==9.9.9" not in filtered
+    # other platform's pin, onnxruntime-gpu, comments and unrelated packages stay
+    assert "onnxruntime==1.0.0 ; sys_platform == 'no-such-platform'" in filtered
+    assert "onnxruntime-gpu==1.21.0" in filtered
+    assert "    # via onnxruntime\n" in filtered
+    assert "fastapi==0.136.1\n" in filtered and "pillow==11.0.0\n" in filtered
+
+
+def test_prepare_pip_args_leaves_everything_alone_without_gpu_onnxruntime(tmp_path, monkeypatch):
+    requirements = tmp_path / "requirements-core.txt"
+    requirements.write_text(REQUIREMENTS_WITH_ORT, encoding="utf-8")
+    monkeypatch.setattr(launcher_pip, "non_cpu_onnxruntime_installed", lambda: False)
+    args = ["install", "--no-build-isolation", "-r", str(requirements)]
+
+    new_args, temp_file = launcher_pip.prepare_pip_args(args)
+
+    assert new_args == args
+    assert temp_file is None
+
+
+def test_prepare_pip_args_ignores_installs_without_requirements_file(monkeypatch):
+    monkeypatch.setattr(launcher_pip, "non_cpu_onnxruntime_installed", lambda: True)
+
+    assert launcher_pip.prepare_pip_args(["install", "setuptools", "wheel"]) == (
+        ["install", "setuptools", "wheel"],
+        None,
+    )
+
+
+def test_main_installs_from_filtered_copy_and_deletes_it_when_gpu_onnxruntime_present(tmp_path, monkeypatch, capsys):
+    requirements = tmp_path / "requirements-core.txt"
+    requirements.write_text(REQUIREMENTS_WITH_ORT, encoding="utf-8")
+    monkeypatch.setattr(launcher_pip, "non_cpu_onnxruntime_installed", lambda: True)
+    seen = {}
+
+    class FakeProcess:
+        stdout = io.StringIO("Collecting fastapi\n")
+
+        def wait(self):
+            return 0
+
+    def fake_popen(command, **kwargs):
+        used = command[command.index("-r") + 1]
+        seen["path"] = used
+        seen["text"] = open(used, encoding="utf-8").read()
+        return FakeProcess()
+
+    monkeypatch.setattr(launcher_pip.subprocess, "Popen", fake_popen)
+
+    assert launcher_pip.main(["install", "-r", str(requirements)]) == 0
+
+    assert seen["path"] != str(requirements)
+    assert "onnxruntime==9.9.9" not in seen["text"]
+    assert "pillow==11.0.0" in seen["text"]
+    assert not launcher_pip.Path(seen["path"]).exists()
+    assert requirements.read_text(encoding="utf-8") == REQUIREMENTS_WITH_ORT
+    assert "GPU onnxruntime present, CPU onnxruntime skipped" in capsys.readouterr().out
+
+
+def test_non_cpu_onnxruntime_installed_uses_metadata_not_import(monkeypatch):
+    seen = []
+
+    def fake_distribution(name):
+        seen.append(name)
+        if name == "onnxruntime-directml":
+            return object()
+        raise launcher_pip.metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(launcher_pip.metadata, "distribution", fake_distribution)
+
+    assert launcher_pip.non_cpu_onnxruntime_installed() is True
+    assert seen == ["onnxruntime-gpu", "onnxruntime-directml"]

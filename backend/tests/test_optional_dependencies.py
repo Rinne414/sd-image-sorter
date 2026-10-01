@@ -513,7 +513,15 @@ def test_install_packages_refuses_system_python_without_opt_in(monkeypatch):
     assert calls == []
 
 
+def _isolate_onnxruntime_state(monkeypatch):
+    """fastembed is an onnxruntime consumer: keep these tests independent of the
+    onnxruntime distributions installed in the interpreter that runs them."""
+    monkeypatch.setattr(optional_dependencies, "capture_named_runtime_snapshot", lambda names: None)
+    monkeypatch.setattr(optional_dependencies, "validated_onnxruntime_provider", lambda snapshot: None)
+
+
 def test_install_packages_allows_virtualenv(monkeypatch):
+    _isolate_onnxruntime_state(monkeypatch)
     monkeypatch.setattr(optional_dependencies, "_running_in_virtualenv", lambda: True)
     calls = []
 
@@ -538,6 +546,7 @@ def test_install_packages_allows_portable_python(monkeypatch, tmp_path):
 
     monkeypatch.setattr(optional_dependencies, "__file__", str(backend_dir / "optional_dependencies.py"))
     monkeypatch.setattr(optional_dependencies.sys, "executable", str(portable_python))
+    _isolate_onnxruntime_state(monkeypatch)
     monkeypatch.setattr(optional_dependencies, "_running_in_virtualenv", lambda: False)
     monkeypatch.delenv("SD_IMAGE_SORTER_ALLOW_SYSTEM_PIP_INSTALL", raising=False)
     calls = []
