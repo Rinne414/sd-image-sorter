@@ -104,6 +104,26 @@ endpoints are exempt.
 
 ---
 
+## Request Guard (`/api/*`)
+
+Besides the loopback client-IP check, every `/api` request must look like it
+comes from this app's own page or a local non-browser client; otherwise it is
+answered `403 {"error": "...", "type": "Forbidden"}`:
+
+| Header | Rule |
+|--------|------|
+| `Host` | Exactly `host[:port]`: a loopback name (`127.0.0.1`, `localhost`, `[::1]`, any `127.x`) on the port the socket is bound to (`request.scope["server"]`, which no client can set; `SD_IMAGE_SORTER_PORT` only when the server did not fill it). A DNS-rebound hostname, another port, a LAN address, or a value with userinfo, a path, a query or a fragment fails |
+| `Origin` | Absent (non-browser clients, same-origin GET) or exactly `http(s)://<loopback host>[:port]` on any port, so another local web app may call the API. Any extra (userinfo, path, query, fragment, whitespace, a second value) or a non-loopback host fails |
+| `Sec-Fetch-Site` | `cross-site` passes only together with such a loopback `Origin`. That is how another local web app looks to the browser (a page on `localhost:3000` calling `127.0.0.1:8487` is cross-site, and its fetch carries its loopback Origin). A cross-site request without an Origin, which is what a link, a GET form, `window.open`, `location=` or a hidden `<iframe>` from any site sends, is refused. `same-origin`, `same-site`, `none` and absent pass |
+
+Pages, `/static`, `/docs` and `/openapi.json` are not guarded. With
+`SD_SORTER_TESTING=1` the test suite's `testserver` host and a port-less
+loopback host are accepted. Refusals are logged once per reason per
+`REJECTION_LOG_INTERVAL_SECONDS` (60 s); the rest are counted and reported
+with the next line.
+
+---
+
 ## Endpoints
 
 ### Images

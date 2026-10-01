@@ -5,10 +5,12 @@ from __future__ import annotations
 import ipaddress
 import logging
 import os
+import re
 import threading
 import time
 from collections import defaultdict, deque
-from typing import Optional
+from typing import Mapping, Optional
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,6 +22,7 @@ from config import (
     RATE_LIMIT_ENABLED as CONFIG_RATE_LIMIT_ENABLED,
     RATE_LIMIT_MAX_REQUESTS as CONFIG_RATE_LIMIT_MAX_REQUESTS,
     RATE_LIMIT_WINDOW_SECONDS as CONFIG_RATE_LIMIT_WINDOW_SECONDS,
+    SERVER_PORT,
 )
 
 
@@ -55,6 +58,151 @@ def _is_loopback_host(host: Optional[str]) -> bool:
 def _is_rate_limit_exempt(path: str) -> bool:
     """Return True when a request path should skip in-memory rate limiting."""
     return path in RATE_LIMIT_EXEMPT_PATHS or path.startswith(RATE_LIMIT_EXEMPT_PREFIXES)
+
+
+# The API answers only its own page and local non-browser clients (the MCP
+# server, the release QA script). The client IP check above cannot tell a
+# browser that was sent here by another site: DNS rebinding resolves the
+# attacker's hostname to 127.0.0.1, and a cross-site page can fire simple
+# requests at a local port. Three headers can.
+API_GUARD_PREFIX = "/api/"
+_TEST_SERVER_HOST = "testserver"  # starlette's TestClient default
+# Exactly host[:port] / scheme://host[:port]: userinfo, a path, a query, a
+# fragment, whitespace or a second value is refused before anything parses it.
+_HOST_TOKEN = r"(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+)(:[0-9]{1,5})?"
+_HOST_HEADER_RE = re.compile(rf"^{_HOST_TOKEN}$")
+_ORIGIN_RE = re.compile(rf"^https?://{_HOST_TOKEN}$")
+# A rejection is logged once per reason per interval; the rest are counted
+# and reported with the next line, so a hostile page cannot flood the log.
+REJECTION_LOG_INTERVAL_SECONDS = 60
+_rejection_log_lock = threading.Lock()
+_rejection_log_state: dict[str, tuple[float, int]] = {}  # reason -> (last logged, skipped since)
+
+
+def _bound_port(request: Request) -> int:
+    """The port the socket that received this request is bound to. uvicorn
+    fills scope["server"] from the socket, so no client can choose it; the
+    --port main.py recorded in the env is only the fallback for a server
+    that did not fill it."""
+    server = request.scope.get("server")
+    if isinstance(server, (tuple, list)) and len(server) == 2:
+        port = server[1]
+        if isinstance(port, int) and port > 0:
+            return port
+    raw = os.environ.get("SD_IMAGE_SORTER_PORT", "").strip()
+    try:
+        return int(raw) if raw else SERVER_PORT
+    except ValueError:
+        return SERVER_PORT
+
+
+def _is_testing() -> bool:
+    return os.environ.get("SD_SORTER_TESTING") == "1"
+
+
+def _split_host_header(value: str) -> tuple[Optional[str], Optional[int]]:
+    """(hostname, port) of a Host header; (None, None) when it is not exactly
+    host[:port]. urlsplit then lowercases the name, strips IPv6 brackets
+    and rejects a port out of range."""
+    if not _HOST_HEADER_RE.match(value):
+        return None, None
+    try:
+        parts = urlsplit("//" + value)
+        return parts.hostname, parts.port
+    except ValueError:
+        return None, None
+
+
+def _host_header_allowed(host_header: Optional[str], *, bound_port: int, testing: bool) -> bool:
+    """A loopback name on the bound port. A rebound hostname, another local
+    server's port and a LAN address all fail. The test gate also accepts
+    starlette's ``testserver`` and a port-less loopback host."""
+    hostname, port = _split_host_header(host_header or "")
+    if not hostname:
+        return False
+    if testing and hostname == _TEST_SERVER_HOST:
+        return True
+    if not _is_loopback_host(hostname):
+        return False
+    if port is None:
+        port = 80  # what a port-less Host header means
+    return port == bound_port or testing
+
+
+def _origin_allowed(origin: Optional[str]) -> bool:
+    """Absent: a non-browser client or a same-origin GET. Present: a loopback
+    origin on any port, so another local web app may still call the API."""
+    if origin is None:
+        return True
+    if not _ORIGIN_RE.match(origin):
+        return False
+    try:
+        parts = urlsplit(origin)
+    except ValueError:
+        return False
+    return bool(parts.hostname) and _is_loopback_host(parts.hostname)
+
+
+def api_request_rejection(
+    *, path: str, method: str, headers: Mapping[str, str], bound_port: int, testing: bool
+) -> Optional[str]:
+    """Why an /api request must be refused ("host", "origin",
+    "sec-fetch-site"), or None when it may proceed. Pure: the middleware
+    and the tests call it with the same arguments."""
+    if not path.startswith(API_GUARD_PREFIX):
+        return None
+    if not _host_header_allowed(headers.get("host"), bound_port=bound_port, testing=testing):
+        return "host"
+    if not _origin_allowed(headers.get("origin")):
+        return "origin"
+    site = (headers.get("sec-fetch-site") or "").strip().lower()
+    if site == "cross-site" and headers.get("origin") is None:
+        # Another local web app (localhost:3000 calling 127.0.0.1:8487 is
+        # cross-site to the browser) sends a loopback Origin, checked above.
+        # A link, a GET form, window.open, location= and a hidden <iframe>
+        # are navigations and carry none: any site could make the browser
+        # GET /api/... with a query string of its choosing.
+        return "sec-fetch-site"
+    return None
+
+
+def _log_rejection(reason: str, method: str, path: str, value: Optional[str]) -> None:
+    now = time.monotonic()
+    with _rejection_log_lock:
+        last_logged, skipped = _rejection_log_state.get(reason, (None, 0))
+        if last_logged is not None and now - last_logged < REJECTION_LOG_INTERVAL_SECONDS:
+            _rejection_log_state[reason] = (last_logged, skipped + 1)
+            return
+        _rejection_log_state[reason] = (now, 0)
+    suffix = (
+        f" (skipped {skipped} similar in the last {REJECTION_LOG_INTERVAL_SECONDS}s)"
+        if skipped
+        else ""
+    )
+    logger.warning(
+        "Rejected %s %s: %s header is not this app's (%r)%s", method, path, reason, value, suffix
+    )
+
+
+async def api_request_guard_middleware(request: Request, call_next):
+    """Refuse /api requests that another site or a rebound hostname sent."""
+    reason = api_request_rejection(
+        path=request.url.path,
+        method=request.method,
+        headers=request.headers,
+        bound_port=_bound_port(request),
+        testing=_is_testing(),
+    )
+    if reason is not None:
+        _log_rejection(reason, request.method, request.url.path, request.headers.get(reason))
+        return JSONResponse(
+            status_code=403,
+            content={
+                "error": "This application only accepts requests from its own page",
+                "type": "Forbidden",
+            },
+        )
+    return await call_next(request)
 
 
 async def localhost_only_middleware(request: Request, call_next):
@@ -149,6 +297,7 @@ def configure_security_middleware(app: FastAPI) -> None:
         ],
     )
     app.middleware("http")(localhost_only_middleware)
+    app.middleware("http")(api_request_guard_middleware)
     app.middleware("http")(rate_limit_middleware)
     app.middleware("http")(library_workspace_middleware)
     app.middleware("http")(add_security_headers)

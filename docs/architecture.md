@@ -28,7 +28,7 @@ SD Image Sorter is a local web application for managing, tagging, sorting, and c
 
 #### Entry Point
 - **`main.py`**: FastAPI application assembly, service initialization, router mounting, exception handlers, and process startup.
-- **`app_security.py`**: CORS, localhost-only enforcement, in-memory API rate limiting, and security response headers.
+- **`app_security.py`**: CORS, localhost-only enforcement, the `/api` request guard (Host / Origin / `Sec-Fetch-Site`), in-memory API rate limiting, and security response headers.
 - **`app_static.py`**: `/static` mounting, no-cache static responses, and `GET /` cache-bust injection for frontend JS/CSS.
 - **`app_diagnostics.py`**: Bounded support diagnostics, support-log redaction, and file-manager opening for the support log.
 
@@ -219,6 +219,7 @@ All file-accepting endpoints use `utils/path_validation.py`:
 ### Local-Only Access
 - No authentication (intentional for local tool)
 - CORS is restricted to loopback origins by regex, and `app_security.py` rejects non-loopback client IPs even if a future launcher widens the bind host.
+- `api_request_guard_middleware` refuses `/api/*` requests a browser was sent here by another site: the `Host` must be exactly a loopback name on the port the socket is bound to (`request.scope["server"]`, so a DNS-rebound hostname fails and no client can pick the port), an `Origin`, when present, must be exactly a loopback origin on any port, and `Sec-Fetch-Site: cross-site` passes only with such an Origin. "Other local web apps" means a page on another loopback port (`localhost:3000` calling `127.0.0.1:8487` is cross-site to the browser, and its fetch carries a loopback Origin): it keeps working. A cross-site request without an Origin, which is what a link, a GET form, `window.open`, `location=` or a hidden `<iframe>` sends, is refused. Pages, static files and docs are not guarded. `SD_SORTER_TESTING=1` admits starlette's `testserver` host and a port-less loopback host for the test suite. Refusals are logged once per reason per minute with a skipped count.
 
 ## Architecture Guardrails
 
