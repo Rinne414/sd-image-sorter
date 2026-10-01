@@ -32,13 +32,13 @@ const WORDS = {
     tabCustom: 'My axes', tabModel: 'Model axes', apply: 'Apply', revert: 'Back to the model layout', add: 'Add selected pictures',
     applied: 'Applied: the map is laid out along your axes', hiddenModel: 'Your own axes are on', needTwo: 'Each end needs at least 2 pictures',
     notSeparable: 'These two groups are hard to tell apart (3/5); the model may not see this difference. Add more pictures, or use more typical ones.',
-    nameA: 'thick paint', nameB: 'flat color', placeholder: 'e.g. thick paint', open: 'Axis meanings',
+    nameA: 'thick paint', nameB: 'flat color', placeholder: 'e.g. thick paint', placeholderB: 'e.g. flat color', open: 'Axis meanings',
   },
   'zh-CN': {
     tabCustom: '自订轴', tabModel: '模型算出的轴', apply: '套用', revert: '还原原本排法', add: '加入选取的图',
     applied: '已套用：地图按你定义的轴排列', hiddenModel: '自订轴已套用', needTwo: '每一端至少要 2 张图',
     notSeparable: '这两组范例分不太开（3/5），模型可能看不出这个差别。可以多放几张，或换更典型的图',
-    nameA: '厚涂', nameB: '平涂', placeholder: '例如：厚涂', open: '轴的含义',
+    nameA: '厚涂', nameB: '平涂', placeholder: '例如：厚涂', placeholderB: '例如：平涂', open: '轴的含义',
   },
 } as const
 
@@ -127,6 +127,8 @@ async function openCustomTab(page: Page, words: (typeof WORDS)['en']) {
 }
 
 async function define(page: Page, axis: string, a: number[], b: number[], names: [string, string] = ['', '']) {
+  const opener = page.locator(`.stylemap-custom-open[data-axis="${axis}"]`)
+  if (await opener.count()) await opener.click()
   for (const [end, ids, name] of [['a', a, names[0]], ['b', b, names[1]]] as const) {
     await pick(page, [...ids])
     await page.locator(`.stylemap-custom-axis[data-axis="${axis}"] .stylemap-custom-end[data-end="${end}"] .stylemap-custom-add`).click()
@@ -185,6 +187,11 @@ test.describe('Style Map custom axes', () => {
       await expect(page.locator('.stylemap-custom-add').first()).toBeDisabled()
       await expect(page.locator('.stylemap-custom-add').first()).toHaveText(words.add)
       await expect(page.locator('.stylemap-custom-name').first()).toHaveAttribute('placeholder', words.placeholder)
+      await expect(page.locator('.stylemap-custom-name').nth(1)).toHaveAttribute('placeholder', words.placeholderB)
+      // Nothing defined: X is open, Y and Z are one folded button each (no empty boxes).
+      await expect(page.locator('.stylemap-custom-axis')).toHaveCount(1)
+      await expect(page.locator('.stylemap-custom-open')).toHaveCount(2)
+      if (width === 1366) await page.screenshot({ path: `${SHOTS}/custom_empty_${lang}_${width}x${height}.png` })
       await page.locator('.stylemap-custom-apply').click()
       await expect(page.locator('.stylemap-custom-note[data-tone="error"]')).toBeVisible()
       expect(seen.posts).toHaveLength(0)
@@ -209,6 +216,17 @@ test.describe('Style Map custom axes', () => {
       expect(post.body.axes.y).toBeUndefined()
       expect(new URL(post.url).searchParams.get('space')).toBe('kaloscope')
       await expect(page.locator('.stylemap-custom-note[data-tone="ok"]')).toHaveText(words.applied)
+      // The state line sits in the bottom block that stays in view, above Apply, even at 1366.
+      const foot = await page.evaluate(() => {
+        const panel = (document.querySelector('#stylemap-axes-panel') as HTMLElement).getBoundingClientRect()
+        const ok = document.querySelector('.stylemap-custom-foot .stylemap-custom-note[data-tone="ok"]') as HTMLElement
+        const apply = (document.querySelector('.stylemap-custom-apply') as HTMLElement).getBoundingClientRect()
+        const r = ok.getBoundingClientRect()
+        return { inView: r.top >= panel.top && r.bottom <= panel.bottom, aboveApply: r.bottom <= apply.top + 1 }
+      })
+      expect(foot).toEqual({ inView: true, aboveApply: true })
+      // Every example chip shows its picture (a blank chip would be a broken thumbnail).
+      await expect.poll(() => page.evaluate(() => [...document.querySelectorAll('.stylemap-custom-chip img')].map((i) => (i as HTMLImageElement).naturalWidth))).toEqual([32, 32, 32, 32, 32, 32])
 
       // The dots moved to the scripted positions; the landmarks (original layout) are gone with a note.
       await expect.poll(() => dotAt(page, 1)).toEqual(moved(1).map((v) => Math.round(v * 1000) / 1000))
@@ -287,6 +305,7 @@ test.describe('Style Map custom axes', () => {
     const seen = await mockAll(page, () => ({ status: 'not_started', space: 'kaloscope', layout: 'pca', ids: [], coords: [], axes: {}, warnings: [] }))
     await openMap(page, 1366, 768, 'en')
     await openCustomTab(page, WORDS.en)
+    await page.locator('.stylemap-custom-open[data-axis="y"]').click()
     await pick(page, [1, 3])
     await page.locator('.stylemap-custom-axis[data-axis="y"] [data-end="a"] .stylemap-custom-add').click()
     await expect(page.locator('.stylemap-custom-note[data-tone="warn"]')).toHaveText(WORDS.en.needTwo)
@@ -306,6 +325,7 @@ test.describe('Style Map custom axes', () => {
     await mockAll(page)
     await openMap(page, 1366, 768, 'en')
     await openCustomTab(page, WORDS.en)
+    await page.locator('.stylemap-custom-open[data-axis="z"]').click()
     const input = page.locator('.stylemap-custom-axis[data-axis="z"] [data-end="b"] .stylemap-custom-name')
     await input.click()
     await input.pressSequentially('abcdef')

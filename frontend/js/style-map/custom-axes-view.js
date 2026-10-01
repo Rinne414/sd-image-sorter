@@ -26,6 +26,8 @@ export class CustomAxesView {
         this.host = host;
         this.root = el('div', 'stylemap-custom');
         this.focusKey = null;
+        // Axes without a definition stay folded to one button until asked for (X is open at the start).
+        this.expanded = new Set(['x']);
     }
 
     /** Rebuild the tab (keeps the focus in a name field the user is typing in). */
@@ -33,10 +35,14 @@ export class CustomAxesView {
         const active = document.activeElement;
         this.focusKey = active && this.root.contains(active) && active.dataset.key ? active.dataset.key : null;
         const caret = this.focusKey ? active.selectionStart : null;
+        const open = AXES.filter((axis) => this.isOpen(axis));
+        const folded = AXES.filter((axis) => !this.isOpen(axis));
+        const notes = this.notes();
         this.root.replaceChildren(
-            ...AXES.map((axis) => this.axisBlock(axis)),
-            ...this.notes(),
-            this.actions(),
+            ...open.map((axis) => this.axisBlock(axis)),
+            ...(folded.length ? [this.foldedRow(folded)] : []),
+            ...notes.filter((note) => note.dataset.tone === 'info'),
+            this.foot(notes.filter((note) => note.dataset.tone !== 'info')),
         );
         if (this.focusKey) {
             const again = this.root.querySelector(`[data-key="${this.focusKey}"]`);
@@ -46,6 +52,34 @@ export class CustomAxesView {
             }
         }
         return this.root;
+    }
+
+    /** A defined axis is always open; an empty one opens when the user asks. */
+    isOpen(axis) {
+        const def = this.custom.defs[axis];
+        return def.a.length > 0 || def.b.length > 0 || this.expanded.has(axis);
+    }
+
+    foldedRow(axes) {
+        const row = el('div', 'stylemap-custom-folded');
+        for (const axis of axes) {
+            const button = el('button', 'btn btn-secondary btn-small stylemap-custom-open', t('stylemap.customOpenAxis', '+ {axis}', { axis: t(`stylemap.axis.${axis}`, `${axis.toUpperCase()} axis`) }));
+            button.type = 'button';
+            button.dataset.axis = axis;
+            button.addEventListener('click', () => {
+                this.expanded.add(axis);
+                this.custom.host.onChange();
+            });
+            row.append(button);
+        }
+        return row;
+    }
+
+    /** The bottom block that stays in view: the state lines, then Apply and Back. */
+    foot(lines) {
+        const foot = el('div', 'stylemap-custom-foot');
+        foot.append(...lines, this.actions());
+        return foot;
     }
 
     axisBlock(axis) {
@@ -75,7 +109,9 @@ export class CustomAxesView {
         input.type = 'text';
         input.maxLength = 40;
         input.value = end === 'a' ? def.nameA : def.nameB;
-        input.placeholder = t('stylemap.customNamePlaceholder', 'e.g. thick paint');
+        input.placeholder = end === 'a'
+            ? t('stylemap.customNamePlaceholder', 'e.g. thick paint')
+            : t('stylemap.customNamePlaceholderB', 'e.g. flat color');
         input.dataset.key = `${axis}-${end}`;
         input.setAttribute('aria-label', `${t(`stylemap.axis.${axis}`, axis)} · ${end === 'a' ? t('stylemap.customEndA', 'End A') : t('stylemap.customEndB', 'End B')}`);
         input.addEventListener('input', () => this.custom.setName(axis, end, input.value));
