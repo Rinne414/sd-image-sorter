@@ -429,6 +429,15 @@ async function startReconnectMissing() {
         showToast(appT('reconnect.startedToast', 'Search started in the background. You can keep using the gallery.'), 'info');
         pollReconnectProgress();
     } catch (error) {
+        // The backend refuses a second search with an English sentence; say it
+        // plainly in the UI language instead of leaking it.
+        if (/already in progress/i.test(error instanceof Error ? error.message : String(error || ''))) {
+            showToast(
+                appT('reconnect.alreadyRunning', 'A search for moved files is already running. Wait for it to finish or stop it first.'),
+                'warning',
+            );
+            return;
+        }
         const userMessage = mapScanPathError(error);
         if (isScanPathError(error)) {
             setReconnectFolderValidation('error', userMessage);

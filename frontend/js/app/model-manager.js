@@ -386,7 +386,10 @@ async function runBulkDownload(items) {
             // Hard guard: 1 hour absolute cap per model so the loop can
             // never deadlock if the backend never reports `prepare_result`.
             if (safetyTicks > 2400) {
-                failures.push({ id: item.id, message: 'timeout waiting for prepare_result' });
+                failures.push({
+                    id: item.id,
+                    message: appT('models.bulkPrepareTimeout', 'Timed out waiting for the setup result'),
+                });
                 break;
             }
             try {

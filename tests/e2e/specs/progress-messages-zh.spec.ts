@@ -497,3 +497,24 @@ test('character-purity progress and failure read in Chinese', async ({ page }, t
   expect(await status.textContent()).not.toContain('Fewer than')
   await page.screenshot({ path: shotPath(testInfo, 'purity-failed-zh-1366.png') })
 })
+
+test('a second moved-files search is refused in Chinese', async ({ page }, testInfo) => {
+  test.setTimeout(120000)
+  await page.setViewportSize({ width: 1366, height: 768 })
+
+  await page.route('**/api/images/reconnect-missing/start', (route) => route.fulfill({
+    status: 400,
+    json: { detail: 'Missing-file reconnect already in progress' },
+  }))
+
+  await openMainPage(page)
+  await page.evaluate(() => (window as any).App.showModal('reconnect-modal'))
+  await expect(page.locator('#reconnect-modal.visible')).toBeVisible()
+  await page.locator('#reconnect-folder-path').fill(fixtureRoot)
+  await page.locator('#btn-start-reconnect').click()
+
+  const toast = page.locator('.toast', { hasText: '已经有一个查找移动文件的任务在运行' }).first()
+  await expect(toast).toBeVisible({ timeout: 15000 })
+  expect(await toast.textContent()).not.toContain('already in progress')
+  await page.screenshot({ path: shotPath(testInfo, 'reconnect-busy-zh-1366.png') })
+})
