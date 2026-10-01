@@ -540,3 +540,34 @@ class TestBusyRuntime:
         finally:
             style_map_router.set_style_map_service(None)
         assert response.status_code == 409
+
+
+class TestUnlocatedNeighbour:
+    def test_a_picture_in_the_filter_without_a_dot_is_not_called_outside_it(
+        self, test_db, tmp_path, no_umap, fake_vector
+    ):
+        ids = _make_images(test_db, tmp_path, 6)
+        vectors = _random_units(6, seed=51)
+        broken = np.zeros_like(vectors[5])
+        broken[0] = 1.0  # one component dominates: cannot be placed
+        vectors[5] = broken
+        _store_kaloscope(test_db, ids, vectors)
+        service = _service()
+        points = service.points("kaloscope")
+        assert ids[5] in points["unlocatable"]
+        fake_vector["vector"] = broken
+
+        body = _query(service, points["map_id"])
+
+        top = body["neighbors"][0]
+        assert top["id"] == ids[5]
+        assert top["in_filter"] is True and top["located"] is False
+        assert top["x"] is None
+        assert all(n["located"] for n in body["neighbors"][1:])
+
+    def test_a_picture_outside_the_filter_is_neither_in_filter_nor_located(self):
+        body = query_mod.build_answer(
+            [(9, 0.9)], {}, filenames={}, weak_threshold=0.3, model_version="v"
+        )
+        assert body["neighbors"][0]["in_filter"] is False
+        assert body["neighbors"][0]["located"] is False

@@ -22,9 +22,13 @@ from utils.source_paths import (
 )
 
 
-# Hidden collections that hold a "show only these pictures" set (db_pinned_sets.py).
-# slugify never yields "~", so no user collection can collide with the prefix.
-PINNED_SLUG_PREFIX = "~pin-"
+# Hidden collections that hold a picture set (db_pinned_sets.py): "~pin-" =
+# a Gallery view of a Style Map pick, "~tok-" = the pictures behind a
+# selection token handed to another tool. slugify never yields "~", so no user
+# collection can collide with the prefix; every "~" collection is hidden.
+HIDDEN_SLUG_PREFIX = "~"
+PIN_SLUG_PREFIX = "~pin-"
+TOKEN_SLUG_PREFIX = "~tok-"
 
 
 def _favorite_path_identity(path: str) -> tuple[str, int]:
@@ -391,7 +395,7 @@ def list_collections() -> List[Dict[str, Any]]:
             GROUP BY c.id
             ORDER BY c.created_at DESC, c.id DESC
             """,
-            img_params + lib_params + (f"{PINNED_SLUG_PREFIX}%",),
+            img_params + lib_params + (f"{HIDDEN_SLUG_PREFIX}%",),
         )
         collections = [_row_to_dict(row) for row in cursor.fetchall()]
     # Favorites is path-anchored (not a collection_items snapshot), so report its

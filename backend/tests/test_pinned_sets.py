@@ -134,7 +134,7 @@ class TestRoute:
         body = test_client.post(
             "/api/collections/pinned", json={"image_ids": ids}
         ).json()
-        test_client.delete(f"/api/collections/{body['collection_id']}")
+        test_client.delete(f"/api/collections/pinned/{body['collection_id']}")
         found = test_client.get(f"/api/collections/pinned/{body['collection_id']}")
         assert found.status_code == 200
         assert found.json() == {
@@ -161,3 +161,140 @@ class TestRoute:
             headers={"X-SD-Library-Id": "libB"},
         ).json()
         assert other["exists"] is False
+
+
+class TestReviewFixes:
+    def test_a_token_set_survives_any_number_of_later_views_and_pages_completely(
+        self, test_db
+    ):
+        from services.image_service import ImageService
+
+        ids = _images(7)
+        token_set = pins.create_pinned_set(ids, purpose="token")
+        for _ in range(pins.PINNED_KEEP + 1):
+            pins.create_pinned_set(ids[:2])  # nine later Gallery views
+        service = ImageService()
+        token = service.create_selection_token(collection_id=token_set["id"])[
+            "selection_token"
+        ]
+        paged: list[int] = []
+        offset = 0
+        while True:
+            page = service.get_selection_chunk(token, offset=offset, limit=2)
+            paged.extend(page["image_ids"])
+            if not page["has_more"]:
+                break
+            offset = page["next_offset"]
+        assert sorted(paged) == sorted(ids)
+
+    def test_view_sets_are_pruned_per_library(self, test_db):
+        libdb.ensure_default_library()
+        other = libdb.create_library("Elsewhere")["id"]
+        mine = _images(2, "mine")
+        theirs = _images(2, "theirs", other)
+        token = set_current_library_id(other)
+        try:
+            kept = pins.create_pinned_set(theirs)
+        finally:
+            reset_current_library_id(token)
+        for _ in range(pins.PINNED_KEEP + 1):
+            pins.create_pinned_set(mine)
+        token = set_current_library_id(other)
+        try:
+            assert pins.get_pinned_set(kept["id"]) is not None
+        finally:
+            reset_current_library_id(token)
+
+    def test_old_token_sets_are_dropped_after_thirty_days(self, test_db):
+        ids = _images(2)
+        old = pins.create_pinned_set(ids, purpose="token")
+        with db.get_db() as conn:
+            conn.execute(
+                "UPDATE collections SET created_at = datetime('now', '-31 days') WHERE id = ?",
+                (old["id"],),
+            )
+        fresh = pins.create_pinned_set(ids, purpose="token")
+        assert pins.get_pinned_set(old["id"]) is None
+        assert pins.get_pinned_set(fresh["id"]) is not None
+
+    def test_hidden_sets_do_not_count_as_user_work_on_a_missing_picture(self, test_db):
+        ids = _images(2)
+        with db.get_db() as conn:
+            conn.execute("UPDATE images SET is_readable = 0 WHERE id IN (?, ?)", ids)
+        pins.create_pinned_set(ids)
+        pins.create_pinned_set(ids, purpose="token")
+        mine = db.create_collection("Mine")
+        db.set_collection_membership(mine["id"], ids[0], True)
+        rows = {row["id"]: row for row in db.get_unreadable_images_with_user_work()}
+        assert rows[ids[0]]["in_collection"] == 1
+        assert rows[ids[1]]["in_collection"] == 0
+
+
+class TestHiddenFromCollectionRoutes:
+    def test_every_collection_route_answers_404_for_a_pinned_set(self, test_client):
+        ids = _images(3)
+        made = test_client.post("/api/collections/pinned", json={"image_ids": ids}).json()
+        cid = made["collection_id"]
+        assert test_client.patch(f"/api/collections/{cid}", json={"name": "x"}).status_code == 404
+        assert test_client.get(f"/api/collections/{cid}/images").status_code == 404
+        assert (
+            test_client.post(f"/api/collections/{cid}/items", json={"image_id": ids[0]}).status_code
+            == 404
+        )
+        assert (
+            test_client.post(
+                f"/api/collections/{cid}/items/bulk", json={"image_ids": ids}
+            ).status_code
+            == 404
+        )
+        assert test_client.delete(f"/api/collections/{cid}").status_code == 404
+        # still there: only the dedicated route removes it
+        assert test_client.get(f"/api/collections/pinned/{cid}").json()["exists"] is True
+
+    def test_the_dedicated_route_removes_a_set(self, test_client):
+        ids = _images(2)
+        cid = test_client.post("/api/collections/pinned", json={"image_ids": ids}).json()[
+            "collection_id"
+        ]
+        assert test_client.delete(f"/api/collections/pinned/{cid}").json() == {"deleted": True}
+        assert test_client.get(f"/api/collections/pinned/{cid}").json()["exists"] is False
+        assert test_client.delete(f"/api/collections/pinned/{cid}").json() == {"deleted": False}
+
+    def test_an_ordinary_collection_is_not_deleted_by_the_dedicated_route(self, test_client):
+        real = test_client.post("/api/collections", json={"name": "Mine"}).json()
+        assert test_client.delete(f"/api/collections/pinned/{real['id']}").json() == {
+            "deleted": False
+        }
+        assert test_client.delete(f"/api/collections/{real['id']}").status_code == 200
+
+    def test_the_purpose_must_be_known(self, test_client):
+        ids = _images(1)
+        bad = test_client.post(
+            "/api/collections/pinned", json={"image_ids": ids, "purpose": "x"}
+        )
+        assert bad.status_code in (400, 422)
+
+
+class TestTokenPagingThroughTheApi:
+    def test_a_censor_token_still_pages_completely_after_nine_more_views(self, test_client):
+        ids = _images(9)
+        sent = test_client.post(
+            "/api/collections/pinned", json={"image_ids": ids, "purpose": "token"}
+        ).json()
+        token = test_client.post(
+            "/api/images/selection-token", json={"collectionId": sent["collection_id"]}
+        ).json()["selection_token"]
+        for _ in range(pins.PINNED_KEEP + 1):
+            test_client.post("/api/collections/pinned", json={"image_ids": ids[:3]})
+        paged: list[int] = []
+        offset = 0
+        while True:
+            page = test_client.get(
+                "/api/images/selection-chunk",
+                params={"selection_token": token, "offset": offset, "limit": 2},
+            ).json()
+            paged.extend(page["image_ids"])
+            if not page["has_more"]:
+                break
+            offset = page["next_offset"]
+        assert sorted(paged) == sorted(ids)

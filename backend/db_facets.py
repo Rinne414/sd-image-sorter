@@ -884,7 +884,9 @@ def get_unreadable_images_with_user_work() -> List[Dict[str, Any]]:
                    ) THEN 1 ELSE 0 END AS has_tags,
                    CASE WHEN COALESCE(i.user_rating, 0) > 0 THEN 1 ELSE 0 END AS has_rating,
                    CASE WHEN EXISTS (
-                       SELECT 1 FROM collection_items ci WHERE ci.source_image_id = i.id
+                       SELECT 1 FROM collection_items ci
+                       JOIN collections c ON c.id = ci.collection_id
+                       WHERE ci.source_image_id = i.id AND c.slug NOT LIKE '~%'
                    ) THEN 1 ELSE 0 END AS in_collection,
                    CASE WHEN EXISTS (
                        SELECT 1 FROM dataset_project_items dpi

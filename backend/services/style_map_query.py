@@ -107,12 +107,16 @@ def build_answer(
     weak_threshold: float,
     model_version: Optional[str],
     merged: Optional[set] = None,
+    unlocated: Optional[set] = None,
 ) -> Dict[str, Any]:
     """The response body for ranked (id, score) pairs on a map whose point
     coordinates are ``coords`` (ids missing from it are not in the filter).
     ``merged`` are the ids that are not points themselves but were merged into
-    one: ``coords`` holds their representative's position."""
+    one: ``coords`` holds their representative's position. ``unlocated`` are
+    pictures in the filter that have no dot (``in_filter`` true, ``located``
+    false, no coordinates)."""
     merged = merged or set()
+    unlocated = unlocated or set()
     neighbours: List[Dict[str, Any]] = []
     placed: List[_PLACED] = []
     for image_id, score in ranked:
@@ -127,7 +131,8 @@ def build_answer(
                 "y": xyz[1] if xyz else None,
                 "z": xyz[2] if xyz else None,
                 "weak": bool(score < weak_threshold),
-                "in_filter": xyz is not None,
+                "in_filter": xyz is not None or image_id in unlocated,
+                "located": xyz is not None,
                 "merged": image_id in merged,
                 "filename": filenames.get(image_id, ""),
             }
@@ -334,18 +339,24 @@ class StyleMapQueryMixin:
         key: tuple,
         ranked: Sequence[Tuple[int, float]],
         coords: Dict[int, Tuple[float, float, float]],
-    ) -> Tuple[Dict[int, Tuple[float, float, float]], set]:
+    ) -> Tuple[Dict[int, Tuple[float, float, float]], set, set]:
         """``coords`` plus the neighbours that were merged into a
-        representative (placed at its dot, from the map's group table) and
-        their ids. A picture outside the filter is in no group."""
+        representative (placed at its dot, from the map's group table), their
+        ids, and the ids that are in the filter but have no dot at all (no
+        usable vector). A picture outside the filter is none of these."""
         with self._cache_lock:
             inputs = self._inputs.get(key)
         loose = [i for i, _score in ranked if i not in coords]
         if inputs is None or inputs.member_ids is None or not loose or not coords:
-            return coords, set()
+            return coords, set(), set()
         owner = owners(inputs.rep_ids, inputs.member_ids, inputs.member_offsets, loose)
         placed = {**coords, **{m: coords[rep] for m, rep in owner.items() if rep in coords}}
-        return placed, set(owner)
+        rest = [i for i in loose if i not in placed]
+        unlocated = set()
+        if rest and inputs.filter_ids is not None:
+            inside = np.isin(np.asarray(rest, dtype=np.int64), inputs.filter_ids)
+            unlocated = {int(i) for i, flag in zip(rest, inside.tolist()) if flag}
+        return placed, set(owner), unlocated
 
     def _rank_for(
         self,
@@ -393,7 +404,7 @@ class StyleMapQueryMixin:
                 "use_gpu": use_gpu,
             },
         )
-        coords, merged = self._place_members(
+        coords, merged, unlocated = self._place_members(
             key, ranked, self._displayed_coords(key, entry[0])
         )
         body = build_answer(
@@ -403,5 +414,6 @@ class StyleMapQueryMixin:
             weak_threshold=WEAK_THRESHOLDS[normalized],
             model_version=key[2],
             merged=merged,
+            unlocated=unlocated,
         )
         return json.dumps(body, separators=(",", ":")).encode("utf-8")

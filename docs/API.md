@@ -1083,7 +1083,10 @@ Set collection membership for one image. Body carries `image_id` and a `member` 
 Set collection membership for many images in one call. Body carries either `image_ids` (explicit list) or `selection_token` (a token from `POST /api/images/selection-token` covering a filtered scope), plus a `member` flag. Favorites membership is diverted to the path-anchored favorites store. Returns `{ "success": bool, "added": int, "removed": int, "requested": int }`.
 
 #### POST /api/collections/pinned
-Store pictures as a hidden "show only these" set. JSON body `{"image_ids": [..]}` (at least one id, no upper limit). Returns `{"collection_id": 12, "count": 80}`; `count` is how many of the ids exist in the active library (duplicates, unknown ids and other libraries' pictures are left out). The set is an ordinary collection row with a `~pin-` slug: it is not listed by `GET /api/collections`, and the Gallery opens it with the existing `collection_id` filter, so listing, counting, selection tokens, bulk actions, Auto-Separate and Manual Sort all see exactly those pictures with no second filter. Only the newest 8 sets per library are kept.
+Store pictures as a hidden "show only these" set. JSON body `{"image_ids": [..], "purpose": "view"}` (at least one id, no upper limit; `purpose` is `view`, the default, or `token`). Returns `{"collection_id": 12, "count": 80}`; `count` is how many of the ids exist in the active library (duplicates, unknown ids and other libraries' pictures are left out). The set is an ordinary collection row with a `~pin-` slug: it is not listed by `GET /api/collections`, and the Gallery opens it with the existing `collection_id` filter, so listing, counting, selection tokens, bulk actions, Auto-Separate and Manual Sort all see exactly those pictures with no second filter. Hidden sets are not collections: `PATCH`, `DELETE`, `GET .../images` and `POST .../items[/bulk]` on `/api/collections/{id}` answer 404 for them, and `GET /api/collections` does not list them. A `view` set (`~pin-`) is what the Gallery opens; only the newest 8 per library are kept. A `token` set (`~tok-`) stands behind a selection token handed to another tool that pages through it lazily (Censor), so views never prune it; it is dropped 30 days after it was made.
+
+#### DELETE /api/collections/pinned/{collection_id}
+`{"deleted": true}`; `false` when there is no such hidden set in the active library (an ordinary collection is never deleted here).
 
 #### GET /api/collections/pinned/{collection_id}
 `{"exists": true, "collection_id": 12, "count": 80}`; `exists: false` (count 0, status 200) when the set was pruned or deleted, belongs to another library (`X-SD-Library-Id`), or is an ordinary collection. The Style Map banner uses it to say a set is no longer available instead of silently showing the whole Gallery.
@@ -2144,9 +2147,9 @@ picture's (the first call loads the model: about 7-15 s, then about 0.1 s);
   "status": "ok",
   "query": {"x": 0.412, "y": -0.208, "z": 0.133},
   "neighbors": [
-    {"id": 17, "score": 0.87, "x": 0.43, "y": -0.2, "z": 0.12, "weak": false, "in_filter": true, "merged": false, "filename": "a.png"},
-    {"id": 23, "score": 0.41, "x": 0.43, "y": -0.2, "z": 0.12, "weak": false, "in_filter": true, "merged": true, "filename": "b.png"},
-    {"id": 41, "score": 0.12, "x": null, "y": null, "z": null, "weak": true, "in_filter": false, "merged": false, "filename": "c.png"}
+    {"id": 17, "score": 0.87, "x": 0.43, "y": -0.2, "z": 0.12, "weak": false, "in_filter": true, "located": true, "merged": false, "filename": "a.png"},
+    {"id": 23, "score": 0.41, "x": 0.43, "y": -0.2, "z": 0.12, "weak": false, "in_filter": true, "located": true, "merged": true, "filename": "b.png"},
+    {"id": 41, "score": 0.12, "x": null, "y": null, "z": null, "weak": true, "in_filter": false, "located": false, "merged": false, "filename": "c.png"}
   ],
   "weak_threshold": 0.32,
   "model_version": "kaloscope-2.0:sha256:..."
@@ -2155,7 +2158,7 @@ picture's (the first call loads the model: about 7-15 s, then about 0.1 s);
 
 `query` is the similarity-weighted centre of the three nearest neighbours that
 have a position on the map (`null` when none has). A neighbour outside the
-current Gallery filter is listed with `in_filter: false` and no coordinates. A
+current Gallery filter is listed with `in_filter: false` and no coordinates. A picture that is in the filter but has no dot (its style vector is unusable, so it is in `unlocatable` of `points`) has `in_filter: true`, `located: false` and no coordinates; `located` is true exactly when `x`/`y`/`z` are set. A
 neighbour that is a member of a merged near-duplicate dot has
 `merged: true` and sits on that dot (looked up in the map's group table,
 the same one `members` expands). `weak` marks a score below `weak_threshold`: 0.5 for

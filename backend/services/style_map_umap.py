@@ -283,6 +283,9 @@ class _MapInputs:
     # located id ordered by group in rep_ids order, and the group boundaries.
     member_ids: Optional[np.ndarray] = None
     member_offsets: Optional[np.ndarray] = None
+    # Every id of the filter (sorted): tells a picture that is in the filter but
+    # has no dot (no usable vector) from one that is outside the filter.
+    filter_ids: Optional[np.ndarray] = None
 
 
 @dataclass

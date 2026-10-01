@@ -64,6 +64,16 @@ class BulkMembershipRequest(BaseModel):
 
 class PinnedSetRequest(BaseModel):
     image_ids: List[int] = Field(..., min_length=1)
+    # "view": a set the Gallery opens (newest 8 kept); "token": the pictures
+    # behind a selection token given to another tool (kept 30 days).
+    purpose: str = Field(default="view", pattern="^(view|token)$")
+
+
+def _require_visible(collection_id: int) -> None:
+    """Hidden picture sets are not collections: every collection route answers
+    404 for them, exactly as for an id that does not exist."""
+    if db_pinned_sets.is_hidden(collection_id):
+        raise HTTPException(status_code=404, detail="Collection not found")
 
 
 # PLACEHOLDER_ENDPOINTS
@@ -89,7 +99,7 @@ def create_pinned_set(request: PinnedSetRequest):
     """Store pictures as a hidden "show only these" set and return its collection
     id: the Gallery opens it with the ordinary collection filter (``collection_id``).
     """
-    made = db_pinned_sets.create_pinned_set(request.image_ids)
+    made = db_pinned_sets.create_pinned_set(request.image_ids, purpose=request.purpose)
     return {"collection_id": made["id"], "count": made["count"]}
 
 
@@ -104,9 +114,16 @@ def get_pinned_set(collection_id: int):
     }
 
 
+@router.delete("/pinned/{collection_id}")
+def delete_pinned_set(collection_id: int):
+    """Remove a pinned set (the only way to delete one; ordinary collection routes do not see them)."""
+    return {"deleted": db_pinned_sets.delete_pinned_set(collection_id)}
+
+
 @router.patch("/{collection_id}")
 async def rename_collection(collection_id: int, request: RenameCollectionRequest):
     """Rename a collection."""
+    _require_visible(collection_id)
     try:
         ok = db.rename_collection(collection_id, request.name)
     except ValueError as exc:
@@ -119,6 +136,7 @@ async def rename_collection(collection_id: int, request: RenameCollectionRequest
 @router.delete("/{collection_id}")
 async def delete_collection(collection_id: int):
     """Delete a collection and its references (Favorites is protected)."""
+    _require_visible(collection_id)
     try:
         ok = db.delete_collection(collection_id)
     except ValueError as exc:
@@ -131,6 +149,7 @@ async def delete_collection(collection_id: int):
 @router.get("/{collection_id}/images")
 async def list_collection_images(collection_id: int):
     """Return the source image ids in a collection (newest-added first)."""
+    _require_visible(collection_id)
     if not db.collection_exists(collection_id):
         raise HTTPException(status_code=404, detail="Collection not found")
     return {"image_ids": db.get_collection_image_ids(collection_id)}
@@ -139,6 +158,7 @@ async def list_collection_images(collection_id: int):
 @router.post("/{collection_id}/items")
 async def set_membership(collection_id: int, request: MembershipRequest):
     """Add/remove an image to/from a collection (reference, no file copy)."""
+    _require_visible(collection_id)
     try:
         member = db.set_collection_membership(collection_id, request.image_id, request.member)
     except ValueError as exc:
@@ -153,6 +173,7 @@ async def set_membership_bulk(collection_id: int, request: BulkMembershipRequest
     Scope is an explicit id list or a gallery filtered-selection token
     ("Select all matching" can cover tens of thousands of images).
     """
+    _require_visible(collection_id)
     if not db.collection_exists(collection_id):
         raise HTTPException(status_code=404, detail="Collection not found")
 
