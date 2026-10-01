@@ -5496,7 +5496,7 @@ window.I18nLang_zhCN = {
     'stylemap.axis.z': 'Z 轴',
     'stylemap.axesLow': '低端',
     'stylemap.axesHigh': '高端',
-    'stylemap.axesWeak': '这个方向没有明显的画风差异',
+    'stylemap.axesWeak': '标签说不出这一轴的差别，请看两端的图',
     'stylemap.axesLoading': '正在读取轴的含义…',
     'stylemap.axesError': '无法载入轴的含义',
     'stylemap.axesRetry': '重试',

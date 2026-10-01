@@ -227,7 +227,7 @@ class AxisLabels {
         const content = words ? (arrowLast ? `${words} ${arrow}` : `${arrow} ${words}`) : '—';
         item.node.classList.toggle('is-weak', !words);
         const full = entry?.weak
-            ? t('stylemap.axesWeak', 'No clear style difference along this axis')
+            ? t('stylemap.axesWeak', 'The tags cannot name the difference along this axis; compare the pictures at both ends')
             : (entry?.[item.end]?.tags || []).map(axisTagName).join(' · ');
         const note = this.layout === 'umap'
             ? t('stylemap.axesUmapNote', 'UMAP: directions are not fixed, only distances mean something')

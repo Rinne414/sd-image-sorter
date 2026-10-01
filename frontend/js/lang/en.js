@@ -5499,7 +5499,7 @@ window.I18nLang_en = {
     'stylemap.axis.z': 'Z axis',
     'stylemap.axesLow': 'Low end',
     'stylemap.axesHigh': 'High end',
-    'stylemap.axesWeak': 'No clear style difference along this axis',
+    'stylemap.axesWeak': 'The tags cannot name the difference along this axis; compare the pictures at both ends',
     'stylemap.axesLoading': 'Reading the axes...',
     'stylemap.axesError': 'The axis meanings could not be loaded',
     'stylemap.axesRetry': 'Retry',

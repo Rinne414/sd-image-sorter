@@ -19,13 +19,13 @@ const WORDS = {
   en: {
     title: 'What the axes mean', open: 'Axis meanings', close: 'Hide axis meanings',
     umap: 'UMAP: directions are not fixed, only distances mean something',
-    weak: 'No clear style difference along this axis', hide: 'Hide axis labels', show: 'Show axis labels',
+    weak: 'The tags cannot name the difference along this axis; compare the pictures at both ends', hide: 'Hide axis labels', show: 'Show axis labels',
     xLow: 'monochrome · lineart', xHigh: 'flat color', sunlight: 'sunlight', note: 'Pictures at the two ends of each axis, and the style tags that set the ends apart', error: 'The axis meanings could not be loaded',
   },
   'zh-CN': {
     title: '轴的含义', open: '轴的含义', close: '收起轴的含义',
     umap: 'UMAP：位置方向不固定，只看远近',
-    weak: '这个方向没有明显的画风差异', hide: '隐藏轴标签', show: '显示轴标签',
+    weak: '标签说不出这一轴的差别，请看两端的图', hide: '隐藏轴标签', show: '显示轴标签',
     xLow: '单色 · 线稿', xHigh: '平涂', sunlight: 'sunlight', note: '每个轴两端的代表图，以及把两端分开的画风标签', error: '无法载入轴的含义',
   },
 } as const
