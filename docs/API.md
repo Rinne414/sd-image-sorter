@@ -1762,8 +1762,13 @@ Style vectors are the 2048-d feature the Kaloscope 2.0 classifier scores from
 (the `head.bn` output of the LSNet model), stored per image in
 `image_style_vectors` as an L2-normalised float16 blob together with the
 weights version (`model_version`) and the pixel digest (`content_fingerprint`)
-they were computed from. The only `space` today is `kaloscope`; CLIP vectors
-stay in `images.embedding` (see Similarity) and are not copied.
+they were computed from. Two spaces have an index job: `kaloscope` and `csd`
+(the 768-d style embedding of CSD-ViT-L, an optional 2.44 GB model prepared in
+the Model Center as `csd`; license CC-BY-4.0, pinned to one Hugging Face
+commit and checked by SHA-256; it needs torch and open_clip, the Aesthetic
+runtime group). CLIP vectors stay in `images.embedding` (see Similarity) and
+are not copied. A picture has at most one row per space, so the spaces never
+overwrite each other.
 
 The extraction job is a background task (see Background Tasks): one job at a
 time, scoped to the current library (`X-SD-Library-Id`). It processes only
@@ -1777,6 +1782,10 @@ that is not Kaloscope (ONNX / transformers) or fails to load ends the job with
 `model_version` is `kaloscope:<checkpoint>:head.bn` for the pinned official
 weights, or `kaloscope-local:<sha256[:16]>:head.bn` for a local `model_path`
 (a local copy whose digest matches the pinned file shares the official name).
+For `csd` it is `csd:vit-l-14:<sha256[:12]>` of the pinned file; `model_source`
+and `model_path` are ignored there. A `csd` job never writes artist predictions
+(`with_artist` is ignored) and ends with `step: "error"` and an explaining
+message when the CSD model is not prepared or does not fit the GPU.
 
 #### POST /api/style-map/vectors/start
 Start style-vector extraction for the pending images of the current library.
@@ -1784,7 +1793,7 @@ Start style-vector extraction for the pending images of the current library.
 **Parameters:**
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `space` | string | `kaloscope` | Vector space; only `kaloscope` is accepted |
+| `space` | string | `kaloscope` | Vector space: `kaloscope` or `csd` |
 | `image_ids` | int[] | null | Restrict the job to these images (1-5,000,000 positive IDs); omit for the whole library |
 | `selection_token` | string | null | Restrict the job to the current Gallery filter: a token from `POST /api/images/selection-token`, decoded and expanded on the server (the style map page sends this, so no id list travels). Exclusive with `image_ids` |
 | `model_source` | string | `huggingface` | `huggingface`, `modelscope` or `local` (same contract as `/api/artists/identify`) |
@@ -1856,7 +1865,7 @@ model.
 **Parameters:**
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `space` | string | `kaloscope` | Vector space; only `kaloscope` is accepted (400 otherwise) |
+| `space` | string | `kaloscope` | Vector space: `kaloscope` or `csd` (400 otherwise) |
 | `model_source` | string | `huggingface` | `huggingface`, `modelscope` or `local`: the user's Style Finder model setting |
 | `model_path` | string | null | Local checkpoint, `.pth`/`.pt`/`.onnx` (required and must exist when `model_source` is `local`, 400 otherwise; any other file name is 400 before the file is looked at; ignored unless `model_source` is `local`). A local file names its own vector version, so a local-model user's vectors are not counted as `other_version` |
 
@@ -1883,7 +1892,7 @@ One 3-D point per picture of the current Gallery filter, for the style map.
 **Parameters:**
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `space` | string | `kaloscope` | `kaloscope` (style vectors of the weights the user's Style Finder settings name: the official ones, or a local checkpoint) or `clip` (`images.embedding`, the Similarity index) |
+| `space` | string | `kaloscope` | `kaloscope` (style vectors of the weights the user's Style Finder settings name: the official ones, or a local checkpoint), `clip` (`images.embedding`, the Similarity index) or `csd` (the CSD style index; one pinned model, so no model settings apply) |
 | `selection_token` | string | null | A token from `POST /api/images/selection-token`: the whole Gallery filter contract, the same one `selection-ids`, `count` and the bulk actions read. Omit it for the whole current library (`X-SD-Library-Id`) |
 | `refresh` | bool | false | Recompute even when a cached layout exists (the result replaces the cache entry) |
 | `model_source` | string | `huggingface` | The user's Style Finder model setting (`huggingface`, `modelscope`, `local`); the page sends the same settings the Style Finder uses, in the `kaloscope` space only |
@@ -2111,7 +2120,7 @@ group size); a box selection must act on the whole group. JSON body:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `space` | string | `kaloscope` | `kaloscope` or `clip` |
+| `space` | string | `kaloscope` | `kaloscope`, `clip` or `csd` |
 | `map_id` | string | null | The handle of the map the page shows (32 hex characters, 400 otherwise) |
 | `selection_token` | string | null | Locates the map from the filter when no `map_id` is sent |
 | `rep_ids` | integer[] | required | Points (representatives) of the map; no size limit |
@@ -2148,7 +2157,9 @@ placed on the map `points` last returned: the layout is not recomputed.
 
 `kaloscope` compares Kaloscope style vectors of the library with the dropped
 picture's (the first call loads the model: about 7-15 s, then about 0.1 s);
-`clip` reuses the Similar page's upload search.
+`csd` does the same with CSD style vectors (the first call loads the 2.4 GB
+model, about 10 s; `use_gpu` applies); `clip` reuses the Similar page's upload
+search.
 
 **Response:**
 ```json
@@ -2171,17 +2182,20 @@ current Gallery filter is listed with `in_filter: false` and no coordinates. A p
 neighbour that is a member of a merged near-duplicate dot has
 `merged: true` and sits on that dot (looked up in the map's group table,
 the same one `members` expands). `weak` marks a score below `weak_threshold`: 0.5 for
-`clip` (the Similar page's threshold) and 0.32 for `kaloscope` (an empirical
+`clip` (the Similar page's threshold), 0.32 for `kaloscope` (an empirical
 value from a 529-picture library, where a random pair's 95th percentile and
-each picture's nearest-other 5th percentile both sit near 0.32).
+each picture's nearest-other 5th percentile both sit near 0.32) and 0.65 for
+`csd` (300 pictures of a real library: a random pair's median is 0.64, a
+picture's best other match has a 5th percentile of 0.69, and photos and
+wallpapers top out at 0.42).
 `status: "not_started"` (`query: null`, no neighbours, no model run) when the
 map is not cached in this process.
 
 **Errors:** 400 for an empty or unreadable picture, one without a usable style
 vector, an unknown `space`, a malformed `map_id` or `selection_token`, or a
 `model_path` refused as for `points`; 409 while another AI job holds the
-runtime; 413 for a file over 50 MB; 503 when the Kaloscope model is not
-prepared (the message says how to prepare it).
+runtime; 413 for a file over 50 MB; 503 when the Kaloscope or CSD model is
+not prepared (the message says how to prepare it).
 
 #### GET /api/style-map/near
 The nearest pictures of one LIBRARY picture on the map: the same answer as

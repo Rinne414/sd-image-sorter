@@ -118,8 +118,16 @@ def _pinned_file_specs() -> List[_HfSpec]:
     import aesthetic
     import anime_aesthetic
     import anime_censor_models
+    import csd_weights
 
     specs = [
+        _HfSpec(
+            "csd",
+            None,
+            csd_weights.CSD_FILE.repo,
+            csd_weights.CSD_FILE.revision,
+            (_pinned_file(csd_weights.CSD_FILE),),
+        ),
         _HfSpec(
             "aesthetic-anime",
             None,

@@ -471,7 +471,7 @@ class TestService:
             assert forced["cached"] is False
             assert (
                 test_client.get(
-                    "/api/style-map/regions", params={"space": "csd"}
+                    "/api/style-map/regions", params={"space": "dino"}
                 ).status_code
                 == 400
             )

@@ -511,7 +511,7 @@ class TestPoints:
 
     def test_rejects_unknown_space(self, test_db):
         with pytest.raises(ValidationError):
-            _service().points("csd")
+            _service().points("dino")
 
     def test_response_is_compact_json(self, test_db, tmp_path):
         ids = _make_images(test_db, tmp_path, 20)
@@ -798,7 +798,7 @@ class TestRoute:
         assert body["status"] == "ok" and len(body["points"]) == 3
 
     @pytest.mark.parametrize(
-        "params", [{"space": "csd"}, {"space": "kaloscope", "selection_token": "bad!"}]
+        "params", [{"space": "dino"}, {"space": "kaloscope", "selection_token": "bad!"}]
     )
     def test_route_rejects_bad_requests(self, test_client, params):
         response = test_client.get("/api/style-map/points", params=params)

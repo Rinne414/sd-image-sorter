@@ -754,7 +754,7 @@ class TestRoute:
             ).json()
             assert points["umap"]["status"] == "unavailable"
             bad = test_client.get(
-                "/api/style-map/layout-status", params={"space": "csd"}
+                "/api/style-map/layout-status", params={"space": "dino"}
             )
             assert bad.status_code == 400
         finally:

@@ -469,7 +469,7 @@ class TestService:
                 params={"space": "kaloscope", "by": "aesthetic_anime"},
             ).json()
             assert scale["kind"] == "scale" and scale["range"] is None
-            for bad in ({"by": "rating"}, {"space": "csd"}):
+            for bad in ({"by": "rating"}, {"space": "dino"}):
                 assert (
                     test_client.get(
                         "/api/style-map/colors", params={"space": "kaloscope", **bad}

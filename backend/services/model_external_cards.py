@@ -23,6 +23,7 @@ _CARD_MODELS: Dict[str, Tuple[str, Optional[str]]] = {
     "censor-legacy": ("censor-legacy", None),
     "censor-anime": ("censor-anime", "censor"),
     "aesthetic-waifu": ("aesthetic-waifu", None),
+    "csd": ("csd", None),
     "aesthetic-anime": ("aesthetic-anime", None),
 }
 
@@ -36,6 +37,7 @@ def _health_source(card_id: str, health: Dict[str, Any]) -> Optional[Dict[str, A
         "censor-legacy": (health.get("censor") or {}).get("legacy"),
         "censor-anime": health.get("censor_anime"),
         "aesthetic-waifu": health.get("aesthetic_waifu"),
+        "csd": health.get("csd"),
         "aesthetic-anime": health.get("aesthetic_anime"),
     }
     section = sections.get(card_id) or {}

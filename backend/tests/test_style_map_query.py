@@ -360,7 +360,7 @@ class TestRoute:
         )
         response = client.post(
             "/api/style-map/query",
-            params={"space": "csd"},
+            params={"space": "dino"},
             files={"file": ("a.png", _png(), "image/png")},
         )
         assert response.status_code == 400

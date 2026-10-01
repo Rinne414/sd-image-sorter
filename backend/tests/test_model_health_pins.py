@@ -636,6 +636,7 @@ def test_health_top_level_and_censor_key_sets(monkeypatch, tmp_path):
         "rembg",
         "censor_anime",
         "aesthetic_waifu",
+        "csd",
         "aesthetic_anime",
         "video_ffmpeg",
         "umap",

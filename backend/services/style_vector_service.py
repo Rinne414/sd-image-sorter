@@ -10,6 +10,9 @@ Spaces:
 - ``kaloscope``: the 2048-d head-BN feature of the Kaloscope 2.0 classifier
   (``ArtistIdentifier.extract_style_vector``). The model must already be
   prepared in the Model Center; nothing is downloaded here.
+- ``csd``: the 768-d style embedding of CSD-ViT-L (``csd_encoder.CsdEncoder``),
+  an optional model prepared in the Model Center. It has no artist classifier,
+  so the job never writes artist predictions for it.
 - CLIP vectors are the similarity index in ``images.embedding`` and are not
   duplicated into this table.
 
@@ -33,8 +36,10 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 
 import numpy as np
 
+import csd_weights
 import database as db
 from ai_runtime_guard import PRIORITY_BATCH
+from csd_encoder import get_csd_encoder, load_csd_encoder
 from artist_identifier import (
     ARTIST_NOT_PREPARED_ERROR,
     ARTIST_THRESHOLD_DEFAULT,
@@ -59,7 +64,7 @@ from services.style_vector_prepare import (  # noqa: F401 - re-exported names
 
 logger = logging.getLogger(__name__)
 
-STYLE_VECTOR_SPACES = ("kaloscope",)
+STYLE_VECTOR_SPACES = ("kaloscope", csd_weights.CSD_SPACE)
 # top_k the Style Finder page sends for a batch (frontend/js/artist/identify.js
 # _getIdentifyPayload): fixed there, so fixed here. The threshold is the page's
 # slider and travels with every start request instead.
@@ -114,6 +119,14 @@ def style_vector_model_version(model_path: Optional[str]) -> str:
     return _model_version_for(model_path)
 
 
+def space_model_version(space: str, model_path: Optional[str] = None) -> str:
+    """The vector version of ``space``: CSD has one pinned file (no local weights
+    setting); Kaloscope follows the user's model settings."""
+    if space == csd_weights.CSD_SPACE:
+        return csd_weights.CSD_MODEL_VERSION
+    return _model_version_for(model_path)
+
+
 def _model_version_for(model_path: Optional[str]) -> str:
     """Pure version lookup; an unreadable local file is a request error."""
     try:
@@ -127,8 +140,13 @@ def _model_version_for(model_path: Optional[str]) -> str:
 class StyleVectorService:
     """Owns the one style-vector extraction job and its progress state."""
 
-    def __init__(self, identifier_getter: Optional[Callable[..., Any]] = None) -> None:
+    def __init__(
+        self,
+        identifier_getter: Optional[Callable[..., Any]] = None,
+        csd_getter: Optional[Callable[..., Any]] = None,
+    ) -> None:
         self._identifier_getter = identifier_getter or get_artist_identifier
+        self._csd_getter = csd_getter or get_csd_encoder
         self._lock = threading.Lock()
         self._cancel_requested = False
         self._pause_requested = False
@@ -263,7 +281,7 @@ class StyleVectorService:
     def get_stats(self, space: str, model_path: Optional[str] = None) -> Dict[str, Any]:
         """Coverage of ``space`` over the current library (no model is built or loaded)."""
         normalized = self._require_space(space)
-        model_version = _model_version_for(model_path)
+        model_version = space_model_version(normalized, model_path)
         library_sql, library_params = current_library_sql("i.library_id")
         with db.get_db() as conn:
             counts = style_vector_counts(
@@ -299,7 +317,9 @@ class StyleVectorService:
         is the row an identify-batch at the same setting would write).
         """
         normalized = self._require_space(space)
-        model_version = _model_version_for(model_path)
+        model_version = space_model_version(normalized, model_path)
+        if normalized == csd_weights.CSD_SPACE:
+            with_artist = False  # CSD has no artist classifier
         if selection_token:
             if image_ids is not None:
                 raise ValidationError(
@@ -368,13 +388,17 @@ class StyleVectorService:
                     return
             time.sleep(_PAUSE_POLL_SECONDS)
 
-    def _load_identifier(self, *, use_gpu, model_source, model_path):
-        """Build, load and capability-check the artist model exactly once.
+    def _load_identifier(
+        self, *, use_gpu, model_source, model_path, space="kaloscope"
+    ):
+        """Build, load and capability-check the model of ``space`` exactly once.
 
         Runs before the first image: a runtime that fails to load, a model
         that is not Kaloscope, or a stub without a feature layer ends the
         job here with a clear message instead of failing every image.
         """
+        if space == csd_weights.CSD_SPACE:
+            return load_csd_encoder(self._csd_getter, use_gpu)
         # The singleton is built with the default floor exactly as
         # ArtistService._identifier builds it (the request threshold is
         # passed per call, never baked into the shared model).
@@ -415,7 +439,8 @@ class StyleVectorService:
         combined_batch = getattr(
             identifier, "extract_style_vectors_and_identifications", None
         )
-        if with_artist and callable(combined_batch) and len(batch) > 1:
+        vector_only = bool(getattr(identifier, "vector_only_batches", False))
+        if (with_artist or vector_only) and callable(combined_batch) and len(batch) > 1:
             try:
                 outputs = combined_batch(
                     [(item.image_path, item.payload) for item in batch],
@@ -457,7 +482,12 @@ class StyleVectorService:
         combined_batch = getattr(
             identifier, "extract_style_vectors_and_identifications", None
         )
-        if with_artist and callable(combined_batch) and item.payload is not None:
+        vector_only = bool(getattr(identifier, "vector_only_batches", False))
+        if (
+            (with_artist or vector_only)
+            and callable(combined_batch)
+            and item.payload is not None
+        ):
             outputs = combined_batch(
                 [(item.image_path, item.payload)],
                 top_k=ARTIST_INDEX_TOP_K,
@@ -707,9 +737,15 @@ class StyleVectorService:
                 # not build or load a model for nothing.
                 self._finish_cancelled(0, len(rows), 0, 0)
                 return
-            self._update(step="loading_runtime", message="Loading the artist model...")
+            model_name = "CSD" if space == csd_weights.CSD_SPACE else "the artist"
+            self._update(
+                step="loading_runtime", message=f"Loading {model_name} model..."
+            )
             identifier = self._load_identifier(
-                use_gpu=use_gpu, model_source=model_source, model_path=model_path
+                use_gpu=use_gpu,
+                model_source=model_source,
+                model_path=model_path,
+                space=space,
             )
             self._update(
                 step="extracting", message=f"Extracting {len(rows)} style vector(s)..."

@@ -16,6 +16,8 @@ import importlib.util
 from pathlib import Path
 from typing import Any, Dict, List
 
+from services.model_service_csd import csd_card
+
 
 def _svc():
     """Resolve facade-patched seams through services.model_service at call time.
@@ -618,6 +620,7 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "Manual: the LSNet runtime (lsnet_model/) goes in " + str(Path(_svc().get_artist_model_dir()) / "comfyui-lsnet-runtime"),
             ],
         },
+        csd_card(health.get("csd", {})),
         {
             "id": "lucida",
             "name": "Lucida",

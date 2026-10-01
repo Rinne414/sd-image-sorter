@@ -225,6 +225,6 @@ def vector_signature(
         row = cursor.execute(
             "SELECT COUNT(*), SUM(image_id), MAX(updated_at) FROM image_style_vectors "
             "WHERE space = ? AND model_version = ?",
-            ("kaloscope", str(model_version)),
+            (str(space), str(model_version)),
         ).fetchone()
     return tuple(int(v) if isinstance(v, (int, float)) else str(v or "") for v in row)

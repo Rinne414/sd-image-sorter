@@ -6,6 +6,8 @@ and answers in the coordinates of the map the page shows:
 - ``kaloscope`` space: the Kaloscope style vector of the picture (same model,
   singleton and runtime lane as the style index, interactive priority) is
   compared by cosine with every stored style vector of the library.
+- ``csd`` space: the CSD style vector of the picture (the style index's shared
+  encoder, interactive priority), compared the same way.
 - ``clip`` space: the Similar page's own upload search
   (``SimilarityIndex.search_by_upload``), so both pages rank the same way.
 
@@ -51,7 +53,13 @@ COORD_DECIMALS = 3
 # chance"; measured with the real model, a screenshot, a photo or a CG query
 # tops out at 0.34 while the second-best match of a library picture was
 # 0.43-0.71.
-WEAK_THRESHOLDS = {"clip": 0.5, "kaloscope": 0.32}
+# CSD (S5, real model, 300 random pictures of the owner's reference library):
+# random pairs have median 0.64 (the library is full of same-series batches;
+# an earlier stratified 500-picture sample had mean 0.46), the best other
+# picture of a library picture has 5th percentile 0.69, and 30 photos and
+# wallpapers (out-of-distribution queries) top out at 0.42, so 0.65 marks
+# "no closer than an average pair" and flags 3% of true neighbours.
+WEAK_THRESHOLDS = {"clip": 0.5, "kaloscope": 0.32, "csd": 0.65}
 _MATRIX_ENTRIES = 2
 _MATRIX_CHUNK = 4096
 _PLACED = Tuple[float, Tuple[float, float, float]]
@@ -235,6 +243,28 @@ def kaloscope_query_vector(
     return vector
 
 
+def csd_query_vector(
+    image: Image.Image, *, use_gpu: Optional[bool] = None, **_unused: Any
+) -> np.ndarray:
+    """The CSD style vector of one picture, through the style index's own model
+    load (shared encoder) at interactive priority. A model that is not
+    prepared is a precondition the user can fix in the Model Center (503); a
+    busy runtime raises AiRuntimeBusyError (409 for the page)."""
+    from ai_runtime_guard import PRIORITY_INTERACTIVE
+    from services.style_vector_service import StyleVectorService
+
+    try:
+        encoder = StyleVectorService()._load_identifier(
+            use_gpu=use_gpu, model_source="huggingface", model_path=None, space="csd"
+        )
+    except ServiceError as exc:
+        raise HTTPException(status_code=503, detail=exc.message) from exc
+    ((vector, _none),) = encoder.extract_style_vectors_and_identifications(
+        [("query", image)], priority=PRIORITY_INTERACTIVE
+    )
+    return np.asarray(vector, dtype=np.float32).reshape(-1)
+
+
 def clip_ranked(image_bytes: bytes, k: int) -> List[Tuple[int, float]]:
     """Whole-library ranking by the Similar page's upload search (no
     threshold: weakness is flagged, not filtered)."""
@@ -369,7 +399,10 @@ class StyleMapQueryMixin:
         if space == "clip":
             return clip_ranked(image_bytes, k)
         image = decode_upload_image(image_bytes)
-        vector = kaloscope_query_vector(image, **model_settings)
+        query_vector = (
+            csd_query_vector if space == "csd" else kaloscope_query_vector
+        )
+        vector = query_vector(image, **model_settings)
         ids, matrix = self._library_matrix(space, model_version)
         return rank_by_cosine(vector, ids, matrix, k)
 

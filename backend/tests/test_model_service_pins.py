@@ -815,6 +815,7 @@ def test_get_status_wraps_inventory_and_health(monkeypatch):
         "aesthetic-waifu",
         "aesthetic-anime",
         "artist",
+        "csd",
         "lucida",
         "rembg",
         "censor-legacy",

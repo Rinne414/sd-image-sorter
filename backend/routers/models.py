@@ -183,6 +183,7 @@ MODEL_DEPENDENCY_GROUPS: Dict[str, str] = {
     "aesthetic": "aesthetic",
     "aesthetic-waifu": "aesthetic",
     "aesthetic-anime": "aesthetic",
+    "csd": "aesthetic",
     "artist": "artist",
     "censor-legacy": "yolo",
     "censor-nudenet": "nudenet",
@@ -317,6 +318,17 @@ BULK_MODEL_BUNDLE: list[dict[str, object]] = [
         "feature_key": "artist_id",
         "recommended": True,
         "default_selected": True,
+        "restart_after_install": True,
+    },
+    {
+        "id": "csd",
+        # 2.44 GB on its own; Prepare also installs torch + open_clip (the
+        # Aesthetic runtime group) when they are missing.
+        "size_bytes": 2_438_228_893,
+        "label": "CSD style descriptors (optional style map space; needs torch)",
+        "feature_key": "artist_id",
+        "recommended": False,
+        "default_selected": False,
         "restart_after_install": True,
     },
     {

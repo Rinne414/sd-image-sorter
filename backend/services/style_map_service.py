@@ -66,7 +66,7 @@ from services.style_map_locate import StyleMapLocateMixin
 from services.style_map_members import StyleMapMembersMixin
 from services.style_map_query import StyleMapQueryMixin
 from services.style_map_regions import RegionsCache, regions_body
-from services.style_vector_service import style_vector_model_version
+from services.style_vector_service import space_model_version
 from services.style_map_umap import (
     _LayoutJob,
     _MapInputs,
@@ -83,7 +83,7 @@ from similarity_math import bytes_to_embedding
 
 logger = logging.getLogger(__name__)
 
-STYLE_MAP_SPACES = ("kaloscope", "clip")
+STYLE_MAP_SPACES = ("kaloscope", "clip", "csd")
 STYLE_MAP_METHOD = "pca"
 POINT_DECIMALS = 3
 POINTS_LAYOUT = ["id", "x", "y", "z", "members"]
@@ -154,7 +154,7 @@ class StyleMapService(
         (a local checkpoint names its own version), else the official ones."""
         if space == "clip":
             return f"clip:{CLIP_MODEL_NAME}"
-        return style_vector_model_version(model_path)
+        return space_model_version(space, model_path)
 
     @staticmethod
     def _vector_version(space: str, model_version: str) -> tuple:
@@ -648,8 +648,8 @@ class StyleMapService(
                 else:
                     cursor = conn.execute(
                         f"SELECT image_id, dim, dtype, vector FROM image_style_vectors "
-                        f"WHERE space = 'kaloscope' AND model_version = ? AND image_id IN ({placeholders})",
-                        [model_version, *chunk],
+                        f"WHERE space = ? AND model_version = ? AND image_id IN ({placeholders})",
+                        [space, model_version, *chunk],
                     )
                     blobs.extend(
                         (int(row[0]), (row[3], int(row[1]), str(row[2])))

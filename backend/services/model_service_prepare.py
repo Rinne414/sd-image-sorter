@@ -372,6 +372,28 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
             "paths": {**(base.get("paths") or {}), **paths},
         }
 
+    if normalized_model_id == "csd":
+        # CSD runs on torch + open_clip (the Aesthetic runtime group); the
+        # 2.44 GB pinned file is fetched once the runtime is in place.
+        dependency_result = _svc().ensure_group("aesthetic")
+        restart_result = _svc()._dependency_restart_result(
+            normalized_model_id, dependency_result
+        )
+        if restart_result:
+            return restart_result
+        import csd_weights
+
+        paths = csd_weights.prepare(_svc()._direct_download_file)
+        return _svc()._with_dependency_result(
+            {
+                "status": "ok",
+                "model_id": normalized_model_id,
+                "message": "CSD is ready. Build the CSD index on the Style Map to use it.",
+                "paths": paths,
+            },
+            dependency_result,
+        )
+
     if normalized_model_id == "censor-anime":
         import anime_censor_models
 
