@@ -330,6 +330,8 @@ def _tagging_worker_run(
         current: Optional[int] = None,
         total_override: Optional[int] = None,
         last_run_stats: Optional[Dict[str, Any]] = None,
+        key: str = "",
+        args: Optional[Dict[str, Any]] = None,
     ) -> None:
         progress_queue.put(
             _build_tag_progress_state(
@@ -339,6 +341,8 @@ def _tagging_worker_run(
                 tagged=total_tagged,
                 errors=total_errors,
                 message=message,
+                message_key=key,
+                message_args=args,
                 runtime_backend_target=runtime_backend_target,
                 runtime_backend_actual=runtime_backend_actual,
                 runtime_backend_reason=runtime_backend_reason,
@@ -347,7 +351,9 @@ def _tagging_worker_run(
             )
         )
 
-    def send_with_eta(base_message: str) -> None:
+    def send_with_eta(
+        base_message: str, key: str = "", args: Optional[Dict[str, Any]] = None
+    ) -> None:
         """Send a progress message with ETA calculation when in tagging phase."""
         if tagging_start_time > 0 and total_processed > 0 and total > 0:
             elapsed = time.time() - tagging_start_time
@@ -362,17 +368,21 @@ def _tagging_worker_run(
                 eta_str = (
                     f"{int(eta_seconds // 3600)}h {int((eta_seconds % 3600) // 60)}m"
                 )
-            send("running", f"{base_message} (ETA: {eta_str})")
+            send("running", f"{base_message} (ETA: {eta_str})", key=key, args=args)
         else:
-            send("running", base_message)
+            send("running", base_message, key=key, args=args)
 
     try:
         if cancel_event.is_set():
-            send("cancelled", "Tagging cancelled before processing images")
+            send(
+                "cancelled",
+                "Tagging cancelled before processing images",
+                key="cancelled_early",
+            )
             return
 
         if request.model_path:
-            send("running", "Loading custom model...")
+            send("running", "Loading custom model...", key="loading_custom")
         elif runtime_backend == "toriigate":
             # ToriiGate first-use can still snapshot_download Qwen3.5-VL (~9.6 GB
             # BF16). Surface the size BEFORE the download starts so users on
@@ -389,11 +399,18 @@ def _tagging_worker_run(
                     "running",
                     "First-time ToriiGate captioner download: ~9.6 GB BF16 from HuggingFace. "
                     "This runs once; keep the app open until it completes.",
+                    key="first_download",
+                    args={"model": "toriigate"},
                 )
             else:
                 send(
                     "running",
                     f"Loading ToriiGate on {'GPU' if effective_use_gpu else 'CPU'}...",
+                    key="loading_backend",
+                    args={
+                        "model": "ToriiGate",
+                        "device": "gpu" if effective_use_gpu else "cpu",
+                    },
                 )
         elif runtime_backend == "oppai-oracle":
             # OppaiOracle V1.1 ONNX is ~947 MB. Surface a clear size warning
@@ -415,11 +432,18 @@ def _tagging_worker_run(
                     "running",
                     "First-time OppaiOracle download: ~947 MB from HuggingFace. "
                     "This runs once; keep the app open until it completes.",
+                    key="first_download",
+                    args={"model": "oppai"},
                 )
             else:
                 send(
                     "running",
                     f"Loading OppaiOracle on {'GPU' if effective_use_gpu else 'CPU'}...",
+                    key="loading_backend",
+                    args={
+                        "model": "OppaiOracle",
+                        "device": "gpu" if effective_use_gpu else "cpu",
+                    },
                 )
         elif runtime_backend == "cl-tagger-v2":
             try:
@@ -436,16 +460,33 @@ def _tagging_worker_run(
                 send(
                     "running",
                     "First-time CL Tagger v2 download: the gated checkpoint will be fetched from official Hugging Face after authorization.",
+                    key="first_download",
+                    args={"model": "cl_tagger_v2"},
                 )
             else:
                 send(
                     "running",
                     f"Loading CL Tagger v2 on {'GPU' if effective_use_gpu else 'CPU'}...",
+                    key="loading_backend",
+                    args={
+                        "model": "CL Tagger v2",
+                        "device": "gpu" if effective_use_gpu else "cpu",
+                    },
                 )
         elif effective_use_gpu:
-            send("running", "Loading model on GPU...")
+            send(
+                "running",
+                "Loading model on GPU...",
+                key="loading_model",
+                args={"device": "gpu"},
+            )
         else:
-            send("running", "Loading model on CPU...")
+            send(
+                "running",
+                "Loading model on CPU...",
+                key="loading_model",
+                args={"device": "cpu"},
+            )
 
         if (
             os.environ.get("SD_IMAGE_SORTER_E2E_FAKE_TAGGER") == "1"
@@ -523,20 +564,25 @@ def _tagging_worker_run(
             runtime_backend_reason = "CPU mode was requested for this run."
 
         if startup_notice:
-            send("running", startup_notice)
+            send("running", startup_notice, key="runtime_notice")
 
         if effective_use_gpu and not getattr(tagger, "use_gpu", False):
             gpu_fallback_announced = True
             send(
                 "running",
                 f"GPU load failed. Continuing on CPU instead. Reason: {runtime_backend_reason}",
+                key="gpu_load_failed",
             )
 
         if cancel_event.is_set():
-            send("cancelled", "Tagging cancelled before processing images")
+            send(
+                "cancelled",
+                "Tagging cancelled before processing images",
+                key="cancelled_early",
+            )
             return
 
-        send("running", "Collecting image list...")
+        send("running", "Collecting image list...", key="collecting")
         if request.image_ids:
             # Avoid N+1: per-id `get_image_by_id` becomes one round-trip per
             # image and would block "Collecting image list..." for minutes
@@ -566,6 +612,7 @@ def _tagging_worker_run(
             f"Model loaded. Tagging {total} images...",
             current=0,
             total_override=total,
+            key="tagging_started",
         )
         tagging_start_time = time.time()
         tags_batch: List[Dict[str, Any]] = []
@@ -606,6 +653,8 @@ def _tagging_worker_run(
                     logger.error("Image file missing during tagging: %s", image_path)
                     send_with_eta(
                         f"Skipped unreadable image: {image_name} (File not found)",
+                        key="skipped_unreadable",
+                        args={"item": image_name},
                     )
                     continue
 
@@ -622,6 +671,8 @@ def _tagging_worker_run(
                     )
                     send_with_eta(
                         f"Skipped unreadable image: {image_name} ({cause})",
+                        key="skipped_unreadable",
+                        args={"item": image_name},
                     )
                     continue
 
@@ -635,6 +686,8 @@ def _tagging_worker_run(
                     )
                     send_with_eta(
                         f"Skipped changed or unverifiable image: {image_name} ({source_detail})",
+                        key="skipped_changed",
+                        args={"item": image_name},
                     )
                     continue
                 source_evidence: Dict[str, Any] = source_detail
@@ -661,7 +714,11 @@ def _tagging_worker_run(
                             memory_pressure_warning = (
                                 "VRAM pressure forced a runtime session refresh."
                             )
-                            send("running", memory_pressure_warning)
+                            send(
+                                "running",
+                                memory_pressure_warning,
+                                key="memory_refresh",
+                            )
                         ram_avail = pressure.get("ram_available_gb")
                         ram_total = pressure.get("ram_total_gb")
                         ram_pct = pressure.get("ram_percent_used")
@@ -678,9 +735,20 @@ def _tagging_worker_run(
                                     f"({ram_avail:.1f} of {ram_total:.1f} GB RAM free, {ram_pct:.0f}% used). "
                                     f"Pausing briefly and reducing chunk size."
                                 )
+                                memory_args = {
+                                    "free": round(ram_avail, 1),
+                                    "total": round(ram_total, 1),
+                                    "pct": round(ram_pct or 0),
+                                }
                             else:
                                 memory_pressure_warning = "Memory pressure is critical. Pausing briefly and reducing chunk size."
-                            send("running", memory_pressure_warning)
+                                memory_args = {}
+                            send(
+                                "running",
+                                memory_pressure_warning,
+                                key="memory_critical",
+                                args=memory_args,
+                            )
                             time.sleep(2)
                             gc.collect()
                             batch_size = max(1, batch_size // 2)
@@ -694,14 +762,25 @@ def _tagging_worker_run(
                                 batch_size,
                                 reduced,
                             )
+                            memory_args = {"chunk": reduced}
                             if ram_avail is not None and ram_total is not None:
                                 memory_pressure_warning = (
                                     f"High RAM usage ({ram_pct:.0f}% used, {ram_avail:.1f} of {ram_total:.1f} GB free). "
                                     f"Reducing chunk size to {reduced}."
                                 )
+                                memory_args.update(
+                                    free=round(ram_avail, 1),
+                                    total=round(ram_total, 1),
+                                    pct=round(ram_pct),
+                                )
                             else:
                                 memory_pressure_warning = f"High RAM usage detected. Reducing chunk size to {reduced}."
-                            send("running", memory_pressure_warning)
+                            send(
+                                "running",
+                                memory_pressure_warning,
+                                key="memory_high",
+                                args=memory_args,
+                            )
                             batch_size = reduced
                     except Exception:
                         pass  # hardware_monitor not available
@@ -713,11 +792,20 @@ def _tagging_worker_run(
                         send(
                             "running",
                             f"Tagging {total_processed + 1}-{total_processed + len(existing_images)}/{total}: {first_name} ... {last_name}",
+                            key="tagging_batch",
+                            args={
+                                "start": total_processed + 1,
+                                "end": total_processed + len(existing_images),
+                                "first": first_name,
+                                "last": last_name,
+                            },
                         )
                     else:
                         send(
                             "running",
                             f"Tagging {total_processed + 1}/{total}: {first_name}",
+                            key="tagging_one",
+                            args={"start": total_processed + 1, "first": first_name},
                         )
                     providers_before_inference = (
                         _runtime_provider_chain(tagger)
@@ -791,7 +879,9 @@ def _tagging_worker_run(
                     )
                     if runtime_adjustment_message:
                         send(
-                            "running", f"Adaptive runtime: {runtime_adjustment_message}"
+                            "running",
+                            f"Adaptive runtime: {runtime_adjustment_message}",
+                            key="runtime_adjusted",
                         )
 
                     if runtime_info.get("used_cpu_fallback"):
@@ -813,6 +903,7 @@ def _tagging_worker_run(
                         send(
                             "running",
                             f"GPU inference failed. Continuing on CPU... Reason: {runtime_backend_reason}",
+                            key="gpu_inference_failed",
                         )
 
                     source_change_errors: Dict[int, Optional[str]] = {}
@@ -913,6 +1004,8 @@ def _tagging_worker_run(
                         )
                         send_with_eta(
                             f"{total_processed}/{total} ({total_tagged} tagged{f', {total_errors} failed' if total_errors else ''}) - {current_filename}",
+                            key="image_done",
+                            args={"item": current_filename},
                         )
 
                         if len(tags_batch) >= commit_interval:
@@ -937,6 +1030,7 @@ def _tagging_worker_run(
                     send(
                         "running",
                         f"Processed {total_processed}/{total} ({total_tagged} tagged, {total_errors} failed)",
+                        key="batch_error",
                     )
 
             if tags_batch:
@@ -954,6 +1048,7 @@ def _tagging_worker_run(
             send(
                 "cancelled",
                 f"Tagging cancelled. Processed {total_processed}/{total} images.",
+                key="cancelled",
                 last_run_stats=_build_last_run_stats(
                     tagging_start_time,
                     total_processed,
@@ -972,6 +1067,7 @@ def _tagging_worker_run(
             "done",
             f"Completed! Processed {total_processed} images: {total_tagged} tagged"
             + (f", {total_errors} failed." if total_errors else "."),
+            key="done",
             last_run_stats=_build_last_run_stats(
                 tagging_start_time,
                 total_processed,
@@ -982,4 +1078,9 @@ def _tagging_worker_run(
             ),
         )
     except Exception as error:
-        send("error", f"Error: {error}")
+        send(
+            "error",
+            f"Error: {error}",
+            key="error",
+            args={"detail": str(error)},
+        )

@@ -124,6 +124,7 @@ class JobsMixin:
                         "The run did not start. Check available system resources and "
                         "the backend log, then start tagging again."
                     ),
+                    message_key="setup_failed",
                     run_id=run_id,
                 ),
                 run_id=run_id,
@@ -160,7 +161,10 @@ class JobsMixin:
                     should_abort = True
                 else:
                     self._progress = _build_tag_progress_state(
-                        "running", message="Preparing tagger...", run_id=run_id
+                        "running",
+                        message="Preparing tagger...",
+                        message_key="preparing",
+                        run_id=run_id,
                     )
                     self._worker_process = worker_process
                     self._worker_cancel_event = cancel_event
@@ -212,6 +216,8 @@ class JobsMixin:
                                     "ToriiGate is still loading. "
                                     f"Elapsed {elapsed_seconds}s. This stage can use a lot of RAM/VRAM before the first image starts."
                                 ),
+                                message_key="torii_loading",
+                                message_args={"seconds": elapsed_seconds},
                                 runtime_backend_target=current_state.get(
                                     "runtime_backend_target", ""
                                 ),
@@ -259,6 +265,7 @@ class JobsMixin:
                             tagged=current_state.get("tagged", 0),
                             errors=current_state.get("errors", 0),
                             message="Tagging worker stopped during cancellation.",
+                            message_key="cancelled_worker_stopped",
                             run_id=run_id,
                         ),
                         run_id=run_id,
@@ -272,6 +279,7 @@ class JobsMixin:
                             tagged=current_state.get("tagged", 0),
                             errors=current_state.get("errors", 0),
                             message="Tagger worker crashed unexpectedly. The app stayed alive, but this tagging run was stopped.",
+                            message_key="worker_crashed",
                             run_id=run_id,
                         ),
                         run_id=run_id,
@@ -286,6 +294,7 @@ class JobsMixin:
                     tagged=current_state.get("tagged", 0),
                     errors=current_state.get("errors", 0),
                     message=f"Error monitoring tagging worker: {error}",
+                    message_key="monitor_error",
                     run_id=run_id,
                 ),
                 run_id=run_id,
@@ -323,7 +332,10 @@ class JobsMixin:
             run_id = self._active_run_id
             self._pending_run_id = run_id
             self._progress = _build_tag_progress_state(
-                "running", message="Preparing tagger...", run_id=run_id
+                "running",
+                message="Preparing tagger...",
+                message_key="preparing",
+                run_id=run_id,
             )
         try:
             background_tasks.add_task(
@@ -343,6 +355,8 @@ class JobsMixin:
                             "Failed to schedule tagging background task: "
                             f"{error_detail}"
                         ),
+                        message_key="schedule_failed",
+                        message_args={"detail": error_detail},
                         run_id=run_id,
                     )
             logger.error(
@@ -355,4 +369,8 @@ class JobsMixin:
                 exc_info=(type(error), error, error.__traceback__),
             )
             raise
-        return {"status": "started", "message": "Tagging started in background"}
+        return {
+            "status": "started",
+            "message": "Tagging started in background",
+            "message_key": "started",
+        }

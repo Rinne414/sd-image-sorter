@@ -828,6 +828,8 @@ The response now includes truthful runtime fields so the UI can distinguish targ
 - `runtime_backend_reason`
 - `memory_pressure_warning`
 
+`message` is an English display string kept for API compatibility; clients localise from `message_key` (`preparing`, `loading_custom`, `first_download`, `loading_backend`, `loading_model`, `runtime_notice`, `gpu_load_failed`, `collecting`, `tagging_started`, `skipped_unreadable`, `skipped_changed`, `memory_refresh`, `memory_critical`, `memory_high`, `tagging_batch`, `tagging_one`, `runtime_adjusted`, `gpu_inference_failed`, `image_done`, `batch_error`, `cancelling`, `cancelled_early`, `cancelled`, `cancelled_worker_stopped`, `done`, `worker_crashed`, `monitor_error`, `setup_failed`, `schedule_failed`, `torii_loading`, `error`), the counters, and `message_args` (a small object such as `{"item": "a.png"}` or `{"device": "gpu"}`; `error` carries the raw exception text as `detail`). `POST /api/tag` also returns `message_key: "started"`.
+
 **v3.4.2:** the progress snapshot additionally carries `pipeline_queue`: `{"total_queued": N, "queued": [{"queue_id", "kind", "position", "enqueued_at"}], "last_start_error"}` so pollers can render "Queued #N" before the job starts. The same field appears on the Smart Tag and VLM batch progress endpoints.
 
 #### GET /api/tags/pipeline-queue

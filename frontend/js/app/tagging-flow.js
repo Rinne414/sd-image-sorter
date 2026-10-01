@@ -477,6 +477,71 @@ async function startTagging() {
     }
 }
 
+// The backend still sends an English `message` for API compatibility; the UI
+// builds its own sentence from message_key + message_args + the counters so it
+// follows the language. An unknown key falls back to a generic localized line.
+function tagStatusText(progress) {
+    const key = progress?.message_key;
+    if (!key) return '';
+    const args = progress.message_args || {};
+    const fill = (i18nKey, fallback, values = {}) => Object.entries(values).reduce(
+        (text, [name, value]) => text.replace(`{${name}}`, () => String(value)),
+        appT(i18nKey, fallback),
+    );
+    const current = Number(progress.processed ?? progress.current ?? 0);
+    const total = Number(progress.total || 0);
+    const device = args.device === 'gpu' ? 'GPU' : 'CPU';
+    switch (key) {
+        case 'preparing': return appT('tagger.progressPreparing', 'Preparing tagger...');
+        case 'loading_custom': return appT('tagger.msg.loadingCustom', 'Loading custom model...');
+        case 'first_download': return appT(`tagger.msg.firstDownload.${args.model}`, 'First-time model download. This runs once; keep the program open until it completes.');
+        case 'loading_backend': return fill('tagger.msg.loadingBackend', 'Loading {model} on {device}...', { model: args.model || '', device });
+        case 'loading_model': return fill('tagger.msg.loadingModel', 'Loading model on {device}...', { device });
+        case 'runtime_notice': return appT('tagger.msg.runtimeNotice', 'Applying the runtime settings for this run...');
+        case 'gpu_load_failed': return appT('tagger.msg.gpuLoadFailed', 'GPU load failed. Continuing on CPU instead.');
+        case 'collecting': return appT('tagger.msg.collecting', 'Collecting the image list...');
+        case 'tagging_started': return fill('tagger.msg.taggingStarted', 'Model loaded. Images to tag: {total}', { total });
+        case 'skipped_unreadable': return fill('tagger.msg.skippedUnreadable', 'Skipped an unreadable image: {item}', { item: args.item || '' });
+        case 'skipped_changed': return fill('tagger.msg.skippedChanged', 'Skipped a changed or unverifiable image: {item}', { item: args.item || '' });
+        case 'memory_refresh': return appT('tagger.msg.memoryRefresh', 'VRAM pressure: the runtime session was refreshed.');
+        case 'memory_critical': return args.free !== undefined
+            ? fill('tagger.msg.memoryCriticalDetail', 'Memory pressure is critical ({free} of {total} GB RAM free, {pct}% used). Pausing briefly and reducing the chunk size.', args)
+            : appT('tagger.msg.memoryCritical', 'Memory pressure is critical. Pausing briefly and reducing the chunk size.');
+        case 'memory_high': return args.free !== undefined
+            ? fill('tagger.msg.memoryHighDetail', 'High RAM usage ({pct}% used, {free} of {total} GB free). Chunk size reduced to {chunk}.', args)
+            : fill('tagger.msg.memoryHigh', 'High RAM usage detected. Chunk size reduced to {chunk}.', args);
+        case 'tagging_batch': return fill('tagger.msg.taggingBatch', 'Tagging images {start}-{end}/{total}: {first} ... {last}', { ...args, total });
+        case 'tagging_one': return fill('tagger.msg.taggingOne', 'Tagging image {start}/{total}: {first}', { ...args, total });
+        case 'runtime_adjusted': return appT('tagger.msg.runtimeAdjusted', 'The runtime was adjusted automatically to keep the run stable.');
+        case 'gpu_inference_failed': return appT('tagger.msg.gpuInferenceFailed', 'GPU inference failed. Continuing on CPU...');
+        case 'image_done': return args.item || '';
+        case 'batch_error': return fill('tagger.msg.batchError', 'A batch failed. Images processed: {current}/{total}', { current, total });
+        case 'cancelling': return fill('tagger.progressCancelling', 'Cancelling... {current}/{total}', { current, total: Math.max(total, current) });
+        case 'cancelled_early': return appT('tagger.msg.cancelledEarly', 'Tagging cancelled before any image was processed');
+        case 'cancelled': return fill('tagger.msg.cancelledCount', 'Tagging cancelled. Images processed: {current}/{total}', { current, total });
+        case 'cancelled_worker_stopped': return appT('tagger.progressCancelled', 'Tagging cancelled');
+        case 'done': {
+            const errors = Number(progress.errors || 0);
+            const base = fill('tagger.msg.done', 'Tagging complete. Images processed: {current}, tagged: {tagged}', {
+                current, tagged: Number(progress.tagged || 0),
+            });
+            return errors > 0 ? base + fill('tagger.progressErrorSuffix', ', {errors} failed', { errors }) : base;
+        }
+        case 'worker_crashed': return appT('tagger.msg.workerCrashed', 'The tagger process stopped unexpectedly. The program is still running, but this tagging run was stopped.');
+        case 'monitor_error': return appT('tagger.msg.monitorError', 'Lost track of the tagging process. This tagging run was stopped.');
+        case 'setup_failed': return appT('tagger.msg.setupFailed', 'Tagging could not start. Check available system resources and the log, then try again.');
+        case 'schedule_failed': return appT('tagger.msg.scheduleFailed', 'Could not schedule the tagging task.');
+        case 'torii_loading': return fill('tagger.msg.toriiLoading', 'ToriiGate is still loading. Elapsed: {seconds} s. This stage can use a lot of RAM/VRAM before the first image starts.', { seconds: Number(args.seconds || 0) });
+        case 'error': {
+            const failed = appT('tagger.msg.failed', 'Tagging failed');
+            const detail = typeof window.formatUserError === 'function' && args.detail
+                ? window.formatUserError(args.detail) : '';
+            return detail ? `${failed}: ${detail}` : failed;
+        }
+        default: return appT('tagger.msg.working', 'Tagging in progress...');
+    }
+}
+
 async function pollTagProgress(retryCount = 0) {
     if (!_tagPollingActive) return;
 
@@ -569,12 +634,12 @@ async function pollTagProgress(retryCount = 0) {
             tracker: _tagProgressTracker,
             primaryLabel: appT('tagger.progressLabel', 'Tagging'),
             extraParts,
-            detail: progress.current_item || progress.message || appT('tagger.progressPreparing', 'Preparing tagger...'),
+            detail: progress.current_item || tagStatusText(progress) || appT('tagger.progressPreparing', 'Preparing tagger...'),
             defaultMessage: appT('tagger.progressPreparing', 'Preparing tagger...'),
         });
 
         if (progress.status === 'cancelling') {
-            progressText = progress.message || appT('tagger.progressCancelling', 'Cancelling... {current}/{total}')
+            progressText = tagStatusText(progress) || appT('tagger.progressCancelling', 'Cancelling... {current}/{total}')
                 .replace('{current}', current)
                 .replace('{total}', Math.max(total, current));
         }
@@ -595,7 +660,7 @@ async function pollTagProgress(retryCount = 0) {
             // FLOW-06: persistent next-step CTA in place of the success toast.
             const _taggedCount = Number(progress.completed ?? progress.processed ?? 0);
             if (errors > 0) {
-                showToast(progress.message, 'warning');
+                showToast(tagStatusText(progress) || appT('tagger.msg.doneWarning', 'Tagging finished with some failures.'), 'warning');
             } else {
                 showPipelineNextStep({
                     icon: 'i-tag',
@@ -628,7 +693,7 @@ async function pollTagProgress(retryCount = 0) {
                 && typeof window.TagCompleteNotify.fireOnDone === 'function') {
                 try {
                     window.TagCompleteNotify.fireOnDone(
-                        progress.message || 'Tagging complete',
+                        tagStatusText(progress) || appT('tagger.msg.donePlain', 'Tagging complete'),
                         errors > 0 ? 'warning' : 'success',
                     );
                 } catch (_e) { /* */ }
@@ -648,7 +713,7 @@ async function pollTagProgress(retryCount = 0) {
                 /* event dispatch is best-effort */
             }
         } else if (progress.status === 'cancelled') {
-            finishCancelledTagging(progress.message || appT('tagger.progressCancelled', 'Tagging cancelled'));
+            finishCancelledTagging(tagStatusText(progress) || appT('tagger.progressCancelled', 'Tagging cancelled'));
         } else if (progress.status === 'running') {
             scheduleTagProgressPoll(500);
         } else if (progress.status === 'cancelling') {
@@ -658,7 +723,7 @@ async function pollTagProgress(retryCount = 0) {
             _tagPollingActive = false;
             clearTagProgressTimer();
             _hideBgTagProgress();
-            showToast(progress.message, 'error');
+            showToast(tagStatusText(progress) || appT('tagger.msg.failed', 'Tagging failed'), 'error');
             $('#tag-progress-container').style.display = 'none';
             unlockLiveProgressText('#tag-progress-text', 'modal.tagLoadingModel', 'Loading model...');
             setTaggingUiState(false);
@@ -774,7 +839,7 @@ async function resumeTaggingProgress() {
         $('#tag-progress-container').style.display = 'block';
         lockLiveProgressText('#tag-progress-text');
         _tagLastProgressPercent = 0;
-        _tagLastProgressText = progress.message || appT('tagger.progressResuming', 'Resuming tagging progress...');
+        _tagLastProgressText = tagStatusText(progress) || appT('tagger.progressResuming', 'Resuming tagging progress...');
         $('#tag-progress-text').textContent = _tagLastProgressText;
         setTaggingUiState(true);
         // Show background progress bar (tag modal may not be open)

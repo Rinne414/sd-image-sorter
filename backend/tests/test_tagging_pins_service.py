@@ -461,6 +461,7 @@ def test_start_tagging_bumps_run_id_and_queues_exactly_one_task() -> None:
     assert result == {
         "status": "started",
         "message": "Tagging started in background",
+        "message_key": "started",
     }
     progress = service.get_progress()
     assert progress["status"] == "running"

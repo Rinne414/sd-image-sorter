@@ -21,6 +21,8 @@ def _build_tag_progress_state(
     tagged: int = 0,
     errors: int = 0,
     message: str = "",
+    message_key: str = "",
+    message_args: Optional[Dict[str, Any]] = None,
     runtime_backend_target: str = "",
     runtime_backend_actual: str = "",
     runtime_backend_reason: str = "",
@@ -37,6 +39,10 @@ def _build_tag_progress_state(
         "tagged": tagged,
         "errors": errors,
         "message": message,
+        # Stable key + parameters the UI localises from; ``message`` stays the
+        # English display string for API compatibility.
+        "message_key": message_key,
+        "message_args": dict(message_args or {}),
         "runtime_backend_target": runtime_backend_target,
         "runtime_backend_actual": runtime_backend_actual,
         "runtime_backend_reason": runtime_backend_reason,
@@ -65,6 +71,8 @@ class ProgressMixin:
             tagged=int(state.get("tagged", 0) or 0),
             errors=int(state.get("errors", 0) or 0),
             message=str(state.get("message", "") or ""),
+            message_key=str(state.get("message_key", "") or ""),
+            message_args=state.get("message_args") or {},
             runtime_backend_target=str(state.get("runtime_backend_target", "") or ""),
             runtime_backend_actual=str(state.get("runtime_backend_actual", "") or ""),
             runtime_backend_reason=str(state.get("runtime_backend_reason", "") or ""),
@@ -142,6 +150,8 @@ class ProgressMixin:
             errors = self._progress.get("errors", 0)
             run_id = int(self._progress.get("run_id") or self._active_run_id or 0)
             self._progress["message"] = f"Cancelling... ({current}/{total})"
+            self._progress["message_key"] = "cancelling"
+            self._progress["message_args"] = {}
 
             worker = self._worker_process
 
@@ -160,6 +170,7 @@ class ProgressMixin:
                     tagged=tagged,
                     errors=errors,
                     message=f"Tagging cancelled at {current}/{total}.",
+                    message_key="cancelled",
                     run_id=run_id,
                 )
                 self._pending_run_id = None
@@ -196,6 +207,7 @@ class ProgressMixin:
                         tagged=tagged,
                         errors=errors,
                         message=f"Tagging cancelled at {current}/{total}.",
+                        message_key="cancelled",
                         run_id=run_id,
                     )
                     self._worker_process = None
@@ -230,6 +242,12 @@ class ProgressMixin:
                 "tagged": payload.get("tagged", self._progress.get("tagged", 0)),
                 "errors": payload.get("errors", self._progress.get("errors", 0)),
                 "message": payload.get("message", self._progress.get("message", "")),
+                "message_key": payload.get(
+                    "message_key", self._progress.get("message_key", "")
+                ),
+                "message_args": payload.get(
+                    "message_args", self._progress.get("message_args", {})
+                ),
                 "runtime_backend_target": payload.get(
                     "runtime_backend_target",
                     self._progress.get("runtime_backend_target", ""),

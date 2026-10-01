@@ -425,6 +425,8 @@ PROGRESS_STATE_KEYS = {
     "tagged",
     "errors",
     "message",
+    "message_key",
+    "message_args",
     "runtime_backend_target",
     "runtime_backend_actual",
     "runtime_backend_reason",

@@ -186,3 +186,104 @@ test('mid-import and failure states show Chinese, and survive a translation re-a
   override = null
   await request.delete('/api/clear-gallery')
 })
+
+function tagProgress(overrides: Record<string, unknown>) {
+  return {
+    status: 'running',
+    current: 0,
+    processed: 0,
+    total: 0,
+    tagged: 0,
+    errors: 0,
+    message: '',
+    message_key: '',
+    message_args: {},
+    runtime_backend_target: '',
+    runtime_backend_actual: '',
+    runtime_backend_reason: '',
+    memory_pressure_warning: '',
+    run_id: 7,
+    pipeline_queue: { total_queued: 0, queued: [], last_start_error: null },
+    ...overrides,
+  }
+}
+
+test('tagging progress and finish text read in Chinese and survive a translation re-apply', async ({ page }, testInfo) => {
+  test.setTimeout(120000)
+  await page.setViewportSize({ width: 1366, height: 768 })
+
+  let payload: Record<string, unknown> = tagProgress({
+    current: 3,
+    processed: 3,
+    total: 9,
+    tagged: 2,
+    errors: 1,
+    message: 'Tagging 4-6/9: a.png ... c.png',
+    message_key: 'tagging_batch',
+    message_args: { start: 4, end: 6, first: 'a.png', last: 'c.png' },
+  })
+  await page.route('**/api/tag/progress', (route) => route.fulfill({ json: payload }))
+
+  await openMainPage(page)
+  const progressText = page.locator('#tag-progress-text')
+  await expect(progressText).toContainText('正在标注第 4-6 张（共 9）：a.png ... c.png', { timeout: 15000 })
+  expect(await progressText.textContent()).not.toMatch(/Tagging \d/)
+  await page.waitForTimeout(450)
+  await page.screenshot({ path: shotPath(testInfo, 'tag-running-zh-1366.png') })
+
+  await reapplyTranslations(page)
+  await expect(progressText).toContainText('正在标注第 4-6 张（共 9）：a.png ... c.png')
+
+  payload = tagProgress({
+    status: 'running',
+    current: 0,
+    total: 0,
+    message: 'Loading model on GPU...',
+    message_key: 'loading_model',
+    message_args: { device: 'gpu' },
+  })
+  await expect(progressText).toContainText('正在用 GPU 载入模型...', { timeout: 15000 })
+
+  payload = tagProgress({
+    status: 'done',
+    current: 9,
+    processed: 9,
+    total: 9,
+    tagged: 8,
+    errors: 1,
+    message: 'Completed! Processed 9 images: 8 tagged, 1 failed.',
+    message_key: 'done',
+  })
+  const doneToast = page.locator('.toast', { hasText: '标注完成' }).first()
+  await expect(doneToast).toBeVisible({ timeout: 15000 })
+  expect(await doneToast.textContent()).toContain('已处理 9 张，成功 8 张，1 失败')
+  expect(await doneToast.textContent()).not.toContain('Completed')
+  await page.waitForTimeout(450)
+  await page.screenshot({ path: shotPath(testInfo, 'tag-done-zh-1366.png') })
+})
+
+test('a failed tagging run reads in Chinese', async ({ page }, testInfo) => {
+  test.setTimeout(120000)
+  await page.setViewportSize({ width: 1366, height: 768 })
+
+  let payload: Record<string, unknown> = tagProgress({
+    current: 1,
+    processed: 1,
+    total: 4,
+    message_key: 'image_done',
+    message_args: { item: 'x.png' },
+  })
+  await page.route('**/api/tag/progress', (route) => route.fulfill({ json: payload }))
+  await openMainPage(page)
+  await expect(page.locator('#tag-progress-text')).toContainText('x.png', { timeout: 15000 })
+
+  payload = tagProgress({
+    status: 'error',
+    message: 'Tagger worker crashed unexpectedly. The app stayed alive, but this tagging run was stopped.',
+    message_key: 'worker_crashed',
+  })
+  const failToast = page.locator('.toast', { hasText: '标注进程意外停止' }).first()
+  await expect(failToast).toBeVisible({ timeout: 15000 })
+  expect(await failToast.textContent()).not.toContain('crashed')
+  await page.screenshot({ path: shotPath(testInfo, 'tag-failed-zh-1366.png') })
+})
