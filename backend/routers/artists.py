@@ -44,7 +44,7 @@ _batch_start_lock = threading.Lock()
 
 # What ArtistIdentifier._load_local_model can open. Judged by the name alone,
 # before any filesystem access, so the validators are no existence oracle for
-# arbitrary files (and load() opens model_path whatever model_source says).
+# arbitrary files.
 LOCAL_ARTIST_MODEL_SUFFIXES = frozenset({".pth", ".pt", ".onnx"})
 
 
@@ -65,18 +65,27 @@ class ArtistModelConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_local_model_path(self):
-        if self.model_path:
-            suffix = os.path.splitext(self.model_path)[1].lower()
-            if suffix not in LOCAL_ARTIST_MODEL_SUFFIXES:
-                raise ValueError("Local model file must be a .pth, .pt or .onnx checkpoint")
-        if self.model_source == "local":
-            if not self.model_path:
-                raise ValueError("Local model path is required when model_source is 'local'")
+        if self.model_source != "local":
+            # Only the local source carries a path: the official models never
+            # open (or probe) a file the page did not ask for.
+            self.model_path = None
+            return self
+        if not self.model_path:
+            raise ValueError("Local model path is required when model_source is 'local'")
+        suffix = os.path.splitext(self.model_path)[1].lower()
+        if suffix not in LOCAL_ARTIST_MODEL_SUFFIXES:
+            raise ValueError("Local model file must be a .pth, .pt or .onnx checkpoint")
+        import model_roots
 
-            normalized_path = Path(os.path.expanduser(self.model_path)).resolve()
-            if not normalized_path.is_file():
-                raise ValueError("Local model file not found")
-            self.model_path = str(normalized_path)
+        # A network path only inside a trusted model folder, decided before
+        # the file is touched (no SMB connection to an attacker's share).
+        rejection = model_roots.network_path_rejection(self.model_path)
+        if rejection:
+            raise ValueError(rejection)
+        normalized_path = Path(os.path.expanduser(self.model_path)).resolve()
+        if not normalized_path.is_file():
+            raise ValueError("Local model file not found")
+        self.model_path = str(normalized_path)
         return self
 
 

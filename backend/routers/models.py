@@ -11,7 +11,7 @@ import logging
 import threading
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from optional_dependencies import (
@@ -85,6 +85,79 @@ async def set_mirror(request: MirrorRequest):
     from config import save_download_mirror, get_download_mirror
     save_download_mirror(request.mirror)
     return {"mirror": get_download_mirror()}
+
+
+class TrustedFolderRequest(BaseModel):
+    path: str = Field(..., min_length=1, max_length=4096)
+    # A drive, the home folder or a system folder is refused with
+    # needs_confirm=true until the page sends confirm=true.
+    confirm: bool = False
+
+
+def _trusted_folders_payload() -> Dict[str, Any]:
+    import model_roots
+
+    return {
+        "folders": model_roots.describe_trusted_model_folders(),
+        "program_folders": [str(root) for root in model_roots.program_model_roots()],
+    }
+
+
+def _own_page_only(request: Request) -> None:
+    """Widening what the app trusts is for the app's own page only: another
+    local web app may read the list but not change it."""
+    from app_security import own_page_rejection
+
+    reason = own_page_rejection(request)
+    if reason is not None:
+        raise HTTPException(status_code=403, detail=reason)
+
+
+# Plain ``def``: these touch the settings file and local folders (a trusted
+# network folder is never probed), so they run in the threadpool.
+@router.get("/trusted-folders")
+def list_trusted_folders():
+    """Trusted model folders (Model Center): their model files load like the
+    program's own models/ folder, full-pickle formats included (SEC1b)."""
+    return _trusted_folders_payload()
+
+
+@router.post("/trusted-folders", dependencies=[Depends(_own_page_only)])
+def add_trusted_folder(request: TrustedFolderRequest):
+    """Add a folder: a local one must exist; a network (UNC) one is taken as
+    entered and never probed. A very broad folder answers 400 with
+    needs_confirm until confirm=true is sent."""
+    import model_roots
+
+    try:
+        model_roots.add_trusted_model_folder(request.path, confirm=request.confirm)
+    except model_roots.NeedsConfirmation as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": str(exc),
+                "type": "ConfirmationRequired",
+                "needs_confirm": True,
+                "reason": exc.reason,
+            },
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _trusted_folders_payload()
+
+
+@router.delete("/trusted-folders", dependencies=[Depends(_own_page_only)])
+def remove_trusted_folder(request: TrustedFolderRequest):
+    import model_roots
+
+    try:
+        model_roots.remove_trusted_model_folder(request.path)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail="This folder is not in the trusted list / 这个文件夹不在信任清单里",
+        ) from exc
+    return _trusted_folders_payload()
 
 
 @router.get("/download-progress")

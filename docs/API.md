@@ -1103,6 +1103,76 @@ Get the current download mirror preference.
 #### POST /api/models/mirror
 Set the download mirror preference (auto, hf-mirror, modelscope).
 
+#### GET /api/models/trusted-folders
+Trusted model folders (Model Center), the ComfyUI-style `extra_model_paths`
+of this app: model files in them load exactly like files in the program's own
+`models/` folders, full-pickle formats (a YOLO `.pt`, a generic torch `.pth`)
+included. Stored in app settings; only this API changes the list (the request
+guard keeps other sites and rebound hostnames away from it).
+
+**Response:**
+```json
+{
+  "folders": [
+    {"path": "I:\\ComfyUI\\models", "kind": "local", "exists": true},
+    {"path": "\\\\nas\\share\\models", "kind": "network", "exists": false}
+  ],
+  "program_folders": ["L:\\sd-image-sorter\\models", "L:\\sd-image-sorter\\data\\models"]
+}
+```
+
+`program_folders` are the roots that are always allowed (`PROJECT_ROOT/models`,
+`DATA_DIR/models`, then the configured `*_MODEL_DIR` settings as set, nothing
+is created). A file is "inside" a root by resolved path semantics
+(`is_relative_to`), never by string prefix. A network folder's `exists` is
+`null`: it is never probed, so an offline NAS costs nothing (local files are
+judged against local roots only; a network path is compared purely, by
+`\\server\share` rules, against the trusted network folders).
+
+#### POST /api/models/trusted-folders
+Add a folder: `{"path": "...", "confirm": false}`. A local folder must exist
+(400 otherwise). A network folder must be a well-formed `\\server\share\...`
+(any slash spelling; `\\?\`, `\\.\`, `\??\`, `server@port` forms and an empty
+share are 400) and is stored as written, never probed. A very broad local
+folder (a drive root, the home folder or its parent, `SystemRoot`,
+`Program Files`, `ProgramData`) answers
+`400 {"error", "type": "ConfirmationRequired", "needs_confirm": true, "reason": "drive_root"|"home"|"users_root"|"system"}`
+until the same request is sent with `"confirm": true` (Model Center shows the
+reason and asks). Duplicates (case-insensitive for UNC) are ignored. Answers
+the same payload as `GET`.
+
+Only this program's own page may change the list: a request with
+`Sec-Fetch-Site` other than `same-origin`, or with an `Origin` on another port
+than the socket's, is `403` ("信任清单只能在本程序的模型中心里修改"); another
+local web app may still read it, and a non-browser client without `Origin` may
+change it.
+
+#### DELETE /api/models/trusted-folders
+Remove a folder: `{"path": "..."}`; 404 when it is not in the list. Same
+own-page rule as `POST`. Answers the same payload as `GET`.
+
+Where the trusted folders apply (SEC1b / SEC1c):
+
+- `/api/artists/identify`, `identify-batch`, `/api/style-map/vectors/start`
+  with `model_source=local`: a `.pth`/`.pt` without `class_mapping.csv` beside
+  it needs the full unpickler; that fallback runs only for a file inside the
+  program's models folders or a trusted folder, elsewhere the safe load's
+  failure is reported with the fix (trust the folder, add
+  `class_mapping.csv`, or use `.onnx`).
+- `/api/censor/detect` and `/api/censor/media/start` `model_path`: the file
+  must lie inside those roots (400 otherwise); `/api/censor/models` probes a
+  `.pt` for its class names only inside them.
+- Any model-file path (artists, censor, custom tagger `.onnx` and its
+  `tags_path`): a network path, in any spelling pathlib or Win32 reads as UNC
+  (`\\s\x`, `//s/x`, `\/s/x`, `/\s\x`, `\??\UNC\...`, `..` collapsed), is
+  refused before the file is touched unless it lies inside a trusted network
+  folder. The checks run in this order: network rule, extension, allowed
+  roots (all without touching the file), then the file checks, so a file
+  outside the roots gets the same answer whether it exists or not. The YOLO
+  load point itself (`censor.CensorDetector._load_with_ultralytics`) refuses
+  a `.pt` outside the roots, whoever calls it. Library, export and move
+  folders are not affected.
+
 #### GET /api/models/download-progress
 Get active model download progress (bytes downloaded, total size).
 
@@ -1213,7 +1283,10 @@ video) in `folder` into `output_folder` (default `<folder>/censored`; outputs
 are `<name>_censored.gif` / `.mp4`, never replacing a file). Detector settings
 mirror `/api/censor/detect` (`model_type` nudenet / legacy / both,
 `model_path`, `confidence`, `target_classes`, `face_guard`, `shape`,
-`expand_percent`) plus `style` (mosaic / blur / black), `block_size` (0 =
+`expand_percent`; a named `model_path` follows the detect rule, i.e. it must
+lie inside the program's models folders or a trusted model folder and a
+network path outside one is 400 before the file is touched) plus `style`
+(mosaic / blur / black), `block_size` (0 =
 Auto), `detect_every` (run the detector on every Nth frame) and `hold` (keep
 the last regions that many frames after they vanish). Returns the job snapshot
 with `job_id`. Jobs run one at a time in the background.
@@ -1440,7 +1513,7 @@ Identify artist for one image.
 | `threshold` | float | 0.03 | Extra confidence floor (0.0-1.0); tightens only |
 | `top_k` | int | 5 | Number of top predictions to return (1-20) |
 | `model_source` | string | `huggingface` | `huggingface`, `modelscope` or `local` |
-| `model_path` | string | null | Local checkpoint; must end in `.pth`, `.pt` or `.onnx` (checked before the file is touched, whatever the source) and must exist when `model_source=local`; 400 otherwise |
+| `model_path` | string | null | Local checkpoint, read only when `model_source=local` (ignored, set to null, for `huggingface`/`modelscope`): must end in `.pth`, `.pt` or `.onnx` and, if a network (UNC) path, lie inside a trusted model folder (both checked before the file is touched), and must exist; 400 otherwise. A `.pth`/`.pt` without `class_mapping.csv` beside it loads only from the program's models folders or a trusted folder (see `/api/models/trusted-folders`) |
 
 **Response:**
 ```json
@@ -1544,7 +1617,7 @@ Start style-vector extraction for the pending images of the current library.
 | `image_ids` | int[] | null | Restrict the job to these images (1-5,000,000 positive IDs); omit for the whole library |
 | `selection_token` | string | null | Restrict the job to the current Gallery filter: a token from `POST /api/images/selection-token`, decoded and expanded on the server (the style map page sends this, so no id list travels). Exclusive with `image_ids` |
 | `model_source` | string | `huggingface` | `huggingface`, `modelscope` or `local` (same contract as `/api/artists/identify`) |
-| `model_path` | string | null | Local checkpoint, `.pth`/`.pt`/`.onnx`; required (and must exist) when `model_source` is `local`. Any other file name is 400 before the file is looked at |
+| `model_path` | string | null | Local checkpoint, `.pth`/`.pt`/`.onnx`; required (and must exist) when `model_source` is `local`, ignored (null) otherwise. Any other file name, or a network path outside a trusted model folder, is 400 before the file is looked at; a `.pth`/`.pt` without `class_mapping.csv` loads only from the program's models folders or a trusted folder |
 | `use_gpu` | bool | null | `null` = the Style Finder default (`ARTIST_USE_GPU`); `false` forces CPU |
 | `with_artist` | bool | `true` | Also write the Style Finder's artist prediction (`artist_predictions`, same model, threshold and row format as `/api/artists/identify`) from the same forward pass, in the same transaction as the vector; `false` writes vectors only. Only pictures the job actually runs the model for get a prediction: a picture whose stored vector still fits (`kept`) is not re-identified, so to add predictions for an already indexed library use the Style Finder page's batch (`POST /api/artists/identify-batch`). A picture the job does run overwrites its existing prediction row with `threshold` and `top_k` 5 (the Style Finder page sends a fixed `top_k` of 5) |
 | `threshold` | float | `0.03` | Confidence floor for the stored artist prediction, 0.0-1.0 (same field and range as `/api/artists/identify-batch`). The style map page sends the Style Finder page's slider value, so the index writes the rows an identify-batch at that setting would write: above 0.20 it decides whether a confident match is stored by name or as `undefined`. Ignored when `with_artist` is `false` |

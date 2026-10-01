@@ -195,6 +195,8 @@ from config_settings import (
     _normalize_thumbnail_cache_max_mb,
     get_thumbnail_cache_max_mb,
     save_thumbnail_cache_max_mb,
+    get_trusted_model_folders,
+    save_trusted_model_folders,
 )
 MANUAL_SORT_SESSION_FILE: str = os.environ.get(
     "SD_IMAGE_SORTER_SORT_SESSION_FILE",

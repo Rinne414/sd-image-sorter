@@ -58,6 +58,11 @@ class ValidationMixin:
                     status_code=400,
                     detail="Custom ONNX tagger model must be an .onnx file.",
                 )
+            import model_roots
+
+            network_rejection = model_roots.network_path_rejection(normalized_model_path)
+            if network_rejection:
+                raise HTTPException(status_code=400, detail=network_rejection)
             is_valid_model_path, model_path_error = validate_file_path(
                 normalized_model_path,
                 allowed_extensions={".onnx"},
@@ -89,6 +94,11 @@ class ValidationMixin:
                     detail=f"Custom tags/metadata file for {custom_profile} must be {allowed_text}.",
                 )
             if request.model_path:
+                import model_roots
+
+                tags_network_rejection = model_roots.network_path_rejection(normalized_tags_path)
+                if tags_network_rejection:
+                    raise HTTPException(status_code=400, detail=tags_network_rejection)
                 is_valid_tags_path, tags_path_error = validate_file_path(
                     normalized_tags_path,
                     allowed_extensions=allowed_tags_exts,

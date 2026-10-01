@@ -642,12 +642,17 @@ def fake_ultralytics(monkeypatch):
 
 
 def _model_load_driver():
+    from pathlib import Path
+
+    import config
     from censor import CensorDetector
 
+    # The load point refuses a .pt outside the program's models folders
+    # (SEC1b); the fake ultralytics never opens the file.
+    weights = str(Path(config.DATA_DIR) / "models" / "yolo" / "lane-test-seg.pt")
+
     def driver() -> None:
-        CensorDetector(model_path="lane-test-seg.pt")._load_with_ultralytics(
-            "lane-test-seg.pt"
-        )
+        CensorDetector(model_path=weights)._load_with_ultralytics(weights)
 
     return driver
 

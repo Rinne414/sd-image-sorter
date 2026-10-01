@@ -166,6 +166,39 @@ def api_request_rejection(
     return None
 
 
+OWN_PAGE_ONLY_ERROR = (
+    "The trusted folder list can only be changed from this program's own Model "
+    "Center page. / 信任清单只能在本程序的模型中心里修改。"
+)
+
+
+def own_page_rejection(request: Request) -> Optional[str]:
+    """None when a request comes from this program's own page or a non-browser
+    client; the error otherwise. Stricter than the /api guard: another local
+    web app (a loopback Origin on another port) may call the API, but not the
+    few endpoints that widen what the app trusts, since an XSS there must not
+    be able to trust an attacker's share. Rule: Sec-Fetch-Site absent or
+    same-origin, and an Origin, when present, on the socket's own port."""
+    site = (request.headers.get("sec-fetch-site") or "").strip().lower()
+    if site and site != "same-origin":
+        return OWN_PAGE_ONLY_ERROR
+    origin = request.headers.get("origin")
+    if origin is None:
+        return None
+    if not _ORIGIN_RE.match(origin):
+        return OWN_PAGE_ONLY_ERROR
+    try:
+        parts = urlsplit(origin)
+        port = parts.port
+    except ValueError:
+        return OWN_PAGE_ONLY_ERROR
+    if port is None:
+        port = 443 if parts.scheme == "https" else 80
+    if not _is_loopback_host(parts.hostname or "") or port != _bound_port(request):
+        return OWN_PAGE_ONLY_ERROR
+    return None
+
+
 def _log_rejection(reason: str, method: str, path: str, value: Optional[str]) -> None:
     now = time.monotonic()
     with _rejection_log_lock:

@@ -163,3 +163,28 @@ def save_thumbnail_cache_max_mb(max_mb: int) -> int:
     settings["thumbnail_cache_max_mb"] = normalized
     _write_app_settings(settings)
     return normalized
+
+
+def _normalize_trusted_model_folders(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    folders: list[str] = []
+    for item in value:
+        text = str(item or "").strip()
+        if text and text not in folders:
+            folders.append(text)
+    return folders
+
+
+def get_trusted_model_folders() -> list[str]:
+    """Folders the user added in Model Center whose model files load like the
+    program's own models folder (model_roots.py); stored as entered."""
+    return _normalize_trusted_model_folders(_read_app_settings().get("trusted_model_folders"))
+
+
+def save_trusted_model_folders(folders: list[str]) -> list[str]:
+    normalized = _normalize_trusted_model_folders(list(folders))
+    settings = _read_app_settings()
+    settings["trusted_model_folders"] = normalized
+    _write_app_settings(settings)
+    return normalized

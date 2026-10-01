@@ -127,6 +127,12 @@ def _load_yolo_class_names(model_path: Path) -> List[str]:
             continue
 
     if model_path.suffix.lower() in {".pt", ".pth"} and _svc()._module_installed("ultralytics"):
+        import model_roots
+
+        # Opening a .pt is a full unpickle: only from the program's models
+        # folders or a trusted model folder.
+        if not model_roots.is_under_allowed_model_root(model_path):
+            return []
         try:
             from ultralytics import YOLO
 

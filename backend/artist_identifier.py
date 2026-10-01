@@ -247,6 +247,17 @@ ARTIST_STYLE_VECTOR_BACKEND_ERROR = (
     "artist model has no feature layer. / 画风向量需要 Kaloscope 2.0 画风识别模型，"
     "当前加载的模型没有特征层。"
 )
+# A generic torch checkpoint (no class_mapping.csv beside it) opens only with
+# the full unpickler, which runs code from the file: allowed inside the
+# program's models folders and the trusted model folders only (model_roots).
+ARTIST_UNTRUSTED_CHECKPOINT_ERROR = (
+    "Local file '{path}' is a PyTorch checkpoint that cannot be loaded in safe "
+    "mode, and it is outside the program's models folder and the trusted model "
+    "folders. Add its folder as a trusted model folder in Model Center, place "
+    "class_mapping.csv beside a Kaloscope .pth, or use an .onnx file. / "
+    "这个模型文件需要放进程序的 models 文件夹，或在模型中心把它所在的文件夹加进"
+    "信任清单，或在旁边放 class_mapping.csv，或改用 .onnx。"
+)
 
 
 # (resolved path, size, mtime_ns) -> sha256 of a local checkpoint, so the
@@ -545,6 +556,12 @@ class ArtistIdentifier:
             try:
                 loaded = torch.load(path, map_location="cpu", weights_only=True)
             except Exception as safe_exc:
+                import model_roots
+
+                if not model_roots.is_under_allowed_model_root(path):
+                    raise RuntimeError(
+                        ARTIST_UNTRUSTED_CHECKPOINT_ERROR.format(path=path)
+                    ) from safe_exc
                 logger.warning(
                     "Safe load (weights_only=True) failed for artist model "
                     "%s: %s. Falling back to an UNSAFE full unpickle "

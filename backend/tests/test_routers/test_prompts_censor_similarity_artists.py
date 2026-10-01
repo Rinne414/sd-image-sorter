@@ -2686,7 +2686,7 @@ class TestArtistsRouterValidation:
 
         assert response.status_code == 400
 
-    @pytest.mark.parametrize("source", ["local", "huggingface"])
+    @pytest.mark.parametrize("source", ["local"])
     def test_identify_batch_refuses_non_checkpoint_paths_before_touching_the_filesystem(
         self, test_client, monkeypatch, tmp_path, source
     ):

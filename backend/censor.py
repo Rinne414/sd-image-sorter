@@ -199,6 +199,12 @@ class CensorDetector:
             return False
 
     def _load_with_ultralytics(self, model_path: str):
+        import model_roots
+
+        # A .pt is a full unpickle: the program's models folders and the
+        # trusted model folders only, checked here too, whoever calls.
+        if not model_roots.is_under_allowed_model_root(model_path):
+            raise RuntimeError(model_roots.UNTRUSTED_MODEL_LOCATION_ERROR)
         os.environ["YOLO_AUTOINSTALL"] = "false"
         from ultralytics import YOLO
 

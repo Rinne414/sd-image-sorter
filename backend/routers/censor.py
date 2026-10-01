@@ -273,7 +273,7 @@ async def get_cached_mask_preview(
 
 
 @router.get("/models")
-async def list_models(
+def list_models(
     service: CensorService = Depends(get_censor_service),
 ):
     """

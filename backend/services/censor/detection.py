@@ -14,11 +14,9 @@ loaded detector.
 from __future__ import annotations
 
 import logging
-import os
 import re
 import traceback
 from contextlib import contextmanager
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, TypedDict
 
 from fastapi import HTTPException
@@ -603,20 +601,26 @@ class _DetectionMixin:
         }
 
     @staticmethod
-    def _resolve_legacy_model_path(requested_path: str, *, allowed_base: str) -> str:
-        """Pick a safe legacy YOLO path, falling back to the built-in default."""
-        from utils.path_validation import ALLOWED_MODEL_EXTENSIONS, validate_file_path
+    def _resolve_legacy_model_path(requested_path: str, *, allowed_base: Optional[str] = None) -> str:
+        """Pick a safe legacy YOLO path, falling back to the built-in default.
+
+        A requested file must lie in the program's models folders or a trusted
+        model folder (model_roots; ``allowed_base`` is one more root), and a
+        network path is refused before any filesystem access unless trusted.
+        """
+        import model_roots
+        from utils.path_validation import ALLOWED_MODEL_EXTENSIONS
 
         normalized = str(requested_path or "").strip()
         if normalized:
-            is_valid, error = validate_file_path(
-                normalized,
-                ALLOWED_MODEL_EXTENSIONS,
-                allowed_base=allowed_base,
-            )
-            if not is_valid:
-                raise HTTPException(status_code=400, detail=error or "Invalid model path")
-            return str(Path(os.path.abspath(normalized)))
+            try:
+                return model_roots.resolve_model_file(
+                    normalized,
+                    ALLOWED_MODEL_EXTENSIONS,
+                    extra_roots=[allowed_base] if allowed_base else (),
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         default_model_path = _svc().get_default_legacy_model_path()
         if default_model_path:

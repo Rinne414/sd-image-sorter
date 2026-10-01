@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from censor_transforms import MASK_STYLES
 from services import media_censor_service as media
 from services.media_censor_service import FrameSettings, MediaCensorJobs
-from utils.path_validation import validate_folder_path
+from utils.path_validation import ALLOWED_MODEL_EXTENSIONS, validate_folder_path
 
 router = APIRouter(prefix="/api/censor/media", tags=["censor"])
 
@@ -73,12 +73,22 @@ class StartRequest(BaseModel):
 
 
 @router.post("/start")
-async def start_job(request: StartRequest):
+def start_job(request: StartRequest):
     """Censor every GIF (and, with ffmpeg ready, every video) in the folder."""
     if request.style not in MASK_STYLES:
         raise HTTPException(
             status_code=400, detail=f"style must be one of {', '.join(MASK_STYLES)}"
         )
+    # The legacy YOLO file, when named, follows the detect rule: the program's
+    # models folders or a trusted model folder only (a .pt is a full pickle).
+    model_path = request.model_path.strip()
+    if model_path:
+        import model_roots
+
+        try:
+            model_path = model_roots.resolve_model_file(model_path, ALLOWED_MODEL_EXTENSIONS)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     source = _folder(request.folder)
     output = _folder(request.output_folder or str(source / "censored"), create=True)
     listed = media.list_media(source)
@@ -89,7 +99,7 @@ async def start_job(request: StartRequest):
         )
     settings = FrameSettings(
         model_type=request.model_type,
-        model_path=request.model_path,
+        model_path=model_path,
         confidence=request.confidence,
         target_classes=request.target_classes,
         face_guard=request.face_guard,

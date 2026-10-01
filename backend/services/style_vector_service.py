@@ -98,9 +98,10 @@ _GC_EVERY_IMAGES = 64
 def _weights_path_load_would_use(model_path: Optional[str]) -> Optional[str]:
     """The local file ``ArtistIdentifier.load()`` will open, or None for the official weights.
 
-    ``load()`` opens ``model_path`` whenever it exists, whatever ``model_source``
-    says, and otherwise fetches the official checkpoint; the version stamped on
-    the vectors must follow the same rule or it names weights that never ran.
+    ``ArtistModelConfig`` keeps a path only for the local source, and ``load()``
+    opens it when it exists (otherwise it fetches the official checkpoint); the
+    version stamped on the vectors must follow the same rule or it names
+    weights that never ran.
     """
     if not model_path:
         return None
