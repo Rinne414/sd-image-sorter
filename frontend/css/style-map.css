@@ -123,6 +123,16 @@
     color: var(--text-2);
 }
 
+/* The retry beside a failure note sits in the row like a chip (same height
+   as a chip; the shared .btn-small minimum would make it taller). */
+.stylemap-legend > .btn.stylemap-legend-retry {
+    flex: 0 0 auto;
+    height: 26px;
+    min-height: 26px;
+    padding: 0 10px;
+    line-height: 1;
+}
+
 /* "+N" / "Fewer": a real button (it opens the full list), words flip (rule 16). */
 .stylemap-legend-more {
     display: inline-flex;

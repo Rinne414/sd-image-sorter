@@ -1867,9 +1867,18 @@ One 3-D point per picture of the current Gallery filter, for the style map.
     "params": {"n_neighbors": 15, "min_dist": 0.1, "metric": "cosine", "input_dim": 64, "random_state": 0},
     "queued_at": 1790000000.0
   },
+  "map_id": "3f1c9a7e5b2d4c6a8e0f1a2b3c4d5e6f",
   "cached": false
 }
 ```
+
+`map_id` is the handle of this cached map (a digest of its cache key: library,
+space, weights, filter set and vector version). `regions` and `colors`
+accept it and then read that map directly, without running the filter query
+again, so a picture arriving meanwhile (a scan, the index job) cannot turn
+their answer into another map or a recompute; once the map is evicted (the
+newest 8 are kept) or the handle is sent under another library, they answer
+`not_started` and the page asks for `points` again.
 
 `points` is a compact array (about 30 bytes per point): the representative
 picture's `id`, its coordinates scaled to [-1, 1] and rounded to 3 decimals
@@ -1975,7 +1984,10 @@ the next request (`cached` is `true` only on an unchanged repeat); dropped
 whenever the layout is. One computation per map runs at a time.
 
 **Parameters:** `space`, `selection_token`, `model_source`, `model_path` as for `points`; `refresh=true`
-recomputes even when the cache is current.
+recomputes even when the cache is current; `map_id` (the handle a `points`
+answer carried, 32 hex characters, 400 otherwise) names that cached map
+directly instead of locating it from the filter (`not_started` once it is
+evicted or belongs to another library).
 
 **Response:**
 ```json
@@ -2011,6 +2023,7 @@ it; it is read fresh on every call).
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `by` | string | `generator` | `generator` (`images.generator`), `folder` (the directory of `images.path`), `artist` (the Style Finder's stored prediction, `artist_predictions`; `undefined` means no data), `aesthetic_score` (LAION), `aesthetic_waifu` (Waifu Scorer), `aesthetic_anime` (deepghs anime aesthetic) |
+| `map_id` | string | null | The handle the `points` answer carried (32 hex characters, 400 otherwise): names that cached map directly, no filter query (the page always sends it). `not_started` once the map is evicted or the handle is sent under another library; without it the map is located from the filter again |
 
 **Response:**
 ```json
@@ -2036,10 +2049,11 @@ to 3 decimals), `legend` is empty and `range` is `[min, max]` over the
 scored pictures (`null` when none is scored). In both kinds a picture
 without a value is `null` (the page draws it grey) and `missing` counts them.
 `status` is `not_started` (empty arrays) until `points` ran for this map in
-this process (the page then asks for `points` again). A 50k-point map
-answers in about 380-560 KB (categories at the low end, scores at the high
-end) in roughly 0.4 s, most of it the filter query that locates the cached
-map.
+this process (the page then asks for `points` again, once per user action).
+A 50k-point map answers in about 380-560 KB (categories at the low end,
+scores at the high end); with `map_id` the answer is the value read and the
+JSON alone (about 0.15 s), without it the filter query that locates the map
+adds roughly 0.25 s.
 
 **Errors:** 400 for an unknown `space` or `by`, an invalid `selection_token`,
 or a `model_path` that is not a `.pth`/`.pt`/`.onnx` file, is a network path

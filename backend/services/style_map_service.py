@@ -61,7 +61,7 @@ from services.style_map_math import (
     merge_near_duplicates,
     pca_layout,
 )
-from services.style_map_colors import StyleMapColorsMixin
+from services.style_map_colors import StyleMapColorsMixin, map_handle
 from services.style_map_regions import RegionsCache, regions_body
 from services.style_vector_service import style_vector_model_version
 from services.style_map_umap import (
@@ -125,6 +125,7 @@ class StyleMapService(StyleMapColorsMixin):
         self._cache: "OrderedDict[tuple, tuple[bytes, int]]" = OrderedDict()
         # Same keys as _cache, evicted together: the UMAP inputs of each map.
         self._inputs: Dict[tuple, _MapInputs] = {}
+        self._handles: Dict[str, tuple] = {}  # map_id (in points answers) -> key
         self._stamp = 0
         self._cache_lock = threading.Lock()
         self._compute_lock = threading.Lock()
@@ -200,14 +201,17 @@ class StyleMapService(StyleMapColorsMixin):
             self._cache[key] = (value, self._stamp)
             self._cache.move_to_end(key)
             self._inputs[key] = inputs
+            self._handles[map_handle(key)] = key
             while len(self._cache) > _CACHE_ENTRIES:
                 evicted, _entry = self._cache.popitem(last=False)
                 self._inputs.pop(evicted, None)
+                self._handles.pop(map_handle(evicted), None)
 
     def clear_cache(self) -> None:
         with self._cache_lock:
             self._cache.clear()
             self._inputs.clear()
+            self._handles.clear()
         with self._umap_lock:
             self._layouts.clear()
             self._rendered.clear()
@@ -266,7 +270,7 @@ class StyleMapService(StyleMapColorsMixin):
         with self._cache_lock:
             inputs = self._inputs.get(key)
         umap_state = self._umap_state(key, inputs, retry=refresh)
-        return self._render(entry[0], umap_state, cached)
+        return self._render(entry[0], umap_state, cached, map_handle(key))
 
     def points(self, space: str, selection_token=None, **kwargs) -> Dict[str, Any]:
         """Dict form of :meth:`points_json` (tests and in-process callers)."""
@@ -306,16 +310,16 @@ class StyleMapService(StyleMapColorsMixin):
         *,
         refresh: bool = False,
         model_path: Optional[str] = None,
+        map_id: Optional[str] = None,
     ) -> bytes:
-        """Regions of the map ``points`` last computed for this space and filter,
+        """Regions of the map ``points`` last computed for this space and filter
+        (or named by ``map_id``, the handle that points answer carried),
         on the coordinates the page shows (UMAP once ready, PCA before). Cached
         per layout key, method and label version (tags / artist predictions
         written later invalidate it), dropped with the layout; one computation
         per map at a time; ``not_started`` until points ran for this map."""
-        normalized, _model_version, _ids, key = self._map_key(
-            space, selection_token, model_path
-        )
-        entry = self._cache_get(key)
+        normalized, key = self._resolve_map(space, selection_token, model_path, map_id)
+        entry = self._cache_get(key) if key is not None else None
         with self._cache_lock:
             inputs = self._inputs.get(key)
         if entry is None or inputs is None:
@@ -350,9 +354,10 @@ class StyleMapService(StyleMapColorsMixin):
         return payload[:-1] + b',"umap":' + umap_json + tail
 
     def _render(
-        self, payload: bytes, umap_state: Dict[str, Any], cached: bool
+        self, payload: bytes, umap_state: Dict[str, Any], cached: bool, map_id: str
     ) -> bytes:
-        """The PCA JSON plus the ``umap`` and ``cached`` fields; with a ready
+        """The PCA JSON plus the ``umap``, ``map_id`` (the handle colors and
+        regions name this map by) and ``cached`` fields; with a ready
         layout the points carry the UMAP coordinates instead.
 
         The ready body is built once per layout and kept (a 50k map is
@@ -362,7 +367,9 @@ class StyleMapService(StyleMapColorsMixin):
         """
         layout = umap_state.pop("_layout", None)
         layout_key = umap_state.pop("_layout_key", None)
-        tail = b',"cached":true}' if cached else b',"cached":false}'
+        tail = (
+            f',"map_id":"{map_id}","cached":{"true" if cached else "false"}}}'.encode()
+        )
         if layout is None:
             return self._with_umap(payload, umap_state, tail)
         with self._umap_lock:

@@ -5300,6 +5300,7 @@ window.I18nLang_en = {
     'stylemap.legendPictures': '{n} pictures',
     'stylemap.colorsError': 'Dot colours could not be loaded',
     'stylemap.colorsLoading': 'Loading colours...',
+    'stylemap.colorsRetry': 'Retry',
     'stylemap.layoutPcaNoUmapShort': 'Layout: PCA, UMAP not installed',
     'stylemap.tag.blurry': 'blurry',
     'stylemap.tag.comic': 'comic',

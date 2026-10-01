@@ -19,7 +19,7 @@ from artist_identifier import ARTIST_THRESHOLD_DEFAULT
 from exceptions import ValidationError
 from routers.artists import ArtistModelConfig, resolve_local_artist_model
 from services.service_provider import ServiceProvider
-from services.style_map_colors import STYLE_MAP_COLOR_FIELDS
+from services.style_map_colors import MAP_ID_PATTERN, STYLE_MAP_COLOR_FIELDS
 from services.style_map_service import STYLE_MAP_SPACES, StyleMapService
 from services.style_vector_service import STYLE_VECTOR_SPACES, StyleVectorService
 
@@ -36,6 +36,11 @@ set_style_vector_service = _style_vector_service_provider.set
 
 _MAP_SPACE_PATTERN = "^(" + "|".join(STYLE_MAP_SPACES) + ")$"
 _COLOR_BY_PATTERN = "^(" + "|".join(STYLE_MAP_COLOR_FIELDS) + ")$"
+_MAP_ID_DOC = (
+    "The `map_id` a points answer carried: names that cached map directly "
+    "(no filter query; `not_started` once it is evicted or belongs to another "
+    "library). Without it the map is located from the filter again."
+)
 _style_map_service_provider = ServiceProvider(StyleMapService)
 get_style_map_service = _style_map_service_provider.get
 set_style_map_service = _style_map_service_provider.set
@@ -299,11 +304,18 @@ def style_map_regions(
     space: str = Query("kaloscope", pattern=_MAP_SPACE_PATTERN),
     selection_token: Optional[str] = Query(None, max_length=65536),
     refresh: bool = Query(False, description="Recompute even when cached"),
+    map_id: Optional[str] = Query(
+        None, pattern=MAP_ID_PATTERN, description=_MAP_ID_DOC
+    ),
     model_path: Optional[str] = Depends(_model_path_from_query),
     service: StyleMapService = Depends(get_style_map_service),
 ):
     payload = service.regions_json(
-        space, selection_token=selection_token, refresh=refresh, model_path=model_path
+        space,
+        selection_token=selection_token,
+        refresh=refresh,
+        model_path=model_path,
+        map_id=map_id,
     )
     return Response(content=payload, media_type="application/json")
 
@@ -325,10 +337,17 @@ def style_map_colors(
     space: str = Query("kaloscope", pattern=_MAP_SPACE_PATTERN),
     selection_token: Optional[str] = Query(None, max_length=65536),
     by: str = Query("generator", pattern=_COLOR_BY_PATTERN),
+    map_id: Optional[str] = Query(
+        None, pattern=MAP_ID_PATTERN, description=_MAP_ID_DOC
+    ),
     model_path: Optional[str] = Depends(_model_path_from_query),
     service: StyleMapService = Depends(get_style_map_service),
 ):
     payload = service.colors_json(
-        space, selection_token=selection_token, by=by, model_path=model_path
+        space,
+        selection_token=selection_token,
+        by=by,
+        model_path=model_path,
+        map_id=map_id,
     )
     return Response(content=payload, media_type="application/json")

@@ -99,14 +99,25 @@ export class StyleMapPanel {
         if (this.el.colorBy && this.el.colorBy.value !== by) this.el.colorBy.value = by;
     }
 
-    /** The map stays grey meanwhile; the legend row says why (loading, failed). */
-    showColorsNote(message) {
+    /**
+     * The map stays grey meanwhile; the legend row says why (loading,
+     * failed). With `onRetry` a small retry button follows the note, in the
+     * same row as the select (never a button on a row of its own, rule 17).
+     */
+    showColorsNote(message, onRetry = null) {
         const { legend } = this.el;
         if (!legend) return;
         const note = document.createElement('span');
         note.className = 'stylemap-legend-chip is-nodata';
         note.textContent = message;
         legend.replaceChildren(note);
+        if (typeof onRetry !== 'function') return;
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'btn btn-ghost btn-small stylemap-legend-retry';
+        retry.textContent = t('stylemap.colorsRetry', 'Retry');
+        retry.addEventListener('click', onRetry);
+        legend.append(retry);
     }
 
     /** WebGL could not be set up: one explanatory card, no map controls. */

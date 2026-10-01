@@ -142,20 +142,43 @@ export function createStyleMap() {
         // The regions belong to these coordinates: drop the old ones and ask
         // again (a PCA -> UMAP switch arrives as a new points answer).
         applyRegions(null);
-        state.regionsRetried = false;
-        state.colorsRetried = false;
+        const hasPoints = points.status === 'ok' && Array.isArray(points.points) && points.points.length > 0;
         // Colours are per picture, not per layout: the previous answer is
         // laid over the new ids at once (a picture that left or joined the
         // filter is grey until the fresh answer lands), so a refresh of a
-        // 50k map does not flash grey while the server answers.
-        applyColors(state.colors?.by === state.colorBy ? state.colors : null);
+        // 50k map does not flash grey while the server answers. An empty
+        // map keeps no legend.
+        applyColors(hasPoints && state.colors?.by === state.colorBy ? state.colors : null);
         repaint();
         scheduleLayoutPoll(points.umap?.status);
-        if (points.status === 'ok' && Array.isArray(points.points) && points.points.length > 0) {
+        if (hasPoints) {
             if (!state.colors) state.panel.showColorsNote(t('stylemap.colorsLoading', 'Loading colours...'));
             loadRegions();
             loadColors();
         }
+    }
+
+    /**
+     * The regions and colours of a map are asked for by the handle its
+     * points answer carried (`map_id`): the server reads that cached map
+     * directly, so a picture arriving meanwhile (a scan, the index job)
+     * cannot turn the answer into a different map or a recompute.
+     */
+    function mapQuery(extra = {}) {
+        const mapId = state.points?.map_id;
+        return query(mapId ? { map_id: mapId, ...extra } : extra);
+    }
+
+    /**
+     * The one-shot retries of regions and colours (a not_started answer asks
+     * for points again once) are armed only by the user's own actions: a
+     * field, filter or space change, a retry, a finished index job. Never by
+     * a points answer, or a server that keeps losing the map would be asked
+     * for a new layout on every answer.
+     */
+    function armRetries() {
+        state.regionsRetried = false;
+        state.colorsRetried = false;
     }
 
     /** Paint one colours answer onto the dots the scene holds (null: grey, no legend). */
@@ -180,12 +203,13 @@ export function createStyleMap() {
         const colorSeq = ++state.colorSeq;
         const by = state.colorBy;
         try {
-            const body = await app().API.get(`/api/style-map/colors?${query({ by })}`);
+            const body = await app().API.get(`/api/style-map/colors?${mapQuery({ by })}`);
             if (seq !== state.seq || colorSeq !== state.colorSeq || !isViewActive()) return;
             if (body?.status === 'not_started') {
                 applyColors(null);
-                // One rebuild per points answer: a server that keeps losing
-                // the map must not loop; the row then says the colours failed.
+                // One rebuild per user action (armRetries): a server that
+                // keeps losing the map must not loop; the row then says the
+                // colours failed and offers a retry.
                 if (!state.colorsRetried) {
                     state.colorsRetried = true;
                     await refresh();
@@ -198,9 +222,18 @@ export function createStyleMap() {
         } catch (_error) {
             if (seq === state.seq && colorSeq === state.colorSeq) {
                 applyColors(null);
-                state.panel.showColorsNote(t('stylemap.colorsError', 'Dot colours could not be loaded'));
+                state.panel.showColorsNote(t('stylemap.colorsError', 'Dot colours could not be loaded'), retryColors);
             }
         }
+    }
+
+    /** The legend row's retry: arm the colours' one-shot rebuild again and ask once more. */
+    function retryColors() {
+        if (state.points?.status !== 'ok' || state.scene.count === 0) return;
+        state.colorsRetried = false;
+        applyColors(null);
+        state.panel.showColorsNote(t('stylemap.colorsLoading', 'Loading colours...'));
+        loadColors();
     }
 
     function setColorBy(by) {
@@ -208,6 +241,7 @@ export function createStyleMap() {
         state.colorBy = by;
         writeColorPreference(by);
         state.panel.setColorBy(by);
+        armRetries();
         if (state.points?.status !== 'ok' || state.scene.count === 0) return;
         // Grey and "loading" until the new field's answer lands: the dots
         // must never show one field while the select names another.
@@ -229,7 +263,7 @@ export function createStyleMap() {
     async function loadRegions() {
         const seq = state.seq;
         try {
-            const body = await app().API.get(`/api/style-map/regions?${query()}`);
+            const body = await app().API.get(`/api/style-map/regions?${mapQuery()}`);
             if (seq !== state.seq || !isViewActive()) return;
             // not_started: the server no longer holds this map (restarted or
             // evicted); a points call rebuilds it and asks for regions again.
@@ -304,6 +338,7 @@ export function createStyleMap() {
 
     function onFilterChanged() {
         if (!isViewActive()) return;
+        armRetries();
         clearTimeout(state.debounceTimer);
         state.debounceTimer = setTimeout(() => refresh(), FILTER_DEBOUNCE_MS);
     }
@@ -357,16 +392,23 @@ export function createStyleMap() {
                 state.panel.renderJob(job);
                 if (state.points) state.panel.renderEmpty(state.points, state.space, job.isRunning());
             },
-            onDone: () => refresh({ force: true }),
+            onDone: () => {
+                armRetries();
+                refresh({ force: true });
+            },
         });
         state.panel.bind({
             onSpaceChange: (space) => {
                 state.space = space;
+                armRetries();
                 refresh();
             },
             onColorByChange: setColorBy,
             onInstall: installUmap,
-            onRetry: () => refresh({ force: true }),
+            onRetry: () => {
+                armRetries();
+                refresh({ force: true });
+            },
             onResetView: () => state.scene.resetView(),
             onToggleLandmarks: () => setLandmarks(!state.landmarksOn),
             onBuild: () => state.job.start(),
@@ -405,5 +447,5 @@ export function createStyleMap() {
         state.legend?.closePop();
     }
 
-    return { init, dispose, refresh, setColorBy, _state: state };
+    return { init, dispose, refresh, setColorBy, retryColors, _state: state };
 }

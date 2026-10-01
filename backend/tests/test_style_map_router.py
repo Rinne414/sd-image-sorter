@@ -319,13 +319,21 @@ class FakeStyleMapService:
         return {"space": space, "method": "pca", "umap": {"status": "not_started"}}
 
     def regions_json(
-        self, space, selection_token=None, *, refresh=False, model_path=None
+        self,
+        space,
+        selection_token=None,
+        *,
+        refresh=False,
+        model_path=None,
+        map_id=None,
     ):
-        self.calls.append(("regions", space, model_path))
+        self.calls.append(("regions", space, model_path, map_id))
         return b'{"status":"not_started","regions":[]}'
 
-    def colors_json(self, space, selection_token=None, *, by, model_path=None):
-        self.calls.append(("colors", space, model_path, by, selection_token))
+    def colors_json(
+        self, space, selection_token=None, *, by, model_path=None, map_id=None
+    ):
+        self.calls.append(("colors", space, model_path, by, selection_token, map_id))
         return b'{"status":"not_started","by":"' + by.encode() + b'","ids":[]}'
 
 
@@ -470,7 +478,7 @@ def test_colors_route_passes_field_token_and_model_settings(
         assert response.status_code == 200, (by, response.text)
         assert response.json()["by"] == by
     assert [call[1:] for call in fake_map_service.calls] == [
-        ("clip", None, by, "tok.abc") for by in STYLE_MAP_COLOR_FIELDS
+        ("clip", None, by, "tok.abc", None) for by in STYLE_MAP_COLOR_FIELDS
     ]
     fake_map_service.calls.clear()
     # the default field is the generator (always has data)
@@ -480,6 +488,29 @@ def test_colors_route_passes_field_token_and_model_settings(
     for bad in ("rating", "", "aesthetic", "generator folder"):
         response = test_client.get("/api/style-map/colors", params={"by": bad})
         assert response.status_code == 400, (bad, response.text)
+    assert fake_map_service.calls == []
+
+
+def test_colors_and_regions_pass_the_map_handle(test_client, fake_map_service):
+    """Round 2: a points answer's map_id names the cached map; a malformed
+    handle is refused before the service is asked."""
+    handle = "0123456789abcdef0123456789abcdef"
+    for route in ("colors", "regions"):
+        response = test_client.get(
+            f"/api/style-map/{route}", params={"space": "kaloscope", "map_id": handle}
+        )
+        assert response.status_code == 200, (route, response.text)
+    assert [(call[0], call[-1]) for call in fake_map_service.calls] == [
+        ("colors", handle),
+        ("regions", handle),
+    ]
+    fake_map_service.calls.clear()
+    for bad in ("", "xyz", handle[:-1], handle + "0", handle.upper()):
+        for route in ("colors", "regions"):
+            response = test_client.get(
+                f"/api/style-map/{route}", params={"space": "kaloscope", "map_id": bad}
+            )
+            assert response.status_code == 400, (route, bad, response.text)
     assert fake_map_service.calls == []
 
 

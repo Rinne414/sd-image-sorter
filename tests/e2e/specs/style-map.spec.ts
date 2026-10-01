@@ -26,6 +26,7 @@ function pointsBody(overrides: Record<string, unknown> = {}) {
     points_layout: ['id', 'x', 'y', 'z', 'members'],
     points,
     umap: { status: 'unavailable', points: 30, min_points: 21, params: UMAP_PARAMS, install: { model_id: 'style-map-umap', packages: ['umap-learn>=0.5.12'] } },
+    map_id: 'e2e0e2e0e2e0e2e0e2e0e2e0e2e0e2e0',
     cached: false,
     ...overrides,
   }
@@ -301,6 +302,10 @@ test.describe('Style Map', () => {
   test('polls layout-status about every 3 s, reloads points when UMAP is ready, and calls points on not_started', async ({ page }) => {
     await mockSelectionToken(page)
     await mockProgressIdle(page)
+    // Regions and colours are answered (a not_started from the real server
+    // would arm a rebuild and add points calls this test counts).
+    await page.route('**/api/style-map/regions**', (route) => route.fulfill({ json: regionsBody() }))
+    await mockColors(page)
     const pointsTimes: number[] = []
     const statusTimes: number[] = []
     let statusReply: string = 'computing'
@@ -350,6 +355,8 @@ test.describe('Style Map', () => {
       return route.fulfill({ json: { selection_token: 'tok.e2e', total_estimate: 33 } })
     })
     await mockProgressIdle(page)
+    await page.route('**/api/style-map/regions**', (route) => route.fulfill({ json: regionsBody() }))
+    await mockColors(page)
     let pointsCalls = 0
     await page.route('**/api/style-map/points**', (route) => {
       pointsCalls += 1
@@ -397,6 +404,7 @@ test.describe('Style Map', () => {
   test('reads the map and builds the index with the Style Finder model settings', async ({ page }) => {
     await mockSelectionToken(page)
     await mockProgressIdle(page)
+    await mockColors(page)
     const pointsUrls: string[] = []
     const regionsUrls: string[] = []
     const starts: Array<Record<string, unknown>> = []
@@ -549,6 +557,7 @@ test.describe('Style Map', () => {
   test('draws at most k landmark cards without empty text rows; the switch flips its words, remembers, and stops the thumbnails', async ({ page }) => {
     await mockSelectionToken(page)
     await mockProgressIdle(page)
+    await mockColors(page)
     await page.route('**/api/style-map/points**', (route) => route.fulfill({ json: pointsBody() }))
     await page.route('**/api/style-map/regions**', (route) => route.fulfill({ json: regionsBody() }))
     let landmarkThumbnails = 0
@@ -667,6 +676,7 @@ test.describe('Style Map', () => {
   test('drops the regions of a map that was replaced while they were loading', async ({ page }) => {
     await mockSelectionToken(page)
     await mockProgressIdle(page)
+    await mockColors(page)
     await page.route('**/api/style-map/points**', (route) => route.fulfill({ json: pointsBody() }))
     await mockThumbnails(page)
     let regionsCalls = 0
@@ -734,6 +744,7 @@ test.describe('Style Map', () => {
   test('asks for regions again when the layout switches from PCA to UMAP, and calls points first on not_started', async ({ page }) => {
     await mockSelectionToken(page)
     await mockProgressIdle(page)
+    await mockColors(page)
     await mockThumbnails(page)
     let statusReply = 'computing'
     let regionsReply: 'not_started' | 'ok' = 'not_started'
@@ -945,6 +956,78 @@ test.describe('Style Map', () => {
     expectRgb(await map.dotColor(2), NO_DATA_RGB)
     expect(pointsCalls).toBe(2)
     await expect(map.legendRamp).toHaveCount(0)
+  })
+
+  test('a server that keeps losing the map is asked for points once more only; colours and regions then say so', async ({ page }) => {
+    await mockSelectionToken(page)
+    await mockProgressIdle(page)
+    let pointsCalls = 0
+    const mapIds: Array<string | null> = []
+    await page.route('**/api/style-map/points**', (route) => {
+      pointsCalls += 1
+      return route.fulfill({ json: pointsBody({ map_id: `0000000000000000000000000000000${pointsCalls}` }) })
+    })
+    let colorsCalls = 0
+    await page.route('**/api/style-map/colors**', (route) => {
+      colorsCalls += 1
+      const url = new URL(route.request().url())
+      mapIds.push(url.searchParams.get('map_id'))
+      return route.fulfill({ json: { status: 'not_started', space: 'kaloscope', by: url.searchParams.get('by'), kind: 'category', ids: [], values: [], legend: [], range: null, missing: 0 } })
+    })
+    let regionsCalls = 0
+    await page.route('**/api/style-map/regions**', (route) => {
+      regionsCalls += 1
+      mapIds.push(new URL(route.request().url()).searchParams.get('map_id'))
+      return route.fulfill({ json: { status: 'not_started', space: 'kaloscope', regions: [] } })
+    })
+    await mockThumbnails(page)
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await page.goto('/')
+    const map = new StyleMapPage(page)
+    await map.open()
+    await expect.poll(() => map.pointCount()).toBe(30)
+    // Colours and regions each get one rebuild, then stop: three points
+    // calls at most (first + one per retry), however long we wait.
+    await expect(map.legend).toContainText(/读取失败|could not be loaded/)
+    await page.waitForTimeout(3000)
+    expect(pointsCalls).toBeLessThanOrEqual(3)
+    expect(pointsCalls).toBeGreaterThanOrEqual(2)
+    expect(colorsCalls).toBeLessThanOrEqual(3)
+    expect(regionsCalls).toBeLessThanOrEqual(3)
+    // Every colours/regions request named the map by the handle points gave it.
+    expect(mapIds.every((id) => id !== null && /^0{31}\d$/.test(id))).toBe(true)
+    expectRgb(await map.dotColor(1), NO_DATA_RGB)
+    await expect(map.landmarks).toHaveCount(0)
+    // The retry in the row arms one more rebuild, and only one.
+    const before = pointsCalls
+    await map.legend.locator('.stylemap-legend-retry').click()
+    await expect.poll(() => pointsCalls).toBe(before + 1)
+    await expect(map.legend).toContainText(/读取失败|could not be loaded/)
+    await page.waitForTimeout(2000)
+    expect(pointsCalls).toBe(before + 1)
+  })
+
+  test('an empty filter result clears the legend', async ({ page }) => {
+    await mockSelectionToken(page)
+    await mockProgressIdle(page)
+    let empty = false
+    await page.route('**/api/style-map/points**', (route) => route.fulfill({ json: empty
+      ? pointsBody({ status: 'empty', points: [], total_images: 0, missing_vectors: 0, unlocatable: [], umap: { status: 'too_few_points', points: 0, min_points: 21, params: UMAP_PARAMS } })
+      : pointsBody() }))
+    await page.route('**/api/style-map/regions**', (route) => route.fulfill({ json: regionsBody() }))
+    await mockThumbnails(page)
+    await mockColors(page)
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await page.goto('/')
+    const map = new StyleMapPage(page)
+    await map.open()
+    await expect.poll(() => map.pointCount()).toBe(30)
+    await expect(map.legendChips).toHaveCount(6)
+    empty = true
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('gallery-filters-changed')))
+    await expect.poll(() => map.pointCount()).toBe(0)
+    await expect(map.legend).toBeEmpty()
+    await expect(map.scope).toContainText(/没有|matches no/)
   })
 
   test('ESC closes the open legend list without opening the entry page', async ({ page }) => {

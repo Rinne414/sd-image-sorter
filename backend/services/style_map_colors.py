@@ -21,12 +21,14 @@ change it) and is never part of the cached points payload.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import posixpath
 from collections import Counter
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import database as db
+from library_context import get_current_library_id
 
 CATEGORY_FIELDS: Tuple[str, ...] = ("generator", "folder", "artist")
 SCALE_FIELDS: Tuple[str, ...] = (
@@ -176,11 +178,51 @@ def colors_of_points(points: Sequence[Sequence[Any]], *, by: str) -> Dict[str, A
     return {"by": by, "ids": ids, **body}
 
 
+MAP_ID_LENGTH = 32
+MAP_ID_PATTERN = "^[0-9a-f]{32}$"
+
+
+def map_handle(key: tuple) -> str:
+    """The ``map_id`` a points answer carries: a digest of the cache key, so a
+    later colors/regions request names that exact map (same library, space,
+    weights, filter set and vector version) without re-running the filter."""
+    return hashlib.sha256(repr(key).encode("utf-8")).hexdigest()[:MAP_ID_LENGTH]
+
+
 class StyleMapColorsMixin:
-    """``colors_json`` of StyleMapService, kept here so the service module
-    stays within its size budget. Uses the service's own map key and points
-    cache (``_map_key`` / ``_cache_get``), so the answer covers exactly the
-    representatives of the map the page shows."""
+    """``colors_json`` (and the map-handle lookup shared with regions) of
+    StyleMapService, kept here so the service module stays within its size
+    budget. Uses the service's own map key, handle registry and points cache
+    (``_map_key`` / ``_handles`` / ``_cache_get``), so the answer covers
+    exactly the representatives of the map the page shows."""
+
+    def _resolve_map(
+        self,
+        space: str,
+        selection_token: Optional[str],
+        model_path: Optional[str],
+        map_id: Optional[str],
+    ) -> tuple[str, Optional[tuple]]:
+        """(space, cache key) of the map a request names. With ``map_id`` the
+        key comes from the handle registry: None when the handle is unknown
+        (evicted, another process) or names a map of another library or
+        space, never a lookup across libraries. Without it the key is
+        recomputed from the filter (the filter query runs again)."""
+        normalized = self._require_space(space)
+        if map_id:
+            with self._cache_lock:
+                key = self._handles.get(map_id)
+            if (
+                key is None
+                or key[0] != get_current_library_id()
+                or key[1] != normalized
+            ):
+                return normalized, None
+            return normalized, key
+        _space, _model_version, _ids, key = self._map_key(
+            normalized, selection_token, model_path
+        )
+        return normalized, key
 
     def colors_json(
         self,
@@ -189,14 +231,14 @@ class StyleMapColorsMixin:
         *,
         by: str,
         model_path: Optional[str] = None,
+        map_id: Optional[str] = None,
     ) -> bytes:
         """One value per point of the map ``points`` last computed for this
-        space and filter: read fresh on every call, never cached with the
-        layout; ``not_started`` (empty arrays) until points ran."""
-        normalized, _model_version, _ids, key = self._map_key(
-            space, selection_token, model_path
-        )
-        entry = self._cache_get(key)
+        space and filter (or named by ``map_id``): read fresh on every call,
+        never cached with the layout; ``not_started`` (empty arrays) until
+        points ran or once the handle is gone."""
+        normalized, key = self._resolve_map(space, selection_token, model_path, map_id)
+        entry = self._cache_get(key) if key is not None else None
         return colors_body(entry[0] if entry else None, space=normalized, by=by)
 
     def colors(self, space: str, selection_token=None, **kwargs) -> Dict[str, Any]:

@@ -317,6 +317,120 @@ class TestService:
         assert body["legend"][0]["key"] == "wlop" and body["missing"] == 2
         assert service.points("kaloscope")["cached"] is True
 
+    def test_map_id_names_the_cached_map_without_the_filter_query(
+        self, test_db, tmp_path, no_umap, monkeypatch
+    ):
+        """Round 2: the handle in a points answer locates that map directly;
+        an unknown handle (another process, evicted) is not_started."""
+        ids = _make_images(test_db, tmp_path, 4)
+        _store_kaloscope(test_db, ids, _random_units(4, seed=31))
+        service = _service()
+        points = service.points("kaloscope")
+        handle = points["map_id"]
+        assert len(handle) == colors_mod.MAP_ID_LENGTH and int(handle, 16) >= 0
+        assert service.points("kaloscope")["map_id"] == handle  # stable per map
+
+        def no_filter_query(*_args, **_kwargs):
+            raise AssertionError("map_id must not re-run the filter query")
+
+        monkeypatch.setattr(service, "_filtered_ids", no_filter_query)
+        body = service.colors("kaloscope", by="generator", map_id=handle)
+        assert body["status"] == "ok"
+        assert body["ids"] == [point[0] for point in points["points"]]
+        regions = service.regions("kaloscope", map_id=handle)
+        assert regions["status"] == "ok"
+        assert sum(region["size"] for region in regions["regions"]) == 4
+        unknown = service.colors("kaloscope", by="generator", map_id="f" * 32)
+        assert unknown["status"] == "not_started" and unknown["ids"] == []
+        assert service.regions("kaloscope", map_id="f" * 32)["status"] == "not_started"
+        # the handle names one space: the clip map is a different map
+        assert (
+            service.colors("clip", by="generator", map_id=handle)["status"]
+            == "not_started"
+        )
+
+    def test_map_id_follows_the_map_when_the_filter_set_changes(
+        self, test_db, tmp_path, no_umap
+    ):
+        """New pictures change the key (and the handle) of the filter; the old
+        handle keeps answering for the map the page still shows, until it is
+        evicted, and never loops the page back into a recompute."""
+        ids = _make_images(test_db, tmp_path, 3)
+        _store_kaloscope(test_db, ids, _random_units(3, seed=32))
+        service = _service()
+        old = service.points("kaloscope")
+        more = _make_images(test_db, tmp_path, 2, prefix="late")
+        _store_kaloscope(test_db, more, _random_units(2, seed=33))
+        new = service.points("kaloscope")
+        assert new["map_id"] != old["map_id"]
+        stale = service.colors("kaloscope", by="generator", map_id=old["map_id"])
+        assert stale["status"] == "ok" and sorted(stale["ids"]) == sorted(ids)
+        fresh = service.colors("kaloscope", by="generator", map_id=new["map_id"])
+        assert sorted(fresh["ids"]) == sorted(ids + more)
+
+    def test_evicted_handle_is_not_started(
+        self, test_db, tmp_path, no_umap, monkeypatch
+    ):
+        monkeypatch.setattr(style_map_service, "_CACHE_ENTRIES", 1)
+        ids = _make_images(test_db, tmp_path, 2)
+        _store_kaloscope(test_db, ids, _random_units(2, seed=34))
+        _set(test_db, "UPDATE images SET generator = 'nai' WHERE id = ?", (ids[0],))
+        service = _service()
+        from services.image_service import ImageService
+
+        token = ImageService().create_selection_token(generators=["nai"])[
+            "selection_token"
+        ]
+        first = service.points("kaloscope")["map_id"]
+        service.points("kaloscope", selection_token=token)  # evicts the first map
+        assert (
+            service.colors("kaloscope", by="generator", map_id=first)["status"]
+            == "not_started"
+        )
+
+    def test_map_id_never_reads_across_libraries(self, test_client, tmp_path, no_umap):
+        """A handle minted in one library answers nothing under another
+        library's header (X-SD-Library-Id), even though the map is cached."""
+        from library_context import reset_current_library_id, set_current_library_id
+        from routers import style_map as style_map_router
+
+        db = test_client.test_db
+        style_map_router.set_style_map_service(style_map_service.StyleMapService())
+        try:
+            main_ids = _make_images(db, tmp_path, 3, prefix="main")
+            token = set_current_library_id("libB")
+            try:
+                b_ids = _make_images(db, tmp_path, 2, prefix="b")
+            finally:
+                reset_current_library_id(token)
+            _store_kaloscope(db, main_ids + b_ids, _random_units(5, seed=35))
+            main_map = test_client.get(
+                "/api/style-map/points", params={"space": "kaloscope"}
+            ).json()
+            assert sorted(p[0] for p in main_map["points"]) == sorted(main_ids)
+            handle = main_map["map_id"]
+            other = {"X-SD-Library-Id": "libB"}
+            for route, extra in (("colors", {"by": "generator"}), ("regions", {})):
+                cross = test_client.get(
+                    f"/api/style-map/{route}",
+                    params={"space": "kaloscope", "map_id": handle, **extra},
+                    headers=other,
+                ).json()
+                assert cross["status"] == "not_started", (route, cross)
+                own = test_client.get(
+                    f"/api/style-map/{route}",
+                    params={"space": "kaloscope", "map_id": handle, **extra},
+                ).json()
+                assert own["status"] == "ok", (route, own)
+            assert sorted(
+                test_client.get(
+                    "/api/style-map/colors",
+                    params={"space": "kaloscope", "map_id": handle, "by": "generator"},
+                ).json()["ids"]
+            ) == sorted(main_ids)
+        finally:
+            style_map_router.set_style_map_service(None)
+
     def test_unknown_field_and_space_are_400(self, test_db):
         from fastapi import HTTPException
 
