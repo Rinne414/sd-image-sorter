@@ -933,6 +933,8 @@ test.describe('Style Map', () => {
     await map.open()
     await expect.poll(() => map.pointCount()).toBe(30)
     await expect.poll(() => colorsCalls.length).toBe(1)
+    // The request is counted before its answer is painted: wait for it.
+    await expect(map.legendChips.first()).toContainText('gen0')
     expectRgb(await map.dotColor(1), FIRST_CATEGORY_RGB)
 
     // The server lost the map (a picture was added meanwhile): points are

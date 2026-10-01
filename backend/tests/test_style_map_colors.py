@@ -383,6 +383,8 @@ class TestService:
         ]
         first = service.points("kaloscope")["map_id"]
         service.points("kaloscope", selection_token=token)  # evicts the first map
+        assert len(service._handles) == len(service._cache) == 1
+        assert first not in service._handles
         assert (
             service.colors("kaloscope", by="generator", map_id=first)["status"]
             == "not_started"
