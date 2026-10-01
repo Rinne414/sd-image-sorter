@@ -147,6 +147,7 @@ test('the result says how many records were not relinked because the pixels diff
   await expect(note).toBeVisible({ timeout: 10000 })
   await expect(note).toHaveText('Records not relinked because the pixels differ: 1 (a same-name, same-size file was found for each).')
   await expect(page.locator('#reconnect-progress-text')).not.toHaveText('Starting search...')
+  await expect(page.locator('#reconnect-progress-text')).toHaveText('Records relinked: 0 · still missing: 1')
   const doneText = await page.locator('#reconnect-progress-text').textContent()
   await settle(page)
   await page.screenshot({ path: shotPath(testInfo, 'reconnect-pixel-mismatch-summary-1920.png') })
@@ -192,6 +193,20 @@ test('the summary reads in Chinese', async ({ page, request }, testInfo) => {
   const note = page.locator('#reconnect-result-panel .reconnect-result-note')
   await expect(note).toHaveText('有 1 条记录找到了同名同大小的文件，但像素不同，没有自动接上。')
   await expect(page.locator('#reconnect-progress-text')).not.toHaveText('正在开始查找...')
+  // The finish text is built from message_key + counts, not the backend's English string.
+  const progressText = page.locator('#reconnect-progress-text')
+  await expect(progressText).toHaveText('已找回 0 张 · 仍缺失 1 张')
   await settle(page)
   await page.screenshot({ path: shotPath(testInfo, 'reconnect-pixel-mismatch-summary-zh-1920.png') })
+
+  // A translation re-apply must not turn it back into the static key text.
+  await page.evaluate(() => {
+    (window as any).UIRefresh?.applyTranslations?.()
+    document.body.appendChild(document.createElement('div'))
+  })
+  await page.waitForTimeout(600)
+  await expect(progressText).toHaveText('已找回 0 张 · 仍缺失 1 张')
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await settle(page)
+  await page.screenshot({ path: shotPath(testInfo, 'reconnect-pixel-mismatch-summary-zh-1366.png') })
 })

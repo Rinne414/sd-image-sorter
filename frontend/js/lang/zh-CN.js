@@ -3268,6 +3268,8 @@ window.I18nLang_zhCN = {
     'reconnect.cancelling': '正在停止查找...',
     'reconnect.cancelled': '查找已停止',
     'reconnect.done': '查找完成。',
+    'reconnect.doneStatus': '已找回 {matched} 张 · 仍缺失 {missing} 张',
+    'reconnect.cancelledStatus': '查找已停止 · 已检查 {checked} 个文件',
     'reconnect.doneToast': '已找回 {matched} 张移动过的图片。仍缺失 {missing} 张，{ambiguous} 张需要确认，{conflicts} 张已在图库中。',
     'reconnect.doneNoMatchesToast': '这个文件夹里没有找到能对应的缺失图片。图库还有 {libraryMissing} 条缺失记录；请试试更大的文件夹或重新连接硬盘。',
     'reconnect.resultSummary': '找回 {matched} 张 · 这个文件夹内仍缺失 {missing} 张',

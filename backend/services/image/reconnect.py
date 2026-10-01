@@ -94,7 +94,9 @@ class ReconnectMixin:
             "pixel_mismatch": 0,
             "skipped": 0,
             "errors": 0,
+            "still_missing": 0,
             "message": "",
+            "message_key": "",
             "current_item": None,
             "started_at": None,
             "updated_at": None,
@@ -593,6 +595,7 @@ class ReconnectMixin:
                 "status": "running",
                 "step": "starting",
                 "message": "Looking for missing library files...",
+                "message_key": "starting",
                 "started_at": started_at,
                 "updated_at": started_at,
             }
@@ -623,6 +626,7 @@ class ReconnectMixin:
                 skipped=int(snapshot.get("skipped", 0) or 0),
                 errors=errors,
                 message=f"Checked {checked} files. Reconnected {matched}/{missing_total} missing files.",
+                message_key="searching",
                 current_item=snapshot.get("current_item"),
                 updated_at=time.time(),
             )
@@ -665,6 +669,8 @@ class ReconnectMixin:
                         "pixel_mismatch": result.get("pixel_mismatch", 0),
                         "skipped": result.get("skipped", 0),
                         "errors": result.get("errors", 0),
+                        "still_missing": result.get("still_missing", 0),
+                        "message_key": "done",
                         "message": (
                             f"Reconnected {result.get('matched', 0)} missing files. "
                             f"{result.get('still_missing', 0)} still missing."
@@ -684,6 +690,7 @@ class ReconnectMixin:
                         **current,
                         "status": "cancelled",
                         "step": "cancelled",
+                        "message_key": "cancelled",
                         "message": f"Stopped after checking {current.get('checked_files', 0)} files.",
                         "updated_at": now,
                     },
@@ -697,6 +704,7 @@ class ReconnectMixin:
                         **current,
                         "status": "error",
                         "step": "error",
+                        "message_key": "error",
                         "errors": int(current.get("errors", 0) or 0) + 1,
                         "message": "Could not finish finding moved files.",
                         "updated_at": time.time(),
@@ -717,6 +725,7 @@ class ReconnectMixin:
                 **self._reconnect_progress,
                 "status": "cancelling",
                 "step": "cancelling",
+                "message_key": "cancelling",
                 "message": "Stopping missing-file search...",
                 "updated_at": time.time(),
             }

@@ -3101,6 +3101,8 @@ window.I18nLang_en = {
     'reconnect.cancelling': 'Stopping search...',
     'reconnect.cancelled': 'Search stopped',
     'reconnect.done': 'Search complete.',
+    'reconnect.doneStatus': 'Records relinked: {matched} · still missing: {missing}',
+    'reconnect.cancelledStatus': 'Search stopped · files checked: {checked}',
     'reconnect.doneToast': 'Found {matched} moved images. {missing} still missing. {ambiguous} need review. {conflicts} already in gallery.',
     'reconnect.doneNoMatchesToast': 'Checked this folder, but none of the {libraryMissing} missing gallery records matched files here. Try a wider folder or reconnect the drive.',
     'reconnect.resultSummary': '{matched} reconnected · {missing} still missing in this folder',

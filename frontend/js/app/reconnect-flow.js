@@ -312,6 +312,23 @@ function _renderReconnectResultPanel(progress) {
     panel.style.display = 'grid';
 }
 
+// The backend still sends an English `message` for API compatibility; the UI
+// builds its own text from message_key + counts so it follows the language.
+function _reconnectTerminalText(progress) {
+    const key = progress?.message_key;
+    if (key === 'done') {
+        return appT('reconnect.doneStatus', 'Records relinked: {matched} · still missing: {missing}')
+            .replace('{matched}', String(Number(progress.matched || 0)))
+            .replace('{missing}', String(Number(progress.still_missing ?? progress.result?.still_missing ?? 0)));
+    }
+    if (key === 'cancelled') {
+        return appT('reconnect.cancelledStatus', 'Search stopped · files checked: {checked}')
+            .replace('{checked}', String(Number(progress.checked_files || 0)));
+    }
+    if (key === 'error') return appT('reconnect.failedStatus', 'Search failed');
+    return '';
+}
+
 function _updateReconnectProgressUi(progress) {
     const container = $('#reconnect-progress-container');
     const fill = $('#reconnect-progress-fill');
@@ -330,11 +347,11 @@ function _updateReconnectProgressUi(progress) {
         if (progress?.status === 'cancelling') {
             textEl.textContent = appT('reconnect.cancelling', 'Stopping search...');
         } else if (progress?.status === 'done') {
-            textEl.textContent = progress.message || appT('reconnect.done', 'Search complete.');
+            textEl.textContent = _reconnectTerminalText(progress) || appT('reconnect.done', 'Search complete.');
         } else if (progress?.status === 'error') {
-            textEl.textContent = progress.message || appT('reconnect.failedStatus', 'Search failed');
+            textEl.textContent = _reconnectTerminalText(progress) || appT('reconnect.failedStatus', 'Search failed');
         } else if (progress?.status === 'cancelled') {
-            textEl.textContent = progress.message || appT('reconnect.cancelled', 'Search stopped');
+            textEl.textContent = _reconnectTerminalText(progress) || appT('reconnect.cancelled', 'Search stopped');
         } else {
             textEl.textContent = _formatReconnectStatus(progress);
         }
@@ -478,7 +495,7 @@ async function pollReconnectProgress(retryCount = 0) {
         }
 
         if (progress.status === 'cancelled') {
-            showToast(progress.message || appT('reconnect.cancelled', 'Search stopped'), 'info');
+            showToast(_reconnectTerminalText(progress) || appT('reconnect.cancelled', 'Search stopped'), 'info');
             _hideBgReconnectProgress();
             _setReconnectRunningUi(false);
             window.UnreadableBanner?.refresh(true);
@@ -486,7 +503,7 @@ async function pollReconnectProgress(retryCount = 0) {
         }
 
         if (progress.status === 'error') {
-            showToast(progress.message || appT('reconnect.failedStatus', 'Search failed'), 'error');
+            showToast(_reconnectTerminalText(progress) || appT('reconnect.failedStatus', 'Search failed'), 'error');
             _hideBgReconnectProgress();
             _setReconnectRunningUi(false);
         }
