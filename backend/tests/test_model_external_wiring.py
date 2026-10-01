@@ -240,6 +240,15 @@ def test_tagger_loads_the_trusted_copy_without_downloading(world, own, monkeypat
     assert tags_path.endswith(f"{DEFAULT}.csv")
 
 
+def assert_shown_as_written(message: str) -> None:
+    """The rules errors.js applies: a longer or path-carrying message is replaced
+    by "failed, try again", which would never help here."""
+    import re
+
+    assert re.search(r"[A-Za-z]:\\", message) is None, message
+    assert chr(10) not in message and len(message) < 180, (len(message), message)
+
+
 def _recording_hub(monkeypatch):
     import tagger
 
@@ -261,7 +270,9 @@ def _default_tagger(own):
     )
 
 
-def test_tagger_does_not_download_when_the_trusted_copy_changed(world, own, monkeypatch):
+def test_tagger_does_not_download_when_the_trusted_copy_changed(
+    world, own, monkeypatch
+):
     path = add_default_wd14(world)
     path.write_bytes(b"different")
     calls = _recording_hub(monkeypatch)
@@ -271,14 +282,15 @@ def test_tagger_does_not_download_when_the_trusted_copy_changed(world, own, monk
 
     message = str(raised.value)
     assert not calls, "a second copy must not be downloaded behind the user's back"
-    assert str(path) in message
-    assert "is changed" in message
-    assert "已变更" in message and "模型中心" in message
-    zh_part = message.replace(str(path), "").split(" / ")[-1]
-    assert "app" not in zh_part.lower()
+    assert_shown_as_written(message)
+    assert "gone or changed" in message
+    assert "已不见或已变更" in message and "模型中心" in message
+    assert "app" not in message.split(" / ")[-1].lower()
 
 
-def test_tagger_does_not_download_when_the_trusted_copy_is_gone(world, own, monkeypatch):
+def test_tagger_does_not_download_when_the_trusted_copy_is_gone(
+    world, own, monkeypatch
+):
     path = add_default_wd14(world)
     path.unlink()
     world.store.save_matches([])  # the next detect no longer finds it
@@ -288,7 +300,10 @@ def test_tagger_does_not_download_when_the_trusted_copy_is_gone(world, own, monk
         _default_tagger(own)._get_model_paths()
 
     assert not calls
-    assert "is gone" in str(raised.value) and "已不见" in str(raised.value)
+    assert_shown_as_written(str(raised.value))
+    assert "gone or changed" in str(raised.value) and "已不见或已变更" in str(
+        raised.value
+    )
 
 
 def test_fresh_install_still_downloads_on_first_use(world, own, monkeypatch):
@@ -323,7 +338,9 @@ def test_the_prepare_button_downloads_after_the_copy_was_lost(world, own, monkey
     world.store.save_matches([])
     calls = _recording_hub(monkeypatch)
     monkeypatch.setattr(
-        model_service, "_repair_wd14_onnxruntime_if_possible", lambda: {"attempted": False}
+        model_service,
+        "_repair_wd14_onnxruntime_if_possible",
+        lambda: {"attempted": False},
     )
     import tagger
 
@@ -354,18 +371,22 @@ def test_a_corrupt_trusted_file_is_never_deleted(world, own, monkeypatch):
     assert path.exists()
 
 
-def test_tipo_does_not_download_when_its_trusted_weight_vanished(world, own, monkeypatch):
+def test_tipo_does_not_download_when_its_trusted_weight_vanished(
+    world, own, monkeypatch
+):
     from services import tipo_service
 
     weight = world.add_file("tipo", "v2.1", "models/kgen/TIPO.gguf", GGUF, verify="sha")
     weight.unlink()
     calls = []
-    monkeypatch.setattr(tipo_service, "_download_weight", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(
+        tipo_service, "_download_weight", lambda *a, **k: calls.append(a)
+    )
     fake_models = SimpleNamespace(model_dir=None, text_model=None)
     monkeypatch.setattr(tipo_service, "_import_kgen", lambda: {"models": fake_models})
     monkeypatch.setattr(tipo_service, "_loaded_model_key", None)
 
-    with pytest.raises(tipo_service.TipoError, match="is gone"):
+    with pytest.raises(tipo_service.TipoError, match="gone or changed"):
         tipo_service._ensure_model_loaded("v2.1")
 
     assert not calls
@@ -623,3 +644,54 @@ def test_a_cleared_index_changes_nothing(own):
 
     assert wd14["source"] is None
     assert model_external.lookup("wd14", DEFAULT) is None
+
+
+def test_the_message_fits_the_page_for_the_longest_names(world):
+    for kind, model_id, variant, name in (
+        ("comfyui", "wd14", "wd-eva02-large-tagger-v3", "wd-eva02-large-tagger-v3"),
+        ("hf_cache", "wd14", "wd-eva02-large-tagger-v3", "wd-eva02-large-tagger-v3"),
+        ("folder", "tipo", "v2.1", "TIPO v2.1"),
+    ):
+        world.entries.clear()
+        path = world.add_file(model_id, variant, f"m/{name}.bin", kind=kind)
+        path.unlink()
+        with pytest.raises(model_external.ExternalModelUnavailable) as raised:
+            model_external.require_available(model_id, variant, name)
+        assert_shown_as_written(str(raised.value))
+
+
+def test_pressing_prepare_on_an_intact_trusted_copy_changes_and_downloads_nothing(
+    world, own, monkeypatch
+):
+    from services import model_service, model_service_prepare
+
+    path = add_default_wd14(world)
+    calls = _recording_hub(monkeypatch)
+    monkeypatch.setattr(
+        model_service,
+        "_repair_wd14_onnxruntime_if_possible",
+        lambda: {"attempted": False},
+    )
+
+    result = model_service_prepare._prepare_model(None, "wd14", variant=DEFAULT)
+
+    assert not calls
+    assert result["paths"]["model_path"] == str(path)
+    assert [e["model_id"] for e in world.store.matches()] == ["wd14"]
+
+
+def test_pressing_prepare_on_an_intact_tipo_copy_keeps_its_record(
+    world, own, monkeypatch
+):
+    from services import model_service, model_service_prepare
+
+    world.add_file("tipo", "v2.1", "models/kgen/TIPO.gguf", GGUF, verify="sha")
+    monkeypatch.setattr(model_service, "ensure_group", lambda _g: {"ok": True})
+    monkeypatch.setattr(
+        model_service, "_dependency_restart_result", lambda *_a, **_k: None
+    )
+    monkeypatch.setattr(model_service, "_with_dependency_result", lambda r, _d: r)
+
+    model_service_prepare._prepare_model(None, "tipo")
+
+    assert [e["model_id"] for e in world.store.matches()] == ["tipo"]

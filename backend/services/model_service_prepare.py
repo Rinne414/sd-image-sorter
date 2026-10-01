@@ -50,8 +50,11 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
         from tagger import DEFAULT_MODEL, WD14Tagger
 
         model_name = variant or DEFAULT_MODEL
-        # Prepare is the user's choice to download into the program folder.
-        model_external.forget("wd14", model_name)
+        # Prepare on a card that says "download to the program folder" (the
+        # trusted file is gone or changed) clears that record. With an intact
+        # trusted copy it is only a check: nothing is cleared or downloaded.
+        if model_external.problem("wd14", model_name) is not None:
+            model_external.forget("wd14", model_name)
         tagger = WD14Tagger(model_name=model_name, use_gpu=False)
         model_path, tags_path = tagger._get_model_paths()
         result = {
@@ -500,7 +503,11 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
         return _svc()._with_dependency_result(result, dependency_result)
 
     if normalized_model_id == "tipo":
-        model_external.forget("tipo", any_variant=True)
+        from services.tipo_service import MODEL_SPECS
+
+        for tipo_key in MODEL_SPECS:
+            if model_external.problem("tipo", tipo_key) is not None:
+                model_external.forget("tipo", tipo_key)
         dependency_result = _svc().ensure_group("tipo")
         restart_result = _svc()._dependency_restart_result(
             normalized_model_id, dependency_result

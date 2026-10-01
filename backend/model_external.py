@@ -60,7 +60,7 @@ class ExternalModelUnavailable(FileNotFoundError):
 
 _KIND_LABELS_ZH = {
     "comfyui": "ComfyUI",
-    "hf_cache": "Hugging Face 缓存",
+    "hf_cache": "HF 缓存",
     "folder": "信任文件夹",
 }
 
@@ -304,17 +304,24 @@ def source_for_path(
 def require_available(model_id: str, variant: Optional[str], display_name: str) -> None:
     """Raise when this model was used from a trusted folder and is now gone or
     changed there. A fresh install (nothing recorded) passes, so its normal
-    first-use download is unchanged."""
+    first-use download is unchanged.
+
+    The message is short and carries no path (the page shows a short backend
+    message as written, and a long one as "failed, try again", which would
+    never help); the path goes to the log. The page splits the two
+    languages at " / " and keeps "<name>: " in front.
+    """
     broken = problem(model_id, variant)
     if broken is None:
         return
-    gone = broken.state == STATE_GONE
+    logger.warning(
+        "%s file in %s is %s: %s", model_id, broken.source_label, broken.state, broken.path
+    )
+    zh_kind = _KIND_LABELS_ZH.get(broken.source_kind, _KIND_LABELS_ZH["folder"])
     raise ExternalModelUnavailable(
-        f"The {display_name} in {broken.source_label} is {'gone' if gone else 'changed'}: "
-        f"{broken.path}. Rescan in Model Center, or download it to the program folder. / "
-        f"{_KIND_LABELS_ZH.get(broken.source_kind, _KIND_LABELS_ZH['folder'])} 里的 "
-        f"{display_name} 已{'不见' if gone else '变更'}：{broken.path}。"
-        "请到模型中心重新扫描，或下载到程序文件夹。"
+        f"{display_name}: The file in {broken.source_label} is gone or changed. "
+        "Rescan in Model Center, or download it again. / "
+        f"{zh_kind}里的文件已不见或已变更。请到模型中心重新扫描，或下载到程序文件夹。"
     )
 
 

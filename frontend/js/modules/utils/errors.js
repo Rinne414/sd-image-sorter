@@ -116,6 +116,15 @@ function formatUserError(error, context = '') {
         if (explained) return withContext(explained);
     }
 
+    // A model that was used from a trusted folder (ComfyUI, a cache) is gone or
+    // changed there: "<name>: <English> / <中文>". Retrying cannot help, so the
+    // sentence is shown as written, in the UI language, whatever words it
+    // contains (the patterns below match on model names).
+    const missingCopy = /^(.+?): (The file in .+? is gone or changed\. Rescan in Model Center.*?) \/ (.+)$/s.exec(errorMsg);
+    if (missingCopy) {
+        return withContext(`${missingCopy[1]}: ${isZhCn() ? missingCopy[3] : missingCopy[2]}`);
+    }
+
     // Check for exact match first
     if (errorMessageMap[errorMsg]) {
         return withContext(errorMessageMap[errorMsg]);
