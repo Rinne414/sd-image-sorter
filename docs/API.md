@@ -2083,6 +2083,59 @@ or a `model_path` that is not a `.pth`/`.pt`/`.onnx` file, is a network path
 outside a trusted model folder, is missing or cannot be read (`kaloscope`
 space with `model_source=local` only).
 
+
+#### POST /api/style-map/query
+Drop a picture on the Style Map and find the nearest pictures of the current
+library: `multipart/form-data` with one `file` (an image of at most 50 MB,
+read into memory and never stored; a larger body is refused with 413 before
+it is parsed, whether or not it declares a `Content-Length`). The answer is
+placed on the map `points` last returned: the layout is not recomputed.
+
+**Parameters (query string):** `space`, `selection_token`, `model_source`,
+`model_path`, `use_gpu` as for `points`, plus:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `map_id` | string | null | The handle of the map the page shows (32 hex characters, 400 otherwise); `not_started` once that map is evicted or the handle is sent under another library |
+| `k` | integer | 20 | Neighbours to return (1-100) |
+
+`kaloscope` compares Kaloscope style vectors of the library with the dropped
+picture's (the first call loads the model: about 7-15 s, then about 0.1 s);
+`clip` reuses the Similar page's upload search.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "query": {"x": 0.412, "y": -0.208, "z": 0.133},
+  "neighbors": [
+    {"id": 17, "score": 0.87, "x": 0.43, "y": -0.2, "z": 0.12, "weak": false, "in_filter": true, "merged": false, "filename": "a.png"},
+    {"id": 23, "score": 0.41, "x": 0.43, "y": -0.2, "z": 0.12, "weak": false, "in_filter": true, "merged": true, "filename": "b.png"},
+    {"id": 41, "score": 0.12, "x": null, "y": null, "z": null, "weak": true, "in_filter": false, "merged": false, "filename": "c.png"}
+  ],
+  "weak_threshold": 0.32,
+  "model_version": "kaloscope-2.0:sha256:..."
+}
+```
+
+`query` is the similarity-weighted centre of the three nearest neighbours that
+have a position on the map (`null` when none has). A neighbour outside the
+current Gallery filter is listed with `in_filter: false` and no coordinates. A
+neighbour that is a member of a merged near-duplicate dot has
+`merged: true` and borrows that dot's position (approximate under the
+single-linkage merge). `weak` marks a score below `weak_threshold`: 0.5 for
+`clip` (the Similar page's threshold) and 0.32 for `kaloscope` (an empirical
+value from a 529-picture library, where a random pair's 95th percentile and
+each picture's nearest-other 5th percentile both sit near 0.32).
+`status: "not_started"` (`query: null`, no neighbours, no model run) when the
+map is not cached in this process.
+
+**Errors:** 400 for an empty or unreadable picture, one without a usable style
+vector, an unknown `space`, a malformed `map_id` or `selection_token`, or a
+`model_path` refused as for `points`; 409 while another AI job holds the
+runtime; 413 for a file over 50 MB; 503 when the Kaloscope model is not
+prepared (the message says how to prepare it).
+
 ### Obfuscation
 
 Output is always a PNG, so generation metadata survives the protect/restore
