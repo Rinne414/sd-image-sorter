@@ -148,6 +148,11 @@ async function layoutCheck(page: Page) {
 }
 
 test.describe('Style Map box selection', () => {
+  // The axis meanings (S4e) are not under test here: an empty answer keeps the real backend out of it.
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/api/style-map/axes**', (route) => route.fulfill({ json: { status: 'empty', space: 'kaloscope', layout: 'pca', axes: {} } }))
+  })
+
   test('Shift + drag picks exactly the dots inside the box, expands merged dots, and writes the shared selection', async ({ page }) => {
     const watcher = watch(page)
     await mockBase(page)

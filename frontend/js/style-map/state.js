@@ -16,6 +16,7 @@ import { RegionLandmarks, assignRegions, readLandmarksPreference, writeLandmarks
 import { ColorLegend, buildPointColors, readColorPreference, writeColorPreference } from './colors.js';
 import { NeighbourCard } from './neighbours.js';
 import { MapLocator } from './locate.js';
+import { StyleMapAxes } from './axes.js';
 import { BoxSelector } from './lasso.js';
 import { MapSelection } from './selection.js';
 import { t, formatError } from './text.js';
@@ -142,6 +143,7 @@ export function createStyleMap() {
     function repaint() {
         state.near?.render();
         state.locate?.render();
+        state.axes?.render();
         const points = state.points;
         if (!points || !state.panel) return;
         state.panel.renderScope(points);
@@ -173,6 +175,7 @@ export function createStyleMap() {
         repaint();
         scheduleLayoutPoll(points.umap?.status);
         state.near?.setAvailable(hasPoints && Boolean(points.map_id));
+        state.axes?.mapChanged();
         if (hasPoints) state.near?.mapChanged(mapSignature());
         state.locate?.mapChanged(hasPoints ? mapSignature() : null);
         consumePendingLookup(points, hasPoints);
@@ -254,6 +257,15 @@ export function createStyleMap() {
         return { space: state.space, query: params.toString(), signature: mapSignature() };
     }
 
+    /** What the axis-meaning labels and card ask for: the map on screen and the coordinates it shows. */
+    function axesRequest() {
+        if (state.points?.status !== 'ok' || !state.points.map_id) return null;
+        const layout = state.points.method === 'umap' ? 'umap' : 'pca';
+        const params = new URLSearchParams(mapQuery({ layout }));
+        params.delete('selection_token');
+        return { query: params.toString(), signature: mapSignature(), layout };
+    }
+
     /**
      * The one-shot retries of regions and colours (a not_started answer asks
      * for points again once) are armed only by the user's own actions: a
@@ -264,6 +276,7 @@ export function createStyleMap() {
     function armRetries() {
         state.regionsRetried = false;
         state.colorsRetried = false;
+        state.axes?.armRetries();
     }
 
     /** Paint one colours answer onto the dots the scene holds (null: grey, no legend). */
@@ -457,7 +470,10 @@ export function createStyleMap() {
         try {
             state.scene = new StyleMapScene(view.querySelector('#stylemap-canvas'), {
                 onHover: (hit) => state.panel.renderHover(hit),
-                onCameraChange: (camera) => state.landmarks?.place(camera),
+                onCameraChange: (camera) => {
+                    state.landmarks?.place(camera);
+                    state.axes?.place(camera);
+                },
             });
         } catch (error) {
             // No WebGL (old driver, hardware acceleration off, remote desktop):
@@ -497,6 +513,12 @@ export function createStyleMap() {
             preview,
             mark: (position) => state.near.setMarker(position),
             showAll: showAllPictures,
+        }, state.scene);
+        state.axes = new StyleMapAxes(view, {
+            getRequest: axesRequest,
+            refreshMap: () => refresh(),
+            preview: (id) => state.panel.renderHover({ id, members: 1 }),
+            isActive: isViewActive,
         }, state.scene);
         state.job = new IndexJob({
             getSpace: () => state.space,
@@ -560,6 +582,7 @@ export function createStyleMap() {
         state.job?.stopPolling();
         state.landmarks?.hover(-1);
         state.legend?.closePop();
+        state.axes?.close();
     }
 
     return { init, dispose, refresh, setColorBy, retryColors, locateImage, _state: state };

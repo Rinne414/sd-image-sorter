@@ -144,6 +144,11 @@ const ringKinds = (page: Page) =>
   page.evaluate(() => (window as any).StyleMap._state.scene.rings.describe().map((r: any) => `${r.kind}:${r.visible}`))
 
 test.describe('Style Map nearest pictures', () => {
+  // The axis meanings (S4e) are not under test here: an empty answer keeps the real backend out of it.
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/api/style-map/axes**', (route) => route.fulfill({ json: { status: 'empty', space: 'kaloscope', layout: 'pca', axes: {} } }))
+  })
+
   for (const [width, height, lang] of [[1366, 768, 'en'], [1920, 1080, 'zh-CN'], [2560, 1440, 'en']] as const) {
     test(`a dropped picture rings the nearest dots, greys the far ones and lists them best first at ${width}x${height} (${lang})`, async ({ page }) => {
       await mockBase(page)

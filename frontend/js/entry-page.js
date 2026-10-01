@@ -786,6 +786,8 @@
         '.stylemap-selbar:not([hidden])',
         // The locate box's result list closes on ESC itself (style-map/locate.js).
         '.stylemap-locate-pop:not([hidden])',
+        // Style map: the open "what the axes mean" card owns ESC (style-map/axes-panel.js).
+        '#view-stylemap.active .stylemap-axes-panel:not([hidden])',
     ].join(', ');
 
     function editingTarget(target) {

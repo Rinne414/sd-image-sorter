@@ -31,6 +31,7 @@
     <link rel="stylesheet" href="/static/css/reverse-prompt.css">
     <link rel="stylesheet" href="/static/css/style-map.css">
     <link rel="stylesheet" href="/static/css/style-map-locate.css">
+    <link rel="stylesheet" href="/static/css/style-map-axes.css">
     <!-- tokens.css must stay the LAST stylesheet: it owns the Graphite palette
          and remaps every legacy token defined by the sheets above. -->
     <link rel="stylesheet" href="/static/css/tokens.css">
@@ -3908,6 +3909,10 @@
                                     <p class="stylemap-locate-foot" id="stylemap-locate-foot" hidden></p>
                                 </div>
                             </div>
+                            <!-- Opens the "what the axes mean" card (style-map/axes.js); words follow the state (rule 16). -->
+                            <button class="btn btn-ghost btn-small" id="stylemap-axes-toggle" type="button" aria-expanded="false" aria-controls="stylemap-axes-panel" data-i18n="stylemap.axesButton">Axis meanings</button>
+                            <!-- Hides / shows the labels on the map grid (style-map/axes.js); words follow the state (rule 16). -->
+                            <button class="btn btn-ghost btn-small" id="stylemap-axes-labels-toggle" type="button" aria-pressed="true" data-i18n="stylemap.axesLabelsHide">Hide axis labels</button>
                             <!-- Words follow the state (rule 16): panel.js swaps key + text. -->
                             <button class="btn btn-ghost btn-small" id="stylemap-landmarks-toggle" type="button" aria-pressed="true" data-i18n="stylemap.landmarksHide">Hide region landmarks</button>
                             <!-- Box select switch for trackpads (Shift + drag does the same); words follow the state (rule 16). -->

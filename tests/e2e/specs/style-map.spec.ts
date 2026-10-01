@@ -158,6 +158,11 @@ async function mockProgressIdle(page: Page) {
 }
 
 test.describe('Style Map', () => {
+  // The axis meanings (S4e) are not under test here: an empty answer keeps the real backend out of it.
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/api/style-map/axes**', (route) => route.fulfill({ json: { status: 'empty', space: 'kaloscope', layout: 'pca', axes: {} } }))
+  })
+
   test('is reachable through its tab or the More mirror, and the catalog lists it', async ({ page }) => {
     await mockSelectionToken(page)
     await mockProgressIdle(page)

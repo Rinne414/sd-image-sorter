@@ -101,6 +101,11 @@ async function openStyleMap(page: Page, lang: string, width = 1366, height = 768
 }
 
 test.describe('Style Map: view in Gallery', () => {
+  // The axis meanings (S4e) are not under test here: an empty answer keeps the real backend out of it.
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/api/style-map/axes**', (route) => route.fulfill({ json: { status: 'empty', space: 'kaloscope', layout: 'pca', axes: {} } }))
+  })
+
   test('the Gallery shows only the picked pictures, all selected across pages, and the x restores the Gallery', async ({ page, request }) => {
     const ids = await seedPictures(request)
     const everything = (await (await request.get('/api/images?limit=1')).json()).total
