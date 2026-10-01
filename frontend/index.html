@@ -3927,12 +3927,31 @@
                                 <div class="stylemap-preview-name" id="stylemap-preview-name"></div>
                                 <div class="stylemap-preview-members" id="stylemap-preview-members"></div>
                             </div>
-                            <ul class="stylemap-help">
-                                <li data-i18n="stylemap.helpRotate">Drag to rotate, wheel to zoom, right-drag to pan.</li>
-                                <li data-i18n="stylemap.helpMembers">One dot can stand for several near-identical pictures.</li>
-                                <li data-i18n="stylemap.helpNear">Only dots that sit together mean something; distances across the map do not.</li>
-                                <li data-i18n="stylemap.helpLandmarks">Region landmarks are mostly pictures; a style or artist is named only when it is clear.</li>
-                            </ul>
+                            <section class="stylemap-near" id="stylemap-near" aria-labelledby="stylemap-near-title">
+                                <div class="stylemap-near-head">
+                                    <h4 class="stylemap-near-title" id="stylemap-near-title" data-i18n="stylemap.nearTitle">Drop a picture, find the nearest</h4>
+                                    <button class="btn btn-ghost btn-small" id="stylemap-near-clear" type="button" hidden data-i18n="stylemap.nearClear">Clear</button>
+                                </div>
+                                <div class="stylemap-drop" id="stylemap-drop" role="button" tabindex="0" aria-disabled="true">
+                                    <span class="stylemap-drop-main" id="stylemap-drop-main" data-i18n="stylemap.nearDrop">Drop a picture here</span>
+                                    <span class="stylemap-drop-sub" id="stylemap-drop-sub"></span>
+                                    <input type="file" id="stylemap-near-file" accept="image/*" hidden>
+                                </div>
+                                <p class="stylemap-near-status" id="stylemap-near-status" role="status" aria-live="polite" hidden></p>
+                                <div class="stylemap-near-body">
+                                    <ul class="stylemap-near-list" id="stylemap-near-list"></ul>
+                                    <p class="stylemap-near-note" id="stylemap-near-note" hidden></p>
+                                </div>
+                            </section>
+                            <details class="stylemap-help" id="stylemap-help">
+                                <summary data-i18n="stylemap.helpTitle">How to read the map</summary>
+                                <ul>
+                                    <li data-i18n="stylemap.helpRotate">Drag to rotate, wheel to zoom, right-drag to pan.</li>
+                                    <li data-i18n="stylemap.helpMembers">One dot can stand for several near-identical pictures.</li>
+                                    <li data-i18n="stylemap.helpNear">Only dots that sit together mean something; distances across the map do not.</li>
+                                    <li data-i18n="stylemap.helpLandmarks">Region landmarks are mostly pictures; a style or artist is named only when it is clear.</li>
+                                </ul>
+                            </details>
                         </aside>
                     </div>
                 </div>

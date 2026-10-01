@@ -13,6 +13,7 @@
 import * as THREE from '../vendor/three/three.module.js';
 import { OrbitControls } from '../vendor/three/OrbitControls.js';
 import { NO_DATA_RGB } from './colors.js';
+import { RingPool } from './rings.js';
 
 const FOCUS_LIGHTEN = 0.35; // dots of the lit region move this far toward white
 const FOCUS_DIM = 0.45; // every other dot keeps this share of its colour
@@ -175,6 +176,9 @@ export class StyleMapScene {
         this.ring.renderOrder = 10;
         this.ring.visible = false;
         this.scene.add(this.ring);
+        // Markers of a nearest-picture lookup (query point, neighbours).
+        this.rings = new RingPool(this.scene);
+        this.flight = 0;
 
         this.raycaster = new THREE.Raycaster();
         this.raycaster.params.Points.threshold = MAX_POINT_SIZE;
@@ -239,6 +243,7 @@ export class StyleMapScene {
         this.hovered = -1;
         this.focus = null;
         this.ring.visible = false;
+        this.rings.clear();
         this.ids = ids;
         this.members = members;
         this.sizes = sizes;
@@ -277,6 +282,13 @@ export class StyleMapScene {
      * (a resize must not throw away the user's rotation).
      */
     fitCamera({ keepDirection }) {
+        // The user (or a list row) turned the camera to a point: a resize keeps
+        // that view; only a new map or a view reset fits the cloud again.
+        if (keepDirection && this.flownTo) {
+            this.camera.updateProjectionMatrix();
+            return;
+        }
+        this.flownTo = false;
         const halfFov = THREE.MathUtils.degToRad(FOV) / 2;
         const shortHalfAngle = this.aspect >= 1 ? halfFov : Math.atan(Math.tan(halfFov) * this.aspect);
         let distance = this.radius / (Math.sin(shortHalfAngle) * FIT_SHARE);
@@ -569,6 +581,49 @@ export class StyleMapScene {
             this.scratch.multiplyScalar(FOCUS_DIM);
         }
         return this.scratch;
+    }
+
+    /**
+     * Mark a lookup on the map: `items` are {kind: 'query' | 'near' | 'far',
+     * x, y, z}; an empty list removes every marker.
+     */
+    setRings(items) {
+        if (!items.length) this.rings.clear();
+        else this.rings.show(items, basePointSize(this.count));
+        this.requestRender();
+    }
+
+    /**
+     * Turn the camera to a point: the orbit target (and the camera with it,
+     * so the distance and the viewing angle stay) glides there; a user's
+     * reduced-motion setting jumps instead.
+     */
+    flyTo(xyz, durationMs = 380) {
+        cancelAnimationFrame(this.flight);
+        this.flownTo = true;
+        const delta = new THREE.Vector3(...xyz).sub(this.controls.target);
+        const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+        const apply = (share) => {
+            const step = delta.clone().multiplyScalar(share);
+            this.controls.target.add(step);
+            this.camera.position.add(step);
+            this.controls.update();
+            this.render();
+        };
+        if (reduced || durationMs <= 0 || !this.running) {
+            apply(1);
+            return;
+        }
+        const startedAt = performance.now();
+        let shown = 0;
+        const tick = (now) => {
+            const progress = Math.min(1, (now - startedAt) / durationMs);
+            const eased = 1 - (1 - progress) ** 3;
+            apply(eased - shown);
+            shown = eased;
+            if (progress < 1) this.flight = requestAnimationFrame(tick);
+        };
+        this.flight = requestAnimationFrame(tick);
     }
 
     pick() {

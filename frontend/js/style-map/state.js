@@ -14,11 +14,13 @@ import { StyleMapPanel } from './panel.js';
 import { IndexJob } from './index-job.js';
 import { RegionLandmarks, assignRegions, readLandmarksPreference, writeLandmarksPreference } from './regions.js';
 import { ColorLegend, buildPointColors, readColorPreference, writeColorPreference } from './colors.js';
+import { NeighbourCard } from './neighbours.js';
 import { t, formatError } from './text.js';
 
 const LAYOUT_POLL_MS = 3000;
 const FILTER_DEBOUNCE_MS = 500;
 const UMAP_MODEL_ID = 'style-map-umap';
+const NEAR_K = 20; // neighbours asked for by a dropped picture
 
 function app() {
     return window.App || null;
@@ -124,6 +126,7 @@ export function createStyleMap() {
 
     /** Repaint every JS-written text from the current state (also on language switch). */
     function repaint() {
+        state.near?.render();
         const points = state.points;
         if (!points || !state.panel) return;
         state.panel.renderScope(points);
@@ -151,6 +154,8 @@ export function createStyleMap() {
         applyColors(hasPoints && state.colors?.by === state.colorBy ? state.colors : null);
         repaint();
         scheduleLayoutPoll(points.umap?.status);
+        state.near?.setAvailable(hasPoints && Boolean(points.map_id));
+        if (hasPoints) state.near?.mapChanged(mapSignature());
         if (hasPoints) {
             if (!state.colors) state.panel.showColorsNote(t('stylemap.colorsLoading', 'Loading colours...'));
             loadRegions();
@@ -167,6 +172,23 @@ export function createStyleMap() {
     function mapQuery(extra = {}) {
         const mapId = state.points?.map_id;
         return query(mapId ? { map_id: mapId, ...extra } : extra);
+    }
+
+    /** What the dropped-picture card keys its answer by: the map and its coordinates. */
+    function mapSignature() {
+        return `${state.space}|${state.points?.map_id || ''}|${state.points?.method || ''}`;
+    }
+
+    /** The dropped-picture card's view of the map on screen; null while there is none. */
+    function nearRequest() {
+        if (state.points?.status !== 'ok' || !state.points.map_id) return null;
+        const extra = { k: NEAR_K };
+        const gpu = state.space === 'kaloscope' ? readModelSettings().use_gpu : null;
+        if (gpu !== null && gpu !== undefined) extra.use_gpu = gpu;
+        // map_id names the map; the (long) filter token would only lengthen the URL.
+        const params = new URLSearchParams(mapQuery(extra));
+        params.delete('selection_token');
+        return { space: state.space, query: params.toString(), signature: mapSignature() };
     }
 
     /**
@@ -384,6 +406,11 @@ export function createStyleMap() {
         state.landmarks.setVisible(state.landmarksOn);
         state.legend = new ColorLegend(view.querySelector('#stylemap-legend'));
         state.panel.setColorBy(state.colorBy);
+        state.near = new NeighbourCard(view, {
+            getRequest: nearRequest,
+            refreshMap: () => refresh(),
+            preview: (id) => state.panel.renderHover({ id, members: 1 }),
+        }, state.scene);
         state.job = new IndexJob({
             getSpace: () => state.space,
             getToken: () => state.token,

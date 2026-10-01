@@ -553,7 +553,7 @@
 .stylemap-preview-box img {
     display: block;
     max-width: 100%;
-    max-height: calc(var(--ui-viewport-height, 100vh) * 0.42);
+    max-height: calc(var(--ui-viewport-height, 100vh) * 0.24);
     width: auto;
     height: auto;
     object-fit: contain;
@@ -589,13 +589,30 @@
 
 .stylemap-help {
     margin: 0;
-    padding: 12px 14px 12px 28px;
+    padding: 9px 14px;
     border: 1px solid var(--border);
     border-radius: 14px;
     background: var(--surface-1);
     color: var(--text-2);
     font-size: 12.5px;
     line-height: 1.5;
+}
+
+.stylemap-help summary {
+    cursor: pointer;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.stylemap-help summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
+
+.stylemap-help ul {
+    margin: 8px 0 0;
+    padding-left: 14px;
     display: grid;
     gap: 6px;
 }
@@ -604,4 +621,190 @@
     color: var(--muted);
     font-size: 12px;
     word-break: break-word;
+}
+
+/* Drop a picture, find the nearest (S4c). The card takes the side column's
+   remaining height (rule 18); only its list scrolls. */
+.stylemap-near {
+    flex: 1 1 auto;
+    min-height: 140px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface-1);
+    overflow: hidden;
+}
+
+.stylemap-near-head {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 24px;
+}
+
+.stylemap-near-title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    min-width: 0;
+}
+
+.stylemap-drop {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px;
+    border: 1.5px dashed var(--border-strong);
+    border-radius: 10px;
+    background: var(--surface-2);
+    text-align: center;
+    cursor: pointer;
+    color: var(--text-2);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.stylemap-drop-main {
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.stylemap-drop:hover:not([aria-disabled="true"]),
+.stylemap-drop.is-active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+}
+
+.stylemap-drop:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.stylemap-drop[aria-disabled="true"] {
+    cursor: default;
+    opacity: 0.7;
+}
+
+.stylemap-near-status {
+    flex: 0 0 auto;
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-2);
+}
+
+.stylemap-near-status[data-tone="error"] {
+    color: var(--danger);
+}
+
+.stylemap-near-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.stylemap-near-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.stylemap-near-item + .stylemap-near-item {
+    border-top: 1px solid var(--border);
+}
+
+.stylemap-near-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 4px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 12.5px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.stylemap-near-row:hover {
+    background: var(--surface-2);
+}
+
+.stylemap-near-row.is-active {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.stylemap-near-row:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+.stylemap-near-thumb {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    object-fit: cover;
+    background: var(--surface-3);
+}
+
+.stylemap-near-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.stylemap-near-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.stylemap-near-flag {
+    color: var(--muted);
+    font-size: 11.5px;
+    line-height: 1.3;
+}
+
+.stylemap-near-score {
+    flex: 0 0 auto;
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+}
+
+/* A far neighbour reads as grey all over: name, flag and score. */
+.stylemap-near-row[data-weak="true"] .stylemap-near-name,
+.stylemap-near-row[data-weak="true"] .stylemap-near-score {
+    color: var(--muted);
+}
+
+.stylemap-near-row[data-weak="true"] .stylemap-near-thumb {
+    opacity: 0.6;
+}
+
+.stylemap-near-row.is-query .stylemap-near-flag {
+    color: var(--accent);
+}
+
+.stylemap-near-note {
+    margin: 8px 0 0;
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: var(--muted);
+}
+
+.stylemap-drop.is-compact {
+    padding: 7px 10px;
 }
