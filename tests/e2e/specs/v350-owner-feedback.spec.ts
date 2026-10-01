@@ -708,7 +708,11 @@ test('CLIP, OppaiOracle, and Favorites use the active language instead of backen
     }
   })
   page.on('requestfailed', (request) => {
-    requestProblems.push(`${request.method()} ${request.url()} ${request.failure()?.errorText || ''}`.trim())
+    const errorText = request.failure()?.errorText || ''
+    // A grid re-render replaces <img> elements whose thumbnail is still loading;
+    // the browser cancels those loads. That is not a failed request.
+    if (new URL(request.url()).pathname.startsWith('/api/image-thumbnail/') && errorText === 'net::ERR_ABORTED') return
+    requestProblems.push(`${request.method()} ${request.url()} ${errorText}`.trim())
   })
   page.on('response', (response) => {
     if (response.status() >= 400) {

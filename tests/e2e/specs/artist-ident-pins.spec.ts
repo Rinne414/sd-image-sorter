@@ -846,10 +846,14 @@ test('run and clear buttons are gated on availability, in-flight state, and gall
         pageOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
       }
     })
-    expect(geometry.left).toBeGreaterThanOrEqual(0)
-    expect(geometry.top).toBeGreaterThanOrEqual(0)
-    expect(geometry.right).toBeLessThanOrEqual(viewport.width)
-    expect(geometry.bottom).toBeLessThanOrEqual(viewport.height)
+    // UiScale zooms the page at wide viewports, so a button scrolled flush to
+    // an edge can end a fraction of a pixel past it (1440.17 at 2560x1440).
+    // A real clip is more than a pixel; allow the rounding, as other specs do.
+    const subpixel = 1
+    expect(geometry.left).toBeGreaterThanOrEqual(-subpixel)
+    expect(geometry.top).toBeGreaterThanOrEqual(-subpixel)
+    expect(geometry.right).toBeLessThanOrEqual(viewport.width + subpixel)
+    expect(geometry.bottom).toBeLessThanOrEqual(viewport.height + subpixel)
     expect(geometry.width).toBeGreaterThan(0)
     expect(geometry.height).toBeGreaterThan(0)
     expect(geometry.overlappingButtons).toEqual([])
