@@ -2781,8 +2781,10 @@ Poll the active or named Smart Tag job. With no `job_id` query param, returns th
 `queued`, `running`, `completed`, `warning`, `failed`, and `cancelled`: zero successes with
 one or more failures ends as `failed`; mixed successes and failures ends as `warning`; only
 a failure-free run ends as `completed`. Snapshots include `total`, `processed`, `succeeded`,
-`failed`, `message`, `last_caption_preview`, `caption_result_count`, and tail-capped
+`failed`, `message`, `message_key`, `message_args`, `last_caption_preview`, `caption_result_count`, and tail-capped
 `errors: [{image_id, error}]`; `image_id` is a numeric DB ID string or a local source path.
+
+`message` is an English display string kept for API compatibility; clients localise from `message_key` (`cancel_requested`, `smart_tagging`, `smart_tagging_vlm`, `tagging_batch`, `phase1`, `phase1_progress`, `phase2`, `cancelled`, `resolving`, `no_images`, `taggers_sequential`, `loading_tagger`, `loading_tagger_n`, `tagging_model`, `captioner_after_booru`, `loading_vlm`, `loading_captioner`, `consensus`, `consensus_vlm`, `captioning_progress`, `processing_progress`, `vram_refresh`, `memory_critical`, `ram_high`, `done`, `done_warning`, `failed_all`, `failed_caption_profile`, `booru_saved_caption_failed`, `failed`, plus `queued_unknown` / `queued_start_failed` on queue-id lookups), the counters (`succeeded`, `failed`, `skipped`, `total`, `processed`) and `message_args` (a small object such as `{"model": "..."}`; `failed`, `failed_all`, `failed_caption_profile` and `booru_saved_caption_failed` carry the raw provider error as `detail`).
 
 For DB-backed images, caption fields, tag rows, and raw tag-score rows commit in
 one SQLite transaction. A failed append read or write is reported as an image

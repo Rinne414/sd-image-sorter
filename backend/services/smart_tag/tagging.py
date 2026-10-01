@@ -205,7 +205,10 @@ def _apply_memory_pressure(job: "SmartTagJobState", tagger, current_batch_size: 
     if pressure.get("should_restart_session") and hasattr(tagger, "_recreate_session"):
         try:
             tagger._recreate_session()
-            job.message = "VRAM pressure detected — refreshed the tagger session."
+            job.set_message(
+                "vram_refresh",
+                "VRAM pressure detected — refreshed the tagger session.",
+            )
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning("smart-tag: session refresh under VRAM pressure failed: %s", exc)
 
@@ -214,11 +217,19 @@ def _apply_memory_pressure(job: "SmartTagJobState", tagger, current_batch_size: 
         reduced = max(1, current_batch_size // 2)
         gc.collect()
         time.sleep(2)
-        job.message = f"Memory pressure high — pausing briefly and reducing batch to {reduced}."
+        job.set_message(
+            "memory_critical",
+            f"Memory pressure high — pausing briefly and reducing batch to {reduced}.",
+            chunk=reduced,
+        )
         return reduced
     if ram_pct is not None and ram_pct >= 90.0 and current_batch_size > 2:
         reduced = max(2, current_batch_size // 2)
-        job.message = f"High RAM usage — reducing batch to {reduced}."
+        job.set_message(
+            "ram_high",
+            f"High RAM usage — reducing batch to {reduced}.",
+            chunk=reduced,
+        )
         return reduced
     return current_batch_size
 
@@ -384,7 +395,11 @@ def _load_toriigate_for_phase2(job: SmartTagJobState, req: "SmartTagRequest"):
 
     from toriigate_tagger import get_toriigate_tagger
 
-    job.message = "Loading ToriiGate natural-language model..."
+    job.set_message(
+        "loading_captioner",
+        "Loading ToriiGate natural-language model...",
+        captioner="ToriiGate",
+    )
     nl_tagger = get_toriigate_tagger(
         model_name="toriigate-0.5",
         use_gpu=req.use_gpu,
@@ -418,7 +433,11 @@ def _load_florence2_for_phase2(job: SmartTagJobState, req: "SmartTagRequest"):
 
     from florence2_captioner import get_florence2_captioner
 
-    job.message = "Loading Florence-2 Base natural-language model..."
+    job.set_message(
+        "loading_captioner",
+        "Loading Florence-2 Base natural-language model...",
+        captioner="Florence-2 Base",
+    )
     nl_captioner = get_florence2_captioner(
         use_gpu=use_gpu,
         force_reload=False,

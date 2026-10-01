@@ -583,13 +583,21 @@ class TaggingPipelineService(_TaggingPipelinePersistenceMixin):
         elif any(item.get("queue_id") == queue_id for item in queue_info.get("queued", [])):
             snapshot = {"status": "queued", "active": False}
         elif isinstance(start_error, dict) and start_error.get("queue_id") == queue_id:
-            snapshot = {"status": "failed", "active": False, "message": str(start_error.get("error") or "")}
+            snapshot = {
+                "status": "failed",
+                "active": False,
+                "message": str(start_error.get("error") or ""),
+                "message_key": "queued_start_failed",
+                "message_args": {"detail": str(start_error.get("error") or "")},
+            }
         else:
             snapshot = {
                 "status": "unknown",
                 "active": False,
                 "found": False,
                 "message": "This queued Smart Tag run is no longer known (the app restarted or its result was dropped).",
+                "message_key": "queued_unknown",
+                "message_args": {},
             }
         snapshot.setdefault("found", True)
         snapshot["queue_id"] = queue_id

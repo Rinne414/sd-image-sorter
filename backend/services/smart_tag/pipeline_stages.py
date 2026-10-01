@@ -94,6 +94,46 @@ def _terminal_job_outcome(
     return "completed", _completion_message(job)
 
 
+def _finish_job(
+    job: SmartTagJobState,
+    req: SmartTagRequest,
+    *,
+    degraded_reason: str = "",
+) -> None:
+    """Apply the terminal outcome and its localisation key to ``job``."""
+    was_running = job.status == "running" and not job.cancel_requested
+    job.status, job.message = _terminal_job_outcome(
+        job, req, degraded_reason=degraded_reason
+    )
+    if job.cancel_requested:
+        job.message_key, job.message_args = "cancelled", {}
+    elif not was_running:
+        return
+    elif job.status == "completed":
+        job.message_key, job.message_args = "done", {}
+    elif job.status == "warning":
+        job.message_key = "done_warning"
+        job.message_args = {"degraded": bool(degraded_reason)}
+    else:
+        last_error = next(
+            (
+                str(error.get("error", "")).strip()
+                for error in reversed(job.errors)
+                if str(error.get("error", "")).strip()
+            ),
+            "",
+        )
+        if req.caption_profile is not None:
+            job.message_key = "failed_caption_profile"
+            job.message_args = {
+                "profile": req.caption_profile.value,
+                "detail": last_error,
+            }
+        else:
+            job.message_key = "failed_all"
+            job.message_args = {"detail": last_error}
+
+
 def _process_one_image(
     *,
     image_path: str,

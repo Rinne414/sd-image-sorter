@@ -154,6 +154,67 @@
         }
     }
 
+    // The backend still sends an English `message` for API compatibility; the UI
+    // builds its own sentence from message_key + message_args + the counters so
+    // it follows the language. An unknown key falls back to a generic localized
+    // line. Raw provider errors (`detail`) are shown as received.
+    function smartTagStatusText(snap) {
+        const key = snap && snap.message_key;
+        if (!key) return '';
+        const args = snap.message_args || {};
+        const fill = (i18nKey, fallback, values = {}) => Object.keys(values).reduce(
+            (text, name) => text.split(`{${name}}`).join(String(values[name])),
+            smartTagT(i18nKey, fallback),
+        );
+        const withDetail = (text, detail) => (detail ? `${text}: ${detail}` : text);
+        const ok = snap.succeeded || 0;
+        const failed = snap.failed || 0;
+        const skipped = snap.skipped || 0;
+        const countsText = () => {
+            let text = fill('smartTag.msg.counts', 'Succeeded: {ok}, failed: {failed}', { ok, failed });
+            if (skipped > 0) {
+                text += fill('smartTag.msg.countsSkipped', ', skipped (already tagged): {skipped}', { skipped });
+            }
+            return text;
+        };
+        switch (key) {
+            case 'cancel_requested': return smartTagT('smartTag.cancelRequested', 'Smart Tag cancellation requested');
+            case 'smart_tagging_vlm': return fill('smartTag.msg.workingVlm', 'Smart Tag is working on {total} images (VLM workers: {workers})...', { total: snap.total || 0, workers: args.workers || 1 });
+            case 'smart_tagging': return fill('smartTag.msg.working', 'Smart Tag is working on {total} images...', { total: snap.total || 0 });
+            case 'tagging_batch': return fill('smartTag.msg.taggingBatch', 'Tagging a batch of {count} images...', { count: args.count || 0 });
+            case 'phase1': return fill('smartTag.msg.phase1', 'Phase 1 of 2: booru tags ({total} images)...', { total: snap.total || 0 });
+            case 'phase1_progress': return fill('smartTag.msg.phase1Progress', 'Phase 1 of 2: tagged {done}/{total}', { done: args.done || 0, total: args.total || 0 });
+            case 'phase2': return fill('smartTag.msg.phase2', 'Phase 2 of 2: captioning {count} images with {captioner}...', { count: args.count || 0, captioner: args.captioner || '' });
+            case 'cancelled': return smartTagT('smartTag.msg.cancelled', 'Cancelled.');
+            case 'booru_saved_caption_failed': return withDetail(fill('smartTag.msg.booruSavedCaptionFailed', 'Booru tags were saved, but the {captioner} caption phase could not start', { captioner: args.captioner || '' }), args.detail);
+            case 'resolving': return smartTagT('smartTag.msg.resolving', 'Resolving images...');
+            case 'no_images': return smartTagT('smartTag.msg.noImages', 'No matching images found.');
+            case 'taggers_sequential': return smartTagT('smartTag.msg.taggersSequential', 'The local booru taggers will run one at a time...');
+            case 'loading_tagger': return smartTagT('smartTag.msg.loadingTagger', 'Loading the local booru tagger...');
+            case 'captioner_after_booru': return fill('smartTag.msg.captionerAfterBooru', '{captioner} will load after the booru tagging phase...', { captioner: args.captioner || '' });
+            case 'loading_vlm': return smartTagT('smartTag.msg.loadingVlm', 'Loading the VLM provider...');
+            case 'loading_tagger_n': return fill('smartTag.msg.loadingTaggerN', 'Loading tagger {index}/{count}: {model}...', { index: args.index || 1, count: args.count || 1, model: args.model || '' });
+            case 'tagging_model': return fill('smartTag.msg.taggingModel', 'Tagging ({model}) {done}/{total}', { model: args.model || '', done: args.done || 0, total: args.total || 0 });
+            case 'consensus_vlm': return smartTagT('smartTag.msg.consensusVlm', 'Running consensus and VLM...');
+            case 'consensus': return smartTagT('smartTag.msg.consensus', 'Running consensus...');
+            case 'captioning_progress': return smartTagT('smartTag.stageVlm', 'VLM captioning');
+            case 'processing_progress': return smartTagT('smartTag.msg.processing', 'Processing');
+            case 'vram_refresh': return smartTagT('smartTag.msg.vramRefresh', 'VRAM pressure: the runtime session was refreshed.');
+            case 'memory_critical': return fill('smartTag.msg.memoryCritical', 'Memory pressure is high. Pausing briefly and reducing the batch to {chunk}.', { chunk: args.chunk || 1 });
+            case 'ram_high': return fill('smartTag.msg.ramHigh', 'High RAM usage. Reducing the batch to {chunk}.', { chunk: args.chunk || 1 });
+            case 'loading_captioner': return fill('smartTag.msg.loadingCaptioner', 'Loading the {captioner} natural-language model...', { captioner: args.captioner || '' });
+            case 'done': return smartTagT('smartTag.msg.done', 'Done.') + ' ' + countsText();
+            case 'done_warning': return smartTagT('smartTag.msg.doneWarning', 'Completed with warnings.') + ' ' + countsText()
+                + (args.degraded ? ' ' + smartTagT('smartTag.msg.degraded', 'Some of the selected tagger models could not be loaded.') : '');
+            case 'failed_all': return withDetail(fill('smartTag.msg.failedAll', 'Smart Tag failed for all {count} images', { count: failed }), args.detail);
+            case 'failed_caption_profile': return withDetail(fill('smartTag.msg.failedCaptionProfile', 'Caption profile {profile} failed for all {count} images', { profile: args.profile || '', count: failed }), args.detail);
+            case 'failed': return withDetail(smartTagT('smartTag.msg.failed', 'Smart Tag failed'), args.detail);
+            case 'queued_unknown': return smartTagT('smartTag.msg.queuedUnknown', 'This queued Smart Tag run is no longer known (the program restarted or its result was dropped).');
+            case 'queued_start_failed': return fill('aiQueue.startFailed', 'Queued job failed to start: {error}', { error: args.detail || '' });
+            default: return smartTagT('smartTag.msg.generic', 'Smart Tag is working...');
+        }
+    }
+
     function renderSnapshot(snap) {
         if (!snap) return;
         const total = snap.total || 0;
@@ -185,7 +246,10 @@
             percent = total > 0 ? (processed / total) * 100 : 0;
         }
 
-        let text = snap.message || status;
+        const keyedText = smartTagStatusText(snap);
+        const counts = smartTagT('smartTag.msg.progressCounts', 'succeeded {ok}, failed {failed}')
+            .replace('{ok}', String(snap.succeeded || 0)).replace('{failed}', String(snap.failed || 0));
+        let text = keyedText || snap.message || status;
         if (total > 0) {
             let stagePrefix = '';
             if (stage === 'tagging') {
@@ -194,9 +258,9 @@
                 stagePrefix = smartTagT('smartTag.stageVlm', 'VLM captioning');
             }
             if (stagePrefix) {
-                text = `${stagePrefix} ${processed}/${total} — ${snap.succeeded || 0} ok, ${snap.failed || 0} failed`;
+                text = `${stagePrefix} ${processed}/${total} — ${counts}`;
             } else {
-                text = `${snap.message || status} — ${processed}/${total} (${snap.succeeded || 0} ok, ${snap.failed || 0} failed)`;
+                text = `${keyedText || snap.message || status} — ${processed}/${total} (${counts})`;
             }
         }
         setProgressUI({

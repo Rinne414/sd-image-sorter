@@ -150,14 +150,16 @@
             : null;
         const errorSource = String(firstError?.image_id || '').trim();
         const errorLabel = errorSource
-            ? (/^-?\d+$/.test(errorSource) ? `Image #${errorSource}` : `Image ${errorSource}`)
-            : 'Image';
+            ? (/^-?\d+$/.test(errorSource)
+                ? smartTagT('smartTag.errorImageId', 'Image #{id}').replace('{id}', () => errorSource)
+                : smartTagT('smartTag.errorImagePath', 'Image {id}').replace('{id}', () => errorSource))
+            : smartTagT('smartTag.errorImage', 'Image');
         const errorSuffix = firstError
             ? ` · ${errorLabel}: ${String(firstError.error)}`
             : '';
         const errorText = firstError ? String(firstError.error) : '';
         const failedErrorSuffix = firstError
-            ? String(snap.message || '').includes(errorText)
+            ? `${smartTagStatusText(snap)} ${snap.message || ''}`.includes(errorText)
                 ? ` · ${errorLabel}`
                 : errorSuffix
             : '';
@@ -174,7 +176,10 @@
             ? fill(smartTagT('smartTag.cancelledToast', 'Smart Tag cancelled at {done}/{total}{extra}'),
                 { done: ok + fail, total, extra: noiseSuffix + skippedSuffix })
             : status === 'failed'
-                ? `Smart Tag failed: ${snap.message || 'unknown error'}${failedErrorSuffix}`
+                ? (smartTagStatusText(snap)
+                    ? `${smartTagStatusText(snap)}${failedErrorSuffix}`
+                    : fill(smartTagT('smartTag.failedToast', 'Smart Tag failed: {reason}{extra}'),
+                        { reason: snap.message || smartTagT('smartTag.unknownError', 'unknown error'), extra: failedErrorSuffix }))
                 : isWarning
                     ? fill(smartTagT('smartTag.finishedWarningsToast', 'Smart Tag finished with warnings: {ok} ok, {fail} failed{extra}.'),
                         { ok, fail, extra: noiseSuffix + skippedSuffix + errorSuffix })

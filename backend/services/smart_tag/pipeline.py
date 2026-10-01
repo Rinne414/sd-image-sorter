@@ -37,8 +37,9 @@ from services.smart_tag.jobs import (
     _record_job_error,
 )
 from services.smart_tag.pipeline_stages import (
+    _finish_job,
     _process_one_image as _process_one_image,  # re-export: facade + test surface
-    _terminal_job_outcome,
+    _terminal_job_outcome as _terminal_job_outcome,  # re-export: facade + test surface
 )
 from services.smart_tag.request import SmartTagRequest, _coerce_request, _request_total
 from services.smart_tag.results import (
@@ -137,7 +138,7 @@ def cancel_active_job() -> Optional[SmartTagJobState]:
         if job is None:
             return None
         job.cancel_requested = True
-        job.message = "Cancellation requested..."
+        job.set_message("cancel_requested", "Cancellation requested...")
         return job
 
 
@@ -153,7 +154,7 @@ def cancel_job_if_active(job_id: str) -> Optional[SmartTagJobState]:
         if job is None:
             return None
         job.cancel_requested = True
-        job.message = "Cancellation requested..."
+        job.set_message("cancel_requested", "Cancellation requested...")
         return job
 
 
@@ -226,9 +227,13 @@ def _run_windowed_pipeline(
     job.stage = "vlm" if ctx.nl_active else ("tagging" if req.enable_wd14 else "")
     job.phase_completion = 0.0
     if ctx.use_vlm:
-        job.message = f"Smart-tagging {job.total} image(s) (VLM x{ctx.worker_count})..."
+        job.set_message(
+            "smart_tagging_vlm",
+            f"Smart-tagging {job.total} image(s) (VLM x{ctx.worker_count})...",
+            workers=ctx.worker_count,
+        )
     else:
-        job.message = f"Smart-tagging {job.total} image(s)..."
+        job.set_message("smart_tagging", f"Smart-tagging {job.total} image(s)...")
 
     for window in _iter_windows(req, SMART_TAG_PIPELINE_WINDOW, job):
         if job.cancel_requested:
@@ -243,7 +248,11 @@ def _run_windowed_pipeline(
         # ---- Booru phase: ONE GPU-batched call for the whole window. ----
         if req.enable_wd14 and tagger is not None:
             booru_batch_size = _apply_memory_pressure(job, tagger, booru_batch_size)
-            job.message = f"Tagging {len(valid)} image(s) on GPU..."
+            job.set_message(
+                "tagging_batch",
+                f"Tagging {len(valid)} image(s) on GPU...",
+                count=len(valid),
+            )
             raw_results = _tag_batch_with_thresholds(
                 tagger,
                 [path for (_sk, _iid, path) in valid],
@@ -269,7 +278,7 @@ def _run_windowed_pipeline(
         # mid-window cancel keeps finished work and just stops issuing new calls.
         _run_caption_phase(job, req, items, ctx)
 
-    job.status, job.message = _terminal_job_outcome(job, req)
+    _finish_job(job, req)
 
 
 # How many failed model names to spell out before summarising the rest, so a
@@ -352,7 +361,10 @@ def _run_two_phase_local_captioner_pipeline(
     )
     job.stage = "tagging" if req.enable_wd14 else "vlm"
     job.phase_completion = 0.0
-    job.message = f"Smart-tagging {job.total} image(s) (phase 1/2: booru tags)..."
+    job.set_message(
+        "phase1",
+        f"Smart-tagging {job.total} image(s) (phase 1/2: booru tags)...",
+    )
 
     pending_items: List[Tuple[str, int, str, Dict[str, Any]]] = []
     total = max(1, int(job.total or 0))
@@ -390,11 +402,16 @@ def _run_two_phase_local_captioner_pipeline(
             for i in range(len(valid))
         )
         job.phase_completion = min(1.0, len(pending_items) / total)
-        job.message = f"Phase 1/2: tagged {len(pending_items)}/{total} image(s)..."
+        job.set_message(
+            "phase1_progress",
+            f"Phase 1/2: tagged {len(pending_items)}/{total} image(s)...",
+            done=len(pending_items),
+            total=total,
+        )
 
     if job.cancel_requested:
         job.status = "cancelled"
-        job.message = "Cancelled by user."
+        job.set_message("cancelled", "Cancelled by user.")
         return
 
     # Residency handoff: booru session out before the local captioner loads.
@@ -410,17 +427,23 @@ def _run_two_phase_local_captioner_pipeline(
         logger.error("%s load failed after the booru phase: %s", captioner_label, exc)
         _persist_booru_only(job, req, pending_items)
         job.status = "failed"
-        job.message = (
+        job.set_message(
+            "booru_saved_caption_failed",
             f"Booru tags were saved, but the {captioner_label} caption phase could not "
-            f"start: {exc}"
+            f"start: {exc}",
+            captioner=captioner_label,
+            detail=str(exc),
         )
         return
 
     ctx = _build_caption_phase(req, None, nl_tagger)
     device_note = f" {job.caption_device_note}" if job.caption_device_note else ""
-    job.message = (
+    job.set_message(
+        "phase2",
         f"Phase 2/2: captioning {len(pending_items)} image(s) "
-        f"with {captioner_label}...{device_note}"
+        f"with {captioner_label}...{device_note}",
+        count=len(pending_items),
+        captioner=captioner_label,
     )
     for win_start in range(0, len(pending_items), SMART_TAG_PIPELINE_WINDOW):
         if job.cancel_requested:
@@ -432,7 +455,7 @@ def _run_two_phase_local_captioner_pipeline(
             ctx,
         )
 
-    job.status, job.message = _terminal_job_outcome(job, req)
+    _finish_job(job, req)
     job.message += device_note
 
 
@@ -452,7 +475,7 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
     """Body of the worker thread - drives the pipeline and updates job state."""
     global _active_job_id
     job.status = "running"
-    job.message = "Resolving images..."
+    job.set_message("resolving", "Resolving images...")
 
     try:
         # Inside the try so a failure (e.g. a selection token that no longer
@@ -461,7 +484,7 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
         job.total = _request_total(req)
         if job.total <= 0:
             job.status = "failed"
-            job.message = "No matching images found."
+            job.set_message("no_images", "No matching images found.")
             return
 
         # Lazy provider construction so importing this module never triggers
@@ -471,9 +494,12 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
         nl_tagger = None
         if req.enable_wd14:
             if req.taggers:
-                job.message = "Local booru taggers will run one at a time..."
+                job.set_message(
+                    "taggers_sequential",
+                    "Local booru taggers will run one at a time...",
+                )
             else:
-                job.message = "Loading local booru tagger..."
+                job.set_message("loading_tagger", "Loading local booru tagger...")
                 tagger = _resolve_tagger(req)
                 if hasattr(tagger, "load"):
                     tagger.load()
@@ -484,11 +510,13 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                 # never alongside WD14. See _run_two_phase_toriigate_pipeline /
                 # _load_toriigate_for_phase2. nl_tagger stays None here.
                 captioner_label = _local_captioner_label(req)
-                job.message = (
-                    f"{captioner_label} will load after the booru tagging phase..."
+                job.set_message(
+                    "captioner_after_booru",
+                    f"{captioner_label} will load after the booru tagging phase...",
+                    captioner=captioner_label,
                 )
             else:
-                job.message = "Loading VLM provider..."
+                job.set_message("loading_vlm", "Loading VLM provider...")
                 try:
                     from routers.vlm import _build_config as _build_vlm_config
                     from vlm_providers import get_provider as _get_vlm_provider
@@ -553,7 +581,13 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                 char_th = float(entry.get("character_threshold") or req.character_threshold)
                 copy_th = float(entry.get("copyright_threshold") or req.copyright_threshold or gen_th)
 
-                job.message = f"Loading tagger {tagger_idx + 1}/{tagger_count}: {model_name}..."
+                job.set_message(
+                    "loading_tagger_n",
+                    f"Loading tagger {tagger_idx + 1}/{tagger_count}: {model_name}...",
+                    index=tagger_idx + 1,
+                    count=tagger_count,
+                    model=model_name,
+                )
                 try:
                     one_tagger = _resolve_tagger_by_model(
                         model_name,
@@ -618,7 +652,13 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                     steps_done = images_done + (tagger_idx * len(all_sources))
                     job.phase_completion = min(1.0, steps_done / total_tagger_steps)
                     job.processed = job.skipped + min(len(all_sources), steps_done // tagger_count)
-                    job.message = f"Tagging ({model_name}) {images_done}/{len(all_sources)}"
+                    job.set_message(
+                        "tagging_model",
+                        f"Tagging ({model_name}) {images_done}/{len(all_sources)}",
+                        model=model_name,
+                        done=images_done,
+                        total=len(all_sources),
+                    )
 
             if tagger_load_failures and not used_taggers and not job.cancel_requested:
                 # Not one requested model loaded, so the booru phase produced
@@ -634,7 +674,7 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
 
             if job.cancel_requested:
                 job.status = "cancelled"
-                job.message = "Cancelled by user."
+                job.set_message("cancelled", "Cancelled by user.")
             else:
                 # Consensus + concurrent VLM. Build each image's fused tag
                 # partial, then run the SAME concurrent caption phase the
@@ -678,9 +718,12 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                         )
                         _persist_booru_only(job, req, pending_items)
                         job.status = "failed"
-                        job.message = (
+                        job.set_message(
+                            "booru_saved_caption_failed",
                             f"Booru tags were saved, but the {captioner_label} caption "
-                            f"phase could not start: {exc}"
+                            f"phase could not start: {exc}",
+                            captioner=captioner_label,
+                            detail=str(exc),
                         )
                         return
 
@@ -691,7 +734,12 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                 # counted so N/M still reaches M).
                 job.processed = job.skipped
                 job.phase_completion = 0.0
-                job.message = "Running consensus + VLM..." if ctx.nl_active else "Running consensus..."
+                job.set_message(
+                    "consensus_vlm" if ctx.nl_active else "consensus",
+                    "Running consensus + VLM..."
+                    if ctx.nl_active
+                    else "Running consensus...",
+                )
 
                 for win_start in range(0, len(pending_items), SMART_TAG_PIPELINE_WINDOW):
                     if job.cancel_requested:
@@ -713,9 +761,7 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                         "tagger model(s) could not be loaded and contributed no "
                         f"tags: {_describe_tagger_load_failures(tagger_load_failures)}"
                     )
-                job.status, job.message = _terminal_job_outcome(
-                    job, req, degraded_reason=degraded_reason
-                )
+                _finish_job(job, req, degraded_reason=degraded_reason)
         elif req.enable_vlm and req.natural_language_mode == "toriigate":
             # Single-tagger + local ToriiGate: two-phase (tag all → release
             # booru session → load ToriiGate → caption all) so the two heavy
@@ -737,7 +783,7 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
             )
     except Exception as exc:  # noqa: BLE001
         job.status = "failed"
-        job.message = f"Smart Tag failed: {exc}"
+        job.set_message("failed", f"Smart Tag failed: {exc}", detail=str(exc))
         logger.exception("smart-tag pipeline failed")
     finally:
         _close_caption_results(job)

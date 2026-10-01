@@ -287,3 +287,71 @@ test('a failed tagging run reads in Chinese', async ({ page }, testInfo) => {
   expect(await failToast.textContent()).not.toContain('crashed')
   await page.screenshot({ path: shotPath(testInfo, 'tag-failed-zh-1366.png') })
 })
+
+test('Smart Tag progress and failure read in Chinese', async ({ page }, testInfo) => {
+  test.setTimeout(120000)
+  await page.setViewportSize({ width: 1366, height: 768 })
+
+  let snapshot: Record<string, unknown> = {
+    job_id: 'job-zh-1',
+    status: 'running',
+    active: true,
+    stage: '',
+    total: 0,
+    processed: 0,
+    succeeded: 0,
+    failed: 0,
+    skipped: 0,
+    message: 'Loading tagger 1/2: wd-swinv2-tagger-v3...',
+    message_key: 'loading_tagger_n',
+    message_args: { index: 1, count: 2, model: 'wd-swinv2-tagger-v3' },
+    phase_completion: 0,
+    settings: {},
+    errors: [],
+    pipeline_queue: { total_queued: 0, queued: [], last_start_error: null },
+  }
+  await page.route('**/api/smart-tag/progress**', (route) => route.fulfill({ json: snapshot }))
+
+  await openMainPage(page)
+  await page.evaluate(() => (window as any).SmartTag.open())
+  const progressText = page.locator('#smart-tag-progress-text')
+  await expect(progressText).toContainText('正在载入标注器 1/2：wd-swinv2-tagger-v3...', { timeout: 15000 })
+  expect(await progressText.textContent()).not.toContain('Loading')
+  await page.waitForTimeout(450)
+  await page.screenshot({ path: shotPath(testInfo, 'smart-tag-running-zh-1366.png') })
+
+  await reapplyTranslations(page)
+  await expect(progressText).toContainText('正在载入标注器 1/2：wd-swinv2-tagger-v3...')
+
+  snapshot = {
+    ...snapshot,
+    stage: 'tagging',
+    total: 10,
+    processed: 4,
+    succeeded: 3,
+    failed: 1,
+    message: 'Tagging (wd-swinv2-tagger-v3) 4/10',
+    message_key: 'tagging_model',
+    message_args: { model: 'wd-swinv2-tagger-v3', done: 4, total: 10 },
+    phase_completion: 0.4,
+  }
+  await expect(progressText).toContainText('成功 3，失败 1', { timeout: 15000 })
+  const counted = await progressText.textContent()
+  expect(counted).not.toMatch(/ ok,| failed/)
+
+  snapshot = {
+    ...snapshot,
+    status: 'failed',
+    active: false,
+    processed: 2,
+    succeeded: 0,
+    failed: 2,
+    message: 'Smart Tag failed for all 2 image(s). Last error: disk is full',
+    message_key: 'failed_all',
+    message_args: { detail: 'disk is full' },
+  }
+  const toast = page.locator('.toast', { hasText: 'Smart Tag 对全部 2 张图片都失败了' }).first()
+  await expect(toast).toBeVisible({ timeout: 15000 })
+  expect(await toast.textContent()).toContain('disk is full')
+  await page.screenshot({ path: shotPath(testInfo, 'smart-tag-failed-zh-1366.png') })
+})

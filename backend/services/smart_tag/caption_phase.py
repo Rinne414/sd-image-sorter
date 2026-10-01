@@ -174,7 +174,10 @@ def _handle_caption_result(
         if job.total > 0:
             job.phase_completion = min(1.0, job.processed / job.total)
         label = "VLM captioning" if nl_active else "Processing"
-        job.message = f"{label} {job.processed}/{job.total}"
+        job.set_message(
+            "captioning_progress" if nl_active else "processing_progress",
+            f"{label} {job.processed}/{job.total}",
+        )
 
 
 def _record_required_caption_failure(
@@ -188,7 +191,9 @@ def _record_required_caption_failure(
     job.processed += 1
     if job.total > 0:
         job.phase_completion = min(1.0, job.processed / job.total)
-    job.message = f"VLM captioning {job.processed}/{job.total}"
+    job.set_message(
+        "captioning_progress", f"VLM captioning {job.processed}/{job.total}"
+    )
 
 
 def _run_caption_phase(
@@ -323,6 +328,9 @@ def _relieve_caption_pressure(job: SmartTagJobState, nl_tagger) -> None:
     if pressure.get("should_restart_session") and hasattr(nl_tagger, "_recreate_session"):
         try:
             nl_tagger._recreate_session()
-            job.message = "VRAM pressure detected — refreshed the ToriiGate session."
+            job.set_message(
+                "vram_refresh",
+                "VRAM pressure detected — refreshed the ToriiGate session.",
+            )
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning("smart-tag: ToriiGate session refresh under pressure failed: %s", exc)

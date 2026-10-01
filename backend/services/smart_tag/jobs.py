@@ -44,6 +44,10 @@ class SmartTagJobState:
     # progress still completes; surfaced separately for the UI.
     skipped: int = 0
     message: str = ""
+    # Stable key + parameters the UI localises from; ``message`` stays the
+    # English display string for API compatibility.
+    message_key: str = ""
+    message_args: Dict[str, Any] = field(default_factory=dict)
     started_at: float = field(default_factory=time.time)
     finished_at: Optional[float] = None
     cancel_requested: bool = False
@@ -68,6 +72,12 @@ class SmartTagJobState:
     # messages so a slower run is explained.
     caption_device_note: str = ""
 
+    def set_message(self, key: str, text: str, **args: Any) -> None:
+        """Set the English display text together with its localisation key."""
+        self.message = text
+        self.message_key = key
+        self.message_args = dict(args)
+
     def snapshot(self) -> Dict[str, Any]:
         return {
             "job_id": self.job_id,
@@ -79,6 +89,8 @@ class SmartTagJobState:
             "failed": self.failed,
             "skipped": self.skipped,
             "message": self.message,
+            "message_key": self.message_key,
+            "message_args": dict(self.message_args),
             "started_at": self.started_at,
             "finished_at": self.finished_at,
             "last_caption_preview": self.last_caption_preview,
