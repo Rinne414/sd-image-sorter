@@ -282,8 +282,8 @@ export class MapLocator {
 
     // ----------------------------------------------------------------- pick
     pick(item) {
-        const position = { x: item.x, y: item.y, z: item.z };
-        this.scene?.flyTo([item.x, item.y, item.z]);
+        const position = { x: item.x, y: item.y, z: item.z, id: item.id };
+        this.scene?.flyTo([item.x, item.y, item.z], 380, { id: item.id });
         this.host.mark(position);
         this.host.preview(item.id);
         this.close();

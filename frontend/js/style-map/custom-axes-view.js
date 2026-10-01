@@ -147,7 +147,9 @@ export class CustomAxesView {
         const working = this.custom.status === 'working';
         const apply = el('button', 'btn btn-primary btn-small stylemap-custom-apply', t('stylemap.customApply', 'Apply'));
         apply.type = 'button';
-        apply.disabled = working;
+        const ready = this.custom.canApply();
+        apply.disabled = working || !ready;
+        apply.title = ready ? '' : t('stylemap.customApplyNeed', 'Put at least 2 pictures in each box to apply');
         apply.addEventListener('click', () => this.custom.apply());
         const revert = el('button', 'btn btn-secondary btn-small stylemap-custom-revert', t('stylemap.customRevert', 'Back to the model layout'));
         revert.type = 'button';

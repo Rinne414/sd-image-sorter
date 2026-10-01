@@ -374,6 +374,8 @@ export class StyleMapAxes {
     mapChanged() {
         this.seq += 1;
         this.data = null;
+        // Another library's definitions (and applied state) first: they decide what is asked for.
+        this.custom.syncLibrary();
         if (this.custom.applied) {
             // The model's meanings describe the original layout: not asked for.
             this.status = 'idle';

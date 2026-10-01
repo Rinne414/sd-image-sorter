@@ -178,6 +178,9 @@ export function createStyleMap() {
         scheduleLayoutPoll(points.umap?.status);
         state.near?.setAvailable(hasPoints && Boolean(points.map_id));
         state.axes?.mapChanged();
+        // Coming back to the page or a finished UMAP fit: the last custom layout stays on
+        // screen (instead of the original one for the seconds a new answer takes).
+        if (state.axes?.custom.applied && state.lastCustomBody && !state.customActive) showCustom(state.lastCustomBody);
         if (hasPoints) state.near?.mapChanged(mapSignature());
         state.locate?.mapChanged(hasPoints ? mapSignature() : null);
         consumePendingLookup(points, hasPoints);
@@ -291,26 +294,37 @@ export function createStyleMap() {
     function showCustom(body) {
         const points = state.points;
         if (!body) {
-            if (!state.customActive) return;
+            state.lastCustomBody = null;
+            if (!state.customActive) return true;
             state.customActive = false;
             state.scene.setRemap(null);
             if (points) applyPoints(points);
-            return;
+            state.near?.render();
+            return true;
         }
         const original = points?.points || [];
-        if (body.ids.length !== original.length || body.ids.some((id, i) => id !== original[i][0])) return;
-        const moved = new Map();
+        // An answer for other points than the ones on screen is refused (false), never half drawn.
+        if (!points || body.ids.length !== original.length || body.ids.some((id, i) => id !== original[i][0])) return false;
+        // A lookup names a dot by its picture id when it knows it, else by its coordinates
+        // (a picture merged into a dot shares the dot's rounded position).
+        const byId = new Map();
+        const byDot = new Map();
         const rows = original.map((row, i) => {
             const [x, y, z] = body.coords[i];
-            moved.set(dotKey(row[1], row[2], row[3]), [x, y, z]);
+            byId.set(row[0], [x, y, z]);
+            const key = dotKey(row[1], row[2], row[3]);
+            if (!byDot.has(key)) byDot.set(key, [x, y, z]);
             return [row[0], x, y, z, row[4]];
         });
+        state.lastCustomBody = body;
         state.customActive = true;
         state.scene.setPoints(rows, points.points_layout);
-        state.scene.setRemap((xyz) => moved.get(dotKey(...xyz)) || null);
+        state.scene.setRemap((xyz, id) => (id != null && byId.get(id)) || byDot.get(dotKey(...xyz)) || null);
         state.picks?.mapChanged();
         applyRegions(null);
         if (state.colors?.by === state.colorBy) applyColors(state.colors);
+        state.near?.render();
+        return true;
     }
 
     /**

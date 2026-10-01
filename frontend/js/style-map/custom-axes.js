@@ -81,7 +81,31 @@ export class CustomAxes {
         this.error = '';
         this.seq = 0;
         this.retried = false;
+        // The last answers by (map, layout, definitions): the same request is never sent twice.
+        this.cache = new Map();
         this.loadFor(host.libraryId());
+    }
+
+    /**
+     * The user may have switched libraries since the definitions were read:
+     * they belong to ONE library, so the other library's are loaded (and the
+     * applied state with them) before anything is shown or saved.
+     */
+    syncLibrary() {
+        const id = this.host.libraryId() || 'main';
+        if (id === this.libraryId) return false;
+        this.seq += 1;
+        this.cache.clear();
+        this.status = 'idle';
+        this.result = null;
+        this.error = '';
+        this.loadFor(id);
+        return true;
+    }
+
+    /** True when at least one axis has two usable boxes (the Apply button needs it). */
+    canApply() {
+        return Object.keys(readDefinitions(this.defs).axes).length > 0;
     }
 
     storageKey() {
@@ -119,6 +143,7 @@ export class CustomAxes {
     }
 
     change(mutate, { silent = false } = {}) {
+        this.syncLibrary();
         const next = structuredClone(this.defs);
         mutate(next);
         this.defs = next;
@@ -142,6 +167,7 @@ export class CustomAxes {
         this.change((defs) => {
             defs[axis][end] = defs[axis][end].filter((value) => value !== id);
         });
+        return this.followEdit();
     }
 
     /** Typing a name never repaints the card (the field keeps its caret, a click on a button still lands). */
@@ -155,10 +181,26 @@ export class CustomAxes {
         this.change((defs) => {
             defs[axis] = { a: [], b: [], nameA: '', nameB: '' };
         });
+        return this.followEdit();
+    }
+
+    /**
+     * Taking pictures away while the axes are on: the map follows what is
+     * left (laid out again from the complete axes), and with none left it goes
+     * back to the model's layout and the model's labels.
+     */
+    followEdit() {
+        if (!this.applied) return Promise.resolve();
+        if (!this.canApply()) {
+            this.revert();
+            return Promise.resolve();
+        }
+        return this.run();
     }
 
     /** The user pressed Apply. */
     apply() {
+        this.syncLibrary();
         const { axes, problems } = readDefinitions(this.defs);
         if (problems.length || !Object.keys(axes).length) {
             this.status = 'error';
@@ -177,6 +219,7 @@ export class CustomAxes {
     /** Back to the layout the model computed. */
     revert() {
         this.seq += 1;
+        this.syncLibrary();
         this.applied = false;
         this.status = 'idle';
         this.result = null;
@@ -189,6 +232,7 @@ export class CustomAxes {
 
     /** A new map is on screen: lay it out along the stored axes again. */
     mapChanged() {
+        if (this.syncLibrary()) this.host.onChange();
         if (this.applied && this.host.getMap()) return this.run();
         return Promise.resolve();
     }
@@ -198,6 +242,17 @@ export class CustomAxes {
         if (!map) return;
         const { axes } = readDefinitions(this.defs);
         const seq = ++this.seq;
+        const key = JSON.stringify([map.body.map_id, map.body.layout, map.body.space, axes]);
+        const known = this.cache.get(key);
+        if (known) {
+            // The same map, layout and definitions as before: nothing to ask.
+            this.result = known;
+            this.status = 'ok';
+            this.host.show(known);
+            this.host.onChange();
+            return;
+        }
+        // While it is asked for, the last custom layout (if any) stays on screen.
         this.status = 'working';
         this.error = '';
         this.host.onChange();
@@ -218,9 +273,19 @@ export class CustomAxes {
                 throw new Error('not_started');
             }
             if (body?.status !== 'ok') throw new Error(String(body?.status || 'bad answer'));
+            if (this.host.show(body) === false) {
+                // The answer does not match the points on screen (a refresh in between): ask once more.
+                if (!this.retried) {
+                    this.retried = true;
+                    await this.host.refreshMap();
+                    return;
+                }
+                throw new Error('layout_changed');
+            }
+            this.cache.set(key, body);
+            if (this.cache.size > 4) this.cache.delete(this.cache.keys().next().value);
             this.result = body;
             this.status = 'ok';
-            this.host.show(body);
         } catch (error) {
             if (seq !== this.seq) return;
             this.status = 'error';

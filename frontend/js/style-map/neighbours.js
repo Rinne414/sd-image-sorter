@@ -172,13 +172,13 @@ export class NeighbourCard {
     /** One extra ring for a picture the search box found (null removes it). */
     setMarker(position) {
         const signature = this.host.getRequest()?.signature;
-        this.marker = position && signature ? { x: position.x, y: position.y, z: position.z, sig: signature } : null;
+        this.marker = position && signature ? { x: position.x, y: position.y, z: position.z, id: position.id, sig: signature } : null;
         this.drawRings();
     }
 
     /** The rings of the lookup plus the search box's marker. */
     paint(rings) {
-        const extra = this.marker ? [{ kind: 'query', x: this.marker.x, y: this.marker.y, z: this.marker.z }] : [];
+        const extra = this.marker ? [{ kind: 'query', id: this.marker.id, x: this.marker.x, y: this.marker.y, z: this.marker.z }] : [];
         this.scene?.setRings([...rings, ...extra]);
     }
 
@@ -393,7 +393,7 @@ export class NeighbourCard {
             const dot = `${n.x},${n.y},${n.z}`;
             if (!n.located || drawn.has(dot)) continue;
             drawn.add(dot);
-            rings.push({ kind: n.weak ? 'far' : 'near', x: n.x, y: n.y, z: n.z });
+            rings.push({ kind: n.weak ? 'far' : 'near', id: n.id, x: n.x, y: n.y, z: n.z });
         }
         this.paint(rings);
     }
@@ -401,7 +401,7 @@ export class NeighbourCard {
     /** Turn the camera to a row's point and show its picture. */
     pick(id, position) {
         this.activeId = id;
-        if (position) this.scene?.flyTo(position);
+        if (position) this.scene?.flyTo(position, 380, { id });
         if (id !== null) this.host.preview(id);
         this.markActive();
     }
@@ -484,7 +484,9 @@ export class NeighbourCard {
             return;
         }
         note.textContent = placed
-            ? t('stylemap.nearNote', 'Your picture is placed next to its three closest matches, so the spot is an estimate. Scores are cosine similarity; grey ones below {threshold} are not really close.', { threshold })
+            ? this.scene?.remap
+                ? t('stylemap.nearCustomNote', 'Your own axes are on, so the estimated spot of your picture cannot be marked. The closest pictures are listed below.')
+                : t('stylemap.nearNote', 'Your picture is placed next to its three closest matches, so the spot is an estimate. Scores are cosine similarity; grey ones below {threshold} are not really close.', { threshold })
             : t('stylemap.nearNoPlace', 'None of the closest pictures is in the current filter, so your picture is not marked on the map.');
         this.markActive();
     }

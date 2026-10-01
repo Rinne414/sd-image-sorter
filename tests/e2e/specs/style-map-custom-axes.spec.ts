@@ -30,20 +30,24 @@ function colorPng(r: number, g: number, b: number): Buffer {
 const WORDS = {
   en: {
     tabCustom: 'My axes', tabModel: 'Model axes', apply: 'Apply', revert: 'Back to the model layout', add: 'Add selected pictures',
-    applied: 'Applied: the map is laid out along your axes', hiddenModel: 'Your own axes are on', needTwo: 'Each end needs at least 2 pictures',
+    applied: 'Applied: the map is laid out along your axes', hiddenModel: 'Your own axes are on', needTwo: 'Each box needs at least 2 pictures', applyNeed: 'Put at least 2 pictures in each box to apply',
+    nearNote: 'Your own axes are on, so the estimated spot of your picture cannot be marked. The closest pictures are listed below.',
     notSeparable: 'These two groups are hard to tell apart (3/5); the model may not see this difference. Add more pictures, or use more typical ones.',
     nameA: 'thick paint', nameB: 'flat color', placeholder: 'e.g. thick paint', placeholderB: 'e.g. flat color', open: 'Axis meanings',
   },
   'zh-CN': {
     tabCustom: '自订轴', tabModel: '模型算出的轴', apply: '套用', revert: '还原原本排法', add: '加入选取的图',
-    applied: '已套用：地图按你定义的轴排列', hiddenModel: '自订轴已套用', needTwo: '每一端至少要 2 张图',
+    applied: '已套用：地图按你定义的轴排列', hiddenModel: '自订轴已套用', needTwo: '每一栏至少要 2 张图', applyNeed: '每栏至少放 2 张图才能套用',
+    nearNote: '自订轴排列下无法标出你的图的估计位置，下面是最像的图',
     notSeparable: '这两组范例分不太开（3/5），模型可能看不出这个差别。可以多放几张，或换更典型的图',
     nameA: '厚涂', nameB: '平涂', placeholder: '例如：厚涂', placeholderB: '例如：平涂', open: '轴的含义',
   },
 } as const
 
-function pointsBody() {
+function pointsBody(collide = false) {
   const points = Array.from({ length: 30 }, (_, i) => [i + 1, (i % 5) / 4 - 0.5, (i % 7) / 6 - 0.5, (i % 3) / 2 - 0.5, 1])
+  // Two different dots that round to the very same spot (L1): ids 29 and 30.
+  if (collide) { points[29][1] = points[28][1]; points[29][2] = points[28][2]; points[29][3] = points[28][3] }
   return {
     status: 'ok', space: 'kaloscope', method: 'pca', model_version: 'kaloscope:test',
     total_images: 33, missing_vectors: 3, unlocatable: [], merged_away: 0,
@@ -66,6 +70,13 @@ function customBody(overrides: Record<string, unknown> = {}, axes: Record<string
   }
 }
 
+/** The model's axes answer: all three weak, so six dash labels on the grid. */
+const weakAxesBody = () => {
+  const end = { representatives: [], tags: [], size: 6, tagged: 6 }
+  const axis = { weak: true, strength: 0, low: end, high: end }
+  return { status: 'ok', space: 'kaloscope', layout: 'pca', algo_version: 3, points: 30, axes: { x: axis, y: axis, z: axis }, cached: false }
+}
+
 const regionsBody = () => ({
   status: 'ok', space: 'kaloscope', method: 'pca', k: 1, seed: 0, algo_version: 1, cached: false,
   regions: [{ id: 0, center: [0, 0, 0], size: 30, members_total: 30, representatives: [1], tagged: 0, tags: [{ tag: 'monochrome', count: 5, tagged: 10, rate: 0.5, ratio: 4, p: 0.001, q: 0.001 }], artists: [] }],
@@ -73,13 +84,13 @@ const regionsBody = () => ({
 
 type Seen = { posts: Array<{ url: string; body: any }>; axesGets: number; points: number }
 
-async function mockAll(page: Page, custom: (body: any) => unknown = () => customBody()): Promise<Seen> {
+async function mockAll(page: Page, custom: (body: any) => unknown = () => customBody(), collide = false): Promise<Seen> {
   const seen: Seen = { posts: [], axesGets: 0, points: 0 }
   await page.route('**/api/images/selection-token', (route) => route.fulfill({ json: { selection_token: 'tok.e2e', total_estimate: 33 } }))
   await page.route('**/api/style-map/vectors/progress', (route) =>
     route.fulfill({ json: { running: false, paused: false, total: 0, processed: 0, written: 0, kept: 0, errors: 0, step: 'idle', message: '', recent_issues: [] } }))
-  await page.route('**/api/style-map/points**', (route) => { seen.points += 1; return route.fulfill({ json: pointsBody() }) })
-  await page.route('**/api/style-map/axes**', (route) => { seen.axesGets += 1; return route.fulfill({ json: { status: 'empty', space: 'kaloscope', layout: 'pca', axes: {} } }) })
+  await page.route('**/api/style-map/points**', (route) => { seen.points += 1; return route.fulfill({ json: pointsBody(collide) }) })
+  await page.route('**/api/style-map/axes**', (route) => { seen.axesGets += 1; return route.fulfill({ json: weakAxesBody() }) })
   await page.route('**/api/style-map/custom-axes**', (route) => {
     const body = route.request().postDataJSON()
     seen.posts.push({ url: route.request().url(), body })
@@ -192,8 +203,7 @@ test.describe('Style Map custom axes', () => {
       await expect(page.locator('.stylemap-custom-axis')).toHaveCount(1)
       await expect(page.locator('.stylemap-custom-open')).toHaveCount(2)
       if (width === 1366) await page.screenshot({ path: `${SHOTS}/custom_empty_${lang}_${width}x${height}.png` })
-      await page.locator('.stylemap-custom-apply').click()
-      await expect(page.locator('.stylemap-custom-note[data-tone="error"]')).toBeVisible()
+      await expect(page.locator('.stylemap-custom-apply')).toBeDisabled()
       expect(seen.posts).toHaveLength(0)
 
       await define(page, 'x', [1, 3, 5], [2, 4, 6], [words.nameA, words.nameB])
@@ -309,9 +319,12 @@ test.describe('Style Map custom axes', () => {
     await pick(page, [1, 3])
     await page.locator('.stylemap-custom-axis[data-axis="y"] [data-end="a"] .stylemap-custom-add').click()
     await expect(page.locator('.stylemap-custom-note[data-tone="warn"]')).toHaveText(WORDS.en.needTwo)
-    await page.locator('.stylemap-custom-apply').click()
+    // No complete axis yet: Apply is off and says why.
+    await expect(page.locator('.stylemap-custom-apply')).toBeDisabled()
+    await expect(page.locator('.stylemap-custom-apply')).toHaveAttribute('title', WORDS.en.applyNeed)
     expect(seen.posts).toHaveLength(0)
     await define(page, 'x', [1, 3, 5], [2, 4, 6])
+    await expect(page.locator('.stylemap-custom-apply')).toBeEnabled()
     await page.locator('.stylemap-custom-axis[data-axis="y"] .stylemap-custom-clear').click()
     const pointsBefore = seen.points
     await page.locator('.stylemap-custom-apply').click()
@@ -319,6 +332,127 @@ test.describe('Style Map custom axes', () => {
     await page.waitForTimeout(600)
     expect(seen.points).toBe(pointsBefore + 1) // one rebuild, then it gives up
     expect(seen.posts).toHaveLength(2)
+  })
+
+  test('another library has its own definitions and applied state, saved under its own key (M1)', async ({ page }) => {
+    const seen = await mockAll(page)
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.goto('/')
+    await page.evaluate(() => {
+      localStorage.setItem('sd-image-sorter-lang', 'en')
+      const def = (a: number[], b: number[], nameA: string) => ({ v: 1, applied: false, axes: { x: { a, b, nameA, nameB: '' }, y: { a: [], b: [], nameA: '', nameB: '' }, z: { a: [], b: [], nameA: '', nameB: '' } } })
+      localStorage.setItem('sd-stylemap-custom-axes:main', JSON.stringify(def([1, 3], [2, 4], 'main thick')))
+      localStorage.setItem('sd-stylemap-custom-axes:other', JSON.stringify({ ...def([5, 7, 9], [6, 8], 'other thick'), applied: true }))
+    })
+    await page.reload()
+    const map = new StyleMapPage(page)
+    await map.open()
+    await expect.poll(() => map.pointCount()).toBe(30)
+    await openCustomTab(page, WORDS.en)
+    await expect(page.locator('.stylemap-custom-axis[data-axis="x"] [data-end="a"] .stylemap-custom-name')).toHaveValue('main thick')
+    await expect(page.locator('.stylemap-custom-axis[data-axis="x"] [data-end="a"] .stylemap-custom-chip')).toHaveCount(2)
+    expect(seen.posts).toHaveLength(0)
+    // Switch library inside the same session, then the map reloads.
+    await page.evaluate(() => { (window as any).LibraryWorkspace.getCurrentLibraryId = () => 'other'; return (window as any).StyleMap.refresh() })
+    await expect(page.locator('.stylemap-custom-axis[data-axis="x"] [data-end="a"] .stylemap-custom-name')).toHaveValue('other thick')
+    await expect(page.locator('.stylemap-custom-axis[data-axis="x"] [data-end="a"] .stylemap-custom-chip')).toHaveCount(3)
+    // The other library had it applied: it is laid out again, from its own examples.
+    await expect.poll(() => seen.posts.length).toBe(1)
+    expect(seen.posts[0].body.axes.x.a.sort()).toEqual([5, 7, 9])
+    // Editing writes to the OTHER library's key only.
+    await page.locator('.stylemap-custom-axis[data-axis="x"] [data-end="b"] .stylemap-custom-name').fill('right of other')
+    const stored = await page.evaluate(() => ({ main: JSON.parse(localStorage.getItem('sd-stylemap-custom-axes:main')!), other: JSON.parse(localStorage.getItem('sd-stylemap-custom-axes:other')!) }))
+    expect(stored.main.axes.x.nameA).toBe('main thick')
+    expect(stored.main.axes.x.nameB).toBe('')
+    expect(stored.other.axes.x.nameB).toBe('right of other')
+    // And back: the first library's definitions return, not applied.
+    await page.evaluate(() => { (window as any).LibraryWorkspace.getCurrentLibraryId = () => 'main'; return (window as any).StyleMap.refresh() })
+    await expect(page.locator('.stylemap-custom-axis[data-axis="x"] [data-end="a"] .stylemap-custom-name')).toHaveValue('main thick')
+    await expect(page.locator('.stylemap-custom-revert')).toBeDisabled()
+    await expect.poll(() => dotAt(page, 1)).toEqual(original(1).map((v) => Math.round(v * 1000) / 1000))
+  })
+
+  test('two dots that round to the same spot keep their own positions for lookups (L1)', async ({ page }) => {
+    await mockAll(page, undefined, true)
+    await openMap(page, 1366, 768, 'en')
+    await openCustomTab(page, WORDS.en)
+    await define(page, 'x', [1, 3, 5], [2, 4, 6])
+    await page.locator('.stylemap-custom-apply').click()
+    await expect.poll(() => dotAt(page, 29)).toEqual(moved(29).map((v) => Math.round(v * 1000) / 1000))
+    const spot = await page.evaluate(() => { const p = (window as any).StyleMap._state.points.points; return [p[28][1], p[28][2], p[28][3]] })
+    const same = await page.evaluate((s) => { const p = (window as any).StyleMap._state.points.points; return [p[29][1], p[29][2], p[29][3]].join() === s.join() }, spot)
+    expect(same).toBe(true) // the two dots really do share the rounded spot
+    const look = (id: number) => page.evaluate(([o, i]) => (window as any).StyleMap._state.scene.remap(o, i), [spot, id] as any)
+    const round = (v: number[]) => v.map((n) => Math.round(n * 1000) / 1000)
+    expect(round(await look(29))).toEqual(round(moved(29)))
+    expect(round(await look(30))).toEqual(round(moved(30)))
+  })
+
+  test('clearing axes while applied lays out again from the rest, and with none left goes back to the model layout (L5)', async ({ page }) => {
+    const seen = await mockAll(page)
+    await openMap(page, 1366, 768, 'en')
+    await expect(page.locator('.stylemap-axis-label:visible')).toHaveCount(6)
+    await openCustomTab(page, WORDS.en)
+    await define(page, 'x', [1, 3, 5], [2, 4, 6], ['thick paint', 'flat color'])
+    await define(page, 'y', [7, 9, 11], [8, 10, 12], ['dark', 'light'])
+    await page.locator('.stylemap-custom-apply').click()
+    await expect.poll(() => seen.posts.length).toBe(1)
+    await expect(page.locator('.stylemap-axis-label:visible')).toHaveCount(4)
+    await page.locator('.stylemap-custom-axis[data-axis="y"] .stylemap-custom-clear').click()
+    await expect.poll(() => seen.posts.length).toBe(2)
+    expect(Object.keys(seen.posts[1].body.axes)).toEqual(['x'])
+    await expect(page.locator('.stylemap-axis-label:visible')).toHaveCount(2)
+    // The last axis goes: no request, the model layout and the model labels are back.
+    await page.locator('.stylemap-custom-axis[data-axis="x"] .stylemap-custom-clear').click()
+    await expect.poll(() => dotAt(page, 1)).toEqual(original(1).map((v) => Math.round(v * 1000) / 1000))
+    expect(seen.posts).toHaveLength(2)
+    await expect(page.locator('.stylemap-axis-label:visible')).toHaveCount(6)
+    await expect(page.locator('.stylemap-landmark')).toHaveCount(1)
+    await expect(page.locator('.stylemap-custom-revert')).toBeDisabled()
+    await expect(page.locator('.stylemap-custom-apply')).toBeDisabled()
+  })
+
+  test('the same map and definitions are not asked for twice, and a mismatched answer is asked for once more (L3, L4)', async ({ page }) => {
+    let calls = 0
+    const seen = await mockAll(page, () => {
+      calls += 1
+      return calls === 1 ? customBody({ ids: Array.from({ length: 30 }, (_, i) => 30 - i) }) : customBody()
+    })
+    await openMap(page, 1366, 768, 'en')
+    await openCustomTab(page, WORDS.en)
+    await define(page, 'x', [1, 3, 5], [2, 4, 6])
+    const before = seen.points
+    await page.locator('.stylemap-custom-apply').click()
+    // The first answer is for other points than the ones on screen: the map is asked for once more, then it is laid out.
+    await expect.poll(() => dotAt(page, 1)).toEqual(moved(1).map((v) => Math.round(v * 1000) / 1000))
+    expect(seen.points).toBe(before + 1)
+    expect(seen.posts).toHaveLength(2)
+    await expect(page.locator('.stylemap-custom-note[data-tone="ok"]')).toHaveText(WORDS.en.applied)
+    // A refresh of the same map (coming back to the page): the custom layout is used again without a request.
+    await page.evaluate(() => (window as any).StyleMap.refresh())
+    await expect.poll(() => seen.points).toBe(before + 2)
+    expect(await dotAt(page, 1)).toEqual(moved(1).map((v) => Math.round(v * 1000) / 1000))
+    expect(seen.posts).toHaveLength(2)
+  })
+
+  test('a dropped picture cannot be marked under custom axes and says so (L2)', async ({ page }) => {
+    await mockAll(page)
+    await page.route('**/api/style-map/query**', (route) => route.fulfill({ json: {
+      status: 'ok', query: { x: 0.1, y: 0.05, z: -0.1 },
+      neighbors: [{ id: 3, score: 0.9, filename: 'a.png', weak: false, in_filter: true, located: true, merged: false, x: original(3)[0], y: original(3)[1], z: original(3)[2] }],
+      weak_threshold: 0.32, model_version: 'kaloscope:test',
+    } }))
+    await openMap(page, 1366, 768, 'en')
+    await openCustomTab(page, WORDS.en)
+    await define(page, 'x', [1, 3, 5], [2, 4, 6])
+    await page.locator('.stylemap-custom-apply').click()
+    await expect.poll(() => dotAt(page, 1)).toEqual(moved(1).map((v) => Math.round(v * 1000) / 1000))
+    await page.locator('#stylemap-near-file').setInputFiles({ name: 'drop.png', mimeType: 'image/png', buffer: colorPng(100, 100, 100) })
+    await expect(page.locator('#stylemap-near-note')).toHaveText(WORDS.en.nearNote)
+    // The neighbour (a dot) is ringed at its NEW position; the estimate is not drawn.
+    const rings = await page.evaluate(() => (window as any).StyleMap._state.scene.rings.describe().map((r: any) => `${r.kind}:${r.visible}`))
+    expect(rings.filter((r: string) => r.startsWith('query') && r.endsWith('true'))).toHaveLength(0)
+    expect(rings.filter((r: string) => r.startsWith('near') && r.endsWith('true'))).toHaveLength(1)
   })
 
   test('Esc closes the card from the custom tab and a name field keeps its caret while typing', async ({ page }) => {

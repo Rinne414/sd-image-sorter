@@ -607,7 +607,7 @@ export class StyleMapScene {
         // that is not a dot of the map (a dropped picture's estimate) is left out.
         const shown = this.remap
             ? items.map((item) => {
-                const at = this.remap([item.x, item.y, item.z]);
+                const at = this.remap([item.x, item.y, item.z], item.id);
                 return at ? { ...item, x: at[0], y: at[1], z: at[2] } : null;
             }).filter(Boolean)
             : items;
@@ -619,7 +619,9 @@ export class StyleMapScene {
     /**
      * Custom axes move every dot. Lookups (rings, fly-to) still speak the
      * coordinates the server computed; `fn` turns such a position into the
-     * dot's shown one (null when it is not a dot), `null` switches it off.
+     * dot's shown one (null when it is not a dot), `null` switches it off. A
+     * caller that knows the picture passes its id too (`fn(xyz, id)`), so two
+     * dots that round to the same coordinates are never mixed up.
      */
     setRemap(fn) {
         this.remap = typeof fn === 'function' ? fn : null;
@@ -630,9 +632,9 @@ export class StyleMapScene {
      * so the distance and the viewing angle stay) glides there; a user's
      * reduced-motion setting jumps instead.
      */
-    flyTo(xyz, durationMs = 380, { exact = false } = {}) {
+    flyTo(xyz, durationMs = 380, { exact = false, id = null } = {}) {
         if (this.remap && !exact) {
-            xyz = this.remap(xyz);
+            xyz = this.remap(xyz, id);
             if (!xyz) return;
         }
         cancelAnimationFrame(this.flight);

@@ -2144,7 +2144,9 @@ invalid `selection_token`, or a `model_path` that is not a
 #### POST /api/style-map/custom-axes
 Re-lays the map along axes the user defines with example pictures (slice S4g).
 Per axis (`x`, `y`, `z`; `null` or absent = not defined) two groups of examples,
-`a` (the low end) and `b` (the high end), at least 2 each, no upper limit:
+`a` (the low end, the page's left box) and `b` (the high end, the right box), at least 2
+each, no upper limit (5,000 + 5,000 examples on a 50k-point map cost about 6 s,
+the same as a handful: leave-one-out is computed in closed form, O(n x D)):
 
 ```json
 {"space": "kaloscope", "map_id": "...", "layout": "pca",
@@ -2193,8 +2195,10 @@ other-library map and `layout_not_ready` for `umap` before its fit is done
 `points`).
 
 **Errors:** 400 for an unknown `space` / `layout` / axis name, an invalid
-`map_id`, a picture that is in both ends of an axis, or an end with fewer than
-2 example pictures (the message names the axis).
+`map_id`, a picture that is in both boxes of an axis, a box with fewer than 2 example
+pictures, or a malformed axis (not an object, `a`/`b` not lists, an item that
+is not a whole number: a string, `null`, a bool or a fraction); the message
+names the axis.
 
 #### GET /api/style-map/colors
 One colour value per point of the map `points` last returned for the same
