@@ -55,6 +55,11 @@ def own(tmp_path, monkeypatch) -> Path:
     for name, path in dirs.items():
         path.mkdir(parents=True)
         monkeypatch.setattr(model_health, name, lambda p=path: str(p))
+    # config.get_wd14_model_dir (used by the tagger and Prepare) reads this
+    # module constant: without it a developer's real data/models copy wins.
+    import config
+
+    monkeypatch.setattr(config, "WD14_MODEL_DIR", str(dirs["get_wd14_model_dir"]))
     aesthetic_dir = base / "aesthetic"
     aesthetic_dir.mkdir()
     monkeypatch.setattr(aesthetic, "_get_models_dir", lambda: aesthetic_dir)
