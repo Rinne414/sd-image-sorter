@@ -187,3 +187,7 @@
     flex: 0 0 auto;
     align-self: flex-start;
 }
+
+.stylemap-drop[hidden] {
+    display: none;
+}

@@ -270,6 +270,15 @@ test.describe('Style Map: locate a picture from the Gallery', () => {
     await expect(status).toContainText('in the current Gallery filter, so it has no dot')
     await expect(page.locator('.stylemap-near-row')).toHaveCount(5)
     expect(await ringKinds(page)).not.toContain('query:true')
+    // The notice, its button and the list share the card: at least four rows stay fully in view.
+    const visibleRows = await page.evaluate(() => {
+      const body = (document.querySelector('.stylemap-near-body') as HTMLElement).getBoundingClientRect()
+      return [...document.querySelectorAll('.stylemap-near-row')].filter((row) => {
+        const r = row.getBoundingClientRect()
+        return r.top >= body.top - 0.5 && r.bottom <= body.bottom + 0.5
+      }).length
+    })
+    expect(visibleRows).toBeGreaterThanOrEqual(4)
     await shot(page, '04-outside-filter-1366-en')
     const before = spy.pointsCalls
     await page.locator('#stylemap-near-action').click()
@@ -285,6 +294,31 @@ test.describe('Style Map: locate a picture from the Gallery', () => {
     await page.evaluate((id) => (window as any).StyleMap.locateImage(id), SELF_ID)
     await expect(page.locator('#stylemap-near-status')).toContainText('这张图和另一张合并在同一点')
     await expectCameraAt(page, coord(3))
+  })
+
+  test('a Gallery handoff whose map never arrives is forgotten, not answered by a later map', async ({ page }) => {
+    const spy = await mockBase(page)
+    let failing = true
+    await page.route('**/api/style-map/points**', (route) => {
+      if (failing) return route.fulfill({ status: 503, json: { detail: 'map unavailable' } })
+      return route.fallback()
+    })
+    await page.route('**/api/style-map/near**', (route) => {
+      spy.nearUrls.push(route.request().url())
+      return route.fulfill({ json: nearBody() })
+    })
+    await setup(page, 1366, 768)
+    await page.locator(`#gallery-grid .gallery-item[data-id="${SELF_ID}"]`).click({ button: 'right' })
+    await page.locator('.gallery-context-menu').getByText('View on the Style Map').click()
+    await expect(page.locator('#stylemap-error')).toBeVisible()
+    failing = false
+    await page.unroute('**/api/style-map/points**')
+    await page.route('**/api/style-map/points**', (route) => route.fulfill({ json: pointsBody() }))
+    const map = new StyleMapPage(page)
+    await map.spaceSelect.selectOption('clip')
+    await expect.poll(() => map.pointCount()).toBe(30)
+    await expect(page.locator('.stylemap-near-row')).toHaveCount(0)
+    expect(spy.nearUrls).toHaveLength(0)
   })
 
   test('an unknown picture (404) is said in words', async ({ page }) => {
@@ -362,6 +396,34 @@ test.describe('Style Map: the Locate a picture box', () => {
       expect(httpErrors).toEqual([])
     })
   }
+
+  test('Esc closes the result list without opening the entry page; the next Esc is the entry pages', async ({ page }) => {
+    await page.addInitScript(() => {
+      if (!window.sessionStorage.getItem('stylemap-entry-booted')) {
+        window.sessionStorage.setItem('stylemap-entry-booted', '1')
+        window.localStorage.removeItem('aurora-entry-skip')
+      }
+    })
+    await mockBase(page)
+    await page.route('**/api/style-map/locate', (route) => route.fulfill({ json: locateBody() }))
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await page.goto('/')
+    await expect(page.locator('#entry-page')).toBeVisible()
+    await page.locator('#entry-fn-gallery').click()
+    const map = new StyleMapPage(page)
+    await map.open()
+    await expect.poll(() => map.pointCount()).toBe(30)
+    await typeQuery(page, 'blue')
+    await expect(page.locator('#stylemap-locate-pop')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.locator('#stylemap-locate-pop')).toBeHidden()
+    await expect(page.locator('#entry-page')).toBeHidden()
+    await expect(map.view).toHaveClass(/active/)
+    // Focus left the box: Esc is now the entry page's.
+    await page.locator('#stylemap-locate-input').blur()
+    await page.keyboard.press('Escape')
+    await expect(page.locator('#entry-page')).toBeVisible()
+  })
 
   test('tag: and prompt: use the Gallery search language', async ({ page }) => {
     const spy = await mockBase(page)

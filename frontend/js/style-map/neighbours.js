@@ -347,7 +347,7 @@ export class NeighbourCard {
         if (!me.in_filter) {
             return {
                 key: 'stylemap.locateOutside',
-                fallback: 'Not in the current Gallery filter, so it has no dot. Its closest matches are listed anyway.',
+                fallback: 'Not in the current Gallery filter, so it has no dot. Closest matches below.',
                 tone: 'warn',
                 action: { key: 'stylemap.locateShowAll', fallback: 'Show all pictures', run: () => this.host.showAll() },
             };
@@ -422,6 +422,8 @@ export class NeighbourCard {
         dropSub.hidden = hasResult;
         drop.classList.toggle('is-compact', hasResult);
         drop.classList.toggle('is-fill', !hasResult);
+        // A library lookup lists its rows in the room the drop strip would take (the card still takes drops).
+        drop.hidden = hasResult && this.libraryId !== null;
         drop.setAttribute('aria-disabled', this.available ? 'false' : 'true');
         drop.tabIndex = this.available ? 0 : -1;
         clear.hidden = !this.file && this.libraryId === null;

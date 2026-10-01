@@ -5532,7 +5532,7 @@ window.I18nLang_en = {
     'stylemap.locateNote': 'Scores are cosine similarity; grey ones below {threshold} are not really close.',
     'stylemap.locateNoVector': 'This picture has no style data yet; build the style index first.',
     'stylemap.locateNoClip': 'This picture has no similarity data yet; build the similarity index on the Find Similar page.',
-    'stylemap.locateOutside': 'Not in the current Gallery filter, so it has no dot. Its closest matches are listed anyway.',
+    'stylemap.locateOutside': 'Not in the current Gallery filter, so it has no dot. Closest matches below.',
     'stylemap.locateOutsideAll': 'The current Gallery filter leaves no picture on this map, so this picture has no dot.',
     'stylemap.locateUnplaced': 'This picture cannot be placed on the map.',
     'stylemap.locateMerged': 'This picture is merged into the same dot as another picture.',

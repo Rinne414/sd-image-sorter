@@ -240,6 +240,7 @@ export class MapLocator {
         this.active = answer.results.length ? 0 : -1;
         if (!answer.results.length) this.state = this.emptyState(answer);
         this.render();
+        this.openIfTyping();
     }
 
     /** Why nothing was found, in the order the user can act on it. */
@@ -267,6 +268,12 @@ export class MapLocator {
     setState(key, fallback, tone, params = {}) {
         this.state = { key, fallback, params, tone };
         this.render();
+        this.openIfTyping();
+    }
+
+    /** New words or results open the list for the user who is typing; a repaint never reopens one they closed. */
+    openIfTyping() {
+        if (document.activeElement === this.el.input) this.open();
     }
 
     // ----------------------------------------------------------------- pick
@@ -330,7 +337,6 @@ export class MapLocator {
         this.renderStatus();
         this.renderList();
         this.renderFoot();
-        if (this.hasContent() && document.activeElement === this.el.input) this.open();
         if (!this.hasContent()) this.close();
     }
 

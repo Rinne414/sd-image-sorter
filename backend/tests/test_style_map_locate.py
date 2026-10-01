@@ -294,6 +294,85 @@ class TestLocate:
         assert _locate(service, points["map_id"], token)["status"] == "not_started"
 
 
+# ------------------------------------------------- libraries, cap, eviction
+def _other_library_image(test_db, tmp_path, vector):
+    import db_libraries as libdb
+    from PIL import Image
+
+    from library_context import reset_current_library_id, set_current_library_id
+
+    libdb.ensure_default_library()
+    other = libdb.create_library("Locate other")["id"]
+    path = tmp_path / "secretother0.png"
+    Image.new("RGB", (8, 8), (1, 2, 3)).save(path)
+    token = set_current_library_id(other)
+    try:
+        image_id = int(
+            test_db.add_image(
+                path=str(path), filename=path.name, content_fingerprint="other-fp"
+            )
+        )
+    finally:
+        reset_current_library_id(token)
+    _store_kaloscope(test_db, [image_id], vector[None, :])
+    return image_id
+
+
+class TestOtherLibrary:
+    def test_near_never_reads_a_picture_of_another_library(
+        self, test_db, tmp_path, no_umap
+    ):
+        from exceptions import ImageNotFoundError
+
+        ids = _make_images(test_db, tmp_path, 6)
+        vectors = _random_units(6, seed=12)
+        _store_kaloscope(test_db, ids, vectors)
+        foreign = _other_library_image(test_db, tmp_path, vectors[0])
+        service = _service()
+        handle = service.points("kaloscope")["map_id"]
+        with pytest.raises(ImageNotFoundError):
+            service.near_json("kaloscope", foreign, map_id=handle, k=5)
+
+    def test_locate_never_lists_a_picture_of_another_library(
+        self, test_db, tmp_path, no_umap
+    ):
+        ids = _make_images(test_db, tmp_path, 6)
+        vectors = _random_units(6, seed=12)
+        _store_kaloscope(test_db, ids, vectors)
+        _other_library_image(test_db, tmp_path, vectors[0])
+        service = _service()
+        handle = service.points("kaloscope")["map_id"]
+        body = _locate(service, handle, _token(search="secretother"))
+        assert body["results"] == [] and body["total"] == 0
+        assert body["outside_filter"] == 0 and body["without_data"] == 0
+
+
+class TestCapAndEviction:
+    def test_a_huge_limit_still_returns_at_most_fifty(
+        self, test_db, tmp_path, no_umap
+    ):
+        ids = _make_images(test_db, tmp_path, 60)
+        _store_kaloscope(test_db, ids, _random_units(60, seed=7))
+        service = _service()
+        handle = service.points("kaloscope")["map_id"]
+        body = _locate(service, handle, _token(search="img"), limit=500)
+        assert body["total"] == 60
+        assert len(body["results"]) == 50
+
+    def test_map_evicted_between_lookups_is_not_started_not_a_crash(
+        self, test_db, tmp_path, no_umap
+    ):
+        ids = _make_images(test_db, tmp_path, 6)
+        _store_kaloscope(test_db, ids, _random_units(6, seed=7))
+        service = _service()
+        handle = service.points("kaloscope")["map_id"]
+        service._inputs.clear()  # the LRU dropped the inputs, the payload is still cached
+        body = _locate(service, handle, _token(search="img1"))
+        assert body["status"] == "not_started" and body["results"] == []
+        near = _near(service, ids[0], handle)  # must not raise either
+        assert near["status"] in ("ok", "not_started")
+
+
 # ----------------------------------------------------------------- route
 @pytest.fixture
 def route(test_client, tmp_path, no_umap):

@@ -20,11 +20,12 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
+import database as db
 from exceptions import ImageNotFoundError
+from library_context import current_library_sql
 from services.style_map_query import (
     DEFAULT_K,
     WEAK_THRESHOLDS,
-    _filenames,
     build_answer,
     not_started_answer,
     rank_by_cosine,
@@ -32,6 +33,21 @@ from services.style_map_query import (
 
 MAX_RESULTS = 50
 _XYZ = Tuple[float, float, float]
+
+
+def _library_filenames(ids: Sequence[int]) -> Dict[int, str]:
+    """id -> file name of the given pictures that belong to the CURRENT
+    library; an id of another library is simply absent."""
+    if not ids:
+        return {}
+    clause, params = current_library_sql()
+    marks = ",".join("?" * len(ids))
+    with db.get_db() as conn:
+        rows = conn.execute(
+            f"SELECT id, filename FROM images WHERE id IN ({marks}) AND {clause}",
+            [*(int(value) for value in ids), *params],
+        ).fetchall()
+    return {int(row[0]): str(row[1] or "") for row in rows}
 
 
 def _dump(body: Dict[str, Any]) -> bytes:
@@ -122,7 +138,7 @@ class StyleMapLocateMixin:
         entry = self._cache_get(key) if key is not None else None
         if entry is None:
             return _dump(_not_started_near(normalized))
-        names = _filenames([image_id])
+        names = _library_filenames([image_id])
         if image_id not in names:
             raise ImageNotFoundError(image_id=image_id)
         own_ids, own = self._load_vectors(normalized, key[2], [image_id])
@@ -148,7 +164,7 @@ class StyleMapLocateMixin:
         body = build_answer(
             ranked,
             coords,
-            filenames=_filenames([i for i, _ in ranked]),
+            filenames=_library_filenames([i for i, _ in ranked]),
             weak_threshold=WEAK_THRESHOLDS[normalized],
             model_version=key[2],
             merged=merged,
@@ -183,6 +199,8 @@ class StyleMapLocateMixin:
         matched = self._filtered_ids(self._contract(search_token))
         with self._cache_lock:
             inputs = self._inputs.get(key)
+        if inputs is None:  # evicted between the two lookups
+            return _dump(_not_started_locate(normalized))
         mapped = inputs.member_ids if inputs.member_ids is not None else inputs.rep_ids
         on_map, outside, without_data = split_matches(
             matched, mapped, inputs.filter_ids
@@ -191,7 +209,7 @@ class StyleMapLocateMixin:
         coords, merged, _unlocated = self._place_members(
             key, [(i, 1.0) for i in shown], self._displayed_coords(key, entry[0])
         )
-        names = _filenames(shown)
+        names = _library_filenames(shown)
         results = [
             {
                 "id": int(i),

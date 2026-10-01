@@ -5529,7 +5529,7 @@ window.I18nLang_zhCN = {
     'stylemap.locateNote': '分数是余弦相似度；低于 {threshold} 的灰色项并不真的接近。',
     'stylemap.locateNoVector': '这张图还没有画风数据，先建立画风索引。',
     'stylemap.locateNoClip': '这张图还没有相似度数据，请先在「相似」页建立相似度索引。',
-    'stylemap.locateOutside': '不在当前图库筛选里，所以没有点；仍列出和它最像的图。',
+    'stylemap.locateOutside': '不在当前筛选里，没有点。下面是最像的图。',
     'stylemap.locateOutsideAll': '当前图库筛选里没有任何图在这张地图上，所以这张图没有点。',
     'stylemap.locateUnplaced': '这张图无法放到地图上。',
     'stylemap.locateMerged': '这张图和另一张合并在同一点。',

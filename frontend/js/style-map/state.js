@@ -382,7 +382,10 @@ export function createStyleMap() {
             if (seq !== state.seq) return;
             applyPoints(points);
         } catch (error) {
-            if (seq === state.seq) state.panel.showError(formatError(error));
+            if (seq === state.seq) {
+                state.pendingLookup = null; // no map came: a later map must not suddenly answer an old Gallery handoff
+                state.panel.showError(formatError(error));
+            }
         } finally {
             if (seq === state.seq) state.panel.setLoading(false);
         }
