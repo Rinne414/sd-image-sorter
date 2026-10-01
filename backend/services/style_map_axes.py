@@ -6,31 +6,32 @@ the three axes gets, for its low and its high end:
 - representative pictures: the ``REPS_PER_END`` pictures nearest the median of
   the outer ``REP_SHARE`` of the axis (a far outlier is never picked; later
   picks must look different from earlier ones, as regions do);
-- labels: WD14 general tags that separate the outer ``END_SHARE`` at one end
-  from the outer ``END_SHARE`` at the other end. The statistics are the
-  regions' (``style_map_regions``): hypergeometric tail over TAGGED pictures
-  only, one Benjamini-Hochberg correction over every admissible test of the
-  map, and the same effect-size gate. A tag counts as admissible when it
-  appears on at least ``TAG_MIN_COUNT`` pictures of the end it labels.
+- labels: STYLE tags (``style_axis_tags``: medium, technique, colour
+  treatment, rendering, art style; never subject, clothing, pose or
+  composition) that separate the outer ``END_SHARE`` at one end from the
+  outer ``END_SHARE`` at the other end. The statistics are the regions'
+  (``style_map_regions``): hypergeometric tail over TAGGED pictures only, one
+  Benjamini-Hochberg correction over every admissible test of the map, and
+  the same effect-size gate, plus a floor: a label must describe a real share
+  of its end (``LABEL_MIN_RATE``, ``LABEL_MIN_GAIN``). A tag is admissible
+  when at least ``TAG_MIN_COUNT`` pictures of the end carry it.
 
-Rating, meta, artist and character tags never label an axis. Character names
-say who is drawn, not how, and a name seen on a handful of pictures would
-only pretend the axis means that character; ratings and meta tags (highres,
-commentary, ...) are bookkeeping. ``weak`` is true when no tag separates the
-two ends: the page then says there is no shared trait, it never invents one.
+``weak`` is true when no style tag separates the two ends: an axis that only
+separates what is drawn (nude / clothed, one pose / another) has no style
+difference to name, and the page says so instead of inventing a label.
 ``strength`` is the largest rate difference between the two ends among the
 reported tags (0 when weak).
 
 Group counts are aggregated inside SQLite (one temp table of the grouped
-pictures joined to ``tags``), so a 50k-point map reads ~10k result rows, not
-millions. UMAP axes carry no direction (a fit may rotate or flip them); the
-page says so, the numbers here are still true for the layout shown.
+pictures joined to ``tags`` through the covering index, only the style tags),
+so even a 50k-point map reads a few dozen result rows. UMAP axes carry no
+direction (a fit may rotate or flip them); the page says so, the numbers here
+are still true for the layout shown.
 """
 
 from __future__ import annotations
 
 import json
-import re
 import sqlite3
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -39,6 +40,7 @@ import numpy as np
 import database as db
 from exceptions import ValidationError
 from services import style_map_umap
+from services.style_axis_tags import STYLE_AXIS_TAGS
 from services.style_map_regions import (
     SECOND_REPRESENTATIVE_MAX_COS,
     TAG_MAX_Q,
@@ -51,7 +53,7 @@ from services.style_map_regions import (
     hypergeom_tail,
 )
 
-AXES_ALGO_VERSION = 2
+AXES_ALGO_VERSION = 3
 AXIS_NAMES: Tuple[str, ...] = ("x", "y", "z")
 AXES_LAYOUTS: Tuple[str, ...] = ("pca", "umap")
 # A tag names an axis end only when it describes a real share of that end:
@@ -63,9 +65,6 @@ END_SHARE = 0.20
 REP_SHARE = 0.10
 REPS_PER_END = 3
 LABELS_PER_END = 3
-# Candidates looked up in the vocabulary (category, zh) per end before the
-# final LABELS_PER_END survive the rating / meta / character filter.
-CANDIDATES_PER_END = 12
 # Tag counts are taken on at most this many pictures per end, evenly spread
 # over the end's ranks (a 50k map has 10k per end; 4k of them already settle
 # every comparison and keep the answer under a second). Smaller maps are
@@ -73,10 +72,6 @@ CANDIDATES_PER_END = 12
 END_SAMPLE_CAP = 4000
 MIN_POINTS = 30
 _REP_SEARCH = 200
-EXCLUDED_CATEGORIES = frozenset({"meta", "rating", "artist", "character"})
-# The tagger's own rating tags are stored as plain tag names.
-RATING_TAGS = frozenset({"general", "sensitive", "questionable", "explicit"})
-_KANA = re.compile(r"[぀-ヿ]")
 _BITS = 6  # per axis: low end, high end
 
 
@@ -150,7 +145,8 @@ def _unpack_sums(row: Sequence[int]) -> List[int]:
 
 _GROUP_SQL = (
     "SELECT t.tag, SUM(p.w0), SUM(p.w1), SUM(p.w2) FROM tags t {hint} "
-    "JOIN axes_points p ON p.image_id = t.image_id GROUP BY t.tag"
+    "JOIN axes_points p ON p.image_id = t.image_id "
+    f"WHERE t.tag IN ({','.join('?' * len(STYLE_AXIS_TAGS))}) GROUP BY t.tag"
 )
 
 
@@ -161,8 +157,8 @@ def load_end_counts(
     pictures whose ``masks`` bit ``axis * 2 + end`` is set.
 
     The group flags are packed into three integer columns of a temp table, so
-    SQLite adds them up while it walks the covering index ``(tag, image_id)``
-    in tag order: no sort of the millions of tag rows and ~8k result rows. A
+    SQLite adds them up while it seeks the style tags in the covering index
+    ``(tag, image_id)``: a few dozen result rows. A
     tag row counts whatever its source (tagger, sidecar, manual all say what
     the picture shows); a picture counts as tagged when it has any tag row.
     """
@@ -183,27 +179,14 @@ def load_end_counts(
         ).fetchone()
         try:
             rows = conn.execute(
-                _GROUP_SQL.format(hint="INDEXED BY idx_tags_tag_image")
+                _GROUP_SQL.format(hint="INDEXED BY idx_tags_tag_image"),
+                STYLE_AXIS_TAGS,
             ).fetchall()
         except sqlite3.OperationalError:  # a library without that index
-            rows = conn.execute(_GROUP_SQL.format(hint="")).fetchall()
+            rows = conn.execute(_GROUP_SQL.format(hint=""), STYLE_AXIS_TAGS).fetchall()
         conn.execute("DROP TABLE axes_points")
     counts = {str(row[0]): _unpack_sums(tuple(row)[1:]) for row in rows}
     return _unpack_sums(tuple(tagged)), counts
-
-
-def _has_other_category(tag: str) -> bool:
-    """Some row stores this tag under a category other than general
-    (character, rating, ...)."""
-    with db.get_db() as conn:
-        return (
-            conn.execute(
-                "SELECT 1 FROM tags WHERE tag = ? AND category IS NOT NULL "
-                "AND category != 'general' LIMIT 1",
-                (tag,),
-            ).fetchone()
-            is not None
-        )
 
 
 # ------------------------------------------------------------------ tags
@@ -260,22 +243,9 @@ def _separating_tests(
     return [test for test in tests if test["q"] < TAG_MAX_Q]
 
 
-def _vocabulary_view(tag: str) -> Tuple[str, Optional[str], bool]:
-    """(category, Chinese display name or None, known to the vocabulary) from
-    the bundled vocabulary; a Japanese-only alias is no Chinese name."""
-    from services import tag_suggest_service
-
-    try:
-        category, zh, known = tag_suggest_service.tag_category_and_zh(tag)
-    except Exception:  # vocabulary files missing: keep the tag, English only
-        return "general", None, False
-    return category, (None if zh and _KANA.search(zh) else zh), known
-
-
-def _label_item(test: Dict[str, Any], zh: Optional[str]) -> Dict[str, Any]:
+def _label_item(test: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "tag": test["tag"],
-        "zh": zh,
         "count": test["count"],
         "tagged": test["tagged"],
         "rate": round(test["rate"], 3),
@@ -286,28 +256,12 @@ def _label_item(test: Dict[str, Any], zh: Optional[str]) -> Dict[str, Any]:
     }
 
 
-def _is_label_candidate(tag: str, category: str, known: bool) -> bool:
-    if tag in RATING_TAGS or category in EXCLUDED_CATEGORIES:
-        return False
-    # The covering scan cannot see the stored category: a tag the vocabulary
-    # does not know (a custom character name) is checked against the table.
-    return known or not _has_other_category(tag)
-
-
 def _labels_for_end(tests: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     ranked = sorted(
         tests,
         key=lambda test: (test["other_rate"] - test["rate"], test["q"], test["tag"]),
     )
-    labels: List[Dict[str, Any]] = []
-    for test in ranked[:CANDIDATES_PER_END]:
-        category, zh, known = _vocabulary_view(test["tag"])
-        if not _is_label_candidate(test["tag"], category, known):
-            continue
-        labels.append(_label_item(test, zh))
-        if len(labels) == LABELS_PER_END:
-            break
-    return labels
+    return [_label_item(test) for test in ranked[:LABELS_PER_END]]
 
 
 # ------------------------------------------------------------------ axes

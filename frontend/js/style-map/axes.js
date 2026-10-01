@@ -44,16 +44,15 @@ export function writeLabelsPreference(on) {
 }
 
 /**
- * Name of one axis tag: the language packs' curated style names first
- * (stylemap.tag.<tag>), then the vocabulary's Chinese name when the page is
- * Chinese, else the tag with underscores read as spaces.
+ * Name of one axis tag: the language packs' curated name (stylemap.tag.<tag>,
+ * every tag of the style list has one), else the English tag with underscores
+ * read as spaces. Never a vocabulary alias: those mix in Japanese kanji.
  */
 export function axisTagName(item) {
     const tag = String(item?.tag || '');
     const key = `stylemap.tag.${tag}`;
     const curated = t(key, '');
     if (curated && curated !== key) return curated;
-    if (item?.zh && window.I18n?.isChinese?.()) return item.zh;
     return tag.replace(/_\(medium\)$/, '').replace(/_/g, ' ');
 }
 

@@ -8,6 +8,8 @@ regions' BH + effect size rule), and ``weak`` when nothing separates them.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -84,7 +86,7 @@ class TestAxes:
         ids, xyz = _scene(test_db, seed=11)
         order = np.argsort(xyz[:, 0])
         high = order[-int(N * 0.2) :]  # the outer fifth: 80 pictures
-        _tag_all(test_db, np.array(ids)[high[:8]], "black_collar")  # 10% vs 0%
+        _tag_all(test_db, np.array(ids)[high[:8]], "sepia")  # 10% vs 0%
         axes = axes_mod.axes_of_points(_points(ids, xyz))["axes"]
         assert axes["x"]["weak"] is True and axes["x"]["high"]["tags"] == []
 
@@ -95,25 +97,33 @@ class TestAxes:
         assert _tags(axes["y"]["low"]) == ["sketch"]
         assert axes["y"]["high"]["tags"] == [] and axes["x"]["weak"] is True
 
-    def test_rating_character_and_meta_tags_never_label_an_axis(self, test_db):
+    def test_content_tags_never_label_an_axis_however_big_the_difference(self, test_db):
+        """Subject, clothing, rating, character and meta tags say what is
+        drawn: an axis that only separates those has no style difference."""
         ids, xyz = _scene(test_db, seed=4)
         order = np.argsort(xyz[:, 0])
         top = np.array(ids)[order[-int(N * 0.25) :]]
+        low = np.array(ids)[order[: int(N * 0.25)]]
+        for tag in ("breasts", "nipples", "blush"):
+            _tag_all(test_db, top, tag)
+        for tag in ("skirt", "pleated_skirt", "from_above", "close-up"):
+            _tag_all(test_db, low, tag)
         _tag_all(test_db, top, "explicit", "rating")
-        _tag_all(test_db, top, "highres")  # danbooru meta tag, "general" row
-        _tag_all(test_db, np.array(ids)[order[: int(N * 0.25)]], "hatsune_miku", "character")
-        axes = axes_mod.axes_of_points(_points(ids, xyz))["axes"]
-        assert axes["x"]["weak"] is True
-        assert axes["x"]["high"]["tags"] == [] and axes["x"]["low"]["tags"] == []
+        _tag_all(test_db, top, "highres")
+        _tag_all(test_db, low, "hatsune_miku", "character")
+        result = axes_mod.axes_of_points(_points(ids, xyz))["axes"]
+        assert all(result[name]["weak"] for name in "xyz")
+        assert all(result[name][end]["tags"] == [] for name in "xyz" for end in ("low", "high"))
 
-    def test_a_character_tag_the_vocabulary_does_not_know_is_still_excluded(
-        self, test_db
-    ):
-        ids, xyz = _scene(test_db, seed=10)
-        top = np.array(ids)[np.argsort(xyz[:, 0])[-int(N * 0.25) :]]
-        _tag_all(test_db, top, "zzqx_unlisted_heroine_(nowhere)", "character")
-        axes = axes_mod.axes_of_points(_points(ids, xyz))["axes"]
-        assert axes["x"]["weak"] is True
+    def test_a_style_tag_beside_big_content_differences_is_the_only_label(self, test_db):
+        ids, xyz = _scene(test_db, seed=12)
+        order = np.argsort(xyz[:, 0])
+        top = np.array(ids)[order[-int(N * 0.25) :]]
+        _tag_all(test_db, top, "breasts")
+        _tag_all(test_db, top, "watercolor_(medium)")
+        _tag_all(test_db, np.array(ids)[order[: int(N * 0.25)]], "skirt")
+        x = axes_mod.axes_of_points(_points(ids, xyz))["axes"]["x"]
+        assert _tags(x["high"]) == ["watercolor_(medium)"] and x["low"]["tags"] == []
 
     def test_counting_samples_a_large_end_evenly_and_leaves_small_ones_whole(self):
         rows = np.arange(10_000)
@@ -170,15 +180,43 @@ class TestAxes:
         assert all(axes[name]["weak"] for name in "xyz")
         assert axes_mod.axes_of_points([])["axes"]["x"]["weak"] is True
 
-    def test_chinese_display_name_is_attached_when_the_vocabulary_has_one(
-        self, test_db
-    ):
-        ids, xyz = _scene(test_db, seed=9)
-        _tag_all(test_db, np.array(ids)[np.argsort(xyz[:, 0])[-100:]], "monochrome")
-        item = axes_mod.axes_of_points(_points(ids, xyz))["axes"]["x"]["high"]["tags"][
-            0
-        ]
-        assert item["tag"] == "monochrome" and "zh" in item
+def test_the_style_list_is_style_only_and_every_name_is_in_both_language_packs():
+    from pathlib import Path
+
+    from services import style_axis_tags
+
+    assert len(style_axis_tags.STYLE_AXIS_TAGS) == len(style_axis_tags.STYLE_AXIS_TAG_SET)
+    for composition in ("close-up", "from_above", "1girl", "solo", "breasts", "skirt", "highres"):
+        assert composition not in style_axis_tags.STYLE_AXIS_TAG_SET
+    root = Path(__file__).resolve().parents[2] / "frontend" / "js" / "lang"
+    zh = (root / "zh-CN.js").read_text(encoding="utf-8")
+    en = (root / "en.js").read_text(encoding="utf-8")
+    for tag in style_axis_tags.STYLE_AXIS_TAGS:
+        key = f"'stylemap.tag.{tag}'"
+        assert key in zh and key in en, tag
+
+
+def test_every_style_tag_is_in_a_shipped_tagger_vocabulary():
+    """Checked against the selected_tags.csv files of the installed taggers
+    (not shipped in the repo: skipped where they are absent)."""
+    import csv
+
+    from config import DATA_DIR
+    from services import style_axis_tags
+
+    base = Path(DATA_DIR) / "models" / "wd14-tagger"
+    vocabularies = {}
+    for model in ("wd-swinv2-tagger-v3", "pixai-tagger-v0.9"):
+        path = base / model / "selected_tags.csv"
+        if path.is_file():
+            with path.open(encoding="utf-8", newline="") as handle:
+                vocabularies[model] = {
+                    row["name"] for row in csv.DictReader(handle) if row["category"] in ("0", "general")
+                }
+    if len(vocabularies) < 2:
+        pytest.skip("tagger vocabularies are not installed")
+    for tag in style_axis_tags.STYLE_AXIS_TAGS:
+        assert any(tag in names for names in vocabularies.values()), tag
 
 
 # ------------------------------------------------------------ service + route

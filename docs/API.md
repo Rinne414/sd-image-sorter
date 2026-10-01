@@ -2078,8 +2078,12 @@ the largest):
   different from each other (cosine of the PCA features below 0.9, as for the
   regions). Merged near-duplicates are represented by their representative
   point; every point counts once.
-- `tags`: up to 3 WD14 general tags that separate the outer 20% at this end
-  from the outer 20% at the other end. The statistics are the regions' own
+- `tags`: up to 3 STYLE tags that separate the outer 20% at this end from the
+  outer 20% at the other end. Only tags of the style list
+  (`backend/services/style_axis_tags.py`: medium and technique, colour
+  treatment, rendering, art style; each one a WD14 general tag of a shipped
+  tagger) are compared; subject, clothing, pose, composition, rating,
+  character and meta tags never label an axis. The statistics are the regions' own
   (hypergeometric tail over TAGGED pictures only, one Benjamini-Hochberg
   correction over every admissible test of the map, `q` < 0.01, `ratio` >= 3
   or `rate` >= 0.6 with a `gain` of at least 0.25 over `other_rate`), and the tag
@@ -2088,15 +2092,14 @@ the largest):
   admissible when at least 4 pictures of the end carry it and both ends have
   at least 10 tagged pictures. Tag counts are taken on at most 4000 pictures
   per end, evenly spread over the end's ranks (smaller maps are counted
-  whole). Rating, meta, artist and character tags never label an axis
-  (character names say who is drawn, not how). `zh` is the Chinese display
-  name from the bundled vocabulary (null when it has none or only a Japanese
-  one). A tag row counts whatever its source (tagger, sidecar, manual), and a
-  picture is tagged when it has any tag row.
+  whole). A tag row counts whatever its source (tagger, sidecar, manual), and a
+  picture is tagged when it has any tag row. The page names the tags from its
+  language packs (`stylemap.tag.<tag>`), English when there is none.
 - `size` (points in the end) and `tagged` (of those, with any tag).
 
-`weak` is `true` when no tag separates the two ends of the axis: the page then
-says the direction has no clear shared trait and never invents a label.
+`weak` is `true` when no style tag separates the two ends of the axis (an axis
+that only separates what is drawn has no style difference to name): the page
+then says so and never invents a label.
 `strength` is the largest `gain` (rate at the labelled end minus rate at the
 other end) among the reported tags, 0 when `weak`. Maps with fewer than 30
 points are `weak` on every axis.
@@ -2120,11 +2123,11 @@ unchanged repeat); dropped whenever the layout is.
 {
   "status": "ok", "space": "kaloscope", "layout": "pca",
   "model_version": "kaloscope-2.0:sha256:...",
-  "algo_version": 2, "points": 1447,
+  "algo_version": 3, "points": 1447,
   "axes": {
     "x": {"weak": false, "strength": 0.62,
           "low":  {"representatives": [88, 91, 412], "size": 289, "tagged": 289,
-                   "tags": [{"tag": "monochrome", "zh": "单色调", "count": 190, "tagged": 289, "rate": 0.657, "other_rate": 0.038, "gain": 0.619, "ratio": 17.3, "q": 1e-40}]},
+                   "tags": [{"tag": "monochrome", "count": 190, "tagged": 289, "rate": 0.657, "other_rate": 0.038, "gain": 0.619, "ratio": 17.3, "q": 1e-40}]},
           "high": {"representatives": [3, 17, 25], "size": 289, "tagged": 289, "tags": []}},
     "y": {"weak": true, "strength": 0.0, "low": {"...": "..."}, "high": {"...": "..."}},
     "z": {"...": "..."}
