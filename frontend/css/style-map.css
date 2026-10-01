@@ -549,7 +549,7 @@
 .stylemap-preview-box img {
     display: block;
     max-width: 100%;
-    max-height: calc(var(--ui-viewport-height, 100vh) * 0.24);
+    max-height: calc(var(--ui-viewport-height, 100vh) * 0.14);
     width: auto;
     height: auto;
     object-fit: contain;
@@ -608,10 +608,20 @@
 }
 
 .stylemap-help ul {
-    margin: 8px 0 0;
+    margin: 0;
     padding-left: 14px;
     display: grid;
-    gap: 6px;
+    gap: 4px;
+}
+
+.stylemap-help details {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border);
+}
+
+.stylemap-help details ul {
+    margin-top: 6px;
 }
 
 .stylemap-unsupported-detail {
@@ -804,4 +814,44 @@
 
 .stylemap-drop.is-compact {
     padding: 7px 10px;
+}
+
+/* The preview grows with the window: on a short laptop screen the nearest
+   list needs at least four rows beside it; taller windows have room to spare. */
+@media (min-height: 900px) {
+    .stylemap-preview-box img { max-height: calc(var(--ui-viewport-height, 100vh) * 0.26); }
+}
+
+@media (min-height: 1300px) {
+    .stylemap-preview-box img { max-height: calc(var(--ui-viewport-height, 100vh) * 0.32); }
+}
+
+/* Short laptop screens (1366x768): everything in the side column tightens so
+   the nearest list keeps at least four rows besides the preview. */
+@media (max-height: 820px) {
+    .stylemap-side { gap: 8px; }
+    .stylemap-preview { padding: 8px; gap: 5px; }
+    .stylemap-preview-box img { max-height: calc(var(--ui-viewport-height, 100vh) * 0.16); }
+    .stylemap-preview-box { min-height: 80px; }
+    .stylemap-drop.is-compact { padding: 5px 10px; }
+    .stylemap-preview-members:empty { display: none; }
+    .stylemap-help { padding: 7px 12px; font-size: 12px; line-height: 1.35; }
+    .stylemap-help ul { gap: 2px; }
+    .stylemap-help details { margin-top: 4px; padding-top: 4px; }
+    .stylemap-near { padding: 8px 10px; gap: 5px; }
+    .stylemap-near-title { font-size: 12px; }
+    .stylemap-near-row { padding: 2px 4px; }
+    .stylemap-near-thumb { width: 32px; height: 32px; }
+}
+
+.stylemap-near-clear {
+    flex: 0 0 auto;
+    min-width: 28px;
+    padding-left: 8px;
+    padding-right: 8px;
+    height: 24px;
+    padding-top: 0;
+    padding-bottom: 0;
+    font-size: 16px;
+    line-height: 1;
 }

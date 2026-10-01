@@ -3930,7 +3930,7 @@
                             <section class="stylemap-near" id="stylemap-near" aria-labelledby="stylemap-near-title">
                                 <div class="stylemap-near-head">
                                     <h4 class="stylemap-near-title" id="stylemap-near-title" data-i18n="stylemap.nearTitle">Drop a picture, find the nearest</h4>
-                                    <button class="btn btn-ghost btn-small" id="stylemap-near-clear" type="button" hidden data-i18n="stylemap.nearClear">Clear</button>
+                                    <button class="btn btn-ghost btn-small stylemap-near-clear" id="stylemap-near-clear" type="button" hidden aria-label="Clear" title="Clear">&times;</button>
                                 </div>
                                 <div class="stylemap-drop" id="stylemap-drop" role="button" tabindex="0" aria-disabled="true">
                                     <span class="stylemap-drop-main" id="stylemap-drop-main" data-i18n="stylemap.nearDrop">Drop a picture here</span>
@@ -3943,15 +3943,19 @@
                                     <p class="stylemap-near-note" id="stylemap-near-note" hidden></p>
                                 </div>
                             </section>
-                            <details class="stylemap-help" id="stylemap-help">
-                                <summary data-i18n="stylemap.helpTitle">How to read the map</summary>
-                                <ul>
+                            <div class="stylemap-help" id="stylemap-help">
+                                <ul class="stylemap-help-main">
                                     <li data-i18n="stylemap.helpRotate">Drag to rotate, wheel to zoom, right-drag to pan.</li>
-                                    <li data-i18n="stylemap.helpMembers">One dot can stand for several near-identical pictures.</li>
                                     <li data-i18n="stylemap.helpNear">Only dots that sit together mean something; distances across the map do not.</li>
-                                    <li data-i18n="stylemap.helpLandmarks">Region landmarks are mostly pictures; a style or artist is named only when it is clear.</li>
                                 </ul>
-                            </details>
+                                <details>
+                                    <summary data-i18n="stylemap.helpTitle">More about the map</summary>
+                                    <ul>
+                                        <li data-i18n="stylemap.helpMembers">One dot can stand for several near-identical pictures.</li>
+                                        <li data-i18n="stylemap.helpLandmarks">Region landmarks are mostly pictures; a style or artist is named only when it is clear.</li>
+                                    </ul>
+                                </details>
+                            </div>
                         </aside>
                     </div>
                 </div>

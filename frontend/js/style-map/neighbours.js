@@ -319,6 +319,9 @@ export class NeighbourCard {
         drop.setAttribute('aria-disabled', this.available ? 'false' : 'true');
         drop.tabIndex = this.available ? 0 : -1;
         clear.hidden = !this.file;
+        const clearLabel = t('stylemap.nearClear', 'Clear');
+        clear.title = clearLabel;
+        clear.setAttribute('aria-label', clearLabel);
         this.renderStatus();
         this.renderList();
     }

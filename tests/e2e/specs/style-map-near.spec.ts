@@ -11,6 +11,18 @@ import { StyleMapPage } from '../pages/StyleMapPage'
  */
 
 const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
+/** A solid 400x600 PNG: a real-sized preview picture (the 1 px one hides how tall the preview gets). */
+function solidPng(width: number, height: number): Buffer {
+  const zlib = require('node:zlib')
+  const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0 })
+  const crc = (buf: Buffer) => { let c = 0xffffffff; for (const byte of buf) c = crcTable[(c ^ byte) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0 }
+  const chunk = (type: string, data: Buffer) => { const head = Buffer.alloc(8); head.writeUInt32BE(data.length, 0); head.write(type, 4); const tail = Buffer.alloc(4); tail.writeUInt32BE(crc(Buffer.concat([head.subarray(4), data])), 0); return Buffer.concat([head, data, tail]) }
+  const header = Buffer.alloc(13); header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 2
+  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(width * 3, 0x66)])
+  const raw = Buffer.concat(Array.from({ length: height }, () => row))
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))])
+}
+const PREVIEW_PNG = solidPng(400, 600)
 const MAP_ID = 'e2e0e2e0e2e0e2e0e2e0e2e0e2e0e2e0'
 const UMAP_PARAMS = { n_neighbors: 15, min_dist: 0.1, metric: 'cosine', input_dim: 64, random_state: 0 }
 
@@ -59,7 +71,7 @@ async function mockBase(page: Page, points = pointsBody()) {
   await page.route('**/api/style-map/points**', (route) => route.fulfill({ json: points }))
   await page.route('**/api/style-map/regions**', (route) => route.fulfill({ json: { status: 'ok', space: 'kaloscope', method: 'pca', regions: [], cached: false } }))
   await page.route('**/api/style-map/colors**', (route) => route.fulfill({ json: { status: 'ok', space: 'kaloscope', by: 'generator', kind: 'category', ids: Array.from({ length: 30 }, (_, i) => i + 1), values: new Array(30).fill(0), legend: [{ key: 'nai', label: 'nai', count: 30 }], range: null, missing: 0 } }))
-  await page.route('**/api/image-thumbnail/**', (route) => route.fulfill({ status: 200, contentType: 'image/png', body: PNG_1PX }))
+  await page.route('**/api/image-thumbnail/**', (route) => route.fulfill({ status: 200, contentType: 'image/png', body: PREVIEW_PNG }))
   await page.route('**/api/images/*', (route) => {
     if (route.request().method() !== 'GET' || !/\/api\/images\/\d+$/.test(route.request().url())) return route.fallback()
     return route.fulfill({ json: { image: { filename: 'preview_name.png' } } })
@@ -132,7 +144,7 @@ const ringKinds = (page: Page) =>
   page.evaluate(() => (window as any).StyleMap._state.scene.rings.describe().map((r: any) => `${r.kind}:${r.visible}`))
 
 test.describe('Style Map nearest pictures', () => {
-  for (const [width, height, lang] of [[1366, 768, 'en'], [1920, 1080, 'zh-CN']] as const) {
+  for (const [width, height, lang] of [[1366, 768, 'en'], [1920, 1080, 'zh-CN'], [2560, 1440, 'en']] as const) {
     test(`a dropped picture rings the nearest dots, greys the far ones and lists them best first at ${width}x${height} (${lang})`, async ({ page }) => {
       await mockBase(page)
       const uploads: Array<{ url: string; type: string; hasFile: boolean }> = []
@@ -203,6 +215,12 @@ test.describe('Style Map nearest pictures', () => {
       await page.locator('.stylemap-near-row[data-id="12"]').click()
       await expect(page.locator('.stylemap-near-row[data-id="12"]')).toHaveAttribute('aria-current', 'true')
       await expect(map.previewImage).toHaveAttribute('src', /\/api\/image-thumbnail\/12\?size=512/)
+      // With a real-sized preview showing, the side column still holds: no own scrollbar, no overflow, and
+      // on a laptop screen at least the query row and four neighbours stay in view.
+      await expect.poll(async () => page.evaluate(() => (document.querySelector('#stylemap-preview-img') as HTMLImageElement).naturalWidth)).toBe(400)
+      const withPreview = await layoutCheck(page)
+      expect(withPreview).toMatchObject({ pageOverflow: false, sideClipped: false, cardInsideSide: true, overlapping: false })
+      if (height < 900) expect(withPreview.rowsVisible).toBeGreaterThanOrEqual(5)
       await expect.poll(async () => page.evaluate(() => (window as any).StyleMap._state.scene.controls.target.toArray())).not.toEqual(before)
       const target = await page.evaluate(() => (window as any).StyleMap._state.scene.controls.target.toArray())
       const want = coord(12)

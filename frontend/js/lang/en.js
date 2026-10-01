@@ -5366,7 +5366,7 @@ window.I18nLang_en = {
     'stylemap.colorsError': 'Dot colours could not be loaded',
     'stylemap.colorsLoading': 'Loading colours...',
     'stylemap.colorsRetry': 'Retry',
-    'stylemap.helpTitle': 'How to read the map',
+    'stylemap.helpTitle': 'More about the map',
     'stylemap.nearTitle': 'Drop a picture, find the nearest',
     'stylemap.nearEmpty': 'The nearest pictures are listed here and ringed on the map.',
     'stylemap.nearMerged': 'merged into the same dot as another picture',
