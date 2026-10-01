@@ -918,6 +918,33 @@ class TestGeneratorsWithoutASampler:
         assert "draw something unusual" not in (result["prompt"] or "")
 
 
+class TestJsonPromptPayloads:
+    def test_ui_token_state_does_not_outrank_the_rendered_prompt(self):
+        """A prompt UI's token list ([{"id": ..., "text": "1girl"}, ...]) is UI state
+        rendered as the plain ``positive`` string beside it; neither one tag nor the
+        re-joined list may replace that rendered prompt."""
+        from prompt_text_scorer import harvest_prompt_candidates, pick_positive_negative
+
+        full = "1girl, solo, silver hair, braid, hair between eyes, red scarf, snowy street, lantern light"
+        # The token state carries one tag the rendered text does not.
+        tokens = json.dumps(
+            [
+                {"id": f"token_{i}", "text": tag}
+                for i, tag in enumerate(full.split(", ") + ["narrow waist"])
+            ]
+        )
+        nodes = {
+            "667": {
+                "class_type": "WeiLinPromptUI",
+                "inputs": {"positive": full, "temp_str": tokens},
+            },
+        }
+        pos, _neg = pick_positive_negative(
+            harvest_prompt_candidates(nodes, ("CLIPTextEncode",))
+        )
+        assert pos == full
+
+
 class TestPromptEligibility:
     """The graph rule behind the cases above, on the API node map directly."""
 

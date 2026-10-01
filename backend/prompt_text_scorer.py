@@ -73,7 +73,14 @@ _JSON_PAYLOAD_MAX_DEPTH = 6
 
 
 def _json_prompt_strings(text: str) -> List[str]:
-    """Prompt-role strings inside a JSON payload, in document order."""
+    """The prompt inside a JSON payload: its prompt-role strings, in document
+    order, joined as one text.
+
+    A payload is one prompt split into records (a ``[{"text": ...}]`` list, a
+    token list, a gallery selection with several posts), so its strings are
+    one candidate; scoring each token on its own would let a single tag beat
+    the whole prompt it belongs to.
+    """
     try:
         data = json.loads(text)
     except (ValueError, TypeError):
@@ -84,18 +91,21 @@ def _json_prompt_strings(text: str) -> List[str]:
         if depth > _JSON_PAYLOAD_MAX_DEPTH:
             return
         if isinstance(value, dict):
-            for key, item in value.items():
-                if isinstance(item, str):
-                    if str(key).lower() in _JSON_PROMPT_KEYS and item.strip():
-                        found.append(item)
-                else:
+            # A prompt record carries nothing but prompt text. A record with
+            # other string fields (an id, a translation, a type) is UI state
+            # or a catalogue entry, whose text is rendered elsewhere.
+            strings = {key: item for key, item in value.items() if isinstance(item, str) and item.strip()}
+            if strings and all(str(key).lower() in _JSON_PROMPT_KEYS for key in strings):
+                found.extend(strings.values())
+            for item in value.values():
+                if isinstance(item, (dict, list)):
                     walk(item, depth + 1)
         elif isinstance(value, list):
             for item in value:
                 walk(item, depth + 1)
 
     walk(data, 0)
-    return found
+    return [", ".join(item.strip() for item in found if item.strip())] if found else []
 
 
 def _source_chain_has_tagger(
