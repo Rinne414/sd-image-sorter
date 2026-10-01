@@ -138,3 +138,62 @@ class TestTextBehindAModelPatchIsHarvested:
         graph["lora"]["inputs"]["clip"] = ["left", 0]  # a loader never makes its inputs prompts
         result = _parse(tmp_path, "barrier.png", graph)
         assert not result["prompt"], result["prompt"]
+
+
+EXECUTED_PROMPT = (
+    "A tall woman stands by a harbour wall at dusk while gulls circle the mast "
+    "lights and the water keeps moving under a violet sky."
+)
+SYSTEM_TEXT = "You are a prompt writer. Expand the user's idea into one detailed image prompt."
+
+
+def _runtime_source_graph(display_slot: int = 0, display_value: str | None = EXECUTED_PROMPT) -> dict:
+    """The prompt is written at run time by node ``gen``; a display node that is
+    NOT on the sampler path shows (and stores) what ``gen`` produced."""
+    graph = {
+        "gen": {
+            "class_type": "PromptExpand",
+            "inputs": {"system_prompt": SYSTEM_TEXT, "custom_prompt": "stale idea typed before wiring"},
+        },
+        "enc": {"class_type": "CLIPTextEncode", "inputs": {"text": ["gen", 0]}},
+        "neg": {"class_type": "CLIPTextEncode", "inputs": {"text": "worst quality, lowres, bad anatomy"}},
+        "ks": _sampler(["enc", 0]),
+    }
+    if display_value is not None:
+        graph["show"] = {
+            "class_type": "ShowText",
+            "inputs": {"text": ["gen", display_slot], "text_0": display_value},
+        }
+    return graph
+
+
+class TestRuntimeSourceReadsItsDisplayNode:
+    def test_display_node_beside_the_path_gives_the_executed_prompt(self):
+        pos, _neg = MetadataParser()._trace_sampler_prompts(_runtime_source_graph())
+        assert pos == EXECUTED_PROMPT
+
+    def test_a_selector_node_is_not_a_run_time_source(self):
+        """A select / concat node's text comes from the graph; its display can
+        hold a different run's pick, so the trace does not read it."""
+        graph = _runtime_source_graph()
+        graph["gen"] = {"class_type": "ZML_SelectText", "inputs": {"seed": 5}}
+        pos, _neg = MetadataParser()._trace_sampler_prompts(graph)
+        assert pos is None
+
+    def test_a_boolean_display_is_not_a_prompt(self):
+        pos, _neg = MetadataParser()._trace_sampler_prompts(_runtime_source_graph(display_value="False"))
+        assert pos is None
+
+    def test_display_of_another_output_is_not_read(self):
+        pos, _neg = MetadataParser()._trace_sampler_prompts(_runtime_source_graph(display_slot=1))
+        assert pos is None
+
+    def test_without_a_display_node_the_stale_widget_is_still_not_read(self):
+        pos, _neg = MetadataParser()._trace_sampler_prompts(_runtime_source_graph(display_value=None))
+        assert pos is None
+
+    def test_display_node_without_a_stored_value_gives_nothing(self):
+        graph = _runtime_source_graph()
+        del graph["show"]["inputs"]["text_0"]
+        pos, _neg = MetadataParser()._trace_sampler_prompts(graph)
+        assert pos is None

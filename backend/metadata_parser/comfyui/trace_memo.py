@@ -84,6 +84,67 @@ class ComfyUITraceMemoMixin:
     def _trace_texts(self, ref: Any, nodes: Dict[str, dict], side: Optional[str] = None) -> List[str]:
         return [item["text"] for item in self._trace_texts_with_source(ref, nodes, side) if item.get("text")]
 
+    _RUNTIME_SOURCE_MARKERS = (
+        "promptexpand", "llm", "vlm", "ollama", "gemini", "joycaption", "florence", "describe",
+    )
+
+    def _is_runtime_text_source(self, node: Any, nodes: Dict[str, dict], node_id: str) -> bool:
+        """A node that writes its text at run time (an LLM or prompt expander).
+
+        Selectors, concatenators and switches are not: their text comes from
+        the graph, and a display beside them can show a different run's pick.
+        """
+        if not isinstance(node, dict):
+            return False
+        if self._is_comfyui_instruct_node(node, nodes, node_id):
+            return True
+        class_type = str(node.get("class_type") or "").lower().replace("_", "").replace(" ", "")
+        return any(marker in class_type for marker in self._RUNTIME_SOURCE_MARKERS)
+
+    @staticmethod
+    def _is_non_prompt_display_value(text: str) -> bool:
+        from prompt_text_scorer import looks_like_formula_or_tag_stack, looks_like_non_prompt_value
+
+        return looks_like_non_prompt_value(text) or looks_like_formula_or_tag_stack(text)
+
+    def _read_display_of_runtime_source(
+        self, node_id: str, slot: Any, nodes: Dict[str, dict]
+    ) -> List[Dict[str, Any]]:
+        """What display nodes beside the path stored for one output of a node.
+
+        A run-time source (an LLM, a prompt expander) has no value in the
+        graph, but a ShowText / PreviewAny fed by the same output keeps the
+        result of the run even when it is not on the sampler's path. Only a
+        stored display value counts; a widget typed before the input was
+        wired is never read.
+        """
+        found: List[Dict[str, Any]] = []
+        if not self._is_runtime_text_source(nodes.get(node_id), nodes, node_id):
+            return found
+        for display_id, display in nodes.items():
+            inputs = display.get("inputs") if isinstance(display, dict) else None
+            if not isinstance(inputs, dict) or not self._is_comfyui_display_node(display.get("class_type")):
+                continue
+            if not any(
+                isinstance(value, (list, tuple)) and len(value) >= 2
+                and str(value[0]) == str(node_id) and str(value[1]) == str(slot)
+                for value in inputs.values()
+            ):
+                continue
+            for key in ("text_0", "text", "string"):
+                value = inputs.get(key)
+                if isinstance(value, str) and value.strip() and not self._is_non_prompt_display_value(value):
+                    found.append({
+                        "text": value.strip(),
+                        "source_node_id": str(display_id),
+                        "source_class_type": display.get("class_type", ""),
+                        "source_key": key,
+                    })
+                    break
+            if found:
+                break
+        return found
+
     def _trace_memo_note_depth(self, depth: int) -> None:
         for frame in self._trace_memo.frames:
             if depth > frame.max_depth:

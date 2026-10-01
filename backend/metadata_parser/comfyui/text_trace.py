@@ -200,7 +200,10 @@ class ComfyUITextTraceMixin:
             slots = self.COMFYUI_FROM_PIPE_OUTPUTS.get(str(target.get("class_type") or ""))
             if slots is not None:
                 return self._trace_pipe_output(target_id, ref[1], slots, nodes, visited, depth, side)
-            return self._extract_text_from_node_with_source(target_id, nodes, visited, depth, side=side)
+            traced = self._extract_text_from_node_with_source(target_id, nodes, visited, depth, side=side)
+            if not traced and target_id not in visited and not self._is_comfyui_display_node(target.get("class_type")):
+                traced = self._read_display_of_runtime_source(target_id, ref[1], nodes)
+            return traced
 
         return []
 
