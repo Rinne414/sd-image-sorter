@@ -76,6 +76,7 @@ from db_helpers import (
     _is_source_fingerprint_changed,
     _should_clear_derived_state,
     _should_forget_content_fingerprint,
+    _should_withhold_source_fingerprint,
 )
 
 
@@ -298,9 +299,13 @@ def _upsert_image_record(
         source_changed = _is_source_fingerprint_changed(existing_row, record)
         incoming_source_mtime_ns = record.get("source_mtime_ns")
         incoming_source_size = record.get("source_size")
-        if metadata_status == "pending":
+        if metadata_status == "pending" or _should_withhold_source_fingerprint(
+            existing_row, record
+        ):
             # Placeholder scan rows should not consume the new source fingerprint
             # before the final metadata backfill has a chance to compare pixels.
+            # Nor should a backfill that could not hash an incomparable row with
+            # derived state: the next scan's digest decides what to keep.
             incoming_source_mtime_ns = None
             incoming_source_size = None
         if _should_clear_derived_state(
@@ -608,12 +613,21 @@ def update_image_metadata(
         mark_unreadable = (is_readable is False)
         stored_source_mtime_ns = source_mtime_ns
         stored_source_size = source_size
-        if metadata_status_normalized == "pending":
+        if metadata_status_normalized == "pending" or _should_withhold_source_fingerprint(
+            existing_row,
+            {
+                "source_mtime_ns": source_mtime_ns,
+                "source_size": source_size,
+                "content_fingerprint": content_fingerprint,
+            },
+        ):
             # Same rule as _upsert_image_record: a placeholder must not consume
             # the new mtime/size, or the backfill that follows could no longer
             # tell that the file changed. Both derived-state predicates exempt
             # "pending" on that assumption. No caller passes "pending" here
-            # today; the guard keeps the two rewrite paths on one rule.
+            # today; the guard keeps the two rewrite paths on one rule. The
+            # same withholding applies to an incomparable row with derived
+            # state when this write brings no digest.
             stored_source_mtime_ns = None
             stored_source_size = None
         existing_fingerprint = _normalize_content_fingerprint(_row_value(existing_row, "content_fingerprint"))

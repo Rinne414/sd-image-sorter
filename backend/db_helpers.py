@@ -702,6 +702,32 @@ def _should_clear_derived_state(
     return False
 
 
+def _should_withhold_source_fingerprint(
+    existing_row: Optional[Dict[str, Any]],
+    record: Dict[str, Any],
+) -> bool:
+    """Record no mtime/size this time: the row stays incomparable on purpose.
+
+    The unverifiable case of ``_should_forget_content_fingerprint`` for a row
+    that HAS derived state and a fingerprint, when this write brings no new
+    digest. Forgetting the fingerprint there would let the next hash claim the
+    empty slot and wash stale tags into "matches the new pixels"; recording
+    the pair would make the row a permanent unchanged hit with the old digest.
+    Withholding the pair does neither: the next scan re-parses and hashes the
+    file again (``_source_fingerprint_matches`` is False without a pair,
+    ``_should_compute_content_fingerprint`` is True with a fingerprint), and
+    the digest comparison in ``_should_clear_derived_state`` decides -- pipeline
+    tags go only if the pixels changed, manual tags stay either way.
+    """
+    if not _has_derived_state(existing_row):
+        return False
+    if not _is_source_fingerprint_unverifiable(existing_row, record):
+        return False
+    if _normalize_content_fingerprint(record.get("content_fingerprint")) is not None:
+        return False
+    return _normalize_content_fingerprint(_row_value(existing_row, "content_fingerprint")) is not None
+
+
 def _should_forget_content_fingerprint(
     existing_row: Optional[Dict[str, Any]],
     record: Dict[str, Any],
