@@ -14,6 +14,7 @@ import os
 import sys
 import time
 import warnings
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -269,3 +270,25 @@ def prune_layout_cache(directory: Path, *, keep: Path) -> None:
                 pass
             except OSError as exc:
                 logger.warning("Style map: could not delete %s: %s", path, exc)
+
+
+@dataclass
+class _MapInputs:
+    """What a UMAP fit of a cached PCA map needs, kept beside its JSON."""
+
+    rep_ids: np.ndarray
+    # reps x UMAP_INPUT_DIM in float16 (a 50k library costs ~6 MB per entry).
+    features: np.ndarray
+    filter_ids: Optional[np.ndarray] = None  # every id of the filter (S4c: who is on the map)
+
+
+@dataclass
+class _LayoutJob:
+    key: tuple
+    rep_ids: np.ndarray
+    features: Optional[np.ndarray]
+    status: str = "queued"
+    error: str = ""
+    queued_at: float = field(default_factory=time.time)
+    started_at: float = 0.0
+    finished_at: float = 0.0

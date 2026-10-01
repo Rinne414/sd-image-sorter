@@ -39,7 +39,7 @@ import logging
 import threading
 import time
 from collections import OrderedDict, deque
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
 from typing import Any, Deque, Dict, List, Optional
 
 import numpy as np
@@ -66,6 +66,8 @@ from services.style_map_query import StyleMapQueryMixin
 from services.style_map_regions import RegionsCache, regions_body
 from services.style_vector_service import style_vector_model_version
 from services.style_map_umap import (
+    _LayoutJob,
+    _MapInputs,
     UMAP_INPUT_DIM,
     UMAP_INSTALL_MODEL_ID,
     UMAP_MIN_POINTS,
@@ -94,28 +96,6 @@ _JOB_HISTORY = 32
 # not line up ten fits nobody is looking at: older queued maps are forgotten
 # and come back only when asked for again.
 _QUEUE_LIMIT = 2
-
-
-@dataclass
-class _MapInputs:
-    """What a UMAP fit of a cached PCA map needs, kept beside its JSON."""
-
-    rep_ids: np.ndarray
-    # reps x UMAP_INPUT_DIM in float16 (a 50k library costs ~6 MB per entry).
-    features: np.ndarray
-    filter_ids: Optional[np.ndarray] = None  # every id of the filter (S4c: who is on the map)
-
-
-@dataclass
-class _LayoutJob:
-    key: tuple
-    rep_ids: np.ndarray
-    features: Optional[np.ndarray]
-    status: str = "queued"
-    error: str = ""
-    queued_at: float = field(default_factory=time.time)
-    started_at: float = 0.0
-    finished_at: float = 0.0
 
 
 # ------------------------------------------------------------------- service
