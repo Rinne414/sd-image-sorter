@@ -39,7 +39,7 @@ _detector_path: Optional[str] = None
 def _face_detector():
     """The loaded face detector, or None when its model is not downloaded."""
     global _detector, _detector_path
-    path = anime_censor_models.face_model_path()
+    path = anime_censor_models.face_model_in_use()
     if not path.is_file():
         return None
     with _lock:

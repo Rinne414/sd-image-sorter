@@ -116,6 +116,24 @@ def _isolate_hardware_probe_cache():
     hardware_monitor.invalidate_system_info_cache()
 
 
+@pytest.fixture(autouse=True)
+def _isolate_external_model_store(tmp_path, monkeypatch):
+    """Give every test an empty trusted-model index.
+
+    The loaders ask model_external for a trusted copy (a ComfyUI install) when
+    their own folder lacks a file; without isolation they would read the real
+    ``CONFIG_DIR/model_sources.json`` and a developer's own index would turn a
+    "missing" test into "ready".
+    """
+    try:
+        import model_external
+        import model_sources_store
+    except Exception:
+        return
+    store = model_sources_store.ModelSourcesStore(tmp_path / "model_sources.json")
+    monkeypatch.setattr(model_external, "_store_provider", lambda: store)
+
+
 # ============================================================================
 # Test Database Fixture
 # ============================================================================

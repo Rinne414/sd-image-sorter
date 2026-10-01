@@ -1099,6 +1099,21 @@ Image ids for the entry page's slideshow / film-strip display modes (v3.5.0). Qu
 #### GET /api/models/status
 Get local model/runtime readiness status.
 
+A model the program's own folder lacks is served from a trusted copy when one
+is recorded (`/api/models/sources/detect` keeps them in `CONFIG_DIR/model_sources.json`;
+a ComfyUI install or a Hugging Face cache the user trusted). The own folder
+always wins. Each card then carries `source`
+(`{"kind": "comfyui"|"hf_cache"|"folder", "root", "path", "verify", "is_network", "size_bytes"}`,
+`null` when the program's own file is used), the `wd14` card also `variant_sources`
+(`{variant: source}`), and `path` points at the external file. The recorded file
+is compared with the disk (size and mtime; a folder model by the sum of its
+files) on every call. When it is gone or changed the card is `missing` with
+`message_key` `models.external.gone` / `models.external.changed`,
+`message_params` `{source, kind, path}` and a `message` that names the path; the loader
+never picks another file instead. A file that is no longer under a trusted
+folder is ignored. Files on a network path are not touched on this request
+(served as recorded).
+
 #### GET /api/models/mirror
 Get the current download mirror preference.
 
@@ -1272,6 +1287,14 @@ Response shape:
            "roots": ["I:\\ComfyUI-aki-v1.6\\ComfyUI"]}
 }
 ```
+
+A ComfyUI folder given in `COMFYUI_PATH` that is on the network and not trusted
+is never read, but `sources` lists it with `network_not_trusted: true`
+(`trusted: false`, `model_count: 0`, `network_pending: false`; a pure string
+check, nothing touches the network) so the Model Center can offer to trust it.
+A recorded match that `detect` stops finding moves to `lost` in the index so the
+card can keep saying its file is gone; a network match whose background result
+is not in yet is kept as it was.
 
 `kind`: `comfyui` | `hf_cache` | `folder`. `origin`: `trusted` | `env` | `probe` |
 `scan` | `hf_default` | `comfyui_hub`. `folder` is the folder a suggestion would

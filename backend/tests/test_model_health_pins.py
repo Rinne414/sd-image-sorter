@@ -689,8 +689,9 @@ def test_health_wd14_installed_models_lists_wd14_runtime_models_only(
     assert len(wd14["installed_models"]) == len(wd14_names)
     assert len(wd14["installed_models"]) < len(TAGGER_MODELS)
     for entry in wd14["installed_models"]:
-        assert set(entry) == {"name", "available"}
+        assert set(entry) == {"name", "available", "source"}
         assert entry["available"] is False  # zero-model state
+        assert entry["source"] is None  # nothing is used from a trusted folder
 
 
 def test_health_sam3_subshape_and_torch_probe_passthrough(monkeypatch, tmp_path):

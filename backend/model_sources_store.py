@@ -49,6 +49,7 @@ class ModelSourcesStore:
             "scan": {},
             "digests": {},
             "matches": [],
+            "lost": [],
             "network": {},
         }
 
@@ -171,14 +172,42 @@ class ModelSourcesStore:
 
     # chosen (trusted) matches --------------------------------------------
 
+    @staticmethod
+    def _match_key(entry: Mapping[str, Any]) -> tuple:
+        return (entry.get("model_id"), entry.get("variant") or None)
+
     def save_matches(self, matches: Iterable[Mapping[str, Any]]) -> None:
+        """Replace the chosen matches. A model that had a match and has none now
+        moves to ``lost`` (so the card can say its file is gone); one that is
+        found again leaves ``lost``."""
+        new = [dict(m) for m in matches]
+        found = {self._match_key(m) for m in new}
         with self._lock:
-            self._data["matches"] = [dict(m) for m in matches]
+            lost = [
+                e
+                for e in self._data.get("lost") or []
+                if isinstance(e, dict) and self._match_key(e) not in found
+            ]
+            seen = {self._match_key(e) for e in lost}
+            for old in self._data.get("matches") or []:
+                if not isinstance(old, dict):
+                    continue
+                key = self._match_key(old)
+                if key not in found and key not in seen:
+                    lost.append(dict(old))
+                    seen.add(key)
+            self._data["matches"] = new
+            self._data["lost"] = lost
             self._save()
 
     def matches(self) -> List[Dict[str, Any]]:
         with self._lock:
-            return [dict(m) for m in self._data.get("matches") or []]
+            return [dict(m) for m in self._data.get("matches") or [] if isinstance(m, dict)]
+
+    def lost(self) -> List[Dict[str, Any]]:
+        """Trusted matches an earlier ``detect`` recorded that are no longer found."""
+        with self._lock:
+            return [dict(m) for m in self._data.get("lost") or [] if isinstance(m, dict)]
 
     # network roots (judged on the background thread) ----------------------
 

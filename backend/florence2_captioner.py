@@ -9,6 +9,7 @@ from typing import ContextManager, Protocol, cast
 
 from PIL import Image
 
+import model_external
 from ai_runtime_guard import PRIORITY_BATCH, exclusive_ai_runtime
 from config import get_florence2_model_dir
 from model_download_sources import (
@@ -117,11 +118,14 @@ def get_checkpoint_path() -> str | None:
     model_dir = Path(get_florence2_model_dir())
     if not missing_checkpoint_files(model_dir):
         return str(model_dir.resolve())
-    return None
+    return model_external.usable_path("florence2", "base")
 
 
 def prepare_checkpoint() -> str:
-    """Download only the commit-pinned Florence-2 snapshot."""
+    """Download only the commit-pinned Florence-2 snapshot (nothing when a trusted copy is in use)."""
+    external = model_external.usable_path("florence2", "base")
+    if external and missing_checkpoint_files(Path(get_florence2_model_dir())):
+        return external
     try:
         from huggingface_hub import snapshot_download
     except ImportError as exc:

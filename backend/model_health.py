@@ -49,6 +49,7 @@ from config import (
     get_wd14_model_dir,
     get_yolo_model_dir,
 )
+import model_external
 from hardware_monitor import get_system_info, recommend_tagger_config
 from ai_runtime_guard import exclusive_ai_runtime
 from model_download_sources import is_nonempty_model_file, missing_model_artifacts
@@ -80,6 +81,7 @@ from model_health_probes import (
     _probe_torch_runtime,
 )
 from model_health_paths import (
+    describe_external_yolo,
     _build_yolo_capabilities,
     _describe_yolo_model,
     _find_kaloscope_dir,
@@ -326,6 +328,14 @@ def _probe_tipo() -> Dict[str, Any]:
     return tipo_service.probe_tipo_installation()
 
 
+def _wd14_external_source(model_name: str, own_missing: Iterable[str]) -> Optional[Dict[str, Any]]:
+    """Where a WD14 variant comes from when the program's own folder lacks it."""
+    if not own_missing:
+        return None
+    found = model_external.usable("wd14", model_name)
+    return found.source_info() if found is not None else None
+
+
 def get_model_health() -> Dict[str, Any]:
     """Return a machine-readable summary of local model readiness."""
     clip_model_path = get_clip_local_model_path()
@@ -354,6 +364,14 @@ def get_model_health() -> Dict[str, Any]:
     default_tagger_missing = missing_model_artifacts(
         default_tagger_dir,
         default_tagger_required_files,
+    )
+    default_tagger_external = _wd14_external_source(
+        DEFAULT_TAGGER_MODEL, default_tagger_missing
+    )
+    default_tagger_files = (
+        model_external.wd14_files(DEFAULT_TAGGER_MODEL)
+        if default_tagger_external
+        else None
     )
     toriigate_missing = missing_model_artifacts(
         toriigate_dir,
@@ -500,6 +518,11 @@ def get_model_health() -> Dict[str, Any]:
     artist_has_any_source = True
 
     yolo_files = _list_yolo_model_files(Path(get_yolo_model_dir()))
+    legacy_source = model_external.source_for_path(
+        "censor-legacy", None, legacy_model_path
+    ) or model_external.source_for_path("censor-anime", "censor", legacy_model_path)
+    if legacy_source:
+        yolo_files.append(describe_external_yolo(legacy_model_path, legacy_source["size_bytes"]))
     yolo_names = {file_info["name"].lower() for file_info in yolo_files}
     privacy_yolo_files = [file_info for file_info in yolo_files if file_info["recommended_for_censor"]]
     general_yolo_files = [file_info for file_info in yolo_files if not file_info["recommended_for_censor"]]
@@ -524,13 +547,23 @@ def get_model_health() -> Dict[str, Any]:
     health = {
         "wd14": {
             "default_model": DEFAULT_TAGGER_MODEL,
-            "available": not default_tagger_missing,
-            "model_path": str(default_tagger_model.resolve()) if is_nonempty_model_file(default_tagger_model) else None,
-            "tags_path": str(default_tagger_tags.resolve()) if is_nonempty_model_file(default_tagger_tags) else None,
+            "available": not default_tagger_missing or default_tagger_files is not None,
+            "model_path": (
+                str(default_tagger_model.resolve())
+                if is_nonempty_model_file(default_tagger_model)
+                else (default_tagger_files[0] if default_tagger_files else None)
+            ),
+            "tags_path": (
+                str(default_tagger_tags.resolve())
+                if is_nonempty_model_file(default_tagger_tags)
+                else (default_tagger_files[1] if default_tagger_files else None)
+            ),
+            "source": default_tagger_external,
             "installed_models": [
                 {
                     "name": model_name,
-                    "available": not missing_files,
+                    "available": not missing_files or external_source is not None,
+                    "source": external_source,
                 }
                 for model_name, config in TAGGER_MODELS.items()
                 # Every model the WD14 card can prepare: the WD14 ONNX runtime
@@ -548,6 +581,7 @@ def get_model_health() -> Dict[str, Any]:
                         ),
                     ),
                 )
+                for external_source in (_wd14_external_source(model_name, missing_files),)
             ],
         },
         "toriigate": {
@@ -584,6 +618,7 @@ def get_model_health() -> Dict[str, Any]:
             ),
             "model_name": "florence-community/Florence-2-base",
             "checkpoint_path": florence2_checkpoint,
+            "source": model_external.source_for_path("florence2", "base", florence2_checkpoint),
             "expected_path": str(Path(get_florence2_model_dir())),
             "missing_dependencies": florence2_missing,
             "requires_gpu": False,
@@ -666,6 +701,7 @@ def get_model_health() -> Dict[str, Any]:
         "lucida": {
             "available": bool(lucida_checkpoint) and not lucida_missing and runtime_compatible,
             "checkpoint_path": lucida_checkpoint,
+            "source": model_external.source_for_path("lucida", "pinned", lucida_checkpoint),
             "expected_path": str(Path(get_lucida_model_dir())),
             "missing_dependencies": lucida_missing,
             "cuda_available": cuda_available,
@@ -697,6 +733,7 @@ def get_model_health() -> Dict[str, Any]:
             "legacy": {
                 "available": bool(legacy_model_path),
                 "default_model_path": legacy_model_path,
+                "source": legacy_source,
                 "expected_path": str(Path(get_yolo_model_dir())),
                 "message": legacy_message,
                 "files": yolo_files,
@@ -789,6 +826,7 @@ def get_model_health() -> Dict[str, Any]:
             "model_name": ARTIST_HF_MODEL_ID,
             "runtime_path": artist_runtime_path,
             "checkpoint_path": artist_checkpoint,
+            "source": model_external.source_for_path("artist", "kaloscope2.0", artist_checkpoint),
             "expected_path": str(Path(get_artist_model_dir())),
             "class_mapping_path": artist_class_mapping,
             "missing_dependencies": artist_missing,

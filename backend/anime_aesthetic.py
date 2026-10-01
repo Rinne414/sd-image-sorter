@@ -22,6 +22,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 import numpy as np
 
+import model_external
 import pinned_download
 from ai_runtime_guard import claim_gpu_residency, forget_gpu_residency
 
@@ -101,10 +102,30 @@ def samples_path() -> Path:
     return models_dir() / SAMPLES_FILENAME
 
 
+def _external_pair() -> Tuple[Optional[Path], Optional[Path]]:
+    """The model and its samples from a trusted folder, when the recorded pair is intact."""
+    model = model_external.usable_path("aesthetic-anime")
+    samples = model_external.usable_companion("aesthetic-anime", None, 0)
+    if model and samples:
+        return Path(model), Path(samples)
+    return None, None
+
+
+def files_in_use() -> Tuple[Path, Path]:
+    """(model, samples) to read: the program's own pair, else a trusted pair, else the own paths."""
+    if not (
+        pinned_download.is_present(model_path())
+        or pinned_download.is_present(samples_path())
+    ):
+        model, samples = _external_pair()
+        if model is not None and samples is not None:
+            return model, samples
+    return model_path(), samples_path()
+
+
 def is_installed() -> bool:
-    return pinned_download.is_present(model_path()) and pinned_download.is_present(
-        samples_path()
-    )
+    model, samples = files_in_use()
+    return pinned_download.is_present(model) and pinned_download.is_present(samples)
 
 
 def is_scoring() -> bool:
@@ -113,8 +134,9 @@ def is_scoring() -> bool:
 
 
 def health() -> Dict[str, Any]:
-    model_ok = pinned_download.is_present(model_path())
-    samples_ok = pinned_download.is_present(samples_path())
+    model, samples = files_in_use()
+    model_ok = pinned_download.is_present(model)
+    samples_ok = pinned_download.is_present(samples)
     if model_ok and samples_ok and _load_failed:
         key, message = (
             "models.aestheticAnime.broken",
@@ -137,7 +159,12 @@ def health() -> Dict[str, Any]:
         )
     return {
         "available": model_ok and samples_ok and not _load_failed,
-        "model_path": str(model_path()) if model_ok else None,
+        "model_path": str(model) if model_ok else None,
+        "source": (
+            model_external.source_for_path("aesthetic-anime", None, str(model))
+            if model_ok
+            else None
+        ),
         "expected_path": str(model_path()),
         "message_key": key,
         "message": message,
@@ -145,7 +172,11 @@ def health() -> Dict[str, Any]:
 
 
 def prepare(download_file: Callable[..., Path]) -> Dict[str, str]:
-    """Download and verify both files; verified copies on disk are kept as they are."""
+    """Download and verify both files; verified copies on disk are kept as they are
+    (a trusted pair in use is left alone)."""
+    in_use = files_in_use()
+    if in_use != (model_path(), samples_path()):
+        return {"model_path": str(in_use[0]), "samples_path": str(in_use[1])}
     paths = {
         "model_path": pinned_download.fetch(
             MODEL_FILE, model_path(), download_file, model_name="Anime aesthetic"
@@ -227,13 +258,13 @@ def _load_locked(*, use_gpu: bool) -> None:
         else:
             forget_gpu_residency(_RESIDENT)
         try:
-            _session = _open_session(model_path(), use_gpu=on_gpu)
+            _session = _open_session(files_in_use()[0], use_gpu=on_gpu)
         except Exception:
             forget_gpu_residency(_RESIDENT)
             raise
         _session_uses_gpu = use_gpu
     if _samples is None:
-        _samples = _load_samples(samples_path())
+        _samples = _load_samples(files_in_use()[1])
 
 
 def load(*, use_gpu: bool) -> None:

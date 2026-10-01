@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict
 
 import config
+import model_external
 import pinned_download
 
 logger = logging.getLogger(__name__)
@@ -68,9 +69,19 @@ def _path_for(pinned: PinnedFile) -> Path:
     return censor_model_path() if pinned.key == "censor" else face_model_path()
 
 
+def censor_model_in_use() -> Path:
+    """The detector to read: the program's own file, else a trusted copy."""
+    return model_external.prefer_own(censor_model_path(), "censor-anime", "censor")
+
+
+def face_model_in_use() -> Path:
+    """The face detector to read: the program's own file, else a trusted copy."""
+    return model_external.prefer_own(face_model_path(), "censor-anime", "face")
+
+
 def health() -> Dict[str, Any]:
-    censor = censor_model_path()
-    face = face_model_path()
+    censor = censor_model_in_use()
+    face = face_model_in_use()
     censor_ok = pinned_download.is_present(censor)
     face_ok = pinned_download.is_present(face)
     if censor_ok and face_ok:
@@ -92,8 +103,18 @@ def health() -> Dict[str, Any]:
         "available": censor_ok and face_ok,
         "censor_model_path": str(censor) if censor_ok else None,
         "face_model_path": str(face) if face_ok else None,
-        "expected_censor_path": str(censor),
-        "expected_face_path": str(face),
+        "source": (
+            model_external.source_for_path("censor-anime", "censor", str(censor))
+            if censor_ok
+            else None
+        )
+        or (
+            model_external.source_for_path("censor-anime", "face", str(face))
+            if face_ok
+            else None
+        ),
+        "expected_censor_path": str(censor_model_path()),
+        "expected_face_path": str(face_model_path()),
         "message_key": key,
         "message": message,
     }
@@ -108,4 +129,7 @@ def prepare(download_file: Callable[..., Path]) -> Dict[str, str]:
 
 
 def _prepare_one(pinned: PinnedFile, download_file: Callable[..., Path]) -> str:
+    in_use = model_external.prefer_own(_path_for(pinned), "censor-anime", pinned.key)
+    if in_use != _path_for(pinned):
+        return str(in_use)  # a trusted copy is in use; nothing to download
     return str(pinned_download.fetch(pinned, _path_for(pinned), download_file, model_name="Anime censor detector"))

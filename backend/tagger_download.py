@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 from typing import Mapping, Optional, Tuple
 
+import model_external
 from config import TAGGER_MODELS as MODELS
 from model_download_sources import (
     endpoint_label,
@@ -75,6 +76,14 @@ class _DownloadMixin:
 
         model_path = os.path.join(self.model_dir, self.model_name, config["model_file"])
         tags_path = os.path.join(self.model_dir, self.model_name, config["tags_file"])
+
+        # The program's own folder wins; only when it has no copy is a trusted
+        # one (a ComfyUI install) used instead of downloading a second one.
+        if not os.path.exists(model_path):
+            external = model_external.wd14_files(self.model_name)
+            if external is not None:
+                logger.info("Using %s from a trusted folder: %s", self.model_name, external[0])
+                return external
 
         # Check if model exists and is valid
         needs_download = False

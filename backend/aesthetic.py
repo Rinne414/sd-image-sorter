@@ -21,6 +21,7 @@ from pathlib import Path
 
 import aesthetic_backbone
 import anime_aesthetic
+import model_external
 import pinned_download
 
 from ai_runtime_guard import (
@@ -153,8 +154,14 @@ def waifu_head_path() -> Path:
     return _get_models_dir() / WAIFU_HEAD_FILENAME
 
 
+def waifu_head_in_use() -> Path:
+    """The head to read: the program's own file, else a trusted copy (a ComfyUI
+    install), else the own path (where Prepare puts it)."""
+    return model_external.prefer_own(waifu_head_path(), "aesthetic-waifu")
+
+
 def is_waifu_installed() -> bool:
-    return pinned_download.is_present(waifu_head_path())
+    return pinned_download.is_present(waifu_head_in_use())
 
 
 def is_waifu_scoring() -> bool:
@@ -167,7 +174,7 @@ def is_waifu_scoring() -> bool:
 
 
 def waifu_health() -> Dict[str, Any]:
-    path = waifu_head_path()
+    path = waifu_head_in_use()
     installed = is_waifu_installed()
     if installed and _waifu_head_failed:
         key, message = (
@@ -187,7 +194,12 @@ def waifu_health() -> Dict[str, Any]:
     return {
         "available": installed and not _waifu_head_failed,
         "head_path": str(path) if installed else None,
-        "expected_path": str(path),
+        "source": (
+            model_external.source_for_path("aesthetic-waifu", None, str(path))
+            if installed
+            else None
+        ),
+        "expected_path": str(waifu_head_path()),
         "message_key": key,
         "message": message,
     }
@@ -197,6 +209,10 @@ def prepare_waifu_head(download_file: Callable[..., Path]) -> Path:
     """Download and verify the Waifu Scorer V3 head; a verified copy is kept as is."""
     global _waifu_head_failed
 
+    in_use = waifu_head_in_use()
+    if in_use != waifu_head_path():
+        _waifu_head_failed = False
+        return in_use  # a trusted copy is in use; nothing to download
     path = pinned_download.fetch(
         WAIFU_HEAD_FILE, waifu_head_path(), download_file, model_name="Waifu Scorer V3"
     )
@@ -340,7 +356,7 @@ def _load_waifu_head() -> None:
     global _waifu_head, _waifu_head_failed
 
     try:
-        _waifu_head = _build_waifu_head(_get_torch_module(), waifu_head_path(), _device or "cpu")
+        _waifu_head = _build_waifu_head(_get_torch_module(), waifu_head_in_use(), _device or "cpu")
         logger.info("Waifu Scorer V3 head loaded")
     except Exception as exc:
         _waifu_head = None
@@ -348,7 +364,7 @@ def _load_waifu_head() -> None:
         logger.error(
             "Waifu Scorer V3 head at %s could not be loaded (%s). Aesthetic scoring continues "
             "without it; run Prepare / Download on its Model Center card to replace the file.",
-            waifu_head_path(),
+            waifu_head_in_use(),
             exc,
         )
 

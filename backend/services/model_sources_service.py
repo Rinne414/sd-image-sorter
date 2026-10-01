@@ -199,7 +199,10 @@ class ModelSourcesService:
         self._start_background(pending, force=rescan, uncached=uncached)
 
         chosen = model_matchers.select_best(m for m in report.matches if m.trusted)
-        store.save_matches(m.to_dict() for m in chosen)
+        chosen_rows = [m.to_dict() for m in chosen]
+        store.save_matches(
+            chosen_rows + self._carried_network_matches(network_sources, chosen_rows)
+        )
         suggested = self._suggestion_candidates(report.matches, chosen)
         suggestions = _suggestions(suggested, roots)
         counts = _counts_by_source(report.matches)
@@ -213,6 +216,7 @@ class ModelSourcesService:
         for row in network_sources:
             row["model_count"] = counts.get(model_sources.source_key(row["path"]), 0)
             sources.append(row)
+        sources.extend(self._unread_network_rows())
         scan = model_sources_store.scan_status(store)
         scan["roots"] = store.scan_roots()
         return {
@@ -224,6 +228,53 @@ class ModelSourcesService:
             "reusable_bytes": sum(m.total_bytes for m in chosen),
             "scan": scan,
         }
+
+    def _carried_network_matches(
+        self,
+        network_sources: Sequence[Mapping[str, Any]],
+        chosen_rows: Sequence[Mapping[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Recorded matches of a network root whose background result is not in
+        yet: they are kept as they were, not written off as lost."""
+        pending = {
+            model_sources.source_key(row["path"])
+            for row in network_sources
+            if row["network_pending"]
+        }
+        if not pending:
+            return []
+        found = {(m.get("model_id"), m.get("variant") or None) for m in chosen_rows}
+        return [
+            m
+            for m in self.store.matches()
+            if model_sources.source_key(m.get("source") or "") in pending
+            and (m.get("model_id"), m.get("variant") or None) not in found
+        ]
+
+    def _unread_network_rows(self) -> List[Dict[str, Any]]:
+        """A ComfyUI folder the user pointed ``COMFYUI_PATH`` at on the network
+        that is not trusted: never read, but listed so Model Center can offer
+        to trust it (a pure string check; nothing touches the network)."""
+        env = os.environ if self._env is None else self._env
+        text = str(env.get("COMFYUI_PATH") or "").strip()
+        if not text or not model_source_paths.is_network_path(text):
+            return []
+        if self._trust_check(text):
+            return []
+        return [
+            {
+                "path": text,
+                "kind": model_sources.KIND_COMFYUI,
+                "origin": model_sources.ORIGIN_ENV,
+                "is_network": True,
+                "version": None,
+                "trusted": False,
+                "network_pending": False,
+                "network_scanned_at": None,
+                "network_not_trusted": True,
+                "model_count": 0,
+            }
+        ]
 
     def _suggestion_candidates(
         self,

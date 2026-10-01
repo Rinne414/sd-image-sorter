@@ -17,6 +17,8 @@ import os
 from pathlib import Path, PurePosixPath
 from typing import Dict, List, Optional, Tuple
 
+import model_external
+
 logger = logging.getLogger("sd-image-sorter.artist")
 
 
@@ -74,7 +76,7 @@ def _locate_existing_kaloscope_files() -> Optional[Tuple[str, str]]:
         return paired
 
     if not artist_root.exists():
-        return None
+        return _trusted_external_kaloscope_files()
 
     # 2) Case-insensitive kaloscope-dir match.
     for child in sorted(artist_root.iterdir()):
@@ -98,6 +100,16 @@ def _locate_existing_kaloscope_files() -> Optional[Tuple[str, str]]:
         mapping_matches = sorted(p for p in artist_root.rglob(mapping_basename) if p.is_file())
         if mapping_matches:
             return str(checkpoint.resolve()), str(mapping_matches[0].resolve())
+    return _trusted_external_kaloscope_files()
+
+
+def _trusted_external_kaloscope_files() -> Optional[Tuple[str, str]]:
+    """The program's own folder had nothing: the pair recorded from a trusted
+    folder (a ComfyUI install), when it is still what was recorded."""
+    checkpoint = model_external.usable_path("artist", "kaloscope2.0")
+    mapping = model_external.usable_companion("artist", "kaloscope2.0", 0)
+    if checkpoint and mapping:
+        return checkpoint, mapping
     return None
 
 

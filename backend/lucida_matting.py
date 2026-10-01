@@ -9,6 +9,7 @@ from typing import Callable, ContextManager, Protocol, Sequence, cast
 import numpy as np
 from PIL import Image
 
+import model_external
 from ai_runtime_guard import PRIORITY_INTERACTIVE, exclusive_ai_runtime
 from config import get_lucida_model_dir
 from model_download_sources import (
@@ -92,7 +93,7 @@ def get_checkpoint_path() -> str | None:
     model_dir = Path(get_lucida_model_dir())
     if all(_is_nonempty_file(model_dir / filename) for filename in LUCIDA_REQUIRED_FILES):
         return str(model_dir.resolve())
-    return None
+    return model_external.usable_path("lucida", "pinned")
 
 
 def missing_checkpoint_files(model_dir: Path) -> tuple[str, ...]:
@@ -101,7 +102,10 @@ def missing_checkpoint_files(model_dir: Path) -> tuple[str, ...]:
 
 
 def prepare_checkpoint() -> str:
-    """Download the commit-pinned Lucida snapshot through configured HF endpoints."""
+    """Download the commit-pinned Lucida snapshot through configured HF endpoints (nothing when a trusted copy is in use)."""
+    external = model_external.usable_path("lucida", "pinned")
+    if external and missing_checkpoint_files(Path(get_lucida_model_dir())):
+        return external
     try:
         from huggingface_hub import snapshot_download
     except ImportError as exc:

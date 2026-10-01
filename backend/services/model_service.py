@@ -62,6 +62,7 @@ from services.model_service_helpers import (
     build_civitai_auth_error,
     build_privacy_yolo_prepare_error,
 )
+from services.model_external_cards import annotate_inventory
 from services.model_service_inventory import _build_inventory
 from services.model_service_prepare import _prepare_model
 
@@ -549,7 +550,8 @@ class ModelService:
 
     def build_model_inventory(self) -> List[Dict[str, Any]]:
         health = get_model_health()
-        return [_apply_pending_restart_status(card) for card in _build_inventory(health)]
+        cards = annotate_inventory(_build_inventory(health), health)
+        return [_apply_pending_restart_status(card) for card in cards]
 
     def download_privacy_yolo_bundle(self) -> Dict[str, str]:
         target_dir = Path(get_yolo_model_dir())

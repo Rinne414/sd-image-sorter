@@ -147,8 +147,20 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
         wd14_primary_path = health["wd14"]["model_path"]
     elif installed_wd14:
         first_variant = installed_wd14[0]
-        wd14_primary_path = str(
-            (Path(_svc().get_wd14_model_dir()) / first_variant / _svc().TAGGER_MODELS[first_variant]["model_file"]).resolve()
+        first_source = next(
+            (
+                item["source"]
+                for item in health["wd14"]["installed_models"]
+                if item["name"] == first_variant and item.get("source")
+            ),
+            None,
+        )
+        wd14_primary_path = (
+            first_source["path"]
+            if first_source
+            else str(
+                (Path(_svc().get_wd14_model_dir()) / first_variant / _svc().TAGGER_MODELS[first_variant]["model_file"]).resolve()
+            )
         )
 
     aesthetic_available = False

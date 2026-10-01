@@ -18,6 +18,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+import model_external
+
 logger = logging.getLogger("sd-image-sorter.artist")
 
 
@@ -66,7 +68,7 @@ def _resolve_lsnet_runtime_path() -> Optional[str]:
         candidate_path = Path(candidate).expanduser().resolve()
         if candidate_path.exists() and ((candidate_path / "model").exists() or (candidate_path / "lsnet_model").exists()):
             return str(candidate_path)
-    return None
+    return model_external.artist_runtime_path()
 
 
 def _get_artist_model_root() -> Path:

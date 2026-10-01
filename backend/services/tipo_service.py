@@ -61,6 +61,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 import config
+import model_external
 
 logger = logging.getLogger(__name__)
 
@@ -240,6 +241,12 @@ def tipo_weight_path(model_key: str, model_dir: Optional[Path] = None) -> Path:
     return base / f"{spec.repo.split('/')[-1]}_{spec.filename}"
 
 
+def _weight_in_use(model_key: str, model_dir: Optional[Path] = None) -> Path:
+    """The GGUF to read: the program's own file, else a trusted copy (a ComfyUI
+    ``kgen`` folder, same version only), else the own path."""
+    return model_external.prefer_own(tipo_weight_path(model_key, model_dir), "tipo", model_key)
+
+
 def _hf_hub_download(**kwargs: Any) -> str:
     """Thin wrapper so tests can record the Hugging Face call without a network."""
     from huggingface_hub import hf_hub_download  # noqa: PLC0415 - optional at import
@@ -349,10 +356,15 @@ def probe_tipo_installation() -> Dict[str, Any]:
     model_dir = tipo_model_dir_path()
     installed: List[str] = []
     broken: List[str] = []
+    sources: Dict[str, Dict[str, Any]] = {}
     for model_key in MODEL_SPECS:
-        state = _weight_file_state(tipo_weight_path(model_key, model_dir))
+        weight = _weight_in_use(model_key, model_dir)
+        state = _weight_file_state(weight)
         if state == "ready":
             installed.append(model_key)
+            source = model_external.source_for_path("tipo", model_key, str(weight))
+            if source:
+                sources[model_key] = source
         elif state == "broken":
             broken.append(model_key)
 
@@ -408,6 +420,7 @@ def probe_tipo_installation() -> Dict[str, Any]:
         "weight_state": weight_state,
         "installed_variants": installed,
         "broken_variants": broken,
+        "source": next(iter(sources.values()), None),
         "missing_dependencies": missing_dependencies,
         "model_dir": resolved_dir,
         "default_variant": preferred_tipo_variant(installed),
@@ -465,7 +478,7 @@ def _ensure_model_loaded(model_key: str) -> Dict[str, Any]:
     if _loaded_model_key == model_key and models.text_model is not None:
         return api
     spec = MODEL_SPECS[model_key]
-    target = tipo_weight_path(model_key, models.model_dir)
+    target = _weight_in_use(model_key, models.model_dir)
     try:
         if not target.is_file():
             logger.info(

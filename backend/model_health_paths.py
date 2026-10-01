@@ -28,6 +28,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+import model_external
 from model_download_sources import is_nonempty_model_file, missing_model_artifacts
 
 
@@ -260,6 +261,28 @@ def _describe_yolo_model(model_path: Path) -> Dict[str, Any]:
     }
 
 
+def describe_external_yolo(path: str, size_bytes: int) -> Dict[str, Any]:
+    """The Model Center row of a privacy YOLO model used from a trusted folder.
+
+    No file is opened: the matcher already judged it a privacy-part detector,
+    and a network file must not be read on the request thread."""
+    name = Path(path).name
+    capabilities = _svc()._build_yolo_capabilities("privacy-censor", name, [])
+    return {
+        "name": name,
+        "path": path,
+        "size_mb": round(size_bytes / (1024 * 1024), 1),
+        "format": Path(path).suffix.lower().lstrip("."),
+        "class_count": 0,
+        "classes_preview": [],
+        "profile": "privacy-censor",
+        "profile_label": "Privacy-part detector",
+        "recommended_for_censor": True,
+        "message": "Specialized for privacy-part detection and censor workflows.",
+        "capabilities": capabilities,
+    }
+
+
 def _list_yolo_model_files(directory: Path) -> List[Dict[str, Any]]:
     if not directory.exists():
         return []
@@ -349,7 +372,9 @@ def get_default_legacy_model_path() -> Optional[str]:
         )
         if matches:
             return str(matches[0].resolve())
-    return None
+    return model_external.usable_path("censor-legacy") or model_external.usable_path(
+        "censor-anime", "censor"
+    )
 
 
 def get_sam3_checkpoint_path() -> Optional[str]:
@@ -419,7 +444,7 @@ def get_lucida_checkpoint_path() -> Optional[str]:
         is_complete = False
     if is_complete:
         return str(lucida_root.resolve())
-    return None
+    return model_external.usable_path("lucida", "pinned")
 
 
 def get_florence2_checkpoint_path() -> Optional[str]:
@@ -432,7 +457,7 @@ def get_florence2_checkpoint_path() -> Optional[str]:
         is_complete = False
     if is_complete:
         return str(model_dir.resolve())
-    return None
+    return model_external.usable_path("florence2", "base")
 
 
 def get_cl_tagger_v2_checkpoint_path() -> Optional[str]:
@@ -535,7 +560,7 @@ def _resolve_artist_runtime_path() -> Optional[str]:
             continue
         if (resolved / "lsnet_model").exists() or (resolved / "model").exists():
             return str(resolved)
-    return None
+    return model_external.artist_runtime_path()
 
 
 def get_artist_checkpoint_path() -> Optional[str]:
@@ -543,7 +568,7 @@ def get_artist_checkpoint_path() -> Optional[str]:
     checkpoint_basename = Path(_svc().ARTIST_KALOSCOPE_CHECKPOINT.replace("\\", "/")).name
     checkpoint_dir = _svc()._find_kaloscope_dir(artist_root)
     if checkpoint_dir is None:
-        return None
+        return model_external.usable_path("artist", "kaloscope2.0")
     candidate = checkpoint_dir / checkpoint_basename
     if is_nonempty_model_file(candidate):
         return str(candidate.resolve())
@@ -568,4 +593,6 @@ def get_artist_class_mapping_path() -> Optional[str]:
         for match in sorted(artist_root.rglob(mapping_basename)):
             if is_nonempty_model_file(match):
                 return str(match.resolve())
+    if checkpoint_dir is None:
+        return model_external.usable_companion("artist", "kaloscope2.0", 0)
     return None
