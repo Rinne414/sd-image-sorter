@@ -213,6 +213,8 @@ def _cleanup_missing_scope_entries(
             raise ScanError(
                 f"Missing-file cleanup could not safely verify an indexed path: {exc}",
                 path=candidate_path,
+                code="missing_cleanup_unverifiable",
+                args={"path": candidate_path},
             ) from exc
         if not resolved_path or os.path.islink(resolved_path):
             removed_ids.append(int(row["id"]))
@@ -298,11 +300,23 @@ def scan_folder(
         raise ScanError(
             "Refusing to scan a symbolic link or Windows junction folder",
             path=folder_path,
+            code="folder_is_link",
+            args={"path": folder_path},
         )
     if not folder.exists():
-        raise ScanError("Folder does not exist", path=folder_path)
+        raise ScanError(
+            "Folder does not exist",
+            path=folder_path,
+            code="folder_not_found",
+            args={"path": folder_path},
+        )
     if not folder.is_dir():
-        raise ScanError("Path is not a directory", path=folder_path)
+        raise ScanError(
+            "Path is not a directory",
+            path=folder_path,
+            code="not_a_directory",
+            args={"path": folder_path},
+        )
 
     normalized_folder_path = os.path.abspath(folder_path)
 
@@ -454,6 +468,11 @@ def scan_folder(
                     raise ScanError(
                         f"Cannot access scan root: {exc}",
                         path=current_dir,
+                        code="scan_root_inaccessible",
+                        args={
+                            "path": current_dir,
+                            "reason": getattr(exc, "strerror", None) or str(exc),
+                        },
                     ) from exc
                 kind = (
                     "directory_permission"

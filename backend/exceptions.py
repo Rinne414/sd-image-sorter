@@ -47,11 +47,22 @@ class TaggingError(SDImageSorterError):
 class ScanError(SDImageSorterError):
     """Raised when a folder scan operation fails."""
 
-    def __init__(self, message: str = "Scan operation failed", path: Optional[str] = None, details: Optional[Any] = None):
+    def __init__(
+        self,
+        message: str = "Scan operation failed",
+        path: Optional[str] = None,
+        details: Optional[Any] = None,
+        code: str = "",
+        args: Optional[dict] = None,
+    ):
         if path:
             message = f"{message}: {path}"
         super().__init__(message, details)
         self.path = path
+        # Stable reason code + parameters the UI builds its own sentence from;
+        # ``message`` stays the English text for logs and API compatibility.
+        self.code = code
+        self.args_map = dict(args or {})
 
 
 class ScanCancelledError(ScanError):

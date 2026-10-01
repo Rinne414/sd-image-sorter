@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Literal, Optional, TypedDict, Union
+from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -201,6 +201,9 @@ class ScanProgressResponse(BaseModel):
     message_item: str = ""
     # Raw, actionable cause of a ScanError (shown as received after the localised sentence).
     message_detail: str = ""
+    # Reason code + parameters of a ScanError; the UI builds its own sentence.
+    message_detail_code: str = ""
+    message_detail_args: Dict[str, Any] = Field(default_factory=dict)
     missing_text_notice: bool = False
     current_item: Optional[str]
     started_at: Optional[float]

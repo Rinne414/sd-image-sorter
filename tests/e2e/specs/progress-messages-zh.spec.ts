@@ -178,11 +178,14 @@ test('mid-import and failure states show Chinese, and survive a translation re-a
     message: '扫描失败：x / Scan failed: x',
     message_key: 'error',
     message_detail: 'Library Root persistence failed. Check database write access.',
+    message_detail_code: 'library_root_persist_failed',
+    message_detail_args: { path: 'L:\Pics' },
   }
   const toast = page.locator('.toast', { hasText: '导入失败' }).first()
   await expect(toast).toBeVisible({ timeout: 15000 })
   expect(await toast.textContent()).not.toContain('Scan failed')
-  expect(await toast.textContent()).toContain('Check database write access')
+  expect(await toast.textContent()).toContain('L:\Pics')
+  expect(await toast.textContent()).toContain('重新扫描这个文件夹')
   await page.screenshot({ path: shotPath(testInfo, 'scan-failed-zh-1366.png') })
 
   override = null
@@ -250,18 +253,29 @@ test('tagging progress and finish text read in Chinese and survive a translation
     status: 'running',
     message: 'GPU load failed. Continuing on CPU instead. Reason: The ONNX runtime has no GPU provider on this machine.',
     message_key: 'gpu_load_failed',
-    message_args: { reason: 'The ONNX runtime has no GPU provider on this machine.' },
+    message_args: { reason: 'The ONNX runtime has no GPU provider on this machine.', reason_key: 'no_gpu_provider' },
   })
-  await expect(progressText).toContainText('GPU 载入失败，改用 CPU 继续。', { timeout: 15000 })
-  expect((await progressText.textContent() || '').length).toBeGreaterThan('GPU 载入失败，改用 CPU 继续。'.length + 4)
+  await expect(progressText).toContainText('GPU 载入失败，改用 CPU 继续：这台电脑上的 ONNX 运行时没有可用的 GPU 提供方。', { timeout: 15000 })
 
   payload = tagProgress({
     status: 'running',
     message: 'Auto runtime is using the highest batched throughput.',
     message_key: 'runtime_notice',
     message_args: { notice: 'Auto runtime is using the highest batched throughput.' },
+    runtime_notice: 'Auto runtime is using the highest batched throughput.',
   })
   await expect(progressText).toContainText('正在应用本次运行的运行时设置', { timeout: 15000 })
+  await expect(progressText).toHaveAttribute('title', 'Auto runtime is using the highest batched throughput.')
+
+  // The advisory stays one hover away for the whole run, not only while it is the current message.
+  payload = tagProgress({
+    status: 'running',
+    message_key: 'tagging_one',
+    message_args: { start: 1, first: 'a.png' },
+    total: 9,
+    runtime_notice: 'Auto runtime is using the highest batched throughput.',
+  })
+  await expect(progressText).toContainText('正在标注第 1 张', { timeout: 15000 })
   await expect(progressText).toHaveAttribute('title', 'Auto runtime is using the highest batched throughput.')
 
   payload = tagProgress({

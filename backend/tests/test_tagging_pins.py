@@ -427,6 +427,7 @@ PROGRESS_STATE_KEYS = {
     "message",
     "message_key",
     "message_args",
+    "runtime_notice",
     "runtime_backend_target",
     "runtime_backend_actual",
     "runtime_backend_reason",

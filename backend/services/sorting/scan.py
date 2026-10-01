@@ -517,6 +517,8 @@ class ScanMixin:
                                     "folder_path": root_record_path,
                                     "database_error": str(exc),
                                 },
+                                code="library_root_persist_failed",
+                                args={"path": root_record_path},
                             ) from exc
 
                 logger.info(
@@ -681,6 +683,8 @@ class ScanMixin:
                             "message_key": "error",
                             "message_item": "",
                             "message_detail": e.message if isinstance(e, ScanError) else "",
+                            "message_detail_code": e.code if isinstance(e, ScanError) else "",
+                            "message_detail_args": e.args_map if isinstance(e, ScanError) else {},
                             "current_item": current_state.get("current_item"),
                             "recent_errors": current_state.get("recent_errors", []),
                             "started_at": current_state.get("started_at"),

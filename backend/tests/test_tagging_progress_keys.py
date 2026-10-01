@@ -170,3 +170,42 @@ def test_bulk_job_snapshot_carries_the_message_key() -> None:
     )
 
     assert service.get_job(job_id)["message_key"] == "exporting"
+
+
+def test_gpu_load_failure_carries_a_fixed_reason_key(
+    fake_tagger_env, tmp_path: Path
+) -> None:
+    image_id = _add_image(tmp_path, "gpu-key.png")
+    payload = _payload([image_id])
+    payload["effective_use_gpu"] = True
+    payload["request"]["use_gpu"] = True
+
+    messages = _run_worker(payload)
+    failed = [m for m in messages if m.get("message_key") == "gpu_load_failed"]
+
+    assert failed, "the stub tagger runs on CPU, so a GPU request must announce the fallback"
+    for message in failed:
+        assert message["message_args"]["reason_key"] in {
+            "cuda_unavailable",
+            "no_gpu_provider",
+            "gpu_provider_failed",
+            "torii_left_cuda",
+        }
+        assert message["message_args"]["reason"]
+
+
+def test_runtime_notice_rides_every_progress_message_of_the_run(
+    fake_tagger_env, tmp_path: Path
+) -> None:
+    image_id = _add_image(tmp_path, "notice.png")
+    payload = _payload([image_id])
+    payload["startup_notice"] = "Auto runtime is using the highest batched throughput."
+
+    messages = _run_worker(payload)
+
+    assert len(messages) > 3
+    assert {m["runtime_notice"] for m in messages} == {payload["startup_notice"]}
+
+
+def test_default_state_has_an_empty_runtime_notice():
+    assert tsvc._build_tag_progress_state("idle")["runtime_notice"] == ""

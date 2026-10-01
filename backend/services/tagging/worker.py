@@ -297,7 +297,17 @@ def _tagging_worker_run(
     runtime_backend_reason = ""
     memory_pressure_warning = ""
 
+    reason_texts = {
+        "cuda_unavailable": "CUDA is unavailable or this build only has the CPU PyTorch runtime.",
+        "torii_left_cuda": "ToriiGate failed to stay on CUDA and fell back to CPU.",
+        "no_gpu_provider": "The ONNX runtime has no GPU provider on this machine.",
+        "gpu_provider_failed": "The GPU provider failed, so the run continued on CPU.",
+        "inference_failed": "GPU inference failed, so the run continued on CPU.",
+    }
+    runtime_reason_key = ""
+
     def infer_runtime_reason() -> str:
+        """Return a fixed reason key; ``reason_texts`` holds the English text."""
         try:
             from hardware_monitor import get_system_info
 
@@ -307,8 +317,8 @@ def _tagging_worker_run(
 
         if runtime_backend == "toriigate":
             if not system_info.get("torch_cuda_available"):
-                return "CUDA is unavailable or this build only has the CPU PyTorch runtime."
-            return "ToriiGate failed to stay on CUDA and fell back to CPU."
+                return "cuda_unavailable"
+            return "torii_left_cuda"
 
         providers = [
             str(item).lower() for item in (system_info.get("onnx_providers") or [])
@@ -321,8 +331,8 @@ def _tagging_worker_run(
                 "tensorrtexecutionprovider",
             ]
         ):
-            return "The ONNX runtime has no GPU provider on this machine."
-        return "The GPU provider failed, so the run continued on CPU."
+            return "no_gpu_provider"
+        return "gpu_provider_failed"
 
     def send(
         status: str,
@@ -343,6 +353,7 @@ def _tagging_worker_run(
                 message=message,
                 message_key=key,
                 message_args=args,
+                runtime_notice=startup_notice,
                 runtime_backend_target=runtime_backend_target,
                 runtime_backend_actual=runtime_backend_actual,
                 runtime_backend_reason=runtime_backend_reason,
@@ -559,7 +570,8 @@ def _tagging_worker_run(
         if runtime_backend_actual == "gpu":
             runtime_backend_reason = "The runtime loaded successfully on GPU."
         elif effective_use_gpu:
-            runtime_backend_reason = infer_runtime_reason()
+            runtime_reason_key = infer_runtime_reason()
+            runtime_backend_reason = reason_texts[runtime_reason_key]
         else:
             runtime_backend_reason = "CPU mode was requested for this run."
 
@@ -577,7 +589,10 @@ def _tagging_worker_run(
                 "running",
                 f"GPU load failed. Continuing on CPU instead. Reason: {runtime_backend_reason}",
                 key="gpu_load_failed",
-                args={"reason": runtime_backend_reason},
+                args={
+                    "reason": runtime_backend_reason,
+                    "reason_key": runtime_reason_key,
+                },
             )
 
         if cancel_event.is_set():
@@ -892,9 +907,8 @@ def _tagging_worker_run(
 
                     if runtime_info.get("used_cpu_fallback"):
                         runtime_backend_actual = "cpu"
-                        runtime_backend_reason = (
-                            "GPU inference failed, so the run continued on CPU."
-                        )
+                        runtime_reason_key = "inference_failed"
+                        runtime_backend_reason = reason_texts[runtime_reason_key]
 
                     if (
                         effective_use_gpu
@@ -903,14 +917,16 @@ def _tagging_worker_run(
                     ):
                         gpu_fallback_announced = True
                         runtime_backend_actual = "cpu"
-                        runtime_backend_reason = (
-                            "GPU inference failed, so the run continued on CPU."
-                        )
+                        runtime_reason_key = "inference_failed"
+                        runtime_backend_reason = reason_texts[runtime_reason_key]
                         send(
                             "running",
                             f"GPU inference failed. Continuing on CPU... Reason: {runtime_backend_reason}",
                             key="gpu_inference_failed",
-                            args={"reason": runtime_backend_reason},
+                            args={
+                                "reason": runtime_backend_reason,
+                                "reason_key": runtime_reason_key,
+                            },
                         )
 
                     source_change_errors: Dict[int, Optional[str]] = {}

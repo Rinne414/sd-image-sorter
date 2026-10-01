@@ -23,6 +23,7 @@ def _build_tag_progress_state(
     message: str = "",
     message_key: str = "",
     message_args: Optional[Dict[str, Any]] = None,
+    runtime_notice: str = "",
     runtime_backend_target: str = "",
     runtime_backend_actual: str = "",
     runtime_backend_reason: str = "",
@@ -43,6 +44,9 @@ def _build_tag_progress_state(
         # English display string for API compatibility.
         "message_key": message_key,
         "message_args": dict(message_args or {}),
+        # The runtime advisory for this run, repeated on every message so a
+        # reload mid-run can still show it.
+        "runtime_notice": runtime_notice,
         "runtime_backend_target": runtime_backend_target,
         "runtime_backend_actual": runtime_backend_actual,
         "runtime_backend_reason": runtime_backend_reason,
@@ -73,6 +77,7 @@ class ProgressMixin:
             message=str(state.get("message", "") or ""),
             message_key=str(state.get("message_key", "") or ""),
             message_args=state.get("message_args") or {},
+            runtime_notice=str(state.get("runtime_notice", "") or ""),
             runtime_backend_target=str(state.get("runtime_backend_target", "") or ""),
             runtime_backend_actual=str(state.get("runtime_backend_actual", "") or ""),
             runtime_backend_reason=str(state.get("runtime_backend_reason", "") or ""),
@@ -247,6 +252,9 @@ class ProgressMixin:
                 ),
                 "message_args": payload.get(
                     "message_args", self._progress.get("message_args", {})
+                ),
+                "runtime_notice": payload.get(
+                    "runtime_notice", self._progress.get("runtime_notice", "")
                 ),
                 "runtime_backend_target": payload.get(
                     "runtime_backend_target",
