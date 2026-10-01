@@ -425,6 +425,39 @@ test.describe('Style Map: the Locate a picture box', () => {
     await expect(page.locator('#entry-page')).toBeVisible()
   })
 
+  test('Esc pressed while the search is still running keeps the list closed when the answer arrives; typing opens it again', async ({ page }) => {
+    await mockBase(page)
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    let calls = 0
+    await page.route('**/api/style-map/locate', async (route) => {
+      calls += 1
+      if (calls === 1) await gate
+      await route.fulfill({ json: locateBody() })
+    })
+    await openMap(page, 1366, 768)
+    await typeQuery(page, 'blue')
+    await expect(page.locator('#stylemap-locate-status')).toContainText('Searching')
+    await page.keyboard.press('Escape')
+    await expect(page.locator('#stylemap-locate-pop')).toBeHidden()
+    release()
+    await expect.poll(() => page.evaluate(() => (window as any).StyleMap._state.locate.answer?.results?.length ?? 0)).toBe(3)
+    await expect(page.locator('#stylemap-locate-pop')).toBeHidden()
+    await page.keyboard.type('x')
+    await expect(page.locator('#stylemap-locate-pop')).toBeVisible()
+    await expect(page.locator('.stylemap-locate-row')).toHaveCount(3)
+  })
+
+  test('a file dragged over the near card lights the whole card', async ({ page }) => {
+    await mockBase(page)
+    await openMap(page, 1366, 768)
+    const card = page.locator('#stylemap-near')
+    await card.dispatchEvent('dragenter', { dataTransfer: await page.evaluateHandle(() => new DataTransfer()) })
+    await expect(card).toHaveClass(/is-drop-target/)
+    await card.dispatchEvent('dragleave', { dataTransfer: await page.evaluateHandle(() => new DataTransfer()) })
+    await expect(card).not.toHaveClass(/is-drop-target/)
+  })
+
   test('tag: and prompt: use the Gallery search language', async ({ page }) => {
     const spy = await mockBase(page)
     await page.route('**/api/style-map/locate', (route) => route.fulfill({ json: locateBody() }))

@@ -191,3 +191,9 @@
 .stylemap-drop[hidden] {
     display: none;
 }
+
+/* A file dragged over the card lights the whole card (the drop strip may be hidden). */
+.stylemap-near.is-drop-target {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}

@@ -81,6 +81,7 @@ export class MapLocator {
         this.active = -1;
         this.sig = null; // the map the answer belongs to
         this.seq = 0;
+        this.dismissed = false; // the user closed the list: only new typing (or Enter) opens it again
         this.abort = null;
         this.timer = null;
         this.refreshing = false;
@@ -113,6 +114,7 @@ export class MapLocator {
     }
 
     onInput() {
+        this.dismissed = false;
         clearTimeout(this.timer);
         this.el.clear.hidden = !this.el.input.value;
         if (!this.el.input.value.trim()) {
@@ -131,12 +133,14 @@ export class MapLocator {
         } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             if (!items.length) return;
             event.preventDefault();
+            this.dismissed = false;
             this.open();
             const step = event.key === 'ArrowDown' ? 1 : -1;
             this.setActive((this.active + step + items.length) % items.length);
         } else if (event.key === 'Enter') {
             event.preventDefault();
             clearTimeout(this.timer);
+            this.dismissed = false;
             if (this.isOpen() && items[this.active]) this.pick(items[this.active]);
             else if (this.el.input.value.trim()) this.search(false);
         }
@@ -273,7 +277,7 @@ export class MapLocator {
 
     /** New words or results open the list for the user who is typing; a repaint never reopens one they closed. */
     openIfTyping() {
-        if (document.activeElement === this.el.input) this.open();
+        if (!this.dismissed && document.activeElement === this.el.input) this.open();
     }
 
     // ----------------------------------------------------------------- pick
@@ -313,6 +317,7 @@ export class MapLocator {
     }
 
     close() {
+        this.dismissed = true;
         this.el.pop.hidden = true;
         this.el.input.setAttribute('aria-expanded', 'false');
         this.el.input.removeAttribute('aria-activedescendant');

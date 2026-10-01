@@ -107,14 +107,18 @@ export class NeighbourCard {
                 event.preventDefault();
                 if (event.dataTransfer) event.dataTransfer.dropEffect = this.available ? 'copy' : 'none';
                 drop.classList.toggle('is-active', this.available);
+                card.classList.toggle('is-drop-target', this.available);
             });
         }
         card.addEventListener('dragleave', (event) => {
-            if (!card.contains(event.relatedTarget)) drop.classList.remove('is-active');
+            if (card.contains(event.relatedTarget)) return;
+            drop.classList.remove('is-active');
+            card.classList.remove('is-drop-target');
         });
         card.addEventListener('drop', (event) => {
             event.preventDefault();
             drop.classList.remove('is-active');
+            card.classList.remove('is-drop-target');
             const dropped = event.dataTransfer?.files?.[0];
             if (dropped && this.available) this.lookup(dropped);
         });
