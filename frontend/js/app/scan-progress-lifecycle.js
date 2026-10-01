@@ -39,6 +39,83 @@ function scanSkippedOtherLibraryPaths(progress) {
     return Array.isArray(preview) ? preview : [];
 }
 
+function _scanDoneText(progress) {
+    const num = (value) => Number(value || 0);
+    const parts = [appT('scan.msg.doneNew', 'Import complete. New images: {count}.')
+        .replace('{count}', String(num(progress.new ?? progress.result?.new)))];
+    const updated = num(progress.updated ?? progress.result?.updated);
+    const removed = num(progress.removed ?? progress.result?.removed);
+    const issues = num(progress.errors ?? progress.result?.errors);
+    const restored = num(progress.result?.disguise_restored);
+    const restoreFailed = num(progress.result?.disguise_restore_failed);
+    if (updated) parts.push(appT('scan.msg.doneUpdated', 'Updated: {count}.').replace('{count}', String(updated)));
+    if (removed) parts.push(appT('scan.msg.doneRemoved', 'Missing records removed: {count}.').replace('{count}', String(removed)));
+    if (issues) parts.push(appT('scan.msg.doneIssues', 'Images with issues: {count}.').replace('{count}', String(issues)));
+    if (restored) {
+        parts.push(appT('scan.msg.doneRestored', 'Disguise images restored: {count}. Each real picture sits next to its original.')
+            .replace('{count}', String(restored)));
+    }
+    if (restoreFailed) {
+        parts.push(appT('scan.msg.doneRestoreFailed', 'Disguise images that could not be restored: {count}.')
+            .replace('{count}', String(restoreFailed)));
+    }
+    if (progress.missing_text_notice) {
+        parts.push(appT(
+            'scan.msg.doneMissingText',
+            '{missing} of {total} images have no prompt and no caption text. Run Recover Missing Text in Settings.',
+        ).replace('{missing}', String(num(progress.metadata_missing_text)))
+            .replace('{total}', String(num(progress.metadata_prompt_total))));
+    }
+    const names = (progress.recent_errors || progress.result?.recent_errors || [])
+        .slice(-3).map((item) => item?.filename).filter(Boolean).join(', ');
+    if (names) parts.push(appT('scan.msg.doneIssueItems', 'Images with issues: {names}.').replace('{names}', () => names));
+    return parts.join(' ');
+}
+
+// The backend still sends an English/Chinese `message` for API compatibility; the UI
+// builds its own sentence from message_key + counts so it follows the language.
+function scanStatusText(progress) {
+    const fill = (key, fallback, values) => Object.entries(values).reduce(
+        (text, [name, value]) => text.replace(`{${name}}`, () => String(value)),
+        appT(key, fallback),
+    );
+    const current = Number(progress?.current ?? progress?.processed ?? 0);
+    const total = Number(progress?.total || 0);
+    const item = progress?.message_item || progress?.current_item || '';
+    switch (progress?.message_key) {
+        case 'syncing_index': return appT('scan.msg.syncingIndex', 'Syncing the folder index...');
+        case 'counting_before': return appT('scan.msg.countingBefore', 'Counting images before import...');
+        case 'scanning': return appT('scan.msg.scanning', 'Scanning files...');
+        case 'processing': return fill('scan.msg.processing', 'Processing: {item}', { item });
+        case 'counting': return fill('progress.countingImages', 'Counting images... {count} found', { count: current });
+        case 'counted': return fill('progress.foundStarting', 'Found {total} images. Starting scan...', { total });
+        case 'cleanup': return fill('scan.msg.cleanup', 'Folder sync complete. Missing records removed: {count}', { count: Number(progress.removed || 0) });
+        case 'library_ready_metadata': return fill('scan.msg.libraryReadyMetadata', 'Library ready. Filling in image details: {done}/{total}', {
+            done: Number(progress.metadata_processed || 0), total: Number(progress.metadata_total || 0),
+        });
+        case 'library_ready_import': return fill('scan.msg.libraryReadyImport', 'Library is browsable. Import continues: {done}/{total}', {
+            done: current, total: total || '?',
+        });
+        case 'reading_details': return item
+            ? fill('scan.msg.readingDetailsItem', 'Reading details: {item}', { item })
+            : appT('scan.msg.readingDetails', 'Reading image details...');
+        case 'importing_details': return total > 0
+            ? fill('scan.msg.importingDetailsCount', 'Importing and reading details: {done}/{total}', { done: current, total })
+            : appT('scan.msg.importingDetails', 'Importing and reading details...');
+        case 'skipped_unreadable': return fill('scan.msg.skippedUnreadable', 'Skipped an unreadable image: {item}', { item });
+        case 'cancelling': return progress.total_final && total > 0
+            ? fill('scan.cancelling', 'Cancelling import... {current}/{total}', { current, total })
+            : fill('scan.msg.cancellingScanned', 'Cancelling import... scanned: {count}', { count: current });
+        case 'cancelled': return progress.total_final && total > 0
+            ? fill('scan.msg.cancelledAt', 'Import cancelled at {current}/{total}.', { current, total })
+            : fill('scan.cancelledAfterCount', 'Import cancelled after {count} scanned.', { count: current });
+        case 'done': return _scanDoneText(progress);
+        case 'error': return appT('scan.failedStatus', 'Import failed');
+        case 'aborted': return appT('scan.msg.aborted', 'Import ended unexpectedly');
+        default: return '';
+    }
+}
+
 function scanIdentitiesMatch(left, right) {
     return Boolean(
         left
@@ -201,7 +278,7 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
     if (removedCount > 0) extraParts.push(appT('progress.removedCount', '{count} removed').replace('{count}', removedCount));
     if (errorCount > 0) extraParts.push(appT('progress.failedCount', '{count} failed').replace('{count}', errorCount));
 
-    let scanDetail = progress.current_item || progress.message || 'Importing images...';
+    let scanDetail = progress.current_item || scanStatusText(progress) || appT('scan.backgroundImporting', 'Still importing images...');
     if (metrics.isCounting) {
         scanDetail = appT('progress.countingImages', 'Counting images... {count} found')
             .replace('{count}', String(metrics.counted || metrics.processed || 0));
@@ -268,7 +345,7 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
         const errorCount = Number(progress.errors || progress.result?.errors || 0);
         const completionMessage = libraryReadyWasHandled
             ? appT('scan.completedBackgroundToast', 'The remaining image details are ready now.')
-            : (progress.message || appT('scan.completedToast', 'Import complete. Everything is ready now.'));
+            : (scanStatusText(progress) || appT('scan.completedToast', 'Import complete. Everything is ready now.'));
         // FLOW-05: replace the vanishing success toast with a persistent
         // next-step CTA. Warnings/errors still toast. Skip the banner when
         // auto-tag is on (the tag modal opens itself right after).
@@ -395,7 +472,7 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
         _hideBgScanProgress();
         updateScanDiagnosticsCard(null);
     } else if (progress.status === 'error') {
-        showToast(progress.message || appT('scan.failedStatus', 'Import failed'), 'error');
+        showToast(scanStatusText(progress) || appT('scan.failedStatus', 'Import failed'), 'error');
         $('#scan-progress-container').style.display = 'none';
         $('#btn-start-scan').disabled = false;
         setScanCancelButtonState('idle');
@@ -638,9 +715,7 @@ function createBackgroundScanProgressConsumer(messages) {
                 return;
             }
             if (status === 'error') {
-                const errorDetail = typeof progress.message === 'string' && progress.message.trim()
-                    ? progress.message.trim()
-                    : messages.failed;
+                const errorDetail = scanStatusText(progress) || messages.failed;
                 Logger.error('Background scan failed', {
                     error: errorDetail,
                     source: messages.source,

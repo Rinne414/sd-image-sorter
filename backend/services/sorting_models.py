@@ -86,6 +86,7 @@ class ScanStartResponse(BaseModel):
 
     status: Literal["started"]
     message: str
+    message_key: str = ""
     run_id: int = Field(gt=0)
     source: ScanSource
 
@@ -194,6 +195,11 @@ class ScanProgressResponse(BaseModel):
     # image whose text lives in a .txt beside it — those need no repair.
     metadata_missing_text: Optional[int] = None
     message: str
+    # Stable key the UI localises from (with the counters above); ``message``
+    # stays the bilingual display string for API compatibility.
+    message_key: str = ""
+    message_item: str = ""
+    missing_text_notice: bool = False
     current_item: Optional[str]
     started_at: Optional[float]
     updated_at: Optional[float]

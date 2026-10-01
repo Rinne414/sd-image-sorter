@@ -460,7 +460,7 @@ function _updateBgScanProgress(progress) {
         tracker: _scanBackgroundProgressTracker,
         primaryLabel: appT('scan.progressLabel', 'Import'),
         extraParts,
-        detail: progress?.message || (metrics.showingMetadata
+        detail: scanStatusText(progress) || (metrics.showingMetadata
             ? appT('scan.backgroundMetadata', 'Filling in image details...')
             : appT('scan.backgroundImporting', 'Bringing images into your library...')),
         defaultMessage: appT('scan.backgroundImporting', 'Bringing images into your library...'),

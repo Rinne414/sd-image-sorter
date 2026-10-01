@@ -29,7 +29,7 @@ function prepareManualScanResumeUi(progress) {
     lockLiveProgressText('#scan-progress-text');
     resetProgressTracker(_scanProgressTracker);
     resetProgressTracker(_scanBackgroundProgressTracker);
-    $('#scan-progress-text').textContent = progress.message || 'Resuming scan progress...';
+    $('#scan-progress-text').textContent = scanStatusText(progress) || appT('scan.msg.resuming', 'Resuming import progress...');
     _updateBgScanProgress(progress);
 }
 

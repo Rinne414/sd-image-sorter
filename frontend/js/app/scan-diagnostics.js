@@ -127,7 +127,7 @@ function updateScanDiagnosticsCard(progress) {
     }
     if (currentEl) {
         currentEl.removeAttribute('data-i18n');
-        currentEl.textContent = progress.current_item || progress.message || '-';
+        currentEl.textContent = progress.current_item || scanStatusText(progress) || '-';
     }
     if (pendingEl) {
         pendingEl.removeAttribute('data-i18n');

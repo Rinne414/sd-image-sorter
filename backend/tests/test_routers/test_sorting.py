@@ -269,6 +269,7 @@ class TestScan:
         assert response.json() == {
             "status": "started",
             "message": "started",
+            "message_key": "",
             "run_id": 14,
             "source": "manual",
         }
@@ -347,6 +348,7 @@ class TestScan:
             "scan": {
                 "status": "started",
                 "message": "started",
+                "message_key": "",
                 "run_id": 16,
                 "source": "library_auto_refresh",
             },

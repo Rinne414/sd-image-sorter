@@ -233,6 +233,8 @@ class ScanMixin:
                 "metadata_missing_prompt": None,
                 "metadata_missing_text": None,
                 "message": "正在同步文件夹索引 / Syncing folder index..." if request.cleanup_missing else "导入前统计图片数量 / Counting images before import...",
+                "message_key": "syncing_index" if request.cleanup_missing else "counting_before",
+                "message_item": "",
                 "current_item": None,
                 "recent_errors": [],
                 "started_at": started_at,
@@ -318,6 +320,8 @@ class ScanMixin:
                     state_current = import_processed
                     state_total = import_total or total
                     message = f"正在处理 / Processing: {filename}" if filename else "正在扫描文件 / Scanning files..."
+                    message_key = "processing" if filename else "scanning"
+                    message_item = ""
                     current_item = filename or None
                     step = "importing"
                     status = "running"
@@ -327,12 +331,14 @@ class ScanMixin:
                         state_current = counted or current
                         state_total = 0
                         message = f"正在统计图片（已发现 {state_current} 张）/ Counting images ({state_current} found)"
+                        message_key = "counting"
                         current_item = None
                         step = "counting"
                     elif phase == "counted":
                         state_current = 0
                         state_total = import_total or total
                         message = f"共发现 {state_total} 张图片，开始导入 / Found {state_total} images, importing..."
+                        message_key = "counted"
                         current_item = None
                         step = "importing"
                     elif phase == "cleanup":
@@ -341,6 +347,7 @@ class ScanMixin:
                             f"Folder sync complete. Removed {removed_count} missing entr"
                             f"{'y' if removed_count == 1 else 'ies'}."
                         )
+                        message_key = "cleanup"
                         current_item = None
                         step = "cleanup"
                     elif phase == "library_ready":
@@ -348,12 +355,15 @@ class ScanMixin:
                         current_item = None
                         if import_complete and metadata_total > 0:
                             message = f"图库已就绪，后台补齐图片详情（{metadata_processed}/{metadata_total}）/ Library ready, finishing metadata ({metadata_processed}/{metadata_total})..."
+                            message_key = "library_ready_metadata"
                         else:
                             message = f"图库已可浏览，后台继续导入（{state_current}/{state_total or '?'}）/ Library browseable, import continues ({state_current}/{state_total or '?'})..."
+                            message_key = "library_ready_import"
                     elif phase == "metadata":
                         if import_complete:
                             step = "metadata"
                             message = f"正在读取图片详情 / Reading details: {filename}" if filename else "正在读取图片详情 / Reading image details..."
+                            message_key = "reading_details"
                             current_item = filename or None
                         else:
                             step = "importing"
@@ -362,11 +372,13 @@ class ScanMixin:
                                 if state_total > 0
                                 else "正在导入并读取详情 / Importing and reading details..."
                             )
+                            message_key = "importing_details"
                             current_item = None
                     elif not total_final:
                         state_current = counted or current
                         state_total = 0
                         message = f"正在统计图片（已发现 {state_current} 张）/ Counting images ({state_current} found)"
+                        message_key = "counting"
                         current_item = None
                         step = "counting"
 
@@ -375,6 +387,8 @@ class ScanMixin:
                             f"已跳过无法读取的图片 / Skipped unreadable image: {last_error.get('filename', filename)}"
                             f" ({last_error.get('error', 'Unreadable image')})"
                         )
+                        message_key = "skipped_unreadable"
+                        message_item = str(last_error.get("filename", filename) or "")
                     if cancel_event.is_set():
                         status = "cancelling"
                         step = "cancelling"
@@ -383,6 +397,7 @@ class ScanMixin:
                             if total_final and state_total > 0
                             else f"正在取消扫描（已扫 {state_current}）/ Cancelling scan ({state_current} scanned)"
                         )
+                        message_key = "cancelling"
                     self._update_scan_progress_if_current(
                         run_id,
                         status=status,
@@ -402,6 +417,8 @@ class ScanMixin:
                         metadata_total_final=metadata_total_final,
                         metadata_pending=metadata_pending,
                         message=message,
+                        message_key=message_key,
+                        message_item=message_item,
                         current_item=current_item,
                         updated_at=now,
                     )
@@ -455,11 +472,12 @@ class ScanMixin:
                 # left to find. Naming the action off missing_prompt reported a
                 # problem that does not exist and prescribed a run that could
                 # not change the number.
-                if (
+                missing_text_notice = bool(
                     prompt_total
                     and missing_text
                     and missing_text >= prompt_total * SCAN_MISSING_TEXT_NOTICE_RATIO
-                ):
+                )
+                if missing_text_notice:
                     summary += (
                         f" {missing_text}/{prompt_total} 张既没有提示词也没有描述文本，"
                         "可在设置中运行「找回缺失文字」/ "
@@ -559,6 +577,9 @@ class ScanMixin:
                         "metadata_missing_prompt": missing_prompt,
                         "metadata_missing_text": missing_text,
                         "message": summary,
+                        "message_key": "done",
+                        "missing_text_notice": missing_text_notice,
+                        "message_item": "",
                         "current_item": None,
                         "started_at": self._scan_progress.get("started_at"),
                         "updated_at": now,
@@ -603,6 +624,8 @@ class ScanMixin:
                             "metadata_prompt_total": current_state.get("metadata_prompt_total"),
                             "metadata_missing_prompt": current_state.get("metadata_missing_prompt"),
                             "metadata_missing_text": current_state.get("metadata_missing_text"),
+                            "message_key": "cancelled",
+                            "message_item": "",
                             "message": (
                                 f"扫描已取消（{current_state.get('processed', current_state.get('current', 0))}/{current_state.get('total', 0)}）/ Scan cancelled at {current_state.get('processed', current_state.get('current', 0))}/{current_state.get('total', 0)}."
                                 if current_state.get("total_final", False) and current_state.get("total", 0)
@@ -655,6 +678,8 @@ class ScanMixin:
                             "metadata_missing_prompt": current_state.get("metadata_missing_prompt"),
                             "metadata_missing_text": current_state.get("metadata_missing_text"),
                             "message": failure_message,
+                            "message_key": "error",
+                            "message_item": "",
                             "current_item": current_state.get("current_item"),
                             "recent_errors": current_state.get("recent_errors", []),
                             "started_at": current_state.get("started_at"),
@@ -673,6 +698,7 @@ class ScanMixin:
                         status="error",
                         step="error",
                         message="扫描意外中止 / Scan ended unexpectedly",
+                        message_key="aborted",
                         updated_at=time.time(),
                     )
                 self._clear_scan_worker_refs_if_current(run_id)
@@ -681,6 +707,7 @@ class ScanMixin:
         return {
             "status": "started",
             "message": "扫描已在后台开始 / Scan started in background",
+            "message_key": "started",
             "run_id": run_id,
             "source": source,
         }

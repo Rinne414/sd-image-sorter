@@ -68,6 +68,9 @@ class SortingStateMixin:
             "metadata_total_final": False,
             "metadata_pending": 0,
             "message": "",
+            "message_key": "",
+            "message_item": "",
+            "missing_text_notice": False,
             "current_item": None,
             "recent_errors": [],
             "started_at": None,
@@ -425,6 +428,7 @@ class SortingStateMixin:
                     if total_final and total > 0
                     else f"Cancelling scan... ({current} scanned)"
                 )
+                self._scan_progress["message_key"] = "cancelling"
                 self._scan_progress["updated_at"] = time.time()
                 return {
                     "status": "cancelling",
@@ -441,6 +445,7 @@ class SortingStateMixin:
                 if total_final and total > 0
                 else f"Scan cancelled after {current} scanned."
             )
+            self._scan_progress["message_key"] = "cancelled"
             self._scan_progress["updated_at"] = time.time()
             self._scan_cancel_event = None
             self._scan_worker_thread = None
