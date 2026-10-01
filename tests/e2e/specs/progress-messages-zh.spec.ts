@@ -454,3 +454,46 @@ test('artist identification progress and failure read in Chinese', async ({ page
   expect(await toast.textContent()).not.toContain('Artist identification failed')
   await page.screenshot({ path: shotPath(testInfo, 'artist-failed-zh-1366.png') })
 })
+
+test('character-purity progress and failure read in Chinese', async ({ page }, testInfo) => {
+  test.setTimeout(120000)
+  await page.setViewportSize({ width: 1366, height: 768 })
+
+  const base = {
+    status: 'running',
+    job_id: 'purity-1',
+    step: 'extracting',
+    current: 3,
+    total: 9,
+    extracted: 0,
+    failed: 0,
+    result: null,
+    message: 'Embedding image 3/9...',
+    message_key: 'embedding',
+    message_args: { done: 3, total: 9 },
+  }
+  let payload: Record<string, unknown> = base
+  await page.route('**/api/dataset/character-purity/progress**', (route) => route.fulfill({ json: payload }))
+
+  await openMainPage(page)
+  await page.evaluate(() => {
+    const purity = (window as any).CharacterPurity
+    purity._jobId = 'purity-1'
+    purity._schedulePoll()
+  })
+  const status = page.locator('#ccip-status')
+  await expect(status).toHaveText('正在提取第 3/9 张图片的特征...', { timeout: 15000 })
+  await page.screenshot({ path: shotPath(testInfo, 'purity-running-zh-1366.png') })
+
+  payload = {
+    ...base,
+    status: 'failed',
+    step: 'failed',
+    message: 'Fewer than 2 images could be embedded — nothing to compare. / 可分析的图片不足 2 张，无法比较。',
+    message_key: 'too_few',
+    message_args: {},
+  }
+  await expect(status).toHaveText('可分析的图片不足 2 张，无法比较。', { timeout: 15000 })
+  expect(await status.textContent()).not.toContain('Fewer than')
+  await page.screenshot({ path: shotPath(testInfo, 'purity-failed-zh-1366.png') })
+})

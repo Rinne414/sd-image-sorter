@@ -189,6 +189,35 @@
             }
         },
 
+        // The backend still sends an English/bilingual `message` for API
+        // compatibility; the UI builds its own sentence from message_key +
+        // message_args + the counters. A failed run's raw error is shown as received.
+        _statusText(progress) {
+            const args = progress.message_args || {};
+            const fill = (text, values) => Object.keys(values).reduce(
+                (out, name) => out.split(`{${name}}`).join(String(values[name])), text);
+            switch (progress.message_key) {
+                case 'starting': return t('Starting character-purity analysis...', '正在启动角色纯度分析...');
+                case 'extracting': return t('Extracting CCIP embeddings...', '正在提取 CCIP 特征...');
+                case 'embedding': return fill(t('Embedding image {done}/{total}...', '正在提取第 {done}/{total} 张图片的特征...'),
+                    { done: args.done ?? progress.current ?? 0, total: args.total ?? progress.total ?? 0 });
+                case 'comparing': return fill(t('Comparing {count} embeddings...', '正在比较 {count} 张图片的特征...'),
+                    { count: args.count ?? 0 });
+                case 'done': return fill(t('Character-purity analysis finished: {outliers} suspected outliers.', '角色纯度分析完成：{outliers} 张疑似离群图。'),
+                    { outliers: args.outliers ?? 0 });
+                case 'too_few': return t('Fewer than 2 images could be embedded, so there is nothing to compare.', '可分析的图片不足 2 张，无法比较。');
+                case 'cancelling': return t('Cancelling character-purity analysis...', '正在取消角色纯度分析...');
+                case 'cancelled': return t('Character-purity analysis cancelled.', '角色纯度分析已取消。');
+                case 'failed': {
+                    const failed = t('Character-purity analysis failed', '角色纯度分析失败');
+                    const detail = args.detail && typeof window.formatUserError === 'function'
+                        ? window.formatUserError(args.detail) : '';
+                    return detail ? `${failed}: ${detail}` : failed;
+                }
+                default: return '';
+            }
+        },
+
         _schedulePoll() {
             if (this._pollTimer) clearTimeout(this._pollTimer);
             this._pollTimer = setTimeout(() => this._poll(), POLL_INTERVAL_MS);
@@ -208,10 +237,10 @@
                 }
                 if (progress.status === 'failed' || progress.status === 'cancelled') {
                     this._finishJob();
-                    this._setStatus(progress.message || progress.status);
+                    this._setStatus(this._statusText(progress) || progress.status);
                     return;
                 }
-                this._setStatus(progress.message
+                this._setStatus(this._statusText(progress)
                     || t(`Analyzing ${progress.current}/${progress.total}...`, `分析中 ${progress.current}/${progress.total}...`));
                 this._schedulePoll();
             } catch (e) {

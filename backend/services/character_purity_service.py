@@ -54,6 +54,7 @@ class CharacterPurityStartResponse(BaseModel):
     job_id: str
     total: int
     message: str
+    message_key: str = ""
 
 
 def _get_ccip() -> Any:
@@ -153,6 +154,10 @@ _IDLE_PROGRESS: Dict[str, Any] = {
     "failed": 0,
     "result": None,
     "message": "No character-purity analysis is running.",
+    # Stable key + parameters the UI localises from; ``message`` stays the
+    # English display string for API compatibility.
+    "message_key": "",
+    "message_args": {},
     "started_at": None,
     "updated_at": None,
 }
@@ -200,6 +205,8 @@ def cancel_character_purity(job_id: Optional[str] = None) -> Dict[str, Any]:
             "status": "cancelling",
             "step": "cancelling",
             "message": "Cancelling character-purity analysis...",
+            "message_key": "cancelling",
+            "message_args": {},
             "updated_at": time.time(),
         }
         return {
@@ -335,6 +342,8 @@ def start_character_purity(
             "failed": 0,
             "result": None,
             "message": f"Starting character-purity analysis for {len(image_ids)} images...",
+            "message_key": "starting",
+            "message_args": {},
             "started_at": started_at,
             "updated_at": started_at,
         }
@@ -350,6 +359,8 @@ def start_character_purity(
                     "step": "extracting",
                     "failed": failed,
                     "message": f"Extracting CCIP embeddings for {len(resolved['paths'])} images...",
+                    "message_key": "extracting",
+                    "message_args": {},
                 },
             )
 
@@ -362,6 +373,8 @@ def start_character_purity(
                         "current": done,
                         "total": len(image_ids),
                         "message": f"Embedding image {done}/{total}...",
+                        "message_key": "embedding",
+                        "message_args": {"done": done, "total": total},
                     },
                 )
 
@@ -389,6 +402,8 @@ def start_character_purity(
                             "Fewer than 2 images could be embedded — nothing to compare. "
                             "/ 可分析的图片不足 2 张，无法比较。"
                         ),
+                        "message_key": "too_few",
+                        "message_args": {},
                     },
                 )
                 return
@@ -399,6 +414,8 @@ def start_character_purity(
                     "status": "cancelling" if cancel_event.is_set() else "running",
                     "step": "comparing",
                     "message": f"Comparing {len(extracted_ids)} embeddings...",
+                    "message_key": "comparing",
+                    "message_args": {"count": len(extracted_ids)},
                 },
             )
             if cancel_event.is_set():
@@ -420,6 +437,8 @@ def start_character_purity(
                         f"Character-purity analysis finished: {result['extracted']} analyzed, "
                         f"{outliers} suspected outliers, {result['failed']} failed."
                     ),
+                    "message_key": "done",
+                    "message_args": {"outliers": outliers},
                 },
             )
         except ccip.CCIPCancelled:
@@ -429,6 +448,8 @@ def start_character_purity(
                     "status": "cancelled",
                     "step": "cancelled",
                     "message": "Character-purity analysis cancelled.",
+                    "message_key": "cancelled",
+                    "message_args": {},
                 },
             )
         except Exception as exc:  # noqa: BLE001 - defensive worker guard
@@ -439,6 +460,8 @@ def start_character_purity(
                     "status": "failed",
                     "step": "failed",
                     "message": f"Character-purity analysis failed: {exc}",
+                    "message_key": "failed",
+                    "message_args": {"detail": str(exc)},
                 },
             )
         finally:
@@ -457,4 +480,5 @@ def start_character_purity(
         job_id=job_id,
         total=len(image_ids),
         message=f"Character-purity analysis started for {len(image_ids)} images.",
+        message_key="started",
     )

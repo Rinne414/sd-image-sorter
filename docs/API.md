@@ -2650,7 +2650,7 @@ Body: `{"image_ids": [1, 2, 3], "threshold": 0.178}` (`threshold` optional, 0–
 
 #### GET /api/dataset/character-purity/progress
 
-Live progress for the active character-purity job. Optional query: `job_id` (`404` on mismatch). Returns `{status, job_id, step, current, total, extracted, failed, result, message, started_at, updated_at}`. Terminal statuses: `done` / `failed` / `cancelled`. On `done`, `result` is `{medoid_image_id, items: [{image_id, distance, outlier}], threshold, extracted, failed}` with `items` ranked worst-first (largest distance-to-medoid first).
+Live progress for the active character-purity job. Optional query: `job_id` (`404` on mismatch). Returns `{status, job_id, step, current, total, extracted, failed, result, message, message_key, message_args, started_at, updated_at}`. `message` is an English/bilingual display string kept for API compatibility; clients localise from `message_key` (`starting`, `extracting`, `embedding`, `comparing`, `done`, `too_few`, `cancelling`, `cancelled`, `failed`) and `message_args` (`embedding` `{done, total}`, `comparing` `{count}`, `done` `{outliers}`, `failed` `{detail}` with the raw error text). `POST /api/dataset/character-purity` also returns `message_key: "started"`. Terminal statuses: `done` / `failed` / `cancelled`. On `done`, `result` is `{medoid_image_id, items: [{image_id, distance, outlier}], threshold, extracted, failed}` with `items` ranked worst-first (largest distance-to-medoid first).
 
 ---
 
