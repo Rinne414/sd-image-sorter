@@ -25,6 +25,10 @@ from services.model_service import (
     ModelService,
     get_model_service,
 )
+from services.model_sources_service import (
+    ModelSourcesService,
+    get_model_sources_service,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -215,6 +219,19 @@ async def get_model_plan(model_id: str):
         _logger.warning("Could not plan setup for %s: %s", normalized, exc)
         return {"model_id": normalized, "packages": [], "restart_likely": None}
     return {"model_id": normalized, "packages": plan["packages"], "restart_likely": plan["restart_likely"]}
+
+
+@router.get("/sources/detect")
+def detect_model_sources(
+    rescan: bool = False,
+    service: ModelSourcesService = Depends(get_model_sources_service),
+):
+    """Pinned models already on this PC: ComfyUI installs, Hugging Face caches, trusted folders.
+
+    Read-only. Plain def: hashing and the optional drive rescan are blocking
+    file work and must not sit on the event loop.
+    """
+    return service.detect(rescan=rescan)
 
 
 @router.get("/status")

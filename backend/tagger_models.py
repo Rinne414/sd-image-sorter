@@ -22,6 +22,14 @@ against the HuggingFace model API; entries with no local copy were pinned to the
 upstream head, i.e. exactly what ``main`` already resolved to, so no model
 version changed. When bumping a model, benchmark the new revision before
 changing the hash - the thresholds here were tuned against these weights.
+
+``size_bytes`` / ``sha256`` (model file), ``tags_sha256`` (tags file) and
+``external_data_pins`` were read from Hugging Face HTTP HEAD responses on
+the pinned revision (X-Linked-Size / X-Linked-ETag, 2026-10-01) and the
+installed copies' sha256; ``model_matchers`` uses them to recognise the
+same file inside a ComfyUI install or a Hugging Face cache without
+downloading it again. Entries without ``size_bytes`` are never matched
+externally.
 """
 
 TAGGER_MODELS: dict = {
@@ -31,6 +39,9 @@ TAGGER_MODELS: dict = {
         "revision": "b25b82a03f7282e41aa2f257a52c7583b710bd1c",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
+        "size_bytes": 1_260_435_999,
+        "sha256": "9e768793060c7939b277ccb382783e8670e8a042d29d77aa736be0c8cc898bfc",
+        "tags_sha256": "298633d94d0031d2081c0893f29c82eab7f0df00b08483ba8f29d1e979441217",
         "runtime_safety_tier": "heavy",
         "default_threshold": 0.35,
         "default_character_threshold": 0.85,
@@ -43,6 +54,9 @@ TAGGER_MODELS: dict = {
         "revision": "627aef95638667ddcaa3ac8ae625e88ea5b02f51",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
+        "size_bytes": 467_460_978,
+        "sha256": "e6774bff34d43bd49f75a47db4ef217dce701c9847b546523eb85ff6dbba1db1",
+        "tags_sha256": "298633d94d0031d2081c0893f29c82eab7f0df00b08483ba8f29d1e979441217",
         "runtime_safety_tier": "balanced",
         "default_threshold": 0.35,
         "default_character_threshold": 0.85,
@@ -55,6 +69,9 @@ TAGGER_MODELS: dict = {
         "revision": "d39e46de298d27340111b64965e20b8185c407e6",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
+        "size_bytes": 394_990_732,
+        "sha256": "1b8a7abf13d9b8368267df47501d523789c4aeae66b2296ad98483239dfa32eb",
+        "tags_sha256": "298633d94d0031d2081c0893f29c82eab7f0df00b08483ba8f29d1e979441217",
         "runtime_safety_tier": "balanced",
         "default_threshold": 0.35,
         "default_character_threshold": 0.85,
@@ -67,6 +84,9 @@ TAGGER_MODELS: dict = {
         "revision": "7f6b584d0bd3f55c4531f14ba3d4761b2bccdc0f",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
+        "size_bytes": 378_536_310,
+        "sha256": "35f23693620b668f4d53fd3c62bf65e40af739bc52c7eb0fbc49258b58d065b6",
+        "tags_sha256": "298633d94d0031d2081c0893f29c82eab7f0df00b08483ba8f29d1e979441217",
         "runtime_safety_tier": "light",
         "default_threshold": 0.35,
         "default_character_threshold": 0.85,
@@ -79,6 +99,9 @@ TAGGER_MODELS: dict = {
         "revision": "ae469aa2e4706a3af08d3673cf73a11d1add314c",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
+        "size_bytes": 1_260_645_673,
+        "sha256": "e4c8001b000a6c98f2db10794f7c406daa79873d071d6ca924330fa053fa1845",
+        "tags_sha256": "298633d94d0031d2081c0893f29c82eab7f0df00b08483ba8f29d1e979441217",
         "runtime_safety_tier": "balanced",
         "default_threshold": 0.35,
         "default_character_threshold": 0.85,
@@ -91,6 +114,9 @@ TAGGER_MODELS: dict = {
         "revision": "7d40c1b85b86ab4f607b2caf26b1b50c99db743e",
         "model_file": "camie-tagger-v2.onnx",
         "tags_file": "camie-tagger-v2-metadata.json",
+        "size_bytes": 788_983_561,
+        "sha256": "ab0aaf253e3d546090001bec9bebc776c354ab6800f442ab9167af87b4a953ac",
+        "tags_sha256": "de9f962eb0fd86b7e30d0af4e8c7990205200d70e955d8ecae60f87d14eae66b",
         "runtime_safety_tier": "heavy",
         "metadata_format": "camie_v2",
         "input_layout": "nchw",
@@ -117,6 +143,9 @@ TAGGER_MODELS: dict = {
         "revision": "d8cf666911a2c3d10d586d7823259192313c7eb7",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
+        "size_bytes": 1_271_365_854,
+        "sha256": "a8d479098b5e23f253543c93df42391736abbb77c21c2efd3a513b9cda7b3657",
+        "tags_sha256": "76b5dd39354a7a4d9baefb94d63b44a09a4934ee15303b7eb86c38f2128eb68a",
         "runtime_safety_tier": "heavy",
         "input_layout": "nchw",
         "input_normalization": "minus_one_to_one",
@@ -150,6 +179,15 @@ TAGGER_MODELS: dict = {
         "model_file": "model.onnx",
         "tags_file": "tags.json",
         "external_data_files": ["model.onnx.data"],
+        "size_bytes": 2_633_225,
+        "sha256": "563f4576c2668560c20f403b957f0ec4a7bd6a2275da2c2aa7f82f898ad34e5c",
+        "tags_sha256": "0d34f2078016798808dc066dc206b18fb6ce7622f64241002ecd24172a4da068",
+        "external_data_pins": {
+            "model.onnx.data": {
+                "size_bytes": 1_955_123_200,
+                "sha256": "4de1c25a38d1f2a2172fbcb0d2485b5f02a058b6e67bedd7bbbcfdf4de9329dc",
+            },
+        },
         "runtime_safety_tier": "heavy",
         "metadata_format": "pixai_v1",
         "input_layout": "nchw",
@@ -234,6 +272,8 @@ TAGGER_MODELS: dict = {
         "repo_subfolder": "V1.1_onnx",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
+        "size_bytes": 993_246_982,
+        "sha256": "8567852deb135eccfe4b8445d48e4476ee8846436486679adc0642cfeda07d13",
         "extra_files": ["preprocessing.json", "pr_thresholds.json", "config.json"],
         "runtime_backend": "oppai-oracle",
         "runtime_safety_tier": "heavy",

@@ -1201,6 +1201,60 @@ Where the trusted folders apply (SEC1b / SEC1c):
 #### GET /api/models/download-progress
 Get active model download progress (bytes downloaded, total size).
 
+#### GET /api/models/sources/detect
+Pinned models that already exist elsewhere on this PC, so the Model Center can
+use them instead of downloading a second copy. Read-only: nothing in a ComfyUI
+install or a Hugging Face cache is ever written; the chosen matches and the
+drive-scan result are saved in `CONFIG_DIR/model_sources.json`.
+
+Roots come from the trusted-folder list (`/api/models/trusted-folders`, in
+list order), `COMFYUI_PATH`, Comfy Desktop's fixed install folders, the cached
+depth-2 drive scan (started once per process on a background thread; query
+`rescan=1` runs it again synchronously), and the Hugging Face caches
+(`HF_HUB_CACHE`, `HF_HOME/hub`, the user's global `~/.cache/huggingface/hub`
+and each ComfyUI install's `models/hub`).
+
+Response shape:
+
+```json
+{
+  "sources": [
+    {"path": "I:\\ComfyUI-aki-v1.6\\ComfyUI", "kind": "comfyui", "origin": "trusted",
+     "is_network": false, "version": "0.36.0", "trusted": true, "model_count": 4}
+  ],
+  "matches": [
+    {"model_id": "wd14", "variant": "wd-eva02-large-tagger-v3",
+     "path": "I:\\...\\wd-eva02-large-tagger-v3.onnx", "source": "I:\\ComfyUI-aki-v1.6\\ComfyUI",
+     "source_kind": "comfyui", "verify": "size", "size_bytes": 1260435999, "total_bytes": 1260744467, "mtime_ns": 0,
+     "companions": ["I:\\...\\wd-eva02-large-tagger-v3.csv"], "notes": ["hash_skipped_large"],
+     "is_network": false}
+  ],
+  "rejected": [
+    {"model_id": "tipo", "variant": null, "path": "I:\\...\\TIPOv2-1B-A200M-Q8_0.gguf",
+     "source": "I:\\ComfyUI-aki-v1.6\\ComfyUI", "reason": "version_mismatch", "detail": "..."}
+  ],
+  "reusable_bytes": 6780000000,
+  "scan": {"status": "done", "scanned_at": 1790000000.0, "error": null, "roots": ["I:\\ComfyUI-aki-v1.6\\ComfyUI"]}
+}
+```
+
+`kind`: `comfyui` | `hf_cache` | `folder`. `origin`: `trusted` | `env` | `probe` |
+`scan` | `hf_default` | `comfyui_hub`. `verify` (strongest first): `sha` (SHA-256
+equals the pin; files up to 500 MB on local disks, digests cached by size and
+mtime), `revision` (Hugging Face snapshot folder named after the pinned commit
+with every required file present), `size` (byte size equals the pin: big files
+and network/removable drives), `name` (file name only, as the existing loaders
+already accept: privacy YOLO by the `wenaka` convention, the aesthetic
+backbone). `size_bytes` is the primary file; `total_bytes` adds its companion
+files (tags csv, class mapping, samples) and is what `reusable_bytes` sums.
+One match per `(model_id, variant)` is kept: trusted-list order,
+then `sha`/`revision` over `size` over `name`, then local disk over network.
+`rejected.reason`: `size_mismatch`, `sha_mismatch`, `missing_companion`,
+`companion_mismatch`, `incomplete`, `version_mismatch` (another build, e.g. an
+older TIPO; never adopted), `unverified` (a YOLO file whose classes were not
+checked; listed as a candidate only). `scan.status`: `never` | `running` |
+`done` | `error`.
+
 #### GET /api/models/bulk-bundle
 Inventory of models available to the selectable bulk-download flow. Florence-2
 Base and Lucida are recommended defaults for local captions and training masks;
