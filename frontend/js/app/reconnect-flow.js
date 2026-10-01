@@ -154,6 +154,7 @@ function _formatReconnectStatus(progress) {
     const missingTotal = Number(progress?.missing_total || 0);
     const ambiguous = Number(progress?.ambiguous || 0);
     const conflicts = Number(progress?.conflicts || 0);
+    const pixelMismatch = Number(progress?.pixel_mismatch || 0);
     const errors = Number(progress?.errors || 0);
     const base = missingTotal > 0
         ? appT('reconnect.progressText', 'Checked {checked} files · found {matched}/{missing} missing')
@@ -168,6 +169,9 @@ function _formatReconnectStatus(progress) {
     }
     if (conflicts) {
         extras.push(appT('reconnect.conflictsShort', '{count} already in gallery').replace('{count}', String(conflicts)));
+    }
+    if (pixelMismatch) {
+        extras.push(appT('reconnect.pixelMismatchShort', 'pixels differ: {count}').replace('{count}', String(pixelMismatch)));
     }
     if (errors) {
         extras.push(appT('reconnect.errorsShort', '{count} errors').replace('{count}', String(errors)));
@@ -215,6 +219,14 @@ function _renderReconnectResultPanel(progress) {
         return shown.map(renderItem).join('') + more;
     };
     const conflictTotal = Number(result.conflicts || conflicts.length || 0);
+    // Same name and size, nearly the same date, other pixels: the search left
+    // these alone on purpose, so the summary says so instead of hiding them
+    // inside "still missing".
+    const pixelMismatch = Number(result.pixel_mismatch || 0);
+    const pixelMismatchLine = pixelMismatch > 0
+        ? `<span class="reconnect-result-note">${escapeHtml(appT('reconnect.pixelMismatchSummary', 'Records not relinked because the pixels differ: {count} (a same-name, same-size file was found for each).')
+            .replace('{count}', String(pixelMismatch)))}</span>`
+        : '';
 
     panel.innerHTML = `
         <div class="reconnect-result-summary">
@@ -223,6 +235,7 @@ function _renderReconnectResultPanel(progress) {
                 .replace('{matched}', String(matched))
                 .replace('{missing}', String(missing))
                 .replace('{libraryMissing}', String(libraryMissingTotal)))}</span>
+            ${pixelMismatchLine}
         </div>
         <details class="reconnect-result-group" open>
             <summary>${escapeHtml(appT('reconnect.resultUpdated', 'Reconnected'))} <span>${matched || updated.length}</span></summary>
@@ -310,6 +323,10 @@ function _updateReconnectProgressUi(progress) {
         fill.style.width = running ? '' : (progress?.status === 'done' ? '100%' : '0%');
     }
     if (textEl) {
+        // Dynamic text: the i18n re-apply (reopening the modal, a language
+        // switch) would otherwise reset it to the static "Starting search..."
+        // key. Same lock the scan and tag progress texts use.
+        lockDynamicI18nText('#reconnect-progress-text', 'reconnect.starting');
         if (progress?.status === 'cancelling') {
             textEl.textContent = appT('reconnect.cancelling', 'Stopping search...');
         } else if (progress?.status === 'done') {

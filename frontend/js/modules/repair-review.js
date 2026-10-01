@@ -101,6 +101,13 @@
             if (candidate.still_missing === false) {
                 detailBits.push(t('repairReview.candidateReadable', 'currently readable'));
             }
+            // pixels_match: true / false, or null when the record has no pixel
+            // fingerprint to compare (then nothing is said).
+            if (candidate.pixels_match === true) {
+                detailBits.push(t('repairReview.pixelsSame', 'pixels match'));
+            } else if (candidate.pixels_match === false) {
+                detailBits.push(t('repairReview.pixelsDiffer', 'pixels differ'));
+            }
             if (detailBits.length) {
                 body.appendChild(el('small', 'repair-review-candidate-detail', detailBits.join(' · ')));
             }
@@ -122,9 +129,28 @@
             const checked = row.querySelector(`input[name="${groupName}"]:checked`);
             return checked ? Number(checked.value) : null;
         };
+        const chosenPixelsDiffer = () => {
+            const id = chosenId();
+            const chosen = (review.candidates || []).find((candidate) => Number(candidate.image_id) === id);
+            return Boolean(chosen) && chosen.pixels_match === false;
+        };
+        // A record whose remembered pixels differ from the found file is not
+        // blocked (the fingerprint may be stale), but the user confirms first.
+        const afterPixelCheck = (proceed) => {
+            const a = app();
+            if (chosenPixelsDiffer() && a && typeof a.showConfirm === 'function') {
+                a.showConfirm(
+                    t('repairReview.pixelMismatchConfirmTitle', 'Relink a record whose pixels differ?'),
+                    t('repairReview.pixelMismatchConfirmBody', 'The chosen record remembers different pixels than the found file. It may be another picture, or its fingerprint may be out of date. Relink it anyway?'),
+                    proceed
+                );
+            } else {
+                proceed();
+            }
+        };
 
-        pickBtn.addEventListener('click', () => confirmReview(row, review, 'pick', chosenId()));
-        mergeBtn.addEventListener('click', () => {
+        pickBtn.addEventListener('click', () => afterPixelCheck(() => confirmReview(row, review, 'pick', chosenId())));
+        mergeBtn.addEventListener('click', () => afterPixelCheck(() => {
             const a = app();
             const doMerge = () => confirmReview(row, review, 'merge', chosenId());
             if (a && typeof a.showConfirm === 'function') {
@@ -136,7 +162,7 @@
             } else {
                 doMerge();
             }
-        });
+        }));
         skipBtn.addEventListener('click', () => confirmReview(row, review, 'skip', null));
 
         actions.appendChild(pickBtn);

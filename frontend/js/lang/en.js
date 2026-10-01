@@ -232,6 +232,10 @@ window.I18nLang_en = {
     'repairReview.next': 'Next ›',
     'repairReview.foundGone': 'File no longer at this path',
     'repairReview.candidateReadable': 'currently readable',
+    'repairReview.pixelsSame': 'pixels match',
+    'repairReview.pixelsDiffer': 'pixels differ',
+    'repairReview.pixelMismatchConfirmTitle': 'Relink a record whose pixels differ?',
+    'repairReview.pixelMismatchConfirmBody': 'The chosen record remembers different pixels than the found file. It may be another picture, or its fingerprint may be out of date. Relink it anyway?',
 
     // ========================
     // Brand / App Title
@@ -3091,6 +3095,8 @@ window.I18nLang_en = {
     'reconnect.progressNoMissing': 'Checking files... {checked} checked',
     'reconnect.ambiguousShort': '{count} need review',
     'reconnect.conflictsShort': '{count} already in gallery',
+    'reconnect.pixelMismatchShort': 'pixels differ: {count}',
+    'reconnect.pixelMismatchSummary': 'Records not relinked because the pixels differ: {count} (a same-name, same-size file was found for each).',
     'reconnect.errorsShort': '{count} errors',
     'reconnect.cancelling': 'Stopping search...',
     'reconnect.cancelled': 'Search stopped',

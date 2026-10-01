@@ -7623,6 +7623,12 @@ html:not(.lang-zh) .filter-sidebar .btn-ghost.full-width {
     font-size: 12px;
 }
 
+/* One full-width line under the counts: files the search left alone on
+   purpose (same name and size, different pixels). */
+.reconnect-result-summary .reconnect-result-note {
+    flex-basis: 100%;
+}
+
 .reconnect-result-group {
     border-top: 1px solid rgba(255, 255, 255, 0.08);
     padding-top: 7px;

@@ -235,6 +235,10 @@ window.I18nLang_zhCN = {
     'repairReview.next': '下一页 ›',
     'repairReview.foundGone': '文件已不在此路径',
     'repairReview.candidateReadable': '当前可读',
+    'repairReview.pixelsSame': '像素相同',
+    'repairReview.pixelsDiffer': '像素不同',
+    'repairReview.pixelMismatchConfirmTitle': '像素不同，仍要重连？',
+    'repairReview.pixelMismatchConfirmBody': '选中记录保存的像素指纹和找到的文件不一致：可能是另一张图片，也可能是指纹已过时。仍要重连吗？',
 
     // ========================
     // Brand / App Title
@@ -3258,6 +3262,8 @@ window.I18nLang_zhCN = {
     'reconnect.progressNoMissing': '正在检查文件... 已检查 {checked} 个',
     'reconnect.ambiguousShort': '{count} 个需要确认',
     'reconnect.conflictsShort': '{count} 张已在图库中',
+    'reconnect.pixelMismatchShort': '{count} 条像素不同',
+    'reconnect.pixelMismatchSummary': '有 {count} 条记录找到了同名同大小的文件，但像素不同，没有自动接上。',
     'reconnect.errorsShort': '{count} 个错误',
     'reconnect.cancelling': '正在停止查找...',
     'reconnect.cancelled': '查找已停止',
