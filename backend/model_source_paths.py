@@ -66,7 +66,19 @@ KIND_MISSING = "missing"
 
 def normalize_path(raw: str) -> str:
     expanded = os.path.expanduser(os.path.expandvars(str(raw).strip()))
-    return os.path.normpath(os.path.abspath(expanded))
+    return _absolute(expanded)
+
+
+def _absolute(text: str) -> str:
+    """``normpath(abspath(text))``, except a UNC spelling on a POSIX host.
+
+    A backslash is no separator there, so ``abspath`` would put ``\\\\nas\\x``
+    under the working directory and it would stop reading as a network path.
+    It is kept as written instead: still recognised, still never touched.
+    """
+    if os.name != "nt" and model_roots.is_network_path(strip_nt_prefix(text)):
+        return text
+    return os.path.normpath(os.path.abspath(text))
 
 
 def _same_path(a: str, b: str) -> bool:
@@ -250,7 +262,7 @@ def resolve_local_chain(path: object) -> Tuple[str, str]:
     Only ``lstat`` and ``readlink`` of local components are used; a network
     path is recognised by its string before anything is stat'ed.
     """
-    text = os.path.normpath(os.path.abspath(str(path or "")))
+    text = _absolute(str(path or ""))
     for _hop in range(_MAX_LINK_HOPS):
         if is_network_path(text):
             return KIND_NETWORK, text
