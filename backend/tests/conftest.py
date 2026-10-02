@@ -46,6 +46,18 @@ if os.name == "nt" and len(os.environ.get("PATH", "")) > 30000:
     os.environ["PATH"] = os.pathsep.join(_truncated)
 
 
+@pytest.hookimpl(trylast=True)  # after the tmp_path plugin has set itself up
+def pytest_configure(config):
+    """Choose pytest's tmp_path root before collection imports the backend.
+
+    Importing the backend points ``tempfile`` at the project's ``data/tmp``
+    (``config.configure_runtime_temp_env``). A run without xdist picks its
+    basetemp on first use, after that import, so every ``tmp_path`` would land
+    inside ``data/``; the xdist controller picks it up front, as done here.
+    """
+    config._tmp_path_factory.getbasetemp()
+
+
 # ============================================================================
 # Similarity index isolation
 # ============================================================================

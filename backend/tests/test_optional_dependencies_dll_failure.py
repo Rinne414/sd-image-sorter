@@ -62,6 +62,10 @@ def _patch_module_already_installed(monkeypatch):
         "version",
         _locked_version,
     )
+    # The install is faked, so the check that the new package imports is too.
+    monkeypatch.setattr(
+        optional_dependencies, "_restart_reason_after_install", lambda **_kwargs: ""
+    )
 
 
 def test_dll_load_failure_triggers_reinstall(monkeypatch):

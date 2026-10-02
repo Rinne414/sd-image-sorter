@@ -331,6 +331,8 @@ def test_is_network_path_uses_model_roots_spellings_and_drive_types(monkeypatch)
         assert model_sources.is_network_path(spelling) is True
     # NT-prefixed local paths (what readlink returns for a junction) are local.
     assert model_sources.is_network_path(r"\??\C:\x") is False
+    # Drive types are a Windows notion: judge these as a Windows host does.
+    monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(
         model_source_paths,
         "_drive_type",

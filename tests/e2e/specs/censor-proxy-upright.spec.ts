@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { markModelsReady } from '../fixtures/model-status'
 
 /**
  * A large EXIF-rotated JPEG is censored where the detection box was (review of af94bb0).
@@ -70,6 +71,8 @@ with Image.open(${JSON.stringify(file)}) as image:
 }
 
 async function stubDetector(page: Page): Promise<Array<Record<string, unknown>>> {
+  // Detection first checks NudeNet is installed; the detector here is stubbed.
+  await markModelsReady(page, ['censor-nudenet'])
   const calls: Array<Record<string, unknown>> = []
   await page.route('**/api/censor/models', (route) => route.fulfill({
     json: {

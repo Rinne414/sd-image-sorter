@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '../fixtures/click-ledger'
+import { markModelsReady } from '../fixtures/model-status'
 
 /**
  * AI detection on a JPEG turned by EXIF orientation (V3.5 #13).
@@ -23,6 +24,8 @@ const ORIENTATION_6_JPEG = Buffer.from(
 const IMAGE = { id: 9451, filename: 'phone-photo.jpg', path: 'L:/phone-photo.jpg', width: 80, height: 40 }
 
 async function stubBackend(page: Page) {
+  // Detection first checks NudeNet is installed; the detector here is stubbed.
+  await markModelsReady(page, ['censor-nudenet'])
   const fulfillJpeg = (route: Route) => route.fulfill({ status: 200, contentType: 'image/jpeg', body: ORIENTATION_6_JPEG })
   await page.route(`**/api/image-thumbnail/${IMAGE.id}**`, fulfillJpeg)
   await page.route(`**/api/image-file/${IMAGE.id}**`, fulfillJpeg)

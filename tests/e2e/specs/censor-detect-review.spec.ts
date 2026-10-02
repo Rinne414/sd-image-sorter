@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '../fixtures/click-ledger'
+import { markModelsReady } from '../fixtures/model-status'
 
 /**
  * Censor editor characterization pins — part 2 of 2 (detect + review conveyor).
@@ -57,6 +58,8 @@ const MODELS_PAYLOAD = {
 }
 
 async function stubCensorBackend(page: Page) {
+  // Detection first checks NudeNet is installed; the detector here is stubbed.
+  await markModelsReady(page, ['censor-nudenet'])
   const fulfillImage = async (route: Route) => {
     await route.fulfill({ status: 200, contentType: 'image/svg+xml', body: MOCK_IMAGE_SVG })
   }

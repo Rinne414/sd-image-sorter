@@ -5179,6 +5179,7 @@ test.describe('Smoke Tests', () => {
   })
 
   test('filtered selection sent to censor should keep a token-backed queue window', async ({ page }) => {
+    await markModelsReady(page, ['censor-nudenet']) // the detector is stubbed
     const visibleImages = [
       buildMockGalleryImage(11, { filename: 'censor-filter-window-1.png' }),
       buildMockGalleryImage(22, { filename: 'censor-filter-window-2.png' }),
@@ -7357,6 +7358,7 @@ test.describe('Smoke Tests', () => {
   })
 
   test('quick auto censor should auto-restore the privacy detector when a general legacy model is selected', async ({ page }) => {
+    await markModelsReady(page, ['censor-nudenet']) // the detector is stubbed
     let detectPayload: any = null
 
     await mockGalleryImages(page, [
@@ -7520,6 +7522,7 @@ test.describe('Smoke Tests', () => {
   })
 
   test('quick auto censor mixed geometry should affect only matched regions instead of the whole image', async ({ page }) => {
+    await markModelsReady(page, ['censor-nudenet']) // the detector is stubbed
     let detectPayload: any = null
     const fulfillImage = async (route: Route) => {
       await route.fulfill({

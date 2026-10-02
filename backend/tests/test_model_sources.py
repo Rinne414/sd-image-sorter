@@ -37,6 +37,8 @@ def make_comfyui_root(path: Path) -> Path:
 
 def test_extra_model_paths_follow_comfyui_loader(tmp_path, monkeypatch):
     monkeypatch.setenv("MS1A_BASE", str(tmp_path / "envbase"))
+    # os.path.expandvars, as ComfyUI calls it: %VAR% on Windows, $VAR elsewhere.
+    env_base = "%MS1A_BASE%" if os.name == "nt" else "${MS1A_BASE}"
     yaml_dir = tmp_path / "ComfyUI"
     yaml_dir.mkdir()
     yaml_path = yaml_dir / "extra_model_paths.yaml"
@@ -51,7 +53,7 @@ def test_extra_model_paths_follow_comfyui_loader(tmp_path, monkeypatch):
                 "         models/LyCORIS",
                 "    unet: models/unet",
                 "envsec:",
-                "    base_path: '%MS1A_BASE%/sub'",
+                f"    base_path: '{env_base}/sub'",
                 "    is_default: true",
                 "    kgen: gguf",
                 "homesec:",
@@ -87,7 +89,7 @@ def test_extra_model_paths_follow_comfyui_loader(tmp_path, monkeypatch):
     assert paths["text_encoders"] == [
         os.path.normpath(os.path.join(os.path.expanduser("~/comfy-home"), "text"))
     ]
-    # %VAR% expands; the section is still just a list of folders.
+    # The variable expands; the section is still just a list of folders.
     assert paths["kgen"] == [
         os.path.normpath(os.path.join(str(tmp_path / "envbase" / "sub"), "gguf"))
     ]

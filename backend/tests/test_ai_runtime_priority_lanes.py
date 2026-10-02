@@ -323,6 +323,7 @@ def test_batch_mask_refinement_does_not_take_the_interactive_lane(scratch_png):
     ``services/censor/sam3_ops.batch_refine_mask`` calls once per item in a
     sequential loop -- so the lane cannot be pinned inside ``_run_segmentation``.
     """
+    pytest.importorskip("torch")  # refine_box runs under torch.no_grad()
     from sam3_refiner import SAM3Refiner
 
     class _Inputs(dict):
@@ -397,6 +398,7 @@ def test_aesthetic_batch_scoring_does_not_take_the_interactive_lane(
     import aesthetic
     from routers import aesthetic as aesthetic_router
 
+    monkeypatch.setattr(aesthetic, "is_available", lambda: True)
     monkeypatch.setattr(aesthetic, "_ensure_loaded", lambda *_a, **_k: None)
 
     def _predict_scores_loaded(_path, **_kwargs):

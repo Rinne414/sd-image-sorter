@@ -260,7 +260,8 @@ def test_a_stale_file_is_logged_once_per_state_not_on_every_refresh(world, caplo
 
     assert len([r for r in caplog.records if str(path) in r.getMessage()]) == 1
 
-    path.write_bytes(b"weights")
+    # Another size: a same-size rewrite can keep the old mtime on a coarse clock.
+    path.write_bytes(b"other weights")
     assert model_external.usable_path("aesthetic-waifu") is None  # changed: new state, logs again
     assert len([r for r in caplog.records if str(path) in r.getMessage()]) == 2
 

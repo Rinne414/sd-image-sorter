@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 import artist_identifier as ai
 
 
@@ -33,7 +35,7 @@ def test_pth_does_not_open_onnx_when_torch_blob_is_not_a_module(tmp_path, monkey
 
     monkeypatch.setitem(__import__("sys").modules, "onnxruntime", _FakeOrt())
 
-    import torch
+    torch = pytest.importorskip("torch")
 
     monkeypatch.setattr(
         torch,

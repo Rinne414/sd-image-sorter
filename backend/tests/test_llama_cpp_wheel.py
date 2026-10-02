@@ -98,6 +98,12 @@ def test_ensure_tipo_group_installs_llama_cpp_from_the_cpu_index(monkeypatch):
         "_import_optional_package",
         lambda *_args: None,
     )
+    # Faked installs import nothing new: report the restart a real one needs.
+    monkeypatch.setattr(
+        optional_dependencies,
+        "_restart_reason_after_install",
+        lambda **_kwargs: optional_dependencies.RESTART_REASON_IMPORT_NEEDS_FRESH_PROCESS,
+    )
 
     def fake_install_cpu_wheel(**_kwargs):
         wheel_calls.append(llama_cpp_wheel.build_pip_install_args())
@@ -125,6 +131,9 @@ def test_ensure_tipo_group_installs_the_cpu_wheel_before_torch(monkeypatch):
     monkeypatch.setattr(optional_dependencies, "_needs_install", lambda *_args: True)
     monkeypatch.setattr(optional_dependencies, "_assert_safe_install_target", lambda *_args: None)
     monkeypatch.setattr(optional_dependencies, "_import_optional_package", lambda *_args: None)
+    monkeypatch.setattr(
+        optional_dependencies, "_restart_reason_after_install", lambda **_kwargs: ""
+    )
     monkeypatch.setattr(
         optional_dependencies,
         "install_packages",

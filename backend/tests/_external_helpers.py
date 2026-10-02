@@ -29,11 +29,13 @@ class ExternalWorld:
 
     def _is_trusted(self, path: object, **_kwargs: Any) -> bool:
         key = os.path.normcase(os.path.normpath(str(path)))
-        return any(
-            key == os.path.normcase(os.path.normpath(root))
-            or key.startswith(os.path.normcase(os.path.normpath(root)) + os.sep)
-            for root in self.trusted
-        )
+        for root in self.trusted:
+            root_key = os.path.normcase(os.path.normpath(root))
+            # A UNC root keeps its backslashes on a POSIX host too.
+            separator = "\\" if model_roots.is_network_path(root) else os.sep
+            if key == root_key or key.startswith(root_key + separator):
+                return True
+        return False
 
     def write(self, rel: str, data: bytes = b"weights") -> Path:
         path = self.root / rel

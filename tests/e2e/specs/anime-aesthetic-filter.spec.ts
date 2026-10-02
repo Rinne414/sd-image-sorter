@@ -42,11 +42,29 @@ async function expectChipsFitTheirPanel(page: Page) {
     const group = document.getElementById('filter-anime-grades')!
     const panel = group.closest('.filter-panel')!.getBoundingClientRect()
     const chips = [...group.querySelectorAll('.filter-choice-card')].map((chip) => chip.getBoundingClientRect())
+    const groupStyle = getComputedStyle(group)
+    const gap = parseFloat(groupStyle.columnGap) || 0
+    const contentRight = group.getBoundingClientRect().right
+      - parseFloat(groupStyle.paddingRight) - parseFloat(groupStyle.borderRightWidth)
     return {
       panelLeft: panel.left,
       panelRight: panel.right,
       chips: chips.map((r) => ({ left: r.left, right: r.right, top: r.top, height: r.height })),
-      rows: new Set(chips.map((r) => Math.round(r.top))).size,
+      // A chip starts a new row only when it would not fit after the one before:
+      // the row count follows the font, the packing does not.
+      earlyWraps: chips.filter((r, i) => i > 0 && r.top > chips[i - 1].top + 1
+        && chips[i - 1].right + gap + r.width <= contentRight + 0.5).length,
+      // Each chip hugs its word (not the 88px cards the other choices use).
+      looseChips: [...group.querySelectorAll<HTMLElement>('.filter-choice-card')].filter((chip) => {
+        const style = getComputedStyle(chip)
+        const range = document.createRange()
+        range.selectNodeContents(chip)
+        const frame = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
+          + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth)
+        // Rects carry the UI scale (large screens), computed styles and offsetWidth do not.
+        const scale = chip.getBoundingClientRect().width / chip.offsetWidth || 1
+        return chip.offsetWidth > range.getBoundingClientRect().width / scale + frame + 1
+      }).length,
       pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       // Each subheading sits as close to its controls as the other one does.
       headingGaps: [...document.querySelectorAll('#filter-modal .anime-aesthetic-heading')].map((heading) => {
@@ -63,7 +81,8 @@ async function expectChipsFitTheirPanel(page: Page) {
     expect(chip.right).toBeLessThanOrEqual(layout.panelRight)
     expect(chip.height).toBeLessThan(48)
   }
-  expect(layout.rows).toBeLessThanOrEqual(2)
+  expect(layout.earlyWraps).toBe(0)
+  expect(layout.looseChips).toBe(0)
   expect(layout.pageOverflow).toBeLessThanOrEqual(0)
 }
 

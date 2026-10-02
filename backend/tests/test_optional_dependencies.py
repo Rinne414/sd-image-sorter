@@ -225,6 +225,9 @@ def test_ensure_group_upgrades_torch_to_release_lock(monkeypatch):
         }[package],
     )
     monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
+    monkeypatch.setattr(
+        optional_dependencies, "_restart_reason_after_install", lambda **kwargs: ""
+    )
 
     result = optional_dependencies.ensure_group("aesthetic")
 
@@ -247,6 +250,9 @@ def test_yolo_group_upgrades_transitive_torch_to_release_lock(monkeypatch):
         ),
     )
     monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
+    monkeypatch.setattr(
+        optional_dependencies, "_restart_reason_after_install", lambda **kwargs: ""
+    )
 
     result = optional_dependencies.ensure_group("yolo")
 

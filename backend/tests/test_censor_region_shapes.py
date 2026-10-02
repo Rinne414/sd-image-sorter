@@ -100,6 +100,7 @@ def _disk_picture() -> Image.Image:
 
 
 def test_fit_traces_the_object_inside_its_box() -> None:
+    pytest.importorskip("cv2")  # the GrabCut trace; without it fit is an ellipse
     (region,), warnings = shapes.reshape(
         [{"box": [100, 100, 240, 240]}], _disk_picture(), "fit"
     )
@@ -172,6 +173,7 @@ def test_detect_returns_ellipses_and_a_mask_built_from_them(disk_on_disk) -> Non
 
 
 def test_detect_fit_traces_the_part_and_grows_it(disk_on_disk) -> None:
+    pytest.importorskip("cv2")  # the GrabCut trace; without it fit is an ellipse
     result = _detect(shape="fit", expand_percent=10)
 
     (region,) = result["detections"]
