@@ -329,6 +329,52 @@ def test_folder_overwrite_respects_host_path_case_rules(
         assert lower_path.read_text(encoding="utf-8") == "lower_tag"
 
 
+def test_a_case_twin_is_blamed_on_the_stems_where_realpath_keeps_the_case(
+    tmp_path: Path, monkeypatch
+):
+    """macOS: realpath keeps the letter case, so ``dup.txt`` matches the claimed
+    ``Dup.txt`` by file identity only. That is still two stems differing in
+    case, not a hard link, and the advice must say so."""
+    from services.tag_export import sidecars
+
+    claimed = tmp_path / "Dup.txt"
+    claimed.write_text("upper_tag", encoding="utf-8")
+    twin = tmp_path / "dup.txt"
+    if not twin.exists():
+        pytest.skip("needs a case-insensitive volume")
+    monkeypatch.setattr(sidecars.os.path, "realpath", lambda path: path)
+    claims = sidecars._output_path_claims(str(claimed), "Dup.png")
+
+    found, owner, kind = sidecars._find_output_owner(str(twin), claims)
+
+    assert (found, owner) == (True, "Dup.png")
+    message = sidecars._in_run_collision_message_for(kind, "dup.txt", owner)
+    assert "same stem" in message and "hard link" not in message
+
+
+def test_a_hard_link_in_other_case_is_still_called_a_hard_link(tmp_path: Path):
+    """Case-sensitive volume: ``dup.txt`` hard-linked to the claimed ``Dup.txt``
+    is two names for one file, so the advice is to unlink, not to rename."""
+    from services.tag_export import sidecars
+
+    claimed = tmp_path / "Dup.txt"
+    claimed.write_text("upper_tag", encoding="utf-8")
+    twin = tmp_path / "dup.txt"
+    if twin.exists():
+        pytest.skip("needs a case-sensitive volume")
+    try:
+        os.link(claimed, twin)
+    except OSError as exc:
+        pytest.skip(f"hard links unavailable: {exc}")
+    claims = sidecars._output_path_claims(str(claimed), "Dup.png")
+
+    found, owner, kind = sidecars._find_output_owner(str(twin), claims)
+
+    assert found is True
+    message = sidecars._in_run_collision_message_for(kind, "dup.txt", owner)
+    assert "hard link" in message and "same stem" not in message
+
+
 def test_beside_image_overwrite_rejects_hardlinked_sidecar_aliases(
     test_client, test_db, tmp_path: Path
 ):

@@ -165,8 +165,32 @@ def _find_output_owner(
     """
     for kind, key in _output_path_identities(path):
         if key in used_output_paths:
+            if kind == _OWNER_MATCH_FILE and _claimed_in_another_case(
+                path, used_output_paths
+            ):
+                kind = _OWNER_MATCH_PATH
             return True, used_output_paths[key], kind
     return False, "", ""
+
+
+def _claimed_in_another_case(path: str, used_output_paths: Dict[str, str]) -> bool:
+    """Whether an earlier claim is this name in other letter case.
+
+    On a case-insensitive volume (macOS, exFAT) ``dup.txt`` is ``Dup.txt``:
+    two stems that differ only in case, not a hard link. ``realpath`` folds
+    that case on Windows but not elsewhere, so it shows up as one file.
+    A real hard link under the other case lists both names in the folder.
+    """
+    folded = _output_path_key(path).casefold()
+    if not any(
+        not key.startswith("file:") and key.casefold() == folded
+        for key in used_output_paths
+    ):
+        return False
+    try:
+        return os.path.basename(path) not in os.listdir(os.path.dirname(path) or ".")
+    except OSError:
+        return False
 
 
 def _in_run_collision_message_for(
