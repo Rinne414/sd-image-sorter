@@ -54,8 +54,16 @@ test.describe.configure({ mode: 'serial' })
  * other. Deliberately does NOT re-run init(): the pins call VLMCaption methods directly.
  */
 async function gotoVlm(page: Page): Promise<void> {
+  // VLMCaption.init() ends with resumeActiveBatch(), which reads the batch
+  // progress once and marks a running batch as running. Under load that read
+  // could land after a test had routed progress to `running: true`, turning
+  // the test's next start into a no-op. Wait for the boot read first.
+  const bootProgress = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === '/api/vlm/caption-batch/progress',
+  )
   await page.goto('/')
   await page.waitForLoadState('domcontentloaded')
+  await bootProgress
   await page.waitForFunction(() => {
     const w = window as any
     return !!w.VLMCaption
