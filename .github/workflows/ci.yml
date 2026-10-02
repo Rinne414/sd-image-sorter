@@ -103,8 +103,13 @@ jobs:
         working-directory: tests/e2e
         run: npm ci
 
+      # macOS keeps its per-user temp under /private/var, which the
+      # trusted-folder guard treats as a system folder; tests that trust a
+      # tmp_path folder need an ordinary one.
       - name: Backend full test suite (macOS)
         working-directory: backend
+        env:
+          TMPDIR: ${{ runner.temp }}
         run: |
           python -m pytest tests/ -q --ignore=tests/test_update_worker.py
 
