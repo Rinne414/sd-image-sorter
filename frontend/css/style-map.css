@@ -42,13 +42,14 @@
 }
 
 /* The status line keeps its (short) words whole at 1366 and the legend takes
-   the rest; its full sentence is the tooltip. The cap is a last resort for
-   a long failure text, where an ellipsis beats a hidden legend. */
+   the rest (so only the legend shrinks); its full sentence is the tooltip.
+   The cap is a last resort for a long failure text, where an ellipsis beats
+   a hidden legend. */
 .stylemap-layout {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    flex: 0 1 auto;
+    flex: 0 0 auto;
     max-width: 44%;
     min-width: 0;
     color: var(--text-2);
@@ -847,7 +848,7 @@
     .stylemap-help ul { gap: 2px; }
     .stylemap-help details { margin-top: 4px; padding-top: 4px; }
     .stylemap-near { padding: 8px 10px; gap: 5px; }
-    .stylemap-near-title { font-size: 12px; }
+    .stylemap-near-title { font-size: 12px; line-height: 1.2; }
     .stylemap-near-row { padding: 2px 4px; }
     .stylemap-near-thumb { width: 32px; height: 32px; }
 }

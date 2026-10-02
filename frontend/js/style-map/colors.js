@@ -27,6 +27,7 @@ export const OTHER_KEY = '__other__';
 const STORAGE_KEY = 'sd-stylemap-color-by';
 const MORE_BUTTON_ROOM = 48; // px kept for the "+N" / "Fewer" button when chips are folded
 const CHIP_GAP = 6;
+const MIN_SQUEEZED_CHIP = 72; // px: swatch, a few letters and the count
 
 export function readColorPreference() {
     try {
@@ -240,7 +241,10 @@ export class ColorLegend {
             this.moreButton.remove();
             this.moreButton = null;
         }
-        chips.forEach((chip) => { chip.hidden = false; });
+        chips.forEach((chip) => {
+            chip.hidden = false;
+            chip.style.maxWidth = '';
+        });
         const width = host.clientWidth;
         if (!width || chips.length === 0) return;
         const widths = chips.map((chip) => chip.offsetWidth);
@@ -258,6 +262,14 @@ export class ColorLegend {
         // The largest prefix whose chips, plus the gap and the button, fit.
         let fits = 0;
         while (fits < chips.length && rowWidth(fits + 1) + CHIP_GAP + room <= width) fits += 1;
+        // Not even one chip fits (a wide system font, long names): the first
+        // one gives up label width (it ellipsizes; its title keeps the name)
+        // rather than leave "+N" alone in an empty row.
+        const squeezed = width - CHIP_GAP - room;
+        if (fits === 0 && squeezed >= MIN_SQUEEZED_CHIP) {
+            chips[0].style.maxWidth = `${squeezed}px`;
+            fits = 1;
+        }
         chips.forEach((chip, index) => { chip.hidden = index >= fits; });
         const hidden = chips.length - fits;
         button.dataset.hidden = String(hidden);

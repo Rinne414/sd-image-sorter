@@ -6554,7 +6554,12 @@ html:has(#view-gallery.active) {
     z-index: 80;
     display: grid;
     gap: 8px;
+    /* As wide as its longest line, but never past the stage edge (the room is
+       measured on open, censor/events.js): with a wide system font or a long
+       filename a long line wraps instead of being cut off. */
+    width: max-content;
     min-width: 230px;
+    max-width: var(--censor-shortcuts-room, none);
     padding: 10px 12px;
     border: 1px solid rgba(var(--accent-rgb), 0.14);
     border-radius: 12px;
@@ -6562,8 +6567,9 @@ html:has(#view-gallery.active) {
     box-shadow: 0 18px 38px rgba(0, 0, 0, 0.42);
 }
 
-#view-censor .censor-shortcuts-popover .status-item {
-    white-space: nowrap !important;
+#view-censor .censor-shortcuts-popover kbd {
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 
 #view-censor .zoom-controls-v2 {

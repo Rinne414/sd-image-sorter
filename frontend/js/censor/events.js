@@ -98,6 +98,21 @@ function toggleCensorHelp(button) {
     button.setAttribute('aria-expanded', String(!help.hidden));
 }
 
+// Space kept between the shortcut list and the stage edge.
+const CENSOR_SHORTCUTS_EDGE_GAP = 8;
+
+/** Before the shortcut list opens: the room from its button to the stage edge. */
+function fitCensorShortcutsPopover(event) {
+    const disclosure = event.currentTarget.closest('.censor-shortcuts-disclosure');
+    const stage = disclosure?.closest('.censor-main-v2');
+    const popover = disclosure?.querySelector('.censor-shortcuts-popover');
+    if (!stage || !popover) return;
+    const room = stage.getBoundingClientRect().right
+        - disclosure.getBoundingClientRect().left
+        - CENSOR_SHORTCUTS_EDGE_GAP;
+    popover.style.setProperty('--censor-shortcuts-room', `${Math.floor(room)}px`);
+}
+
 /** Empty queue: drop every per-image state and blank the canvas. */
 function resetToEmptyCensorQueue() {
     CensorState.queue = [];
@@ -349,6 +364,8 @@ function bindEvents() {
     $('#btn-close-save-options')?.addEventListener('click', () => $('#save-options-modal')?.classList.remove('visible'));
     $('#btn-cancel-save-options')?.addEventListener('click', () => $('#save-options-modal')?.classList.remove('visible'));
     $('#btn-confirm-save-options')?.addEventListener('click', confirmAndSaveAll);
+
+    $('.censor-shortcuts-disclosure > summary')?.addEventListener('click', fitCensorShortcutsPopover);
 
     // New button handlers
     $('#btn-auto-detect-current')?.addEventListener('click', () => {
