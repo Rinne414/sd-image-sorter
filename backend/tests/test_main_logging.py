@@ -5,6 +5,8 @@ import logging
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
@@ -196,3 +198,14 @@ def test_support_open_log_returns_path_when_file_manager_is_unavailable(test_cli
     assert data["path_redacted"] == "<PATH>"
     assert "No OS file manager" in data["message"]
     assert calls == []
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/private/var/folders/ab/T/backend.log", "/private/tmp/sd-image-sorter/private.png"],
+)
+def test_support_log_redaction_covers_resolved_macos_paths(path):
+    # macOS spells /var and /tmp as /private/var and /private/tmp once resolved.
+    import app_diagnostics
+
+    assert app_diagnostics._redact_support_log_text(f"Opened {path}") == "Opened <PATH>"

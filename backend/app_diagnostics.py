@@ -33,7 +33,8 @@ def _redact_support_log_text(text: str) -> str:
     """Redact likely local filesystem paths before exposing logs to the browser."""
     field_boundary = r"(?=(?:\s+[-A-Za-z0-9_]+[:=])|[\r\n\"'<>]|$)"
     text = re.sub(rf"[A-Za-z]:\\.*?{field_boundary}", "<PATH>", text)
-    text = re.sub(rf"(?<!\w)/(?:mnt|home|Users|var|tmp|Volumes|media)/.*?{field_boundary}", "<PATH>", text)
+    # /private: macOS spells /var and /tmp as /private/var and /private/tmp once resolved.
+    text = re.sub(rf"(?<!\w)/(?:mnt|home|Users|var|tmp|private|Volumes|media)/.*?{field_boundary}", "<PATH>", text)
     return text
 
 
