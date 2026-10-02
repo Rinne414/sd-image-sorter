@@ -50,7 +50,7 @@
 
 ## Validation / 验证
 
-TBD (lead fills in)
+Backend 8,425 passed, 11 skipped (93% line coverage); desktop E2E 1,225 tests: 1,219 passed, 0 failed, 6 skipped; click coverage 48.8%; ruff, tsc, lock files, dependency audit and secret scan clean; release package QA passed; the Windows portable package was extracted and booted (version 3.6.0). / 后端 8,425 个通过、11 个跳过（行覆盖率 93%）；桌面 E2E 1,225 项：1,219 通过、0 失败、6 跳过；点击覆盖率 48.8%；ruff、tsc、锁定文件、依赖审计和密钥扫描均通过；发布包检查通过；Windows 便携版解压后实际启动（版本 3.6.0）。
 
 ---
 
@@ -72,4 +72,13 @@ TBD (lead fills in)
 
 ## Checksums
 
-TBD (filled after packaging)
+| Asset | SHA-256 |
+|---|---|
+| `sd-image-sorter-v3.6.0-windows-portable.zip` | `31ececb859578222d53726a0e3c356b852c8d65fdca6a8992db572e7eee9b2f0` |
+| `sd-image-sorter-v3.6.0-app-patch.zip` | `91b357934fb926718a46d275744b466435e89f6f7ffe889eff4761ed1563d72b` |
+| `sd-image-sorter-v3.6.0-linux.tar.gz` | `14bfa448e18cb17592935fcf7231e6eea9e95f240071f0ffb4a6df885d15f93e` |
+| `sd-image-sorter-v3.6.0-linux-portable-x86_64.tar.gz` | `83d258c9b8ad619b91461562cc5378f53f7c1785c40761da768a119dc0afa652` |
+| `sd-image-sorter-v3.6.0-linux-portable-aarch64.tar.gz` | `3c489a4f6878eda54b38b8f0fc67667c9885621b218b81e2eb53e05d14301316` |
+| `sd-image-sorter-v3.6.0-release-manifest.json` | `0a1420349455001ce8003c0c5637013cf5887c5c1ac7dfbcc9bc2fac1dff12bc` |
+
+The manifest contains the five archive checksums; its own checksum is recorded above. / manifest 内含五个归档校验和，其自身校验和记录于上表。
