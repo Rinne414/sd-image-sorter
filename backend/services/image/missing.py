@@ -27,6 +27,7 @@ them back if the files reappear.
 """
 
 import logging
+import ntpath
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -77,6 +78,19 @@ def _has_any_entry(candidate: Path) -> bool:
         return False
 
 
+def claimed_folder(raw_path: str) -> str:
+    """The folder a row says it lives in, split the way its path was written.
+
+    A Windows path read on a POSIX host has no ``/`` to split on, so pathlib
+    would call its folder ``.`` (the working directory); split it on its own
+    backslashes instead, so each folder keeps its own group.
+    """
+    text = str(raw_path)
+    if os.name != "nt" and "\\" in text and ntpath.splitdrive(text)[0]:
+        return ntpath.dirname(text)
+    return str(Path(text).parent)
+
+
 def classify_missing_location(raw_path: str) -> tuple:
     """Return ``(reason, location)`` for a row whose file is not on disk.
 
@@ -100,9 +114,14 @@ def classify_missing_location(raw_path: str) -> tuple:
     except (TypeError, ValueError):
         return REASON_LOCATION_UNREACHABLE, ""
 
-    parent = path.parent
-    location = str(parent)
+    location = claimed_folder(raw_path)
+    if not path.is_absolute():
+        # Rows are stored with absolute paths. A relative one, or a Windows
+        # path read on another OS, would be judged against the working
+        # directory, which is not where it lives.
+        return REASON_LOCATION_UNREACHABLE, location
 
+    parent = path.parent
     if _is_readable_dir(parent):
         # The folder is right there. Only trust it if it still holds something,
         # so an unmounted mount point is not mistaken for an emptied folder.
@@ -142,7 +161,7 @@ class MissingFilesMixin:
 
         for row in db.get_unreadable_images_with_user_work():
             raw_path = row.get("path") or ""
-            parent_key = str(Path(raw_path).parent) if raw_path else ""
+            parent_key = claimed_folder(raw_path) if raw_path else ""
             if parent_key not in probed:
                 probed[parent_key] = classify_missing_location(raw_path)
             reason, location = probed[parent_key]
