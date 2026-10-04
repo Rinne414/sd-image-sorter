@@ -158,6 +158,18 @@ function renderCensorReviewRegions() {
     });
 }
 
+// "Reviewing N / M" follows the active picture's place in the queue. The
+// queue render calls this too, so a reorder never leaves a stale number.
+function updateCensorReviewProgress() {
+    const progressEl = document.getElementById('censor-review-progress');
+    if (!progressEl) return;
+    const ids = getCensorReviewOrderedIds();
+    const idx = CensorState.activeId != null ? ids.indexOf(CensorState.activeId) : -1;
+    progressEl.textContent = (ids.length > 0 && idx >= 0)
+        ? censorT('censor.reviewProgress', { current: idx + 1, total: ids.length }, 'Reviewing {current} / {total}')
+        : '— / —';
+}
+
 function updateCensorReviewPanel() {
     const ids = getCensorReviewOrderedIds();
     const total = ids.length;
@@ -174,12 +186,7 @@ function updateCensorReviewPanel() {
     }
     const hasRegions = CensorReviewState.detectedForId === CensorState.activeId && CensorReviewState.regions.length > 0;
 
-    const progressEl = document.getElementById('censor-review-progress');
-    if (progressEl) {
-        progressEl.textContent = (total > 0 && hasActive)
-            ? censorT('censor.reviewProgress', { current: idx + 1, total }, 'Reviewing {current} / {total}')
-            : '— / —';
-    }
+    updateCensorReviewProgress();
 
     const prevBtn = document.getElementById('btn-review-prev');
     const nextBtn = document.getElementById('btn-review-next');

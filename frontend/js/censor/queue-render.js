@@ -57,6 +57,8 @@ function renderQueue() {
         CensorState.pendingActiveId = null;
     }
 
+    if (typeof updateCensorReviewProgress === 'function') updateCensorReviewProgress();
+
     // Handle empty state
     if (CensorState.queue.length === 0) {
         CensorState.pendingActiveId = null;
