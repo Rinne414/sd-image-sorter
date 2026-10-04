@@ -69,11 +69,13 @@ async function initManualSort() {
             input.value = savedFolder;
             ManualSortState.folders[input.dataset.key] = savedFolder;
         }
+        if (typeof showFolderPathEnd === 'function') showFolderPathEnd(input);
 
         input.addEventListener('change', () => {
             ManualSortState.folders[input.dataset.key] = input.value;
             localStorage.setItem(`sort-folder-${input.dataset.key}`, input.value);
         });
+        input.addEventListener('blur', () => showFolderPathEnd(input));
     });
 
     // Browse folder buttons

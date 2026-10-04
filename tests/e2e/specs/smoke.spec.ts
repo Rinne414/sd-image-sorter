@@ -4638,6 +4638,50 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#autosep-preview .stat-number')).toHaveText('0')
   })
 
+  test('auto-separate copy asks with a plain button and the banner says what was done', async ({ page }) => {
+    await mockImageAsset(page, 1)
+    await seedAutoSepTagFilter(page, ['partial_match'])
+    await page.route('**/api/images?**', async (route) => {
+      await route.fulfill({
+        json: {
+          images: [
+            { id: 1, filename: 'copy-1.png', path: 'L:/Antigravitiy code/sd-image-sorter/test-data/copy-1.png' },
+            { id: 2, filename: 'copy-2.png', path: 'L:/Antigravitiy code/sd-image-sorter/test-data/copy-2.png' },
+          ],
+          total: 2,
+          has_more: false,
+        },
+      })
+    })
+    await page.route('**/api/batch-move', async (route) => {
+      await route.fulfill({ json: { status: 'started', total: 2, count: 2 } })
+    })
+    await page.route('**/api/batch-move/progress', async (route) => {
+      await route.fulfill({
+        json: { status: 'done', current: 2, total: 2, moved: 2, errors: 0, operation: 'copy', message: 'Completed!', recent_errors: [] },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await openSortingSubView(page, 'autosep')
+    const actionPanel = page.locator('#autosep-action-mode-panel')
+    await actionPanel.locator('input[data-autosep-operation-mode][value="copy"]').check({ force: true })
+    await page.locator('#btn-preview-autosep').click()
+    await expect(page.locator('#autosep-preview .stat-number')).toHaveText('2')
+    await page.locator('#autosep-destination').fill(MOCK_AUTOSEP_DESTINATION)
+    await page.locator('#btn-execute-autosep').click()
+
+    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+    await expect(page.locator('#btn-confirm-ok')).not.toHaveClass(/danger/)
+    await page.locator('#btn-confirm-ok').click()
+
+    const banner = page.locator('#pipeline-next-step')
+    await expect(banner).toBeVisible()
+    await expect(banner).toContainText('Copied 2 images')
+    await expect(banner).toContainText('What next?')
+  })
+
   test('auto-separate progress should reject missing or malformed error details', async ({ page }) => {
     await openMainPage(page)
     await openSortingSubView(page, 'autosep')

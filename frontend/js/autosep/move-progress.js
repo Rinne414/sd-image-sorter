@@ -304,6 +304,7 @@ async function pollAutosepMoveProgress(expectedTotal, destination) {
                         hideAutosepMoveProgress();
                     }
 
+                    let doneSummary = '';
                     if (movedCount > 0 && errorCount > 0) {
                         window.App.showToast(
                             _formatAutoSepI18n(
@@ -318,16 +319,14 @@ async function pollAutosepMoveProgress(expectedTotal, destination) {
                             'warning'
                         );
                     } else if (movedCount > 0) {
-                        window.App.showToast(
-                            _formatAutoSepI18n(
-                                operationMode === 'copy' ? 'autosep.copySuccess' : 'autosep.moveSuccess',
-                                operationMode === 'copy' ? 'Copied {count} images{destination}' : 'Moved {count} images{destination}',
-                                {
-                                count: movedCount,
-                                destination: destinationLabel,
-                                }
-                            ),
-                            'success'
+                        // Said once, in the banner below, which stays until the user moves on.
+                        doneSummary = _formatAutoSepI18n(
+                            operationMode === 'copy' ? 'autosep.copySuccess' : 'autosep.moveSuccess',
+                            operationMode === 'copy' ? 'Copied {count} images{destination}' : 'Moved {count} images{destination}',
+                            {
+                            count: movedCount,
+                            destination: destinationLabel,
+                            }
                         );
                     } else if (errorCount > 0) {
                         window.App.showToast(
@@ -366,7 +365,9 @@ async function pollAutosepMoveProgress(expectedTotal, destination) {
                         // the destination). Reuses window.App.showPipelineNextStep.
                         window.App?.showPipelineNextStep?.({
                             icon: 'i-folders',
-                            title: _formatAutoSepI18n('flow.sortDoneTitle', 'Sorting done. What next?'),
+                            title: doneSummary
+                                ? _formatAutoSepI18n('flow.sortSummaryTitle', '{summary}. What next?', { summary: doneSummary })
+                                : _formatAutoSepI18n('flow.sortDoneTitle', 'Sorting done. What next?'),
                             actions: [
                                 { icon: '🔳', label: _formatAutoSepI18n('nav.censor', 'Censor Edit'), action: 'view:censor' },
                                 { icon: '📦', label: _formatAutoSepI18n('nav.dataset', 'Dataset'), action: 'view:dataset' },

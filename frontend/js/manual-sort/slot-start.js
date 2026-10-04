@@ -379,8 +379,31 @@ function restoreFolderInputs() {
     document.querySelectorAll('.folder-path-input').forEach(input => {
         const key = input.dataset.key;
         input.value = key ? (ManualSortState.folders[key] || '') : '';
+        showFolderPathEnd(input);
     });
     updateFolderNames();
+}
+
+// A long path shows its start (C:/Users/me/AppData/Loc...) in a narrow field,
+// which is the part that says nothing; scroll it to the folder name and keep
+// the whole path in the tooltip.
+function showFolderPathEnd(input) {
+    input.title = input.value;
+    if (document.activeElement === input) return;
+    if (!input.clientWidth) {
+        // Filled while the Sort page is hidden: scroll once the field has a size.
+        if (!input._pathEndObserver && typeof ResizeObserver === 'function') {
+            input._pathEndObserver = new ResizeObserver(() => {
+                if (!input.clientWidth) return;
+                input._pathEndObserver.disconnect();
+                input._pathEndObserver = null;
+                showFolderPathEnd(input);
+            });
+            input._pathEndObserver.observe(input);
+        }
+        return;
+    }
+    window.requestAnimationFrame(() => { input.scrollLeft = input.scrollWidth; });
 }
 
 function syncPreviewImages(imageIds = [], currentImage = null) {

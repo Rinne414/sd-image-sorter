@@ -259,6 +259,7 @@ window.I18nLang_zhCN = {
     'flow.tagDoneTitle': '已标记 {count} 张图片，接下来做什么？',
     'flow.tagDoneTitleZero': '标记完成，接下来做什么？',
     'flow.sortDoneTitle': '分拣完成，接下来做什么？',
+    'flow.sortSummaryTitle': '{summary}，接下来做什么？',
     'flow.ctaTag': 'AI 标记',
     'flow.ctaCreateCollection': '建立同名合集',
     'flow.collectionCreatedToast': '合集「{name}」已建立，加入 {count} 张图片。',

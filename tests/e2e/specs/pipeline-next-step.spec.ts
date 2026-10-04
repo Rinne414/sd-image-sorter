@@ -63,3 +63,17 @@ test('a model download asks with a plain button, not the red destructive one', a
   await expect(page.locator('#btn-confirm-ok')).not.toHaveClass(/danger/)
   await page.locator('#btn-confirm-cancel').click()
 })
+
+test('a long slot folder shows its folder name, with the full path as tooltip', async ({ page }) => {
+  const long = 'C:/Users/me/AppData/Local/Temp/claude/some/very/deep/place/sorted-keepers'
+  await page.evaluate((path) => localStorage.setItem('sort-folder-w', path), long)
+  await page.reload()
+  await page.waitForFunction(() => document.documentElement.dataset.appReady === '1')
+  await page.evaluate(() => (window as any).App.switchView('sorting'))
+  await page.evaluate(() => (window as any)._switchSortingSub?.('manual'))
+  const field = page.locator('.folder-path-input[data-key="w"]')
+  await expect(field).toBeVisible()
+  await expect(field).toHaveValue(long)
+  await expect(field).toHaveAttribute('title', long)
+  await expect.poll(() => field.evaluate((input: HTMLInputElement) => input.scrollLeft)).toBeGreaterThan(0)
+})

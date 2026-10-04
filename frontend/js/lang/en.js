@@ -256,6 +256,7 @@ window.I18nLang_en = {
     'flow.tagDoneTitle': 'Tagged {count} images. What next?',
     'flow.tagDoneTitleZero': 'Tagging complete. What next?',
     'flow.sortDoneTitle': 'Sorting done. What next?',
+    'flow.sortSummaryTitle': '{summary}. What next?',
     'flow.ctaTag': 'Tag with AI',
     'flow.ctaCreateCollection': 'Create collection',
     'flow.collectionCreatedToast': 'Collection "{name}" created with {count} images.',
