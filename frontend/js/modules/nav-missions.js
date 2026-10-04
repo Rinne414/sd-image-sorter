@@ -285,8 +285,43 @@
         });
     }
 
+    // The Gallery's batch bar leads with the step the mission asks for next:
+    // LoRA sends the pick to the Dataset Maker, Pixiv to Censor Edit. Anything
+    // else leads with Move. The Dataset Maker button lives in the More menu
+    // until promoted; it is moved, never copied, so its handler stays bound.
+    const ACTION_BAR_PRIMARY = { lora: 'btn-send-selection-to-dataset-maker', pixiv: 'btn-send-to-censor' };
+    const ACTION_BAR_LEADERS = ['btn-move-selected', 'btn-send-to-censor', 'btn-send-selection-to-dataset-maker'];
+
+    function syncActionBar(missionKey) {
+        const buttons = document.querySelector('#gallery-action-bar .gallery-action-bar-buttons');
+        const menu = document.getElementById('gallery-action-more-menu');
+        const dataset = document.getElementById('btn-send-selection-to-dataset-maker');
+        const move = document.getElementById('btn-move-selected');
+        if (!buttons || !menu || !dataset || !move) return;
+
+        const primaryId = ACTION_BAR_PRIMARY[missionKey] || 'btn-move-selected';
+        if (primaryId === dataset.id) {
+            if (dataset.parentElement !== buttons) buttons.insertBefore(dataset, buttons.firstElementChild);
+        } else if (dataset.parentElement !== menu) {
+            const copy = document.getElementById('btn-copy-selected');
+            menu.insertBefore(dataset, copy ? copy.nextSibling : menu.firstChild);
+        }
+        ACTION_BAR_LEADERS.forEach((id) => {
+            const button = document.getElementById(id);
+            if (!button) return;
+            const isPrimary = id === primaryId;
+            const inBar = button.parentElement === buttons;
+            button.classList.toggle('btn-primary', isPrimary);
+            button.classList.toggle('btn-secondary', !isPrimary && inBar);
+            button.classList.toggle('btn-ghost', !isPrimary && !inBar);
+            // The promoted button leads the row; the rest keep their order.
+            button.style.order = isPrimary ? '-1' : '';
+        });
+    }
+
     function apply() {
         const missionKey = activeMission();
+        syncActionBar(missionKey);
         orderTabs(baseTabs());
         const visible = missionKey ? MISSIONS[missionKey].tabs.slice() : baseTabs();
         const active = currentView();
