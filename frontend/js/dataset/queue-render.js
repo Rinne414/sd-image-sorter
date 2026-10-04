@@ -414,6 +414,9 @@
         if (clearBtn) clearBtn.hidden = this.imageIds.length === 0;
         this._syncTriggerQuickfillButton?.();
         if (DM._refreshExportPreview) DM._refreshExportPreview();
+        // Every membership change passes through here, including flows that
+        // send no dataset:changed event; keep the export header's count true.
+        window.DatasetEstimator?.refresh?.();
     };
 
     DM._renderImportGallery = function () {

@@ -218,6 +218,9 @@
         this._updateExportEnabled();
         this._setActive(snapshot.id);
         this._saveSession();
+        // The drop announced that the image left; announce its return so the
+        // export header, review console and caches count it again.
+        window.dispatchEvent(new CustomEvent('dataset:changed', { detail: { added: snapshot.id } }));
         this._toast?.(
             this._t('dataset.undidReviewDrop', 'Restored last dropped image'),
             'info',
