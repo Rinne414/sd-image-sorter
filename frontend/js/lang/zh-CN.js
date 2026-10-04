@@ -2656,7 +2656,7 @@ window.I18nLang_zhCN = {
     'save.filterPendingTitle': '画面上的调整只是预览',
     'save.filterPendingBody': '还没应用的调整不会保存进图片。要保存，请先在「调整」里点「当前 / 已选 / 全部」。',
     'save.filterPendingApply': '先应用到这张图',
-    'censor.filterPreviewBadge': '滤镜预览中：在「调整」里点「当前 / 已选 / 全部」才会写进图片',
+    'censor.filterPreviewBadge': '预览中：点「当前 / 已选 / 全部」才会写进图片',
     'settings.outputRootTitle': '保存位置',
     'settings.outputRootCurrent': '保存文件夹留空时，文件存到 {path}',
     'settings.outputRootPlaceholder': '留空 = {path}',

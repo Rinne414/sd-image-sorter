@@ -2480,7 +2480,7 @@ window.I18nLang_en = {
     'save.filterPendingTitle': 'The Adjust filters on screen are only a preview',
     'save.filterPendingBody': 'Saving does not include them until you apply them (Current / Selected / All on the Adjust tab).',
     'save.filterPendingApply': 'Apply to this picture first',
-    'censor.filterPreviewBadge': 'Filter preview: press Current / Selected / All on the Adjust tab to write it into the picture',
+    'censor.filterPreviewBadge': 'Preview only: press Current / Selected / All to apply it',
     'settings.outputRootTitle': 'Where saves go',
     'settings.outputRootCurrent': 'Saves with an empty folder field go to {path}',
     'settings.outputRootPlaceholder': 'Empty = {path}',
