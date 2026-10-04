@@ -240,7 +240,7 @@ body.entry-active {
 .entry-version {
     font-family: var(--font-mono);
     font-size: var(--fs-footnote);
-    color: rgba(var(--accent-rgb), 0.4);
+    color: rgba(var(--accent-rgb), 0.65);
     margin-left: 10px;
 }
 
@@ -251,7 +251,9 @@ body.entry-active {
     gap: 18px;
     font-family: var(--font-mono);
     font-size: var(--fs-footnote);
-    color: rgba(var(--accent-rgb), 0.45);
+    /* Readable over a bright cover photo (walkthrough 2026-10-04). */
+    color: rgba(var(--accent-rgb), 0.8);
+    text-shadow: 0 1px 3px rgba(19, 19, 19, 0.9), 0 0 10px rgba(19, 19, 19, 0.6);
 }
 
 .entry-system .sys-accent {
@@ -1086,7 +1088,7 @@ body.entry-active {
     width: 100%;
     font-family: var(--font-mono);
     font-size: var(--fs-footnote);
-    color: rgba(var(--accent-rgb), 0.75);
+    color: rgba(var(--accent-rgb), 0.92);
     text-shadow: 0 1px 3px rgba(19, 19, 19, 0.9), 0 0 12px rgba(19, 19, 19, 0.7);
 }
 
