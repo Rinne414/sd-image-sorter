@@ -484,6 +484,21 @@
         list.replaceChildren();
         STATE.items.forEach((item, index) => list.appendChild(buildRow(item, index)));
         renderStatus();
+        syncNamingFields();
+    }
+
+    // Censor Edit names replace the numbered names, so prefix / start / digits
+    // do nothing then; say so instead of leaving them looking active.
+    function syncNamingFields() {
+        const censorNames = useCensorNames();
+        ['pub-prefix', 'pub-start', 'pub-pad'].forEach((id) => {
+            const field = $(id);
+            if (!field) return;
+            field.disabled = censorNames;
+            field.title = censorNames
+                ? t('pub.namesFromCensorHint', 'The file names from Censor Edit are used, so prefix and numbering do not apply.')
+                : '';
+        });
     }
 
     // ------------------------------------------------------------------
@@ -496,7 +511,7 @@
         return t('pub.metadataStrippedNote', 'generation info removed');
     }
 
-    function renderExportResult(result) {
+    function renderExportResult(result, { leftOut = 0 } = {}) {
         const box = $('pub-result');
         box.replaceChildren();
         box.hidden = false;
@@ -522,6 +537,10 @@
         if (result.caption_file) {
             box.appendChild(makeEl('div', 'pub-result-line',
                 '📝 ' + t('pub.captionWritten', 'Caption saved as {name}', { name: result.caption_file })));
+        }
+        if (leftOut > 0) {
+            box.appendChild(makeEl('div', 'pub-result-line pub-result-warn',
+                t('pub.leftOutUncensored', '{count} picture(s) without a censored version were left out.', { count: leftOut })));
         }
         if (result.skipped_existing.length) {
             box.appendChild(makeEl('div', 'pub-result-line pub-result-warn',
@@ -585,17 +604,20 @@
         try {
             watermark = currentWatermark();
         } catch (err) {
-            showToast(t('pub.exportFailed', 'Export failed: {error}', {
-                error: String(err && err.message || err),
-            }), 'warning');
+            showToast(String(err && err.message || err), 'warning');
+            $('pub-watermark-text')?.focus();
             return;
         }
         let exportItems = STATE.items;
+        let leftOut = 0;
         const uncensored = STATE.items.filter((item) => !item.useCensored);
         if (uncensored.length) {
             const choice = await askAboutUncensored(uncensored);
             if (choice === 'cancel') return;
-            if (choice === 'skip') exportItems = STATE.items.filter((item) => item.useCensored);
+            if (choice === 'skip') {
+                exportItems = STATE.items.filter((item) => item.useCensored);
+                leftOut = uncensored.length;
+            }
         }
         const metadataOption = currentMetadataOption();
         STATE.exporting = true;
@@ -629,7 +651,7 @@
                 return;
             }
             const result = await response.json();
-            renderExportResult(result);
+            renderExportResult(result, { leftOut });
             if (result.success && result.exported.length) {
                 const censoredCount = result.exported.filter((entry) => entry.used_censored).length;
                 showToast(t('pub.exportDoneDetail',

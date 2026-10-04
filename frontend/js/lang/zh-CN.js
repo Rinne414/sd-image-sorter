@@ -2662,6 +2662,8 @@ window.I18nLang_zhCN = {
     'settings.outputRootSaved': '保存位置已更新',
     'settings.outputRootLoadFailed': '读取保存位置失败。',
     'pub.folderDefault': '留空 = {path}',
+    'pub.namesFromCensorHint': '正在用打码页改好的文件名，这里的前缀和编号不会生效。',
+    'pub.leftOutUncensored': '有 {count} 张没有打码版的图没导出。',
     'pub.openFolder': '打开文件夹',
     'pub.openFolderFailed': '打不开这个文件夹',
     'save.uneditedCount': '队列里有 {count} 张还没打码',

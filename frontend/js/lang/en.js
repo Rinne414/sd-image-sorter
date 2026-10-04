@@ -2486,6 +2486,8 @@ window.I18nLang_en = {
     'settings.outputRootSaved': 'Save folder updated',
     'settings.outputRootLoadFailed': 'Could not read the save folder.',
     'pub.folderDefault': 'Empty = {path}',
+    'pub.namesFromCensorHint': 'The file names from Censor Edit are used, so prefix and numbering do not apply.',
+    'pub.leftOutUncensored': '{count} picture(s) without a censored version were left out.',
     'pub.openFolder': 'Open folder',
     'pub.openFolderFailed': 'Could not open the folder',
     'save.uneditedCount': '{count} image(s) in the queue have no censoring',
