@@ -61,7 +61,7 @@ class PublishWatermarkSettings(BaseModel):
 
 class PublishExportRequest(BaseModel):
     items: List[PublishExportItem] = Field(default_factory=list, description="Ordered set; position = publish index")
-    output_folder: str
+    output_folder: str = Field(default="", description="Blank = the built-in output/publish folder")
     name_prefix: str = ""
     start_index: int = Field(default=1, ge=0)
     pad_width: int = Field(default=2, ge=publish_service.MIN_PAD_WIDTH, le=publish_service.MAX_PAD_WIDTH)

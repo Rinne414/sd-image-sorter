@@ -329,6 +329,27 @@ test('workbench renders pairs, drag reorders, and exports through the UI', async
   const censoredSource = path.join(fixtureRoot, 'src', 'v350-pub-2_censored.png')
   expect(inspectImage(path.join(outDir, 'set_01.png')).pixels).toBe(inspectImage(censoredSource).pixels)
 
+  // "Open folder" selects the first written file (no real file manager in tests).
+  const reveals: string[] = []
+  await page.route('**/api/output-folders/reveal', async (route) => {
+    reveals.push((route.request().postDataJSON() as { path: string }).path)
+    await route.fulfill({ json: { status: 'ok' } })
+  })
+  await page.locator('.pub-result-open').click()
+  await expect.poll(() => reveals.length).toBe(1)
+  expect(path.resolve(path.dirname(reveals[0])).toLowerCase()).toBe(path.resolve(outDir).toLowerCase())
+
+  // An empty folder exports into the program's output/publish (owner 2026-10-04).
+  await page.locator('#pub-folder').fill('')
+  const placeholder = await page.locator('#pub-folder').getAttribute('placeholder')
+  expect(placeholder).toMatch(/^Empty = .*output.publish$/)
+  const builtinPublish = String(placeholder).replace(/^Empty = /, '')
+  await page.locator('#pub-prefix').fill('blank_')
+  await page.locator('#btn-pub-export').click()
+  await page.locator('#btn-pub-uncensored-include').click()
+  await expect(page.locator('.pub-result-line.pub-result-ok')).toContainText(builtinPublish)
+  await expect.poll(() => fsSync.existsSync(path.join(builtinPublish, 'blank_01.png'))).toBe(true)
+
   // Watermark is applied only to the publish copy, never to the selected
   // library source. The interaction stays in the same workbench flow.
   const watermarkOut = path.join(fixtureRoot, 'out-ui-watermark')

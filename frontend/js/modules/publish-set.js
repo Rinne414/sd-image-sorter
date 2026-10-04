@@ -295,6 +295,34 @@
         return ($('pub-prefix').value || '').trim() + numberingFor(position) + ext;
     }
 
+    async function revealExportedFile(path) {
+        try {
+            const response = await fetch('/api/output-folders/reveal', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path }),
+            });
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                showToast(body.detail || t('pub.openFolderFailed', 'Could not open the folder'), 'warning');
+            }
+        } catch (err) {
+            showToast(String(err && err.message || err), 'warning');
+        }
+    }
+
+    // The empty folder field exports into output/publish; say where that is.
+    async function refreshDefaultFolderPlaceholder() {
+        try {
+            const response = await fetch('/api/output-folders');
+            if (!response.ok) return;
+            const data = await response.json();
+            if (data && data.folders && data.folders.publish) {
+                $('pub-folder').placeholder = t('pub.folderDefault', 'Empty = {path}', { path: data.folders.publish });
+            }
+        } catch (err) { /* the placeholder is only a hint */ }
+    }
+
     function makeEl(tag, className, text) {
         const node = document.createElement(tag);
         if (className) node.className = className;
@@ -477,6 +505,12 @@
                 count: result.exported.length, folder: result.output_folder,
             }) + ' · ' + metadataSummary(result.metadata_option));
         box.appendChild(summary);
+        if (result.reveal_path) {
+            const reveal = makeEl('button', 'btn btn-ghost btn-small pub-result-open', t('pub.openFolder', 'Open folder'));
+            reveal.type = 'button';
+            reveal.addEventListener('click', () => revealExportedFile(result.reveal_path));
+            summary.appendChild(reveal);
+        }
         result.exported.forEach((entry) => {
             const variant = entry.used_censored
                 ? t('pub.resultCensored', 'censored')
@@ -544,12 +578,8 @@
 
     async function runExport() {
         if (!STATE.items.length || STATE.exporting) return;
+        // An empty folder is allowed: the server exports into output/publish.
         const folder = ($('pub-folder').value || '').trim();
-        if (!folder) {
-            showToast(t('pub.folderRequired', 'Choose an output folder first'), 'warning');
-            $('pub-folder').focus();
-            return;
-        }
         saveSettings();
         let watermark;
         try {
@@ -637,6 +667,7 @@
         const modal = $('publish-set-modal');
         if (!modal) return;
         loadSettings();
+        refreshDefaultFolderPlaceholder();
         modal.classList.add('visible');
         $('pub-result').hidden = true;
         $('pub-result').replaceChildren();

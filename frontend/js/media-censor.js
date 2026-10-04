@@ -49,8 +49,35 @@
 
         open() {
             this.init();
+            this._restoreFolders();
             byId('media-censor-modal')?.classList.add('visible');
             byId('media-censor-folder')?.focus();
+        },
+
+        // The last source and save folders come back once per page load; an
+        // empty save folder stays empty (= the video-censor folder in the
+        // output root, which Settings can move), and a field cleared during
+        // this visit is not refilled.
+        _restoreFolders() {
+            if (this._foldersRestored) return;
+            this._foldersRestored = true;
+            const source = byId('media-censor-folder');
+            const output = byId('media-censor-output');
+            try {
+                if (output && !output.value.trim()) output.value = localStorage.getItem('media_censor_output_folder') || '';
+                const savedSource = localStorage.getItem('media_censor_source_folder') || '';
+                if (source && !source.value.trim() && savedSource) {
+                    source.value = savedSource;
+                    this.list();
+                }
+            } catch (err) { /* storage can be unavailable; the fields just start empty */ }
+        },
+
+        _rememberFolders(sourceFolder, outputFolder) {
+            try {
+                localStorage.setItem('media_censor_source_folder', sourceFolder);
+                localStorage.setItem('media_censor_output_folder', outputFolder);
+            } catch (err) { /* not remembering is harmless */ }
         },
 
         close() {
@@ -134,12 +161,14 @@
             if (['nudenet', 'both'].includes(detection.model_type) && typeof window.ensureFeatureModel === 'function') {
                 await window.ensureFeatureModel('censor-nudenet', { label: 'NudeNet', sizeHint: '~12 MB', confirmBytes: 0 });
             }
+            const sourceFolder = (byId('media-censor-folder')?.value || '').trim();
+            const outputFolder = (byId('media-censor-output')?.value || '').trim();
             const response = await fetch('/api/censor/media/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    folder: (byId('media-censor-folder')?.value || '').trim(),
-                    output_folder: (byId('media-censor-output')?.value || '').trim(),
+                    folder: sourceFolder,
+                    output_folder: outputFolder,
                     include_videos: includeVideos,
                     style: byId('media-censor-style')?.value || 'mosaic',
                     detect_every: Number(byId('media-censor-every')?.value) || 2,
@@ -153,8 +182,7 @@
                 return;
             }
             this._jobId = body.job_id;
-            const output = byId('media-censor-output');
-            if (output && !output.value.trim()) output.value = body.output_folder;
+            this._rememberFolders(sourceFolder, outputFolder);
             this._render(body);
             this._setRunning(true);
             this._poll();

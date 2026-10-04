@@ -208,6 +208,8 @@ from config_settings import (
     get_trusted_model_folders,
     save_trusted_model_folders,
     update_trusted_model_folders,
+    get_output_root_setting,
+    save_output_root_setting,
 )
 MANUAL_SORT_SESSION_FILE: str = os.environ.get(
     "SD_IMAGE_SORTER_SORT_SESSION_FILE",
@@ -608,14 +610,20 @@ def get_data_dir() -> str:
     return str(DATA_DIR)
 
 
+def output_root() -> Path:
+    """Where blank-folder saves go: the folder chosen in Settings, else OUTPUT_DIR."""
+    custom = get_output_root_setting()
+    return Path(custom).expanduser() if custom else Path(OUTPUT_DIR)
+
+
 def default_output_folder(feature: str) -> Path:
-    """Built-in output folder of one save flow, ``OUTPUT_DIR/<feature>``.
+    """Output folder of one save flow, ``output_root()/<feature>``.
 
     Not created here; the save that writes into it creates it.
     """
     if feature not in OUTPUT_FEATURES:
         raise ValueError(f"Unknown output feature: {feature!r}")
-    return Path(OUTPUT_DIR) / feature
+    return output_root() / feature
 
 
 def get_config_dir() -> str:

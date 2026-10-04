@@ -60,7 +60,7 @@ async function stubBackend(page: Page): Promise<SaveStub> {
     })
   })
   // Never let a test open a real file manager window.
-  await page.route('**/api/censor/reveal-output', async (route) => {
+  await page.route('**/api/output-folders/reveal', async (route) => {
     stub.reveals.push((route.request().postDataJSON() as { path: string }).path)
     await route.fulfill({ json: { status: 'ok' } })
   })

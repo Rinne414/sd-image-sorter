@@ -547,10 +547,34 @@ function showBatchExportModal() {
         contentModeSelect.value = 'caption_merged';
     }
     updateBatchExportContentDescription(contentModeSelect?.value || 'caption_merged');
+    restoreBatchExportOutput();
     syncBatchExportOutputModeUi();
     $('#batch-export-progress').style.display = 'none';
     $('#btn-start-batch-export').disabled = false;
     showModal('batch-export-modal');
+}
+
+// "Next to each image" vs "one folder" and that folder come back next time.
+function restoreBatchExportOutput() {
+    let mode = '';
+    let folder = '';
+    try {
+        mode = localStorage.getItem('batch_export_output_mode') || '';
+        folder = localStorage.getItem('batch_export_folder') || '';
+    } catch (error) {
+        return;
+    }
+    const radio = document.querySelector(`input[name="batch-export-output-mode"][value="${mode === 'folder' ? 'folder' : 'beside_image'}"]`);
+    if (mode && radio) radio.checked = true;
+    const folderInput = $('#batch-export-folder');
+    if (folderInput && !folderInput.value.trim() && folder) folderInput.value = folder;
+}
+
+function rememberBatchExportOutput(mode, folder) {
+    try {
+        localStorage.setItem('batch_export_output_mode', mode);
+        if (folder) localStorage.setItem('batch_export_folder', folder);
+    } catch (error) { /* not remembering is harmless */ }
 }
 
 function syncBatchExportOutputModeUi() {
@@ -728,6 +752,7 @@ async function executeBatchExport() {
         showToast(appT('export.outputFolderRequired', 'Please enter an output folder'), 'error');
         return;
     }
+    rememberBatchExportOutput(outputMode, outputFolder);
 
     const prefix = $('#batch-export-prefix')?.value || '';
     const blacklistText = $('#batch-export-blacklist')?.value || '';

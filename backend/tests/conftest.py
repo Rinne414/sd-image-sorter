@@ -143,6 +143,9 @@ def _isolate_output_dir(tmp_path, monkeypatch):
     import config
 
     monkeypatch.setattr(config, "OUTPUT_DIR", tmp_path / "app-output")
+    # The custom output root lives in app-settings.json; never read or
+    # write the developer's own copy.
+    monkeypatch.setattr(config, "APP_SETTINGS_CONFIG_PATH", tmp_path / "app-settings.json")
 
 
 @pytest.fixture(autouse=True)

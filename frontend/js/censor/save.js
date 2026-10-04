@@ -66,7 +66,7 @@ function folderOfSavedPath(path) {
 }
 
 function revealCensorSavedFile(path) {
-    window.App.API.post('/api/censor/reveal-output', { path }).catch((error) => {
+    window.App.API.post('/api/output-folders/reveal', { path }).catch((error) => {
         window.App.showToast(error?.message || String(error), 'error');
     });
 }

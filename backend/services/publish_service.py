@@ -37,6 +37,7 @@ from typing import Any, Dict, List, Optional
 
 from PIL import Image
 
+from services.output_registry import remember_saved_output
 from services.watermark_service import TextWatermarkConfig, WatermarkServiceError, apply_text_watermark
 
 logger = logging.getLogger(__name__)
@@ -242,12 +243,15 @@ def find_censor_pairs(image_ids: List[int], censor_suffix: Optional[str] = None)
 
 
 def _validated_output_folder(output_folder: str) -> Path:
+    """Validate the export folder; blank means the built-in output/publish."""
+    import config
     from utils.path_validation import validate_folder_path
 
-    is_valid, error = validate_folder_path(output_folder, allow_create=True)
+    folder = str(output_folder or "").strip() or str(config.default_output_folder("publish"))
+    is_valid, error = validate_folder_path(folder, allow_create=True)
     if not is_valid:
         raise ValueError(error or "Invalid output folder")
-    return Path(output_folder).resolve()
+    return Path(folder).resolve()
 
 
 def _explicit_censored_source(censored_path: str) -> Dict[str, Any]:
@@ -398,6 +402,9 @@ def export_set(
 
     exported: List[Dict[str, Any]] = []
     skipped_existing: List[Dict[str, Any]] = []
+    # "Open folder" selects the first written file, else the first skipped one.
+    exported_reveal_path: Optional[str] = None
+    reveal_path: Optional[str] = None
     errors: List[Dict[str, Any]] = []
     used_names: set = set()
 
@@ -430,6 +437,8 @@ def export_set(
             destination = target / output_name
             if destination.exists() and not overwrite:
                 skipped_existing.append({"image_id": image_id, "output_name": output_name})
+                remember_saved_output(str(destination))
+                reveal_path = reveal_path or str(destination)
                 continue
             try:
                 _write_export_copy(
@@ -451,6 +460,9 @@ def export_set(
                 "source_path": source["path"],
                 "metadata": metadata,
             })
+            remember_saved_output(str(destination))
+            if not exported_reveal_path:
+                exported_reveal_path = str(destination)
 
     caption_file: Optional[str] = None
     caption = str(caption_text or "").strip()
@@ -472,5 +484,6 @@ def export_set(
         "errors": errors,
         "caption_file": caption_file,
         "output_folder": str(target),
+        "reveal_path": exported_reveal_path or reveal_path,
         "metadata_option": metadata,
     }

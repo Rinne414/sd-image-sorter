@@ -9,16 +9,12 @@ Supports multiple detection backends:
 
 Refactored to use Service Layer pattern with dependency injection.
 """
-from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Query
 from starlette.concurrency import run_in_threadpool
 
-from app_diagnostics import _open_path_in_file_manager as open_in_file_manager
 from services import entry_stats_service
-from services.censor.output_io import was_saved_output
 from services.service_provider import ServiceProvider
 from services.censor_service import (
     CensorService,
@@ -173,24 +169,6 @@ async def censor_save_original(
     count toward the censor activity stat.
     """
     return await run_in_threadpool(service.save_original, request)
-
-
-class RevealOutputRequest(BaseModel):
-    path: str = Field(..., min_length=1, max_length=4096)
-
-
-@router.post("/reveal-output")
-async def censor_reveal_output(request: RevealOutputRequest):
-    """Show a file the censor save wrote while this server runs in the OS file manager."""
-    path = Path(request.path)
-    if not was_saved_output(request.path) or not path.is_file():
-        raise HTTPException(
-            status_code=404,
-            detail="Only files saved from the censor editor in this session can be shown.",
-        )
-    if not await run_in_threadpool(open_in_file_manager, path):
-        raise HTTPException(status_code=501, detail="No file manager is available on this computer.")
-    return {"status": "ok"}
 
 
 @router.post("/save-operations")

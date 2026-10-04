@@ -5730,6 +5730,18 @@
                             </select>
                         </label>
                     </div>
+                    <div class="settings-row settings-output-row">
+                        <div class="settings-row-copy">
+                            <strong data-i18n="settings.outputRootTitle">Where saves go</strong>
+                            <span id="settings-output-root-current">Censor, publish set and video censor save here when their folder field is left empty.</span>
+                        </div>
+                        <div class="settings-inline-control settings-output-root-control">
+                            <input type="text" id="settings-output-root" class="input-field" data-folder-browser-container="settings-output-root-browser" autocomplete="off" spellcheck="false" aria-label="Where saves go" data-i18n-aria="settings.outputRootTitle">
+                            <button type="button" class="btn btn-secondary btn-small" id="btn-settings-output-root-browse" data-i18n="common.browse">Browse</button>
+                            <button type="button" class="btn btn-ghost btn-small" id="btn-settings-output-root-reset" data-i18n="settings.outputRootReset">Use the program folder</button>
+                        </div>
+                    </div>
+                    <div id="settings-output-root-browser" aria-live="polite"></div>
                     <details class="guided-advanced-panel settings-preferences-panel" id="settings-ai-defaults-panel">
                         <summary class="guided-advanced-summary">
                             <span data-i18n="settings.aiDefaultsTitle">AI defaults</span>
@@ -7315,7 +7327,7 @@
                     <div class="pub-export-grid">
                         <label class="pub-field">
                             <span data-i18n="pub.outputFolder">Output folder</span>
-                            <input type="text" id="pub-folder" class="input-field" placeholder="D:\publish\set-01" autocomplete="off" spellcheck="false">
+                            <input type="text" id="pub-folder" class="input-field" placeholder="" autocomplete="off" spellcheck="false">
                         </label>
                         <label class="pub-field">
                             <span data-i18n="pub.prefix">Filename prefix</span>

@@ -282,6 +282,25 @@ def _normalize_trusted_model_folders(value: object) -> list[str]:
     return folders
 
 
+def get_output_root_setting() -> str:
+    """The folder the user picked for blank-folder saves; "" = the program's output/."""
+    value = _read_app_settings().get("output_root")
+    return value.strip() if isinstance(value, str) else ""
+
+
+def save_output_root_setting(value: str) -> str:
+    """Store the custom output root ("" clears it). Returns the stored value."""
+    cleaned = str(value or "").strip()
+    with _app_settings_lock:
+        settings = _read_app_settings_for_update()
+        if cleaned:
+            settings["output_root"] = cleaned
+        else:
+            settings.pop("output_root", None)
+        _write_app_settings(settings)
+    return cleaned
+
+
 def get_trusted_model_folders() -> list[str]:
     """Folders the user added in Model Center whose model files load like the
     program's own models folder (model_roots.py); stored as entered."""

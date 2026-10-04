@@ -54,7 +54,7 @@ def test_listing_a_folder_sorts_gifs_and_videos(test_client, tmp_path: Path) -> 
     assert isinstance(body["video_ready"], bool)
 
 
-def test_a_job_censors_the_folder_into_the_censored_subfolder(
+def test_a_job_censors_the_folder_into_the_builtin_video_censor_folder(
     test_client, tmp_path: Path, monkeypatch
 ) -> None:
     _fresh_jobs(monkeypatch)
@@ -71,10 +71,13 @@ def test_a_job_censors_the_folder_into_the_censored_subfolder(
     ).json()
     snapshot = _wait(test_client, started["job_id"])
 
-    assert started["output_folder"] == str(tmp_path / "censored")
+    import config
+
+    builtin = Path(config.OUTPUT_DIR) / "video-censor"
+    assert started["output_folder"] == str(builtin)
     assert snapshot["status"] == "done"
     (item,) = snapshot["files"]
-    assert Path(item["output"]) == tmp_path / "censored" / "anim_censored.gif"
+    assert Path(item["output"]) == builtin / "anim_censored.gif"
     assert item["censored_frames"] == 3
     with Image.open(item["output"]) as result:
         assert result.convert("RGB").getpixel((15, 15)) == (0, 0, 0)

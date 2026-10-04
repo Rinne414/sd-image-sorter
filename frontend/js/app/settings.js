@@ -281,10 +281,55 @@ function resetAiDefaultPreferences() {
     showToast(appT('settings.aiDefaultsReset', 'AI defaults reset'), 'info');
 }
 
+// Where blank-folder saves go (censor, publish set, video censor). The
+// field holds the custom root; empty = the program's own output folder.
+async function syncSettingsOutputRoot() {
+    const input = document.getElementById('settings-output-root');
+    const current = document.getElementById('settings-output-root-current');
+    if (!input || !current) return;
+    try {
+        const data = await API.get('/api/output-folders');
+        if (document.activeElement !== input) input.value = data.custom_root || '';
+        input.placeholder = appT('settings.outputRootPlaceholder', 'Empty = {path}', { path: data.builtin_root });
+        current.textContent = appT('settings.outputRootCurrent', 'Saves with an empty folder field go to {path}', { path: data.root });
+    } catch (error) {
+        current.textContent = appT('settings.outputRootLoadFailed', 'Could not read the save folder.');
+    }
+}
+
+async function saveSettingsOutputRoot(root) {
+    window.hideFolderBrowser?.();
+    try {
+        await API.patch('/api/output-folders', { root });
+        showToast(appT('settings.outputRootSaved', 'Save folder updated'), 'success');
+    } catch (error) {
+        showToast(error?.message || String(error), 'error');
+    }
+    await syncSettingsOutputRoot();
+}
+
+function initSettingsOutputRoot() {
+    const input = document.getElementById('settings-output-root');
+    if (!input || input.dataset.bound === '1') return;
+    input.dataset.bound = '1';
+    input.addEventListener('change', () => saveSettingsOutputRoot(input.value.trim()));
+    input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') input.blur();
+    });
+    document.getElementById('btn-settings-output-root-browse')?.addEventListener('click', () => {
+        window.showFolderBrowser?.(input);
+    });
+    document.getElementById('btn-settings-output-root-reset')?.addEventListener('click', () => {
+        input.value = '';
+        saveSettingsOutputRoot('');
+    });
+}
+
 function syncSettingsControls() {
     syncSettingsSoundControl();
     syncSettingsUiScaleControl();
     syncSettingsPreferenceStatus();
+    syncSettingsOutputRoot();
 }
 
 function initSettingsControls() {
@@ -327,6 +372,8 @@ function initSettingsControls() {
         resetAi.dataset.bound = '1';
         resetAi.addEventListener('click', resetAiDefaultPreferences);
     }
+
+    initSettingsOutputRoot();
 
     if (document.body && document.body.dataset.settingsLanguageBound !== '1') {
         document.body.dataset.settingsLanguageBound = '1';

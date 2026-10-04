@@ -14,6 +14,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+import config
 from censor_transforms import MASK_STYLES
 from services import media_censor_service as media
 from services.media_censor_service import FrameSettings, MediaCensorJobs
@@ -96,7 +97,7 @@ def start_job(request: StartRequest):
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     source = _folder(request.folder)
-    output = _folder(request.output_folder or str(source / "censored"), create=True)
+    output = _folder(request.output_folder or str(config.default_output_folder("video-censor")), create=True)
     listed = media.list_media(source)
     sources = listed["gifs"] + (listed["videos"] if request.include_videos else [])
     if not sources:

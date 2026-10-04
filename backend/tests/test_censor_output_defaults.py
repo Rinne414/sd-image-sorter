@@ -134,21 +134,21 @@ def test_default_conflict_still_refuses_and_overwrite_still_replaces(
 def test_reveal_output_opens_only_files_the_censor_save_wrote(
     test_client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import routers.censor as censor_router
+    import routers.output_folders as output_folders_router
 
     opened: list[Path] = []
     monkeypatch.setattr(
-        censor_router, "open_in_file_manager", lambda path: opened.append(path) or True
+        output_folders_router, "open_in_file_manager", lambda path: opened.append(path) or True
     )
     body = _save(test_client, str(tmp_path / "out"))
     stranger = tmp_path / "not-saved-here.png"
     stranger.write_bytes(b"x")
 
     refused = test_client.post(
-        "/api/censor/reveal-output", json={"path": str(stranger)}
+        "/api/output-folders/reveal", json={"path": str(stranger)}
     )
     allowed = test_client.post(
-        "/api/censor/reveal-output", json={"path": body["output_path"]}
+        "/api/output-folders/reveal", json={"path": body["output_path"]}
     )
 
     assert refused.status_code == 404

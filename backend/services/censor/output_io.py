@@ -22,8 +22,6 @@ import binascii
 import logging
 import os
 import shutil
-import threading
-from collections import OrderedDict
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
@@ -35,6 +33,7 @@ import config
 import database as db
 from services.image_metadata_writer import prepare_image_for_save
 from services.indexed_file_mutation_service import save_and_reconcile_checked
+from services.output_registry import remember_saved_output
 from utils.atomic_staging import (
     create_staging_sibling,
     discard_staging_file,
@@ -56,30 +55,7 @@ logger = logging.getLogger("services.censor_service")
 CensorOutputFormat = Literal['png', 'jpg', 'webp']
 
 
-# Files the censor save wrote while this server runs. "Open folder" after a
-# save may reveal only these, so the endpoint never opens arbitrary paths.
-_RECENT_OUTPUTS: "OrderedDict[str, None]" = OrderedDict()
-_RECENT_OUTPUTS_LOCK = threading.Lock()
-_RECENT_OUTPUTS_MAX = 2000
 _MAX_UNIQUE_NAME_ATTEMPTS = 10_000
-
-
-def _output_key(path: str) -> str:
-    return os.path.normcase(os.path.abspath(path))
-
-
-def remember_saved_output(path: str) -> None:
-    key = _output_key(path)
-    with _RECENT_OUTPUTS_LOCK:
-        _RECENT_OUTPUTS.pop(key, None)
-        _RECENT_OUTPUTS[key] = None
-        while len(_RECENT_OUTPUTS) > _RECENT_OUTPUTS_MAX:
-            _RECENT_OUTPUTS.popitem(last=False)
-
-
-def was_saved_output(path: str) -> bool:
-    with _RECENT_OUTPUTS_LOCK:
-        return _output_key(path) in _RECENT_OUTPUTS
 
 
 def _discard_empty_placeholder(path: str) -> None:

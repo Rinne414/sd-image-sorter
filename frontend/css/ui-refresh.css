@@ -2195,6 +2195,26 @@ html:has(#view-gallery.active) {
     padding: 6px 10px;
 }
 
+/* Where saves go: the path field takes the room, its buttons stay compact. */
+.settings-output-row .settings-row-copy {
+    flex: 1 1 0;
+}
+
+.settings-output-root-control {
+    flex: 1 1 440px;
+    min-width: 360px;
+    max-width: 620px;
+}
+
+.settings-output-root-control .input-field {
+    flex: 1;
+    min-width: 180px;
+}
+
+#settings-output-root-browser:empty {
+    display: none;
+}
+
 .settings-preferences-panel {
     margin-top: 2px;
 }

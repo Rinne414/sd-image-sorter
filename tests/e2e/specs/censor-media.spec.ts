@@ -82,7 +82,9 @@ test('the dialog lists the folder, starts a job with the Censor page settings an
     folder, output_folder: '', include_videos: true, style: 'blur', detect_every: 3, hold: 8,
     face_guard: true, shape: 'precise', expand_percent: 0, block_size: 0,
   })
-  await expect(page.locator('#media-censor-output')).toHaveValue(path.join(folder, 'censored'))
+  // An empty save folder stays empty after the start: it means the output
+  // root's video-censor folder, which Settings can move (owner 2026-10-04).
+  await expect(page.locator('#media-censor-output')).toHaveValue('')
   await expect(page.locator('.media-censor-row.is-done')).toHaveCount(2)
   await expect(page.locator('.media-censor-row').first()).toContainText('Done · 7 frame(s) censored')
   await expect(page.locator('#media-censor-stop')).toBeHidden()
