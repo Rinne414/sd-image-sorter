@@ -243,3 +243,104 @@ def test_user_written_sentence_still_exports_after_the_tags(
     )
     assert caption.strip().endswith(sentence), caption
     assert _tokens(caption).count(TRIGGER) == 1, caption
+
+
+# ------------------------------------------------------------------ #
+# Every other place that fell back from nl_caption to ai_caption
+# ------------------------------------------------------------------ #
+
+
+def _folded(caption: str) -> list[str]:
+    parts = [p.strip() for p in caption.replace(". ", ", ").split(",") if p.strip()]
+    return [" ".join(p.replace("_", " ").lower().split()) for p in parts]
+
+
+def _tag_export_preview(test_client, image_id: int, **body) -> str:
+    response = test_client.post(
+        "/api/tags/export-preview", json={"image_ids": [image_id], **body}
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["results"][0]["rendered"]
+
+
+@pytest.mark.parametrize("content_mode", ["tags_nl", "nl_caption", "prompt_nl"])
+def test_natural_language_content_modes_do_not_reuse_the_tag_list(
+    test_client, smart_tagged_image, content_mode
+):
+    image_id, _path = smart_tagged_image
+    rendered = _tag_export_preview(test_client, image_id, content_mode=content_mode)
+    folded = _folded(rendered)
+
+    assert len(folded) == len(set(folded)), rendered
+    if content_mode != "tags_nl":
+        # No sentence exists, so a prose-only mode has nothing to write.
+        assert "1girl" not in folded, rendered
+
+
+def test_the_default_anima_preset_writes_each_tag_once(test_client, smart_tagged_image):
+    image_id, _path = smart_tagged_image
+    rendered = _tag_export_preview(test_client, image_id, preset_id="anima")
+    folded = _folded(rendered)
+
+    assert "1girl" in folded, rendered
+    assert len(folded) == len(set(folded)), rendered
+
+
+def test_flux_preset_does_not_put_the_tag_list_in_the_sentence(
+    test_client, smart_tagged_image
+):
+    image_id, _path = smart_tagged_image
+    rendered = _tag_export_preview(test_client, image_id, preset_id="flux")
+
+    assert "1girl" not in _folded(rendered), rendered
+
+
+def test_dataset_preview_reports_a_refused_tag_list(
+    test_client, smart_tagged_image, tmp_path: Path
+):
+    image_id, _path = smart_tagged_image
+    response = test_client.post(
+        "/api/dataset/export-preview",
+        json={
+            "image_ids": [image_id],
+            "output_folder": str(tmp_path / "advisory-out"),
+            "naming_pattern": "{index:03d}",
+            "content_mode": "template",
+            "image_types": {str(image_id): "both"},
+        },
+    )
+    assert response.status_code == 200, response.text
+    item = response.json()["items"][0]
+
+    assert "nl_fallback_is_tag_list" in [a["code"] for a in item["caption_advisories"]]
+    folded = _folded(item["caption"])
+    assert len(folded) == len(set(folded)), item["caption"]
+
+
+def test_legacy_prose_ai_caption_is_still_offered_as_the_sentence(test_client, test_db):
+    """Comma-heavy legacy prose must not be mistaken for the tag list."""
+    import database as db
+
+    image_id = db.add_image(
+        path="/pins/nl/legacy-prose.png", filename="legacy-prose.png"
+    )
+    db.add_tags(
+        image_id,
+        [
+            {"tag": "1girl", "confidence": 0.9},
+            {"tag": "blonde_hair", "confidence": 0.9},
+            {"tag": "blue_eyes", "confidence": 0.9},
+            {"tag": "smile", "confidence": 0.9},
+        ],
+    )
+    legacy = "A woman, blonde hair, blue eyes, smiling"
+    db.update_image_caption(image_id, legacy)
+
+    response = test_client.post(
+        "/api/tags/export-preview",
+        json={"image_ids": [image_id], "preset_id": "custom"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["results"][0]["nl_source"] == legacy
+    tags_nl = _tag_export_preview(test_client, image_id, content_mode="tags_nl")
+    assert tags_nl.endswith(legacy), tags_nl

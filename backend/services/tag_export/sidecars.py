@@ -635,6 +635,7 @@ def export_tags_batch_request(
                     content_mode=content_mode,
                     image_types=image_types_map,
                     nl_overrides=nl_overrides_map,
+                    tags=tags,
                 )
                 file_content = apply_caption_transforms(file_content, caption_transforms)
                 # In ``beside_image`` mode each image lands in its own
@@ -692,7 +693,7 @@ def export_tags_batch_request(
                 nl_twin_content = ""
                 if nl_sidecar_enabled:
                     nl_twin_content = _build_nl_sidecar_content(
-                        _image_nl_source_text(image, image_id, nl_overrides_map),
+                        _image_nl_source_text(image, image_id, nl_overrides_map, tags),
                         nl_sidecar_trigger,
                     )
                     if nl_twin_content:
@@ -914,6 +915,7 @@ def export_tags_combined_request(
                             content_mode=content_mode,
                             image_types=image_types_map,
                             nl_overrides=nl_overrides_map,
+                            tags=tags_map.get(image_id, []) or [],
                         )
                         rendered = apply_caption_transforms(rendered, caption_transforms)
                         if not rendered:

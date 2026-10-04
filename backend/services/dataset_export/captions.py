@@ -199,6 +199,8 @@ def _compose_nl_caption(
     nl_overrides_int: Dict[int, str],
     nl_overrides_path: Dict[str, str],
     advisories: Optional[List[Any]] = None,
+    tags: Optional[List[Any]] = None,
+    trigger: str = "",
 ) -> str:
     """Fold the natural-language sentence into a booru caption per the image's
     caption type (point 3: two-box editor / per-image Booru-NL-Both control).
@@ -243,7 +245,9 @@ def _compose_nl_caption(
             nl_text = (
                 str(sidecar)
                 if caption_reads_as_prose(sidecar, record.get("sidecar_caption_format"))
-                else ai_caption_nl_fallback(record.get("ai_caption"))
+                else ai_caption_nl_fallback(
+                    record.get("ai_caption"), tags, trigger=trigger, advisories=advisories,
+                )
             )
     if advisories is not None:
         advisory = nl_compose_advisory(caption_type, caption_format_for_storage(nl_text))
@@ -294,7 +298,12 @@ def caption_dialect_advisories(
     marker alone, because a library item's caption is rendered from tag rows and
     carries no sidecar marker at all, yet still lands in a krea2 dataset as tags.
     """
-    advisories = list(compose_advisories)
+    # One notice per code per caption: the template slot and the per-image
+    # compose can both refuse the same ai_caption.
+    advisories: list[Any] = []
+    for advisory in compose_advisories:
+        if all(kept.code != advisory.code for kept in advisories):
+            advisories.append(advisory)
     target_advisory = caption_dialect_advisory(
         target_model,
         detect_caption_format(rendered),
@@ -432,6 +441,7 @@ def _render_dataset_sidecar(
             prefix=str(getattr(request, "prefix", "") or ""),
             template_options=template_options,
             normalize_tag_underscores=bool(getattr(request, "normalize_tag_underscores", True)),
+            advisories=advisories,
         )
         rendered = _append_common_tags_for_mode(rendered, request, content_mode)
     # Point 3: fold in the per-image natural-language sentence (no-op unless the
@@ -447,6 +457,8 @@ def _render_dataset_sidecar(
         nl_overrides_int=nl_overrides_int or {},
         nl_overrides_path=nl_overrides_path or {},
         advisories=advisories,
+        tags=tags,
+        trigger=str(getattr(request, "trigger", "") or ""),
     )
     transformed = apply_caption_transforms(
         rendered,

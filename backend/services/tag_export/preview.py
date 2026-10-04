@@ -94,6 +94,7 @@ def render_export_preview(request: Any) -> Dict[str, Any]:
                 rating_override=getattr(request, "rating_override", None),
                 underscore_to_space_override=getattr(request, "underscore_to_space_override", None),
                 preserve_underscore_prefixes_override=getattr(request, "preserve_underscore_prefixes_override", None),
+                source_tags=tags_map.get(image_id, []) or [],
             )
         except Exception as exc:
             results.append({"image_id": image_id, "error": str(exc), "rendered": ""})
@@ -129,7 +130,11 @@ def render_export_preview(request: Any) -> Dict[str, Any]:
             # pre-split fused ai_caption. A booru-only Smart Tag ai_caption is
             # just the tag list, so it is not offered (it doubled every tag).
             "nl_source": str(image.get("nl_caption") or "")
-            or ai_caption_nl_fallback(image.get("ai_caption")),
+            or ai_caption_nl_fallback(
+                image.get("ai_caption"),
+                tags_map.get(image_id, []) or [],
+                trigger=preview_trigger,
+            ),
             "blacklist_leaks": blacklist_leaks,
             "error": None,
         })

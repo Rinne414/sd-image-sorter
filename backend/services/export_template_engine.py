@@ -33,6 +33,7 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+from services.caption_dialect import ai_caption_nl_fallback
 from services.export_template_presets import (
     PRESETS,
     TEMPLATE_VARIABLES,
@@ -100,8 +101,15 @@ def build_export_caption(
     rating_override: Optional[str] = None,
     underscore_to_space_override: Optional[bool] = None,
     preserve_underscore_prefixes_override: Optional[List[str]] = None,
+    advisories: Optional[List[Any]] = None,
+    source_tags: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """Build the final caption string for a single image using a preset + overrides.
+
+    ``{nl_caption}`` falls back to ``ai_caption`` only when that is not the
+    image's own tag list (``ai_caption_nl_fallback``, tested against
+    ``source_tags``: the unfiltered rows, default ``tags``); a refusal goes to
+    the optional ``advisories`` sink.
 
     ``underscore_to_space_override`` and ``preserve_underscore_prefixes_override``
     let the caller force the LoRA underscore convention (``True`` to convert,
@@ -113,6 +121,7 @@ def build_export_caption(
     """
     preset = PRESETS.get(preset_id) or PRESETS["custom"]
     template = template_override if template_override else preset["template"]
+    nl_fallback_tags = source_tags if source_tags is not None else tags
     separator = preset.get("separator", ", ")
 
     # Resolve the image's actual rating once (canonical danbooru word or "").
@@ -217,7 +226,12 @@ def build_export_caption(
     quality = _filter_template_value(quality, proc_config, separator)
 
     trigger_text = _filter_template_value(trigger.strip(), proc_config, separator)
-    nl_caption = _filter_template_value(str(image.get("nl_caption") or image.get("ai_caption") or "").strip(), proc_config, separator)
+    nl_text = str(image.get("nl_caption") or "").strip()
+    if not nl_text and "nl_caption" in template:
+        nl_text = ai_caption_nl_fallback(
+            image.get("ai_caption"), nl_fallback_tags, trigger=trigger, advisories=advisories,
+        ).strip()
+    nl_caption = _filter_template_value(nl_text, proc_config, separator)
     prompt = _filter_template_value(str(image.get("prompt") or "").strip(), proc_config, separator)
     negative = _filter_template_value(str(image.get("negative_prompt") or "").strip(), proc_config, separator)
     append_text = "" if append else _filter_template_value(preset.get("default_append", ""), proc_config, separator)

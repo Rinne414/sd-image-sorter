@@ -353,7 +353,13 @@ def _coerce_int_str_map(raw: Optional[Dict[Any, Any]]) -> Dict[int, str]:
     return result
 
 
-def _image_nl_source_text(image: Dict[str, Any], image_id: int, nl_overrides: Dict[int, str]) -> str:
+def _image_nl_source_text(
+    image: Dict[str, Any],
+    image_id: int,
+    nl_overrides: Dict[int, str],
+    tags: Optional[List[Any]] = None,
+    advisories: Optional[List[Any]] = None,
+) -> str:
     """Resolve one image's natural-language caption text.
 
     Editor override first (an explicit empty string intentionally suppresses
@@ -376,7 +382,7 @@ def _image_nl_source_text(image: Dict[str, Any], image_id: int, nl_overrides: Di
     sidecar = image.get("sidecar_caption")
     if caption_reads_as_prose(sidecar, image.get("sidecar_caption_format")):
         return str(sidecar)
-    return ai_caption_nl_fallback(image.get("ai_caption"))
+    return ai_caption_nl_fallback(image.get("ai_caption"), tags, advisories=advisories)
 
 
 def _compose_nl_for_image(
@@ -388,6 +394,7 @@ def _compose_nl_for_image(
     image_types: Dict[int, str],
     nl_overrides: Dict[int, str],
     advisories: Optional[List[Any]] = None,
+    tags: Optional[List[Any]] = None,
 ) -> str:
     """Apply the per-image caption type to an already-rendered caption.
 
@@ -406,7 +413,7 @@ def _compose_nl_for_image(
         return rendered
     if str(content_mode or "").strip().lower() not in NL_COMPOSE_MODES:
         return rendered
-    nl_text = _image_nl_source_text(image, image_id, nl_overrides)
+    nl_text = _image_nl_source_text(image, image_id, nl_overrides, tags, advisories)
     if advisories is not None:
         advisory = nl_compose_advisory(caption_type, caption_format_for_storage(nl_text))
         if advisory is not None:
@@ -482,6 +489,7 @@ def build_sidecar_content(
     normalize_tag_underscores: Optional[bool] = None,
     training_purpose: str = "",
     dedupe_implications: bool = False,
+    advisories: Optional[List[Any]] = None,
 ) -> str:
     """Build export content for one image according to a Pro SD workflow mode.
 
@@ -497,10 +505,18 @@ def build_sidecar_content(
     not. Pass ``False`` explicitly to keep underscores in tag modes; pass
     ``True`` to force normalization in modes that do not normalize by default
     (rarely useful — most callers should leave this at ``None``).
+
+    ``advisories`` is an optional sink for the natural-language fallback: when
+    the stored ``ai_caption`` is only this image's tag list it is not used as
+    the sentence (``ai_caption_nl_fallback``) and that refusal is reported.
     """
     mode = str(content_mode or "tags").strip().lower()
     if mode not in VALID_CONTENT_MODES:
         raise HTTPException(status_code=400, detail=f"Invalid content_mode: {content_mode}")
+    # The image's own tag rows before any filtering: the ai_caption test asks
+    # whether that caption was composed from them.
+    source_tags = tags
+    trigger_text = str((template_options or {}).get("trigger") or prefix or "")
 
     # P2-19 / P2-18 (2026-07-07): purpose filtering + implication dedup happen
     # on the tag ROWS before any mode dispatch, so every content mode —
@@ -523,8 +539,13 @@ def build_sidecar_content(
     caption = str(image.get("ai_caption") or "").strip()
     # Pure natural-language caption (point 1): prefer the dedicated nl_caption
     # column; fall back to the composed ai_caption for images tagged before the
-    # split existed. The NL-oriented modes use this so booru tags don't leak in.
-    nl_caption_text = str(image.get("nl_caption") or "").strip() or caption
+    # split existed, never to the image's own tag list (it doubled every tag).
+    # Only the NL-oriented modes read it, so only they consult the fallback.
+    nl_caption_text = str(image.get("nl_caption") or "").strip()
+    if not nl_caption_text and mode in {"nl_caption", "tags_nl", "prompt_nl"}:
+        nl_caption_text = ai_caption_nl_fallback(
+            caption, source_tags, trigger=trigger_text, advisories=advisories,
+        ).strip()
     prefix = str(prefix or "").strip()
 
     # LoRA-friendly underscore normalization for danbooru-tag content modes.
@@ -584,7 +605,9 @@ def build_sidecar_content(
         elif normalize_tag_underscores is True and "underscore_to_space_override" not in opts:
             opts["underscore_to_space_override"] = True
             opts.setdefault("preserve_underscore_prefixes_override", ["score_"])
-        return build_export_caption(image, tags, **opts)
+        return build_export_caption(
+            image, tags, **opts, advisories=advisories, source_tags=source_tags,
+        )
     if mode == "json":
         payload = {
             "id": image.get("id"),

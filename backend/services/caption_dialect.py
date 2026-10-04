@@ -45,8 +45,10 @@ and telling a user to convert text nobody could classify is worse than silence.
 """
 from __future__ import annotations
 
+import math
+import re
 from dataclasses import dataclass
-from typing import Iterable, Optional
+from typing import Iterable, List, Optional
 
 from caption_format import (
     CAPTION_FORMAT_MIXED,
@@ -88,6 +90,14 @@ CODE_DIALECT_MISMATCH = "caption_dialect_mismatch"
 CODE_DIALECT_PARTIAL = "caption_dialect_partial"
 CODE_NL_OVER_TAG_SOURCE = "nl_compose_over_tag_source"
 CODE_NL_SOURCE_PARTLY_TAGS = "nl_compose_source_partly_tags"
+CODE_NL_FALLBACK_IS_TAG_LIST = "nl_fallback_is_tag_list"
+
+# ``ai_caption`` is the image's own tag list when at least this share of its
+# comma segments are that image's tag names: one tag removed from the rows
+# since the caption was composed must not turn the list into "prose".
+_OWN_TAG_LIST_MIN_SHARE = 0.9
+_TAG_WEIGHT_SUFFIX = re.compile(r":\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s*$")
+_TAG_BRACKETS = re.compile(r"[()\[\]{}]")
 
 # Composition modes that put text into a prose slot. ``booru`` (and an absent
 # entry) keeps the tag caption, so nothing there can contradict a tag source.
@@ -150,20 +160,77 @@ def caption_reads_as_prose(
     return resolved_caption_format(text, stored_format) == CAPTION_FORMAT_NATURAL
 
 
-def ai_caption_nl_fallback(ai_caption: object) -> str:
-    """``ai_caption`` as the natural-language fallback, or ``""`` for a tag list.
+def _tag_key(value: object) -> str:
+    """One tag or caption segment, compared loosely: case, ``_`` vs space,
+    ``(tag:1.2)`` weights and bracket emphasis do not matter."""
+    text = _TAG_BRACKETS.sub(" ", str(value or "").replace("\\", ""))
+    text = _TAG_WEIGHT_SUFFIX.sub("", text.strip())
+    return " ".join(text.replace("_", " ").split()).casefold()
+
+
+def _tag_names(tags: Optional[Iterable[object]]) -> List[str]:
+    names: List[str] = []
+    for row in tags or []:
+        name = row.get("tag") if isinstance(row, dict) else row
+        if str(name or "").strip():
+            names.append(str(name))
+    return names
+
+
+def _is_own_tag_list(text: str, tag_names: Iterable[str]) -> bool:
+    keys = {key for key in (_tag_key(name) for name in tag_names) if key}
+    segments = [key for key in (_tag_key(part) for part in re.split(r"[,\n]", text)) if key]
+    if not keys or not segments:
+        return False
+    matched = sum(1 for segment in segments if segment in keys)
+    return matched >= math.ceil(len(segments) * _OWN_TAG_LIST_MIN_SHARE)
+
+
+def ai_caption_nl_fallback(
+    ai_caption: object,
+    tags: Optional[Iterable[object]] = None,
+    *,
+    trigger: object = "",
+    advisories: Optional[List["CaptionDialectAdvisory"]] = None,
+) -> str:
+    """``ai_caption`` as the natural-language fallback, or ``""`` for the tag list.
 
     The fallback exists for rows tagged before the ``nl_caption`` split, whose
     ``ai_caption`` fuses tags with a sentence. A booru-only Smart Tag run also
-    stores its composed caption there, which is only the tag list; handing that
-    to a prose slot wrote every tag twice into a default LoRA export. Only a
-    text the classifier places as ``tags`` is refused: a fused ``mixed`` caption
-    keeps the historical fallback, and the stored text itself is never touched.
+    stores its composed caption there: only the image's tags, which every export
+    already renders, so using it as the sentence wrote each tag twice.
+
+    With the image's ``tags`` (rows or names) the test is membership, not
+    shape: the text is refused only when nearly every comma segment is one of
+    those tag names or the ``trigger``. Comma-heavy legacy prose ("A woman,
+    blonde hair, blue eyes, smiling") is kept. Without tags the shape
+    classifier decides. The stored text is never changed; a refusal is
+    reported to ``advisories`` so it is never silent where a caller listens.
     """
     text = str(ai_caption or "")
-    if caption_format_for_storage(text) == CAPTION_FORMAT_TAGS:
+    if not text.strip():
         return ""
-    return text
+    names = _tag_names(tags)
+    if names:
+        refused = _is_own_tag_list(text, [*names, str(trigger or "")])
+    else:
+        refused = caption_format_for_storage(text) == CAPTION_FORMAT_TAGS
+    if not refused:
+        return text
+    if advisories is not None:
+        advisories.append(CaptionDialectAdvisory(
+            code=CODE_NL_FALLBACK_IS_TAG_LIST,
+            caption_format=CAPTION_FORMAT_TAGS,
+            message=(
+                "The stored AI caption is this image's own tag list, not a "
+                "sentence, so it is not used as natural-language text."
+            ),
+            action=(
+                "Write a natural-language caption for this image, or run the "
+                "natural-language captioner, to add a sentence."
+            ),
+        ))
+    return ""
 
 
 def caption_dialect_advisory(
