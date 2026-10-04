@@ -50,3 +50,13 @@ test('a filter modal opened with its own wording keeps it through a DOM change',
   await expect(page.locator('#filter-modal-title')).toHaveText('Edit smart folder')
   await expect(page.locator('#btn-apply-modal-filters')).toHaveText(/^Save folder/)
 })
+
+test('the tagger advanced hint keeps the custom-model sentence through a DOM change', async ({ page }) => {
+  await page.evaluate(() => {
+    const select = document.getElementById('tag-model-select') as HTMLSelectElement
+    select.value = 'custom'
+    ;(window as any).syncTagAdvancedUi()
+  })
+  await mutateDom(page)
+  await expect(page.locator('#tag-advanced-options-hint')).toContainText('when using a custom local model')
+})

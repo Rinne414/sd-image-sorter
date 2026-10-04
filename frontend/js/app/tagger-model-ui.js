@@ -506,6 +506,12 @@ function syncTagAdvancedUi(options = {}) {
     if (!advancedDetails) return;
 
     if (advancedHint) {
+        // The key moves with the sentence, or the i18n re-apply puts the
+        // "optional" hint back over the custom / active one.
+        const hintKey = isCustom
+            ? 'tagger.advancedHintCustomPanel'
+            : (hasActiveAdvanced ? 'tagger.advancedHintActivePanel' : 'tagger.advancedHintPanel');
+        advancedHint.dataset.i18n = hintKey;
         advancedHint.textContent = isCustom
             ? appT('tagger.advancedHintCustomPanel', 'Custom local model selected. Fill in these fields before starting.')
             : (hasActiveAdvanced
@@ -562,6 +568,8 @@ function syncTaggerRuntimeChunkUi(options = {}) {
     const batchSelect = $('#tagger-batch-size');
     const batchHelp = $('#tag-batch-help');
     const batchRecommendation = $('#tag-batch-recommendation');
+    // Rewritten per model / GPU below; keep the i18n re-apply off it.
+    if (batchRecommendation) batchRecommendation.dataset.i18nLocked = '1';
     const chunkChip = $('#tag-runtime-chunk-chip');
     if (!batchSelect || !batchHelp) return;
 
