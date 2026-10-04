@@ -230,6 +230,33 @@
     text-align: right;
 }
 
+/* No captioner set up: the hint sits in the natural-language section (top
+   right, no scrolling) and stays readable while the rest of it is dimmed. */
+#smart-tag-modal #smart-tag-natural-section.is-disabled:has(> .smart-tag-nl-unconfigured:not([hidden])) {
+    opacity: 1;
+}
+#smart-tag-modal #smart-tag-natural-section.is-disabled:has(> .smart-tag-nl-unconfigured:not([hidden])) > :not(.smart-tag-nl-unconfigured) {
+    opacity: 0.58;
+}
+#smart-tag-modal .smart-tag-nl-unconfigured:not([hidden]) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 0 12px 0;
+    padding: 8px 12px;
+    border: 1px solid rgba(var(--accent-rgb), 0.35);
+    border-radius: var(--radius-md, 8px);
+    background: rgba(var(--accent-rgb), 0.08);
+    color: var(--text-secondary, #D6D6D6);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+#smart-tag-modal .smart-tag-nl-unconfigured .btn {
+    flex: 0 0 auto;
+}
+
 #smart-tag-modal .smart-tag-safety-note {
     padding: 10px 12px;
     border: 1px solid rgba(var(--accent-secondary-rgb, 51, 214, 224), 0.26);

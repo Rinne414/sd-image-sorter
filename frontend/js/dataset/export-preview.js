@@ -68,6 +68,7 @@
 
         const renderCaptionReview = (data) => {
             if (requestSeq !== previewRequestSeq) return;
+            DM._syncPairChipFromPreview?.(data, outputMode);
             list.innerHTML = '';
             const summary = document.createElement('div');
             summary.className = 'dataset-export-preview-summary';

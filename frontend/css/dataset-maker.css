@@ -1855,6 +1855,11 @@
     color: var(--text-secondary, #D6D6D6);
     font-size: 12px;
 }
+/* The output folder already holds files: say what the same-name setting does */
+#view-dataset .dataset-confirm-folder-note {
+    margin: 0 0 14px 0;
+    font-size: 13px;
+}
 #view-dataset #btn-dataset-confirm-recheck {
     justify-self: start;
 }

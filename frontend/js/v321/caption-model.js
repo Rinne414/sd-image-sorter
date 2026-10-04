@@ -124,8 +124,10 @@ Object.assign(window.V321Integration, {
     _seedNlFromPreviewItem(item) {
         const id = Number(item?.image_id);
         if (!Number.isFinite(id) || id <= 0) return;
-        if (item.nl_caption !== undefined || item.ai_caption !== undefined) {
-            this.nlCache.set(id, String(item.nl_caption || item.ai_caption || ''));
+        // nl_source: the stored sentence or a pre-split fused ai_caption, never
+        // a bare tag list (that would export every tag twice in "both").
+        if (item.nl_source !== undefined) {
+            this.nlCache.set(id, String(item.nl_source || ''));
         }
     },
 

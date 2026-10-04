@@ -271,6 +271,17 @@
         return count > 0 ? showExistingChoice(count) : 'skip';
     }
 
+    // The trigger typed in Smart Tag is the dataset's trigger too: fill an
+    // empty Dataset Maker trigger so it need not be typed twice. A trigger
+    // already typed there is the user's and stays.
+    function carryTriggerToDatasetMaker(trigger) {
+        const value = String(trigger || '').trim();
+        const field = document.getElementById('dataset-trigger');
+        if (!value || !field || String(field.value || '').trim()) return;
+        field.value = value;
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
     async function runSmartTag() {
         answerExistingChoice('cancel');
         const form = readForm();
@@ -299,6 +310,22 @@
         if (!form.enable_wd14 && !form.enable_vlm) {
             if (typeof window.showToast === 'function') {
                 window.showToast(smartTagT('smartTag.pickOneMode', 'Pick booru tags, natural-language captioning, or both.'), 'warning');
+            }
+            return;
+        }
+        // Stop here, before any model download, when the start route would
+        // refuse the captioner anyway (same rule, read from VLM Settings).
+        if (form.enable_vlm && form.natural_language_mode === 'vlm'
+            && await readSmartTagCaptionerReady() === false) {
+            syncNaturalLanguageHint();
+            refreshOllamaWarning();
+            smartTag$('#smart-tag-natural-section')?.scrollIntoView({ block: 'nearest' });
+            const notReadyMsg = smartTagT('smartTag.nlNotConfiguredRun',
+                'Natural-language captioning is on, but no captioner is set up. Nothing was downloaded. Set one up in VLM Settings, or turn natural-language captioning off.');
+            if (typeof window.showToast === 'function') {
+                window.showToast(notReadyMsg, 'error');
+            } else {
+                alert(notReadyMsg);
             }
             return;
         }
@@ -367,8 +394,10 @@
 
         showProgress(true);
         setProgressUI({ percent: 0, text: 'Starting...', preview: '' });
+        const fromDatasetMaker = ['dataset', 'dataset-dom'].includes(getDatasetSources().source);
         try {
             const snap = await postJson('/api/smart-tag/start', form);
+            if (fromDatasetMaker) carryTriggerToDatasetMaker(form.trigger_word);
             if (snap && snap.pipeline_queued === true) {
                 // v3.4.1 AI job queue: another AI job is running, so this
                 // run was queued (200) instead of rejected with 409. The

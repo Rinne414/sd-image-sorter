@@ -5117,7 +5117,7 @@
                                     <label class="dataset-preset-row">
                                         <input type="radio" name="dataset-naming-preset" value="renumber">
                                         <span class="dataset-preset-label">
-                                            <strong data-i18n="dataset.presetRenumberTitle">Renumber: subject_001, subject_002, ...</strong>
+                                            <strong data-i18n="dataset.presetRenumberTitle">Renumber: 001, 002, … (or trigger_001)</strong>
                                             <small data-i18n="dataset.presetRenumberHint">Clean sequential names using the Setup trigger.</small>
                                         </span>
                                     </label>
@@ -5476,6 +5476,8 @@
                                 <span data-i18n="dataset.confirmTitle">Ready to export</span>
                             </h3>
                             <ul class="dataset-confirm-summary" id="dataset-confirm-summary"></ul>
+                            <p class="dataset-warning-inline dataset-confirm-folder-note" id="dataset-confirm-folder-note"
+                               data-testid="dataset-confirm-folder-note" role="status" hidden></p>
                             <section class="dataset-confirm-check" id="dataset-confirm-check"
                                      data-testid="dataset-confirm-check" aria-live="polite">
                                 <p class="dataset-confirm-check-status" id="dataset-confirm-check-status"
@@ -8815,6 +8817,12 @@
                             <span data-i18n="smartTag.vlmSettings">VLM Settings</span>
                         </button>
                     </div>
+                    <!-- Shown while no captioner is set up: captioning then starts off. -->
+                    <p class="smart-tag-nl-unconfigured" id="smart-tag-nl-unconfigured" hidden>
+                        <span data-i18n="smartTag.nlUnconfiguredHint">No natural-language captioner is set up yet, so natural-language captioning is off. Set one up to use it.</span>
+                        <button type="button" class="btn btn-ghost btn-small" id="btn-smart-tag-nl-setup"
+                                data-i18n="smartTag.nlUnconfiguredSetup">Set up captioner</button>
+                    </p>
                     <div class="smart-tag-natural-grid">
                         <label class="form-label">
                             <span data-i18n="smartTag.nlSource">Caption source</span>

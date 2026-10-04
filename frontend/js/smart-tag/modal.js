@@ -42,6 +42,8 @@
         // every openModal lets a user who fixes Ollama mid-session
         // see the cleared state without reloading the app.
         refreshOllamaWarning();
+        // No captioner set up -> natural-language captioning starts off.
+        syncNaturalLanguageDefault();
 
         // Reload-resume: after an F5 (or close/reopen of this modal) a job
         // started earlier may still be running on the backend. Re-attach the

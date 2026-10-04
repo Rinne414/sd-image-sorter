@@ -2634,7 +2634,7 @@ Undo one journaled bulk operation. Body: `{force}`. Restores each affected image
 List built-in tag/caption export presets used by the LoRA training template engine (Anima Tags+NL, Anima Tags-only, Illustrious / Pony, NoobAI, FLUX, Kohya SD1.5, Custom).
 
 #### POST /api/tags/export-preview
-Render sample caption files without writing to disk. Body: `{image_ids, preset_id|template_override, options}`. Returns rendered captions keyed by image id plus the resolved template variables. v3.5.0 (preview unification): pass `content_mode` (any real export mode, plus optional `prefix` and `normalize_tag_underscores`) to render through `build_sidecar_content` — the exact engine `/api/tags/export-batch` writes with — so the preview can never drift from the exported sidecar. Omit `content_mode` (or send `template`) for the template-designer path. Also accepts `training_purpose` and `dedupe_implications` (P2-19/P2-18) so the preview mirrors those export filters on both the native and template paths. Each result row also reports `blacklist_leaks` — blacklisted terms that still appear in the final rendered text (underscore/space folded, word-bounded), i.e. features that leaked back in through NL prose after the tag rows were pruned (SEP-2).
+Render sample caption files without writing to disk. Body: `{image_ids, preset_id|template_override, options}`. Returns rendered captions keyed by image id plus the resolved template variables. v3.5.0 (preview unification): pass `content_mode` (any real export mode, plus optional `prefix` and `normalize_tag_underscores`) to render through `build_sidecar_content` — the exact engine `/api/tags/export-batch` writes with — so the preview can never drift from the exported sidecar. Omit `content_mode` (or send `template`) for the template-designer path. Also accepts `training_purpose` and `dedupe_implications` (P2-19/P2-18) so the preview mirrors those export filters on both the native and template paths. Each result row also carries `nl_source`, the text the Dataset Maker's natural-language box starts from: the stored `nl_caption`, else a pre-split fused `ai_caption`, never a bare booru tag list (a booru-only Smart Tag `ai_caption`). Each result row also reports `blacklist_leaks` — blacklisted terms that still appear in the final rendered text (underscore/space folded, word-bounded), i.e. features that leaked back in through NL prose after the tag rows were pruned (SEP-2).
 
 #### POST /api/tags/export-combined
 Build a single combined export bundle for the current selection across multiple presets. Body: `{image_ids|selection_token, presets: [{preset_id|template, options}], filename_template}`. Returns `{token, total_files}` — pass the token to the download endpoint below.
@@ -2672,7 +2672,7 @@ List supported VLM providers (`openai_compat`, `anthropic`, `gemini`, `vertex`) 
 Auto-detect provider from a pasted endpoint URL. Body: `{endpoint}`. Returns the inferred `provider` key plus suggested defaults.
 
 #### GET /api/vlm/settings
-Return the saved VLM configuration (provider, endpoint, model, prompt preset, output format, concurrency, retries, proxy).
+Return the saved VLM configuration (provider, endpoint, model, prompt preset, output format, concurrency, retries, proxy). Also returns `captioner_ready` and `captioner_problem`: whether Smart Tag's natural-language captioner (`natural_language_mode=vlm`) would pass the same check `/api/smart-tag/start` applies, and why not. The Smart Tag dialog uses them to turn captioning off by default and to stop a run before any model download.
 
 #### POST /api/vlm/settings
 Persist the VLM configuration. Body: full settings payload (secrets handled server-side). Returns the saved settings minus secrets.
@@ -2860,6 +2860,12 @@ Body matches `/api/dataset/export` minus `image_op` (the preview never moves/cop
 The preview wire contract also accepts and echoes the same validated `subject_crop`, `bucket_resize`, and `watermark_removal` settings through the shared payload model, but it does not transform or write pixels.
 
 Returns `{total, returned, items_truncated, content_mode, output_mode, sidecar_extension, items[]}`. Each `items[]` entry carries `{index, image_id, abs_path, filename, thumbnail_url, output_image_name, output_caption_name, output_image_path, output_caption_path, caption, ai_caption, nl_caption, skipped_reason, error}`. `caption` is the fully-rendered booru-tag line; `nl_caption` is the raw natural-language sentence for the two-box editor. `output_image_path` / `output_caption_path` are empty strings when no output folder is supplied.
+
+---
+
+#### POST /api/dataset/output-folder-status
+
+Count what an export folder already holds, so the Dataset Maker confirm can warn before a second export mixes two datasets in one folder. Body: `{output_folder}`. Read-only and not recursive. Returns `{exists, file_count, image_count, caption_count, has_export_manifest}`; a folder that does not exist yet returns `exists: false` and zeros. Returns `400` for a path that cannot be read as a folder.
 
 ---
 

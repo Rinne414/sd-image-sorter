@@ -127,7 +127,7 @@ async function installBaseMocks(page: Page): Promise<void> {
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ endpoint: 'https://example.invalid/v1', use_vertex: false }),
+      body: JSON.stringify({ endpoint: 'https://example.invalid/v1', use_vertex: false, captioner_ready: true }),
     }))
   await page.route('**/api/vlm/local-models/recommended', (route) =>
     route.fulfill({

@@ -7,6 +7,10 @@
  * intentionally duplicated with the one in smart-tag/boot.js
  * (pre-split 253-259 vs 1145-1151) — do NOT DRY it as part of a
  * verbatim split. Classic script; family renames applied.
+ * Since the LoRA journey fix (2026-10): the banner sits inside the natural-
+ * language section, and readSmartTagCaptionerReady / syncNaturalLanguageHint /
+ * syncNaturalLanguageDefault turn captioning off on open (and back on) from the
+ * captioner_ready verdict GET /api/vlm/settings reports.
  */
 'use strict';
     function ensureSmartTagStyles() {
@@ -61,7 +65,11 @@
                 Open VLM Settings
             </button>
         `;
-        naturalSection.parentNode.insertBefore(banner, naturalSection);
+        // Inside the natural-language section, under its heading: placed
+        // before the section, the grid put it at the bottom of the dialog,
+        // out of view at 1366x768.
+        const sectionHead = naturalSection.querySelector('.smart-tag-section-head');
+        naturalSection.insertBefore(banner, sectionHead ? sectionHead.nextSibling : naturalSection.firstChild);
         banner.querySelector('#btn-smart-tag-open-vlm-from-warning')?.addEventListener('click', () => {
             if (typeof window.App?.openVlmSettings === 'function') {
                 window.App.openVlmSettings();
@@ -70,6 +78,47 @@
             }
         });
         return banner;
+    }
+
+    // Smart Tag's captioner verdict (null = not known). GET /api/vlm/settings
+    // reports the same check /api/smart-tag/start applies (captioner_ready),
+    // which needs more than an endpoint: a cloud host also needs an API key.
+    let smartTagCaptionerReady = null;
+
+    async function readSmartTagCaptionerReady() {
+        try {
+            const settings = await getJson('/api/vlm/settings');
+            smartTagCaptionerReady = settings?.captioner_ready === true;
+        } catch (_err) {
+            // Unknown: never guess. The start route still checks on its own.
+            smartTagCaptionerReady = null;
+        }
+        return smartTagCaptionerReady;
+    }
+
+    function syncNaturalLanguageHint() {
+        const hint = smartTag$('#smart-tag-nl-unconfigured');
+        if (!hint) return;
+        const naturalEnabled = !!smartTag$('#smart-tag-enable-vlm')?.checked;
+        const nlMode = smartTag$('#smart-tag-nl-mode')?.value || 'vlm';
+        hint.hidden = !(smartTagCaptionerReady === false && nlMode === 'vlm' && !naturalEnabled);
+    }
+
+    // With no captioner set up, natural-language captioning starts off, so a
+    // default run never downloads a tagger only to be refused at start. A
+    // choice already made on the checkbox (by the user or another panel that
+    // dispatched a change) is left alone.
+    async function syncNaturalLanguageDefault() {
+        const box = smartTag$('#smart-tag-enable-vlm');
+        if (!box) return;
+        const ready = await readSmartTagCaptionerReady();
+        const nlMode = smartTag$('#smart-tag-nl-mode')?.value || 'vlm';
+        if (ready !== null && nlMode === 'vlm' && box.dataset.userTouched !== 'true' && box.checked !== ready) {
+            box.checked = ready;
+            syncSmartTagVoteUi();
+            refreshOllamaWarning();
+        }
+        syncNaturalLanguageHint();
     }
 
     async function refreshOllamaWarning() {
@@ -104,15 +153,20 @@
             // Couldn't read settings — fall through to the Ollama probe rather
             // than assuming a cloud captioner is configured.
         }
+        // The checkbox may have changed while the probes ran (captioning is
+        // switched off on open when no captioner is set up): a stale answer
+        // must not show the banner for a captioner that is now off.
+        const stillWanted = () => !!smartTag$('#smart-tag-enable-vlm')?.checked
+            && (smartTag$('#smart-tag-nl-mode')?.value || 'vlm') === 'vlm';
         try {
             const data = await getJson('/api/vlm/local-models/recommended');
             const unavailable = !data?.ollama_installed || !data?.ollama_running;
-            banner.hidden = !unavailable;
+            banner.hidden = !unavailable || !stillWanted();
         } catch (_err) {
             // No configured endpoint AND the Ollama probe failed — we can't
             // confirm any captioner is reachable, so show the banner with a
             // path to fix it.
-            banner.hidden = false;
+            banner.hidden = !stillWanted();
         }
     }
 

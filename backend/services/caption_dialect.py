@@ -150,6 +150,22 @@ def caption_reads_as_prose(
     return resolved_caption_format(text, stored_format) == CAPTION_FORMAT_NATURAL
 
 
+def ai_caption_nl_fallback(ai_caption: object) -> str:
+    """``ai_caption`` as the natural-language fallback, or ``""`` for a tag list.
+
+    The fallback exists for rows tagged before the ``nl_caption`` split, whose
+    ``ai_caption`` fuses tags with a sentence. A booru-only Smart Tag run also
+    stores its composed caption there, which is only the tag list; handing that
+    to a prose slot wrote every tag twice into a default LoRA export. Only a
+    text the classifier places as ``tags`` is refused: a fused ``mixed`` caption
+    keeps the historical fallback, and the stored text itself is never touched.
+    """
+    text = str(ai_caption or "")
+    if caption_format_for_storage(text) == CAPTION_FORMAT_TAGS:
+        return ""
+    return text
+
+
 def caption_dialect_advisory(
     target_model: object,
     caption_format: object,

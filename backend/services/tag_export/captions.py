@@ -22,7 +22,11 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException
 
 from caption_format import caption_format_for_storage
-from services.caption_dialect import caption_reads_as_prose, nl_compose_advisory
+from services.caption_dialect import (
+    ai_caption_nl_fallback,
+    caption_reads_as_prose,
+    nl_compose_advisory,
+)
 
 
 PARAMETER_EXPORT_ORDER = [
@@ -162,13 +166,17 @@ def _maybe_normalize_underscores(
     *,
     normalize: bool,
     preserve_prefixes: Optional[List[str]] = None,
+    verbatim: frozenset = frozenset(),
 ) -> List[str]:
-    """Apply LoRA-friendly underscore-to-space conversion to a list of tags."""
+    """Apply LoRA-friendly underscore-to-space conversion to a list of tags.
+
+    ``verbatim`` names tags kept exactly as written (trigger words).
+    """
     if not normalize:
         return tags
     from services.export_template_engine import normalize_lora_tag
     prefixes = list(preserve_prefixes) if preserve_prefixes is not None else LORA_PRESERVE_UNDERSCORE_PREFIXES
-    return [normalize_lora_tag(t, prefixes) for t in tags]
+    return [t if t in verbatim else normalize_lora_tag(t, prefixes) for t in tags]
 
 
 def _resolve_underscore_normalization(
@@ -351,7 +359,7 @@ def _image_nl_source_text(image: Dict[str, Any], image_id: int, nl_overrides: Di
     Editor override first (an explicit empty string intentionally suppresses
     the stored sentence), then the stored pure NL, then a ``.txt`` sidecar that
     is actually prose, then the fused ai_caption for rows tagged before the
-    nl_caption split existed.
+    nl_caption split existed (never a bare tag list: ``ai_caption_nl_fallback``).
 
     The sidecar step is why the format marker exists here: this function used to
     fall straight through to ``ai_caption`` — a booru string — while a perfectly
@@ -368,7 +376,7 @@ def _image_nl_source_text(image: Dict[str, Any], image_id: int, nl_overrides: Di
     sidecar = image.get("sidecar_caption")
     if caption_reads_as_prose(sidecar, image.get("sidecar_caption_format")):
         return str(sidecar)
-    return str(image.get("ai_caption") or "")
+    return ai_caption_nl_fallback(image.get("ai_caption"))
 
 
 def _compose_nl_for_image(
@@ -525,7 +533,12 @@ def build_sidecar_content(
     # downstream consumers see ``multiple girls`` while ``score_5`` /
     # ``score_9_up`` survive intact.
     underscore_apply = _resolve_underscore_normalization(mode, normalize_tag_underscores)
-    filtered_tags = _maybe_normalize_underscores(filtered_tags, normalize=underscore_apply)
+    from services.export_template_engine import trigger_tag_names
+    filtered_tags = _maybe_normalize_underscores(
+        filtered_tags,
+        normalize=underscore_apply,
+        verbatim=trigger_tag_names(tags),
+    )
 
     if mode == "tags":
         return _join_caption_parts(filtered_tags)

@@ -61,6 +61,7 @@ from services.dataset_export.trainer_contracts import (
 )
 from services.dataset_export.artifacts import _validate_export_request_read_only
 from services.dataset_export.annotations import AnnotationSelectionResolutionError
+from services.dataset_export.output_folder import output_folder_status
 from services.dataset_export.planning import _requested_item_count
 from services.dataset_export.readiness import (
     DatasetReadinessCancelledError,
@@ -254,6 +255,32 @@ def post_dataset_export_preview(payload: DatasetExportPreviewRequest) -> Dict[st
         raise HTTPException(
             status_code=500,
             detail="Dataset export preview failed. / 数据集导出预览失败。",
+        ) from exc
+
+
+class DatasetOutputFolderStatusRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    output_folder: str = Field(min_length=1, max_length=4096)
+
+
+@router.post(
+    "/dataset/output-folder-status",
+    summary="Count what an export folder already holds",
+    responses={
+        200: {"description": "File counts directly inside the folder (zeros when it does not exist)"},
+        400: {"description": "Not a usable folder path"},
+    },
+)
+def post_dataset_output_folder_status(
+    payload: DatasetOutputFolderStatusRequest,
+) -> Dict[str, Any]:
+    try:
+        return output_folder_status(payload.output_folder)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot read the output folder: {exc} / 无法读取输出文件夹：{exc}",
         ) from exc
 
 

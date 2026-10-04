@@ -324,6 +324,7 @@ async function stubDatasetDependencies(page: Page) {
           thumbnail_path: '',
           rendered: [trigger, `tag ${id}`].filter(Boolean).join(', '),
           nl_caption: `caption ${id}`,
+          nl_source: `caption ${id}`,
         })),
       },
     })

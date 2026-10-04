@@ -47,13 +47,24 @@
         });
         smartTag$('#smart-tag-consensus-mode')?.addEventListener('change', syncSmartTagVoteUi);
         smartTag$('#smart-tag-enable-wd14')?.addEventListener('change', syncSmartTagVoteUi);
-        smartTag$('#smart-tag-enable-vlm')?.addEventListener('change', () => {
+        smartTag$('#smart-tag-enable-vlm')?.addEventListener('change', (event) => {
+            // A made choice: syncNaturalLanguageDefault no longer changes it.
+            event.currentTarget.dataset.userTouched = 'true';
             syncSmartTagVoteUi();
             refreshOllamaWarning();
+            syncNaturalLanguageHint();
         });
         smartTag$('#smart-tag-nl-mode')?.addEventListener('change', () => {
             syncSmartTagVoteUi();
             refreshOllamaWarning();
+            syncNaturalLanguageHint();
+        });
+        smartTag$('#btn-smart-tag-nl-setup')?.addEventListener('click', () => {
+            if (typeof window.App?.openVlmSettings === 'function') {
+                window.App.openVlmSettings();
+            } else {
+                document.getElementById('btn-vlm-settings')?.click();
+            }
         });
         ['#smart-tag-general-threshold', '#smart-tag-character-threshold', '#smart-tag-copyright-threshold'].forEach((selector) => {
             const input = smartTag$(selector);

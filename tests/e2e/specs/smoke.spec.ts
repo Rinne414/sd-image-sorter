@@ -2942,7 +2942,7 @@ test.describe('Smoke Tests', () => {
     await mockGalleryImages(page, [{ id: 711, filename: 'smart-tag-payload.png' }])
     await mockTaggerCatalog(page)
     await page.route('**/api/vlm/settings', async (route) => {
-      await route.fulfill({ json: { endpoint: 'https://example.invalid/v1', use_vertex: false } })
+      await route.fulfill({ json: { endpoint: 'https://example.invalid/v1', use_vertex: false, captioner_ready: true } })
     })
     await page.route('**/api/smart-tag/progress**', async (route) => {
       await route.fulfill({ json: { status: 'idle' } })
@@ -3353,7 +3353,7 @@ test.describe('Smoke Tests', () => {
     await mockGalleryImages(page, [{ id: 712, filename: 'smart-tag-scroll.png' }])
     await mockTaggerCatalog(page)
     await page.route('**/api/vlm/settings', async (route) => {
-      await route.fulfill({ json: { endpoint: 'https://example.invalid/v1', use_vertex: false } })
+      await route.fulfill({ json: { endpoint: 'https://example.invalid/v1', use_vertex: false, captioner_ready: true } })
     })
     await page.route('**/api/smart-tag/progress**', async (route) => {
       await route.fulfill({ json: { status: 'idle' } })
@@ -7909,7 +7909,7 @@ test.describe('Smoke Tests', () => {
     await mockGalleryImages(page, [{ id: 701, filename: 'smart-tag-entry.png' }])
     await mockTaggerCatalog(page)
     await page.route('**/api/vlm/settings', async (route) => {
-      await route.fulfill({ json: { endpoint: 'https://example.invalid/v1', use_vertex: false } })
+      await route.fulfill({ json: { endpoint: 'https://example.invalid/v1', use_vertex: false, captioner_ready: true } })
     })
     await page.route('**/api/smart-tag/progress**', async (route) => {
       await route.fulfill({ json: { status: 'idle' } })

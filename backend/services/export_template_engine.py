@@ -41,6 +41,7 @@ from services.export_template_presets import (
 from services.export_tag_pipeline import (
     TagProcessingConfig,
     process_tags,
+    trigger_tag_names,
     KAOMOJI_TAGS,
     is_kaomoji_tag,
     _format_tag_underscore,
@@ -165,8 +166,10 @@ def build_export_caption(
         if t.get("tag")
     ]
     if proc_config.underscore_to_space:
+        verbatim = trigger_tag_names(tags)
         all_tag_strings = [
-            _format_tag_underscore(t, proc_config.preserve_underscore_prefixes)
+            t if t in verbatim
+            else _format_tag_underscore(t, proc_config.preserve_underscore_prefixes)
             for t in all_tag_strings
         ]
 

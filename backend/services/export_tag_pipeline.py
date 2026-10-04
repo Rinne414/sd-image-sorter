@@ -27,6 +27,24 @@ class TagProcessingConfig:
     preserve_underscore_prefixes: List[str] = field(default_factory=list)
 
 
+def trigger_tag_names(tags: List[Dict[str, Any]]) -> frozenset:
+    """Exact text of the trigger rows in ``tags`` (source or category ``trigger``).
+
+    A trigger is a word the user typed, not a booru tag, so underscore
+    formatting must leave it alone: ``mylora_walk`` turning into
+    ``mylora walk`` split one trigger into two tokens in exported captions.
+    """
+    return frozenset(
+        str(row.get("tag") or "").strip()
+        for row in tags or []
+        if "trigger" in {
+            str(row.get("source") or "").strip().lower(),
+            str(row.get("category") or "").strip().lower(),
+        }
+        and str(row.get("tag") or "").strip()
+    )
+
+
 def process_tags(
     tags: List[Dict[str, Any]],
     config: TagProcessingConfig,
@@ -78,9 +96,14 @@ def process_tags(
     if config.max_tags and config.max_tags > 0:
         processed = processed[:config.max_tags]
 
-    # Step 4: format (underscore handling) + append
+    # Step 4: format (underscore handling) + append. Trigger rows keep the
+    # exact text the user typed (see trigger_tag_names).
     if config.underscore_to_space:
-        processed = [_format_tag_underscore(t, config.preserve_underscore_prefixes) for t in processed]
+        verbatim = trigger_tag_names(tags)
+        processed = [
+            t if t in verbatim else _format_tag_underscore(t, config.preserve_underscore_prefixes)
+            for t in processed
+        ]
 
     if config.append:
         appended = list(config.append)

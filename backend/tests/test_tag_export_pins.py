@@ -370,9 +370,17 @@ class TestNlCompose:
             tes._image_nl_source_text(img, 7, {7: ""}) == ""
         )  # explicit empty suppresses
         assert tes._image_nl_source_text(img, 7, {}) == "stored"
+        fused = "1girl, solo, A girl stands in a field."
         assert (
-            tes._image_nl_source_text(_img(nl_caption="", ai_caption="fused"), 7, {})
-            == "fused"
+            tes._image_nl_source_text(_img(nl_caption="", ai_caption=fused), 7, {})
+            == fused
+        )
+        # A bare tag list (booru-only Smart Tag ai_caption) is not a sentence.
+        assert (
+            tes._image_nl_source_text(
+                _img(nl_caption="", ai_caption="mylora_walk, 1girl, solo"), 7, {}
+            )
+            == ""
         )
 
     def test_compose_nl_for_image_gated_by_mode_and_type(self):

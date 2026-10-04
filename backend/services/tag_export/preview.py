@@ -13,6 +13,7 @@ from typing import Any, Dict, List
 from fastapi import HTTPException
 
 import database as db
+from services.caption_dialect import ai_caption_nl_fallback
 from services.tag_export.captions import (
     VALID_CONTENT_MODES,
     apply_caption_transforms,
@@ -124,6 +125,11 @@ def render_export_preview(request: Any) -> Dict[str, Any]:
             # Pure natural-language caption (point 1/2): lets the editor's NL
             # box show / edit the sentence separately from the booru-tags box.
             "nl_caption": str(image.get("nl_caption") or ""),
+            # What the editor's NL box starts from: the stored sentence, else a
+            # pre-split fused ai_caption. A booru-only Smart Tag ai_caption is
+            # just the tag list, so it is not offered (it doubled every tag).
+            "nl_source": str(image.get("nl_caption") or "")
+            or ai_caption_nl_fallback(image.get("ai_caption")),
             "blacklist_leaks": blacklist_leaks,
             "error": None,
         })

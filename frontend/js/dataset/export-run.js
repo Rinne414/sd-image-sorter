@@ -494,12 +494,15 @@
         if (preset === 'keep') {
             namingLabel = this._t('dataset.namingKeepLabel', 'kept as the original filenames');
         } else if (preset === 'renumber') {
+            // Mirror _effectivePattern: no trigger exports plain 001.png.
             const trigger = this._canonicalDatasetTrigger(
                 document.getElementById('dataset-trigger')?.value || '',
-            ) || 'subject';
-            namingLabel = this._t('dataset.namingRenumberLabel',
-                'renumbered: {trigger}_001.png, {trigger}_002.png, ...',
-                { trigger: escapeHtml(trigger) });
+            );
+            namingLabel = trigger
+                ? this._t('dataset.namingRenumberLabel',
+                    'renumbered: {trigger}_001.png, {trigger}_002.png, ...',
+                    { trigger: escapeHtml(trigger) })
+                : this._t('dataset.namingRenumberPlainLabel', 'renumbered: 001.png, 002.png, ...');
         } else {
             const pattern = document.getElementById('dataset-naming-pattern')?.value || '';
             namingLabel = this._t('dataset.namingCustomLabel',
@@ -548,6 +551,67 @@
         list.innerHTML = items.map(s => `<li>${s}</li>`).join('');
         modal.hidden = false;
         this._renderConfirmCheck();
+        void this._renderConfirmFolderNote(outputMode, folder);
+    };
+
+    const CONFIRM_FOLDER_POLICY_TEXT = Object.freeze({
+        unique: ['dataset.confirmFolderPolicyUnique',
+            'Same-name files are kept and the new ones get a number (name_2), so the folder will hold both sets. Pick an empty folder to keep them apart.'],
+        overwrite: ['dataset.confirmFolderPolicyOverwrite',
+            'Same-name files will be replaced by this export.'],
+        skip: ['dataset.confirmFolderPolicySkip',
+            'Pictures whose names already exist there are skipped.'],
+    });
+
+    // A second export into a folder that already holds files mixes two sets
+    // under the default "add a number" setting. Say so before the export;
+    // the user still decides (never blocks).
+    DM._renderConfirmFolderNote = async function (outputMode, folder) {
+        const note = document.getElementById('dataset-confirm-folder-note');
+        if (!note) return;
+        note.hidden = true;
+        note.textContent = '';
+        const requestSeq = Number(this._confirmFolderNoteSeq || 0) + 1;
+        this._confirmFolderNoteSeq = requestSeq;
+        if (outputMode === 'beside_image' || !folder) return;
+        let status;
+        try {
+            const response = await fetch('/api/dataset/output-folder-status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ output_folder: folder }),
+            });
+            if (!response.ok) {
+                window.Logger?.warn?.('dataset_output_folder_status_failed', {
+                    status_code: response.status,
+                    body: (await response.text()).slice(0, 300),
+                });
+                return;
+            }
+            status = await response.json();
+        } catch (error) {
+            window.Logger?.warn?.('dataset_output_folder_status_failed', {
+                message: error instanceof Error ? error.message : String(error),
+            });
+            return;
+        }
+        if (requestSeq !== this._confirmFolderNoteSeq) return;
+        const files = Number(status?.file_count || 0);
+        if (!(files > 0)) return;
+        const policy = document.getElementById('dataset-overwrite')?.value || 'unique';
+        const [policyKey, policyFallback] = CONFIRM_FOLDER_POLICY_TEXT[policy] || CONFIRM_FOLDER_POLICY_TEXT.unique;
+        const parts = [this._t('dataset.confirmFolderHasFiles',
+            'This folder already has {files} file(s), {images} of them pictures.',
+            { files, images: Number(status.image_count || 0) })];
+        if (status.has_export_manifest === true) {
+            parts.push(this._t('dataset.confirmFolderHasExport', 'It already holds an earlier dataset export.'));
+        }
+        parts.push(this._t(policyKey, policyFallback));
+        // Chinese sentences end in a full-width stop and take no space after it.
+        note.textContent = parts.reduce((text, part) => (
+            !text || /[。！？]$/.test(text) ? `${text}${part}` : `${text} ${part}`
+        ), '');
+        note.hidden = false;
     };
 
     DM._hideConfirmModal = function () {

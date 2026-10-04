@@ -185,7 +185,7 @@
                     `Caption response results[${index}].rendered must be a string.`,
                 );
             }
-            for (const field of ['filename', 'thumbnail_path', 'nl_caption', 'ai_caption']) {
+            for (const field of ['filename', 'thumbnail_path', 'nl_caption', 'ai_caption', 'nl_source']) {
                 if (item[field] !== undefined && item[field] !== null && typeof item[field] !== 'string') {
                     throw new TypeError(
                         `Caption response results[${index}].${field} must be a string or null.`,
@@ -200,6 +200,7 @@
                 thumbnail_path: item.thumbnail_path ?? '',
                 nl_caption: item.nl_caption ?? null,
                 ai_caption: item.ai_caption ?? null,
+                nl_source: item.nl_source ?? null,
             });
         });
         const missing = requestedIds.filter((imageId) => !seen.has(imageId));
@@ -527,7 +528,10 @@
             const imageId = Number(item.image_id);
             if (item.rendered != null) this.captions.set(imageId, item.rendered);
             // Seed the natural-language baseline without clobbering a user edit.
-            const nlText = String(item.nl_caption || item.ai_caption || '').trim();
+            // The server decides what counts as NL (nl_source): a booru-only
+            // Smart Tag ai_caption is just the tag list, and seeding it here made
+            // the image "both" and exported every tag twice.
+            const nlText = String(item.nl_source || '').trim();
             if (nlText) this.nlCaptions.set(imageId, nlText);
             if (!this.meta.has(imageId)) {
                 this.meta.set(imageId, {
@@ -569,9 +573,9 @@
             }
             for (const item of (data.results || [])) {
                 const id = Number(item.image_id);
-                // Prefer the pure nl_caption; fall back to the fused ai_caption
-                // for rows tagged before the split column existed.
-                const nl = String(item.nl_caption || item.ai_caption || '').trim();
+                // The pure nl_caption, else a pre-split fused ai_caption; never
+                // a bare tag list (the server resolves this as nl_source).
+                const nl = String(item.nl_source || '').trim();
                 if (!Number.isFinite(id) || !nl) continue;
                 this.nlCaptions.set(id, nl);
                 applied += 1;

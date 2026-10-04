@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from caption_format import caption_format_for_storage, detect_caption_format
 from services.annotation_models import TrainingCaptionContentV1
 from services.caption_dialect import (
+    ai_caption_nl_fallback,
     caption_dialect_advisory,
     caption_reads_as_prose,
     nl_compose_advisory,
@@ -242,7 +243,7 @@ def _compose_nl_caption(
             nl_text = (
                 str(sidecar)
                 if caption_reads_as_prose(sidecar, record.get("sidecar_caption_format"))
-                else str(record.get("ai_caption") or "")
+                else ai_caption_nl_fallback(record.get("ai_caption"))
             )
     if advisories is not None:
         advisory = nl_compose_advisory(caption_type, caption_format_for_storage(nl_text))

@@ -157,6 +157,62 @@ class SmartTagRequest:
     suppressed_traits: List[str] = field(default_factory=list)
 
 
+def vlm_captioner_problem() -> Optional[str]:
+    """Why the saved VLM Settings cannot run Smart Tag's captioner, or ``None``.
+
+    The one rule behind both the start-time refusal (Fix B2) and the
+    ``captioner_ready`` flag ``GET /api/vlm/settings`` reports, so the dialog
+    can turn captioning off or stop a run before any model download starts.
+    """
+    try:
+        # Lazy import to avoid hard coupling between the service layer
+        # and the VLM router module on startup.
+        from routers.vlm import _build_config as _build_vlm_config
+
+        vlm_config = _build_vlm_config()
+    except Exception as exc:  # noqa: BLE001
+        return (
+            "Natural-language captioning is enabled, but the VLM "
+            f"configuration could not be loaded: {exc}. Open VLM Settings "
+            "and configure an endpoint, or disable natural-language captioning."
+        )
+    provider_name = (getattr(vlm_config, "provider", "") or "").strip().lower()
+    endpoint = (getattr(vlm_config, "endpoint", "") or "").strip()
+    api_key = (getattr(vlm_config, "api_key", "") or "").strip()
+    use_vertex = bool(getattr(vlm_config, "use_vertex", False))
+    vertex_project = (getattr(vlm_config, "vertex_project", "") or "").strip()
+
+    # Vertex AI auth path: project + service-account credentials, no api_key.
+    if provider_name == "gemini" and use_vertex:
+        if not vertex_project:
+            return (
+                "Natural-language captioning via Vertex AI is enabled, but "
+                "VLM Settings has no Vertex project configured. Open VLM "
+                "Settings and set the Vertex project, or disable natural-"
+                "language captioning."
+            )
+        return None
+    if not endpoint:
+        return (
+            "Natural-language captioning is enabled, but VLM Settings "
+            "has no endpoint configured. Open VLM Settings and "
+            "configure an endpoint, or disable natural-language "
+            "captioning."
+        )
+    # Local OpenAI-compatible servers (Ollama, vLLM, LM Studio, etc.)
+    # accept requests without an api_key. Only require api_key when
+    # the endpoint points at something other than a loopback / *.local
+    # / *.lan host so cloud providers still get caught early.
+    if not api_key and not _is_local_openai_compat_endpoint(provider_name, endpoint):
+        return (
+            "Natural-language captioning is enabled, but VLM Settings "
+            "has no API key configured. Open VLM Settings and "
+            "configure an API key, or disable natural-language "
+            "captioning."
+        )
+    return None
+
+
 def _coerce_dataset_scan_token(payload: Dict[str, Any]) -> Optional[str]:
     for key in (
         "dataset_scan_token",
@@ -349,52 +405,9 @@ def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
             f"received {nl_mode_raw!r}."
         )
     if enable_vlm_flag and nl_mode_normalized == "vlm":
-        try:
-            # Lazy import to avoid hard coupling between the service layer
-            # and the VLM router module on startup.
-            from routers.vlm import _build_config as _build_vlm_config
-
-            vlm_config = _build_vlm_config()
-        except Exception as exc:  # noqa: BLE001
-            raise ValueError(
-                "Natural-language captioning is enabled, but the VLM "
-                f"configuration could not be loaded: {exc}. Open VLM Settings "
-                "and configure an endpoint, or disable natural-language captioning."
-            ) from exc
-        provider_name = (getattr(vlm_config, "provider", "") or "").strip().lower()
-        endpoint = (getattr(vlm_config, "endpoint", "") or "").strip()
-        api_key = (getattr(vlm_config, "api_key", "") or "").strip()
-        use_vertex = bool(getattr(vlm_config, "use_vertex", False))
-        vertex_project = (getattr(vlm_config, "vertex_project", "") or "").strip()
-
-        # Vertex AI auth path: project + service-account credentials, no api_key.
-        if provider_name == "gemini" and use_vertex:
-            if not vertex_project:
-                raise ValueError(
-                    "Natural-language captioning via Vertex AI is enabled, but "
-                    "VLM Settings has no Vertex project configured. Open VLM "
-                    "Settings and set the Vertex project, or disable natural-"
-                    "language captioning."
-                )
-        else:
-            if not endpoint:
-                raise ValueError(
-                    "Natural-language captioning is enabled, but VLM Settings "
-                    "has no endpoint configured. Open VLM Settings and "
-                    "configure an endpoint, or disable natural-language "
-                    "captioning."
-                )
-            # Local OpenAI-compatible servers (Ollama, vLLM, LM Studio, etc.)
-            # accept requests without an api_key. Only require api_key when
-            # the endpoint points at something other than a loopback / *.local
-            # / *.lan host so cloud providers still get caught early.
-            if not api_key and not _is_local_openai_compat_endpoint(provider_name, endpoint):
-                raise ValueError(
-                    "Natural-language captioning is enabled, but VLM Settings "
-                    "has no API key configured. Open VLM Settings and "
-                    "configure an API key, or disable natural-language "
-                    "captioning."
-                )
+        problem = vlm_captioner_problem()
+        if problem:
+            raise ValueError(problem)
 
     tagger_model = str(payload.get("tagger_model") or "").strip()
     single_defaults = _tagger_defaults(tagger_model)

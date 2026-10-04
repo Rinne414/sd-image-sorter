@@ -181,7 +181,26 @@
         setTimeout(() => document.addEventListener('mousedown', dismiss), 0);
     }
 
+    // Once the server preview has planned the real names, the chip shows the
+    // first one: the preview sees name clashes in the output folder (a second
+    // export writes 001_2.png, not the 001.png the sample above promises).
+    function syncPairChipFromPreview(data, outputMode) {
+        const png = document.getElementById('dataset-pair-chip-png');
+        const txt = document.getElementById('dataset-pair-chip-txt');
+        if (!png || !txt) return;
+        const first = outputMode === 'folder'
+            ? (data?.items || []).find((item) => item?.output_image_name && !item.skipped_reason)
+            : null;
+        if (!first) {
+            refreshPairChip();
+            return;
+        }
+        png.textContent = String(first.output_image_name);
+        txt.textContent = String(first.output_caption_name || '');
+    }
+
     DM._refreshPairChip = refreshPairChip;
+    DM._syncPairChipFromPreview = syncPairChipFromPreview;
 
     // Split of dataset-maker-pipeline.js's single init() (forced
     // non-verbatim) — this module keeps only its own binder. See

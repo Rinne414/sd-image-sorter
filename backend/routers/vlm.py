@@ -326,6 +326,13 @@ async def get_settings():
     if settings.get("service_account_json"):
         settings["service_account_json_display"] = "*** (configured)"
         del settings["service_account_json"]
+    # Smart Tag's start-time verdict, so its dialog can switch captioning off
+    # and stop a run before any model download (same rule as /smart-tag/start).
+    from services.smart_tag.request import vlm_captioner_problem
+
+    problem = vlm_captioner_problem()
+    settings["captioner_ready"] = problem is None
+    settings["captioner_problem"] = problem or ""
     return settings
 
 
