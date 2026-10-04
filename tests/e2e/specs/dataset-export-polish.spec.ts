@@ -76,3 +76,36 @@ test('the export header count follows the set after a reject is undone', async (
   await page.evaluate(() => (window as any).DatasetMaker._undoReviewDrop())
   await expect(line).toContainText('25 images')
 })
+
+// ---------------------------------------------------------------------------
+// 14. Red token count explains itself
+// ---------------------------------------------------------------------------
+
+test('an over-budget token count says why and what to do', async ({ page }) => {
+  await openDatasetMaker(page, [991])
+  const longCaption = Array.from({ length: 40 }, (_, index) => `long_descriptive_tag_${index}`).join(', ')
+  await page.evaluate((caption) => {
+    const dm = (window as any).DatasetMaker
+    dm._setPipelineTab('workbench')
+    dm._setActive(991)
+    const box = document.getElementById('dataset-editor-textarea') as HTMLTextAreaElement
+    box.value = caption
+    ;(window as any).SeparationConsole._updateTokenCounter()
+  }, longCaption)
+
+  const counter = page.locator('#dataset-token-counter')
+  await expect(counter).toHaveClass(/dataset-token-counter-over/)
+  const note = page.locator('#dataset-token-counter-note')
+  await expect(note).toBeVisible()
+  await expect(note).toContainText('75')
+  await expect(note).toContainText('max_token_length')
+  await expect(counter).toHaveAttribute('title', /75-token/)
+
+  await page.evaluate(() => {
+    const box = document.getElementById('dataset-editor-textarea') as HTMLTextAreaElement
+    box.value = '1girl, solo'
+    ;(window as any).SeparationConsole._updateTokenCounter()
+  })
+  await expect(counter).not.toHaveClass(/dataset-token-counter-over/)
+  await expect(note).toBeHidden()
+})

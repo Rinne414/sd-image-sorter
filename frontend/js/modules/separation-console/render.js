@@ -51,10 +51,26 @@ Object.assign(SeparationConsole, {
             counter.textContent = sepconT(
                 `${tagCount} tags · ≈${tokens} tokens`,
                 `${tagCount} 个标签 · ≈${tokens} tokens`);
-            counter.classList.toggle('dataset-token-counter-over', tokens > budget);
-            counter.title = tokens > budget
-                ? sepconT(`Over the ~${budget}-token budget for the chosen target model — the encoder truncates the rest.`,
-                    `超过所选目标模型的 ~${budget}-token 预算 — 编码器会截断多余部分。`)
+            const over = tokens > budget;
+            counter.classList.toggle('dataset-token-counter-over', over);
+            // Red alone said nothing: say why and what to do, right under it.
+            let note = document.getElementById('dataset-token-counter-note');
+            if (!note) {
+                note = document.createElement('p');
+                note.id = 'dataset-token-counter-note';
+                note.className = 'dataset-token-counter-note';
+                counter.insertAdjacentElement('afterend', note);
+            }
+            const [adviceKey, adviceFallback] = budget <= SEPCON_CLIP_TOKEN_CHUNK
+                ? ['dataset.tokenOverClip', 'Over {budget} tokens: CLIP reads a caption in 75-token chunks and the trainer cuts everything past its limit. Remove tags that add little, or set max_token_length to 150 or 225 in kohya.']
+                : ['dataset.tokenOverLong', 'Over {budget} tokens: the text encoder cuts off the rest. Shorten the caption.'];
+            const advice = this.dm?._t
+                ? this.dm._t(adviceKey, adviceFallback, { budget })
+                : adviceFallback.replace('{budget}', String(budget));
+            note.hidden = !over;
+            note.textContent = over ? advice : '';
+            counter.title = over
+                ? advice
                 : sepconT(`Estimated tokens (budget ~${budget} for the chosen target model; CLIP default when unset).`,
                     `估算 token 数（当前目标模型预算约 ${budget}；未选择时按 CLIP 预算）。`);
         },

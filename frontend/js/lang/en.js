@@ -5012,6 +5012,8 @@ window.I18nLang_en = {
     'dataset.kohyaLayoutLabel': 'kohya folder structure ({repeats}_{name})',
     'dataset.kohyaLayoutHint': 'Pictures and captions go into a subfolder named repeats_trigger word, which kohya reads directly. Untick to write them straight into the output folder.',
     'dataset.exportPreviewSubfolder': 'in {folder}/',
+    'dataset.tokenOverClip': 'Over {budget} tokens: CLIP reads a caption in 75-token chunks and the trainer cuts everything past its limit. Remove tags that add little, or set max_token_length to 150 or 225 in kohya.',
+    'dataset.tokenOverLong': 'Over {budget} tokens: the text encoder cuts off the rest. Shorten the caption.',
     'dataset.confirmSummaryKohya':'kohya folder structure: kohya reads repeats = {repeats} from the folder name "{subfolder}".',
     'dataset.cat.body': 'Body',
     'dataset.cat.bodyDesc': 'hair, eyes, breasts, skin, face and other fixed body traits',

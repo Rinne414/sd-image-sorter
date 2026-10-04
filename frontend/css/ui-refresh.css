@@ -11632,6 +11632,15 @@ html.lang-zh #view-censor .queue-action-btn span {
     color: var(--accent-danger, #E58985);
     font-weight: 600;
 }
+.dataset-token-counter-note {
+    margin: 2px 0 0;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-secondary, #BDBDBD);
+}
+.dataset-token-counter-note[hidden] {
+    display: none;
+}
 
 /* ==========================================================================
    NOISE-10 — floating background-job progress bars: distinct vertical slots

@@ -50,6 +50,9 @@
     const SEPCON_SEEN_KEY = 'sd-image-sorter-dataset-seen';
     const SEPCON_PURPOSE_KEY = 'sd-image-sorter-separation-purpose';
     const SEPCON_INTRINSIC_MIN_RATIO = 0.5;
+    // CLIP text encoders read 75 tokens per chunk; budgets at or under this
+    // are CLIP targets, where kohya's max_token_length (150/225) helps.
+    const SEPCON_CLIP_TOKEN_CHUNK = 75;
 
     // Trait families that are usually intrinsic to a character (mirrors the
     // backend trait-pruning families; heuristic, marking only — never acts).

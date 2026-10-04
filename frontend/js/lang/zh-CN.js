@@ -5010,6 +5010,8 @@ window.I18nLang_zhCN = {
     'dataset.kohyaLayoutLabel': 'kohya 文件夹结构（{repeats}_{名称}）',
     'dataset.kohyaLayoutHint': '图片和 caption 写进以「repeats_触发词」命名的子文件夹，kohya 可以直接读取。取消勾选则直接写进输出文件夹。',
     'dataset.exportPreviewSubfolder': '写进 {folder}/',
+    'dataset.tokenOverClip': '超过 {budget} 个 token：CLIP 按每段 75 个 token 读取 caption，超出训练器上限的部分会被截掉。删掉作用不大的标签，或在 kohya 里把 max_token_length 设为 150 或 225。',
+    'dataset.tokenOverLong': '超过 {budget} 个 token：文本编码器会截掉多出的部分。请缩短 caption。',
     'dataset.confirmSummaryKohya':'kohya 文件夹结构：kohya 会从文件夹名「{subfolder}」读出 repeats = {repeats}。',
     'dataset.cat.body': '身体',
     'dataset.cat.bodyDesc': 'hair、eyes、breasts、skin、face 等固定身体特征',
