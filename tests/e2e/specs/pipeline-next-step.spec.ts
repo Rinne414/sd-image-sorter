@@ -45,3 +45,14 @@ test('the banner action still takes the user to the next page', async ({ page })
   await expect(page.locator('#view-censor.active')).toBeVisible()
   await expect(banner).toBeHidden()
 })
+
+test('starting a manual sort closes an Auto-Separate banner on the same page', async ({ page }) => {
+  const banner = page.locator('#pipeline-next-step')
+  await page.evaluate(() => (window as any).App.switchView('sorting'))
+  await page.evaluate(() => (window as any).App.showPipelineNextStep({ title: 'Sorting done. What next?', actions: [] }))
+  await expect(banner).toBeVisible()
+
+  await page.evaluate(() => (window as any).activateSortingUi('slot'))
+
+  await expect(banner).toBeHidden()
+})

@@ -437,6 +437,8 @@ function hideSortInterfaces() {
 function activateSortingUi(mode = 'slot') {
     const { $ } = window.App;
     ManualSortState.active = true;
+    // An Auto-Separate "what next?" banner would sit over the W slot.
+    if (typeof hidePipelineNextStep === 'function') hidePipelineNextStep();
     ManualSortState.mode = MANUAL_SORT_MODES.has(mode) ? mode : 'slot';
     document.removeEventListener('keydown', handleSortKeypress);
     document.addEventListener('keydown', handleSortKeypress);
