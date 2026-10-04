@@ -44,7 +44,7 @@
         lora: {
             labelKey: 'entry.missionLoraTitle', fallback: 'LoRA Dataset', tabs: ['gallery', 'dataset'],
             steps: [
-                { view: 'gallery', key: 'navMission.lora.pick', title: 'Pick', hint: 'Select the training images in the Gallery, then use More > To Dataset Maker in the bar at the bottom. You can also import a folder in the dataset directly.' },
+                { view: 'gallery', key: 'navMission.lora.pick', title: 'Pick', hint: 'Select the training images in the Gallery, then click To Dataset Maker at the front of the bar at the bottom. You can also import a folder in the dataset directly.' },
                 { view: 'dataset', key: 'navMission.lora.build', title: 'Tag and export', hint: 'Tag, edit captions, then export a training set kohya can read.' },
             ],
         },

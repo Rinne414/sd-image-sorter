@@ -5401,7 +5401,7 @@ window.I18nLang_en = {
     'loraPreset.kohya_sd15.description': 'Classic Kohya format for SD 1.5 LoRAs — no quality tags, just trigger + tags.',
     'loraPreset.custom.description': 'Build your own template with full control.',
     'navMission.lora.pick.title': 'Pick',
-    'navMission.lora.pick.hint': 'Select the training images in the Gallery, then use More > To Dataset Maker in the bar at the bottom. You can also import a folder in the dataset directly.',
+    'navMission.lora.pick.hint': 'Select the training images in the Gallery, then click To Dataset Maker at the front of the bar at the bottom. You can also import a folder in the dataset directly.',
     'navMission.lora.build.title': 'Tag and export',
     'navMission.lora.build.hint': 'Tag, edit captions, then export a training set kohya can read.',
     'navMission.pixiv.pick.title': 'Pick',

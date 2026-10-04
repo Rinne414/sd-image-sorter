@@ -5398,7 +5398,7 @@ window.I18nLang_zhCN = {
     'loraPreset.kohya_sd15.description': 'SD 1.5 LoRA 的经典 Kohya 格式：不加质量标签，只有触发词加标签。',
     'loraPreset.custom.description': '自己写模板，完全自己控制。',
     'navMission.lora.pick.title': '挑图',
-    'navMission.lora.pick.hint': '在图库选好要训练的图，点下方动作列「更多 › 送到数据集」。也可以直接在数据集里导入文件夹。',
+    'navMission.lora.pick.hint': '在图库选好要训练的图，点下方动作列最前面的「送到数据集」。也可以直接在数据集里导入文件夹。',
     'navMission.lora.build.title': '打标和导出',
     'navMission.lora.build.hint': '打标、改字幕，最后导出 kohya 能直接用的训练集。',
     'navMission.pixiv.pick.title': '挑图',
