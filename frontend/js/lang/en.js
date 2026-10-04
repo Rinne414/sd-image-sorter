@@ -1211,7 +1211,7 @@ window.I18nLang_en = {
     'censor.removeBgApplied': 'Background removed successfully',
     'censor.undo': 'Undo',
     'censor.redo': 'Redo',
-    'censor.reset': 'Reset',
+    'censor.reset': 'Revert',
     'censor.showChanges': 'Diff',
     'censor.settings': 'Settings & Tools',
     'censor.detection': 'Auto-Detection',
@@ -1250,7 +1250,8 @@ window.I18nLang_en = {
     'censor.sharpen': 'Sharpen',
     'censor.temperature': 'Temperature',
     'censor.vignette': 'Vignette',
-    'censor.filterReset': 'Reset',
+    'censor.filterReset': 'Clear',
+    'censor.filterResetTitle': 'Clear the adjustments',
     'censor.filterVivid': 'Vivid',
     'censor.filterWarm': 'Warm',
     'censor.filterCool': 'Cool',
@@ -3259,7 +3260,7 @@ window.I18nLang_en = {
     // ========================
     // Censor zoom controls
     // ========================
-    'censor.zoomReset': 'Reset',
+    'censor.zoomReset': 'Fit',
     'censor.zoomResetTitle': 'Reset Zoom',
     'censor.zoomInTitle': 'Zoom In',
     'censor.zoomOutTitle': 'Zoom Out',

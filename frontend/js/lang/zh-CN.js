@@ -1222,7 +1222,7 @@ window.I18nLang_zhCN = {
     'censor.removeBgApplied': '背景移除成功',
     'censor.undo': '撤销',
     'censor.redo': '重做',
-    'censor.reset': '重置',
+    'censor.reset': '恢复原图',
     'censor.showChanges': '差异',
     'censor.settings': '设置与工具',
     'censor.detection': '自动检测',
@@ -1261,7 +1261,8 @@ window.I18nLang_zhCN = {
     'censor.sharpen': '锐化',
     'censor.temperature': '色温',
     'censor.vignette': '暗角',
-    'censor.filterReset': '重置',
+    'censor.filterReset': '清除调整',
+    'censor.filterResetTitle': '清除所有调整',
     'censor.filterVivid': '鲜艳',
     'censor.filterWarm': '暖色',
     'censor.filterCool': '冷色',
@@ -3426,7 +3427,7 @@ window.I18nLang_zhCN = {
     // ========================
     // Censor zoom controls
     // ========================
-    'censor.zoomReset': '重置',
+    'censor.zoomReset': '适应窗口',
     'censor.zoomResetTitle': '重置缩放',
     'censor.zoomInTitle': '放大',
     'censor.zoomOutTitle': '缩小',
