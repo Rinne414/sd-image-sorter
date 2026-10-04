@@ -200,3 +200,23 @@ test('without a trigger the folder takes the project name, then "dataset"', asyn
   })
   expect(concept).toEqual({ concept: 'My_WalkSet', folder: '10_My_WalkSet' })
 })
+
+test('an earlier export with other repeats is called out in the confirm', async ({ page }) => {
+  await stubExportSide(page, [])
+  // Registered later, so it wins over the empty-folder stub.
+  await page.route('**/api/dataset/output-folder-status', (route) => route.fulfill({
+    json: {
+      exists: false, file_count: 0, image_count: 0, caption_count: 0,
+      has_export_manifest: false, other_kohya_folders: ['5_mylora_walk'],
+    },
+  }))
+  await openDatasetMaker(page, [971])
+  await prepareExportTab(page, 'mylora_walk')
+
+  await page.locator('#btn-dataset-export').click()
+
+  const note = page.locator('#dataset-confirm-folder-note')
+  await expect(note).toBeVisible()
+  await expect(note).toContainText('5_mylora_walk')
+  await expect(note).toContainText('trained twice')
+})

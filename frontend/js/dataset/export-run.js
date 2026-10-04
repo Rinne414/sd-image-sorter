@@ -608,16 +608,27 @@
         }
         if (requestSeq !== this._confirmFolderNoteSeq) return;
         const files = Number(status?.file_count || 0);
-        if (!(files > 0)) return;
-        const policy = document.getElementById('dataset-overwrite')?.value || 'unique';
-        const [policyKey, policyFallback] = CONFIRM_FOLDER_POLICY_TEXT[policy] || CONFIRM_FOLDER_POLICY_TEXT.unique;
-        const parts = [this._t('dataset.confirmFolderHasFiles',
-            'This folder already has {files} file(s), {images} of them pictures.',
-            { files, images: Number(status.image_count || 0) })];
-        if (status.has_export_manifest === true) {
-            parts.push(this._t('dataset.confirmFolderHasExport', 'It already holds an earlier dataset export.'));
+        // kohya trains every <repeats>_<name> folder in its train dir, so an
+        // earlier export with other repeats or another trigger trains twice.
+        const siblings = Array.isArray(status?.other_kohya_folders) ? status.other_kohya_folders : [];
+        if (!(files > 0) && siblings.length === 0) return;
+        const parts = [];
+        if (files > 0) {
+            const policy = document.getElementById('dataset-overwrite')?.value || 'unique';
+            const [policyKey, policyFallback] = CONFIRM_FOLDER_POLICY_TEXT[policy] || CONFIRM_FOLDER_POLICY_TEXT.unique;
+            parts.push(this._t('dataset.confirmFolderHasFiles',
+                'This folder already has {files} file(s), {images} of them pictures.',
+                { files, images: Number(status.image_count || 0) }));
+            if (status.has_export_manifest === true) {
+                parts.push(this._t('dataset.confirmFolderHasExport', 'It already holds an earlier dataset export.'));
+            }
+            parts.push(this._t(policyKey, policyFallback));
         }
-        parts.push(this._t(policyKey, policyFallback));
+        if (siblings.length > 0) {
+            parts.push(this._t('dataset.confirmKohyaSiblings',
+                'The output folder also holds {folders}: kohya trains every such folder, so these pictures could be trained twice. Remove the old folder if it is not wanted.',
+                { folders: siblings.join(', ') }));
+        }
         // Chinese sentences end in a full-width stop and take no space after it.
         note.textContent = parts.reduce((text, part) => (
             !text || /[。！？]$/.test(text) ? `${text}${part}` : `${text} ${part}`

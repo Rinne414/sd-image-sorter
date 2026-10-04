@@ -5009,6 +5009,7 @@ window.I18nLang_en = {
     'dataset.cat.character': 'Character',
     'dataset.cat.characterDesc': 'Character names (danbooru).',
     // ---- Dataset Maker / Smart Tag polish (2026-10) ----
+    'dataset.confirmKohyaSiblings': 'The output folder also holds {folders}: kohya trains every such folder, so these pictures could be trained twice. Remove the old folder if it is not wanted.',
     'dataset.kohyaLayoutLabel': 'kohya folder structure ({repeats}_{name})',
     'dataset.kohyaLayoutHint': 'Pictures and captions go into a subfolder named repeats_trigger word, which kohya reads directly. Untick to write them straight into the output folder.',
     'dataset.exportPreviewSubfolder': 'in {folder}/',

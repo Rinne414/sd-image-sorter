@@ -2870,7 +2870,7 @@ Returns `{total, returned, items_truncated, content_mode, output_mode, sidecar_e
 
 #### POST /api/dataset/output-folder-status
 
-Count what an export folder already holds, so the Dataset Maker confirm can warn before a second export mixes two datasets in one folder. Body: `{output_folder}`. Read-only and not recursive. Returns `{exists, file_count, image_count, caption_count, has_export_manifest}`; a folder that does not exist yet returns `exists: false` and zeros. Returns `400` for a path that cannot be read as a folder.
+Count what an export folder already holds, so the Dataset Maker confirm can warn before a second export mixes two datasets in one folder. Body: `{output_folder}`. Read-only and not recursive. Returns `{exists, file_count, image_count, caption_count, has_export_manifest, other_kohya_folders}`; a folder that does not exist yet returns `exists: false` and zeros. When the folder is a kohya concept folder (`<repeats>_<name>`), `other_kohya_folders` lists the other `<repeats>_<name>` folders beside it that hold an export manifest (at most 10): kohya trains all of them, so an earlier export with other repeats or another trigger would train the same pictures twice. Returns `400` for a path that cannot be read as a folder.
 
 ---
 

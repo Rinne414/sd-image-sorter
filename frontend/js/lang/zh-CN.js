@@ -5007,6 +5007,7 @@ window.I18nLang_zhCN = {
     'dataset.cat.character': '角色',
     'dataset.cat.characterDesc': '角色名（danbooru）。',
     // ---- 数据集制作 / 智能标注细节修整（2026-10）----
+    'dataset.confirmKohyaSiblings': '输出文件夹里还有 {folders}：kohya 会把这类文件夹全部读进去，同一批图可能被训练两遍。不需要的话，请先删掉旧文件夹。',
     'dataset.kohyaLayoutLabel': 'kohya 文件夹结构（{repeats}_{名称}）',
     'dataset.kohyaLayoutHint': '图片和 caption 写进以「repeats_触发词」命名的子文件夹，kohya 可以直接读取。取消勾选则直接写进输出文件夹。',
     'dataset.exportPreviewSubfolder': '写进 {folder}/',

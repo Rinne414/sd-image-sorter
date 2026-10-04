@@ -63,6 +63,7 @@ def test_output_folder_status_counts_what_the_folder_already_holds(
         "image_count": 0,
         "caption_count": 0,
         "has_export_manifest": False,
+        "other_kohya_folders": [],
     }
 
     first = test_client.post("/api/dataset/export", json=_payload(three_images, out))
@@ -78,6 +79,7 @@ def test_output_folder_status_counts_what_the_folder_already_holds(
         "image_count": 3,
         "caption_count": 3,
         "has_export_manifest": True,
+        "other_kohya_folders": [],
     }
 
 
