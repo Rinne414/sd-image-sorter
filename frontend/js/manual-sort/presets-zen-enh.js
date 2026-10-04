@@ -109,7 +109,8 @@ async function refreshManualSortScopeCount() {
     wrap.classList.add('is-counting');
     wrap.classList.remove('is-failed');
     text.textContent = manualSortText('manual.scopeCountCounting', 'Counting images…', '正在统计图片…');
-    renderManualSortSortedNote(0);
+    // The "already sorted" note keeps its last value until the new count
+    // arrives; hiding it on every keystroke made the row jump.
 
     const seq = ++_manualSortScopeCountSeq;
     try {
@@ -132,6 +133,7 @@ async function refreshManualSortScopeCount() {
         wrap.classList.remove('is-counting');
         wrap.classList.add('is-failed');
         text.textContent = manualSortText('manual.scopeCountFailed', 'Count unavailable', '无法统计数量');
+        renderManualSortSortedNote(0);
     }
 }
 
