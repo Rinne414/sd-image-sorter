@@ -5008,6 +5008,11 @@ window.I18nLang_en = {
     'dataset.cat.ratingDesc': 'safe, sensitive, questionable, explicit, nsfw…',
     'dataset.cat.character': 'Character',
     'dataset.cat.characterDesc': 'Character names (danbooru).',
+    // ---- Dataset Maker / Smart Tag polish (2026-10) ----
+    'dataset.kohyaLayoutLabel': 'kohya folder structure ({repeats}_{name})',
+    'dataset.kohyaLayoutHint': 'Pictures and captions go into a subfolder named repeats_trigger word, which kohya reads directly. Untick to write them straight into the output folder.',
+    'dataset.exportPreviewSubfolder': 'in {folder}/',
+    'dataset.confirmSummaryKohya':'kohya folder structure: kohya reads repeats = {repeats} from the folder name "{subfolder}".',
     'dataset.cat.body': 'Body',
     'dataset.cat.bodyDesc': 'hair, eyes, breasts, skin, face and other fixed body traits',
     'dataset.cat.outfit': 'Outfit',

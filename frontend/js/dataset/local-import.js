@@ -1331,6 +1331,7 @@
             subject_crop: this._subjectCropExportSettings(),
             bucket_resize: this._bucketResizeExportSettings(),
             watermark_removal: this._watermarkRemovalExportSettings(),
+            ...this._exportLayoutPayloadFields(),
             ...trainerFields,
             ...optionFields,
         };

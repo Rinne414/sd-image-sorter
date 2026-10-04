@@ -474,9 +474,12 @@
         if (!modal || !list) return;
 
         const imageOp = document.getElementById('dataset-image-op')?.value || 'copy';
-        const folder = document.getElementById('dataset-output-folder')?.value?.trim() || '';
         const preset = this._currentPreset();
         const outputMode = this._outputMode();
+        // The folder the export writes into: with the kohya folder structure
+        // on, that is the "<repeats>_<name>" subfolder of the chosen folder.
+        const folder = this._effectiveOutputFolder();
+        const kohyaSubfolder = this._exportSubfolder();
 
         // Declared here (before any _t() interpolation) because _t() does NOT
         // HTML-escape its params and the result is written via innerHTML below.
@@ -532,6 +535,14 @@
                     'Naming: <strong>{naming}</strong>',
                     { naming: escapeHtml(namingLabel) }),
             );
+            if (kohyaSubfolder) {
+                items.splice(3, 0, this._t('dataset.confirmSummaryKohya',
+                    'kohya folder structure: kohya reads repeats = {repeats} from the folder name "{subfolder}".',
+                    {
+                        repeats: escapeHtml(kohyaSubfolder.split('_')[0]),
+                        subfolder: escapeHtml(kohyaSubfolder),
+                    }));
+            }
         }
         if (editedCount > 0) {
             items.push(this._t('dataset.confirmSummaryEdited',
@@ -830,7 +841,11 @@
     };
 
     DM._startExportJob = async function (payload) {
-        const folder = payload.output_folder || '';
+        // Shown only if the job never starts; a started job reports its own
+        // output_folder (the kohya subfolder when that layout is on).
+        const folder = payload.output_mode === 'beside_image'
+            ? ''
+            : (this._effectiveOutputFolder?.() || payload.output_folder || '');
         this._setExportBusy(true);
         this._renderExportProgress({
             status: 'starting',

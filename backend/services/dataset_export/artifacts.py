@@ -43,6 +43,10 @@ from services.dataset_export.kohya_contract import (
     KohyaTrainerContractError,
     validate_kohya_request,
 )
+from services.dataset_export.folder_layout import (
+    effective_output_folder,
+    folder_layout_record,
+)
 from services.dataset_export.planning import _output_mode
 from services.dataset_export.package_integrity import (
     PackageOwnershipError,
@@ -503,7 +507,13 @@ def _validate_export_request_read_only(request: DatasetExportRequest) -> Optiona
             status_code=400,
             detail=f"Output folder path is not a directory: {output_folder_norm!r}",
         )
-    return output_path
+    concept_path = effective_output_folder(output_path, request)
+    if concept_path.exists() and not concept_path.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail=f"kohya concept folder path is not a directory: {str(concept_path)!r}",
+        )
+    return concept_path
 
 
 def _validate_export_request(request: DatasetExportRequest) -> Optional[Path]:
@@ -579,6 +589,9 @@ def _build_export_manifest(
             "bucket_resize": request.bucket_resize.model_dump(mode="json"),
             "watermark_removal": request.watermark_removal.model_dump(mode="json"),
             "trainer_resolution": request.trainer_resolution,
+            "folder_layout": folder_layout_record(
+                Path(normalize_user_path(request.output_folder)), request
+            ),
         },
         "counts": {
             "total": total_items,

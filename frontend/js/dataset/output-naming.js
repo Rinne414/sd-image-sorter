@@ -13,6 +13,100 @@
         return document.querySelector('input[name="dataset-output-mode"]:checked')?.value || 'folder';
     };
 
+    // ---------- kohya folder layout ----------
+    // kohya-ss reads one "<repeats>_<name>" folder per concept and takes the
+    // repeat count from the folder name. The page composes the name and the
+    // backend only validates it (services/dataset_export/folder_layout.py), so
+    // the path shown here is the path the export writes.
+    const KOHYA_LAYOUT_STORAGE_KEY = 'sd-image-sorter-dataset-kohya-layout';
+    const KOHYA_CONCEPT_MAX_LENGTH = 80;
+    const KOHYA_CONCEPT_FALLBACK = 'dataset';
+    const KOHYA_CONCEPT_DROPPED = /[<>:"/\\|?*\u0000-\u001f\u007f]/g;
+    const KOHYA_CONCEPT_SPACES = /[\s\u0085]+/g;
+
+    function safeKohyaConcept(raw) {
+        const cleaned = String(raw || '').normalize('NFC')
+            .replace(KOHYA_CONCEPT_DROPPED, '')
+            .trim()
+            .replace(KOHYA_CONCEPT_SPACES, '_');
+        // Code points, not UTF-16 units: never cut a surrogate pair.
+        const clipped = Array.from(cleaned).slice(0, KOHYA_CONCEPT_MAX_LENGTH).join('');
+        return clipped.replace(/^\.+/, '').replace(/\.+$/, '');
+    }
+
+    DM._kohyaLayoutEnabled = function () {
+        return this._outputMode() === 'folder'
+            && document.getElementById('dataset-kohya-layout')?.checked === true;
+    };
+
+    // Trigger word first, then the project name; empty means the backend's
+    // "dataset" fallback.
+    DM._kohyaConcept = function () {
+        const trigger = this._canonicalDatasetTrigger?.(
+            document.getElementById('dataset-trigger')?.value || '',
+        ) || '';
+        for (const raw of [trigger, this._activeProject?.name || '']) {
+            const concept = safeKohyaConcept(raw);
+            if (concept) return concept;
+        }
+        return '';
+    };
+
+    DM._exportSubfolder = function () {
+        if (!this._kohyaLayoutEnabled()) return '';
+        const repeats = Number.parseInt(document.getElementById('dataset-est-repeats')?.value || '', 10);
+        const shown = Number.isSafeInteger(repeats) && repeats > 0 ? repeats : 10;
+        return `${shown}_${this._kohyaConcept() || KOHYA_CONCEPT_FALLBACK}`;
+    };
+
+    DM._joinOutputPath = function (folder, child) {
+        const base = String(folder || '').trim();
+        if (!base || !child) return base;
+        const separator = base.includes('\\') && !base.includes('/') ? '\\' : '/';
+        return `${base.replace(/[\\/]+$/, '')}${separator}${child}`;
+    };
+
+    // The folder the export writes into (the kohya subfolder when it is on).
+    DM._effectiveOutputFolder = function () {
+        const folder = document.getElementById('dataset-output-folder')?.value?.trim() || '';
+        return this._joinOutputPath(folder, this._exportSubfolder());
+    };
+
+    DM._exportLayoutPayloadFields = function () {
+        const kohya = this._kohyaLayoutEnabled();
+        return {
+            folder_layout: kohya ? 'kohya' : 'flat',
+            kohya_concept: kohya ? this._kohyaConcept() : '',
+        };
+    };
+
+    function bindKohyaLayout(dm) {
+        const box = document.getElementById('dataset-kohya-layout');
+        if (!box || box.dataset.bound === '1') return;
+        box.dataset.bound = '1';
+        try {
+            if (localStorage.getItem(KOHYA_LAYOUT_STORAGE_KEY) === '0') box.checked = false;
+        } catch { /* storage unavailable: keep the default */ }
+        const refresh = () => {
+            dm._markReadinessStale?.();
+            dm._refreshPairChip?.();
+            dm._refreshExportPreview?.();
+        };
+        box.addEventListener('change', () => {
+            try {
+                localStorage.setItem(KOHYA_LAYOUT_STORAGE_KEY, box.checked ? '1' : '0');
+            } catch { /* storage unavailable: the choice lasts this session */ }
+            refresh();
+        });
+        document.getElementById('dataset-est-repeats')?.addEventListener('input', refresh);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => bindKohyaLayout(DM), { once: true });
+    } else {
+        bindKohyaLayout(DM);
+    }
+
     // ``unknown`` counts only local items with no file path: the export payload
     // cannot include them. Library items always resolve their path on the
     // backend, so a missing capability hint does not make them unknown.

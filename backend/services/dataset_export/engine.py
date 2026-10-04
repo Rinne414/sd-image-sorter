@@ -83,6 +83,7 @@ from services.dataset_export.annotations import (
     resolve_annotation_selections,
     validate_annotation_selection_coverage,
 )
+from services.dataset_export.folder_layout import effective_output_folder
 from services.dataset_export.models import (
     DatasetExportItemResult,
     DatasetExportPreviewRequest,
@@ -1627,7 +1628,13 @@ def preview_dataset_export(request: DatasetExportPreviewRequest) -> Dict[str, An
 
     total = _requested_item_count(request)  # type: ignore[arg-type]
     try:
-        output_path = Path(normalize_user_path(request.output_folder)).resolve() if request.output_folder else Path("__dataset_preview__").resolve()
+        output_path = (
+            effective_output_folder(
+                Path(normalize_user_path(request.output_folder)).resolve(), request
+            )
+            if request.output_folder
+            else Path("__dataset_preview__").resolve()
+        )
     except (OSError, ValueError):
         output_path = Path("__dataset_preview__").resolve()
 

@@ -77,6 +77,16 @@
                 <span>${DM._t?.('dataset.exportPreviewShowing', 'Showing') || 'Showing'} ${Number(data.returned || 0).toLocaleString()}</span>
                 <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-translation-settings">${DM._t?.('dataset.translationSettings', 'VLM translation settings') || 'VLM translation settings'}</button>
             `;
+            // With the kohya folder structure on, every pair below lands in
+            // the "<repeats>_<name>" subfolder; say which one.
+            const subfolder = outputMode === 'folder' ? (DM._exportSubfolder?.() || '') : '';
+            if (subfolder) {
+                const where = document.createElement('span');
+                where.className = 'dataset-export-preview-subfolder';
+                where.textContent = DM._t?.('dataset.exportPreviewSubfolder', 'in {folder}/', { folder: subfolder })
+                    || `in ${subfolder}/`;
+                summary.querySelector('span')?.after(where);
+            }
             list.appendChild(summary);
             summary.querySelector('#btn-dataset-translation-settings')?.addEventListener('click', () => {
                 if (typeof window.App?.openVlmSettings === 'function') {

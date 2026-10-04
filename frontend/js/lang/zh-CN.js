@@ -5006,6 +5006,11 @@ window.I18nLang_zhCN = {
     'dataset.cat.ratingDesc': 'safe、sensitive、questionable、explicit、nsfw…',
     'dataset.cat.character': '角色',
     'dataset.cat.characterDesc': '角色名（danbooru）。',
+    // ---- 数据集制作 / 智能标注细节修整（2026-10）----
+    'dataset.kohyaLayoutLabel': 'kohya 文件夹结构（{repeats}_{名称}）',
+    'dataset.kohyaLayoutHint': '图片和 caption 写进以「repeats_触发词」命名的子文件夹，kohya 可以直接读取。取消勾选则直接写进输出文件夹。',
+    'dataset.exportPreviewSubfolder': '写进 {folder}/',
+    'dataset.confirmSummaryKohya':'kohya 文件夹结构：kohya 会从文件夹名「{subfolder}」读出 repeats = {repeats}。',
     'dataset.cat.body': '身体',
     'dataset.cat.bodyDesc': 'hair、eyes、breasts、skin、face 等固定身体特征',
     'dataset.cat.outfit': '服装',

@@ -389,6 +389,8 @@ test('the output-name chip shows the name the export will write', async ({ page 
   await page.locator('#dataset-output-folder').fill('C:/training/out1')
   await page.evaluate(() => (window as any).DatasetMaker._refreshExportPreview())
 
-  await expect(page.locator('#dataset-pair-chip-png')).toHaveText('001_2.png')
-  await expect(page.locator('#dataset-pair-chip-txt')).toHaveText('001_2.txt')
+  // The kohya folder structure is on by default; with no trigger or project
+  // the pair goes into "10_dataset" (dataset-kohya-layout.spec.ts).
+  await expect(page.locator('#dataset-pair-chip-png')).toHaveText('10_dataset/001_2.png')
+  await expect(page.locator('#dataset-pair-chip-txt')).toHaveText('10_dataset/001_2.txt')
 })

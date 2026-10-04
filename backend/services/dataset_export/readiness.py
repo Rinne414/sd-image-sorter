@@ -384,10 +384,16 @@ def plan_dataset_readiness(
     cancellation_requested: CancellationRequested,
 ) -> DatasetReadinessPlan:
     """Build the Readiness report and the complete set of skipped items."""
-    _validate_export_request_read_only(request)
+    # The validated folder includes the kohya concept subfolder, so every
+    # planned destination below is the path the export then writes.
+    validated_output_folder = _validate_export_request_read_only(request)
     total_requested = _requested_item_count(request)
     output_mode = _output_mode(request)
-    output_folder = Path(normalize_user_path(request.output_folder))
+    output_folder = (
+        validated_output_folder
+        if validated_output_folder is not None
+        else Path(normalize_user_path(request.output_folder))
+    )
     caption_extension = _dataset_sidecar_extension(request.content_mode)
     mask_export_mode = _mask_export_mode(request)
     subject_crop_enabled = request.subject_crop.enabled

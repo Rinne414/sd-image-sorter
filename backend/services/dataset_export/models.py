@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Callable, Dict, List, Literal, Optional, Tuple
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from services.annotation_models import (
     AnnotationAuthorClass,
@@ -19,6 +19,11 @@ from services.annotation_models import (
     TrainingCaptionContentV1,
 )
 from services.dataset_export._constants import TRAINING_TAG_CONTENT_MODES
+from services.dataset_export.folder_layout import (
+    KOHYA_CONCEPT_MAX_LENGTH,
+    FolderLayout,
+    validate_kohya_concept,
+)
 from services.dataset_trigger import (
     DATASET_CAPTION_TAG_LIST_MAX_LENGTH,
     DatasetTrigger,
@@ -348,6 +353,10 @@ class DatasetExportRequest(BaseModel):
     # keep_tokens = N). This is how the trigger word survives shuffling.
     # 0 = don't emit shuffle/keep lines at all.
     trainer_keep_tokens: int = Field(default=0, ge=0, le=50)
+    # "kohya" writes into <output>/<trainer_repeats>_<kohya_concept>/, the
+    # folder kohya-ss reads repeats from; "flat" writes into <output>.
+    folder_layout: FolderLayout = "flat"
+    kohya_concept: str = Field(default="", max_length=KOHYA_CONCEPT_MAX_LENGTH)
 
     # Per-item problems (unreadable source, empty or failed caption, missing
     # mask) normally block the whole export. With ``skip_blocked_items`` the
@@ -369,6 +378,11 @@ class DatasetExportRequest(BaseModel):
         default=None,
         pattern=r"^[a-f0-9]{64}$",
     )
+
+    @field_validator("kohya_concept")
+    @classmethod
+    def validate_kohya_concept_name(cls, value: str) -> str:
+        return validate_kohya_concept(value)
 
     @model_validator(mode="after")
     def validate_annotation_selection_contract(self) -> "DatasetExportRequest":
@@ -428,7 +442,15 @@ class DatasetExportPreviewRequest(BaseModel):
         default_factory=disabled_watermark_removal_settings
     )
     trainer_resolution: int = Field(default=1024, ge=256, le=4096)
+    trainer_repeats: int = Field(default=10, ge=1, le=1000)
+    folder_layout: FolderLayout = "flat"
+    kohya_concept: str = Field(default="", max_length=KOHYA_CONCEPT_MAX_LENGTH)
     limit: int = Field(default=72, ge=1, le=500)
+
+    @field_validator("kohya_concept")
+    @classmethod
+    def validate_kohya_concept_name(cls, value: str) -> str:
+        return validate_kohya_concept(value)
 
     @model_validator(mode="after")
     def validate_annotation_selection_contract(self) -> "DatasetExportPreviewRequest":
@@ -676,6 +698,8 @@ class DatasetPackageOptions(_StrictPackageModel):
     trainer_resolution: int = Field(ge=256, le=4096)
     trainer_keep_tokens: int = Field(ge=0, le=50)
     trigger_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    # Packages written before the kohya layout existed were all flat.
+    folder_layout: FolderLayout = "flat"
 
 
 class DatasetPackageCounts(_StrictPackageModel):

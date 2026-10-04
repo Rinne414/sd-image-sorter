@@ -5196,6 +5196,15 @@
                                         <span class="dataset-pair-chip-suffix" data-i18n="dataset.pairChipSuffix">(trainers pair files with the same name)</span>
                                     </div>
                                 </label>
+                                <!-- kohya-ss reads one <repeats>_<name> folder per concept and
+                                     takes the repeat count from its name; default on. -->
+                                <label class="dataset-checkbox-row dataset-kohya-layout-row" data-export-folder-only>
+                                    <input type="checkbox" id="dataset-kohya-layout" checked>
+                                    <span class="dataset-kohya-layout-copy">
+                                        <span data-i18n="dataset.kohyaLayoutLabel">kohya folder structure ({repeats}_{name})</span>
+                                        <small class="dataset-help" data-i18n="dataset.kohyaLayoutHint">Pictures and captions go into a subfolder named repeats_trigger word, which kohya reads directly.</small>
+                                    </span>
+                                </label>
 
                                 <!-- P2 fix: Copy vs Move out of Advanced. New users care most about
                                      "will my originals be safe?" so this needs to be visible. -->

@@ -1353,6 +1353,20 @@
     font-size: 13px;
 }
 
+/* kohya folder structure: name on the first line, what it does below. */
+#view-dataset .dataset-kohya-layout-row {
+    align-items: flex-start;
+    margin: 2px 0 10px;
+}
+#view-dataset .dataset-kohya-layout-row > input {
+    margin-top: 2px;
+}
+#view-dataset .dataset-kohya-layout-copy {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
 #view-dataset .dataset-subject-crop-settings,
 #view-dataset .dataset-bucket-resize-settings {
     display: grid;

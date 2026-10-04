@@ -649,6 +649,7 @@ def _options_for_request(
         trainer_resolution=request.trainer_resolution,
         trainer_keep_tokens=request.trainer_keep_tokens,
         trigger_sha256=_sha256_text(request.trigger),
+        folder_layout=request.folder_layout,
     )
 
 

@@ -105,6 +105,13 @@
         return match ? match[1].toLowerCase() : 'png';
     }
 
+    // With the kohya folder structure on, the pair lands in the
+    // "<repeats>_<name>" subfolder, so the chip shows that path.
+    function withExportSubfolder(name, outputMode) {
+        const subfolder = outputMode === 'folder' ? (DM._exportSubfolder?.() || '') : '';
+        return subfolder ? `${subfolder}/${name}` : name;
+    }
+
     function refreshPairChip() {
         const png = document.getElementById('dataset-pair-chip-png');
         const txt = document.getElementById('dataset-pair-chip-txt');
@@ -138,8 +145,8 @@
                 .replace(/\{ext\}/g, ext)
                 .replace(/\{date\}/g, new Date().toISOString().slice(0, 10));
         }
-        png.textContent = `${stem}.${ext}`;
-        txt.textContent = `${stem}.txt`;
+        png.textContent = withExportSubfolder(`${stem}.${ext}`, outputMode);
+        txt.textContent = withExportSubfolder(`${stem}.txt`, outputMode);
     }
 
     function bindPairChip() {
@@ -195,8 +202,10 @@
             refreshPairChip();
             return;
         }
-        png.textContent = String(first.output_image_name);
-        txt.textContent = String(first.output_caption_name || '');
+        png.textContent = withExportSubfolder(String(first.output_image_name), outputMode);
+        txt.textContent = first.output_caption_name
+            ? withExportSubfolder(String(first.output_caption_name), outputMode)
+            : '';
     }
 
     DM._refreshPairChip = refreshPairChip;
