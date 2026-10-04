@@ -94,8 +94,9 @@ function showToast(message, type = 'info', options = {}) {
         window.A11y.announce(message, priority);
     }
 
+    // options.persistent keeps the toast until the user clicks it or its action.
     const duration = options.duration || 3000;
-    const timeoutId = setTimeout(() => {
+    const timeoutId = options.persistent ? null : setTimeout(() => {
         toast.style.opacity = '0';
         toast.style.transform = 'translateX(50px)';
         setTimeout(() => toast.remove(), 300);

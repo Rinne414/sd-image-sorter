@@ -95,6 +95,10 @@ function countUneditedQueueItems() {
 // Reorder + rename is a use of its own, so unedited images are exported as
 // they are unless the user leaves them out. The count is always shown first,
 // so nothing uncensored goes out without the user having seen it.
+function isPixivMission() {
+    return window.NavMissions?.activeMission?.() === 'pixiv';
+}
+
 function refreshUneditedSaveOption() {
     const group = document.getElementById('save-unedited-group');
     if (!group) return;
@@ -108,7 +112,10 @@ function refreshUneditedSaveOption() {
     }
     const select = document.getElementById('save-unedited-option');
     if (select) {
-        select.value = localStorage.getItem('censor_unedited_option') === 'skip' ? 'skip' : 'include';
+        // Pixiv sets are meant to be censored, so leaving the rest out is the
+        // default there; reorder + rename keeps exporting them as they are.
+        select.value = (isPixivMission() || localStorage.getItem('censor_unedited_option') === 'skip')
+            ? 'skip' : 'include';
     }
 }
 
@@ -129,7 +136,10 @@ async function confirmAndSaveAll() {
     localStorage.setItem('censor_output_folder', folder);
     localStorage.setItem('censor_metadata_option', metadataOption);
     localStorage.setItem('censor_name_conflict', nameConflict);
-    localStorage.setItem('censor_unedited_option', includeUnedited ? 'include' : 'skip');
+    // The Pixiv default is not the user's own preference; keep it out of storage.
+    if (!isPixivMission()) {
+        localStorage.setItem('censor_unedited_option', includeUnedited ? 'include' : 'skip');
+    }
 
     // Close popup and start saving
     document.getElementById('save-options-modal')?.classList.remove('visible');
@@ -288,7 +298,7 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
     const openFolder = lastSavedPath ? {
         actionLabel: censorT('censor.openOutputFolder', null, 'Open folder'),
         onAction: () => revealCensorSavedFile(lastSavedPath),
-        duration: 8000,
+        persistent: true,
     } : {};
     if (failedCount > 0) {
         window.App.showToast(
