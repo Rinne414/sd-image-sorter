@@ -32,11 +32,8 @@
             tab.addEventListener('click', () => {
                 const target = tab.getAttribute('data-tab-target');
                 if (!target) return;
-                datasetMaker.setAttribute('data-active-tab', target);
-                for (const t of tabs) {
-                    t.setAttribute('aria-selected',
-                        t.getAttribute('data-tab-target') === target ? 'true' : 'false');
-                }
+                // One switch implementation for clicks and code alike.
+                DM._setPipelineTab(target);
             });
         }
     }

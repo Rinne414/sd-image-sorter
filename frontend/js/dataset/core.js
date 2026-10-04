@@ -179,7 +179,15 @@
         // second implementation of the switch.
         _setPipelineTab(tabName = 'import') {
             const dm = document.querySelector('.dataset-maker');
+            const previousTab = dm?.getAttribute('data-active-tab');
             if (dm) dm.setAttribute('data-active-tab', tabName);
+            // The side panel is one element shared by every tab; a new tab
+            // starts at its top instead of the last tab's scroll position
+            // (the Export heading used to open off-screen).
+            if (dm && previousTab !== tabName) {
+                const pane = dm.querySelector('.dataset-export-pane');
+                if (pane) pane.scrollTop = 0;
+            }
             const tabs = document.querySelectorAll('.dataset-tabs [role="tab"]');
             for (const t of tabs) {
                 t.setAttribute('aria-selected',

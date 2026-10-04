@@ -272,10 +272,10 @@
 #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-pane > .dataset-pane-head {
     grid-area: head;
 }
-#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-pane > .dataset-zoom-toolbar {
-    grid-area: head;
-    align-self: end;
+/* The zoom bar is part of the header row (title, file name, Split, zoom, help). */
+#view-dataset .dataset-pane-head > .dataset-zoom-toolbar {
     margin: 0;
+    align-self: center;
 }
 #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-editor-pane > .dataset-editor-image-wrap {
     grid-area: image;
@@ -1455,10 +1455,10 @@
     padding-top: 8px;
 }
 
+/* Scrolls with the panel. It used to be sticky, and the two-row rail of a
+   1366-wide window then covered the setup fields under it (e.g. the LoRA
+   type) whenever the panel scrolled; it marks steps, it is not a menu. */
 #view-dataset .dataset-workflow-rail {
-    position: sticky;
-    top: 0;
-    z-index: 12;
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 4px;
@@ -1467,7 +1467,6 @@
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 8px;
     background: rgba(28, 28, 28, 0.94);
-    box-shadow: 0 8px 18px rgba(0,0,0,0.22);
 }
 /* A narrow side panel (1366-wide windows) cannot fit four step labels in
    one row without "Generate" running into "3 Review"; use two rows there. */
@@ -3043,7 +3042,7 @@
     border-color: var(--accent-primary);
     box-shadow: 0 0 0 2px rgba(var(--accent-primary-rgb), 0.14);
 }
-#view-dataset .dataset-split-mode > .dataset-zoom-toolbar,
+#view-dataset .dataset-split-mode .dataset-zoom-toolbar,
 #view-dataset .dataset-split-mode > .dataset-editor-image-wrap,
 #view-dataset .dataset-split-mode > .dataset-editor-controls {
     display: none !important;

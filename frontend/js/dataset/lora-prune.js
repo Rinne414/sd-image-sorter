@@ -368,6 +368,25 @@
         updateApplyButton(tagsByCategory());
     }
 
+    // ---- Colour legend: folded by default, remembered ----------------------
+    // Open, its 14 rows squeezed the editable tag chips into a thin strip at
+    // 1366x768, so it starts folded and keeps whatever the user chose last.
+    const LEGEND_OPEN_STORAGE_KEY = 'sd-image-sorter-dataset-tag-legend-open';
+
+    function bindColorLegendMemory() {
+        const legend = document.getElementById('dataset-tag-color-legend');
+        if (!legend || legend.dataset.memoryBound === '1') return;
+        legend.dataset.memoryBound = '1';
+        try {
+            legend.open = localStorage.getItem(LEGEND_OPEN_STORAGE_KEY) === '1';
+        } catch { /* storage unavailable: stay folded */ }
+        legend.addEventListener('toggle', () => {
+            try {
+                localStorage.setItem(LEGEND_OPEN_STORAGE_KEY, legend.open ? '1' : '0');
+            } catch { /* storage unavailable: the choice lasts this session */ }
+        });
+    }
+
     // ---- Init --------------------------------------------------------------
 
     DM._initLoraPrune = function () {
@@ -375,6 +394,7 @@
         if (!host) return;
         buildCheckboxes();
         renderColorLegend();
+        bindColorLegendMemory();
 
         const sel = document.getElementById('dataset-lora-type');
         if (sel && !sel.dataset.wired) {

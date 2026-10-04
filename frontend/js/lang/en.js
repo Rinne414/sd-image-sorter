@@ -297,7 +297,7 @@ window.I18nLang_en = {
     'onboarding.step3Title': 'Open Settings & Models once',
     'onboarding.step3Hint': 'Click the top-right Settings & Models gear to prepare the AI models you need. Start with the recommended tagger; similarity, censor, and artist tools stay opt-in.',
     'onboarding.step4Title': 'Explore the tabs',
-    'onboarding.step4Hint': 'Use the top-left tabs for the core flow: Gallery, Reader, Sort, Censor Edit, Similar, and Dataset. Prompt Helper and Style Finder appear directly when there is room, or under More on narrower screens.',
+    'onboarding.step4Hint': 'Use the top-left tabs for the core flow: Gallery, Reader, Sort, Censor Edit, Similar, and Dataset. Prompt Helper and Style Finder are in the top bar too, or under More when it is full.',
     'onboarding.tipHelp': 'Click Help in the top-right at any time for a guide to the current tab.',
     // Comfort-1: quiet library room
     'gallery.comfort.showTips': 'Getting started tips',
@@ -5019,7 +5019,7 @@ window.I18nLang_en = {
     'smartTag.doneTitleCancelled': 'Smart Tag was stopped',
     'smartTag.doneTitleFailed': 'Smart Tag failed',
     'smartTag.doneCounts': '{tagged} tagged · {skipped} skipped · {failed} failed',
-    'dataset.confirmSummaryKohya':'kohya folder structure: kohya reads repeats = {repeats} from the folder name "{subfolder}".',
+    'dataset.confirmSummaryKohya': 'kohya folder structure: kohya reads repeats = {repeats} from the folder name "{subfolder}".',
     'dataset.cat.body': 'Body',
     'dataset.cat.bodyDesc': 'hair, eyes, breasts, skin, face and other fixed body traits',
     'dataset.cat.outfit': 'Outfit',

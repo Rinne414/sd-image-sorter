@@ -1252,7 +1252,7 @@
                                     <span aria-hidden="true" class="onboarding-step-icon"><svg class="icon" aria-hidden="true"><use href="#i-compass"/></svg></span>
                                     <div class="onboarding-step-copy">
                                         <strong data-i18n="onboarding.step4Title">Explore the tabs</strong>
-                                        <span data-i18n="onboarding.step4Hint">Use the top-left tabs for the core flow: Gallery, Reader, Sort, Censor Edit, Similar, and Dataset. Prompt Helper and Style Finder appear directly when there is room, or under More on narrower screens.</span>
+                                        <span data-i18n="onboarding.step4Hint">Use the top-left tabs for the core flow: Gallery, Reader, Sort, Censor Edit, Similar, and Dataset. Prompt Helper and Style Finder are in the top bar too, or under More when it is full.</span>
                                     </div>
                                 </li>
                             </ol>
@@ -4245,6 +4245,14 @@
                                 <span class="dataset-editor-filename" id="dataset-editor-filename"></span>
                                 <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-split-view"
                                         data-i18n="dataset.splitBtn" title="Compare two captions side by side" data-i18n-title="tip.compareTwoCaptionsSideBySide">Split</button>
+                                <!-- In the header row (not stacked on it): at 1366x768 the
+                                     bar used to sit over the "Caption editor" title. -->
+                                <div class="dataset-zoom-toolbar" id="dataset-zoom-toolbar" hidden>
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-out" title="Zoom out" data-i18n-title="tip.zoomOut">−</button>
+                                    <span class="dataset-zoom-label" id="dataset-zoom-label">100%</span>
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-in" title="Zoom in" data-i18n-title="tip.zoomIn">+</button>
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-reset" title="Reset zoom to 100%" data-i18n-title="tip.resetZoomTo100" aria-label="Reset zoom to 100%" data-i18n-aria="tip.resetZoomTo100">⟲</button>
+                                </div>
                                 <details class="dataset-editor-help">
                                     <summary aria-label="What makes a good caption?" data-i18n-aria="dataset.helpTitle"
                                              title="What makes a good caption?" data-i18n-title="dataset.helpTitle"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg></summary>
@@ -4265,12 +4273,6 @@
                                         </p>
                                     </div>
                                 </details>
-                            </div>
-                            <div class="dataset-zoom-toolbar" id="dataset-zoom-toolbar" hidden>
-                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-out" title="Zoom out" data-i18n-title="tip.zoomOut">−</button>
-                                <span class="dataset-zoom-label" id="dataset-zoom-label">100%</span>
-                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-in" title="Zoom in" data-i18n-title="tip.zoomIn">+</button>
-                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-reset" title="Reset zoom to 100%" data-i18n-title="tip.resetZoomTo100" aria-label="Reset zoom to 100%" data-i18n-aria="tip.resetZoomTo100">⟲</button>
                             </div>
                             <div class="dataset-editor-image-wrap" id="dataset-editor-image-wrap">
                                 <img class="dataset-editor-image" id="dataset-editor-image" alt="" hidden>
@@ -4344,7 +4346,7 @@
                                     <!-- Color legend for the 14-class danbooru tag categories. Body rows
                                          are injected by dataset/lora-prune.js (one source of truth for
                                          the palette + labels, shared with the LoRA-prune checkboxes). -->
-                                    <details class="dataset-tag-color-legend" id="dataset-tag-color-legend" open>
+                                    <details class="dataset-tag-color-legend" id="dataset-tag-color-legend">
                                         <summary><svg class="icon" aria-hidden="true"><use href="#i-palette"/></svg> <span data-i18n="dataset.tagColorLegendTitle">Tag color legend</span></summary>
                                         <div class="dataset-tag-color-legend-body" id="dataset-tag-color-legend-body"></div>
                                     </details>

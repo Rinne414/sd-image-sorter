@@ -199,3 +199,83 @@ test('Smart Tag progress is visible without scrolling and the finish shows its c
   await page.locator('#btn-smart-tag-run').click()
   await expect(done).toBeHidden()
 })
+
+// ---------------------------------------------------------------------------
+// 15. Workbench layout at 1366x768
+// ---------------------------------------------------------------------------
+
+async function openWorkbench(page: Page): Promise<void> {
+  await openDatasetMaker(page, [995, 996])
+  await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    dm._setPipelineTab('workbench')
+    dm._setActive(995)
+  })
+  await expect(page.locator('#dataset-zoom-toolbar')).toBeVisible()
+}
+
+function overlaps(a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number }): boolean {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+}
+
+test('the zoom bar does not overlap the caption editor title', async ({ page }) => {
+  await openWorkbench(page)
+  const title = await page.locator('.dataset-editor-pane .dataset-pane-head > strong').boundingBox()
+  const zoom = await page.locator('#dataset-zoom-toolbar').boundingBox()
+  expect(title && zoom).toBeTruthy()
+  expect(overlaps(title!, zoom!)).toBe(false)
+})
+
+test('the step rail never covers the LoRA-type field when the side panel scrolls', async ({ page }) => {
+  await openWorkbench(page)
+  const covered = await page.evaluate(() => {
+    const pane = document.querySelector('#view-dataset .dataset-export-pane') as HTMLElement
+    const label = document.querySelector('[data-i18n="dataset.loraPruneLabel"]') as HTMLElement
+    const paneTop = pane.getBoundingClientRect().top
+    pane.scrollTop = Math.max(0, label.getBoundingClientRect().top - paneTop - 30)
+    const rect = label.getBoundingClientRect()
+    const x = rect.left + Math.min(20, rect.width / 2)
+    const y = rect.top + rect.height / 2
+    const paneRect = pane.getBoundingClientRect()
+    const inView = y > paneRect.top && y < paneRect.bottom
+    const hit = document.elementFromPoint(x, y)
+    return { inView, hitsLabel: !!hit && (label === hit || label.contains(hit) || hit.contains(label)) }
+  })
+  expect(covered.inView).toBe(true)
+  expect(covered.hitsLabel).toBe(true)
+})
+
+test('the tag colour legend starts folded and remembers being opened', async ({ page }) => {
+  await openWorkbench(page)
+  const legend = page.locator('#dataset-tag-color-legend')
+  await expect(legend).not.toHaveAttribute('open', '')
+  await legend.locator('summary').click()
+  await expect(legend).toHaveAttribute('open', '')
+
+  await openWorkbench(page)
+  await expect(page.locator('#dataset-tag-color-legend')).toHaveAttribute('open', '')
+})
+
+test('the export tab opens at its top even after the workbench side panel scrolled', async ({ page }) => {
+  await openWorkbench(page)
+  await page.evaluate(() => {
+    const pane = document.querySelector('#view-dataset .dataset-export-pane') as HTMLElement
+    pane.scrollTop = pane.scrollHeight
+  })
+  await page.locator('#dataset-tab-export').click()
+  await expect(page.locator('#dataset-step-export .dataset-card-title')).toBeInViewport()
+  expect(await page.evaluate(() =>
+    (document.querySelector('#view-dataset .dataset-export-pane') as HTMLElement).scrollTop)).toBe(0)
+})
+
+test('the empty-gallery guide no longer talks about narrow screens', async ({ page }) => {
+  await page.goto('/')
+  await page.waitForFunction(() => !!(window as any).I18nLang_zhCN && !!(window as any).I18nLang_en)
+  const copy = await page.evaluate(() => ({
+    zh: (window as any).I18nLang_zhCN['onboarding.step4Hint'],
+    en: (window as any).I18nLang_en['onboarding.step4Hint'],
+  }))
+  expect(copy.zh).not.toContain('窄屏')
+  expect(copy.en).not.toMatch(/narrow/i)
+})

@@ -299,7 +299,7 @@ window.I18nLang_zhCN = {
     'onboarding.step3Title': '先打开一次设置与模型',
     'onboarding.step3Hint': '点击右上角「设置与模型」齿轮，准备需要的 AI 模型。先用推荐 tagger 即可；相似图、打码、画师识别都可以按需开启。',
     'onboarding.step4Title': '探索其他功能',
-    'onboarding.step4Hint': '左上角导航是核心流程：图片库、读图、整理图片、打码编辑、相似图、数据集。提示词助手和画风识别在空间足够时直接显示，窄屏时收进「更多」。',
+    'onboarding.step4Hint': '左上角导航是核心流程：图片库、读图、整理图片、打码编辑、相似图、数据集。提示词助手和画风识别也在顶栏，放不下时在「更多」里。',
     'onboarding.tipHelp': '随时点右上角的「帮助」，可以打开当前页面的引导。',
     // Comfort-1：安静图库房间感
     'gallery.comfort.showTips': '新手提示（可选）',
@@ -5017,7 +5017,7 @@ window.I18nLang_zhCN = {
     'smartTag.doneTitleCancelled': '智能标注已停止',
     'smartTag.doneTitleFailed': '智能标注失败',
     'smartTag.doneCounts': '已打标 {tagged} 张 · 跳过 {skipped} 张 · 失败 {failed} 张',
-    'dataset.confirmSummaryKohya':'kohya 文件夹结构：kohya 会从文件夹名「{subfolder}」读出 repeats = {repeats}。',
+    'dataset.confirmSummaryKohya': 'kohya 文件夹结构：kohya 会从文件夹名「{subfolder}」读出 repeats = {repeats}。',
     'dataset.cat.body': '身体',
     'dataset.cat.bodyDesc': 'hair、eyes、breasts、skin、face 等固定身体特征',
     'dataset.cat.outfit': '服装',
