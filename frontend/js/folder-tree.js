@@ -86,15 +86,22 @@
             try {
                 const result = await appRef().API?.listLibraryFolders?.();
                 const folders = Array.isArray(result?.folders) ? result.folders : [];
+                const previous = new Set(this._folders.map((path) => normalizePath(path)));
                 this._folders = folders;
                 this._tree = this._buildTree(folders);
                 // Sync the highlighted/active folder from the persisted gallery
                 // filter so a reload keeps the tree and the gallery in step.
                 const current = normalizePath(appRef().AppState?.filters?.folder || '');
                 this._active = current || null;
-                if (!this._seeded) {
+                // Unfold once the tree first has folders (a fresh library starts
+                // empty), then keep each newly imported folder in view.
+                if (!this._seeded && this._tree.children.size > 0) {
                     [...this._tree.children.values()].forEach((node) => this._seedDefaults(node, 0));
                     this._seeded = true;
+                } else if (this._seeded) {
+                    folders.map((path) => normalizePath(path))
+                        .filter((path) => path && !previous.has(path))
+                        .forEach((path) => this._expandAncestors(path));
                 }
                 if (this._active) this._expandAncestors(this._active);
                 this._renderTree();
