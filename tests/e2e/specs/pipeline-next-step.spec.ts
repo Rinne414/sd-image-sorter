@@ -90,3 +90,13 @@ test('the Select Images button says Done Selecting while selecting, and keeps sa
   await button.click()
   await expect(button).toContainText('Select Images')
 })
+
+test('starting to select images closes the banner that would cover the action bar', async ({ page }) => {
+  const banner = page.locator('#pipeline-next-step')
+  await page.evaluate(() => (window as any).App.showPipelineNextStep({ title: 'Imported 3 images. What next?', actions: [] }))
+  await expect(banner).toBeVisible()
+
+  await page.locator('#btn-toggle-select').click()
+
+  await expect(banner).toBeHidden()
+})

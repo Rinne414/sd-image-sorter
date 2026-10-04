@@ -20,6 +20,9 @@ function syncSelectionModeButton() {
 
     toggleBtn.classList.toggle('active', isSelecting);
     toggleBtn.classList.toggle('selection-active', isSelecting);
+    // Picking images is the next step already; the "what next?" banner would
+    // only sit on top of the batch action bar.
+    if (isSelecting && typeof hidePipelineNextStep === 'function') hidePipelineNextStep();
     toggleBtn.setAttribute('aria-pressed', String(isSelecting));
     toggleBtn.setAttribute('data-state', isSelecting ? 'selecting' : 'idle');
     toggleBtn.setAttribute(
