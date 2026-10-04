@@ -750,6 +750,29 @@ button.censor-batch-outcome-badge:focus-visible {
 }
 
 /* Brush Size Indicator */
+/* Shown while Adjust sliders preview on the canvas but are not applied yet. */
+.censor-filter-preview-badge {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 30;
+    max-width: calc(100% - 40px);
+    padding: 6px 12px;
+    border: 1px solid rgba(var(--warning-rgb), 0.45);
+    border-radius: var(--r-ctl, 4px);
+    background: var(--surface-2);
+    color: var(--warning);
+    font-size: 12px;
+    line-height: 1.4;
+    text-align: center;
+    pointer-events: none;
+}
+
+.censor-filter-preview-badge[hidden] {
+    display: none;
+}
+
 .brush-indicator-v2 {
     box-shadow: none;
     top: 50%;

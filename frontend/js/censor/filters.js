@@ -37,6 +37,14 @@
             if (label) label.textContent = key === 'hue' ? `${val}°` : String(val);
             currentFilters[key] = val;
         });
+        syncFilterPreviewBadge();
+    }
+
+    // The canvas shows the sliders as a CSS preview; saving uses the pixels.
+    // Say so while a preview is on screen, so it is not mistaken for an edit.
+    function syncFilterPreviewBadge() {
+        const badge = document.getElementById('censor-filter-preview-badge');
+        if (badge) badge.hidden = !hasFilterChanges();
     }
 
     // Pre-filter pixel snapshot, captured on first slider use per session.
@@ -136,6 +144,7 @@
         schedulePixelPreview(canvas);
 
         updateFilterColorPreview(canvas);
+        syncFilterPreviewBadge();
     }
 
     function updateFilterColorPreview(canvas) {
@@ -494,6 +503,7 @@
         });
     });
 
+    window.__applyCensorFilterPreviewToCurrent = bakeFiltersToCanvas;
     window.__updateCensorFilterPreview = applyFilterPreview;
     window.__invalidateCensorFilterPreview = invalidatePreFilterSnapshot;
     window.__censorHasPendingFilterPreview = hasFilterChanges;

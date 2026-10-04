@@ -116,3 +116,33 @@ test('Apply to Current bakes the preview into the pixels and clears the live fil
     return state.queue.find((item: any) => item.id === state.activeId)?.isModified
   })).toBe(true)
 })
+
+test('an unapplied preview is labelled on the canvas and offered for applying before saving', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openAdjustTab(page)
+  const badge = page.locator('#censor-filter-preview-badge')
+  await expect(badge).toBeHidden()
+
+  await page.locator('#btn-filter-bw').click()
+  await expect(badge).toBeVisible()
+  await expect(badge).toContainText('Current / Selected / All')
+
+  await page.locator('#btn-save-all-processed').click()
+  const notice = page.locator('#save-filter-pending-group')
+  await expect(notice).toBeVisible()
+  await expect(page.locator('#btn-confirm-save-options')).toBeInViewport()
+  await page.locator('#btn-save-apply-filters-current').click()
+
+  await expect(notice).toBeHidden()
+  await expect(badge).toBeHidden()
+  await expect.poll(() => page.evaluate(() => {
+    const state = (window as any).__CENSOR_STATE__
+    return state.queue.find((item: any) => item.id === state.activeId)?.isModified
+  })).toBe(true)
+
+  await page.locator('#btn-cancel-save-options').click()
+  await page.locator('#btn-filter-warm').click()
+  await expect(badge).toBeVisible()
+  await page.locator('#btn-filter-reset').click()
+  await expect(badge).toBeHidden()
+})

@@ -2651,6 +2651,7 @@
                             </div>
                             <div id="brush-size-indicator" class="brush-indicator-v2">30px</div>
                             <div id="cursor-overlay"></div>
+                            <div id="censor-filter-preview-badge" class="censor-filter-preview-badge" role="status" hidden data-i18n="censor.filterPreviewBadge">Filter preview: press Current / Selected / All on the Adjust tab to write it into the picture</div>
                             <!-- No Image State -->
                             <div id="censor-no-image" class="no-image-state-v2">
                                 <div class="censor-empty-card">
@@ -8022,6 +8023,14 @@
                             <option value="skip" data-i18n="save.uneditedSkip">Leave them out</option>
                         </select>
                         <small class="helper-text" data-i18n="save.uneditedHelper">Pick "Export them as they are" when you only want the queue order and the new names.</small>
+                    </div>
+
+                    <div class="form-group save-options-unedited-group save-filter-pending-group" id="save-filter-pending-group" hidden>
+                        <label data-i18n="save.filterPendingTitle">The Adjust filters on screen are only a preview</label>
+                        <div class="save-filter-pending-row">
+                            <small class="helper-text" data-i18n="save.filterPendingBody">Saving does not include them until you apply them (Current / Selected / All on the Adjust tab).</small>
+                            <button type="button" class="btn btn-secondary btn-small" id="btn-save-apply-filters-current" data-i18n="save.filterPendingApply">Apply to this picture first</button>
+                        </div>
                     </div>
 
                     <div class="form-group">

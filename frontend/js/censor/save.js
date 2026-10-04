@@ -33,9 +33,23 @@ function openSaveOptionsPopup() {
     }
 
     window.hideFolderBrowser?.();
+    refreshPendingFilterNotice();
     refreshUneditedSaveOption();
     refreshCensorDefaultOutputFolder();
     document.getElementById('save-options-modal')?.classList.add('visible');
+}
+
+// Adjust sliders only preview on the canvas; warn in the dialog and offer to
+// write them into the shown picture before saving.
+function refreshPendingFilterNotice() {
+    const group = document.getElementById('save-filter-pending-group');
+    if (group) group.hidden = !window.__censorHasPendingFilterPreview?.();
+}
+
+async function applyPendingFiltersBeforeSave() {
+    await window.__applyCensorFilterPreviewToCurrent?.();
+    refreshPendingFilterNotice();
+    refreshUneditedSaveOption();
 }
 
 const CENSOR_NAME_CONFLICTS = new Set(['unique', 'overwrite', 'skip']);
