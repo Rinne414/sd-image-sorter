@@ -206,7 +206,10 @@ def _join_caption_parts(parts: List[str]) -> str:
         normalized = " ".join(str(part or "").split()).strip(",")
         if not normalized:
             continue
-        key = normalized.lower()
+        # "long_hair" and "long hair" are one tag; the first spelling wins, so
+        # a typed trigger ("mylora_walk") is kept and Smart Tag's spaced copy
+        # in ai_caption is dropped.
+        key = normalized.lower().replace("_", " ")
         if key in seen:
             continue
         seen.add(key)
@@ -454,6 +457,17 @@ def _filter_text_caption_tokens(value: str, blacklist: set[str]) -> List[str]:
     return output
 
 
+def _split_text_caption_tokens(value: str, blacklist: set[str]) -> List[str]:
+    """Comma tokens of a tag-list caption, blacklisted ones removed."""
+    blocked = {" ".join(str(tag or "").split()).strip().lower() for tag in blacklist if str(tag or "").strip()}
+    output: List[str] = []
+    for token in str(value or "").replace("\n", ",").split(","):
+        normalized = " ".join(token.split()).strip(",")
+        if normalized and normalized.lower() not in blocked:
+            output.append(normalized)
+    return output
+
+
 def _merge_template_blacklist_options(template_options: Optional[Dict[str, Any]], blacklist: set[str]) -> Dict[str, Any]:
     """Keep the export-modal blacklist authoritative for template sidecars too."""
     opts = dict(template_options or {})
@@ -547,6 +561,15 @@ def build_sidecar_content(
             caption, source_tags, trigger=trigger_text, advisories=advisories,
         ).strip()
     prefix = str(prefix or "").strip()
+    # caption_tags / caption_merged keep a prose caption as one piece (its
+    # commas belong to the sentence), but Smart Tag stores this image's own
+    # tag list there; kept whole it repeated every tag after the tag rows.
+    # Split a tag list so each tag dedupes against the rows.
+    caption_parts = _filter_text_caption_tokens(caption, blacklist)
+    if caption and mode in {"caption_tags", "caption_merged"} and not ai_caption_nl_fallback(
+        caption, source_tags, trigger=trigger_text,
+    ):
+        caption_parts = _split_text_caption_tokens(caption, blacklist)
 
     # LoRA-friendly underscore normalization for danbooru-tag content modes.
     # Applied AFTER blacklist filtering (so the blacklist still works against
@@ -572,11 +595,11 @@ def build_sidecar_content(
     if mode == "a1111":
         return build_a1111_parameters_text(image)
     if mode == "caption_tags":
-        return _join_caption_parts([prefix, *_filter_text_caption_tokens(caption, blacklist), *filtered_tags])
+        return _join_caption_parts([prefix, *caption_parts, *filtered_tags])
     if mode == "caption_merged":
         return _join_caption_parts([
             prefix,
-            *_filter_text_caption_tokens(caption, blacklist),
+            *caption_parts,
             *_filter_text_caption_tokens(prompt, blacklist),
             *filtered_tags,
         ])
