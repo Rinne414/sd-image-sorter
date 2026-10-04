@@ -44,7 +44,7 @@ function showToast(message, type = 'info', options = {}) {
         container.className = 'toast-container';
         container.setAttribute('role', 'status');
         container.setAttribute('aria-live', 'polite');
-        container.setAttribute('aria-label', 'Notifications');
+        container.setAttribute('aria-label', appT('a11y.notifications', 'Notifications'));
         document.body.appendChild(container);
     }
 

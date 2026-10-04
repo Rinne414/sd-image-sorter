@@ -27,7 +27,9 @@ function syncSelectionModeButton() {
     toggleBtn.setAttribute('data-state', isSelecting ? 'selecting' : 'idle');
     toggleBtn.setAttribute(
         'aria-label',
-        isSelecting ? 'Exit image selection mode' : 'Enable image selection mode'
+        isSelecting
+            ? appT('a11y.exitSelectionMode', 'Exit image selection mode')
+            : appT('a11y.enableSelectionMode', 'Enable image selection mode')
     );
 
     if (iconEl) {

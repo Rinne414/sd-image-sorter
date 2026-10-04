@@ -365,16 +365,16 @@
         </footer>
     </section>
 
-    <div id="app" role="application" aria-label="SD Image Sorter - Image Management Tool">
+    <div id="app" role="application" aria-label="SD Image Sorter - Image Management Tool" data-i18n-aria="a11y.sDImageSorterImageManagementTool">
         <!-- Navigation -->
-        <nav class="nav-bar" role="navigation" aria-label="Main navigation" data-view="gallery">
+        <nav class="nav-bar" role="navigation" aria-label="Main navigation" data-i18n-aria="a11y.mainNavigation" data-view="gallery">
             <div class="nav-brand" id="nav-brand" role="button" tabindex="0" title="Back to the mission entry page" aria-label="Back to the mission entry page" data-i18n-title="rail.backToEntry" data-i18n-aria="rail.backToEntry">
                 <span class="brand-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-palette"/></svg></span>
                 <span class="brand-text" data-i18n="brand.name">SD Image Sorter</span>
-                <span class="brand-version" id="brand-version" aria-label="Application version"></span>
+                <span class="brand-version" id="brand-version" aria-label="Application version" data-i18n-aria="a11y.applicationVersion"></span>
             </div>
             <!-- Mobile Menu Toggle Button -->
-            <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="mobile-nav-overlay">
+            <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle navigation menu" data-i18n-aria="a11y.toggleNavigationMenu" aria-expanded="false" aria-controls="mobile-nav-overlay">
                 <span class="hamburger-line" aria-hidden="true"></span>
                 <span class="hamburger-line" aria-hidden="true"></span>
                 <span class="hamburger-line" aria-hidden="true"></span>
@@ -387,10 +387,10 @@
                      order-agnostic (keyed on data-view), so this is a pure
                      reorder. Glyphs disambiguated: Sort 🗂️ (was 📁), Similar 🔎
                      (was 🔍), Style Finder 🖌️ (was 🎨 = the brand logo). -->
-                <div class="nav-tabs" role="tablist" aria-label="Application views">
+                <div class="nav-tabs" role="tablist" aria-label="Application views" data-i18n-aria="a11y.applicationViews">
                     <!-- Current long-lived library chip (click → manage libraries). -->
                     <button type="button" class="nav-library-chip" id="nav-library-chip" hidden
-                            title="Current library" aria-label="Current library">
+                            title="Current library" aria-label="Current library" data-i18n-aria="a11y.currentLibrary">
                         <span class="nav-library-chip-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span>
                         <span class="chip-label" id="nav-library-chip-label"></span>
                     </button>
@@ -474,7 +474,7 @@
                             <span class="tab-text" data-i18n="nav.more">More</span>
                             <span class="nav-tools-caret" aria-hidden="true">▾</span>
                         </button>
-                        <div class="nav-tools-menu" id="nav-tools-menu" aria-label="More tools" hidden>
+                        <div class="nav-tools-menu" id="nav-tools-menu" aria-label="More tools" data-i18n-aria="a11y.moreTools" hidden>
                             <!-- data-mirror-view, NOT data-view: page objects click plain
                                  [data-view=...] locators and a duplicate would trip
                                  Playwright strict mode. -->
@@ -556,58 +556,58 @@
                 <div class="mobile-nav-menu">
                     <div class="mobile-nav-header">
                         <span class="mobile-nav-title" id="mobile-nav-title-text" data-i18n="nav.navigation">Navigation</span>
-                        <button class="mobile-nav-close" id="mobile-nav-close" aria-label="Close navigation menu">
+                        <button class="mobile-nav-close" id="mobile-nav-close" aria-label="Close navigation menu" data-i18n-aria="a11y.closeNavigationMenu">
                             <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></span>
                         </button>
                     </div>
                     <!-- v3.3.3 WS1: mirror the desktop pipeline order so the two
                          IA definitions never drift. Core pipeline first, then a
                          "More Tools" group for Prompt Helper + Style Finder. -->
-                    <div class="mobile-nav-tabs" role="navigation" aria-label="Mobile navigation">
-                        <button class="mobile-nav-item active" data-view="gallery" aria-label="Gallery view">
+                    <div class="mobile-nav-tabs" role="navigation" aria-label="Mobile navigation" data-i18n-aria="a11y.mobileNavigation">
+                        <button class="mobile-nav-item active" data-view="gallery" aria-label="Gallery view" data-i18n-aria="a11y.galleryView">
                             <span class="mobile-nav-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg></span>
                             <span class="mobile-nav-text" data-i18n="nav.gallery">Gallery</span>
                         </button>
-                        <button class="mobile-nav-item" data-view="reader" aria-label="Read Image view">
+                        <button class="mobile-nav-item" data-view="reader" aria-label="Read Image view" data-i18n-aria="a11y.readImageView">
                             <span class="mobile-nav-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span>
                             <span class="mobile-nav-text" data-i18n="nav.reader">Read Image</span>
                         </button>
-                        <button class="mobile-nav-item" data-view="sorting" aria-label="Organize view">
+                        <button class="mobile-nav-item" data-view="sorting" aria-label="Organize view" data-i18n-aria="a11y.organizeView">
                             <span class="mobile-nav-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-folders"/></svg></span>
                             <span class="mobile-nav-text" data-i18n="nav.sorting">Organize</span>
                         </button>
-                        <button class="mobile-nav-item" data-view="censor" aria-label="Censor Edit view">
+                        <button class="mobile-nav-item" data-view="censor" aria-label="Censor Edit view" data-i18n-aria="a11y.censorEditView">
                             <span class="mobile-nav-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></span>
                             <span class="mobile-nav-text" data-i18n="nav.censor">Censor Edit</span>
                         </button>
-                        <button class="mobile-nav-item" data-view="similar" aria-label="Find Similar view">
+                        <button class="mobile-nav-item" data-view="similar" aria-label="Find Similar view" data-i18n-aria="a11y.findSimilarView">
                             <span class="mobile-nav-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg></span>
                             <span class="mobile-nav-text" data-i18n="nav.similar">Find Similar</span>
                         </button>
-                        <button class="mobile-nav-item" data-view="dataset" aria-label="Dataset Maker view">
+                        <button class="mobile-nav-item" data-view="dataset" aria-label="Dataset Maker view" data-i18n-aria="a11y.datasetMakerView">
                             <span class="mobile-nav-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-package"/></svg></span>
                             <span class="mobile-nav-text" data-i18n="nav.dataset">Dataset</span>
                         </button>
                         <div class="mobile-nav-group-label" data-i18n="nav.moreTools">More Tools</div>
-                        <button class="mobile-nav-item" data-view="promptlab" aria-label="Prompt Helper view">
+                        <button class="mobile-nav-item" data-view="promptlab" aria-label="Prompt Helper view" data-i18n-aria="a11y.promptHelperView">
                             <span class="mobile-nav-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-flask"/></svg></span>
                             <span class="mobile-nav-text" data-i18n="nav.promptlab">Prompt Helper</span>
                         </button>
-                        <button class="mobile-nav-item" data-view="artist" aria-label="Style Finder view">
+                        <button class="mobile-nav-item" data-view="artist" aria-label="Style Finder view" data-i18n-aria="a11y.styleFinderView">
                             <span class="mobile-nav-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-brush"/></svg></span>
                             <span class="mobile-nav-text" data-i18n="nav.artist">Style Finder</span>
                         </button>
                     </div>
                     <div class="mobile-nav-actions">
-                        <button class="btn btn-primary btn-large full-width" id="mobile-btn-scan" aria-label="Import images from a folder">
+                        <button class="btn btn-primary btn-large full-width" id="mobile-btn-scan" aria-label="Import images from a folder" data-i18n-aria="a11y.importImagesFromAFolder">
                             <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg></span>
                             <span data-i18n="action.scan">Import Images</span>
                         </button>
-                        <button class="btn btn-secondary full-width" id="mobile-btn-tag" aria-label="Tag images with AI">
+                        <button class="btn btn-secondary full-width" id="mobile-btn-tag" aria-label="Tag images with AI" data-i18n-aria="a11y.tagImagesWithAI">
                             <span><svg class="icon" aria-hidden="true"><use href="#i-tag"/></svg></span>
                             <span data-i18n="action.tag">Tag Images</span>
                         </button>
-                        <button class="btn btn-ghost full-width" id="mobile-btn-model-manager" aria-label="Open model manager">
+                        <button class="btn btn-ghost full-width" id="mobile-btn-model-manager" aria-label="Open model manager" data-i18n-aria="a11y.openModelManager">
                             <span><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg></span>
                             <span data-i18n="models.manager">Settings</span>
                         </button>
@@ -627,7 +627,7 @@
                             <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg></span>
                             <span data-i18n="guide.openLabel">Open Guide</span>
                         </button>
-                        <button class="btn btn-ghost full-width" id="mobile-btn-app-update" aria-label="Check for application updates">
+                        <button class="btn btn-ghost full-width" id="mobile-btn-app-update" aria-label="Check for application updates" data-i18n-aria="update.checkTitle">
                             <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-arrow-up"/></svg></span>
                             <span data-i18n="update.check">Check Updates</span>
                         </button>
@@ -642,7 +642,7 @@
                 <button id="btn-language-toggle" class="btn btn-ghost btn-icon-only btn-language" title="Switch language" aria-label="Switch language" data-i18n-title="lang.switchTooltip" data-i18n-aria="lang.switchLabel">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg></span>
                 </button>
-                <button id="btn-app-update" class="btn btn-ghost btn-icon-only" type="button" title="Check for application updates" aria-label="Check for application updates" data-i18n-title="update.checkTitle">
+                <button id="btn-app-update" class="btn btn-ghost btn-icon-only" type="button" title="Check for application updates" aria-label="Check for application updates" data-i18n-aria="update.checkTitle" data-i18n-title="update.checkTitle">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-arrow-up"/></svg></span>
                 </button>
                 <span class="nav-actions-divider" aria-hidden="true"></span>
@@ -650,7 +650,7 @@
                 <button id="btn-tags-library" class="btn btn-ghost btn-icon-only" title="Browse all tags and prompts" aria-label="Open tags and prompts library" data-i18n-title="action.libraryTooltip" data-i18n-aria="action.library">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span>
                 </button>
-                <button id="btn-mass-tag-editor" class="btn btn-ghost btn-icon-only" type="button" title="Mass tag editor: find/replace, add, remove, cleanup" aria-label="Open mass tag editor" data-i18n-title="massTag.openTooltip">
+                <button id="btn-mass-tag-editor" class="btn btn-ghost btn-icon-only" type="button" title="Mass tag editor: find/replace, add, remove, cleanup" aria-label="Open mass tag editor" data-i18n-aria="a11y.openMassTagEditor" data-i18n-title="massTag.openTooltip">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-broom"/></svg></span>
                 </button>
                 <span class="nav-actions-divider" aria-hidden="true"></span>
@@ -659,20 +659,20 @@
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-cpu"/></svg></span>
                     <span class="nav-ai-busy-label" id="nav-ai-busy-label"></span>
                 </button>
-                <button id="nav-color-progress" class="btn btn-ghost btn-icon-only nav-color-chip" type="button" hidden title="Color analysis progress" aria-label="Color analysis progress" data-i18n-title="color.progressTooltip">
+                <button id="nav-color-progress" class="btn btn-ghost btn-icon-only nav-color-chip" type="button" hidden title="Color analysis progress" aria-label="Color analysis progress" data-i18n-aria="color.progressTooltip" data-i18n-title="color.progressTooltip">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-palette"/></svg></span>
                     <span class="nav-color-chip-label" id="nav-color-progress-label">0%</span>
                 </button>
-                <button id="btn-help" class="btn-help btn-icon-only" title="Open guide for current tab" aria-label="Open guide for current tab" data-i18n-title="guide.tooltip">
+                <button id="btn-help" class="btn-help btn-icon-only" title="Open guide for current tab" aria-label="Open guide for current tab" data-i18n-aria="a11y.openGuideForCurrentTab" data-i18n-title="guide.tooltip">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg></span>
                 </button>
                 <span class="nav-actions-divider" aria-hidden="true"></span>
                 <!-- Group 4: Primary CTAs (rightmost) -->
-                <button id="btn-scan" class="btn btn-primary" aria-label="Import images from a folder">
+                <button id="btn-scan" class="btn btn-primary" aria-label="Import images from a folder" data-i18n-aria="a11y.importImagesFromAFolder">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg></span>
                     <span data-i18n="action.scan">Import Images</span>
                 </button>
-                <button id="btn-tag" class="btn btn-secondary" aria-label="Tag images with AI">
+                <button id="btn-tag" class="btn btn-secondary" aria-label="Tag images with AI" data-i18n-aria="a11y.tagImagesWithAI">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-tag"/></svg></span>
                     <span data-i18n="action.tag">Tag Images</span>
                 </button>
@@ -754,11 +754,11 @@
             </div>
             <!-- Gallery View -->
             <section id="view-gallery" class="view active" role="tabpanel" aria-labelledby="nav-tab-gallery">
-                <aside class="filter-sidebar compact" aria-label="Image filters">
+                <aside class="filter-sidebar compact" aria-label="Image filters" data-i18n-aria="a11y.imageFilters">
                     <div class="filter-sidebar-scroll">
                     <div class="sidebar-section" data-sidebar-section="filters">
                         <div class="sidebar-section-head">
-                            <button id="btn-collapse-desktop-sidebar" class="btn btn-ghost btn-small btn-icon-only" title="Collapse Sidebar" data-i18n-title="tip.collapseSidebar" aria-label="Collapse sidebar">
+                            <button id="btn-collapse-desktop-sidebar" class="btn btn-ghost btn-small btn-icon-only" title="Collapse Sidebar" data-i18n-title="tip.collapseSidebar" aria-label="Collapse sidebar" data-i18n-aria="a11y.collapseSidebar">
                                 <span aria-hidden="true">◀</span>
                             </button>
                             <button type="button" class="sidebar-section-toggle" aria-expanded="true" aria-controls="sidebar-body-filters">
@@ -766,7 +766,7 @@
                                 <span class="sidebar-section-title" id="filter-sidebar-title" data-i18n="filter.title">Filters</span>
                             </button>
                             <div class="sidebar-section-actions">
-                                <button id="btn-open-filters" class="btn btn-primary btn-small btn-icon-only" title="Open filter editor" aria-label="Open filter editor" data-i18n-title="gallery.editFiltersTooltip">
+                                <button id="btn-open-filters" class="btn btn-primary btn-small btn-icon-only" title="Open filter editor" aria-label="Open filter editor" data-i18n-aria="a11y.openFilterEditor" data-i18n-title="gallery.editFiltersTooltip">
                                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg></span>
                                 </button>
                             </div>
@@ -814,18 +814,18 @@
                                 <div class="summary-row" id="artist-filter-row" style="display: none;">
                                     <span class="summary-label"><span data-i18n="summary.artist">Artist</span>:</span>
                                     <span class="summary-value" id="summary-artist">-</span>
-                                    <button class="btn-clear-filter" id="btn-clear-artist" title="Clear artist filter" data-i18n-title="tip.clearArtistFilter" aria-label="Clear artist filter">
+                                    <button class="btn-clear-filter" id="btn-clear-artist" title="Clear artist filter" data-i18n-title="tip.clearArtistFilter" aria-label="Clear artist filter" data-i18n-aria="tip.clearArtistFilter">
                                         <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></span>
                                     </button>
                                 </div>
                             </div>
 
-                            <button id="btn-clear-filters" class="btn btn-ghost full-width" aria-label="Clear all active filters" data-i18n="filter.clearAll">Clear All Filters</button>
+                            <button id="btn-clear-filters" class="btn btn-ghost full-width" aria-label="Clear all active filters" data-i18n-aria="a11y.clearAllActiveFilters" data-i18n="filter.clearAll">Clear All Filters</button>
                         </div>
                     </div>
 
                     <!-- v3.3.2 Library Navigation: folder-tree subset filter -->
-                    <div class="sidebar-section" data-sidebar-section="folders" aria-label="Folders">
+                    <div class="sidebar-section" data-sidebar-section="folders" aria-label="Folders" data-i18n-aria="folders.title">
                         <div class="sidebar-section-head">
                             <button type="button" class="sidebar-section-toggle" aria-expanded="true" aria-controls="sidebar-body-folders">
                                 <span class="sidebar-section-caret" aria-hidden="true">▾</span>
@@ -841,19 +841,19 @@
                             </div>
                         </div>
                         <div class="sidebar-section-body" id="sidebar-body-folders">
-                            <div id="folder-tree" class="folder-tree" role="group" aria-label="Library folders"></div>
+                            <div id="folder-tree" class="folder-tree" role="group" aria-label="Library folders" data-i18n-aria="a11y.libraryFolders"></div>
                         </div>
                     </div>
 
                     <!-- v3.3.1 FEAT-COLLECTIONS: Collections / Favorites browser -->
-                    <div class="sidebar-section" data-sidebar-section="collections" aria-label="Collections">
+                    <div class="sidebar-section" data-sidebar-section="collections" aria-label="Collections" data-i18n-aria="collections.title">
                         <div class="sidebar-section-head">
                             <button type="button" class="sidebar-section-toggle" aria-expanded="true" aria-controls="sidebar-body-collections">
                                 <span class="sidebar-section-caret" aria-hidden="true">▾</span>
                                 <span class="sidebar-section-title" data-i18n="collections.title">Collections</span>
                             </button>
                             <div class="sidebar-section-actions">
-                                <button id="btn-new-collection" class="btn btn-ghost btn-small btn-icon-only" title="New collection" aria-label="New collection" data-i18n-title="collections.new">
+                                <button id="btn-new-collection" class="btn btn-ghost btn-small btn-icon-only" title="New collection" aria-label="New collection" data-i18n-aria="collections.create" data-i18n-title="collections.new">
                                     <span aria-hidden="true">＋</span>
                                 </button>
                             </div>
@@ -866,7 +866,7 @@
                     <!-- Smart Folders v1: pinned filter presets with live counts.
                          Hidden until at least one preset is pinned (modules/smart-folders.js).
                          [hidden] display guard lives in ui-refresh.css. -->
-                    <div class="sidebar-section" data-sidebar-section="smart-folders" id="smart-folders-section" aria-label="Smart folders" hidden>
+                    <div class="sidebar-section" data-sidebar-section="smart-folders" id="smart-folders-section" aria-label="Smart folders" data-i18n-aria="a11y.smartFolders" hidden>
                         <div class="sidebar-section-head">
                             <button type="button" class="sidebar-section-toggle" aria-expanded="true" aria-controls="sidebar-body-smart-folders">
                                 <span class="sidebar-section-caret" aria-hidden="true">▾</span>
@@ -887,7 +887,7 @@
                     <div class="filter-sidebar-footer">
                         <div class="divider-h" aria-hidden="true"></div>
 
-                        <button id="btn-toggle-select" class="btn btn-primary btn-large full-width" aria-pressed="false" aria-label="Toggle image selection mode">
+                        <button id="btn-toggle-select" class="btn btn-primary btn-large full-width" aria-pressed="false" aria-label="Toggle image selection mode" data-i18n-aria="a11y.toggleImageSelectionMode">
                             <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span>
                             <span data-i18n="gallery.selectImages">Select Images</span>
                         </button>
@@ -903,7 +903,7 @@
                             </div>
                             <div class="selection-panel-section selection-panel-section-scope">
                                 <span class="selection-panel-section-title" data-i18n="selection.scopeSection">Choose images</span>
-                                <div class="selection-panel-actions selection-panel-pick-actions" aria-label="Selection tools">
+                                <div class="selection-panel-actions selection-panel-pick-actions" aria-label="Selection tools" data-i18n-aria="a11y.selectionTools">
                                     <button id="btn-select-all" class="btn btn-primary full-width" title="Select all images matching current filters" data-i18n-title="tip.selectAllImagesMatchingCurrentFilters"><span><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg></span> <span data-i18n="selection.selectAllFiltered">Select all matching</span></button>
                                     <button id="btn-invert-selection-filtered" class="btn btn-secondary full-width" title="Invert selection among filtered images" data-i18n-title="tip.invertSelectionAmongFilteredImages"><span>⇄</span> <span data-i18n="selection.invertAllFiltered">Invert matching</span></button>
                                 </div>
@@ -917,7 +917,7 @@
                 </aside>
 
                 <!-- Mobile Filter Toggle Button -->
-                <button class="mobile-filter-toggle" id="mobile-filter-toggle" aria-label="Toggle filter sidebar" aria-expanded="false">
+                <button class="mobile-filter-toggle" id="mobile-filter-toggle" aria-label="Toggle filter sidebar" data-i18n-aria="a11y.toggleFilterSidebar" aria-expanded="false">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg></span>
                     <span class="filter-badge" id="mobile-filter-badge" style="display: none;" aria-hidden="true">!</span>
                 </button>
@@ -934,7 +934,7 @@
                     <div class="gallery-banner gallery-banner-pin" id="gallery-pin-banner" role="status" aria-live="polite" hidden>
                         <span class="gallery-banner-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-pin"/></svg></span>
                         <strong class="gallery-banner-title" id="gallery-pin-banner-title"></strong>
-                        <button type="button" class="btn btn-ghost btn-small" id="gallery-pin-banner-clear" aria-label="Remove this filter" title="Remove this filter"><span aria-hidden="true">&times;</span></button>
+                        <button type="button" class="btn btn-ghost btn-small" id="gallery-pin-banner-clear" aria-label="Remove this filter" data-i18n-aria="a11y.removeThisFilter" title="Remove this filter"><span aria-hidden="true">&times;</span></button>
                     </div>
                     <div class="gallery-banner gallery-banner-warning" id="gallery-unreadable-banner" role="status" aria-live="polite" hidden>
                         <span class="gallery-banner-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg></span>
@@ -972,7 +972,7 @@
                     <div class="gallery-header">
                         <div class="gallery-header-left">
                             <!-- Mobile Filter Toggle (shown in header on mobile) -->
-                            <button class="mobile-filter-header-btn" id="mobile-filter-header-btn" aria-label="Open filters">
+                            <button class="mobile-filter-header-btn" id="mobile-filter-header-btn" aria-label="Open filters" data-i18n-aria="a11y.openFilters">
                                 <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg></span>
                                 <span data-i18n="gallery.filters">Filters</span>
                             </button>
@@ -984,11 +984,11 @@
                                 <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg></span>
                             </button>
                             <div class="divider-v" aria-hidden="true"></div>
-                            <div class="generator-tabs" id="generator-tabs" role="tablist" aria-label="Filter by generator">
+                            <div class="generator-tabs" id="generator-tabs" role="tablist" aria-label="Filter by generator" data-i18n-aria="a11y.filterByGenerator">
                                 <div class="generator-tabs-pinned">
                                     <button class="gen-tab active" data-gen="all" role="tab" aria-selected="true"><span data-i18n="common.all">All</span> <span class="gen-count" id="count-all">0</span></button>
                                 </div>
-                                <div class="generator-tabs-scroll" id="generator-tabs-scroll" tabindex="0" aria-label="More generator filters">
+                                <div class="generator-tabs-scroll" id="generator-tabs-scroll" tabindex="0" aria-label="More generator filters" data-i18n-aria="a11y.moreGeneratorFilters">
                                     <button class="gen-tab" data-gen="nai" role="tab" aria-selected="false">NovelAI <span class="gen-count" id="count-nai">0</span></button>
                                     <button class="gen-tab" data-gen="comfyui" role="tab" aria-selected="false">ComfyUI <span class="gen-count" id="count-comfyui">0</span></button>
                                     <button class="gen-tab" data-gen="forge" role="tab" aria-selected="false">Forge <span class="gen-count" id="count-forge">0</span></button>
@@ -1095,7 +1095,7 @@
                                     <span aria-hidden="true">▮</span>
                                 </button>
                             </div>
-                            <select id="gallery-sort" class="sort-dropdown" aria-label="Sort images">
+                            <select id="gallery-sort" class="sort-dropdown" aria-label="Sort images" data-i18n-aria="a11y.sortImages">
                                 <option value="newest" data-i18n="sort.optionDate">Date</option>
                                 <option value="name_asc" data-i18n="sort.optionName">Name</option>
                                 <option value="generator" data-i18n="sort.optionGenerator">Generator</option>
@@ -1113,7 +1113,7 @@
                                 <option value="brightness_skew" data-i18n="sort.brightnessSkew">Brightness Spread</option>
                                 <option value="random" data-i18n="sort.random">Random</option>
                             </select>
-                            <button class="view-btn sort-reverse-btn" id="sort-reverse-btn" title="Reverse sort order" data-i18n-title="tip.reverseSortOrder" aria-label="Reverse sort order" aria-pressed="false">
+                            <button class="view-btn sort-reverse-btn" id="sort-reverse-btn" title="Reverse sort order" data-i18n-title="tip.reverseSortOrder" aria-label="Reverse sort order" data-i18n-aria="tip.reverseSortOrder" aria-pressed="false">
                                 <span aria-hidden="true">↕</span>
                             </button>
                         </div>
@@ -1134,7 +1134,7 @@
                             <button type="button" class="btn btn-ghost btn-small" id="btn-color-backfill-dismiss" data-i18n="color.bannerDismiss">Hide</button>
                         </div>
                     </div>
-                    <div class="gallery-grid" id="gallery-grid" role="grid" aria-label="Image gallery" aria-describedby="gallery-loading">
+                    <div class="gallery-grid" id="gallery-grid" role="grid" aria-label="Image gallery" data-i18n-aria="a11y.imageGallery" aria-describedby="gallery-loading">
                         <!-- Initial skeleton content - will be replaced when app loads -->
                         <div class="skeleton-gallery-item skeleton-item" aria-hidden="true">
                             <div class="skeleton-image"></div>
@@ -1222,7 +1222,7 @@
                                 </button>
                             </div>
                             <!-- Owner review: keep getting-started steps open — empty gallery has room, and collapsed tips are never opened. -->
-                            <ol class="onboarding-steps" aria-label="Getting started">
+                            <ol class="onboarding-steps" aria-label="Getting started" data-i18n-aria="a11y.gettingStarted">
                                 <li class="onboarding-step">
                                     <span class="onboarding-step-num">1</span>
                                     <span aria-hidden="true" class="onboarding-step-icon"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg></span>
@@ -1260,11 +1260,11 @@
                         </div>
                     </div>
                     <div class="gallery-load-more" id="gallery-load-more" style="display:none">
-                        <button class="btn btn-secondary" id="load-more-btn" aria-label="Load more images" data-i18n="gallery.loadMore">
+                        <button class="btn btn-secondary" id="load-more-btn" aria-label="Load more images" data-i18n-aria="a11y.loadMoreImages" data-i18n="gallery.loadMore">
                             Load More Images
                         </button>
                     </div>
-                    <div class="gallery-loading" id="gallery-loading" role="status" aria-live="polite" aria-label="Loading status">
+                    <div class="gallery-loading" id="gallery-loading" role="status" aria-live="polite" aria-label="Loading status" data-i18n-aria="a11y.loadingStatus">
                         <div class="spinner" aria-hidden="true"></div>
                         <span data-i18n="gallery.loading">Loading images...</span>
                     </div>
@@ -1310,7 +1310,7 @@
                         <h2 class="reader-tools-title" data-i18n="reader.workspaceTitle">Read / Edit Metadata</h2>
                         <p class="reader-tools-subtitle" data-i18n="reader.workspaceSubtitle">Drop in an image to see prompts, model, and parameters right away, then save a cleaned-up copy if needed.</p>
                     </div>
-                    <div class="reader-tools-tabs" role="tablist" aria-label="Reader tools">
+                    <div class="reader-tools-tabs" role="tablist" aria-label="Reader tools" data-i18n-aria="a11y.readerTools">
                         <button class="reader-tool-tab active" id="reader-tool-tab-reader" type="button" data-reader-tool="reader" role="tab" aria-selected="true" aria-controls="reader-tool-panel-reader">
                             <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span>
                             <span data-i18n="nav.reader">Read Image</span>
@@ -1805,7 +1805,7 @@
                             <div class="autosep-pane-body autosep-pane-action-body">
                                 <div class="autosep-action-block autosep-action-settings" id="autosep-action-mode-panel" aria-labelledby="autosep-action-settings-title">
                                     <label class="autosep-action-block-label" id="autosep-action-settings-title" data-i18n="autosep.actionSettingsTitle">File Action</label>
-                                    <div class="segmented-control autosep-operation-control" role="radiogroup" aria-label="Auto-Separate action mode">
+                                    <div class="segmented-control autosep-operation-control" role="radiogroup" aria-label="Auto-Separate action mode" data-i18n-aria="a11y.autoSeparateActionMode">
                                         <label class="segmented-option">
                                             <input type="radio" name="autosep-operation-mode-main" value="move" data-autosep-operation-mode>
                                             <span data-i18n="autosep.operationModeMove">Move originals</span>
@@ -1930,7 +1930,7 @@
                             </div>
 
                         <!-- v3.3.2 WB-S3: Sort & Cull Workbench mode switcher -->
-                        <div class="sort-mode-switch" id="sort-mode-switch" role="tablist" aria-label="Sort mode">
+                        <div class="sort-mode-switch" id="sort-mode-switch" role="tablist" aria-label="Sort mode" data-i18n-aria="a11y.sortMode">
                             <span class="sort-mode-label" data-i18n="manual.modeLabel">Mode</span>
                             <button type="button" class="sort-mode-btn is-active" data-sort-mode="slot" role="tab" aria-selected="true">
                                 <span aria-hidden="true">⌨</span> <span data-i18n="manual.modeSlot">Slot sort (WASD)</span>
@@ -1949,7 +1949,7 @@
                              common Load/Save so it can't be hit by accident. -->
                         <div class="sort-preset-bar" id="sort-preset-bar">
                             <span class="sort-preset-label" data-i18n="manual.presetLabel">Presets</span>
-                            <select id="sort-preset-select" class="sort-preset-select" aria-label="Saved sort presets">
+                            <select id="sort-preset-select" class="sort-preset-select" aria-label="Saved sort presets" data-i18n-aria="a11y.savedSortPresets">
                                 <option value="" data-i18n="manual.presetNone">No saved presets</option>
                             </select>
                             <button type="button" class="btn btn-secondary btn-small" id="btn-sort-preset-load">
@@ -2012,7 +2012,7 @@
                                 <div class="folder-key">W</div>
                                 <div class="folder-arrow">↑</div>
                                 <div class="slot-target" data-key="w">
-                                    <div class="slot-type-toggle" role="radiogroup" aria-label="Slot W destination type">
+                                    <div class="slot-type-toggle" role="radiogroup" aria-label="Slot W destination type" data-i18n-aria="a11y.slotWDestinationType">
                                         <label><input type="radio" name="slot-type-w" value="folder" data-key="w" checked> <span data-i18n="manual.slotTypeFolder">Folder</span></label>
                                         <label><input type="radio" name="slot-type-w" value="collection" data-key="w"> <span data-i18n="manual.slotTypeCollection">Collection</span></label>
                                     </div>
@@ -2029,7 +2029,7 @@
                                     <div class="folder-key">A</div>
                                     <div class="folder-arrow">←</div>
                                     <div class="slot-target" data-key="a">
-                                        <div class="slot-type-toggle" role="radiogroup" aria-label="Slot A destination type">
+                                        <div class="slot-type-toggle" role="radiogroup" aria-label="Slot A destination type" data-i18n-aria="a11y.slotADestinationType">
                                             <label><input type="radio" name="slot-type-a" value="folder" data-key="a" checked> <span data-i18n="manual.slotTypeFolder">Folder</span></label>
                                             <label><input type="radio" name="slot-type-a" value="collection" data-key="a"> <span data-i18n="manual.slotTypeCollection">Collection</span></label>
                                         </div>
@@ -2050,7 +2050,7 @@
                                     <div class="folder-key">D</div>
                                     <div class="folder-arrow">→</div>
                                     <div class="slot-target" data-key="d">
-                                        <div class="slot-type-toggle" role="radiogroup" aria-label="Slot D destination type">
+                                        <div class="slot-type-toggle" role="radiogroup" aria-label="Slot D destination type" data-i18n-aria="a11y.slotDDestinationType">
                                             <label><input type="radio" name="slot-type-d" value="folder" data-key="d" checked> <span data-i18n="manual.slotTypeFolder">Folder</span></label>
                                             <label><input type="radio" name="slot-type-d" value="collection" data-key="d"> <span data-i18n="manual.slotTypeCollection">Collection</span></label>
                                         </div>
@@ -2067,7 +2067,7 @@
                                 <div class="folder-key">S</div>
                                 <div class="folder-arrow">↓</div>
                                 <div class="slot-target" data-key="s">
-                                    <div class="slot-type-toggle" role="radiogroup" aria-label="Slot S destination type">
+                                    <div class="slot-type-toggle" role="radiogroup" aria-label="Slot S destination type" data-i18n-aria="a11y.slotSDestinationType">
                                         <label><input type="radio" name="slot-type-s" value="folder" data-key="s" checked> <span data-i18n="manual.slotTypeFolder">Folder</span></label>
                                         <label><input type="radio" name="slot-type-s" value="collection" data-key="s"> <span data-i18n="manual.slotTypeCollection">Collection</span></label>
                                     </div>
@@ -2125,7 +2125,7 @@
                             <div class="filter-header-compact">
                                 <h4 data-i18n="manual.actionModeTitle">File Action Mode</h4>
                             </div>
-                            <div class="segmented-control" role="radiogroup" aria-label="Manual sort action mode">
+                            <div class="segmented-control" role="radiogroup" aria-label="Manual sort action mode" data-i18n-aria="a11y.manualSortActionMode">
                                 <label class="segmented-option">
                                     <input type="radio" name="manual-sort-operation" value="move">
                                     <span data-i18n="manual.actionModeMove">Move originals</span>
@@ -2278,7 +2278,7 @@
                         <div class="bracket-hint" data-i18n="manual.bracketHint">Pick the better image. The winner stays champion and faces the next challenger.</div>
 
                         <div class="bracket-duel">
-                            <button type="button" class="bracket-fighter is-champion" id="bracket-champion" data-bracket-pick="champion" aria-label="Keep A (champion)">
+                            <button type="button" class="bracket-fighter is-champion" id="bracket-champion" data-bracket-pick="champion" aria-label="Keep A (champion)" data-i18n-aria="a11y.keepAChampion">
                                 <span class="bracket-tag">A</span>
                                 <span class="bracket-crown" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-star"/></svg></span>
                                 <img id="bracket-champion-image" src="" alt="Champion image">
@@ -2288,7 +2288,7 @@
                                 </div>
                             </button>
                             <div class="bracket-vs" aria-hidden="true"><span>VS</span></div>
-                            <button type="button" class="bracket-fighter" id="bracket-challenger" data-bracket-pick="challenger" aria-label="Keep B (challenger)">
+                            <button type="button" class="bracket-fighter" id="bracket-challenger" data-bracket-pick="challenger" aria-label="Keep B (challenger)" data-i18n-aria="a11y.keepBChallenger">
                                 <span class="bracket-tag">B</span>
                                 <img id="bracket-challenger-image" src="" alt="Challenger image">
                                 <div class="bracket-caption">
@@ -2710,7 +2710,7 @@
                              the manual + detect controls stay visible exactly as before;
                              Adjust holds Filters; Review is the new detect→approve→next
                              conveyor. Save & Queue stays below the tabs, always visible. -->
-                        <div class="censor-tab-bar" role="tablist" aria-label="Censor tools">
+                        <div class="censor-tab-bar" role="tablist" aria-label="Censor tools" data-i18n-aria="a11y.censorTools">
                             <button type="button" class="censor-tab is-active" data-censor-tab="brush" role="tab" aria-selected="true">
                                 <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-brush"/></svg></span> <span data-i18n="censor.tabBrush">Brush</span>
                             </button>
@@ -3969,7 +3969,7 @@
                             <section class="stylemap-near" id="stylemap-near" aria-labelledby="stylemap-near-title">
                                 <div class="stylemap-near-head">
                                     <h4 class="stylemap-near-title" id="stylemap-near-title" data-i18n="stylemap.nearTitle">Drop a picture, find the nearest</h4>
-                                    <button class="btn btn-ghost btn-small stylemap-near-clear" id="stylemap-near-clear" type="button" hidden aria-label="Clear" title="Clear">&times;</button>
+                                    <button class="btn btn-ghost btn-small stylemap-near-clear" id="stylemap-near-clear" type="button" hidden aria-label="Clear" data-i18n-aria="a11y.clear" title="Clear">&times;</button>
                                 </div>
                                 <div class="stylemap-drop" id="stylemap-drop" role="button" tabindex="0" aria-disabled="true">
                                     <span class="stylemap-drop-main" id="stylemap-drop-main" data-i18n="stylemap.nearDrop">Drop a picture here</span>
@@ -4018,7 +4018,7 @@
                             <span data-i18n="dataset.title">Dataset Maker</span>
                         </h2>
                         <!-- Workflow tabs inline with title -->
-                        <nav class="dataset-tabs" role="tablist" aria-label="Dataset Maker pipeline">
+                        <nav class="dataset-tabs" role="tablist" aria-label="Dataset Maker pipeline" data-i18n-aria="a11y.datasetMakerPipeline">
                             <button type="button" role="tab" id="dataset-tab-import" aria-selected="true"
                                     class="dataset-tab" data-tab-target="import">
                                 <span class="dataset-tab-num">1</span>
@@ -4204,10 +4204,10 @@
 
                     <div class="dataset-workbench">
                         <!-- Left: image queue with thumbnails + edit indicator -->
-                        <aside class="dataset-queue-pane" aria-label="Dataset image queue" id="dataset-step-organize">
+                        <aside class="dataset-queue-pane" aria-label="Dataset image queue" data-i18n-aria="a11y.datasetImageQueue" id="dataset-step-organize">
                             <div class="dataset-pane-head">
                                 <strong data-i18n="dataset.queueTitle">Images</strong>
-                                <div class="dataset-queue-head-actions" role="group" aria-label="Dataset queue display mode">
+                                <div class="dataset-queue-head-actions" role="group" aria-label="Dataset queue display mode" data-i18n-aria="a11y.datasetQueueDisplayMode">
                                     <select id="dataset-queue-caption-filter" class="dataset-queue-filter-select" data-i18n-title="dataset.filterAll">
                                         <option value="all" data-i18n="dataset.filterAll">All</option>
                                         <option value="untagged" data-i18n="dataset.filterUntagged">No caption</option>
@@ -4232,14 +4232,14 @@
                         </aside>
 
                         <!-- Center: selected image + caption editor -->
-                        <section class="dataset-editor-pane" aria-label="Caption editor for selected image">
+                        <section class="dataset-editor-pane" aria-label="Caption editor for selected image" data-i18n-aria="a11y.captionEditorForSelectedImage">
                             <div class="dataset-pane-head">
                                 <strong data-i18n="dataset.editorTitle">Caption editor</strong>
                                 <span class="dataset-editor-filename" id="dataset-editor-filename"></span>
                                 <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-split-view"
                                         data-i18n="dataset.splitBtn" title="Compare two captions side by side" data-i18n-title="tip.compareTwoCaptionsSideBySide">Split</button>
                                 <details class="dataset-editor-help">
-                                    <summary aria-label="What makes a good caption?"
+                                    <summary aria-label="What makes a good caption?" data-i18n-aria="dataset.helpTitle"
                                              title="What makes a good caption?" data-i18n-title="dataset.helpTitle"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg></summary>
                                     <div class="dataset-editor-help-body">
                                         <strong data-i18n="dataset.helpTitle">What makes a good caption?</strong>
@@ -4263,7 +4263,7 @@
                                 <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-out" title="Zoom out" data-i18n-title="tip.zoomOut">−</button>
                                 <span class="dataset-zoom-label" id="dataset-zoom-label">100%</span>
                                 <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-in" title="Zoom in" data-i18n-title="tip.zoomIn">+</button>
-                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-reset" title="Reset zoom to 100%" data-i18n-title="tip.resetZoomTo100" aria-label="Reset zoom to 100%">⟲</button>
+                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-reset" title="Reset zoom to 100%" data-i18n-title="tip.resetZoomTo100" aria-label="Reset zoom to 100%" data-i18n-aria="tip.resetZoomTo100">⟲</button>
                             </div>
                             <div class="dataset-editor-image-wrap" id="dataset-editor-image-wrap">
                                 <img class="dataset-editor-image" id="dataset-editor-image" alt="" hidden>
@@ -4283,7 +4283,7 @@
                                      both), with bulk + auto helpers for large sets.
                                      Hidden until an image is active. -->
                                 <div class="dataset-caption-type" id="dataset-caption-type" role="group"
-                                     aria-label="Caption type for this image" hidden>
+                                     aria-label="Caption type for this image" data-i18n-aria="a11y.captionTypeForThisImage" hidden>
                                     <span class="dataset-caption-type-label" data-i18n="dataset.captionTypeLabel">This image:</span>
                                     <div class="dataset-caption-type-seg" role="radiogroup">
                                         <button type="button" class="dataset-caption-type-btn" data-caption-type="booru"
@@ -4423,7 +4423,7 @@
                         </section>
 
                         <!-- Right: streamlined export settings (3 simple sections, no more buried options) -->
-                        <aside class="dataset-export-pane" aria-label="Dataset export settings">
+                        <aside class="dataset-export-pane" aria-label="Dataset export settings" data-i18n-aria="a11y.datasetExportSettings">
                             <div class="dataset-export-progress" id="dataset-export-progress" hidden>
                                 <div class="dataset-export-progress-bar" aria-hidden="true">
                                     <div class="dataset-export-progress-fill" id="dataset-export-progress-fill"></div>
@@ -4436,7 +4436,7 @@
                                             type="button" hidden data-i18n="common.cancel">Cancel</button>
                                 </div>
                             </div>
-                            <div class="dataset-workflow-rail" aria-label="Dataset Maker workflow">
+                            <div class="dataset-workflow-rail" aria-label="Dataset Maker workflow" data-i18n-aria="a11y.datasetMakerWorkflow">
                                 <span class="dataset-workflow-step is-active">
                                     <strong>1</strong>
                                     <span data-i18n="dataset.workflowSetup">Setup</span>
@@ -4471,7 +4471,7 @@
                                                placeholder="subject"
                                                maxlength="100"
                                                data-i18n-placeholder="dataset.triggerPlaceholderShort"
-                                               aria-label="Trigger word">
+                                               aria-label="Trigger word" data-i18n-aria="dataset.triggerCaptionLabel">
                                         <button type="button" class="btn btn-ghost btn-small"
                                                 id="btn-dataset-quickfill-trigger"
                                                 disabled
@@ -4644,7 +4644,7 @@
                                      injected by dataset/lora-prune.js. -->
                                 <div class="dataset-lora-prune" id="dataset-lora-prune">
                                     <div class="dataset-lora-prune-cats" id="dataset-lora-prune-cats" role="group"
-                                         aria-label="Tag categories to remove from captions"></div>
+                                         aria-label="Tag categories to remove from captions" data-i18n-aria="a11y.tagCategoriesToRemoveFromCaptions"></div>
                                     <div class="dataset-lora-prune-actions">
                                         <!-- No data-i18n here: the label is dynamic ("Add N tags to blacklist"),
                                              set by dataset/lora-prune.js. applyToDOM() would clobber the
@@ -5583,7 +5583,7 @@
         <div class="modal" id="nav-customize-modal" role="dialog" aria-modal="true" aria-labelledby="nav-customize-title">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-small">
-                <button class="modal-close" id="nav-customize-close" aria-label="Close">
+                <button class="modal-close" id="nav-customize-close" aria-label="Close" data-i18n-aria="a11y.close">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></span>
                 </button>
                 <div class="modal-header">
@@ -5604,7 +5604,7 @@
         <div class="modal" id="entry-catalog-modal" role="dialog" aria-modal="true" aria-labelledby="entry-catalog-title">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content">
-                <button class="modal-close" id="entry-catalog-close" aria-label="Close">
+                <button class="modal-close" id="entry-catalog-close" aria-label="Close" data-i18n-aria="a11y.close">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></span>
                 </button>
                 <div class="modal-header">
@@ -5620,7 +5620,7 @@
         <div class="modal" id="model-manager-modal" role="dialog" aria-modal="true" aria-labelledby="model-manager-title">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-large">
-                <button class="modal-close" id="model-manager-close" aria-label="Close model manager">
+                <button class="modal-close" id="model-manager-close" aria-label="Close model manager" data-i18n-aria="a11y.closeModelManager">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></span>
                 </button>
                 <div class="modal-header">
@@ -5631,7 +5631,7 @@
                 <!-- v3.5.0 audit (design rule 6): the modal stacked settings +
                      models + disk + audit into a 3000-4700px scrolling column.
                      Four tabs keep each area near one viewport tall. -->
-                <div class="settings-modal-tabs" id="settings-modal-tabs" role="tablist" aria-label="Settings sections">
+                <div class="settings-modal-tabs" id="settings-modal-tabs" role="tablist" aria-label="Settings sections" data-i18n-aria="a11y.settingsSections">
                     <button type="button" class="settings-modal-tab active" data-settings-tab="general" role="tab" aria-selected="true">
                         <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg></span> <span data-i18n="settings.tabGeneral">Settings</span>
                     </button>
@@ -5840,7 +5840,7 @@
                             </div>
                         </div>
 
-                        <div class="health-kpi-grid" aria-label="Library health metrics">
+                        <div class="health-kpi-grid" aria-label="Library health metrics" data-i18n-aria="a11y.libraryHealthMetrics">
                             <article class="health-kpi-card">
                                 <span data-i18n="health.totalImages">Images</span>
                                 <strong id="health-total-images">—</strong>
@@ -5912,15 +5912,15 @@
         <div class="modal" id="image-modal" role="dialog" aria-modal="true" aria-labelledby="modal-filename">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-image-workspace">
-                <button type="button" class="modal-close" id="modal-close" aria-label="Close image preview">
+                <button type="button" class="modal-close" id="modal-close" aria-label="Close image preview" data-i18n-aria="a11y.closeObfuscatePreview">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></span>
                 </button>
                 <div class="modal-image-column">
                     <div class="modal-image-toolbar">
-                        <button class="btn btn-ghost btn-small" id="modal-prev-image" aria-label="Previous image">
+                        <button class="btn btn-ghost btn-small" id="modal-prev-image" aria-label="Previous image" data-i18n-aria="a11y.previousImage">
                             <span aria-hidden="true">←</span> <span data-i18n="modal.prev">Prev</span>
                         </button>
-                        <button class="btn btn-ghost btn-small" id="modal-next-image" aria-label="Next image">
+                        <button class="btn btn-ghost btn-small" id="modal-next-image" aria-label="Next image" data-i18n-aria="a11y.nextImage">
                             <span data-i18n="modal.next">Next</span> <span aria-hidden="true">→</span>
                         </button>
                     </div>
@@ -5932,19 +5932,19 @@
                         <div class="modal-info-header">
                             <div class="modal-sticky-actions">
                                 <div class="modal-action-primary">
-                                    <button class="btn btn-secondary btn-small" id="btn-toggle-prompt-format" aria-label="Toggle prompt format" data-i18n="modal.viewAsSD">View as SD</button>
+                                    <button class="btn btn-secondary btn-small" id="btn-toggle-prompt-format" aria-label="Toggle prompt format" data-i18n-aria="a11y.togglePromptFormat" data-i18n="modal.viewAsSD">View as SD</button>
                                     <details class="modal-copy-menu" id="modal-copy-menu">
                                         <summary class="btn btn-primary btn-small modal-copy-menu-trigger">
                                             <span data-i18n="reader.copy">Copy</span>
                                             <span aria-hidden="true">▾</span>
                                         </summary>
                                         <div class="modal-copy-menu-list">
-                                            <button class="modal-copy-menu-item" id="btn-copy-all" type="button" aria-label="Copy all image info to clipboard" data-i18n="modal.copyAll">Copy All</button>
-                                            <button class="modal-copy-menu-item" id="btn-copy-prompt" type="button" aria-label="Copy prompt" title="Copy prompt only" data-i18n-title="tip.copyPromptOnly"><span data-i18n="modal.prompt">Prompt</span></button>
-                                            <button class="modal-copy-menu-item" id="btn-copy-negative" type="button" aria-label="Copy negative" title="Copy negative prompt only" data-i18n-title="tip.copyNegativePromptOnly"><span data-i18n="modal.negative">Negative</span></button>
-                                            <button class="modal-copy-menu-item" id="btn-copy-tags" type="button" aria-label="Copy tags" title="Copy tags only" data-i18n-title="tip.copyTagsOnly"><span data-i18n="modal.tags">Tags</span></button>
+                                            <button class="modal-copy-menu-item" id="btn-copy-all" type="button" aria-label="Copy all image info to clipboard" data-i18n-aria="a11y.copyAllImageInfoToClipboard" data-i18n="modal.copyAll">Copy All</button>
+                                            <button class="modal-copy-menu-item" id="btn-copy-prompt" type="button" aria-label="Copy prompt" data-i18n-aria="a11y.copyPrompt" title="Copy prompt only" data-i18n-title="tip.copyPromptOnly"><span data-i18n="modal.prompt">Prompt</span></button>
+                                            <button class="modal-copy-menu-item" id="btn-copy-negative" type="button" aria-label="Copy negative" data-i18n-aria="a11y.copyNegative" title="Copy negative prompt only" data-i18n-title="tip.copyNegativePromptOnly"><span data-i18n="modal.negative">Negative</span></button>
+                                            <button class="modal-copy-menu-item" id="btn-copy-tags" type="button" aria-label="Copy tags" data-i18n-aria="a11y.copyTags" title="Copy tags only" data-i18n-title="tip.copyTagsOnly"><span data-i18n="modal.tags">Tags</span></button>
                                             <button class="modal-copy-menu-item tag-category-menu-trigger" id="btn-copy-tags-category" type="button" aria-label="Copy Options" title="Copy Options" data-i18n-title="tagCategory.copyOptions" data-i18n-aria="tagCategory.copyOptions"><span data-i18n="tagCategory.copyOptions">Copy Options</span></button>
-                                            <button class="modal-copy-menu-item" id="btn-copy-params" type="button" aria-label="Copy params" title="Copy params only" data-i18n-title="tip.copyParamsOnly"><span data-i18n="modal.params">Params</span></button>
+                                            <button class="modal-copy-menu-item" id="btn-copy-params" type="button" aria-label="Copy params" data-i18n-aria="a11y.copyParams" title="Copy params only" data-i18n-title="tip.copyParamsOnly"><span data-i18n="modal.params">Params</span></button>
                                         </div>
                                     </details>
                                     <details class="modal-tools-menu" id="modal-tools-menu">
@@ -5955,7 +5955,7 @@
                                         <div class="modal-tools-menu-list">
                                             <div class="modal-tools-menu-section">
                                                 <div class="modal-tools-menu-label" data-i18n="modal.sendTo">Send to:</div>
-                                                <div class="modal-handoff-row" role="group" aria-label="Send this image to another tool">
+                                                <div class="modal-handoff-row" role="group" aria-label="Send this image to another tool" data-i18n-aria="a11y.sendThisImageToAnotherTool">
                                                     <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="censor" title="Send to Censor Edit" data-i18n-title="gallery.contextSendToCensor"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg> <span data-i18n="nav.censor">Censor Edit</span></button>
                                                     <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="similar" title="Find similar images" data-i18n-title="gallery.contextFindSimilar"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg> <span data-i18n="nav.similar">Similar</span></button>
                                                     <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="dataset" title="Add to dataset" data-i18n-title="modal.addToDataset"><svg class="icon" aria-hidden="true"><use href="#i-package"/></svg> <span data-i18n="nav.dataset">Dataset</span></button>
@@ -5976,7 +5976,7 @@
                                             </div>
                                         </div>
                                     </details>
-                                    <button class="btn btn-ghost btn-small" id="btn-reparse-metadata" aria-label="Read image info again" data-i18n="modal.reparse">Read Again</button>
+                                    <button class="btn btn-ghost btn-small" id="btn-reparse-metadata" aria-label="Read image info again" data-i18n-aria="a11y.readImageInfoAgain" data-i18n="modal.reparse">Read Again</button>
                                     <button class="btn btn-ghost btn-small" id="btn-edit-metadata" aria-label="Edit image metadata" title="Edit image metadata" data-i18n-title="modal.editMetadataTitle" data-i18n-aria="modal.editMetadataTitle"><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg> <span data-i18n="modal.editMetadata">Edit</span></button>
                                 </div>
                             </div>
@@ -5996,7 +5996,7 @@
                                 <span class="meta-item" id="modal-waifu-item" style="display:none" title="Waifu Scorer V3: an anime-focused aesthetic score (0-10)" data-i18n-title="modal.waifuScoreTitle"><strong data-i18n="modal.waifuScore">Waifu:</strong> <span id="modal-waifu-score">-</span></span>
                                 <span class="meta-item" id="modal-anime-item" style="display:none" title="deepghs anime aesthetic: a grade from masterpiece to worst, and how the picture ranks among the model's reference pictures" data-i18n-title="modal.animeGradeTitle"><strong data-i18n="modal.animeGrade">Anime grade:</strong> <span id="modal-anime-grade">-</span></span>
                                 <span id="modal-img2img-badge" class="img2img-badge" style="display:none">img2img</span>
-                                <span class="meta-item meta-item-rating"><strong data-i18n="rating.modalLabel">Your rating:</strong> <span class="star-rating star-rating-interactive" id="modal-user-rating" role="radiogroup" aria-label="Your star rating"></span></span>
+                                <span class="meta-item meta-item-rating"><strong data-i18n="rating.modalLabel">Your rating:</strong> <span class="star-rating star-rating-interactive" id="modal-user-rating" role="radiogroup" aria-label="Your star rating" data-i18n-aria="a11y.yourStarRating"></span></span>
                             </div>
 
                             <!--
@@ -6087,7 +6087,7 @@
                         <h4 class="section-toggle" data-target="modal-color-content" data-collapse-key="color">Color Distribution <span class="collapse-icon">▼</span></h4>
                         <div id="modal-color-content">
                             <div class="modal-color-toolbar">
-                                <div class="modal-color-mode-group" role="group" aria-label="Histogram mode">
+                                <div class="modal-color-mode-group" role="group" aria-label="Histogram mode" data-i18n-aria="a11y.histogramMode">
                                     <button type="button" class="modal-color-mode-btn active" data-histogram-mode="rgb">RGB</button>
                                     <button type="button" class="modal-color-mode-btn" data-histogram-mode="split">Split</button>
                                     <button type="button" class="modal-color-mode-btn" data-histogram-mode="luma">Luma</button>
@@ -6113,7 +6113,7 @@
                         <!-- FLOW-02 inline tag editor (hidden until Edit). Saves via the
                              single-image scope of the bulk add/remove endpoints. -->
                         <div id="modal-tags-editor" class="modal-tags-editor" hidden>
-                            <div id="modal-tags-edit-chips" class="modal-tags-edit-chips" aria-label="Editable tags"></div>
+                            <div id="modal-tags-edit-chips" class="modal-tags-edit-chips" aria-label="Editable tags" data-i18n-aria="a11y.editableTags"></div>
                             <input type="text" id="modal-tags-add-input" class="input-field modal-tags-add-input" placeholder="Add a tag, press Enter" data-i18n-placeholder="modal.addTagPlaceholder">
                             <div class="modal-tags-edit-actions">
                                 <button class="btn btn-primary btn-small" id="btn-save-modal-tags" type="button" data-i18n="common.save">Save</button>
@@ -6231,7 +6231,7 @@
                     <label for="scan-folder-path" id="scan-folder-path-label" data-i18n="modal.folderPath">Image Folder</label>
                     <div class="folder-path-row">
                         <input type="text" id="scan-folder-path" class="input-field" placeholder="D:\images\outputs" aria-describedby="scan-folder-path-label scan-folder-feedback">
-                        <button type="button" class="btn-browse" id="btn-browse-folder" aria-label="Browse for folder" title="Browse folders" data-i18n-title="tip.browseFolders" data-i18n="scan.browse">Browse</button>
+                        <button type="button" class="btn-browse" id="btn-browse-folder" aria-label="Browse for folder" data-i18n-aria="a11y.browseForFolder" title="Browse folders" data-i18n-title="tip.browseFolders" data-i18n="scan.browse">Browse</button>
                     </div>
                     <small id="scan-folder-feedback" class="validation-feedback" aria-live="polite"></small>
                     <div id="folder-browser-container"></div>
@@ -6284,7 +6284,7 @@
 
                     </div>
                 </details>
-                <div class="progress-container" id="scan-progress-container" style="display: none;" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Scan progress">
+                <div class="progress-container" id="scan-progress-container" style="display: none;" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Scan progress" data-i18n-aria="a11y.scanProgress">
                     <div class="progress-bar">
                         <div class="progress-fill" id="scan-progress-fill"></div>
                     </div>
@@ -6311,8 +6311,8 @@
                     </div>
                 </div>
                 <div class="modal-actions">
-                    <button class="btn btn-ghost" id="btn-cancel-scan" aria-label="Cancel scan" data-i18n="modal.cancel">Cancel</button>
-                    <button class="btn btn-primary" id="btn-start-scan" aria-label="Start importing folder" data-i18n="modal.startScan">Start Import</button>
+                    <button class="btn btn-ghost" id="btn-cancel-scan" aria-label="Cancel scan" data-i18n-aria="a11y.cancelScan" data-i18n="modal.cancel">Cancel</button>
+                    <button class="btn btn-primary" id="btn-start-scan" aria-label="Start importing folder" data-i18n-aria="a11y.startImportingFolder" data-i18n="modal.startScan">Start Import</button>
                 </div>
             </div>
         </div>
@@ -6326,7 +6326,7 @@
                     <label for="reconnect-folder-path" id="reconnect-folder-path-label" data-i18n="reconnect.folderPath">Where should the app look?</label>
                     <div class="folder-path-row">
                         <input type="text" id="reconnect-folder-path" class="input-field" placeholder="D:\images\outputs" data-folder-browser-container="reconnect-folder-browser-container" aria-describedby="reconnect-folder-path-label reconnect-folder-feedback">
-                        <button type="button" class="btn-browse" id="btn-browse-reconnect-folder" aria-label="Browse for folder" title="Browse folders" data-i18n-title="tip.browseFolders" data-i18n="scan.browse">Browse</button>
+                        <button type="button" class="btn-browse" id="btn-browse-reconnect-folder" aria-label="Browse for folder" data-i18n-aria="a11y.browseForFolder" title="Browse folders" data-i18n-title="tip.browseFolders" data-i18n="scan.browse">Browse</button>
                     </div>
                     <small id="reconnect-folder-feedback" class="validation-feedback" aria-live="polite"></small>
                     <div id="reconnect-folder-browser-container"></div>
@@ -6355,7 +6355,7 @@
                         </div>
                     </div>
                 </details>
-                <div class="progress-container" id="reconnect-progress-container" style="display: none;" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Find moved files progress">
+                <div class="progress-container" id="reconnect-progress-container" style="display: none;" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Find moved files progress" data-i18n-aria="a11y.findMovedFilesProgress">
                     <div class="progress-bar">
                         <div class="progress-fill" id="reconnect-progress-fill"></div>
                     </div>
@@ -6363,8 +6363,8 @@
                 </div>
                 <div class="reconnect-result-panel" id="reconnect-result-panel" style="display: none;" aria-live="polite"></div>
                 <div class="modal-actions">
-                    <button class="btn btn-ghost" id="btn-cancel-reconnect" aria-label="Cancel finding moved files" data-i18n="modal.cancel">Cancel</button>
-                    <button class="btn btn-primary" id="btn-start-reconnect" aria-label="Start finding moved files" data-i18n="reconnect.startButton">Start Search</button>
+                    <button class="btn btn-ghost" id="btn-cancel-reconnect" aria-label="Cancel finding moved files" data-i18n-aria="a11y.cancelFindingMovedFiles" data-i18n="modal.cancel">Cancel</button>
+                    <button class="btn btn-primary" id="btn-start-reconnect" aria-label="Start finding moved files" data-i18n-aria="a11y.startFindingMovedFiles" data-i18n="reconnect.startButton">Start Search</button>
                 </div>
             </div>
         </div>
@@ -6394,7 +6394,7 @@
         <div class="modal" id="tag-modal" role="dialog" aria-modal="true" aria-labelledby="tag-modal-title">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-large tagger-modal-shell">
-                <button class="modal-close" id="btn-close-tag-modal" aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+                <button class="modal-close" id="btn-close-tag-modal" aria-label="Close" data-i18n-aria="a11y.close"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
                 <h3 id="tag-modal-title" data-i18n="modal.tagTitle">AI Auto Tagging</h3>
                 <p class="modal-description" data-i18n="modal.tagDescription">Use supported tagger models to generate tags for images.</p>
                 <!-- B4: explain why gallery images without a sibling .txt are still in scope. -->
@@ -6412,13 +6412,13 @@
                     </div>
                     <div class="smart-tag-hint-banner-actions">
                         <button type="button" class="btn btn-primary btn-small" id="btn-tag-modal-smart-tag-go" data-i18n="tagModal.smartTagGo">Open Smart Tag</button>
-                        <button type="button" class="btn btn-ghost btn-small" id="btn-tag-modal-smart-tag-dismiss" aria-label="Don't show again" data-i18n="tagModal.smartTagHintDismiss">Don't show again</button>
+                        <button type="button" class="btn btn-ghost btn-small" id="btn-tag-modal-smart-tag-dismiss" aria-label="Don't show again" data-i18n-aria="tagModal.smartTagHintDismiss" data-i18n="tagModal.smartTagHintDismiss">Don't show again</button>
                     </div>
                 </div>
 
                 <!-- Aurora Phase 3 (#25b): 智能一趟 (Smart Tag one-pass) is the default
                      first tab — the recommended entry — with Local / VLM / Aesthetic / Color after it. -->
-                <div class="tagger-tabs" role="tablist" aria-label="Tagger mode">
+                <div class="tagger-tabs" role="tablist" aria-label="Tagger mode" data-i18n-aria="a11y.taggerMode">
                     <button type="button" class="tagger-tab active" data-tagger-tab="smart" role="tab" aria-selected="true">
                         <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg></span>
                         <span data-i18n="tagger.tabSmart">Smart Tag</span>
@@ -6477,7 +6477,7 @@
                      The gallery tagger cannot run ToriiGate (a captioner), so the only
                      card shown here is VLM API and it is the default; ToriiGate is
                      reached through Smart Tag (#btn-tagger-nl-torii-smart). -->
-                <div class="tagger-nl-subtoggle tagger-nl-source-inputs" data-tagger-shows="nl" role="radiogroup" aria-label="Natural Language source" style="display:none">
+                <div class="tagger-nl-subtoggle tagger-nl-source-inputs" data-tagger-shows="nl" role="radiogroup" aria-label="Natural Language source" data-i18n-aria="a11y.naturalLanguageSource" style="display:none">
                     <label class="segmented-option">
                         <input type="radio" name="tagger-nl-source" value="toriigate">
                         <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-package"/></svg></span> <span data-i18n="tagger.nlSourceTorii">ToriiGate (local)</span>
@@ -6932,7 +6932,7 @@
         <div class="modal" id="metadata-editor-modal" role="dialog" aria-modal="true" aria-labelledby="meta-editor-title">
             <div class="modal-backdrop"></div>
             <div class="modal-content">
-                <button class="modal-close" id="meta-editor-close" aria-label="Close">
+                <button class="modal-close" id="meta-editor-close" aria-label="Close" data-i18n-aria="a11y.close">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></span>
                 </button>
                 <h3 id="meta-editor-title" data-i18n="modal.editMetadataTitle">Edit Image Metadata</h3>
@@ -7019,7 +7019,7 @@
 
                 <div class="form-group">
                     <label data-i18n="batchExport.outputDestination">Where to save sidecar files</label>
-                    <div class="segmented-control" role="radiogroup" aria-label="Sidecar output destination">
+                    <div class="segmented-control" role="radiogroup" aria-label="Sidecar output destination" data-i18n-aria="a11y.sidecarOutputDestination">
                         <label class="segmented-option">
                             <input type="radio" name="batch-export-output-mode" value="beside_image" checked>
                             <span data-i18n="batchExport.outputModeBesideImage">Save next to each image</span>
@@ -7238,7 +7238,7 @@
                             <span data-i18n="batchExport.refreshPreview">Refresh</span>
                         </button>
                         <button class="btn btn-primary btn-small" id="btn-caption-editor-done" type="button" title="Close editor (your edits are kept)" data-i18n-title="tip.closeEditorYourEditsAreKept" data-i18n="captionEditor.done">Done</button>
-                        <button class="modal-close" id="btn-close-caption-editor" aria-label="Close caption editor"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+                        <button class="modal-close" id="btn-close-caption-editor" aria-label="Close caption editor" data-i18n-aria="captionEditor.closeAriaLabel"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
                     </div>
                 </div>
                 <div class="caption-editor-body">
@@ -7431,7 +7431,7 @@
         <div class="modal" id="filter-modal" role="dialog" aria-modal="true" aria-labelledby="filter-modal-title">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-large filter-modal-shell">
-                <button class="modal-close" id="btn-close-filter-modal" aria-label="Close filter modal">
+                <button class="modal-close" id="btn-close-filter-modal" aria-label="Close filter modal" data-i18n-aria="a11y.closeFilterModal">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></span>
                 </button>
                 <div class="filter-modal-hero" style="padding: 0; gap: 0; margin-bottom: 8px;">
@@ -7440,13 +7440,13 @@
                     </div>
                     <div class="filter-modal-hero-actions" style="gap: 6px;">
                         <span id="filter-modal-selection-summary" style="font-size: 12px; color: var(--text-muted); max-width: 300px;"></span>
-                        <button class="btn btn-ghost btn-small" id="btn-open-library-from-filter" aria-label="Open tags and prompts library" style="white-space: nowrap;">
+                        <button class="btn btn-ghost btn-small" id="btn-open-library-from-filter" aria-label="Open tags and prompts library" data-i18n-aria="a11y.openTagsAndPromptsLibrary" style="white-space: nowrap;">
                             <svg class="icon" aria-hidden="true"><use href="#i-book"/></svg> <span data-i18n="filter.browseLibrary">Library</span>
                         </button>
                     </div>
                 </div>
 
-                <div class="filter-modal-stat-grid" aria-label="Current filter counts">
+                <div class="filter-modal-stat-grid" aria-label="Current filter counts" data-i18n-aria="a11y.currentFilterCounts">
                     <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.generators">Generators</span><strong class="filter-stat-value" id="filter-modal-count-generators">14/14</strong></div>
                     <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.ratings">Ratings</span><strong class="filter-stat-value" id="filter-modal-count-ratings">4/4</strong></div>
                     <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.tags">Tags</span><strong class="filter-stat-value" id="filter-modal-count-tags">0</strong></div>
@@ -7544,19 +7544,19 @@
                             <div class="dimension-grid" role="group" aria-labelledby="dimensions-heading">
                                 <label class="dimension-field">
                                     <span class="dimension-label" data-i18n="filter.widthMin">Min width</span>
-                                    <input type="number" id="filter-min-width" class="input-field" placeholder="Min width" data-i18n-placeholder="filter.widthMin" min="0" step="64" aria-label="Minimum width">
+                                    <input type="number" id="filter-min-width" class="input-field" placeholder="Min width" data-i18n-placeholder="filter.widthMin" min="0" step="64" aria-label="Minimum width" data-i18n-aria="a11y.minimumWidth">
                                 </label>
                                 <label class="dimension-field">
                                     <span class="dimension-label" data-i18n="filter.widthMax">Max width</span>
-                                    <input type="number" id="filter-max-width" class="input-field" placeholder="Max width" data-i18n-placeholder="filter.widthMax" min="0" step="64" aria-label="Maximum width">
+                                    <input type="number" id="filter-max-width" class="input-field" placeholder="Max width" data-i18n-placeholder="filter.widthMax" min="0" step="64" aria-label="Maximum width" data-i18n-aria="a11y.maximumWidth">
                                 </label>
                                 <label class="dimension-field">
                                     <span class="dimension-label" data-i18n="filter.heightMin">Min height</span>
-                                    <input type="number" id="filter-min-height" class="input-field" placeholder="Min height" data-i18n-placeholder="filter.heightMin" min="0" step="64" aria-label="Minimum height">
+                                    <input type="number" id="filter-min-height" class="input-field" placeholder="Min height" data-i18n-placeholder="filter.heightMin" min="0" step="64" aria-label="Minimum height" data-i18n-aria="a11y.minimumHeight">
                                 </label>
                                 <label class="dimension-field">
                                     <span class="dimension-label" data-i18n="filter.heightMax">Max height</span>
-                                    <input type="number" id="filter-max-height" class="input-field" placeholder="Max height" data-i18n-placeholder="filter.heightMax" min="0" step="64" aria-label="Maximum height">
+                                    <input type="number" id="filter-max-height" class="input-field" placeholder="Max height" data-i18n-placeholder="filter.heightMax" min="0" step="64" aria-label="Maximum height" data-i18n-aria="a11y.maximumHeight">
                                 </label>
                             </div>
 
@@ -7630,11 +7630,11 @@
                             <div class="dimension-grid" role="group">
                                 <label class="dimension-field">
                                     <span class="dimension-label" data-i18n="filter.aestheticMin">Min score</span>
-                                    <input type="number" id="filter-aesthetic-min" class="input-field" placeholder="e.g. 5" min="0" max="10" step="0.5" aria-label="Minimum aesthetic score">
+                                    <input type="number" id="filter-aesthetic-min" class="input-field" placeholder="e.g. 5" min="0" max="10" step="0.5" aria-label="Minimum aesthetic score" data-i18n-aria="a11y.minimumAestheticScore">
                                 </label>
                                 <label class="dimension-field">
                                     <span class="dimension-label" data-i18n="filter.aestheticMax">Max score</span>
-                                    <input type="number" id="filter-aesthetic-max" class="input-field" placeholder="e.g. 10" min="0" max="10" step="0.5" aria-label="Maximum aesthetic score">
+                                    <input type="number" id="filter-aesthetic-max" class="input-field" placeholder="e.g. 10" min="0" max="10" step="0.5" aria-label="Maximum aesthetic score" data-i18n-aria="a11y.maximumAestheticScore">
                                 </label>
                             </div>
                             <div class="aesthetic-quick-filters" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
@@ -7647,7 +7647,7 @@
                             <!-- Optional anime aesthetic scores (deepghs grade, Waifu Scorer V3).
                                  Pictures without that score never match a set filter. -->
                             <h5 class="anime-aesthetic-heading" data-i18n="filter.animeGradeTitle" title="Only pictures scored with the optional Anime Aesthetic Grade model (Model Center) have a grade." data-i18n-title="filter.animeGradeHint">Anime grade</h5>
-                            <div class="anime-grade-choices" role="group" aria-label="Anime grade" id="filter-anime-grades">
+                            <div class="anime-grade-choices" role="group" aria-label="Anime grade" data-i18n-aria="filter.animeGradeTitle" id="filter-anime-grades">
                                 <label class="filter-choice"><input type="checkbox" name="anime-grade" value="masterpiece"><span class="filter-choice-card"><span>masterpiece</span></span></label>
                                 <label class="filter-choice"><input type="checkbox" name="anime-grade" value="best"><span class="filter-choice-card"><span>best</span></span></label>
                                 <label class="filter-choice"><input type="checkbox" name="anime-grade" value="great"><span class="filter-choice-card"><span>great</span></span></label>
@@ -7660,11 +7660,11 @@
                             <div class="dimension-grid" role="group">
                                 <label class="dimension-field">
                                     <span class="dimension-label" data-i18n="filter.aestheticMin">Min score</span>
-                                    <input type="number" id="filter-waifu-min" class="input-field" placeholder="0" min="0" max="10" step="0.5" aria-label="Minimum Waifu score">
+                                    <input type="number" id="filter-waifu-min" class="input-field" placeholder="0" min="0" max="10" step="0.5" aria-label="Minimum Waifu score" data-i18n-aria="a11y.minimumWaifuScore">
                                 </label>
                                 <label class="dimension-field">
                                     <span class="dimension-label" data-i18n="filter.aestheticMax">Max score</span>
-                                    <input type="number" id="filter-waifu-max" class="input-field" placeholder="10" min="0" max="10" step="0.5" aria-label="Maximum Waifu score">
+                                    <input type="number" id="filter-waifu-max" class="input-field" placeholder="10" min="0" max="10" step="0.5" aria-label="Maximum Waifu score" data-i18n-aria="a11y.maximumWaifuScore">
                                 </label>
                             </div>
                         </section>
@@ -7684,11 +7684,11 @@
                             <div class="dimension-grid" role="group">
                                 <label class="dimension-field">
                                     <span class="dimension-label" data-i18n="filter.dateFrom">From</span>
-                                    <input type="date" id="filter-date-from" class="input-field" aria-label="Earliest file date (inclusive)">
+                                    <input type="date" id="filter-date-from" class="input-field" aria-label="Earliest file date (inclusive)" data-i18n-aria="a11y.earliestFileDateInclusive">
                                 </label>
                                 <label class="dimension-field">
                                     <span class="dimension-label" data-i18n="filter.dateTo">To</span>
-                                    <input type="date" id="filter-date-to" class="input-field" aria-label="Latest file date (inclusive)">
+                                    <input type="date" id="filter-date-to" class="input-field" aria-label="Latest file date (inclusive)" data-i18n-aria="a11y.latestFileDateInclusive">
                                 </label>
                             </div>
                         </section>
@@ -7706,7 +7706,7 @@
                             <div class="dimension-grid" role="group">
                                 <label class="dimension-field">
                                     <span class="dimension-label" data-i18n="filter.userRatingMin">Minimum</span>
-                                    <select id="filter-user-rating-min" class="input-field" aria-label="Minimum user star rating">
+                                    <select id="filter-user-rating-min" class="input-field" aria-label="Minimum user star rating" data-i18n-aria="a11y.minimumUserStarRating">
                                         <option value="" data-i18n="filter.userRatingAny">Any</option>
                                         <option value="1">★ 1+</option>
                                         <option value="2">★★ 2+</option>
@@ -7741,24 +7741,24 @@
                             <div class="dimension-grid" role="group">
                                 <label class="dimension-field">
                                     <span class="dimension-label" data-i18n="filter.brightnessMin">Min brightness</span>
-                                    <input type="number" id="filter-brightness-min" class="input-field" placeholder="0" min="0" max="255" step="1" aria-label="Minimum brightness">
+                                    <input type="number" id="filter-brightness-min" class="input-field" placeholder="0" min="0" max="255" step="1" aria-label="Minimum brightness" data-i18n-aria="a11y.minimumBrightness">
                                 </label>
                                 <label class="dimension-field">
                                     <span class="dimension-label" data-i18n="filter.brightnessMax">Max brightness</span>
-                                    <input type="number" id="filter-brightness-max" class="input-field" placeholder="255" min="0" max="255" step="1" aria-label="Maximum brightness">
+                                    <input type="number" id="filter-brightness-max" class="input-field" placeholder="255" min="0" max="255" step="1" aria-label="Maximum brightness" data-i18n-aria="a11y.maximumBrightness">
                                 </label>
                                 <!-- Aurora Phase 3 (24d): saturation range joins brightness -->
                                 <label class="dimension-field">
                                     <span class="dimension-label" data-i18n="filter.saturationMin">Min saturation</span>
-                                    <input type="number" id="filter-saturation-min" class="input-field" placeholder="0" min="0" max="255" step="1" aria-label="Minimum saturation">
+                                    <input type="number" id="filter-saturation-min" class="input-field" placeholder="0" min="0" max="255" step="1" aria-label="Minimum saturation" data-i18n-aria="a11y.minimumSaturation">
                                 </label>
                                 <label class="dimension-field">
                                     <span class="dimension-label" data-i18n="filter.saturationMax">Max saturation</span>
-                                    <input type="number" id="filter-saturation-max" class="input-field" placeholder="255" min="0" max="255" step="1" aria-label="Maximum saturation">
+                                    <input type="number" id="filter-saturation-max" class="input-field" placeholder="255" min="0" max="255" step="1" aria-label="Maximum saturation" data-i18n-aria="a11y.maximumSaturation">
                                 </label>
                             </div>
                             <h5 data-i18n="filter.colorTemperature">Color Temperature</h5>
-                            <div class="aspect-choice-grid" role="group" aria-label="Color temperature">
+                            <div class="aspect-choice-grid" role="group" aria-label="Color temperature" data-i18n-aria="a11y.colorTemperature">
                                 <label class="filter-choice">
                                     <input type="radio" name="color-temperature" value="" checked>
                                     <span class="filter-choice-card"><span class="filter-choice-icon">○</span><span data-i18n="filter.any">Any</span></span>
@@ -7778,7 +7778,7 @@
                             </div>
                             <!-- v3.5.0: dominant-hue multi-select (dominant_color_tags column). Dot colors reuse the cap-ac-dot palette where hues coincide. -->
                             <h5 data-i18n="filter.dominantColors">Dominant Colors</h5>
-                            <div class="aspect-choice-grid hue-choice-grid" role="group" aria-label="Dominant colors" id="filter-color-hues">
+                            <div class="aspect-choice-grid hue-choice-grid" role="group" aria-label="Dominant colors" data-i18n-aria="a11y.dominantColors" id="filter-color-hues">
                                 <label class="filter-choice"><input type="checkbox" name="color-hue" value="red"><span class="filter-choice-card"><span class="filter-hue-dot hue-dot-red"></span><span data-i18n="filter.hueRed">Red</span></span></label>
                                 <label class="filter-choice"><input type="checkbox" name="color-hue" value="orange"><span class="filter-choice-card"><span class="filter-hue-dot hue-dot-orange"></span><span data-i18n="filter.hueOrange">Orange</span></span></label>
                                 <label class="filter-choice"><input type="checkbox" name="color-hue" value="yellow"><span class="filter-choice-card"><span class="filter-hue-dot hue-dot-yellow"></span><span data-i18n="filter.hueYellow">Yellow</span></span></label>
@@ -7793,7 +7793,7 @@
                                 <label class="filter-choice"><input type="checkbox" name="color-hue" value="gray"><span class="filter-choice-card"><span class="filter-hue-dot hue-dot-gray"></span><span data-i18n="filter.hueGray">Gray</span></span></label>
                             </div>
                             <h5 data-i18n="filter.brightnessDistribution">Brightness Distribution</h5>
-                            <div class="aspect-choice-grid" role="group" aria-label="Brightness distribution">
+                            <div class="aspect-choice-grid" role="group" aria-label="Brightness distribution" data-i18n-aria="a11y.brightnessDistribution">
                                 <label class="filter-choice">
                                     <input type="radio" name="brightness-distribution" value="" checked>
                                     <span class="filter-choice-card"><span class="filter-choice-icon">○</span><span data-i18n="filter.any">Any</span></span>
@@ -8683,7 +8683,7 @@
         <div class="color-progress-toast-head">
             <span class="color-progress-toast-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-palette"/></svg></span>
             <strong id="color-progress-title" data-i18n="color.toastTitle">Color analysis</strong>
-            <button type="button" class="color-progress-toast-close" id="btn-color-progress-close" aria-label="Close color analysis toast"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+            <button type="button" class="color-progress-toast-close" id="btn-color-progress-close" aria-label="Close color analysis toast" data-i18n-aria="a11y.closeColorAnalysisToast"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
         </div>
         <div class="color-progress-toast-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
             <div class="color-progress-toast-fill" id="color-progress-toast-fill"></div>
@@ -8703,7 +8703,7 @@
     <div class="modal" id="smart-tag-modal" role="dialog" aria-modal="true" aria-labelledby="smart-tag-modal-title">
         <div class="modal-backdrop"></div>
         <div class="modal-content modal-large smart-tag-modal-content">
-            <button class="modal-close" id="btn-smart-tag-close" aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+            <button class="modal-close" id="btn-smart-tag-close" aria-label="Close" data-i18n-aria="a11y.close"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
             <h3 id="smart-tag-modal-title">
                 <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg></span>
                 <span data-i18n="smartTag.title">Smart Tag (WD14 + VLM)</span>
@@ -8939,7 +8939,7 @@
 
             <div class="form-group vlm-output-format-group">
                 <label data-i18n="vlmSettings.outputFormat">Output Format</label>
-                <div class="vlm-segmented" role="radiogroup" aria-label="Output format" id="vlm-output-format">
+                <div class="vlm-segmented" role="radiogroup" aria-label="Output format" data-i18n-aria="a11y.outputFormat" id="vlm-output-format">
                     <button type="button" class="vlm-segmented-btn active" data-output-format="nl_caption" role="radio" aria-checked="true">
                         <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg></span>
                         <span data-i18n="vlmSettings.outputFormatNL">NL caption</span>
@@ -9128,7 +9128,7 @@
     <div class="modal" id="mass-tag-modal" role="dialog" aria-modal="true" aria-labelledby="mass-tag-modal-title">
         <div class="modal-backdrop"></div>
         <div class="modal-content modal-large mass-tag-shell">
-            <button class="modal-close" id="btn-mass-tag-close" aria-label="Close mass tag editor"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
+            <button class="modal-close" id="btn-mass-tag-close" aria-label="Close mass tag editor" data-i18n-aria="a11y.closeMassTagEditor"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
             <h3 id="mass-tag-modal-title"><svg class="icon" aria-hidden="true"><use href="#i-broom"/></svg> <span data-i18n="massTag.title">Mass Tag Editor</span></h3>
             <p class="modal-description" data-i18n="massTag.description">
                 Bulk-edit stored tags. Run "Dry-run preview" before "Apply". Successful edits offer Undo when an undo journal can be saved.
@@ -9157,7 +9157,7 @@
                 </p>
             </section>
 
-            <div class="mass-tag-tabs" role="tablist" aria-label="Operation">
+            <div class="mass-tag-tabs" role="tablist" aria-label="Operation" data-i18n-aria="a11y.operation">
                 <button type="button" class="mass-tag-tab active" data-mass-tag-tab="find_replace" role="tab" aria-selected="true">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg></span>
                     <span data-i18n="massTag.tabFindReplace">Find &amp; Replace</span>
