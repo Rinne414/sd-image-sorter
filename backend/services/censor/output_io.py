@@ -22,6 +22,8 @@ import binascii
 import logging
 import os
 import shutil
+import threading
+from collections import OrderedDict
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
@@ -29,6 +31,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 from fastapi import HTTPException
 from PIL import Image, PngImagePlugin
 
+import config
 import database as db
 from services.image_metadata_writer import prepare_image_for_save
 from services.indexed_file_mutation_service import save_and_reconcile_checked
@@ -51,6 +54,40 @@ logger = logging.getLogger("services.censor_service")
 
 
 CensorOutputFormat = Literal['png', 'jpg', 'webp']
+
+
+# Files the censor save wrote while this server runs. "Open folder" after a
+# save may reveal only these, so the endpoint never opens arbitrary paths.
+_RECENT_OUTPUTS: "OrderedDict[str, None]" = OrderedDict()
+_RECENT_OUTPUTS_LOCK = threading.Lock()
+_RECENT_OUTPUTS_MAX = 2000
+_MAX_UNIQUE_NAME_ATTEMPTS = 10_000
+
+
+def _output_key(path: str) -> str:
+    return os.path.normcase(os.path.abspath(path))
+
+
+def remember_saved_output(path: str) -> None:
+    key = _output_key(path)
+    with _RECENT_OUTPUTS_LOCK:
+        _RECENT_OUTPUTS.pop(key, None)
+        _RECENT_OUTPUTS[key] = None
+        while len(_RECENT_OUTPUTS) > _RECENT_OUTPUTS_MAX:
+            _RECENT_OUTPUTS.popitem(last=False)
+
+
+def was_saved_output(path: str) -> bool:
+    with _RECENT_OUTPUTS_LOCK:
+        return _output_key(path) in _RECENT_OUTPUTS
+
+
+def _discard_empty_placeholder(path: str) -> None:
+    try:
+        if os.path.isfile(path) and os.path.getsize(path) == 0:
+            os.remove(path)
+    except OSError:
+        logger.warning("Could not remove unused output placeholder %s", path)
 
 
 def _combine_save_warnings(writer_warnings: List[str], reconcile_warnings: List[str]) -> List[str]:
@@ -259,15 +296,105 @@ class _OutputMixin:
     @staticmethod
     def _save_response(output_path: str, filename: str, *, warnings: Optional[List[str]] = None, target_existed: bool = False) -> Dict[str, Any]:
         indexed_output = db.get_image_by_path(output_path)
+        remember_saved_output(output_path)
         return {
             "status": "ok",
             "output_path": output_path,
             "filename": filename,
             "warnings": warnings or [],
+            "skipped": False,
             "overwrote_existing": bool(target_existed),
             "overwrote_indexed_path": bool(indexed_output),
             "reconciled_image_id": int(indexed_output["id"]) if indexed_output else None,
         }
+
+    @staticmethod
+    def _skipped_response(output_path: str, filename: str) -> Dict[str, Any]:
+        remember_saved_output(output_path)
+        return {
+            "status": "skipped",
+            "output_path": output_path,
+            "filename": filename,
+            "warnings": [],
+            "skipped": True,
+            "overwrote_existing": False,
+            "overwrote_indexed_path": False,
+            "reconciled_image_id": None,
+        }
+
+    def _resolve_save_output_folder(self, requested: str) -> str:
+        """Validate the requested output folder; blank means the built-in output/censor."""
+        from utils.path_validation import validate_folder_path
+
+        folder = str(requested or "").strip() or str(config.default_output_folder("censor"))
+        is_valid, error = validate_folder_path(folder, allow_create=True)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error or "Invalid output folder")
+        return self._ensure_safe_output_directory(folder)
+
+    def _claim_free_output_path(self, output_folder: str, base_name: str, ext: str) -> tuple:
+        """Create an empty placeholder at the first free name, name_2, name_3, ...
+
+        Claiming the name with O_EXCL keeps two saves of same-named pictures
+        from both picking the same free name and one replacing the other.
+        """
+        for attempt in range(1, _MAX_UNIQUE_NAME_ATTEMPTS + 1):
+            filename = f"{base_name}{ext}" if attempt == 1 else f"{base_name}_{attempt}{ext}"
+            candidate = self._ensure_output_path(output_folder, filename)
+            try:
+                handle = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                continue
+            os.close(handle)
+            return candidate, filename
+        raise self._output_conflict_error("No free file name is left for this picture in the output folder.")
+
+    def _write_named_output(
+        self,
+        output_folder: str,
+        base_name: str,
+        ext: str,
+        writer: Any,
+        *,
+        allow_overwrite: bool,
+        name_conflict: str,
+    ) -> Dict[str, Any]:
+        """Write one save under the user's same-name choice and build the response.
+
+        allow_overwrite replaces an existing file. Otherwise name_conflict
+        decides: "error" refuses (409), "skip" leaves the existing file, and
+        "unique" saves under the first free name_2, name_3, ...
+        """
+        filename = f"{base_name}{ext}"
+        output_path = self._ensure_output_path(output_folder, filename)
+        if not allow_overwrite and name_conflict == "skip" and os.path.lexists(output_path):
+            return self._skipped_response(output_path, filename)
+
+        placeholder: Optional[str] = None
+        if not allow_overwrite and name_conflict == "unique":
+            output_path, filename = self._claim_free_output_path(output_folder, base_name, ext)
+            placeholder = output_path
+
+        try:
+            write_result = save_and_reconcile_checked(
+                output_path,
+                writer,
+                allow_overwrite=allow_overwrite or placeholder is not None,
+                backend_file=_svc()._BACKEND_FILE,
+                validation_error_factory=self._output_validation_error,
+                conflict_error_factory=self._output_conflict_error,
+            )
+        except BaseException:
+            if placeholder:
+                _discard_empty_placeholder(placeholder)
+            raise
+
+        return self._save_response(
+            output_path,
+            filename,
+            warnings=_combine_save_warnings(write_result.writer_result, write_result.warnings),
+            target_existed=write_result.target_existed and placeholder is None,
+        )
 
     def preview(self, request: CensorApplyRequest) -> Dict[str, str]:
         """Apply censoring and return base64 preview image."""
@@ -405,17 +532,14 @@ class _OutputMixin:
         for byte; otherwise it is re-encoded on the server, so the browser
         never round-trips the pixels through a canvas.
         """
-        from utils.path_validation import validate_folder_path, sanitize_filename
+        from utils.path_validation import sanitize_filename
 
-        is_valid, error = validate_folder_path(request.output_folder, allow_create=True)
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=error or "Invalid output folder")
+        output_folder = self._resolve_save_output_folder(request.output_folder)
 
         image_row = db.get_image_by_id(request.original_image_id)
         if not image_row:
             raise HTTPException(status_code=404, detail="Image not found")
 
-        output_folder = self._ensure_safe_output_directory(request.output_folder)
         source_path = self._resolve_source_image_path(
             image_row["path"],
             image_id=request.original_image_id,
@@ -430,8 +554,6 @@ class _OutputMixin:
         try:
             os.makedirs(output_folder, exist_ok=True)
             base_name = os.path.splitext(sanitize_filename(request.filename))[0]
-            output_filename = f"{base_name}.{output_format}"
-            output_path = self._ensure_output_path(output_folder, output_filename)
 
             if output_format == source_format and request.metadata_option == "keep":
                 def _write(final_output_path: str, _overwrite_requested: bool) -> List[str]:
@@ -456,19 +578,13 @@ class _OutputMixin:
                 def _write(final_output_path: str, _overwrite_requested: bool) -> List[str]:
                     return self._save_image_with_format(image, final_output_path, output_format, save_kwargs)
 
-            write_result = save_and_reconcile_checked(
-                output_path,
+            return self._write_named_output(
+                output_folder,
+                base_name,
+                f".{output_format}",
                 _write,
                 allow_overwrite=request.allow_overwrite,
-                backend_file=_svc()._BACKEND_FILE,
-                validation_error_factory=self._output_validation_error,
-                conflict_error_factory=self._output_conflict_error,
-            )
-            return self._save_response(
-                output_path,
-                output_filename,
-                warnings=_combine_save_warnings(write_result.writer_result, write_result.warnings),
-                target_existed=write_result.target_existed,
+                name_conflict=request.name_conflict,
             )
         except HTTPException:
             raise
@@ -478,13 +594,9 @@ class _OutputMixin:
 
     def save_data(self, request: CensorSaveDataRequest) -> Dict[str, Any]:
         """Save base64 image data directly to disk."""
-        from utils.path_validation import validate_folder_path, sanitize_filename
+        from utils.path_validation import sanitize_filename
 
-        is_valid, error = validate_folder_path(request.output_folder, allow_create=True)
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=error or "Invalid output folder")
-
-        output_folder = self._ensure_safe_output_directory(request.output_folder)
+        output_folder = self._resolve_save_output_folder(request.output_folder)
 
         try:
             os.makedirs(output_folder, exist_ok=True)
@@ -504,8 +616,6 @@ class _OutputMixin:
             base_name = os.path.splitext(safe_filename)[0]
             output_format = self._normalize_output_format(request.output_format)
             ext = f".{output_format}"
-            output_filename = f"{base_name}{ext}"
-            output_path = self._ensure_output_path(output_folder, output_filename)
 
             save_kwargs: Dict[str, object]
             if request.metadata_option == "strip":
@@ -522,20 +632,13 @@ class _OutputMixin:
             def _write_canvas_save(final_output_path: str, _overwrite_requested: bool) -> List[str]:
                 return self._save_image_with_format(image, final_output_path, output_format, save_kwargs)
 
-            write_result = save_and_reconcile_checked(
-                output_path,
+            return self._write_named_output(
+                output_folder,
+                base_name,
+                ext,
                 _write_canvas_save,
                 allow_overwrite=request.allow_overwrite,
-                backend_file=_svc()._BACKEND_FILE,
-                validation_error_factory=self._output_validation_error,
-                conflict_error_factory=self._output_conflict_error,
-            )
-
-            return self._save_response(
-                output_path,
-                output_filename,
-                warnings=_combine_save_warnings(write_result.writer_result, write_result.warnings),
-                target_existed=write_result.target_existed,
+                name_conflict=request.name_conflict,
             )
         except HTTPException:
             raise

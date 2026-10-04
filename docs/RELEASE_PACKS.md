@@ -124,8 +124,9 @@ The app only checks for updates when the user clicks the update button.
 This is intentional and must stay that way.
 
 - `data/` is package-local user state: database, favorites, downloaded models, cache, thumbnails, temp files, and other long-lived runtime data
+- `output/` holds the files users save when they leave a save folder blank (`output/censor`, `output/publish`, `output/video-censor`)
 - `update/backups`, `update/downloads`, `update/logs`, `update/state`, and `update/worker` are updater runtime workspaces, not release payload content
-- Protected runtime prefixes are: `data`, `update/backups`, `update/downloads`, `update/logs`, `update/state`, `update/worker`
+- Protected runtime prefixes are: `data`, `output`, `update/backups`, `update/downloads`, `update/logs`, `update/state`, `update/worker`
 - The in-app updater is meant to behave like "replace the app code in place", not "reinstall the whole environment from scratch"
 - Release packaging already excludes runtime folders, but the worker also hard-blocks them so a future packaging mistake cannot silently overwrite or delete user state
 - If a new release manifest ever tries to manage protected runtime paths, the worker aborts the update before copying or deleting installed files

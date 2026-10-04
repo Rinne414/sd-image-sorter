@@ -137,6 +137,15 @@ def _no_automatic_model_source_discovery(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_output_dir(tmp_path, monkeypatch):
+    """Saves that fall back to the built-in output folder land in tmp_path,
+    never in the repository's own ``output/``."""
+    import config
+
+    monkeypatch.setattr(config, "OUTPUT_DIR", tmp_path / "app-output")
+
+
+@pytest.fixture(autouse=True)
 def _isolate_external_model_store(tmp_path, monkeypatch):
     """Give every test an empty trusted-model index.
 

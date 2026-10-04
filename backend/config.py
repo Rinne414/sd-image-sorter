@@ -172,6 +172,16 @@ THUMBNAIL_DIR: Path = Path(
         str(DATA_DIR / "thumbnails"),
     )
 ).expanduser()
+# Built-in save destinations: a save flow whose folder is left blank writes
+# into OUTPUT_DIR/<feature> (owner decision 2026-10-04). Next to run.bat like
+# ComfyUI's output/, and protected from the updater (update_worker).
+OUTPUT_DIR: Path = Path(
+    os.environ.get(
+        "SD_IMAGE_SORTER_OUTPUT_DIR",
+        str(PACKAGE_ROOT / "output"),
+    )
+).expanduser()
+OUTPUT_FEATURES: tuple[str, ...] = ("censor", "publish", "video-censor")
 UPDATE_CHANNEL_CONFIG_PATH: Path = CONFIG_DIR / "update-channel.json"
 DOWNLOAD_MIRROR_CONFIG_PATH: Path = CONFIG_DIR / "download-mirror.json"
 APP_SETTINGS_CONFIG_PATH: Path = CONFIG_DIR / "app-settings.json"
@@ -596,6 +606,16 @@ def get_data_dir() -> str:
     """Get the package-local data directory, creating it if necessary."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     return str(DATA_DIR)
+
+
+def default_output_folder(feature: str) -> Path:
+    """Built-in output folder of one save flow, ``OUTPUT_DIR/<feature>``.
+
+    Not created here; the save that writes into it creates it.
+    """
+    if feature not in OUTPUT_FEATURES:
+        raise ValueError(f"Unknown output feature: {feature!r}")
+    return Path(OUTPUT_DIR) / feature
 
 
 def get_config_dir() -> str:

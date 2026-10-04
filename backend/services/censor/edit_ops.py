@@ -26,8 +26,6 @@ from fastapi import HTTPException
 from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter
 
 import database as db
-from services.censor.output_io import _combine_save_warnings
-from services.indexed_file_mutation_service import save_and_reconcile_checked
 
 if TYPE_CHECKING:  # annotation-only; never imported at runtime (no facade cycle)
     from services.censor_service import CensorSaveOperationsRequest
@@ -51,17 +49,14 @@ class _EditApplyMixin:
 
     def save_operations(self, request: CensorSaveOperationsRequest) -> Dict[str, Any]:
         """Save original image with non-destructive censor operations applied server-side."""
-        from utils.path_validation import validate_folder_path, sanitize_filename
+        from utils.path_validation import sanitize_filename
 
-        is_valid, error = validate_folder_path(request.output_folder, allow_create=True)
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=error or "Invalid output folder")
+        output_folder = self._resolve_save_output_folder(request.output_folder)
 
         image_row = db.get_image_by_id(request.original_image_id)
         if not image_row:
             raise HTTPException(status_code=404, detail="Image not found")
 
-        output_folder = self._ensure_safe_output_directory(request.output_folder)
         source_path = self._resolve_source_image_path(
             image_row["path"],
             image_id=request.original_image_id,
@@ -85,8 +80,6 @@ class _EditApplyMixin:
             base_name = os.path.splitext(safe_filename)[0]
             output_format = self._normalize_output_format(request.output_format)
             ext = f".{output_format}"
-            output_filename = f"{base_name}{ext}"
-            output_path = self._ensure_output_path(output_folder, output_filename)
 
             if request.metadata_option == "strip":
                 image_to_save = self._strip_all_metadata(working_image)
@@ -103,20 +96,13 @@ class _EditApplyMixin:
             def _write_operations_save(final_output_path: str, _overwrite_requested: bool) -> List[str]:
                 return self._save_image_with_format(image_to_save, final_output_path, output_format, save_kwargs)
 
-            write_result = save_and_reconcile_checked(
-                output_path,
+            return self._write_named_output(
+                output_folder,
+                base_name,
+                ext,
                 _write_operations_save,
                 allow_overwrite=request.allow_overwrite,
-                backend_file=_svc()._BACKEND_FILE,
-                validation_error_factory=self._output_validation_error,
-                conflict_error_factory=self._output_conflict_error,
-            )
-
-            return self._save_response(
-                output_path,
-                output_filename,
-                warnings=_combine_save_warnings(write_result.writer_result, write_result.warnings),
-                target_existed=write_result.target_existed,
+                name_conflict=request.name_conflict,
             )
         except HTTPException:
             raise

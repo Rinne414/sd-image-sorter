@@ -30,6 +30,7 @@ INSTALLED_MANIFEST_RELATIVE_PATH = Path("update") / "installed-manifest.json"
 # and must never be replaced by release assets.
 PROTECTED_RUNTIME_PREFIXES = (
     Path("data"),
+    Path("output"),
     Path("update") / "backups",
     Path("update") / "downloads",
     Path("update") / "logs",

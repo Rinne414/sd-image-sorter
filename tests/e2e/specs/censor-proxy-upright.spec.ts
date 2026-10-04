@@ -124,7 +124,7 @@ test('a large rotated JPEG in proxy mode is censored where the box was when save
   const result = await page.evaluate(async ({ id, folder }) => {
     const state = (window as any).__CENSOR_STATE__
     const item = state.queue.find((entry: any) => entry.id === id)
-    return (window as any).saveCensorQueueItem(item, 'png', 'strip', true, { folder, baseName: 'proxy_rotated_out' })
+    return (window as any).saveCensorQueueItem(item, 'png', 'strip', 'overwrite', { folder, baseName: 'proxy_rotated_out' })
   }, { id: seeded.id, folder: seeded.outputDir })
   expect(result?.success ?? true).toBe(true)
   expect(fs.existsSync(output)).toBe(true)

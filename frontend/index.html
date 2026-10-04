@@ -7994,9 +7994,13 @@
 
                 <div class="save-options-grid">
                     <div class="form-group save-options-folder-group">
-                        <label data-i18n="save.outputFolder">Output Folder</label>
-                        <input type="text" id="save-output-folder" class="input-field" placeholder="D:\censored_output">
-                        <small class="helper-text" data-i18n="save.outputFolderHelper">Exported images go here</small>
+                        <label for="save-output-folder" data-i18n="save.outputFolder">Output Folder</label>
+                        <div class="input-modal-field-row">
+                            <input type="text" id="save-output-folder" class="input-field" data-folder-browser-container="save-output-folder-browser" placeholder="">
+                            <button type="button" class="btn btn-secondary" id="btn-save-browse-folder" data-i18n="common.browse">Browse</button>
+                        </div>
+                        <div id="save-output-folder-browser" aria-live="polite"></div>
+                        <small class="helper-text" data-i18n="save.outputFolderHelper">Leave it empty to save into the program's own output folder.</small>
                     </div>
 
                     <div class="form-group save-options-unedited-group" id="save-unedited-group" hidden>
@@ -8030,12 +8034,13 @@
                     </div>
 
                     <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="save-allow-overwrite">
-                            <span class="checkbox-custom" aria-hidden="true"></span>
-                            <span data-i18n="save.allowOverwrite">Allow replacing existing files</span>
-                        </label>
-                        <small class="helper-text" data-i18n="save.allowOverwriteHelper">Leave off to block accidental overwrites. Turn on only when you intentionally want to replace matching output files.</small>
+                        <label for="save-name-conflict" data-i18n="save.nameConflict">When a file with the same name exists</label>
+                        <select id="save-name-conflict" class="input-field">
+                            <option value="unique" data-i18n="save.nameConflictUnique">Number it (name_2, name_3...)</option>
+                            <option value="overwrite" data-i18n="save.nameConflictOverwrite">Replace the old file</option>
+                            <option value="skip" data-i18n="save.nameConflictSkip">Skip it and keep the old file</option>
+                        </select>
+                        <small class="helper-text" data-i18n="save.nameConflictHelper">Numbering never replaces a file, so you can save several versions of one picture without renaming.</small>
                     </div>
                 </div>
 

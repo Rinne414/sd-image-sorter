@@ -151,22 +151,30 @@ class CensorSaveDataRequest(BaseModel):
     """Request to save base64 image data directly."""
     image_data: str = Field(..., max_length=100_000_000)
     filename: str = Field(..., min_length=1)
-    output_folder: str = Field(..., min_length=1)
+    # Blank = the built-in output/censor folder.
+    output_folder: str = ""
     metadata_option: str = Field("keep", pattern="^(keep|minimal|strip)$")
     output_format: str = Field("png", pattern="^(png|jpg|jpeg|webp)$")
     original_image_id: Optional[int] = Field(None, ge=1)
     allow_overwrite: bool = False
+    # Without allow_overwrite: "error" refuses an existing name (409), "skip"
+    # leaves it, "unique" saves as name_2, name_3, ...
+    name_conflict: str = Field("error", pattern="^(error|unique|skip)$")
 
 
 class CensorSaveOriginalRequest(BaseModel):
     """Save an image the user did not edit, read straight from its source file."""
     original_image_id: int = Field(..., ge=1)
     filename: str = Field(..., min_length=1)
-    output_folder: str = Field(..., min_length=1)
+    # Blank = the built-in output/censor folder.
+    output_folder: str = ""
     metadata_option: str = Field("keep", pattern="^(keep|minimal|strip)$")
     # "original" keeps the source's own format (png / jpg / jpeg / webp).
     output_format: str = Field("original", pattern="^(original|png|jpg|jpeg|webp)$")
     allow_overwrite: bool = False
+    # Without allow_overwrite: "error" refuses an existing name (409), "skip"
+    # leaves it, "unique" saves as name_2, name_3, ...
+    name_conflict: str = Field("error", pattern="^(error|unique|skip)$")
 
 
 class CensorSaveOperationsRequest(BaseModel):
@@ -174,10 +182,14 @@ class CensorSaveOperationsRequest(BaseModel):
     original_image_id: int = Field(..., ge=1)
     operations: List[Dict[str, Any]] = Field(default_factory=list, max_length=MAX_EDIT_OPERATION_COUNT)
     filename: str = Field(..., min_length=1)
-    output_folder: str = Field(..., min_length=1)
+    # Blank = the built-in output/censor folder.
+    output_folder: str = ""
     metadata_option: str = Field("keep", pattern="^(keep|minimal|strip)$")
     output_format: str = Field("png", pattern="^(png|jpg|jpeg|webp)$")
     allow_overwrite: bool = False
+    # Without allow_overwrite: "error" refuses an existing name (409), "skip"
+    # leaves it, "unique" saves as name_2, name_3, ...
+    name_conflict: str = Field("error", pattern="^(error|unique|skip)$")
 
 
 class RemoveBackgroundRequest(BaseModel):

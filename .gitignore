@@ -37,6 +37,8 @@ models/yolo/*.pt
 python/
 run-portable.bat
 data/
+# Built-in save folder (users' censored / published pictures)
+/output/
 update/
 
 # Internal dev files (not for public repo).

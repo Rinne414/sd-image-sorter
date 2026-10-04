@@ -107,8 +107,8 @@ const CensorState = {
     // full generation prompt/metadata by default was a privacy leak. Matches the
     // 'strip' fallback every save function already uses. Users can still pick
     // keep/minimal per export. ('keep', 'minimal', or 'strip')
-    metadataOption: 'strip',
-    outputFormat: 'png', // 'png', 'jpg', or 'webp'
+    metadataOption: localStorage.getItem('censor_metadata_option') || 'strip',
+    outputFormat: localStorage.getItem('censor_output_format') || 'png', // 'original', 'png', 'jpg', or 'webp'
     sam3Confidence: 0.5, // SAM3 confidence threshold
     // 'precise': model outline (YOLO-seg / SAM3) else box; 'box': rectangles;
     // 'ellipse' / 'fit': plain boxes become an ellipse / a GrabCut trace (backend).

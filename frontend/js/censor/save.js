@@ -19,7 +19,7 @@ function openSaveOptionsPopup() {
 
     const metadataOption = document.getElementById('save-metadata-option');
     if (metadataOption) {
-        metadataOption.value = CensorState.metadataOption || 'strip';
+        metadataOption.value = CensorState.metadataOption || localStorage.getItem('censor_metadata_option') || 'strip';
     }
 
     const formatOption = document.getElementById('save-format-option');
@@ -27,13 +27,48 @@ function openSaveOptionsPopup() {
         formatOption.value = CensorState.outputFormat || localStorage.getItem('censor_output_format') || 'png';
     }
 
-    const allowOverwrite = document.getElementById('save-allow-overwrite');
-    if (allowOverwrite) {
-        allowOverwrite.checked = false;
+    const nameConflict = document.getElementById('save-name-conflict');
+    if (nameConflict) {
+        nameConflict.value = readCensorNameConflict();
     }
 
+    window.hideFolderBrowser?.();
     refreshUneditedSaveOption();
+    refreshCensorDefaultOutputFolder();
     document.getElementById('save-options-modal')?.classList.add('visible');
+}
+
+const CENSOR_NAME_CONFLICTS = new Set(['unique', 'overwrite', 'skip']);
+
+// Numbering is the default: it never replaces a file and never needs a rename.
+function readCensorNameConflict() {
+    const stored = localStorage.getItem('censor_name_conflict');
+    return CENSOR_NAME_CONFLICTS.has(stored) ? stored : 'unique';
+}
+
+// The empty folder field saves into the program's output/censor; show where.
+async function refreshCensorDefaultOutputFolder() {
+    const input = document.getElementById('save-output-folder');
+    if (!input) return;
+    try {
+        const response = await window.App.API.get('/api/output-folders');
+        const folder = response?.folders?.censor;
+        if (folder) {
+            input.placeholder = censorT('save.outputFolderDefault', { path: folder }, 'Empty = {path}');
+        }
+    } catch (error) {
+        Logger.warn('Could not read the default output folder', error);
+    }
+}
+
+function folderOfSavedPath(path) {
+    return String(path || '').replace(/[\\/][^\\/]*$/, '');
+}
+
+function revealCensorSavedFile(path) {
+    window.App.API.post('/api/censor/reveal-output', { path }).catch((error) => {
+        window.App.showToast(error?.message || String(error), 'error');
+    });
 }
 
 // Items still on the server's page cursor were never opened, so they cannot
@@ -68,29 +103,24 @@ async function confirmAndSaveAll() {
     const folder = document.getElementById('save-output-folder')?.value;
     const metadataOption = document.getElementById('save-metadata-option')?.value || 'strip';
     const formatOption = document.getElementById('save-format-option')?.value || 'png';
-    const allowOverwrite = Boolean(document.getElementById('save-allow-overwrite')?.checked);
+    const selectedConflict = document.getElementById('save-name-conflict')?.value;
+    const nameConflict = CENSOR_NAME_CONFLICTS.has(selectedConflict) ? selectedConflict : 'unique';
     const includeUnedited = document.getElementById('save-unedited-option')?.value !== 'skip';
 
-    if (!folder) {
-        window.App.showToast(
-            censorT('censor.outputFolderRequired', null, 'Please specify an output folder'),
-            'error'
-        );
-        return;
-    }
-
-    // Save settings
+    // An empty folder is allowed: the server saves into output/censor.
     CensorState.outputFolder = folder;
     CensorState.metadataOption = metadataOption;
     CensorState.outputFormat = formatOption;
     localStorage.setItem('censor_output_format', formatOption);
     localStorage.setItem('censor_output_folder', folder);
+    localStorage.setItem('censor_metadata_option', metadataOption);
+    localStorage.setItem('censor_name_conflict', nameConflict);
     localStorage.setItem('censor_unedited_option', includeUnedited ? 'include' : 'skip');
 
     // Close popup and start saving
     document.getElementById('save-options-modal')?.classList.remove('visible');
 
-    await saveAllProcessed(formatOption, metadataOption, allowOverwrite, { includeUnedited });
+    await saveAllProcessed(formatOption, metadataOption, nameConflict, { includeUnedited });
 }
 
 function markGalleryRefreshAfterCensorSave(result) {
@@ -128,11 +158,15 @@ function resolveCensorOutputFormat(item, formatOption) {
 
 // `target` redirects one save (the Publish Set hand-over writes into its
 // staging folder under a name of its own); Save uses the chosen folder.
-async function saveCensorQueueItem(item, formatOption = 'png', metadataOption = 'strip', allowOverwrite = false, target = {}) {
-    const folder = target.folder || CensorState.outputFolder;
+// nameConflict: 'unique' (name_2, name_3...), 'overwrite', 'skip', or
+// 'error' (refuse an existing name; the hand-over needs its exact names).
+async function saveCensorQueueItem(item, formatOption = 'png', metadataOption = 'strip', nameConflict = 'error', target = {}) {
+    const folder = target.folder || CensorState.outputFolder || '';
     const baseName = target.baseName || item.outputFilename.replace(/\.[^/.]+$/, '');
     const outputFormat = resolveCensorOutputFormat(item, formatOption);
     const finalFilename = `${baseName}.${outputFormat}`;
+    const allowOverwrite = nameConflict === 'overwrite';
+    const conflictPolicy = nameConflict === 'unique' || nameConflict === 'skip' ? nameConflict : 'error';
 
     if (shouldUseProxyEditMode(item) || (Array.isArray(item.editOperations) && item.editOperations.length > 0)) {
         const result = await window.App.API.post('/api/censor/save-operations', {
@@ -143,6 +177,7 @@ async function saveCensorQueueItem(item, formatOption = 'png', metadataOption = 
             metadata_option: metadataOption,
             output_format: outputFormat,
             allow_overwrite: allowOverwrite,
+            name_conflict: conflictPolicy,
         });
         markGalleryRefreshAfterCensorSave(result);
         return result;
@@ -159,6 +194,7 @@ async function saveCensorQueueItem(item, formatOption = 'png', metadataOption = 
             metadata_option: metadataOption,
             output_format: formatOption,
             allow_overwrite: allowOverwrite,
+            name_conflict: conflictPolicy,
         });
         markGalleryRefreshAfterCensorSave(result);
         return result;
@@ -172,21 +208,13 @@ async function saveCensorQueueItem(item, formatOption = 'png', metadataOption = 
         output_format: outputFormat,
         original_image_id: item.id,
         allow_overwrite: allowOverwrite,
+        name_conflict: conflictPolicy,
     });
     markGalleryRefreshAfterCensorSave(result);
     return result;
 }
 
-async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', allowOverwrite = false, { includeUnedited = true } = {}) {
-    const folder = CensorState.outputFolder;
-    if (!folder) {
-        window.App.showToast(
-            censorT('censor.outputFolderSetupFirst', null, 'Set output folder in Rename or Setup first'),
-            'error'
-        );
-        return;
-    }
-
+async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', nameConflict = 'unique', { includeUnedited = true } = {}) {
     _resetBatchStatus();
     const tracker = window.App.createProgressTracker();
     showLoading(true, censorT('censor.loadingSavePreparing', null, 'Save · preparing files...'));
@@ -195,6 +223,8 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
     let asIsCount = 0;
     let failedCount = 0;
     let skippedCount = 0;
+    let existingSkippedCount = 0;
+    let lastSavedPath = '';
     const saveWarnings = new Set();
     await processCensorBatchItems(async (item, { index, total }) => {
         // Unedited items go out as they are only when the save dialog, which
@@ -217,8 +247,14 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
                 primaryLabel: censorT('censor.loadingSavePrimary', null, 'Save')
             }));
 
-            const result = await saveCensorQueueItem(item, formatOption, metadataOption, allowOverwrite);
+            const result = await saveCensorQueueItem(item, formatOption, metadataOption, nameConflict);
             readCensorSaveWarnings(result).forEach((warning) => saveWarnings.add(warning));
+            if (result.output_path) lastSavedPath = result.output_path;
+            if (result.skipped) {
+                item.batchStatus = 'skipped';
+                existingSkippedCount += 1;
+                return;
+            }
             item.batchStatus = 'saved';
             count++;
             if (isUnedited) asIsCount += 1;
@@ -233,6 +269,12 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
     showLoading(false);
     renderQueue();
     failedCount = Math.max(failedCount, _summarizeBatchFailures().failedCount);
+    const folder = folderOfSavedPath(lastSavedPath) || CensorState.outputFolder || '';
+    const openFolder = lastSavedPath ? {
+        actionLabel: censorT('censor.openOutputFolder', null, 'Open folder'),
+        onAction: () => revealCensorSavedFile(lastSavedPath),
+        duration: 8000,
+    } : {};
     if (failedCount > 0) {
         window.App.showToast(
             censorT('censor.savePartial', {
@@ -258,12 +300,23 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
         window.App.showToast(
             censorT('censor.saveSuccessAsIs', { count, folder, asIs: asIsCount },
                 'Saved {count} images to {folder}. {asIs} had no censoring and went out as they are.'),
-            'success'
+            'success',
+            openFolder
         );
-    } else {
+    } else if (count > 0) {
         window.App.showToast(
             censorT('censor.saveSuccess', { count, folder }, 'Saved {count} images to {folder}'),
-            'success'
+            'success',
+            openFolder
+        );
+    }
+
+    if (existingSkippedCount > 0) {
+        window.App.showToast(
+            censorT('censor.saveSkippedExisting', { count: existingSkippedCount },
+                '{count} image(s) skipped: a file with the same name is already there.'),
+            'warning',
+            openFolder
         );
     }
 

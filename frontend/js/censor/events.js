@@ -364,6 +364,7 @@ function bindEvents() {
     $('#btn-close-save-options')?.addEventListener('click', () => $('#save-options-modal')?.classList.remove('visible'));
     $('#btn-cancel-save-options')?.addEventListener('click', () => $('#save-options-modal')?.classList.remove('visible'));
     $('#btn-confirm-save-options')?.addEventListener('click', confirmAndSaveAll);
+    $('#btn-save-browse-folder')?.addEventListener('click', () => window.showFolderBrowser?.($('#save-output-folder')));
 
     $('.censor-shortcuts-disclosure > summary')?.addEventListener('click', fitCensorShortcutsPopover);
 

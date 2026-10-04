@@ -592,7 +592,7 @@ async function stageCensorItemForPublish(item, folder) {
     if (!hasResult) throw new Error('No censored result to hand over');
     const baseName = `${item.id}_${String(item.outputFilename || item.originalFilename).replace(/\.[^/.]+$/, '')}`;
     // "keep": the workbench's own metadata choice decides what goes out.
-    return saveCensorQueueItem(item, 'original', 'keep', false, { folder, baseName });
+    return saveCensorQueueItem(item, 'original', 'keep', 'error', { folder, baseName });
 }
 
 // Hand the queue, in its current order and including images still on the

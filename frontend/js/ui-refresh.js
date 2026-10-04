@@ -478,7 +478,7 @@
             this._setButton('#btn-apply-rename', 'rename.apply');
 
             this._setText('#save-options-modal .modal-description', 'save.description');
-            this._setPlaceholder('#save-output-folder', 'save.outputFolder');
+            // #save-output-folder's placeholder names the real default folder (censor/save.js).
             this._setOptionText('#save-metadata-option', {
                 strip: 'save.metadataStrip',
                 keep: 'save.metadataKeep',

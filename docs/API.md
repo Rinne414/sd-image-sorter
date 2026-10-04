@@ -1508,6 +1508,11 @@ The decoded source format determines the output bytes and extension: JPEG stays 
 #### POST /api/censor/save-data
 Save edited base64 canvas output.
 
+All three save routes (`save-data`, `save-original`, `save-operations`) accept a blank `output_folder`, which means the built-in `output/censor` folder, and `name_conflict: error|unique|skip` (default `error`). Without `allow_overwrite`, `error` refuses an existing name (409), `skip` leaves the existing file and returns `skipped: true`, and `unique` saves under the first free `name`, `name_2`, `name_3`, ... (the name is claimed atomically, so concurrent saves never share it). Responses carry `output_path`, `filename`, `warnings`, `skipped`, `overwrote_existing`, `overwrote_indexed_path`, `reconciled_image_id`.
+
+#### POST /api/censor/reveal-output
+Body: `{path}`. Opens the OS file manager on a file a censor save wrote while this server runs, with the file selected. Any other path, or a file that no longer exists, returns 404; 501 when no file manager is available.
+
 #### POST /api/censor/save-original
 Save an image the user did not edit, read straight from its source file (reorder-and-rename exports from the censor queue). Body: `{original_image_id, filename, output_folder, metadata_option: keep|minimal|strip, output_format: original|png|jpg|jpeg|webp, allow_overwrite}`. With `output_format: original` and `metadata_option: keep` the source file is copied byte for byte; otherwise it is re-encoded on the server. An existing target is not replaced unless `allow_overwrite` is true (409). Does not count toward the censor activity stat. Returns the same shape as `/api/censor/save-data`.
 
@@ -2558,6 +2563,11 @@ Return `{boot_id}`, a value that changes every time the server starts. After `PO
 Apply a downloaded update package. Body: `{force_check?: bool, relaunch?: bool, check_busy?: bool}` (defaults `true`, `true`, `false`). With `check_busy: true`, an install while work is running returns `{status: "busy", jobs, boot_id}` (the same ids as `POST /api/updates/restart`) before anything is downloaded or scheduled, so the page can ask the user; sending it again with `check_busy: false` installs anyway. Without the flag the endpoint installs as before (older clients; V4 and V3.5 send it).
 
 When an update is scheduled, response includes `pending_manifest` and `restart_required`. The updater validates archive entries and the package manifest before copying files, and rejects protected runtime paths such as `data/`, `update/downloads/`, `update/logs/`, `update/state/`, `update/worker/`, and `update/backups/`.
+
+### Output folders
+
+#### GET /api/output-folders
+Return `{root, folders: {censor, publish, video-censor}}`: the built-in folder each save flow writes into when its folder field is left blank. `root` is `<program root>/output` unless `SD_IMAGE_SORTER_OUTPUT_DIR` is set; it is protected from the updater like `data/`.
 
 ### Disk
 

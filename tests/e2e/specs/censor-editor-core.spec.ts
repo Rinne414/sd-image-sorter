@@ -436,6 +436,7 @@ test('save-all wire format: /save-data payload, strip default, unedited items ex
     output_format: 'png',
     original_image_id: IMAGES[0].id,
     allow_overwrite: false,
+    name_conflict: 'unique',
   })
 
   await expect(page.locator('#toast-container .toast', { hasText: 'were not exported' }).first()).toBeVisible()
@@ -484,6 +485,7 @@ test('save-all wire format: /save-data payload, strip default, unedited items ex
     metadata_option: 'strip',
     output_format: 'png',
     allow_overwrite: false,
+    name_conflict: 'unique',
   })
   await expect(
     page.locator('#toast-container .toast', { hasText: 'went out as they are' }).first()
@@ -558,6 +560,7 @@ test('items with edit operations save via /save-operations with the operation li
     metadata_option: 'strip',
     output_format: 'webp',
     allow_overwrite: false,
+    name_conflict: 'unique',
   })
 })
 

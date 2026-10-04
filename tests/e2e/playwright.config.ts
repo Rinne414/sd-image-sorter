@@ -279,6 +279,8 @@ export default defineConfig({
       PYTHONPATH: e2eStubModulesDir,
       SD_IMAGE_SORTER_DATA_DIR: e2eDataDir,
       SD_IMAGE_SORTER_DB_PATH: e2eDatabasePath,
+      // Saves that fall back to the built-in output folder stay in the run's data dir.
+      SD_IMAGE_SORTER_OUTPUT_DIR: path.join(e2eDataDir, 'output'),
       SD_IMAGE_SORTER_DISABLE_ENV_FILES: '1',
       SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY: '1',
       // Never look for a ComfyUI install or the global Hugging Face cache on the
