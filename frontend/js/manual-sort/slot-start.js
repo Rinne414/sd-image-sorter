@@ -175,7 +175,9 @@ async function startSorting() {
             manualSortText('manual.startSortingTitle', 'Start Sorting', '确认开始排序'),
             confirmMessage,
             () => resolve(true),
-            () => resolve(false)
+            () => resolve(false),
+            // Copying leaves the originals in place; only a move gets the red button.
+            { tone: operationMode === 'copy' ? 'primary' : 'danger' }
         );
     });
     if (!confirmed) return;

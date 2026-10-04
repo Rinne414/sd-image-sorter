@@ -56,3 +56,10 @@ test('starting a manual sort closes an Auto-Separate banner on the same page', a
 
   await expect(banner).toBeHidden()
 })
+
+test('a model download asks with a plain button, not the red destructive one', async ({ page }) => {
+  await page.evaluate(() => { (window as any).featureInstallConfirm('Download model', 'About 12 MB.') })
+  await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+  await expect(page.locator('#btn-confirm-ok')).not.toHaveClass(/danger/)
+  await page.locator('#btn-confirm-cancel').click()
+})

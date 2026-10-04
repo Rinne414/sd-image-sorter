@@ -69,7 +69,7 @@ function featureInstallConfirm(title, message) {
     return new Promise((resolve) => {
         const ask = window.App?.showConfirm || window.showConfirm;
         if (typeof ask === 'function') {
-            ask(title, message, () => resolve(true), () => resolve(false));
+            ask(title, message, () => resolve(true), () => resolve(false), { tone: 'primary' });
             return;
         }
         resolve(window.confirm(message));

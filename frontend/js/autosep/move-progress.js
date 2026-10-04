@@ -571,7 +571,10 @@ async function executeAutoSeparateWithProgress() {
             window.I18n?.getLang?.() === 'zh-CN'
                 ? `要把 ${total} 张匹配图片${operationMode === 'copy' ? '复制到' : '移动到'}：\n${destination}${allWarn}\n操作模式：${operationLabel}\n${scopeLine}\n继续前先确认上方预览列表。`
                 : `${operationMode === 'copy' ? 'Copy' : 'Move'} ${total} matching images to:\n${destination}${allWarn}\nAction mode: ${operationLabel}\n${scopeLine}\nReview the preview list above before continuing.`,
-            executeMove
+            executeMove,
+            undefined,
+            // Copying leaves the originals in place; only a move gets the red button.
+            { tone: operationMode === 'copy' ? 'primary' : 'danger' }
         );
         return;
     }

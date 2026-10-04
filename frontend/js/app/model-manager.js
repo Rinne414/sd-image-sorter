@@ -279,6 +279,7 @@ async function promptBulkDownloadModels() {
                 messageEl.style.textAlign = '';
             }
         },
+        { tone: 'primary' },
     );
 
     const messageEl = document.getElementById('confirm-message');
