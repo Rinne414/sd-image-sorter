@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 from utils.path_validation import sanitize_filename
+from utils.unique_names import first_free_path
 
 
 _PATTERN_VAR = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)(?::(\d{1,2})d)?\}")
@@ -142,20 +143,13 @@ def resolve_collision(
         used_paths.add(primary_str)
         return primary
 
-    # ``unique`` (default): try the bare name first, then ``_1``, ``_2``...
-    if primary_str not in used_paths and not primary.exists():
-        used_paths.add(primary_str)
-        return primary
-
-    counter = 1
-    while counter <= 10000:
-        candidate = folder / f"{base_stem}_{counter}{extension}"
-        candidate_str = str(candidate)
-        if candidate_str not in used_paths and not candidate.exists():
-            used_paths.add(candidate_str)
-            return candidate
-        counter += 1
-    return None  # too many collisions; treat as skip
+    # ``unique`` (default): the bare name first, then ``_2``, ``_3``...
+    try:
+        candidate = first_free_path(folder, base_stem, extension, taken=lambda path: str(path) in used_paths)
+    except FileExistsError:
+        return None  # too many collisions; treat as skip
+    used_paths.add(str(candidate))
+    return candidate
 
 
 def plan_renames(

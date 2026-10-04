@@ -860,7 +860,7 @@ Export one same-name sidecar per selected image. Text modes write `.txt`; `json`
 | `prefix` | string | "" | Optional Class Token prepended only to training-caption modes (`caption_tags`, `caption_merged`) |
 | `blacklist` | string[] | `[]` | Tags excluded from tag/caption outputs |
 | `content_mode` | string | `tags` | `tags`, `prompt`, `negative`, `prompt_negative`, `a1111`, `caption_tags`, `caption_merged`, or `json` |
-| `overwrite_policy` | string | `unique` | `unique` keeps each sidecar's image-matched name and reports a per-image error if that name is already taken — it never renames to `{stem}_1`, which would pair the caption with no image (in `beside_image` mode a caption already sitting next to the image is skipped instead of erroring). `skip` leaves existing sidecars untouched. `overwrite` replaces sidecars |
+| `overwrite_policy` | string | `unique` | `unique` keeps each sidecar's image-matched name and reports a per-image error if that name is already taken — it never renames to `{stem}_2`, which would pair the caption with no image (in `beside_image` mode a caption already sitting next to the image is skipped instead of erroring). `skip` leaves existing sidecars untouched. `overwrite` replaces sidecars |
 | `image_types` | object | `{}` | v3.5.0 (caption editor): per-image caption type `{image_id: "booru"\|"nl"\|"both"}`. `nl`/`both` fold the stored (or overridden) natural-language sentence into the caption; absent keys mean `booru` and reproduce the pre-v3.5.0 output byte-for-byte |
 | `image_nl_overrides` | object | `{}` | v3.5.0 (caption editor): per-image edited NL sentence `{image_id: text}`. An explicit empty string suppresses the stored sentence |
 | `nl_sidecar` | bool | `false` | v3.5.0 (diffusion-pipe split export): additionally write each image's natural-language caption to a `{stem}{suffix}.txt` twin beside the tag sidecar. Only valid for `tags`/`template` content modes (400 otherwise). The twin is single-line with the trigger (template trigger, else `prefix`) injected up front; images without NL text get no twin. Under `unique` policy a clash on the twin fails that row atomically (no half-pairs) |
@@ -872,7 +872,7 @@ Mode rules: `prompt`, `negative`, `prompt_negative`, `a1111`, and `json` preserv
 
 Response includes `status` (`ok`, `partial`, or `error`), `exported`, `skipped`, numeric `errors`/`error_count`, `error_messages`, `total`, `content_mode`, `overwrite_policy`, and `nl_sidecars_written` (count of `{stem}_nl.txt` twins; 0 when `nl_sidecar` is off). `overwrite_policy=skip` returns `partial` when existing sidecars are intentionally left untouched. `overwrite_policy=unique` returns `partial` (or `error` if nothing was exported) when a name clash is reported: `error_messages` names the taken sidecar and the source image that already owns it.
 
-v3.5.0: the response also carries a `validation` block — a trainer-consumability report over every written sidecar: `{checked, ok, warnings: [{code, count, examples, message}]}`. Warning codes: `unpaired_sidecar` (caption filename no longer matches its image, e.g. an `overwrite`-mode `_1` de-dup rename), `empty_caption`, `multiline_caption` (kohya-style trainers read only the first line; not raised for the by-design multi-line modes `prompt_negative`/`a1111`/`json`/`prompt_nl`), `missing_trigger` (template mode with a configured trigger), and `conflicting_ratings` (two different rating tokens in one caption). `examples` lists at most 3 filenames per code.
+v3.5.0: the response also carries a `validation` block — a trainer-consumability report over every written sidecar: `{checked, ok, warnings: [{code, count, examples, message}]}`. Warning codes: `unpaired_sidecar` (caption filename no longer matches its image, e.g. an `overwrite`-mode `_2` de-dup rename), `empty_caption`, `multiline_caption` (kohya-style trainers read only the first line; not raised for the by-design multi-line modes `prompt_negative`/`a1111`/`json`/`prompt_nl`), `missing_trigger` (template mode with a configured trigger), and `conflicting_ratings` (two different rating tokens in one caption). `examples` lists at most 3 filenames per code.
 
 #### POST /api/tags/export-batch/start
 Run the same sidecar export as a background job so a large selection does not block the request. Accepts the same body as `POST /api/tags/export-batch`. This is a coarse background wrap (no mid-run cancel). Response includes `status` and `message`.
@@ -2451,7 +2451,7 @@ or `mosaic` (censor detections of the first library source; `detect_model_type`,
 `max_side` (0 keeps the size, default 1600), `scrub`, `canvas_background`,
 `output_folder` (default `<data>/disguise/output`), `output_name`, and
 `output_format` (`disguise`, or `gif` for a plain looping GIF with no cover). An existing
-file is never replaced (`name (2).png`). Returns `{status: "ok", token, file_url,
+file is never replaced (`name_2.png`). Returns `{status: "ok", token, file_url,
 output_path, file_name, cover_preview, width, height, real_frames, bytes}`, or
 `{status: "needs_cover", reason}` (`no_default_cover`, `no_upload`,
 `nothing_detected`, `detector_unavailable`, `not_in_library`) with nothing written.

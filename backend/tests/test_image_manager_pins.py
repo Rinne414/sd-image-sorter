@@ -528,7 +528,7 @@ class TestMoveCopyDestination:
         src2 = tmp_path / "a.png"
         _png(src2)
         _, new_path = _prepare_destination_path(str(src2), str(dest), "move")
-        assert Path(new_path).name == "a_1.png"
+        assert Path(new_path).name == "a_2.png"
 
     def test_prepare_destination_copy_forces_increment_even_for_same_path(
         self, tmp_path
@@ -538,7 +538,7 @@ class TestMoveCopyDestination:
         existing = _png(dest / "same.png")
         # image_path == the existing target, but a copy must not clobber it
         _, new_path = _prepare_destination_path(str(existing), str(dest), "copy")
-        assert Path(new_path).name == "same_1.png"
+        assert Path(new_path).name == "same_2.png"
 
     def test_batch_move_moves_all_and_reports_new_paths(self, test_db, tmp_path):
         src = tmp_path / "bm-src"

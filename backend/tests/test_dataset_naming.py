@@ -124,14 +124,14 @@ def test_collision_unique_first_image_uses_bare_name(tmp_path: Path):
 def test_collision_unique_second_image_gets_suffix(tmp_path: Path):
     used: set[str] = {str(tmp_path / "subject.png")}
     out = resolve_collision(tmp_path, "subject", ".png", used_paths=used, overwrite_policy="unique")
-    assert out == tmp_path / "subject_1.png"
+    assert out == tmp_path / "subject_2.png"
 
 
 def test_collision_unique_with_existing_file_on_disk(tmp_path: Path):
     (tmp_path / "subject.png").write_bytes(b"x")
     used: set[str] = set()
     out = resolve_collision(tmp_path, "subject", ".png", used_paths=used, overwrite_policy="unique")
-    assert out == tmp_path / "subject_1.png"
+    assert out == tmp_path / "subject_2.png"
 
 
 def test_collision_overwrite_first_image_uses_bare_name(tmp_path: Path):
@@ -145,7 +145,7 @@ def test_collision_overwrite_second_image_in_run_disambiguates(tmp_path: Path):
     same target in one run. Disambiguate."""
     used: set[str] = {str(tmp_path / "subject.png")}
     out = resolve_collision(tmp_path, "subject", ".png", used_paths=used, overwrite_policy="overwrite")
-    assert out == tmp_path / "subject_1.png"
+    assert out == tmp_path / "subject_2.png"
 
 
 def test_collision_skip_returns_none_when_existing_on_disk(tmp_path: Path):
@@ -202,7 +202,7 @@ def test_plan_renames_static_pattern_disambiguates(tmp_path: Path):
         images, output_folder=tmp_path,
         pattern="train", trigger="", overwrite_policy="unique",
     )
-    assert [p[1].name for p in plan] == ["train.png", "train_1.png", "train_2.png"]
+    assert [p[1].name for p in plan] == ["train.png", "train_2.png", "train_3.png"]
 
 
 def test_plan_renames_skip_existing_on_disk(tmp_path: Path):

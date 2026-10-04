@@ -313,7 +313,7 @@ test('copy-all and the pack card copy, download and show the made files', async 
   const download = page.waitForEvent('download')
   await page.locator('#disguise-pack-download').click()
 
-  expect((await download).suggestedFilename()).toMatch(/^a_2p( \(\d+\))?\.png$/)
+  expect((await download).suggestedFilename()).toMatch(/^a_2p(_\d+)?\.png$/)
   await expect.poll(() => copied.at(-1)).toEqual([packToken])
   await expect.poll(() => revealed).toEqual([packToken])
 })
@@ -332,7 +332,7 @@ test('a picture protected in Simple mode first still downloads as the disguise P
   await page.locator('#obfuscate-queue .obfuscate-download').first().click()
   const file = await download
 
-  expect(file.suggestedFilename()).toMatch(/^simple-first( \(\d+\))?\.png$/)
+  expect(file.suggestedFilename()).toMatch(/^simple-first(_\d+)?\.png$/)
   const bytes = fs.readFileSync((await file.path())!)
   expect(bytes.includes(Buffer.from('acTL'))).toBe(true)
 })
@@ -381,7 +381,7 @@ test('a pack can be a plain looping GIF, which needs no cover', async ({ page })
   await expect(page.locator('#disguise-cover-row')).toBeHidden()
   await page.locator('#obfuscate-btn-encode').click()
   await expect(page.locator('#disguise-pack-result')).toBeVisible()
-  await expect(page.locator('#disguise-pack-info')).toContainText(/gif-one_2p( \(\d+\))?\.gif/)
+  await expect(page.locator('#disguise-pack-info')).toContainText(/gif-one_2p(_\d+)?\.gif/)
   const header = await page.evaluate(async () => {
     const blob: Blob = await (await fetch((window as any).ImageDisguise._packResult.file_url)).blob()
     return String.fromCharCode(...new Uint8Array(await blob.slice(0, 6).arrayBuffer()))

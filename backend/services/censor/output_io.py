@@ -34,6 +34,7 @@ import database as db
 from services.image_metadata_writer import prepare_image_for_save
 from services.indexed_file_mutation_service import save_and_reconcile_checked
 from services.output_registry import remember_saved_output
+from utils.unique_names import numbered_filename
 from utils.atomic_staging import (
     create_staging_sibling,
     discard_staging_file,
@@ -315,7 +316,7 @@ class _OutputMixin:
         from both picking the same free name and one replacing the other.
         """
         for attempt in range(1, _MAX_UNIQUE_NAME_ATTEMPTS + 1):
-            filename = f"{base_name}{ext}" if attempt == 1 else f"{base_name}_{attempt}{ext}"
+            filename = numbered_filename(base_name, ext, attempt)
             candidate = self._ensure_output_path(output_folder, filename)
             try:
                 handle = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY)

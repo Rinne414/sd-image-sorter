@@ -127,7 +127,7 @@ def test_media_is_listed_by_kind_and_outputs_never_overwrite(tmp_path: Path) -> 
     assert [Path(p).name for p in listed["videos"]] == ["a.MP4", "c.webm"]
     assert (
         media.free_output_path(tmp_path, tmp_path / "b.gif", ".gif").name
-        == "b_censored (2).gif"
+        == "b_censored_2.gif"
     )
 
 

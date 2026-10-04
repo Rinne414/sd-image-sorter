@@ -26,6 +26,7 @@ from typing import Any, Dict, List
 from config import ALLOWED_IMAGE_EXTENSIONS
 from services.dataset_session.allowlist import _register_session_paths
 from services.dataset_session.ids_and_items import _ds_id_for_path, _read_image_metadata
+from utils.unique_names import first_free_path
 
 # Same logger channel as the pre-split monolith (report seam: logger verbatim).
 logger = logging.getLogger("services.dataset_session_service")
@@ -191,11 +192,7 @@ async def _extract_rar_into_dataset(
                     if suffix not in ALLOWED_IMAGE_EXTENSIONS:
                         continue
                     safe_name = _safe_uploaded_name(posix.name, f"image{suffix or '.png'}")
-                    dest = archive_dir / safe_name
-                    counter = 1
-                    while dest.exists():
-                        dest = archive_dir / f"{Path(safe_name).stem}_{counter}{Path(safe_name).suffix}"
-                        counter += 1
+                    dest = first_free_path(archive_dir, Path(safe_name).stem, Path(safe_name).suffix)
                     try:
                         with rf.open(member) as src, dest.open("wb") as out:
                             shutil.copyfileobj(src, out, length=1024 * 1024)
@@ -292,11 +289,7 @@ async def upload_files_for_dataset(files, *, recursive: bool = True) -> Dict[str
                         if suffix not in ALLOWED_IMAGE_EXTENSIONS:
                             continue
                         safe_name = _safe_uploaded_name(posix.name, f"image{suffix or '.png'}")
-                        dest = archive_dir / safe_name
-                        counter = 1
-                        while dest.exists():
-                            dest = archive_dir / f"{Path(safe_name).stem}_{counter}{Path(safe_name).suffix}"
-                            counter += 1
+                        dest = first_free_path(archive_dir, Path(safe_name).stem, Path(safe_name).suffix)
                         with zf.open(member) as src, dest.open("wb") as out:
                             shutil.copyfileobj(src, out, length=1024 * 1024)
                         if not _append_upload_item(dest, items, source_kind="zip_extract"):
@@ -311,12 +304,7 @@ async def upload_files_for_dataset(files, *, recursive: bool = True) -> Dict[str
 
         # Write to disk with a unique name to avoid collisions
         safe_filename = _safe_uploaded_name(filename, "image.png")
-        dest = upload_dir / safe_filename
-        counter = 1
-        while dest.exists():
-            stem = Path(safe_filename).stem
-            dest = upload_dir / f"{stem}_{counter}{ext}"
-            counter += 1
+        dest = first_free_path(upload_dir, Path(safe_filename).stem, Path(safe_filename).suffix)
 
         if hasattr(upload_file, "file") and upload_file.file is not None:
             upload_file.file.seek(0)

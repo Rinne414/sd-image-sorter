@@ -157,7 +157,7 @@ def test_the_output_never_replaces_an_existing_file(
         output_folder=str(out),
     ).json()
 
-    assert body["file_name"] == "mine (2).png"
+    assert body["file_name"] == "mine_2.png"
     assert (out / "mine.png").read_bytes() == b"keep me"
 
 

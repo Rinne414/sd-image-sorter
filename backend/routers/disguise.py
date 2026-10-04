@@ -34,6 +34,7 @@ from services import disguise_service
 from services.disguise_service import CoverSpec, CoverUnavailable, MakeOptions
 from utils import file_clipboard
 from utils.path_validation import sanitize_filename, validate_folder_path
+from utils.unique_names import first_free_path
 
 logger = logging.getLogger(__name__)
 
@@ -100,12 +101,7 @@ def _output_folder(requested: str) -> Path:
 
 def _free_name(folder: Path, stem: str, suffix: str = ".png") -> Path:
     clean = sanitize_filename(stem) or "disguise"
-    candidate = folder / f"{clean}{suffix}"
-    counter = 2
-    while candidate.exists():
-        candidate = folder / f"{clean} ({counter}){suffix}"
-        counter += 1
-    return candidate
+    return first_free_path(folder, clean, suffix)
 
 
 def _remember_result(path: Path) -> str:

@@ -3,7 +3,7 @@
 ``_undo_file_operation`` used to hand only the *folder* to ``move_image``, which
 derives the filename from the file's current basename and then applies the
 forward-move collision suffix. Undoing a move of ``00042.png`` into a folder
-that already held a ``00042.png`` therefore restored ``00042_1.png`` — the
+that already held a ``00042.png`` therefore restored ``00042_2.png`` — the
 original filename destroyed, the library row pointing at the renamed file, and
 the undo reported as clean. For a Stable Diffusion library the filename carries
 the seed/batch number, so that is real information lost by the undo button.
@@ -54,7 +54,7 @@ class TestManualSortUndoRestoresOriginalPath:
     def test_undo_restores_the_original_filename_after_a_collision_rename(
         self, test_db, tmp_path, svc
     ):
-        """The user's file must come back as 00042.png, not 00042_1.png.
+        """The user's file must come back as 00042.png, not 00042_2.png.
 
         Asserting only that undo "succeeded" would reproduce the bug: the old
         code returned without raising while leaving a renamed file behind.
@@ -82,13 +82,13 @@ class TestManualSortUndoRestoresOriginalPath:
             source_path=str(original),
         )
         # Forward-move collision handling is correct and must stay that way.
-        assert Path(moved["new_path"]).name == "00042_1.png"
+        assert Path(moved["new_path"]).name == "00042_2.png"
         assert not original.exists()
 
         svc._undo_file_operation(_history_entry(image_id, original, moved["new_path"]))
 
         assert original.exists(), "undo must restore the file under its original name"
-        assert not (library / "00042_1.png").exists()
+        assert not (library / "00042_2.png").exists()
         assert not Path(moved["new_path"]).exists()
 
         row = test_db.get_image_by_id(image_id)
@@ -139,7 +139,7 @@ class TestManualSortUndoRestoresOriginalPath:
         # Nothing moved, nothing renamed, nothing overwritten.
         assert occupant.read_bytes() == occupant_bytes
         assert Path(moved["new_path"]).exists()
-        assert not (library / "00042_1.png").exists()
+        assert not (library / "00042_2.png").exists()
         assert os.path.samefile(
             test_db.get_image_by_id(image_id)["path"], moved["new_path"]
         )

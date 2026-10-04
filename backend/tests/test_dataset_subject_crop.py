@@ -525,9 +525,9 @@ def test_subject_crop_unique_renames_the_whole_pair_when_mask_target_exists(
 
     assert result.status == "ok"
     assert existing_mask.read_bytes() == b"manual-mask"
-    assert (output / "subject_1.png").exists()
-    assert (output / "subject_1.txt").exists()
-    assert (output / "mask" / "subject_1.png").exists()
+    assert (output / "subject_2.png").exists()
+    assert (output / "subject_2.txt").exists()
+    assert (output / "mask" / "subject_2.png").exists()
 
 
 def test_subject_crop_skip_skips_the_whole_pair_when_mask_target_exists(

@@ -38,6 +38,7 @@ from services.dataset_session_service import (
     iter_scan_manifest_paths,
 )
 from utils.path_validation import normalize_user_path
+from utils.unique_names import first_free_path
 
 logger = logging.getLogger("services.dataset_export_service")
 
@@ -219,13 +220,15 @@ def _allocate_sidecar_path(
         return base, None
     if overwrite_policy == "skip" and (base.exists() or str(base.resolve()) in used_paths):
         return None, "existing"
-    candidate = base
-    counter = 1
-    while candidate.exists() or str(candidate.resolve()) in used_paths:
-        candidate = target_folder / f"{stem}_{counter}{caption_extension}"
-        counter += 1
-        if counter > 9999:
-            return None, "too_many_collisions"
+    try:
+        candidate = first_free_path(
+            target_folder,
+            stem,
+            caption_extension,
+            taken=lambda path: str(path.resolve()) in used_paths,
+        )
+    except FileExistsError:
+        return None, "too_many_collisions"
     used_paths.add(str(candidate.resolve()))
     return candidate, None
 

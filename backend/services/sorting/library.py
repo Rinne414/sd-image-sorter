@@ -31,6 +31,7 @@ from services.sorting_models import (
     ValidatePathRequest,
 )
 from utils.path_validation import normalize_user_path, validate_folder_path
+from utils.unique_names import first_free_path
 from utils.source_paths import (
     indexed_image_path_match_key,
     indexed_path_for_runtime,
@@ -422,12 +423,8 @@ class LibraryMixin:
             safe_stem_name = Path(raw_name).name
             if not safe_stem_name or safe_stem_name in {".", ".."} or safe_stem_name.startswith("."):
                 safe_stem_name = f"upload_{len(saved_paths)}{ext}"
-            dest = (import_dir / safe_stem_name).resolve()
-            counter = 1
             stem = Path(safe_stem_name).stem or "upload"
-            while dest.exists():
-                dest = (import_dir / f"{stem}_{counter}{ext}").resolve()
-                counter += 1
+            dest = first_free_path(import_dir, stem, Path(safe_stem_name).suffix).resolve()
             # Defense in depth: refuse anything that resolves outside import_dir.
             try:
                 dest.relative_to(import_dir)

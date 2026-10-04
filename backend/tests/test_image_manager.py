@@ -229,7 +229,7 @@ def test_concurrent_same_name_copies_publish_distinct_complete_files(test_db, tm
     assert Path(result_b["new_path"]).read_bytes() == source_b_bytes
     assert {Path(result_a["new_path"]).name, Path(result_b["new_path"]).name} == {
         "same-name.png",
-        "same-name_1.png",
+        "same-name_2.png",
     }
 
 

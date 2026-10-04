@@ -23,6 +23,7 @@ from PIL import Image, ImageSequence
 
 from ai_runtime_guard import PRIORITY_BATCH
 from censor_transforms import MASK_STYLES, censor_under_mask
+from utils.unique_names import first_free_path
 
 logger = logging.getLogger(__name__)
 
@@ -215,12 +216,7 @@ def list_media(folder: Path) -> Dict[str, List[str]]:
 
 
 def free_output_path(folder: Path, source: Path, suffix: str) -> Path:
-    candidate = folder / f"{source.stem}{OUTPUT_SUFFIX}{suffix}"
-    counter = 2
-    while candidate.exists():
-        candidate = folder / f"{source.stem}{OUTPUT_SUFFIX} ({counter}){suffix}"
-        counter += 1
-    return candidate
+    return first_free_path(folder, f"{source.stem}{OUTPUT_SUFFIX}", suffix)
 
 
 @dataclass

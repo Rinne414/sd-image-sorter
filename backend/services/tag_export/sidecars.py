@@ -269,7 +269,7 @@ def _allocate_output_path(
       with the name already present, or ``unique`` policy in ``beside_image``
       mode where a caption already sits next to the image ("already exported").
     - ``error`` + ``message``: a name clash that must not be worked around.
-      Renaming to ``{stem}_1{ext}`` would produce a caption that pairs with no
+      Renaming to ``{stem}_2{ext}`` would produce a caption that pairs with no
       image, so the clash is reported instead. This applies whenever an earlier
       image in the same run already claimed the name, and to pre-existing files
       under ``unique`` policy in ``folder`` mode.
@@ -340,7 +340,7 @@ def _allocate_output_path(
 
     # overwrite_policy == "unique": the sidecar stem is pinned to the image
     # stem so image/caption pairing always holds. We therefore never rename a
-    # collision to ``{stem}_1{ext}`` — a renamed caption pairs with no image
+    # collision to ``{stem}_2{ext}`` — a renamed caption pairs with no image
     # (LoRA trainers match by exact basename), i.e. a silently broken training
     # sample. A taken name is reported so the user can rename the offending
     # image or switch to overwrite/skip.
