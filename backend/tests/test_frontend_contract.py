@@ -1687,7 +1687,7 @@ def test_scan_progress_eta_uses_real_counted_totals_and_separate_metadata_totals
     assert "Counting images... {count} found" in en_source
     assert "checking the final detail count" in en_source
     assert "正在统计图片... 已找到 {count} 张" in zh_source
-    assert "正在确认详细信息总数" in zh_source
+    assert "还在统计要读取参数的图片" in zh_source
 
 
 def test_queue_solitaire_escapes_file_and_section_values_before_inner_html():

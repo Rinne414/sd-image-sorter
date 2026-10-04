@@ -447,10 +447,11 @@ function _updateBgScanProgress(progress) {
         if (!metrics.metadataTotalFinal) {
             extraParts.push(appT('progress.detailsStillCounting', 'details total still being checked'));
         }
-    } else if (metrics.totalFinal && metrics.total > 0) {
+    } else if (metrics.totalFinal && metrics.total > metrics.processed) {
+        // "0 left" says nothing once every file is in.
         extraParts.push(
             appT('progress.left', '{count} left')
-                .replace('{count}', String(Math.max(0, metrics.total - metrics.processed)))
+                .replace('{count}', String(metrics.total - metrics.processed))
         );
     }
 

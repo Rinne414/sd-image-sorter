@@ -107,7 +107,7 @@ test('a finished import reads in Chinese and names the problem file', async ({ p
   await page.locator('#btn-start-scan').click()
 
   // A quick import shows the library-ready toast, then the background-finished one.
-  const toast = page.locator('.toast', { hasText: '图片详细信息已经补齐' }).first()
+  const toast = page.locator('.toast', { hasText: '图片的生成参数已经读完' }).first()
   await expect(toast).toBeVisible({ timeout: 90000 })
   await page.waitForTimeout(450)
   await page.screenshot({ path: shotPath(testInfo, 'scan-done-zh-1366.png') })

@@ -269,10 +269,11 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
             appT('progress.discoveredCount', '{count} found')
                 .replace('{count}', String(metrics.counted || metrics.processed || 0))
         );
-    } else if (metrics.totalFinal && metrics.total > 0 && !metrics.showingMetadata) {
+    } else if (metrics.totalFinal && metrics.total > metrics.processed && !metrics.showingMetadata) {
+        // "0 left" says nothing once every file is in.
         extraParts.push(
             appT('progress.left', '{count} left')
-                .replace('{count}', String(Math.max(0, metrics.total - metrics.processed)))
+                .replace('{count}', String(metrics.total - metrics.processed))
         );
     }
     if (metrics.metadataTotal > 0) {
@@ -281,7 +282,9 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
                 .replace('{current}', String(metrics.metadataProcessed))
                 .replace('{total}', String(metrics.metadataTotal))
         );
-        if (!metrics.metadataTotalFinal && metrics.importComplete) {
+        // While reading metadata the main line already says the total is still
+        // being counted; saying it twice crowded the progress line.
+        if (!metrics.metadataTotalFinal && metrics.importComplete && !metrics.showingMetadata) {
             extraParts.push(appT('progress.detailsStillCounting', 'details total still being checked'));
         }
     }
