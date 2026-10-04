@@ -32,6 +32,9 @@ function syncSelectionModeButton() {
     }
 
     if (labelEl) {
+        // ui-refresh re-applies [data-i18n] text on DOM changes: move the key
+        // with the words, or it puts "Select Images" back while selecting.
+        labelEl.dataset.i18n = isSelecting ? 'selection.doneSelecting' : 'gallery.selectImages';
         labelEl.textContent = isSelecting ? doneLabel : idleLabel;
     }
 }

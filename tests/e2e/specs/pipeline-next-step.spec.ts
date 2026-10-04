@@ -77,3 +77,16 @@ test('a long slot folder shows its folder name, with the full path as tooltip', 
   await expect(field).toHaveAttribute('title', long)
   await expect.poll(() => field.evaluate((input: HTMLInputElement) => input.scrollLeft)).toBeGreaterThan(0)
 })
+
+test('the Select Images button says Done Selecting while selecting, and keeps saying it', async ({ page }) => {
+  const button = page.locator('#btn-toggle-select')
+  await button.click()
+  await expect(button).toHaveAttribute('aria-pressed', 'true')
+  await expect(button).toContainText('Done Selecting')
+  // Any DOM change re-applies data-i18n texts; the label must survive it.
+  await page.evaluate(() => document.body.appendChild(document.createElement('div')))
+  await page.waitForTimeout(400)
+  await expect(button).toContainText('Done Selecting')
+  await button.click()
+  await expect(button).toContainText('Select Images')
+})
