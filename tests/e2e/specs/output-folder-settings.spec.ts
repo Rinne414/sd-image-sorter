@@ -93,3 +93,17 @@ test('video censoring says where it saves and brings back the last folders', asy
   await page.locator('#media-censor-output').fill('')
   await expect(page.locator('#media-censor-output')).toHaveAttribute('placeholder', /video-censor/)
 })
+
+test('in Chinese the refused folder and the rating filters read in Chinese', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('sd-image-sorter-lang', 'zh-CN'))
+  await openSettings(page)
+  await page.locator('#settings-output-root').fill('bad<name>|here')
+  await page.locator('#settings-output-root').press('Enter')
+  const error = page.locator('#toast-container .toast.error .toast-message').last()
+  await expect(error).toBeVisible()
+  const message = await error.textContent()
+  expect(message).toMatch(/[一-鿿]/)
+  expect(message).not.toMatch(/[A-Za-z]{4,}/)
+
+  await expect(page.locator('#modal-rating-filters .checkbox-text').first()).toHaveText('普通', { useInnerText: false })
+})

@@ -303,7 +303,7 @@ async function saveSettingsOutputRoot(root) {
         await API.patch('/api/output-folders', { root });
         showToast(appT('settings.outputRootSaved', 'Save folder updated'), 'success');
     } catch (error) {
-        showToast(error?.message || String(error), 'error');
+        showToast(typeof formatUserError === 'function' ? formatUserError(error) : (error?.message || String(error)), 'error');
     }
     await syncSettingsOutputRoot();
 }
