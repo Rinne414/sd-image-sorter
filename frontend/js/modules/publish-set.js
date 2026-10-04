@@ -59,6 +59,10 @@
     // ------------------------------------------------------------------
 
     function loadSettings() {
+        // The watermark text and layout are remembered, but the watermark
+        // itself starts off every time: it is a per-set choice.
+        $('pub-watermark-enabled').checked = false;
+        syncWatermarkControls();
         try {
             const raw = localStorage.getItem(SETTINGS_KEY);
             const saved = raw ? JSON.parse(raw) : null;
@@ -71,7 +75,6 @@
             }
             if (typeof saved.suffix === 'string' && saved.suffix) $('pub-suffix').value = saved.suffix;
             $('pub-overwrite').checked = !!saved.overwrite;
-            $('pub-watermark-enabled').checked = !!saved.watermarkEnabled;
             if (typeof saved.watermarkText === 'string') $('pub-watermark-text').value = saved.watermarkText;
             if (typeof saved.watermarkPosition === 'string') $('pub-watermark-position').value = saved.watermarkPosition;
             if (Number.isFinite(saved.watermarkOpacity)) $('pub-watermark-opacity').value = String(saved.watermarkOpacity);
@@ -92,7 +95,6 @@
                 pad: $('pub-pad').value,
                 suffix: $('pub-suffix').value,
                 overwrite: $('pub-overwrite').checked,
-                watermarkEnabled: $('pub-watermark-enabled').checked,
                 watermarkText: $('pub-watermark-text').value,
                 watermarkPosition: $('pub-watermark-position').value,
                 watermarkOpacity: Number($('pub-watermark-opacity').value),
@@ -570,7 +572,8 @@
     }
 
     // Images that would go out uncensored are named before anything is
-    // written. Cancel is the default; exporting them as they are is a choice.
+    // written. Cancel is the default (Leave out in the Pixiv mission);
+    // exporting them as they are is always a choice.
     function askAboutUncensored(items) {
         answerUncensoredCheck('cancel');
         const panel = $('pub-uncensored-check');
@@ -584,7 +587,10 @@
         $('btn-pub-uncensored-skip').hidden = items.length === STATE.items.length;
         panel.hidden = false;
         panel.scrollIntoView({ block: 'nearest' });
-        $('btn-pub-uncensored-cancel').focus();
+        // Pixiv sets are meant to be censored: Enter leaves the pictures out.
+        const leaveOutFirst = window.NavMissions?.activeMission?.() === 'pixiv'
+            && !$('btn-pub-uncensored-skip').hidden;
+        $(leaveOutFirst ? 'btn-pub-uncensored-skip' : 'btn-pub-uncensored-cancel').focus();
         return new Promise((resolve) => { STATE.pendingCheck = resolve; });
     }
 

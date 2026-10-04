@@ -366,3 +366,13 @@
     min-height: 34px;
     padding: 2px;
 }
+
+/* On wide desktops the workbench would stretch the row across 1700px and
+   strand each picture's info far from its Original / Censored buttons. Cap
+   the dialog so related controls stay together; laptop widths are untouched. */
+@media (min-width: 1700px) {
+    /* The global modal cap in ui-refresh.css is !important, so this must be too. */
+    #publish-set-modal.visible > .modal-content.publish-set-content {
+        max-width: 1120px !important;
+    }
+}

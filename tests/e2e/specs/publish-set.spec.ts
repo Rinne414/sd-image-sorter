@@ -478,3 +478,68 @@ for (const viewport of [
     await page.locator('#btn-pub-uncensored-cancel').click()
   })
 }
+
+test('the watermark starts off on every open while its text and layout are remembered', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('#view-gallery')).toBeVisible()
+  await page.evaluate((ids) => (window as any).PublishSet.open(ids), fixtureIds)
+  await expect(page.locator('.pub-item')).toHaveCount(3)
+
+  await page.locator('#pub-watermark-enabled').check()
+  await page.locator('#pub-watermark-text').fill('@mine')
+  await page.locator('#pub-watermark-position').selectOption('top_left')
+  await page.locator('#pub-watermark-text').dispatchEvent('change')
+
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#publish-set-modal.visible')).toHaveCount(0)
+  await page.evaluate((ids) => (window as any).PublishSet.open(ids), fixtureIds)
+  await expect(page.locator('#publish-set-modal.visible')).toBeVisible()
+  await expect(page.locator('#pub-watermark-enabled')).not.toBeChecked()
+  await expect(page.locator('#pub-watermark-text')).toHaveValue('@mine')
+  await expect(page.locator('#pub-watermark-position')).toHaveValue('top_left')
+  // The stored settings no longer carry the on/off choice at all.
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('sd-sorter-publish-settings') || '{}')))
+    .not.toHaveProperty('watermarkEnabled')
+})
+
+for (const mission of [null, 'pixiv'] as const) {
+  test(`the not-censored check focuses ${mission ? 'Leave out in the Pixiv mission' : 'Cancel outside a mission'}`, async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('#view-gallery')).toBeVisible()
+    if (mission) await page.evaluate((key) => (window as any).NavMissions.enter(key), mission)
+    await page.evaluate((ids) => (window as any).PublishSet.open(ids), fixtureIds)
+    await expect(page.locator('.pub-item')).toHaveCount(3)
+    await page.locator('#pub-folder').fill(path.join(fixtureRoot, 'out-focus'))
+    await page.locator('#btn-pub-export').click()
+    await expect(page.locator('#pub-uncensored-check')).toBeVisible()
+    await expect(page.locator(mission ? '#btn-pub-uncensored-skip' : '#btn-pub-uncensored-cancel')).toBeFocused()
+    await page.locator('#btn-pub-uncensored-cancel').click()
+  })
+}
+
+for (const viewport of [
+  { width: 1920, height: 1080 },
+  { width: 2560, height: 1440 },
+]) {
+  test(`item info stays next to its Original / Censored toggle at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport)
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('#view-gallery')).toBeVisible()
+    await page.evaluate((ids) => (window as any).PublishSet.open(ids), fixtureIds)
+    await expect(page.locator('.pub-item')).toHaveCount(3)
+    const measured = await page.evaluate(() => {
+      const row = document.querySelector('.pub-item') as HTMLElement
+      const meta = row.querySelector('.pub-item-meta') as HTMLElement
+      const toggle = row.querySelector('.pub-variant-toggle') as HTMLElement
+      const widest = Array.from(meta.children).reduce((max, child) => {
+        const range = document.createRange()
+        range.selectNodeContents(child)
+        return Math.max(max, range.getBoundingClientRect().right)
+      }, 0)
+      const zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1
+      return { gap: (toggle.getBoundingClientRect().left - widest) / zoom, row: row.getBoundingClientRect().width / zoom }
+    })
+    expect(measured.row).toBeLessThanOrEqual(1100)
+    expect(measured.gap).toBeLessThan(600)
+  })
+}
