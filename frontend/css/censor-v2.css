@@ -2605,9 +2605,9 @@ button.censor-batch-outcome-badge:focus-visible {
     box-shadow: none !important;
 }
 
-#view-censor .censor-workspace-v2 .censor-canvas-wrapper-v2 canvas {
-    filter: none !important;
-}
+/* No filter pin on the canvases: the Adjust tab previews brightness, hue and
+   the other sliders as an inline style.filter on the active canvas, and an
+   !important rule here would hide that preview. */
 
 #view-censor .censor-workspace-v2 .censor-toolbar-v2 {
     background: var(--surface-1) !important;

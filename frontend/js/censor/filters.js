@@ -128,7 +128,9 @@
             }
         }
 
-        canvas.style.filter = filters.join(' ');
+        // All sliders at 0: no filter at all, so a large canvas is not run
+        // through an identity filter chain on every load.
+        canvas.style.filter = hasFilterChanges() ? filters.join(' ') : '';
 
         // Sharpen & vignette need real pixel ops; debounce to keep slider responsive.
         schedulePixelPreview(canvas);
