@@ -384,7 +384,7 @@ test('Smart Tag progress and failure read in Chinese', async ({ page }, testInfo
     message_key: 'failed_all',
     message_args: { detail: 'disk is full', device_note: 'cpu_fallback' },
   }
-  const toast = page.locator('.toast', { hasText: 'Smart Tag 对全部 2 张图片都失败了' }).first()
+  const toast = page.locator('.toast', { hasText: '智能打标对全部 2 张图片都失败了' }).first()
   await expect(toast).toBeVisible({ timeout: 15000 })
   expect(await toast.textContent()).toContain('disk is full')
   expect(await toast.textContent()).toContain('描述模型在 CPU 上运行')
