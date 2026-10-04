@@ -60,3 +60,14 @@ test('the tagger advanced hint keeps the custom-model sentence through a DOM cha
   await mutateDom(page)
   await expect(page.locator('#tag-advanced-options-hint')).toContainText('when using a custom local model')
 })
+
+test('Clear in a filter group shows 0 ticked instead of the full count', async ({ page }) => {
+  await page.evaluate(() => (window as any).openFilterModal())
+  const count = page.locator('#filter-modal-count-ratings')
+  await expect(count).toHaveText(/^\d+\/\d+$/)
+  await page.locator('.btn-group-action[data-group="modal-rating-filters"][data-action="clear"]').click()
+  await expect(count).toHaveText(/^0\//)
+  await page.locator('.btn-group-action[data-group="modal-rating-filters"][data-action="select-all"]').click()
+  const total = (await count.textContent())!.split('/')[1]
+  await expect(count).toHaveText(`${total}/${total}`)
+})

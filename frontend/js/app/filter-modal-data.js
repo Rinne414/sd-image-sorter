@@ -160,9 +160,12 @@ function updateFilterModalSummary() {
         return translated && translated !== key ? translated : (fallback || key);
     };
 
-    const countChecked = (selector, fallback = 0) => {
-        const matches = $$(selector);
-        return matches.length > 0 ? matches.length : fallback;
+    // The fallback is for a list that is not rendered yet; once its boxes
+    // exist, none ticked is 0 (Clear used to leave "14/14" on screen).
+    const countChecked = (groupSelector, fallback = 0) => {
+        const boxes = $$(`${groupSelector} input[type="checkbox"]`);
+        if (boxes.length === 0) return fallback;
+        return Array.from(boxes).filter((box) => box.checked).length;
     };
     const setCount = (id, value) => {
         const element = document.getElementById(id);
@@ -173,10 +176,10 @@ function updateFilterModalSummary() {
 
     const generatorTotal = Math.max(1, $$('#modal-generator-filters input').length || 5);
     const ratingTotal = Math.max(1, $$('#modal-rating-filters input').length || 4);
-    const generatorCount = countChecked('#modal-generator-filters input:checked', filterState.generators?.length || generatorTotal);
-    const ratingCount = countChecked('#modal-rating-filters input:checked', filterState.ratings?.length || ratingTotal);
-    const checkpointCount = countChecked('#modal-checkpoint-list input:checked', filterState.checkpoints?.length || 0);
-    const loraCount = countChecked('#modal-lora-list input:checked', filterState.loras?.length || 0);
+    const generatorCount = countChecked('#modal-generator-filters', filterState.generators?.length || generatorTotal);
+    const ratingCount = countChecked('#modal-rating-filters', filterState.ratings?.length || ratingTotal);
+    const checkpointCount = countChecked('#modal-checkpoint-list', filterState.checkpoints?.length || 0);
+    const loraCount = countChecked('#modal-lora-list', filterState.loras?.length || 0);
     const tagCount = filterState.tags?.length || 0;
     const promptCount = filterState.prompts?.length || 0;
     const minWidth = parseInt($('#filter-min-width')?.value, 10) || null;
