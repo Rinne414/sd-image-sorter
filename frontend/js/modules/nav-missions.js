@@ -28,6 +28,8 @@
 
     const TABS_KEY = 'aurora-nav-tabs';
     const MISSION_KEY = 'aurora-nav-mission';
+    // Missions whose steps already popped open once; later entries stay quiet.
+    const STEPS_SEEN_KEY = 'aurora-nav-mission-steps-seen';
 
     const ALL_VIEWS = ['gallery', 'reader', 'sorting', 'censor', 'similar', 'dataset', 'promptlab', 'artist', 'stylemap', 'reverse'];
     // Owner 2026-09-30: the Style Map is a default tab (sixth, after Similar).
@@ -103,7 +105,12 @@
         if (!MISSIONS[missionKey]) return;
         try { localStorage.setItem(MISSION_KEY, missionKey); } catch (error) { /* ignore */ }
         apply();
-        // Starting a mission shows its steps once; the chip label reopens them.
+        // A mission shows its steps the first time only; after that they would
+        // just cover the page, and the chip label reopens them.
+        const seen = readJson(STEPS_SEEN_KEY);
+        const seenList = Array.isArray(seen) ? seen : [];
+        if (seenList.includes(missionKey)) return;
+        try { localStorage.setItem(STEPS_SEEN_KEY, JSON.stringify([...seenList, missionKey])); } catch (error) { /* ignore */ }
         // Deferred: the entry tile's own click is still bubbling and would
         // otherwise count as a click outside the panel.
         window.setTimeout(openSteps, 0);

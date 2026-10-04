@@ -229,3 +229,23 @@ test('a mission shows its steps once, marks where you are, and the chip reopens 
   await page.click('#nav-mission-exit')
   await expect(page.locator('#nav-mission-chip')).toBeHidden()
 })
+
+test('entering the same mission again does not pop its steps over the page', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await page.goto('/')
+  await expect(page.locator('#view-gallery')).toBeVisible()
+  const panel = page.locator('#nav-mission-steps')
+
+  await page.evaluate(() => (window as any).NavMissions.enter('organize'))
+  await expect(panel).toBeVisible()
+  await page.keyboard.press('Escape')
+  await page.click('#nav-mission-exit')
+
+  await page.evaluate(() => (window as any).NavMissions.enter('organize'))
+  await expect(page.locator('#nav-mission-chip')).toBeVisible()
+  await page.waitForTimeout(150)
+  await expect(panel).toBeHidden()
+
+  await page.click('#nav-mission-chip-label')
+  await expect(panel).toBeVisible()
+})
