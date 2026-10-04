@@ -202,20 +202,22 @@ async function openFilterModal(options = {}) {
 
     // Sync modal state with current AppState
     const filterState = getFilterModalState();
-    const titleEl = $('#filter-modal-title');
-    if (titleEl && FilterModalController.titleText) {
-        titleEl.textContent = FilterModalController.titleText;
-    } else if (titleEl) {
-        titleEl.textContent = appT('filter.filterImages', 'Filter Images');
-    }
-    const applyButton = $('#btn-apply-modal-filters');
-    const resetButton = $('#btn-reset-filters');
-    if (applyButton) {
-        applyButton.textContent = FilterModalController.applyButtonText || appT('filter.apply', 'Apply Filters');
-    }
-    if (resetButton) {
-        resetButton.textContent = FilterModalController.resetButtonText || appT('filter.reset', 'Reset All');
-    }
+    // A caller's own wording (a smart folder, Manual Sort) is locked against
+    // the i18n re-apply; the default wording keeps following the language.
+    const setModalLabel = (el, customText, key, fallback) => {
+        if (!el) return;
+        if (customText) {
+            el.dataset.i18nLocked = '1';
+            el.textContent = customText;
+            return;
+        }
+        delete el.dataset.i18nLocked;
+        el.setAttribute('data-i18n', key);
+        el.textContent = appT(key, fallback);
+    };
+    setModalLabel($('#filter-modal-title'), FilterModalController.titleText, 'filter.filterImages', 'Filter Images');
+    setModalLabel($('#btn-apply-modal-filters'), FilterModalController.applyButtonText, 'filter.apply', 'Apply Filters');
+    setModalLabel($('#btn-reset-filters'), FilterModalController.resetButtonText, 'filter.reset', 'Reset All');
     // v3.5.0 audit: the footer note used to always talk about "gallery
     // results" even when the modal was opened from Manual Sort / Auto-Separate.
     const footerNote = document.querySelector('#filter-modal .filter-modal-footer-note');

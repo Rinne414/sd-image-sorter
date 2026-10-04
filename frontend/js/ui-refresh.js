@@ -485,7 +485,7 @@
             this._setButton('#btn-cancel-save-options', 'save.cancel');
             this._setButton('#btn-confirm-save-options', 'save.saveAll', 'i-save', 'save.saveAll');
 
-            this._setText('#model-select-title', 'modelSelect.title');
+            // #model-select-title carries the key for Models vs LoRAs (library-modelselect.js).
             this._setPlaceholder('#model-select-search', 'modelSelect.search');
             this._setButton('#btn-cancel-model-select', 'modelSelect.cancel');
             this._setButton('#btn-confirm-model-select', 'modelSelect.apply');

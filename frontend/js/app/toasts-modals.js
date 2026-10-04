@@ -600,12 +600,16 @@ function initInputModal() {
     });
 }
 
-// Global Loading Overlay
-function showGlobalLoading(message = 'Loading...') {
+// Global Loading Overlay. The message is locked while shown: any DOM change
+// re-applies [data-i18n] and would put the generic "Loading..." back.
+function showGlobalLoading(message = '') {
     const overlay = $('#global-loading');
     const msgEl = $('#global-loading-msg');
     if (overlay) {
-        if (msgEl) msgEl.textContent = message;
+        if (msgEl) {
+            msgEl.dataset.i18nLocked = '1';
+            msgEl.textContent = message || appT('common.loading', 'Loading...');
+        }
         overlay.style.display = 'flex';
     }
 }
@@ -615,5 +619,7 @@ function hideGlobalLoading() {
     if (overlay) {
         overlay.style.display = 'none';
     }
+    const msgEl = $('#global-loading-msg');
+    if (msgEl) delete msgEl.dataset.i18nLocked;
 }
 

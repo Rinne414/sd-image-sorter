@@ -252,9 +252,10 @@ function refreshLocalizedDynamicUi() {
     if (AppState.modalSelection.type) {
         const titleEl = $('#model-select-title');
         if (titleEl) {
-            titleEl.textContent = AppState.modalSelection.type === 'checkpoint'
-                ? appT('modelSelect.checkpointsTitle', 'Select Models')
-                : appT('modelSelect.lorasTitle', 'Select LoRAs');
+            // The key moves with the title, or the i18n re-apply resets it.
+            const titleKey = AppState.modalSelection.type === 'checkpoint' ? 'modelSelect.checkpointsTitle' : 'modelSelect.lorasTitle';
+            titleEl.dataset.i18n = titleKey;
+            titleEl.textContent = appT(titleKey, AppState.modalSelection.type === 'checkpoint' ? 'Select Models' : 'Select LoRAs');
         }
         renderModelSelectList();
     }

@@ -137,6 +137,8 @@ function _updateBatchExportJobProgress(progress) {
         fill.style.width = pct + '%';
     }
     if (textEl) {
+        // Live counts: keep the i18n re-apply from resetting them to "Exporting...".
+        textEl.dataset.i18nLocked = '1';
         if (progress?.status === 'cancelling') {
             textEl.textContent = appT('batchExport.stopping', 'Stopping...');
             return;

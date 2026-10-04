@@ -384,6 +384,7 @@ function setExportModalMode(mode) {
 
     const normalizedMode = mode === 'tags' ? 'tags' : 'prompts';
     exportAltBtn.dataset.exportView = normalizedMode;
+    exportAltBtn.dataset.i18nLocked = '1';
     exportAltBtn.innerHTML = normalizedMode === 'prompts'
         ? `🏷️ ${appT('export.tagsInstead', 'Show Tags')}`
         : `📤 ${appT('export.promptsInstead', 'Show Prompt Text')}`;
@@ -770,7 +771,10 @@ async function executeBatchExport() {
     const startBtn = $('#btn-start-batch-export');
     if (progressEl) progressEl.style.display = 'block';
     if (progressFill) progressFill.style.width = '0%';
-    if (progressText) progressText.textContent = appT('export.inProgress', 'Exporting...');
+    if (progressText) {
+        progressText.dataset.i18nLocked = '1';
+        progressText.textContent = appT('export.inProgress', 'Exporting...');
+    }
     if (startBtn) startBtn.disabled = true;
 
     try {

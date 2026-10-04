@@ -31,9 +31,11 @@ function openModelSelect(type) {
             : currentSelection
     );
 
-    $('#model-select-title').textContent = type === 'checkpoint'
-        ? appT('modelSelect.checkpointsTitle', 'Select Models')
-        : appT('modelSelect.lorasTitle', 'Select LoRAs');
+    // The key moves with the title, or the i18n re-apply resets it.
+    const titleKey = type === 'checkpoint' ? 'modelSelect.checkpointsTitle' : 'modelSelect.lorasTitle';
+    const titleEl = $('#model-select-title');
+    titleEl.dataset.i18n = titleKey;
+    titleEl.textContent = appT(titleKey, type === 'checkpoint' ? 'Select Models' : 'Select LoRAs');
     $('#model-select-search').value = '';
 
     renderModelSelectList();

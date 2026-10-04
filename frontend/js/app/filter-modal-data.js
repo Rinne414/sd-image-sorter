@@ -133,8 +133,11 @@ async function runFilterCountPreview() {
             // explicit _setButton call), and the observer fires on our own
             // write — without the lock the count is clobbered one frame later.
             applyButton.dataset.i18nLocked = '1';
-            applyButton.textContent = appT('filter.applyWithCount', 'Apply · ~{count} images')
-                .replace('{count}', total.toLocaleString());
+            // A caller's own wording ("Apply to Auto-Separate") keeps its words.
+            const customApply = FilterModalController.applyButtonText;
+            applyButton.textContent = customApply
+                ? `${customApply} · ~${total.toLocaleString()}`
+                : appT('filter.applyWithCount', 'Apply · ~{count} images').replace('{count}', total.toLocaleString());
         }
     } catch (e) { /* aborted / offline — keep the last label */ }
 }
