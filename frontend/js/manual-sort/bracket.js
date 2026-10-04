@@ -83,6 +83,7 @@ async function startBracketSorting() {
             null, // collection slots
             'bracket',
             buildManualSortScopeFilters(f),
+            { excludeSorted: isManualSortExcludeSortedOn() },
         );
 
         const totalImages = Number(result?.total_images ?? 0);

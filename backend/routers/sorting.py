@@ -32,6 +32,7 @@ from services.sorting_models import (
     ScanProgressResponse,
     ScanRequest,
     ScanStartResponse,
+    SortFilterRequest,
     ValidatePathRequest,
 )
 from services.sorting_service import SortingService
@@ -580,6 +581,31 @@ async def cancel_batch_move(
 
 
 
+def _manual_sort_filter_kwargs(request: SortFilterRequest) -> Dict[str, Any]:
+    """Every filter of a Manual Sort request, as service keyword arguments.
+
+    One mapping for ``/sort/start`` and ``/sort/scope-count`` so the count on
+    the setup page and the queued session can never use different filters.
+    """
+    return {name: getattr(request, name) for name in SortFilterRequest.model_fields}
+
+
+@router.post("/sort/scope-count")
+def count_sort_scope(
+    request: SortFilterRequest,
+    service: SortingService = Depends(get_sorting_service),
+):
+    """Count what a Manual Sort session with these filters would queue.
+
+    Takes the same body as ``POST /api/sort/start`` (session-only fields are
+    ignored) and returns ``{"total", "sorted", "remaining"}``: ``sorted`` of
+    the ``total`` matches were already copied or moved by Auto-Separate or
+    Manual Sort, and ``remaining`` is what a session started with
+    ``exclude_sorted`` queues.
+    """
+    return service.count_sort_scope(**_manual_sort_filter_kwargs(request))
+
+
 @router.post("/sort/start")
 async def start_sort_session(
     request: Optional[ManualSortStartRequest] = Body(default=None),
@@ -609,63 +635,23 @@ async def start_sort_session(
     operation_mode: str = Query(default="move", max_length=16),
     replace_existing: bool = Query(default=False),
     mode: str = Query(default="slot", max_length=16),
+    exclude_sorted: bool = Query(default=False),
     service: SortingService = Depends(get_sorting_service),
 ):
-    """Start a manual sort session."""
+    """Start a manual sort session.
+
+    ``exclude_sorted`` leaves out pictures Auto-Separate or Manual Sort
+    already copied or moved; the response's ``excluded_sorted`` says how many.
+    """
     if request is not None:
         return service.start_sort_session(
-            generators=request.generators,
-            tags=request.tags,
-            tag_mode=request.tag_mode,
-            ratings=request.ratings,
-            checkpoints=request.checkpoints,
-            loras=request.loras,
-            prompts=request.prompts,
-            prompt_match_mode=request.prompt_match_mode,
-            artist=request.artist,
-            search=request.search,
-            min_width=request.min_width,
-            max_width=request.max_width,
-            min_height=request.min_height,
-            max_height=request.max_height,
-            aspect_ratio=request.aspect_ratio,
-            min_aesthetic=request.min_aesthetic,
-            max_aesthetic=request.max_aesthetic,
+            **_manual_sort_filter_kwargs(request),
             folders=request.folders,
             operation_mode=request.operation_mode,
             replace_existing=request.replace_existing,
-            exclude_tags=request.exclude_tags,
-            exclude_generators=request.exclude_generators,
-            exclude_ratings=request.exclude_ratings,
-            exclude_checkpoints=request.exclude_checkpoints,
-            exclude_loras=request.exclude_loras,
             collection_slots=request.collection_slots,
             mode=request.mode,
-            # v3.3.x gallery-scope parity (Finding: filter→scope dropped
-            # collection/folder/rating/exclude/brightness scopes on this path)
-            min_user_rating=request.min_user_rating,
-            brightness_min=request.brightness_min,
-            brightness_max=request.brightness_max,
-            color_temperature=request.color_temperature,
-            brightness_distribution=request.brightness_distribution,
-            exclude_prompts=request.exclude_prompts,
-            exclude_colors=request.exclude_colors,
-            color_hues=request.color_hues,
-            exclude_color_hues=request.exclude_color_hues,
-            collection_id=request.collection_id,
-            scope=request.scope,
-            folder=request.folder,
-            has_metadata=request.has_metadata,
-            no_caption=request.no_caption,
-            aesthetic_unscored=request.aesthetic_unscored,
-            min_saturation=request.min_saturation,
-            max_saturation=request.max_saturation,
-            seed=request.seed,
-            date_from=request.date_from,
-            date_to=request.date_to,
-            anime_grades=request.anime_grades,
-            min_waifu=request.min_waifu,
-            max_waifu=request.max_waifu,
+            exclude_sorted=request.exclude_sorted,
         )
 
     return service.start_sort_session(
@@ -695,6 +681,7 @@ async def start_sort_session(
         exclude_checkpoints=exclude_checkpoints,
         exclude_loras=exclude_loras,
         mode=mode,
+        exclude_sorted=exclude_sorted,
     )
 
 

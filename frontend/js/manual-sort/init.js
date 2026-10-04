@@ -142,6 +142,10 @@ async function initManualSort() {
         syncManualSortFiltersFromGallery({ toastKey: 'scope.resyncedToast' });
     });
     $('#btn-manual-sort-keep-scope')?.addEventListener('click', keepManualSortSavedScope);
+    // Leave out / include pictures Auto-Separate or an earlier sort already did.
+    $('#btn-sort-scope-sorted-toggle')?.addEventListener('click', () => {
+        setManualSortExcludeSorted(!isManualSortExcludeSortedOn());
+    });
 
     // Start sorting button
     const startBtn = $('#btn-start-sorting');

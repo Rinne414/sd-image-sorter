@@ -3210,6 +3210,38 @@ html:has(#view-gallery.active) {
     background: transparent;
     color: var(--text-muted);
 }
+/* "· 18 already sorted left out [Include them]" rides in the same pill, so
+   the choice sits next to the number it changes instead of on its own row. */
+.sort-scope-sorted {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.sort-scope-sorted[hidden] {
+    display: none;
+}
+.sort-scope-sorted-sep {
+    opacity: 0.6;
+}
+.sort-scope-sorted-toggle {
+    padding: 2px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(var(--blue-rgb), 0.45);
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.5;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.sort-scope-sorted-toggle:hover {
+    background: rgba(var(--blue-rgb), 0.16);
+}
+.sort-scope-sorted-toggle:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+}
 
 
 /* Named full-config preset bar in the sort setup. Delete sits apart, ghost +

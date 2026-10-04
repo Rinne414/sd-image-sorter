@@ -1970,6 +1970,13 @@
                             <div class="sort-scope-count" id="sort-scope-count" aria-live="polite" hidden>
                                 <span class="sort-scope-count-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg></span>
                                 <span id="sort-scope-count-text"></span>
+                                <!-- Pictures Auto-Separate or an earlier Manual Sort already
+                                     copied/moved: left out by default, one click includes them. -->
+                                <span class="sort-scope-sorted" id="sort-scope-sorted" hidden>
+                                    <span class="sort-scope-sorted-sep" aria-hidden="true">·</span>
+                                    <span id="sort-scope-sorted-text" data-i18n-title="manual.sortedHint" title="Pictures Auto-Separate or an earlier Manual Sort already copied or moved"></span>
+                                    <button type="button" class="sort-scope-sorted-toggle" id="btn-sort-scope-sorted-toggle" data-i18n="manual.sortedIncludeAgain">Include them</button>
+                                </span>
                             </div>
                             <button class="btn btn-primary btn-large btn-glow" id="btn-start-sorting">
                                 <svg class="icon" aria-hidden="true"><use href="#i-dice"/></svg> <span id="sort-start-label" data-i18n="manual.startSorting">Start Sorting</span>
@@ -2238,7 +2245,7 @@
                                 <span class="progress-summary-item"><strong id="sort-sorted-count">0</strong> <span data-i18n="manual.sorted">Sorted</span></span>
                                 <span class="progress-summary-item"><strong id="sort-skipped-count">0</strong> <span data-i18n="manual.skipped">Skipped</span></span>
                                 <span class="progress-summary-item"><strong id="sort-remaining-count">0</strong> <span data-i18n="manual.remaining">Remaining</span></span>
-                                <span class="progress-hint" data-i18n="manual.progressHint">SPACE to skip • Z to undo • ESC to exit</span>
+                                <span class="progress-hint" data-i18n="manual.progressHint">SPACE to skip • Z to undo • Ctrl+Y to redo • ESC to exit</span>
                             </div>
                             <div class="progress-bar-segmented">
                                 <div class="progress-fill-sorted" id="sort-progress-sorted"></div>

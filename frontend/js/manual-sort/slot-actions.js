@@ -425,6 +425,29 @@ function describeUndoFailure(error) {
     return (match ? match[1] : raw).trim();
 }
 
+// Name what the undo took back ("Undone: 00042.png moved back") from the
+// server's undone_* fields; the plain "Undid last action" stays the fallback
+// for answers that carry no file name (an older server, a vanished row).
+function describeUndoneAction(result) {
+    const name = typeof result?.undone_filename === 'string' ? result.undone_filename : '';
+    if (!name) {
+        return manualSortText('manual.undoSuccess', 'Undid last action', '已撤销上一步');
+    }
+    if (result.undone_action === 'skip') {
+        return formatManualSortI18n('manual.undoneSkip', 'Undid skip of {name}', { name });
+    }
+    if (result.undone_action === 'collect') {
+        return formatManualSortI18n('manual.undoneCollect', 'Undone: {name} taken out of the collection', { name });
+    }
+    if (result.undone_action === 'move' && result.undone_operation === 'copy') {
+        return formatManualSortI18n('manual.undoneCopy', 'Undone: removed the copy of {name}', { name });
+    }
+    if (result.undone_action === 'move') {
+        return formatManualSortI18n('manual.undoneMove', 'Undone: {name} moved back', { name });
+    }
+    return manualSortText('manual.undoSuccess', 'Undid last action', '已撤销上一步');
+}
+
 async function undoLastAction() {
     const { $, API, showToast } = window.App;
 
@@ -446,7 +469,7 @@ async function undoLastAction() {
         }
 
         await loadCurrentImage(result);
-        showToast(manualSortText('manual.undoSuccess', 'Undid last action', '已撤销上一步'), 'info');
+        showToast(describeUndoneAction(result), 'info');
     } catch (error) {
         Logger.error('Failed to undo:', error);
         const reason = describeUndoFailure(error);

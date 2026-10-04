@@ -449,8 +449,21 @@ Object.assign(API, {
     },
 
     // Manual Sort
-    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'copy', artist = null, replaceExisting = false, promptMatchMode = 'exact', tagMode = 'and', excludeFilters = null, collectionSlots = null, mode = 'slot', scopeFilters = null) {
-        return this.post('/api/sort/start', {
+    async startSortSession(...args) {
+        return this.post('/api/sort/start', this.buildSortStartPayload(...args));
+    },
+
+    // How many pictures a session started with the same arguments would
+    // queue: { total, sorted, remaining }. Same body as startSortSession, so
+    // the setup-page count and the queue can never use different filters.
+    async countSortScope(...args) {
+        return this.post('/api/sort/scope-count', this.buildSortStartPayload(...args));
+    },
+
+    // sessionOptions.excludeSorted leaves out pictures Auto-Separate or an
+    // earlier Manual Sort already copied/moved.
+    buildSortStartPayload(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'copy', artist = null, replaceExisting = false, promptMatchMode = 'exact', tagMode = 'and', excludeFilters = null, collectionSlots = null, mode = 'slot', scopeFilters = null, sessionOptions = null) {
+        return {
             generators,
             tags,
             tag_mode: tagMode === 'or' ? 'or' : 'and',
@@ -509,7 +522,8 @@ Object.assign(API, {
             // v3.3.2 WB-S3: session mode. "slot" = WASD folder sort (default);
             // "bracket" = A/B king-of-the-hill culling; "cull" = 留/汰 keep-reject (FF-1).
             mode: ['bracket', 'cull'].includes(mode) ? mode : 'slot',
-        });
+            exclude_sorted: sessionOptions?.excludeSorted === true,
+        };
     },
 
     async getCurrentSortImage() {

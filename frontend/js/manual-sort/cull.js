@@ -73,6 +73,7 @@ async function startCullSorting() {
             null, // collection slots
             'cull',
             buildManualSortScopeFilters(f),
+            { excludeSorted: isManualSortExcludeSortedOn() },
         );
 
         const totalImages = Number(result?.total_images ?? 0);

@@ -582,6 +582,9 @@ class ManualSortStartRequest(SortFilterRequest):
     replace_existing: bool = False
     # v3.3.2 Workbench: culling/sorting mode ("slot" = WASD slot-sort, default).
     mode: str = Field(default=SORT_MODE_DEFAULT, max_length=16)
+    # Leave out pictures Auto-Separate or Manual Sort already copied/moved
+    # (the setup page sends true by default; API callers keep the old queue).
+    exclude_sorted: bool = False
 
 
 class FolderConfig(BaseModel):

@@ -1326,7 +1326,9 @@ def test_manual_sort_start_uses_json_body_not_query_string_filters():
     source = _app_family_source(repo_root)
 
     assert "async startSortSession(" in source
-    assert "return this.post('/api/sort/start', {" in source
+    # One JSON body builder for the start and the setup-page scope count.
+    assert "return this.post('/api/sort/start', this.buildSortStartPayload(...args));" in source
+    assert "return this.post('/api/sort/scope-count', this.buildSortStartPayload(...args));" in source
     assert "params.set('tags', tags.join(','))" not in source
     assert "this.post(`/api/sort/start?${params}`)" not in source
 

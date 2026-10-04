@@ -232,6 +232,39 @@ def test_sort_start_route_forwards_every_gallery_filter():
     assert not _missing(seen, [_snake(key) for key in _canonical_keys()])
 
 
+def test_manual_sort_scope_count_selects_with_every_gallery_filter(svc, monkeypatch):
+    """The setup-page count must use the same filters as the queue it predicts."""
+    seen = {}
+
+    def fake_ids(**kwargs):
+        seen.update(kwargs)
+        return []
+
+    monkeypatch.setattr(database, "get_filtered_image_ids", fake_ids)
+
+    counted = svc.count_sort_scope(**_snake_sample())
+
+    assert counted == {"total": 0, "sorted": 0, "remaining": 0}
+    names = [DB_NAMES.get(key, _snake(key)) for key in _canonical_keys()]
+    assert not _missing(seen, names)
+
+
+def test_sort_scope_count_route_forwards_every_gallery_filter():
+    from routers.sorting import count_sort_scope
+
+    seen = {}
+
+    class FakeService:
+        def count_sort_scope(self, **kwargs):
+            seen.update(kwargs)
+            return {"total": 0, "sorted": 0, "remaining": 0}
+
+    request = ss.ManualSortStartRequest(**_snake_sample())
+    count_sort_scope(request=request, service=FakeService())
+
+    assert not _missing(seen, [_snake(key) for key in _canonical_keys()])
+
+
 def test_bulk_tag_filter_contract_reaches_the_query_with_every_gallery_filter():
     from routers.tags_bulk import _filter_contract_db_kwargs
     from routers.tags_bulk_models import BulkTagFilterContract
@@ -521,7 +554,8 @@ const load = new Function(
   read({_js_path("manual-sort", "filters-scope.js")}) + '\\n' +
   read({_js_path("app", "api-features.js")}) + '\\n' +
   'return {{ serializeAutoSepFilters, buildAutoSepFilterContract, buildAutoSepScopeFilters, ' +
-  '_buildAutoSepImageQuery, buildManualSortScopeFilters }};'
+  '_buildAutoSepImageQuery, buildManualSortScopeFilters, buildManualSortFilterContract, ' +
+  'buildManualSortStartArgs }};'
 );
 const fns = load();
 const sample = {sample};
@@ -530,11 +564,17 @@ API.batchMove(null, null, null, 'out', null, null, null, null, null, null, 'move
   'exact', 'and', null, fns.buildAutoSepScopeFilters(contract), null);
 API.startSortSession(null, null, null, {{}}, null, null, null, null, null, null, 'copy', null,
   false, 'exact', 'and', null, null, 'slot', fns.buildManualSortScopeFilters(sample));
+API.countSortScope(...fns.buildManualSortStartArgs(fns.buildManualSortFilterContract(sample)));
+API.startSortSession(...fns.buildManualSortStartArgs(fns.buildManualSortFilterContract(sample),
+  {{ excludeSorted: true }}));
 process.stdout.write(JSON.stringify({{
   serialized: fns.serializeAutoSepFilters(sample),
   previewQuery: fns._buildAutoSepImageQuery(sample),
   batchMoveWire: posted[0].body,
   sortStartWire: posted[1].body,
+  scopeCountUrl: posted[2].url,
+  scopeCountWire: posted[2].body,
+  sharedStartWire: posted[3].body,
 }}));
 """
     return _run_node(script)
@@ -543,6 +583,25 @@ process.stdout.write(JSON.stringify({{
 @pytest.fixture(scope="module")
 def frontend_output():
     return _frontend_builders_output()
+
+
+def test_manual_sort_scope_count_wire_carries_every_gallery_filter(frontend_output):
+    """The setup-page count posts what the slot start posts, every filter included."""
+    assert frontend_output["scopeCountUrl"] == "/api/sort/scope-count"
+    count_body = frontend_output["scopeCountWire"]
+    missing = [
+        _snake(key)
+        for key in _canonical_keys()
+        if count_body.get(_snake(key)) in (None, [], "")
+    ]
+    assert not missing, f"the Manual Sort scope count drops: {missing}"
+
+    start_body = frontend_output["sharedStartWire"]
+    assert start_body["exclude_sorted"] is True
+    assert count_body["exclude_sorted"] is False
+    assert {k: v for k, v in start_body.items() if k != "exclude_sorted"} == {
+        k: v for k, v in count_body.items() if k != "exclude_sorted"
+    }
 
 
 def test_auto_separate_keeps_every_gallery_filter_when_copying(frontend_output):

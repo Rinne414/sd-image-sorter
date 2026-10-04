@@ -144,6 +144,54 @@ function buildManualSortScopeFilters(contract) {
     };
 }
 
+// Positional API.startSortSession / API.countSortScope arguments for a filter
+// contract. The slot start and the setup-page count both use it, so the count
+// the user reads is the queue the session builds.
+function buildManualSortStartArgs(f, options = {}) {
+    const {
+        folders = {},
+        operationMode = 'copy',
+        replaceExisting = false,
+        collectionSlots = null,
+        mode = 'slot',
+        excludeSorted = false,
+    } = options;
+    return [
+        f.generators?.length > 0 ? f.generators : null,
+        f.tags?.length > 0 ? f.tags : null,
+        f.ratings?.length > 0 ? f.ratings : null,
+        folders,
+        f.checkpoints?.length > 0 ? f.checkpoints : null,
+        f.loras?.length > 0 ? f.loras : null,
+        f.prompts?.length > 0 ? f.prompts : null,
+        {
+            minWidth: f.minWidth,
+            maxWidth: f.maxWidth,
+            minHeight: f.minHeight,
+            maxHeight: f.maxHeight,
+            aspectRatio: f.aspectRatio,
+        },
+        f.search?.trim() || null,
+        { min: f.minAesthetic, max: f.maxAesthetic },
+        operationMode,
+        f.artist,
+        replaceExisting,
+        f.promptMatchMode,
+        f.tagMode,
+        {
+            tags: f.excludeTags?.length > 0 ? f.excludeTags : null,
+            generators: f.excludeGenerators?.length > 0 ? f.excludeGenerators : null,
+            ratings: f.excludeRatings?.length > 0 ? f.excludeRatings : null,
+            checkpoints: f.excludeCheckpoints?.length > 0 ? f.excludeCheckpoints : null,
+            loras: f.excludeLoras?.length > 0 ? f.excludeLoras : null,
+        },
+        collectionSlots,
+        mode,
+        buildManualSortScopeFilters(f),
+        { excludeSorted: excludeSorted === true },
+    ];
+}
+
 function loadManualSortScopeMeta() {
     try {
         const raw = localStorage.getItem(MANUAL_SORT_SCOPE_META_KEY);

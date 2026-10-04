@@ -457,6 +457,25 @@ async function resetManualSortFixture() {
     await clearDir(dir)
   }
   ensureMoveSortFixtureImages()
+  forgetManualSortFixtureSorts()
+}
+
+// The reset moves sorted files back by hand, outside the app, so the app still
+// remembers them as sorted (migration 051) and Manual Sort would leave them out
+// of the next queue on a rerun against the same data folder.
+function forgetManualSortFixtureSorts() {
+  runBackendScript(`
+import sys
+sys.path.insert(0, ${JSON.stringify(path.join(repoRoot, 'backend'))})
+import database as db
+
+with db.get_db() as conn:
+    conn.execute(
+        "DELETE FROM sorted_images WHERE image_id IN "
+        "(SELECT id FROM images WHERE filename LIKE 'manual-sort-%')"
+    )
+print("ok")
+`)
 }
 
 async function resetSaveOutputs() {
@@ -2114,10 +2133,12 @@ test('starting a different mode over a paused session asks before discarding, ne
 
   // OK = discard the slot session and start the requested bracket fresh. A
   // resumed slot session would show #sort-interface and keep its 1-sorted
-  // progress; a clean 0/2 bracket proves the old session was discarded.
+  // progress; a clean 0/1 bracket proves the old session was discarded. It is
+  // 0/1, not 0/2: the picture the slot session already copied with D is left
+  // out by default (Manual Sort skips already sorted pictures).
   await page.locator('#btn-confirm-ok').click()
   await expect(page.locator('#sort-bracket-interface')).toBeVisible()
-  await expect(page.locator('#bracket-progress-text')).toHaveText('0 / 2')
+  await expect(page.locator('#bracket-progress-text')).toHaveText('0 / 1')
 
   // Server-side confirmation: the active session is now a bracket, not the
   // paused slot session.

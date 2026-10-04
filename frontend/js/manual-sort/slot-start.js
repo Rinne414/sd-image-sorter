@@ -203,49 +203,21 @@ async function startSorting() {
     const loras = f.loras?.length > 0 ? f.loras : null;
     const prompts = f.prompts?.length > 0 ? f.prompts : null;
     const search = f.search?.trim() || null;
-    const dimensions = {
-        minWidth: f.minWidth,
-        maxWidth: f.maxWidth,
-        minHeight: f.minHeight,
-        maxHeight: f.maxHeight,
-        aspectRatio: f.aspectRatio
-    };
 
     try {
         // Set folders + collection slots on server
         await API.setSortFolders(folders, collectionSlots);
 
         // Start session with unified filters including prompts and dimensions
-        const result = await API.startSortSession(
-            generators,
-            tags,
-            ratings,
+        // (the same arguments the setup-page count posts).
+        const result = await API.startSortSession(...buildManualSortStartArgs(f, {
             folders,
-            checkpoints,
-            loras,
-            prompts,
-            dimensions,
-            search,
-            {
-                min: f.minAesthetic,
-                max: f.maxAesthetic,
-            },
             operationMode,
-            f.artist,
             replaceExisting,
-            f.promptMatchMode,
-            f.tagMode,
-            {
-                tags: f.excludeTags?.length > 0 ? f.excludeTags : null,
-                generators: f.excludeGenerators?.length > 0 ? f.excludeGenerators : null,
-                ratings: f.excludeRatings?.length > 0 ? f.excludeRatings : null,
-                checkpoints: f.excludeCheckpoints?.length > 0 ? f.excludeCheckpoints : null,
-                loras: f.excludeLoras?.length > 0 ? f.excludeLoras : null,
-            },
             collectionSlots,
-            'slot',
-            buildManualSortScopeFilters(f),
-        );
+            mode: 'slot',
+            excludeSorted: isManualSortExcludeSortedOn(),
+        }));
 
         if (result.total_images === 0) {
             showToast(

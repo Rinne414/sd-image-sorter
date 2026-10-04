@@ -27,14 +27,58 @@ function isManualSortSetupVisible() {
     return !ManualSortState.active;
 }
 
-let _manualSortScopeCountAbort = null;
 let _manualSortScopeCountSeq = 0;
 
+// --- Already-sorted pictures ------------------------------------------------
+// "Auto-sort first, hand-sort the rest": pictures Auto-Separate or an earlier
+// Manual Sort already copied/moved are left out of the next session unless the
+// user includes them again. Per-viewer preference, default on.
+function isManualSortExcludeSortedOn() {
+    try {
+        return localStorage.getItem(MANUAL_SORT_EXCLUDE_SORTED_KEY) !== '0';
+    } catch (_) {
+        return true;
+    }
+}
+
+function setManualSortExcludeSorted(on) {
+    try {
+        localStorage.setItem(MANUAL_SORT_EXCLUDE_SORTED_KEY, on ? '1' : '0');
+    } catch (_) { /* storage unavailable: the choice lasts until reload */ }
+    refreshManualSortScopeCount();
+}
+
+// The "18 already sorted left out · Include them" part of the count pill.
+// Hidden when nothing in scope was sorted yet: there is nothing to choose.
+function renderManualSortSortedNote(sortedCount) {
+    const note = document.getElementById('sort-scope-sorted');
+    const text = document.getElementById('sort-scope-sorted-text');
+    const toggle = document.getElementById('btn-sort-scope-sorted-toggle');
+    if (!note || !text || !toggle) return;
+    if (!(sortedCount > 0)) {
+        note.hidden = true;
+        return;
+    }
+    const excluding = isManualSortExcludeSortedOn();
+    const count = sortedCount.toLocaleString();
+    text.textContent = excluding
+        ? formatManualSortI18n('manual.sortedExcluded', '{count} already sorted left out', { count })
+        : formatManualSortI18n('manual.sortedIncluded', 'includes {count} already sorted', { count });
+    // The button names what a click gives you and flips after it; its key
+    // moves with the text so the i18n re-apply keeps the right label.
+    const toggleKey = excluding ? 'manual.sortedIncludeAgain' : 'manual.sortedLeaveOut';
+    toggle.setAttribute('data-i18n', toggleKey);
+    toggle.textContent = excluding
+        ? manualSortText(toggleKey, 'Include them', '重新包含')
+        : manualSortText(toggleKey, 'Leave them out', '排除它们');
+    note.hidden = false;
+}
+
 // Count how many images the current Manual Sort filters would pull in and show
-// it above the Start button. Reuses the Gallery count endpoint + shared
-// buildFilterQueryParams so the number matches what a session would enqueue.
-// Best-effort: on any failure the row shows an unavailable note rather than a
-// stale/false count. The `≈` framing keeps it honest (filters + moves race).
+// it above the Start button. Posts the same arguments as the slot start to
+// /api/sort/scope-count, so the number is the queue a session would build
+// (minus already-sorted pictures while those are left out). Best-effort: on
+// any failure the row shows an unavailable note rather than a stale count.
 async function refreshManualSortScopeCount() {
     const wrap = document.getElementById('sort-scope-count');
     const text = document.getElementById('sort-scope-count-text');
@@ -47,14 +91,14 @@ async function refreshManualSortScopeCount() {
     }
 
     const API = window.App?.API;
-    if (!API || typeof API.buildFilterQueryParams !== 'function') {
+    if (!API || typeof API.countSortScope !== 'function') {
         wrap.hidden = true;
         return;
     }
 
-    let params;
+    let args;
     try {
-        params = API.buildFilterQueryParams(buildManualSortFilterContract(getManualSortFilters()));
+        args = buildManualSortStartArgs(buildManualSortFilterContract(getManualSortFilters()));
     } catch (_) {
         wrap.hidden = true;
         return;
@@ -65,28 +109,26 @@ async function refreshManualSortScopeCount() {
     wrap.classList.add('is-counting');
     wrap.classList.remove('is-failed');
     text.textContent = manualSortText('manual.scopeCountCounting', 'Counting images…', '正在统计图片…');
+    renderManualSortSortedNote(0);
 
     const seq = ++_manualSortScopeCountSeq;
     try {
-        if (_manualSortScopeCountAbort) _manualSortScopeCountAbort.abort();
-        _manualSortScopeCountAbort = new AbortController();
-        const resp = await fetch(`/api/images/count?${params}`, { signal: _manualSortScopeCountAbort.signal });
+        const data = await API.countSortScope(...args);
         if (seq !== _manualSortScopeCountSeq) return; // a newer refresh superseded us
-        if (!resp.ok) throw new Error(`count ${resp.status}`);
-        const data = await resp.json();
         const total = Number(data?.total);
+        const sorted = Number(data?.sorted) || 0;
         wrap.classList.remove('is-counting');
-        if (Number.isFinite(total) && total >= 0) {
-            text.textContent = formatManualSortI18n('manual.scopeCount', '≈{count} images in scope', {
-                count: total.toLocaleString(),
-            });
-        } else {
-            // total < 0 is the count-skipped sentinel for very large libraries;
-            // hide rather than print a nonsense number.
+        if (!Number.isFinite(total) || total < 0) {
             wrap.hidden = true;
+            return;
         }
+        const queued = isManualSortExcludeSortedOn() ? Math.max(0, total - sorted) : total;
+        text.textContent = formatManualSortI18n('manual.scopeCount', '≈{count} images in scope', {
+            count: queued.toLocaleString(),
+        });
+        renderManualSortSortedNote(sorted);
     } catch (e) {
-        if (e?.name === 'AbortError' || seq !== _manualSortScopeCountSeq) return;
+        if (seq !== _manualSortScopeCountSeq) return;
         wrap.classList.remove('is-counting');
         wrap.classList.add('is-failed');
         text.textContent = manualSortText('manual.scopeCountFailed', 'Count unavailable', '无法统计数量');

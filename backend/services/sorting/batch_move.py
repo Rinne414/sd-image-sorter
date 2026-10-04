@@ -369,6 +369,10 @@ class BatchMoveMixin:
                                             source_path=source_path,
                                         )
                                         moved += 1
+                                        # Manual Sort can leave this picture
+                                        # out later (auto-sort, then hand-sort
+                                        # the rest).
+                                        self._mark_sorted_by_auto_separate(image["id"], operation)
                                     except Exception as e:
                                         # Same descriptor gallery move and
                                         # Manual Sort use: str(e) here kept the

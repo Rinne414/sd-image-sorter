@@ -935,13 +935,16 @@ Cooperatively cancel an in-flight batch move/copy. The worker checks the cancel 
 Reset stuck batch move progress.
 
 #### POST /api/sort/start
-Start manual sort session. Preferred clients send a JSON body with `generators`, `tags`, `ratings`, `checkpoints`, `loras`, `prompts`, `prompt_match_mode`, `artist`, `search`, size/aesthetic filters, `folders`, `operation_mode`, and `replace_existing`; this avoids URL/query-length limits for large filter scopes. Legacy query-string parameters remain supported, including `prompt_match_mode=exact|contains`. If an unfinished session exists, the default response is HTTP 409; pass `replace_existing=true` only after the user explicitly chooses to discard saved progress.
+Start manual sort session. Preferred clients send a JSON body with `generators`, `tags`, `ratings`, `checkpoints`, `loras`, `prompts`, `prompt_match_mode`, `artist`, `search`, size/aesthetic filters, `folders`, `operation_mode`, and `replace_existing`; this avoids URL/query-length limits for large filter scopes. Legacy query-string parameters remain supported, including `prompt_match_mode=exact|contains`. If an unfinished session exists, the default response is HTTP 409; pass `replace_existing=true` only after the user explicitly chooses to discard saved progress. `exclude_sorted=true` leaves out pictures Auto-Separate (`/api/batch-move`) or an earlier Manual Sort already copied or moved (recorded in `sorted_images`, migration 051); the response's `excluded_sorted` says how many were left out. The default (`false`) queues every match.
+
+#### POST /api/sort/scope-count
+Count what a session with the same body would queue, without starting one. Returns `{"total", "sorted", "remaining"}`: `total` pictures match the filters, `sorted` of them were already copied or moved by Auto-Separate or Manual Sort, and `remaining` is what `exclude_sorted=true` queues. Uses the same filter path as `/api/sort/start`, so the Manual Sort setup count equals the queue length.
 
 #### GET /api/sort/current
 Get current sort image. Every session answer (here and from `/api/sort/action`) carries `library_id`, the library the session's images belong to (the one saved session is shared by every library; null without a session), and `library_mixed`: true when the images belong to more than one library (then `library_id` is null). Manual Sort asks before resuming a session that is not the open library's.
 
 #### POST /api/sort/action
-Perform `move`, `skip`, or `undo`.
+Perform `move`, `skip`, or `undo`. A slot `move` (copy or move) records the picture in `sorted_images`; `undo` takes that record back (or restores the one it replaced). An `undo` answer names what it took back: `undone_action`, `undone_image_id`, `undone_filename`, and for a move `undone_operation` (`copy` or `move`).
 
 #### POST /api/sort/set-folders
 Set manual sort folders.

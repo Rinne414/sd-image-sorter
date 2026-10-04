@@ -87,6 +87,7 @@ from services.sorting.batch_move import BatchMoveMixin
 from services.sorting.library import LibraryMixin
 from services.sorting.move import MoveMixin
 from services.sorting.scan import ScanMixin
+from services.sorting.scope import SortScopeMixin
 from services.sorting.session import SortSessionMixin
 from services.sorting.session_state import SessionStateMixin
 from services.sorting.state import SortingStateMixin
@@ -203,6 +204,7 @@ class SortingService(
     MoveMixin,
     BatchMoveMixin,
     SessionStateMixin,
+    SortScopeMixin,
     SortSessionMixin,
     WorkbenchMixin,
     LibraryMixin,

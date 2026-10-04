@@ -79,6 +79,10 @@ const MANUAL_SORT_ZEN_KEY = 'manual_sort_zen_v1';
 // action + filters). Array of { name, savedAt, mode, operationMode, filters,
 // collectionSlots, folders }.
 const MANUAL_SORT_PRESETS_KEY = 'manual_sort_presets_v1';
+// Leave pictures Auto-Separate or an earlier Manual Sort already copied/moved
+// out of the next session. Default on ("auto-sort first, hand-sort the rest");
+// '0' = the user chose to include them again.
+const MANUAL_SORT_EXCLUDE_SORTED_KEY = 'manual_sort_exclude_sorted_v1';
 const MAX_MINIMAP_IMAGES = 1000;
 const MANUAL_SORT_PROMPT_MATCH_MODES = new Set(['exact', 'contains']);
 

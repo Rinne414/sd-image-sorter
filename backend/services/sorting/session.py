@@ -11,13 +11,11 @@ from typing import Any, Dict, Optional
 from fastapi import HTTPException
 
 import database as db
-from constants import VALID_ASPECT_RATIOS
 from services.sorting_models import (
     FolderConfig,
     SORT_MODE_BRACKET,
     SORT_MODE_CULL,
     SORT_MODE_DEFAULT,
-    VALID_PROMPT_MATCH_MODES,
     VALID_SORT_ACTIONS,
     VALID_SORT_MODES,
 )
@@ -109,6 +107,8 @@ class SortSessionMixin:
         anime_grades: Optional[Any] = None,
         min_waifu: Optional[float] = None,
         max_waifu: Optional[float] = None,
+        # Leave out pictures Auto-Separate or Manual Sort already copied/moved.
+        exclude_sorted: bool = False,
     ) -> Dict[str, Any]:
         """Start a manual sort session."""
         operation_mode = self._validate_file_operation(operation_mode)
@@ -118,13 +118,6 @@ class SortSessionMixin:
                 status_code=400,
                 detail=f"Invalid sort mode. Must be one of: {', '.join(VALID_SORT_MODES)}",
             )
-        # Validate aspect_ratio
-        if aspect_ratio is not None and aspect_ratio not in VALID_ASPECT_RATIOS:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid aspect_ratio. Must be one of: {', '.join(VALID_ASPECT_RATIOS)}"
-            )
-
         with self._sort_session_lock:
             has_active_session = bool(self._sort_session.get("active")) and int(self._sort_session.get("current_index", 0) or 0) < len(self._sort_session.get("image_ids", []) or [])
         if has_active_session and not replace_existing:
@@ -133,40 +126,17 @@ class SortSessionMixin:
                 detail="An unfinished manual sort session already exists. Resume it or explicitly start a new session.",
             )
 
-        # Validate dimension ranges
-        if min_width is not None and max_width is not None and min_width > max_width:
-            raise HTTPException(status_code=400, detail="min_width cannot be greater than max_width")
-        if min_height is not None and max_height is not None and min_height > max_height:
-            raise HTTPException(status_code=400, detail="min_height cannot be greater than max_height")
-        if min_aesthetic is not None and max_aesthetic is not None and min_aesthetic > max_aesthetic:
-            raise HTTPException(status_code=400, detail="min_aesthetic cannot be greater than max_aesthetic")
-        normalized_prompt_match_mode = str(prompt_match_mode or "exact").strip().lower()
-        if normalized_prompt_match_mode not in VALID_PROMPT_MATCH_MODES:
-            raise HTTPException(status_code=400, detail="prompt_match_mode must be exact or contains")
-        normalized_tag_mode = str(tag_mode or "and").strip().lower()
-        if normalized_tag_mode not in {"and", "or"}:
-            raise HTTPException(status_code=400, detail="tag_mode must be and or or")
-
-        gen_list = self._coerce_sort_filter_values(generators)
-        tag_list = self._coerce_sort_filter_values(tags)
-        rating_list = self._coerce_sort_filter_values(ratings)
-        cp_list = self._coerce_sort_filter_values(checkpoints)
-        lr_list = self._coerce_sort_filter_values(loras)
-        prompt_list = self._coerce_sort_filter_values(prompts)
-        artist_name = artist.strip() if artist else None
-        search_query = search.strip() if search else None
-
-        image_ids = db.get_filtered_image_ids(
-            generators=gen_list,
-            tags=tag_list,
-            tag_mode=normalized_tag_mode,
-            ratings=rating_list,
-            checkpoints=cp_list,
-            loras=lr_list,
-            search_query=search_query,
-            prompt_terms=prompt_list,
-            prompt_match_mode=normalized_prompt_match_mode,
-            artist=artist_name,
+        image_ids = self._select_sort_scope_ids(
+            generators=generators,
+            tags=tags,
+            tag_mode=tag_mode,
+            ratings=ratings,
+            checkpoints=checkpoints,
+            loras=loras,
+            prompts=prompts,
+            prompt_match_mode=prompt_match_mode,
+            artist=artist,
+            search=search,
             min_width=min_width,
             max_width=max_width,
             min_height=min_height,
@@ -174,23 +144,23 @@ class SortSessionMixin:
             aspect_ratio=aspect_ratio,
             min_aesthetic=min_aesthetic,
             max_aesthetic=max_aesthetic,
-            exclude_tags=self._coerce_sort_filter_values(exclude_tags),
-            exclude_generators=self._coerce_sort_filter_values(exclude_generators),
-            exclude_ratings=self._coerce_sort_filter_values(exclude_ratings),
-            exclude_checkpoints=self._coerce_sort_filter_values(exclude_checkpoints),
-            exclude_loras=self._coerce_sort_filter_values(exclude_loras),
-            exclude_prompts=self._coerce_sort_filter_values(exclude_prompts),
-            exclude_colors=self._coerce_sort_filter_values(exclude_colors),
-            color_hues=self._coerce_sort_filter_values(color_hues),
-            exclude_color_hues=self._coerce_sort_filter_values(exclude_color_hues),
+            exclude_tags=exclude_tags,
+            exclude_generators=exclude_generators,
+            exclude_ratings=exclude_ratings,
+            exclude_checkpoints=exclude_checkpoints,
+            exclude_loras=exclude_loras,
             min_user_rating=min_user_rating,
             brightness_min=brightness_min,
             brightness_max=brightness_max,
-            color_temperature=color_temperature.strip() if color_temperature else None,
-            brightness_distribution=brightness_distribution.strip() if brightness_distribution else None,
+            color_temperature=color_temperature,
+            brightness_distribution=brightness_distribution,
+            exclude_prompts=exclude_prompts,
+            exclude_colors=exclude_colors,
+            color_hues=color_hues,
+            exclude_color_hues=exclude_color_hues,
             collection_id=collection_id,
             scope=scope,
-            folder=folder.strip() if folder else None,
+            folder=folder,
             has_metadata=has_metadata,
             no_caption=no_caption,
             aesthetic_unscored=aesthetic_unscored,
@@ -199,13 +169,13 @@ class SortSessionMixin:
             seed=seed,
             date_from=date_from,
             date_to=date_to,
-            anime_grades=self._coerce_sort_filter_values(anime_grades),
+            anime_grades=anime_grades,
             min_waifu=min_waifu,
             max_waifu=max_waifu,
         )
-        # DB-level filter already excludes images marked unreadable.
-        # Per-image verification runs lazily in get_current_sort_image so
-        # starting a session doesn't stall on thousands of PIL decodes.
+        excluded_sorted = 0
+        if exclude_sorted:
+            image_ids, excluded_sorted = self._drop_sorted_ids(image_ids)
 
         folder_config = self._parse_sort_folders(folders)
         collection_slot_config = self._coerce_collection_slots(collection_slots)
@@ -234,6 +204,7 @@ class SortSessionMixin:
         return {
             "status": "started",
             "total_images": len(image_ids),
+            "excluded_sorted": excluded_sorted,
             "current": first_image,
             "skipped_unreadable": [],
             "operation_mode": operation_mode,
@@ -394,6 +365,7 @@ class SortSessionMixin:
                                     status_code=500,
                                     detail=f"Could not undo last action: {e}",
                                 )
+                            self._restore_prior_sorted_mark(last)
                     elif last["action"] == "collect":
                         # v3.3.1: collect adds a membership reference (no file
                         # move). Undo removes that membership. A missing/invalid
@@ -423,6 +395,7 @@ class SortSessionMixin:
                     }
 
                 session_flags = self._get_sort_session_flags()
+                undone_details = self._describe_undone_entry(last)
 
                 if self._sort_session["current_index"] < len(image_ids):
                     current_id = image_ids[self._sort_session["current_index"]]
@@ -434,6 +407,7 @@ class SortSessionMixin:
                         "current_index": self._sort_session["current_index"],
                         "undone_action": undone_action,
                         "folder_key": undone_folder_key,
+                        **undone_details,
                         "operation_mode": operation_mode,
                         **session_flags,
                     }
@@ -446,6 +420,7 @@ class SortSessionMixin:
                     "status": "undone",
                     "undone_action": undone_action,
                     "folder_key": undone_folder_key,
+                    **undone_details,
                     "image": current,
                     "tags": current_tags,
                     "index": current_index,
@@ -502,6 +477,9 @@ class SortSessionMixin:
                         )
                         redo_entry["new_path"] = operation_result["new_path"]
                         redo_entry["copied_image_id"] = operation_result.get("new_image_id")
+                        redo_entry["prior_sorted_mark"] = self._mark_sorted_by_hand(
+                            target_image["id"], entry_operation
+                        )
                     except Exception as e:
                         logger.error("Redo %s failed for image %s: %s", entry_operation, target_id, e)
                         redo_stack.append(redo_entry)
@@ -646,7 +624,8 @@ class SortSessionMixin:
                         "original_folder": os.path.dirname(original_path),
                         "new_path": operation_result["new_path"],
                         "copied_image_id": operation_result.get("new_image_id"),
-                        "folder_key": folder_key
+                        "folder_key": folder_key,
+                        "prior_sorted_mark": self._mark_sorted_by_hand(current["id"], operation_mode),
                     })
                 except Exception as e:
                     logger.error("Sort %s failed for image %d: %s", operation_mode, current["id"], e)

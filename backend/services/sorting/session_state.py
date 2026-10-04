@@ -212,6 +212,21 @@ class SessionStateMixin:
             **self._sort_session_library(),
         }
 
+    @staticmethod
+    def _describe_undone_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
+        """Name the picture an undo took back, so the toast can say which.
+
+        Read after the undo ran, so a move shows the name the file has again.
+        ``undone_operation`` (copy/move) is only set for a slot move.
+        """
+        image_id = entry.get("image_id")
+        image = db.get_image_by_id(image_id) if image_id is not None else None
+        return {
+            "undone_image_id": image_id,
+            "undone_filename": image.get("filename") if image else None,
+            "undone_operation": entry.get("operation") if entry.get("action") == "move" else None,
+        }
+
     def _sort_session_library(self) -> Dict[str, Any]:
         """The library the session's images belong to, as ``library_id`` and ``library_mixed``.
 
