@@ -2857,7 +2857,7 @@ test('censor batch rename should update preview and apply only selected queue it
   await page.locator('#rename-pattern').fill('{original}_review_{n:02d}')
   await expect(page.locator('#rename-preview-list')).toContainText('_review_01.png')
   await page.locator('#btn-apply-rename').click()
-  await expect(page.locator('#toast-container')).toContainText('Renamed 1 image', { timeout: 10000 })
+  await expect(page.locator('#toast-container')).toContainText('Export names set for 1 image', { timeout: 10000 })
 
   const queueState = await page.evaluate(() => {
     return (window as Window & { __CENSOR_STATE__?: any }).__CENSOR_STATE__?.queue?.map((item: any) => ({

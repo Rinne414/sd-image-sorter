@@ -270,6 +270,7 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
                 return;
             }
             item.batchStatus = 'saved';
+            item.savedSignature = censorItemSaveSignature(item);
             count++;
             if (isUnedited) asIsCount += 1;
         } catch (e) {

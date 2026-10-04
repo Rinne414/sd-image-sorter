@@ -1512,8 +1512,19 @@ textarea:focus,
     display: flex;
     flex-direction: column;
     gap: 8px;
-    max-height: 280px;
+    max-height: min(280px, 24vh);
     overflow-y: auto;
+}
+
+/* Cancel / Apply stay reachable however tall the preview gets (1366x768). */
+.rename-modal-shell > .modal-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    margin-top: 12px;
+    padding-top: 12px;
+    background: inherit;
+    border-top: 1px solid var(--border);
 }
 
 .rename-preview-row {

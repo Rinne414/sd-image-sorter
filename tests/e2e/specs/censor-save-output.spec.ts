@@ -154,3 +154,37 @@ test('the same-name, metadata and format choices are remembered; skipped files a
   await expect.poll(() => stub.calls.length).toBe(2)
   expect(stub.calls[1]).toMatchObject({ allow_overwrite: true })
 })
+
+test('the rename dialog puts each hint under its own field and keeps Apply on screen', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('sd-image-sorter-lang', 'zh-CN'))
+  await openSaveDialog(page)
+  await page.locator('#btn-cancel-save-options').click()
+  await page.locator('#btn-batch-rename').click()
+  await expect(page.locator('#rename-modal.visible')).toBeVisible()
+
+  await expect(page.locator('#rename-selection-help')).toHaveText(/选中|全部/)
+  await expect(page.locator('#rename-custom-group .helper-text')).not.toContainText('编号')
+  await expect(page.locator('.rename-pattern-group label')).not.toHaveText(/预览/)
+  await expect(page.locator('#btn-apply-rename')).toBeInViewport()
+})
+
+test('a picture painted after saving no longer shows as saved', async ({ page }) => {
+  await openSaveDialog(page)
+  await page.locator('#btn-confirm-save-options').click()
+  await expect.poll(() => stub.calls.length).toBe(1)
+  const outcome = () => page.evaluate(() => {
+    const state = (window as any).__CENSOR_STATE__
+    const item = state.queue.find((entry: any) => entry.id === state.activeId)
+    return (window as any).getCensorBatchOutcome(item)
+  })
+  await expect.poll(outcome).toBe('saved')
+
+  await page.evaluate(() => {
+    const state = (window as any).__CENSOR_STATE__
+    const item = state.queue.find((entry: any) => entry.id === state.activeId)
+    item.currentDataUrl = 'data:image/png;base64,painted-after-save'
+    item.isModified = true
+  })
+
+  await expect.poll(outcome).toBeNull()
+})

@@ -383,8 +383,19 @@ function hasCensorDetectorFailures(item) {
     return Array.isArray(item?.batchDetectorFailures) && item.batchDetectorFailures.length > 0;
 }
 
+// What a save wrote: the edit list and the edited pixels. Painting after a
+// save changes it, and the queue stops calling the picture "saved".
+function censorItemSaveSignature(item) {
+    const pixels = String(item?.currentDataUrl || '');
+    const operations = Array.isArray(item?.editOperations) ? item.editOperations.length : 0;
+    return `${operations}:${pixels.length}:${pixels.slice(-48)}`;
+}
+
 function getCensorBatchOutcome(item) {
     const status = typeof item?.batchStatus === 'string' ? item.batchStatus : '';
+    if (status === 'saved' && item.savedSignature !== undefined && item.savedSignature !== censorItemSaveSignature(item)) {
+        return null;
+    }
     if (status === 'saved' || status === 'skipped' || status === 'failed' || status === 'refined') {
         return status;
     }

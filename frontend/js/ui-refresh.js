@@ -467,13 +467,7 @@
 
             // #rename-modal-title and the Save-Options heading are icon + label-span
             // pairs translated by applyToDOM; writing the <h3> would drop the icon.
-            this._setText('#rename-modal .modal-description', 'rename.description');
-            this._setText('#rename-modal .checkbox-text', 'rename.useOriginal');
-            this._setText('#rename-modal .helper-text', 'rename.useOriginalHelper');
-            this._setTextAll('#rename-modal .form-group label:not(.checkbox-label)', ['rename.baseName', 'rename.startingNumber', 'rename.preview']);
-            this._setTextAll('#rename-modal .form-group .helper-text', ['rename.useOriginalHelper', 'rename.baseNameHelper', 'rename.startingNumberHelper']);
-            this._setPlaceholder('#rename-base', 'rename.baseName');
-            this._setText('.preview-hint', 'rename.andSoOn');
+            // The rename dialog's texts come from their own data-i18n attributes.
             this._setButton('#btn-cancel-rename', 'rename.cancel');
             this._setButton('#btn-apply-rename', 'rename.apply');
 
