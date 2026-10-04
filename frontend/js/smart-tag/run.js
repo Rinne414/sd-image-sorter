@@ -198,6 +198,7 @@
         } else if (!captionApplyFailed) {
             (window.Logger?.info || console.log)('[smart-tag]', message);
         }
+        showSmartTagDone(snap);
 
         // Surface the new captions in Dataset Maker so they show up in the
         // editor + queue without requiring a re-import (Bug: gallery-source

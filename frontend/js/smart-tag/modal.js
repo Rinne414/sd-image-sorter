@@ -14,6 +14,8 @@
         if (!modal) return;
         // A question left open when the modal was closed (Esc) is void.
         answerExistingChoice('cancel');
+        // The last run's finish notice belongs to that visit only.
+        hideSmartTagDone();
 
         // Refresh image-count summary every time we open.
         const sources = getDatasetSources();

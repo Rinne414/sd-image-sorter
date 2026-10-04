@@ -8885,8 +8885,13 @@
                     <strong id="smart-tag-image-count">0</strong>
                     <span id="smart-tag-image-count-suffix" data-i18n="smartTag.imageCountSuffix">images currently in Dataset Maker.</span>
                 </div>
+            </div>
 
-                <!-- Progress (hidden until job starts) -->
+            <!-- Actions -->
+            <div class="modal-actions smart-tag-actions">
+                <!-- Progress and the finish notice live in the pinned action bar
+                     beside Run, so a 768px-tall window shows them without
+                     scrolling the form. -->
                 <div class="smart-tag-progress" id="smart-tag-progress" hidden>
                     <div class="progress-bar">
                         <div class="progress-bar-fill" id="smart-tag-progress-fill"></div>
@@ -8894,10 +8899,10 @@
                     <p class="smart-tag-progress-text" id="smart-tag-progress-text">Initialising...</p>
                     <p class="smart-tag-progress-preview" id="smart-tag-progress-preview"></p>
                 </div>
-            </div>
-
-            <!-- Actions -->
-            <div class="modal-actions smart-tag-actions">
+                <div class="smart-tag-done" id="smart-tag-done" role="status" aria-live="polite" hidden>
+                    <p class="smart-tag-done-title" id="smart-tag-done-title"></p>
+                    <p class="smart-tag-done-counts" id="smart-tag-done-counts"></p>
+                </div>
                 <!-- Asked before a run when "re-tag" is off and some images already
                      have tags; it lives in the sticky action bar so it is never
                      scrolled out of view or covered by it. -->

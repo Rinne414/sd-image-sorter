@@ -109,3 +109,93 @@ test('an over-budget token count says why and what to do', async ({ page }) => {
   await expect(counter).not.toHaveClass(/dataset-token-counter-over/)
   await expect(note).toBeHidden()
 })
+
+// ---------------------------------------------------------------------------
+// 12. Smart Tag completion notice
+// ---------------------------------------------------------------------------
+
+type RunPhase = { value: 'idle' | 'running' | 'done' }
+
+async function stubSmartTagRun(page: Page, phase: RunPhase): Promise<void> {
+  await markModelsReady(page, ['wd14'], { extraVariants: ['model-a'] })
+  await page.route('**/api/tagger/models', (route) => route.fulfill({
+    json: {
+      default: 'model-a',
+      models: [{
+        name: 'model-a',
+        recommended: true,
+        default_threshold: 0.35,
+        default_character_threshold: 0.85,
+        default_copyright_threshold: 0.35,
+        default_max_tags_per_image: 40,
+        runtime_safety_tier: 'stable',
+      }],
+    },
+  }))
+  await page.route('**/api/smart-tag/tagged-count', (route) =>
+    route.fulfill({ json: { checked: 6, already_tagged: 0 } }))
+  await page.route('**/api/vlm/settings', (route) => route.fulfill({
+    json: { endpoint: '', use_vertex: false, captioner_ready: false, captioner_problem: 'none' },
+  }))
+  await page.route('**/api/vlm/local-models/recommended', (route) =>
+    route.fulfill({ json: { ollama_installed: false, ollama_running: false } }))
+  await page.route('**/api/smart-tag/start', (route) =>
+    route.fulfill({ json: { job_id: 'done-job', status: 'running', active: true, total: 6 } }))
+  await page.route('**/api/smart-tag/progress**', (route) => {
+    if (phase.value === 'idle') return route.fulfill({ json: { status: 'idle' } })
+    if (phase.value === 'running') {
+      return route.fulfill({
+        json: {
+          job_id: 'done-job', status: 'running', active: true, total: 6, processed: 2,
+          succeeded: 2, failed: 0, skipped: 0, stage: 'tagging', phase_completion: 0.33,
+          settings: { enable_wd14: true, enable_vlm: false },
+        },
+      })
+    }
+    return route.fulfill({
+      json: {
+        job_id: 'done-job', status: 'warning', active: false, total: 6, processed: 6,
+        succeeded: 3, failed: 1, skipped: 2, caption_result_count: 0,
+        message_key: 'done_warning', message_args: {},
+        settings: { enable_wd14: true, enable_vlm: false },
+      },
+    })
+  })
+}
+
+test('Smart Tag progress is visible without scrolling and the finish shows its counts', async ({ page }) => {
+  const phase: RunPhase = { value: 'idle' }
+  await stubSmartTagRun(page, phase)
+  await openDatasetMaker(page, [981, 982, 983, 984, 985, 986])
+  await page.evaluate(() => (window as any).SmartTag.open())
+  await expect(page.locator('#smart-tag-modal')).toHaveClass(/visible/)
+  await expect(page.locator('#smart-tag-tagger-1 option')).toHaveCount(1)
+
+  phase.value = 'running'
+  await page.locator('#btn-smart-tag-run').click()
+  const progress = page.locator('#smart-tag-progress')
+  await expect(progress).toBeVisible()
+  await page.evaluate(() => {
+    const content = document.querySelector('#smart-tag-modal .smart-tag-modal-content') as HTMLElement
+    content.scrollTop = 0
+  })
+  const box = await progress.boundingBox()
+  expect(box).not.toBeNull()
+  expect(box!.y).toBeGreaterThanOrEqual(0)
+  expect(box!.y + box!.height).toBeLessThanOrEqual(768)
+
+  phase.value = 'done'
+  const done = page.locator('#smart-tag-done')
+  await expect(done).toBeVisible({ timeout: 10_000 })
+  await expect(done).toContainText('3 tagged')
+  await expect(done).toContainText('2 skipped')
+  await expect(done).toContainText('1 failed')
+  const doneBox = await done.boundingBox()
+  expect(doneBox!.y + doneBox!.height).toBeLessThanOrEqual(768)
+  await expect(page.locator('.toast').filter({ hasText: 'Smart Tag finished' })).toBeVisible()
+
+  // A new run clears the old notice.
+  phase.value = 'running'
+  await page.locator('#btn-smart-tag-run').click()
+  await expect(done).toBeHidden()
+})

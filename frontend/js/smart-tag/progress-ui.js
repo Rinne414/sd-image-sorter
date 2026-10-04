@@ -21,7 +21,42 @@
         if (prev && typeof preview === 'string') prev.textContent = preview;
     }
 
+    // The finish notice sits in the pinned action bar, beside Run, so it is
+    // where the user is looking; the toast alone vanished and the form
+    // looked unchanged.
+    const SMART_TAG_DONE_TITLES = Object.freeze({
+        completed: ['smartTag.doneTitle', 'Smart Tag finished'],
+        warning: ['smartTag.doneTitleWarning', 'Smart Tag finished with warnings'],
+        cancelled: ['smartTag.doneTitleCancelled', 'Smart Tag was stopped'],
+        failed: ['smartTag.doneTitleFailed', 'Smart Tag failed'],
+    });
+
+    function hideSmartTagDone() {
+        const done = smartTag$('#smart-tag-done');
+        if (done) done.hidden = true;
+    }
+
+    function showSmartTagDone(snap) {
+        const done = smartTag$('#smart-tag-done');
+        const title = smartTag$('#smart-tag-done-title');
+        const counts = smartTag$('#smart-tag-done-counts');
+        if (!done || !title || !counts) return;
+        const status = snap.status || 'completed';
+        const failed = snap.failed || 0;
+        const tone = status === 'completed' && failed > 0 ? 'warning' : status;
+        const [titleKey, titleFallback] = SMART_TAG_DONE_TITLES[tone] || SMART_TAG_DONE_TITLES.completed;
+        const values = { tagged: snap.succeeded || 0, skipped: snap.skipped || 0, failed };
+        done.dataset.status = tone;
+        title.textContent = smartTagT(titleKey, titleFallback);
+        counts.textContent = Object.keys(values).reduce(
+            (text, name) => text.split(`{${name}}`).join(String(values[name])),
+            smartTagT('smartTag.doneCounts', '{tagged} tagged · {skipped} skipped · {failed} failed'),
+        );
+        done.hidden = false;
+    }
+
     function showProgress(show) {
+        if (show) hideSmartTagDone();
         const wrap = smartTag$('#smart-tag-progress');
         if (wrap) wrap.hidden = !show;
         const runBtn = smartTag$('#btn-smart-tag-run');

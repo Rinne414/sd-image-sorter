@@ -96,8 +96,7 @@
         "toggle1  natural"
         "toggle2  natural"
         "booru    booru"
-        "note     summary"
-        "progress progress";
+        "note     summary";
     align-items: start;
     gap: 12px 16px;
     margin-top: 12px;
@@ -110,8 +109,40 @@
 #smart-tag-modal #smart-tag-natural-section { grid-area: natural; height: 100%; }
 #smart-tag-modal .smart-tag-safety-note { grid-area: note; }
 #smart-tag-modal .smart-tag-summary { grid-area: summary; align-self: center; }
-#smart-tag-modal .smart-tag-progress { grid-area: progress; }
-#smart-tag-modal .smart-tag-progress[hidden] { display: none; }
+/* Progress and the finish notice take a full row of the pinned action bar,
+   above the buttons, so they never need the form to be scrolled. */
+#smart-tag-modal .smart-tag-progress,
+#smart-tag-modal .smart-tag-done {
+    flex: 1 0 100%;
+    min-width: 0;
+}
+#smart-tag-modal .smart-tag-progress[hidden],
+#smart-tag-modal .smart-tag-done[hidden] { display: none; }
+#smart-tag-modal .smart-tag-progress-text,
+#smart-tag-modal .smart-tag-progress-preview {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+#smart-tag-modal .smart-tag-done {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--accent-color);
+    border-radius: var(--radius-md, 8px);
+    background: var(--surface-1, #141414);
+}
+#smart-tag-modal .smart-tag-done[data-status="warning"],
+#smart-tag-modal .smart-tag-done[data-status="cancelled"] { border-color: var(--warning, #DAAC35); }
+#smart-tag-modal .smart-tag-done[data-status="failed"] { border-color: var(--accent-danger, #E58985); }
+#smart-tag-modal .smart-tag-done-title { margin: 0; font-weight: 600; }
+#smart-tag-modal .smart-tag-done-counts {
+    margin: 0;
+    color: var(--text-secondary, #D6D6D6);
+    font-variant-numeric: tabular-nums;
+}
 
 #smart-tag-modal .smart-tag-existing-check {
     display: flex;
