@@ -9,6 +9,12 @@
 function switchView(viewName) {
     const previousView = AppState.currentView;
 
+    // The "what next?" banner belongs to the moment a step finished; on
+    // another page it only covers that page (walkthrough 2026-10-04).
+    if (previousView !== viewName && typeof hidePipelineNextStep === 'function') {
+        hidePipelineNextStep();
+    }
+
     // Cleanup previous view
     if (previousView === 'gallery' && viewName !== 'gallery') {
         if (window.Gallery && typeof window.Gallery.destroy === 'function') {
