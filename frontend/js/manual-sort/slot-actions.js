@@ -7,6 +7,57 @@
  * finishSorting / exitSorting. Classic script: loads after
  * manual-sort/state-constants.js (base).
  */
+// Setup-page slot folders the user changed since the resume panel appeared.
+// Remembered (prefilled) values are the baseline, so they never count as edits.
+function captureManualSortResumeBaseline() {
+    const baseline = {};
+    document.querySelectorAll('.folder-path-input').forEach(input => {
+        if (input.dataset.key) baseline[input.dataset.key] = input.value.trim();
+    });
+    ManualSortState.resumeInputBaseline = baseline;
+}
+
+function collectManualSortResumeFolderEdits(savedFolders = {}) {
+    const baseline = ManualSortState.resumeInputBaseline;
+    const edits = {};
+    if (!baseline) return edits;
+    document.querySelectorAll('.folder-path-input').forEach(input => {
+        const key = input.dataset.key;
+        if (!key || isManualSortCollectionSlot(key)) return;
+        const value = input.value.trim();
+        if (value && value !== (baseline[key] || '') && value !== savedFolders[key]) edits[key] = value;
+    });
+    return edits;
+}
+
+// Applies edited folders to the live session; resolves to the session to resume
+// (with the merged folders), or null when they could not be applied.
+async function applyManualSortResumeFolderEdits(session) {
+    const { API, showToast } = window.App;
+    const edits = collectManualSortResumeFolderEdits(session.folders || {});
+    if (!Object.keys(edits).length) return session;
+    try {
+        const result = await API.setSortFolders({ ...(session.folders || {}), ...edits });
+        const folders = result?.folders || { ...(session.folders || {}), ...edits };
+        const summary = Object.keys(edits)
+            .map(key => `${key.toUpperCase()} ${getManualSortFolderName(folders[key] || edits[key])}`)
+            .join(' · ');
+        showToast(formatManualSortText(
+            'manual.resumeFoldersApplied',
+            'Using the folders you changed: {summary}',
+            '已改用你修改的文件夹：{summary}',
+            { summary }
+        ), 'info');
+        return { ...session, folders };
+    } catch (error) {
+        Logger.error('Failed to apply edited folders on resume:', error);
+        showToast(formatUserError(error, manualSortText(
+            'manual.resumeFoldersApplyFailed', 'Could not use the folders you changed', '无法改用你修改的文件夹'
+        )), 'error');
+        return null;
+    }
+}
+
 async function resumeSavedSession(prefetchedSession = null, { libraryConfirmed = false } = {}) {
     const { $, API, showToast } = window.App;
     const previousResumeSnapshot = ManualSortState.resumeBannerSessionSnapshot
@@ -19,7 +70,7 @@ async function resumeSavedSession(prefetchedSession = null, { libraryConfirmed =
         : null;
 
     try {
-        const session = prefetchedSession || await API.getCurrentSortImage();
+        let session = prefetchedSession || await API.getCurrentSortImage();
 
         if (!session || session.done || !(session.image || session.champion)) {
             renderManualSortResumeBanner(null, { visible: false });
@@ -29,6 +80,11 @@ async function resumeSavedSession(prefetchedSession = null, { libraryConfirmed =
         if (!libraryConfirmed && !(await confirmForeignLibrarySortSession(session))) {
             renderManualSortResumeBanner(session, { visible: true });
             return;
+        }
+        // Folder-free modes (A/B, keep/reject) have no slot folders to apply.
+        if ((session.mode || 'slot') === 'slot') {
+            session = await applyManualSortResumeFolderEdits(session);
+            if (!session) return;
         }
 
         ManualSortState.folders = session.folders || {};

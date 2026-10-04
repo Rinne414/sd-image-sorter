@@ -339,6 +339,11 @@ async function startSorting() {
     }
 }
 
+function getManualSortFolderName(path) {
+    const parts = String(path || '').split(/[/\\]/).filter(Boolean);
+    return parts[parts.length - 1] || String(path || '');
+}
+
 function updateFolderNames() {
     const { $ } = window.App;
 
@@ -360,14 +365,11 @@ function updateFolderNames() {
             return;
         }
 
-        nameEl.title = '';
         const path = ManualSortState.folders[key];
-        if (path) {
-            const parts = path.split(/[/\\]/);
-            nameEl.textContent = parts[parts.length - 1] || path;
-        } else {
-            nameEl.textContent = DEFAULT_FOLDER_LABELS[key] || key.toUpperCase();
-        }
+        nameEl.title = path || '';
+        nameEl.textContent = path
+            ? getManualSortFolderName(path)
+            : (DEFAULT_FOLDER_LABELS[key] || key.toUpperCase());
     });
 }
 

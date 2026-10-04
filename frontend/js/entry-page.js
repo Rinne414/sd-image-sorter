@@ -849,9 +849,18 @@
                 enterMission('organize');
                 navigate('sorting');
             },
+            // Continue means continue: land on Manual Sort and resume the saved
+            // session (same path as its 恢复 button, foreign-library confirm
+            // included) instead of stopping at the setup page.
             'entry-anchor-continue': () => {
                 enterMission('organize');
                 navigate('sorting');
+                if (typeof window._switchSortingSub === 'function') {
+                    window._switchSortingSub('manual');
+                }
+                if (typeof window.resumeSavedSession === 'function') {
+                    window.resumeSavedSession();
+                }
             },
             // comfort.js restores the exact offset once the gallery loads; this
             // just gets the user there without a detour.

@@ -5994,9 +5994,10 @@ test.describe('Smoke Tests', () => {
     await expect(banner).toBeVisible()
     await expect(banner).toContainText('12 images remaining')
     await expect(banner).toContainText('Saved session action mode: Copy and keep originals')
-    await expect(banner).toContainText('A: C:/sorted/keep')
-    await expect(banner).toContainText('D: C:/sorted/best')
-    await expect(banner).toContainText('The settings here may differ from the saved session.')
+    await expect(banner).toContainText('A keep')
+    await expect(banner).toContainText('D best')
+    await expect(banner.locator('[title="C:/sorted/keep"]')).toHaveCount(1)
+    await expect(banner).toContainText('Folders you change below are used when you resume.')
 
     const layout = await page.evaluate(() => {
       const actions = document.getElementById('sort-setup-actions')
@@ -6032,7 +6033,7 @@ test.describe('Smoke Tests', () => {
           actionRect.right <= window.innerWidth
         ),
         countContained: isContained(countRect, actionRect),
-        resumeContained: isContained(resumeRect, actionRect),
+        resumeAboveActions: resumeRect.bottom <= actionRect.top + 1,
         resumeFullyVisible: (
           resumeRect.top >= 0 &&
           resumeRect.left >= 0 &&
@@ -6047,7 +6048,7 @@ test.describe('Smoke Tests', () => {
     expect(layout).toEqual({
       actionFullyVisible: true,
       countContained: true,
-      resumeContained: true,
+      resumeAboveActions: true,
       resumeFullyVisible: true,
       hasHorizontalOverflow: false,
       overlapsColumns: false,

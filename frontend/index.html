@@ -1913,6 +1913,22 @@
                         <h2 class="setup-title" data-i18n="manual.title">Manual Sort Mode</h2>
                         <p class="setup-description" data-i18n="manual.description">Configure your folder destinations and start sorting!</p>
 
+                            <!-- Resume banner shown when a saved session is detected -->
+                            <div id="sort-resume-banner" style="display:none; flex-direction:column; align-items:flex-start; gap:8px; margin:12px auto 4px; padding:12px 16px; background:var(--bg-secondary,#2a2a2a); border:1px solid var(--accent,#7c6af7); border-radius:8px;">
+                                <div>
+                                    <span data-i18n="manual.resumeBannerTitle">Unfinished session detected:</span>
+                                    <strong class="resume-count"></strong>
+                                </div>
+                                <div class="helper-text resume-library" style="display:none; color:var(--warning,#f0b429);"></div>
+                                <div class="helper-text resume-operation"></div>
+                                <div class="helper-text resume-folders"></div>
+                                <div class="helper-text resume-note" data-i18n="manual.resumeBannerNote">Folders you change below are used when you resume. Folders you leave alone stay as saved.</div>
+                                <div style="display:flex; gap:12px;">
+                                <button class="btn btn-primary" id="btn-resume-sorting" data-i18n="manual.resume">Resume</button>
+                                <button class="btn btn-secondary" id="btn-discard-session" data-i18n="manual.discard">Discard</button>
+                                </div>
+                            </div>
+
                         <!-- v3.3.2 WB-S3: Sort & Cull Workbench mode switcher -->
                         <div class="sort-mode-switch" id="sort-mode-switch" role="tablist" aria-label="Sort mode">
                             <span class="sort-mode-label" data-i18n="manual.modeLabel">Mode</span>
@@ -1958,22 +1974,6 @@
                             <button class="btn btn-primary btn-large btn-glow" id="btn-start-sorting">
                                 <svg class="icon" aria-hidden="true"><use href="#i-dice"/></svg> <span id="sort-start-label" data-i18n="manual.startSorting">Start Sorting</span>
                             </button>
-
-                            <!-- Resume banner shown when a saved session is detected -->
-                            <div id="sort-resume-banner" style="display:none; flex-direction:column; align-items:flex-start; gap:8px; margin-top:12px; padding:12px 16px; background:var(--bg-secondary,#2a2a2a); border:1px solid var(--accent,#7c6af7); border-radius:8px;">
-                                <div>
-                                    <span data-i18n="manual.resumeBannerTitle">Unfinished session detected:</span>
-                                    <strong class="resume-count"></strong>
-                                </div>
-                                <div class="helper-text resume-library" style="display:none; color:var(--warning,#f0b429);"></div>
-                                <div class="helper-text resume-operation"></div>
-                                <div class="helper-text resume-folders"></div>
-                                <div class="helper-text resume-note" data-i18n="manual.resumeBannerNote">The settings here may differ from the saved session.</div>
-                                <div style="display:flex; gap:12px;">
-                                <button class="btn btn-primary" id="btn-resume-sorting" data-i18n="manual.resume">Resume</button>
-                                <button class="btn btn-secondary" id="btn-discard-session" data-i18n="manual.discard">Discard</button>
-                                </div>
-                            </div>
                         </div>
 
                         <!-- v3.5.0 rule-6: setup was a 1900px+ single column. At

@@ -3098,10 +3098,28 @@ html:has(#view-gallery.active) {
     margin: 0 auto;
 }
 
-.sort-setup-actions #sort-resume-banner {
+#sort-setup #sort-resume-banner {
     width: min(760px, 100%);
     margin-inline: auto;
     text-align: left;
+}
+
+/* Saved folders as chips: name up front, full path in the tooltip. */
+#sort-resume-banner .resume-folders {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+}
+#sort-resume-banner .resume-folder-chip {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--bg-tertiary, rgba(255, 255, 255, 0.08));
+    color: var(--text-primary);
+    cursor: default;
+}
+#sort-resume-banner .resume-folder-chip strong {
+    color: var(--accent-primary);
 }
 
 @media (min-width: 1280px) {

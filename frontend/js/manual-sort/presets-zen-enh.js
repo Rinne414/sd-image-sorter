@@ -332,14 +332,29 @@ function maybeAdoptManualSortFiltersFromGallery() {
     return true;
 }
 
-function summarizeManualSortFolders(folders = {}) {
+// Saved folders as compact chips: the folder name up front, the full path in
+// the tooltip (a wall of raw paths buried the resume buttons).
+function renderManualSortFolderChips(container, folders = {}) {
+    container.textContent = '';
     const entries = Object.entries(folders || {}).filter(([, value]) => typeof value === 'string' && value.trim());
     if (entries.length === 0) {
-        return manualSortText('manual.resumeFoldersEmpty', 'No destination folders saved yet', '还没有保存目标文件夹');
+        container.textContent = manualSortText('manual.resumeFoldersEmpty', 'No destination folders saved yet', '还没有保存目标文件夹');
+        return;
     }
-    return entries
-        .map(([key, value]) => `${String(key).toUpperCase()}: ${value}`)
-        .join(' · ');
+    const label = document.createElement('span');
+    label.className = 'resume-folders-label';
+    label.textContent = manualSortText('manual.resumeFoldersLabel', 'Saved folders:', '已保存的文件夹：');
+    container.appendChild(label);
+    entries.forEach(([key, value]) => {
+        const chip = document.createElement('span');
+        chip.className = 'resume-folder-chip';
+        chip.title = value;
+        const keyEl = document.createElement('strong');
+        keyEl.textContent = String(key).toUpperCase();
+        chip.appendChild(keyEl);
+        chip.appendChild(document.createTextNode(` ${getManualSortFolderName(value)}`));
+        container.appendChild(chip);
+    });
 }
 
 // The one saved sort session is shared by every library. Returns null when
@@ -462,6 +477,9 @@ function renderManualSortResumeBanner(session, { visible = true } = {}) {
         return;
     }
 
+    // The moment the panel appears, remember what the setup fields hold: only
+    // fields changed after this count as edits to apply on resume.
+    if (banner.style.display === 'none') captureManualSortResumeBaseline();
     banner.style.display = 'flex';
     const mode = MANUAL_SORT_MODES.has(session?.mode) ? session.mode : 'slot';
     const remaining = Number(session?.remaining || 0);
@@ -509,11 +527,7 @@ function renderManualSortResumeBanner(session, { visible = true } = {}) {
     if (foldersEl) {
         foldersEl.style.display = slotOnly ? '' : 'none';
         if (slotOnly) {
-            foldersEl.textContent = formatManualSortI18n(
-                'manual.resumeFolderSummary',
-                'Saved session folders: {summary}',
-                { summary: summarizeManualSortFolders(session?.folders || {}) }
-            );
+            renderManualSortFolderChips(foldersEl, session?.folders || {});
         }
     }
 }

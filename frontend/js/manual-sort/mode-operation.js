@@ -120,6 +120,11 @@ function setManualSortOperationMode(mode, { persist = true, updateUi = true } = 
         });
         const helper = document.getElementById('manual-sort-operation-help');
         if (helper) {
+            // ui-refresh re-applies [data-i18n] text on every DOM change, so the
+            // key has to move with the words or it restores the copy sentence.
+            helper.dataset.i18n = ManualSortState.operationMode === 'copy'
+                ? 'manual.actionModeCopyHelp'
+                : 'manual.actionModeMoveHelp';
             helper.textContent = ManualSortState.operationMode === 'copy'
                 ? manualSortText(
                     'manual.actionModeCopyHelp',
