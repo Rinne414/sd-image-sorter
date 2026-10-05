@@ -46,7 +46,7 @@
 
 ## Validation / 验证
 
-Windows: backend 8,532 passed, 13 skipped; desktop E2E 1,321 tests: 1,317 passed, 0 failed, 4 skipped. GitHub CI (Linux, macOS, Windows, both Linux portable builds) green: Linux backend 8,385 passed, 69 skipped (91% line coverage); Linux E2E 1,299 tests: 1,287 passed, 0 failed, 10 skipped, 2 flaky, both traced to test timing and fixed; click coverage gate passed. / Windows：后端 8,532 个通过、13 个跳过；桌面 E2E 1,321 项：1,317 通过、0 失败、4 跳过。GitHub CI（Linux、macOS、Windows、两种 Linux 便携版）全部通过：Linux 后端 8,385 个通过、69 个跳过（行覆盖率 91%）；Linux E2E 1,299 项：1,287 通过、0 失败、10 跳过、2 项不稳定，均查明是测试时序问题并已修正；点击覆盖率检查通过。
+Windows: backend 8,532 passed, 13 skipped; desktop E2E 1,321 tests: 1,317 passed, 0 failed, 4 skipped. GitHub CI (Linux, macOS, Windows, both Linux portable builds) green: Linux backend 8,385 passed, 69 skipped (91% line coverage); Linux E2E 1,299 tests: 1,289 passed, 0 failed, 10 skipped, 0 flaky; click coverage gate passed. Release package QA passed (asset set and SHA-256 against the manifest); the Windows portable package was extracted and booted (version 3.6.1, built-in output folder in place). / Windows：后端 8,532 个通过、13 个跳过；桌面 E2E 1,321 项：1,317 通过、0 失败、4 跳过。GitHub CI（Linux、macOS、Windows、两种 Linux 便携版）全部通过：Linux 后端 8,385 个通过、69 个跳过（行覆盖率 91%）；Linux E2E 1,299 项：1,289 通过、0 失败、10 跳过、0 项不稳定；点击覆盖率检查通过。发布包检查通过（文件齐全，SHA-256 与 manifest 一致）；Windows 便携版解压后实际启动（版本 3.6.1，自带 output 文件夹就位）。
 
 ---
 
@@ -68,4 +68,13 @@ Windows: backend 8,532 passed, 13 skipped; desktop E2E 1,321 tests: 1,317 passed
 
 ## Checksums
 
-CHECKSUMS_PLACEHOLDER
+| Asset | SHA-256 |
+|---|---|
+| `sd-image-sorter-v3.6.1-windows-portable.zip` | `489aae6c2b4416a9d272b78cb82da1d69c13e018007e4e206e3dffd7fb4e0cee` |
+| `sd-image-sorter-v3.6.1-app-patch.zip` | `6fc44ffc8a8b08f01f7e725cef684b75e9ca686381d1493164530101abd14d99` |
+| `sd-image-sorter-v3.6.1-linux.tar.gz` | `6012fdfe48f13bff8adc36313da6b5e547fb0718d76e4a56e382d5d9ac5cddec` |
+| `sd-image-sorter-v3.6.1-linux-portable-x86_64.tar.gz` | `64fccdd4be39cb32d08875c4a3d919b9c6c5d249cd3493131fcb23372dee6905` |
+| `sd-image-sorter-v3.6.1-linux-portable-aarch64.tar.gz` | `1310d0f68c2b6d08c90cad3919b8da49388dd2e584a7fe56219fb21c164b2261` |
+| `sd-image-sorter-v3.6.1-release-manifest.json` | `39dc076b02a2b4f9843581662c2614d5f671563ec561b958ca9ae8f040bfc6fb` |
+
+The manifest contains the five archive checksums; its own checksum is recorded above. / manifest 内含五个归档校验和，其自身校验和记录于上表。
