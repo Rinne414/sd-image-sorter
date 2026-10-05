@@ -63,6 +63,12 @@
 - **更快**：图库翻页从 0.36 秒降到 0.045 秒；批量打标 1000 张从 170 秒降到 106 秒（实测）。
 - **中英文完整**：中文界面里的按钮提示也都是中文。
 
+### v3.6.1
+
+- **保存不用先设置**：打码、Pixiv 成套发布、视频打码在保存文件夹留空时存到程序里的 `output` 文件夹；同一张图再存一个版本会自动加编号（`name_2`），不用手动改名。
+- **手动排序跳过已分类的图**：自动分类或手动排序处理过的图不再重复出现，一键可重新包含；撤销会说明撤销了什么。
+- **LoRA 数据集**：默认导出每个标签只写一次、触发词照你输入的写，并采用 kohya 的 `<repeats>_<名称>` 文件夹；打码的调色预览重新显示在图上。
+
 ### v3.6.0（vFable）
 
 - **ComfyUI 提示词读对了**：Impact Pack 管线、TIPO / WD14 屏蔽词、高清修复第二遍，不再把反向混进正向或存两遍；设置 → 数据集体检 里新增「重读 ComfyUI 提示词」，一键修好以前扫进来的图。
@@ -625,6 +631,12 @@ Eagle and Billfish are general asset managers and are not in this SD-workflow ta
 - **No hard stops**: caps and export gates became warnings with a choice.
 - **Faster**: gallery page 0.36 s to 0.045 s; Mass Tag on 1,000 images 170 s to 106 s (measured).
 - **Complete Chinese and English UI**, tooltips included.
+
+### v3.6.1
+
+- **Saving without setup**: Censor, Pixiv set publishing and video censoring save into the program's `output` folder when the folder field is empty; another version of a picture is numbered (`name_2`) instead of needing a rename.
+- **Manual Sort skips sorted pictures**: pictures Auto-Separate or Manual Sort already handled stay out of new sessions, with one click to include them; undo says what it undid.
+- **LoRA datasets**: the default export writes each tag once with the trigger as typed, into kohya's `<repeats>_<name>` folder; the Censor Adjust preview shows on the picture again.
 
 ### v3.6.0 (vFable)
 

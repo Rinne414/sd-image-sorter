@@ -5,6 +5,61 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.1] - 2026-10-05
+
+Saving no longer needs setup: an empty folder field saves into the program's own output folder, and a second version of a picture is numbered instead of stopping the save. Manual Sort leaves out pictures that were already sorted, the default LoRA export writes each tag once with the trigger as typed and uses kohya's folder layout, and the Censor Adjust tab shows its preview on the picture again. Many small workflow fixes came from walking through the three home-page missions.
+
+保存不用先设置：保存文件夹留空时存到程序自带的 output 文件夹，同一张图再存一个版本会自动加编号而不是卡住。手动排序会排除已分类的图，LoRA 默认导出每个标签只写一次、触发词照你输入的写，并采用 kohya 文件夹结构；打码的调色预览重新显示在图上。另外把首页三个任务从头走了一遍，修正了许多流程细节。
+
+### Added / 新增
+
+- **Program output folder / 程序自带的 output 文件夹**: the Censor editor, Pixiv set publishing and video / GIF censoring save into `output/censor`, `output/publish` and `output/video-censor` when the folder field is empty. Settings → General → Where saves go moves the root for every flow (an absolute folder; files, symlinks and junctions are refused), and the toast after a save opens the folder. `GET/PATCH /api/output-folders`, `POST /api/output-folders/reveal`.
+  - 打码编辑器、Pixiv 成套发布和视频 / GIF 打码在保存文件夹留空时，存到 `output/censor`、`output/publish` 和 `output/video-censor`。设置 → 常规 → 保存位置 可一次改掉所有流程的根目录（必须是绝对路径的文件夹；文件、符号链接和联接点会被拒绝），保存后的提示可直接打开文件夹。
+- **Same-name handling for saves / 保存时的同名处理**: "When a file with the same name exists" offers Number it (default, `name_2`, `name_3` …), Replace the old file, or Skip it. Numbering claims the name atomically, so two saves never take the same file.
+  - 「遇到同名文件时」可选自动加编号（默认，`name_2`、`name_3`…）、覆盖旧文件或跳过。编号以原子方式占用文件名，两次保存不会写到同一个文件。
+- **Manual Sort leaves out already sorted pictures / 手动排序排除已分类的图**: pictures that Auto-Separate or Manual Sort copied or moved are remembered (migration 051, `sorted_images`) and left out of new sessions; a note shows how many, with Include them / Leave them out. Undo removes or restores the mark and the toast names the action it undid. `POST /api/sort/scope-count`; `exclude_sorted` on session start.
+  - 自动分类或手动排序复制或移动过的图会被记住（迁移 051，`sorted_images`），新会话不再列入；提示会显示数量，可「重新包含」或「排除它们」。撤销会删除或还原标记，提示会写明撤销了哪个动作。
+- **kohya folder layout by default / 默认 kohya 文件夹结构**: dataset export writes into `<folder>/<repeats>_<name>/` (the trigger word, else `dataset`), recorded in the export manifest; uncheck "kohya folder structure" for the flat layout. The output status lists up to 10 other kohya folders with a manifest next to it and warns that they would train twice.
+  - 数据集导出写进 `<文件夹>/<repeats>_<名称>/`（名称为触发词，否则为 `dataset`），并记录在导出清单里；取消勾选「kohya 文件夹结构」可恢复直接写入。输出状态会列出旁边最多 10 个带清单的其他 kohya 文件夹，并提醒它们会被训练两次。
+- **Mission-led Gallery batch bar / 跟随任务的图库批量栏**: inside a mission the batch bar puts that mission's next step first.
+  - 在任务里，批量操作栏把该任务的下一步放在最前面。
+- **Smart Tag finish notice / 智能打标完成提示**: a notice with the counts appears beside Run when a Smart Tag run ends.
+  - 智能打标结束时，「运行」旁会显示带数量的完成提示。
+
+### Changed / 变更
+
+- **Video censor output / 视频打码输出**: the default folder moved from a `censored` folder next to the source pictures to `output/video-censor`; the last source and output folders are remembered.
+  - 默认输出从原图旁边的 `censored` 文件夹改为 `output/video-censor`；会记住上次的来源和输出文件夹。
+- **One numbering style / 统一编号格式**: moves, dataset naming, uploads, library imports, chat disguise and media censoring number a clash as `name_2`, `name_3` … (`utils/unique_names.py`); moves used to start at `_1`.
+  - 移动、数据集命名、上传、图库导入、聊天伪装和媒体打码遇到同名时都编号为 `name_2`、`name_3`…；移动以前从 `_1` 开始。
+- **Pixiv publish defaults / Pixiv 发布默认值**: pictures without censoring are left out by default; the watermark starts off each time the dialog opens; the result says what was left out and which name fields apply.
+  - 没有打码的图默认不导出；每次打开对话框水印都默认关闭；结果会说明排除了哪些、哪些命名字段有效。
+- **Confirm buttons and mission steps / 确认按钮与任务步骤**: the red confirm button is kept for moves, not downloads or copies; a mission's steps show the first time only.
+  - 红色确认按钮只留给移动，下载和复制不再用红色；任务步骤只在第一次显示。
+- **zh-CN naming / 中文命名**: AI tagging is called AI 打标 everywhere, Smart Tag is 智能打标, local taggers are 本地打标器.
+  - AI 打标、智能打标、本地打标器在整个中文界面统一使用。
+
+### Fixed / 修复
+
+- **Censor Adjust preview / 打码调色预览**: a CSS rule pinned the canvas filter to none, so the Adjust sliders changed nothing on screen. The preview shows again, a one-line badge says while it is only a preview, and the save dialog offers to apply it to the current picture first.
+  - 一条 CSS 规则把画布滤镜固定为无，调色滑杆在画面上没有效果。预览重新显示，单行标记说明目前只是预览，保存对话框会提示先套用到当前图片。
+- **Censor editor details / 打码编辑器细节**: rename dialog hints and a reachable Apply button; the "saved" badge follows the picture's actual saved state; the three Reset buttons are named for what they reset; the review counter follows queue reorders; the Open folder toast stays until dismissed; metadata and format choices are no longer reset on every load.
+  - 改名对话框有提示、「套用」按钮够得到；「已保存」标记跟随图片实际的保存状态；三个重置按钮写明各自重置什么；复核计数跟着队列重排；「打开文件夹」提示会一直显示到关闭；元数据和格式选项不再每次载入都被重置。
+- **Default LoRA export captions / LoRA 默认导出的 caption**: every tag was written twice and the trigger was split (`mylora_walk` and `mylora walk`); each tag is now written once and the trigger exactly as typed. Gallery training captions (caption_tags / caption_merged) stop repeating Smart Tag's tags, and an AI caption that is only the image's own tags is no longer reused as its sentence.
+  - 每个标签被写两遍、触发词被拆开（`mylora_walk` 和 `mylora walk`）；现在每个标签只写一次，触发词照你输入的写。图库的训练 caption（caption_tags / caption_merged）不再重复智能打标的标签，只由图片自身标签组成的 AI caption 不再被当成句子重用。
+- **Manual Sort resume / 手动排序续做**: resume uses the folders you edited, Continue on the home page resumes the session, the resume panel sits on top, slot fields show the folder name of long paths, Auto-Separate says what it did, and the already-sorted note no longer blinks while counting.
+  - 续做会用你改过的文件夹，首页「继续」会接着上次的会话，续做面板在最上层，长路径的槽位显示文件夹名称，自动分类会说明做了什么，已分类提示在计数时不再闪烁。
+- **What-next banner / 「下一步」提示条**: it closes when you leave the page, start a manual sort or start selecting images, instead of covering the canvas, the slots or the action bar.
+  - 离开页面、开始手动排序或开始选图时会自动关闭，不再盖住画布、槽位或操作栏。
+- **Runtime labels / 运行时文字**: the i18n re-apply no longer resets labels set while you work (Select Images / Done Selecting, the loading message, the model picker and filter modal titles, export progress, tagger hints, rename dialog).
+  - 界面语言重新套用时，不再把操作中设定的文字（选择图片 / 完成选择、加载信息、模型选择与筛选对话框标题、导出进度、打标器提示、改名对话框）重置回去。
+- **zh-CN UI / 中文界面**: rating names, tag-mode labels, path errors and every static aria-label are translated.
+  - 分级名称、标签模式文字、路径错误和所有固定的按钮提示（aria-label）都已翻译。
+- **Gallery and dataset / 图库与数据集**: imported folders unfold in the sidebar tree; filter group counts show 0 after Clear; a calmer import progress line without "0 left"; readable small text over the home page cover; the dataset export header count follows a reject undone with Z; a red token count says why and what to do; the Dataset workbench fits 1366×768.
+  - 导入的文件夹在侧栏树中展开；筛选分组按「清除」后显示 0；导入进度不再显示「剩 0」；首页封面上的小字看得清楚；用 Z 撤销剔除后导出标题的数量会更新；token 数变红时说明原因和怎么做；数据集工作台在 1366×768 下排版正常。
+- **Linux and macOS / Linux 与 macOS**: UNC paths stay recognised as network paths on POSIX hosts; records whose path this OS cannot place are never offered for clearing; export blames case-only twins on the right stems; the support log redacts macOS `/private` paths; the shortcut list stays inside the stage.
+  - POSIX 系统上 UNC 路径仍被识别为网络路径；本系统无法定位路径的记录不会被列为可清除；导出能正确指出只差大小写的同名文件；支持日志会隐藏 macOS 的 `/private` 路径；快捷键列表不再超出画面。
+
 ## [3.6.0] - 2026-10-02
 
 A 3D Style Map tab shows your whole library as a cloud of dots grouped by drawing style, in three switchable spaces including the optional CSD style model: colour the dots, find any Gallery picture on it, drop a picture to find its nearest, see what the two ends of each axis look like or lay out your own axis from example pictures, box-select dots and send them to a collection, Censor, Dataset Maker or the Gallery. Models you already have in ComfyUI or the Hugging Face cache are used in place instead of downloaded again. ComfyUI prompts are read right, /api refuses requests from other websites, and the portable launcher no longer reinstalls packages at every start on GPU installs. Rescan your library folders once after upgrading so the metadata fixes reach old pictures.
