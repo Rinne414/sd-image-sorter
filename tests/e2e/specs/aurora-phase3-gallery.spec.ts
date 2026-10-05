@@ -373,7 +373,11 @@ test.describe('Aurora Phase 3 — repair review (Roadmap-C)', () => {
     await page.locator('#btn-reconnect-missing').click()
     await expect(page.locator('#reconnect-modal.visible')).toBeVisible()
     await page.locator('#reconnect-folder-path').fill(repairFoundDir)
+    // Poll only once this run has started: the progress endpoint still reports
+    // an earlier run's "done" until then.
+    const started = page.waitForResponse((response: any) => response.url().endsWith('/api/images/reconnect-missing/start'))
     await page.locator('#btn-start-reconnect').click()
+    expect((await started).ok()).toBe(true)
 
     let progress: any = null
     await expect.poll(async () => {

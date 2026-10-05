@@ -118,6 +118,9 @@ test('a large rotated JPEG in proxy mode is censored where the box was when save
   await page.locator('#btn-auto-detect-current').click()
   await expect.poll(() => detectCalls.length).toBe(1)
   expect(detectCalls[0].upright).toBe(false)
+  // The stub records the call before it answers; the regions are baked only
+  // when the run ends. Saving earlier saved the frame without them.
+  await expect.poll(() => page.evaluate(() => (window as any).__CENSOR_STATE__?.detectionBusy)).toBe(false)
 
   const output = path.join(seeded.outputDir, 'proxy_rotated_out.png')
   fs.rmSync(output, { force: true })

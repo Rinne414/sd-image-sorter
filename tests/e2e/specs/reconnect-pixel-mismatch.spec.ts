@@ -129,7 +129,11 @@ test('the result says how many records were not relinked because the pixels diff
   await openMainPage(page, 'en')
   await openReconnectModal(page)
   await page.locator('#reconnect-folder-path').fill(seeded.folder)
+  // Poll only once this run has started: until then the progress endpoint
+  // still reports the previous run's "done" (a spec earlier in the shard).
+  const started = page.waitForResponse((response: any) => response.url().endsWith('/api/images/reconnect-missing/start'))
   await page.locator('#btn-start-reconnect').click()
+  expect((await started).ok()).toBe(true)
 
   let progress: any = null
   await expect.poll(async () => {
@@ -183,7 +187,9 @@ test('the summary reads in Chinese', async ({ page, request }, testInfo) => {
   await openMainPage(page, 'zh-CN')
   await openReconnectModal(page)
   await page.locator('#reconnect-folder-path').fill(seeded.folder)
+  const started = page.waitForResponse((response: any) => response.url().endsWith('/api/images/reconnect-missing/start'))
   await page.locator('#btn-start-reconnect').click()
+  expect((await started).ok()).toBe(true)
   await expect.poll(async () => {
     const progress = await (await request.get('/api/images/reconnect-missing/progress')).json()
     return String(progress.status || '')
