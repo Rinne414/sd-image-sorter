@@ -124,6 +124,7 @@ from services.dataset_session.manifest_store import (
     iter_scan_manifest_entries,
     iter_scan_manifest_paths,
     purge_expired_scan_manifests,
+    purge_legacy_scan_manifests,
 )
 from services.dataset_session.allowlist import (
     _SESSION_PATH_CACHE_MAX,
@@ -157,10 +158,16 @@ _SCAN_DIR: Optional[Path] = None
 
 
 def _get_scan_dir() -> Path:
-    """Return the temp manifest directory used for large folder scans."""
+    """Return the temp manifest directory used for large folder scans.
+
+    Lives under the configured temp root (``TEMP_DIR``, derived from
+    ``SD_IMAGE_SORTER_DATA_DIR``) because the manifests are TTL-purged scratch.
+    """
     global _SCAN_DIR
     if _SCAN_DIR is None or not _SCAN_DIR.exists():
-        data_dir = Path(__file__).resolve().parent.parent / "data" / "dataset-scans"
+        import config
+
+        data_dir = Path(config.TEMP_DIR) / "dataset-scans"
         data_dir.mkdir(parents=True, exist_ok=True)
         _SCAN_DIR = data_dir
     return _SCAN_DIR

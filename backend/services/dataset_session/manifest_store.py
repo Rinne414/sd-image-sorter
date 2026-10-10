@@ -43,7 +43,7 @@ def _svc():
 
 _SCAN_TOKEN_RE = re.compile(r"^[a-f0-9]{32}$")
 
-# Scan-token manifests under data/dataset-scans/ used to accumulate
+# Scan-token manifests under <TEMP_DIR>/dataset-scans/ used to accumulate
 # forever — every folder-scan wrote a new NDJSON file and nothing ever
 # removed it. This TTL cap (in seconds) is enforced by
 # ``purge_expired_scan_manifests`` which runs on app startup and after
@@ -59,21 +59,16 @@ def _scan_manifest_path(scan_token: str) -> Path:
     return _svc()._get_scan_dir() / f"{token}.json"
 
 
-def purge_expired_scan_manifests(*, max_age_seconds: int = SCAN_TOKEN_TTL_SECONDS) -> int:
-    """Delete scan-token manifests older than ``max_age_seconds``.
+def _legacy_scan_dir() -> Path:
+    """Pre-fix manifest dir (``backend/data/dataset-scans``), only ever swept."""
+    import config
 
-    Returns the number of token files removed. Safe to call repeatedly:
-    only files matching ``<32-hex>.json`` / ``<32-hex>.paths.jsonl`` /
-    ``<32-hex>.tmp`` under the scan dir are considered, so unrelated
-    files in ``data/dataset-scans/`` are left alone.
+    return Path(config.BACKEND_DIR) / "data" / "dataset-scans"
 
-    This closes the unbounded-growth hole where every folder-scan wrote
-    a new NDJSON manifest and nothing ever removed them — long-running
-    installs accumulated thousands of stale manifest files.
-    """
+
+def _purge_manifest_dir(scan_dir: Path, max_age_seconds: int) -> int:
     import time as _time
 
-    scan_dir = _svc()._get_scan_dir()
     cutoff = _time.time() - int(max_age_seconds)
     removed = 0
     token_pattern = re.compile(r"^([a-f0-9]{32})(?:\.paths\.jsonl|\.json|\.tmp)$")
@@ -81,8 +76,7 @@ def purge_expired_scan_manifests(*, max_age_seconds: int = SCAN_TOKEN_TTL_SECOND
         for entry in os.scandir(scan_dir):
             if not entry.is_file():
                 continue
-            match = token_pattern.fullmatch(entry.name)
-            if not match:
+            if not token_pattern.fullmatch(entry.name):
                 continue
             try:
                 mtime = entry.stat().st_mtime
@@ -99,6 +93,32 @@ def purge_expired_scan_manifests(*, max_age_seconds: int = SCAN_TOKEN_TTL_SECOND
     except OSError:
         return removed
     return removed
+
+
+def purge_expired_scan_manifests(*, max_age_seconds: int = SCAN_TOKEN_TTL_SECONDS) -> int:
+    """Delete scan-token manifests older than ``max_age_seconds``.
+
+    Returns the number of token files removed. Safe to call repeatedly:
+    only files matching ``<32-hex>.json`` / ``<32-hex>.paths.jsonl`` /
+    ``<32-hex>.tmp`` under the scan dir are considered, so unrelated
+    files in the scan dir are left alone.
+
+    This closes the unbounded-growth hole where every folder-scan wrote
+    a new NDJSON manifest and nothing ever removed them — long-running
+    installs accumulated thousands of stale manifest files.
+    """
+    return _purge_manifest_dir(_svc()._get_scan_dir(), max_age_seconds)
+
+
+def purge_legacy_scan_manifests(*, max_age_seconds: int = SCAN_TOKEN_TTL_SECONDS) -> int:
+    """Sweep expired manifests left in the pre-fix ``backend/data/dataset-scans``.
+
+    Never creates the folder and ignores it when it is the active scan dir.
+    """
+    legacy = _legacy_scan_dir()
+    if not legacy.is_dir() or legacy.resolve() == _svc()._get_scan_dir().resolve():
+        return 0
+    return _purge_manifest_dir(legacy, max_age_seconds)
 
 
 def _scan_manifest_paths_path(scan_token: str) -> Path:

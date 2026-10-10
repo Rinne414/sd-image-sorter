@@ -2895,7 +2895,7 @@ Body:
 }
 ```
 
-Returns `{folder_path, items[], total_files_seen, skipped_unreadable, truncated, scan_token, offset, next_offset, has_more, page_size}`. Each item carries `{ds_id, abs_path, filename, width, height, mtime, size, thumb_b64, scan_index, source_kind, sidecar_capability}` where `thumb_b64` is a JPEG-encoded base64 string for direct rendering and `ds_id` is a stable session id derived from `sha1(abs_path)`. `scan_token` / `next_offset` / `has_more` / `page_size` form the paging contract: for folders larger than one page, the frontend re-POSTs with `scan_token` + `offset` to fetch subsequent pages without rescanning. Scan-token manifests persist under `data/dataset-scans/` and are garbage-collected after 7 days of inactivity on app startup.
+Returns `{folder_path, items[], total_files_seen, skipped_unreadable, truncated, scan_token, offset, next_offset, has_more, page_size}`. Each item carries `{ds_id, abs_path, filename, width, height, mtime, size, thumb_b64, scan_index, source_kind, sidecar_capability}` where `thumb_b64` is a JPEG-encoded base64 string for direct rendering and `ds_id` is a stable session id derived from `sha1(abs_path)`. `scan_token` / `next_offset` / `has_more` / `page_size` form the paging contract: for folders larger than one page, the frontend re-POSTs with `scan_token` + `offset` to fetch subsequent pages without rescanning. Scan-token manifests persist under `<TEMP_DIR>/dataset-scans/` (default `data/tmp/dataset-scans/`) and are garbage-collected after 7 days of inactivity on app startup.
 
 ---
 

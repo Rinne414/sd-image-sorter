@@ -30,7 +30,7 @@ later split can be proven verbatim:
 No product code, existing test, or pyproject is modified. Every pin runs on a
 scratch scan/upload dir (``_get_scan_dir`` / ``_UPLOAD_DIR`` seams patched to
 tmp_path) and clears the module-global session cache, so nothing touches the
-real ``data/dataset-scans`` / ``data/dataset-uploads`` trees or the main DB.
+real ``TEMP_DIR/dataset-scans`` / ``data/dataset-uploads`` trees or the main DB.
 """
 
 from __future__ import annotations
@@ -68,7 +68,7 @@ def scan_dir(tmp_path, monkeypatch):
 
     ``_get_scan_dir`` is the single seam every manifest read/write/purge routes
     through; patching it keeps NDJSON manifests out of the real
-    ``backend/data/dataset-scans`` tree (the similarity-index isolation pattern).
+    ``TEMP_DIR/dataset-scans`` tree (the similarity-index isolation pattern).
     """
     d = tmp_path / "dataset-scans"
     d.mkdir(parents=True, exist_ok=True)
