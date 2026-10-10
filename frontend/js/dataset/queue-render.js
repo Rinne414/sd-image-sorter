@@ -55,22 +55,37 @@
         };
     }
 
+    // Scroll the least distance that shows the row, like scrollIntoView({ block: 'nearest' }):
+    // a row above the viewport aligns with the top edge, one below with the bottom edge.
     function scrollVirtualIndexIntoView(scroller, index, columns, itemHeight) {
         if (!scroller || index < 0 || columns <= 0 || itemHeight <= 0) return;
         const row = Math.floor(index / columns);
         const rowCount = Math.ceil(Math.max(0, index + 1) / columns);
         const knownRows = Number(scroller.dataset.virtualRows || rowCount);
-        const totalRows = Math.max(rowCount, knownRows);
-        const totalHeight = totalRows * itemHeight;
-        const viewport = Math.max(1, scroller.clientHeight || 1);
-        const spacerHeight = Math.min(totalHeight, DATASET_MAX_SCROLL_SPACER_PX);
-        const targetVirtualTop = row * itemHeight;
-        if (totalHeight <= spacerHeight) {
-            scroller.scrollTop = targetVirtualTop;
+        const metrics = getVirtualMetrics(scroller, Math.max(rowCount, knownRows), itemHeight);
+        const rowTop = row * itemHeight;
+        // Also covers rows the renderer has not drawn yet (it repaints on the next frame).
+        const rowFullyShown = rowTop >= metrics.virtualTop
+            && rowTop + itemHeight <= metrics.virtualTop + metrics.viewport;
+        if (rowFullyShown) return;
+        const targetVirtualTop = rowTop < metrics.virtualTop
+            ? rowTop
+            : rowTop + itemHeight - metrics.viewport;
+        if (!metrics.compressed) {
+            scroller.scrollTop = Math.max(0, targetVirtualTop);
             return;
         }
-        const ratio = targetVirtualTop / Math.max(1, totalHeight - viewport);
-        scroller.scrollTop = ratio * Math.max(1, spacerHeight - viewport);
+        const ratio = Math.max(0, targetVirtualTop) / Math.max(1, metrics.totalHeight - metrics.viewport);
+        scroller.scrollTop = ratio * Math.max(1, metrics.spacerHeight - metrics.viewport);
+    }
+
+    function isQueueItemFullyVisible(list, id) {
+        const item = list.querySelector(`.dataset-queue-item[data-image-id="${Number(id)}"]`);
+        if (!item) return false;
+        // Rows clip at the padding box, so measure from inside the list's border.
+        const viewTop = list.getBoundingClientRect().top + list.clientTop;
+        const rect = item.getBoundingClientRect();
+        return rect.top >= viewTop && rect.bottom <= viewTop + list.clientHeight;
     }
 
     function getMeasuredWidth(el, fallback = 1) {
@@ -141,6 +156,8 @@
     DM._scrollActiveQueueItemIntoView = function () {
         const list = document.getElementById('dataset-queue-list');
         if (!list || !list.classList.contains('is-virtualized') || this.activeId == null) return;
+        // A picture already fully on screen stays where the user clicked it (issue #5 point 2).
+        if (isQueueItemFullyVisible(list, this.activeId)) return;
         const renderIds = this._queueIdsForCurrentFilter();
         const index = renderIds.indexOf(Number(this.activeId));
         if (index < 0) return;
