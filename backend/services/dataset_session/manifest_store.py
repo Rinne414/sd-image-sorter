@@ -66,6 +66,12 @@ def _legacy_scan_dir() -> Path:
     return Path(config.BACKEND_DIR) / "data" / "dataset-scans"
 
 
+def _data_root_is_default() -> bool:
+    import config
+
+    return Path(config.DATA_DIR).resolve() == (Path(config.PACKAGE_ROOT) / "data").resolve()
+
+
 def _purge_manifest_dir(scan_dir: Path, max_age_seconds: int) -> int:
     import time as _time
 
@@ -113,8 +119,12 @@ def purge_expired_scan_manifests(*, max_age_seconds: int = SCAN_TOKEN_TTL_SECOND
 def purge_legacy_scan_manifests(*, max_age_seconds: int = SCAN_TOKEN_TTL_SECONDS) -> int:
     """Sweep expired manifests left in the pre-fix ``backend/data/dataset-scans``.
 
+    Only runs when the data root is the package default: a server started with
+    an isolated ``SD_IMAGE_SORTER_DATA_DIR`` must not touch the real install.
     Never creates the folder and ignores it when it is the active scan dir.
     """
+    if not _data_root_is_default():
+        return 0
     legacy = _legacy_scan_dir()
     if not legacy.is_dir() or legacy.resolve() == _svc()._get_scan_dir().resolve():
         return 0
