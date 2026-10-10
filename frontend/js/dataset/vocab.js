@@ -75,10 +75,19 @@
             node.className = 'dataset-vocab-tag';
             const state = VOCAB_STATE.states.get(it.tag);
             if (state) node.classList.add(`state-${state}`);
-            const lbl = document.createElement('span');
+            // The tag itself toggles an include filter on the queue.
+            const filtered = DM._queueTagFilterMode(it.tag) === 'include';
+            node.classList.toggle('is-queue-filter', filtered);
+            const lbl = document.createElement('button');
+            lbl.type = 'button';
             lbl.className = 'dataset-vocab-tag-label';
-            lbl.title = it.tag;
             lbl.textContent = it.tag;
+            lbl.setAttribute('aria-pressed', filtered ? 'true' : 'false');
+            // Full tag first: long tags are cut off with an ellipsis.
+            lbl.title = `${it.tag}\n${filtered
+                ? DM._t('dataset.vocabFilterRemove', 'Click to stop filtering the queue by this tag')
+                : DM._t('dataset.vocabFilterAdd', 'Click to show only images with this tag in the queue')}`;
+            lbl.addEventListener('click', () => DM._toggleQueueTagInclude(it.tag));
             const c = document.createElement('span');
             c.className = 'dataset-vocab-tag-count';
             c.textContent = String(it.count);
@@ -192,6 +201,7 @@
     }
 
     DM._refreshVocab = refreshVocab;
+    DM._renderVocab = renderVocab;
     DM._getDatasetVocabItems = function () {
         return VOCAB_STATE.items.slice();
     };

@@ -622,6 +622,8 @@
     //     _fetchMissingCaptions/_refreshAllCaptions/_removeImageById/
     //     _removeActive/_updateCount/_isReadyToExport and owns the single
     //     _buildExportPayload — never resurrect the removed part3 copy);
+    //   * queue-filter BEFORE split-view (split-view calls
+    //     _initQueueCaptionFilter at load time);
     //   * gallery-import BEFORE tag-autocomplete (wraps DM.addImageIds);
     //   * lora-prune wraps DM.init — no other module may wrap init;
     //   * audit BEFORE audit-run (AUDIT_STATE + renderResults bridges);
@@ -633,6 +635,7 @@
         '/static/js/dataset/project-store.js',
         '/static/js/dataset/events.js',
         '/static/js/dataset/queue-render.js',
+        '/static/js/dataset/queue-filter.js',
         '/static/js/dataset/active-editor.js',
         '/static/js/dataset/multiselect.js',
         '/static/js/dataset/split-view.js',

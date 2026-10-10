@@ -730,6 +730,124 @@
     cursor: pointer;
 }
 
+/* Queue tag filter (issue #5): the entry row always shows; chips and the
+   "Showing N of M" + Clear row only while a filter is on. Sized for the
+   ~216px queue column at 1366x768. */
+#view-dataset .dataset-queue-tag-filter {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0 0 8px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+#view-dataset .dataset-queue-tag-entry {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 28px 28px;
+    align-items: center;
+    gap: 4px;
+}
+#view-dataset .dataset-queue-tag-input {
+    min-width: 0;
+    height: 28px;
+    padding: 4px 8px;
+    font-size: 12px;
+}
+#view-dataset .dataset-queue-tag-btn {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.04);
+    color: var(--text-secondary, #A6A6A6);
+    font: inherit;
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+}
+#view-dataset .dataset-queue-tag-btn:hover {
+    background: rgba(255,255,255,0.08);
+    color: var(--text-primary, #FBF5EF);
+}
+#view-dataset .dataset-queue-tag-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 4px;
+    max-height: 64px;
+    overflow-y: auto;
+}
+#view-dataset .dataset-queue-tag-chip {
+    appearance: none;
+    -webkit-appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    padding: 2px 7px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.05);
+    color: var(--text-primary, #FBF5EF);
+    font: inherit;
+    font-size: 11px;
+    line-height: 1.4;
+    cursor: pointer;
+}
+#view-dataset .dataset-queue-tag-chip.is-include {
+    border-color: rgba(var(--accent-primary-rgb, 124, 139, 255), 0.5);
+    background: rgba(var(--accent-primary-rgb, 124, 139, 255), 0.14);
+}
+#view-dataset .dataset-queue-tag-chip.is-exclude .dataset-queue-tag-chip-label {
+    text-decoration: line-through;
+}
+#view-dataset .dataset-queue-tag-chip-glyph {
+    font-weight: 700;
+}
+#view-dataset .dataset-queue-tag-chip-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+#view-dataset .dataset-queue-tag-chip-x {
+    color: var(--text-secondary, #A6A6A6);
+}
+#view-dataset .dataset-queue-tag-chip:hover .dataset-queue-tag-chip-x {
+    color: var(--text-primary, #FBF5EF);
+}
+#view-dataset .dataset-queue-filter-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+#view-dataset .dataset-queue-filter-count {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    color: var(--text-secondary, #A6A6A6);
+}
+#view-dataset .dataset-queue-filter-status .btn {
+    flex: 0 0 auto;
+    min-height: 26px;
+    padding-inline: 8px;
+}
+#view-dataset .dataset-queue-tag-chips[hidden],
+#view-dataset .dataset-queue-filter-status[hidden] {
+    display: none;
+}
+#view-dataset .dataset-caption-scope-summary {
+    display: block;
+    margin: 2px 0 6px;
+}
+
 /* ---- Big empty-state (queue) ---- */
 #view-dataset .dataset-empty-state {
     display: flex;

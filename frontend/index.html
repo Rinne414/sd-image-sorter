@@ -4226,6 +4226,32 @@
                                             data-dataset-queue-mode="list" title="List with names" data-i18n-title="tip.listWithNames" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></button>
                                 </div>
                             </div>
+                            <!-- Tag filter (issue #5): include = AND, exclude = OR, like
+                                 sd-dataset-tag-editor. Chips and the count row only show
+                                 while a filter is on. Logic: dataset/queue-filter.js. -->
+                            <div class="dataset-queue-tag-filter" id="dataset-queue-tag-filter" role="group"
+                                 aria-label="Filter the queue by tag" data-i18n-aria="dataset.queueTagFilterAria">
+                                <div class="dataset-queue-tag-entry">
+                                    <input type="text" id="dataset-queue-tag-input" class="form-input dataset-queue-tag-input"
+                                           list="dataset-queue-tag-options" autocomplete="off" spellcheck="false"
+                                           placeholder="Filter by tag..." data-i18n-placeholder="dataset.queueTagPlaceholder"
+                                           title="Enter shows only images with this tag; Shift+Enter hides them." data-i18n-title="dataset.queueTagInputTip"
+                                           aria-label="Tag to filter the queue by" data-i18n-aria="dataset.queueTagInputAria">
+                                    <datalist id="dataset-queue-tag-options"></datalist>
+                                    <button type="button" class="dataset-queue-tag-btn" id="btn-dataset-queue-tag-include"
+                                            title="Show only images with this tag" data-i18n-title="dataset.queueTagInclude"
+                                            aria-label="Show only images with this tag" data-i18n-aria="dataset.queueTagInclude">+</button>
+                                    <button type="button" class="dataset-queue-tag-btn" id="btn-dataset-queue-tag-exclude"
+                                            title="Hide images with this tag" data-i18n-title="dataset.queueTagExclude"
+                                            aria-label="Hide images with this tag" data-i18n-aria="dataset.queueTagExclude">&minus;</button>
+                                </div>
+                                <div class="dataset-queue-tag-chips" id="dataset-queue-tag-chips" hidden></div>
+                                <div class="dataset-queue-filter-status" id="dataset-queue-filter-status" hidden>
+                                    <span class="dataset-queue-filter-count" id="dataset-queue-filter-count" aria-live="polite"></span>
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-queue-clear-filters"
+                                            data-i18n="dataset.queueClearFilters">Clear filters</button>
+                                </div>
+                            </div>
                             <div class="dataset-queue-toolbar">
                                 <span class="dataset-selection-summary" id="dataset-queue-selection-summary">0 selected</span>
                                 <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-queue-select-all"
@@ -4605,9 +4631,11 @@
                                     <select id="dataset-caption-scope" class="form-input">
                                         <option value="active" data-i18n="dataset.scopeActiveImage">Current image</option>
                                         <option value="selected" data-i18n="dataset.scopeSelectedImages">Selected images</option>
+                                        <option value="filtered" data-i18n="dataset.scopeFilteredImages">Images shown in the queue</option>
                                         <option value="all" selected data-i18n="dataset.scopeAllImages">All images</option>
                                     </select>
                                 </label>
+                                <small class="form-hint dataset-caption-scope-summary" id="dataset-caption-scope-summary" aria-live="polite"></small>
                                 <label class="form-label">
                                     <span>
                                         <span data-i18n="dataset.blacklistLabel">Blacklist tags (removed from every caption)</span>
@@ -4632,7 +4660,7 @@
                                     </summary>
                                     <div class="dataset-vocab-body">
                                         <p class="dataset-vocab-help" data-i18n="dataset.vocabHelp">
-                                            Built from this dataset's captions. + adds a tag to Common tags, - adds it to the blacklist; click again to undo.
+                                            Built from the captions you see. Click a tag to show only images that have it; + adds it to Common tags, - adds it to the blacklist; click again to undo.
                                         </p>
                                         <div class="dataset-vocab-controls">
                                             <input type="text" class="form-input dataset-vocab-search" id="dataset-vocab-search"
@@ -5042,8 +5070,9 @@
                                     <span class="checkbox-custom" aria-hidden="true"></span>
                                     <span class="checkbox-text" data-i18n="dataset.findSubstringMode">Substring mode</span>
                                 </label>
+                                <small class="form-hint dataset-caption-scope-summary" id="dataset-findreplace-scope-summary" aria-live="polite"></small>
                                 <button type="button" class="btn btn-secondary full-width" id="btn-dataset-find-replace"
-                                        data-i18n="dataset.replaceAllBtn">Replace in all captions</button>
+                                        data-i18n="dataset.replaceAllBtn">Replace in captions</button>
                             </details>
 
                             <!-- Section C: Output (the only required section) -->

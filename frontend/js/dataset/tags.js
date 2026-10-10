@@ -122,7 +122,12 @@
     DM._applyTagCategoryOrder = async function () {
         const ids = typeof this._captionScopeIds === 'function' ? this._captionScopeIds() : [Number(this.activeId)];
         if (!ids.length) {
-            this._toast(this._t('dataset.noActiveImage', 'Select an image first.'), 'warning', 3000);
+            if (this._captionScope?.() === 'active') {
+                this._toast(this._t('dataset.noActiveImage', 'Select an image first.'), 'warning', 3000);
+            } else {
+                this._toast(this._t('dataset.noCaptionScopeImages',
+                    'No images match the current caption action scope.'), 'warning', 3000);
+            }
             return;
         }
         // Resolve real backend categories for every tag in scope first, so the
@@ -230,6 +235,13 @@
     };
 
     // ---------- Batch Find/Replace ----------
+    // trim + collapse whitespace + fold _<->space + case-insensitive, so
+    // "long_hair" matches "long hair" / "Long  Hair". Shared with the queue
+    // tag filter so both agree on what "the same tag" means.
+    DM._normalizeTagKey = function (s) {
+        return String(s || '').replace(/[\s_]+/g, ' ').trim().toLowerCase();
+    };
+
     DM._batchFindReplace = async function () {
         const findEl = document.getElementById('dataset-find-input');
         const replaceEl = document.getElementById('dataset-replace-input');
@@ -247,10 +259,7 @@
         // means "rename this tag", not "edit this substring wherever it lands".
         // The opt-in checkbox restores the raw substring behavior.
         const substringMode = !!document.getElementById('dataset-find-substring')?.checked;
-        // trim + collapse whitespace + fold _<->space + case-insensitive, so
-        // "long_hair" matches "long hair" / "Long  Hair".
-        const normalizeTag = (s) => String(s || '').replace(/[\s_]+/g, ' ').trim().toLowerCase();
-        const findKey = normalizeTag(find);
+        const findKey = this._normalizeTagKey(find);
         // An empty replacement removes the tag: its token goes with its
         // separator, so no ", ," is left behind.
         const removing = replace.trim() === '';
@@ -292,7 +301,7 @@
                     // verbatim while keeping each token's surrounding spacing.
                     let changed = false;
                     const parts = caption.split(',').map((part) => {
-                        if (!findKey || normalizeTag(part) !== findKey) return part;
+                        if (!findKey || this._normalizeTagKey(part) !== findKey) return part;
                         changed = true;
                         if (removing) return '';
                         const m = part.match(/^(\s*)[\s\S]*?(\s*)$/);
@@ -304,6 +313,8 @@
                 this.captionEdits.set(id, updated);
                 count++;
             }
+            // Status badges and the queue filter follow the new captions.
+            if (count > 0) this._renderQueue();
             if (count > 0 && this.activeId != null) {
                 this._setActive(this.activeId);
             }

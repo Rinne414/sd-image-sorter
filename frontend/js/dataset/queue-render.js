@@ -1,9 +1,9 @@
 /**
- * Dataset Maker — queue + import-gallery rendering: virtual renderers, _buildQueueItem, queue view mode, caption filter, _updateCount.
+ * Dataset Maker — queue + import-gallery rendering: virtual renderers, _buildQueueItem, queue view mode, _updateCount.
  * Moved VERBATIM from dataset-maker-part2.js L28-104, L318-449,
  * L458-644, L1024-1193. (The _queueItemDecorators registry initializer
  * that lived at part2 L457 now lives in dataset/core.js — lead-approved
- * deviation.)
+ * deviation.) The queue caption filter now lives in dataset/queue-filter.js.
  * Load order is pinned by the ordered async=false loader in dataset/core.js.
  */
 (function () {
@@ -103,6 +103,14 @@
         return { width, columns, cellWidth, rowStride: cellWidth + gap, gap };
     }
 
+    // Order badges show each image's real queue (export) position, also
+    // while a filter hides the images around it.
+    function queueOrderLookup(datasetMaker, renderIds) {
+        if (renderIds.length === datasetMaker.imageIds.length) return (index) => index;
+        const order = new Map(datasetMaker.imageIds.map((id, index) => [Number(id), index]));
+        return (index) => order.get(Number(renderIds[index]));
+    }
+
     // ---------- Queue rendering ----------
     DM._renderQueue = function () {
         const list = document.getElementById('dataset-queue-list');
@@ -110,6 +118,7 @@
         this._updateCount?.();
         const mode = this._queueViewMode === 'list' ? 'list' : 'grid';
         const renderIds = this._queueIdsForCurrentFilter();
+        this._renderQueueFilterBar(renderIds);
         list.classList.toggle('dataset-queue-grid-mode', mode === 'grid');
         list.classList.toggle('dataset-queue-list-mode', mode === 'list');
         if (renderIds.length > DATASET_VIRTUAL_THRESHOLD) {
@@ -144,12 +153,12 @@
             this._updateMultiSelectUI();
             return;
         }
+        const orderAt = queueOrderLookup(this, renderIds);
         for (const [index, id] of renderIds.entries()) {
-            list.appendChild(this._buildQueueItem(id, index));
+            list.appendChild(this._buildQueueItem(id, orderAt(index)));
         }
         this._highlightActiveQueueItem();
         this._applyAuditFilterToQueue?.();
-        this._applyCaptionFilter?.();
         this._updateMultiSelectUI();
     };
 
@@ -180,6 +189,7 @@
         const spacer = document.createElement('div');
         spacer.className = 'dataset-virtual-spacer dataset-queue-virtual-spacer';
         list.appendChild(spacer);
+        const orderAt = queueOrderLookup(this, renderIds);
 
         let frame = 0;
         const renderVisible = () => {
@@ -207,7 +217,7 @@
                     for (let col = 0; col < columns; col += 1) {
                         const index = row * columns + col;
                         if (index >= renderIds.length) break;
-                        const node = this._buildQueueItem(renderIds[index], index);
+                        const node = this._buildQueueItem(renderIds[index], orderAt(index));
                         node.style.position = 'absolute';
                         node.style.top = `${metrics.domTopForRow(row)}px`;
                         node.style.left = isList ? '0' : `${col * (cellWidth + DATASET_QUEUE_GRID_GAP)}px`;
@@ -343,6 +353,11 @@
     DM._refreshQueueItem = function (id) {
         const list = document.getElementById('dataset-queue-list');
         if (!list) return;
+        // The edit may move this image into or out of the active filter.
+        if (this._hasActiveQueueFilter()) {
+            this._scheduleQueueRender();
+            return;
+        }
         const existing = list.querySelector(`.dataset-queue-item[data-image-id="${id}"]`);
         if (!existing) return;
         if (list.classList.contains('is-virtualized')) {
@@ -379,49 +394,6 @@
             btn.addEventListener('click', () => this._setQueueViewMode(btn.getAttribute('data-dataset-queue-mode')));
         });
         this._setQueueViewMode(this._queueViewMode || 'grid');
-    };
-
-    // ---------- Queue caption filter ----------
-    DM._queueCaptionFilter = 'all';
-
-    DM._queueIdsForCurrentFilter = function () {
-        const filter = this._queueCaptionFilter || 'all';
-        if (filter === 'all') return Array.from(this.imageIds || []);
-        return (this.imageIds || []).filter((id) => {
-            const caption = (this.captionEdits?.get?.(id) || this.captions?.get?.(id) || '').trim();
-            const hasCaption = caption.length > 0;
-            return filter === 'tagged' ? hasCaption : !hasCaption;
-        });
-    };
-
-    DM._initQueueCaptionFilter = function () {
-        const sel = document.getElementById('dataset-queue-caption-filter');
-        if (!sel) return;
-        sel.addEventListener('change', () => {
-            this._queueCaptionFilter = sel.value || 'all';
-            this._renderQueue();
-        });
-    };
-
-    DM._applyCaptionFilter = function () {
-        const filter = this._queueCaptionFilter || 'all';
-        const list = document.getElementById('dataset-queue-list');
-        if (list?.classList.contains('is-virtualized')) {
-            this._renderQueue();
-            return;
-        }
-        const items = document.querySelectorAll('#dataset-queue-list .dataset-queue-item');
-        for (const it of items) {
-            if (filter === 'all') {
-                it.style.display = '';
-                continue;
-            }
-            const id = Number(it.dataset.imageId || 0);
-            const caption = (this.captionEdits?.get?.(id) || this.captions?.get?.(id) || '').trim();
-            const hasCaption = caption.length > 0;
-            if (filter === 'tagged') it.style.display = hasCaption ? '' : 'none';
-            else it.style.display = hasCaption ? 'none' : '';
-        }
     };
 
     DM._updateCount = function () {

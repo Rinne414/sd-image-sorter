@@ -153,12 +153,22 @@
         );
     };
 
+    // Walk the queue order but only land on images the queue filter shows,
+    // so next/previous never opens a hidden image (and still works when an
+    // edit just filtered the active image out).
     DM._stepActive = function (delta) {
         if (this.activeId == null || this.imageIds.length === 0) return;
         const idx = this.imageIds.indexOf(Number(this.activeId));
         if (idx < 0) return;
-        const next = (idx + delta + this.imageIds.length) % this.imageIds.length;
-        this._setActive(this.imageIds[next]);
+        const shown = new Set(this._queueIdsForCurrentFilter());
+        const total = this.imageIds.length;
+        for (let step = 1; step <= total; step += 1) {
+            const next = this.imageIds[(((idx + delta * step) % total) + total) % total];
+            if (shown.has(next)) {
+                this._setActive(next);
+                return;
+            }
+        }
     };
 
     DM._removeActive = function () {

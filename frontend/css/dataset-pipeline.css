@@ -1268,10 +1268,34 @@ button.dataset-readiness-issue.severity-blocker:hover {
 .dataset-vocab-tag:hover { border-color: rgba(var(--accent-primary-rgb), 0.45); }
 
 .dataset-vocab-tag-label {
+    appearance: none;
+    -webkit-appearance: none;
     min-width: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    text-decoration: inherit;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    cursor: pointer;
+}
+.dataset-vocab-tag-label:hover {
+    text-decoration: underline;
+}
+
+/* The tag is an include filter on the queue (accent = selected state).
+   An inset bar, not a tint, so it reads apart from the Common-tags tint and
+   the hover border. #view-dataset beats the dataset-wide button colour. */
+.dataset-vocab-tag.is-queue-filter {
+    box-shadow: inset 3px 0 0 var(--accent-primary);
+}
+#view-dataset .dataset-vocab-tag.is-queue-filter .dataset-vocab-tag-label {
+    color: var(--accent-primary);
+    font-weight: 600;
 }
 
 .dataset-vocab-tag .dataset-vocab-tag-count {

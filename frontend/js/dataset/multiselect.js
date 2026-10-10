@@ -34,10 +34,17 @@
             const btn = document.getElementById(id);
             if (btn) btn.disabled = count === 0;
         }
-        for (const id of ['btn-dataset-queue-select-all', 'btn-dataset-import-select-all']) {
-            const btn = document.getElementById(id);
-            if (btn) btn.disabled = this.imageIds.length === 0 || count >= this.imageIds.length;
+        const importSelectAll = document.getElementById('btn-dataset-import-select-all');
+        if (importSelectAll) {
+            importSelectAll.disabled = this.imageIds.length === 0 || count >= this.imageIds.length;
         }
+        const queueSelectAll = document.getElementById('btn-dataset-queue-select-all');
+        if (queueSelectAll) {
+            const shown = this._queueShownIdList();
+            queueSelectAll.disabled = shown.length === 0
+                || shown.every((id) => this._queueSelection.has(Number(id)));
+        }
+        if (this._captionScope?.() === 'selected') this._renderCaptionScopeSummary();
     };
 
     DM._toggleQueueSelection = function (id) {
@@ -49,9 +56,11 @@
         this._updateMultiSelectUI();
     };
 
-    DM._selectAllQueue = function () {
-        this._queueSelection = new Set(this.imageIds.map(Number));
-        this._lastClickedId = this.imageIds.length ? Number(this.imageIds[this.imageIds.length - 1]) : null;
+    // The queue's Select all takes only the images its filter shows; the
+    // import grid (no filter) passes every queued image.
+    DM._selectAllQueue = function (ids = this._queueIdsForCurrentFilter()) {
+        this._queueSelection = new Set(ids.map(Number));
+        this._lastClickedId = ids.length ? Number(ids[ids.length - 1]) : null;
         this._updateMultiSelectUI();
     };
 
@@ -105,9 +114,10 @@
     };
 
     DM._initQueueSelectionControls = function () {
-        for (const id of ['btn-dataset-queue-select-all', 'btn-dataset-import-select-all']) {
-            document.getElementById(id)?.addEventListener('click', () => this._selectAllQueue());
-        }
+        document.getElementById('btn-dataset-queue-select-all')
+            ?.addEventListener('click', () => this._selectAllQueue());
+        document.getElementById('btn-dataset-import-select-all')
+            ?.addEventListener('click', () => this._selectAllQueue(this.imageIds));
         for (const id of ['btn-dataset-queue-clear-selection', 'btn-dataset-import-clear-selection']) {
             document.getElementById(id)?.addEventListener('click', () => this._clearQueueSelection());
         }
@@ -119,13 +129,19 @@
 
     DM._handleMultiSelectClick = function (id, e) {
         if (e.shiftKey && this._lastClickedId != null) {
-            const startIdx = this.imageIds.indexOf(Number(this._lastClickedId));
-            const endIdx = this.imageIds.indexOf(Number(id));
+            // A range covers what the filtered queue shows between the two
+            // clicks, never the hidden images in between.
+            const shown = this._queueIdsForCurrentFilter();
+            const order = shown.includes(Number(this._lastClickedId)) && shown.includes(Number(id))
+                ? shown
+                : this.imageIds;
+            const startIdx = order.indexOf(Number(this._lastClickedId));
+            const endIdx = order.indexOf(Number(id));
             if (startIdx >= 0 && endIdx >= 0) {
                 const lo = Math.min(startIdx, endIdx);
                 const hi = Math.max(startIdx, endIdx);
                 for (let i = lo; i <= hi; i++) {
-                    this._queueSelection.add(this.imageIds[i]);
+                    this._queueSelection.add(order[i]);
                 }
             }
         } else {

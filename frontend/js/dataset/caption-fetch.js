@@ -224,6 +224,9 @@
         if (scope === 'selected') {
             return Array.from(this._queueSelection || []).map(Number);
         }
+        if (scope === 'filtered') {
+            return this._queueIdsForCurrentFilter().map(Number);
+        }
         return Array.from(this.imageIds || []).map(Number);
     };
 
@@ -318,6 +321,11 @@
         }
         if (scope === 'active' && ids.length === 0) {
             this._toast(this._t('dataset.noActiveImage', 'Select an image first.'), 'warning', 3000);
+            return;
+        }
+        if (ids.length === 0) {
+            this._toast(this._t('dataset.noCaptionScopeImages',
+                'No images match the current caption action scope.'), 'warning', 3000);
             return;
         }
         let changedImages = 0;
