@@ -573,17 +573,20 @@ def post_dataset_audit(payload: DatasetAuditRequest) -> Dict[str, Any]:
 class DatasetVocabRequest(BaseModel):
     """Request body for ``POST /api/dataset/vocab``.
 
-    Returns the union of tags across ``image_ids`` (DB-source) and
+    Returns the union of tags across ``image_ids`` (DB-source),
+    ``image_caption_overrides`` (gallery images counted from the caption
+    the editor shows instead of their DB tags) and
     ``path_caption_overrides`` (local-source captions split by comma)
     sorted by descending frequency, optionally truncated to ``top_n``.
 
-    Each entry includes a ``sample_image_id`` from the DB-source rows
+    Each entry includes a ``sample_image_id`` from the gallery rows
     so the frontend can preview-link the tag to a representative
     image; for path-only items the sample_image_id is 0.
     """
     model_config = ConfigDict(extra="ignore")
 
     image_ids: List[int] = Field(default_factory=list)
+    image_caption_overrides: Dict[int, str] = Field(default_factory=dict)
     path_caption_overrides: Dict[str, str] = Field(default_factory=dict)
     top_n: int = Field(default=300, ge=1, le=2000)
 
@@ -593,7 +596,8 @@ class DatasetVocabRequest(BaseModel):
     summary="Tag frequency vocabulary for the active Dataset Maker session",
     description=(
         "Returns the union of tags across the supplied gallery image_ids "
-        "(read from the DB tag table) and any per-path caption overrides "
+        "(read from the DB tag table unless image_caption_overrides carries "
+        "the caption the editor shows) and any per-path caption overrides "
         "(local-source items split by comma). Sorted by descending "
         "frequency, optionally truncated to ``top_n``."
     ),
@@ -602,7 +606,15 @@ def post_dataset_vocab(payload: DatasetVocabRequest) -> Dict[str, Any]:
     counts: Dict[str, int] = {}
     samples: Dict[str, int] = {}
 
-    image_ids_clean = list({int(i) for i in payload.image_ids if int(i) > 0})
+    shown_captions = {
+        int(image_id): caption
+        for image_id, caption in (payload.image_caption_overrides or {}).items()
+        if int(image_id) > 0
+    }
+    image_ids_clean = list({
+        int(i) for i in payload.image_ids
+        if int(i) > 0 and int(i) not in shown_captions
+    })
     if image_ids_clean:
         try:
             import database as db
@@ -622,11 +634,15 @@ def post_dataset_vocab(payload: DatasetVocabRequest) -> Dict[str, Any]:
                 counts[tag] = counts.get(tag, 0) + 1
                 samples.setdefault(tag, int(image_id))
 
-    # Local-source: split caption overrides by comma to produce an
-    # approximate tag list. Captions are NL+booru-mixed so this is
+    # Shown captions (gallery + local-source): split by comma to produce
+    # an approximate tag list. Captions are NL+booru-mixed so this is
     # rough, but it's good enough to surface "trigger word X appears
     # in 18 of 20 captions" — the most common Dataset Maker question.
-    for _path, caption in (payload.path_caption_overrides or {}).items():
+    caption_sources = [
+        *shown_captions.items(),
+        *((0, caption) for caption in (payload.path_caption_overrides or {}).values()),
+    ]
+    for sample_id, caption in caption_sources:
         if not caption:
             continue
         for token in str(caption).split(","):
@@ -634,7 +650,7 @@ def post_dataset_vocab(payload: DatasetVocabRequest) -> Dict[str, Any]:
             if not tag:
                 continue
             counts[tag] = counts.get(tag, 0) + 1
-            samples.setdefault(tag, 0)
+            samples.setdefault(tag, sample_id)
 
     # Sort: highest count first, alphabetical for ties.
     ordered = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0].lower()))

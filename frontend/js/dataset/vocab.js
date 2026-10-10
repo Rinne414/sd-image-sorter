@@ -116,15 +116,23 @@
             DM._refreshCleanupButtons?.();
             return VOCAB_STATE.items;
         }
+        // Count the caption the editor shows (edit, saved revision, imported
+        // .txt or rendered caption). Gallery images whose caption has not
+        // loaded yet fall back to their DB tags.
         const galleryIds = [];
+        const galleryCaptions = {};
         const localCaptions = {};
-        for (const id of DM.imageIds) {
+        for (const rawId of DM.imageIds) {
+            const id = Number(rawId);
             if (DM.isLocalId && DM.isLocalId(id)) {
                 const p = DM.localItemPaths?.get?.(id);
-                const cap = DM.captionEdits?.get?.(id);
+                const cap = DM._booruTextFor(id);
                 if (p && cap) localCaptions[p] = cap;
+            } else if (DM.captionEdits.has(id) || DM.captions.has(id)
+                || DM.annotationHeads?.get?.(id)?.active_revision) {
+                galleryCaptions[id] = DM._booruTextFor(id);
             } else {
-                galleryIds.push(Number(id));
+                galleryIds.push(id);
             }
         }
         try {
@@ -133,6 +141,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     image_ids: galleryIds,
+                    image_caption_overrides: galleryCaptions,
                     path_caption_overrides: localCaptions,
                     top_n: 2000,
                 }),

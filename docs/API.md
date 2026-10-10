@@ -2966,12 +2966,13 @@ Download the two CCIP ONNX files (`model_feat.onnx` ~143 MB + `model_metrics.onn
 
 #### POST /api/dataset/vocab
 
-Returns the union of tags across the supplied Dataset Maker session, sorted by descending frequency. Combines DB-source tags (read from `image_ids`) and local-source caption text (`path_caption_overrides`, split by comma). Backs the Dataset Maker "Tag Vocabulary" side panel for adding current tags to common tags or blacklist.
+Returns the union of tags across the supplied Dataset Maker session, sorted by descending frequency. Combines DB-source tags (read from `image_ids`), the caption the editor shows for gallery images (`image_caption_overrides`, keyed by image id, split by comma; an id listed here is not also read from the DB) and local-source caption text (`path_caption_overrides`, split by comma). Backs the Dataset Maker "Tag Vocabulary" side panel for adding current tags to common tags or blacklist.
 
 Body:
 ```json
 {
   "image_ids": [1, 2, 3],
+  "image_caption_overrides": {"4": "my_oc, 1girl, red_hair"},
   "path_caption_overrides": {"C:/dataset/local_001.png": "my_oc, masterpiece, blue_hair"},
   "top_n": 300
 }
