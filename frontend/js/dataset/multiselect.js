@@ -101,7 +101,9 @@
         }
         this._queueSelection.clear();
         if (this.activeId != null && !this.imageIds.includes(Number(this.activeId))) {
-            this.activeId = this.imageIds.length ? Number(this.imageIds[0]) : null;
+            // First image the queue shows; the full order when it shows none.
+            const first = this._queueIdsForCurrentFilter()[0] ?? this.imageIds[0];
+            this.activeId = first != null ? Number(first) : null;
         }
         this._renderQueue();
         this._renderImportGallery?.();

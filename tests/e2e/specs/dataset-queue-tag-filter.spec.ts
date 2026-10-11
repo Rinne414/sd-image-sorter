@@ -380,3 +380,18 @@ test('adding images the current filter hides says so and keeps the filter', asyn
   await expect(page.locator('#dataset-queue-filter-count')).toHaveText('Showing 2 of 8')
   expect(await shownIds(page)).toEqual([901, 906])
 })
+
+test('removing the selected images moves on to an image the filter shows', async ({ page }) => {
+  await openDatasetWith(page, FILTER_CAPTIONS)
+  await addTagFilter(page, 'hat', 'include')
+  await expect.poll(() => shownIds(page)).toEqual([901, 906])
+  await page.locator('#dataset-queue-list .dataset-queue-item[data-image-id="901"]').click()
+  await page.locator('#dataset-queue-list .dataset-queue-item[data-image-id="901"]')
+    .click({ modifiers: ['Control'] })
+  expect(await selectionIds(page)).toEqual([901])
+
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.locator('#btn-dataset-queue-remove-selected').click()
+  await expect.poll(() => page.evaluate(() => Number((window as any).DatasetMaker.activeId))).toBe(906)
+  expect(await shownIds(page)).toEqual([906])
+})
