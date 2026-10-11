@@ -101,6 +101,7 @@
                 });
             }
             this._renderQueue();
+            this._noteFilterHidesNewImages(newOnes);
             this._updateCount();
             this._updateExportEnabled();
             this._syncSourceCapabilityStatus?.();

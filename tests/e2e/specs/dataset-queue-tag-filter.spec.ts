@@ -290,3 +290,93 @@ test('clearing the dataset drops the queue filter before the next import', async
   })
   await expectFiltersReset(page, [961, 962])
 })
+
+const selectionIds = (page: Page) => page.evaluate(() =>
+  [...(window as any).DatasetMaker._queueSelection].map(Number).sort((a: number, b: number) => a - b))
+
+test('shift-click after the anchor is hidden by a filter selects only shown images', async ({ page }) => {
+  await openDatasetWith(page, FILTER_CAPTIONS)
+  await page.locator('#dataset-queue-list .dataset-queue-item[data-image-id="901"]').click({ modifiers: ['Control'] })
+  expect(await selectionIds(page)).toEqual([901])
+
+  await addTagFilter(page, 'smile', 'include')
+  await expect.poll(() => shownIds(page)).toEqual([904, 906])
+  await page.locator('#dataset-queue-list .dataset-queue-item[data-image-id="906"]').click({ modifiers: ['Shift'] })
+  // 902, 903 and 905 sit between the old anchor and 906 but are hidden.
+  expect(await selectionIds(page)).toEqual([906])
+})
+
+test('typing in the editor under a filter keeps the other queue items and drops an item that stops matching', async ({ page }) => {
+  await openDatasetWith(page, FILTER_CAPTIONS)
+  await addTagFilter(page, 'long hair', 'include')
+  await expect.poll(() => shownIds(page)).toEqual([901, 902, 904, 906])
+  await page.locator('#dataset-queue-list .dataset-queue-item[data-image-id="901"]').click()
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll('#dataset-queue-list .dataset-queue-item')) (el as any).__kept = true
+  })
+  const keptIds = () => page.evaluate(() =>
+    Array.from(document.querySelectorAll('#dataset-queue-list .dataset-queue-item'))
+      .filter((el) => (el as any).__kept).map((el) => Number((el as HTMLElement).dataset.imageId)))
+
+  // Still matches: only this row is rebuilt.
+  await page.locator('#dataset-editor-textarea').fill('1girl, long hair, hat, scarf')
+  await expect.poll(() => page.evaluate(() => (window as any).DatasetMaker.captionEdits.get(901)))
+    .toBe('1girl, long hair, hat, scarf')
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))))
+  expect((await keptIds()).sort()).toEqual([902, 904, 906])
+  expect(await shownIds(page)).toEqual([901, 902, 904, 906])
+
+  // No longer matches: the queue re-renders without it.
+  await page.locator('#dataset-editor-textarea').fill('1girl, hat')
+  await expect.poll(() => shownIds(page)).toEqual([902, 904, 906])
+})
+
+test('selecting audit matches under a filter skips the images the filter hides', async ({ page }) => {
+  await openDatasetWith(page, FILTER_CAPTIONS)
+  await addTagFilter(page, 'hat', 'include')
+  await expect.poll(() => shownIds(page)).toEqual([901, 906])
+  await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    dm._showAuditModal()
+    dm._renderAuditResults({
+      summary: { untagged_count: 3 },
+      items: [901, 902, 906].map((id) => ({ image_id: id, flags: ['untagged'] })),
+    })
+  })
+  await page.getByRole('button', { name: 'Select matching' }).click()
+  expect(await selectionIds(page)).toEqual([901, 906])
+})
+
+test('removing the active image and the comparison partner follow the filtered queue', async ({ page }) => {
+  await openDatasetWith(page, FILTER_CAPTIONS)
+  await addTagFilter(page, 'hat', 'include')
+  await expect.poll(() => shownIds(page)).toEqual([901, 906])
+  const activeId = () => page.evaluate(() => Number((window as any).DatasetMaker.activeId))
+  const partnerId = () => page.locator('#dataset-split-panel .dataset-split-card').last()
+    .getAttribute('data-image-id').then(Number)
+
+  await page.locator('#dataset-queue-list .dataset-queue-item[data-image-id="901"]').click()
+  await page.locator('#btn-dataset-split-view').click()
+  await expect.poll(partnerId).toBe(906)
+  await page.locator('#btn-dataset-split-view').click()
+  await page.locator('#dataset-queue-list .dataset-queue-item[data-image-id="906"]').click()
+  await page.locator('#btn-dataset-split-view').click()
+  await expect.poll(partnerId).toBe(901)
+  await page.locator('#btn-dataset-split-view').click()
+
+  await page.locator('#dataset-queue-list .dataset-queue-item[data-image-id="901"]').click()
+  await page.evaluate(() => (window as any).DatasetMaker._removeImageById(901))
+  await expect.poll(activeId).toBe(906)
+})
+
+test('adding images the current filter hides says so and keeps the filter', async ({ page }) => {
+  await openDatasetWith(page, FILTER_CAPTIONS)
+  await addTagFilter(page, 'hat', 'include')
+  await expect.poll(() => shownIds(page)).toEqual([901, 906])
+
+  await page.evaluate(() => (window as any).DatasetMaker.addImageIds([907, 908], { switchView: false }))
+  await expect(page.getByText('The current filter hides 2 of the images you just added. Clear filters to see them.'))
+    .toBeVisible()
+  await expect(page.locator('#dataset-queue-filter-count')).toHaveText('Showing 2 of 8')
+  expect(await shownIds(page)).toEqual([901, 906])
+})

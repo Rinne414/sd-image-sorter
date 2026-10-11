@@ -755,6 +755,7 @@
 
         const added = this.imageIds.length - before;
         this._renderQueue();
+        this._noteFilterHidesNewImages(Array.from(addedLocalItems.keys()));
         this._updateCount();
         this._updateExportEnabled();
         this._syncSourceCapabilityStatus?.();

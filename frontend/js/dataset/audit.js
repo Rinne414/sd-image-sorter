@@ -232,7 +232,10 @@
         AUDIT_STATE.activeFilter = flag;
         applyFilterToQueue();
         updateBadgeState();
-        const ids = loadedAuditMatchIds(flag);
+        // Images the queue filter hides stay out of the selection, so later
+        // "Selected" actions never reach them.
+        const shown = new Set(DM._queueIdsForCurrentFilter().map(Number));
+        const ids = loadedAuditMatchIds(flag).filter((id) => shown.has(id));
         DM._queueSelection = new Set(ids);
         DM._updateMultiSelectUI?.();
         if (options.focus !== false) focusFirstAuditMatch(flag);
@@ -408,7 +411,7 @@
 
     function focusFirstAuditMatch(flag) {
         const { flaggedIds, flaggedPaths } = getAuditMatches(flag);
-        for (const id of DM.imageIds || []) {
+        for (const id of DM._queueIdsForCurrentFilter()) {
             const numericId = Number(id);
             const meta = DM.meta?.get?.(numericId) || {};
             const absPath = meta.abs_path || '';

@@ -45,21 +45,36 @@
         return keys;
     }
 
+    function filterCriteria(datasetMaker) {
+        const keyOf = (tag) => datasetMaker._normalizeTagKey(tag);
+        return {
+            status: datasetMaker._queueCaptionFilter || 'all',
+            include: datasetMaker._queueTagFilter.include.map(keyOf),
+            exclude: datasetMaker._queueTagFilter.exclude.map(keyOf),
+        };
+    }
+
+    function passesFilter(datasetMaker, id, criteria) {
+        if (criteria.status !== 'all') {
+            const hasCaption = datasetMaker._booruTextFor(id).trim().length > 0;
+            if (hasCaption !== (criteria.status === 'tagged')) return false;
+        }
+        if (criteria.include.length === 0 && criteria.exclude.length === 0) return true;
+        const keys = captionTagKeys(datasetMaker, id);
+        return criteria.include.every((key) => keys.has(key))
+            && !criteria.exclude.some((key) => keys.has(key));
+    }
+
     DM._queueIdsForCurrentFilter = function () {
         const ids = Array.from(this.imageIds || []);
         if (!this._hasActiveQueueFilter()) return ids;
-        const status = this._queueCaptionFilter || 'all';
-        const include = this._queueTagFilter.include.map((tag) => this._normalizeTagKey(tag));
-        const exclude = this._queueTagFilter.exclude.map((tag) => this._normalizeTagKey(tag));
-        return ids.filter((id) => {
-            if (status !== 'all') {
-                const hasCaption = this._booruTextFor(id).trim().length > 0;
-                if (hasCaption !== (status === 'tagged')) return false;
-            }
-            if (include.length === 0 && exclude.length === 0) return true;
-            const keys = captionTagKeys(this, id);
-            return include.every((key) => keys.has(key)) && !exclude.some((key) => keys.has(key));
-        });
+        const criteria = filterCriteria(this);
+        return ids.filter((id) => passesFilter(this, id, criteria));
+    };
+
+    /** Whether one image passes the filters right now (true with none active). */
+    DM._queueItemPassesFilter = function (id) {
+        return !this._hasActiveQueueFilter() || passesFilter(this, id, filterCriteria(this));
     };
 
     DM._queueTagFilterMode = function (tag) {
@@ -110,8 +125,25 @@
                 if (!shown.has(Number(id))) this._queueSelection.delete(id);
             }
         }
+        // A range anchor the filter hides is no anchor.
+        if (this._lastClickedId != null && !this._queueItemPassesFilter(Number(this._lastClickedId))) {
+            this._lastClickedId = null;
+        }
         this._renderQueue();
         this._renderVocab?.();
+    };
+
+    /** Tell the user how many just-added images the active filter hides. */
+    DM._noteFilterHidesNewImages = function (newIds) {
+        if (!this._hasActiveQueueFilter()) return;
+        const criteria = filterCriteria(this);
+        const hidden = (newIds || []).filter((id) => !passesFilter(this, id, criteria)).length;
+        if (hidden === 0) return;
+        this._toast(this._t(
+            'dataset.queueFilterHidesNew',
+            'The current filter hides {count} of the images you just added. Clear filters to see them.',
+            { count: formatCount(hidden) },
+        ), 'info', 6000);
     };
 
     // Caption edits can move an image into or out of an active filter; one

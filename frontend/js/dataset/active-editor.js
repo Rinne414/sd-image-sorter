@@ -247,6 +247,7 @@
         }
         this._supersedeCaptionFetch?.();
         const idx = this.imageIds.indexOf(id);
+        const shownIdx = this._queueIdsForCurrentFilter().indexOf(id);
         this.imageIds.splice(idx, 1);
         this.captions.delete(id);
         if (typeof this._deleteCaptionEditForDatasetRemoval === 'function') {
@@ -275,7 +276,12 @@
         if (this.imageIds.length === 0) {
             this._renderEmptyEditor();
         } else if (wasActive) {
-            this._setActive(this.imageIds[Math.min(idx, this.imageIds.length - 1)]);
+            // Move on within what the queue shows; a filter that now shows
+            // nothing falls back to the full order.
+            const shown = this._queueIdsForCurrentFilter();
+            this._setActive(shownIdx >= 0 && shown.length > 0
+                ? shown[Math.min(shownIdx, shown.length - 1)]
+                : this.imageIds[Math.min(idx, this.imageIds.length - 1)]);
         }
         this._syncSourceCapabilityStatus?.();
         this._syncOutputModeUi?.();

@@ -39,11 +39,14 @@
             editorPane?.classList.remove('dataset-split-mode');
             return;
         }
-        const idx = this.imageIds.indexOf(Number(this.activeId));
+        // Neighbours come from what the filtered queue shows.
+        const shown = this._queueIdsForCurrentFilter();
+        const order = shown.includes(Number(this.activeId)) ? shown : this.imageIds;
+        const idx = order.indexOf(Number(this.activeId));
         // Compare with the next image; on the last one fall back to the
         // previous so the button still works everywhere. Only a 1-image
         // queue genuinely has nothing to compare with.
-        const partnerIdx = idx + 1 < this.imageIds.length ? idx + 1 : idx - 1;
+        const partnerIdx = idx + 1 < order.length ? idx + 1 : idx - 1;
         if (partnerIdx < 0) {
             this._toast(this._t('dataset.splitNoNext',
                 'This is the only image in the queue — nothing to compare with.'), 'info');
@@ -56,7 +59,7 @@
         }
         const partnerIsNext = partnerIdx > idx;
         editorPane?.classList.add('dataset-split-mode');
-        const nextId = this.imageIds[partnerIdx];
+        const nextId = order[partnerIdx];
         const panel = document.createElement('div');
         panel.id = 'dataset-split-panel';
         panel.className = 'dataset-split-panel';

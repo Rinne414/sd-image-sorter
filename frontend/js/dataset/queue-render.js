@@ -353,12 +353,16 @@
     DM._refreshQueueItem = function (id) {
         const list = document.getElementById('dataset-queue-list');
         if (!list) return;
-        // The edit may move this image into or out of the active filter.
-        if (this._hasActiveQueueFilter()) {
+        const existing = list.querySelector(`.dataset-queue-item[data-image-id="${id}"]`);
+        // The edit may move this image into or out of the active filter; only
+        // then does the whole queue need a rebuild (a virtualized one always
+        // does, it draws a window of rows).
+        if (this._hasActiveQueueFilter()
+            && (list.classList.contains('is-virtualized')
+                || Boolean(existing) !== this._queueItemPassesFilter(id))) {
             this._scheduleQueueRender();
             return;
         }
-        const existing = list.querySelector(`.dataset-queue-item[data-image-id="${id}"]`);
         if (!existing) return;
         if (list.classList.contains('is-virtualized')) {
             this._renderQueue();

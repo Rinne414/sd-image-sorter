@@ -128,21 +128,17 @@
     };
 
     DM._handleMultiSelectClick = function (id, e) {
-        if (e.shiftKey && this._lastClickedId != null) {
-            // A range covers what the filtered queue shows between the two
-            // clicks, never the hidden images in between.
-            const shown = this._queueIdsForCurrentFilter();
-            const order = shown.includes(Number(this._lastClickedId)) && shown.includes(Number(id))
-                ? shown
-                : this.imageIds;
-            const startIdx = order.indexOf(Number(this._lastClickedId));
-            const endIdx = order.indexOf(Number(id));
-            if (startIdx >= 0 && endIdx >= 0) {
-                const lo = Math.min(startIdx, endIdx);
-                const hi = Math.max(startIdx, endIdx);
-                for (let i = lo; i <= hi; i++) {
-                    this._queueSelection.add(order[i]);
-                }
+        // A range covers what the filtered queue shows between the two clicks,
+        // never the hidden images in between; an anchor the filter hides is no
+        // anchor, so that click acts as a plain toggle.
+        const shown = e.shiftKey && this._lastClickedId != null ? this._queueIdsForCurrentFilter() : [];
+        const startIdx = shown.indexOf(Number(this._lastClickedId));
+        const endIdx = shown.indexOf(Number(id));
+        if (startIdx >= 0 && endIdx >= 0) {
+            const lo = Math.min(startIdx, endIdx);
+            const hi = Math.max(startIdx, endIdx);
+            for (let i = lo; i <= hi; i++) {
+                this._queueSelection.add(shown[i]);
             }
         } else {
             // Ctrl/Cmd+click toggles individual
