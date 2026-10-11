@@ -28,6 +28,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional
 from fastapi import HTTPException
 
 import database as db
+from services.dataset_sidecar import clean_edited_tag_caption
 from services.export_validation import ExportValidator
 from services.tag_export.captions import (
     NL_COMPOSE_MODES,
@@ -610,9 +611,13 @@ def export_tags_batch_request(
                     continue
 
                 tags = tags_map.get(image_id, [])
-                # v3.2.1: if user provided a manual override for this image, use it verbatim
+                # v3.2.1: a manual override replaces the engine output; only empty tokens
+                # (and underscores, when the option is explicitly on) are cleaned
                 if image_id in image_overrides:
-                    file_content = image_overrides[image_id]
+                    file_content = clean_edited_tag_caption(
+                        image_overrides[image_id],
+                        underscore_to_space=normalize_tag_underscores_request is True,
+                    )
                 else:
                     file_content = build_sidecar_content(
                         image,
@@ -895,7 +900,10 @@ def export_tags_combined_request(
                                 error_messages.append(f"Image {image_id} not found")
                             continue
                         if image_id in image_overrides:
-                            rendered = image_overrides[image_id]
+                            rendered = clean_edited_tag_caption(
+                                image_overrides[image_id],
+                                underscore_to_space=normalize_tag_underscores_request is True,
+                            )
                         else:
                             rendered = build_sidecar_content(
                                 image,

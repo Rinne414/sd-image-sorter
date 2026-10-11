@@ -476,7 +476,10 @@ def test_gallery_beside_image_mode_writes_txt_next_to_original_without_copying(
     assert body["exported"] == 1
     assert body["output_mode"] == "beside_image"
     assert image_path.exists()
-    assert sidecar_path.read_text(encoding="utf-8") == "gallery sidecar caption"
+    assert (
+        sidecar_path.read_text(encoding="utf-8")
+        == "gallery_trigger, gallery sidecar caption"
+    )
     assert not (image_path.parent / f"ignored_001{image_path.suffix}").exists()
     assert body["items"][0]["dst_image_path"] is None
     assert body["items"][0]["dst_caption_path"] == str(sidecar_path)
@@ -926,7 +929,9 @@ def test_export_image_overrides(test_client, staged_images, tmp_path: Path):
     })
     assert response.status_code == 200, response.text
     cap = (out / "test.txt").read_text(encoding="utf-8")
-    assert cap == "USER_EDITED_CAPTION_FOR_THIS_IMAGE"
+    # The edit wins over the template; it still gets the export's
+    # underscore-to-space rule (see test_edited_caption_export_transforms).
+    assert cap == "USER EDITED CAPTION FOR THIS IMAGE"
 
 
 def test_export_content_mode_tags_writes_common_tags(test_client, staged_images, tmp_path: Path):

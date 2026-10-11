@@ -257,8 +257,8 @@ def test_path_mode_beside_image_writes_sidecars_next_to_originals_without_output
 
     assert paths[0].exists()
     assert paths[1].exists()
-    assert (paths[0].with_suffix(".txt")).read_text(encoding="utf-8") == "beside caption for local_a"
-    assert (paths[1].with_suffix(".txt")).read_text(encoding="utf-8") == "beside caption for local_b"
+    assert (paths[0].with_suffix(".txt")).read_text(encoding="utf-8") == "ignored, beside caption for local_a"
+    assert (paths[1].with_suffix(".txt")).read_text(encoding="utf-8") == "ignored, beside caption for local_b"
     assert not (paths[0].parent / "ignored_001.png").exists()
 
 

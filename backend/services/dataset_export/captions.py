@@ -32,6 +32,7 @@ from services.dataset_export._constants import (
 )
 from services.dataset_sidecar import (
     MAX_DATASET_SIDECAR_BYTES,
+    clean_edited_tag_caption,
     dataset_sidecar_caption_rows,
     read_dataset_sidecar,
 )
@@ -395,6 +396,27 @@ def _build_dataset_template_options(request: Any, blacklist_set: set[str]) -> Di
     return options
 
 
+def _prepare_edited_caption(edited: str, request: Any, content_mode: str) -> str:
+    """Give a hand-edited caption the transforms an unedited one gets.
+
+    Tag lists get empty tokens dropped and, with the underscore option on, the
+    shared ``score_*``-preserving underscore rule; prose is left alone. The
+    trigger is added once when missing (an underscore or space spelling of it
+    counts as present). Tag order, the blacklist and the common tags stay as the
+    user wrote them, and a blank override stays blank.
+    """
+    if not edited.strip():
+        return edited
+    cleaned = clean_edited_tag_caption(
+        edited,
+        underscore_to_space=bool(getattr(request, "normalize_tag_underscores", True)),
+    )
+    trigger = str(getattr(request, "trigger", "") or "").strip()
+    if trigger and content_mode in {*TRAINING_TAG_CONTENT_MODES, "template"}:
+        return _ensure_caption_token_once(cleaned, trigger)
+    return cleaned
+
+
 def _render_dataset_sidecar(
     record: Dict[str, Any],
     tags: Optional[List[Any]],
@@ -412,10 +434,13 @@ def _render_dataset_sidecar(
     image_id = int(record.get("id") or 0)
     src_image_path = str(record.get("path") or "")
     content_mode = str(getattr(request, "content_mode", "template") or "template").strip().lower()
+    edited = None
     if image_id and image_id in image_overrides_int:
-        rendered = image_overrides_int[image_id]
+        edited = image_overrides_int[image_id]
     elif src_image_path and src_image_path in image_overrides_path:
-        rendered = image_overrides_path[src_image_path]
+        edited = image_overrides_path[src_image_path]
+    if edited is not None:
+        rendered = _prepare_edited_caption(edited, request, content_mode)
     else:
         effective_tags = list(tags or [])
         if not image_id and src_image_path and content_mode != "json":

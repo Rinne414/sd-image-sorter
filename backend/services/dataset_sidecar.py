@@ -1,14 +1,16 @@
 """Strict readers for Dataset Maker caption sidecars."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
 from caption_format import (
     CAPTION_FORMAT_MIXED,
     CAPTION_FORMAT_NATURAL,
     detect_caption_format,
 )
+from services.export_tag_pipeline import DEFAULT_LORA_PRESERVE_PREFIXES, normalize_lora_tag
 
 
 MAX_DATASET_SIDECAR_BYTES = 1024 * 1024
@@ -71,6 +73,11 @@ def dataset_sidecar_tag_rows(caption: str) -> list[dict[str, str]]:
     return rows
 
 
+def dataset_sidecar_caption_is_tag_list(caption: str) -> bool:
+    """True unless the classifier reads ``caption`` as prose or mixed text."""
+    return detect_caption_format(caption) not in _NOT_A_TAG_LIST
+
+
 def dataset_sidecar_caption_rows(caption: str) -> list[dict[str, str]]:
     """Rows for the export renderer, enumerated only when the caption IS tags.
 
@@ -108,6 +115,60 @@ def dataset_sidecar_caption_rows(caption: str) -> list[dict[str, str]]:
     No format label ever removes, shortens or refuses text — a misclassification
     can only change how the caption is wrapped, never whether it survives.
     """
-    if detect_caption_format(caption) in _NOT_A_TAG_LIST:
+    if not dataset_sidecar_caption_is_tag_list(caption):
         return [{"tag": caption}] if caption.strip() else []
     return dataset_sidecar_tag_rows(caption)
+
+
+_TAG_SEPARATOR_RE = re.compile(r"([,\r\n]+[ \t]*)")
+_PLAIN_COMMA_RE = re.compile(r",[ \t]*")
+_LINE_BREAK_RE = re.compile(r"\r\n|\r|\n")
+
+
+def _gap_separator(chunks: Sequence[str]) -> str:
+    """The separator to write between two surviving tags.
+
+    ``chunks`` are the separator runs that sat between them (more than one when
+    an empty token was dropped). A line break is kept, as is a single comma the
+    user typed; a run such as ``", ,, "`` collapses to ``", "``.
+    """
+    combined = "".join(chunks)
+    newline = _LINE_BREAK_RE.search(combined)
+    if newline is not None:
+        return newline.group(0)
+    first = chunks[0]
+    return first if _PLAIN_COMMA_RE.fullmatch(first) else ", "
+
+
+def clean_edited_tag_caption(
+    caption: str,
+    *,
+    underscore_to_space: bool,
+    preserve_prefixes: Sequence[str] = tuple(DEFAULT_LORA_PRESERVE_PREFIXES),
+) -> str:
+    """Apply the export's tag clean-up to a caption the user edited by hand.
+
+    Only a caption read as a tag list is touched (see
+    :func:`dataset_sidecar_caption_is_tag_list`); a sentence comes back as is.
+    Empty tokens (``a, , b``, left behind when find/replace removes a tag) are
+    dropped together with their separator, and with ``underscore_to_space`` each
+    tag gets the shared LoRA underscore rule, so ``score_*`` prefixes survive.
+    Tag order and content are otherwise exactly what the user wrote.
+    """
+    if not caption.strip() or not dataset_sidecar_caption_is_tag_list(caption):
+        return caption
+    pieces = _TAG_SEPARATOR_RE.split(caption.strip())
+    kept: list[tuple[str, str]] = []
+    pending: list[str] = []
+    for index, piece in enumerate(pieces):
+        if index % 2 == 1:
+            pending.append(piece)
+            continue
+        token = piece.strip()
+        if not token:
+            continue
+        if underscore_to_space:
+            token = normalize_lora_tag(token, list(preserve_prefixes))
+        kept.append((_gap_separator(pending) if kept and pending else ", ", token))
+        pending = []
+    return "".join(f"{separator if index else ''}{token}" for index, (separator, token) in enumerate(kept))

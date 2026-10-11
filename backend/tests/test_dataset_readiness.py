@@ -636,9 +636,10 @@ def test_readiness_surfaces_existing_export_validator_warnings(tmp_path: Path) -
     assert report.summary.blocker_count == 0
     assert warning_codes >= {
         "multiline_caption",
-        "missing_trigger",
         "conflicting_ratings",
     }
+    # The export adds the trigger to an edited caption, so it is not missing.
+    assert "missing_trigger" not in warning_codes
 
 
 def test_readiness_fingerprint_changes_with_source_content(tmp_path: Path) -> None:
