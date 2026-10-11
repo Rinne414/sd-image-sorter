@@ -251,6 +251,13 @@
         // "long_hair" matches "long hair" / "Long  Hair".
         const normalizeTag = (s) => String(s || '').replace(/[\s_]+/g, ' ').trim().toLowerCase();
         const findKey = normalizeTag(find);
+        // An empty replacement removes the tag: its token goes with its
+        // separator, so no ", ," is left behind.
+        const removing = replace.trim() === '';
+        const dropEmptyTags = (parts) => parts
+            .filter((part) => part.trim() !== '')
+            .join(',')
+            .replace(/^\s+/, '');
         let count = 0;
         try {
             const scopeIds = typeof this._captionScopeIds === 'function' ? this._captionScopeIds() : this.imageIds;
@@ -273,18 +280,26 @@
                 if (substringMode) {
                     if (!caption.includes(find)) continue;
                     updated = caption.split(find).join(replace);
+                    if (removing) {
+                        // Cutting part of a tag must not leave a dangling space
+                        // before the comma or an empty line behind.
+                        updated = dropEmptyTags(updated.split(',').map((part) => part.trimEnd()))
+                            .replace(/(\r?\n)(?:[ \t]*\r?\n)+/g, '$1');
+                    }
                 } else {
                     // Whole-tag: split on commas, match tokens whose normalized
                     // form equals the find term, and swap the replacement in
                     // verbatim while keeping each token's surrounding spacing.
                     let changed = false;
-                    updated = caption.split(',').map((part) => {
+                    const parts = caption.split(',').map((part) => {
                         if (!findKey || normalizeTag(part) !== findKey) return part;
                         changed = true;
+                        if (removing) return '';
                         const m = part.match(/^(\s*)[\s\S]*?(\s*)$/);
                         return `${m ? m[1] : ''}${replace}${m ? m[2] : ''}`;
-                    }).join(',');
+                    });
                     if (!changed) continue;
+                    updated = removing ? dropEmptyTags(parts) : parts.join(',');
                 }
                 this.captionEdits.set(id, updated);
                 count++;
