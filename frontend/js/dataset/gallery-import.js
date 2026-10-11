@@ -225,6 +225,7 @@
                 this.captionEdits.clear();
                 this._undoStacks.clear();
                 this._queueSelection.clear();
+                this._resetQueueFilters();
                 // meta + NL/type maps too — clearing used to leak them, and
                 // deterministic local ids resurface leaked entries on
                 // re-import (2026-07 pin-sweep finding #2).

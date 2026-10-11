@@ -53,7 +53,11 @@ async function shownIds(page: Page) {
 
 /** The scope <select> is wrapped by the dataset custom dropdown; use its real UI. */
 async function chooseCaptionScope(page: Page, value: string) {
-  await page.locator('.dataset-custom-dropdown[data-select-id="dataset-caption-scope"] button').click()
+  const button = page.locator('.dataset-custom-dropdown[data-select-id="dataset-caption-scope"] button')
+  // The page scrolls smoothly, and any scroll closes an open dropdown: bring the
+  // button into view instantly so no animation runs after the click opens the list.
+  await button.evaluate((el) => el.scrollIntoView({ block: 'center', behavior: 'instant' }))
+  await button.click()
   await page.locator(`.dataset-custom-dropdown-list:not([hidden]) .dataset-custom-dropdown-option[data-value="${value}"]`).click()
   await expect(page.locator('#dataset-caption-scope')).toHaveValue(value)
 }
@@ -213,4 +217,76 @@ test('the virtualized queue (over 800 images) renders only images that pass the 
   await list.evaluate((el) => { el.scrollTop = Math.floor(el.scrollHeight * 0.8) })
   await expect.poll(async () => Math.min(...(await shownIds(page)))).toBeGreaterThan(FIRST_ID + 1000)
   expect((await shownIds(page)).every((id) => (id - FIRST_ID) % 2 === 0)).toBe(true)
+})
+
+async function expectFiltersReset(page: Page, ids: number[]) {
+  await expect(page.locator('#dataset-queue-tag-chips .dataset-queue-tag-chip')).toHaveCount(0)
+  await expect(page.locator('#dataset-queue-filter-count')).toBeHidden()
+  await expect(page.locator('#dataset-queue-caption-filter')).toHaveValue('all')
+  await expect.poll(() => shownIds(page)).toEqual(ids)
+  expect(await page.evaluate(() => (window as any).DatasetMaker._queueTagFilter))
+    .toEqual({ include: [], exclude: [] })
+}
+
+test('loading a project starts with no queue filter so its images are not hidden', async ({ page }) => {
+  await openDatasetWith(page, FILTER_CAPTIONS)
+  await page.locator('#dataset-queue-caption-filter').selectOption('tagged')
+  await addTagFilter(page, 'hat', 'include')
+  await expect.poll(() => shownIds(page)).toEqual([901, 906])
+
+  const settings = await page.evaluate(() => (window as any).DatasetMaker._serializeProjectSettings())
+  const now = '2026-10-10T00:00:00Z'
+  const project = {
+    id: 95,
+    name: 'Filter reset',
+    revision: 1,
+    archived_at: null,
+    created_at: now,
+    updated_at: now,
+    settings,
+    items: [951, 952].map((id, position) => ({
+      position, item_type: 'library', source_image_id: id, image_id: id, missing: false,
+    })),
+    missing_image_ids: [],
+  }
+  await page.route('**/api/dataset/projects', (route) => route.fulfill({
+    json: {
+      projects: [{
+        id: 95, name: project.name, revision: 1, archived_at: null,
+        created_at: now, updated_at: now, item_count: 2, missing_image_count: 0,
+      }],
+    },
+  }))
+  await page.route('**/api/dataset/projects/95', (route) => route.fulfill({ json: project }))
+  await page.route(/\/api\/annotations\/projects\/95\/training-captions\/heads(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: { project_id: 95, items: [], has_more: false, next_after_subject_id: null } }))
+  await page.evaluate(() => (window as any).DatasetMaker._refreshProjectLists())
+
+  await page.getByTestId('dataset-project-selector').selectOption('95')
+  // The unsaved draft holds images, so loading asks before replacing it.
+  await expect(page.locator('#confirm-modal')).toHaveClass(/visible/)
+  await page.locator('#btn-confirm-ok').click()
+  await expect(page.getByTestId('dataset-project-status')).toHaveAttribute('data-state', 'loaded')
+  await expectFiltersReset(page, [951, 952])
+})
+
+test('clearing the dataset drops the queue filter before the next import', async ({ page }) => {
+  await openDatasetWith(page, FILTER_CAPTIONS)
+  await addTagFilter(page, 'hat', 'include')
+  await addTagFilter(page, 'smile', 'exclude')
+  await expect.poll(() => shownIds(page)).toEqual([901])
+
+  await page.locator('#btn-dataset-clear').click()
+  await expect(page.locator('#confirm-modal')).toHaveClass(/visible/)
+  await page.locator('#btn-confirm-ok').click()
+  await expect.poll(() => page.evaluate(() => (window as any).DatasetMaker.imageIds.length)).toBe(0)
+
+  await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    dm.imageIds = [961, 962]
+    dm.captions.set(961, '1girl, smile')
+    dm.captions.set(962, 'solo')
+    dm._renderQueue()
+  })
+  await expectFiltersReset(page, [961, 962])
 })

@@ -775,6 +775,7 @@
                 this._quickfilledTrigger = projectManagedTrigger;
                 this._undoStacks.clear();
                 this._queueSelection.clear();
+                this._resetQueueFilters();
                 restoreAuthoritativeMembership();
                 this.activeId = imageIds.length > 0 ? imageIds[0] : null;
             } finally {
@@ -847,6 +848,7 @@
                 this._quickfilledTrigger = '';
                 this._undoStacks.clear();
                 this._queueSelection.clear();
+                this._resetQueueFilters();
                 this._clearLocalDatasetState?.();
                 this.activeId = null;
             } finally {

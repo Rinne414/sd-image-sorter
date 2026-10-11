@@ -88,11 +88,16 @@
         this._setQueueTagFilter(tag, this._queueTagFilterMode(tag) === 'include' ? null : 'include');
     };
 
-    DM._clearQueueFilters = function () {
+    // State only: callers that replace the queue render it right after.
+    DM._resetQueueFilters = function () {
         this._queueCaptionFilter = 'all';
         const select = document.getElementById('dataset-queue-caption-filter');
         if (select) select.value = 'all';
         this._queueTagFilter = { include: [], exclude: [] };
+    };
+
+    DM._clearQueueFilters = function () {
+        this._resetQueueFilters();
         this._onQueueFilterChanged();
     };
 
