@@ -110,10 +110,39 @@ export function ContextMenu({ x, y, label, header, groups, onClose, focusFirst =
     item.onSelect?.()
   }
 
-  const openSub = (item: CtxItem, el: HTMLElement, focus: boolean) => {
+  const keepSub = () => {
     window.clearTimeout(closeTimer.current)
+    closeTimer.current = undefined
+  }
+
+  const closeSubSoon = () => {
+    if (closeTimer.current !== undefined) return
+    closeTimer.current = window.setTimeout(() => {
+      closeTimer.current = undefined
+      setSub(null)
+    }, HOVER_CLOSE_MS)
+  }
+
+  const openSub = (item: CtxItem, el: HTMLElement, focus: boolean) => {
+    keepSub()
     setSub({ item, anchor: el.getBoundingClientRect() })
     if (focus) requestAnimationFrame(() => items(document.querySelector<HTMLElement>('[data-ctx-sub]'))[0]?.focus())
+  }
+
+  // The pointer moved over a row. (Not "entered": an entry that arrives late,
+  // like "Filter by this model" once the image's details load, slides the rows
+  // under a pointer that stays still, and that must not swap the submenu.)
+  const pointerOver = (item: CtxItem, el: HTMLElement) => {
+    if (!item.children) {
+      if (sub) closeSubSoon()
+    } else if (sub?.item.id !== item.id) {
+      openSub(item, el, false)
+    } else if (el.getBoundingClientRect().top !== sub.anchor.top) {
+      // Its row moved since the submenu opened: the submenu follows it.
+      openSub(item, el, false)
+    } else {
+      keepSub()
+    }
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -163,10 +192,7 @@ export function ContextMenu({ x, y, label, header, groups, onClose, focusFirst =
               item={item}
               expanded={sub?.item.id === item.id}
               onChoose={choose}
-              onEnter={(el) => {
-                if (item.children) openSub(item, el, false)
-                else if (sub) closeTimer.current = window.setTimeout(() => setSub(null), HOVER_CLOSE_MS)
-              }}
+              onPointerOver={(el) => pointerOver(item, el)}
               onOpen={(el) => (sub?.item.id === item.id ? setSub(null) : openSub(item, el, false))}
             />
           ))}
@@ -181,7 +207,7 @@ export function ContextMenu({ x, y, label, header, groups, onClose, focusFirst =
             setSub(null)
             if (refocus) ref.current?.querySelector<HTMLElement>(`[data-item="${CSS.escape(sub.item.id)}"]`)?.focus()
           }}
-          onHold={() => window.clearTimeout(closeTimer.current)}
+          onHold={keepSub}
         />
       )}
     </div>,
@@ -193,13 +219,13 @@ function Row({
   item,
   expanded,
   onChoose,
-  onEnter,
+  onPointerOver,
   onOpen,
 }: {
   item: CtxItem
   expanded?: boolean
   onChoose: (item: CtxItem) => void
-  onEnter?: (el: HTMLElement) => void
+  onPointerOver?: (el: HTMLElement) => void
   onOpen?: (el: HTMLElement) => void
 }) {
   const parent = !!item.children
@@ -214,7 +240,7 @@ function Row({
       disabled={item.disabled}
       aria-haspopup={parent ? 'menu' : undefined}
       aria-expanded={parent ? !!expanded : undefined}
-      onPointerEnter={(e) => onEnter?.(e.currentTarget)}
+      onPointerMove={(e) => onPointerOver?.(e.currentTarget)}
       onClick={(e) => (parent ? onOpen?.(e.currentTarget) : onChoose(item))}
     >
       <span className={styles.label}>{item.label}</span>

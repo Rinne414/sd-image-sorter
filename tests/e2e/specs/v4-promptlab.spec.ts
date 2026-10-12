@@ -269,6 +269,34 @@ test('Build starts from the image being looked at and cleans its prompt, keeping
   expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
 })
 
+test('an entry that arrives after "Send to tool" opened leaves that submenu open', async ({ page }) => {
+  await page.setViewportSize({ width: 2560, height: 1440 })
+  await openAt(page, '#/library', 'compare')
+  // The image's details come late: "Filter by this model" then appears above
+  // "Send to tool" and the rows move under the pointer, which stays still.
+  let release = () => {}
+  const held = new Promise<void>((resolve) => (release = resolve))
+  await page.route(`**/api/images/${ids[2]}`, async (route) => {
+    await held
+    await route.continue()
+  })
+  await tile(page, 2).click({ button: 'right' })
+  const menu = page.getByTestId('card-menu')
+  const sendTo = menu.getByRole('menuitem', { name: 'Send to tool' })
+  await sendTo.hover()
+  await expect(sendTo).toHaveAttribute('aria-expanded', 'true')
+  await expect(menu.getByRole('menuitem', { name: 'Filter by this model' })).toHaveCount(0)
+
+  release()
+  await expect(menu.getByRole('menuitem', { name: 'Filter by this model' })).toBeVisible()
+  // Two frames: the browser has re-checked what is under the pointer.
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))))
+  await expect(menu.getByRole('menuitem', { name: 'Analyze' })).toHaveAttribute('aria-expanded', 'false')
+  await expect(sendTo).toHaveAttribute('aria-expanded', 'true')
+  await page.locator('[data-ctx-sub]').getByRole('menuitem', { name: 'Prompt Lab' }).click()
+  await expect(page.getByTestId('pl-build-source-name')).toHaveText(`${PREFIX}02.png`)
+})
+
 test('"Send to tool" opens a library image in Build, and the mode is remembered', async ({ page }) => {
   await page.setViewportSize({ width: 2560, height: 1440 })
   await openAt(page, '#/library', 'compare')
