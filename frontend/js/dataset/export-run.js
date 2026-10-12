@@ -1063,6 +1063,7 @@
     };
 
     // ---------- Result modal ----------
+    let resultReturnFocus = null;
     DM._showResultModal = function (status, data) {
         const modal = document.getElementById('dataset-result-modal');
         const statusEl = document.getElementById('dataset-result-status');
@@ -1142,7 +1143,12 @@
             openFolderBtn.dataset.folder = folder;
             openFolderBtn.disabled = !folder;
         }
+        // Closing hands focus back to what had it, so a keyboard user is not
+        // dropped on <body> after the dialog goes away.
+        const active = document.activeElement;
+        resultReturnFocus = active && active !== document.body && !modal.contains(active) ? active : null;
         modal.hidden = false;
+        document.getElementById('btn-dataset-result-close')?.focus();
 
         // Reload captions if export succeeded — DB tags may have updated via sidecars
         // (no-op for now; placeholder for future automatic refresh).
@@ -1150,8 +1156,23 @@
 
     DM._hideResultModal = function () {
         const modal = document.getElementById('dataset-result-modal');
-        if (modal) modal.hidden = true;
+        if (!modal || modal.hidden) return;
+        modal.hidden = true;
+        if (resultReturnFocus?.isConnected) resultReturnFocus.focus();
+        resultReturnFocus = null;
     };
+
+    // Escape closes the result dialog like every other dialog. Capture phase +
+    // stopPropagation keeps the same keypress from also clearing a Gallery
+    // selection or reaching the Dataset workbench hotkeys behind the dialog.
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        const modal = document.getElementById('dataset-result-modal');
+        if (!modal || modal.hidden) return;
+        event.preventDefault();
+        event.stopPropagation();
+        DM._hideResultModal();
+    }, true);
 
     DM._openOutputFolder = async function () {
         const btn = document.getElementById('btn-dataset-open-folder');
