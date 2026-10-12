@@ -3034,12 +3034,24 @@
 #view-dataset .dataset-multiselect-bar {
     flex: 0 0 auto;
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
     padding: 8px;
     background: rgba(28, 28, 28, 0.9);
     border-top: 1px solid var(--border-color, rgba(255,255,255,0.08));
     border-radius: 0 0 12px 12px;
 }
+#view-dataset .dataset-multisel-tag-form {
+    flex: 1 1 100%;
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+}
+#view-dataset .dataset-multisel-tag-form .form-input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 #view-dataset .dataset-multiselect-bar[hidden] {
     display: none !important;
 }

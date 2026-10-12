@@ -198,23 +198,84 @@
             this._removeSelectedImages();
         });
         bar.querySelector('#btn-multisel-addtag').addEventListener('click', () => {
-            const tag = prompt(this._t('dataset.multiAddTagPrompt', 'Tag to add:'));
-            if (!tag || !tag.trim()) return;
-            const t = tag.trim();
-            for (const sid of this._queueSelection) {
-                const current = this.captionEdits.has(sid)
-                    ? this.captionEdits.get(sid)
-                    : (this.captions.get(sid) || '');
-                const updated = current ? current + ', ' + t : t;
-                this.captionEdits.set(sid, updated);
-            }
-            this._queueSelection.clear();
-            this._updateMultiSelectUI();
-            this._renderQueue();
-            if (this.activeId != null) this._setActive(this.activeId);
-            this._toast(this._t('dataset.multiAddTagDone',
-                'Added tag to {count} images', { count: n }), 'success');
-            this._saveSession?.();
+            this._openAddTagField(bar);
         });
+    };
+
+    // The tag field opens inside the selection bar (no window.prompt). Typing
+    // "a, b" adds each piece as its own tag. An image that already has a tag
+    // (same _normalizeTagKey) is left alone for that tag.
+    DM._openAddTagField = function (bar) {
+        if (bar.querySelector('#dataset-multisel-tag-form')) return;
+        const form = document.createElement('form');
+        form.id = 'dataset-multisel-tag-form';
+        form.className = 'dataset-multisel-tag-form';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = 'dataset-multisel-tag-input';
+        input.className = 'form-input';
+        input.autocomplete = 'off';
+        input.placeholder = this._t('dataset.multiAddTagPrompt', 'Tag to add:');
+        input.setAttribute('aria-label', input.placeholder);
+        const confirm = document.createElement('button');
+        confirm.type = 'submit';
+        confirm.className = 'btn btn-small btn-primary';
+        confirm.textContent = this._t('dataset.multiAddTagConfirm', 'Add');
+        const cancel = document.createElement('button');
+        cancel.type = 'button';
+        cancel.className = 'btn btn-small btn-ghost';
+        cancel.textContent = this._t('dataset.multiAddTagCancel', 'Cancel');
+        form.append(input, confirm, cancel);
+        bar.appendChild(form);
+        input.focus();
+        cancel.addEventListener('click', () => form.remove());
+        input.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            e.preventDefault();
+            e.stopPropagation();
+            form.remove();
+        });
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const tags = input.value.split(',').map((t) => t.trim()).filter(Boolean);
+            if (tags.length === 0) return;
+            form.remove();
+            this._addTagsToSelection(tags);
+        });
+    };
+
+    DM._addTagsToSelection = function (tags) {
+        const unique = [];
+        const seen = new Set();
+        for (const tag of tags) {
+            const key = this._normalizeTagKey(tag);
+            if (!key || seen.has(key)) continue;
+            seen.add(key);
+            unique.push(tag);
+        }
+        let changed = 0;
+        let alreadyHad = 0;
+        for (const sid of this._queueSelection) {
+            const current = this.captionEdits.has(sid)
+                ? this.captionEdits.get(sid)
+                : (this.captions.get(sid) || '');
+            const have = new Set(String(current).split(',').map((p) => this._normalizeTagKey(p)));
+            const missing = unique.filter((t) => !have.has(this._normalizeTagKey(t)));
+            if (missing.length === 0) {
+                alreadyHad += 1;
+                continue;
+            }
+            const base = String(current).trim().replace(/,\s*$/, '');
+            this.captionEdits.set(sid, base ? base + ', ' + missing.join(', ') : missing.join(', '));
+            changed += 1;
+        }
+        this._queueSelection.clear();
+        this._updateMultiSelectUI();
+        this._renderQueue();
+        if (this.activeId != null) this._setActive(this.activeId);
+        this._toast(this._t('dataset.multiAddTagResult',
+            'Added the tag to {added} images, {skipped} already had it',
+            { added: changed, skipped: alreadyHad }), changed > 0 ? 'success' : 'info');
+        if (changed > 0) this._saveSession?.();
     };
 })();
