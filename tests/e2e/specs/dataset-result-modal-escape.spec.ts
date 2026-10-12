@@ -46,3 +46,22 @@ test('Escape with no dialog open leaves the Dataset workbench alone', async ({ p
   expect(await page.evaluate(() => [...(window as any).DatasetMaker.imageIds])).toEqual(before)
   await expect(page.locator('#view-dataset')).toHaveClass(/active/)
 })
+
+test('Escape on the result dialog does not also reach other Escape handlers behind it', async ({ page }) => {
+  await openResultModal(page)
+  // The More menu closes on any Escape that reaches the document.
+  await page.evaluate(() => { document.getElementById('nav-tools-menu')!.hidden = false })
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#dataset-result-modal')).toBeHidden()
+  expect(await page.evaluate(() => document.getElementById('nav-tools-menu')!.hidden)).toBe(false)
+})
+
+test('Escape leaves the result dialog open while another dialog sits above it', async ({ page }) => {
+  await openResultModal(page)
+  await page.evaluate(() => document.getElementById('nav-customize-modal')!.classList.add('visible'))
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#dataset-result-modal')).toBeVisible()
+  await page.evaluate(() => document.getElementById('nav-customize-modal')!.classList.remove('visible'))
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#dataset-result-modal')).toBeHidden()
+})

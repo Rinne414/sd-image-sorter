@@ -479,6 +479,14 @@
     }
 }
 
+/* From 1440 up to the point the 144px minimum fits twice (~1894px) the queue
+   column is 234-274px of content, which holds only one 144px thumbnail per row. */
+@media (min-width: 1440px) and (max-width: 1893px) {
+    #view-dataset .dataset-queue-list.dataset-queue-grid-mode {
+        --dataset-queue-grid-min: 108px;
+    }
+}
+
 @media (min-width: 1600px) {
     #view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-workbench {
         grid-template-columns: clamp(300px, 17vw, 380px) minmax(920px, 2fr) clamp(300px, 18vw, 380px);

@@ -1145,8 +1145,10 @@
         }
         // Closing hands focus back to what had it, so a keyboard user is not
         // dropped on <body> after the dialog goes away.
-        const active = document.activeElement;
-        resultReturnFocus = active && active !== document.body && !modal.contains(active) ? active : null;
+        if (modal.hidden) {
+            const active = document.activeElement;
+            resultReturnFocus = active && active !== document.body && !modal.contains(active) ? active : null;
+        }
         modal.hidden = false;
         document.getElementById('btn-dataset-result-close')?.focus();
 
@@ -1163,12 +1165,15 @@
     };
 
     // Escape closes the result dialog like every other dialog. Capture phase +
-    // stopPropagation keeps the same keypress from also clearing a Gallery
-    // selection or reaching the Dataset workbench hotkeys behind the dialog.
+    // stopPropagation keeps the same keypress from also reaching other Escape
+    // handlers behind the dialog (the More menu, Gallery selection clearing).
     document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') return;
         const modal = document.getElementById('dataset-result-modal');
         if (!modal || modal.hidden) return;
+        // A dialog opened above this one owns the key; it closes first.
+        const openDialogs = document.querySelectorAll('.modal.visible, .dataset-modal:not([hidden])');
+        if ([...openDialogs].some(dialog => dialog !== modal)) return;
         event.preventDefault();
         event.stopPropagation();
         DM._hideResultModal();
