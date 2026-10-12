@@ -3287,6 +3287,11 @@ test('training caption version survives project reload and exports by revision r
     content: TrainingCaptionContent
   } | null = null
   await openDataset(page)
+  // Typing "blue_hair" below opens the tag suggestions a moment later, and the
+  // dropdown can land over "Save version". This test is about saving, so the
+  // suggestions come back empty and the dropdown never opens.
+  await page.route((url) => url.pathname === '/api/tags/suggest', (route) =>
+    route.fulfill({ json: { suggestions: [] } }))
   await page.route('**/api/annotations/projects/120/**', (route) => {
     const request = route.request()
     const path = new URL(request.url()).pathname
