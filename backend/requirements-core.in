@@ -52,3 +52,7 @@ threadpoolctl>=3.1.0
 # the VLM and translate clients use httpx.AsyncClient on anyio) and
 # CVE-2026-64847 (process-pool workers can wedge on a full stderr pipe).
 anyio>=4.14.2
+# Security floor: fsspec 2026.6.0 fixes CVE-2026-104851 (GHSA-27vj-qcqg-25rc):
+# ReferenceFileSystem rendered reference documents through un-sandboxed jinja2.
+# Transitive via huggingface-hub.
+fsspec>=2026.6.0
