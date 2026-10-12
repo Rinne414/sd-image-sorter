@@ -222,7 +222,11 @@
     // "a, b" adds each piece as its own tag. An image that already has a tag
     // (same _normalizeTagKey) is left alone for that tag.
     DM._openAddTagField = function (bar) {
-        if (bar.querySelector('#dataset-multisel-tag-form')) return;
+        const openForm = bar.querySelector('#dataset-multisel-tag-form');
+        if (openForm) {
+            openForm.querySelector('input')?.focus();
+            return;
+        }
         const form = document.createElement('form');
         form.id = 'dataset-multisel-tag-form';
         form.className = 'dataset-multisel-tag-form';
@@ -253,7 +257,8 @@
         });
         form.addEventListener('submit', (e) => {
             e.preventDefault();
-            const tags = input.value.split(',').map((t) => t.trim()).filter(Boolean);
+            const tags = input.value.split(',').map((t) => t.trim())
+                .filter((t) => this._normalizeTagKey(t));
             if (tags.length === 0) return;
             form.remove();
             this._addTagsToSelection(tags);

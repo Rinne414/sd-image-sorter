@@ -60,10 +60,36 @@ test('opens an in-app field instead of window.prompt, Escape cancels', async ({ 
   expect(await edited(page, 801)).toBeUndefined()
 })
 
-test('an empty value does nothing', async ({ page }) => {
-  await seedSelection(page, { 811: '1girl' })
-  await addTag(page, '   ')
-  expect(await edited(page, 811)).toBeUndefined()
+for (const blank of ['   ', '_', ' , _ ']) {
+  test(`a value with no real tag (${JSON.stringify(blank)}) does nothing and keeps the form`, async ({ page }) => {
+    await seedSelection(page, { 811: '1girl' })
+    await addTag(page, blank)
+    await expect(page.locator('#dataset-multisel-tag-input')).toBeVisible()
+    await expect(page.locator('#dataset-multisel-tag-input')).toHaveValue(blank)
+    await expect(page.locator('.toast')).toHaveCount(0)
+    expect(await edited(page, 811)).toBeUndefined()
+    expect(await page.evaluate(() => (window as any).DatasetMaker._queueSelection.size)).toBe(1)
+  })
+}
+
+test('clicking Add tag again focuses the open field', async ({ page }) => {
+  await seedSelection(page, { 812: '1girl' })
+  await page.locator('#btn-multisel-addtag').click()
+  await page.locator('#dataset-tab-workbench').focus()
+  await page.locator('#btn-multisel-addtag').click()
+  await expect(page.locator('#dataset-multisel-tag-input')).toBeFocused()
+})
+
+test('typing a and d in the field does not change the active image', async ({ page }) => {
+  await seedSelection(page, { 851: '1girl', 852: 'solo' })
+  const active = () => page.evaluate(() => (window as any).DatasetMaker.activeId)
+  const before = await active()
+  await page.locator('#btn-multisel-addtag').click()
+  const input = page.locator('#dataset-multisel-tag-input')
+  await input.press('a')
+  await input.press('d')
+  await expect(input).toHaveValue('ad')
+  expect(await active()).toBe(before)
 })
 
 test('skips images that already have the tag (folded) and reports both counts', async ({ page }) => {
@@ -101,7 +127,5 @@ test('a half-typed tag survives queue re-renders and selection changes', async (
   await expect(input).toBeFocused()
   await expect(page.locator('#btn-multisel-addtag')).toContainText('2')
   await page.evaluate(() => (window as any).DatasetMaker._clearQueueSelection())
-  await expect(page.locator('#dataset-multisel-tag-form')).toHaveCount(0)
-  await page.evaluate(() => (window as any).DatasetMaker._selectAllQueue([841, 842]))
   await expect(page.locator('#dataset-multisel-tag-form')).toHaveCount(0)
 })
