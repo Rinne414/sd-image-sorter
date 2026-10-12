@@ -32,6 +32,20 @@ def _app(calls: list):
     return app
 
 
+@pytest.fixture(autouse=True)
+def _own_temp_folder(tmp_path, monkeypatch):
+    """Spooled upload files go to a folder only this test uses.
+
+    The check below lists the temp folder before and after a request. The
+    system one is shared with every other test process (xdist workers' SQLite
+    writes its own ``etilqs_*`` temp files there), so a file another process
+    made in between failed this test though the app wrote nothing.
+    """
+    folder = tmp_path / "temp"
+    folder.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(folder))
+
+
 def _temp_files() -> set[str]:
     return {p.name for p in Path(tempfile.gettempdir()).iterdir()}
 

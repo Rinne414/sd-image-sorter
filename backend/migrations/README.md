@@ -16,6 +16,11 @@ This project now treats SQLite schema changes as versioned application code, not
 - Each migration runs inside its own SQLite `SAVEPOINT`.
 - If one migration fails, that migration is rolled back without advancing `schema_version`, and startup fails loudly.
 - If the database schema is newer than the latest bundled migration, startup fails before persistent connection PRAGMAs, migrations, or recovery writes run.
+- Before the first pending migration touches an existing database, `init_db()` writes a consistent copy of it to
+  `backups/<db stem>-schema-<from>-to-<to>-<timestamp>.db` next to the database (an upgrade is one-way: an older
+  version refuses the result). A new database or one that is already current is not copied, only the newest
+  `SCHEMA_BACKUPS_KEPT` (3) such copies are kept, and a copy that cannot be written is logged as a warning and the
+  upgrade goes on.
 - Migration 030 adds `gallery_session_images`, a restart-cleared membership index;
   it never owns image pixels or permanent Library/Collection records.
 - Migration 031 adds named Dataset projects with ordered Library references;
@@ -39,6 +44,9 @@ This project now treats SQLite schema changes as versioned application code, not
   existing Dataset projects without changing their export behavior.
 - Migration 041 materializes disabled watermark-removal settings for existing
   Dataset projects without changing their export behavior.
+- Migrations 060 and 061 came from the V Opus line, which numbered them while the classic line added 049-051. A
+  database V Opus had taken to 061 therefore skipped 049-051; migration 062 runs those three again (each is additive
+  and idempotent), so it repairs such a database and changes nothing on any other.
 
 ## Downgrade Policy
 

@@ -8,6 +8,10 @@ factory and schema constants; it must not import from ``database``.
 """
 import sqlite3
 import logging
+import os
+import time
+from pathlib import Path
+from typing import Optional
 
 from db_core import (
     get_connection,
@@ -17,6 +21,11 @@ from db_core import (
 
 
 logger = logging.getLogger(__name__)
+
+# Copies of a database written just before its schema is upgraded live in a
+# folder next to it; only the newest few of them are kept.
+SCHEMA_BACKUP_DIRNAME = "backups"
+SCHEMA_BACKUPS_KEPT = 3
 
 
 class UnsupportedDatabaseSchemaVersionError(RuntimeError):
@@ -135,6 +144,108 @@ def _recover_stale_pending_metadata_rows(conn: sqlite3.Connection) -> int:
     return pending_count
 
 
+def _database_file(conn: sqlite3.Connection) -> Optional[Path]:
+    """The file behind the connection's main database (None for an in-memory one)."""
+    for _seq, name, file_name in conn.execute("PRAGMA database_list").fetchall():
+        if name == "main":
+            return Path(file_name) if file_name else None
+    return None
+
+
+def _has_user_tables(conn: sqlite3.Connection) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'images'"
+    ).fetchone()
+    return row is not None
+
+
+def _copy_database(conn: sqlite3.Connection, target: Path) -> None:
+    """Write a consistent copy of the connection's database (WAL included) to ``target``."""
+    destination = sqlite3.connect(str(target))
+    try:
+        conn.backup(destination)
+    finally:
+        destination.close()
+
+
+def _modified_at(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
+def _prune_schema_backups(folder: Path, stem: str, newest: Path) -> None:
+    """Keep ``newest`` and the most recent other pre-upgrade copies of this database.
+
+    Only files this module names (``<stem>-schema-*.db``) are considered, and
+    the copy just written always stays, whatever the other files' times say.
+    """
+    prefix = f"{stem}-schema-"
+    others = sorted(
+        (
+            path
+            for path in folder.iterdir()
+            if path.name.startswith(prefix) and path.suffix == ".db" and path != newest
+        ),
+        key=_modified_at,
+        reverse=True,
+    )
+    for stale in others[SCHEMA_BACKUPS_KEPT - 1 :]:
+        try:
+            stale.unlink()
+        except OSError as exc:
+            logger.warning("Could not remove the old database copy %s: %s", stale, exc)
+
+
+def _backup_before_upgrade(
+    conn: sqlite3.Connection, current_version: int, target_version: int
+) -> Optional[Path]:
+    """Copy an existing database aside before its schema is upgraded.
+
+    An upgrade is one-way (an older version refuses the result), so the copy
+    is the way back. A copy that cannot be written is logged and the upgrade
+    goes on: the migrations themselves only add to the database.
+    """
+    database_file = _database_file(conn)
+    if database_file is None:
+        return None
+    folder = database_file.parent / SCHEMA_BACKUP_DIRNAME
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    target = folder / (
+        f"{database_file.stem}-schema-{current_version:03d}-to-{target_version:03d}-{stamp}.db"
+    )
+    partial = target.with_name(target.name + ".part")
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        _copy_database(conn, partial)
+        os.replace(partial, target)
+    except (OSError, sqlite3.Error) as exc:
+        logger.warning(
+            "Could not copy the database before upgrading its schema from %s to %s; "
+            "upgrading without a copy: %s",
+            current_version,
+            target_version,
+            exc,
+        )
+        try:
+            partial.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return None
+    logger.info(
+        "Copied the database before upgrading its schema from %s to %s: %s",
+        current_version,
+        target_version,
+        target,
+    )
+    try:
+        _prune_schema_backups(folder, database_file.stem, target)
+    except OSError as exc:
+        logger.warning("Could not tidy the old database copies in %s: %s", folder, exc)
+    return target
+
+
 def init_db() -> None:
     """Initialize or migrate the database schema to the latest known version."""
     from migrations import get_migrations
@@ -151,6 +262,14 @@ def init_db() -> None:
                 current_version,
                 latest_supported_version,
             )
+
+        if current_version < latest_supported_version and (
+            current_version > 0 or _has_user_tables(conn)
+        ):
+            # The ledger insert above may have opened a transaction; the copy
+            # must see a quiet database.
+            conn.commit()
+            _backup_before_upgrade(conn, current_version, latest_supported_version)
 
         for migration in migration_list:
             if migration.version <= current_version:
