@@ -87,7 +87,7 @@ async function openAt(page: Page, hash: string) {
     localStorage.removeItem('sd-v4-browse')
     localStorage.removeItem('sd-v4-lexicon')
   }, LIBRARY)
-  const res = await page.goto(`/v4/${hash}`, { waitUntil: 'domcontentloaded' })
+  const res = await page.goto(`/vopus/${hash}`, { waitUntil: 'domcontentloaded' })
   expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
   await expect(page.getByTestId('lexicon-page').or(page.getByTestId('gallery-scroller')).first()).toBeVisible()
 }

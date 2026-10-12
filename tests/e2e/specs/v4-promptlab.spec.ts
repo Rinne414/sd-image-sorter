@@ -119,7 +119,7 @@ async function openAt(page: Page, hash: string, mode = 'stats') {
     },
     { library: LIBRARY, first: mode },
   )
-  const res = await page.goto(`/v4/${hash}`, { waitUntil: 'domcontentloaded' })
+  const res = await page.goto(`/vopus/${hash}`, { waitUntil: 'domcontentloaded' })
   expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
 }
 

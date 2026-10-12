@@ -96,7 +96,7 @@ async function openV4(page: Page, hash: string): Promise<void> {
     localStorage.setItem('sd-v4-theme', 'dark')
     localStorage.removeItem('sd-v4-caption-zh')
   })
-  await page.goto(`/v4/${hash}`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`/vopus/${hash}`, { waitUntil: 'domcontentloaded' })
 }
 
 async function apiJson<T>(page: Page, url: string, init?: { method: string; body?: unknown }): Promise<{ status: number; body: T }> {
@@ -428,7 +428,7 @@ test('X takes the image out (the toast undoes it); A/D/X do nothing on the Libra
   expect((await project(page)).items.length).toBe(4)
 
   // the Library page: A, D and X mean nothing for the batch
-  await page.goto('/v4/#/library', { waitUntil: 'domcontentloaded' })
+  await page.goto('/vopus/#/library', { waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('gallery-scroller')).toBeVisible()
   const before = (await project(page)).revision
   for (const key of ['a', 'd', 'x', 'x']) await page.keyboard.press(key)

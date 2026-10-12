@@ -7,7 +7,7 @@ import { expect, type Locator, type Page } from '@playwright/test'
 import { PY_DELETE_IMAGES } from './e2e-db'
 
 /**
- * Shared set-up for the V4 specs (V4 is served at /v4/ by the same backend).
+ * Shared set-up for the V4 specs (V4 is served at /vopus/ by the same backend).
  * Each spec seeds its own rows into the isolated test database under its own
  * filename prefix and search token, so specs never see each other's images,
  * and removes them (and their folders) afterwards.
@@ -137,7 +137,7 @@ print("ok")
 `)
 }
 
-/** Open /v4/ in English with a fixed theme (in `library` when given), search for `query` and wait for `count` results. */
+/** Open /vopus/ in English with a fixed theme (in `library` when given), search for `query` and wait for `count` results. */
 export async function openLibrary(page: Page, query: string, count: number, theme: 'dark' | 'light' = 'dark', library?: string) {
   // Seed language and theme once per page, so a later reload keeps what the test changed.
   await page.addInitScript((th) => {
@@ -148,7 +148,7 @@ export async function openLibrary(page: Page, query: string, count: number, them
     localStorage.setItem('sd-v4-theme', th)
     // no update check half a minute after start: the test server would ask GitHub (v4-about.spec.ts stubs and tests it)
     localStorage.setItem('sd-v4-update-autocheck', '0')
-    // these specs start in the library: a plain /v4/ opens the start page (Home unless Settings says otherwise)
+    // these specs start in the library: a plain /vopus/ opens the start page (Home unless Settings says otherwise)
     const prefs = JSON.parse(localStorage.getItem('sd-v4-prefs') || '{}')
     localStorage.setItem('sd-v4-prefs', JSON.stringify({ ...prefs, startPage: 'library' }))
   }, theme)
@@ -157,7 +157,7 @@ export async function openLibrary(page: Page, query: string, count: number, them
   const switched = library
     ? page.waitForRequest((req) => req.url().includes('/api/images?') && req.headers()['x-sd-library-id'] === library)
     : null
-  const res = await page.goto(library ? `/v4/?library=${encodeURIComponent(library)}` : '/v4/', { waitUntil: 'domcontentloaded' })
+  const res = await page.goto(library ? `/vopus/?library=${encodeURIComponent(library)}` : '/vopus/', { waitUntil: 'domcontentloaded' })
   expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
   await switched
   const input = page.getByTestId('query-input')

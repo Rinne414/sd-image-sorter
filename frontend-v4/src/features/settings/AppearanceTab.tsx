@@ -1,9 +1,10 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useLang, useT, type Lang, type MessageKey } from '../../i18n'
 import type { StartPage } from '../../lib/route'
 import { percent, roomAt, SCALE_OPTIONS, type ScaleSetting } from '../../lib/uiScale'
 import { useApp } from '../../state/store'
 import { useTheme, type ThemeMode } from '../../theme'
+import { pushRefusal } from '../jobs/refusalToast'
 import styles from './AppearanceTab.module.css'
 import { useUiScale } from './uiScaleStore'
 import { useSaved } from './useSaved'
@@ -28,7 +29,8 @@ type Section = 'theme' | 'lang' | 'scale' | 'start' | 'film'
 
 /**
  * Settings › Appearance: theme, language, interface zoom, the page V4 opens
- * on and the ★5 film on Home, each applied as soon as it is chosen.
+ * on, the ★5 film on Home and which interface opens at start, each applied
+ * as soon as it is chosen.
  */
 export function AppearanceTab() {
   const t = useT()
@@ -64,7 +66,50 @@ export function AppearanceTab() {
       />
       <ScaleChoice saved={saved === 'scale'} onSaved={() => mark('scale')} />
       <HomeChoices saved={saved} mark={mark} />
+      <InterfaceChoice />
     </div>
+  )
+}
+
+/**
+ * Which interface opens at start: this one or the classic one. The backend
+ * keeps the choice (PUT /api/interface), so every browser and every launch
+ * opens the same one; picking Classic goes there at once.
+ */
+function InterfaceChoice() {
+  const t = useT()
+  const [leaving, setLeaving] = useState(false)
+  const toClassic = async () => {
+    setLeaving(true)
+    try {
+      const res = await fetch('/api/interface', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ interface: 'classic' }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      window.location.assign('/')
+    } catch (error) {
+      setLeaving(false)
+      pushRefusal(t('settings.interface.failed'), error)
+    }
+  }
+  return (
+    <Choice
+      name="interface"
+      title={t('settings.interface.title')}
+      saved={false}
+      options={[
+        { value: 'vopus', label: t('settings.interface.vopus') },
+        { value: 'classic', label: t('settings.interface.classic') },
+      ]}
+      value={leaving ? 'classic' : 'vopus'}
+      onChange={(v) => {
+        if (v === 'classic' && !leaving) void toClassic()
+      }}
+    >
+      <p className={styles.hint}>{t('settings.interface.hint')}</p>
+    </Choice>
   )
 }
 

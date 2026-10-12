@@ -34,6 +34,11 @@ export const enSettings: Record<keyof typeof zhCNSettings, string> = {
   'settings.film.on': 'Show',
   'settings.film.off': 'Hide',
   'settings.film.hint': 'Turn it off while sharing your screen: Home then shows no film and loads none of those images. The rest of Home stays.',
+  'settings.interface.title': 'Interface',
+  'settings.interface.vopus': 'Vopus (this one)',
+  'settings.interface.classic': 'Classic',
+  'settings.interface.hint': 'Both work on the same library. The one you pick opens every time the program starts; the classic interface switches back in its own Settings.',
+  'settings.interface.failed': 'Could not switch to the classic interface',
 
   'settings.palette.open': 'Settings: {tab}',
   'settings.palette.language': 'Language: switch to 中文',

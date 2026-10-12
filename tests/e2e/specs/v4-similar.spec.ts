@@ -633,7 +633,7 @@ test('similar pairs: 60 % lists the pairs most alike first, opens full size, and
       localStorage.setItem('sd-v4-update-autocheck', '0')
       localStorage.setItem('sd-library-workspace-v1', JSON.stringify({ v: 2, currentId: library }))
     }, PAIRS_LIBRARY)
-    await page.goto('/v4/#/library', { waitUntil: 'domcontentloaded' })
+    await page.goto('/vopus/#/library', { waitUntil: 'domcontentloaded' })
     await page.keyboard.press('Control+k')
     await page.keyboard.type('duplicate')
     await page.keyboard.press('Enter')

@@ -111,7 +111,7 @@ async function openWithStoredLibrary(page: Page, libraryId: string, lang: 'en' |
     },
     [libraryId, lang] as const,
   )
-  const res = await page.goto('/v4/#/library', { waitUntil: 'domcontentloaded' })
+  const res = await page.goto('/vopus/#/library', { waitUntil: 'domcontentloaded' })
   expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
 }
 

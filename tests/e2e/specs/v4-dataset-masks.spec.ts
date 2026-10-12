@@ -88,7 +88,7 @@ async function openV4(page: Page, hash: string): Promise<void> {
     localStorage.setItem('sd-image-sorter-lang', 'en')
     localStorage.setItem('sd-v4-theme', 'dark')
   })
-  await page.goto(`/v4/${hash}`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`/vopus/${hash}`, { waitUntil: 'domcontentloaded' })
 }
 
 async function apiJson<T>(page: Page, url: string, init?: { method: string; body?: unknown }): Promise<{ status: number; body: T }> {

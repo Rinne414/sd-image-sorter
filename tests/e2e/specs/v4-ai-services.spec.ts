@@ -144,7 +144,7 @@ async function openAi(page: Page, theme: 'dark' | 'light' = 'dark') {
     localStorage.setItem('sd-v4-update-autocheck', '0')
   }, theme)
   // the theme in the address makes each theme a full load (a hash change alone would not run the init script)
-  const res = await page.goto(`/v4/?theme=${theme}#/settings/ai`, { waitUntil: 'domcontentloaded' })
+  const res = await page.goto(`/vopus/?theme=${theme}#/settings/ai`, { waitUntil: 'domcontentloaded' })
   expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
   await expect(page.getByTestId('ai-services')).toBeVisible()
 }

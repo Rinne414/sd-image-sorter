@@ -169,6 +169,9 @@ function writeStubPackageMetadata(packageName: string, version: string) {
 
 fs.mkdirSync(e2eFixtureRoot, { recursive: true })
 fs.rmSync(e2eStubModulesDir, { recursive: true, force: true })
+// Every run starts on the classic interface at /, even after an aborted
+// interface-switch spec left Vopus chosen in this reused data folder.
+fs.rmSync(path.join(e2eDataDir, 'config', 'interface.json'), { force: true })
 const artistRuntimeZip = path.join(e2eFixtureRoot, 'comfyui-lsnet-runtime.zip')
 const artistRuntimeSource = path.join(e2eFixtureRoot, 'comfyui-lsnet-runtime-source')
 const artistCheckpoint = path.join(e2eFixtureRoot, 'best_checkpoint.pth')

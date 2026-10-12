@@ -252,7 +252,7 @@ async function openAt(page: Page, hash: string, lang: 'en' | 'zh-CN' = 'en', res
     if (left) localStorage.setItem('sd-v4-model-resume', left)
     else localStorage.removeItem('sd-v4-model-resume')
   }, [lang, resume ? JSON.stringify(resume) : ''] as const)
-  const res = await page.goto(`/v4/${hash}`, { waitUntil: 'domcontentloaded' })
+  const res = await page.goto(`/vopus/${hash}`, { waitUntil: 'domcontentloaded' })
   expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
   await expect(page.getByTestId('model-center')).toBeVisible()
 }

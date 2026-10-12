@@ -576,7 +576,7 @@ def test_apply_update_removes_managed_files_the_new_package_dropped(monkeypatch,
         new_manifest_paths=[V4_INDEX, V4_NEW_ASSET, "update/package-manifest.json"],
         installed_files={"frontend/index.html": "v3.5\n", "frontend/js/app.js": "v3.5\n"},
         payload_files={
-            V4_INDEX: '<script src="/v4/assets/index-NewHash2.js"></script>\n',
+            V4_INDEX: '<script src="/vopus/assets/index-NewHash2.js"></script>\n',
             V4_NEW_ASSET: "new build\n",
         },
     )
@@ -599,11 +599,11 @@ def test_apply_update_replaces_an_older_v4_build_without_leaving_its_hashed_asse
         current_manifest_paths=[V4_INDEX, V4_OLD_ASSET, "update/package-manifest.json"],
         new_manifest_paths=[V4_INDEX, V4_NEW_ASSET, "update/package-manifest.json"],
         installed_files={
-            V4_INDEX: '<script src="/v4/assets/index-OldHash1.js"></script>\n',
+            V4_INDEX: '<script src="/vopus/assets/index-OldHash1.js"></script>\n',
             V4_OLD_ASSET: "old build\n",
         },
         payload_files={
-            V4_INDEX: '<script src="/v4/assets/index-NewHash2.js"></script>\n',
+            V4_INDEX: '<script src="/vopus/assets/index-NewHash2.js"></script>\n',
             V4_NEW_ASSET: "new build\n",
         },
     )

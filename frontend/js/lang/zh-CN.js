@@ -5481,6 +5481,8 @@ window.I18nLang_zhCN = {
     'catalog.promptlab': '用你的库组 prompt：权重、模板、负面词',
     'catalog.artist': '识别画风相近的画师',
     'catalog.stylemap': '把整个图库按画风摆成三维点云，靠在一起的图画法相近；先建立画风索引',
+    'catalog.vopusName': 'Vopus 界面',
+    'catalog.vopus': '同一个图库的第二套界面；选中的那个每次启动都会打开（在它的设置里可切回经典界面）',
     // Style Map (画风地图)
     'stylemap.space': '坐标',
     'stylemap.spaceKaloscope': '画风识别模型',
@@ -5744,6 +5746,12 @@ window.I18nLang_zhCN = {
     'settings.entryHeroBody': '入口页全屏展示你的 ★5 作品，每天换一张',
     'settings.entryHeroOn': '开',
     'settings.entryHeroOff': '关',
+    'settings.interfaceTitle': '界面',
+    'settings.interfaceBody': '当前是经典界面。Vopus 是同一个图库的第二套界面；选中的那个每次启动程序都会打开。',
+    'settings.interfaceNotBuilt': 'Vopus 还没有构建：安装 Node.js 后，用 run.bat 或 run.sh 重新启动程序即可。',
+    'settings.interfaceSwitch': '切换到 Vopus',
+    'settings.interfaceFailed': '切换界面失败：{detail}',
+    'settings.interfaceOffline': '程序没有响应',
 
     // 纯图标按钮的无障碍名称。这些按钮没有可见文字，SVG 图标带 aria-hidden，
     // 读屏软件只会念「按钮」。通过 data-i18n-aria 套用；HTML 里同时写死

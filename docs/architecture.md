@@ -2,7 +2,7 @@
 
 ## System Overview
 
-SD Image Sorter is a local web application for managing, tagging, sorting, and censoring Stable Diffusion generated images. It runs as a FastAPI backend on `127.0.0.1:8487` by default (configurable via `SD_IMAGE_SORTER_PORT`) that serves two interfaces over the same API and database: the classic vanilla HTML/JS/CSS frontend at `/` (the default) and V Opus, a React frontend (formerly V4), at `/v4/`.
+SD Image Sorter is a local web application for managing, tagging, sorting, and censoring Stable Diffusion generated images. It runs as a FastAPI backend on `127.0.0.1:8487` by default (configurable via `SD_IMAGE_SORTER_PORT`) that serves two interfaces over the same API and database: the classic vanilla HTML/JS/CSS frontend at `/` (the default) and V Opus, a React frontend (formerly V4), at `/vopus/`. Settings in either interface chooses which one `/` opens.
 
 ## Architecture Diagram
 
@@ -29,7 +29,7 @@ SD Image Sorter is a local web application for managing, tagging, sorting, and c
 #### Entry Point
 - **`main.py`**: FastAPI application assembly, service initialization, router mounting, exception handlers, and process startup.
 - **`app_security.py`**: CORS, localhost-only enforcement, the `/api` request guard (Host / Origin / `Sec-Fetch-Site`), in-memory API rate limiting, and security response headers.
-- **`app_static.py`**: serves both interfaces. The classic UI: `/static` mounting, no-cache static responses, and `GET /` cache-bust injection for frontend JS/CSS. V Opus: the `frontend-v4/dist` build at `/v4/` (hashed assets cached forever, `index.html` never), with `index.html` as the fallback for its client routes.
+- **`app_static.py`**: serves both interfaces. The classic UI: `/static` mounting, no-cache static responses, and `GET /` cache-bust injection for frontend JS/CSS. V Opus: the `frontend-v4/dist` build at `/vopus/` (hashed assets cached forever, `index.html` never), with `index.html` as the fallback for its client routes; old `/v4/...` addresses get a 308 to the same path under `/vopus/`. `GET /` redirects to `/vopus/` (keeping the query) only when V Opus was chosen and its build exists; `/?ui=classic` always serves the classic UI.
 - **`app_diagnostics.py`**: Bounded support diagnostics, support-log redaction, and file-manager opening for the support log.
 
 #### Routers (`routers/`)
@@ -113,6 +113,14 @@ React + TypeScript single-page app, built by Vite into `frontend-v4/dist`
 launchers once Node.js is installed). The address hash is the route. It talks
 to the same backend and database as the classic UI.
 
+Which interface `/` opens is one backend setting, not a browser one, so every
+browser and every launch agree: `services/interface_preference.py` keeps it in
+`data/config/interface.json` (missing or unreadable means classic), and
+`routers/interface.py` reads and sets it (`GET`/`PUT /api/interface`). The
+classic UI offers the switch in Settings › General and in the entry page's
+catalog (`frontend/js/modules/interface-switch.js`); V Opus offers it in
+Settings › Appearance.
+
 - **`src/app/`**: the shell (top bar, page switch)
 - **`src/features/`**: one folder per area (`library/`, `batch/`, `sort/`,
   `censor/`, `tools/`, `settings/`, ...)
@@ -131,6 +139,7 @@ Package-local runtime state is stored outside `backend/` code paths:
 - `data/thumbnails/` (thumbnail cache)
 - `data/models/` (downloaded runtime models)
 - `data/state/sort-session.json` (manual sort persisted session)
+- `data/config/interface.json` (which interface `/` opens)
 - `update/` (update downloads/logs/state/worker workspaces)
 
 All runtime paths are configurable by environment variables in `backend/config.py`.

@@ -168,7 +168,7 @@ test('six picks go into four folders by key; undo moves back; a reload keeps the
   await expect(page.getByTestId('gallery-scroller')).toBeVisible()
   const current = await (await page.request.get('/api/sort/current')).json()
   expect(current.active).toBe(false)
-  await page.goto('/v4/#/home')
+  await page.goto('/vopus/#/home')
   await expect(page.getByTestId('home')).toBeVisible()
   await expect(page.getByTestId('home-sort')).toHaveCount(0)
 })
@@ -229,7 +229,7 @@ test('a new sort over an unfinished one asks first; Home and the setup offer to 
   await expect(page.getByTestId('sort-pos')).toHaveText('Image 1 of 3')
   await press(page, 'Space', 'Image 2 of 3')
 
-  await page.goto('/v4/#/home')
+  await page.goto('/vopus/#/home')
   const card = page.getByTestId('home-sort')
   await expect(card).toContainText('image 2 of 3')
   await expect(card.getByRole('button', { name: 'Continue' })).toBeInViewport({ ratio: 1 })

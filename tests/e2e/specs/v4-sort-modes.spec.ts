@@ -143,7 +143,7 @@ test('keep / reject: keys, undo, the tally, then favourite the kept and pick the
 test('presets: save the setup, load it back, replace by name, delete after asking', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   await openLibrary(page, TOKEN, COUNT)
-  await page.goto('/v4/#/home')
+  await page.goto('/vopus/#/home')
   await page.getByTestId('home-start-sort').click()
   const bar = page.getByTestId('sort-presets')
   await page.getByTestId('sort-mode-cull').click()
@@ -280,7 +280,7 @@ test('a sort of another library waits for a yes before any key acts, and Home an
     await page.getByTestId('palette').locator('input').fill('continue the last sort')
     await expect(page.getByTestId('palette').getByRole('option').first()).toHaveText(/Continue the last sort \(library “Main library”\)/)
     await page.keyboard.press('Escape')
-    await page.goto('/v4/#/home')
+    await page.goto('/vopus/#/home')
     await expect(page.getByTestId('home-sort')).toContainText('belong to the library “Main library”')
     expect(actions).toHaveLength(1)
   } finally {

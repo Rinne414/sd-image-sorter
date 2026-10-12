@@ -1,7 +1,7 @@
 # SD Image Sorter Vopus — UI Design Rules
 
 This document describes the Vopus interface (formerly V4; `frontend-v4/`, React
-+ TypeScript, served at `/v4/`; the classic interface stays at `/`, see `DESIGN.md`). It has two layers: **§principles** is
++ TypeScript, served at `/vopus/`; the classic interface stays at `/`, see `DESIGN.md`). It has two layers: **§principles** is
 the design philosophy every surface must serve; the sections after it are
 **micro-invariants** that survived a "wait, why?" review. When a change
 conflicts with either layer, the change is wrong; see `docs/AI_PRINCIPLES.md`

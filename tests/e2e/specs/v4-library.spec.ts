@@ -3,7 +3,7 @@ import { expect, test, type Page } from '../fixtures/click-ledger'
 import { cleanupImages, openLibrary as open, pageOverflow, seedImages, VIEWPORTS } from '../fixtures/v4-seed'
 
 /**
- * V4 library page (served by the same backend at /v4/, next to V3.5 at /).
+ * V4 library page (served by the same backend at /vopus/, next to V3.5 at /).
  * Seeds its own images into the isolated test database, tagged with a search
  * token so other specs' rows never leak in, and removes them afterwards.
  *

@@ -2616,6 +2616,28 @@ Return a copyable support diagnostics payload for stalled scans and troubleshoot
 #### POST /api/support/open-log
 Open the configured rotating backend support log in the operating system file manager. The endpoint does not accept a user-supplied path; it only opens the app-controlled `LOG_FILE_PATH` location so the scan dialog can offer an "Open log file" action. If no OS opener is available, it returns `opened=false` with the log path instead of failing with a server error. The JSON response includes both the raw local `path` for local clipboard use and `path_redacted` for display, so frontend UI must display the redacted value and only copy the raw path on explicit user action.
 
+### Interface
+
+The backend serves two interfaces: the classic one at `/` and Vopus at `/vopus/`
+(old `/v4/...` addresses answer 308 with the same path under `/vopus/`). Which one
+`/` opens is remembered here, so every browser and every launch agree. When Vopus
+is chosen and built, `GET /` answers 307 to `/vopus/` with the same query;
+`GET /?ui=classic` always serves the classic interface.
+
+#### GET /api/interface
+
+```json
+{ "interface": "classic", "vopus_built": true }
+```
+
+`interface` is `classic` (the default, also when the saved choice is missing or
+unreadable) or `vopus`. `vopus_built` says whether `frontend-v4/dist/index.html` exists.
+
+#### PUT /api/interface
+
+Body: `{ "interface": "classic" | "vopus" }`. Returns the same shape as `GET`.
+`409` when `vopus` is asked for before it is built; `400` for any other value.
+
 ### Updates
 
 #### GET /api/updates/status

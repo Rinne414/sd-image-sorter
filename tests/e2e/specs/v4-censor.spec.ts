@@ -95,7 +95,7 @@ async function openBatch(page: Page, theme: 'dark' | 'light' = 'dark'): Promise<
     localStorage.setItem('sd-v4-theme', th)
     for (const key of Object.keys(localStorage)) if (key.startsWith('sd-v4-censor-')) localStorage.removeItem(key)
   }, theme)
-  const res = await page.goto(`/v4/#/batch/${batchId}`, { waitUntil: 'domcontentloaded' })
+  const res = await page.goto(`/vopus/#/batch/${batchId}`, { waitUntil: 'domcontentloaded' })
   expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
   await expect(page.getByTestId('censor-editor')).toBeVisible()
   await expect(page.getByTestId('censor-canvas')).toBeVisible()
@@ -433,7 +433,7 @@ test('settings are remembered; [ and ] only act inside the editor', async ({ pag
   await page.keyboard.press('[')
   expect(await page.evaluate(() => localStorage.getItem('sd-v4-censor-size'))).toBe('60')
 
-  await page.goto(`/v4/#/batch/${batchId}`)
+  await page.goto(`/vopus/#/batch/${batchId}`)
   await expect(page.getByTestId('censor-editor')).toBeVisible()
   await page.keyboard.press(']')
   await expect(size).toHaveValue('65')

@@ -374,7 +374,7 @@ else
     echo
 fi
 
-# ── Vopus interface (/v4/) ─────────────────────────────────────────
+# ── Vopus interface (/vopus/) ──────────────────────────────────────
 # A source checkout builds frontend-v4 when the build is missing or out of
 # date (release packages ship it built). A missing Node.js or a failed build
 # only skips the build; the app still starts.

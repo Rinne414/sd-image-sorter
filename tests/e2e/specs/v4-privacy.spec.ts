@@ -90,7 +90,7 @@ async function openPrivacy(page: Page) {
     localStorage.setItem('sd-v4-update-autocheck', '0')
     localStorage.removeItem('sd-v4-privacy-options')
   })
-  const res = await page.goto('/v4/#/tools/privacy', { waitUntil: 'domcontentloaded' })
+  const res = await page.goto('/vopus/#/tools/privacy', { waitUntil: 'domcontentloaded' })
   expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
   await expect(page.getByTestId('privacy-page')).toBeVisible()
 }

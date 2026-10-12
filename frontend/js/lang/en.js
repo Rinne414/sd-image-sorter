@@ -5484,6 +5484,8 @@ window.I18nLang_en = {
     'catalog.promptlab': 'Build prompts from your library: weights, templates, negatives',
     'catalog.artist': 'Identify artists with a similar style',
     'catalog.stylemap': 'Your library as a 3-D cloud where pictures drawn alike sit together. Build the style index first.',
+    'catalog.vopusName': 'Vopus interface',
+    'catalog.vopus': 'A second interface on the same library; the one you pick opens at every start (its Settings switches back)',
     // Style Map
     'stylemap.space': 'Space',
     'stylemap.spaceKaloscope': 'Style Finder model',
@@ -5747,6 +5749,12 @@ window.I18nLang_en = {
     'settings.entryHeroBody': 'Full-bleed ★5 artwork on the entry page, rotating daily',
     'settings.entryHeroOn': 'On',
     'settings.entryHeroOff': 'Off',
+    'settings.interfaceTitle': 'Interface',
+    'settings.interfaceBody': 'This is the classic interface. Vopus is a second interface on the same library; the one you pick opens every time the program starts.',
+    'settings.interfaceNotBuilt': 'Vopus is not built yet: install Node.js, then start the program again with run.bat or run.sh.',
+    'settings.interfaceSwitch': 'Switch to Vopus',
+    'settings.interfaceFailed': 'Could not switch the interface: {detail}',
+    'settings.interfaceOffline': 'the program did not answer',
 
     // Accessible names for icon-only buttons. These carry no visible text, so
     // the sprite icon (aria-hidden) leaves a screen reader nothing to announce

@@ -93,6 +93,7 @@
                 { icon: '🖌️', nameKey: 'nav.artist', name: 'Style Finder', descKey: 'catalog.artist', desc: 'Identify artists with a similar style', run: () => goView('artist') },
                 { icon: '🧭', nameKey: 'nav.stylemap', name: 'Style Map', descKey: 'catalog.stylemap', desc: 'Your library as a 3-D cloud where pictures drawn alike sit together. Build the style index first.', run: () => goView('stylemap') },
                 { icon: '📦', nameKey: 'entry.tileModels', name: 'Model Center', descKey: 'catalog.models', desc: 'Download and manage the AI models used by tagging, similarity, artist, censor, and captions', run: () => openSettingsTab('models') },
+                { icon: '#i-layers', nameKey: 'catalog.vopusName', name: 'Vopus interface', descKey: 'catalog.vopus', desc: 'A second interface on the same library; the one you pick opens at every start (its Settings switches back)', run: () => window.InterfaceSwitch?.useVopus() },
                 { icon: '⚙️', nameKey: 'settings.tabGeneral', name: 'Settings', descKey: 'catalog.settings', desc: 'Sound, entry page, UI scale, language, disk cache, updates', run: () => openSettingsTab('general') },
             ],
         },

@@ -55,7 +55,7 @@ async function openReader(page: Page) {
     localStorage.removeItem('sd-v4-reader-folds')
     localStorage.removeItem('sd-v4-reader-save-dir')
   })
-  const res = await page.goto('/v4/#/tools/reader', { waitUntil: 'domcontentloaded' })
+  const res = await page.goto('/vopus/#/tools/reader', { waitUntil: 'domcontentloaded' })
   expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
   await expect(page.getByTestId('reader-page')).toBeVisible()
 }

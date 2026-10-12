@@ -1,4 +1,4 @@
-"""Build the Vopus interface (/v4/) for a source checkout before the app starts.
+"""Build the Vopus interface (/vopus/) for a source checkout before the app starts.
 
 run.bat and run.sh call this. Release packages ship frontend-v4/dist already
 built and carry no sources, so there it does nothing. In a source checkout it
@@ -30,12 +30,12 @@ BUILD_INPUTS = (
 INSTALL_STAMP = Path("node_modules") / ".package-lock.json"
 
 NO_NODE_MESSAGE = (
-    "[INFO] Vopus 界面（/v4/）需要 Node.js 才能构建，本次跳过；程序照常启动。"
-    " / The Vopus interface (/v4/) needs Node.js to build and is skipped; the app still starts."
+    "[INFO] Vopus 界面（/vopus/）需要 Node.js 才能构建，本次跳过；程序照常启动。"
+    " / The Vopus interface (/vopus/) needs Node.js to build and is skipped; the app still starts."
 )
 FAILED_MESSAGE = (
-    "[WARN] Vopus 界面（/v4/）构建失败，本次跳过；程序照常启动。"
-    " / The Vopus interface (/v4/) failed to build and is skipped; the app still starts."
+    "[WARN] Vopus 界面（/vopus/）构建失败，本次跳过；程序照常启动。"
+    " / The Vopus interface (/vopus/) failed to build and is skipped; the app still starts."
 )
 
 
@@ -90,13 +90,13 @@ def build_if_needed(frontend_dir: Path) -> int:
     if npm is None:
         print(NO_NODE_MESSAGE, flush=True)
         return 0
-    print("[Info] Building the Vopus interface (/v4/)...", flush=True)
+    print("[Info] Building the Vopus interface (/vopus/)...", flush=True)
     npm_steps = [["ci"], ["run", "build"]] if step == "install" else [["run", "build"]]
     for npm_args in npm_steps:
         if not _run_npm(npm, npm_args, frontend_dir):
             print(FAILED_MESSAGE, flush=True)
             return 0
-    print("[OK] Vopus interface built: /v4/", flush=True)
+    print("[OK] Vopus interface built: /vopus/", flush=True)
     return 0
 
 

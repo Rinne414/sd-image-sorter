@@ -162,7 +162,7 @@ async function openBatch(page: Page, id = batchId): Promise<void> {
     localStorage.setItem('sd-v4-theme', 'dark')
     localStorage.removeItem('sd-v4-pixiv-export')
   })
-  const res = await page.goto(`/v4/#/batch/${id}`, { waitUntil: 'domcontentloaded' })
+  const res = await page.goto(`/vopus/#/batch/${id}`, { waitUntil: 'domcontentloaded' })
   expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
   await expect(page.getByTestId('batch-view')).toBeVisible()
 }
@@ -662,7 +662,7 @@ print("ok")
   await expect(page.getByTestId('step-next')).toBeInViewport()
 
   // in the first batch a has a censored copy: the hover shows that copy, never the original
-  await page.goto(`/v4/#/batch/${batchId}`)
+  await page.goto(`/vopus/#/batch/${batchId}`)
   await page.reload({ waitUntil: 'domcontentloaded' })
   await railStep(page, 'order').click()
   await expect(page.getByTestId('order-tile')).toHaveCount(3)

@@ -4,7 +4,7 @@ import { markModelsReady } from '../fixtures/model-status'
 import { cleanupImages, dbPath, pageOverflow, runBackendScript, scrollToMiddle, seedImages, VIEWPORTS } from '../fixtures/v4-seed'
 
 /**
- * V4 at launch (slice 6l): a plain /v4/ opens Home, as V3.5 opens on its
+ * V4 at launch (slice 6l): a plain /vopus/ opens Home, as V3.5 opens on its
  * entry page; Settings › Appearance › "Open at start" can make it the library;
  * an address that names a page opens that page either way. "Show the ★5 film
  * strip on Home" off: Home shows no film and asks for none of its images, the
@@ -74,48 +74,48 @@ const storedPrefs = (page: Page) => page.evaluate(() => JSON.parse(localStorage.
 
 test('a plain launch opens Home by default; an address that names a page opens that page', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
-  await launch(page, '/v4/')
+  await launch(page, '/vopus/')
   await expect(page.getByTestId('home')).toBeVisible()
   await expect(page.getByTestId('home-film')).toBeVisible()
   expect(new URL(page.url()).hash).toBe('')
 
-  await page.goto('/v4/#/library')
+  await page.goto('/vopus/#/library')
   await expect(page.getByTestId('query-input')).toBeVisible()
   await expect(page.getByTestId('home')).toHaveCount(0)
-  await page.goto('/v4/#/settings/appearance')
+  await page.goto('/vopus/#/settings/appearance')
   await expect(page.getByTestId('settings-page')).toBeVisible()
   // a reload of a plain address opens the start page again
-  await page.goto('/v4/')
+  await page.goto('/vopus/')
   await expect(page.getByTestId('home')).toBeVisible()
 })
 
 test('"Open at start: Library" makes a plain launch open the library; Home is still one address away', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
-  await launch(page, '/v4/#/settings/appearance')
+  await launch(page, '/vopus/#/settings/appearance')
   const start = page.getByTestId('setting-start')
   await expect(start.locator('label[data-checked]')).toHaveText('Home')
   await choose(start, 'Library')
   await expect(start.getByRole('status')).toHaveText('Saved')
   expect((await storedPrefs(page)).startPage).toBe('library')
 
-  await page.goto('/v4/')
+  await page.goto('/vopus/')
   await expect(page.getByTestId('query-input')).toBeVisible()
   await expect(page.getByTestId('home')).toHaveCount(0)
   await page.reload()
   await expect(page.getByTestId('query-input')).toBeVisible()
-  await page.goto('/v4/#/home')
+  await page.goto('/vopus/#/home')
   await expect(page.getByTestId('home')).toBeVisible()
 
   // and back to Home
-  await page.goto('/v4/#/settings/appearance')
+  await page.goto('/vopus/#/settings/appearance')
   await choose(page.getByTestId('setting-start'), 'Home')
-  await page.goto('/v4/')
+  await page.goto('/vopus/')
   await expect(page.getByTestId('home')).toBeVisible()
 })
 
 test('film off: Home shows no film and asks for none of its images, the rest stays; on again, the film is back', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
-  await launch(page, '/v4/#/settings/appearance')
+  await launch(page, '/vopus/#/settings/appearance')
   const film = page.getByTestId('setting-film')
   await expect(film.locator('label[data-checked]')).toHaveText('Show')
   await choose(film, 'Hide')
@@ -131,7 +131,7 @@ test('film off: Home shows no film and asks for none of its images, the rest sta
   page.on('request', (r) => {
     if (filmRequest(r.url())) asked.push(r.url())
   })
-  await page.goto('/v4/')
+  await page.goto('/vopus/')
   await expect(page.getByTestId('home')).toBeVisible()
   await expect(page.getByTestId('home-start-sort')).toBeVisible()
   await expect(page.getByTestId('home')).toContainText('V4 e2e launch')
@@ -139,9 +139,9 @@ test('film off: Home shows no film and asks for none of its images, the rest sta
   await expect(page.getByTestId('home-film')).toHaveCount(0)
   expect(asked).toEqual([])
 
-  await page.goto('/v4/#/settings/appearance')
+  await page.goto('/vopus/#/settings/appearance')
   await choose(page.getByTestId('setting-film'), 'Show')
-  await page.goto('/v4/#/home')
+  await page.goto('/vopus/#/home')
   await expect(page.getByTestId('home-film')).toBeVisible()
   await expect.poll(() => asked.some((u) => new URL(u).pathname === '/api/images')).toBe(true)
 })
@@ -149,7 +149,7 @@ test('film off: Home shows no film and asks for none of its images, the rest sta
 for (const viewport of VIEWPORTS) {
   test(`the two rows and Home without the film fit at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport)
-    await launch(page, '/v4/#/settings/appearance')
+    await launch(page, '/vopus/#/settings/appearance')
     for (const id of ['setting-start', 'setting-film']) {
       const row = page.getByTestId(id)
       await scrollToMiddle(row)
@@ -157,7 +157,7 @@ for (const viewport of VIEWPORTS) {
     }
     expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
     await choose(page.getByTestId('setting-film'), 'Hide')
-    await page.goto('/v4/#/home')
+    await page.goto('/vopus/#/home')
     await expect(page.getByTestId('home-start-sort')).toBeInViewport()
     expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
   })

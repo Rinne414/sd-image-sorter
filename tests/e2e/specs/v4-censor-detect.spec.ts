@@ -217,7 +217,7 @@ async function openBatch(page: Page, theme: 'dark' | 'light' = 'dark', id = batc
     localStorage.setItem('sd-v4-theme', th)
     for (const key of Object.keys(localStorage)) if (key.startsWith('sd-v4-censor-')) localStorage.removeItem(key)
   }, theme)
-  const res = await page.goto(`/v4/#/batch/${id}`, { waitUntil: 'domcontentloaded' })
+  const res = await page.goto(`/vopus/#/batch/${id}`, { waitUntil: 'domcontentloaded' })
   expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
   await expect(page.getByTestId('censor-editor')).toBeVisible()
   await expect(page.getByTestId('censor-canvas')).toBeVisible()

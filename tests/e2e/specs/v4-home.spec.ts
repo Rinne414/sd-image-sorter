@@ -105,7 +105,7 @@ async function openHome(page: Page, library: string, theme: 'dark' | 'light' = '
     },
     [library, theme] as const,
   )
-  const res = await page.goto('/v4/#/home', { waitUntil: 'domcontentloaded' })
+  const res = await page.goto('/vopus/#/home', { waitUntil: 'domcontentloaded' })
   expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
   await expect(page.getByTestId('home')).toBeVisible()
 }

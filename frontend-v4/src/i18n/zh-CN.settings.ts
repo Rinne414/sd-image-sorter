@@ -35,6 +35,11 @@ export const zhCNSettings = {
   'settings.film.on': '显示',
   'settings.film.off': '不显示',
   'settings.film.hint': '共享屏幕时可以关掉：首页就不显示胶卷，也不读取这些图。首页的其他内容不变。',
+  'settings.interface.title': '界面',
+  'settings.interface.vopus': 'Vopus（当前）',
+  'settings.interface.classic': '经典界面',
+  'settings.interface.hint': '两个界面用的是同一个图库。选中的那个每次启动程序都会打开；经典界面的设置里可以再切回来。',
+  'settings.interface.failed': '没能切换到经典界面',
 
   'settings.palette.open': '设置：{tab}',
   'settings.palette.language': '语言：切换到 English',

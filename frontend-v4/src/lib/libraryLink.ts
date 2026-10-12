@@ -1,5 +1,6 @@
-// A link can name the library to open: ?library=<id>. Old V3.5 bookmarks
-// carry it too, since / redirects to /v4/ with its query. The app reads it
+// A link can name the library to open: ?library=<id>. Classic-interface
+// bookmarks carry it too, since / leads to /vopus/ with its query when
+// Settings chose Vopus. The app reads it
 // once, checks it against the libraries it knows, and drops it from the
 // address. Pure; state/arrival.ts and features/libraries/useArrival.ts apply it.
 

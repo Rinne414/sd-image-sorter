@@ -1,4 +1,4 @@
-"""Frontend serving: the classic UI at / and /static, V Opus (frontend-v4 build) at /v4/."""
+"""Frontend serving: the classic UI at / and /static, Vopus (the frontend-v4 build) at /vopus/."""
 
 from __future__ import annotations
 
@@ -6,13 +6,17 @@ import logging
 import os
 import re
 import zlib
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 
 logger = logging.getLogger("sd-image-sorter")
+
+# The Vite build of the second interface, Vopus.
+FRONTEND_V4_DIST_PATH = Path(__file__).resolve().parent.parent / "frontend-v4" / "dist"
 
 _STATIC_CACHE_BUST_RE = re.compile(r'((?:src|href)=")(/static/[^"?]+\.(?:js|css))(")')
 
@@ -102,28 +106,62 @@ V4_NOT_BUILT_MESSAGE = (
     "Install Node.js, then start the app again with run.bat (Windows) or run.sh (Linux / macOS): "
     "it builds Vopus automatically. You can also run npm ci and npm run build in the frontend-v4 folder, "
     "then reload this page.\n"
+    "\n"
+    "经典界面一直可以用：打开 / 即可。 The classic interface is always at /.\n"
 )
 
 
+def vopus_is_built(dist_path: Path | str | None = None) -> bool:
+    """Whether the Vopus build exists (``FRONTEND_V4_DIST_PATH`` unless given)."""
+    root = Path(dist_path) if dist_path is not None else FRONTEND_V4_DIST_PATH
+    return (root / "index.html").is_file()
+
+
+def serve_root(request: Request, *, frontend_path: str, app_version: str):
+    """``/``: the classic UI, or a redirect to Vopus when Settings chose it and it is built.
+
+    ``/?ui=classic`` always opens the classic UI, a way back if Vopus cannot load.
+    """
+    from services.interface_preference import VOPUS, get_preferred_interface
+
+    if (
+        request.query_params.get("ui") != "classic"
+        and get_preferred_interface() == VOPUS
+        and vopus_is_built()
+    ):
+        query = request.url.query
+        return RedirectResponse(url=f"/vopus/?{query}" if query else "/vopus/", status_code=307)
+    return serve_frontend_index(frontend_path=frontend_path, app_version=app_version)
+
+
 def mount_frontend_v4(app: FastAPI, *, dist_path: str) -> None:
-    """Serve the V Opus frontend build at /v4/.
+    """Serve the Vopus frontend build at /vopus/; the old /v4/ addresses lead there.
 
     ``dist_path`` is the Vite build output (index.html + content-hashed
-    assets/). Client-side routes under /v4/ fall back to index.html; asset
-    paths never do, so a missing file is a real 404. ``/`` stays the classic UI.
+    assets/). Client-side routes under /vopus/ fall back to index.html; asset
+    paths never do, so a missing file is a real 404. ``/`` stays the classic UI
+    (``serve_root``).
     """
     assets_path = os.path.join(dist_path, "assets")
     if os.path.isdir(assets_path):
         app.mount(
-            "/v4/assets", ImmutableStaticFiles(directory=assets_path), name="v4-assets"
+            "/vopus/assets", ImmutableStaticFiles(directory=assets_path), name="vopus-assets"
         )
 
-    @app.get("/v4", include_in_schema=False)
-    async def v4_redirect():
-        return RedirectResponse(url="/v4/")
+    @app.get("/vopus", include_in_schema=False)
+    async def vopus_redirect():
+        return RedirectResponse(url="/vopus/")
 
-    @app.get("/v4/{spa_path:path}", include_in_schema=False)
-    async def v4_index(spa_path: str = ""):
+    # Bookmarks and links from before the move keep their path and query.
+    @app.get("/v4", include_in_schema=False)
+    @app.get("/v4/{old_path:path}", include_in_schema=False)
+    async def v4_moved(request: Request, old_path: str = ""):
+        query = request.url.query
+        target = f"/vopus/{old_path}" + (f"?{query}" if query else "")
+        return RedirectResponse(url=target, status_code=308)
+
+    @app.get("/vopus/{spa_path:path}", include_in_schema=False)
+    async def vopus_index(spa_path: str = ""):
         index_path = os.path.join(dist_path, "index.html")
         if not os.path.isfile(index_path):
             return PlainTextResponse(V4_NOT_BUILT_MESSAGE, status_code=503)

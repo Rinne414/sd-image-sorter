@@ -310,7 +310,7 @@ if "!SD_IMAGE_SORTER_INSTALL_FULL_AI!"=="1" (
 )
 echo.
 
-REM -- Vopus interface at /v4/: a source checkout builds frontend-v4 here when the
+REM -- Vopus interface at /vopus/: a source checkout builds frontend-v4 here when the
 REM -- build is missing or out of date (release packages ship it built). A
 REM -- missing Node.js or a failed build only skips the build; the app still starts.
 backend\venv\Scripts\python.exe backend\launcher_v4_build.py

@@ -1,13 +1,14 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// V4 is served by the FastAPI backend under /v4/ (/ redirects there).
+// Vopus is served by the FastAPI backend under /vopus/; / is the classic
+// interface unless Settings chose Vopus, and old /v4/ addresses lead here.
 // During development the dev server proxies /api to an isolated backend
 // (never the owner's daily instance on 8487).
 const backend = process.env.V4_BACKEND ?? 'http://127.0.0.1:8521'
 
 export default defineConfig({
-  base: '/v4/',
+  base: '/vopus/',
   plugins: [react()],
   server: {
     port: 5174,

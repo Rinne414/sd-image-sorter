@@ -5731,6 +5731,17 @@
                     </div>
                     <div class="settings-row">
                         <div class="settings-row-copy">
+                            <strong data-i18n="settings.interfaceTitle">Interface</strong>
+                            <span data-i18n="settings.interfaceBody">This is the classic interface. Vopus is a second interface on the same library; the one you pick opens every time the program starts.</span>
+                            <span id="settings-interface-note" data-i18n="settings.interfaceNotBuilt" hidden>Vopus is not built yet: install Node.js, then start the program again with run.bat or run.sh.</span>
+                        </div>
+                        <button type="button" class="btn btn-ghost" id="btn-settings-interface">
+                            <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-layers"/></svg></span>
+                            <span data-i18n="settings.interfaceSwitch">Switch to Vopus</span>
+                        </button>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-copy">
                             <strong data-i18n="comfort.zenTitle">Zen mode</strong>
                             <span data-i18n="comfort.zenBody">Quieter interface so the image stands out (Ctrl+.)</span>
                         </div>
@@ -8655,6 +8666,7 @@
     <script src="/static/js/modules/settings-tabs.js"></script>
     <script src="/static/js/modules/nav-missions.js"></script>
     <script src="/static/js/modules/entry-catalog.js"></script>
+    <script src="/static/js/modules/interface-switch.js"></script>
     <script src="/static/js/modules/trait-pruner.js"></script>
     <!-- separation-console family: verbatim decomposition of the 1,155-line
          modules/separation-console.js IIFE (the SEP-1 per-tag curation

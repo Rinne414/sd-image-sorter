@@ -38,7 +38,7 @@ async function openAt(page: Page, hash: string, { lang = 'en', scale }: { lang?:
     },
     [lang, scale ?? ''] as const,
   )
-  const res = await page.goto(`/v4/${hash}`, { waitUntil: 'domcontentloaded' })
+  const res = await page.goto(`/vopus/${hash}`, { waitUntil: 'domcontentloaded' })
   expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
 }
 
@@ -88,9 +88,9 @@ test('settings tabs are addresses: clicking, typing the address, unknown tab, ba
   await expect(page.getByTestId('ai-services')).toBeVisible()
 
   // the address opens a tab; an unknown tab opens Appearance
-  await page.goto('/v4/#/settings/models')
+  await page.goto('/vopus/#/settings/models')
   await expect(page.getByTestId('settings-tab-models')).toHaveAttribute('aria-current', 'page')
-  await page.goto('/v4/#/settings/nothing-here')
+  await page.goto('/vopus/#/settings/nothing-here')
   await expect(page.getByTestId('settings-appearance')).toBeVisible()
 
   // Esc with nothing open stays on the page
@@ -98,7 +98,7 @@ test('settings tabs are addresses: clicking, typing the address, unknown tab, ba
   await expect(page.getByTestId('settings-page')).toBeVisible()
 
   // back goes to the page Settings was opened from (the Batch page here)
-  await page.goto('/v4/#/batch')
+  await page.goto('/vopus/#/batch')
   await page.getByTestId('settings-button').click()
   await page.getByTestId('settings-back').click()
   await expect(page).toHaveURL(/#\/batch$/)
@@ -138,15 +138,15 @@ test('Tools menu: keyboard, Esc closes only the menu, tool pages, back', async (
   const toolPage = page.getByTestId('tool-page')
   await expect(toolPage.getByRole('heading', { level: 1 })).toHaveText('Reverse prompt')
   await expect(page.getByTestId('reverse-page')).toBeVisible()
-  await page.goto('/v4/#/tools/lexicon')
+  await page.goto('/vopus/#/tools/lexicon')
   await expect(page.getByTestId('lexicon-page')).toBeVisible()
-  await page.goto('/v4/#/tools/reverse')
+  await page.goto('/vopus/#/tools/reverse')
   await expect(button).toHaveAttribute('aria-current', 'page')
   await expect(topTabs(page).and(page.locator('[aria-current="page"]'))).toHaveCount(0)
 
   // every tool has its address
   for (const id of ['reader', 'promptlab', 'artist', 'lexicon', 'privacy']) {
-    await page.goto(`/v4/#/tools/${id}`)
+    await page.goto(`/vopus/#/tools/${id}`)
     await expect(toolPage).toHaveAttribute('data-tool', id)
   }
 
@@ -396,13 +396,13 @@ test('?library= opens that library and is dropped; an unknown id keeps the open 
     await expect(page.getByTestId('about-version')).toBeVisible()
 
     // an address that names a library opens it and drops the query
-    await page.goto(`/v4/?library=${other}`)
-    await expect(page).toHaveURL(/\/v4\/(#.*)?$/)
+    await page.goto(`/vopus/?library=${other}`)
+    await expect(page).toHaveURL(/\/vopus\/(#.*)?$/)
     await expect.poll(storedLibrary).toBe(other)
 
     // an id this backend does not know: V4 keeps its own library, says nothing
-    await page.goto('/v4/?library=no-such-library#/settings/about')
-    await expect(page).toHaveURL(/\/v4\/#\/settings\/about$/)
+    await page.goto('/vopus/?library=no-such-library#/settings/about')
+    await expect(page).toHaveURL(/\/vopus\/#\/settings\/about$/)
     await expect(page.getByTestId('about-version')).toBeVisible()
     expect(await storedLibrary()).toBe(other)
     await expect(page.locator('[aria-live="polite"] > [data-tone]')).toHaveCount(0)

@@ -116,7 +116,7 @@ def test_build_if_needed_installs_then_builds_in_the_frontend_folder(
         (["C:/node/npm.cmd", "ci"], frontend),
         (["C:/node/npm.cmd", "run", "build"], frontend),
     ]
-    assert "/v4/" in capsys.readouterr().out
+    assert "/vopus/" in capsys.readouterr().out
 
 
 def test_build_if_needed_only_builds_when_node_modules_is_current(

@@ -104,7 +104,7 @@ async function openReverse(page: Page) {
     localStorage.removeItem('sd-v4-reverse-options')
     localStorage.removeItem('sd-v4-reverse-draft')
   }, REMEMBERED)
-  const res = await page.goto('/v4/#/tools/reverse', { waitUntil: 'domcontentloaded' })
+  const res = await page.goto('/vopus/#/tools/reverse', { waitUntil: 'domcontentloaded' })
   expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
   await expect(page.getByTestId('reverse-page')).toBeVisible()
 }

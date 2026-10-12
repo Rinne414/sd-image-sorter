@@ -90,7 +90,7 @@ async function openAt(page: Page, hash: string, { ready = true }: { ready?: bool
     },
     { library: LIBRARY, key: PREFS_KEY },
   )
-  const res = await page.goto(`/v4/${hash}`, { waitUntil: 'domcontentloaded' })
+  const res = await page.goto(`/vopus/${hash}`, { waitUntil: 'domcontentloaded' })
   expect(res?.status(), 'V4 is not built: run npm run build in frontend-v4').toBe(200)
 }
 
@@ -363,7 +363,7 @@ test('settings are remembered with V3.5, and right-click "Identify style" uses t
   expect(saved).toMatchObject({ version: 1, modelSource: 'modelscope', modelPath: '', threshold: 0.1, useGpu: false, skipExisting: true })
 
   // the library's right-click menu runs one image with them and names what it found
-  await page.goto('/v4/#/library')
+  await page.goto('/vopus/#/library')
   await expect(page.getByTestId('result-count')).toHaveText('7 images')
   await tile(page, 2).click({ button: 'right' })
   await page.getByTestId('card-menu').getByRole('menuitem', { name: 'Analyze' }).hover()
@@ -380,7 +380,7 @@ test('settings are remembered with V3.5, and right-click "Identify style" uses t
   await page.getByTestId('card-identify-artist').click()
   await expect(toast(page, 'With a local model file, enter its path first.')).toBeVisible()
   expect(stub.starts).toHaveLength(1)
-  await page.goto('/v4/#/tools/artist')
+  await page.goto('/vopus/#/tools/artist')
   await expect(page.getByTestId('artist-settings')).toContainText('With a local model file, enter its path first.')
   await page.getByTestId('artist-reset').click()
   await expect(page.getByTestId('artist-source')).toHaveValue('huggingface')
