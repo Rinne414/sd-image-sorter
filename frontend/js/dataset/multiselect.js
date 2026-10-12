@@ -174,7 +174,10 @@
         this._setSelectionSummary();
         let bar = document.getElementById('dataset-multiselect-bar');
         if (this._queueSelection.size === 0) {
-            if (bar) bar.hidden = true;
+            if (bar) {
+                bar.hidden = true;
+                bar.querySelector('#dataset-multisel-tag-form')?.remove();
+            }
             return;
         }
         if (!bar) {
@@ -186,6 +189,12 @@
         }
         bar.hidden = false;
         const n = this._queueSelection.size;
+        // An open add-tag form keeps its text and focus across the rebuild.
+        const openForm = bar.querySelector('#dataset-multisel-tag-form');
+        const tagInput = openForm?.querySelector('input');
+        const hadFocus = !!tagInput && document.activeElement === tagInput;
+        const caret = hadFocus ? [tagInput.selectionStart, tagInput.selectionEnd] : null;
+        openForm?.remove();
         bar.innerHTML = `
             <button type="button" class="btn btn-small btn-secondary" id="btn-multisel-remove">
                 ${this._t('dataset.multiRemove', 'Remove {count} selected', { count: n })}
@@ -200,6 +209,13 @@
         bar.querySelector('#btn-multisel-addtag').addEventListener('click', () => {
             this._openAddTagField(bar);
         });
+        if (openForm) {
+            bar.appendChild(openForm);
+            if (hadFocus) {
+                tagInput.focus();
+                tagInput.setSelectionRange(caret[0], caret[1]);
+            }
+        }
     };
 
     // The tag field opens inside the selection bar (no window.prompt). Typing

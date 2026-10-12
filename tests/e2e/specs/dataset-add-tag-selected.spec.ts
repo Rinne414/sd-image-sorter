@@ -83,3 +83,25 @@ test('a comma-separated entry adds each tag once', async ({ page }) => {
   await expect.poll(() => edited(page, 831)).toBe('smile, blush')
   expect(await edited(page, 832)).toBe('blush, smile')
 })
+
+test('a half-typed tag survives queue re-renders and selection changes', async ({ page }) => {
+  await seedSelection(page, { 841: '1girl', 842: 'solo', 843: 'smile' })
+  await page.locator('#btn-multisel-addtag').click()
+  const input = page.locator('#dataset-multisel-tag-input')
+  await input.fill('pending')
+  await page.evaluate(() => (window as any).DatasetMaker._renderQueue())
+  await expect(input).toHaveValue('pending')
+  await expect(input).toBeFocused()
+  await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    dm._queueSelection.delete(843)
+    dm._updateMultiSelectUI()
+  })
+  await expect(input).toHaveValue('pending')
+  await expect(input).toBeFocused()
+  await expect(page.locator('#btn-multisel-addtag')).toContainText('2')
+  await page.evaluate(() => (window as any).DatasetMaker._clearQueueSelection())
+  await expect(page.locator('#dataset-multisel-tag-form')).toHaveCount(0)
+  await page.evaluate(() => (window as any).DatasetMaker._selectAllQueue([841, 842]))
+  await expect(page.locator('#dataset-multisel-tag-form')).toHaveCount(0)
+})
