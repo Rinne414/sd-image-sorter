@@ -357,6 +357,36 @@ def _run_ci(
             ROOT,
         ),
         (
+            "vopus frontend typecheck",
+            [
+                str(NODE_EXECUTABLE),
+                "./node_modules/typescript/lib/tsc.js",
+                "--noEmit",
+                "-p",
+                "tsconfig.json",
+            ],
+            ROOT / "frontend-v4",
+        ),
+        (
+            "vopus frontend unit tests",
+            [
+                str(NODE_EXECUTABLE),
+                "./node_modules/vitest/vitest.mjs",
+                "run",
+            ],
+            ROOT / "frontend-v4",
+        ),
+        (
+            # The Vopus browser tests load /vopus/ from this build (frontend-v4/dist).
+            "vopus frontend build",
+            [
+                str(NODE_EXECUTABLE),
+                "./node_modules/vite/bin/vite.js",
+                "build",
+            ],
+            ROOT / "frontend-v4",
+        ),
+        (
             "playwright e2e",
             [
                 str(NODE_EXECUTABLE),
@@ -385,6 +415,13 @@ def _run_ci(
     all_ok = True
     passed_checks: set[str] = set()
     for name, command, cwd in checks:
+        if name == "playwright e2e" and "vopus frontend build" not in passed_checks:
+            print(
+                "[CI] SKIPPED: playwright e2e — the Vopus build did not pass, "
+                "so every Vopus browser test would fail on a missing page."
+            )
+            all_ok = False
+            continue
         if name == "click coverage gate" and "playwright e2e" not in passed_checks:
             print(
                 "[CI] SKIPPED: click coverage gate — playwright e2e did not "

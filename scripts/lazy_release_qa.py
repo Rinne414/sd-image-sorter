@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -25,7 +26,7 @@ import urllib.request
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 ROOT = Path(__file__).resolve().parent.parent
 ARTIFACT_ROOT = ROOT / "artifacts" / "release"
@@ -39,6 +40,9 @@ PACKAGE_FORBIDDEN_PREFIXES = (
     "backend/tests/",
     "backend/venv/",
     "data/",
+    # Vopus ships as its build (frontend-v4/dist) only.
+    "frontend-v4/node_modules/",
+    "frontend-v4/src/",
     "node_modules/",
     "tests/",
     "update/backups/",
@@ -55,7 +59,19 @@ PACKAGE_REQUIRED_COMMON_APP_FILES = (
     "frontend/index.html",
     "frontend/js/app.js",
     "frontend/js/gallery.js",
+    "frontend-v4/dist/index.html",
     "update/package-manifest.json",
+)
+
+V4_DIST_PREFIX = "frontend-v4/dist/"
+V4_INDEX_PATH = V4_DIST_PREFIX + "index.html"
+# The address the backend serves Vopus at; its build loads every file from here.
+V4_BASE_URL = "/vopus/"
+# A content-hashed Vite build file as index.html, the JS chunks and the
+# stylesheets name it: "/vopus/assets/x-AbC12345.js", "./x-AbC12345.js",
+# "assets/x-AbC12345.css" or url(/vopus/assets/x-AbC12345.woff2).
+V4_ASSET_REF_RE = re.compile(
+    r"(?:/vopus/assets/|\./|\bassets/)([\w.-]+-[\w-]{8}\.(?:js|css|svg|png|webp|woff2?))\b"
 )
 
 PACKAGE_REQUIRED_FILES_BY_KIND = {
@@ -237,6 +253,61 @@ def assert_archive_contents(names: Iterable[str], *, package_kind: str) -> None:
         raise LazyQaError("linux archive must not include embedded python/")
 
 
+def assert_frontend_v4_build(
+    names: Iterable[str],
+    read_text: Callable[[str], str],
+    *,
+    package_kind: str,
+) -> None:
+    """Fail unless the Vopus index.html and every file it loads, directly or through a chunk or stylesheet, ship."""
+    present = set(names)
+    if V4_INDEX_PATH not in present:
+        raise LazyQaError(f"{package_kind} archive missing required file: {V4_INDEX_PATH}")
+    index_text = read_text(V4_INDEX_PATH)
+    if f'src="{V4_BASE_URL}assets/' not in index_text:
+        raise LazyQaError(
+            f"{package_kind} archive has a Vopus index.html that does not load its script "
+            f"from {V4_BASE_URL}assets/, the address the backend serves Vopus at"
+        )
+
+    pending = sorted(set(V4_ASSET_REF_RE.findall(index_text)))
+    checked: set[str] = set()
+    while pending:
+        ref = pending.pop()
+        if ref in checked:
+            continue
+        checked.add(ref)
+        asset_path = f"{V4_DIST_PREFIX}assets/{ref}"
+        if asset_path not in present:
+            raise LazyQaError(f"{package_kind} archive missing Vopus file: {asset_path}")
+        if ref.endswith((".js", ".css")):
+            pending.extend(V4_ASSET_REF_RE.findall(read_text(asset_path)))
+
+
+def _check_package_archive(
+    names: Iterable[str],
+    read_member: Callable[[str], bytes],
+    *,
+    package_kind: str,
+) -> None:
+    raw_names = list(names)
+    assert_archive_contents(raw_names, package_kind=package_kind)
+    members = {normalize_archive_name(name): name for name in raw_names}
+    assert_frontend_v4_build(
+        members,
+        lambda path: read_member(members[path]).decode("utf-8"),
+        package_kind=package_kind,
+    )
+
+
+def _read_tar_member(archive: tarfile.TarFile, name: str) -> bytes:
+    member = archive.extractfile(name)
+    if member is None:
+        raise LazyQaError(f"Archive member is not a regular file: {name}")
+    with member:
+        return member.read()
+
+
 def find_manifest(artifact_root: Path, version: str | None) -> Path:
     pattern = f"sd-image-sorter-v{version}-release-manifest.json" if version else "sd-image-sorter-v*-release-manifest.json"
     candidates = sorted(artifact_root.glob(pattern), key=lambda path: path.stat().st_mtime, reverse=True)
@@ -282,13 +353,17 @@ def check_release_packages(artifact_root: Path, version: str | None) -> None:
                 if bad_member:
                     raise LazyQaError(f"Corrupt zip member in {name}: {bad_member}")
                 if name.endswith("windows-portable.zip"):
-                    assert_archive_contents(archive.namelist(), package_kind="windows-portable")
+                    _check_package_archive(archive.namelist(), archive.read, package_kind="windows-portable")
                 elif name.endswith("app-patch.zip"):
-                    assert_archive_contents(archive.namelist(), package_kind="app-patch")
+                    _check_package_archive(archive.namelist(), archive.read, package_kind="app-patch")
         elif name.endswith(".tar.gz"):
             with tarfile.open(asset, "r:gz") as archive:
                 package_kind = "linux-portable" if "-linux-portable-" in name else "linux"
-                assert_archive_contents(archive.getnames(), package_kind=package_kind)
+                _check_package_archive(
+                    archive.getnames(),
+                    lambda member_name: _read_tar_member(archive, member_name),
+                    package_kind=package_kind,
+                )
 
 
 def find_free_port() -> int:

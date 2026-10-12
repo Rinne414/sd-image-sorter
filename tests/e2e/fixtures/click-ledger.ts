@@ -50,6 +50,9 @@ export const test = base.extend({
             if (w.__pwLedgerBound) return
             w.__pwLedgerBound = true
             document.addEventListener('click', (event) => {
+                // The ratchet measures the classic interface (its inventory is
+                // the classic crawl); a click on a Vopus page is not in it.
+                if (location.pathname.startsWith('/vopus/')) return
                 try {
                     const key = w.__controlKey ? w.__controlKey(event.target as Element | null) : null
                     if (!key || !w.__pwLedgerRecord) return

@@ -255,7 +255,7 @@ Eagle、Billfish 是通用素材库，不列入这张 SD 工作流细表。详�
 
 ## 60 秒上手
 
-所有安装包都放在 **[Releases 页面](https://github.com/Rinne414/sd-image-sorter/releases/latest)** 的 **Assets** 区域。按下表对号入座下载一个就好。标成 Latest 的是 V3.5。Vopus（新界面）是另一条发布，标签以 `vopus-v` 开头，不在 Latest 里。
+所有安装包都放在 **[Releases 页面](https://github.com/Rinne414/sd-image-sorter/releases/latest)** 的 **Assets** 区域。按下表对号入座下载一个就好。每个安装包都同时带两套界面：默认打开经典界面，在设置里的「界面」一项可以换成 Vopus 新界面（地址 `/vopus/`），程序会记住你的选择（v3.6.1 及更早的安装包只有经典界面）。早先单独发布、标签以 `vopus-v` 开头的 Vopus 版本，检查更新时只看得到同一条线的发布。
 
 | 你的系统 | 下载这个文件 | 启动方式 |
 |:--|:--|:--|
@@ -683,7 +683,7 @@ The GitHub attachment at the top of this README is the screenshot that currently
 
 ### Quick Start
 
-Every build lives under **Assets** on the **[Releases page](https://github.com/Rinne414/sd-image-sorter/releases/latest)**. Grab exactly one. The release marked Latest is V3.5. Vopus, the new interface, is a separate release line whose tags start with `vopus-v`, and it is not the Latest release.
+Every build lives under **Assets** on the **[Releases page](https://github.com/Rinne414/sd-image-sorter/releases/latest)**. Grab exactly one. Every package carries both interfaces: the classic one opens by default, and the Interface row in Settings switches to Vopus, the new interface (at `/vopus/`); the program remembers the choice (packages up to v3.6.1 carry the classic interface only). The earlier standalone Vopus release, tagged `vopus-v…`, only sees releases of its own line when it checks for updates.
 
 | Your system | Download this file | How to start it |
 |:--|:--|:--|

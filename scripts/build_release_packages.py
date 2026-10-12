@@ -229,6 +229,13 @@ ALLOWED_HIDDEN_FILES = {
     ".env.example",
 }
 
+# Vopus interface (/vopus/): only its Vite build (frontend-v4/dist) ships. The
+# sources, node_modules and dev config are build inputs the backend never
+# reads, and the source maps embed those same sources at about three times
+# the size of the build itself.
+FRONTEND_V4_DIRNAME = "frontend-v4"
+FRONTEND_V4_BUILD_DIRNAME = "dist"
+
 CORE_MODEL_FILES = (
     "models/README.md",
     "models/yolo/README.md",
@@ -322,6 +329,20 @@ def _matches_prefix(relative_path: Path, prefixes: Iterable[str]) -> bool:
     return any(rel == prefix or rel.startswith(prefix + "/") for prefix in prefixes)
 
 
+def _is_frontend_v4_dev_dir(relative_path: Path) -> bool:
+    parts = relative_path.parts
+    return len(parts) >= 2 and parts[0] == FRONTEND_V4_DIRNAME and parts[1] != FRONTEND_V4_BUILD_DIRNAME
+
+
+def _is_frontend_v4_dev_file(relative_path: Path) -> bool:
+    parts = relative_path.parts
+    if not parts or parts[0] != FRONTEND_V4_DIRNAME:
+        return False
+    if len(parts) < 3 or parts[1] != FRONTEND_V4_BUILD_DIRNAME:
+        return True
+    return relative_path.suffix.lower() == ".map"
+
+
 def should_prune_directory(relative_path: Path) -> bool:
     rel = relative_path.as_posix()
     if any(part.startswith(".") for part in relative_path.parts):
@@ -333,6 +354,8 @@ def should_prune_directory(relative_path: Path) -> bool:
     if rel.startswith("backend/test_"):
         return True
     if any(part in EXCLUDED_NAMES for part in relative_path.parts):
+        return True
+    if _is_frontend_v4_dev_dir(relative_path):
         return True
     return False
 
@@ -363,6 +386,8 @@ def should_skip_path(relative_path: Path) -> bool:
         return True
     if is_root_internal_report(relative_path):
         return True
+    if _is_frontend_v4_dev_file(relative_path):
+        return True
     if relative_path.parts and relative_path.parts[0] == "models" and rel not in DOC_FILES:
         return True
     # Repo root is for launcher scripts and core docs only — never images.
@@ -392,6 +417,31 @@ def iter_project_files() -> Iterable[tuple[Path, Path]]:
                 continue
             if not should_skip_path(relative):
                 yield item, relative
+
+
+def build_frontend_v4() -> Path:
+    """Build the Vopus interface (/vopus/) from its lockfile before anything is staged.
+
+    A release must never ship without Vopus, so a missing npm or a failed build
+    stops the release instead of packaging an absent or stale frontend-v4/dist.
+    """
+    frontend_dir = ROOT / FRONTEND_V4_DIRNAME
+    npm = shutil.which("npm")
+    if npm is None:
+        raise RuntimeError(
+            "npm was not found on PATH. Install Node.js (it includes npm) to build "
+            f"{FRONTEND_V4_DIRNAME}; a release must not ship without the Vopus interface."
+        )
+    dist_dir = frontend_dir / FRONTEND_V4_BUILD_DIRNAME
+    # Whatever an earlier build left behind must not reach a package.
+    if dist_dir.exists():
+        shutil.rmtree(dist_dir)
+    for npm_args in (["ci"], ["run", "build"]):
+        print(f"[release] {FRONTEND_V4_DIRNAME}: npm {' '.join(npm_args)}")
+        subprocess.run([npm, *npm_args], cwd=frontend_dir, check=True)
+    if not (dist_dir / "index.html").is_file():
+        raise RuntimeError(f"The Vopus build did not produce {dist_dir / 'index.html'}")
+    return dist_dir
 
 
 def copy_file(relative_path: str | Path, destination_root: Path) -> None:
@@ -670,6 +720,9 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             "REM -- Put embedded Python and its Scripts on PATH so DLLs and\n"
             "REM    compiled extensions (numpy, pillow, onnxruntime) resolve.\n"
             "set \"PATH=!PYTHON_DIR!;!PYTHON_DIR!\\Scripts;!PYTHON_DIR!\\Lib\\site-packages;%PATH%\"\n"
+            "REM -- Use only this Python's own packages, never the user's site-packages\n"
+            "REM    under AppData (they could fill in or shadow a pinned package).\n"
+            "set \"PYTHONNOUSERSITE=1\"\n"
             "\n"
             "echo [OK] Using embedded Python: !PYTHON_CMD!\n"
             "\n"
@@ -1039,6 +1092,9 @@ fi
 # Make pip-installed entry points runnable without LD_LIBRARY_PATH dance.
 # python-build-standalone uses RPATH so the interpreter finds its own libs.
 export PATH="$PYTHON_DIR/bin:$PATH"
+# Use only this Python's own packages, never the user's ~/.local site-packages
+# (they could fill in or shadow a pinned package).
+export PYTHONNOUSERSITE=1
 
 echo "[OK] Using bundled Python: $PYTHON_CMD"
 "$PYTHON_CMD" --version
@@ -1338,6 +1394,9 @@ def stage_archive(name: str, version: str, seven_zip: Path | None, *, populate) 
 
 
 def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
+    # Every package ships the Vopus build that copy_project picks up from
+    # frontend-v4/dist, so build it before the previous packages are cleared.
+    build_frontend_v4()
     seven_zip = find_seven_zip()
     if ARTIFACT_ROOT.exists():
         shutil.rmtree(ARTIFACT_ROOT)

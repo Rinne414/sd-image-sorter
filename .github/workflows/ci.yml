@@ -21,9 +21,10 @@ jobs:
           cache: "pip"
           cache-dependency-path: backend/requirements-dev.txt
 
+      # vitest 5 (frontend-v4) needs Node 22.12 or newer.
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Install backend dependencies
         run: |
@@ -35,6 +36,12 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
+
+      # run_ci.py type-checks, unit-tests and builds Vopus before the browser
+      # tests, which open it at /vopus/.
+      - name: Install Vopus frontend dependencies
+        working-directory: frontend-v4
+        run: npm ci
 
       # A hosted runner: measuring backend coverage costs nothing here, and
       # the report is uploaded below.
@@ -163,6 +170,12 @@ jobs:
         with:
           python-version: "3.12"
 
+      # The package build runs npm ci + npm run build in frontend-v4, so every
+      # package ships Vopus already built.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Build linux-portable archive (both arches)
         env:
           # Use the runner's pip cache so repeat runs don't re-download
@@ -224,6 +237,16 @@ jobs:
               curl -fsS --max-time 5 http://127.0.0.1:8499/api/aesthetic/status \
                 | head -c 200
               echo
+              # The package carries the Vopus build: /vopus/ must answer with
+              # its page, not the "not built yet" notice.
+              # (Saved to a file first: a pipe into grep -q can fail curl
+              # under pipefail.)
+              if ! curl -fsS --max-time 5 -o "${{ runner.temp }}/vopus.html" http://127.0.0.1:8499/vopus/ \
+                || ! grep -q '/vopus/assets/' "${{ runner.temp }}/vopus.html"; then
+                echo "[smoke] /vopus/ did not serve the packaged Vopus build"
+                kill $LAUNCHER_PID 2>/dev/null || true
+                exit 1
+              fi
               kill $LAUNCHER_PID 2>/dev/null || true
               # Give the launcher a moment to clean up, then fall through to success.
               sleep 2
