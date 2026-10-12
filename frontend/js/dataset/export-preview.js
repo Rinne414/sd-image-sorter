@@ -304,6 +304,9 @@
         document.querySelectorAll('input[name="dataset-naming-preset"]').forEach((r) => {
             r.addEventListener('change', schedule);
         });
+        // The overwrite policy decides whether a clashing name gets a suffix,
+        // so the planned names change with it.
+        document.getElementById('dataset-overwrite')?.addEventListener('change', schedule);
     }
 
     DM._refreshExportPreview = refreshExportPreview;
