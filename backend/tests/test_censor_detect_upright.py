@@ -31,6 +31,7 @@ from services.censor_service import (  # noqa: E402
     CensorDetectRequest,
     CensorService,
     MaskRefineRequest,
+    RemoveBackgroundRequest,
     TextSegmentRequest,
 )
 
@@ -257,7 +258,34 @@ class TestSam3Tools:
         assert close(one["results"][0]["mask_bounds"], UPRIGHT_BOX)
 
 
+def decode_preview(data_url: str) -> Image.Image:
+    import base64
+    from io import BytesIO
+
+    return Image.open(BytesIO(base64.b64decode(data_url.split(",", 1)[1])))
+
+
+class TestRemoveBackground:
+    def test_upright_preview_is_the_upright_picture_with_the_mask_as_alpha(
+        self, rotated_jpeg, sam3
+    ):
+        request = RemoveBackgroundRequest(
+            image_id=1, fill_mode="transparent", upright=True
+        )
+        preview = decode_preview(CensorService().remove_background(request)["preview"])
+        assert preview.size == (40, 80)
+        assert close(list(preview.getchannel("A").getbbox()), UPRIGHT_BOX)
+        assert sam3.sizes[-1] == (40, 80)
+
+    def test_without_the_flag_the_raw_frame_as_before(self, rotated_jpeg, sam3):
+        request = RemoveBackgroundRequest(image_id=1, fill_mode="transparent")
+        preview = decode_preview(CensorService().remove_background(request)["preview"])
+        assert preview.size == (80, 40)
+        assert close(list(preview.getchannel("A").getbbox()), RAW_BOX)
+
+
 def test_the_flag_defaults_to_off():
+    assert RemoveBackgroundRequest(image_id=1).upright is False
     assert CensorDetectRequest(image_id=1).upright is False
     assert MaskRefineRequest(image_id=1, box=[0, 0, 1, 1]).upright is False
     assert TextSegmentRequest(image_id=1, text_prompt="x").upright is False

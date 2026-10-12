@@ -1,0 +1,57 @@
+.stack {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(420px, calc(100 * var(--vw) - 32px));
+}
+
+/* Lifted above the selection bar while it is docked at the bottom. */
+:global(html[data-selbar]) .stack {
+  bottom: 62px;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 10px 10px 14px;
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: var(--shadow-float), inset 3px 0 0 var(--accent);
+  border-radius: var(--radius-lg);
+  animation: rise var(--t-med) var(--ease);
+}
+
+.toast[data-tone="error"] {
+  box-shadow: var(--shadow-float), inset 3px 0 0 var(--danger);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+
+.text {
+  flex: 1;
+  padding-top: 5px;
+}
+
+.close {
+  display: grid;
+  align-self: center;
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  padding: 0 2px;
+}
+
+.close:hover {
+  color: var(--text);
+}

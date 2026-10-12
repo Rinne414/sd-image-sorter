@@ -463,6 +463,33 @@ class SortFilterRequest(BaseModel):
 VALID_BATCH_MOVE_SPLIT_BY = frozenset({"", "none", "generator", "checkpoint", "rating"})
 
 
+def _normalize_split_by(value: Optional[str]) -> Optional[str]:
+    """None / "" / "none" = flat; generator | checkpoint | rating = one child folder per value."""
+    if value is None:
+        return None
+    normalized = str(value).strip().lower()
+    if normalized not in VALID_BATCH_MOVE_SPLIT_BY:
+        raise ValueError("split_by must be one of: none, generator, checkpoint, rating")
+    if normalized in {"", "none"}:
+        return None
+    return normalized
+
+
+class BatchMoveGroup(BaseModel):
+    """V4: one rule of a sort by several rules: these images into this folder."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    image_ids: List[int] = Field(..., min_length=1, max_length=5_000_000)
+    destination_folder: str = Field(..., max_length=PATH_MAX_LENGTH)
+    split_by: Optional[str] = Field(default=None, max_length=32)
+
+    @field_validator("split_by")
+    @classmethod
+    def validate_split_by(cls, v: Optional[str]) -> Optional[str]:
+        return _normalize_split_by(v)
+
+
 class BatchMoveRequest(SortFilterRequest):
     """Request model for batch move operations."""
 
@@ -471,6 +498,14 @@ class BatchMoveRequest(SortFilterRequest):
     # B3-②: optional subfolder split under destination_folder.
     # "" / "none" = flat; generator | checkpoint | rating = one child folder per value.
     split_by: Optional[str] = Field(default=None, max_length=32)
+    # V4: move exactly these images (the picks, or every match of a V4 search
+    # the page resolved); when given, the filter fields above are not used.
+    image_ids: Optional[List[int]] = Field(default=None, min_length=1, max_length=5_000_000)
+    # V4 sort by several rules: each group's images go into its own folder
+    # (and split), all in ONE run with one token and one undo. An image in
+    # more than one group goes with the first. When given, the fields above
+    # that pick images or a folder are not used.
+    groups: Optional[List[BatchMoveGroup]] = Field(default=None, min_length=1)
 
     @field_validator("operation")
     @classmethod
@@ -482,20 +517,13 @@ class BatchMoveRequest(SortFilterRequest):
     @field_validator("split_by")
     @classmethod
     def validate_split_by(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return None
-        normalized = str(v).strip().lower()
-        if normalized not in VALID_BATCH_MOVE_SPLIT_BY:
-            raise ValueError(
-                "split_by must be one of: none, generator, checkpoint, rating"
-            )
-        if normalized in {"", "none"}:
-            return None
-        return normalized
+        return _normalize_split_by(v)
 
     @model_validator(mode="after")
     def require_at_least_one_filter(self) -> "BatchMoveRequest":
         """Refuse whole-library moves unless the caller supplies a real filter."""
+        if self.image_ids or self.groups:
+            return self
 
         # SortFilterRequest fields that, if any of them is set, indicate the
         # caller actually intended a filter-scoped move.
@@ -572,6 +600,12 @@ class BatchMoveRequest(SortFilterRequest):
         return self
 
 
+class BatchMoveUndoRequest(BaseModel):
+    """Undo one batch move/copy run, named by the token its start answered with."""
+
+    run_token: str = Field(..., pattern=r"^[0-9a-f]{32}$")
+
+
 class ManualSortStartRequest(SortFilterRequest):
     """Request model for starting manual sort without query-string size limits."""
 
@@ -585,6 +619,10 @@ class ManualSortStartRequest(SortFilterRequest):
     # Leave out pictures Auto-Separate or Manual Sort already copied/moved
     # (the setup page sends true by default; API callers keep the old queue).
     exclude_sorted: bool = False
+    # V4: sort exactly these images, in this order (the picks, or every match of
+    # the gallery filter resolved by /api/images/selection-ids). When given, the
+    # filter fields above are not used.
+    image_ids: Optional[List[int]] = Field(default=None, max_length=5_000_000)
 
 
 class FolderConfig(BaseModel):
@@ -629,6 +667,7 @@ class BrowseFolderRequest(BaseModel):
 
 __all__ = [
     "BatchMoveRequest",
+    "BatchMoveUndoRequest",
     "BrowseFolderRequest",
     "DIMENSION_MAX",
     "DIMENSION_MIN",

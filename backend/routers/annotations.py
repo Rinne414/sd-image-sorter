@@ -34,6 +34,12 @@ from services.annotation_revision_service import (
     resolve_project_training_caption_head,
     restore_project_training_caption_revision,
 )
+from services.annotation_batch_service import (
+    AnnotationBatchConflictError,
+    TrainingCaptionBatchRequest,
+    TrainingCaptionBatchResponse,
+    write_training_caption_batch,
+)
 
 
 router = APIRouter(prefix="/api/annotations", tags=["annotations"])
@@ -241,5 +247,35 @@ def post_restore_training_caption_revision(
             subject_id,
             request,
         )
+    except AnnotationRevisionError as error:
+        _raise_http_error(error)
+
+
+@router.post(
+    "/projects/{project_id}/training-captions/revisions:batch",
+    response_model=TrainingCaptionBatchResponse,
+    status_code=201,
+)
+def post_training_caption_revision_batch(
+    project_id: int,
+    request: TrainingCaptionBatchRequest,
+) -> TrainingCaptionBatchResponse:
+    """V4 bulk caption edits: every entry is written, or (any conflict) none."""
+    try:
+        return write_training_caption_batch(project_id, request)
+    except AnnotationBatchConflictError as error:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "annotation_batch_conflict",
+                "message": (
+                    "Some captions changed or can no longer be edited since they "
+                    "were read; nothing was written."
+                ),
+                "project_id": error.project_id,
+                "written": 0,
+                "problems": error.problems,
+            },
+        ) from error
     except AnnotationRevisionError as error:
         _raise_http_error(error)

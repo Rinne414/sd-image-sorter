@@ -1,0 +1,134 @@
+.viewport {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--stage);
+  touch-action: none;
+  user-select: none;
+  outline: none;
+}
+
+.viewport[data-cursor="paint"] {
+  cursor: crosshair;
+}
+
+.viewport[data-cursor="grab"] {
+  cursor: grab;
+}
+
+.viewport[data-cursor="grabbing"] {
+  cursor: grabbing;
+}
+
+.canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.canvas[data-pixelated] {
+  image-rendering: pixelated;
+}
+
+.note {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 24px;
+  color: var(--text-2);
+  text-align: center;
+}
+
+/* The brush outline at the current zoom: a light and a dark rule, so it shows on any picture. */
+.ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 1px solid var(--on-image);
+  box-shadow: 0 0 0 1px var(--film), inset 0 0 0 1px var(--film);
+  border-radius: 50%;
+  pointer-events: none;
+  display: none;
+}
+
+.ring[data-hover] {
+  display: block;
+}
+
+/* A big picture's filter preview on a small copy while the slider moves (scaled up over the canvas). */
+.fast {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+/* "Large picture" warning along the bottom of the picture area: says, never blocks. */
+.large {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 32px);
+  margin: 0;
+  padding: 4px 4px 4px 12px;
+  transform: translateX(-50%);
+  background: var(--tile-caption-bg);
+  color: var(--on-image);
+  font-size: var(--fs-2);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+}
+
+.large :global(.btn) {
+  height: 24px;
+  color: var(--on-image);
+}
+
+/* "Show changes": the differing pixels in marker red, over the picture, never saved. */
+.changes {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+
+/* The clone stamp's sample point: a small cross with a light and a dark rule. */
+.cloneMark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--on-image), var(--on-image)) center / 2px 100% no-repeat,
+    linear-gradient(var(--on-image), var(--on-image)) center / 100% 2px no-repeat;
+  filter: drop-shadow(0 0 1px var(--film)) drop-shadow(0 0 1px var(--film));
+}
+
+/* A one-line instruction over the top of the picture (e.g. "Alt+click to set the clone source"). */
+.hint {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  margin: 0;
+  padding: 4px 10px;
+  transform: translateX(-50%);
+  background: var(--tile-caption-bg);
+  color: var(--on-image);
+  font-size: var(--fs-2);
+  border-radius: var(--radius);
+  pointer-events: none;
+  white-space: nowrap;
+}

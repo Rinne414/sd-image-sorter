@@ -1,0 +1,56 @@
+/* What the page is for, above its keys. */
+.purpose {
+  margin: 0 0 16px;
+  max-width: 78ch;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.none {
+  margin: 0 0 12px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.note {
+  color: var(--muted);
+}
+
+/* Two columns of key groups, like the censor editor's list. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 32px;
+}
+
+.group h3 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  font-weight: 600;
+}
+
+.group dl {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+}
+
+.row dt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.row dd {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-2);
+}

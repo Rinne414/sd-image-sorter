@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/src/favicon.svg" />
+    <title>SD Image Sorter Vopus</title>
+    <script>
+      // Pick the theme before first paint (same rule as src/theme.ts).
+      ;(function () {
+        var mode = 'system'
+        try {
+          mode = localStorage.getItem('sd-v4-theme') || 'system'
+        } catch (e) {}
+        var light = mode === 'light' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches)
+        document.documentElement.dataset.theme = light ? 'light' : 'dark'
+      })()
+    </script>
+    <script>
+      // Interface zoom before first paint (same rule as src/lib/uiScale.ts): a
+      // stored choice from sd-v4-ui-scale, else by window width.
+      ;(function () {
+        var raw = null
+        try {
+          raw = localStorage.getItem('sd-v4-ui-scale')
+        } catch (e) {}
+        var n = Number(raw)
+        var w = window.innerWidth
+        var scale = raw && [1, 1.15, 1.3, 1.4, 1.5].indexOf(n) >= 0 ? n : w >= 3600 ? 1.5 : w >= 3100 ? 1.4 : w >= 2350 ? 1.3 : w >= 2000 ? 1.15 : 1
+        var root = document.documentElement
+        root.style.setProperty('--ui-zoom', String(scale))
+        if (scale !== 1) root.style.zoom = String(scale)
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

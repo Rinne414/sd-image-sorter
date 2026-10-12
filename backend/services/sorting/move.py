@@ -240,15 +240,52 @@ class MoveMixin:
             move_image(history_entry["image_id"], original_folder, source_path)
 
     @staticmethod
+    def _collect_image(collection_id: int, image_id: int) -> Dict[str, bool]:
+        """Add the image to a key's collection; say what the history entry needs.
+
+        V4: the built-in Favorites collection favorites the image the way the
+        heart does (path-anchored ``favorite_paths``, as the bulk membership
+        route does); a ``collection_items`` row there never lights the heart.
+        ``was_member``: the image was in already, so undo must leave it there.
+        """
+        favorites_id = db.get_favorites_collection_id()
+        if favorites_id is not None and int(collection_id) == int(favorites_id):
+            was_member = db.is_favorited(image_id)
+            db.set_favorite(image_id, True)
+            return {"favorites": True, "was_member": was_member}
+        was_member = db.get_collection_item(collection_id, image_id) is not None
+        db.set_collection_membership(collection_id, image_id, True)
+        return {"favorites": False, "was_member": was_member}
+
+    @staticmethod
+    def _redo_collect_action(history_entry: Dict[str, Any]) -> None:
+        """Add the image again the way the key first did (Favorites or the collection)."""
+        collection_id = history_entry.get("collection_id")
+        image_id = history_entry.get("image_id")
+        if collection_id is None or image_id is None:
+            return
+        if history_entry.get("favorites"):
+            db.set_favorite(int(image_id), True)
+        else:
+            db.set_collection_membership(int(collection_id), int(image_id), True)
+
+    @staticmethod
     def _undo_collect_action(history_entry: Dict[str, Any]) -> None:
-        """Undo a previous collect action by removing the membership reference.
+        """Undo a previous collect action by taking out what that key added.
 
         v3.3.1: collect never touches the file, so undo only drops the
-        ``collection_items`` row for ``(collection_id, image_id)``.
+        ``collection_items`` row for ``(collection_id, image_id)``. V4: an
+        image that was in before the key (``was_member``) stays; a Favorites
+        key unfavorites. Entries saved before these fields undo as before.
         """
         collection_id = history_entry.get("collection_id")
         image_id = history_entry.get("image_id")
         if collection_id is None or image_id is None:
+            return
+        if history_entry.get("was_member") is True:
+            return
+        if history_entry.get("favorites"):
+            db.set_favorite(int(image_id), False)
             return
         db.set_collection_membership(int(collection_id), int(image_id), False)
 

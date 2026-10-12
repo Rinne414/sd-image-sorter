@@ -1,0 +1,458 @@
+/* The caption editor column: position and reading aid on top, then the
+   save line, the type, the tags, the words, the final caption and tools. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface-1);
+  border-left: 1px solid var(--line);
+}
+
+.panelHead {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: 38px;
+  padding: 0 8px 0 4px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.position {
+  min-width: 64px;
+  color: var(--text);
+  font-size: var(--fs-2);
+  text-align: center;
+}
+
+.gap {
+  flex: 1;
+}
+
+.zhPick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
+.select {
+  height: 26px;
+  min-width: 0;
+  padding: 0 6px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-2);
+  border-radius: var(--radius);
+}
+
+.select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.panelScroll {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px 24px;
+}
+
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}
+
+.warnText {
+  margin: 0;
+  color: var(--warn);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}
+
+.problem {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}
+
+.label {
+  color: var(--text);
+  font-size: var(--fs-2);
+  font-weight: 600;
+}
+
+.notice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--warn);
+  background: var(--wash);
+  color: var(--text);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+  border-radius: var(--radius);
+}
+
+.notice p {
+  margin: 0;
+}
+
+.saveLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+}
+
+.saveState {
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.saveState[data-state='saved'] {
+  color: var(--ok);
+}
+
+.saveState[data-state='waiting'],
+.saveState[data-state='saving'] {
+  color: var(--text-2);
+}
+
+.saveState[data-state='failed'],
+.saveState[data-state='conflict'] {
+  color: var(--danger);
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.types {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.types .label {
+  margin-right: 6px;
+}
+
+.typeButton {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  border-radius: var(--radius);
+}
+
+.typeButton:hover {
+  background: var(--wash-hover);
+}
+
+.typeButton[aria-checked='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.typeButton:disabled {
+  opacity: 0.45;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The part the chosen type does not write stays editable, dimmed. */
+.section[data-off] {
+  opacity: 0.62;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 7px 9px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-3);
+  line-height: 1.55;
+  resize: vertical;
+  border-radius: var(--radius);
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  padding: 0 2px 0 0;
+}
+
+.chip[data-selected] {
+  border-color: var(--c);
+}
+
+/* The batch rules take this tag out at export (blacklist, dropped category). */
+.chip[data-dropped] .chipText {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.chipText {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 100%;
+  padding: 0 3px 0 7px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+.zh {
+  color: var(--text-2);
+}
+
+.conf {
+  color: var(--muted);
+  font-size: var(--fs-1);
+}
+
+.chipRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  opacity: 0.7;
+  border-radius: var(--radius);
+}
+
+.chipRemove:hover {
+  opacity: 1;
+  background: var(--wash-strong);
+}
+
+.info,
+.tool {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  border-radius: var(--radius);
+}
+
+.infoHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text);
+  font-size: var(--fs-3);
+}
+
+.infoList {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  font-size: var(--fs-2);
+}
+
+.infoRow {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.infoRow dt {
+  color: var(--muted);
+}
+
+.infoRow dd {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.toolRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.proposals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.proposal {
+  cursor: pointer;
+}
+
+.proposal input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.final {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  border-radius: var(--radius);
+}
+
+.finalText {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-3);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.finalText[data-pending] {
+  color: var(--text-2);
+}
+
+/* Put there by the batch rules: changed in the training settings, not here. */
+.ruleToken {
+  padding: 0 3px;
+  border: 1px dashed var(--accent-line);
+  color: var(--accent);
+  font-weight: 600;
+  border-radius: var(--radius);
+}
+
+/* ---- history ------------------------------------------------------------------ */
+
+.history {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.historyHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 10px 0 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.historyScroll {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px 24px;
+}
+
+.revisions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.revision {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  border-radius: var(--radius);
+}
+
+.revision[data-active] {
+  border-color: var(--accent-line);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.revisionHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.current {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.revisionText {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-2);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+}

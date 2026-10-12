@@ -165,6 +165,10 @@ class JobsMixin:
                         message="Preparing tagger...",
                         message_key="preparing",
                         run_id=run_id,
+                        model=model_name,
+                        runtime_backend_target=(
+                            "gpu" if runtime_plan.get("effective_use_gpu") else "cpu"
+                        ),
                     )
                     self._worker_process = worker_process
                     self._worker_cancel_event = cancel_event
@@ -337,6 +341,8 @@ class JobsMixin:
                 message="Preparing tagger...",
                 message_key="preparing",
                 run_id=run_id,
+                model=self._resolve_model_name(request),
+                runtime_backend_target="gpu" if request.use_gpu else "cpu",
             )
         try:
             background_tasks.add_task(

@@ -12,14 +12,15 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import BackgroundTasks, HTTPException
 
 import database as db
 from services import entry_stats_service
+from services.sorting import move_journal
 from services.sorting.move import describe_readability_failure, normalize_reported_cause
-from services.sorting_models import BatchMoveRequest
+from services.sorting_models import BatchMoveGroup, BatchMoveRequest
 from utils.path_validation import normalize_user_path, validate_folder_path
 
 _SPLIT_FOLDER_UNSAFE = re.compile(r'[<>:"/\\|?*\x00-\x1f]+')
@@ -97,6 +98,46 @@ class BatchMoveMixin:
         return str(Path(base_destination) / leaf)
 
     @staticmethod
+    def _library_image_ids(image_ids) -> List[int]:
+        """The chosen ids that are images of the current library, deduplicated, in order."""
+        from library_context import current_library_sql
+
+        wanted = list(dict.fromkeys(int(i) for i in image_ids))
+        lib_sql, lib_params = current_library_sql()
+        found = set()
+        with db.get_db() as conn:
+            for start in range(0, len(wanted), 500):
+                chunk = wanted[start:start + 500]
+                placeholders = ",".join("?" * len(chunk))
+                rows = conn.execute(
+                    f"SELECT id FROM images WHERE id IN ({placeholders}) AND {lib_sql}",
+                    (*chunk, *lib_params),
+                ).fetchall()
+                found.update(row[0] for row in rows)
+        return [i for i in wanted if i in found]
+
+    @classmethod
+    def _group_targets(cls, groups: List[BatchMoveGroup]) -> Tuple[List[int], Dict[int, Tuple[str, Optional[str]]], List[str]]:
+        """V4 sort by several rules: the run's ids in group order, each id's folder and split, and every folder.
+
+        An id listed in more than one group goes with the first; ids that are
+        not images of the current library are left out, as for ``image_ids``.
+        A folder that cannot be used refuses the whole run before anything moves.
+        """
+        folders: List[str] = []
+        targets: Dict[int, Tuple[str, Optional[str]]] = {}
+        for group in groups:
+            folder = normalize_user_path(group.destination_folder)
+            is_valid, error = validate_folder_path(folder, allow_create=True)
+            if not is_valid:
+                raise HTTPException(status_code=400, detail=error or "Invalid destination folder")
+            folders.append(folder)
+            for image_id in group.image_ids:
+                targets.setdefault(int(image_id), (folder, group.split_by))
+        ordered = cls._library_image_ids(list(targets))
+        return ordered, {image_id: targets[image_id] for image_id in ordered}, folders
+
+    @staticmethod
     def _write_id_snapshot(id_chunks) -> str:
         """Write matching IDs to a temp file before mutating their rows."""
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
@@ -133,6 +174,8 @@ class BatchMoveMixin:
         if not is_valid:
             raise HTTPException(status_code=400, detail=error or "Invalid destination folder")
         split_by = request.split_by  # already normalized by Pydantic (None or facet key)
+        # V4: several rules' groups, each into its own folder, all in this one run.
+        group_ids, group_map, group_folders = self._group_targets(request.groups) if request.groups else (None, {}, [])
 
         with self._batch_move_lock:
             # "cancelling" is still busy: the worker is alive and draining; a
@@ -168,6 +211,7 @@ class BatchMoveMixin:
         collection_id = request.collection_id
         folder_scope = request.folder.strip() if request.folder else None
         has_metadata = request.has_metadata
+        chosen_ids = group_ids if group_ids is not None else self._library_image_ids(request.image_ids) if request.image_ids else None
 
         # One filter set for the count and the moved id snapshot, so the two
         # can never disagree about which pictures match.
@@ -220,7 +264,7 @@ class BatchMoveMixin:
             min_waifu=request.min_waifu,
             max_waifu=request.max_waifu,
         )
-        total_count = db.get_filtered_image_count(**filter_kwargs)
+        total_count = len(chosen_ids) if chosen_ids is not None else db.get_filtered_image_count(**filter_kwargs)
 
         if total_count == 0:
             return {
@@ -236,10 +280,14 @@ class BatchMoveMixin:
         # between images so a cancel request lands within a few image
         # iterations rather than after the whole batch completes.
         cancel_event = threading.Event()
+        run_token = move_journal.new_token()
         with self._batch_move_lock:
             self._batch_move_run_id += 1
             run_id = self._batch_move_run_id
             self._batch_move_cancel_event = cancel_event
+            # V4: the run's name (for its undo) and every failure, beyond the last three.
+            self._batch_move_extra = {"run_token": run_token, "run_kind": "sort"}
+            self._batch_move_error_items = []
             self._batch_move_progress = {
                 "status": "running",
                 "step": "starting",
@@ -269,6 +317,10 @@ class BatchMoveMixin:
                 # truncated/corrupt PNGs to the destination).
 
                 os.makedirs(destination_folder, exist_ok=True)
+                for group_folder in group_folders:
+                    os.makedirs(group_folder, exist_ok=True)
+                journal = move_journal.RunJournal(run_token, operation, destination_folder)
+                error_items = self._batch_move_error_items
 
                 moved = 0
                 processed = 0
@@ -290,6 +342,7 @@ class BatchMoveMixin:
                         "filename": filename,
                         "error": normalize_reported_cause(cause),
                     })
+                    error_items.append(errors[-1])
 
                 def _write_cancelled_state() -> None:
                     """Publish the cancelled summary for this batch-move run."""
@@ -317,7 +370,7 @@ class BatchMoveMixin:
                         }
                     )
 
-                snapshot_path = self._write_id_snapshot(db.iter_filtered_image_id_chunks(
+                snapshot_path = self._write_id_snapshot([chosen_ids]) if chosen_ids is not None else self._write_id_snapshot(db.iter_filtered_image_id_chunks(
                     chunk_size=_svc().BATCH_MOVE_FETCH_CHUNK,
                     **filter_kwargs,
                 ))
@@ -356,18 +409,27 @@ class BatchMoveMixin:
                                     db.mark_image_unreadable(image["id"], error_message)
                                 else:
                                     try:
-                                        # B3-②: optional per-image subfolder under destination.
+                                        # B3-②: optional per-image subfolder under destination
+                                        # (V4: under its group's folder, with its group's split).
+                                        base_folder, image_split = group_map.get(image["id"], (destination_folder, split_by))
                                         target_folder = self._split_destination_for_image(
-                                            destination_folder, image, split_by
+                                            base_folder, image, image_split
                                         )
-                                        if target_folder != destination_folder:
+                                        if target_folder != base_folder:
                                             os.makedirs(target_folder, exist_ok=True)
-                                        self._apply_file_operation(
+                                        # On disk before the file is touched, so a power cut
+                                        # mid-file still leaves undo something to go on.
+                                        step = journal.intend(image["id"], source_path, target_folder)
+                                        result = self._apply_file_operation(
                                             operation=operation,
                                             image_id=image["id"],
                                             destination_folder=target_folder,
                                             source_path=source_path,
                                         )
+                                        # Only a file whose new place is known can be put back later.
+                                        new_path = (result or {}).get("new_path")
+                                        if new_path:
+                                            journal.record(image["id"], source_path, new_path, step)
                                         moved += 1
                                         # Manual Sort can leave this picture
                                         # out later (auto-sort, then hand-sort
@@ -403,6 +465,7 @@ class BatchMoveMixin:
                             ):
                                 return
                 finally:
+                    journal.close()
                     try:
                         os.unlink(snapshot_path)
                     except OSError:
@@ -498,4 +561,7 @@ class BatchMoveMixin:
             "total": total_count,
             "count": total_count,
             "operation": operation,
+            "run_token": run_token,
+            # V4: how many groups this run sorts into (only for a run by groups).
+            **({"groups": len(group_folders)} if request.groups else {}),
         }

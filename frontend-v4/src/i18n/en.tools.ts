@@ -1,0 +1,28 @@
+import type { zhCNTools } from './zh-CN.tools'
+
+export const enTools: Record<keyof typeof zhCNTools, string> = {
+  'tools.menu': 'Tools',
+  'tools.menuTitle': 'Reader, Reverse prompt, Prompt Lab and other features you use on their own',
+  'tools.reader': 'Reader',
+  'tools.reverse': 'Reverse prompt',
+  'tools.promptlab': 'Prompt Lab',
+  'tools.artist': 'Style finder',
+  'tools.analyze': 'Analyze',
+  'tools.artist.identify': 'Identify style',
+  'tools.artist.identifyPalette': 'Identify the style of these images',
+  'tools.artist.job.running': 'Identifying style: {n} images',
+  'tools.artist.job.done': 'Style identified: {n} images',
+  'tools.lexicon': 'Tag & prompt library',
+  'tools.lexicon.browse': 'Browse the tag & prompt library…',
+  'tools.privacy': 'Privacy scramble',
+  'tools.censor': 'Censor…',
+  'tools.censorMany': 'Censor the {n} picked images…',
+  'tools.editTags': 'Edit tags…',
+  'tools.editTagsMany': 'Edit the tags of the {n} picked images…',
+  'tools.pickFirst': 'Click an image in the library first (or pick a few), then use this.',
+  'tools.sendTo': 'Send to tool',
+  'tools.palette.open': 'Tools: {tool}',
+  'tools.palette.send': 'Send the picks to {tool}',
+  'palette.group.tools': 'Tools',
+  'palette.group.settings': 'Settings',
+}

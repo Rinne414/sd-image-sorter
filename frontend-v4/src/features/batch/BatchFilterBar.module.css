@@ -1,0 +1,84 @@
+/* The filter row and its notes, under a step's bar. */
+.wrap {
+  flex: none;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+
+/* One row when it fits; on a narrow window the counts and buttons wrap under the inputs. */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+  min-height: 42px;
+  padding: 6px 12px 6px 16px;
+  white-space: nowrap;
+}
+
+.name,
+.condition {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-1);
+  color: var(--text);
+  font-size: var(--fs-3);
+  border-radius: var(--radius);
+}
+
+.name {
+  flex: 0 1 220px;
+  min-width: 120px;
+}
+
+.condition {
+  flex: 1 1 280px;
+  min-width: 160px;
+  max-width: 720px;
+  font-family: var(--font-mono);
+}
+
+.name:focus,
+.condition:focus {
+  border-color: var(--accent-line);
+  outline: none;
+}
+
+.chip {
+  flex: none;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--accent-line);
+  color: var(--text);
+}
+
+.note,
+.error {
+  flex: none;
+  font-size: var(--fs-2);
+}
+
+.note {
+  color: var(--muted);
+}
+
+.error {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--danger);
+}
+
+.line {
+  margin: 0;
+  padding: 0 16px 8px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.line[role='alert'] {
+  color: var(--warn);
+}

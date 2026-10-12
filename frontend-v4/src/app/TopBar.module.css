@@ -1,0 +1,149 @@
+.bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--topbar-h);
+  padding: 0 14px 0 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Keyboard users' first stop: hidden until it has focus, then over the brand. */
+.skip {
+  position: absolute;
+  z-index: 60;
+  top: 6px;
+  left: 8px;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  background: var(--ink-button);
+  color: var(--on-ink-button);
+  font-weight: 600;
+  border-radius: var(--radius);
+  translate: 0 -200%;
+}
+
+.skip:focus-visible {
+  translate: 0 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px 0 4px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  border-radius: var(--radius);
+}
+
+.brand:hover {
+  background: var(--wash-hover);
+}
+
+.mark {
+  color: var(--text);
+}
+
+.brandName {
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.version {
+  font-size: var(--fs-1);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  padding: 0 4px;
+  line-height: 15px;
+  border-radius: var(--radius);
+}
+
+.tabs {
+  display: flex;
+  /* never squeezed: a Chinese tab name would break between its characters */
+  flex: none;
+  gap: 2px;
+  margin-left: 14px;
+  align-self: stretch;
+}
+
+.tab {
+  position: relative;
+  padding: 0 14px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: var(--fs-5);
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab[aria-current="page"] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* The active tab sits on the rule like a tab on a file folder. */
+.tab[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: -1px;
+  height: 3px;
+  background: var(--accent);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.gap {
+  flex: 1;
+}
+
+.command {
+  display: flex;
+  /* Gives way first when the busy chip, the update hint and jobs all show (it
+     shrinks far faster than the chip, which names what holds the AI): its width
+     is only a wish (the basis), and with its content left out of its size the
+     bar's minimum counts it at min-width, not at the wish. */
+  flex: 0 100 clamp(210px, 22 * var(--vw), 320px);
+  contain: inline-size;
+  min-width: 150px;
+  align-items: center;
+  gap: 8px;
+  height: var(--control-h);
+  margin-right: 4px;
+  padding: 0 7px 0 12px;
+  border: 1px solid transparent;
+  background: var(--surface-1);
+  color: var(--faint);
+  border-radius: var(--radius);
+}
+
+.commandText {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command:hover {
+  border-color: var(--line-strong);
+  color: var(--muted);
+}
+
+/* ⚙ and Tools stand in for the tabs on their own pages. */
+.bar :global(.btn)[aria-current="page"] {
+  border-color: var(--text-2);
+  background: var(--wash-strong);
+  color: var(--text);
+}

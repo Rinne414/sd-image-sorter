@@ -1,0 +1,18 @@
+.hint {
+  flex: none;
+  border-color: var(--accent-line);
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.hint:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* A small printed square, like the V4 badge beside the name. */
+.dot {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+}

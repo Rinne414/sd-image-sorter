@@ -17,6 +17,7 @@ from services.service_provider import ServiceProvider
 from services.state_compat import MutableStateProxy
 from services.sorting_models import (
     BatchMoveRequest,
+    BatchMoveUndoRequest,
     BrowseFolderRequest,
     FolderConfig,
     LibraryAutoRefreshResponse,
@@ -580,6 +581,16 @@ async def cancel_batch_move(
     return service.cancel_batch_move()
 
 
+@router.post("/batch-move/undo")
+def undo_batch_move(
+    request: BatchMoveUndoRequest,
+    background_tasks: BackgroundTasks,
+    service: SortingService = Depends(get_sorting_service),
+):
+    """Undo a finished batch move/copy run (V4 sort by condition), in the background."""
+    return service.undo_batch_move(request, background_tasks)
+
+
 
 def _manual_sort_filter_kwargs(request: SortFilterRequest) -> Dict[str, Any]:
     """Every filter of a Manual Sort request, as service keyword arguments.
@@ -652,6 +663,7 @@ async def start_sort_session(
             collection_slots=request.collection_slots,
             mode=request.mode,
             exclude_sorted=request.exclude_sorted,
+            image_ids=request.image_ids,
         )
 
     return service.start_sort_session(

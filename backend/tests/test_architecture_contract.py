@@ -41,6 +41,7 @@ def test_backend_infrastructure_modules_own_extracted_main_concerns():
     assert "def configure_security_middleware" in security
     assert "class NoCacheStaticFiles" in static
     assert "def serve_frontend_index" in static
+    assert "def mount_frontend_v4" in static
     assert "def build_support_diagnostics" in diagnostics
     assert "def open_support_log_file" in diagnostics
 

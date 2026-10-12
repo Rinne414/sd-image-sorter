@@ -1,0 +1,529 @@
+.card {
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  background: var(--surface-1);
+  border-left: 1px solid var(--line);
+  padding: 14px 14px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.card > * {
+  flex-shrink: 0;
+}
+
+.card[data-variant="overlay"] {
+  background: var(--overlay-panel);
+  border-left: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: var(--fs-2);
+  margin: 0;
+}
+
+.error {
+  color: var(--danger);
+  margin: 0;
+}
+
+/* Empty state: an unexposed frame. */
+.empty {
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 24px 12px;
+  color: var(--text-2);
+}
+
+.empty p {
+  margin: 0;
+}
+
+.emptyFrame {
+  width: 56%;
+  aspect-ratio: 3 / 4;
+  margin-bottom: 16px;
+  border-radius: var(--radius);
+  /* one unexposed frame on film, waiting for a picture */
+  background:
+    repeating-linear-gradient(90deg, transparent 0 6px, var(--film-hole) 6px 13px) top 5px left / 100% 5px no-repeat,
+    repeating-linear-gradient(90deg, transparent 0 6px, var(--film-hole) 6px 13px) bottom 5px left / 100% 5px no-repeat,
+    linear-gradient(var(--surface-2), var(--surface-2)) center / calc(100% - 20px) calc(100% - 40px) no-repeat,
+    var(--film);
+}
+
+/* ---- film frame: the preview with parameters on its edges ---- */
+.frame {
+  margin: 0;
+  background: var(--film);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.edgeStrip {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 10px;
+  background: var(--film);
+}
+
+.edgeStrip[data-part="bottom"] {
+  flex-direction: column-reverse;
+}
+
+.edgeStrip[data-inline] {
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--film);
+}
+
+.holes {
+  height: 6px;
+  margin: 0 -10px;
+  background: repeating-linear-gradient(90deg, transparent 0 7px, var(--film-hole) 7px 15px);
+}
+
+.codes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  min-height: 16px;
+}
+
+.code {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  letter-spacing: 0.06em;
+  color: color-mix(in srgb, var(--edge-print) 88%, transparent);
+  cursor: copy;
+  white-space: nowrap;
+}
+
+.code:hover {
+  color: var(--edge-print);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.codeKey {
+  color: color-mix(in srgb, var(--edge-print) 50%, transparent);
+  margin-right: 5px;
+}
+
+.window {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: min(42 * var(--vh), 460px);
+  background: var(--stage);
+  cursor: zoom-in;
+}
+
+.under,
+.over {
+  grid-area: 1 / 1;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.under {
+  width: 100%;
+  height: 100%;
+}
+
+.over {
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity var(--t-med) var(--ease);
+}
+
+.over[data-ready] {
+  opacity: 1;
+}
+
+/* ---- title row ---- */
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.filename {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+/* The file's folder under its name, tucked up against the title row. */
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: -10px;
+}
+
+.folder {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: var(--fs-1);
+}
+
+.heartBtn {
+  display: grid;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  padding: 2px 4px;
+}
+
+.heartBtn:hover {
+  color: var(--text-2);
+}
+
+.heartBtn[data-on] {
+  color: var(--marker);
+}
+
+.stars {
+  display: inline-flex;
+}
+
+.star {
+  display: grid;
+  border: 0;
+  background: none;
+  padding: 0 1px;
+  color: var(--line-strong);
+}
+
+.star[data-on] {
+  color: var(--accent);
+}
+
+/* ---- sections ---- */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.label {
+  font-size: var(--fs-2);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.copy {
+  display: grid;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  padding: 0 2px;
+}
+
+.copy:hover {
+  color: var(--text);
+}
+
+/* The prompt is the hero of the card. */
+.prompt {
+  margin: 0;
+  font-size: var(--fs-4);
+  line-height: 1.62;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.ptag {
+  color: color-mix(in srgb, var(--c) 78%, var(--text));
+}
+
+.ptag:global(.cat-unknown) {
+  color: var(--text);
+}
+
+.ppunct {
+  color: var(--faint);
+}
+
+.pcomma {
+  color: var(--faint);
+  margin-right: 0.3em;
+}
+
+.pweight {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.plora {
+  color: var(--ai);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 0 4px;
+  border: 1px solid color-mix(in srgb, var(--ai) 35%, transparent);
+  border-radius: var(--radius);
+}
+
+.pkeyword {
+  color: var(--accent);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.expandable {
+  position: relative;
+  max-height: 13.5em;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.expandable::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 3em;
+  background: linear-gradient(transparent, var(--surface-1));
+  pointer-events: none;
+}
+
+.card[data-variant="overlay"] .expandable::after {
+  background: linear-gradient(transparent, var(--surface-1));
+}
+
+.expandable[data-open] {
+  max-height: none;
+  cursor: auto;
+}
+
+.expandable[data-open]::after {
+  display: none;
+}
+
+/* The negative prompt folds to one line; its copy button sits beside it. */
+.negativeRow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.negative {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 10px;
+  align-items: baseline;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.negText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.negative[data-open] .negText {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.characters {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.characters li {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+.characters .prompt {
+  font-size: var(--fs-3);
+}
+
+.castNo {
+  display: grid;
+  place-items: center;
+  height: 20px;
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  font-size: var(--fs-1);
+  font-weight: 700;
+  border-radius: var(--radius);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.more {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px dashed var(--line-strong);
+  background: none;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  border-radius: var(--radius);
+}
+
+.more:hover {
+  color: var(--text);
+}
+
+/* A tag's remove mark appears on hover or keyboard focus only. */
+.tagChip {
+  position: relative;
+}
+
+/* Zero width, not display:none, so the keyboard can still reach it. */
+.tagRemove {
+  display: inline-flex;
+  align-items: center;
+  width: 0;
+  margin: 0 -3px 0 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: none;
+  color: inherit;
+  opacity: 0;
+}
+
+.tagChip:hover .tagRemove,
+.tagRemove:focus-visible {
+  width: 12px;
+  margin-left: 1px;
+  opacity: 0.8;
+}
+
+.tagRemove:hover {
+  opacity: 1;
+}
+
+.captionField {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.captionField textarea {
+  width: 100%;
+  padding: 6px 8px;
+  resize: vertical;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-3);
+  border-radius: var(--radius);
+}
+
+.captionField textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.captionActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.caption {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+}
+
+.extra summary {
+  display: flex;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.extra dl {
+  margin: 8px 0 0;
+  display: grid;
+  gap: 2px;
+}
+
+.extra dl div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 8px;
+}
+
+.extra dt {
+  color: var(--muted);
+  font-size: var(--fs-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.extra dd {
+  margin: 0;
+  font-size: var(--fs-1);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 4px;
+}

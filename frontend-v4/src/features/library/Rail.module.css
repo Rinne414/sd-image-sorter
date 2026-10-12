@@ -1,0 +1,331 @@
+.rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--bg);
+  border-right: 1px solid var(--line);
+}
+
+/* The library's name label, with its own prompts woven faintly behind. */
+.label {
+  position: relative;
+  /* room on the right for the collapse button */
+  padding: 16px 40px 14px 16px;
+  border-bottom: 1px solid var(--hairline);
+  overflow: visible;
+}
+
+.texture {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--accent);
+  opacity: 0.1;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  user-select: none;
+  mask-image: linear-gradient(90deg, transparent 20%, #000 95%);
+}
+
+.libraryButton {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+
+.libraryName {
+  font-size: var(--fs-6);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.caret {
+  display: grid;
+  align-self: center;
+  color: var(--muted);
+}
+
+.libraryButton:hover .caret {
+  color: var(--accent);
+}
+
+.libraryCount {
+  position: relative;
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% - 6px);
+  left: 12px;
+  right: 12px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface-2);
+  box-shadow: var(--shadow-float);
+  border-radius: var(--radius-lg);
+}
+
+.menu button {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  background: none;
+  text-align: left;
+  border-radius: var(--radius);
+}
+
+.menu button:hover {
+  background: var(--wash-hover);
+}
+
+.menu button[aria-checked="true"] {
+  color: var(--accent);
+}
+
+.menu .mono {
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 8px 12px;
+}
+
+.heading {
+  margin: 14px 8px 4px;
+  font-size: var(--fs-2);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  text-align: left;
+  border-radius: var(--radius);
+}
+
+.row:hover {
+  background: var(--wash-hover);
+  color: var(--text);
+}
+
+.row[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.row[data-dim] {
+  color: var(--muted);
+}
+
+.rowLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.count {
+  color: var(--faint);
+  font-size: var(--fs-2);
+}
+
+.row[aria-pressed="true"] .count {
+  color: var(--accent);
+}
+
+.savedRow {
+  position: relative;
+}
+
+.savedRow .row {
+  padding-right: 26px;
+}
+
+.remove {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  translate: 0 -50%;
+  display: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  background: var(--surface-2);
+  color: var(--muted);
+  border-radius: var(--radius);
+}
+
+.savedRow:hover .remove,
+.remove:focus-visible {
+  display: grid;
+}
+
+.savedRow:hover .count {
+  visibility: hidden;
+}
+
+.remove:hover {
+  color: var(--danger);
+}
+
+.fav {
+  display: grid;
+  color: var(--marker);
+}
+
+.status {
+  padding: 4px 8px 12px;
+  border-top: 1px solid var(--hairline);
+}
+
+.clean {
+  margin: 0 8px;
+  color: var(--ok);
+  font-size: var(--fs-2);
+}
+
+.menuDivider {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.issues {
+  margin: 0;
+  padding: 0 8px;
+  list-style: none;
+  font-size: var(--fs-2);
+  color: var(--warn);
+  display: grid;
+  gap: 4px;
+}
+
+.issues li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+
+.issues li[data-quiet] {
+  color: var(--muted);
+}
+
+/* The fix for a status row: a small printed link, not another button slab. */
+.fix {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+
+.fix:hover {
+  color: var(--text);
+  text-decoration-color: var(--text-2);
+}
+
+/* The way into the full library report, under the rows. */
+.report {
+  display: block;
+  margin: 6px 8px 0;
+}
+
+.fix:disabled {
+  color: var(--muted);
+  text-decoration: none;
+  cursor: default;
+}
+
+/* Hide the rail: a quiet button at the top right of the library label. */
+.collapse {
+  position: absolute;
+  top: 12px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  color: var(--muted);
+}
+
+.collapse:hover {
+  color: var(--text);
+}
+
+/* A section heading folds its list; the caret turns when folded. */
+.fold {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: left;
+}
+
+.fold:hover {
+  color: var(--text-2);
+}
+
+.foldCaret {
+  display: grid;
+  transition: rotate var(--t-fast) var(--ease);
+}
+
+.fold[aria-expanded='false'] .foldCaret {
+  rotate: -90deg;
+}

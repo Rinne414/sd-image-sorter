@@ -1,0 +1,73 @@
+.presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.presets :global(.btn) {
+  padding: 0 4px;
+}
+
+.apply {
+  display: grid;
+  gap: 6px;
+}
+
+.apply > :global(.btn) {
+  width: 100%;
+}
+
+.histogram {
+  display: block;
+  width: 100%;
+  height: 60px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.histR {
+  fill: var(--hist-r);
+}
+
+.histG {
+  fill: var(--hist-g);
+}
+
+.histB {
+  fill: var(--hist-b);
+}
+
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.swatch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  border-radius: var(--radius);
+}
+
+.swatch:hover {
+  color: var(--text);
+  background: var(--wash-hover);
+}
+
+/* The sample of the picture's own colour (data, not a design colour). */
+.dot {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+}

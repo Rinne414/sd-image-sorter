@@ -2,7 +2,7 @@
 
 ## System Overview
 
-SD Image Sorter is a local web application for managing, tagging, sorting, and censoring Stable Diffusion generated images. It runs as a FastAPI backend serving a vanilla HTML/JS/CSS frontend on `127.0.0.1:8487` by default (configurable via `SD_IMAGE_SORTER_PORT`).
+SD Image Sorter is a local web application for managing, tagging, sorting, and censoring Stable Diffusion generated images. It runs as a FastAPI backend on `127.0.0.1:8487` by default (configurable via `SD_IMAGE_SORTER_PORT`) that serves two interfaces over the same API and database: the classic vanilla HTML/JS/CSS frontend at `/` (the default) and V Opus, a React frontend (formerly V4), at `/v4/`.
 
 ## Architecture Diagram
 
@@ -29,7 +29,7 @@ SD Image Sorter is a local web application for managing, tagging, sorting, and c
 #### Entry Point
 - **`main.py`**: FastAPI application assembly, service initialization, router mounting, exception handlers, and process startup.
 - **`app_security.py`**: CORS, localhost-only enforcement, the `/api` request guard (Host / Origin / `Sec-Fetch-Site`), in-memory API rate limiting, and security response headers.
-- **`app_static.py`**: `/static` mounting, no-cache static responses, and `GET /` cache-bust injection for frontend JS/CSS.
+- **`app_static.py`**: serves both interfaces. The classic UI: `/static` mounting, no-cache static responses, and `GET /` cache-bust injection for frontend JS/CSS. V Opus: the `frontend-v4/dist` build at `/v4/` (hashed assets cached forever, `index.html` never), with `index.html` as the fallback for its client routes.
 - **`app_diagnostics.py`**: Bounded support diagnostics, support-log redaction, and file-manager opening for the support log.
 
 #### Routers (`routers/`)
@@ -105,6 +105,23 @@ line-heights, and `tokens.css` wins only because it is last. Deleting or
 "tidying" those sheets on the assumption that `tokens.css` is authoritative
 will break the design. The current visual language is flat graphite with one
 accent — not glassmorphism, which `tokens.css` explicitly retired.
+
+### 2b. Second interface: V Opus (`frontend-v4/`)
+
+React + TypeScript single-page app, built by Vite into `frontend-v4/dist`
+(release packages ship only that build; a source checkout builds it from the
+launchers once Node.js is installed). The address hash is the route. It talks
+to the same backend and database as the classic UI.
+
+- **`src/app/`**: the shell (top bar, page switch)
+- **`src/features/`**: one folder per area (`library/`, `batch/`, `sort/`,
+  `censor/`, `tools/`, `settings/`, ...)
+- **`src/api/`**: the typed client; `schema.d.ts` is generated from the
+  backend's OpenAPI (`npm run gen:api`)
+- **`src/state/`**: app state (zustand); **`src/i18n/`**: zh-CN and en packs
+  with identical key sets
+- **`src/design/tokens.css`**: the design tokens; its design doc is
+  `docs/DESIGN_VOPUS.md`.
 
 ### 3. Runtime Layout
 
@@ -228,7 +245,7 @@ The project is intentionally a local-first monolith, but individual files should
 
 ### Backend
 
-- `main.py` is an application composition file. Do not move security middleware, static asset serving, cache busting, support diagnostics, or OS file-manager logic back into it.
+- `main.py` is an application composition file. Do not move security middleware, frontend serving, support diagnostics, or OS file-manager logic back into it.
 - Routers should own HTTP request/response contracts and framework background-task scheduling. Business workflow state belongs in services.
 - Sorting request schemas belong in `services/sorting_models.py`; manual-sort JSON file IO belongs in `services/sorting_session_store.py`. Keep `sorting_service.py` focused on workflow orchestration and compatibility state.
 - Very large service files are allowed only as temporary refactor waypoints. New cross-feature helpers should be extracted into focused service modules instead of growing `image_service.py`, `sorting_service.py`, or `smart_tag_service.py`.
@@ -251,6 +268,12 @@ The project is intentionally a local-first monolith, but individual files should
 - Adding a palette means converting the feature stylesheets first. Only
   `tokens.css` has `data-theme` selectors today; the other sheets still carry
   hardcoded dark values, which is why a light theme is not offered.
+- V Opus: feature behavior lives in its own folder under
+  `frontend-v4/src/features/`; the shell in `src/app/` only lays pages out.
+  New features land in the classic UI first; V Opus gets them only on request.
+  Its colors, sizes and type come from the tokens in `src/design/tokens.css`,
+  and every user-visible string is an i18n key present in both the zh-CN and en
+  packs.
 
 ## Performance Considerations
 

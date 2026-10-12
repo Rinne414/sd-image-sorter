@@ -659,10 +659,16 @@ A `location_unreachable` group is never cleared. Naming one explicitly returns `
 `status` is `cleared`, `refused`, or `nothing_to_clear`. Call `GET /api/images/missing-summary` first to learn what clearing would cost.
 
 #### POST /api/image-metadata/save-edited
-Save an image copy with edited metadata fields. The edit is written in the image's own format: a NovelAI PNG gets it inside its `Comment` record (plus `Description` and `Source`), with no A1111 `parameters` block, and a warning names fields a NovelAI record has no place for (LoRAs); an A1111/Forge block keeps every setting the editor does not show, verbatim (a `Model hash` whose model was changed is dropped and named in the warnings). A ComfyUI graph is kept as it is next to the edited `parameters` block and still reads back as ComfyUI.
+Save an image copy with edited metadata fields. The edit is written in the image's own format: a NovelAI PNG gets it inside its `Comment` record (plus `Description` and `Source`), with no A1111 `parameters` block, and a warning names fields a NovelAI record has no place for (LoRAs); an A1111/Forge block keeps every setting the editor does not show, verbatim (a `Model hash` whose model was changed is dropped and named in the warnings). A ComfyUI graph is kept as it is next to the edited `parameters` block and still reads back as ComfyUI. Returns `{ "output_path", "format", "warnings", "warning_codes" }`: `warnings` are English sentences; `warning_codes` names the same warnings in the same order as `{ "code", "params" }` for a client to translate. Codes: `jpeg_limited`, `webp_limited`, `jpeg_alpha_flattened`, `record_preserved` (`keys`), `chunks_not_carried` (`format`, `keys`), `animation_flattened` (`format`, `frames`), `settings_dropped` (`keys`), `nai_fields_unsaved` (`keys`), `library_refresh_failed`, and `other` (`text`) for a warning without a code.
 
 #### POST /api/open-folder
 Open an image's containing folder in the host file explorer.
+
+#### POST /api/images/by-ids
+Gallery rows (id, path, filename, generator, width, height, file_size, checkpoint, loras, user_rating, aesthetic_score, is_readable, metadata_status, created_at, library_order_time) for a list of image ids, in the order given. Body: `{ "image_ids": [12, 7, 30] }` (at most 2000). Ids that no longer exist or belong to another library are left out; repeats come back once. Returns `{ "images": [...], "count": n }`. Used by ranked views (similarity search, duplicate review).
+
+#### POST /api/open-path
+Open an existing folder in the host file explorer (Windows explorer, macOS open, Linux xdg-open). Body: `{ "path": "D:/exports/pixiv" }`. The path must pass the shared path validation and be an existing directory: a missing folder returns 404, a file or a suspicious path returns 400 and nothing is launched. The launcher receives an argument list (no shell). Returns `{ "success": true, "path": "<resolved folder>" }`.
 
 #### POST /api/parse-image
 Parse uploaded image metadata without inserting into library DB.
@@ -719,7 +725,7 @@ Page through the last completed duplicate scan. Query: `offset`, `limit` (1-200)
 Per-generator text-parse coverage (metadata L3, v3.5.0). Returns `{ "generators": [{ "generator", "total", "missing_prompt", "missing_text", "with_raw" }], "totals": { "total", "missing_prompt", "missing_text", "with_raw" }, "scope": "readable_images", "excluded_unreadable" }`. Every counter describes the same population as the recovery job — readable rows only (`COALESCE(is_readable, 1) = 1`) — because these numbers sit beside the button that runs it: `missing_prompt` is exactly the set a run retries, `missing_text` (neither a prompt nor a sidecar caption) is the subset a run can still change, and `with_raw` counts rows carrying a stored raw metadata envelope (re-parseable without the original file). `excluded_unreadable` reports the indexed rows left out; whole-library composition is `GET /api/library-health`. Drives the settings-page metadata health row.
 
 #### POST /api/metadata/reparse
-Re-parse missing-prompt images through the current parser (metadata L3, v3.5.0). Body: `{ "scope": "missing_prompt" | "comfyui" }` (422 otherwise). For every readable image with an empty positive prompt, replays the gzipped raw metadata envelope stored at scan time first (`used_raw`), then falls back to fully re-parsing the file if it still exists (`used_file`); rows with neither count as `missing_source`. Runs as a bulk background job — poll `GET /api/bulk-jobs/{job_id}`; 409 while another re-parse runs. Job result: `{ "recovered", "still_missing", "used_raw", "used_file", "missing_source" }`. `scope: "comfyui"` (v3.6.0) is the other job: it re-reads EVERY readable ComfyUI image of the current library from its file with the current parser, stored prompt or not, and rewrites only the prompt-derived fields (`update_reparsed_prompt_fields`) of rows whose prompt or negative prompt came out different; a file that no longer parses to a prompt leaves its row untouched. Result: `{ "changed", "unchanged", "kept", "missing_source" }`. Meant for after a parser upgrade that changed how ComfyUI graphs are read.
+Re-parse missing-prompt images through the current parser (metadata L3, v3.5.0). Body: `{ "scope": "missing_prompt" | "comfyui" | "metadata_error" }` (422 otherwise). For every readable image with an empty positive prompt, replays the gzipped raw metadata envelope stored at scan time first (`used_raw`), then falls back to fully re-parsing the file if it still exists (`used_file`); rows with neither count as `missing_source`. Runs as a bulk background job — poll `GET /api/bulk-jobs/{job_id}`; 409 while another re-parse runs. Job result: `{ "recovered", "still_missing", "used_raw", "used_file", "missing_source" }`. `scope: "comfyui"` (v3.6.0) is the other job: it re-reads EVERY readable ComfyUI image of the current library from its file with the current parser, stored prompt or not, and rewrites only the prompt-derived fields (`update_reparsed_prompt_fields`) of rows whose prompt or negative prompt came out different; a file that no longer parses to a prompt leaves its row untouched. Result: `{ "changed", "unchanged", "kept", "missing_source" }`. Meant for after a parser upgrade that changed how ComfyUI graphs are read. `scope: "metadata_error"` re-reads the file of every readable image whose generation details failed to read (`metadata_status = 'error'`), like `POST /api/images/{image_id}/reparse`; result `{ "scope": "metadata_error", "fixed", "still_error", "unreadable", "gone" }` (`gone` = the file vanished, row untouched). All scopes share the one-at-a-time slot and refresh the library status report when they end.
 
 #### GET /api/metadata/reparse-status
 Return `{ "active", "job_id", "job", "scope" }` for the running metadata re-parse (if any) so a reopened UI can re-attach to the progress poll; `scope` names the running job's scope (`missing_prompt` or `comfyui`).
@@ -827,6 +833,8 @@ The response now includes truthful runtime fields so the UI can distinguish targ
 - `runtime_backend_actual`
 - `runtime_backend_reason`
 - `memory_pressure_warning`
+- `model`: the tagger key of the current (or last) run, e.g. `pixai-tagger-v1.0`; `""` before any run.
+- `uses_gpu`: `true` when that run is on the GPU; the requested device until the model has loaded, then the device it actually loaded on.
 
 `message` is an English display string kept for API compatibility; clients localise from `message_key` (`preparing`, `loading_custom`, `first_download`, `loading_backend`, `loading_model`, `runtime_notice`, `gpu_load_failed`, `collecting`, `tagging_started`, `skipped_unreadable`, `skipped_changed`, `memory_refresh`, `memory_critical`, `memory_high`, `tagging_batch`, `tagging_one`, `runtime_adjusted`, `gpu_inference_failed`, `image_done`, `batch_error`, `cancelling`, `cancelled_early`, `cancelled`, `cancelled_worker_stopped`, `done`, `worker_crashed`, `monitor_error`, `setup_failed`, `schedule_failed`, `torii_loading`, `error`), the counters, and `message_args` (a small object such as `{"item": "a.png"}` or `{"device": "gpu"}`; `error` and `monitor_error` carry the raw exception text as `detail`; `schedule_failed` carries `detail`; `gpu_load_failed` and `gpu_inference_failed` carry `reason` (English) and `reason_key` (`cuda_unavailable`, `torii_left_cuda`, `no_gpu_provider`, `gpu_provider_failed`, `inference_failed`); `runtime_notice` carries the runtime advisory as `notice`). Every progress state also carries `runtime_notice`, the English runtime advisory of the current run (empty when none), so a client can show it for the whole run. `POST /api/tag` also returns `message_key: "started"`.
 
@@ -923,7 +931,9 @@ Cooperatively cancel an in-flight background move/copy. The worker checks the ca
 Reset stuck background move progress.
 
 #### POST /api/batch-move
-Move all images matching filters. JSON filter payloads accept `prompt_match_mode` (`exact` or `contains`, default `exact`) alongside `prompts`.
+Move all images matching filters. JSON filter payloads accept `prompt_match_mode` (`exact` or `contains`, default `exact`) alongside `prompts`. A body with `image_ids` moves exactly those images of the current library instead (V4 sends the picks, or every match of its search resolved by `POST /api/images/selection-ids`); no filter is needed then. Every run answers with a `run_token` and records what it moved or copied, so it can be undone; the progress carries the same `run_token`, `run_kind` (`sort` or `undo`) and `error_items` (every failure, the first 200; `error_items_total` counts them all).
+
+V4 sort by several rules: an optional `groups` list (`[{"image_ids": [...], "destination_folder": "...", "split_by": null | "generator" | "checkpoint" | "rating"}]`) sorts each group's images into its own folder and split, all in ONE run (one `run_token`, one progress, one undo that puts every group back). An image listed in more than one group goes with the first; ids that are not images of the current library are left out. When `groups` is given, the top-level `image_ids`, `destination_folder` and `split_by` do not pick images or folders (send the first group's folder, which the run's record names), no filter is needed, and every group folder is checked before anything moves (400 for one that cannot be used). The start answer then also carries `groups`, how many groups it sorts into. A request without `groups` is unchanged.
 
 #### GET /api/batch-move/progress
 Get batch move progress. `message` is a bilingual display string kept for API compatibility; clients localise from `message_key` (`starting`, `processing`, `done`, `cancelling`, `cancelled`, `no_images`, `error`) and the counters (`current`, `total`, `moved`, `errors`, `operation`). The start response carries `message_key: "started"`.
@@ -934,17 +944,20 @@ Cooperatively cancel an in-flight batch move/copy. The worker checks the cancel 
 #### POST /api/batch-move/reset
 Reset stuck batch move progress.
 
+#### POST /api/batch-move/undo
+Undo a finished batch move/copy run: body `{"run_token": "<32 hex>"}`. Runs in the batch-move slot (same progress and cancel; 409 while another run is busy) with `run_kind: "undo"`. Each moved file goes back to where it came from and each copy the run made is removed, but only while it is still what the run left behind; a file moved again since, an original place now taken by another file, a copy changed since or imported into the library, and an image no longer in the library are left alone and listed in `error_items` with the reason. The run's journal has an `intent` line per file synced to disk before the file is touched and a `done` line synced after (older journals: one line per file, no phase, read as done); a file with an intent but no done line (a crash or power cut mid-file) goes back only when it is at the destination and not at its old place, otherwise it is listed for a look at the disk (a copy cut short is always kept and listed). 404 for an unknown run, 409 for a run already undone.
+
 #### POST /api/sort/start
-Start manual sort session. Preferred clients send a JSON body with `generators`, `tags`, `ratings`, `checkpoints`, `loras`, `prompts`, `prompt_match_mode`, `artist`, `search`, size/aesthetic filters, `folders`, `operation_mode`, and `replace_existing`; this avoids URL/query-length limits for large filter scopes. Legacy query-string parameters remain supported, including `prompt_match_mode=exact|contains`. If an unfinished session exists, the default response is HTTP 409; pass `replace_existing=true` only after the user explicitly chooses to discard saved progress. `exclude_sorted=true` leaves out pictures Auto-Separate (`/api/batch-move`) or an earlier Manual Sort already copied or moved (recorded in `sorted_images`, migration 051); the response's `excluded_sorted` says how many were left out. The default (`false`) queues every match.
+Start manual sort session. Preferred clients send a JSON body with `generators`, `tags`, `ratings`, `checkpoints`, `loras`, `prompts`, `prompt_match_mode`, `artist`, `search`, size/aesthetic filters, `folders`, `operation_mode`, and `replace_existing`; this avoids URL/query-length limits for large filter scopes. Legacy query-string parameters remain supported, including `prompt_match_mode=exact|contains`. If an unfinished session exists, the default response is HTTP 409; pass `replace_existing=true` only after the user explicitly chooses to discard saved progress. `exclude_sorted=true` leaves out pictures Auto-Separate (`/api/batch-move`) or an earlier Manual Sort already copied or moved (recorded in `sorted_images`, migration 051); the response's `excluded_sorted` says how many were left out. The default (`false`) queues every match. A body with `image_ids` sorts exactly those images in that order (V Opus starts from the picks, or from every match of the gallery filter resolved by `POST /api/images/selection-ids`); the filter fields are then not used, and ids that are not readable images of the current library are dropped.
 
 #### POST /api/sort/scope-count
 Count what a session with the same body would queue, without starting one. Returns `{"total", "sorted", "remaining"}`: `total` pictures match the filters, `sorted` of them were already copied or moved by Auto-Separate or Manual Sort, and `remaining` is what `exclude_sorted=true` queues. Uses the same filter path as `/api/sort/start`, so the Manual Sort setup count equals the queue length.
 
 #### GET /api/sort/current
-Get current sort image. Every session answer (here and from `/api/sort/action`) carries `library_id`, the library the session's images belong to (the one saved session is shared by every library; null without a session), and `library_mixed`: true when the images belong to more than one library (then `library_id` is null). Manual Sort asks before resuming a session that is not the open library's.
+Get current sort image. Every session answer (here and from `/api/sort/action`) carries `slot_counts`, the images sent to each slot key, and `library_id`, the library the session's images belong to (the one saved session is shared by every library; null without a session), plus `library_mixed`: true when the images belong to more than one library (then `library_id` is null). Every image of the session counts. A finished session still answers with `done: true` plus its `index`, `total`, `image_ids`, `folders`, `operation_mode` and counts, so the summary survives a reload. Clients ask before resuming a session that is not the open library's.
 
 #### POST /api/sort/action
-Perform `move`, `skip`, or `undo`. A slot `move` (copy or move) records the picture in `sorted_images`; `undo` takes that record back (or restores the one it replaced). An `undo` answer names what it took back: `undone_action`, `undone_image_id`, `undone_filename`, and for a move `undone_operation` (`copy` or `move`).
+Perform `move`, `skip`, or `undo`. A slot `move` (copy or move) records the picture in `sorted_images`; `undo` takes that record back (or restores the one it replaced). An `undo` answer names what it took back: `undone_action`, `undone_image_id`, `undone_filename`, and for a move `undone_operation` (`copy` or `move`). `collect` adds the image to the collection its key points at, by reference (no file moves); a key on the built-in Favorites collection favorites the image the way the heart does (path-anchored, it shows in `/api/collections/favorites/ids`). Undoing a `collect` takes out only what that key added: an image that was already a favorite, or already in the collection, stays (the history entry records `was_member`; entries saved before it undo as before). `redo` adds it again the same way.
 
 #### POST /api/sort/set-folders
 Set manual sort folders.
@@ -1100,6 +1113,75 @@ List the ids of all favorited images (plus `count`) for fast client-side heart-s
 #### POST /api/collections/favorites
 Set the favorite state of one image. Body carries `image_id` and `favorited` (default `true`; pass `false` to unfavorite). Returns `{ "favorited": bool }`.
 
+### Batches
+
+A batch (V4) is a saved, ordered group of images with steps and settings: a Pixiv post, a dataset or a custom group. Every route is scoped to the request's library (`X-SD-Library-Id`, default `main`); a batch or template of another library answers `404` exactly like a missing one. Errors use the global envelope with a `code` (`batch_not_found`, `batch_images_not_found`, `batch_item_not_found`, `batch_template_not_found`, `batch_revision_conflict`, `batch_items_mismatch`, `batch_invalid`, `dataset_batch_items_in_project`, `dataset_batch_orphaned`, `dataset_project_not_found`, `dataset_project_name_conflict`, ...). Working files (censored copies) live under `<data dir>/batches/<batch_id>/censored/<image_id>.png`. Deleting an image row from the Library removes it from every batch (FK cascade); its censored copy is removed the next time items are added to or removed from that batch.
+
+A **dataset batch** is a view of one Dataset Maker project (`dataset_projects`, the same rows V3.5 opens at `/api/dataset/projects`): the project holds its name, items (Library and folder images), order and V1 settings, and the batch row only V4 steps and settings. Each project has at most one batch (unique index, migration 061). Its images are read and written through `GET/PUT /api/dataset/projects/{id}`; the batch item endpoints refuse it with `409 dataset_batch_items_in_project`. When V3.5 deletes the project, the batch stays with `orphaned: true` (no items, last known name) and can only be deleted.
+
+#### GET /api/batches/templates
+List the library's saved templates plus the built-in step sets. Query: `kind` (`pixiv` | `dataset` | `custom`, optional). Returns `{ "templates": [{ "id", "kind", "name", "steps": [{ "id", "enabled" }], "settings", "created_at" }], "builtin_steps": { "pixiv": [...], "dataset": [...], "custom": [...] } }`. Built-in Pixiv steps: `pick`, `censor`, `order`, `name`, `export`.
+
+#### POST /api/batches/templates
+Save a template. Body: `{ "kind", "name", "steps": [{ "id": "^[a-z][a-z0-9_-]{0,39}$", "enabled": true }], "settings": {} }` (at least one step; step ids unique). Returns `201` with the template.
+
+#### DELETE /api/batches/templates/{template_id}
+Delete a template of the current library. Returns `{ "deleted": true, "template_id" }`; `404` when it does not exist here.
+
+#### GET /api/batches
+List batches, newest change first. Query: `include_archived` (default `false`), `kind` (optional). Returns `{ "batches": [{ "id", "kind", "name", "steps": [{ "id", "enabled" }] (the batch's own steps, in order), "current_step", "revision", "archived_at", "created_at", "updated_at", "item_count", "censored_count", "cover_image_ids": [first 4 image ids in order], "dataset_project_id", "project_revision", "orphaned", "source_collection_id" }], "unlinked_dataset_projects": [{ "id", "name", "revision", "archived_at", "created_at", "updated_at", "item_count", "cover_image_ids" }] }`. A dataset batch shows its project's `name`, `archived_at` (also used by `include_archived`), `item_count` (Library and folder images), `cover_image_ids` (its first 4 Library images; folder images have no id) and `project_revision`; its `updated_at` is the later of the batch's and the project's, so a V3.5 edit moves it up. `orphaned` is true for a dataset batch whose project was deleted (`dataset_project_id` and `project_revision` are `null`, `item_count` 0). `source_collection_id` is the V3.5 collection a custom batch was made from (`settings.source_collection_id` when it is an integer, else `null`), so a client can reuse that batch. `unlinked_dataset_projects` lists this library's projects that no batch shows yet (made in V3.5), newest change first, archived ones only with `include_archived`; it is empty when `kind` is `pixiv` or `custom`.
+
+#### POST /api/batches
+Create a batch. Body: `{ "kind": "pixiv" | "dataset" | "custom", "name", "template_id": null, "image_ids": [] }`. Steps and settings come from the template (its `kind` must match, else `422 batch_invalid`) or the built-in set; `current_step` starts at the first step. `image_ids` are appended in the given order; repeated ids are skipped and reported. Every id must be an image of the current library, otherwise `404 batch_images_not_found` and nothing is created. Returns `201 { "batch": <batch>, "skipped_image_ids": [] }`.
+
+Kind `dataset` creates a Dataset Maker project and its batch in one transaction: the project gets the `name` (an active project of this library with the same name, compared case-insensitively, returns `409 dataset_project_name_conflict` and nothing is created), the `image_ids` as Library items in order, and default settings that pass V3.5's strict V1 validation (V3.5 defaults with trainer `kohya_toml`, its `contract_version` and option defaults taken from `GET /api/dataset/trainers`). To show an existing project as a batch, send `{ "kind": "dataset", "dataset_project_id": <id> }` without `name` and `image_ids` (sending them, or a `dataset_project_id` with another kind, returns `400`): the batch takes the project's name and archive state; `201` when the batch is created, `200` with the same batch when the project already has one; `404 dataset_project_not_found` when the project is not in the current library. `name` is required otherwise.
+
+#### GET /api/batches/{batch_id}
+One batch with its items in order: `{ "id", "library_id", "kind", "name", "steps", "settings", "current_step", "dataset_project_id", "revision", "archived_at", "created_at", "updated_at", "item_count", "censored_count", "cover_image_ids", "project_revision", "orphaned", "items": [{ "image_id", "position", "filename", "width", "height", "output_name", "has_censored", "censored_at", "item_state" }] }`. `has_censored` is true only when the working copy exists on disk. A dataset batch has `items: []` and shows its project exactly as the list does (`name`, `archived_at`, `item_count`, `cover_image_ids`, `project_revision`, `orphaned`); read its items with `GET /api/dataset/projects/{dataset_project_id}`.
+
+#### PATCH /api/batches/{batch_id}
+Change the batch row. Body: `{ "revision" (required), "name"?, "steps"?, "settings"?, "current_step"?, "archived"? }`; only the fields sent change (`current_step: null` clears it). Compare-and-set: a stale `revision` returns `409 batch_revision_conflict` with `current_revision`, and nothing changes. `current_step` must be one of the steps (`422 batch_invalid`); when new `steps` drop the current step it moves to the first step. `archived: true` hides the batch from the default list. Every successful patch increments `revision`; item operations do not. Returns the batch. On a dataset batch, `name` and `archived` also change the project in the same transaction (rename, archive or restore; the project's `revision` goes up so an open V3.5 editor reloads): a name used by another active project returns `409 dataset_project_name_conflict` and nothing changes; an orphaned batch refuses them with `409 dataset_batch_orphaned`.
+
+#### DELETE /api/batches/{batch_id}
+Delete the batch rows and its working folder. Original image files and Library rows are never touched. Returns `{ "deleted": true, "batch_id" }`. A dataset batch deletes its project in the same transaction, with the project's items, folder-image references and every training-caption subject, revision and head; files uploaded into the batch (under its working folder) go with the folder. Library images and folder images on disk are never touched. Archiving is the reversible alternative. Query `expected_project_revision`: the project revision the user confirmed against. It is required for a dataset batch that still has its project: without it the answer is `400 dataset_project_revision_required` (with `batch_id` and `project_id`) and nothing is deleted; when the project changed since (edited in V3.5, say) the answer is `409 dataset_project_revision_conflict` with `current_revision` and nothing is deleted. Other kinds, and a dataset batch whose project is already gone (`orphaned`), ignore it.
+
+#### POST /api/batches/{batch_id}/copy
+
+Copy a dataset batch under a new name ("Save as…"). Body `{ "name": string }`; answers 201 `{ "batch" }` like `POST /api/batches`. The new batch has its own Dataset Maker project with the same items in the same order, the same settings, the batch's steps and V4 settings, and every training caption with its whole history, copied as new rows that keep their source, author (an AI caption stays AI-written), provider, model and time. Files uploaded into the batch are copied into the new batch's folder; Library and other folder images are referenced. One transaction: a copy that fails writes nothing and leaves no files. 409 `batch_not_dataset`, `dataset_batch_orphaned`, `dataset_project_name_conflict` (an active project uses the name) or `dataset_batch_copy_source_changed`; 404 when the batch is not in the current library.
+
+#### GET /api/batches/{batch_id}/project
+A dataset batch's project as its pick step shows it: `{ "project": <exactly what GET /api/dataset/projects/{id} returns>, "library_images": [{ "id", "filename", "width", "height", "tagged" }], "uploaded_count" }`. `library_images` names the project's Library images (the project stores ids only; `tagged` is true once the AI tagger ran on the image, the marker Smart Tag's `skip_existing` goes by); `uploaded_count` is how many of its folder images live in this batch's uploads folder (they are deleted with the batch). Like the V3.5 read, it lets the project's available folder images' thumbnails be served by `/api/dataset/local-thumbnail`. Items are changed with `PUT /api/dataset/projects/{id}` (`expected_revision` = `project.revision`, existing entries sent with `keep_as_saved`). `409 batch_not_dataset` for another kind, `409 dataset_batch_orphaned` when the project was deleted, `404 batch_not_found` for a batch of another library.
+
+#### POST /api/batches/{batch_id}/items
+Append images in the given order. Body: `{ "image_ids": [..] }`. Ids already in the batch (or repeated) are skipped. Unknown or other-library ids return `404 batch_images_not_found` and nothing is added. Returns `{ "batch", "added_image_ids", "skipped_image_ids" }`. A dataset batch returns `409 dataset_batch_items_in_project`.
+
+#### DELETE /api/batches/{batch_id}/items
+Remove images from the batch (body `{ "image_ids": [..] }`); positions are compacted and the removed items' censored copies are deleted. Returns `{ "batch", "removed_image_ids", "not_found_image_ids" }`. A dataset batch returns `409 dataset_batch_items_in_project`.
+
+#### PUT /api/batches/{batch_id}/items/order
+Reorder. Body: `{ "image_ids": [the full current set, in the new order] }`. A list that does not match the current items returns `409 batch_items_mismatch` with `missing_image_ids` / `unexpected_image_ids`; repeated ids return `400`. Returns the batch. A dataset batch returns `409 dataset_batch_items_in_project`.
+
+#### PATCH /api/batches/{batch_id}/items/{image_id}
+Set one item's `output_name` (a file name without extension that overrides the export name template; `null` or empty clears it) and/or `item_state` (free JSON object for the steps). Returns the item.
+
+#### PUT /api/batches/{batch_id}/items/{image_id}/censored
+Save the item's censored working copy. Body: `{ "image_data": "data:image/png;base64,...", "item_state"?: {} }` (same decoding and limits as the censor editor's save: 40 MB, 40 megapixels; `400` for invalid data, `413` when too large). The copy is written as PNG **without any metadata**, replacing an earlier copy. Optional `item_state` works like the item PATCH (absent keeps the state, `null` clears it) and is written **together with the copy**: the copy is staged first and swapped in inside the database transaction that records it and the state, so either both change or neither does (a failure keeps the previous copy and the previous state). The V4 censor editor sends its ops this way. Returns the item (`has_censored: true`, `censored_at`, `item_state`).
+
+#### PUT /api/batches/{batch_id}/items/{image_id}/censored/file
+The same save as a binary upload, for pictures of any size (the V4 censor editor uses this). `multipart/form-data` with a `file` part (the PNG or lossless WebP bytes, no base64) and an optional `item_state` part (JSON text: an object, or `null` to clear; absent keeps the state; up to 64 MB). Same one-write rule as the JSON PUT (staged copy swapped in inside the transaction, rollback on failure) and the copy is stored as PNG without metadata. There is no 40 MB / 40 MP cap: only Pillow's decompression-bomb limit (`Image.MAX_IMAGE_PIXELS`) refuses a picture, with `413` naming its pixel count. `400` when the part is missing, not a PNG/WebP picture, or `item_state` is not a JSON object or `null`. Returns the item.
+
+#### GET /api/batches/{batch_id}/items/{image_id}/censored
+Serve the item's censored working copy (`image/png`, `Cache-Control: no-store`); `404 batch_censored_copy_not_found` when there is none.
+
+#### DELETE /api/batches/{batch_id}/items/{image_id}/censored
+Discard the item's censored copy (file and columns). Optional body `{ "item_state": {} | null }` sets the item's state in the same database change (the censor editor's "back to original" clears its ops this way); without a body the state is left as it is. The file is removed only after that change committed, so a failure keeps both the copy and the state. Returns the item.
+
+#### POST /api/batches/{batch_id}/export/names
+Preview the file names an export would write; nothing is written. Body: the naming part of the export body, `{ "name_template", "start_number", "output_format", "missing_censored" }` (same defaults; other fields are refused). It uses the export's own source choice and naming, so the names match exactly (sanitizing, extension by format, per-item `output_name`, numbering of exported items only). With `block` every item is named as if its missing copy were resolved (`source: "missing"`); `skip` leaves out items without a copy exactly like the export. Returns `{ "items": [{ "image_id", "position", "filename", "has_censored", "included", "source": "censored" | "original" | "missing" | null, "number", "overridden", "output_name" }], "duplicates": [{ "output_name", "image_ids" }], "template_error": null | { "token", "message" } }`. Duplicate names (case-insensitive) and a broken template are reported as data (`200`); with a broken template every `output_name` is `null`. A batch of another library answers `404 batch_not_found`.
+
+#### POST /api/batches/{batch_id}/export
+Export the batch for posting (Pixiv). Body: `{ "output_folder", "name_template": "{batch}_{n:02}", "start_number": 1, "metadata_option": "strip" | "keep" | "minimal" (default "strip"), "output_format": "original" | "png" | "jpg" | "webp", "overwrite": false, "caption_text": "", "watermark": { same shape as the publish-set watermark }, "missing_censored": "block" | "skip" | "original" (default "block") }`. Every item uses its censored copy. With `block`, any item without one returns `409 batch_export_missing_censored` with `missing: [{ "image_id", "filename" }]` and nothing is written; `skip` leaves those items out (reported in `skipped`); `original` exports their original files, still stripped unless `keep` is chosen. Name tokens: `{batch}`, `{n}`, `{n:0W}` (zero-padded to W digits, W = 1-9), `{original}` (original name without extension); numbers count the exported items from `start_number`; an item's `output_name` overrides the template; the extension follows the output format (`original` = the original file's format). Refusals before any write: invalid folder `400`, unknown token `422 batch_export_name_template_invalid`, duplicate names (case-insensitive) `422 batch_export_duplicate_names` with `duplicates: [{ "output_name", "image_ids" }]`, a missing original with `original` `409 batch_export_sources_missing`, existing files (including `caption.txt`) without `overwrite` `409 batch_export_files_exist` with `existing`. `strip` re-encodes the pixels only (no PNG text, EXIF or XMP); `minimal` keeps only the ICC profile and DPI; `keep` copies the original's metadata (a byte copy when an original is exported in its own format without a watermark). An original's EXIF rotation is applied to the pixels when its metadata is not kept. Optional `caption_text` is written to `caption.txt`. Returns `{ "success", "batch_id", "output_folder", "exported": [{ "image_id", "position", "filename", "output_name", "output_path", "source": "censored" | "original", "used_censored", "metadata_option", "generation_data_removed", "watermarked", "overwrote_existing", "reconciled_image_id", "warnings" }], "skipped", "errors", "caption_file" }`.
+
 ### Entry Page
 
 #### GET /api/entry/summary
@@ -1228,7 +1310,7 @@ Where the trusted folders apply (SEC1b / SEC1c):
   folders are not affected.
 
 #### GET /api/models/download-progress
-Get active model download progress (bytes downloaded, total size).
+Get active model download progress (bytes downloaded, total size). `prepare_result` describes the latest prepare, with its `run_id` (0 when none ran since the app started). `finished_prepares` maps run ids (as strings) to the results of the last 32 finished prepares (the same fields as `prepare_result`, `active: false`), so a page that missed the moment its run handed over to the next one still learns how its own run ended; a run no longer listed there has to be treated as lost.
 
 #### GET /api/models/sources/detect
 Pinned models that already exist elsewhere on this PC, so the Model Center can
@@ -1426,11 +1508,14 @@ The request returns immediately with HTTP 200:
 {
   "status": "downloading",
   "model_id": "sam3",
+  "run_id": 7,
   "message": "Download started in background."
 }
 ```
 
-Poll `GET /api/models/download-progress` and read `prepare_result` for completion, warnings, or actionable errors.
+Only one prepare runs at a time: while one runs, the answer names the running one (`model_id`, `run_id`, message `A download is already in progress.`) and starts nothing.
+
+Poll `GET /api/models/download-progress` and read `prepare_result` for completion, warnings, or actionable errors; once `prepare_result.run_id` is another run, read this run's result from `finished_prepares`.
 
 Structured errors can include:
 
@@ -1544,6 +1629,8 @@ Optional `upright` (bool, default false): when true the image's EXIF orientation
 Remove the image background with SAM3 foreground detection.
 
 Body: `image_id` (int), `fill_mode` (`transparent`, `white`, or `black`), optional `edge_threshold` (float 0.0–1.0). Returns a base64 preview image; transparent mode returns PNG data with an alpha channel.
+
+Optional `upright` (bool, default false): when true the image's EXIF orientation is applied first, so the preview (and the mask in its alpha) is in the upright frame a browser shows. Omitted keeps the raw frame.
 
 #### GET /api/censor/mask-cache/{mask_ref}
 Retrieve a cached mask image by reference.
@@ -1724,12 +1811,16 @@ Start batch identification.
 | `threshold` | float | 0.03 | Extra confidence floor; tightens only |
 | `top_k` | int | 5 | Number of predictions per image |
 | `model_source`, `model_path` | | | Same rules as `POST /api/artists/identify` |
+| `skip_existing` | bool | false | Leave out images that already have an artist result (a row in `artist_predictions`) |
+
+The response has `message`, `total` (images the run will identify), `skipped` (images left out by `skip_existing`; 0 otherwise) and `started`. When `skip_existing` leaves nothing to do, nothing starts: `started` is false and `total` is 0.
 
 Each `results[]` entry carries `artist`, `confidence`, `confidence_level`, and `candidate_artist`.
 
 #### GET /api/artists/batch-progress
 Get identification progress.
 The response includes step-oriented status fields such as `message`, `current_item`, `started_at`, and `updated_at` for frontend diagnostics. `message` is an English display string kept for API compatibility; clients localise from `message_key` (`preparing`, `loading_runtime`, `identifying`, `identifying_item`, `done`, `error`) and the counters, and `message_detail` carries the raw error text for `error`.
+`?include_results=false` leaves `results` empty: the list grows with every image of the run, so a poll that only needs the counts should not carry it.
 
 #### GET /api/artists/models
 List artist models.
@@ -2748,7 +2839,7 @@ Build a typed review queue from the submitted Dataset Maker scope and its stored
 
 Validate the exact requested export settings and queue a read-only Dataset Readiness job. Returns HTTP 202 with a durable `dataset_readiness` bulk-job snapshot; poll `GET /api/bulk-jobs/{job_id}` for progress and the final report.
 
-Two optional fields (same on `POST /api/dataset/export`) change what counts as a blocker. `skip_blocked_items: true` turns per-item problems (unreadable source, empty or failed caption, missing subject-crop / bucket / trainer mask, a source that vanished before a beside-image write) into `Skipped:` warnings, and the export re-runs the check and leaves exactly those items out (`skipped` in the result). Name collisions, writes onto a source file and "no pairs left" still block. It is refused with HTTP 400 for verified trainer packages, because a skipped item makes the package incomplete. `allow_empty_captions: true` writes an empty `.txt` instead of flagging an empty caption. The report summary adds `skippable_items` and `empty_caption_items`. With `overwrite_policy: "skip"` an output that already exists is a warning (`existing_output_skipped`), not a blocker.
+Two optional fields (same on `POST /api/dataset/export`) change what counts as a blocker. `skip_blocked_items: true` turns per-item problems (unreadable source, empty or failed caption, missing subject-crop / bucket / trainer mask, a source that vanished before a beside-image write) into `Skipped:` warnings, and the export re-runs the check and leaves exactly those items out (`skipped` in the result). Name collisions, writes onto a source file and "no pairs left" still block. It is refused with HTTP 400 for verified trainer packages, because a skipped item makes the package incomplete. `allow_empty_captions: true` writes an empty `.txt` instead of flagging an empty caption. The report summary adds `skippable_items` and `empty_caption_items`. With `overwrite_policy: "skip"` an output that already exists is a warning (`existing_output_skipped`), not a blocker. For a named Dataset Project, an item that is left out this way (skipped, unreadable, or not planned) still matches its `annotation_selections` entry: only a selection for an item that was never requested is reported as `annotation_selection_extra`.
 
 #### POST /api/dataset/package-verifications
 
@@ -2800,7 +2891,7 @@ Page through the current training-caption heads for a project. Query parameters 
 
 #### POST /api/annotations/projects/{project_id}/training-captions/revisions
 
-Append an immutable manual training-caption revision and advance its subject head using `expected_project_revision` and `expected_head_generation` conflict checks.
+Append an immutable manual training-caption revision and advance its subject head using `expected_project_revision` and `expected_head_generation` conflict checks. Optional `ai_provenance: { "source": "wd14" | "vlm", "provider"?, "model"? }` (V4 tag step) records the revision as AI output (`author_class: "ai"`) instead of a user's manual edit, so a later AI run can leave the user's own edits alone.
 
 #### GET /api/annotations/projects/{project_id}/subjects/{subject_id}/training-captions/revisions
 
@@ -2809,6 +2900,10 @@ Page through one subject's immutable training-caption history. Query parameters 
 #### POST /api/annotations/projects/{project_id}/subjects/{subject_id}/training-captions/restore
 
 Restore a selected immutable revision as the subject's active caption using project-revision and head-generation conflict checks.
+
+#### POST /api/annotations/projects/{project_id}/training-captions/revisions:batch
+
+V4 bulk caption edits and their undo: many subjects' new training-caption revisions in one transaction. Body: `expected_project_revision` and `entries` (1 to 5000 per request; a larger change is sent as several requests). Each entry has a Library or project-local `subject`, its `expected_head_generation`, and exactly one of `content` (written as a manual user revision) or `restore_revision_id` (an earlier revision of the same subject made current again, source `restore`, keeping that revision's author, provider and model so an undone AI caption stays the AI's). `template_snapshot: true` with `content` records the content as source `legacy_snapshot`, author `system`: an undo putting back the template's caption of an image nobody had edited. Either every entry is written or none is: a stale generation, a subject no longer in the project or whose file changed, or a restore naming another subject's revision answers HTTP 409 `annotation_batch_conflict` with `problems: [{index, reason: generation | not_in_project | identity | revision, expected_generation, current_generation, message}]` and `written: 0`. Naming the same subject twice is a 400. The 201 response lists, in request order, each subject's new `generation`, `revision_id`, `source`, `author_class` and `restored_from_revision_id`.
 
 #### POST /api/dataset/export
 Combined image-and-caption export for LoRA training datasets. Renames every image according to the supplied pattern, copies (or moves) it to the output folder, and writes the matching `.txt` caption sidecar with the same stem. Optional `mask_export` (`"none"` default | `"onetrainer"` | `"kohya"`, v3.5.x Phase 4): also exports stored training masks — OneTrainer writes `<stem>-masklabel.png` beside each exported image, kohya writes `mask/<stem>.png` (a `conditioning_data_dir` layout). Images without a stored mask count in `masks_missing`, never fail (no mask = train the whole image); successful copies count in `masks_written`. Both counters ride the response. Optional `trainer_config: "kohya_toml"` (+ `trainer_repeats` 1-1000 default 10, `trainer_batch` 1-64 default 2, `trainer_resolution` 256-4096 default 1024) drops a ready `dataset_config.toml` into the output folder — one subset with explicit `num_repeats` (kohya's config method ignores folder-name repeats, per `docs/config_README-en.md`), `caption_extension` matching the export, `class_tokens` from the trigger, and `conditioning_data_dir = <output>/mask` when kohya-style masks were written (`docs/masked_loss_README.md`). Optional `trainer_keep_tokens` (0-50, default 0) additionally emits `shuffle_caption = true` + `keep_tokens = N` on the subset (official config example) so the trigger and leading common tags stay first while the rest shuffle. `trainer_config_path` rides the response; folder mode only.
@@ -2820,6 +2915,8 @@ Optional `bucket_resize` is `{enabled, subject_aware, alpha_threshold}` and defa
 Optional `watermark_removal` is `{enabled, method, radius, padding_percent, regions}` and defaults to `{enabled: false, method: "telea", radius: 3, padding_percent: 0, regions: []}`. It is a manual, CPU-only inpainting step: each region is `{x, y, width, height}` in basis points of the visual image (`0..10000`), with at most eight rectangles. The exporter applies the selected OpenCV method after EXIF orientation normalization and before subject crop or bucket geometry, and writes only the copied output image. The `watermark` tag is metadata and is never treated as a pixel mask. Enabling this option requires folder output, `image_op="copy"`, and `trainer_config="none"`; missing OpenCV/NumPy or an invalid region fails the row with an actionable error. It does not claim to detect arbitrary watermarks automatically.
 
 Optional `folder_layout` (`"flat"` default | `"kohya"`) and `kohya_concept` (string, at most 80 characters, default `""`) choose where the pairs land. `"kohya"` writes everything (images, captions, masks, `export_manifest.json`, any trainer config) into `<output_folder>/<trainer_repeats>_<kohya_concept>/`, the folder name kohya-ss sd-scripts' folder method reads repeats from; an empty concept becomes `dataset`. The concept must already be one safe folder name (no whitespace, path separators, `<>:"|?*`, control characters, or leading/trailing dot) or the request fails with 422; the Dataset Maker composes it from the trigger word, then the project name. Readiness, the preview, the start response, the result's `output_folder` and a kohya `dataset_config.toml` `image_dir` all use that subfolder. Both export manifests record the layout (`settings.folder_layout` = `{layout, output_root, subfolder, repeats}`; Package v2 `options.folder_layout`). The export preview accepts the same two fields plus `trainer_repeats`.
+
+Optional `nl_sidecar` (bool, default `false`, V4): also write each caption's natural-language sentence to a `{stem}_nl.txt` twin beside the caption (diffusion-pipe split captions), with the same text rule as `/api/tags/export-batch`'s `nl_sidecar`: one line, trigger (else `prefix`) first. The sentence is the edited revision's `nl_caption` for `revision_ref` items, else the stored `nl_caption` / prose sidecar / `ai_caption`. The twin is planned before the row is written and follows `overwrite_policy` (`unique` fails the row when the twin exists, so no pair is written without it; `skip` leaves an existing twin; `overwrite` replaces it). Only for `trainer_config: "none"` (verified packages list every file they hold) and the `template`/`tags` content modes; otherwise HTTP 400 on export, export start and readiness start. Optional `dedupe_implications` (bool, default `false`, V4): drop tags a more specific tag of the same caption implies (`cat_ears` drops `animal_ears`, transitive), with the same implication table as `/api/tags/export-batch`; it applies to rendered captions (on the tag rows) and to edited `revision_ref` captions (on their tag part). `/api/dataset/export-preview` accepts `dedupe_implications` too. Both options off write exactly the files they always did, and an off option is left out of the Readiness input fingerprint.
 
 `DatasetExportResponse.warnings` is always an array. A completed overwrite whose obsolete backup could not be deleted returns a structured `backup_cleanup_failed` warning with `{code, message, backup_path, error_type, error}`. The exported row remains valid; the retained backup path is shown so the user can verify the new output and remove that backup manually. This condition is never hidden as a log-only success.
 
@@ -2984,7 +3081,7 @@ Returns `{vocab: [{tag, count, sample_image_id}], total_unique_tags}` ordered by
 
 #### POST /api/dataset/upload-files
 
-Upload image files directly into the Dataset Maker session via multipart form data. Files are saved to a persistent temp directory (`data/dataset-uploads/`) and the response returns the same item shape as `/api/dataset/folder-scan` so the frontend can feed them into `addLocalItems()`.
+Upload image files directly into the Dataset Maker session via multipart form data. Files are saved to a persistent temp directory (`data/dataset-uploads/`) and the response returns the same item shape as `/api/dataset/folder-scan` so the frontend can feed them into `addLocalItems()`. Optional form field `batch_id` (V4): the files go to that dataset batch's own folder, `<data dir>/batches/<batch_id>/uploads/`, and are deleted with the batch; the batch must be a linked dataset batch of the current library (`404 batch_not_found`, `409 batch_not_dataset`, `409 dataset_batch_orphaned`). Uploaded files never enter the Library.
 
 Form data: `files` — one or more image files (PNG, JPG, WebP, etc.)
 

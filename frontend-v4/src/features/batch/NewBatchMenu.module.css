@@ -1,0 +1,31 @@
+.row {
+  display: flex;
+  align-items: center;
+}
+
+.row > button:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The shared menu styles give every button full width; this one stays small. */
+.row > .remove {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  justify-content: center;
+  color: var(--muted);
+}
+
+.row > .remove:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.empty {
+  padding: 4px 10px 6px 26px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}

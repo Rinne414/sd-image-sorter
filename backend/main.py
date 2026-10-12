@@ -112,7 +112,7 @@ from fastapi.responses import JSONResponse
 import app_static
 from app_diagnostics import build_support_diagnostics, open_support_log_file
 from app_security import _is_loopback_host, configure_security_middleware
-from app_static import mount_frontend_static, serve_frontend_index, static_cache_bust_token
+from app_static import mount_frontend_static, mount_frontend_v4, serve_frontend_index, static_cache_bust_token
 
 _STATIC_CACHE_BUST_RE = app_static._STATIC_CACHE_BUST_RE
 
@@ -134,7 +134,7 @@ from exceptions import (
 )
 
 # Import routers
-from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, disguise, censor_media, aesthetic, updates, disk, vlm, colors, tags_bulk, dataset, dataset_projects, annotations, smart_tag, collections, entry, libraries, duplicates, publish, metadata_repair, masks, style_map, output_folders
+from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, disguise, censor_media, aesthetic, updates, disk, vlm, colors, tags_bulk, dataset, dataset_projects, annotations, smart_tag, collections, entry, libraries, duplicates, publish, metadata_repair, masks, style_map, output_folders, batches, batch_uploads, file_manager, image_lookup
 
 # Import services
 from services import (
@@ -380,6 +380,10 @@ configure_security_middleware(app)
 frontend_path = str(BACKEND_DIR.parent / "frontend")
 mount_frontend_static(app, frontend_path=frontend_path)
 
+# The second interface, V Opus (Vite build of frontend-v4), at /v4/.
+frontend_v4_dist_path = str(BACKEND_DIR.parent / "frontend-v4" / "dist")
+mount_frontend_v4(app, dist_path=frontend_v4_dist_path)
+
 
 def _static_cache_bust_token(asset_path: str) -> str:
     """Compatibility shim for existing cache-bust tests."""
@@ -419,8 +423,12 @@ app.include_router(libraries.router)
 app.include_router(duplicates.router)
 app.include_router(masks.router)
 app.include_router(publish.router)
+app.include_router(batches.router)
+app.include_router(batch_uploads.router)
 app.include_router(metadata_repair.router)
 app.include_router(output_folders.router)
+app.include_router(file_manager.router)
+app.include_router(image_lookup.router)
 
 
 # ============================================================

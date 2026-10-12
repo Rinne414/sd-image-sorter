@@ -1,0 +1,723 @@
+/* The Sort tab's setup and finished summary: one sheet on the stage, like Home. */
+
+.page {
+  height: 100%;
+  overflow-y: auto;
+  background: var(--stage);
+}
+
+.sheet {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 32px 40px 40px;
+}
+
+@media (min-width: 2400px) {
+  .sheet {
+    max-width: 1320px;
+  }
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-7);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.lede {
+  margin: 6px 0 14px;
+  color: var(--text-2);
+  font-size: var(--fs-4);
+}
+
+.section {
+  margin: 0 0 8px;
+  padding: 0;
+  font-size: var(--fs-2);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.note {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+
+.error {
+  margin: 6px 0 0;
+  color: var(--danger);
+  font-size: var(--fs-3);
+}
+
+.warn {
+  margin: 8px 0 0;
+  color: var(--warn);
+  font-size: var(--fs-3);
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ---- the unfinished sort ---- */
+
+.resume {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0 0 18px;
+  padding: 12px 14px 12px 16px;
+  background: var(--surface-1);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-lg);
+}
+
+.resumeText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-4);
+}
+
+/* ---- how to sort ---- */
+
+.modes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin: 0 0 16px;
+}
+
+.modes .note {
+  margin: 0;
+}
+
+.modeRow {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+}
+
+.mode {
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+  white-space: nowrap;
+}
+
+.mode:first-child {
+  border-left: 0;
+}
+
+.mode[aria-checked='true'] {
+  background: var(--wash-strong);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.mode:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+/* ---- what, where, move or copy ---- */
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
+  gap: 48px;
+  align-items: start;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 0;
+  cursor: pointer;
+}
+
+.option input {
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+}
+
+.optionText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.optionTitle {
+  color: var(--text);
+  font-size: var(--fs-4);
+}
+
+.optionHint {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.folderName {
+  flex-shrink: 0;
+  max-width: 60%;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-4);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folderParent {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unset {
+  color: var(--muted);
+  font-size: var(--fs-3);
+}
+
+.startRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.startRow .note,
+.startRow .error {
+  margin: 0;
+}
+
+.startRow :global(.btn) {
+  height: 36px;
+  padding: 0 18px;
+}
+
+.confirmBody {
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* A run by several rules: one line per rule under the title. */
+.runGroups {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.runGroups li {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.runGroups .mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- the finished summary ---- */
+
+.doneList {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doneRow {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 80px auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 8px 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.doneCount {
+  color: var(--accent);
+  font-size: var(--fs-4);
+  text-align: right;
+}
+
+.doneActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.gap {
+  flex: 1;
+}
+
+/* ---- focus mode: the sort over the whole window, top bar included ---- */
+
+.focus {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  background: var(--stage);
+}
+
+.focus > section {
+  height: 100%;
+}
+
+/* ---- presets ---- */
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 0 0 12px;
+}
+
+.presetsLabel {
+  margin-right: 4px;
+  font-size: var(--fs-2);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.preset {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+}
+
+.presetLoad {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-3);
+}
+
+.presetLoad:hover {
+  background: var(--wash-hover);
+}
+
+.presetMode {
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.presetDelete {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+}
+
+.presetDelete:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.nameField {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+}
+
+.nameField input {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-1);
+  color: var(--text);
+  font-size: var(--fs-4);
+  border-radius: var(--radius);
+}
+
+/* ---- A/B and keep / reject in the setup ---- */
+
+.how {
+  min-width: 0;
+  padding: 14px 16px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.howBody {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-4);
+  line-height: 1.7;
+}
+
+.range {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+/* Keys and sound: one line under the columns. */
+.optionsRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  margin-top: 18px;
+}
+
+.inlineOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: var(--fs-3);
+  cursor: pointer;
+}
+
+.inlineOption input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.range input {
+  width: 160px;
+  accent-color: var(--accent);
+}
+
+.warnLine {
+  color: var(--warn);
+  font-size: var(--fs-2);
+}
+
+/* ---- the finished A/B and keep / reject ---- */
+
+.winner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 20px;
+  align-items: center;
+  padding: 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.winnerImage {
+  width: 240px;
+  height: 240px;
+  object-fit: contain;
+  background: var(--film);
+}
+
+.winnerInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.winnerInfo .section {
+  margin: 0;
+}
+
+.winnerName {
+  overflow: hidden;
+  font-size: var(--fs-5);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.group2 {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--fs-4);
+}
+
+.thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.thumbs img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  background: var(--film);
+}
+
+.more {
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: var(--fs-3);
+}
+
+/* ---- sort by condition ---- */
+
+.condition {
+  display: grid;
+  gap: 6px;
+  margin: 2px 0 6px 26px;
+}
+
+.conditionRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.conditionInput {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-1);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-3);
+  border-radius: var(--radius);
+}
+
+.conditionInput:focus {
+  border-color: var(--accent-line);
+  outline: none;
+}
+
+.splitRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 10px;
+}
+
+.rulePreview {
+  min-width: 0;
+}
+
+.rulePreview .thumbs img {
+  width: 56px;
+  height: 56px;
+}
+
+.rulePreview .link {
+  margin-top: 8px;
+  font-size: var(--fs-2);
+}
+
+.runBar {
+  height: 4px;
+  margin: 4px 0 16px;
+  background: var(--line);
+}
+
+.runBar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--t-fast) var(--ease);
+}
+
+.failures {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.failures ul {
+  display: grid;
+  gap: 4px;
+  max-height: 240px;
+  margin: 6px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.destRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 6px 6px 6px 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+/* WASD as the keys themselves: W above, A S D below, each cap names its folder. */
+.keyboard {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-areas:
+    ". w ."
+    "a s d";
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* The letter beside its folder, clear in the corner, the two actions below. */
+.keycap {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "letter target clear"
+    "actions actions actions";
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+  padding: 10px 8px 10px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-bottom: 5px solid var(--surface-3);
+  border-radius: var(--radius-lg);
+}
+
+.keycap[data-slot="w"] { grid-area: w; }
+.keycap[data-slot="a"] { grid-area: a; }
+.keycap[data-slot="s"] { grid-area: s; }
+.keycap[data-slot="d"] { grid-area: d; }
+
+.keycap[data-set] {
+  background: var(--surface-2);
+  border-color: var(--line-strong);
+  border-bottom-color: var(--accent);
+}
+
+.keyLetter {
+  grid-area: letter;
+  font-family: var(--font-mono);
+  font-size: var(--fs-7);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.keycap[data-set] .keyLetter {
+  color: var(--accent);
+}
+
+.keyTarget {
+  grid-area: target;
+  min-width: 0;
+}
+
+.keyClear {
+  grid-area: clear;
+  align-self: start;
+}
+
+.keyTarget .folder {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.keyActions {
+  grid-area: actions;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}

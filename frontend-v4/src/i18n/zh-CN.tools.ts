@@ -1,0 +1,28 @@
+// The Tools menu, the tool pages and "送到工具". Spread into zh-CN.ts; every
+// key here must exist in en.tools.ts (the type enforces it).
+export const zhCNTools = {
+  'tools.menu': '工具',
+  'tools.menuTitle': '读图、反推提示词、提示词助手等单独使用的功能',
+  'tools.reader': '读图',
+  'tools.reverse': '反推提示词',
+  'tools.promptlab': '提示词助手',
+  'tools.artist': '画风识别',
+  'tools.analyze': 'AI 分析',
+  'tools.artist.identify': '识别画风',
+  'tools.artist.identifyPalette': '识别这些图的画风',
+  'tools.artist.job.running': '正在识别画风：{n} 张',
+  'tools.artist.job.done': '已识别画风：{n} 张',
+  'tools.lexicon': '词库',
+  'tools.lexicon.browse': '浏览词库…',
+  'tools.privacy': '隐私混淆',
+  'tools.censor': '打码…',
+  'tools.censorMany': '给选中的 {n} 张打码…',
+  'tools.editTags': '批量改标签…',
+  'tools.editTagsMany': '改选中的 {n} 张的标签…',
+  'tools.pickFirst': '先在图库里点一张图（或选中几张），再用这个。',
+  'tools.sendTo': '送到工具',
+  'tools.palette.open': '工具：{tool}',
+  'tools.palette.send': '把选中的图送到{tool}',
+  'palette.group.tools': '工具',
+  'palette.group.settings': '设置',
+}

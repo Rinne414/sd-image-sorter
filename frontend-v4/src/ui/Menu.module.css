@@ -1,0 +1,99 @@
+.wrap {
+  position: relative;
+}
+
+.caret {
+  display: grid;
+  color: var(--muted);
+}
+
+.menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 180px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface-2);
+  box-shadow: var(--shadow-float);
+  border-radius: var(--radius-lg);
+}
+
+.menu[data-align="right"] {
+  left: auto;
+  right: 0;
+}
+
+.menu[data-up] {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+.menu li[data-divider] {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px 6px 6px;
+  border: 0;
+  background: none;
+  text-align: left;
+  white-space: nowrap;
+  border-radius: var(--radius);
+}
+
+.menu button:hover {
+  background: var(--wash-hover);
+}
+
+.menu li[data-danger] button {
+  color: var(--danger);
+}
+
+.menu li[data-danger] button:hover {
+  background: var(--danger-soft);
+}
+
+.check {
+  width: 12px;
+  color: var(--accent);
+  font-size: 8px;
+  text-align: center;
+}
+
+.itemLabel {
+  flex: 1;
+}
+
+.menu li.group {
+  padding: 6px 8px 2px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.menu li.group[data-divider] {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.menu li .itemLabel {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:global(.btn-primary) > .caret {
+  color: inherit;
+  opacity: 0.7;
+}

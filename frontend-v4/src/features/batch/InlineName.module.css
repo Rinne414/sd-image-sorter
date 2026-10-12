@@ -1,0 +1,20 @@
+.input {
+  width: 100%;
+  max-width: 420px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--accent);
+  background: var(--bg);
+  color: var(--text);
+  font-weight: 600;
+  border-radius: var(--radius);
+}
+
+.input:focus {
+  outline: none;
+}
+
+.input[data-large] {
+  height: 34px;
+  font-size: var(--fs-6);
+}

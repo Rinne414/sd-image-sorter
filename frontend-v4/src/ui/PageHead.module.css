@@ -1,0 +1,27 @@
+/* Same head as an open batch: back, a thin rule, the title. */
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  height: 52px;
+  padding: 0 16px 0 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+.rule {
+  width: 1px;
+  height: 20px;
+  background: var(--line);
+}
+
+.title {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-6);
+  font-weight: 650;
+}

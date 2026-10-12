@@ -1,0 +1,40 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.field input {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-4);
+  border-radius: var(--radius);
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.note {
+  margin: 12px 0 0;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+
+.steps {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+
+.body {
+  margin: 0;
+  line-height: 1.7;
+}

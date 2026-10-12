@@ -1,0 +1,222 @@
+/* V4 design tokens. One owner for every colour, size and shape.
+
+   Two themes, both taken from how photographers cull a shoot:
+   - "darkroom" (dark): warm near-black, paper-white type, amber edge print.
+   - "proof" (light): a contact sheet on proof paper, ink-black type.
+   Shared marks: a vermilion china-marker for picked frames, cyanotype blue
+   for anything a model produced. No gradients, glows or blur; one spot colour
+   per role. Theme is set on <html data-theme="dark|light"> before first paint. */
+
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* surfaces, darkest to lightest */
+  --stage: #0a0909;
+  --bg: #121110;
+  --surface-1: #1a1917;
+  --surface-2: #23221f;
+  --surface-3: #2e2c28;
+  --line: #282622;
+  --line-strong: #3d3a34;
+  --hairline: #1f1e1b;
+  --scrim: rgba(8, 7, 6, 0.62);
+  --overlay-panel: rgba(26, 25, 23, 0.96);
+
+  /* type */
+  --text: #ece6da;
+  --text-2: #c9c2b4;
+  --muted: #989184;
+  --faint: #7a7367;
+
+  /* roles */
+  --ink-button: #ece6da; /* primary buttons are printed in paper white */
+  --on-ink-button: #131210;
+  --accent: #e2a03f; /* amber edge print: focus, active, counts */
+  --accent-soft: rgba(226, 160, 63, 0.12);
+  --accent-line: rgba(226, 160, 63, 0.5);
+  --marker: #e4553c; /* china marker: picked frames */
+  --marker-soft: rgba(228, 85, 60, 0.14);
+  --on-marker: #1a0c08;
+  --ai: #79a7cf; /* cyanotype: what a model produced */
+  --ok: #8fb07c;
+  --warn: #d9a441;
+  --danger: #e0685a;
+  --danger-soft: rgba(224, 104, 90, 0.12);
+
+  --wash: rgba(236, 230, 218, 0.04);
+  --wash-hover: rgba(236, 230, 218, 0.07);
+  --wash-strong: rgba(236, 230, 218, 0.1);
+  --scrollbar: rgba(236, 230, 218, 0.18);
+
+  /* film (the same black rebate in both themes, as on a contact print) */
+  --film: #0e0d0c;
+  --film-hole: rgba(236, 230, 218, 0.17);
+  --edge-print: #e2a03f;
+  --tile-caption-bg: rgba(13, 12, 11, 0.82);
+  --on-image: #f3eee4; /* marks drawn over thumbnails (the favourite heart) */
+  --ai-on-image: #8fbde6; /* a model's marks drawn over pictures (detected regions) */
+  --ok-on-image: #a8c996;
+  --hist-r: rgba(228, 96, 80, 0.55); /* the Adjust tab's histogram channels */
+  --hist-g: rgba(122, 184, 110, 0.5);
+  --hist-b: rgba(110, 150, 220, 0.5);
+
+  --shadow-float: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(236, 230, 218, 0.06);
+
+  /* 14 tag categories (mirrors backend tag_rules.categorize_tag) */
+  --cat-character: #e7a15b;
+  --cat-artist: #e5806c;
+  --cat-body: #d8b48c;
+  --cat-expression: #e0c45c;
+  --cat-outfit: #b89cd4;
+  --cat-pose: #8db3d9;
+  --cat-angle: #78bfbc;
+  --cat-action: #d98ba0;
+  --cat-background: #92b980;
+  --cat-style: #c7a3c9;
+  --cat-quality: #aaa296;
+  --cat-meta: #80796f;
+  --cat-rating: #de5a4c;
+  --cat-unknown: #bfb8aa;
+  --chip-mix: 12%;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  --stage: #e3ded3;
+  --bg: #eeeae2;
+  --surface-1: #f6f3ed;
+  --surface-2: #fbf9f5;
+  --surface-3: #e6e1d6;
+  --line: #ddd6c9;
+  --line-strong: #c4bcad;
+  --hairline: #e2dcd0;
+  --scrim: rgba(40, 36, 30, 0.35);
+  --overlay-panel: rgba(246, 243, 237, 0.97);
+
+  --text: #1c1a17;
+  --text-2: #3f3b34;
+  --muted: #605a50;
+  --faint: #857d6e;
+
+  --ink-button: #1c1a17;
+  --on-ink-button: #f6f3ed;
+  --accent: #844e03;
+  --accent-soft: rgba(132, 78, 3, 0.1);
+  --accent-line: rgba(132, 78, 3, 0.45);
+  --marker: #b5311a;
+  --marker-soft: rgba(181, 49, 26, 0.1);
+  --on-marker: #fff8f4;
+  --ai: #2d6590;
+  --ok: #3d6a30;
+  --warn: #835709;
+  --danger: #b3261e;
+  --danger-soft: rgba(179, 38, 30, 0.08);
+
+  --wash: rgba(28, 26, 23, 0.035);
+  --wash-hover: rgba(28, 26, 23, 0.06);
+  --wash-strong: rgba(28, 26, 23, 0.09);
+  --scrollbar: rgba(28, 26, 23, 0.22);
+
+  --film: #151412;
+  --film-hole: rgba(238, 234, 226, 0.2);
+  --edge-print: #e2a03f;
+  --tile-caption-bg: rgba(21, 20, 18, 0.8);
+  --on-image: #f3eee4;
+  --ai-on-image: #8fbde6;
+  --ok-on-image: #a8c996;
+  --hist-r: rgba(196, 52, 38, 0.45);
+  --hist-g: rgba(52, 128, 44, 0.4);
+  --hist-b: rgba(40, 90, 170, 0.4);
+
+  --shadow-float: 0 10px 28px rgba(40, 34, 24, 0.16), 0 0 0 1px rgba(28, 26, 23, 0.1);
+
+  --cat-character: #955710;
+  --cat-artist: #a53f2d;
+  --cat-body: #85603a;
+  --cat-expression: #86680b;
+  --cat-outfit: #6b4d93;
+  --cat-pose: #2e5f8e;
+  --cat-angle: #1f716f;
+  --cat-action: #983e59;
+  --cat-background: #3e6a32;
+  --cat-style: #7a4e80;
+  --cat-quality: #69625a;
+  --cat-meta: #8a8378;
+  --cat-rating: #b3261e;
+  --cat-unknown: #57514a;
+  --chip-mix: 10%;
+}
+
+:root {
+  /* type */
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", Consolas, ui-monospace, monospace;
+  --fs-1: 12px;
+  --fs-2: 13px;
+  --fs-3: 14px;
+  --fs-4: 15px;
+  --fs-5: 17px;
+  --fs-6: 22px;
+  --fs-7: 30px;
+
+  /* shape: soft corners on controls and cards; small ones inside them
+     (keys, film frames, the tab mark) */
+  --radius-sm: 3px;
+  --radius: 6px;
+  --radius-lg: 10px;
+
+  /* layout */
+  /* One percent of the window in the page's own px. Under the interface zoom
+     (Settings › Appearance) vh/vw are zoomed too, so heights tied to the
+     window use calc(N * var(--vh)) instead of Nvh. --ui-zoom is set on
+     <html> by index.html and lib/uiScale. */
+  --vh: calc(1vh / var(--ui-zoom, 1));
+  --vw: calc(1vw / var(--ui-zoom, 1));
+  --topbar-h: 54px;
+  /* buttons, text fields and selects share one height so a row lines up */
+  --control-h: 34px;
+  --rail-w: 232px;
+  --card-w: 380px;
+  --gap-grid: 6px;
+
+  /* motion: short and calm */
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --t-fast: 120ms;
+  --t-med: 180ms;
+}
+
+@media (min-width: 1800px) {
+  :root {
+    --rail-w: 256px;
+    --card-w: 420px;
+  }
+}
+
+/* A short laptop screen (768 high) keeps the slimmer top bar. */
+@media (max-height: 820px) {
+  :root {
+    --topbar-h: 46px;
+  }
+}
+
+@media (min-width: 2400px) {
+  :root {
+    --fs-1: 13px;
+    --fs-2: 14px;
+    --fs-3: 15px;
+    --fs-4: 16px;
+    --fs-5: 18px;
+    --topbar-h: 58px;
+    --rail-w: 280px;
+    --card-w: 480px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-fast: 1ms;
+    --t-med: 1ms;
+  }
+}

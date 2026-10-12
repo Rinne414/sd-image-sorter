@@ -1,0 +1,11 @@
+.body {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.examples {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  overflow-wrap: anywhere;
+}

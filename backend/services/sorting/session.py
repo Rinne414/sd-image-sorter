@@ -109,8 +109,10 @@ class SortSessionMixin:
         max_waifu: Optional[float] = None,
         # Leave out pictures Auto-Separate or Manual Sort already copied/moved.
         exclude_sorted: bool = False,
+        # Sort exactly these images, in this order; the filter is then not used.
+        image_ids: Optional[Any] = None,
     ) -> Dict[str, Any]:
-        """Start a manual sort session."""
+        """Start a manual sort session (over a filter, or over ``image_ids`` when given)."""
         operation_mode = self._validate_file_operation(operation_mode)
         normalized_mode = str(mode or SORT_MODE_DEFAULT).strip().lower()
         if normalized_mode not in VALID_SORT_MODES:
@@ -126,7 +128,8 @@ class SortSessionMixin:
                 detail="An unfinished manual sort session already exists. Resume it or explicitly start a new session.",
             )
 
-        image_ids = self._select_sort_scope_ids(
+        picked_ids = image_ids
+        image_ids = self._readable_picked_ids(picked_ids) if picked_ids is not None else self._select_sort_scope_ids(
             generators=generators,
             tags=tags,
             tag_mode=tag_mode,
@@ -249,10 +252,19 @@ class SortSessionMixin:
 
                 image_ids = self._sort_session["image_ids"]
                 if self._sort_session["current_index"] >= len(image_ids):
+                    # The summary (totals, folders, per-slot counts) outlives a reload.
                     return {
                         "done": True,
                         "message": "All images sorted",
                         "mode": self._sort_session.get("mode", SORT_MODE_DEFAULT),
+                        "index": len(image_ids),
+                        "total": len(image_ids),
+                        "remaining": 0,
+                        "image_ids": list(image_ids),
+                        "folders": dict(self._sort_session["folders"]),
+                        "collection_slots": dict(self._sort_session.get("collection_slots", {})),
+                        "operation_mode": self._sort_session.get("operation_mode", "move"),
+                        **self._get_sort_session_flags(),
                     }
 
                 current_id = image_ids[self._sort_session["current_index"]]
@@ -489,11 +501,11 @@ class SortSessionMixin:
                             **self._get_sort_session_flags(),
                         }
                 elif redone_action == "collect":
-                    # v3.3.1: re-add the membership reference (no file move).
+                    # v3.3.1: re-add the membership reference (no file move);
+                    # V4: a Favorites key favorites again.
                     collection_id = redo_entry.get("collection_id")
                     try:
-                        if collection_id is not None and target_id is not None:
-                            db.set_collection_membership(int(collection_id), int(target_id), True)
+                        self._redo_collect_action(redo_entry)
                     except Exception as e:
                         logger.error(
                             "Redo collect failed for image %s into collection %s: %s",
@@ -647,7 +659,7 @@ class SortSessionMixin:
                         **self._get_sort_session_flags(),
                     }
                 try:
-                    db.set_collection_membership(int(collection_id), current["id"], True)
+                    added = self._collect_image(int(collection_id), current["id"])
                 except ValueError as e:
                     logger.error(
                         "Collect failed for image %d into collection %s: %s",
@@ -678,6 +690,9 @@ class SortSessionMixin:
                     "image_id": current["id"],
                     "collection_id": int(collection_id),
                     "folder_key": folder_key,
+                    # V4: undo takes out only what this key added.
+                    "favorites": added["favorites"],
+                    "was_member": added["was_member"],
                 })
             elif action == "skip":
                 self._sort_session["redo_stack"] = []
@@ -709,6 +724,27 @@ class SortSessionMixin:
                 "operation_mode": operation_mode,
                 **session_flags,
             }
+
+    @staticmethod
+    def _readable_picked_ids(picked: Any) -> list:
+        """The picked ids that are readable images of the current library, deduplicated, in pick order."""
+        from library_context import current_library_sql
+
+        wanted = list(dict.fromkeys(int(i) for i in picked or []))
+        lib_sql, lib_params = current_library_sql()
+        found: set = set()
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            for start in range(0, len(wanted), 500):
+                chunk = wanted[start:start + 500]
+                placeholders = ",".join("?" * len(chunk))
+                cursor.execute(
+                    f"SELECT id FROM images WHERE id IN ({placeholders}) "
+                    f"AND COALESCE(is_readable, 1) = 1 AND {lib_sql}",
+                    (*chunk, *lib_params),
+                )
+                found.update(row[0] for row in cursor.fetchall())
+        return [i for i in wanted if i in found]
 
     def set_sort_folders(self, config: FolderConfig) -> Dict[str, Any]:
         """Set folder destinations (and optional per-slot collections) for sort keys."""

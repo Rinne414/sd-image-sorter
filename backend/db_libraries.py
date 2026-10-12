@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import uuid
 from typing import Any, Dict, List, Optional
@@ -11,6 +12,7 @@ from db_helpers import _path_query_match_clause
 from library_context import MAIN_LIBRARY_ID, get_current_library_id, normalize_library_id
 
 
+logger = logging.getLogger(__name__)
 _NAME_RE = re.compile(r"\s+")
 
 
@@ -204,14 +206,50 @@ def delete_library(library_id: str) -> Dict[str, Any]:
         removed_projects = conn.execute(
             "DELETE FROM dataset_projects WHERE library_id = ?", (lid,)
         ).rowcount
+        # V4 batches and batch templates (migration 060) belong to one library
+        # the same way; batch items cascade. Working folders go after commit.
+        batch_ids = [
+            int(row[0])
+            for row in conn.execute(
+                "SELECT id FROM batches WHERE library_id = ?", (lid,)
+            ).fetchall()
+        ]
+        conn.execute("DELETE FROM batches WHERE library_id = ?", (lid,))
+        removed_templates = conn.execute(
+            "DELETE FROM batch_templates WHERE library_id = ?", (lid,)
+        ).rowcount
         conn.execute("DELETE FROM libraries WHERE id = ?", (lid,))
+    _remove_batch_folders(batch_ids)
     return {
         "id": lid,
         "removed_images": removed,
         "removed_collections": int(removed_collections or 0),
         "removed_dataset_projects": int(removed_projects or 0),
+        "removed_batches": len(batch_ids),
+        "removed_batch_templates": int(removed_templates or 0),
         "name": lib["name"],
     }
+
+
+def _remove_batch_folders(batch_ids: List[int]) -> None:
+    """Delete deleted batches' working folders (censored copies this app made).
+
+    Best-effort: the rows are already gone and batch ids are never reused, so a
+    folder that cannot be removed now is inert.
+    """
+    if not batch_ids:
+        return
+    from services import batch_workdir
+
+    for batch_id in batch_ids:
+        try:
+            batch_workdir.remove_batch_folder(batch_id)
+        except (OSError, RuntimeError):
+            logger.warning(
+                "Library deleted but batch %s working folder remains",
+                batch_id,
+                exc_info=True,
+            )
 
 
 def move_images_to_library(

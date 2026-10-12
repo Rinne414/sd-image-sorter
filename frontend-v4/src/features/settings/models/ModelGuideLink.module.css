@@ -1,0 +1,19 @@
+.wrap {
+  margin: 4px 0 8px;
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line-strong);
+}
+
+.link:hover {
+  color: var(--text);
+  text-decoration-color: var(--text);
+}
