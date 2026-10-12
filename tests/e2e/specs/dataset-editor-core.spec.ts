@@ -897,6 +897,9 @@ test('trigger quickfill rolls back Gallery captions when local owner persistence
 })
 
 test('clear cancels pending Booru and NL caption edits before a deterministic local reimport', async ({ page }) => {
+  // The editor commits typing after a 200 ms debounce. Control the page clock
+  // so Clear always runs inside that window, however slow the machine is.
+  await page.clock.install()
   await page.route('**/api/dataset/local-thumbnail**', async (route) => {
     await route.fulfill({ status: 204 })
   })
@@ -929,6 +932,7 @@ test('clear cancels pending Booru and NL caption edits before a deterministic lo
     dm.captionType.set(dm.imageIds[0], 'both')
     dm._setActive(dm.imageIds[0])
   }, localItem)
+  await page.clock.pauseAt(new Date(Date.now() + 60_000))
   await page.locator('#dataset-editor-textarea').fill('pending booru edit')
   await page.locator('#dataset-editor-nl').fill('pending natural-language edit')
 
@@ -944,7 +948,8 @@ test('clear cancels pending Booru and NL caption edits before a deterministic lo
     }
     dm.addLocalItems([item], { showToast: false, switchView: false, focusImportTab: false })
   }, localItem)
-  await page.waitForTimeout(350)
+  // Let every debounce timer that could still be alive fire.
+  await page.clock.runFor(1000)
 
   expect(await page.evaluate((path) => {
     const dm = (window as any).DatasetMaker
