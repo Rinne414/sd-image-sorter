@@ -48,8 +48,12 @@
         // queue genuinely has nothing to compare with.
         const partnerIdx = idx + 1 < order.length ? idx + 1 : idx - 1;
         if (partnerIdx < 0) {
-            this._toast(this._t('dataset.splitNoNext',
-                'This is the only image in the queue — nothing to compare with.'), 'info');
+            const filterHidesRest = this._hasActiveQueueFilter() && this.imageIds.length > 1;
+            this._toast(filterHidesRest
+                ? this._t('dataset.splitFilterOnlyOne',
+                    'The current filter shows only one image. Clear or change the filter to compare.')
+                : this._t('dataset.splitNoNext',
+                    'This is the only image in the queue — nothing to compare with.'), 'info');
             this._splitActive = false;
             const btn = document.getElementById('btn-dataset-split-view');
             if (btn) btn.classList.remove('active');

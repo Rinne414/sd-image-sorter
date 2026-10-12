@@ -5253,6 +5253,7 @@ window.I18nLang_zhCN = {
     'dataset.queueTagExclude': '隐藏含这个 tag 的图片',
     'dataset.queueClearFilters': '清除筛选',
     'dataset.queueFilterCount': '显示 {shown} / {total} 张',
+    'dataset.splitFilterOnlyOne': '当前筛选只显示一张图片。清除或更改筛选后才能对比。',
     'dataset.queueFilterHidesNew': '当前筛选隐藏了刚添加的 {count} 张图片。点击“清除筛选”即可看到。',
     'dataset.queueTagChipIncludeRemove': '只显示含「{tag}」的图片。点击移除这个筛选。',
     'dataset.queueTagChipExcludeRemove': '已隐藏含「{tag}」的图片。点击移除这个筛选。',

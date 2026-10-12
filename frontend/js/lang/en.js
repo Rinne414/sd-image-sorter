@@ -5255,6 +5255,7 @@ window.I18nLang_en = {
     'dataset.queueTagExclude': 'Hide images with this tag',
     'dataset.queueClearFilters': 'Clear filters',
     'dataset.queueFilterCount': 'Showing {shown} of {total}',
+    'dataset.splitFilterOnlyOne': 'The current filter shows only one image. Clear or change the filter to compare.',
     'dataset.queueFilterHidesNew': 'The current filter hides {count} of the images you just added. Clear filters to see them.',
     'dataset.queueTagChipIncludeRemove': 'Showing images with "{tag}". Click to remove this filter.',
     'dataset.queueTagChipExcludeRemove': 'Hiding images with "{tag}". Click to remove this filter.',

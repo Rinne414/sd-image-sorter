@@ -375,7 +375,7 @@ test('adding images the current filter hides says so and keeps the filter', asyn
   await expect.poll(() => shownIds(page)).toEqual([901, 906])
 
   await page.evaluate(() => (window as any).DatasetMaker.addImageIds([907, 908], { switchView: false }))
-  await expect(page.getByText('The current filter hides 2 of the images you just added. Clear filters to see them.'))
+  await expect(page.locator('.toast-message', { hasText: 'The current filter hides 2 of the images you just added. Clear filters to see them.' }))
     .toBeVisible()
   await expect(page.locator('#dataset-queue-filter-count')).toHaveText('Showing 2 of 8')
   expect(await shownIds(page)).toEqual([901, 906])
@@ -394,4 +394,30 @@ test('removing the selected images moves on to an image the filter shows', async
   await page.locator('#btn-dataset-queue-remove-selected').click()
   await expect.poll(() => page.evaluate(() => Number((window as any).DatasetMaker.activeId))).toBe(906)
   expect(await shownIds(page)).toEqual([906])
+})
+
+test('comparing with only one image shown names the filter, not the queue size', async ({ page }) => {
+  await openDatasetWith(page, FILTER_CAPTIONS)
+  await addTagFilter(page, 'scarf', 'include')
+  await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    dm.captions.set(902, '1girl, scarf')
+    dm._renderQueue()
+  })
+  await expect.poll(() => shownIds(page)).toEqual([902])
+  await page.locator('#dataset-queue-list .dataset-queue-item[data-image-id="902"]').click()
+  await page.locator('#btn-dataset-split-view').click()
+  await expect(page.locator('.toast-message', { hasText: 'The current filter shows only one image. Clear or change the filter to compare.' }))
+    .toBeVisible()
+  await expect(page.locator('#dataset-split-panel')).toHaveCount(0)
+
+  // A queue that really holds one image keeps the original message.
+  await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    dm._clearQueueFilters()
+    dm.imageIds = [902]
+    dm._renderQueue()
+  })
+  await page.locator('#btn-dataset-split-view').click()
+  await expect(page.locator('.toast-message', { hasText: 'This is the only image in the queue — nothing to compare with.' })).toBeVisible()
 })
