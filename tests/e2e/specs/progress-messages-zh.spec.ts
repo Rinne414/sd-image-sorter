@@ -82,6 +82,18 @@ async function reapplyTranslations(page: any) {
   await page.waitForTimeout(600)
 }
 
+async function startScanFromModal(page: any, folder: string, beforeStart: () => void = () => {}) {
+  await page.locator('#btn-scan').click()
+  await expect(page.locator('#scan-modal.visible')).toBeVisible()
+  await page.locator('#scan-folder-path').fill(folder)
+  const autoTag = page.locator('#scan-auto-tag')
+  if (await autoTag.isChecked().catch(() => false)) {
+    await page.locator('label:has(#scan-auto-tag) .checkbox-custom').click()
+  }
+  beforeStart()
+  await page.locator('#btn-start-scan').click()
+}
+
 test('a finished import reads in Chinese and names the problem file', async ({ page, request }, testInfo) => {
   test.setTimeout(120000)
   await page.setViewportSize({ width: 1366, height: 768 })
@@ -96,17 +108,25 @@ test('a finished import reads in Chinese and names the problem file', async ({ p
     if (body?.status === 'done') progress = body
   })
 
-  await openMainPage(page)
-  await page.locator('#btn-scan').click()
-  await expect(page.locator('#scan-modal.visible')).toBeVisible()
-  await page.locator('#scan-folder-path').fill(folder)
-  const autoTag = page.locator('#scan-auto-tag')
-  if (await autoTag.isChecked().catch(() => false)) {
-    await page.locator('label:has(#scan-auto-tag) .checkbox-custom').click()
-  }
-  await page.locator('#btn-start-scan').click()
+  // The toast depends on whether a poll saw the library-ready phase before the
+  // scan finished. A real 0.1 s scan can finish before the first poll lands, so
+  // pin that phase on the first poll after the start instead of racing it.
+  let armed = false
+  await page.route('**/api/scan/progress', async (route) => {
+    const response = await route.fetch()
+    if (!armed) return route.fulfill({ response })
+    armed = false
+    const real = await response.json()
+    await route.fulfill({
+      response,
+      json: { ...real, status: 'running', step: 'importing', library_ready: true, message_key: 'library_ready_import' },
+    })
+  })
 
-  // A quick import shows the library-ready toast, then the background-finished one.
+  await openMainPage(page)
+  await startScanFromModal(page, folder, () => { armed = true })
+
+  // Library ready was seen, so the finish reads as "the details are ready now".
   const toast = page.locator('.toast', { hasText: '图片的生成参数已经读完' }).first()
   await expect(toast).toBeVisible({ timeout: 90000 })
   await page.waitForTimeout(450)
@@ -123,6 +143,36 @@ test('a finished import reads in Chinese and names the problem file', async ({ p
   expect(text).not.toContain(' / ')
 
   await reapplyTranslations(page)
+  await request.delete('/api/clear-gallery')
+})
+
+test('an import that finishes before the first poll reads its full summary in Chinese', async ({ page, request }) => {
+  test.setTimeout(120000)
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await request.delete('/api/clear-gallery')
+  const folder = seedScanFolder('scan-done-fast')
+
+  // Hold the first poll until the server itself reports the scan finished: no library-ready phase is ever seen.
+  let held = false
+  await page.route('**/api/scan/progress', async (route) => {
+    if (!held) return route.continue()
+    held = false
+    let latest: any = null
+    await expect.poll(async () => {
+      latest = await route.fetch()
+      return (await latest.json()).status
+    }, { timeout: 60000 }).toBe('done')
+    await route.fulfill({ response: latest })
+  })
+
+  await openMainPage(page)
+  await startScanFromModal(page, folder, () => { held = true })
+
+  const toast = page.locator('.toast', { hasText: '导入完成，新增图片：2。' }).first()
+  await expect(toast).toBeVisible({ timeout: 30000 })
+  expect(await toast.textContent()).toContain('问题文件：broken.png。')
+  await expect(page.locator('.toast', { hasText: '图片的生成参数已经读完' })).toHaveCount(0)
+
   await request.delete('/api/clear-gallery')
 })
 
