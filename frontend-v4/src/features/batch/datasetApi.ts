@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { create } from 'zustand'
 import { api, ApiError, unwrap } from '../../api/client'
 import { queryClient } from '../../api/queryClient'
 import type { Batch, BatchKind, BatchProjectView, DatasetProject, ScannedImage, UnlinkedDatasetProject } from '../../api/types'
@@ -149,16 +150,50 @@ async function writeOnce(
       },
     }),
   )
-  const more = (queuedWrites.get(batchId) ?? 1) > 1
+  const more = (useQueuedWrites.getState().counts[batchId] ?? 1) > 1
   return { before, after, view: storeProject(batchId, view, saved, more) }
 }
 
 /** Project writes waiting in (or running from) each batch's queue. */
-const queuedWrites = new Map<number, number>()
+const useQueuedWrites = create<{ counts: Readonly<Record<number, number>> }>(() => ({ counts: {} }))
+
+function countWrites(batchId: number, change: 1 | -1): void {
+  useQueuedWrites.setState((s) => {
+    const left = (s.counts[batchId] ?? 0) + change
+    const { [batchId]: _, ...others } = s.counts
+    return { counts: left > 0 ? { ...others, [batchId]: left } : others }
+  })
+}
+
+/**
+ * True while the project `view` shows is being replaced: a save is running,
+ * or its answer is in the cache but not yet on screen (the cache tells its
+ * watchers a moment later). A question built on `view` now (a caption preview
+ * names the project revision) would name the revision the save replaces; it waits.
+ */
+export function useProjectChanging(batchId: number, view: BatchProjectView | undefined): boolean {
+  const saving = useQueuedWrites((s) => (s.counts[batchId] ?? 0) > 0)
+  const stored = queryClient.getQueryData<BatchProjectView>(projectKey(useApp.getState().libraryId, batchId))
+  return saving || (view !== undefined && stored !== undefined && stored.project.revision !== view.project.revision)
+}
+
+/**
+ * A caption question already out names the project revision this save is
+ * about to replace, and the backend would refuse it. The page gives those up
+ * (the final captions, the check step's, the settings preview); each is asked
+ * again, on the new revision, once the save is shown.
+ */
+function giveUpCaptionQuestions(batchId: number): void {
+  const library = libraryId()
+  for (const queryKey of [['caption-final', library, batchId], ['dataset-preview', 'check', library, batchId], ['dataset-preview', library, batchId]]) {
+    void queryClient.cancelQueries({ queryKey })
+  }
+}
 
 /** Run `task` in the batch's queue; says what went wrong and returns null on failure. */
 function inQueue(batchId: number, task: () => Promise<WriteResult>): Promise<WriteResult | null> {
-  queuedWrites.set(batchId, (queuedWrites.get(batchId) ?? 0) + 1)
+  countWrites(batchId, 1)
+  giveUpCaptionQuestions(batchId)
   return enqueue(batchId, async () => {
     try {
       return await task()
@@ -166,9 +201,7 @@ function inQueue(batchId: number, task: () => Promise<WriteResult>): Promise<Wri
       explain(batchId, error)
       return null
     } finally {
-      const left = (queuedWrites.get(batchId) ?? 1) - 1
-      if (left > 0) queuedWrites.set(batchId, left)
-      else queuedWrites.delete(batchId)
+      countWrites(batchId, -1)
     }
   })
 }

@@ -263,6 +263,63 @@ test("common tags and the blacklist suggest tags as they are typed, in the batch
   await saved(page)
 })
 
+test('a caption preview refused because a caption moved on elsewhere is asked again, and never shows the refusal', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  const imageId = Number(
+    runBackendScript(`
+import sqlite3
+with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
+    print(conn.execute("SELECT id FROM images WHERE filename LIKE ? ORDER BY filename", (${JSON.stringify(PREFIX + '%')},)).fetchone()[0])
+`)
+      .split(/\s+/)
+      .at(-1),
+  )
+  let release: () => void = () => {}
+  const gate = new Promise<void>((resolve) => (release = resolve))
+  let asked: () => void = () => {}
+  const held = new Promise<void>((resolve) => (asked = resolve))
+  await page.route('**/api/dataset/export-preview', async (route) => {
+    if ((route.request().postData() ?? '').includes('annotation_selections')) {
+      asked()
+      await gate
+    }
+    await route.continue()
+  })
+  const answers: number[] = []
+  page.on('response', (res) => {
+    if (res.url().includes('/api/dataset/export-preview')) answers.push(res.status())
+  })
+  await openV4(page, `#/batch/${batchId}`)
+  await page.getByTestId('dataset-settings-open').click()
+  await held
+
+  const p = await apiJson<{ revision: number }>(page, `/api/dataset/projects/${projectId}`)
+  const write = await apiJson(page, `/api/annotations/projects/${projectId}/training-captions/revisions`, {
+    method: 'POST',
+    body: {
+      expected_project_revision: p.body.revision,
+      expected_head_generation: 0,
+      subject: { item_type: 'library', image_id: imageId },
+      content: { content_version: 1, booru_caption: 'movedon', nl_caption: '', caption_type: 'booru' },
+    },
+  })
+  expect(write.status).toBe(201)
+  await page.evaluate(() => {
+    const w = window as unknown as { __refusalShown: boolean }
+    w.__refusalShown = false
+    const look = () => {
+      if (document.body.innerText.includes('The preview failed')) w.__refusalShown = true
+    }
+    new MutationObserver(look).observe(document.body, { subtree: true, childList: true, characterData: true })
+    look()
+  })
+  release()
+
+  await expect(page.getByTestId('preview-caption').filter({ hasText: 'movedon' })).toHaveCount(1)
+  expect(answers.filter((s) => s === 409), 'refused once, not asked again on the same state').toHaveLength(1)
+  expect(await page.evaluate(() => (window as unknown as { __refusalShown: boolean }).__refusalShown), 'the refusal never showed').toBe(false)
+})
+
 for (const viewport of VIEWPORTS) {
   test(`the settings panel fits at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport)

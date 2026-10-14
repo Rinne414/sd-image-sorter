@@ -6,10 +6,10 @@ import type { MessageKey } from '../../../i18n'
 import { useApp } from '../../../state/store'
 import { tr } from '../../jobs/jobs'
 import { previewBody } from '../captionRules'
-import { projectKey } from '../datasetApi'
+import { projectKey, useProjectChanging } from '../datasetApi'
 import type { DatasetForm } from '../datasetSettings'
 import type { Author, CaptionContent, HeadInfo } from '../datasetTag'
-import { headInfo, headsKey, type HeadRow } from '../datasetTagApi'
+import { headInfo, headsKey, rereadAfterRefusedPreview, retryPreview, type HeadRow } from '../datasetTagApi'
 import type { Entry } from '../entries'
 import { emptyContent, rowKey, type PreviewRow } from './captionContent'
 import { bareForm, PREVIEW_CHUNK, renderInitialContents } from './initialContents'
@@ -242,7 +242,8 @@ export interface FinalCaption {
 /**
  * The caption the export writes for this image now: its revision (or the
  * template) under the batch rules. Asked only once the heads are known: the
- * backend refuses "no revision" for an image that has one.
+ * backend refuses "no revision" for an image that has one, and a revision that
+ * is no longer the head (the heads are then read again).
  */
 export function useFinalCaption(
   batch: Batch,
@@ -253,6 +254,7 @@ export function useFinalCaption(
   headsKnown: boolean,
 ) {
   const library = useApp((s) => s.libraryId)
+  const changing = useProjectChanging(batch.id, view)
   const scope =
     view && entry && entry.status !== 'changed'
       ? { projectId: view.project.id, projectRevision: view.project.revision, heads: new Map([[entry.key, { revisionId: head.revisionId ?? undefined }]]) }
@@ -260,10 +262,16 @@ export function useFinalCaption(
   const body = form && entry ? JSON.stringify(previewBody(form, [entry], 1, scope)) : null
   return useQuery({
     queryKey: ['caption-final', library, batch.id, body],
-    enabled: headsKnown && body !== null && (entry?.imageId !== null || entry?.status !== 'missing'),
+    enabled: headsKnown && !changing && body !== null && (entry?.imageId !== null || entry?.status !== 'missing'),
+    retry: retryPreview,
     queryFn: async ({ signal }): Promise<FinalCaption> => {
-      const row = await previewOne(JSON.parse(body as string), signal)
-      return { caption: row?.caption ?? '', problem: row ? (row.error ?? row.skipped_reason) : null }
+      try {
+        const row = await previewOne(JSON.parse(body as string), signal)
+        return { caption: row?.caption ?? '', problem: row ? (row.error ?? row.skipped_reason) : null }
+      } catch (error) {
+        await rereadAfterRefusedPreview(error, library, batch.id)
+        throw error
+      }
     },
     staleTime: 30_000,
   })

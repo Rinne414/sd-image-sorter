@@ -5,7 +5,7 @@ import type { Batch, BatchProjectView } from '../../api/types'
 import { useApp } from '../../state/store'
 import { patchBatch } from './batchApi'
 import { previewBody, type TemplatePreset } from './captionRules'
-import { saveProjectSettings, useBatchProject } from './datasetApi'
+import { saveProjectSettings, useBatchProject, useProjectChanging } from './datasetApi'
 import {
   batchDatasetFromForm,
   formFromSettings,
@@ -17,7 +17,7 @@ import {
   type DatasetForm,
 } from './datasetSettings'
 import { pathKey } from './datasetItems'
-import { useProjectHeads } from './datasetTagApi'
+import { rereadAfterRefusedPreview, retryPreview, useProjectHeads } from './datasetTagApi'
 import { entriesFromProject, type Entry } from './entries'
 
 /** Quiet time after the last edit before the settings are saved. */
@@ -144,17 +144,27 @@ export function useDatasetSettings(batch: Batch, previewOn = true) {
   const entries = useMemo(() => (view ? entriesFromProject(view) : []), [view])
   // Edited images preview as their revision; until the heads are read nothing is asked (a failed read previews the template).
   const scope = view && heads.data ? { projectId: view.project.id, projectRevision: view.project.revision, heads: heads.data } : null
-  const ready = previewOn && (scope !== null || heads.isError)
-  const body = useDebounced(ready && shown ? JSON.stringify(previewBody(shown, entries.slice(0, PREVIEW_LIMIT), PREVIEW_LIMIT, scope)) : null, PREVIEW_AFTER_MS)
+  const changing = useProjectChanging(batch.id, view)
+  const ready = previewOn && !changing && (scope !== null || heads.isError)
+  // Only typing waits; a newer project or caption revision is asked on at once (a refused question must not sit on screen meanwhile).
+  const typed = useDebounced(shown ? JSON.stringify(shown) : null, PREVIEW_AFTER_MS)
+  const body = ready && typed ? JSON.stringify(previewBody(JSON.parse(typed) as DatasetForm, entries.slice(0, PREVIEW_LIMIT), PREVIEW_LIMIT, scope)) : null
   const library = useApp((s) => s.libraryId)
   const preview = useQuery({
     queryKey: ['dataset-preview', library, batch.id, body],
     enabled: body !== null,
     placeholderData: keepPreviousData,
-    queryFn: async ({ signal }) =>
-      unwrap<{ total: number; returned: number; items: PreviewItem[] }>(
-        await api.POST('/api/dataset/export-preview', { body: JSON.parse(body as string), signal }),
-      ),
+    retry: retryPreview,
+    queryFn: async ({ signal }) => {
+      try {
+        return unwrap<{ total: number; returned: number; items: PreviewItem[] }>(
+          await api.POST('/api/dataset/export-preview', { body: JSON.parse(body as string), signal }),
+        )
+      } catch (error) {
+        await rereadAfterRefusedPreview(error, library, batch.id)
+        throw error
+      }
+    },
   })
   const items = useMemo(() => (preview.data ? inBatchOrder(preview.data.items, entries) : null), [preview.data, entries])
 

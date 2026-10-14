@@ -399,3 +399,54 @@ test('a check that did not finish is never read as "no issues": the heading coun
   await expect(heading).toHaveText('No issues found')
   await expect(page.getByTestId('check-unfinished')).toHaveCount(0)
 })
+
+test('a final caption refused because a caption moved on elsewhere is asked again, and the check never says it failed', async ({ page }) => {
+  await stubPurity(page)
+  await page.setViewportSize({ width: 1366, height: 768 })
+  // the first caption question is answered only after another writer wrote a caption
+  let release: () => void = () => {}
+  const gate = new Promise<void>((resolve) => (release = resolve))
+  let asked: () => void = () => {}
+  const held = new Promise<void>((resolve) => (asked = resolve))
+  await page.route('**/api/dataset/export-preview', async (route) => {
+    if ((route.request().postData() ?? '').includes('annotation_selections')) {
+      asked()
+      await gate
+    }
+    await route.continue()
+  })
+  const answers: number[] = []
+  page.on('response', (res) => {
+    if (res.url().includes('/api/dataset/export-preview')) answers.push(res.status())
+  })
+  await openCheck(page)
+  await held
+
+  const p = await project(page)
+  const write = await apiJson(page, `/api/annotations/projects/${projectId}/training-captions/revisions`, {
+    method: 'POST',
+    body: {
+      expected_project_revision: p.revision,
+      expected_head_generation: 0,
+      subject: { item_type: 'library', image_id: ids[0] },
+      content: { content_version: 1, booru_caption: 'movedon', nl_caption: '', caption_type: 'booru' },
+    },
+  })
+  expect(write.status).toBe(201)
+  // from here on, note whether the check ever says a source failed
+  await page.evaluate(() => {
+    const w = window as unknown as { __failedShown: boolean }
+    w.__failedShown = false
+    const look = () => {
+      if (document.querySelector('[data-testid="check-source"][data-status="failed"]')) w.__failedShown = true
+    }
+    new MutationObserver(look).observe(document.body, { subtree: true, childList: true, attributes: true })
+    look()
+  })
+  release()
+
+  await expect(page.locator('[data-testid="check-source"][data-source="captions"]')).toHaveAttribute('data-status', 'done', { timeout: 20_000 })
+  expect(answers.filter((s) => s === 409), 'refused once, not asked again on the same state').toHaveLength(1)
+  expect(answers.at(-1)).toBe(200)
+  expect(await page.evaluate(() => (window as unknown as { __failedShown: boolean }).__failedShown), 'the refusal never showed').toBe(false)
+})

@@ -180,6 +180,8 @@ async function openEditStep(page: Page): Promise<void> {
   await openV4(page, `#/batch/${batchId}`)
   await page.locator('[data-testid="rail-step"][data-step-id="edit"]').click()
   await expect(page.getByTestId('edit-step')).toBeVisible()
+  // keys act on the image shown: a key before the list has arrived has no image to move from
+  await expect(panel(page)).toHaveAttribute('data-key', /^(lib|dir):/)
 }
 
 test('a dataset batch with three Library images and a folder image, a trigger set', async ({ page }) => {
@@ -344,6 +346,8 @@ test('a caption changed elsewhere meanwhile is read again, the user is told, and
   await page.keyboard.press('d')
   await expect(panel(page)).toHaveAttribute('data-key', `lib:${ids[1]}`)
   await expect(chip(page, 'e2e added')).toBeVisible()
+  // its final caption is rendered (that request is answered) before the other writer comes
+  await expect(page.getByTestId('edit-final')).toContainText('e2e added')
 
   // V3.5 (or an AI run) writes a revision while the editor shows the older one
   const p = await project(page)
@@ -370,6 +374,75 @@ test('a caption changed elsewhere meanwhile is read again, the user is told, and
   expect(mine?.booru_caption).toContain('long hair')
   expect(mine?.booru_caption).not.toContain('e2e added')
   expect(mine?.booru_caption).not.toContain('from_elsewhere')
+})
+
+test('a final caption refused because the caption moved on elsewhere reads the captions again', async ({ page }) => {
+  await stubAids(page)
+  await page.setViewportSize({ width: 1366, height: 768 })
+  // the final caption of the image about to be shown is asked for, but answered only after the other writer wrote
+  let release: () => void = () => {}
+  const gate = new Promise<void>((resolve) => (release = resolve))
+  await page.route('**/api/dataset/export-preview', async (route) => {
+    const body = route.request().postData() ?? ''
+    if (body.includes(`"image_ids":[${ids[1]}]`) && body.includes('annotation_selections')) await gate
+    await route.continue()
+  })
+  await openEditStep(page)
+  await page.keyboard.press('d')
+  await expect(panel(page)).toHaveAttribute('data-key', `lib:${ids[1]}`)
+
+  const p = await project(page)
+  const theirs = await headOf(page, ids[1]!)
+  const write = await apiJson(page, `/api/annotations/projects/${projectId}/training-captions/revisions`, {
+    method: 'POST',
+    body: {
+      expected_project_revision: p.revision,
+      expected_head_generation: theirs?.generation ?? 0,
+      subject: { item_type: 'library', image_id: ids[1] },
+      content: { content_version: 1, booru_caption: 'moved_on', nl_caption: '', caption_type: 'booru' },
+    },
+  })
+  expect(write.status).toBe(201)
+  const before = refusedPreviews.length
+  // from here on, note whether the refusal ever reaches the screen
+  await page.evaluate(() => {
+    const w = window as unknown as { __refusalShown: boolean }
+    w.__refusalShown = false
+    const look = () => {
+      if (document.body.innerText.includes('The preview failed')) w.__refusalShown = true
+    }
+    new MutationObserver(look).observe(document.body, { subtree: true, childList: true, characterData: true })
+    look()
+  })
+  release()
+
+  // the backend names the refusal; the editor then shows what is there now, with a final caption to match
+  await expect(chip(page, 'moved_on')).toBeVisible()
+  await expect(page.getByTestId('edit-final')).toContainText('moved_on')
+  await expect(panel(page)).not.toContainText('The preview failed')
+  expect(await page.evaluate(() => (window as unknown as { __refusalShown: boolean }).__refusalShown), 'the refusal never showed').toBe(false)
+  // the refusal itself is the designed answer to a request made before the other writer came: not counted against the other tests
+  expect(refusedPreviews.length, 'asked once, not again on the same state').toBe(before + 1)
+  refusedPreviews.splice(before)
+})
+
+test('a final caption still refused after the captions were read again says so, and is not asked again', async ({ page }) => {
+  await stubAids(page)
+  await page.setViewportSize({ width: 1366, height: 768 })
+  // nothing moved, yet the backend refuses (a state the page cannot repair): the refusal must show, once
+  let refused = 0
+  await page.route('**/api/dataset/export-preview', async (route) => {
+    const body = route.request().postData() ?? ''
+    if (!body.includes(`"image_ids":[${ids[0]}]`) || !body.includes('annotation_selections')) return route.continue()
+    refused += 1
+    return route.fulfill({ status: 409, json: { detail: 'Dataset annotation selection conflict: e2e' } })
+  })
+  const before = refusedPreviews.length
+  await openEditStep(page)
+  await expect(panel(page)).toContainText('The preview failed: Dataset annotation selection conflict: e2e')
+  expect(refused, 'asked once, not again on the same state').toBe(1)
+  expect(refusedPreviews.length, 'only the refusal this test made').toBe(before + 1)
+  refusedPreviews.splice(before)
 })
 
 test('TIPO and the Chinese reading aid only suggest; tag info shows what the app knows', async ({ page }) => {
@@ -431,6 +504,107 @@ test('a key right after X skips the image going out', async ({ page }) => {
   await expect(panel(page)).toHaveAttribute('data-key', `lib:${ids[1]}`)
   await page.getByRole('status').getByRole('button', { name: 'Undo' }).click()
   await expect.poll(async () => (await project(page)).items.length).toBe(4)
+})
+
+test('taking an image out never asks for a caption on the project revision it is replacing', async ({ page }) => {
+  await stubAids(page)
+  await page.setViewportSize({ width: 1366, height: 768 })
+  const before = refusedPreviews.length
+  // the revision each caption question names, from the moment X is pressed
+  const asked: number[] = []
+  let saving = false
+  page.on('request', (req) => {
+    if (!saving || !req.url().includes('/api/dataset/export-preview')) return
+    const body = JSON.parse(req.postData() ?? '{}') as { dataset_project_revision?: number }
+    if (body.dataset_project_revision !== undefined) asked.push(body.dataset_project_revision)
+  })
+  let release: () => void = () => {}
+  const gate = new Promise<void>((resolve) => (release = resolve))
+  let hit: () => void = () => {}
+  const putStarted = new Promise<void>((resolve) => (hit = resolve))
+  await page.route(`**/api/dataset/projects/${projectId}`, async (route) => {
+    if (route.request().method() !== 'PUT') return route.continue()
+    hit()
+    await gate
+    await route.continue()
+  })
+  await openEditStep(page)
+  await burst(page, ['d', 'd'])
+  await expect(panel(page)).toHaveAttribute('data-key', `lib:${ids[2]}`)
+  const revision = (await project(page)).revision
+
+  // X takes the third image out; A moves to the second while the save is still on its way
+  saving = true
+  await burst(page, ['x', 'a'])
+  await putStarted
+  await expect(panel(page)).toHaveAttribute('data-key', `lib:${ids[1]}`)
+  // a frame later, and every request the page made on the way has been seen
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(null)))))
+  await page.evaluate(() => fetch('/api/dataset/trainers').then(() => undefined))
+  release()
+
+  await expect.poll(async () => (await project(page)).revision).toBe(revision + 1)
+  await expect(page.getByTestId('edit-final')).toBeVisible()
+  expect(asked, 'no caption is asked on the revision being replaced').not.toContain(revision)
+  expect(refusedPreviews.length, 'and none is refused').toBe(before)
+  await page.getByRole('status').getByRole('button', { name: 'Undo' }).click()
+  await expect.poll(async () => (await project(page)).items.length).toBe(4)
+})
+
+test('a caption question already on its way when the project is saved is not left to be refused', async ({ page }) => {
+  await stubAids(page)
+  await page.setViewportSize({ width: 1366, height: 768 })
+  const before = refusedPreviews.length
+  let holding = false
+  let holdSave = false
+  let release: () => void = () => {}
+  const gate = new Promise<void>((resolve) => (release = resolve))
+  let onItsWay: () => void = () => {}
+  const askedNow = new Promise<void>((resolve) => (onItsWay = resolve))
+  let answered: () => void = () => {}
+  const askDone = new Promise<void>((resolve) => (answered = resolve))
+  const answers: string[] = []
+  // the question of the image on screen is held on its way to the backend, and let go only after the project save has landed there
+  await page.route('**/api/dataset/export-preview', async (route) => {
+    if (!holding || !(route.request().postData() ?? '').includes('annotation_selections')) return route.continue()
+    holding = false
+    onItsWay()
+    await gate
+    try {
+      const res = await route.fetch()
+      answers.push(String(res.status()))
+      await route.fulfill({ response: res })
+    } catch (error) {
+      // the page gave the question up meanwhile
+      answers.push((error as Error).message)
+    }
+    answered()
+  })
+  // the save reaches the backend, but its answer is held until that question has been answered
+  await page.route(`**/api/dataset/projects/${projectId}`, async (route) => {
+    if (route.request().method() !== 'PUT' || !holdSave) return route.continue()
+    holdSave = false
+    const res = await route.fetch()
+    release()
+    await askDone
+    await route.fulfill({ response: res })
+  })
+  await openEditStep(page)
+  await burst(page, ['d', 'd'])
+  await expect(panel(page)).toHaveAttribute('data-key', `lib:${ids[2]}`)
+  await expect(page.getByTestId('edit-final')).toBeVisible()
+  holding = true
+  await burst(page, ['x'])
+  await expect(panel(page)).toHaveAttribute('data-key', /^dir:/)
+  await onItsWay
+
+  // putting the image back saves the project while the folder image's question is out; the screen stays on that image
+  holdSave = true
+  await page.getByRole('status').getByRole('button', { name: 'Undo' }).click()
+  await askDone
+  await expect.poll(async () => (await project(page)).items.length).toBe(4)
+  await expect(page.getByTestId('edit-final')).toBeVisible()
+  expect(refusedPreviews.length, `no refused question reached the page (${answers.join(' | ')})`).toBe(before)
 })
 
 test('X takes the image out (the toast undoes it); A/D/X do nothing on the Library page', async ({ page }) => {

@@ -9,6 +9,8 @@ import type { HeadInfo } from '../datasetTag'
 import type { Entry } from '../entries'
 import { rowKey, type PreviewRow } from '../edit/captionContent'
 import { PREVIEW_CHUNK } from '../edit/initialContents'
+import { useProjectChanging } from '../datasetApi'
+import { rereadAfterRefusedPreview, retryPreview } from '../datasetTagApi'
 import { readAuditReport, type AuditReport, type HealthReport, type ReviewIssueRow } from './checkIssues'
 import type { CheckOptions } from './checkOptions'
 
@@ -46,10 +48,12 @@ export function useFinalCaptions(
   heads: ReadonlyMap<string, HeadInfo> | undefined,
 ) {
   const library = useApp((s) => s.libraryId)
+  const changing = useProjectChanging(batch.id, view)
   const revisions = heads ? [...heads.entries()].map(([k, h]) => `${k}=${h.revisionId ?? 0}`).join('|') : null
   return useQuery({
     queryKey: ['dataset-preview', 'check', library, batch.id, view?.project.revision, form ? JSON.stringify(form) : null, revisions, entries.map((e) => e.key).join('|')],
-    enabled: !!view && !!form && !!heads && entries.length > 0,
+    enabled: !changing && !!view && !!form && !!heads && entries.length > 0,
+    retry: retryPreview,
     queryFn: async ({ signal }): Promise<Finals> => {
       const scope = { projectId: (view as BatchProjectView).project.id, projectRevision: (view as BatchProjectView).project.revision, heads: heads as ReadonlyMap<string, HeadInfo> }
       const byRow = new Map(entries.map((e) => [rowKey(e.imageId ?? 0, e.path), e.key]))
@@ -58,7 +62,13 @@ export function useFinalCaptions(
       for (let i = 0; i < entries.length; i += PREVIEW_CHUNK) {
         const body = previewBody(form as DatasetForm, entries.slice(i, i + PREVIEW_CHUNK), PREVIEW_CHUNK, scope)
         if (body.image_ids.length === 0 && body.image_paths.length === 0) continue
-        const res = unwrap<{ items: PreviewRow[] }>(await api.POST('/api/dataset/export-preview', { body: body as never, signal }))
+        let res: { items: PreviewRow[] }
+        try {
+          res = unwrap<{ items: PreviewRow[] }>(await api.POST('/api/dataset/export-preview', { body: body as never, signal }))
+        } catch (error) {
+          await rereadAfterRefusedPreview(error, library, batch.id)
+          throw error
+        }
         for (const row of res.items) {
           const key = byRow.get(rowKey(row.image_id, row.abs_path))
           if (!key) continue

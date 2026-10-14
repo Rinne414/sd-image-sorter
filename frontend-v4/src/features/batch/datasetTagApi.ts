@@ -129,6 +129,26 @@ export function useProjectHeads(view: BatchProjectView | undefined) {
 
 export const headsKey = (library: string, projectId?: number, revision?: number) => ['batch-heads', library, projectId, revision] as const
 
+/**
+ * A scoped preview names the project revision and each image's caption revision
+ * it was asked on; the backend answers 409 when either moved on meanwhile (V3.5,
+ * an AI run, another tab), or an image left the project. Reads the project and the
+ * heads again and waits for them, so the caller can fail (the 409 stays, and is
+ * shown) only when nothing it was asked on changed; if something did, the
+ * caller's query key changes and the question is asked again on the new state.
+ * A read already under way is shared, not restarted: restarting it would let a
+ * second refused caller stop waiting before the new state arrived.
+ */
+export async function rereadAfterRefusedPreview(error: unknown, library: string, batchId: number): Promise<void> {
+  if (!(error instanceof ApiError && error.status === 409)) return
+  await Promise.all(
+    [projectKey(library, batchId), ['batch-heads', library]].map((queryKey) => queryClient.invalidateQueries({ queryKey }, { cancelRefetch: false })),
+  )
+}
+
+/** A refused scoped preview is not asked again on the same state; any other failure gets one more try. */
+export const retryPreview = (count: number, error: Error): boolean => !(error instanceof ApiError && error.status === 409) && count < 1
+
 /** Describer models that run on this computer, as model cards. */
 const DESCRIBER_CARDS: Record<'florence2' | 'toriigate', TaggerInfo & { sizeHint: string }> = {
   florence2: { card: 'florence2', variant: null, label: 'Florence-2', note: 'tagger.note.custom', sizeHint: '465 MB' },
