@@ -401,8 +401,15 @@
 #view-dataset .dataset-queue-toolbar > .btn {
     width: 100%;
     min-width: 0;
-    padding-inline: 4px;
+    /* The centred label may use the whole button: "Remove selected" fills it
+       at 1366. One wider than the button (a wider fallback font, such as
+       DejaVu Sans on Linux) takes a second line instead of running past it;
+       the row's buttons keep one height. */
+    padding-inline: 0;
     justify-content: center;
+    white-space: normal;
+    text-align: center;
+    align-self: stretch;
 }
 #view-dataset .dataset-selection-summary {
     color: var(--text-secondary, #A6A6A6);

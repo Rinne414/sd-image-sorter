@@ -539,7 +539,22 @@ test('"Which one should I pick?" in the tag panel opens the Model Center at the 
   await expect(page).toHaveURL(/#\/settings\/models$/)
   const wd = cardOf(page, 'wd14')
   await expect(wd).toHaveAttribute('data-focus', 'true')
-  await expect(wd).toBeInViewport({ ratio: 1 })
+  // Scrolled to from its top: wholly in view when it fits the page, and from its
+  // top edge when a wider font (DejaVu Sans on Linux) makes it taller than that.
+  const place = await wd.evaluate((card) => {
+    let area = card.parentElement
+    while (area && !/(auto|scroll)/.test(getComputedStyle(area).overflowY)) area = area.parentElement
+    const box = (area ?? document.documentElement).getBoundingClientRect()
+    const pad = area ? parseFloat(getComputedStyle(area).paddingTop) : 0
+    const r = card.getBoundingClientRect()
+    return { taller: r.height > box.height - pad, topAt: r.top - box.top, pad }
+  })
+  if (place.taller) {
+    expect(place.topAt).toBeGreaterThanOrEqual(-1)
+    expect(place.topAt).toBeLessThanOrEqual(place.pad + 1)
+  } else {
+    await expect(wd).toBeInViewport({ ratio: 1 })
+  }
   await expect(wd).toBeFocused()
   // Esc on the page closes nothing and goes nowhere; back returns to the library
   await page.keyboard.press('Escape')

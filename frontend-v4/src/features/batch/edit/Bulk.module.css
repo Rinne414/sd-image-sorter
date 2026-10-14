@@ -148,6 +148,14 @@
   text-overflow: ellipsis;
 }
 
+/* The chip is a flex box, which never ellipsizes its own text: the name gets a
+   box of its own so a long tag ends in "…" instead of being cut. */
+.rowChipText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .rowChip[data-listed] {
   text-decoration: line-through;
   opacity: 0.7;
@@ -352,10 +360,18 @@
   text-decoration: line-through;
 }
 
-/* A narrow table keeps the tag, the count and the actions; the bar goes first. */
+/* A narrow table keeps the tag, the count and the actions; the bar goes first
+   and the row packs tighter, so the five actions stay whole and the tag keeps
+   room in a wider font too (DejaVu Sans on Linux). Past that the tag gives up
+   width: its chip ends in "…" and names itself on hover. */
 @container (max-width: 640px) {
   .row {
-    grid-template-columns: minmax(72px, 1fr) auto 44px auto;
+    grid-template-columns: minmax(48px, 1fr) auto 44px auto;
+    gap: 6px;
+  }
+
+  .rowActions :global(.btn) {
+    padding: 0 4px;
   }
 
   .bar {

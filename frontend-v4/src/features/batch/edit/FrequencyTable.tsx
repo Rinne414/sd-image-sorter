@@ -115,8 +115,8 @@ function Row({ row, top, scopeSize, category, listed, inCommon, trait, busy, act
   const share = scopeSize > 0 ? row.count / scopeSize : 0
   return (
     <div className={styles.row} style={{ transform: `translateY(${top}px)`, height: ROW_H }} data-testid="freq-row" data-tag={row.tag}>
-      <span className={`chip cat-${category} ${styles.rowChip}`} data-listed={listed || undefined} title={listed ? t('dataset.edit.droppedBlacklist') : undefined}>
-        {displayTag(row.tag)}
+      <span className={`chip cat-${category} ${styles.rowChip}`} data-listed={listed || undefined} title={listed ? t('dataset.edit.droppedBlacklist') : displayTag(row.tag)}>
+        <span className={styles.rowChipText}>{displayTag(row.tag)}</span>
       </span>
       <span className={styles.traitCell}>
         {trait && (
