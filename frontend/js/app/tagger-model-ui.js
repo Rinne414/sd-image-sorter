@@ -16,6 +16,8 @@ function formatSize(bytes) {
 
 function setGalleryViewMode(mode) {
     const nextMode = ['grid', 'large', 'waterfall'].includes(mode) ? mode : 'grid';
+    // Capture the reading position before the mode classes below reflow the cards.
+    const anchor = window.Gallery && Gallery.images.length > 0 ? Gallery._captureViewAnchor() : null;
     AppState.viewMode = nextMode;
     AppState.pagination.pageSize = getDefaultGalleryPageSize(nextMode);
     localStorage.setItem(GALLERY_VIEW_MODE_KEY, nextMode);
@@ -34,7 +36,7 @@ function setGalleryViewMode(mode) {
     }
 
     if (window.Gallery) {
-        Gallery.setViewMode(nextMode);
+        Gallery.setViewMode(nextMode, anchor);
     }
 
     requestAnimationFrame(() => {

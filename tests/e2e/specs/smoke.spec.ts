@@ -110,7 +110,12 @@ async function getGalleryScrollState(page: Page) {
     const scrollContainer = getScrollContainer()
     if (!grid || !scrollContainer) return { scrollTop: 0, topVisibleId: null }
 
-    const scrollRect = scrollContainer.getBoundingClientRect()
+    // The window itself scrolls when no ancestor does: its rect is the whole
+    // document, not what is on screen.
+    const isViewport = scrollContainer === document.scrollingElement || scrollContainer === document.documentElement
+    const scrollRect = isViewport
+      ? { top: 0, bottom: window.innerHeight }
+      : scrollContainer.getBoundingClientRect()
     const items = Array.from(grid.querySelectorAll('.gallery-item'))
 
     let topVisibleItem = null
@@ -131,6 +136,37 @@ async function getGalleryScrollState(page: Page) {
       topVisibleId: topVisibleItem?.getAttribute('data-id') ?? null,
     }
   })
+}
+
+const DEEP_SCROLL_TARGET = 1500
+const DEEP_SCROLL_MIN = 1000
+
+async function scrollGalleryTo(page: Page, top: number) {
+  return page.evaluate((target) => {
+    const grid = document.getElementById('gallery-grid')
+    let container: Element | null = document.scrollingElement || document.documentElement
+    let node = grid?.parentElement ?? null
+    while (node) {
+      const style = window.getComputedStyle(node)
+      if (/(auto|scroll|overlay)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 4) {
+        container = node
+        break
+      }
+      node = node.parentElement
+    }
+    if (container) container.scrollTop = target
+    return container?.scrollTop ?? 0
+  }, top)
+}
+
+async function isGalleryItemOnScreen(page: Page, imageId: string | null) {
+  return page.evaluate((id) => {
+    const item = Array.from(document.querySelectorAll('#gallery-grid .gallery-item'))
+      .find((node) => node.getAttribute('data-id') === id)
+    if (!item) return false
+    const rect = item.getBoundingClientRect()
+    return rect.bottom > 0 && rect.top < window.innerHeight
+  }, imageId)
 }
 
 async function openSelectionPanelSection(page: Page, _sectionName: 'Export' | 'Remove') {
@@ -1423,11 +1459,12 @@ test.describe('Smoke Tests', () => {
     const pageErrors: string[] = []
     page.on('pageerror', (error) => pageErrors.push(error.message))
 
-    await mockGalleryImages(page, [
-      { id: 201, filename: 'view-flow-1.png' },
-      { id: 202, filename: 'view-flow-2.png' },
-      { id: 203, filename: 'view-flow-3.png' },
-    ])
+    // Enough rows that every view mode (including the dense ones) still has
+    // room to scroll; with three images the dense modes cannot hold an offset.
+    await mockGalleryImages(
+      page,
+      Array.from({ length: 60 }, (_, index) => ({ id: 201 + index, filename: `view-flow-${index + 1}.png` })),
+    )
     await page.route('**/api/tags/library**', async (route) => {
       await route.fulfill({
         json: {
@@ -1479,29 +1516,16 @@ test.describe('Smoke Tests', () => {
 
     const galleryGrid = page.locator('#gallery-grid')
     await expect(galleryGrid).toBeVisible()
+    await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible()
 
-    await page.evaluate(() => {
-      const grid = document.getElementById('gallery-grid')
-      if (!grid) return
-
-      let node = grid.parentElement
-      while (node) {
-        const style = window.getComputedStyle(node)
-        const canScroll = /(auto|scroll|overlay)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 4
-        if (canScroll) {
-          node.scrollTop = 900
-          return
-        }
-        node = node.parentElement
-      }
-
-      const scrollContainer = document.scrollingElement || document.documentElement
-      if (scrollContainer) {
-        scrollContainer.scrollTop = 900
-      }
-    })
-
+    // Scroll deep into the list. The grid keeps growing while the first pages
+    // lay out, so a single write is clamped to whatever fits at that instant;
+    // keep asking until the offset really holds.
+    await expect.poll(async () => scrollGalleryTo(page, DEEP_SCROLL_TARGET), {
+      message: 'Expected the long gallery to hold a deep scroll offset before switching views',
+    }).toBeGreaterThan(DEEP_SCROLL_MIN)
     const initialScrollState = await getGalleryScrollState(page)
+    expect(initialScrollState.topVisibleId).not.toBe('201')
 
     const viewModes = [
       { mode: 'large', className: /large/ },
@@ -1510,7 +1534,12 @@ test.describe('Smoke Tests', () => {
     ]
 
     for (const { mode, className } of viewModes) {
-      await page.locator(`.view-btn[data-size="${mode}"]`).click()
+      // A pointer click at the button's own position. locator.click() scrolls
+      // the page first, because the toolbar is sticky and Playwright measures
+      // it at its document position, which moves the very offset under test.
+      const viewButtonBox = await page.locator(`.view-btn[data-size="${mode}"]`).boundingBox()
+      expect(viewButtonBox).not.toBeNull()
+      await page.mouse.click(viewButtonBox!.x + viewButtonBox!.width / 2, viewButtonBox!.y + viewButtonBox!.height / 2)
       await expect(galleryGrid).toHaveClass(className)
 
       const firstItem = page.locator('#gallery-grid .gallery-item').first()
@@ -1530,11 +1559,13 @@ test.describe('Smoke Tests', () => {
         }
       }
 
-      const scrollState = await getGalleryScrollState(page)
-      if (initialScrollState.scrollTop > 0) {
-        expect(scrollState.scrollTop).toBeGreaterThan(120)
-        expect(scrollState.topVisibleId).toBe(initialScrollState.topVisibleId)
-      }
+      // The anchor restore lands a couple of frames after the re-render. The
+      // masonry mode staggers its columns, so the image the reader was on
+      // must stay on screen rather than stay the topmost one.
+      await expect.poll(async () => isGalleryItemOnScreen(page, initialScrollState.topVisibleId), {
+        message: `Expected the ${mode} view to keep image ${initialScrollState.topVisibleId} on screen`,
+      }).toBe(true)
+      expect((await getGalleryScrollState(page)).scrollTop).toBeGreaterThan(0)
     }
 
     await page.locator('#btn-open-filters').click()

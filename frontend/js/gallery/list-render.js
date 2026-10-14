@@ -129,10 +129,16 @@ Object.assign(window.Gallery, {
     /**
      * Set view mode and re-render
      * @param {string} mode - View mode ('grid', 'large', 'waterfall')
+     * @param {{imageId: string, offset: number}|null} [capturedAnchor] - Reading
+     *   position taken before the caller restyled the grid. Changing the mode
+     *   class reflows the cards at the same scroll offset, so an anchor captured
+     *   afterwards points at a different image than the one the reader was on.
      */
-    setViewMode(mode) {
+    setViewMode(mode, capturedAnchor) {
         const nextMode = ['grid', 'large', 'waterfall'].includes(mode) ? mode : 'grid';
-        const anchor = this.images.length > 0 ? this._captureViewAnchor() : null;
+        const anchor = capturedAnchor !== undefined
+            ? capturedAnchor
+            : (this.images.length > 0 ? this._captureViewAnchor() : null);
         const shouldVirtual = this.shouldUseVirtualScroll(this.images.length, nextMode);
         const canReuseStandardVirtual = Boolean(
             shouldVirtual &&
