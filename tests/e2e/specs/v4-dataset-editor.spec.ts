@@ -400,6 +400,39 @@ test('TIPO and the Chinese reading aid only suggest; tag info shows what the app
   await expect(page.getByTestId('edit-tag-info')).toContainText('Category')
 })
 
+/** Keys pressed in one task, so no redraw falls between them (a key held down, or a busy computer). */
+async function burst(page: Page, keys: string[]): Promise<void> {
+  await page.evaluate((ks) => {
+    for (const k of ks) window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }))
+  }, keys)
+}
+
+test('A and D pressed faster than the screen redraws still move one image per press', async ({ page }) => {
+  await stubAids(page)
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openEditStep(page)
+  await expect(panel(page)).toHaveAttribute('data-key', /^lib:/)
+  const first = await panel(page).getAttribute('data-key')
+  await burst(page, ['d', 'd', 'd'])
+  await expect(panel(page)).toHaveAttribute('data-key', /^dir:/)
+  await burst(page, ['a', 'a', 'a'])
+  await expect(panel(page)).toHaveAttribute('data-key', first ?? '')
+})
+
+test('a key right after X skips the image going out', async ({ page }) => {
+  await stubAids(page)
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openEditStep(page)
+  await burst(page, ['d', 'd'])
+  await expect(panel(page)).toHaveAttribute('data-key', `lib:${ids[2]}`)
+  // X takes the third image out; A, before the list has caught up, goes to the second
+  await burst(page, ['x', 'a'])
+  await expect.poll(async () => (await project(page)).items.length).toBe(3)
+  await expect(panel(page)).toHaveAttribute('data-key', `lib:${ids[1]}`)
+  await page.getByRole('status').getByRole('button', { name: 'Undo' }).click()
+  await expect.poll(async () => (await project(page)).items.length).toBe(4)
+})
+
 test('X takes the image out (the toast undoes it); A/D/X do nothing on the Library page', async ({ page }) => {
   await stubAids(page)
   await page.setViewportSize({ width: 1366, height: 768 })

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import { isTypingTarget } from '../../../lib/format'
 import { useApp } from '../../../state/store'
 import { layerCount } from '../../../ui/layers'
@@ -23,7 +23,9 @@ export function useEditKeys(keys: EditKeys): void {
   const ref = useRef(keys)
   ref.current = keys
 
-  useEffect(() => {
+  // Listening before the step is first painted: a key pressed the moment it
+  // shows (on a busy computer the gap was long enough to lose an A or D).
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = ref.current
       if (!k.enabled || layerCount() > 0 || useApp.getState().page !== 'batch') return

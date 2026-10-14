@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Batch, BatchProjectView } from '../../../api/types'
 import { useT } from '../../../i18n'
 import { useBatchProject } from '../datasetApi'
@@ -153,21 +153,35 @@ export function EditStep({ batch, next, onNext }: Props) {
     holder.picked = null
   }, [holder, current, mode])
 
+  // The image a key acts on: the one the last key chose, even before the
+  // screen shows it (D held down, or pressed faster than a busy computer
+  // redraws). Each render brings it back to the image on screen.
+  const latest = useRef<string | null>(null)
+  latest.current = current?.key ?? null
+  // Taken out with X but still listed until the batch answers: keys skip them.
+  const leaving = useRef(new Set<string>())
+  useLayoutEffect(() => leaving.current.clear(), [entries])
+  const live = () => keys.filter((key) => !leaving.current.has(key))
+
   const pick = (key: string | null) => {
-    if (current) void session.flush(current.key)
+    if (latest.current) void session.flush(latest.current)
+    latest.current = key
     setPicked(key)
   }
-  const go = (step: 1 | -1) => pick(stepKey(keys, current?.key ?? null, step))
+  const go = (step: 1 | -1) => pick(stepKey(live(), latest.current, step))
   useEditKeys({
     enabled: mode === 'one',
     go,
     drop: () => {
-      if (!current) return
-      void session.flush(current.key)
-      setPicked(afterRemoval(keys, current.key))
-      remove([current.key])
+      const gone = latest.current
+      if (!gone || leaving.current.has(gone)) return
+      void session.flush(gone)
+      latest.current = afterRemoval(live(), gone)
+      leaving.current.add(gone)
+      setPicked(latest.current)
+      remove([gone])
     },
-    undo: () => current && session.undo(current.key),
+    undo: () => latest.current && session.undo(latest.current),
   })
 
   const body =
