@@ -454,6 +454,22 @@ test('health check uses effective captions and fixes only the project draft', as
       },
     })
   })
+  const previewCalls: string[] = []
+  // The ids are queue-only seeds, not DB rows, so the debounced re-render the
+  // trigger field arms must echo the seeded captions instead of hitting the
+  // real endpoint (which renders unknown ids as empty captions).
+  await page.route('**/api/tags/export-preview', async (route) => {
+    const body = route.request().postDataJSON() as { image_ids: number[] }
+    previewCalls.push(route.request().url())
+    await route.fulfill({
+      json: {
+        results: body.image_ids.map((imageId) => ({
+          image_id: imageId,
+          rendered: imageId === 601 ? 'mychar, 1girl' : '1girl',
+        })),
+      },
+    })
+  })
   let bulkEndpointCalled = false
   await page.route('**/api/tags/bulk/add', async (route) => {
     bulkEndpointCalled = true
@@ -462,6 +478,9 @@ test('health check uses effective captions and fixes only the project draft', as
 
   await openConsole(page)
   await page.locator('#dataset-trigger').fill('mychar')
+  // The trigger field arms a debounced caption re-render; let it land before the
+  // health check so it cannot rewrite the seeded captions mid-test.
+  await expect.poll(() => previewCalls.length).toBe(1)
   await page.locator('#sepcon-health-run').click()
 
   const out = page.locator('#sepcon-health-results')
