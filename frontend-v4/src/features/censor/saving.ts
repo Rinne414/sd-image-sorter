@@ -1,4 +1,5 @@
 import { api, ApiError, imageFileUrl, unwrap } from '../../api/client'
+import { encodePng } from '../../lib/encodePng'
 import { queryClient } from '../../api/queryClient'
 import type { Batch, BatchItem } from '../../api/types'
 import { useApp } from '../../state/store'
@@ -46,14 +47,6 @@ export function loadOriginal(imageId: number): Promise<Raster> {
   pending.catch(() => originals.delete(imageId))
   while (originals.size > ORIGINALS_KEPT) originals.delete(originals.keys().next().value as number)
   return pending
-}
-
-export async function encodePng(raster: Raster): Promise<Blob> {
-  const canvas = new OffscreenCanvas(raster.width, raster.height)
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error(tr('censor.noCanvas'))
-  ctx.putImageData(new ImageData(raster.data, raster.width, raster.height), 0, 0)
-  return canvas.convertToBlob({ type: 'image/png' })
 }
 
 const FAILURE_TEXT: Record<SaveFailure, 'censor.saveErr.tooLarge' | 'censor.saveErr.invalid' | 'censor.saveErr.network' | 'censor.saveErr.server'> = {
@@ -141,7 +134,8 @@ async function writeCopy(batchId: number, imageId: number, ops: Op[], reviewed: 
     }
     const rendered = renderOps(await loadOriginal(imageId), ops)
     const censor = censorState(item, ops, reviewed, rendered)
-    const png = await encodePng(rendered)
+    // Encoded in a worker (a fresh raster: its pixels move there, no copy).
+    const png = await encodePng(rendered, { transfer: true })
     storeItem(batchId, await uploadCopy(batchId, imageId, png, stateBody(withCensorState(state, censor))))
   } catch (error) {
     throw gone(error) ? new ItemGoneError((error as Error).message) : saveFailure(error)

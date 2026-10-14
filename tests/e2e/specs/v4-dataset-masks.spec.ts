@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
 
+import { countPageEncodes } from '../fixtures/page-encodes'
 import { cleanupImages, dbPath, pageOverflow, runBackendScript, seedImages, VIEWPORTS } from '../fixtures/v4-seed'
 
 /**
@@ -145,6 +146,7 @@ test('a dataset batch with three Library images', async ({ page }) => {
 
 test('painting and saving a mask flips the image to "has a mask"; the saved PNG is black where it was painted', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
+  const pageEncodes = await countPageEncodes(page)
   await openCheck(page)
   await expect(page.getByTestId('mask-coverage')).toHaveText('Masks: 0 of 3 Library images')
   // no mask anywhere and none exported: nothing to say in the list
@@ -173,6 +175,8 @@ test('painting and saving a mask flips the image to "has a mask"; the saved PNG 
   const [middle, corner] = await maskPixels(page, ids[0]!, [[W / 2, H / 2], [2, 2]])
   expect(middle).toBe(0)
   expect(corner).toBe(255)
+  // the mask was encoded in the worker, never on the page's thread
+  expect(await pageEncodes()).toBe(0)
 
   // leaving with a change not saved asks first; discarding keeps the saved mask as it was
   await paintMiddle(page)

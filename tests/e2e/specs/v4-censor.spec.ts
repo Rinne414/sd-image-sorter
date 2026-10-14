@@ -2,6 +2,7 @@ import { expect, test, type Page } from '../fixtures/click-ledger'
 
 import { dbPath, pageOverflow, runBackendScript, tmpRoot, VIEWPORTS } from '../fixtures/v4-seed'
 import { PY_DELETE_IMAGES } from '../fixtures/e2e-db'
+import { countPageEncodes } from '../fixtures/page-encodes'
 
 /**
  * V4 censor step of a Pixiv batch: paint a mosaic stroke, leave the image and
@@ -210,6 +211,7 @@ test('create the Pixiv batch at the censor step', async ({ page }) => {
 
 test('paint, leave the image, and the saved copy differs only where painted; undo, redo and the eraser', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
+  const pageEncodes = await countPageEncodes(page)
   await openBatch(page)
   await expect(page.getByTestId('censor-position')).toHaveText('1 / 2')
   await expect(page.getByTestId('censor-strip-item')).toHaveCount(2)
@@ -273,6 +275,8 @@ test('paint, leave the image, and the saved copy differs only where painted; und
   await expect.poll(async () => (await diffFromOriginal(page, ids[0] as number, false))?.total).toBe(painted?.total)
   await expect(stripItem(page, 0)).toHaveAttribute('data-state', 'saved')
   await page.keyboard.press('b')
+  // every save above encoded its copy in the worker, never on the page's thread
+  expect(await pageEncodes()).toBe(0)
 })
 
 test('reload restores the editable ops and the "censored" mark', async ({ page }) => {

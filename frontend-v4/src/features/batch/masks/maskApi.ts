@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api, ApiError, unwrap } from '../../../api/client'
 import { fetchModelStatus } from '../../../api/queries'
 import { queryClient } from '../../../api/queryClient'
+import { encodePng } from '../../../lib/encodePng'
 import { useApp } from '../../../state/store'
 import { useToasts } from '../../../ui/toasts'
 import { createRaster, type Raster } from '../../censor/raster'
@@ -71,11 +72,8 @@ export async function loadMask(imageId: number, width: number, height: number): 
 }
 
 async function toDataUrl(mask: Raster): Promise<string> {
-  const canvas = new OffscreenCanvas(mask.width, mask.height)
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error(tr('censor.noCanvas'))
-  ctx.putImageData(new ImageData(mask.data, mask.width, mask.height), 0, 0)
-  const blob = await canvas.convertToBlob({ type: 'image/png' })
+  // Encoded in a worker; the editor keeps drawing on `mask`, so it is copied.
+  const blob = await encodePng(mask)
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result))
