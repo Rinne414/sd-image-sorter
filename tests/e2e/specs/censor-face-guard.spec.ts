@@ -47,6 +47,8 @@ async function openCensor(page: Page, dropped: number): Promise<Array<Record<str
   await page.locator(`#gallery-grid .gallery-item[data-id="${IMAGE.id}"]`).click()
   await page.locator('#btn-send-to-censor').click()
   await expect(page.locator('#view-censor.active')).toBeVisible()
+  // isLoadingImage is also false before the first load starts: wait for the image itself
+  await expect.poll(() => page.evaluate(() => (window as any).__CENSOR_STATE__?.activeId)).toBe(IMAGE.id)
   await expect.poll(() => page.evaluate(() => (window as any).__CENSOR_STATE__?.isLoadingImage)).toBe(false)
   await page.evaluate(() => { (window as any).ensureFeatureModel = async () => ({ ok: true }) })
   return calls
