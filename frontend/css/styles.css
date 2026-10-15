@@ -8140,9 +8140,12 @@ input[type="radio"] {
     cursor: pointer;
 }
 
+/* Its width comes from the two pictures, and the Manual Sort container lines
+   items up at the left: centre it under the Organize tabs, like Keep / Reject. */
 .sort-bracket-interface {
     flex-direction: column;
     gap: 16px;
+    margin-inline: auto;
 }
 .bracket-hint {
     font-size: 13px;
