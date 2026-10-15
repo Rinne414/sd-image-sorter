@@ -165,8 +165,13 @@ async function loadImages(appendMode = false, options = {}) {
             galleryGrid.appendChild(generateSkeletonItems(20));
         }
         // The placeholders keep the grid's height, so without this the new
-        // results would open at the offset the old ones were read at.
-        if (opensNewResults) resetViewScrollPosition();
+        // results would open at the offset the old ones were read at. A restore
+        // of the old results still landing or holding gives way, or its next
+        // step carries the page back down into the new ones.
+        if (opensNewResults) {
+            window.GalleryComfort?.cancelRestore?.();
+            resetViewScrollPosition();
+        }
     }
 
     AppState.isLoading = true;

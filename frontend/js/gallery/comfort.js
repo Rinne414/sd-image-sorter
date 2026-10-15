@@ -23,6 +23,8 @@
     let _saveTimer = null;
     let _restoring = false;
     let _restoreClaimedAt = 0;
+    // Bumped by cancelRestore: a restore's steps stop once it is not theirs.
+    let _restoreGeneration = 0;
     // Hard ceiling on the restore window so a failed restore can never leave
     // scroll-to-top suppressed for the rest of the session.
     const RESTORE_CLAIM_MAX_MS = 5000;
@@ -221,12 +223,14 @@
      * like the restore had never happened.
      */
     function _releaseRestoreAfterResets(target = null) {
+        const generation = _restoreGeneration;
         const holdUntil = Date.now() + 1100;
         // Hold the place past the grid's top, not the raw offset: a banner
         // arriving above the grid meanwhile is kept out of the reader's way by
         // Gallery.keepReaderInPlace, and re-asserting the old number undid that.
         const pastGridTop = target == null ? null : target - _gridTop();
         const hold = () => {
+            if (generation !== _restoreGeneration) return;
             // Left the gallery mid-hold: its offset must not scroll another view.
             if (!_isGalleryActive()) {
                 _restoring = false;
@@ -350,6 +354,7 @@
 
         _restoring = true;
         _restoreClaimedAt = Date.now();
+        const generation = ++_restoreGeneration;
         const target = resume.scrollTop;
         // Where the saved place is now: the missing-files banner arrives a
         // moment after launch, so it may not be above the grid yet (or any more).
@@ -367,6 +372,7 @@
         let lastMax = -1;
         let stalledAtBottom = 0;
         const apply = () => {
+            if (generation !== _restoreGeneration) return;
             // The user switched to another view while the grid was filling:
             // stop, or the gallery offset scrolls that view under the nav.
             if (!_isGalleryActive()) {
@@ -448,6 +454,16 @@
             setTimeout(tick, 220);
         };
         setTimeout(tick, 120);
+    }
+
+    /**
+     * Other results replaced the ones being restored (a new sort, filter,
+     * search or library): they open at their top and the saved offset means
+     * nothing in them, so a restore still landing or holding stops here.
+     */
+    function cancelRestore() {
+        _restoreGeneration += 1;
+        _restoring = false;
     }
 
     function bumpDay(field, amount) {
@@ -800,6 +816,7 @@
         saveResumeNow,
         tryRestoreResume,
         restoreSoon,
+        cancelRestore,
         // Read by app/selection.js scheduleViewScrollReset so a deliberate
         // resume is not overwritten by the view-switch scroll-to-top.
         isRestoring: () => Boolean(
