@@ -122,6 +122,9 @@
                 filters: String(raw.resume.filters || ''),
                 imageCount: Number(raw.resume.imageCount) || 0,
                 savedAt: Number(raw.resume.savedAt) || 0,
+                gridOffset: typeof raw.resume.gridOffset === 'number' && Number.isFinite(raw.resume.gridOffset)
+                    ? raw.resume.gridOffset
+                    : null,
             };
         }
         if (raw.dayKey === _todayKey() && raw.day && typeof raw.day === 'object') {
@@ -172,6 +175,32 @@
         }
     }
 
+    /**
+     * Where the grid starts in the scrolled page. A banner or status chip above
+     * it moves it, so a position kept as "this far past the grid's top" lands on
+     * the same pictures whether or not they are showing.
+     * Measured without the view's entrance slide (a translateY on .view.active
+     * for about 160ms): it moves what is drawn, not where the page scrolls to,
+     * and the launch restore lands while it is still running.
+     */
+    function _gridTop() {
+        const grid = document.getElementById('gallery-grid');
+        if (!grid) return 0;
+        const gallery = window.Gallery;
+        const scroller = gallery && typeof gallery._getScrollContainer === 'function'
+            ? gallery._getScrollContainer()
+            : null;
+        const viewport = gallery && typeof gallery._getScrollViewportRect === 'function'
+            ? gallery._getScrollViewportRect(scroller)
+            : null;
+        let slide = 0;
+        for (let node = grid; node && node !== scroller && node !== document.documentElement; node = node.parentElement) {
+            const transform = getComputedStyle(node).transform;
+            if (transform && transform !== 'none') slide += new DOMMatrixReadOnly(transform).m42;
+        }
+        return _getScrollTop() + grid.getBoundingClientRect().top - slide - (viewport ? viewport.top : 0);
+    }
+
     /** Largest offset the current scroller can actually hold. */
     function _maxScrollTop() {
         let el = null;
@@ -193,16 +222,21 @@
      */
     function _releaseRestoreAfterResets(target = null) {
         const holdUntil = Date.now() + 1100;
+        // Hold the place past the grid's top, not the raw offset: a banner
+        // arriving above the grid meanwhile is kept out of the reader's way by
+        // Gallery.keepReaderInPlace, and re-asserting the old number undid that.
+        const pastGridTop = target == null ? null : target - _gridTop();
         const hold = () => {
             // Left the gallery mid-hold: its offset must not scroll another view.
             if (!_isGalleryActive()) {
                 _restoring = false;
                 return;
             }
-            if (target != null && Math.abs(_getScrollTop() - target) > 4) {
+            const want = pastGridTop == null ? null : _gridTop() + pastGridTop;
+            if (want != null && Math.abs(_getScrollTop() - want) > 4) {
                 // A reset (or its smooth glide) moved us: cancel the animation
                 // by re-asserting the target instantly.
-                _setScrollTop(target);
+                _setScrollTop(want);
             }
             if (Date.now() < holdUntil) {
                 requestAnimationFrame(() => setTimeout(hold, 60));
@@ -259,8 +293,13 @@
         // Library is the exception: that offset is the user's own, and keeping
         // an older, deeper one made coming back jump there.
         if (!options.leaving && scrollTop < 80 && Number(state.resume?.scrollTop) >= 80) return;
+        const grid = document.getElementById('gallery-grid');
         state.resume = {
             scrollTop,
+            // Kept beside scrollTop: the same place counted from the grid's top,
+            // which a banner or chip above the grid does not move. A grid that
+            // is not drawn has no top to count from: the restore uses scrollTop.
+            gridOffset: grid && grid.getClientRects().length > 0 ? scrollTop - _gridTop() : null,
             scope: snap.scope,
             sortBy: snap.sortBy,
             ..._resultSetSnapshot(),
@@ -312,6 +351,9 @@
         _restoring = true;
         _restoreClaimedAt = Date.now();
         const target = resume.scrollTop;
+        // Where the saved place is now: the missing-files banner arrives a
+        // moment after launch, so it may not be above the grid yet (or any more).
+        const targetNow = () => (resume.gridOffset == null ? target : _gridTop() + resume.gridOffset);
         // The old fixed rAF + 60ms/120ms ladder gave up ~180ms in, but the
         // virtual list keeps growing the scroll height for a second or more
         // after the first page renders — so the offset was clamped to whatever
@@ -331,14 +373,15 @@
                 _restoring = false;
                 return;
             }
-            _setScrollTop(target);
+            const want = targetNow();
+            _setScrollTop(want);
             const now = _getScrollTop();
-            if (Math.abs(now - target) <= 4) {
+            if (Math.abs(now - want) <= 4) {
                 // Landed. Do NOT release the claim yet: switchView's reset
                 // ladder runs out to 700ms and one of its writes is a
                 // behavior:'smooth' scroll, whose glide would otherwise carry
                 // us back to 0 over the following second.
-                _releaseRestoreAfterResets(target);
+                _releaseRestoreAfterResets(want);
                 return;
             }
             const max = _maxScrollTop();

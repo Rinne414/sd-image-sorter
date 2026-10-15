@@ -239,20 +239,35 @@
         }
     }
 
+    // The banner sits above the Gallery toolbar and comes or goes on its own
+    // (after the first load, a scan, a reconnect): keep the picture being read
+    // where it is.
+    function keepReaderInPlace(toggle) {
+        if (window.Gallery && typeof window.Gallery.keepReaderInPlace === 'function') {
+            window.Gallery.keepReaderInPlace(toggle);
+        } else {
+            toggle();
+        }
+    }
+
     function showBanner(summary) {
         var banner = $('#gallery-unreadable-banner');
         if (!banner) return;
         if (isDismissedThisSession()) return;
-        applySummary(summary);
-        banner.hidden = false;
+        keepReaderInPlace(function () {
+            applySummary(summary);
+            banner.hidden = false;
+        });
     }
 
     function hideBanner() {
         var banner = $('#gallery-unreadable-banner');
         if (!banner) return;
-        banner.hidden = true;
-        var panel = $('#gallery-missing-panel');
-        if (panel) panel.hidden = true;
+        keepReaderInPlace(function () {
+            banner.hidden = true;
+            var panel = $('#gallery-missing-panel');
+            if (panel) panel.hidden = true;
+        });
         state.detailsOpen = false;
     }
 

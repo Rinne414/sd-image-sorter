@@ -83,7 +83,9 @@ async function loadStats() {
         syncGeneratorRailOverflow();
 
         const metadataChip = $('#metadata-status-chip');
-        if (metadataChip) {
+        // The chip sits above the grid and comes and goes with metadata
+        // reading: keep the picture being read where it is.
+        const updateMetadataChip = () => {
             if (countsResolving) {
                 metadataChip.textContent = metadataPending > 0
                     ? appT('gallery.metadataResolving', 'Reading image info: {count} pending')
@@ -95,6 +97,13 @@ async function loadStats() {
                 metadataChip.textContent = '';
                 metadataChip.title = '';
                 metadataChip.hidden = true;
+            }
+        };
+        if (metadataChip) {
+            if (window.Gallery && typeof window.Gallery.keepReaderInPlace === 'function') {
+                window.Gallery.keepReaderInPlace(updateMetadataChip);
+            } else {
+                updateMetadataChip();
             }
         }
 

@@ -307,6 +307,31 @@ Object.assign(window.Gallery, {
         return true;
     },
 
+    /**
+     * Show or hide something above the grid (a banner, a status chip) without
+     * moving the picture being read. The browser's scroll anchoring does not
+     * hold the grid here: measured in Chromium, a reader scrolled past the
+     * grid's top saw every picture jump by the element's height. With the
+     * grid's top in sight the change is left to push the grid, where it can
+     * be seen.
+     */
+    keepReaderInPlace(toggle) {
+        const grid = document.getElementById('gallery-grid');
+        const scrollContainer = this._getScrollContainer();
+        const viewport = this._getScrollViewportRect(scrollContainer);
+        const gridTopBefore = grid ? grid.getBoundingClientRect().top : 0;
+        toggle();
+        if (!grid || !viewport || gridTopBefore >= viewport.top) return;
+        const shift = grid.getBoundingClientRect().top - gridTopBefore;
+        if (shift === 0) return;
+        if (this._isViewportScrollContainer(scrollContainer)) {
+            // 'instant': html is scroll-behavior: smooth, and a glide would show the jump this undoes.
+            window.scrollBy({ top: shift, left: 0, behavior: 'instant' });
+        } else {
+            scrollContainer.scrollTop += shift;
+        }
+    },
+
     _scheduleAnchorRestore(anchor) {
         if (!anchor) return;
 
