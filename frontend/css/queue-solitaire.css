@@ -35,7 +35,8 @@
 .qs-toolbar-title {
     font-size: 15px;
     font-weight: 700;
-    color: var(--accent-contrast);
+    /* Not --accent-contrast: that is the ink for a solid amber fill. */
+    color: var(--text-primary);
     margin-right: auto;
 }
 
