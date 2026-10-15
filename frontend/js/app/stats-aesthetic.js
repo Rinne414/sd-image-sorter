@@ -373,7 +373,7 @@ async function pollAestheticProgress() {
             );
             if (completed > 0) {
                 // Partial scores may have landed before the crash.
-                await loadImages();
+                await loadImages(false, { keepPosition: true });
                 await loadStats();
             }
             return;
@@ -387,7 +387,7 @@ async function pollAestheticProgress() {
                     : appT('gallery.aestheticCompleted', 'Aesthetic scoring completed.'),
                 errors > 0 ? 'warning' : 'success'
             );
-            await loadImages();
+            await loadImages(false, { keepPosition: true });
             await loadStats();
         }
     } catch (error) {

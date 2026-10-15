@@ -603,7 +603,7 @@
         refresh();
         updateReparseVisibility();
         if (changed > 0 && window.App && typeof window.App.loadImages === 'function') {
-            try { window.App.loadImages(); } catch (_e) { /* gallery view may be closed */ }
+            try { window.App.loadImages(false, { keepPosition: true }); } catch (_e) { /* gallery view may be closed */ }
         }
     }
 
@@ -639,7 +639,7 @@
         updateReparseVisibility();
         // Recovered text changes gallery rows; let an open gallery refetch.
         if (foundSomething && window.App && typeof window.App.loadImages === 'function') {
-            try { window.App.loadImages(); } catch (_e) { /* gallery view may be closed */ }
+            try { window.App.loadImages(false, { keepPosition: true }); } catch (_e) { /* gallery view may be closed */ }
         }
     }
 

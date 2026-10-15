@@ -158,7 +158,7 @@ Object.assign(window.VLMCaption, {
                 // images surface their new VLM caption / tag chips without
                 // the user having to switch views or hit Refresh manually.
                 try {
-                    if (typeof window.loadImages === 'function') window.loadImages();
+                    if (typeof window.loadImages === 'function') window.loadImages(false, { keepPosition: true });
                     if (typeof window.loadStats === 'function') window.loadStats();
                     // v3.2.2: if the image detail modal is open, re-fetch so
                     // the user sees the new ai_caption immediately without

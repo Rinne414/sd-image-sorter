@@ -29,7 +29,9 @@ function cancelGalleryImageLoad() {
     if (galleryLoading) galleryLoading.style.display = 'none';
 }
 
-// Generate skeleton items for loading state
+// Generate skeleton items for loading state. Every placeholder carries the class
+// skeleton-item: loadImages reads it to tell a pending replace from a grid it can
+// refresh in place.
 function generateSkeletonItems(count = 20) {
     const fragment = document.createDocumentFragment();
 
@@ -56,6 +58,38 @@ function generateSkeletonItems(count = 20) {
     return fragment;
 }
 
+// The listing endpoint returns at most this many images per request.
+const GALLERY_LISTING_MAX_LIMIT = 1000;
+
+/**
+ * Fetch the current results from their start until `targetCount` images are in
+ * (or the results end), one listing page at a time. A refresh in place needs
+ * every page the reader had scrolled through, or their image drops out.
+ */
+async function fetchGalleryFromStart(filters, targetCount, pageLimit, signal) {
+    const useCursorPagination = supportsCursorPagination(filters.sortBy);
+    const images = [];
+    let first = null;
+    let page = null;
+    do {
+        const limit = Math.min(GALLERY_LISTING_MAX_LIMIT, Math.max(pageLimit, targetCount - images.length));
+        const nextOffset = page && Number.isFinite(page.next_offset) ? page.next_offset : images.length;
+        page = await API.getImages({
+            ...filters,
+            limit,
+            cursor: useCursorPagination && page ? page.next_cursor : null,
+            offset: !useCursorPagination && page ? nextOffset : undefined,
+        }, { signal });
+        if (page === null) return null;
+        first = first || page;
+        images.push(...page.images);
+        // Without a cursor to go on, the next request would start over and repeat images.
+        if (useCursorPagination && !page.next_cursor) break;
+    } while (images.length < targetCount && page.has_more && page.images.length > 0);
+    // Later cursor pages skip the COUNT (total -1); the first page has the real one.
+    return { ...page, images, total: first.total };
+}
+
 async function loadImages(appendMode = false, options = {}) {
     if (typeof appendMode === 'object') {
         options = appendMode;
@@ -68,10 +102,21 @@ async function loadImages(appendMode = false, options = {}) {
         coalesce = false,
         pageSizeOverride = null,
         suppressAutoLoadMore = false,
+        // A refresh of the results the reader is in (a job finished, images
+        // left them): keep the grid on screen, refetch every loaded page and put
+        // the reader back on their image instead of starting over at the top.
+        keepPosition = false,
     } = options;
 
     if (AppState.isLoading && coalesce) {
         _pendingImageReload = { appendMode, options: { ...options } };
+        return;
+    }
+
+    // Off the Gallery, every loaded page refetched now would be thrown away:
+    // the Gallery reloads when the user comes back to it.
+    if (keepPosition && AppState.currentView !== 'gallery') {
+        AppState.galleryNeedsRefresh = true;
         return;
     }
 
@@ -83,7 +128,13 @@ async function loadImages(appendMode = false, options = {}) {
     const loadSequence = ++_imageLoadSequence;
     _activeImageLoadSequence = loadSequence;
     const galleryGrid = $('#gallery-grid');
-    const replacesGallery = !appendMode && !preserveExisting;
+    const loadedCount = AppState.images.length;
+    // A replacing load (new filter or sort) cancelled above leaves placeholders
+    // in the grid; a refresh in place would keep them up if it failed, so start
+    // over instead. Another refresh in place leaves the grid intact.
+    const showsPlaceholders = Boolean(galleryGrid && galleryGrid.querySelector('.skeleton-item'));
+    const keepsPosition = keepPosition && !appendMode && loadedCount > 0 && !showsPlaceholders;
+    const replacesGallery = !appendMode && !preserveExisting && !keepsPosition;
     const settledGalleryState = replacesGallery
         ? {
             images: AppState.images,
@@ -103,9 +154,10 @@ async function loadImages(appendMode = false, options = {}) {
 
     AppState.isLoading = true;
     const galleryLoading = $('#gallery-loading');
-    if (galleryLoading && !silent) galleryLoading.style.display = 'flex';
+    const showsLoading = !silent && !keepsPosition;
+    if (galleryLoading && showsLoading) galleryLoading.style.display = 'flex';
     const imageCount = $('#image-count');
-    if (imageCount && !appendMode && !silent) imageCount.textContent = appT('gallery.loading', 'Loading images...');
+    if (imageCount && !appendMode && showsLoading) imageCount.textContent = appT('gallery.loading', 'Loading images...');
     let controller = null;
     let loadSucceeded = false;
 
@@ -122,7 +174,9 @@ async function loadImages(appendMode = false, options = {}) {
             cursor: appendMode && useCursorPagination ? AppState.pagination.cursor : null,
             offset: appendMode && !useCursorPagination ? AppState.pagination.offset : undefined
         };
-        const result = await API.getImages(filters, { signal: controller.signal });
+        const result = keepsPosition
+            ? await fetchGalleryFromStart(filters, loadedCount, pageLimit, controller.signal)
+            : await API.getImages(filters, { signal: controller.signal });
         RequestManager.complete(IMAGE_LOAD_KEY, controller);
 
         if (result === null) return;
@@ -187,6 +241,14 @@ async function loadImages(appendMode = false, options = {}) {
         if (window.Gallery) {
             if (appendMode) {
                 Gallery.appendImages(result.images);
+            } else if (keepsPosition) {
+                // Read the reader's image now, not before the request: they may
+                // have scrolled while it was in flight.
+                const readerAnchor = Gallery._captureViewAnchor();
+                Gallery.setImages(AppState.images, { renderAll: true });
+                if (readerAnchor && !Gallery._restoreViewAnchor(readerAnchor)) {
+                    Gallery._scheduleAnchorRestore(readerAnchor);
+                }
             } else {
                 Gallery.setImages(AppState.images);
             }

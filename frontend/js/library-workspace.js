@@ -478,7 +478,7 @@
         const refreshAfterMove = async () => {
             await refreshFromServer();
             if (typeof window.loadImages === 'function') {
-                try { await window.loadImages(false, { coalesce: true }); } catch (_e) { /* ignore */ }
+                try { await window.loadImages(false, { coalesce: true, keepPosition: true }); } catch (_e) { /* ignore */ }
             }
         };
         try {
@@ -560,7 +560,7 @@
             }
             await refreshFromServer();
             if (typeof window.loadImages === 'function') {
-                try { await window.loadImages(false, { coalesce: true }); } catch (_e) { /* ignore */ }
+                try { await window.loadImages(false, { coalesce: true, keepPosition: true }); } catch (_e) { /* ignore */ }
             }
             if (typeof window.showToast === 'function') {
                 window.showToast(

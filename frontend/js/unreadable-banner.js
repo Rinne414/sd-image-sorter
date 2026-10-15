@@ -363,7 +363,7 @@
                 }
             }
             if (removed > 0 && typeof window.loadImages === 'function') {
-                window.loadImages();
+                window.loadImages(false, { keepPosition: true });
             }
         } catch (e) {
             if (window.showToast) {

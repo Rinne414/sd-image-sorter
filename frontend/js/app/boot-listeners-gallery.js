@@ -421,7 +421,7 @@ function initBootListenersGallery() {
                         imported: result.imported,
                         skipped: result.skipped,
                     }), 'success');
-                    loadImages();
+                    loadImages(false, { keepPosition: true });
                 },
                 async () => {
                     // Overwrite = false (skip already-tagged)
@@ -430,7 +430,7 @@ function initBootListenersGallery() {
                         imported: result.imported,
                         skipped: result.skipped,
                     }), 'success');
-                    loadImages();
+                    loadImages(false, { keepPosition: true });
                 }
             );
         } catch (err) {

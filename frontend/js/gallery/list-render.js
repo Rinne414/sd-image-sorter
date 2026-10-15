@@ -7,7 +7,13 @@
  * live there); index.html lists the family in original line order.
  */
 Object.assign(window.Gallery, {
-    setImages(images) {
+    /**
+     * @param {Array} images
+     * @param {{renderAll?: boolean}} [options] - renderAll: draw every card of a
+     *   small (non-virtual) grid at once. A refresh in place needs it: drawing in
+     *   batches starts from a short page, and the browser pulls the scroll up.
+     */
+    setImages(images, options = {}) {
         this.images = images;
         this._cancelPendingWork();
 
@@ -39,7 +45,7 @@ Object.assign(window.Gallery, {
             const virtualList = this.initVirtualScroll(AppState.viewMode);
             if (!virtualList) {
                 this.useVirtualScroll = false;
-                this.render();
+                this.render(options);
             }
             return;
         }
@@ -49,7 +55,7 @@ Object.assign(window.Gallery, {
             this.virtualList.destroy();
             this.virtualList = null;
         }
-        this.render();
+        this.render(options);
     },
 
     appendImages(newImages) {
@@ -196,7 +202,7 @@ Object.assign(window.Gallery, {
         }
     },
 
-    render() {
+    render({ renderAll = false } = {}) {
         const { $, AppState } = getGalleryAppContext();
         const grid = $('#gallery-grid');
         if (!grid) return;
@@ -229,7 +235,9 @@ Object.assign(window.Gallery, {
         }
 
         const sessionId = ++this.renderSessionId;
-        const initialCount = GALLERY_VIRTUAL_CONFIG.progressiveRender.initialCount[viewMode] || this.images.length;
+        const initialCount = renderAll
+            ? this.images.length
+            : (GALLERY_VIRTUAL_CONFIG.progressiveRender.initialCount[viewMode] || this.images.length);
         const batchCount = GALLERY_VIRTUAL_CONFIG.progressiveRender.batchCount[viewMode] || this.images.length;
 
         const appendBatch = (startIndex, maxCount) => {

@@ -104,7 +104,7 @@ async function deleteGalleryImagesByIds(imageIds) {
             if (result?.status === 'reset') {
                 // Stranded job cleared by the user; the reset control already
                 // reported it and there is no run result to summarize.
-                await loadImages();
+                await loadImages(false, { keepPosition: true });
                 loadStats();
                 return;
             }
@@ -113,7 +113,7 @@ async function deleteGalleryImagesByIds(imageIds) {
                     formatUserError(null, appT('selection.deleteFailed', 'Failed to move selected image files to Trash')),
                     'error'
                 );
-                await loadImages();
+                await loadImages(false, { keepPosition: true });
                 loadStats();
                 return;
             }
@@ -135,7 +135,7 @@ async function deleteGalleryImagesByIds(imageIds) {
                 window.Gallery.syncSelectionState();
             }
 
-            await loadImages();
+            await loadImages(false, { keepPosition: true });
             loadStats();
 
             if (result?.status === 'cancelled') {
@@ -218,7 +218,7 @@ async function removeGalleryImagesByIds(imageIds) {
             if (result?.status === 'reset') {
                 // Stranded job cleared by the user; the reset control already
                 // reported it and there is no run result to summarize.
-                await loadImages();
+                await loadImages(false, { keepPosition: true });
                 await loadStats();
                 return;
             }
@@ -227,7 +227,7 @@ async function removeGalleryImagesByIds(imageIds) {
                     formatUserError(null, appT('selection.removeFailed', 'Failed to remove selected images from gallery')),
                     'error'
                 );
-                await loadImages();
+                await loadImages(false, { keepPosition: true });
                 await loadStats();
                 return;
             }
@@ -245,7 +245,7 @@ async function removeGalleryImagesByIds(imageIds) {
                 window.Gallery.syncSelectionState();
             }
 
-            await loadImages();
+            await loadImages(false, { keepPosition: true });
             await loadStats();
 
             if (result?.status === 'cancelled') {
@@ -386,7 +386,7 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
                 // result to summarize; refresh so partially-moved files show
                 // their new locations.
                 resetSelectionDataCache();
-                await loadImages();
+                await loadImages(false, { keepPosition: true });
                 await loadStats();
                 return;
             }
@@ -399,7 +399,7 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
                 // Files moved before the failure are gone from their source —
                 // reload so the gallery doesn't keep showing stale rows.
                 resetSelectionDataCache();
-                await loadImages();
+                await loadImages(false, { keepPosition: true });
                 await loadStats();
                 return;
             }
@@ -431,7 +431,7 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
                 window.Gallery.syncSelectionState();
             }
 
-            await loadImages();
+            await loadImages(false, { keepPosition: true });
             await loadStats();
 
             if (finalProgress?.status === 'cancelled') {

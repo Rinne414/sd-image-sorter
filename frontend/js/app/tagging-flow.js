@@ -697,7 +697,7 @@ async function pollTagProgress(retryCount = 0) {
             setTaggingUiState(false);
             resetTagUiProgressState();
             syncTaggerModelUi();
-            loadImages();
+            loadImages(false, { keepPosition: true });
             loadStats();
             // v3.2.2 T-power-PR2 (H): pop the post-tag stats modal once
             // when the worker emits last_run_stats on the terminal send.
