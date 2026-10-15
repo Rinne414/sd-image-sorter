@@ -468,6 +468,11 @@ test('NL tab: the source card, the ToriiGate route and Start fit at desktop size
 // to be open. They are now kept until they are exported.
 test('export caption edits survive a reload until they are exported', async ({ page }) => {
   await openApp(page)
+  // Edits are kept only once the app has put back any saved ones (after the
+  // export panel's first content-format pass); leaving before that keeps the
+  // saved copy as it is. openApp returns only 60-100 ms after that point, and
+  // a slower export-presets answer turned the order round: edits dropped.
+  await expect.poll(() => page.evaluate(() => (window.V321Integration as any)._captionEditsRestorePending)).toBe(false)
   await page.evaluate(() => {
     const V = window.V321Integration as any
     V._setPreviewCaption(101, 'hand-edited caption')
