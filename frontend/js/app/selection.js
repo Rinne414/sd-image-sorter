@@ -483,10 +483,13 @@ function resetViewScrollPosition() {
         mainContent.style.overflowAnchor = 'none';
         mainContent.scrollTop = 0;
     }
-    document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
+    // 'instant': html declares scroll-behavior: smooth, so 'auto' (and a scrollTop
+    // write on documentElement) would glide.
+    // A glide reads as the user scrolling (hasViewScrollMoved) and cancels the
+    // ladder below, stranding an interrupted slide partway down the new view.
     try {
-        window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     } catch (_error) {
         window.scrollTo(0, 0);
     }
@@ -518,10 +521,17 @@ function scheduleViewScrollReset() {
     );
     const token = ++viewScrollResetToken;
     let resetApplied = false;
+    let settled = false;
     if (restoring()) return;
     const resetUnlessRestoring = () => {
         if (token !== viewScrollResetToken || restoring()) return;
-        if (resetApplied && hasViewScrollMoved()) {
+        const moved = hasViewScrollMoved();
+        // A smooth scroll already running when the view switched still lands a
+        // frame after our instant reset, so early movement is that leftover, not
+        // the user: keep resetting until a step finds the page holding at the
+        // top. Only movement after that is someone else scrolling.
+        if (resetApplied && !moved) settled = true;
+        if (settled && moved) {
             viewScrollResetToken += 1;
             return;
         }

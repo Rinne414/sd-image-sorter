@@ -284,7 +284,8 @@ Object.assign(window.Gallery, {
         const applyScroll = (itemTop) => {
             const nextScrollTop = Math.max(0, gridOffsetTop + itemTop - anchor.offset);
             if (isViewportScroll) {
-                window.scrollTo(0, nextScrollTop);
+                // 'instant': html is scroll-behavior: smooth, and a glide would slide the page to the reader's image.
+                window.scrollTo({ top: nextScrollTop, left: 0, behavior: 'instant' });
             } else {
                 scrollContainer.scrollTop = nextScrollTop;
             }
