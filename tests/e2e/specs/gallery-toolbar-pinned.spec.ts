@@ -1,4 +1,5 @@
 import { expect, test } from '../fixtures/click-ledger'
+import type { Page } from '@playwright/test'
 
 /**
  * Owner 2026-09-30: the gallery toolbar (count, generator tabs, view, search)
@@ -7,9 +8,32 @@ import { expect, test } from '../fixtures/click-ledger'
  * gallery child position:relative must not take its sticky away.
  */
 
+const MOCK_IMAGE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#789"/></svg>'
+
+/** Own gallery rows, so the spec does not depend on what the e2e library holds. */
+async function mockGalleryImages(page: Page, count = 12) {
+  const images = Array.from({ length: count }, (_, index) => ({
+    id: 401 + index,
+    filename: `toolbar-pinned-${index + 1}.png`,
+    path: `/mock/toolbar-pinned-${index + 1}.png`,
+    prompt: `mock prompt ${index + 1}`,
+  }))
+  await page.route(/\/api\/image-(thumbnail|file)\/\d+/, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'image/svg+xml', body: MOCK_IMAGE_SVG })
+  })
+  await page.route('**/api/images**', async (route) => {
+    if (new URL(route.request().url()).pathname !== '/api/images') {
+      await route.continue()
+      return
+    }
+    await route.fulfill({ json: { images, total: images.length, has_more: false, next_cursor: null } })
+  })
+}
+
 for (const [width, height] of [[1366, 768], [1920, 1080]] as const) {
   test(`the toolbar stays under the top bar and usable while the grid scrolls at ${width}x${height}`, async ({ page }) => {
     await page.setViewportSize({ width, height })
+    await mockGalleryImages(page)
     await page.addInitScript(() => {
       localStorage.setItem('sd-image-sorter-lang', 'zh-CN')
       localStorage.setItem('sd-sorter-entry-skip-session', '1')
@@ -55,6 +79,7 @@ for (const [width, height] of [[1366, 768], [1920, 1080]] as const) {
  */
 test('a room view enters once: nothing replays after the comfort enter ends', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
+  await mockGalleryImages(page)
   await page.addInitScript(() => {
     localStorage.setItem('sd-image-sorter-lang', 'zh-CN')
     localStorage.setItem('sd-sorter-entry-skip-session', '1')

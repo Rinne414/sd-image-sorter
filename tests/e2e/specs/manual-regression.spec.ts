@@ -2150,6 +2150,8 @@ test('starting a different mode over a paused session asks before discarding, ne
 })
 
 test('paused bracket keeps the server session authoritative across reload', async ({ page, request }) => {
+  // No smooth scroll: Playwright's scroll-into-view glides under the smooth html, the bracket screen clamps it, and it finishes later on the setup screen.
+  await page.emulateMedia({ reducedMotion: 'reduce' })
   const serverErrors: string[] = []
   page.on('response', (response) => {
     if (response.status() >= 500) serverErrors.push(`${response.status()} ${response.url()}`)

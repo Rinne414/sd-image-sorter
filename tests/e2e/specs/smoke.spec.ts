@@ -154,7 +154,9 @@ async function scrollGalleryTo(page: Page, top: number) {
       }
       node = node.parentElement
     }
-    if (container) container.scrollTop = target
+    // 'instant': the page declares smooth scrolling, and a glide still in
+    // flight would make the offset (and the image on top) read mid-way.
+    container?.scrollTo({ top: target, behavior: 'instant' })
     return container?.scrollTop ?? 0
   }, top)
 }
@@ -1542,22 +1544,18 @@ test.describe('Smoke Tests', () => {
       await page.mouse.click(viewButtonBox!.x + viewButtonBox!.width / 2, viewButtonBox!.y + viewButtonBox!.height / 2)
       await expect(galleryGrid).toHaveClass(className)
 
-      const firstItem = page.locator('#gallery-grid .gallery-item').first()
-      if (await firstItem.count()) {
-        await expect(firstItem).toBeVisible()
-        const box = await firstItem.boundingBox()
-        const viewport = page.viewportSize()
-
-        expect(box).not.toBeNull()
-        expect(viewport).not.toBeNull()
-
-        if (box && viewport) {
-          expect(box.width).toBeGreaterThan(0)
-          expect(box.width).toBeLessThan(viewport.width)
-          expect(box.height).toBeGreaterThan(0)
-          expect(box.height).toBeLessThan(viewport.height)
-        }
-      }
+      // Measure in one step: the virtual list recycles cards while the offset
+      // is restored, so a separate visible-then-measure pair can lose the node.
+      const viewport = page.viewportSize()
+      expect(viewport).not.toBeNull()
+      await expect.poll(async () => page.evaluate(({ maxWidth, maxHeight }) => {
+        const item = document.querySelector('#gallery-grid .gallery-item')
+        if (!item) return false
+        const rect = item.getBoundingClientRect()
+        return rect.width > 0 && rect.width < maxWidth && rect.height > 0 && rect.height < maxHeight
+      }, { maxWidth: viewport!.width, maxHeight: viewport!.height }), {
+        message: `Expected the ${mode} view to render sane card sizes`,
+      }).toBe(true)
 
       // The anchor restore lands a couple of frames after the re-render. The
       // masonry mode staggers its columns, so the image the reader was on

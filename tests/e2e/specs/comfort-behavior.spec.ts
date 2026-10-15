@@ -325,9 +325,13 @@ test.describe('comfort behavior', () => {
 
   test('a later reload of the Library does not re-apply an old position', async ({ page }) => {
     await bootGallery(page)
-    // seedCards is this session's first load with pictures (the relaunch
-    // restore point); everything after it is a filter change or a refresh.
     await seedCards(page)
+    // Only the session's FIRST load with pictures consumes the relaunch restore
+    // point. seedCards sets images without that event, and a library that is
+    // empty at boot (a fresh data dir) has no earlier load that did, so send
+    // the first load here, before any position is saved. Everything after it
+    // is a filter change or a refresh.
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('gallery-images-loaded', { detail: {} })))
     const deep = await seedDeepResume(page)
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
 
