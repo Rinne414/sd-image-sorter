@@ -531,7 +531,7 @@ function updateComboDisplay() {
 // ============== Finish/Exit ==============
 
 function finishSorting() {
-    const { $, showToast } = window.App;
+    const { showToast } = window.App;
 
     ManualSortState.active = false;
     ManualSortState.history = [];
@@ -574,8 +574,7 @@ function finishSorting() {
     });
 
     // Return to setup
-    hideSortInterfaces();
-    $('#sort-setup').style.display = 'block';
+    showSortSetup();
 
     window.App.API.delete('/api/sort/session').catch(e => {
         if (window.Logger) Logger.warn('Failed to clean up sort session:', e);
@@ -588,7 +587,7 @@ function finishSorting() {
 }
 
 function exitSorting() {
-    const { $, showToast } = window.App;
+    const { showToast } = window.App;
 
     ManualSortState.active = false;
     ManualSortState.undoAvailable = false;
@@ -596,8 +595,7 @@ function exitSorting() {
     document.removeEventListener('keydown', handleSortKeypress);
     updateHistoryControlState({ undo_available: false, redo_available: false });
 
-    hideSortInterfaces();
-    $('#sort-setup').style.display = 'block';
+    showSortSetup();
 
     const remaining = Math.max(0, ManualSortState.total - ManualSortState.index);
     if (remaining > 0) {

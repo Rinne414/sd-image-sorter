@@ -289,7 +289,7 @@ async function collectCullDecisions() {
 }
 
 async function finishCullSorting(result) {
-    const { $, showToast } = window.App;
+    const { showToast } = window.App;
 
     ManualSortState.active = false;
     ManualSortState.undoAvailable = false;
@@ -299,8 +299,7 @@ async function finishCullSorting(result) {
 
     window.AudioManager?.play('finish');
 
-    hideSortInterfaces();
-    $('#sort-setup').style.display = 'block';
+    showSortSetup();
 
     const map = ManualSortState.cullDecisions || new Map();
     let keptCount = 0;

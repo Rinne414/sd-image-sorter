@@ -431,6 +431,20 @@ function hideSortInterfaces() {
     clearManualSortZen();
 }
 
+// Organize swaps whole screens inside one page: the offset of the screen that
+// was left would open the next one partway down, with its top cut off.
+function scrollSortScreenToTop() {
+    if (typeof resetViewScrollPosition === 'function') resetViewScrollPosition();
+}
+
+// Back to the setup screen, at its top, where the Resume banner and Start are.
+function showSortSetup() {
+    const { $ } = window.App;
+    hideSortInterfaces();
+    $('#sort-setup').style.display = 'block';
+    scrollSortScreenToTop();
+}
+
 function activateSortingUi(mode = 'slot') {
     const { $ } = window.App;
     ManualSortState.active = true;
@@ -451,6 +465,7 @@ function activateSortingUi(mode = 'slot') {
         // in this HUD). hideSortInterfaces() above already cleared it.
         applyManualSortZen(getManualSortZenPref(), { persist: false });
     }
+    scrollSortScreenToTop();
     // Re-sync the HUD mute button — the global Settings toggle may have changed
     // AudioManager since this button was last painted.
     syncSortMuteButton();
@@ -458,11 +473,9 @@ function activateSortingUi(mode = 'slot') {
 }
 
 function rollbackSortingUi() {
-    const { $ } = window.App;
     ManualSortState.active = false;
     document.removeEventListener('keydown', handleSortKeypress);
-    hideSortInterfaces();
-    $('#sort-setup').style.display = 'block';
+    showSortSetup();
     updateHistoryControlState({ undo_available: false, redo_available: false });
 }
 

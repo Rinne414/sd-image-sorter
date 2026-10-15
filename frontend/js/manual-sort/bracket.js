@@ -525,7 +525,7 @@ async function collectBracketWinner(winnerImage) {
 }
 
 async function finishBracketSorting(result) {
-    const { $, showToast } = window.App;
+    const { showToast } = window.App;
 
     ManualSortState.active = false;
     ManualSortState.undoAvailable = false;
@@ -539,8 +539,7 @@ async function finishBracketSorting(result) {
     const winner = result?.winner?.image || result?.champion?.image || null;
     const winnerName = bracketImageName(winner);
 
-    hideSortInterfaces();
-    $('#sort-setup').style.display = 'block';
+    showSortSetup();
 
     const destLabel = await collectBracketWinner(winner);
 

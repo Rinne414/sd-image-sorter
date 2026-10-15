@@ -8729,6 +8729,9 @@
                 window.refreshManualSortScopeCount();
             }
         }
+        // The sub-view left behind may have been scrolled; its offset would
+        // open this one partway down.
+        if (typeof resetViewScrollPosition === 'function') resetViewScrollPosition();
         var btns = document.querySelectorAll('.sorting-sub-tab');
         btns.forEach(function(b) {
             var isActive = b.getAttribute('data-sorting-sub') === sub;
