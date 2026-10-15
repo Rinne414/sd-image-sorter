@@ -12,6 +12,17 @@ test.describe('gallery comfort-1', () => {
   })
 
   test('comfort module boots, empty tips stay collapsed, resume API works', async ({ page }) => {
+    // An empty library, whatever earlier specs imported into the shared test
+    // library: the Gallery shows its onboarding card by itself. Forcing the card
+    // open instead lost to a first load that answered after page.goto returned,
+    // which hid it again because the library had images.
+    await page.route('**/api/images**', async (route) => {
+      if (new URL(route.request().url()).pathname !== '/api/images') {
+        await route.continue()
+        return
+      }
+      await route.fulfill({ json: { images: [], total: 0, has_more: false, next_cursor: null } })
+    })
     await page.setViewportSize({ width: 1920, height: 1080 })
     await page.goto('/')
     await page.evaluate(() => {
@@ -23,10 +34,7 @@ test.describe('gallery comfort-1', () => {
     })
 
     // Empty onboarding steps stay open (owner: do not collapse tips).
-    await page.evaluate(() => {
-      const empty = document.getElementById('gallery-empty-state')
-      if (empty) empty.style.display = 'flex'
-    })
+    await expect(page.locator('#gallery-empty-state')).toBeVisible()
     await expect(page.locator('#gallery-empty-state .onboarding-steps')).toBeVisible()
     await expect(page.locator('#gallery-empty-state .onboarding-step')).toHaveCount(4)
 
