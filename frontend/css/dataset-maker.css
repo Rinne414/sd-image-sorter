@@ -3072,12 +3072,23 @@
 #view-dataset .dataset-multisel-tag-form {
     flex: 1 1 100%;
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
     min-width: 0;
 }
+/* The field gets a line of its own, so a whole tag fits even in the ~214px
+   laptop column; Add and Cancel share the line below, like the stacked
+   full-width buttons above. The bar is not a .dataset-card, so the field
+   takes the small buttons' height and an inner padding here. */
 #view-dataset .dataset-multisel-tag-form .form-input {
-    flex: 1 1 auto;
+    flex: 1 1 100%;
     min-width: 0;
+    min-height: var(--btn-h-sm);
+    padding: 0 10px;
+    box-sizing: border-box;
+}
+#view-dataset .dataset-multisel-tag-form > .btn {
+    flex: 1 1 0;
 }
 #view-dataset .dataset-multiselect-bar[hidden] {
     display: none !important;
