@@ -12,6 +12,14 @@ const IMAGE_LOAD_KEY = 'images-load';
 let _pendingImageReload = null;
 let _imageLoadSequence = 0;
 let _activeImageLoadSequence = 0;
+// Which results the grid shows (library, filters, sort). A load of other results
+// opens them at their top: the old scroll offset means nothing in them.
+let _shownGalleryResultsKey = null;
+
+function getGalleryResultsKey() {
+    const libraryId = window.LibraryWorkspace?.getCurrentLibraryId?.() || '';
+    return `${libraryId}|${getSelectionFilterCacheKey(AppState.filters)}`;
+}
 
 function cancelGalleryImageLoad() {
     const hadPendingGalleryLoad = AppState.isLoading
@@ -135,6 +143,12 @@ async function loadImages(appendMode = false, options = {}) {
     const showsPlaceholders = Boolean(galleryGrid && galleryGrid.querySelector('.skeleton-item'));
     const keepsPosition = keepPosition && !appendMode && loadedCount > 0 && !showsPlaceholders;
     const replacesGallery = !appendMode && !preserveExisting && !keepsPosition;
+    const resultsKey = getGalleryResultsKey();
+    // Another view keeps its own offset. A "continue where you left off" restore
+    // checks the results itself and lands after this, once the grid is filled.
+    const opensNewResults = replacesGallery
+        && resultsKey !== _shownGalleryResultsKey
+        && AppState.currentView === 'gallery';
     const settledGalleryState = replacesGallery
         ? {
             images: AppState.images,
@@ -150,6 +164,9 @@ async function loadImages(appendMode = false, options = {}) {
             galleryGrid.innerHTML = '';
             galleryGrid.appendChild(generateSkeletonItems(20));
         }
+        // The placeholders keep the grid's height, so without this the new
+        // results would open at the offset the old ones were read at.
+        if (opensNewResults) resetViewScrollPosition();
     }
 
     AppState.isLoading = true;
@@ -200,6 +217,7 @@ async function loadImages(appendMode = false, options = {}) {
             AppState.images = [...AppState.images, ...result.images];
         } else {
             AppState.images = result.images;
+            _shownGalleryResultsKey = resultsKey;
         }
         resetSelectionDataCache();
 
