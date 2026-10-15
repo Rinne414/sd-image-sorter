@@ -674,7 +674,9 @@
 #view-dataset .dataset-queue-grid-mode .dataset-queue-meta {
     position: absolute;
     inset: auto 4px 4px 4px;
-    padding: 18px 6px 5px;
+    /* The queue number sits in the bottom-left corner (bottom 7px, 22px high):
+       the name goes 3px above it instead of being drawn over it. */
+    padding: 18px 6px 28px;
     border-radius: 0 0 6px 6px;
     background: transparent;
     opacity: 0;
