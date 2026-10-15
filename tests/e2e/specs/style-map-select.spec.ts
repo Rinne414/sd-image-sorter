@@ -67,6 +67,14 @@ async function openMap(page: Page, width: number, height: number, lang = 'en', c
   const map = new StyleMapPage(page)
   await map.open()
   await expect.poll(() => map.pointCount(), { timeout: 30000 }).toBe(count)
+  // The view slides in by up to 8 px when it opens. Dot positions read before
+  // the slide ends are off by that much, and from 8 px a small box around one
+  // dot misses it. (A finished slide that keeps its end state is not running.)
+  await expect.poll(() => page.evaluate(() => document.getAnimations().filter((animation) => {
+    const target = (animation.effect as KeyframeEffect | null)?.target
+    return target instanceof Element && target.classList.contains('view')
+      && (animation.playState === 'running' || animation.pending)
+  }).length)).toBe(0)
   return map
 }
 
