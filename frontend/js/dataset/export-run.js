@@ -449,6 +449,11 @@
         this._renderConfirmOptions(view.report, view.state);
     };
 
+    // Opening the confirmation takes focus to Cancel, the safe answer, and
+    // closing hands it back, so a keyboard user answers the dialog instead of
+    // the Export button behind it.
+    let confirmReturnFocus = null;
+
     DM._cancelConfirmModal = function () {
         this._hideConfirmModal();
         this._resetExportOptions();
@@ -560,8 +565,14 @@
         // folder, naming). Any new item that embeds user-influenced text MUST
         // escapeHtml it before pushing — _t() does not escape its params.
         list.innerHTML = items.map(s => `<li>${s}</li>`).join('');
+        const opening = modal.hidden;
+        if (opening) {
+            const active = document.activeElement;
+            confirmReturnFocus = active && active !== document.body && !modal.contains(active) ? active : null;
+        }
         modal.hidden = false;
         this._renderConfirmCheck();
+        if (opening) document.getElementById('btn-dataset-confirm-cancel')?.focus();
         void this._renderConfirmFolderNote(outputMode, folder);
     };
 
@@ -638,7 +649,10 @@
 
     DM._hideConfirmModal = function () {
         const modal = document.getElementById('dataset-confirm-modal');
-        if (modal) modal.hidden = true;
+        if (!modal || modal.hidden) return;
+        modal.hidden = true;
+        if (confirmReturnFocus?.isConnected) confirmReturnFocus.focus();
+        confirmReturnFocus = null;
     };
 
     // ---------- Run export ----------
@@ -1164,20 +1178,25 @@
         resultReturnFocus = null;
     };
 
-    // Escape closes the result dialog like every other dialog. Capture phase +
-    // stopPropagation keeps the same keypress from also reaching other Escape
-    // handlers behind the dialog (the More menu, Gallery selection clearing).
-    document.addEventListener('keydown', (event) => {
-        if (event.key !== 'Escape') return;
-        const modal = document.getElementById('dataset-result-modal');
-        if (!modal || modal.hidden) return;
-        // A dialog opened above this one owns the key; it closes first.
-        const openDialogs = document.querySelectorAll('.modal.visible, .dataset-modal:not([hidden])');
-        if ([...openDialogs].some(dialog => dialog !== modal)) return;
-        event.preventDefault();
-        event.stopPropagation();
-        DM._hideResultModal();
-    }, true);
+    // Escape answers a Dataset dialog like its own Close or Cancel button.
+    // Capture phase + stopPropagation keeps the same keypress from also
+    // reaching other Escape handlers behind the dialog (the More menu, Gallery
+    // selection clearing).
+    function closeOnEscape(modalId, close) {
+        document.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape') return;
+            const modal = document.getElementById(modalId);
+            if (!modal || modal.hidden) return;
+            // A dialog opened above this one owns the key; it closes first.
+            const openDialogs = document.querySelectorAll('.modal.visible, .dataset-modal:not([hidden])');
+            if ([...openDialogs].some(dialog => dialog !== modal)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            close();
+        }, true);
+    }
+    closeOnEscape('dataset-result-modal', () => DM._hideResultModal());
+    closeOnEscape('dataset-confirm-modal', () => DM._cancelConfirmModal());
 
     DM._openOutputFolder = async function () {
         const btn = document.getElementById('btn-dataset-open-folder');
