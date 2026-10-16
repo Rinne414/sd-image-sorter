@@ -696,7 +696,11 @@
         if (!modal) return;
         loadSettings();
         refreshDefaultFolderPlaceholder();
-        modal.classList.add('visible');
+        if (typeof window.App?.showModal === 'function') {
+            window.App.showModal('publish-set-modal', { onEscape: escapeWorkbench });
+        } else {
+            modal.classList.add('visible');
+        }
         $('pub-result').hidden = true;
         $('pub-result').replaceChildren();
         STATE.handoff = new Map();
@@ -725,8 +729,24 @@
 
     function close() {
         answerUncensoredCheck('cancel');
+        if (typeof window.App?.hideModal === 'function') {
+            window.App.hideModal('publish-set-modal');
+            return;
+        }
         const modal = $('publish-set-modal');
         if (modal) modal.classList.remove('visible');
+    }
+
+    // Escape answers the open uncensored check first and waits while an export
+    // runs (the workbench stays open); otherwise it closes the workbench.
+    function escapeWorkbench() {
+        if (STATE.exporting) return false;
+        if (STATE.pendingCheck) {
+            answerUncensoredCheck('cancel');
+            return false;
+        }
+        close();
+        return true;
     }
 
     function onMasterToggle() {
@@ -748,16 +768,6 @@
         });
         $('btn-close-publish-set')?.addEventListener('click', close);
         modal.querySelector('.modal-backdrop')?.addEventListener('click', close);
-        document.addEventListener('keydown', (event) => {
-            if (event.key !== 'Escape' || !isOpen() || STATE.exporting) return;
-            // Esc answers the open check first; the workbench stays open.
-            if (STATE.pendingCheck) {
-                event.preventDefault();
-                answerUncensoredCheck('cancel');
-                return;
-            }
-            close();
-        });
 
         $('btn-pub-export')?.addEventListener('click', runExport);
         $('btn-pub-uncensored-cancel')?.addEventListener('click', () => answerUncensoredCheck('cancel'));

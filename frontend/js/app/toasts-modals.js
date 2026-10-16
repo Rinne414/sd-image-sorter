@@ -227,6 +227,11 @@ function _topOpenModal() {
     return null;
 }
 
+/** True when this dialog is open and nothing sits on top of it. */
+function isTopModal(modalId) {
+    return _topOpenModal()?.modal.id === modalId;
+}
+
 function readWindowScrollPosition() {
     const mainContent = document.getElementById('main-content');
     return {

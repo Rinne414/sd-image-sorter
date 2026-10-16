@@ -167,10 +167,18 @@
         const modal = document.getElementById('entry-catalog-modal');
         if (!modal) return;
         render();
-        modal.classList.add('visible');
+        if (typeof window.App?.showModal === 'function') {
+            window.App.showModal('entry-catalog-modal', { onEscape: close });
+        } else {
+            modal.classList.add('visible');
+        }
     }
 
     function close() {
+        if (typeof window.App?.hideModal === 'function') {
+            window.App.hideModal('entry-catalog-modal');
+            return;
+        }
         const modal = document.getElementById('entry-catalog-modal');
         if (modal) modal.classList.remove('visible');
     }
@@ -182,12 +190,6 @@
         if (closeButton) closeButton.addEventListener('click', close);
         const backdrop = modal.querySelector('.modal-backdrop');
         if (backdrop) backdrop.addEventListener('click', close);
-        document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape' && modal.classList.contains('visible')) {
-                event.stopPropagation();
-                close();
-            }
-        }, true);
     }
 
     if (document.readyState === 'loading') {

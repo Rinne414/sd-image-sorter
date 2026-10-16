@@ -462,10 +462,18 @@
         const modal = document.getElementById('nav-customize-modal');
         if (!modal) return;
         renderCustomize();
-        modal.classList.add('visible');
+        if (typeof window.App?.showModal === 'function') {
+            window.App.showModal('nav-customize-modal', { onEscape: closeCustomize });
+        } else {
+            modal.classList.add('visible');
+        }
     }
 
     function closeCustomize() {
+        if (typeof window.App?.hideModal === 'function') {
+            window.App.hideModal('nav-customize-modal');
+            return;
+        }
         const modal = document.getElementById('nav-customize-modal');
         if (modal) modal.classList.remove('visible');
     }
@@ -502,12 +510,6 @@
         if (close) close.addEventListener('click', closeCustomize);
         const backdrop = modal.querySelector('.modal-backdrop');
         if (backdrop) backdrop.addEventListener('click', closeCustomize);
-        document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape' && modal.classList.contains('visible')) {
-                event.stopPropagation();
-                closeCustomize();
-            }
-        }, true);
     }
 
     // ------------------------------------------------------------------

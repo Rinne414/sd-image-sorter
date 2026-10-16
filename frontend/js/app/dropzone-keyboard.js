@@ -265,6 +265,14 @@ function initGlobalKeyboardShortcuts() {
             return;
         }
 
+        // A dialog or the shortcuts panel over the Gallery owns the keys. The
+        // image preview keeps the letter keys (R shows another random
+        // picture), but its Escape only closes the preview.
+        if (document.querySelector('.modal.visible:not(#image-modal), #keyboard-shortcuts-panel.visible')) {
+            return;
+        }
+        const isPreviewOpen = Boolean(document.getElementById('image-modal')?.classList.contains('visible'));
+
         // G - Toggle grid view
         if (e.key === 'g' || e.key === 'G') {
             e.preventDefault();
@@ -306,7 +314,7 @@ function initGlobalKeyboardShortcuts() {
         }
         // Escape - Clear selection
         else if (e.key === 'Escape') {
-            if (getSelectedGalleryCount() > 0) {
+            if (!isPreviewOpen && getSelectedGalleryCount() > 0) {
                 e.preventDefault();
                 clearSelectedIds({ scope: 'visible' });
                 updateSelectionUI();

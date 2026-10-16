@@ -769,6 +769,8 @@
         '#onboarding-overlay:not([hidden])',
         '.guide-overlay.visible',
         '.update-popup.visible',
+        // The ? shortcuts panel closes on ESC itself (keyboard-shortcuts.js).
+        '#keyboard-shortcuts-panel.visible',
         // Open dropdowns and gallery selection mode own ESC too. Their own
         // handlers close/clear on the same keypress; checking the DOM here is
         // registration-order safe where relying on stopPropagation between

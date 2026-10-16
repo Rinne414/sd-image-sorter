@@ -119,8 +119,14 @@ Object.assign(window.V321Integration, {
     async openCaptionEditor() {
         const modal = document.getElementById('caption-editor-modal');
         if (!modal) return;
-        modal.classList.add('visible');
         modal.style.display = 'flex';
+        // Through the app's dialog handling: it opens over the batch export
+        // dialog, and Escape closes only the topmost.
+        if (typeof window.App?.showModal === 'function') {
+            window.App.showModal('caption-editor-modal', { onEscape: () => this.closeCaptionEditor() });
+        } else {
+            modal.classList.add('visible');
+        }
         document.body.classList.add('modal-open');
         // If the inline preview hasn't been generated yet, fetch first; otherwise re-render in big container.
         if ((!this.queueImageIds || !this.queueImageIds.length) && (!this.previewResults || !this.previewResults.length)) {
@@ -137,7 +143,8 @@ Object.assign(window.V321Integration, {
     closeCaptionEditor() {
         const modal = document.getElementById('caption-editor-modal');
         if (!modal) return;
-        modal.classList.remove('visible');
+        if (typeof window.App?.hideModal === 'function') window.App.hideModal('caption-editor-modal');
+        else modal.classList.remove('visible');
         modal.style.display = '';
         if (!document.querySelector('.modal.visible')) {
             document.body.classList.remove('modal-open');
@@ -155,13 +162,10 @@ Object.assign(window.V321Integration, {
     _handleCaptionEditorKey(e) {
         const modal = document.getElementById('caption-editor-modal');
         if (!modal || !modal.classList.contains('visible')) return;
+        // A dialog over the editor owns the keys. Escape is answered by the
+        // app's dialog handling, topmost first.
+        if (typeof isTopModal === 'function' && !isTopModal('caption-editor-modal')) return;
         const inTextarea = e.target?.tagName === 'TEXTAREA' || e.target?.tagName === 'INPUT';
-
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            this.closeCaptionEditor();
-            return;
-        }
         // Ctrl+Enter / Cmd+Enter: save + next; Ctrl+Shift+Enter: save + prev
         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();

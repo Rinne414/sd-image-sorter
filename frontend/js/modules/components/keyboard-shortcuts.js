@@ -102,16 +102,29 @@ const KeyboardShortcutsPanel = (function () {
         if (isPanelOpen) return;
         createPanel();
         renderPanel(panelElement);
-        panelElement.classList.add('visible');
         isPanelOpen = true;
-        document.addEventListener('keydown', handleKeydown);
+        // Through the app's dialog handling: focus moves in and comes back,
+        // and Escape closes only the topmost dialog.
+        if (typeof window.App?.showModal === 'function') {
+            window.App.showModal(PANEL_ID, {
+                onEscape: hide,
+                initialFocus: panelElement.querySelector('.shortcuts-panel-close'),
+            });
+        } else {
+            panelElement.classList.add('visible');
+            document.addEventListener('keydown', handleKeydown);
+        }
     }
 
     function hide() {
         if (!isPanelOpen || !panelElement) return;
-        panelElement.classList.remove('visible');
         isPanelOpen = false;
-        document.removeEventListener('keydown', handleKeydown);
+        if (typeof window.App?.hideModal === 'function') {
+            window.App.hideModal(PANEL_ID);
+        } else {
+            panelElement.classList.remove('visible');
+            document.removeEventListener('keydown', handleKeydown);
+        }
     }
 
     function handleKeydown(e) {
