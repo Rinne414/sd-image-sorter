@@ -713,6 +713,11 @@
          * Stores `body` on the editor so the confirm-button handler can read it back.
          */
         _openConfirm(body, scopeSize, previewSignature, operationTab) {
+            // One countdown at a time: an earlier one would turn Apply on early.
+            if (this.confirmTimer) {
+                clearTimeout(this.confirmTimer);
+                this.confirmTimer = null;
+            }
             this._pendingApplyBody = body;
             this._pendingApplySignature = previewSignature;
             this._pendingApplyTab = operationTab;

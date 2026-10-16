@@ -264,13 +264,10 @@ function restoreWindowScrollPosition(position) {
     }
 }
 
-function trapFocus(modal) {
-    const focusableElements = modal.querySelectorAll(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    const firstFocusable = focusableElements[0];
-    const lastFocusable = focusableElements[focusableElements.length - 1];
+// Links only: [href] alone also matches an icon's SVG <use href>.
+const FOCUSABLE_IN_DIALOG = 'button, a[href], area[href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
+function trapFocus(modal) {
     // Remove existing trap if any
     if (_focusTrapHandler) {
         document.removeEventListener('keydown', _focusTrapHandler);
@@ -278,6 +275,13 @@ function trapFocus(modal) {
 
     _focusTrapHandler = (e) => {
         if (e.key !== 'Tab') return;
+        // Read the usable controls on each Tab: buttons turn on and off (a
+        // countdown, a form becoming valid) and parts of a dialog show and hide.
+        const usable = Array.from(modal.querySelectorAll(FOCUSABLE_IN_DIALOG))
+            .filter((element) => !element.disabled && element.tabIndex >= 0 && element.getClientRects().length > 0);
+        if (usable.length === 0) return;
+        const firstFocusable = usable[0];
+        const lastFocusable = usable[usable.length - 1];
 
         if (e.shiftKey) {
             if (document.activeElement === firstFocusable) {
