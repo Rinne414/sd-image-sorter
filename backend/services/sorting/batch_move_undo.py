@@ -257,7 +257,10 @@ class BatchMoveUndoMixin:
                 recent_errors=errors[-3:],
                 updated_at=time.time(),
             )
-        move_journal.mark_undone(token)
+        # Undone only when everything is back: after the user clears what kept
+        # the rest (a file in use, a taken name), the undo can run again.
+        if not errors:
+            move_journal.mark_undone(token)
         self._finish_undo(run_id, "done", total, total, restored, errors)
 
     def _finish_undo(
