@@ -253,7 +253,27 @@ function _openScanWithPath(folderPath) {
     showToast(appT('gallery.dropFolderDetected', 'Folder detected: {path}').replace('{path}', folderPath), 'info');
 }
 
+// Everything that answers the keyboard itself while open (Escape closes it).
+const GALLERY_KEYS_YIELD_TO = [
+    '.modal.visible:not(#image-modal)',
+    '#keyboard-shortcuts-panel.visible',
+    '.guide-overlay.visible',
+    '.onboarding-overlay',
+    '.update-popup.visible',
+    '.gallery-context-menu',
+    '#nav-tools-menu:not([hidden])',
+].join(', ');
+
 function initGlobalKeyboardShortcuts() {
+    // Read what is open before anything closes on this key: the Guide closes
+    // in the capture phase, the More menu in a listener added before this one.
+    let isOverlayOpen = false;
+    let isPreviewOpen = false;
+    document.addEventListener('keydown', () => {
+        isOverlayOpen = Boolean(document.querySelector(GALLERY_KEYS_YIELD_TO));
+        isPreviewOpen = Boolean(document.getElementById('image-modal')?.classList.contains('visible'));
+    }, true);
+
     document.addEventListener('keydown', (e) => {
         // Only handle when not in input/textarea
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
@@ -265,13 +285,12 @@ function initGlobalKeyboardShortcuts() {
             return;
         }
 
-        // A dialog or the shortcuts panel over the Gallery owns the keys. The
+        // A dialog, panel, popup or menu over the Gallery owns the keys. The
         // image preview keeps the letter keys (R shows another random
-        // picture), but its Escape only closes the preview.
-        if (document.querySelector('.modal.visible:not(#image-modal), #keyboard-shortcuts-panel.visible')) {
+        // picture), but Escape and Delete there leave the selection alone.
+        if (isOverlayOpen) {
             return;
         }
-        const isPreviewOpen = Boolean(document.getElementById('image-modal')?.classList.contains('visible'));
 
         // G - Toggle grid view
         if (e.key === 'g' || e.key === 'G') {
@@ -327,7 +346,7 @@ function initGlobalKeyboardShortcuts() {
         }
         // Delete - Remove from gallery only; permanent disk delete stays behind the explicit dangerous button.
         else if (e.key === 'Delete') {
-            if (getSelectedGalleryCount() > 0) {
+            if (!isPreviewOpen && getSelectedGalleryCount() > 0) {
                 e.preventDefault();
                 removeSelectedGalleryImages();
             }

@@ -766,7 +766,7 @@
         '.modal.visible',
         '.dataset-modal:not([hidden])',
         '.image-workspace.visible',
-        '#onboarding-overlay:not([hidden])',
+        '.onboarding-overlay',
         '.guide-overlay.visible',
         '.update-popup.visible',
         // The ? shortcuts panel closes on ESC itself (keyboard-shortcuts.js).

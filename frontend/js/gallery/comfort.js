@@ -559,7 +559,7 @@
     function _overlayBlockingPeek() {
         return Boolean(document.querySelector(
             '.modal.visible, .dataset-modal:not([hidden]), .image-workspace.visible, '
-            + '#onboarding-overlay:not([hidden]), .guide-overlay.visible, .update-popup.visible',
+            + '.onboarding-overlay, .guide-overlay.visible, .update-popup.visible',
         ));
     }
 
