@@ -2048,6 +2048,7 @@ window.I18nLang_en = {
     'modal.tagsUndoPartial': 'Partly undone: the parts changed again after this edit were kept',
     'modal.tagsUndoNothing': 'Nothing was changed: the tags were already as before this edit',
     'modal.tagsSaveFailed': 'Failed to update tags',
+    'modal.tagsSavePartial': 'The new tags were saved, but removing tags failed.',
     'modal.showMore': 'Show More',
     'modal.showLess': 'Show Less',
     'modal.aiCaption': 'AI Caption',

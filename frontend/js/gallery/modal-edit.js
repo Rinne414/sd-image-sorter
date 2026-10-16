@@ -112,29 +112,40 @@ Object.assign(window.Gallery, {
         const api = app.API;
         const saveBtn = document.querySelector('#btn-save-modal-tags');
         if (saveBtn) saveBtn.disabled = true;
+        // FE-2s: both bulk endpoints journal applied ops server-side —
+        // collect the op ids so the toast can offer real undo.
+        const opIds = [];
+        const undoOptions = () => (opIds.length === 0 ? undefined : {
+            duration: 10000,
+            actionLabel: this._t('modal.undo', null, 'Undo'),
+            onAction: () => this._undoModalTagOps(id, opIds)
+        });
+        let addWritten = false;
         try {
-            // FE-2s: both bulk endpoints journal applied ops server-side —
-            // collect the op ids so the success toast can offer real undo.
-            const opIds = [];
             if (added.length) {
                 const result = await api.post('/api/tags/bulk/add', { image_ids: [id], tags: added, dry_run: false });
+                addWritten = true;
                 if (result?.op_id && result?.undo_available) opIds.push(result.op_id);
             }
             if (removed.length) {
                 const result = await api.post('/api/tags/bulk/remove', { image_ids: [id], tags: removed, dry_run: false });
                 if (result?.op_id && result?.undo_available) opIds.push(result.op_id);
             }
-            const toastOptions = opIds.length === 0 ? undefined : {
-                duration: 10000,
-                actionLabel: this._t('modal.undo', null, 'Undo'),
-                onAction: () => this._undoModalTagOps(id, opIds)
-            };
-            app.showToast?.(this._t('modal.tagsSaved', null, 'Tags updated'), 'success', toastOptions);
+            app.showToast?.(this._t('modal.tagsSaved', null, 'Tags updated'), 'success', undoOptions());
             this._exitTagEdit();
             await this._reloadModalTags(id);
             app.loadImages?.();
         } catch (e) {
-            app.showToast?.(this._t('modal.tagsSaveFailed', null, 'Failed to update tags'), 'error');
+            if (addWritten) {
+                // The new tags are saved; taking the others out failed. Show
+                // what is saved now, with the undo of what was written.
+                app.showToast?.(this._t('modal.tagsSavePartial', null, 'The new tags were saved, but removing tags failed.'), 'warning', undoOptions());
+                this._exitTagEdit();
+                await this._reloadModalTags(id);
+                app.loadImages?.();
+            } else {
+                app.showToast?.(this._t('modal.tagsSaveFailed', null, 'Failed to update tags'), 'error');
+            }
         } finally {
             if (saveBtn) saveBtn.disabled = false;
         }

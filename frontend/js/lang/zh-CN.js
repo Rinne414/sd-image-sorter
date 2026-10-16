@@ -2225,6 +2225,7 @@ window.I18nLang_zhCN = {
     'modal.tagsUndoPartial': '只撤销了一部分：这次修改之后又改过的部分保留原样',
     'modal.tagsUndoNothing': '没有变化：标签本来就和这次修改之前一样',
     'modal.tagsSaveFailed': '更新标签失败',
+    'modal.tagsSavePartial': '新标签已保存，但删除标签失败。',
     'modal.showMore': '显示更多',
     'modal.showLess': '收起',
     'modal.aiCaption': 'AI 自然语言描述',
