@@ -252,7 +252,7 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
     let existingSkippedCount = 0;
     let lastSavedPath = '';
     const saveWarnings = new Set();
-    await processCensorBatchItems(async (item, { index, total }) => {
+    const batch = await processCensorBatchItems(async (item, { index, total }) => {
         // Unedited items go out as they are only when the save dialog, which
         // showed their count, was left on "export them as they are". Proxy-mode
         // strokes leave isProcessed=false but carry real editOperations;
@@ -302,7 +302,9 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
         onAction: () => revealCensorSavedFile(lastSavedPath),
         persistent: true,
     } : {};
-    if (failedCount > 0) {
+    if (batch.stopError) {
+        showCensorBatchStopped(batch, openFolder);
+    } else if (failedCount > 0) {
         window.App.showToast(
             censorT('censor.savePartial', {
                 count,

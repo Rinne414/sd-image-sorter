@@ -421,7 +421,9 @@ async function autoCensorBatch() {
     // "complete" toast. renderQueue() already red-outlines failed thumbs.
     const { failedCount } = _summarizeBatchFailures(processed);
     const { appliedCount, emptyCount } = _summarizeBatchDetections(processed);
-    if (failedCount > 0) {
+    if (result.stopError) {
+        showCensorBatchStopped(result);
+    } else if (failedCount > 0) {
         const okCount = Math.max(0, count - failedCount);
         showToast(
             censorT(
@@ -812,7 +814,9 @@ async function detectAllImages() {
     if (CensorState.activeId) loadCanvasImage(CensorState.activeId);
     failedCount = Math.max(failedCount, _summarizeBatchFailures(processed).failedCount);
     const total = result.total;
-    if (failedCount > 0) {
+    if (result.stopError) {
+        showCensorBatchStopped(result);
+    } else if (failedCount > 0) {
         showToast(
             censorT('censor.detectPartial', {
                 count,

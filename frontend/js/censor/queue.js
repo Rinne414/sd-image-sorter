@@ -544,12 +544,22 @@ async function processCensorBatchItems(handler, { pageSize = CENSOR_TOKEN_QUEUE_
     }
 
     const source = CensorState.tokenQueueSource;
+    let stopError = null;
     if (source?.selectionToken) {
         let offset = 0;
         let hasMore = true;
 
         while (hasMore) {
-            const page = await fetchTokenQueueDataPage(offset, pageSize);
+            let page;
+            try {
+                page = await fetchTokenQueueDataPage(offset, pageSize);
+            } catch (error) {
+                // The rest of the selection could not be read: stop here, and
+                // the caller says how far it got.
+                Logger.error(error);
+                stopError = error;
+                break;
+            }
             updateTokenQueueSourceFromPage(source, page, offset);
             total = Math.max(total, getTokenQueueTotal());
 
@@ -582,7 +592,19 @@ async function processCensorBatchItems(handler, { pageSize = CENSOR_TOKEN_QUEUE_
     return {
         completed,
         total: Math.max(total, completed),
+        stopError,
     };
+}
+
+/** A batch that stopped because the rest of the selection could not be read. */
+function showCensorBatchStopped(batch, toastOptions = {}) {
+    const reason = formatUserError(batch.stopError);
+    window.App.showToast(
+        censorT('censor.batchStopped', { done: batch.completed, total: batch.total, reason },
+            'Stopped after {done} of {total} image(s): the rest of the selection could not be loaded ({reason}).'),
+        'error',
+        toastOptions
+    );
 }
 
 // A name given here (Batch Rename) travels to the publish set; an untouched
@@ -619,8 +641,9 @@ async function sendCensorQueueToPublishSet() {
     let stagingFolder = '';
     let failedCount = 0;
     showLoading(true, censorT('censor.publishPreparing', null, 'Preparing the censored images for Publish Set...'));
+    let batch;
     try {
-        await processCensorBatchItems(async (item) => {
+        batch = await processCensorBatchItems(async (item) => {
             const entry = { id: Number(item.id), outputName: censorQueueRenamedName(item) };
             if (itemHasCensorContent(item)) {
                 try {
@@ -640,6 +663,12 @@ async function sendCensorQueueToPublishSet() {
         });
     } finally {
         showLoading(false);
+    }
+    // Part of the selection could not be read: a set of only the pictures
+    // read so far is not what was asked for.
+    if (batch.stopError) {
+        showCensorBatchStopped(batch);
+        return;
     }
     if (failedCount > 0) {
         window.App.showToast(censorT('censor.publishPrepareFailed', { count: failedCount },

@@ -1547,6 +1547,7 @@ window.I18nLang_zhCN = {
     'censor.noImagesToSave': '队列里没有可保存的图片',
     'censor.saveFailed': '保存失败',
     'censor.savePartial': '已保存 {count} 张图片 · {failedCount} 张失败（红框缩略图）',
+    'censor.batchStopped': '处理了 {done}/{total} 张后停止：所选范围里其余的图片没能载入（{reason}）。',
     'censor.saveSuccess': '已保存 {count} 张图片到 {folder}',
     'censor.saveSuccessAsIs': '已保存 {count} 张图片到 {folder}，其中 {asIs} 张没打码，照原图导出。',
     'censor.saveSkippedUnprocessed': '已保存 {count} 张打码图，{skipped} 张没打码的图没有导出。',

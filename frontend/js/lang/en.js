@@ -1536,6 +1536,7 @@ window.I18nLang_en = {
     'censor.noImagesToSave': 'No images in queue to save',
     'censor.saveFailed': 'Save failed',
     'censor.savePartial': 'Saved {count} images · {failedCount} failed (red-outlined thumbnails)',
+    'censor.batchStopped': 'Stopped after {done} of {total} image(s): the rest of the selection could not be loaded ({reason}).',
     'censor.saveSuccess': 'Saved {count} images to {folder}',
     'censor.saveSuccessAsIs': 'Saved {count} images to {folder}. {asIs} had no censoring and went out as they are.',
     'censor.saveSkippedUnprocessed': 'Saved {count} censored image(s); {skipped} uncensored image(s) were not exported.',
