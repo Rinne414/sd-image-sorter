@@ -2260,6 +2260,7 @@ window.I18nLang_en = {
     'selection.moveCopyPartial': '{operation} completed for {success} image(s). {failed} failed.',
     'selection.moveCopyFailed': 'Failed to {operation} selected images',
     'selection.moveCopyCancelled': '{operation} cancelled after {count} image(s).',
+    'selection.moveCopyUnknown': '{operation} ended without a report; the program may have restarted. Check the destination folder.',
     'move.movingVerb': 'Moving',
     'move.copyingVerb': 'Copying',
     'move.sourceNote': ' · originals removed as each file moves',

@@ -2436,6 +2436,7 @@ window.I18nLang_zhCN = {
     'selection.moveCopyPartial': '{operation}完成：{success} 张图片，{failed} 张失败。',
     'selection.moveCopyFailed': '{operation}已选图片失败',
     'selection.moveCopyCancelled': '{operation}已取消，已处理 {count} 张图片。',
+    'selection.moveCopyUnknown': '{operation}结束了，但没有拿到结果，程序可能重启过。请检查目标文件夹。',
     'move.movingVerb': '移动中',
     'move.copyingVerb': '复制中',
     'move.sourceNote': ' · 每移动一张就会删除一张原文件',

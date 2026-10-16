@@ -434,6 +434,17 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
             await loadImages(false, { keepPosition: true });
             await loadStats();
 
+            // The job is gone without a report (the program restarted mid-move):
+            // not known what moved, so not "completed" and not "failed".
+            if (results.length === 0 && finalProgress?.status === 'idle') {
+                showToast(
+                    appT('selection.moveCopyUnknown', '{operation} ended without a report; the program may have restarted. Check the destination folder.')
+                        .replace('{operation}', operationLabel),
+                    'warning'
+                );
+                return;
+            }
+
             if (finalProgress?.status === 'cancelled') {
                 showToast(
                     appT('selection.moveCopyCancelled', '{operation} cancelled after {count} image(s).')
