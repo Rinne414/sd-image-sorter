@@ -52,7 +52,8 @@ function showConfirm(title, message, onOk, onCancel, options = {}) {
         answer(false, { hide: false });
     });
 
-    showModal('confirm-modal');
+    // It has no close button: start on Cancel, the safe answer.
+    showModal('confirm-modal', { initialFocus: $('#btn-confirm-cancel') });
 }
 
 function showRandomImage() {
