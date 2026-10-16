@@ -81,6 +81,7 @@ class _EditApplyMixin:
             output_format = self._normalize_output_format(request.output_format)
             ext = f".{output_format}"
 
+            metadata_warnings: List[str] = []
             if request.metadata_option == "strip":
                 image_to_save = self._strip_all_metadata(working_image)
                 save_kwargs = {}
@@ -91,10 +92,13 @@ class _EditApplyMixin:
                     request.original_image_id,
                     request.metadata_option,
                     output_format,
+                    warnings=metadata_warnings,
                 )
 
             def _write_operations_save(final_output_path: str, _overwrite_requested: bool) -> List[str]:
-                return self._save_image_with_format(image_to_save, final_output_path, output_format, save_kwargs)
+                return metadata_warnings + self._save_image_with_format(
+                    image_to_save, final_output_path, output_format, save_kwargs
+                )
 
             return self._write_named_output(
                 output_folder,

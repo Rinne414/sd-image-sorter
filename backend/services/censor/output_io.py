@@ -67,6 +67,41 @@ def _discard_empty_placeholder(path: str) -> None:
         logger.warning("Could not remove unused output placeholder %s", path)
 
 
+# The save asked to keep the metadata but the original could not be read.
+METADATA_NOT_COPIED_WARNING = (
+    "The original picture could not be read, so its prompt and metadata were not copied into this save."
+)
+
+
+def _staging_for(target: Path) -> tuple:
+    """A sibling staging file whose name ends in .tmp: one a killed process
+    leaves behind must not look like an image to the scan, which admits files
+    by extension alone (image_manager._copy_file_atomically does the same)."""
+    return create_staging_sibling(target.with_name(f"{target.name}.tmp"))
+
+
+def _copy_file_atomically(source_path: str, output_path: str) -> None:
+    """Copy the bytes into a sibling staging file, then publish it over the destination."""
+    target = Path(output_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staging, descriptor = _staging_for(target)
+    os.close(descriptor)
+    try:
+        shutil.copyfile(source_path, staging)
+        # The bytes reach the disk before the name does.
+        flushed = os.open(staging, os.O_RDWR | getattr(os, "O_BINARY", 0))
+        try:
+            os.fsync(flushed)
+        except OSError:
+            pass
+        finally:
+            os.close(flushed)
+        publish_staging_file(staging, target)
+    except BaseException:
+        discard_staging_file(staging)
+        raise
+
+
 def _combine_save_warnings(writer_warnings: List[str], reconcile_warnings: List[str]) -> List[str]:
     '''Return stable, de-duplicated warnings from image conversion and reconciliation.'''
     return list(dict.fromkeys([*writer_warnings, *reconcile_warnings]))
@@ -106,7 +141,7 @@ def _save_pillow_image_atomically(
     """
     target = Path(output_path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    staging, descriptor = create_staging_sibling(target)
+    staging, descriptor = _staging_for(target)
     try:
         handle = os.fdopen(descriptor, "wb")
     except BaseException:
@@ -534,13 +569,14 @@ class _OutputMixin:
 
             if output_format == source_format and request.metadata_option == "keep":
                 def _write(final_output_path: str, _overwrite_requested: bool) -> List[str]:
-                    shutil.copyfile(source_path, final_output_path)
+                    _copy_file_atomically(source_path, final_output_path)
                     return []
             else:
                 with Image.open(source_path) as src:
                     src.load()
                     image = src.copy()
                     image.info = dict(src.info)
+                metadata_warnings: List[str] = []
                 if request.metadata_option == "strip":
                     image = self._strip_all_metadata(image)
                     save_kwargs: Dict[str, object] = {}
@@ -550,10 +586,13 @@ class _OutputMixin:
                         request.original_image_id,
                         request.metadata_option,
                         output_format,
+                        warnings=metadata_warnings,
                     )
 
                 def _write(final_output_path: str, _overwrite_requested: bool) -> List[str]:
-                    return self._save_image_with_format(image, final_output_path, output_format, save_kwargs)
+                    return metadata_warnings + self._save_image_with_format(
+                        image, final_output_path, output_format, save_kwargs
+                    )
 
             return self._write_named_output(
                 output_folder,
@@ -595,6 +634,7 @@ class _OutputMixin:
             ext = f".{output_format}"
 
             save_kwargs: Dict[str, object]
+            metadata_warnings: List[str] = []
             if request.metadata_option == "strip":
                 image = self._strip_all_metadata(image)
                 save_kwargs = {}
@@ -603,11 +643,14 @@ class _OutputMixin:
                     image,
                     request.original_image_id,
                     request.metadata_option,
-                    output_format
+                    output_format,
+                    warnings=metadata_warnings,
                 )
 
             def _write_canvas_save(final_output_path: str, _overwrite_requested: bool) -> List[str]:
-                return self._save_image_with_format(image, final_output_path, output_format, save_kwargs)
+                return metadata_warnings + self._save_image_with_format(
+                    image, final_output_path, output_format, save_kwargs
+                )
 
             return self._write_named_output(
                 output_folder,
@@ -752,9 +795,14 @@ class _OutputMixin:
         image: Image.Image,
         original_image_id: Optional[int],
         metadata_option: str,
-        output_format: str
+        output_format: str,
+        warnings: Optional[List[str]] = None,
     ) -> Dict[str, object]:
-        """Prepare save kwargs with metadata based on options."""
+        """Prepare save kwargs with metadata based on options.
+
+        When the metadata of a given original cannot be read, ``warnings``
+        gets METADATA_NOT_COPIED_WARNING: the save goes on without it.
+        """
         save_kwargs: Dict[str, object] = {}
 
         if metadata_option == "strip":
@@ -765,6 +813,8 @@ class _OutputMixin:
 
         original_image_data = db.get_image_by_id(original_image_id)
         if not original_image_data:
+            if warnings is not None:
+                warnings.append(METADATA_NOT_COPIED_WARNING)
             return save_kwargs
 
         try:
@@ -804,6 +854,8 @@ class _OutputMixin:
 
         except Exception as e:
             logger.warning("Could not copy metadata from original: %s", e)
+            if warnings is not None:
+                warnings.append(METADATA_NOT_COPIED_WARNING)
 
         return save_kwargs
 
