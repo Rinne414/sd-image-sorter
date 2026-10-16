@@ -92,7 +92,7 @@ test('the entry catalog takes focus and closes alone on Escape, leaving the entr
   await expect(page.locator('#dialog-opener')).toBeFocused()
 })
 
-test('Customize takes focus and closes on Escape', async ({ page }) => {
+test('Customize takes focus, closes on Escape and hands focus to the More button', async ({ page }) => {
   await openApp(page)
   await page.locator('#nav-tools-toggle').click()
   await page.locator('#nav-tools-customize').click()
@@ -100,6 +100,8 @@ test('Customize takes focus and closes on Escape', async ({ page }) => {
   await expect.poll(() => focusInside(page, 'nav-customize-modal')).toBe(true)
   await page.keyboard.press('Escape')
   await expect(page.locator('#nav-customize-modal')).not.toHaveClass(/visible/)
+  // The menu item that opened it is hidden with the closed menu.
+  await expect(page.locator('#nav-tools-toggle')).toBeFocused()
 })
 
 const MOCK_IMAGE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#789"/></svg>'

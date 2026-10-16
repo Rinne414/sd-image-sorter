@@ -483,6 +483,9 @@
         if (opener) {
             opener.addEventListener('click', () => {
                 if (typeof window._closeNavToolsMenu === 'function') window._closeNavToolsMenu();
+                // The closed menu hides this item; closing Customize hands
+                // focus back to the More button instead.
+                document.getElementById('nav-tools-toggle')?.focus();
                 openCustomize();
             });
         }
