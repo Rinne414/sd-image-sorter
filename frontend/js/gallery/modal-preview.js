@@ -330,6 +330,8 @@ ${String(value)}`)
                 e.preventDefault();
                 this.openAdjacentPreview(1);
             } else if (e.key === 'Escape') {
+                // A dialog above answered this keypress and closed first.
+                if (typeof claimEscape === 'function' && !claimEscape(e)) return;
                 document.removeEventListener('keydown', this._modalKeydownHandler);
                 this._modalKeydownHandler = null;
                 const closeModal = window.App?.closeModal || window.closeModal;

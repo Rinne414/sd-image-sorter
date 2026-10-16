@@ -227,6 +227,18 @@ function _topOpenModal() {
     return null;
 }
 
+// One Escape closes one dialog. The first dialog to answer it marks the
+// keypress, so the dialog under it, topmost a moment later in the same
+// keypress, waits for the next one.
+const _answeredEscapes = new WeakSet();
+
+/** False when another dialog already answered this Escape keypress. */
+function claimEscape(event) {
+    if (_answeredEscapes.has(event)) return false;
+    _answeredEscapes.add(event);
+    return true;
+}
+
 /** True when this dialog is open and nothing sits on top of it. */
 function isTopModal(modalId) {
     return _topOpenModal()?.modal.id === modalId;
@@ -314,17 +326,19 @@ function releaseFocus(modal) {
 function showModal(modalId, options = {}) {
     const modal = $(`#${modalId}`);
     if (modal) {
-        // Remember what opened this dialog. Opening it again while it shows
-        // keeps the first opener: focus is inside the dialog by then. An entry
-        // left by a dialog hidden with a class toggle is stale, not reused.
+        // Remember what opened this dialog. Shown again while it is open (the
+        // preview's next picture, a refresh), it keeps its place, its first
+        // opener and the scroll to restore: a dialog above it stays on top.
+        // An entry left by a dialog hidden with a class toggle is stale.
         const previous = _openModalStack.findIndex((entry) => entry.modal === modal);
-        const [earlier] = previous >= 0 ? _openModalStack.splice(previous, 1) : [];
-        const returnFocus = earlier && modal.classList.contains('visible')
-            ? earlier.returnFocus
-            : document.activeElement;
-        _openModalStack.push({ modal, returnFocus });
-        modal._previousWindowScrollPosition = readWindowScrollPosition();
+        const isAlreadyOpen = previous >= 0 && modal.classList.contains('visible');
+        if (!isAlreadyOpen) {
+            if (previous >= 0) _openModalStack.splice(previous, 1);
+            _openModalStack.push({ modal, returnFocus: document.activeElement });
+            modal._previousWindowScrollPosition = readWindowScrollPosition();
+        }
         modal.classList.add('visible');
+        const isTopmost = _topOpenModal()?.modal === modal;
 
         // Populate recent folders datalist when scan modal opens
         if (modalId === 'scan-modal') {
@@ -354,13 +368,17 @@ function showModal(modalId, options = {}) {
             if (typeof loadSystemInfo === 'function') loadSystemInfo();
         }
 
-        // Set up focus trap
-        trapFocus(modal);
+        // Set up focus trap (a dialog above keeps its own)
+        if (isTopmost) trapFocus(modal);
 
-        // Add escape key handler to close modal
+        // Add escape key handler to close modal, replacing the one from an
+        // earlier show
+        if (modal._escapeHandler) {
+            document.removeEventListener('keydown', modal._escapeHandler);
+        }
         const escapeHandler = (e) => {
             // Only the topmost dialog answers; one under it waits its turn.
-            if (e.key === 'Escape' && _topOpenModal()?.modal === modal) {
+            if (e.key === 'Escape' && _topOpenModal()?.modal === modal && claimEscape(e)) {
                 e.preventDefault();
                 if (typeof options.onEscape === 'function') {
                     // Still open: keep answering Escape.
@@ -383,7 +401,7 @@ function showModal(modalId, options = {}) {
         // Focus the close button for accessibility, or the field the dialog
         // starts in
         const firstFocus = options.initialFocus || modal.querySelector('.modal-close');
-        if (firstFocus) {
+        if (firstFocus && isTopmost) {
             setTimeout(() => firstFocus.focus(), 100);
         }
     }
