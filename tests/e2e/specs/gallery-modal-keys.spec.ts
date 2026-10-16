@@ -1,4 +1,10 @@
+import fs from 'node:fs'
+import path from 'node:path'
+
+import type { APIRequestContext } from '@playwright/test'
+
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { createTestImage } from '../fixtures/test-helpers'
 
 /**
  * The image preview's arrow keys switch images. They used to fire while the
@@ -8,6 +14,41 @@ import { expect, test, type Page } from '../fixtures/click-ledger'
  */
 
 test.use({ viewport: { width: 1366, height: 768 } })
+
+// The preview needs two pictures. The file brings its own instead of relying
+// on an earlier spec's scan, so it also passes alone from a fresh library.
+const FIXTURE_DIR = path.resolve(__dirname, '../../../.tmp/e2e-modal-keys-images')
+const FIXTURE_KEY = FIXTURE_DIR.replace(/\\/g, '/').toLowerCase()
+let seededIds: number[] = []
+
+const seededImageIds = async (api: APIRequestContext): Promise<number[]> => {
+  const listed = await (await api.get('/api/images?limit=500&sort_by=newest')).json()
+  return (listed.images || [])
+    .filter((image: { path?: string }) => String(image.path || '').replace(/\\/g, '/').toLowerCase().startsWith(FIXTURE_KEY))
+    .map((image: { id: number }) => image.id)
+}
+
+test.beforeAll(async ({ playwright }, testInfo) => {
+  fs.rmSync(FIXTURE_DIR, { recursive: true, force: true })
+  fs.mkdirSync(FIXTURE_DIR, { recursive: true })
+  for (const [index, color] of ['teal', 'orange', 'navy'].entries()) {
+    await createTestImage(FIXTURE_DIR, `modal_keys_${index}.png`, { color, generator: 'webui', prompt: `modal keys fixture ${index}, 1girl` })
+  }
+  const api = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL })
+  expect((await api.post('/api/scan', { data: { folder_path: FIXTURE_DIR } })).ok()).toBe(true)
+  // Done when the three pictures are in the library.
+  await expect.poll(async () => (await seededImageIds(api)).length, { timeout: 60_000 }).toBe(3)
+  seededIds = await seededImageIds(api)
+  await api.dispose()
+})
+
+test.afterAll(async ({ playwright }, testInfo) => {
+  if (!seededIds.length) return
+  const api = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL })
+  await api.post('/api/images/remove-selected', { data: { image_ids: seededIds } })
+  await api.dispose()
+  fs.rmSync(FIXTURE_DIR, { recursive: true, force: true })
+})
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
