@@ -313,6 +313,9 @@ ${String(value)}`)
                 this._modalKeydownHandler = null;
                 return;
             }
+            // A dialog on top (Delete asks first) owns the keys: an arrow would
+            // switch the picture under the question, Escape close both.
+            if (typeof isTopModal === 'function' && !isTopModal('image-modal')) return;
             // Typing in the tag or caption editor: arrows move the cursor;
             // switching images would drop the unsaved edit.
             const target = e.target;
