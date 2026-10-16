@@ -321,7 +321,8 @@ function releaseFocus(modal) {
  * Show a dialog. options.onEscape runs instead of a plain hide when the
  * dialog's own close also tidies up; it returns false when Escape answered
  * something inside the dialog and the dialog stays open. options.initialFocus
- * is where focus starts (the close button otherwise).
+ * is where focus starts; otherwise the dialog's data-initial-focus selector,
+ * then its close button.
  */
 function showModal(modalId, options = {}) {
     const modal = $(`#${modalId}`);
@@ -400,7 +401,8 @@ function showModal(modalId, options = {}) {
 
         // Focus the close button for accessibility, or the field the dialog
         // starts in
-        const firstFocus = options.initialFocus || modal.querySelector('.modal-close');
+        const namedStart = modal.dataset.initialFocus ? modal.querySelector(modal.dataset.initialFocus) : null;
+        const firstFocus = options.initialFocus || namedStart || modal.querySelector('.modal-close');
         if (firstFocus && isTopmost) {
             setTimeout(() => firstFocus.focus(), 100);
         }

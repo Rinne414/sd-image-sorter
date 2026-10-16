@@ -754,7 +754,13 @@
                     dl.appendChild(dd);
                 });
             }
-            document.getElementById("mass-tag-confirm-modal")?.classList.add("visible");
+            // On the dialog stack, above the editor: Escape cancels this
+            // question, not the editor behind it.
+            if (typeof window.showModal === "function") {
+                window.showModal("mass-tag-confirm-modal", { onEscape: () => this.closeConfirm() });
+            } else {
+                document.getElementById("mass-tag-confirm-modal")?.classList.add("visible");
+            }
 
             // Disable Apply for 2s; update label with countdown.
             const btn = document.getElementById("btn-mass-tag-confirm-apply");
@@ -778,7 +784,11 @@
         },
 
         closeConfirm() {
-            document.getElementById("mass-tag-confirm-modal")?.classList.remove("visible");
+            if (typeof window.hideModal === "function") {
+                window.hideModal("mass-tag-confirm-modal");
+            } else {
+                document.getElementById("mass-tag-confirm-modal")?.classList.remove("visible");
+            }
             if (this.confirmTimer) {
                 clearTimeout(this.confirmTimer);
                 this.confirmTimer = null;

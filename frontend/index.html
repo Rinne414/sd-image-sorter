@@ -6216,7 +6216,7 @@
 
         <!-- Scan Modal -->
         <!-- v3.3.2 Library Navigation: multi-root management + idle auto-refresh toggle -->
-        <div class="modal" id="library-roots-modal" role="dialog" aria-modal="true" aria-labelledby="library-roots-modal-title">
+        <div class="modal" id="library-roots-modal" role="dialog" aria-modal="true" aria-labelledby="library-roots-modal-title" data-initial-focus="#btn-library-roots-close">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-medium">
                 <h3 id="library-roots-modal-title" data-i18n="libraryRoots.title">Library Folders</h3>
@@ -6282,7 +6282,7 @@
                 <div class="media-censor-progress" id="media-censor-progress" aria-live="polite"></div>
             </div>
         </div>
-        <div class="modal" id="scan-modal" role="dialog" aria-modal="true" aria-labelledby="scan-modal-title">
+        <div class="modal" id="scan-modal" role="dialog" aria-modal="true" aria-labelledby="scan-modal-title" data-initial-focus="#scan-folder-path">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-medium">
                 <h3 id="scan-modal-title" data-i18n="modal.scanFolder">Import Image Folder</h3>
@@ -6377,7 +6377,7 @@
             </div>
         </div>
 
-        <div class="modal" id="reconnect-modal" role="dialog" aria-modal="true" aria-labelledby="reconnect-modal-title">
+        <div class="modal" id="reconnect-modal" role="dialog" aria-modal="true" aria-labelledby="reconnect-modal-title" data-initial-focus="#reconnect-folder-path">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-small">
                 <h3 id="reconnect-modal-title" data-i18n="reconnect.title">Find Moved Images</h3>
@@ -9318,10 +9318,10 @@
     </div>
 
     <!-- Mass Tag Editor Confirm Dialog (>1000 scope) -->
-    <div class="modal" id="mass-tag-confirm-modal">
+    <div class="modal" id="mass-tag-confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="mass-tag-confirm-title" data-initial-focus="#btn-mass-tag-confirm-cancel">
         <div class="modal-backdrop"></div>
         <div class="modal-content modal-small mass-tag-confirm-shell">
-            <h3>
+            <h3 id="mass-tag-confirm-title">
                 <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg></span>
                 <span data-i18n="massTag.confirmTitle">Confirm bulk edit</span>
             </h3>
