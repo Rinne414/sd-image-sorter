@@ -107,10 +107,14 @@ function showAutosepMoveProgress(total) {
     const hideBtn = document.getElementById('btn-hide-autosep-move');
     if (hideBtn) {
         hideBtn.onclick = () => {
-            // Hide only dismisses the panel. The backend worker keeps
-            // running; resumeAutosepMoveProgress() will re-attach if the
-            // user navigates back while the worker is still active.
-            hideAutosepMoveProgress();
+            // While the move runs, Hide only folds the panel away: the page
+            // keeps following it and still reports how it ended. Once it has
+            // ended (the button reads Close), it clears the panel.
+            if (autosepMoveController?.active) {
+                document.getElementById('autosep-move-progress')?.classList.remove('visible');
+            } else {
+                hideAutosepMoveProgress();
+            }
         };
     }
     const resetBtn = document.getElementById('btn-reset-autosep-move');
@@ -163,6 +167,8 @@ function formatAutosepMoveError(entry) {
 }
 
 function preserveAutosepMoveErrorDetails() {
+    // Folded away with Hide while it ran: the failures bring it back.
+    document.getElementById('autosep-move-progress')?.classList.add('visible');
     const cancelBtn = document.getElementById('btn-cancel-autosep-move');
     if (cancelBtn) cancelBtn.disabled = true;
 
@@ -247,6 +253,17 @@ function updateAutosepMoveProgress(progress, fallbackTotal) {
     renderAutosepMoveErrors(Array.isArray(progress.recent_errors) ? progress.recent_errors : []);
 }
 
+// Pictures left their folders: the preview lists files that moved.
+function clearAutoSepPreviewAfterMove() {
+    AutoSepState.matchCount = 0;
+    AutoSepState.previewImages = [];
+    AutoSepState.previewSignature = null;
+    _resetAutoSepOverflowState(null);
+    const count = document.querySelector('#autosep-preview .stat-number');
+    if (count) count.textContent = '0';
+    renderAutoSepPreviewList([], 0);
+}
+
 async function pollAutosepMoveProgress(expectedTotal, destination) {
     if (autosepMoveController?.active) return;
 
@@ -261,6 +278,7 @@ async function pollAutosepMoveProgress(expectedTotal, destination) {
     // concluding it never started, so the progress bar doesn't flash-and-vanish.
     const AUTOSEP_IDLE_GRACE_POLLS = 8;
     let idlePolls = 0;
+    let wasStalled = false;
 
     try {
         while (autosepMoveController === controller && controller.active) {
@@ -288,10 +306,12 @@ async function pollAutosepMoveProgress(expectedTotal, destination) {
             // holding it keeps this loop and this panel alive forever, and
             // every later batch move is refused with 409. Offer the reset once
             // the state has genuinely stopped moving.
-            setStuckJobResetVisible(
-                document.getElementById('btn-reset-autosep-move'),
-                isStuckJobStalled(autosepMoveStuckWatcher, progress.status)
-            );
+            const isStalled = isStuckJobStalled(autosepMoveStuckWatcher, progress.status);
+            setStuckJobResetVisible(document.getElementById('btn-reset-autosep-move'), isStalled);
+            // Its reset button lives in the panel: a folded panel comes back
+            // once, when the job stalls (Hide still folds it after that).
+            if (isStalled && !wasStalled) document.getElementById('autosep-move-progress')?.classList.add('visible');
+            wasStalled = isStalled;
 
             if (progress.status === 'done') {
                 setTimeout(() => {
@@ -350,12 +370,7 @@ async function pollAutosepMoveProgress(expectedTotal, destination) {
                     }
 
                     if (movedCount > 0) {
-                        AutoSepState.matchCount = 0;
-                        AutoSepState.previewImages = [];
-                        AutoSepState.previewSignature = null;
-                        _resetAutoSepOverflowState(null);
-                        document.querySelector('#autosep-preview .stat-number').textContent = '0';
-                        renderAutoSepPreviewList([], 0);
+                        clearAutoSepPreviewAfterMove();
 
                         if (window.App && window.App.loadImages) {
                             window.App.loadImages();
@@ -397,8 +412,9 @@ async function pollAutosepMoveProgress(expectedTotal, destination) {
                 // Refresh the gallery so the partially-moved files reflect
                 // their new on-disk locations. Skip the refresh when nothing
                 // was committed — there's nothing to update.
-                if (movedCount > 0 && window.App && window.App.loadImages) {
-                    window.App.loadImages();
+                if (movedCount > 0) {
+                    clearAutoSepPreviewAfterMove();
+                    window.App?.loadImages?.();
                 }
                 break;
             }
@@ -406,13 +422,30 @@ async function pollAutosepMoveProgress(expectedTotal, destination) {
             if (progress.status === 'error') {
                 hideAutosepMoveProgress();
                 const operationMode = normalizeAutoSepOperationMode(progress.operation || getAutoSepOperationMode());
-                window.App.showToast(
-                    _formatAutoSepI18n(
-                        operationMode === 'copy' ? 'autosep.copyFailed' : 'autosep.moveFailed',
-                        operationMode === 'copy' ? 'Failed to copy images' : 'Failed to move images'
-                    ),
-                    'error'
-                );
+                const movedCount = Number(progress.moved || 0);
+                if (movedCount > 0) {
+                    // The pictures handled before the error stay where they went.
+                    window.App.showToast(
+                        _formatAutoSepI18n(
+                            operationMode === 'copy' ? 'autosep.copyFailedAfter' : 'autosep.moveFailedAfter',
+                            operationMode === 'copy'
+                                ? 'Copying stopped on an error after {count} images; the rest were not copied.'
+                                : 'Moving stopped on an error after {count} images; the rest stay where they were.',
+                            { count: movedCount }
+                        ),
+                        'error'
+                    );
+                    clearAutoSepPreviewAfterMove();
+                    window.App.loadImages?.();
+                } else {
+                    window.App.showToast(
+                        _formatAutoSepI18n(
+                            operationMode === 'copy' ? 'autosep.copyFailed' : 'autosep.moveFailed',
+                            operationMode === 'copy' ? 'Failed to copy images' : 'Failed to move images'
+                        ),
+                        'error'
+                    );
+                }
                 break;
             }
 
@@ -444,6 +477,14 @@ async function resumeAutosepMoveProgress() {
 // Enhanced execute with progress tracking
 async function executeAutoSeparateWithProgress() {
     const { $, API, showToast, showConfirm } = window.App;
+
+    // A move this page still follows (its panel may be folded away): a second
+    // start would be refused, and its failure path would drop the first one.
+    if (autosepMoveController?.active) {
+        document.getElementById('autosep-move-progress')?.classList.add('visible');
+        showToast(_formatAutoSepI18n('autosep.moveAlreadyRunning', 'A move is still running; its progress is shown again.'), 'info');
+        return;
+    }
 
     const destEl = $('#autosep-destination');
     const destination = destEl ? destEl.value.trim() : '';
