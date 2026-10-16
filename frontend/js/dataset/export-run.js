@@ -809,6 +809,7 @@
                 return {
                     status: 'failed',
                     stale_job_id: false,
+                    outcome_unknown: true,
                     error_samples: [this._t('dataset.exportJobTimeout',
                         'Stopped waiting because the export didn\'t finish in time. Check the output folder and export again if files are missing.')],
                 };
@@ -824,6 +825,7 @@
                         return {
                             status: 'failed',
                             stale_job_id: true,
+                            outcome_unknown: true,
                             error_samples: [this._t('dataset.exportJobLost',
                                 'The export job is gone; the app may have restarted. Check the output folder and export again if files are missing.')],
                         };
@@ -967,10 +969,17 @@
                 output_folder: view.output_folder || folder,
                 error_messages: view.recent_errors,
             };
+            // The page stopped waiting: how far the export got is not known.
+            if (progress.outcome_unknown) result.outcome_unknown = true;
             invalidateReadinessAfterExport(this, progress, result);
             this._showResultModal(result.status || (progress.status === 'cancelled' ? 'cancelled' : 'ok'), result);
         } catch (e) {
-            this._showResultModal('failed', { errorMessages: [e.message], output_folder: folder });
+            // Once the job had started, losing track of it says nothing about the files.
+            this._showResultModal('failed', {
+                errorMessages: [e.message],
+                output_folder: folder,
+                outcome_unknown: Boolean(this._activeExportJobId),
+            });
         } finally {
             this._activeExportJobId = null;
             this._exportCancelRequested = false;
@@ -1026,6 +1035,7 @@
                 output_folder: view.output_folder,
                 error_messages: view.recent_errors,
             };
+            if (finalProgress.outcome_unknown) result.outcome_unknown = true;
             invalidateReadinessAfterExport(this, finalProgress, result);
             this._showResultModal(result.status || 'failed', result);
         } catch (e) {
@@ -1134,6 +1144,14 @@
                 html = this._t('dataset.resultDetailCancelled',
                     'Export stopped. <strong>{exported}</strong> image+caption pairs were written before cancellation. Files are in <code>{folder}</code>',
                     { exported, folder: escapeHtml(folder) });
+            } else if (exported > 0) {
+                html = this._t('dataset.resultDetailFailedAfter',
+                    'The export stopped on an error after <strong>{exported}</strong> image+caption pairs were written. Files are in <code>{folder}</code>. Check the error details below.',
+                    { exported, folder: escapeHtml(folder) });
+            } else if (data.outcome_unknown) {
+                html = this._t('dataset.resultDetailUnknown',
+                    'It is not known how far the export got. Check <code>{folder}</code> before exporting again; the error details are below.',
+                    { folder: escapeHtml(folder || this._t('dataset.outputFolderFallback', 'the output folder')) });
             } else {
                 html = this._t('dataset.resultDetailFailed',
                     'No files were written. Check the error details below.');
