@@ -7,6 +7,8 @@ its build exists; ``/?ui=classic`` always opens the classic interface.
 
 from __future__ import annotations
 
+import logging
+import os
 from pathlib import Path
 
 import pytest
@@ -113,3 +115,111 @@ def test_the_choice_is_written_whole(tmp_path, monkeypatch):
     assert not list((tmp_path / "config").glob("*.tmp"))
     with pytest.raises(ValueError):
         interface_preference.set_preferred_interface("v4")
+
+
+def _hold_the_choice_file(monkeypatch, times=None):
+    """Make ``os.replace`` onto interface.json refuse like a held file on
+    Windows: ``times`` refusals, or every one when ``times`` is None."""
+    real_replace = os.replace
+    left = {"count": times}
+
+    def held(src, dst):
+        if Path(dst).name == "interface.json" and left["count"] != 0:
+            if left["count"] is not None:
+                left["count"] -= 1
+            raise PermissionError(13, "in use")
+        real_replace(src, dst)
+
+    monkeypatch.setattr(interface_preference, "_REPLACE_RETRY_SECONDS", 0.0)
+    monkeypatch.setattr(interface_preference.os, "replace", held)
+    return left
+
+
+def test_a_file_held_for_a_moment_is_still_replaced(tmp_path, monkeypatch):
+    """Windows refuses the replace while a reader holds the file (the ``/``
+    route, an antivirus scan); the save waits that moment out."""
+    monkeypatch.setattr(interface_preference, "CONFIG_DIR", tmp_path)
+    left = _hold_the_choice_file(monkeypatch, times=2)
+    assert interface_preference.set_preferred_interface("vopus") == "vopus"
+    assert left["count"] == 0
+    assert (tmp_path / "interface.json").read_text(encoding="utf-8") == (
+        '{"interface": "vopus"}'
+    )
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_a_file_that_stays_held_answers_503_with_a_reason(
+    test_client, vopus_built, monkeypatch
+):
+    test_client.put("/api/interface", json={"interface": "vopus"})
+    _hold_the_choice_file(monkeypatch)
+    res = test_client.put("/api/interface", json={"interface": "classic"})
+    assert res.status_code == 503
+    assert res.json()["error"] == interface_preference.INTERFACE_FILE_BUSY_ERROR
+    assert interface_preference.get_preferred_interface() == "vopus"
+    folder = interface_preference._preference_path().parent
+    assert not list(folder.glob("*.tmp"))
+
+
+def test_a_held_temp_file_does_not_hide_the_reason(tmp_path, monkeypatch):
+    monkeypatch.setattr(interface_preference, "CONFIG_DIR", tmp_path)
+    _hold_the_choice_file(monkeypatch)
+    real_unlink = Path.unlink
+
+    def held_unlink(self, *args, **kwargs):
+        if self.name == "interface.json.tmp":
+            raise PermissionError(13, "in use")
+        return real_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", held_unlink)
+    with pytest.raises(interface_preference.InterfaceChoiceBusyError) as exc:
+        interface_preference.set_preferred_interface("vopus")
+    assert str(exc.value) == interface_preference.INTERFACE_FILE_BUSY_ERROR
+
+
+def test_any_other_write_failure_stays_a_plain_server_error(
+    test_client, vopus_built, monkeypatch
+):
+    """Only a held file is "busy": a full disk is not, and no path reaches
+    the page."""
+    from fastapi.testclient import TestClient
+
+    real_write_text = Path.write_text
+
+    def disk_full(self, *args, **kwargs):
+        if self.name == "interface.json.tmp":
+            raise OSError(28, "No space left on device", str(self))
+        return real_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", disk_full)
+    client = TestClient(test_client.app, raise_server_exceptions=False)
+    res = client.put("/api/interface", json={"interface": "vopus"})
+    assert res.status_code == 500
+    assert res.json()["error"] == "Internal server error"
+    assert "interface.json" not in res.text
+    assert interface_preference.get_preferred_interface() == "classic"
+
+
+@pytest.mark.skipif(
+    os.name != "nt", reason="an open handle blocks os.replace on Windows only"
+)
+def test_a_real_open_handle_keeps_the_old_choice_and_logs_the_path(
+    tmp_path, monkeypatch, caplog
+):
+    monkeypatch.setattr(interface_preference, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(interface_preference, "_REPLACE_RETRY_SECONDS", 0.0)
+    interface_preference.set_preferred_interface("vopus")
+    path = tmp_path / "interface.json"
+    with path.open("r", encoding="utf-8"):  # a handle without delete sharing
+        with caplog.at_level(logging.WARNING, logger=interface_preference.__name__):
+            with pytest.raises(interface_preference.InterfaceChoiceBusyError) as exc:
+                interface_preference.set_preferred_interface("classic")
+    message = str(exc.value)
+    assert message == interface_preference.INTERFACE_FILE_BUSY_ERROR
+    assert str(tmp_path) not in message
+    assert any(
+        str(path) in r.getMessage() and "errno" in r.getMessage().lower()
+        for r in caplog.records
+    )
+    assert interface_preference.get_preferred_interface() == "vopus"
+    assert not list(tmp_path.glob("*.tmp"))

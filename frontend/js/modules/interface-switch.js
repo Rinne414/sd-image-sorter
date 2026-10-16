@@ -52,8 +52,9 @@
         if (!res || !res.ok) {
             let detail = res ? `HTTP ${res.status}` : t('settings.interfaceOffline', {}, 'the program did not answer');
             try {
+                // The app's error answer: {"error": "..."}.
                 const body = res ? await res.json() : null;
-                if (body && typeof body.detail === 'string') detail = body.detail;
+                if (body && typeof body.error === 'string' && body.error) detail = body.error;
             } catch (err) { /* keep the status text */ }
             window.App?.showToast?.(
                 t('settings.interfaceFailed', { detail }, `Could not switch the interface: ${detail}`),

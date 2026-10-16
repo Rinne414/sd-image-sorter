@@ -35,5 +35,9 @@ def put_interface(body: InterfaceChoice) -> Dict[str, Any]:
             status_code=409,
             detail="Vopus is not built yet: install Node.js and start the program again with run.bat or run.sh.",
         )
-    interface_preference.set_preferred_interface(body.interface)
+    try:
+        interface_preference.set_preferred_interface(body.interface)
+    except interface_preference.InterfaceChoiceBusyError as exc:
+        # The file stayed held through every retry; the page shows why.
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return _state()

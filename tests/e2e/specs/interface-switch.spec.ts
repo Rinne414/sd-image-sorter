@@ -154,3 +154,21 @@ test('without the Vopus build the classic switch is off and says how to get it',
   await expect(page.locator('#settings-interface-note')).toBeVisible()
   await expect(page.locator('#settings-interface-note')).toContainText('install Node.js')
 })
+
+test('a switch the program refuses says why', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await prepare(page, 'en')
+  // The app's error answer (main.py http_exception_handler).
+  const reason = 'The interface choice is in use by another program, so it was not saved. Try again.'
+  await page.route('**/api/interface', (route) =>
+    route.request().method() === 'PUT'
+      ? route.fulfill({ status: 503, json: { error: reason, type: 'HTTPException', status_code: 503 } })
+      : route.fallback(),
+  )
+  await page.goto('/')
+  await classicReady(page)
+  const button = await openClassicInterfaceRow(page)
+  await button.click()
+  await expect(page.locator('#toast-container .toast').last()).toContainText(reason)
+  await expect(page).toHaveURL(/\/$/)
+})
