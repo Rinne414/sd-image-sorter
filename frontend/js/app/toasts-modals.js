@@ -211,9 +211,21 @@ function copyTextToClipboard(text, successMessage = 'Copied to clipboard') {
     return Promise.resolve(copied);
 }
 
-// Focus trap for accessibility
-let _lastFocusedElement = null;
+// Focus trap for accessibility. Dialogs open on top of one another (a
+// confirmation over a form): each keeps the element that opened it, and
+// Escape and the Tab trap belong to the topmost.
+const _openModalStack = [];
 let _focusTrapHandler = null;
+
+/** The topmost dialog still showing; dialogs hidden some other way drop out. */
+function _topOpenModal() {
+    for (let i = _openModalStack.length - 1; i >= 0; i -= 1) {
+        const entry = _openModalStack[i];
+        if (entry.modal.isConnected && entry.modal.classList.contains('visible')) return entry;
+        _openModalStack.splice(i, 1);
+    }
+    return null;
+}
 
 function readWindowScrollPosition() {
     const mainContent = document.getElementById('main-content');
@@ -266,22 +278,40 @@ function trapFocus(modal) {
     document.addEventListener('keydown', _focusTrapHandler);
 }
 
-function releaseFocus() {
-    if (_focusTrapHandler) {
+/**
+ * Take a closing dialog off the stack. When it was the topmost one, focus goes
+ * back to what opened it and the Tab trap to the dialog under it, if any.
+ */
+function releaseFocus(modal) {
+    const index = _openModalStack.findIndex((entry) => entry.modal === modal);
+    if (index < 0) return;
+    const [entry] = _openModalStack.splice(index, 1);
+    const wasTopmost = !_openModalStack.slice(index).some(
+        (other) => other.modal.isConnected && other.modal.classList.contains('visible'),
+    );
+    if (!wasTopmost) return;
+    const below = _topOpenModal();
+    if (below) {
+        trapFocus(below.modal);
+    } else if (_focusTrapHandler) {
         document.removeEventListener('keydown', _focusTrapHandler);
         _focusTrapHandler = null;
     }
-    if (_lastFocusedElement) {
-        _lastFocusedElement.focus();
-        _lastFocusedElement = null;
-    }
+    if (entry.returnFocus?.isConnected) entry.returnFocus.focus();
 }
 
 function showModal(modalId) {
     const modal = $(`#${modalId}`);
     if (modal) {
-        // Store the element that had focus before opening modal
-        _lastFocusedElement = document.activeElement;
+        // Remember what opened this dialog. Opening it again while it shows
+        // keeps the first opener: focus is inside the dialog by then. An entry
+        // left by a dialog hidden with a class toggle is stale, not reused.
+        const previous = _openModalStack.findIndex((entry) => entry.modal === modal);
+        const [earlier] = previous >= 0 ? _openModalStack.splice(previous, 1) : [];
+        const returnFocus = earlier && modal.classList.contains('visible')
+            ? earlier.returnFocus
+            : document.activeElement;
+        _openModalStack.push({ modal, returnFocus });
         modal._previousWindowScrollPosition = readWindowScrollPosition();
         modal.classList.add('visible');
 
@@ -318,7 +348,8 @@ function showModal(modalId) {
 
         // Add escape key handler to close modal
         const escapeHandler = (e) => {
-            if (e.key === 'Escape') {
+            // Only the topmost dialog answers; one under it waits its turn.
+            if (e.key === 'Escape' && _topOpenModal()?.modal === modal) {
                 e.preventDefault();
                 if (modalId === 'tag-modal') {
                     minimizeTaggingToBackground();
@@ -385,7 +416,7 @@ function hideModal(modalId) {
         }
 
         // Release focus trap and restore focus
-        releaseFocus();
+        releaseFocus(modal);
         restoreWindowScrollPosition(previousWindowScrollPosition);
         modal._previousWindowScrollPosition = null;
     }
