@@ -119,6 +119,7 @@ Object.assign(SeparationConsole, {
             btn.disabled = true;
             const spelledTag = row.key.replace(/ /g, '_');
             const ids = gaps.map(g => Number(g.image_id)).filter(id => id > 0);
+            let result = null;
             try {
                 const response = await fetch('/api/tags/bulk/add', {
                     method: 'POST',
@@ -126,6 +127,9 @@ Object.assign(SeparationConsole, {
                     body: JSON.stringify({ image_ids: ids, tags: [spelledTag] }),
                 });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                // The tags are written once the answer is 200; an unreadable
+                // body only loses the details below.
+                result = await response.json().catch(() => null);
             } catch (e) {
                 window.App?.showToast?.(sepconT('Failed: ', '失败：') + String(e.message || e), 'error');
                 btn.disabled = false;
@@ -153,11 +157,33 @@ Object.assign(SeparationConsole, {
                 dm.captionEdits.set(Number(id), next);
                 dm._refreshQueueItem?.(Number(id));
             }
-            // Journaled server-side (FE-2s) — undoable from the mass editor.
-            window.App?.showToast?.(
-                sepconT(`Added "${row.spelling}" to ${ids.length} images (undo in Mass Tag Editor)`,
-                  `已给 ${ids.length} 张图补上「${row.spelling}」（可在批量标签编辑器撤销）`),
-                'success');
+            // The backend counts what it changed and says when the change
+            // could not be journaled for undo (FE-2s).
+            const added = Number.isInteger(result?.affected_images) ? result.affected_images : ids.length;
+            const warningText = Array.isArray(result?.warnings)
+                ? result.warnings.map((warning) => String(warning?.message || '').trim()).filter(Boolean).join(' ')
+                : '';
+            if (added === 0 && !warningText) {
+                window.App?.showToast?.(
+                    sepconT(`Every one of them already has "${row.spelling}"; nothing changed.`,
+                      `这些图都已经有「${row.spelling}」，没有改动。`),
+                    'info');
+            } else if (warningText) {
+                window.App?.showToast?.(
+                    sepconT(`Added "${row.spelling}" to ${added} images. ${warningText}`,
+                      `已给 ${added} 张图补上「${row.spelling}」。${warningText}`),
+                    'warning');
+            } else if (result?.undo_available) {
+                window.App?.showToast?.(
+                    sepconT(`Added "${row.spelling}" to ${added} images (undo in Mass Tag Editor)`,
+                      `已给 ${added} 张图补上「${row.spelling}」（可在批量标签编辑器撤销）`),
+                    'success');
+            } else {
+                window.App?.showToast?.(
+                    sepconT(`Added "${row.spelling}" to ${added} images`,
+                      `已给 ${added} 张图补上「${row.spelling}」`),
+                    'success');
+            }
             this.findGaps(row);
             this.refresh();
         },
