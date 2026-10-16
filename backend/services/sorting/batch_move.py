@@ -429,7 +429,16 @@ class BatchMoveMixin:
                                         # Only a file whose new place is known can be put back later.
                                         new_path = (result or {}).get("new_path")
                                         if new_path:
-                                            journal.record(image["id"], source_path, new_path, step)
+                                            try:
+                                                journal.record(image["id"], source_path, new_path, step)
+                                            except OSError as journal_error:
+                                                # The file moved; undo still finds it through
+                                                # the intent line written before the move.
+                                                logger.warning(
+                                                    "Could not journal the move of image %s: %s",
+                                                    image["id"],
+                                                    journal_error,
+                                                )
                                         moved += 1
                                         # Manual Sort can leave this picture
                                         # out later (auto-sort, then hand-sort
