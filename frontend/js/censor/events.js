@@ -64,7 +64,8 @@ function initCensorEdit() {
     updateUndoRedoButtons();
 }
 
-// Open/close censor-owned modals (#detect-modal, #rename-modal) through the
+// Open/close censor-owned modals (#detect-modal, #rename-modal,
+// #save-options-modal) through the
 // shared modal helpers in app.js so they get the single shared focus-trap,
 // Esc-to-close, and focus-restore behavior. Falls back to a raw class toggle
 // only if the shared helper is somehow unavailable.
@@ -361,13 +362,22 @@ function bindEvents() {
 
     // Save All - opens options popup first
     $('#btn-save-all-processed')?.addEventListener('click', openSaveOptionsPopup);
-    $('#btn-close-save-options')?.addEventListener('click', () => $('#save-options-modal')?.classList.remove('visible'));
-    $('#btn-cancel-save-options')?.addEventListener('click', () => $('#save-options-modal')?.classList.remove('visible'));
+    $('#btn-close-save-options')?.addEventListener('click', () => closeCensorModal('save-options-modal'));
+    $('#btn-cancel-save-options')?.addEventListener('click', () => closeCensorModal('save-options-modal'));
     $('#btn-confirm-save-options')?.addEventListener('click', confirmAndSaveAll);
     $('#btn-save-browse-folder')?.addEventListener('click', () => window.showFolderBrowser?.($('#save-output-folder')));
     $('#btn-save-apply-filters-current')?.addEventListener('click', applyPendingFiltersBeforeSave);
 
     $('.censor-shortcuts-disclosure > summary')?.addEventListener('click', fitCensorShortcutsPopover);
+    // Escape folds the open Shortcuts list like any other popover; an open
+    // dialog takes the key first.
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape' || document.querySelector('.modal.visible')) return;
+        const disclosure = document.querySelector('#view-censor .censor-shortcuts-disclosure[open]');
+        if (!disclosure) return;
+        disclosure.open = false;
+        disclosure.querySelector('summary')?.focus();
+    });
 
     // New button handlers
     $('#btn-auto-detect-current')?.addEventListener('click', () => {

@@ -36,7 +36,9 @@ function openSaveOptionsPopup() {
     refreshPendingFilterNotice();
     refreshUneditedSaveOption();
     refreshCensorDefaultOutputFolder();
-    document.getElementById('save-options-modal')?.classList.add('visible');
+    // Through the app's dialog handling, like the Detect dialog: focus moves
+    // in, Escape closes it, and closing hands focus back to Save All.
+    openCensorModal('save-options-modal');
 }
 
 // Adjust sliders only preview on the canvas; warn in the dialog and offer to
@@ -142,7 +144,7 @@ async function confirmAndSaveAll() {
     }
 
     // Close popup and start saving
-    document.getElementById('save-options-modal')?.classList.remove('visible');
+    closeCensorModal('save-options-modal');
 
     await saveAllProcessed(formatOption, metadataOption, nameConflict, { includeUnedited });
 }
