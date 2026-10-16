@@ -1275,8 +1275,25 @@ def _move_file_atomically(source_path: str, destination_path: str) -> None:
         if rename_error.errno not in _CROSS_VOLUME_RENAME_ERRNOS:
             raise
 
+    destination_existed = os.path.lexists(destination_path)
     _copy_file_atomically(source_path, destination_path)
-    os.unlink(source_path)
+    try:
+        os.unlink(source_path)
+    except OSError:
+        # The source stays (another program holds it), so the move did not
+        # happen: take the copy back rather than leave a second file the next
+        # scan would index. A destination that existed was already replaced.
+        if not destination_existed:
+            try:
+                os.unlink(destination_path)
+            except OSError as cleanup_error:
+                logger.warning(
+                    "Could not remove the copy %s after its source %s stayed: %s",
+                    destination_path,
+                    source_path,
+                    cleanup_error,
+                )
+        raise
 
 
 def copy_image(
