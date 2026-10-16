@@ -50,7 +50,10 @@ Object.assign(window.VLMCaption, {
         const modal = document.getElementById('vlm-settings-modal');
         if (!modal) return;
         this.populateSettingsForm();
-        modal.classList.add('visible');
+        // Through the app's dialog handling: Escape closes it and focus comes
+        // back, also when it is opened over AI tagging or Smart Tag.
+        if (typeof window.App?.showModal === 'function') window.App.showModal('vlm-settings-modal');
+        else modal.classList.add('visible');
         this.loadRecommendedModels();
     },
 

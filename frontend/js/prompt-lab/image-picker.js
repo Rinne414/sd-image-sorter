@@ -125,14 +125,20 @@ Object.assign(window.PromptLab, {
         if (title) title.textContent = meta.title;
         if (search) search.value = '';
         this.renderImagePicker(true);
-        modal?.classList.add('visible');
+        if (typeof window.App?.showModal === 'function') {
+            // Escape closes it through closeImagePicker, which also forgets the target.
+            window.App.showModal('promptlab-image-picker-modal', { onEscape: () => this.closeImagePicker() });
+        } else {
+            modal?.classList.add('visible');
+        }
         this._ensureImageCatalog()
             .then(() => this.renderImagePicker())
             .catch(() => this.renderImagePicker());
     },
 
     closeImagePicker() {
-        document.getElementById('promptlab-image-picker-modal')?.classList.remove('visible');
+        if (typeof window.App?.hideModal === 'function') window.App.hideModal('promptlab-image-picker-modal');
+        else document.getElementById('promptlab-image-picker-modal')?.classList.remove('visible');
         this.imagePickerTarget = '';
     },
 

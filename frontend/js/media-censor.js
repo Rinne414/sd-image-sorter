@@ -42,16 +42,29 @@
             byId('media-censor-folder')?.addEventListener('change', () => this.list());
             byId('media-censor-start')?.addEventListener('click', () => this.start());
             byId('media-censor-stop')?.addEventListener('click', () => this.stop());
+            // Typing a path must not reach the Censor shortcuts behind the
+            // dialog; Escape still goes through and closes it.
             ['media-censor-folder', 'media-censor-output'].forEach((id) => {
-                byId(id)?.addEventListener('keydown', (event) => event.stopPropagation());
+                byId(id)?.addEventListener('keydown', (event) => {
+                    if (event.key !== 'Escape') event.stopPropagation();
+                });
             });
         },
 
         open() {
             this.init();
             this._restoreFolders();
-            byId('media-censor-modal')?.classList.add('visible');
-            byId('media-censor-folder')?.focus();
+            if (typeof window.App?.showModal === 'function') {
+                // Starts in the folder field; Escape closes it through close(),
+                // which also folds the folder browser.
+                window.App.showModal('media-censor-modal', {
+                    onEscape: () => this.close(),
+                    initialFocus: byId('media-censor-folder'),
+                });
+            } else {
+                byId('media-censor-modal')?.classList.add('visible');
+                byId('media-censor-folder')?.focus();
+            }
         },
 
         // The last source and save folders come back once per page load; an
@@ -82,7 +95,8 @@
 
         close() {
             window.hideFolderBrowser?.();
-            byId('media-censor-modal')?.classList.remove('visible');
+            if (typeof window.App?.hideModal === 'function') window.App.hideModal('media-censor-modal');
+            else byId('media-censor-modal')?.classList.remove('visible');
         },
 
         async list() {

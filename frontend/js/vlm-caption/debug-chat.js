@@ -11,12 +11,14 @@ Object.assign(window.VLMCaption, {
     async openDebugChat() {
         const modal = document.getElementById('vlm-debug-chat-modal');
         if (!modal) return;
-        modal.classList.add('visible');
+        if (typeof window.App?.showModal === 'function') window.App.showModal('vlm-debug-chat-modal');
+        else modal.classList.add('visible');
         await this.loadDebugChat();
     },
 
     closeDebugChat() {
-        document.getElementById('vlm-debug-chat-modal')?.classList.remove('visible');
+        if (typeof window.App?.hideModal === 'function') window.App.hideModal('vlm-debug-chat-modal');
+        else document.getElementById('vlm-debug-chat-modal')?.classList.remove('visible');
     },
 
     async loadDebugChat(options = {}) {

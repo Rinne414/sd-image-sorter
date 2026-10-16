@@ -90,7 +90,8 @@ Object.assign(window.VLMCaption, {
 
         // Close modal
         document.getElementById('vlm-settings-modal')?.querySelector('.modal-close')?.addEventListener('click', () => {
-            document.getElementById('vlm-settings-modal').classList.remove('visible');
+            if (typeof window.App?.hideModal === 'function') window.App.hideModal('vlm-settings-modal');
+            else document.getElementById('vlm-settings-modal').classList.remove('visible');
         });
     },
 

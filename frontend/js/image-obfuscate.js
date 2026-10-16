@@ -722,10 +722,15 @@
             if (!modal || !img) return;
             img.src = src;
             this._previewIndex = Number.isFinite(index) ? index : -1;
-            modal.classList.add('visible');
+            if (typeof window.App?.showModal === 'function') window.App.showModal('obfuscate-preview-modal');
+            else modal.classList.add('visible');
         },
 
         _closePreview() {
+            if (typeof window.App?.hideModal === 'function') {
+                window.App.hideModal('obfuscate-preview-modal');
+                return;
+            }
             const modal = document.getElementById('obfuscate-preview-modal');
             if (modal) modal.classList.remove('visible');
         },

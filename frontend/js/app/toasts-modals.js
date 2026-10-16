@@ -300,7 +300,13 @@ function releaseFocus(modal) {
     if (entry.returnFocus?.isConnected) entry.returnFocus.focus();
 }
 
-function showModal(modalId) {
+/**
+ * Show a dialog. options.onEscape runs instead of a plain hide when the
+ * dialog's own close also tidies up; it returns false when Escape answered
+ * something inside the dialog and the dialog stays open. options.initialFocus
+ * is where focus starts (the close button otherwise).
+ */
+function showModal(modalId, options = {}) {
     const modal = $(`#${modalId}`);
     if (modal) {
         // Remember what opened this dialog. Opening it again while it shows
@@ -351,7 +357,10 @@ function showModal(modalId) {
             // Only the topmost dialog answers; one under it waits its turn.
             if (e.key === 'Escape' && _topOpenModal()?.modal === modal) {
                 e.preventDefault();
-                if (modalId === 'tag-modal') {
+                if (typeof options.onEscape === 'function') {
+                    // Still open: keep answering Escape.
+                    if (options.onEscape() === false) return;
+                } else if (modalId === 'tag-modal') {
                     minimizeTaggingToBackground();
                 } else if (modalId === 'filter-modal') {
                     closeFilterModal();
@@ -366,10 +375,11 @@ function showModal(modalId) {
         // Store escape handler for cleanup
         modal._escapeHandler = escapeHandler;
 
-        // Focus the close button for accessibility
-        const closeBtn = modal.querySelector('.modal-close');
-        if (closeBtn) {
-            setTimeout(() => closeBtn.focus(), 100);
+        // Focus the close button for accessibility, or the field the dialog
+        // starts in
+        const firstFocus = options.initialFocus || modal.querySelector('.modal-close');
+        if (firstFocus) {
+            setTimeout(() => firstFocus.focus(), 100);
         }
     }
 }
