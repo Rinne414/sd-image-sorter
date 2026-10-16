@@ -79,7 +79,7 @@ test('a picture without a Waifu score shows no Waifu row', async ({ page }) => {
     async (route) => {
       const response = await route.fetch()
       const body = await response.json()
-      body.image = { ...body.image, aesthetic_waifu: null }
+      body.image = { ...body.image, aesthetic_score: 6.1, aesthetic_waifu: null }
       await route.fulfill({ response, json: body })
     },
   )
@@ -88,7 +88,10 @@ test('a picture without a Waifu score shows no Waifu row', async ({ page }) => {
   await page.locator('#gallery-grid .gallery-item').first().click()
   await expect(page.locator('#image-modal.visible')).toBeVisible({ timeout: 10_000 })
 
-  await expect(page.locator('#modal-filename')).not.toHaveText('')
+  // The Waifu row is hidden until the details arrive, so wait for them (the
+  // aesthetic score shows) before reading it; the test also no longer ends
+  // with the details request still in flight.
+  await expect(page.locator('#modal-aesthetic-item')).toContainText('6.10 / 10')
   await expect(page.locator('#modal-waifu-item')).toBeHidden()
 })
 
