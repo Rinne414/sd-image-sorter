@@ -115,6 +115,16 @@ test('Escape on the image context menu closes it and keeps the Gallery selection
   expect(await selectedCount(page)).toBe(2)
 })
 
+test('a view letter typed in the More actions menu of a selection leaves the Gallery alone', async ({ page }) => {
+  await openGalleryWithSelection(page)
+  await page.locator('#btn-gallery-action-more').click()
+  await expect(page.locator('#gallery-action-more-menu')).toBeVisible()
+  const mode = await viewMode(page)
+  await page.keyboard.press(mode === 'large' ? 'g' : 'l')
+  expect(await viewMode(page)).toBe(mode)
+  await expect(page.locator('#gallery-action-more-menu')).toBeVisible()
+})
+
 test('Escape on the More menu closes it and keeps the Gallery selection', async ({ page }) => {
   await openGalleryWithSelection(page)
   await page.locator('#nav-tools-toggle').click()

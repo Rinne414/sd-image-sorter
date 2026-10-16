@@ -262,6 +262,7 @@ const GALLERY_KEYS_YIELD_TO = [
     '.update-popup.visible',
     '.gallery-context-menu',
     '#nav-tools-menu:not([hidden])',
+    '#gallery-action-more-menu:not([hidden])',
 ].join(', ');
 
 function initGlobalKeyboardShortcuts() {
