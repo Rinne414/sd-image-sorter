@@ -370,6 +370,21 @@ run.bat
 
 设置会保存，重启后生效。不需要编辑任何配置文件。
 
+### 数据与隐私：哪些功能会联网
+
+图片、标签和图库数据都只存在你的电脑上。程序只接受本机（127.0.0.1）的连接，没有统计或遥测。会联网的只有下面这些：
+
+| 什么时候 | 连到哪里 | 送出什么 |
+|----------|----------|----------|
+| 第一次启动，或更新后依赖有变化 | PyPI。安装前会同时试 pypi.org 和清华、阿里、中科大镜像，选最快的 | 只下载 Python 套件，不送你的数据 |
+| 第一次用某个 AI 功能，或在模型中心点下载 | Hugging Face（失败时改用 hf-mirror.com）、ModelScope、GitHub、Civitai（隐私 YOLO 模型） | 只下载模型文件；有的功能还会自动安装它需要的 Python 套件 |
+| 检查更新 | GitHub | 只查询有没有新版本。原版界面只在你点「检查更新」时查；Vopus 界面默认在打开 30 秒后自动查一次，可以在设置里关掉 |
+| 你设置了云端 VLM / LLM，并用它打标、写描述或翻译 | 你填的服务（OpenAI 兼容接口、Anthropic、Google Gemini / Vertex） | **会送出图片**（缩小后的 JPEG）和提示词。不想上传图片，就不要设置云端服务，或改用本机的 Ollama |
+| 数据集翻译选了外部翻译服务 | Google 翻译、MyMemory、百度等 | 只送要翻译的标签或句子，不送图片。默认用你设置的 VLM |
+| 你点开的链接 | Civitai、GitHub、模型页面 | 在浏览器新标签页打开 |
+
+想换来源：模型下载在模型中心的「下载来源」里切换；环境变量 `SD_IMAGE_SORTER_PYPI_MIRROR` 指定 PyPI 镜像（指定后不再测速），`HF_ENDPOINT` 指定 Hugging Face 地址。
+
 ## 快捷键
 
 | 场景 | 按键 | 动作 |
@@ -758,6 +773,21 @@ cd sd-image-sorter
 Thumbnail cache is capped at **500 MB** by default. It only removes regeneratable thumbnails, never original images. Change it in **Setup Now → Disk Usage → Thumbnail cache limit**; set `0` to disable persistent thumbnail caching. The UI explains the trade-off: lower limits save disk, but large-gallery scrolling can spend more CPU / disk I/O regenerating thumbnails.
 
 If an old install already pulled full AI Python packages, use **Setup Now → Disk Usage → Python runtime environment → Rebuild lightweight runtime on next start**. It schedules the next launcher start to rebuild only the Python runtime: source/Linux builds recreate `backend/venv`, and Windows portable clears installed packages from embedded Python. `data/`, `images.db`, settings, caches, and downloaded models are kept.
+
+### Data & Privacy: What Goes Online
+
+Your pictures, tags and library data stay on your computer. The server only accepts connections from this machine (127.0.0.1), and there is no telemetry or analytics. Only these things go online:
+
+| When | Where | What is sent |
+|------|-------|--------------|
+| First start, or after an update changes the dependencies | PyPI. Before installing, the launcher tries pypi.org and the Tsinghua, Aliyun and USTC mirrors and uses the fastest | Package downloads only; none of your data |
+| First use of an AI feature, or Download in the Model Center | Hugging Face (falls back to hf-mirror.com), ModelScope, GitHub, Civitai (privacy YOLO model) | Model file downloads only; some features also install the Python packages they need |
+| Checking for updates | GitHub | A version lookup only. The classic interface checks only when you press "Check update"; the Vopus interface checks once, 30 seconds after it opens, unless you turn that off in its settings |
+| You set up a cloud VLM / LLM and use it to tag, describe or translate | The service you entered (OpenAI-compatible APIs, Anthropic, Google Gemini / Vertex) | **Your pictures** (downscaled JPEG) and the prompt. To keep pictures local, leave cloud services unset or use a local Ollama |
+| Dataset translation with an external translation service | Google Translate, MyMemory, Baidu and others | The tag or sentence text only, never pictures. The default uses your configured VLM |
+| Links you click | Civitai, GitHub, model pages | Opened in a new browser tab |
+
+To change sources: switch the model download source in the Model Center; set `SD_IMAGE_SORTER_PYPI_MIRROR` to pin a PyPI mirror (this skips the speed test) and `HF_ENDPOINT` to choose the Hugging Face endpoint.
 
 ### Tech Stack
 
