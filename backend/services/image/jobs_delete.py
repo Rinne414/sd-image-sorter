@@ -28,6 +28,12 @@ from text_counts import count_text
 # output stay byte-identical after the package split.
 logger = logging.getLogger("services.image_service")
 
+# The trash step worked; dropping the library row did not.
+TRASHED_ROW_LEFT_ERROR = (
+    "The file went to the trash, but its gallery entry could not be removed. / "
+    "文件已移到回收站，但图库里的这一项没能移除。"
+)
+
 
 def _svc():
     """Resolve facade-owned seams/constants through services.image_service at call time.
@@ -186,8 +192,6 @@ class DeleteJobsMixin:
         try:
             source_path = self.resolve_image_source_path(image_id, image.get("path", ""))
             move_file_to_trash(source_path)
-            db.delete_image(image_id)
-            return {"id": image_id, "success": True, "filename": filename}
         except HTTPException as exc:
             return {
                 "id": image_id,
@@ -197,6 +201,12 @@ class DeleteJobsMixin:
             }
         except Exception as exc:
             return {"id": image_id, "success": False, "filename": filename, "error": str(exc)}
+        try:
+            db.delete_image(image_id)
+        except Exception as exc:
+            logger.warning("Image %s went to the trash but its row stayed: %s", image_id, exc)
+            return {"id": image_id, "success": False, "filename": filename, "error": TRASHED_ROW_LEFT_ERROR}
+        return {"id": image_id, "success": True, "filename": filename}
 
     def _expand_delete_request_ids(
         self, image_ids: Optional[List[int]], selection_token: Optional[str]
