@@ -139,7 +139,7 @@ def test_export_censored_missing_errors_instead_of_silent_fallback(pub_env):
     assert result["exported"] == [{
         "index": 2, "output_name": "02.png", "image_id": 1,
         "used_censored": False, "source_path": str(pub_env["originals"] / "alpha.png"),
-        "metadata": "keep",
+        "metadata": "keep", "warnings": [],
     }]
 
 

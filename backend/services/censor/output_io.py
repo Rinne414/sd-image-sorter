@@ -69,7 +69,8 @@ def _discard_empty_placeholder(path: str) -> None:
 
 # The save asked to keep the metadata but the original could not be read.
 METADATA_NOT_COPIED_WARNING = (
-    "The original picture could not be read, so its prompt and metadata were not copied into this save."
+    "The original picture could not be read, so its prompt and metadata were not copied into this save. / "
+    "原图读取不了，这次保存没有带上它的提示词和元数据。"
 )
 
 

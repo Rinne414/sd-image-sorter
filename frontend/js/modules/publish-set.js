@@ -535,6 +535,11 @@
             box.appendChild(makeEl('div',
                 'pub-result-line pub-result-file' + (entry.used_censored ? '' : ' pub-result-warn'),
                 entry.output_name + ' ← ' + variant));
+            // What this file could not carry over (its metadata, transparency).
+            if (Array.isArray(entry.warnings) && entry.warnings.length) {
+                box.appendChild(makeEl('div', 'pub-result-line pub-result-warn',
+                    '⚠ ' + entry.output_name + ' — ' + entry.warnings.join(' ')));
+            }
         });
         if (result.caption_file) {
             box.appendChild(makeEl('div', 'pub-result-line',
@@ -650,8 +655,10 @@
             if (!response.ok) {
                 let detail = 'HTTP ' + response.status;
                 try {
+                    // The app's error answer: {"error": "..."}.
                     const body = await response.json();
-                    if (body && body.detail) detail = String(body.detail);
+                    const reason = body && (body.error || body.detail);
+                    if (reason) detail = String(reason);
                 } catch (parseErr) { /* non-JSON error body */ }
                 showToast(t('pub.exportFailed', 'Export failed: {error}', { error: detail }), 'error');
                 return;
@@ -660,12 +667,13 @@
             renderExportResult(result, { leftOut });
             if (result.success && result.exported.length) {
                 const censoredCount = result.exported.filter((entry) => entry.used_censored).length;
+                const hasFileWarnings = result.exported.some((entry) => Array.isArray(entry.warnings) && entry.warnings.length);
                 showToast(t('pub.exportDoneDetail',
                     'Publish set exported: {censored} censored, {original} original · {metadata}', {
                         censored: censoredCount,
                         original: result.exported.length - censoredCount,
                         metadata: metadataSummary(result.metadata_option),
-                    }), censoredCount === result.exported.length ? 'success' : 'warning');
+                    }), censoredCount === result.exported.length && !hasFileWarnings ? 'success' : 'warning');
             } else if (result.errors.length) {
                 showToast(t('pub.exportPartial', 'Export finished with {count} error(s); see details', {
                     count: result.errors.length,

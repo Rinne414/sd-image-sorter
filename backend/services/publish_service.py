@@ -309,8 +309,11 @@ def _write_export_copy(
     image_id: int,
     metadata_option: str,
     watermark: Optional[TextWatermarkConfig],
-) -> None:
-    """Write one publish copy; only an unwatermarked "keep" copies the bytes.
+) -> List[str]:
+    """Write one publish copy and return what it could not carry over.
+
+    Only an unwatermarked "keep" copies the bytes (staged, so a copy cut short
+    never leaves a partial file or damages the one it replaces).
 
     Everything else is re-encoded through the Censor page's own metadata
     handling: ``_strip_all_metadata`` rebuilds the raster without any info,
@@ -319,8 +322,10 @@ def _write_export_copy(
     """
     watermark_on = watermark is not None and watermark.enabled
     if metadata_option == "keep" and not watermark_on:
-        shutil.copy2(source_path, destination)
-        return
+        from image_manager import _copy_file_atomically
+
+        _copy_file_atomically(source_path, str(destination))
+        return []
 
     from services.censor.output_io import _normalize_censor_source, _save_pillow_image_atomically
     from services.censor_service import CensorService
@@ -344,18 +349,22 @@ def _write_export_copy(
         image = apply_text_watermark(image, watermark)
 
     censor = CensorService()
+    warnings: List[str] = []
     if metadata_option == "keep":
-        save_kwargs = censor._prepare_metadata_for_save(image, image_id, "keep", output_format)
+        save_kwargs = censor._prepare_metadata_for_save(
+            image, image_id, "keep", output_format, warnings=warnings
+        )
     else:
         image = censor._strip_all_metadata(_normalize_censor_source(image))
         save_kwargs = (
-            censor._prepare_metadata_for_save(image, image_id, "minimal", output_format)
+            censor._prepare_metadata_for_save(
+                image, image_id, "minimal", output_format, warnings=warnings
+            )
             if metadata_option == "minimal"
             else {}
         )
 
     pil_format, encoder_options = _ENCODER_OPTIONS[output_format]
-    warnings: List[str] = []
     image = prepare_image_for_save(image, pil_format, warnings)
     _save_pillow_image_atomically(
         image,
@@ -363,6 +372,7 @@ def _write_export_copy(
         pil_format,
         {**encoder_options, **_pick_metadata_kwargs(save_kwargs, output_format)},
     )
+    return list(dict.fromkeys(warnings))
 
 
 def export_set(
@@ -441,7 +451,7 @@ def export_set(
                 reveal_path = reveal_path or str(destination)
                 continue
             try:
-                _write_export_copy(
+                item_warnings = _write_export_copy(
                     source["path"],
                     destination,
                     image_id=image_id,
@@ -459,6 +469,7 @@ def export_set(
                 "used_censored": source["used_censored"],
                 "source_path": source["path"],
                 "metadata": metadata,
+                "warnings": item_warnings,
             })
             remember_saved_output(str(destination))
             if not exported_reveal_path:
