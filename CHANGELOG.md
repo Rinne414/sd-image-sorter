@@ -5,6 +5,48 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] - 2026-10-17
+
+One program now serves two interfaces: the classic one stays the start page and Vopus, the second interface, is switched on in Settings. The database is copied before every upgrade, and libraries that Vopus 1.0.0 had upgraded are repaired. Moves, undo, exports and batch censoring always say how they ended. Letter shortcuts no longer swallow browser keys such as Ctrl+Shift+R, and the browser Back button goes up one level like Esc.
+
+同一个程序现在有两套界面：经典界面仍是首页，第二套界面 Vopus 在设置里切换。数据库每次升级前都会先复制一份，用过 Vopus 1.0.0 的图库会被修复。移动、撤销、导出和批量打码都会说明最后结果。字母快捷键不再吃掉 Ctrl+Shift+R 这类浏览器按键，浏览器后退键像 Esc 一样退一层。
+
+### Added / 新增
+
+- **Vopus interface / Vopus 界面**: the backend serves the classic interface at `/` and Vopus at `/vopus/` (old `/v4/` addresses redirect). Settings → Interface switches between them; the choice is kept in `data/config/interface.json`. Release packages ship the built Vopus (`frontend-v4/dist`); launchers rebuild it when it is missing or stale and Node.js is installed.
+  - 后端在 `/` 提供经典界面，在 `/vopus/` 提供 Vopus（旧的 `/v4/` 地址会跳转）。设置 → 界面 可以切换，选择保存在 `data/config/interface.json`。发布包内含构建好的 Vopus（`frontend-v4/dist`）；缺少或过期时，装了 Node.js 的启动器会重新构建。
+- **Browser Back goes up one level / 浏览器后退键退一层**: in the classic interface, Back and the mouse back button close the topmost dialog, panel or menu (through the same Escape handling), otherwise return to the previous page; Forward goes back again. On the first screen the first Back only says so, and a second one within three seconds leaves.
+  - 经典界面里，后退键和鼠标侧键会关闭最上层的对话框、面板或菜单（走同一套 Esc 处理），否则回到上一个页面；前进键可以再回去。在第一个页面按后退，第一次只会提示，三秒内再按一次才离开。
+- **Dataset Maker queue tools / 数据集队列工具**: filter the queue by tags, and add a tag to the selected images from an in-app field that skips images already carrying it.
+  - 队列可以按标签筛选；可以在程序内的输入框给选中的图加标签，已经有这个标签的图会被跳过。
+- **README: what goes online / README：哪些功能会联网**: both language sections list every connection the program makes, when, and what it sends.
+  - 中英文两部分都列出程序的每一种联网、什么时候发生、送出什么。
+
+### Changed / 变更
+
+- **Schema backup and repair / 数据库备份与修复**: before a schema upgrade the database is copied to `data/backups` (the newest three copies are kept); migration 062 repairs migrations 049–051 for databases Vopus 1.0.0 had taken to 060/061, and is a no-op otherwise.
+  - 升级数据库结构前先复制到 `data/backups`（保留最近三份）；迁移 062 为被 Vopus 1.0.0 升到 060/061 的数据库补做 049–051，其他情况不做任何事。
+- **Dialogs and keys / 对话框与按键**: dialogs take focus, Esc and the Tab trap belong to the topmost one, focus returns to the opener, and Gallery keys wait while an overlay is open.
+  - 对话框会取得焦点，Esc 和 Tab 只作用于最上层，关闭后焦点回到打开它的按钮；有浮层开着时，图库的按键会让路。
+- **Reading position / 阅读位置**: switching views or refreshing keeps the picture you were reading; a new sort, filter, search or library opens at the top.
+  - 切换视图或刷新时停在正在看的图；换排序、筛选、搜索或图库时从顶部开始。
+- **Library scope / 图库范围**: collections, duplicate scans, artist results and tag backups stay in the current library; a tab keeps its own library when another tab switches.
+  - 合集、查重结果、画师识别结果和标签备份都只属于当前图库；另一个标签页切换图库时，本标签页保持自己的图库。
+
+### Fixed / 修复
+
+- **Browser shortcuts / 浏览器快捷键**: single-key shortcuts ignore Ctrl, Alt and ⌘, and a capture-phase guard (`frontend/js/modules/core/key-guard.js`) keeps reload, address-bar, tab and dev-tools combos away from every page handler. Ctrl+Shift+R no longer opens a random picture, Ctrl+R no longer switches the censor tool, and Ctrl+A / Ctrl+D / Ctrl+1–9 reach the browser where the page did not mean to take them.
+  - 单键快捷键在按住 Ctrl、Alt 或 ⌘ 时不触发；捕获阶段的保护（`frontend/js/modules/core/key-guard.js`）让刷新、地址栏、标签页和开发者工具组合键不会被任何页面处理。Ctrl+Shift+R 不再随机打开一张图，Ctrl+R 不再切换打码工具，页面原本无意占用的 Ctrl+A / Ctrl+D / Ctrl+1–9 交还给浏览器。
+- **Honest outcomes / 如实的结果**: moves, Auto-Separate, dataset export, batch censoring and undo always say how they ended; an undo that left some files can be run again; a cross-drive move whose source stays takes its copy back; a publish export says what each file lost and cannot damage the file it replaces; a censor save asked to keep metadata says when it could not.
+  - 移动、自动分类、数据集导出、批量打码和撤销都会说明最后结果；没撤销完的可以再撤销一次；跨磁盘移动删不掉原图时会收回复制出去的那份；成套发布导出会说明每个文件丢了什么，也不会弄坏被替换的文件；打码保存要求保留元数据却做不到时会说明。
+- **Prompt Lab / 提示词助手**: an exclusion rule can exclude a whole category, the "tag is missing" condition is checked, and seed and count reach tag sets.
+  - 排除规则可以排除整个分类，「缺少某个标签」条件生效，种子和数量会套用到标签组。
+
+### Security / 安全
+
+- fsspec 2026.6.0 or newer (CVE-2026-104851), anyio 4.14.2, transformers 5.10.4.
+  - fsspec 升到 2026.6.0 以上（CVE-2026-104851）、anyio 4.14.2、transformers 5.10.4。
+
 ## [3.6.1] - 2026-10-05
 
 Saving no longer needs setup: an empty folder field saves into the program's own output folder, and a second version of a picture is numbered instead of stopping the save. Manual Sort leaves out pictures that were already sorted, the default LoRA export writes each tag once with the trigger as typed and uses kohya's folder layout, and the Censor Adjust tab shows its preview on the picture again. Many small workflow fixes came from walking through the three home-page missions.

@@ -63,6 +63,13 @@
 - **更快**：图库翻页从 0.36 秒降到 0.045 秒；批量打标 1000 张从 170 秒降到 106 秒（实测）。
 - **中英文完整**：中文界面里的按钮提示也都是中文。
 
+### v3.7.0
+
+- **两套界面，同一个图库**：经典界面仍是首页，第二套界面 Vopus 在设置 → 界面里切换，选择会被记住。
+- **升级前备份数据库**：数据库升级前会先在 `data/backups` 留一份副本。
+- **操作结果如实说明**：移动、撤销、导出、批量打码都会说清楚最后结果；没撤销完的可以再撤销一次。
+- **键盘和后退键**：按住 Ctrl 时字母快捷键不再触发，Ctrl+Shift+R 能强制刷新；浏览器后退键和鼠标侧键像 Esc 一样退一层。
+
 ### v3.6.1
 
 - **保存不用先设置**：打码、Pixiv 成套发布、视频打码在保存文件夹留空时存到程序里的 `output` 文件夹；同一张图再存一个版本会自动加编号（`name_2`），不用手动改名。
@@ -646,6 +653,13 @@ Eagle and Billfish are general asset managers and are not in this SD-workflow ta
 - **No hard stops**: caps and export gates became warnings with a choice.
 - **Faster**: gallery page 0.36 s to 0.045 s; Mass Tag on 1,000 images 170 s to 106 s (measured).
 - **Complete Chinese and English UI**, tooltips included.
+
+### v3.7.0
+
+- **Two interfaces, one library**: the classic interface stays the start page; Vopus, the second interface, is switched on in Settings → Interface and the choice is remembered.
+- **Database backup before upgrades**: a copy is saved to `data/backups` before the database is upgraded.
+- **Honest results**: moves, undo, exports and batch censoring say how they ended; an undo that left files behind can be run again.
+- **Keyboard and Back**: letter shortcuts no longer fire while Ctrl is held, so Ctrl+Shift+R hard-refreshes; the browser Back and mouse back buttons go up one level, like Esc.
 
 ### v3.6.1
 
