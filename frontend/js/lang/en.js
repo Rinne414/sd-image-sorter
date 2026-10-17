@@ -20,6 +20,7 @@ window.I18nLang_en = {
     'nav.dataset': 'Dataset',
     'nav.artist': 'Style Finder',
     'nav.stylemap': 'Style Map',
+    'nav.backAtStart': 'This is the first screen. Press Back again to leave.',
     'nav.sorting': 'Organize',
     'dup.navTitle': 'Duplicate Cleanup',
     'dup.title': 'Duplicate Cleanup',

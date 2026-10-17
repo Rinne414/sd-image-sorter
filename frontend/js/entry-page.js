@@ -792,6 +792,12 @@
         '#view-stylemap.active .stylemap-axes-panel:not([hidden])',
     ].join(', ');
 
+    // Something open that Esc would close first. Selection mode is not one for
+    // the browser's Back: Back leaves the page and the selection stays.
+    function hasOverlay() {
+        return Array.from(document.querySelectorAll(OVERLAY_SELECTOR)).some((node) => node.id !== 'btn-toggle-select');
+    }
+
     function editingTarget(target) {
         if (!target) return false;
         const tag = (target.tagName || '').toLowerCase();
@@ -978,5 +984,5 @@
         boot();
     }
 
-    window.EntryPage = { show, hide, render };
+    window.EntryPage = { show, hide, render, hasOverlay };
 })();

@@ -22,6 +22,7 @@ window.I18nLang_zhCN = {
     'nav.dataset': '数据集',
     'nav.artist': '画风识别',
     'nav.stylemap': '画风地图',
+    'nav.backAtStart': '这是第一个页面。再按一次“后退”才会离开程序。',
     'nav.sorting': '整理',
     'dup.navTitle': '查重清理',
     'dup.title': '查重清理',
