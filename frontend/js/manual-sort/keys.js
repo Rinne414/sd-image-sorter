@@ -37,6 +37,8 @@ function handleSortKeypress(e) {
         }
         return; // Ignore other Ctrl+key combos
     }
+    // Alt + a sort key (Alt+Left is the browser's Back) is not a sort key.
+    if (e.altKey) return;
 
     // v3.3.2 WB-S3: A/B Showdown has its own key map (←/→ pick, ↑ skip).
     if (isBracket) {

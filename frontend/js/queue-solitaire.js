@@ -1527,7 +1527,7 @@
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
 
         // Number keys 1-9: move selected to section
-        if (e.key >= '1' && e.key <= '9') {
+        if (e.key >= '1' && e.key <= '9' && !KeyGuard.hasModifier(e)) {
             const idx = parseInt(e.key) - 1;
             if (idx < state.sections.length && state.selected.size > 0) {
                 moveItems([...state.selected], state.sections[idx].id);
@@ -1561,6 +1561,9 @@
             }
             return;
         }
+
+        // The keys below are single keys; Ctrl/Alt/Meta + them is the browser's.
+        if (KeyGuard.hasModifier(e)) return;
 
         // Delete: move selected back to unsorted
         if (e.key === 'Delete' || e.key === 'Backspace') {

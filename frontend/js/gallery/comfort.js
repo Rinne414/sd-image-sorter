@@ -632,6 +632,7 @@
     function bindSpacePeek() {
         document.addEventListener('keydown', (e) => {
             if (e.code !== 'Space' && e.key !== ' ') return;
+            if (KeyGuard.hasModifier(e)) return;
             if (e.repeat) {
                 if (_peekOpen) e.preventDefault();
                 return;

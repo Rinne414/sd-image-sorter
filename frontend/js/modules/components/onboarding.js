@@ -514,6 +514,7 @@ const OnboardingTour = (function() {
      */
     function handleKeydown(e) {
         if (!isActive) return;
+        if (KeyGuard.hasModifier(e)) return;
 
         switch (e.key) {
             case 'ArrowRight':

@@ -407,6 +407,8 @@
         if (!maker || maker.dataset.activeTab !== 'workbench') return;
         const tag = document.activeElement?.tagName?.toLowerCase();
         if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+        // Ctrl+A / Ctrl+D / Alt+Left are the browser's, not step / drop / back.
+        if (KeyGuard.hasModifier(e)) return;
 
         switch (e.key) {
             case 'a':
@@ -432,7 +434,6 @@
                 break;
             case 'z':
             case 'Z':
-                if (e.ctrlKey || e.metaKey) break;
                 e.preventDefault();
                 DM._undoReviewDrop();
                 break;

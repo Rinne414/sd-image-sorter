@@ -20,7 +20,7 @@ export function useCensorKeys(run: (action: KeyAction) => void): void {
     const onDown = (e: KeyboardEvent) => {
       if (layerCount() > 0 || useApp.getState().page !== 'batch') return
       const focus = focusKind(e.target)
-      if (e.key === ' ' && focus !== 'text' && (view().hover || view().panKey)) {
+      if (e.key === ' ' && !e.ctrlKey && !e.metaKey && !e.altKey && focus !== 'text' && (view().hover || view().panKey)) {
         e.preventDefault()
         if (!view().panKey) view().setPanKey(true)
         return

@@ -442,6 +442,7 @@ function initBootListenersShell() {
         // over --grid-item-size and never agreed after a reload.)
         document.addEventListener('keydown', (e) => {
             if (e.key !== '[' && e.key !== ']') return;
+            if (KeyGuard.hasModifier(e)) return;
             const activeEl = document.activeElement;
             if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA'
                 || activeEl.tagName === 'SELECT' || activeEl.isContentEditable)) {

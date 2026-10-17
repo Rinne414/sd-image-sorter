@@ -281,6 +281,10 @@ function initGlobalKeyboardShortcuts() {
             return;
         }
 
+        // Ctrl/Alt/Meta + a letter belongs to the browser (Ctrl+Shift+R reload,
+        // Ctrl+L address bar, Ctrl+F find ...).
+        if (KeyGuard.hasModifier(e)) return;
+
         // Only in gallery view
         if (AppState.currentView !== 'gallery') {
             return;

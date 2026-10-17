@@ -70,7 +70,7 @@ function initPanControls() {
     // tab does not stack duplicate handlers or duplicate toasts/actions.
     boundHandlers.spaceKeydown = (e) => {
         if (!isCensorViewActive()) return;
-        if (e.code === 'Space' && !isEditableTarget(document.activeElement)) {
+        if (e.code === 'Space' && !KeyGuard.hasModifier(e) && !isEditableTarget(document.activeElement)) {
             spacePressed = true;
             wrapper.style.cursor = 'grab';
             e.preventDefault();

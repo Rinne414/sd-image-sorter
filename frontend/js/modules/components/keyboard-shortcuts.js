@@ -145,6 +145,7 @@ const KeyboardShortcutsPanel = (function () {
     function init() {
         document.addEventListener('keydown', function (e) {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            if (KeyGuard.hasModifier(e)) return;
             if (e.key === '?' && !isPanelOpen) {
                 e.preventDefault();
                 show();

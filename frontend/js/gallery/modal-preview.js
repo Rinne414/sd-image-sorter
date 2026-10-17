@@ -323,6 +323,8 @@ ${String(value)}`)
                 && target.closest('input, textarea, select, [contenteditable="true"]')) {
                 return;
             }
+            // Alt+Left / Alt+Right are the browser's Back / Forward.
+            if (KeyGuard.hasModifier(e)) return;
             if (e.key === 'ArrowLeft') {
                 e.preventDefault();
                 this.openAdjacentPreview(-1);

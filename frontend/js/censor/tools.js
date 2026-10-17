@@ -464,10 +464,10 @@ function handleKeydown(e) {
     }
 
     // Navigation: ArrowLeft/ArrowRight for prev/next
-    if (code === 'ArrowLeft') {
+    if (code === 'ArrowLeft' && !KeyGuard.hasModifier(e)) {
         navigateQueue(-1);
         e.preventDefault();
-    } else if (code === 'ArrowRight') {
+    } else if (code === 'ArrowRight' && !KeyGuard.hasModifier(e)) {
         navigateQueue(1);
         e.preventDefault();
     } else if (e.altKey && code === 'Home') {
@@ -488,6 +488,24 @@ function handleKeydown(e) {
         updateQueueSelection();
         window.App.showToast(censorT('censor.queueSelectedAll', null, 'Selected the whole queue'), 'info');
         e.preventDefault();
+    }
+    // Undo
+    else if (e.ctrlKey && key === 'z') {
+        if (e.shiftKey) {
+            redo();
+        } else {
+            undo();
+        }
+        e.preventDefault();
+    }
+    else if ((e.ctrlKey && key === 'y') || (e.metaKey && key === 'y')) {
+        redo();
+        e.preventDefault();
+    }
+    // Everything below is a single key: with Ctrl/Alt/Meta held it is the
+    // browser's (Ctrl+R reload, Ctrl+F find, Ctrl+L address bar ...).
+    else if (KeyGuard.hasModifier(e)) {
+        return;
     }
     // Brush size [ ]
     else if (e.key === '[') {
@@ -533,19 +551,6 @@ function handleKeydown(e) {
         if (activeItem) {
             runDetectionForImage(activeItem);
         }
-        e.preventDefault();
-    }
-    // Undo
-    else if (e.ctrlKey && key === 'z') {
-        if (e.shiftKey) {
-            redo();
-        } else {
-            undo();
-        }
-        e.preventDefault();
-    }
-    else if ((e.ctrlKey && key === 'y') || (e.metaKey && key === 'y')) {
-        redo();
         e.preventDefault();
     }
 }
