@@ -1197,6 +1197,27 @@ def move_image(image_id: int, destination_folder: str, image_path: str) -> str:
 # PermissionError/EACCES instead, which is already the answer the caller needs.
 _CROSS_VOLUME_RENAME_ERRNOS = frozenset({errno.EXDEV, errno.ENOTSUP})
 
+# Windows refuses to rename or delete a file that another handle holds open
+# without delete sharing, which is how Python, Pillow and antivirus scanners
+# open files. This server holds one itself while it sends a picture or builds
+# its thumbnail, so a sort key pressed the moment a picture appeared failed
+# with "in use by another program". Those handles close within moments: wait
+# for them (about two seconds in all), then report a refusal that is still there.
+_SHARING_VIOLATION_WINERRORS = frozenset({32, 33})  # ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION
+_SHARED_FILE_RETRY_DELAYS = (0.05, 0.1, 0.2, 0.4, 0.4, 0.4, 0.4)
+
+
+def _once_the_file_is_free(operation: Callable[..., Any], *args: Any) -> Any:
+    """Run a rename or delete, waiting out another handle that is reading the file."""
+    for delay in _SHARED_FILE_RETRY_DELAYS:
+        try:
+            return operation(*args)
+        except OSError as exc:
+            if getattr(exc, "winerror", None) not in _SHARING_VIOLATION_WINERRORS:
+                raise
+        time.sleep(delay)
+    return operation(*args)
+
 
 def _flush_staged_file(staging_path: Path) -> None:
     """Force the staged bytes out of the OS cache before publishing them."""
@@ -1269,7 +1290,7 @@ def _move_file_atomically(source_path: str, destination_path: str) -> None:
     reporting anything at all.
     """
     try:
-        os.replace(source_path, destination_path)
+        _once_the_file_is_free(os.replace, source_path, destination_path)
         return
     except OSError as rename_error:
         if rename_error.errno not in _CROSS_VOLUME_RENAME_ERRNOS:
@@ -1278,7 +1299,7 @@ def _move_file_atomically(source_path: str, destination_path: str) -> None:
     destination_existed = os.path.lexists(destination_path)
     _copy_file_atomically(source_path, destination_path)
     try:
-        os.unlink(source_path)
+        _once_the_file_is_free(os.unlink, source_path)
     except OSError:
         # The source stays (another program holds it), so the move did not
         # happen: take the copy back rather than leave a second file the next

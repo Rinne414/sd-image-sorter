@@ -39,6 +39,8 @@ One program now serves two interfaces: the classic one stays the start page and 
   - 单键快捷键在按住 Ctrl、Alt 或 ⌘ 时不触发；捕获阶段的保护（`frontend/js/modules/core/key-guard.js`）让刷新、地址栏、标签页和开发者工具组合键不会被任何页面处理。Ctrl+Shift+R 不再随机打开一张图，Ctrl+R 不再切换打码工具，页面原本无意占用的 Ctrl+A / Ctrl+D / Ctrl+1–9 交还给浏览器。
 - **Honest outcomes / 如实的结果**: moves, Auto-Separate, dataset export, batch censoring and undo always say how they ended; an undo that left some files can be run again; a cross-drive move whose source stays takes its copy back; a publish export says what each file lost and cannot damage the file it replaces; a censor save asked to keep metadata says when it could not.
   - 移动、自动分类、数据集导出、批量打码和撤销都会说明最后结果；没撤销完的可以再撤销一次；跨磁盘移动删不掉原图时会收回复制出去的那份；成套发布导出会说明每个文件丢了什么，也不会弄坏被替换的文件；打码保存要求保留元数据却做不到时会说明。
+- **A move waits for a picture that is still being read / 移动会等图片读完**: on Windows a file another program is reading cannot be moved, and this program reads a picture itself while it shows it or makes its thumbnail. A sort key pressed the moment a picture appeared could fail with "in use by another program"; a move now waits up to about two seconds for the reader and still reports a file that stays locked.
+  - 在 Windows 上，正被其他程序读取的文件无法移动，而本程序显示图片或生成缩略图时自己也在读它。图片一出现就按分类键，可能失败并提示「文件正由另一个程序使用」；现在移动会最多等约两秒，文件一直被占用时仍会如实报告。
 - **Prompt Lab / 提示词助手**: an exclusion rule can exclude a whole category, the "tag is missing" condition is checked, and seed and count reach tag sets.
   - 排除规则可以排除整个分类，「缺少某个标签」条件生效，种子和数量会套用到标签组。
 

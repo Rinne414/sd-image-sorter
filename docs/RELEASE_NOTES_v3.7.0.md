@@ -14,6 +14,8 @@ Two interfaces in one program, a backup before upgrades, honest moves and undo.
   - **升级前备份数据库**：数据库升级前会先复制一份到 `data/backups`（保留最近三份）。用过 Vopus 1.0.0 的图库会在第一次启动时自动修复。
 - **Operations tell the truth and can be undone again**: moves, Auto-Separate, dataset export, batch censoring and undo always say how they ended. An undo that left some files behind can be run again; a cross-drive move whose source could not be removed takes its copy back; a publish export says what each file lost and can no longer damage the file it replaces; a censor save asked to keep the metadata says when it could not.
   - **操作结果如实说明，撤销能再跑一次**：移动、自动分类、数据集导出、批量打码和撤销都会说明最后结果。没撤销完的可以再撤销一次；跨磁盘移动删不掉原图时会把复制出去的那份收回；成套发布导出会说明每个文件丢了什么，也不会再弄坏被替换的文件；打码保存要求保留元数据却做不到时会告诉你。
+- **A move waits for a picture that is still being read**: on Windows, a sort key pressed the moment a picture appeared could fail with "in use by another program", because the program was still reading that picture to show it. A move now waits up to about two seconds, and still reports a file that stays locked.
+  - **移动会等图片读完**：在 Windows 上，图片一出现就按分类键，可能因为程序还在读这张图来显示它，而失败并提示「文件正由另一个程序使用」。现在移动会最多等约两秒；文件一直被占用时仍会如实报告。
 - **Keyboard and back button**: single-letter shortcuts no longer fire while Ctrl, Alt or ⌘ is held, so Ctrl+Shift+R (hard refresh), Ctrl+L, Ctrl+F and other browser keys work again. The browser Back button and the mouse back button go up one level, like Esc. Dialogs take focus, Esc closes only the topmost one, Tab stays inside, and focus returns to the button that opened it.
   - **键盘和后退键**：按住 Ctrl、Alt 或 ⌘ 时，单字母快捷键不再触发，Ctrl+Shift+R（强制刷新）、Ctrl+L、Ctrl+F 等浏览器按键恢复正常。浏览器后退键和鼠标侧键会像 Esc 一样退一层。对话框会取得焦点，Esc 只关最上面一层，Tab 不会跑出对话框，关闭后焦点回到打开它的按钮。
 - **Keeps your place**: switching views or refreshing keeps the picture you were reading; a new sort, filter, search or library opens its results at the top.
@@ -42,7 +44,8 @@ Two interfaces in one program, a backup before upgrades, honest moves and undo.
 
 ## Validation / 验证
 
-Filled in from the release gate before the packages are built. / 打包前填入发布检查结果。
+Local Windows gate: backend 8,884 passed (13 skipped); Vopus typecheck, build and 1,147 unit tests passed; dependency audit clean; browser tests 1,869 of 1,882 passed (12 skipped) with one failure, a sort move refused while the picture was still being read, fixed in this release, after which all 78 tests that move files passed. GitHub CI on the release candidate before that fix (Linux full suite with browser tests and click coverage, macOS, Windows, Linux portable x86_64 and aarch64): 5 of 5 green.
+  - 本机 Windows：后端 8,884 通过（13 跳过）；Vopus 类型检查、构建和 1,147 个单元测试通过；依赖安全检查无问题；浏览器测试 1,882 个中 1,869 通过、12 跳过、1 失败（图片还在读取时移动被拒），已在本版修复，修复后 78 个移动文件的测试全部通过。修复前的候选版本在 GitHub CI（Linux 完整测试含浏览器测试和点击覆盖、macOS、Windows、Linux 便携版 x86_64 与 aarch64）5 项全部通过。
 
 ---
 
