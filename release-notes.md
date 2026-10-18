@@ -67,4 +67,13 @@ Local Windows gate: backend 8,884 passed (13 skipped); Vopus typecheck, build an
 
 ## Checksums
 
-Added after the packages are built. / 打包完成后补上。
+| Asset | SHA-256 |
+|---|---|
+| `sd-image-sorter-v3.7.0-windows-portable.zip` | `066691c374cff0576e0c2f3de2536662319edfe38e5d817f0fb573c8a671b149` |
+| `sd-image-sorter-v3.7.0-app-patch.zip` | `bbfbf89b7e406b6b1302a94d87ed6edc021d26111f38ea366b86c11cc3f532c8` |
+| `sd-image-sorter-v3.7.0-linux.tar.gz` | `bc87925eb0305947eeec468e31c18104ef8f569ebe4d607d50d011ebac27fdcc` |
+| `sd-image-sorter-v3.7.0-linux-portable-x86_64.tar.gz` | `1ea768fe19cc9f1f7f40f13975e7acff7ecc87236bfe355bff6e6fb2a86ee169` |
+| `sd-image-sorter-v3.7.0-linux-portable-aarch64.tar.gz` | `f1641b35eff4af1d86146a2f29ac421779dd5daf0d14b66687f5ab7db6d4e162` |
+| `sd-image-sorter-v3.7.0-release-manifest.json` | `d230b5cbc4d50184c47cd305aa041c97aaa65781c434d5496a60b3ff8459a7ef` |
+
+The manifest contains the five archive checksums; its own checksum is recorded above. / manifest 内含五个归档校验和，其自身校验和记录于上表。
