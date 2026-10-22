@@ -201,6 +201,9 @@
             if (emptyState && emptyState.classList.contains('empty-state-no-matches')) {
                 this._setText('#gallery-empty-state h3', 'gallery.noMatchesTitle');
                 this._setText('#gallery-empty-state p', 'gallery.noMatchesHint');
+            } else if (emptyState && emptyState.classList.contains('empty-state-all-missing')) {
+                // Every file of the library is missing; the hint carries the count and is locked.
+                this._setText('#gallery-empty-state h3', 'gallery.allMissingTitle');
             } else {
                 this._setText('#gallery-empty-state h3', 'gallery.noImages');
                 this._setText('#gallery-empty-state p', 'gallery.scanPrompt');

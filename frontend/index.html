@@ -943,16 +943,19 @@
                             <span class="gallery-banner-detail" id="gallery-unreadable-banner-detail" data-i18n="reconnect.banner.detail">Usually the files were moved, renamed, or are on an unplugged drive. Find Moved Files re-links them and only updates gallery records.</span>
                         </div>
                         <div class="gallery-banner-actions">
-                            <button type="button" class="btn btn-ghost btn-small" id="gallery-missing-clear-all" hidden>
-                                <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-broom"/></svg></span>
-                                <span id="gallery-missing-clear-all-label" data-i18n="missing.clearAll">Clear these records</span>
-                            </button>
                             <button type="button" class="btn btn-primary btn-small" id="gallery-unreadable-banner-cta">
                                 <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg></span>
                                 <span data-i18n="reconnect.banner.cta">Find Moved Files</span>
                             </button>
                             <button type="button" class="btn btn-ghost btn-small" id="gallery-missing-toggle-details" aria-expanded="false" aria-controls="gallery-missing-panel" hidden>
                                 <span id="gallery-missing-toggle-details-label" data-i18n="missing.showDetails">Show folders</span>
+                            </button>
+                            <!-- Removing records is the rare, big step: last, apart from the
+                                 everyday Find Moved Files (DESIGN.md rule 14). -->
+                            <span class="gallery-banner-divider" aria-hidden="true"></span>
+                            <button type="button" class="btn btn-ghost btn-small gallery-banner-danger" id="gallery-missing-clear-all" hidden>
+                                <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-broom"/></svg></span>
+                                <span id="gallery-missing-clear-all-label" data-i18n="missing.clearAll">Clear these records</span>
                             </button>
                             <button type="button" class="btn btn-ghost btn-small" id="gallery-unreadable-banner-dismiss" aria-label="Hide banner" data-i18n-aria="reconnect.banner.dismiss">
                                 <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></span>

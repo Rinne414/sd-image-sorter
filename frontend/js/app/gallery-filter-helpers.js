@@ -132,14 +132,32 @@ function _applyGalleryEmptyStateVariant(emptyState) {
             cta.style.display = '';
         }
     } else {
+        // The library has records but none of their files opens (moved,
+        // renamed, an unplugged drive): say so instead of "no images yet".
+        const missing = Number(window.UnreadableBanner?.getLastCount?.() || 0);
+        emptyState.classList.toggle('empty-state-all-missing', missing > 0);
+        const titleKey = missing > 0 ? 'gallery.allMissingTitle' : 'gallery.noImages';
+        const hintKey = missing > 0 ? 'gallery.allMissingHint' : 'gallery.scanPrompt';
         if (titleEl) {
-            titleEl.setAttribute('data-i18n', 'gallery.noImages');
-            titleEl.textContent = t('gallery.noImages', 'No images yet');
+            titleEl.setAttribute('data-i18n', titleKey);
+            titleEl.textContent = missing > 0
+                ? t(titleKey, 'The images of this library cannot be found on disk')
+                : t(titleKey, 'No images yet');
         }
         if (hintEl) {
-            hintEl.setAttribute('data-i18n', 'gallery.scanPrompt');
-            hintEl.textContent = t('gallery.scanPrompt',
-                'Import an image folder to start browsing, filtering, and organizing your images');
+            // The count is written in, so this text is locked against the i18n re-apply.
+            hintEl.removeAttribute('data-i18n');
+            hintEl.dataset.i18nLocked = missing > 0 ? '1' : '';
+            if (missing > 0) {
+                hintEl.textContent = t(hintKey,
+                    'The library has {count} images, but their files are not where they were: usually the folder was moved or renamed, or the drive is unplugged. Use Find Moved Files above to re-link them, or import a folder.')
+                    .replace('{count}', missing.toLocaleString());
+            } else {
+                delete hintEl.dataset.i18nLocked;
+                hintEl.setAttribute('data-i18n', hintKey);
+                hintEl.textContent = t(hintKey,
+                    'Import an image folder to start browsing, filtering, and organizing your images');
+            }
         }
         if (importBtn) importBtn.style.display = '';
         if (onboardingSteps) onboardingSteps.style.display = '';

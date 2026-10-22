@@ -285,6 +285,8 @@ window.I18nLang_en = {
     'gallery.imageCountOf': '{count} of {total} images',
     'gallery.imageCountMissingTip': '{total} indexed in this library; {missing} originals are not at their recorded location.',
     'gallery.noImages': 'No images yet',
+    'gallery.allMissingTitle': 'The images of this library cannot be found on disk',
+    'gallery.allMissingHint': 'The library has {count} images, but their files are not where they were: usually the folder was moved or renamed, or the drive is unplugged. Use Find Moved Files above to re-link them, or import a folder.',
     'gallery.scanPrompt': 'Import an image folder to start browsing, filtering, and organizing your images',
     'gallery.noMatchesTitle': 'No images match your filters',
     'gallery.noMatchesHint': 'Try removing some filters or clearing the search.',

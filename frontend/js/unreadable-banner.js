@@ -212,6 +212,11 @@
             { count: summary.total }
         ));
         lockedText($('#gallery-unreadable-banner-detail'), detailFor(summary));
+        // An empty gallery shown before this count arrived said "no images yet"; let it say why.
+        var emptyState = document.getElementById('gallery-empty-state');
+        if (emptyState && typeof window._applyGalleryEmptyStateVariant === 'function') {
+            window._applyGalleryEmptyStateVariant(emptyState);
+        }
 
         var clearAll = $('#gallery-missing-clear-all');
         var clearable = summary.clearable_total || 0;

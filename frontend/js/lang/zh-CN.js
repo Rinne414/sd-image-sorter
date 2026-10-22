@@ -288,6 +288,8 @@ window.I18nLang_zhCN = {
     'gallery.imageCountOf': '{count} / {total} 张图片',
     'gallery.imageCountMissingTip': '图库共索引 {total} 张；其中 {missing} 张原始文件不在原位。',
     'gallery.noImages': '还没有图片',
+    'gallery.allMissingTitle': '这个图库的图都找不到原文件',
+    'gallery.allMissingHint': '图库里有 {count} 张图，但原文件不在原来的位置：多半是文件夹被搬走、改名，或在没接上的硬盘里。用上面的「找回搬走的图」重新连上它们，或导入新的文件夹。',
     'gallery.scanPrompt': '先导入一个图片文件夹，就可以开始看图、筛图和整理图片',
     'gallery.noMatchesTitle': '没有符合条件的图片',
     'gallery.noMatchesHint': '试试去掉几个筛选条件，或者清空搜索。',

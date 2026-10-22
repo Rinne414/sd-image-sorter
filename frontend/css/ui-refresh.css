@@ -9454,6 +9454,19 @@ html.lang-zh #view-censor .queue-action-btn span {
     align-items: center;
     gap: 8px;
 }
+/* The rare, big action sits last, past a rule, in the danger colour. */
+.gallery-banner-divider {
+    width: 1px;
+    height: 22px;
+    margin: 0 4px;
+    background: var(--border-color);
+}
+.gallery-banner-divider:has(+ [hidden]) {
+    display: none;
+}
+.gallery-banner-actions #gallery-missing-clear-all {
+    color: var(--danger);
+}
 @media (max-width: 768px) {
     .gallery-banner {
         flex-direction: column;
@@ -11872,6 +11885,27 @@ html.lang-zh #view-censor .queue-action-btn span {
     gap: 8px;
     margin-left: auto;
     flex-shrink: 0;
+}
+
+/* A laptop (1500px and narrower, 1366 the target): the search row stays on
+   one line (DESIGN.md §gallery-toolbar). The box gives way first (down to
+   220px, back to 480px when there is room), the aspect toggle keeps its
+   icons (each title still names it) and the sort list narrows. */
+@media (max-width: 1500px) {
+    .gallery-search-box {
+        flex: 1 1 220px;
+        min-width: 200px;
+    }
+
+    .gallery-search-tools .aspect-quick-btn [data-i18n="common.all"] {
+        display: none;
+    }
+
+    .gallery-search-tools .sort-dropdown {
+        width: 9.5rem;
+        min-width: 9.5rem;
+        max-width: 9.5rem;
+    }
 }
 
 .gallery-chip {
