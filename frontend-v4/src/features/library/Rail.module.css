@@ -225,6 +225,25 @@
   border-top: 1px solid var(--hairline);
 }
 
+/* Danger kept apart: its own line under a divider, in the danger colour. */
+.clearLibrary {
+  display: block;
+  margin: 10px 8px 0;
+  padding: 8px 0 0;
+  width: calc(100% - 16px);
+  border: 0;
+  border-top: 1px solid var(--hairline);
+  background: none;
+  color: var(--danger);
+  font-size: var(--fs-2);
+  text-align: left;
+}
+
+.clearLibrary:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .clean {
   margin: 0 8px;
   color: var(--ok);

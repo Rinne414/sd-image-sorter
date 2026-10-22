@@ -5,6 +5,7 @@ import { useSavedSearches, type SavedSearch } from '../../state/savedSearches'
 import { useToasts } from '../../ui/toasts'
 import { useFavorites, useFolders, useGenerators, useLibraries } from '../../api/queries'
 import { useSelectionDialog } from '../selection/dialogs'
+import { useClearRequest } from '../settings/library/ClearSection'
 import { useStatusDialogs } from '../status/dialogs'
 import { useStatusRows, type StatusRow } from '../status/statusRows'
 import { useT } from '../../i18n'
@@ -259,7 +260,36 @@ function Status() {
   return (
     <section className={styles.status} aria-label={t('rail.status')} data-testid="library-status">
       <StatusBody shown={shown} />
+      <ClearLibraryLine />
     </section>
+  )
+}
+
+/**
+ * "Clear current library…" on the library page (owner, 2026-10-22: visible
+ * there, plus the Settings entrance), at the rail's foot below the status,
+ * away from the frequent buttons, and outside the folding section so it never
+ * hides. It runs the same check and question as Settings › Library.
+ */
+function ClearLibraryLine() {
+  const t = useT()
+  const libraries = useLibraries()
+  const libraryId = useApp((s) => s.libraryId)
+  const current = libraries.data?.libraries.find((l) => l.id === libraryId)
+  const clear = () => {
+    useClearRequest.getState().request()
+    useApp.getState().openSettings('library')
+  }
+  return (
+    <button
+      type="button"
+      className={styles.clearLibrary}
+      onClick={clear}
+      title={t('next.footer.clearTitle', { name: displayName(current?.name, current?.is_default, t) })}
+      data-testid="rail-clear-library"
+    >
+      {t('next.footer.clear')}
+    </button>
   )
 }
 

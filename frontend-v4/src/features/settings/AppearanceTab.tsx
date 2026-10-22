@@ -73,7 +73,7 @@ export function AppearanceTab() {
       <ScaleChoice saved={saved === 'scale'} onSaved={() => mark('scale')} />
       <HomeChoices saved={saved} mark={mark} />
       {next ? <NextInterfaceNote /> : <InterfaceChoice />}
-      {next && <ResetAllSection />}
+      <ResetAllSection />
     </div>
   )
 }

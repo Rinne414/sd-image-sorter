@@ -150,9 +150,9 @@
         "#btn-settings-clear-library"
       ],
       "vopus": {
-        "partial": "Clear is only in Settings > Library; there is no entrance on the gallery page",
-        "at": "#/settings/library",
-        "find": "[data-testid=\"clear-index\"]"
+        "at": "#/library",
+        "find": "[data-testid=\"rail-clear-library\"]",
+        "note": "Rail foot, below Library status; Settings > Library has clear-index"
       },
       "next": {
         "at": "#/library",
@@ -3722,7 +3722,8 @@
         "#btn-settings-reset-all"
       ],
       "vopus": {
-        "missing": "Reset all settings exists only in the /next/ interface, not in Vopus"
+        "at": "#/settings/appearance",
+        "find": "[data-testid=\"reset-all-open\"]"
       },
       "next": {
         "at": "#/settings/appearance",

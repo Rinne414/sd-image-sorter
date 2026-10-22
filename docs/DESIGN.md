@@ -197,7 +197,11 @@ Not ported on 2026-10-23: Vopus 11 missing and 13 in part, `/next/` 9
 missing and 11 in part (both lack tab customising, the disguise cover,
 GIF and video censoring, the style map, dataset to collection, hard refresh
 and the output-folder root; Vopus also lacks saving AI defaults, Reset all
-settings and Clear library on the gallery page). Entrances that need a
+settings and Clear library on the gallery page; both added to Vopus the
+same day: a "Clear current library…" line at the rail's foot under Library
+status, opening the Settings › Library check and question, and "Reset all
+settings" at the end of Settings › Appearance, so Vopus is now 9 missing
+and 12 in part). Entrances that need a
 running job, missing files, a sort session or an image read in the Reader
 are checked in the source only. Controls that classic builds in script
 (context menus) are not in the baseline yet.
