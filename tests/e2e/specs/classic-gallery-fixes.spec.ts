@@ -109,3 +109,41 @@ test('an error nothing caught is said on screen with Reload and Copy, paths hidd
   await expect(strip.getByRole('button', { name: 'Reload' })).toBeVisible()
   await expect(strip.getByRole('button', { name: 'Copy the error' })).toBeVisible()
 })
+
+test('Reset all settings asks first, then clears preferences and keeps the work', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await mockLibrary(page, 3, 0)
+  await open(page, 'en')
+  const seeded: Record<string, string> = {
+    ui_scale_v1: '1.3',
+    'sort-audio-enabled': 'true',
+    'sidebar_section_collapsed_folders': '1',
+    disguise_cover_kind: 'text',
+    censor_mask_shape: 'ellipse',
+    // work: stays
+    disguise_output_folder: 'D:/out',
+    censor_output_folder: 'D:/censored',
+    'sd-image-sorter-filter-presets': '[{"name":"mine"}]',
+    'sd-image-sorter-recent-folders': '["D:/pics"]',
+  }
+  await page.evaluate((items) => { for (const [k, v] of Object.entries(items)) localStorage.setItem(k, v) }, seeded)
+  const read = () => page.evaluate((keys) => Object.fromEntries(keys.map((k) => [k, localStorage.getItem(k)])), Object.keys(seeded))
+
+  await page.click('#btn-open-model-manager')
+  await page.locator('#btn-settings-reset-all').scrollIntoViewIfNeeded()
+  await page.click('#btn-settings-reset-all')
+  await expect(page.locator('#confirm-modal.visible #confirm-title')).toHaveText('Reset all settings?')
+  await expect(page.locator('#btn-confirm-cancel')).toBeFocused()
+  await page.click('#btn-confirm-cancel')
+  expect(await read()).toEqual(seeded)
+
+  await page.click('#btn-settings-reset-all')
+  await Promise.all([page.waitForEvent('load'), page.click('#btn-confirm-ok')])
+  const after = await read()
+  for (const key of ['ui_scale_v1', 'sort-audio-enabled', 'sidebar_section_collapsed_folders', 'disguise_cover_kind', 'censor_mask_shape']) {
+    expect(after[key], key).toBeNull()
+  }
+  for (const key of ['disguise_output_folder', 'censor_output_folder', 'sd-image-sorter-filter-presets', 'sd-image-sorter-recent-folders']) {
+    expect(after[key], key).toBe(seeded[key])
+  }
+})

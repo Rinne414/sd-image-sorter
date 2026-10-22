@@ -325,6 +325,69 @@ function initSettingsOutputRoot() {
     });
 }
 
+// Reset all settings (owner baseline, docs/DESIGN.md §redesign-2026-10): every
+// preference this interface keeps in the browser goes back to its default.
+// Work stays: libraries and their searches, collections, saved presets and
+// configs, drafts, jobs, recent folders, guides already seen, and every folder
+// the user picked. The interface choice and the output folder live on the server.
+const SETTING_RESET_KEYS = [
+    // language, size, sound, start page
+    'sd-image-sorter-lang', 'ui_scale_v1', 'sort-audio-enabled',
+    'aurora-entry-skip', 'aurora-entry-hero-off', 'aurora-entry-hero-mode',
+    'sd-comfort-zen', 'sd-comfort-warmth', 'library_auto_refresh_enabled',
+    'sd-image-sorter-debug-enabled',
+    // tabs, panels shown or folded, gallery view
+    'aurora-nav-tabs', 'gallery-view-mode', 'sd-sorter:grid-size', 'desktop-sidebar-collapsed',
+    'sd-image-sorter-scan-advanced-open', 'sd-image-sorter-tag-advanced-open',
+    'sd-image-sorter-dataset-tag-legend-open',
+    // tool options
+    'sd-image-sorter-tagger-defaults-v1', 'sd-image-sorter-artist-defaults-v1', 'sd-tipo-model-v1',
+    'manual_sort_cooldown_ms_v1', 'manual_sort_mode_v1', 'manual_sort_operation_mode_v1',
+    'manual_sort_zen_v1', 'manual_sort_exclude_sorted_v1', 'autosep_settings_v1',
+    'batch_export_output_mode', 'batchExport.trainingPurpose',
+    'batchExport.normalizeUnderscores', 'batchExport.dedupeImplications',
+    'sd-image-sorter-dataset-queue-mode', 'sd-image-sorter-dataset-kohya-layout',
+    'sd-image-sorter-separation-purpose', 'sd-sorter-publish-settings', 'sd-stylemap-color-by',
+    'censor_output_format', 'censor_metadata_option', 'censor_mask_shape', 'censor_unedited_option',
+    'censor_show_advanced_models', 'censor_name_conflict', 'censor_face_guard',
+    'censor_expand_percent', 'censor_block_size_auto', 'censor_undo_depth',
+];
+const SETTING_RESET_PREFIXES = ['sidebar_section_collapsed_', 'disguise_'];
+
+function isSettingResetKey(key) {
+    // A folder the user picked (disguise_output_folder) is theirs, not a preference.
+    if (key.endsWith('_folder')) return false;
+    return SETTING_RESET_KEYS.includes(key) || SETTING_RESET_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
+
+function resetAllSettingsNow() {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key !== null && isSettingResetKey(key)) keys.push(key);
+    }
+    keys.forEach((key) => localStorage.removeItem(key));
+    return keys;
+}
+
+function resetAllSettingsInteractive() {
+    showConfirm(
+        appT('settings.resetAllConfirmTitle', 'Reset all settings?'),
+        appT('settings.resetAllConfirmMessage', 'Every preference goes back to its default and the page reloads. Your libraries, images and saved work stay.'),
+        () => {
+            try {
+                resetAllSettingsNow();
+            } catch (error) {
+                showToast(formatUserError(error, appT('settings.resetAllFailed', 'Could not reset the settings')), 'error');
+                return;
+            }
+            window.location.reload();
+        },
+        null,
+        { tone: 'primary' },
+    );
+}
+
 function syncSettingsControls() {
     syncSettingsSoundControl();
     syncSettingsUiScaleControl();
@@ -371,6 +434,12 @@ function initSettingsControls() {
     if (resetAi && resetAi.dataset.bound !== '1') {
         resetAi.dataset.bound = '1';
         resetAi.addEventListener('click', resetAiDefaultPreferences);
+    }
+
+    const resetAll = document.getElementById('btn-settings-reset-all');
+    if (resetAll && resetAll.dataset.bound !== '1') {
+        resetAll.dataset.bound = '1';
+        resetAll.addEventListener('click', resetAllSettingsInteractive);
     }
 
     initSettingsOutputRoot();

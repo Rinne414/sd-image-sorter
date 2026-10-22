@@ -13006,6 +13006,26 @@ html .nav-bar.nav-measuring * {
     line-height: 1.55;
 }
 
+/* Reset all settings: neutral frame, the work stays (js/app/settings.js). */
+.settings-reset-all {
+    margin-top: 18px;
+    padding: 14px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+}
+
+.settings-reset-all h3 {
+    margin: 0 0 6px;
+    font-size: 15px;
+}
+
+.settings-reset-all p {
+    margin: 0 0 10px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
 /* Whole-interface error fallback (js/error-fallback.js): a strip, never a white page. */
 .app-error-strip {
     position: fixed;
