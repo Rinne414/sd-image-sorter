@@ -6,7 +6,9 @@ import { expect, test, type Page } from '@playwright/test'
  *   it used to push the aspect toggle and sort onto a third toolbar row;
  * - the missing-files banner puts the rare record clearing last, apart from
  *   Find Moved Files;
- * - a library whose every file is missing says so instead of "No images yet".
+ * - a library whose every file is missing says so instead of "No images yet";
+ * - Clear current library is on the gallery page and in Settings;
+ * - an error nothing caught is said on screen instead of a silent dead page.
  */
 
 const MOCK_IMAGE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#789"/></svg>'
@@ -89,4 +91,21 @@ test('Clear current library is on the gallery page and in Settings, asking with 
   await page.click('#btn-settings-clear-library')
   await expect(message).toContainText(name)
   await page.click('#btn-confirm-cancel')
+})
+
+test('an error nothing caught is said on screen with Reload and Copy, paths hidden', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await mockLibrary(page, 3, 0)
+  await open(page, 'en')
+  await page.evaluate(() => {
+    setTimeout(() => {
+      throw new Error('could not read D:\\Pictures\\mine\\a.png')
+    }, 0)
+  })
+  const strip = page.locator('#app-error-strip')
+  await expect(strip).toBeVisible()
+  await expect(strip).toContainText('could not read <path>')
+  await expect(strip).not.toContainText('Pictures')
+  await expect(strip.getByRole('button', { name: 'Reload' })).toBeVisible()
+  await expect(strip.getByRole('button', { name: 'Copy the error' })).toBeVisible()
 })

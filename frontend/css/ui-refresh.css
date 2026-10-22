@@ -13005,3 +13005,33 @@ html .nav-bar.nav-measuring * {
     font-size: 13px;
     line-height: 1.55;
 }
+
+/* Whole-interface error fallback (js/error-fallback.js): a strip, never a white page. */
+.app-error-strip {
+    position: fixed;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    z-index: 10050;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: min(920px, calc(100vw - 32px));
+    padding: 10px 12px 10px 16px;
+    border: 1px solid var(--danger);
+    border-radius: 12px;
+    background: var(--bg-elevated);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.app-error-strip[hidden] {
+    display: none;
+}
+
+.app-error-strip-text {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
