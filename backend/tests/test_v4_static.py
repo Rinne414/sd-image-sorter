@@ -122,3 +122,42 @@ def test_unbuilt_vopus_explains_how_to_build(tmp_path):
         assert text in res.text
     assert "Vopus" in res.text
     assert "V4" not in res.text
+
+
+# The new interface (docs/DESIGN.md §redesign-2026-10) is a second page of the
+# same build: next.html, served at /next/ beside /vopus/.
+
+
+def _build_with_next(tmp_path):
+    dist = _build(tmp_path)
+    (dist / "next.html").write_text(
+        "<!doctype html><div id=root data-next></div>", encoding="utf-8"
+    )
+    return dist
+
+
+def test_the_new_interface_is_served_at_next_without_cache(tmp_path):
+    client = _client(_build_with_next(tmp_path))
+    res = client.get("/next/")
+    assert res.status_code == 200
+    assert "data-next" in res.text
+    assert res.headers["cache-control"] == "no-cache"
+    # its own routes live in the address hash; any path under /next/ is the page
+    assert "data-next" in client.get("/next/library").text
+    # Vopus is untouched
+    assert "data-next" not in client.get("/vopus/").text
+
+
+def test_bare_next_redirects_to_trailing_slash(tmp_path):
+    client = _client(_build_with_next(tmp_path))
+    res = client.get("/next", follow_redirects=False)
+    assert res.status_code in (307, 308)
+    assert res.headers["location"] == "/next/"
+
+
+def test_unbuilt_new_interface_says_how_to_build_it(tmp_path):
+    client = _client(_build(tmp_path))
+    res = client.get("/next/")
+    assert res.status_code == 503
+    assert "npm run build" in res.text
+    assert "经典界面" in res.text

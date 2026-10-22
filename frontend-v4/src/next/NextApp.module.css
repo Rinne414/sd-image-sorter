@@ -1,0 +1,22 @@
+.app {
+  display: grid;
+  grid-template-rows: var(--topbar-h) minmax(0, 1fr);
+  height: calc(100 * var(--vh));
+  min-width: 1280px;
+  background: var(--bg);
+}
+
+.body {
+  min-height: 0;
+}
+
+/* Switching page fades the new one in instead of cutting (reduced motion: instant). */
+.body > * {
+  animation: page-in var(--t-med) var(--ease);
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+  }
+}

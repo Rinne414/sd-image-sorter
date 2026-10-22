@@ -19,6 +19,8 @@ interface Deps {
   search: RefObject<HTMLInputElement | null>
   rate: (id: number, stars: number) => void
   toggleFavorite: (id: number) => void
+  /** Esc, with nothing picked and no likeness ranking, stops inspecting (the /next/ recipe column closes). */
+  escapeClearsInspect?: boolean
 }
 
 /** Do what a library key means; false when it does not apply now (the browser keeps the key). */
@@ -38,6 +40,7 @@ function run(action: LibraryKey, d: Deps): boolean {
     case 'escape':
       if (s.selection.length) s.clearSelection()
       else if (useSimilar.getState().query) useSimilar.getState().clear()
+      else if (d.escapeClearsInspect && id !== null) s.inspect(null)
       else return false
       return true
     case 'search':

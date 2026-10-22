@@ -8,6 +8,8 @@
 /** Nouns that follow a count, with their singular. */
 export const PLURALS: Readonly<Record<string, string>> = {
   images: 'image',
+  sources: 'source',
+  conditions: 'condition',
   records: 'record',
   tags: 'tag',
   captions: 'caption',

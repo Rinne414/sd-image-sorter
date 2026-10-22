@@ -29,6 +29,8 @@ interface Props {
   /** The total is the backend's estimate. */
   about?: boolean
   inputRef: React.RefObject<HTMLInputElement | null>
+  /** Offer "show the rail" while the rail is folded away (the /next/ interface has no rail). */
+  railToggle?: boolean
 }
 
 interface Option {
@@ -36,7 +38,7 @@ interface Option {
   count?: number
 }
 
-export function QueryBar({ total, about = false, inputRef }: Props) {
+export function QueryBar({ total, about = false, inputRef, railToggle = true }: Props) {
   const t = useT()
   const queryText = useApp((s) => s.queryText)
   const setQueryText = useApp((s) => s.setQueryText)
@@ -132,7 +134,7 @@ export function QueryBar({ total, about = false, inputRef }: Props) {
   return (
     <div className={styles.bar} {...drop.props} data-dropping={drop.over || undefined} data-testid="query-bar">
       {drop.over && <div className={styles.dropHint}>{t('sim.dropHint')}</div>}
-      {!railOpen && (
+      {railToggle && !railOpen && (
         <button
           type="button"
           className="btn btn-ghost btn-icon"

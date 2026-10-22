@@ -16,7 +16,13 @@ import styles from './Gallery.module.css'
 import { useScrollMemory } from './useScrollMemory'
 
 const TILE_TARGET: Record<TileSize, number> = { s: 170, m: 236, l: 330 }
-const GAP = 6
+
+/**
+ * How tiles mark state. 'film' (Vopus): a china-marker box with the pick
+ * number and viewfinder corners. 'plain' (the /next/ interface): rounded
+ * tiles, a ring on the inspected one and a numbered badge on picks.
+ */
+export type TileLook = 'film' | 'plain'
 
 export interface GalleryHandle {
   move: (dir: 'left' | 'right' | 'up' | 'down' | 'first' | 'last') => void
@@ -38,6 +44,11 @@ interface Props {
   stale?: boolean
   /** Likeness per image, shown on each tile while the grid is ranked by it. */
   scores?: ReadonlyMap<number, number> | undefined
+  look?: TileLook
+  /** Height of a grid-layout cell as a multiple of its width (1: square). */
+  gridRatio?: number
+  /** Space between tiles and around the grid, in px. */
+  gap?: number
 }
 
 function useElementWidth(ref: React.RefObject<HTMLElement | null>): number {
@@ -53,8 +64,9 @@ function useElementWidth(ref: React.RefObject<HTMLElement | null>): number {
   return width
 }
 
-function tileHeight(img: ImageSummary | undefined, colW: number, layout: Layout): number {
-  if (layout === 'grid' || !img?.width || !img.height) return Math.round(colW)
+function tileHeight(img: ImageSummary | undefined, colW: number, layout: Layout, gridRatio = 1): number {
+  if (layout === 'grid') return Math.round(colW * gridRatio)
+  if (!img?.width || !img.height) return Math.round(colW)
   const ratio = Math.min(Math.max(img.height / img.width, 0.45), 2.4)
   return Math.round(colW * ratio)
 }
@@ -89,7 +101,22 @@ function tileLabel(t: Translate, img: ImageSummary, n: number, total: number | n
   return parts.join(t('browse.tile.sep'))
 }
 
-export function Gallery({ images, total, scrollKey, hasMore, isFetchingMore, fetchMore, favorites, onFavorite, onReady, stale, scores }: Props) {
+export function Gallery({
+  images,
+  total,
+  scrollKey,
+  hasMore,
+  isFetchingMore,
+  fetchMore,
+  favorites,
+  onFavorite,
+  onReady,
+  stale,
+  scores,
+  look = 'film',
+  gridRatio = 1,
+  gap = 6,
+}: Props) {
   const t = useT()
   const scrollRef = useRef<HTMLDivElement>(null)
   const width = useElementWidth(scrollRef)
@@ -98,10 +125,10 @@ export function Gallery({ images, total, scrollKey, hasMore, isFetchingMore, fet
   const inspectedId = useApp((s) => s.inspectedId)
   const selection = useApp((s) => s.selection)
 
-  const inner = Math.max(0, width - 2 * GAP)
+  const inner = Math.max(0, width - 2 * gap)
   const target = TILE_TARGET[tileSize]
-  const lanes = Math.max(1, Math.floor((inner + GAP) / (target + GAP)))
-  const colW = lanes > 0 ? (inner - GAP * (lanes - 1)) / lanes : target
+  const lanes = Math.max(1, Math.floor((inner + gap) / (target + gap)))
+  const colW = lanes > 0 ? (inner - gap * (lanes - 1)) / lanes : target
   // Screen pixels per tile: the interface zoom enlarges tiles like a denser screen does.
   const thumbSize = layout === 'grid' && colW * devicePixelRatio * uiZoom() <= 256 ? 256 : 384
 
@@ -111,18 +138,18 @@ export function Gallery({ images, total, scrollKey, hasMore, isFetchingMore, fet
   const virtualizer = useVirtualizer({
     count: images.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: (i) => tileHeight(imagesRef.current[i], colW, layout),
+    estimateSize: (i) => tileHeight(imagesRef.current[i], colW, layout, gridRatio),
     overscan: 6,
     lanes,
-    gap: GAP,
-    paddingStart: GAP,
+    gap,
+    paddingStart: gap,
     paddingEnd: 96,
     getItemKey: (i) => imagesRef.current[i]?.id ?? i,
   })
 
   useEffect(() => {
     virtualizer.measure()
-  }, [virtualizer, lanes, colW, layout])
+  }, [virtualizer, lanes, colW, layout, gridRatio])
 
   useScrollMemory({ scrollRef, virtualizer, images, scrollKey, ready: width > 0, hasMore, isFetchingMore, fetchMore })
 
@@ -251,7 +278,7 @@ export function Gallery({ images, total, scrollKey, hasMore, isFetchingMore, fet
                 position={item.index + 1}
                 setSize={total ?? -1}
                 img={img}
-                left={GAP + item.lane * (colW + GAP)}
+                left={gap + item.lane * (colW + gap)}
                 top={item.start}
                 width={colW}
                 height={item.size}
@@ -261,6 +288,7 @@ export function Gallery({ images, total, scrollKey, hasMore, isFetchingMore, fet
                 pick={pickOrder.get(img.id) ?? 0}
                 favorite={favorites.has(img.id)}
                 score={scores?.get(img.id)}
+                look={look}
                 onClick={onTileClick}
                 onDouble={onTileDouble}
                 onMenu={onTileMenu}
@@ -295,6 +323,7 @@ interface TileProps {
   pick: number
   favorite: boolean
   score: number | undefined
+  look: TileLook
   onClick: (e: MouseEvent, id: number) => void
   onDouble: (id: number) => void
   onMenu: (e: MouseEvent, id: number) => void
@@ -317,6 +346,7 @@ const Tile = memo(function Tile(p: TileProps) {
       data-inspected={p.inspected || undefined}
       data-picked={p.pick > 0 || undefined}
       data-scored={p.score !== undefined || undefined}
+      data-look={p.look}
       data-testid="tile"
       data-id={p.img.id}
       style={{ transform: `translate(${p.left}px, ${p.top}px)`, width: p.width, height: p.height }}
@@ -375,8 +405,15 @@ const Tile = memo(function Tile(p: TileProps) {
       >
         <Icon name="heart" filled={p.favorite} size={14} />
       </button>
-      {p.pick > 0 && <PickMark seed={p.img.id} order={p.pick} />}
-      {p.inspected && <span className={styles.viewfinder} aria-hidden />}
+      {p.pick > 0 &&
+        (p.look === 'plain' ? (
+          <span className={styles.pickBadge} aria-hidden data-testid="pick-badge">
+            {p.pick}
+          </span>
+        ) : (
+          <PickMark seed={p.img.id} order={p.pick} />
+        ))}
+      {p.inspected && p.look === 'film' && <span className={styles.viewfinder} aria-hidden />}
     </div>
   )
 })

@@ -1,0 +1,43 @@
+.failed {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-6);
+  font-weight: 600;
+}
+
+.lead {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-4);
+}
+
+.reason {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}

@@ -111,6 +111,17 @@ V4_NOT_BUILT_MESSAGE = (
 )
 
 
+NEXT_NOT_BUILT_MESSAGE = (
+    "SD 图片管理器的新界面（试用）还没有构建。\n"
+    "在 frontend-v4 文件夹里运行 npm ci 和 npm run build，然后刷新本页。\n"
+    "\n"
+    "The new interface (trial) has not been built yet.\n"
+    "Run npm ci and npm run build in the frontend-v4 folder, then reload this page.\n"
+    "\n"
+    "经典界面一直可以用：打开 / 即可。 The classic interface is always at /.\n"
+)
+
+
 def vopus_is_built(dist_path: Path | str | None = None) -> bool:
     """Whether the Vopus build exists (``FRONTEND_V4_DIST_PATH`` unless given)."""
     root = Path(dist_path) if dist_path is not None else FRONTEND_V4_DIST_PATH
@@ -159,6 +170,19 @@ def mount_frontend_v4(app: FastAPI, *, dist_path: str) -> None:
         query = request.url.query
         target = f"/vopus/{old_path}" + (f"?{query}" if query else "")
         return RedirectResponse(url=target, status_code=308)
+
+    # The new interface (docs/DESIGN.md §redesign-2026-10): a second page of the
+    # same build, next.html, at /next/. Its routes live in the address hash.
+    @app.get("/next", include_in_schema=False)
+    async def next_redirect():
+        return RedirectResponse(url="/next/")
+
+    @app.get("/next/{spa_path:path}", include_in_schema=False)
+    async def next_index(spa_path: str = ""):
+        next_path = os.path.join(dist_path, "next.html")
+        if not os.path.isfile(next_path):
+            return PlainTextResponse(NEXT_NOT_BUILT_MESSAGE, status_code=503)
+        return FileResponse(next_path, headers={"Cache-Control": "no-cache"})
 
     @app.get("/vopus/{spa_path:path}", include_in_schema=False)
     async def vopus_index(spa_path: str = ""):

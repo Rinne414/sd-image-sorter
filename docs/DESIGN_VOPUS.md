@@ -75,6 +75,9 @@ like a temporary viewer or two peer "session vs permanent" galleries.
    image's generation card in the right column; double-click or Enter opens
    the lightbox (one image up close); `I` toggles the right column.
 8. **Esc closes only the topmost layer and never navigates** (D8).
+   Browser Back and the mouse back button go up one level: the topmost
+   layer closes first, otherwise the page shown before returns; on the
+   first page one Back only warns (`src/lib/backNav.ts`, 2026-10-22).
 9. **Never cage.** Every feature is reachable from at least two places (its
    page or menu, plus Ctrl K). A feature missing from Ctrl K is hard to find.
 10. **Entrances may duplicate; implementations must not.** Two entrances to

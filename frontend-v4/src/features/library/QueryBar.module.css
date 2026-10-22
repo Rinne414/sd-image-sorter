@@ -231,3 +231,12 @@
   border-radius: var(--radius);
   pointer-events: none;
 }
+
+/* The new interface (/next/) names its scope line a container: on a laptop
+   with the recipe column open, the count gives its room to the search box
+   (it is back as soon as the column closes). */
+@container scope-line (max-width: 880px) {
+  :global(html[data-ui="next"]) .count {
+    display: none;
+  }
+}

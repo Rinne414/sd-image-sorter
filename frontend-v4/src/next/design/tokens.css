@@ -1,0 +1,151 @@
+/* Tokens of the /next/ interface (docs/DESIGN.md §redesign-2026-10, direction A
+   "Recipe"). One owner for every colour, size and shape of this interface.
+
+   The interface itself carries no accent hue: colour on screen comes from the
+   images and from the 14 word categories (data colours). Selection and focus
+   are a near-white ring; primary buttons are filled near-white. One dark
+   theme. Variable names match frontend-v4's tokens so its feature components
+   draw in this palette unchanged. */
+
+:root {
+  color-scheme: dark;
+
+  /* surfaces, darkest to lightest */
+  --stage: #0f1011;
+  --bg: #141516;
+  --surface-1: #1a1b1d;
+  --surface-2: #232427;
+  --surface-3: #2c2d31;
+  --line: #2e2f33;
+  --line-strong: #3e4045;
+  --hairline: #202124;
+  --scrim: rgba(6, 6, 7, 0.62);
+  --overlay-panel: rgba(26, 27, 29, 0.97);
+
+  /* type, contrast on --bg: body 15.5:1, secondary 10.3:1, muted 6.6:1, faint 5.8:1 */
+  --text: #edece8;
+  --text-2: #c4c2bc;
+  --muted: #9d9b95;
+  --faint: #93918b;
+
+  /* roles: no accent hue; the ring and the ink are near-white */
+  --ink-button: #edece8;
+  --on-ink-button: #141516;
+  --accent: #edece8;
+  --accent-soft: rgba(237, 236, 232, 0.1);
+  --accent-line: rgba(237, 236, 232, 0.45);
+  --marker: #f2f1ed;
+  --marker-soft: rgba(242, 241, 237, 0.12);
+  --on-marker: #141516;
+  --ring: #f2f1ed;
+  --on-ring: #141516;
+  --ai: #b7c0ca;
+  --ok: #8fb07c;
+  --warn: #d9a441;
+  --danger: #e0685a;
+  --danger-soft: rgba(224, 104, 90, 0.12);
+
+  --wash: rgba(237, 236, 232, 0.04);
+  --wash-hover: rgba(237, 236, 232, 0.07);
+  --wash-strong: rgba(237, 236, 232, 0.1);
+  --scrollbar: rgba(237, 236, 232, 0.2);
+
+  /* marks on and around pictures */
+  --film: #101112;
+  --film-hole: rgba(237, 236, 232, 0.15);
+  --edge-print: #c4c2bc;
+  --tile-caption-bg: rgba(12, 12, 13, 0.78);
+  --tile-outline: rgba(255, 255, 255, 0.08);
+  --on-image: #f3f2ee;
+  --ai-on-image: #c9d3dd;
+  --ok-on-image: #a8c996;
+  --hist-r: rgba(228, 96, 80, 0.55);
+  --hist-g: rgba(122, 184, 110, 0.5);
+  --hist-b: rgba(110, 150, 220, 0.5);
+
+  /* depth: frames and a short shadow on controls; real shadows on what floats */
+  --shadow-ctl: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-tile: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-badge: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-float: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 12px 32px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --shadow-bar: 0 -10px 24px rgba(0, 0, 0, 0.35);
+
+  /* 14 word categories (mirrors backend tag_rules.categorize_tag): data, not decoration */
+  --cat-character: #e7a15b;
+  --cat-artist: #e5806c;
+  --cat-body: #d8b48c;
+  --cat-expression: #e0c45c;
+  --cat-outfit: #b89cd4;
+  --cat-pose: #8db3d9;
+  --cat-angle: #78bfbc;
+  --cat-action: #d98ba0;
+  --cat-background: #92b980;
+  --cat-style: #c7a3c9;
+  --cat-quality: #aaa296;
+  --cat-meta: #8f8a82;
+  --cat-rating: #de5a4c;
+  --cat-unknown: #bfb8aa;
+  --chip-mix: 12%;
+
+  /* type: system fonts only (a local tool loads nothing to render) */
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+  --fs-1: 13px;
+  --fs-2: 14px;
+  --fs-3: 15px;
+  --fs-4: 16px;
+  --fs-5: 18px;
+  --fs-6: 22px;
+  --fs-7: 30px;
+
+  /* shape: rounded, a child never rounder than its parent */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-tile: 10px;
+
+  /* layout (see frontend-v4 tokens for --vh / --vw under the interface zoom) */
+  --vh: calc(1vh / var(--ui-zoom, 1));
+  --vw: calc(1vw / var(--ui-zoom, 1));
+  --topbar-h: 56px;
+  --scope-h: 62px;
+  --footer-h: 38px;
+  --control-h: 36px;
+  --rail-w: 256px;
+  --card-w: 400px;
+  --gap-grid: 10px;
+
+  /* motion: short and calm */
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --t-fast: 120ms;
+  --t-med: 180ms;
+}
+
+@media (min-width: 1800px) {
+  :root {
+    --card-w: 440px;
+  }
+}
+
+/* A laptop screen: the recipe column gives the grid and the scope line more room. */
+@media (max-width: 1500px) {
+  :root {
+    --card-w: 340px;
+  }
+}
+
+/* A short laptop screen keeps the bars slimmer. */
+@media (max-height: 820px) {
+  :root {
+    --topbar-h: 50px;
+    --scope-h: 56px;
+    --footer-h: 34px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-fast: 1ms;
+    --t-med: 1ms;
+  }
+}

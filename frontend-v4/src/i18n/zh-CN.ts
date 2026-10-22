@@ -17,6 +17,7 @@ import { zhCNPrivacy } from './zh-CN.privacy'
 import { zhCNLibrarySettings } from './zh-CN.library-settings'
 import { zhCNPromptLab } from './zh-CN.promptlab'
 import { zhCNAi } from './zh-CN.ai'
+import { zhCNNext } from './zh-CN.next'
 
 export const zhCN = {
   ...zhCNPublish,
@@ -37,6 +38,7 @@ export const zhCN = {
   ...zhCNLibrarySettings,
   ...zhCNPromptLab,
   ...zhCNAi,
+  ...zhCNNext,
   'app.name': 'SD Image Sorter',
   'nav.home': '首页',
   'nav.library': '图库',
@@ -417,6 +419,7 @@ export const zhCN = {
   'card.model': '模型',
   'card.loras': 'LoRA',
   'card.clickToCopy': '点一下复制',
+  'card.wordSearch': '点一下，找含这个词的图',
   'nav.backLeave': '再按一次「返回」就会离开本程序',
   'card.loadError': '读取这张图的信息失败：{reason}',
   'card.favorite': '收藏',

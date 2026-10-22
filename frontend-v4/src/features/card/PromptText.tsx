@@ -6,6 +6,10 @@ import styles from './Card.module.css'
 interface Props {
   text: string
   categories: Map<string, TagCategory> | undefined
+  /** When given, every tag is a button that hands its words over (the /next/ card adds them to the search). */
+  onWord?: ((word: string) => void) | undefined
+  /** The button's hint, e.g. "find images with this word". */
+  wordTitle?: string | undefined
 }
 
 function categoryOf(seg: Segment, categories: Map<string, TagCategory> | undefined): TagCategory {
@@ -14,14 +18,25 @@ function categoryOf(seg: Segment, categories: Map<string, TagCategory> | undefin
 }
 
 /** A prompt with its syntax dimmed and every tag in its category colour. */
-export function PromptText({ text, categories }: Props) {
+export function PromptText({ text, categories, onWord, wordTitle }: Props) {
   const segments = useMemo(() => segmentPrompt(text), [text])
   return (
     <p className={styles.prompt}>
       {segments.map((seg, i) => {
         switch (seg.kind) {
           case 'tag':
-            return (
+            return onWord ? (
+              <button
+                key={i}
+                type="button"
+                className={`${styles.ptag} ${styles.ptagButton} cat-${categoryOf(seg, categories)}`}
+                title={wordTitle}
+                onClick={() => onWord(seg.text)}
+                data-testid="prompt-word"
+              >
+                {seg.text}
+              </button>
+            ) : (
               <span key={i} className={`${styles.ptag} cat-${categoryOf(seg, categories)}`}>
                 {seg.text}
               </span>

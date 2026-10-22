@@ -1,0 +1,104 @@
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: var(--footer-h);
+  padding: 0 12px 0 16px;
+  background: var(--surface-1);
+  border-top: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.library {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: none;
+}
+
+.library b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.count {
+  color: var(--muted);
+}
+
+.rows {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+}
+
+.rows li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  flex: none;
+}
+
+.rows li[data-quiet] {
+  color: var(--muted);
+}
+
+.clean {
+  color: var(--muted);
+}
+
+.fix {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--faint);
+  text-underline-offset: 3px;
+}
+
+.fix:hover {
+  text-decoration-color: var(--text);
+}
+
+.fix:disabled {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.gap {
+  flex: 1;
+  min-width: 12px;
+}
+
+/* Visible on the gallery page, at the far end and quiet until pointed at. */
+.clear {
+  flex: none;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--danger);
+  font-size: var(--fs-2);
+}
+
+.clear:hover {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
+}
+
+/* A laptop screen keeps one row on the line; the report lists the rest. */
+@media (max-width: 1500px) {
+  .rows li:nth-child(n + 2):not(:last-child) {
+    display: none;
+  }
+}

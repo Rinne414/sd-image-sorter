@@ -1,0 +1,236 @@
+/* Element reset and shared control shapes of the /next/ interface. Started
+   from frontend-v4's base.css; the controls differ (§redesign-2026-10):
+   visible frames, a short shadow for depth, a 1px press. Components compose
+   these classes; nothing overrides them later. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-3);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+img {
+  display: block;
+}
+
+svg {
+  flex: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* The skip link parks focus on the page's main area; the next Tab shows where. */
+main:focus-visible {
+  outline: none;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar) transparent;
+}
+
+/* Shared control shapes. Components compose these; nothing overrides them later. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--control-h);
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-ctl);
+  color: var(--text);
+  font-size: var(--fs-3);
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+  border-radius: var(--radius);
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+
+.btn:hover {
+  background: var(--surface-3);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn[aria-pressed="true"],
+.btn[aria-expanded="true"] {
+  border-color: var(--line-strong);
+  background: var(--surface-3);
+}
+
+/* Primary actions are printed in ink: paper-white on dark, ink-black on light. */
+.btn-primary {
+  background: var(--ink-button);
+  border-color: transparent;
+  color: var(--on-ink-button);
+  font-weight: 650;
+}
+
+.btn-primary:hover {
+  background: color-mix(in srgb, var(--ink-button) 88%, var(--bg));
+}
+
+.btn-primary kbd {
+  color: inherit;
+  border-color: currentColor;
+  background: none;
+  opacity: 0.6;
+}
+
+/* Destructive confirmations: the danger ink on the surface, never a filled red slab. */
+.btn-danger {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--danger) 60%, transparent);
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.btn-danger:hover {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text-2);
+}
+
+.btn-ghost:hover {
+  background: var(--wash-hover);
+  color: var(--text);
+}
+
+.btn-icon {
+  width: var(--control-h);
+  padding: 0;
+}
+
+/* A compact button for tight places, such as the actions on a sort key. */
+.btn-sm {
+  height: 30px;
+  padding: 0 10px;
+  font-size: var(--fs-2);
+}
+
+.btn-sm.btn-icon {
+  width: 30px;
+  padding: 0;
+}
+
+kbd {
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  padding: 0 5px;
+  line-height: 18px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Read aloud, never seen. The -1px margin keeps its 1px box inside the page:
+   left at the end of the content, it made the page 1px taller than the window. */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Tag chips coloured by category. The category class sets --c. */
+.chip {
+  --c: var(--cat-unknown);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 7px;
+  color: var(--c);
+  background: color-mix(in srgb, var(--c) var(--chip-mix), transparent);
+  border: 1px solid color-mix(in srgb, var(--c) 22%, transparent);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+  border-radius: var(--radius);
+}
+
+.cat-character { --c: var(--cat-character); }
+.cat-artist { --c: var(--cat-artist); }
+.cat-body { --c: var(--cat-body); }
+.cat-expression { --c: var(--cat-expression); }
+.cat-outfit { --c: var(--cat-outfit); }
+.cat-pose { --c: var(--cat-pose); }
+.cat-angle { --c: var(--cat-angle); }
+.cat-action { --c: var(--cat-action); }
+.cat-background { --c: var(--cat-background); }
+.cat-style { --c: var(--cat-style); }
+.cat-quality { --c: var(--cat-quality); }
+.cat-meta { --c: var(--cat-meta); }
+.cat-rating { --c: var(--cat-rating); }
+.cat-unknown { --c: var(--cat-unknown); }
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--ring);
+}

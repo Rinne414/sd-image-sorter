@@ -26,7 +26,16 @@ export interface EdgeFacts {
 }
 
 /** Parameters printed on the film edge; click a code to copy its value. */
-export function EdgeCodes({ gen, generator, rating, score, i2i, part, inline }: EdgeFacts & { part?: 'top' | 'bottom'; inline?: boolean }) {
+export function EdgeCodes({
+  gen,
+  generator,
+  rating,
+  score,
+  i2i,
+  part,
+  inline,
+  keepCase,
+}: EdgeFacts & { part?: 'top' | 'bottom'; inline?: boolean; /** Print values as written (the plain card), not in edge-print capitals. */ keepCase?: boolean }) {
   const t = useT()
   // [label, what is shown, what gets copied]
   type Code = [string, string, string]
@@ -64,7 +73,7 @@ export function EdgeCodes({ gen, generator, rating, score, i2i, part, inline }: 
             onClick={() => void copyText(value)}
           >
             {label && <span className={styles.codeKey}>{label}</span>}
-            {display.toUpperCase()}
+            {keepCase ? display : display.toUpperCase()}
           </button>
         ))}
       </span>

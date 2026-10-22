@@ -111,6 +111,25 @@ shown (A Recipe, B Cover-lit library, C One wall); the owner picked A.
 Samples and the review screenshots live in `.plans/redesign-2026-10-22/`
 (not tracked).
 
+**Built so far (2026-10-22): the library page at `/next/`.** Code:
+`frontend-v4/next.html` and `frontend-v4/src/next/` (its own tokens and base
+controls, top edge, scope line, footer line, error fallback); the library
+reuses frontend-v4's gallery, recipe card, selection bar, lightbox and data
+layer through options that leave Vopus unchanged (`look="plain"` on the
+gallery and the card, clickable prompt words, no rail). Measured against the
+classic gallery: 25–27 controls instead of 69–71 before anything is picked,
+1 icon-only button instead of 9–11, images on 82% of a 1366×768 screen
+instead of 48% (10 thumbnails fully visible instead of 4) and 86% at
+1920×1080 instead of 63%, no text below 13 px.
+
+Not yet, in order: the other pages (batches, organize, settings, tools,
+home) still draw frontend-v4's layouts in the new tokens; censor editor,
+similar, style map and dataset maker open the classic interface's page
+(`/?ui=classic&view=…`); "reset all settings" belongs to the Settings
+redesign; the search conditions show as chips under the search box, not
+inside it as in sample A; on a laptop with the recipe column open the
+result count gives its room to the search box until the column closes.
+
 ---
 
 ## §principles — The design principles (macro layer)

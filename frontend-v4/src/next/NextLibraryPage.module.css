@@ -1,0 +1,40 @@
+.page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.page[data-card] {
+  grid-template-columns: minmax(0, 1fr) var(--card-w);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.gridArea {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  padding: 24px;
+  color: var(--text-2);
+  background: var(--stage);
+  text-align: center;
+}
+
+.notice p {
+  margin: 0;
+}

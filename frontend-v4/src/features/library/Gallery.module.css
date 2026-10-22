@@ -141,3 +141,70 @@
   font-size: var(--fs-2);
   border-radius: var(--radius);
 }
+
+/* The plain look (the /next/ interface, §redesign-2026-10): rounded tiles, a
+   thin inner outline, a ring on the inspected tile, a numbered badge on picks,
+   and the facts as a quiet label instead of a film edge. */
+.tile[data-look="plain"] {
+  border-radius: var(--radius-tile);
+  overflow: hidden;
+  box-shadow: var(--shadow-tile);
+}
+
+.tile[data-look="plain"] .img {
+  border-radius: inherit;
+}
+
+.tile[data-look="plain"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--tile-outline);
+  pointer-events: none;
+}
+
+.tile[data-look="plain"][data-inspected]::after {
+  box-shadow: inset 0 0 0 2px var(--ring), 0 0 0 1px var(--stage);
+}
+
+.tile[data-look="plain"][data-picked]::after {
+  box-shadow: inset 0 0 0 3px var(--ring);
+}
+
+.tile[data-look="plain"] .edge {
+  inset: auto auto 8px 8px;
+  height: auto;
+  padding: 2px 8px;
+  border-radius: 6px;
+  color: var(--on-image);
+  letter-spacing: 0;
+  font-size: var(--fs-2);
+}
+
+.tile[data-look="plain"] .edge :global(.mono) {
+  font-family: var(--font-ui);
+}
+
+.tile[data-look="plain"] .stars {
+  color: var(--on-image);
+}
+
+.pickBadge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: 13px;
+  background: var(--ring);
+  color: var(--on-ring);
+  font-size: var(--fs-2);
+  font-weight: 700;
+  box-shadow: var(--shadow-badge);
+  pointer-events: none;
+}

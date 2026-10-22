@@ -16,6 +16,7 @@ import { enPrivacy } from './en.privacy'
 import { enLibrarySettings } from './en.library-settings'
 import { enPromptLab } from './en.promptlab'
 import { enAi } from './en.ai'
+import { enNext } from './en.next'
 import type { MessageKey } from './zh-CN'
 
 export const en: Record<MessageKey, string> = {
@@ -37,6 +38,7 @@ export const en: Record<MessageKey, string> = {
   ...enLibrarySettings,
   ...enPromptLab,
   ...enAi,
+  ...enNext,
   'app.name': 'SD Image Sorter',
   'nav.home': 'Home',
   'nav.library': 'Library',
@@ -417,6 +419,7 @@ export const en: Record<MessageKey, string> = {
   'card.model': 'Model',
   'card.loras': 'LoRA',
   'card.clickToCopy': 'Click to copy',
+  'card.wordSearch': 'Click to find images with this word',
   'nav.backLeave': 'Press Back again to leave the program',
   'card.loadError': "Couldn't read this image's details: {reason}",
   'card.favorite': 'Favorite',

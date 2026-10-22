@@ -24,6 +24,30 @@ interface Props {
 export function Rail({ texture }: Props) {
   const t = useT()
   const libraries = useLibraries()
+  const libraryId = useApp((s) => s.libraryId)
+  const current = libraries.data?.libraries.find((l) => l.id === libraryId)
+
+  return (
+    <nav className={styles.rail} aria-label={t('nav.library')}>
+      <LibraryLabel name={displayName(current?.name, current?.is_default, t)} count={current?.image_count ?? null} texture={texture} />
+
+      <div className={styles.scroll}>
+        <ScopeLists />
+      </div>
+
+      <Status />
+    </nav>
+  )
+}
+
+/**
+ * What part of the library the grid shows: all, favourites, saved searches,
+ * sources, folders. The rail lists them; the /next/ interface shows the same
+ * lists in its scope menu.
+ */
+export function ScopeLists() {
+  const t = useT()
+  const libraries = useLibraries()
   const generators = useGenerators()
   const folders = useFolders()
   const favorites = useFavorites()
@@ -37,10 +61,7 @@ export function Rail({ texture }: Props) {
     setScope({ generators: scope.generators.includes(g) ? scope.generators.filter((x) => x !== g) : [...scope.generators, g] })
 
   return (
-    <nav className={styles.rail} aria-label={t('nav.library')}>
-      <LibraryLabel name={displayName(current?.name, current?.is_default, t)} count={current?.image_count ?? null} texture={texture} />
-
-      <div className={styles.scroll}>
+    <>
         <ul className={styles.list}>
           <Row
             active={isAll}
@@ -80,10 +101,7 @@ export function Rail({ texture }: Props) {
             <FolderTree folders={folders.data} />
           </Section>
         )}
-      </div>
-
-      <Status />
-    </nav>
+    </>
   )
 }
 
@@ -106,7 +124,7 @@ function Section({ id, title, children }: { id: RailSectionId; title: string; ch
   )
 }
 
-function displayName(name: string | undefined, isDefault: boolean | undefined, t: ReturnType<typeof useT>): string {
+export function displayName(name: string | undefined, isDefault: boolean | undefined, t: ReturnType<typeof useT>): string {
   if (!name) return '…'
   // The seeded default library is named in English in the database.
   if (isDefault && name === 'Main library') return t('rail.mainLibrary')

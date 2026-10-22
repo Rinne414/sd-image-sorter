@@ -92,3 +92,31 @@
     border-bottom: 1px solid var(--line);
   }
 }
+
+/* The new interface (/next/, larger type): the same words give way a little
+   earlier, so the bar never runs past the grid into the recipe column. */
+@container (max-width: 1100px) {
+  :global(html[data-ui="next"]) .wordy,
+  :global(html[data-ui="next"]) .rule {
+    display: none;
+  }
+
+  :global(html[data-ui="next"]) .clearIcon {
+    display: block;
+  }
+
+  :global(html[data-ui="next"]) .terse {
+    display: inline;
+  }
+
+  :global(html[data-ui="next"]) .bar .invert {
+    display: none;
+  }
+
+  :global(html[data-ui="next"]) .narrowOnly {
+    display: list-item;
+    margin-bottom: 4px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--line);
+  }
+}

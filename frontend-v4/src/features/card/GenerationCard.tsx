@@ -37,13 +37,17 @@ interface Props {
   id: number | null
   /** 'panel' = right column in the library; 'overlay' = beside the big image. */
   variant?: 'panel' | 'overlay'
+  /** 'film' (Vopus): the picture in a film frame with edge print. 'plain' (/next/): a rounded frame, facts in a line under it. */
+  look?: 'film' | 'plain'
+  /** Clicking a prompt word hands it over (the /next/ library adds it to the search). */
+  onWord?: (word: string) => void
 }
 
-export function GenerationCard({ id, variant = 'panel' }: Props) {
+export function GenerationCard({ id, variant = 'panel', look = 'film', onWord }: Props) {
   const t = useT()
   if (id === null) {
     return (
-      <aside className={styles.card} data-variant={variant} data-testid="generation-card">
+      <aside className={styles.card} data-variant={variant} data-look={look} data-testid="generation-card">
         <div className={styles.empty}>
           <div className={styles.emptyFrame} aria-hidden />
           <p>{t('card.empty')}</p>
@@ -52,10 +56,17 @@ export function GenerationCard({ id, variant = 'panel' }: Props) {
       </aside>
     )
   }
-  return <CardBody id={id} variant={variant} />
+  return <CardBody id={id} variant={variant} look={look} onWord={onWord} />
 }
 
-function CardBody({ id, variant }: { id: number; variant: 'panel' | 'overlay' }) {
+interface BodyProps {
+  id: number
+  variant: 'panel' | 'overlay'
+  look: 'film' | 'plain'
+  onWord: ((word: string) => void) | undefined
+}
+
+function CardBody({ id, variant, look, onWord }: BodyProps) {
   const t = useT()
   const detail = useImageDetail(id)
   const favorites = useFavorites()
@@ -79,7 +90,7 @@ function CardBody({ id, variant }: { id: number; variant: 'panel' | 'overlay' })
 
   if (detail.isError) {
     return (
-      <aside className={styles.card} data-variant={variant} data-testid="generation-card">
+      <aside className={styles.card} data-variant={variant} data-look={look} data-testid="generation-card">
         <p className={styles.error}>{t('card.loadError', { reason: String(detail.error.message) })}</p>
       </aside>
     )
@@ -90,8 +101,8 @@ function CardBody({ id, variant }: { id: number; variant: 'panel' | 'overlay' })
   const edge = { gen, generator: image?.generator ?? null, rating: tags.rating, score: image?.aesthetic_score ?? null, i2i }
 
   return (
-    <aside className={styles.card} data-variant={variant} data-testid="generation-card">
-      {variant === 'panel' && <Frame id={id} edge={edge} />}
+    <aside className={styles.card} data-variant={variant} data-look={look} data-testid="generation-card">
+      {variant === 'panel' && <Frame id={id} edge={edge} plain={look === 'plain'} />}
 
       {variant === 'panel' && (
       <div className={styles.titleRow}>
@@ -115,12 +126,14 @@ function CardBody({ id, variant }: { id: number; variant: 'panel' | 'overlay' })
 
       {variant === 'panel' && image?.path && <FileRow id={id} path={image.path} />}
 
+      {variant === 'panel' && look === 'plain' && gen && <EdgeCodes {...edge} inline keepCase />}
+
       {image && !image.prompt && !gen?.characters.length && <NoParamsNote generator={image.generator} />}
 
       {image?.prompt && (
         <Section label={t('card.prompt')} copy={image.prompt}>
           <Expandable>
-            <PromptText text={image.prompt} categories={categories.data} />
+            <PromptText text={image.prompt} categories={categories.data} onWord={onWord} wordTitle={onWord ? t('card.wordSearch') : undefined} />
           </Expandable>
         </Section>
       )}
@@ -261,12 +274,12 @@ function sortTags(tags: ImageTag[]): { general: ImageTag[]; rating: string | nul
   return { general, rating }
 }
 
-function Frame({ id, edge }: { id: number; edge: EdgeFacts }) {
+function Frame({ id, edge, plain }: { id: number; edge: EdgeFacts; plain: boolean }) {
   const [bigLoaded, setBigLoaded] = useState<number | null>(null)
   const openLightbox = useApp((s) => s.openLightbox)
   return (
-    <figure className={styles.frame}>
-      <EdgeCodes {...edge} part="top" />
+    <figure className={styles.frame} data-plain={plain || undefined}>
+      {!plain && <EdgeCodes {...edge} part="top" />}
       <div className={styles.window} onDoubleClick={() => openLightbox(id)}>
         <img className={styles.under} src={thumbnailUrl(id, 384)} alt="" draggable={false} />
         <img
@@ -279,7 +292,7 @@ function Frame({ id, edge }: { id: number; edge: EdgeFacts }) {
           onLoad={() => setBigLoaded(id)}
         />
       </div>
-      <EdgeCodes {...edge} part="bottom" />
+      {!plain && <EdgeCodes {...edge} part="bottom" />}
     </figure>
   )
 }

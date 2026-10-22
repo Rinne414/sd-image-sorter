@@ -1,0 +1,97 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--topbar-h);
+  padding: 0 12px 0 14px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-right: 10px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+}
+
+.brand:hover {
+  background: var(--wash-hover);
+}
+
+.name {
+  font-size: var(--fs-4);
+  font-weight: 650;
+}
+
+.version {
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.trial {
+  color: var(--faint);
+  font-size: var(--fs-1);
+}
+
+.places {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.place {
+  flex: none;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+}
+
+.place:hover {
+  background: var(--wash-hover);
+  color: var(--text);
+}
+
+.place[aria-current="page"] {
+  background: var(--surface-3);
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-ctl);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.gap {
+  flex: 1;
+  min-width: 8px;
+}
+
+.find kbd {
+  margin-left: 2px;
+}
+
+/* A laptop screen: the trial label and the "find" words give way first. */
+@media (max-width: 1500px) {
+  .trial {
+    display: none;
+  }
+}
+
+@media (max-width: 1440px) {
+  .find span {
+    display: none;
+  }
+
+  .place {
+    padding: 0 9px;
+  }
+}

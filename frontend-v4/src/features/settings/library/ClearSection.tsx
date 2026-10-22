@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { create } from 'zustand'
 import { ApiError } from '../../../api/client'
 import { useLibraries } from '../../../api/queries'
 import { useT } from '../../../i18n'
@@ -25,6 +26,21 @@ const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve
 const fail = (key: LibKey, error: unknown) => useToasts.getState().push(lt(key, { reason: (error as Error).message }), 'error')
 
 /**
+ * Another entrance to the same clearing (the /next/ gallery's footer): it asks,
+ * then opens Settings › Library, where this section starts the check at once.
+ * One implementation, two entrances (docs/DESIGN.md rule 11).
+ */
+export const useClearRequest = create<{ requested: boolean; request: () => void; take: () => boolean }>((set, get) => ({
+  requested: false,
+  request: () => set({ requested: true }),
+  take: () => {
+    const was = get().requested
+    if (was) set({ requested: false })
+    return was
+  },
+}))
+
+/**
  * At the bottom, set apart: clearing the library's index. It first checks what
  * would be in the way (and offers to stop it), then counts what would be lost
  * and asks with Cancel focused.
@@ -37,6 +53,7 @@ export function ClearSection() {
   const [busy, setBusy] = useState<BusyWork[]>([])
   const [refused, setRefused] = useState<Work[]>([])
   const [facts, setFacts] = useState<ClearFacts | null>(null)
+  const sectionRef = useRef<HTMLElement>(null)
 
   const start = async () => {
     setChecking(true)
@@ -56,6 +73,13 @@ export function ClearSection() {
     setChecking(false)
   }
 
+  // Asked for from another entrance: show this section and start the check.
+  useEffect(() => {
+    if (!useClearRequest.getState().take()) return
+    sectionRef.current?.scrollIntoView({ block: 'center' })
+    void start()
+  }, [])
+
   const onRefused = (works: Work[]) => {
     setRefused(works)
     void probeBusy().then(setBusy, () => undefined)
@@ -67,7 +91,7 @@ export function ClearSection() {
   }
 
   return (
-    <section className={styles.danger} aria-labelledby="libset-clear-title" data-testid="libset-clear">
+    <section ref={sectionRef} className={styles.danger} aria-labelledby="libset-clear-title" data-testid="libset-clear">
       <h3 id="libset-clear-title" className={styles.dangerTitle}>
         {t('libset.clear.title')}
       </h3>
