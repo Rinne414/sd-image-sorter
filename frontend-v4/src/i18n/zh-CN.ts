@@ -417,6 +417,7 @@ export const zhCN = {
   'card.model': '模型',
   'card.loras': 'LoRA',
   'card.clickToCopy': '点一下复制',
+  'nav.backLeave': '再按一次「返回」就会离开本程序',
   'card.loadError': '读取这张图的信息失败：{reason}',
   'card.favorite': '收藏',
   'card.unfavorite': '取消收藏',

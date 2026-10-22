@@ -444,3 +444,23 @@ for (const viewport of VIEWPORTS) {
     }
   })
 }
+
+test('browser Back goes up one level: a page back, the big image closed first, and one warning before leaving', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await openAt(page, '#/library')
+  const tabs = topTabs(page)
+  await tabs.filter({ hasText: 'Batches' }).click()
+  await expect(page).toHaveURL(/#\/batch$/)
+  await tabs.filter({ hasText: 'Organize' }).click()
+  await expect(page).toHaveURL(/#\/sort$/)
+  await page.goBack()
+  await expect(page).toHaveURL(/#\/batch$/)
+  await page.goBack()
+  await expect(page).toHaveURL(/#\/library$/)
+  await expect(tabs.filter({ hasText: 'Library' })).toHaveAttribute('aria-current', 'page')
+
+  // the first page is the root: Back says once that one more press leaves
+  await page.goBack()
+  await expect(page.getByText('Press Back again to leave the program')).toBeVisible()
+  await expect(page).toHaveURL(/#\/library$/)
+})

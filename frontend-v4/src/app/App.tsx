@@ -25,6 +25,7 @@ import { useLang } from '../i18n'
 import { useApp } from '../state/store'
 import styles from './App.module.css'
 import { TopBar } from './TopBar'
+import { useBackNav } from './useBackNav'
 import { Toasts } from '../ui/toasts'
 
 export function App() {
@@ -37,6 +38,9 @@ export function App() {
 
   // Settings › Library › checking the source folders for new images while idle (off unless switched on).
   useEffect(() => startAutoRefresh(), [])
+
+  // Browser and mouse Back go up one level instead of leaving the program.
+  useBackNav()
 
   // Coming from V3.5: open the library it had open.
   useLibraryArrival()

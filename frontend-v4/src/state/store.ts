@@ -3,6 +3,7 @@ import type { BatchKind } from '../api/types'
 import { parseBrowseStore, recallBrowse, rememberBrowse, type BrowseState, type Scope } from '../lib/browseMemory'
 import { isMainPage, isStartPage, parseRoute, routeHash, startRoute, type MainPage, type Page, type Route, type SettingsTab, type StartPage, type ToolId } from '../lib/route'
 import { isSortBase, type SortBase } from '../lib/sort'
+import { pushPage, replacePage } from '../lib/backNav'
 // First: arriving from V3.5 rewrites the address (drops ?library=, reopens the page V4 was left from).
 import './arrival'
 
@@ -60,8 +61,7 @@ function writeJson(key: string, value: unknown): void {
 }
 
 function writeHash(route: Route): void {
-  const hash = routeHash(route)
-  if (location.hash !== hash) history.replaceState(null, '', hash)
+  replacePage(routeHash(route))
 }
 
 /** Where "← back" on the settings and tools pages returns to. */
@@ -301,10 +301,15 @@ export const useApp = create<AppState>((set, get) => ({
   setAdding: (adding) => set({ adding }),
 }))
 
-/** Show a route and write it into the address. */
+/** Show a route and write it into the address: a new history entry, so browser Back returns (lib/backNav.ts). */
 function go(route: Route): void {
-  writeHash(route)
+  pushPage(routeHash(route))
   useApp.setState((s) => ({ ...stateFor(route, s), lightboxId: null }))
 }
 
-window.addEventListener('hashchange', () => useApp.setState((s) => ({ ...stateFor(parseRoute(location.hash), s), lightboxId: null })))
+/** Show the page the address names (an edited address, or browser Back and Forward). */
+export function showAddressRoute(): void {
+  useApp.setState((s) => ({ ...stateFor(parseRoute(location.hash), s), lightboxId: null }))
+}
+
+window.addEventListener('hashchange', showAddressRoute)

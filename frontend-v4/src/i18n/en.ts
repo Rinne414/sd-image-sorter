@@ -417,6 +417,7 @@ export const en: Record<MessageKey, string> = {
   'card.model': 'Model',
   'card.loras': 'LoRA',
   'card.clickToCopy': 'Click to copy',
+  'nav.backLeave': 'Press Back again to leave the program',
   'card.loadError': "Couldn't read this image's details: {reason}",
   'card.favorite': 'Favorite',
   'card.unfavorite': 'Remove from favorites',
