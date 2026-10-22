@@ -82,6 +82,35 @@ then build one screen, the gallery, at `/next/`, with before and after
 screenshots at 1366×768, 1920×1080 and 2560×1440 in both languages. The
 direction the owner picks is recorded here before the rest is built.
 
+**Direction chosen: A, "Recipe" (owner, 2026-10-22).** Three samples were
+shown (A Recipe, B Cover-lit library, C One wall); the owner picked A.
+
+- *Idea:* these images are made from words. Finding, inspecting and "more
+  like this" work through the prompt's own words.
+- *Colour:* the interface itself carries no accent hue. Colour on screen comes
+  only from the images and from the 14 word categories (data colours, see
+  §color-exemptions); selection and focus are a near-white ring, primary
+  buttons are filled near-white. One dark theme.
+- *Top edge:* every place is a labelled tab (never an icon row), the version
+  sits beside the program name, background work shows as a status, Ctrl K
+  finds any feature, then AI tagging, Import and Settings.
+- *Scope line:* "library ▾ › scope ▾" (all images, favourites, saved
+  searches, sources, folders), then the search field holding the query as
+  word chips, Filter, Sort, View, "clear N conditions" and the count.
+- *Grid:* images get the rest of the screen. Click inspects: a recipe column
+  opens on the right only while an image is inspected (never an empty column);
+  every word in it adds itself to the search. Double-click or Enter opens the
+  one-image view. Picking shows the action bar on the bottom edge.
+- *Footer line:* what the library still needs (untagged, no prompt, no
+  aesthetic score) with the fix beside each, and "Clear current library…" at
+  its far end, visible on the gallery page and away from frequent buttons.
+- Rounded corners (10 px controls and tiles, 14 px panels), visible frames,
+  filled buttons that look like buttons, depth from surface steps and a
+  short shadow; system fonts only (Microsoft YaHei UI, Segoe UI).
+
+Samples and the review screenshots live in `.plans/redesign-2026-10-22/`
+(not tracked).
+
 ---
 
 ## §principles — The design principles (macro layer)
