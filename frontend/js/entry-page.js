@@ -973,8 +973,25 @@
         document.addEventListener('keydown', onKeydownCapture, true);
     }
 
+    // Another interface opens one page here from an address
+    // (/?ui=classic&view=stylemap, frontend-v4/src/next/classicLink.ts):
+    // that page instead of the entry page.
+    const LINKABLE_VIEWS = ['gallery', 'reader', 'sorting', 'censor', 'similar', 'stylemap', 'dataset', 'promptlab', 'reverse', 'artist'];
+
+    function linkedView() {
+        let view = null;
+        try { view = new URLSearchParams(window.location.search).get('view'); } catch (e) { /* ignore */ }
+        return LINKABLE_VIEWS.includes(view) ? view : null;
+    }
+
     function boot() {
         wire();
+        const linked = linkedView();
+        const go = window.App?.switchView || window.switchView;
+        if (linked && typeof go === 'function') {
+            go(linked);
+            return;
+        }
         if (!isSkipped()) show();
     }
 
