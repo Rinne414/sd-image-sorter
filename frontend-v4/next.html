@@ -7,10 +7,10 @@
     <title>SD 图片管理器 · 新界面试用</title>
     <script>
       // The new interface (docs/DESIGN.md §redesign-2026-10) opens on the
-      // library unless the address names another page.
+      // library unless the address names a page (#/home opens Home).
       ;(function () {
         var hash = location.hash
-        if (!hash || hash === '#' || hash === '#/' || hash.indexOf('#/home') === 0) {
+        if (!hash || hash === '#' || hash === '#/') {
           history.replaceState(history.state, '', location.pathname + location.search + '#/library')
         }
       })()
