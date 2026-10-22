@@ -59,8 +59,12 @@ the database, 1366×768 / 1920×1080 / 2560×1440, both languages):**
   choices on the entry page before any image, seven unlabeled icon buttons,
   a selection mode entered from the sidebar's bottom corner, a click that
   covers the whole gallery with a popup, a filter form with an Apply button.
-- Classic has 39 text runs at 11–12 px in its toolbar and sidebar, too small
-  on the owner's 2560×1440 screen.
+- ~~Classic has 39 text runs at 11–12 px in its toolbar and sidebar, too small
+  on the owner's 2560×1440 screen.~~ Corrected 2026-10-23: that count was in
+  CSS px and missed classic's Auto scale, which zooms the whole interface
+  1.3× from 2350 px wide. At 2560×1440 the smallest visible text on every
+  page renders at 14.3 px (counts, version, folding carets) and labels at
+  15.6–18 px; nothing visible is set below 11 px.
 - The look is a default rather than this product's own (see the blind check
   below), and its identity lives on the entry page, not on the screen used
   all day.
@@ -148,6 +152,34 @@ conditions show as chips under the search box, not inside it as in sample A;
 on a laptop with the recipe column open the result count gives its room to
 the search box until the column closes; `/` cannot be set to open the new
 interface yet.
+
+**Round 3 (owner, 2026-10-23): "I think did not win my old design."** The
+owner chose to improve the classic interface itself and keep its look
+(amber, icons, layout, visible controls); `/next/` stays as an opt-in
+sample. Lesson: fewer visible controls and no accent hue were the wrong
+premise for this owner, who values the visible tools. Done in classic, each
+pinned by `tests/e2e/specs/classic-gallery-fixes.spec.ts`:
+- On a 1366×768 laptop the search row stays on one line (the aspect
+  toggle and sort no longer drop to a third toolbar row; grid starts 47 px
+  higher); see §gallery-toolbar.
+- The missing-files banner puts Find Moved Files first and "Clear N
+  records" last, in the danger colour behind a divider; a library whose
+  every file is missing says so instead of "No images yet".
+- Clear current library is on the gallery page (a line at the top of the
+  sidebar naming the library and its count) and in Settings, both asking
+  with the library's name.
+- An error nothing caught shows a strip with the reason, Reload and Copy
+  the error (personal paths hidden) instead of a silent dead page
+  (`js/error-fallback.js`, loaded first).
+- Settings has "Reset all settings": preferences kept in the browser go
+  back to defaults after a question that starts on Cancel, then the page
+  reloads; libraries, searches, presets, drafts, jobs, recent folders and
+  every folder the user picked stay (`js/app/settings.js`).
+
+Dropped, with the reason: the position numbers on tiles in selection mode
+stay (they are deliberate, styled apart from the pick ✓N, see the
+selection badge comment in ui-refresh.css); the small-text item was a measuring mistake (see
+the corrected line in the diagnosis above).
 
 ---
 
@@ -525,6 +557,7 @@ Implementation:
 - `.generator-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }`
 - Below 1500px, secondary actions (Random, Reconnect) are hidden via `@media (max-width: 1500px)`.
 - Below 1600px, the "X images" count is hidden. Generator tab counts stay on every tab so switching All / NovelAI / ComfyUI does not resize the pills; extra tabs scroll.
+- The search row (`.gallery-search-box` + `.gallery-search-tools`) is also one line: below 1500px the search box starts at 220px, the aspect toggle's "All" shows its icon only and the sort menu is 9.5rem (2026-10-23; it used to push the aspect toggle and sort onto a third row).
 
 Do NOT:
 - Use `flex-wrap: wrap` on these containers; users have explicitly rejected line breaks here.
