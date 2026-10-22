@@ -291,7 +291,16 @@
     function refreshEntryHome() {
         const current = getCurrentLibrary();
         const nameEl = document.getElementById('entry-library-name');
-        if (nameEl) nameEl.textContent = current.name;
+        if (nameEl) {
+            nameEl.textContent = current.name;
+            // The i18n re-apply would put the static 主图库 back over a chosen
+            // name; only the untouched default keeps following the language.
+            if (current.name === _t('library.defaultName', DEFAULT_LIBRARY_SEED_NAME)) {
+                delete nameEl.dataset.i18nLocked;
+            } else {
+                nameEl.dataset.i18nLocked = '1';
+            }
+        }
         refreshNavChip();
 
         const switcher = document.getElementById('entry-library-switcher');

@@ -142,3 +142,24 @@ test('Style Finder: clearing results says it clears the current library only, in
   const english = await page.evaluate(() => (window as any).I18nLang_en['artist.clearConfirmMessage'])
   expect(english).toBe('Clear the artist predictions of the current library? Other libraries are not affected. This cannot be undone.')
 })
+
+test('the entry page names the library that is open, also after the language is applied again', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await boot(page)
+  const name = `入口页图库 ${Date.now()}`
+  const other = await makeLibrary(page, name)
+  try {
+    await page.goto('/')
+    await expect(page.locator('#view-gallery')).toBeVisible()
+    await page.evaluate((id) => (window as any).LibraryWorkspace.setCurrentLibraryId(id, { reloadGallery: false }), other)
+    await expect.poll(() => currentLibrary(page)).toBe(other)
+
+    await page.click('#nav-library-chip')
+    await expect(page.locator('#entry-library-name')).toHaveText(name)
+    // any later DOM change re-applies every [data-i18n] text; the name must survive it
+    await page.evaluate(() => (window as any).UIRefresh.applyTranslations())
+    await expect(page.locator('#entry-library-name')).toHaveText(name)
+  } finally {
+    await dropLibrary(page, other)
+  }
+})
