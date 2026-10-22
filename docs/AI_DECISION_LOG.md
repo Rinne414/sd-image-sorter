@@ -3335,3 +3335,14 @@ A new "🎌 Apply Anime LoRA defaults" button in Step B re-applies these in one 
   uv 0.11.23 also resolved the core-only dev lock for Intel Mac without installation: x86_64-apple-darwin / Python 3.12 selected 85 packages with ONNX Runtime 1.19.2, and Python 3.13 selected 85 packages with ONNX Runtime 1.23.2; neither closure contained Torch, CUDA, NVIDIA, Ultralytics, or Triton packages.
 - Do not regress:
   Do not invent a Torch/version pair for a CUDA index without querying the official wheel repository. Do not use a loose direct requirement to decide whether an exact locked runtime is already satisfied. Do not report a CUDA install as successful unless a fresh interpreter reports the exact selected Torch/torchvision/CUDA build and `torch.cuda.is_available() == True`. Do not silently fall back to another CUDA wheel family after a selected index fails. Do not auto-downgrade a clean runtime to advisory-bearing legacy Torch for GPU acceleration. Do not reintroduce full-AI packages into the cross-platform dev/CI lock or omit its setuptools security floor. Do not promise Intel Mac Torch features or macOS SAM3 until upstream and the product path are both verified. Do not treat primitive tensor smoke as sufficient when a real product model and representative input are available.
+
+### ADR-AI-20261022-116: Agent instruction files stay out of the public repository
+
+- Status: accepted
+- Area: public repository hygiene
+- Context:
+  The owner's rule for public repositories is that agent files and handoffs are not published. `AGENTS.md` was ignored from 2026-04-07, entered the repository on 2026-07-15 and lost its ignore line on 2026-08-18, when other documents were being published. On 2026-10-22 every published version was checked for keys, personal paths, e-mail addresses and brand names, and none were found.
+- Decision:
+  `AGENTS.md` is untracked and ignored again, next to `CLAUDE.md`. The local copy stays, so agents working in this checkout still read it; a fresh public clone has no agent instructions. History is not rewritten because nothing private was published. Release archives already excluded the file.
+- Do not regress:
+  Do not add `AGENTS.md`, `CLAUDE.md`, handoffs or other agent files back to the repository, and keep CI and release tests independent of them.

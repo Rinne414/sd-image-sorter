@@ -48,6 +48,7 @@ update/
 # statement, and README links to docs/architecture.md. They are still excluded
 # from release archives by scripts/build_release_packages.py.
 CLAUDE.md
+AGENTS.md
 backend/lora_debug.txt
 example/
 
