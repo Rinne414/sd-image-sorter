@@ -12948,3 +12948,60 @@ html .nav-bar.nav-measuring * {
         opacity: 1;
     }
 }
+
+/* Clear current library, visible on the gallery page (owner 2026-10-22): the
+   sidebar's first line names the library a clear would empty; the action sits
+   at its right in the danger colour, away from Select Images and Import. */
+.sidebar-library-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 14px 9px 18px;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 13px;
+}
+
+.sidebar-library-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.sidebar-library-clear {
+    flex: none;
+    padding: 4px 9px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: none;
+    color: var(--danger);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.sidebar-library-clear:hover {
+    border-color: var(--danger);
+    background: var(--bg-hover);
+}
+
+.settings-library-clear {
+    margin-top: 18px;
+    padding: 14px 16px;
+    border: 1px solid var(--danger);
+    border-radius: 12px;
+}
+
+.settings-library-clear h3 {
+    margin: 0 0 6px;
+    font-size: 15px;
+}
+
+.settings-library-clear p {
+    margin: 0 0 10px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.55;
+}

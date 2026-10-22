@@ -267,7 +267,22 @@
         };
     }
 
+    /** The gallery sidebar's line: which library a clear would empty. */
+    function refreshSidebarLine() {
+        const nameEl = document.getElementById('sidebar-library-name');
+        if (!nameEl) return;
+        const current = getCurrentLibrary();
+        nameEl.textContent = current.image_count > 0
+            ? `${current.name} · ${current.image_count.toLocaleString()}`
+            : current.name;
+        const button = document.getElementById('btn-sidebar-clear-library');
+        if (button) {
+            button.title = _t('library.clearTitle', 'Clears only the records of "{name}"; the image files on disk stay. You are asked first.', { name: current.name });
+        }
+    }
+
     function refreshNavChip() {
+        refreshSidebarLine();
         const chip = document.getElementById('nav-library-chip');
         const label = document.getElementById('nav-library-chip-label');
         if (!chip || !label) return;
@@ -873,6 +888,13 @@
         applyLibraryDefaultScope();
         refreshFromServer();
         document.addEventListener('i18n-applied', () => refreshEntryHome());
+        // The gallery sidebar's and Settings' entrances run the library menu's clear (rule 11).
+        for (const id of ['btn-sidebar-clear-library', 'btn-settings-clear-library']) {
+            document.getElementById(id)?.addEventListener('click', () => {
+                if (id === 'btn-settings-clear-library' && typeof window.hideModal === 'function') window.hideModal('model-manager-modal');
+                void window.clearCurrentLibraryInteractive();
+            });
+        }
     }
 
     // Install as early as this classic script loads (before DOMContentLoaded),

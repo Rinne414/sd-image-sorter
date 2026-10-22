@@ -755,6 +755,12 @@
             <!-- Gallery View -->
             <section id="view-gallery" class="view active" role="tabpanel" aria-labelledby="nav-tab-gallery">
                 <aside class="filter-sidebar compact" aria-label="Image filters" data-i18n-aria="a11y.imageFilters">
+                    <!-- Owner 2026-10-22: Clear current library visible on the gallery page, away from
+                         Select Images and Import; the same confirm as the library menu's item. -->
+                    <div class="sidebar-library-line" id="sidebar-library-line">
+                        <span class="sidebar-library-name" id="sidebar-library-name" data-i18n-locked="1"></span>
+                        <button type="button" class="sidebar-library-clear" id="btn-sidebar-clear-library" data-i18n="library.clearShort">Clear library…</button>
+                    </div>
                     <div class="filter-sidebar-scroll">
                     <div class="sidebar-section" data-sidebar-section="filters">
                         <div class="sidebar-section-head">
@@ -5832,6 +5838,12 @@
                             </div>
                         </div>
                     </details>
+                </section>
+                <!-- Second entrance to Clear current library (owner 2026-10-22). -->
+                <section class="settings-library-clear" id="settings-library-clear">
+                    <h3 data-i18n="library.clearSectionTitle">Clear current library</h3>
+                    <p data-i18n="library.clearSectionLead">Removes this library's records (tags, ratings, collections stored with them). Other libraries and the image files on disk stay. You are asked first.</p>
+                    <button type="button" class="btn btn-ghost btn-small danger" id="btn-settings-clear-library" data-i18n="library.clearShort">Clear library…</button>
                 </section>
                 </div>
                 <div data-settings-panel="models" hidden>

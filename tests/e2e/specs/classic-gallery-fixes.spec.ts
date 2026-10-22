@@ -68,3 +68,25 @@ test('missing files: Find Moved Files first, clearing records last; the empty ga
   await page.evaluate(() => (window as any).UIRefresh.applyTranslations())
   await expect(empty.locator('h3')).toHaveText('The images of this library cannot be found on disk')
 })
+
+test('Clear current library is on the gallery page and in Settings, asking with the library\'s name', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await mockLibrary(page, 6, 0)
+  await open(page, 'en')
+  const line = page.locator('#sidebar-library-line')
+  await expect(line).toBeInViewport()
+  await expect(page.locator('#sidebar-library-name')).not.toBeEmpty()
+  const name = ((await page.locator('#sidebar-library-name').textContent()) ?? '').split(' · ')[0]!.trim()
+
+  await page.click('#btn-sidebar-clear-library')
+  const message = page.locator('#confirm-modal.visible #confirm-message')
+  await expect(message).toContainText(name)
+  await page.click('#btn-confirm-cancel')
+  await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
+
+  await page.click('#btn-open-model-manager')
+  await page.locator('#btn-settings-clear-library').scrollIntoViewIfNeeded()
+  await page.click('#btn-settings-clear-library')
+  await expect(message).toContainText(name)
+  await page.click('#btn-confirm-cancel')
+})
