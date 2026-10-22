@@ -3,11 +3,13 @@ import { useLang, useT, type Lang, type MessageKey } from '../../i18n'
 import type { StartPage } from '../../lib/route'
 import { percent, roomAt, SCALE_OPTIONS, type ScaleSetting } from '../../lib/uiScale'
 import { useApp } from '../../state/store'
+import { isNextUi } from '../../lib/uiLook'
 import { useTheme, type ThemeMode } from '../../theme'
 import { pushRefusal } from '../jobs/refusalToast'
 import styles from './AppearanceTab.module.css'
 import { useUiScale } from './uiScaleStore'
 import { useSaved } from './useSaved'
+import { ResetAllSection } from './ResetAllSection'
 
 const THEMES: { value: ThemeMode; label: MessageKey }[] = [
   { value: 'system', label: 'theme.system' },
@@ -37,9 +39,12 @@ export function AppearanceTab() {
   const [saved, mark] = useSaved<Section>()
   const mode = useTheme((s) => s.mode)
   const lang = useLang((s) => s.lang)
+  // The new interface (/next/) has one dark theme, the interface note and reset-all.
+  const next = isNextUi()
 
   return (
     <div className={styles.sections}>
+      {!next && (
       <Choice
         name="theme"
         title={t('settings.theme.title')}
@@ -53,6 +58,7 @@ export function AppearanceTab() {
       >
         <p className={styles.hint}>{t('settings.theme.hint')}</p>
       </Choice>
+      )}
       <Choice
         name="lang"
         title={t('settings.lang.title')}
@@ -66,7 +72,8 @@ export function AppearanceTab() {
       />
       <ScaleChoice saved={saved === 'scale'} onSaved={() => mark('scale')} />
       <HomeChoices saved={saved} mark={mark} />
-      <InterfaceChoice />
+      {next ? <NextInterfaceNote /> : <InterfaceChoice />}
+      {next && <ResetAllSection />}
     </div>
   )
 }
@@ -110,6 +117,25 @@ function InterfaceChoice() {
     >
       <p className={styles.hint}>{t('settings.interface.hint')}</p>
     </Choice>
+  )
+}
+
+/** In the new interface: where you are, and the way to the other two interfaces. */
+function NextInterfaceNote() {
+  const t = useT()
+  return (
+    <section className={styles.section} data-testid="next-interface-note">
+      <h3 className={styles.title}>{t('settings.interface.title')}</h3>
+      <p className={styles.hint}>{t('next.iface.body')}</p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <a className="btn" href="/?ui=classic">
+          {t('next.more.classicUi')}
+        </a>
+        <a className="btn" href="/vopus/">
+          {t('next.more.vopusUi')}
+        </a>
+      </div>
+    </section>
   )
 }
 

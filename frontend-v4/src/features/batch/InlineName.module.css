@@ -18,3 +18,8 @@
   height: 34px;
   font-size: var(--fs-6);
 }
+
+/* The new interface (/next/): the page line's title size. */
+:global(html[data-ui="next"]) .input {
+  font-size: var(--fs-5);
+}

@@ -211,3 +211,33 @@
   gap: 4px;
   padding: 0 0 0 4px;
 }
+
+/* The new interface (/next/): full width, and the title line matches the
+   library's scope line (docs/DESIGN.md §redesign-2026-10). */
+:global(html[data-ui="next"]) .sheet {
+  max-width: none;
+  padding: 0 16px 48px;
+}
+
+:global(html[data-ui="next"]) .head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  min-height: var(--scope-h);
+  margin: 0 -16px;
+  padding: 0 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+:global(html[data-ui="next"]) .title {
+  font-size: var(--fs-5);
+}
+
+:global(html[data-ui="next"]) .lead {
+  margin: 14px 0 18px;
+}
+
+:global(html[data-ui="next"]) .page {
+  background: var(--bg);
+}

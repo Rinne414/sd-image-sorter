@@ -234,3 +234,8 @@ input[type="radio"] {
   height: 16px;
   accent-color: var(--ring);
 }
+
+/* No tracked capitals in this interface: labels read as written. */
+html[data-ui="next"] * {
+  text-transform: none !important;
+}

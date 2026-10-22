@@ -150,6 +150,9 @@
 }
 
 :root {
+  /* sprocket holes along film edges (an interface without film sets it transparent) */
+  --film-sprocket: var(--film-hole);
+
   /* type */
   --font-ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
   --font-mono: "Cascadia Mono", "JetBrains Mono", Consolas, ui-monospace, monospace;

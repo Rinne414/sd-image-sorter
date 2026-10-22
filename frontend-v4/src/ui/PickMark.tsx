@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { isNextUi } from '../lib/uiLook'
 import styles from './PickMark.module.css'
 
 // A picked frame is marked the way photographers mark a contact sheet: a quick
@@ -37,6 +38,14 @@ export function markerPath(seed: number): string {
 }
 
 export const PickMark = memo(function PickMark({ seed, order }: { seed: number; order: number }) {
+  // The new interface marks a pick with a ring and a numbered badge, not a hand-drawn box.
+  if (isNextUi()) {
+    return (
+      <span className={styles.plain} aria-hidden>
+        <span className={styles.badge}>{order}</span>
+      </span>
+    )
+  }
   return (
     <span className={styles.mark} aria-hidden>
       <svg className={styles.box} viewBox="0 0 100 100" preserveAspectRatio="none">

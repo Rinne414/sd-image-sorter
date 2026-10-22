@@ -10,6 +10,10 @@ import { useAppStats } from '../features/settings/about/aboutApi'
 import { UpdateHint } from '../features/settings/about/UpdateHint'
 import { useSimilarDialogs } from '../features/similar/dialogs'
 import { TOOLS } from '../features/tools/registry'
+import { findLoadedImage } from '../api/loaded'
+import { quickCensor } from '../features/censor/quickCensor'
+import { pickImageFile } from '../features/similar/imageSearch'
+import { showLikeImage, useSimilar } from '../features/similar/similarStore'
 import { openClassic, type ClassicView } from './classicLink'
 import styles from './NextTopBar.module.css'
 
@@ -55,8 +59,6 @@ export function NextTopBar() {
     { id: 'batch', label: 'next.place.batch', current: page === 'batch', go: () => app().setPage('batch') },
     { id: 'sort', label: 'next.place.sort', current: page === 'sort', go: () => app().setPage('sort') },
     { id: 'reader', label: 'next.place.reader', current: page === 'tools' && toolId === 'reader', go: () => app().openTool('reader') },
-    classic('censor', 'next.place.censor', 'censor'),
-    classic('similar', 'next.place.similar', 'similar'),
     classic('stylemap', 'next.place.stylemap', 'stylemap'),
   ]
 
@@ -65,6 +67,42 @@ export function NextTopBar() {
     if (ids.length === 0) useToasts.getState().push(t('tools.pickFirst'))
     else run(ids)
   }
+
+  // Censoring here is a batch's censor step; the picks become one at once.
+  const inspectedId = useApp.getState().inspectedId
+  const censorItems: MenuItem[] = [
+    {
+      id: 'censor-picks',
+      label: picks > 0 ? t('next.censor.picks', { n: picks }) : inspectedId !== null ? t('next.censor.one') : t('next.censor.pickFirst'),
+      onSelect: onImages((ids) => void quickCensor(ids)),
+    },
+    { id: 'censor-batches', label: t('next.censor.batches'), onSelect: () => app().setPage('batch') },
+    { id: 'censor-classic', label: t('next.censor.classic'), hint: t('next.place.classicHint'), divider: true, onSelect: () => openClassic('censor') },
+  ]
+  // Similar images are a ranking of the library itself.
+  const similarItems: MenuItem[] = [
+    { id: 'similar-image', label: t('next.similar.byImage'), onSelect: () => { app().setPage('library'); pickImageFile() } },
+    {
+      id: 'similar-meaning',
+      label: t('next.similar.byMeaning'),
+      onSelect: () => {
+        app().setPage('library')
+        useSimilar.getState().setSemantic(true)
+      },
+    },
+    {
+      id: 'similar-this',
+      label: t('next.similar.likeThis'),
+      onSelect: onImages((ids) => {
+        const id = ids[0]!
+        app().setPage('library')
+        showLikeImage(id, findLoadedImage(id)?.filename ?? '', false)
+      }),
+    },
+    { id: 'similar-dup', label: t('next.more.duplicates'), onSelect: () => useSimilarDialogs.getState().setDuplicates(true) },
+    { id: 'similar-classic', label: t('next.similar.classic'), hint: t('next.place.classicHint'), divider: true, onSelect: () => openClassic('similar') },
+  ]
+
   const more: MenuItem[] = [
     ...TOOLS.filter((tool) => tool.id !== 'reader').map((tool) => ({
       id: `tool-${tool.id}`,
@@ -78,7 +116,6 @@ export function NextTopBar() {
       divider: true,
       onSelect: onImages((ids) => useSelectionDialog.getState().showFor('edit-tags', ids, ids.length)),
     },
-    { id: 'duplicates', label: t('next.more.duplicates'), onSelect: () => useSimilarDialogs.getState().setDuplicates(true) },
     { id: 'dataset', label: t('next.more.dataset'), hint: t('next.place.classicHint'), divider: true, onSelect: () => openClassic('dataset') },
     { id: 'classic', label: t('next.more.classicUi'), divider: true, onSelect: () => openClassic() },
     { id: 'vopus', label: t('next.more.vopusUi'), onSelect: () => location.assign('/vopus/') },
@@ -111,6 +148,8 @@ export function NextTopBar() {
             {t(p.label)}
           </button>
         ))}
+        <Menu label={t('next.place.censor')} items={censorItems} testId="next-censor" />
+        <Menu label={t('next.place.similar')} items={similarItems} testId="next-similar" />
         <Menu label={t('next.place.more')} items={more} current={page === 'tools' && toolId !== 'reader'} testId="next-more" />
       </nav>
 

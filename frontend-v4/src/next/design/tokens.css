@@ -51,8 +51,10 @@
   --scrollbar: rgba(237, 236, 232, 0.2);
 
   /* marks on and around pictures */
-  --film: #101112;
-  --film-hole: rgba(237, 236, 232, 0.15);
+  /* no film here: strips are plain panels without sprocket holes */
+  --film: #18191b;
+  --film-hole: rgba(237, 236, 232, 0.12);
+  --film-sprocket: transparent;
   --edge-print: #c4c2bc;
   --tile-caption-bg: rgba(12, 12, 13, 0.78);
   --tile-outline: rgba(255, 255, 255, 0.08);

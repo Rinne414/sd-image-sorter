@@ -49,10 +49,10 @@ for (const viewport of VIEWPORTS) {
     for (const lang of ['en', 'zh-CN'] as const) {
       await openNext(page, lang)
       // every place is a labelled tab on the top edge, all on screen
-      for (const id of ['library', 'batch', 'sort', 'reader', 'censor', 'similar', 'stylemap']) {
+      for (const id of ['library', 'batch', 'sort', 'reader', 'stylemap']) {
         await expect(page.getByTestId(`next-place-${id}`)).toBeInViewport({ ratio: 1 })
       }
-      for (const id of ['next-more', 'open-palette', 'next-ai-tag', 'import-button', 'settings-button', 'query-input', 'result-count', 'next-clear-library']) {
+      for (const id of ['next-censor', 'next-similar', 'next-more', 'open-palette', 'next-ai-tag', 'import-button', 'settings-button', 'query-input', 'result-count', 'next-clear-library']) {
         await expect(page.getByTestId(id)).toBeInViewport()
       }
       // no empty column: the recipe column opens with an image and closes with Esc

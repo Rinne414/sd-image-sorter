@@ -122,13 +122,32 @@ classic gallery: 25–27 controls instead of 69–71 before anything is picked,
 instead of 48% (10 thumbnails fully visible instead of 4) and 86% at
 1920×1080 instead of 63%, no text below 13 px.
 
-Not yet, in order: the other pages (batches, organize, settings, tools,
-home) still draw frontend-v4's layouts in the new tokens; censor editor,
-similar, style map and dataset maker open the classic interface's page
-(`/?ui=classic&view=…`); "reset all settings" belongs to the Settings
-redesign; the search conditions show as chips under the search box, not
-inside it as in sample A; on a laptop with the recipe column open the
-result count gives its room to the search box until the column closes.
+**Every page (2026-10-23, after the owner found one page not enough to
+judge).** Home, batches (list, Pixiv and dataset steps with the censor
+editor), Sort, Settings and every tool page draw in the same language: the
+page line under the top edge (title at the scope line's size, back where you
+drilled in), full width, no film: sprocket holes are their own token
+(`--film-sprocket`, transparent here), picks are a ring and a numbered badge
+(`ui/PickMark`), edge codes keep their case, no tracked capitals. Shared
+components ask `lib/uiLook.ts` (`isNextUi()`, from `<html data-ui="next">`) or
+use `:global(html[data-ui="next"])`-scoped rules in their own module, so
+Vopus keeps its look. Settings in the new interface: one dark theme (no
+theme picker), a note on which interface `/` opens with links to the other
+two, and "Reset all settings" (`lib/resetSettings.ts`: preferences kept in
+the browser go back to defaults; libraries, images, batches, saved searches,
+drafts, recent folders, resumable jobs, AI services and keys and models
+stay; asks first, Cancel focused). Censor and Similar are menus on the top
+edge, because here they act on the library: Censor turns the picks into a
+censoring batch opened on its censor step; Similar offers by image, by
+meaning, like the image in view, and duplicates.
+
+Not yet: the style map and the dataset maker exist only in the classic
+interface and open there (`/?ui=classic&view=…`), as do the classic censor
+editor and similar page offered at the end of those menus; the search
+conditions show as chips under the search box, not inside it as in sample A;
+on a laptop with the recipe column open the result count gives its room to
+the search box until the column closes; `/` cannot be set to open the new
+interface yet.
 
 ---
 

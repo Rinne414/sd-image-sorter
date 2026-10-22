@@ -54,8 +54,8 @@
   border-radius: var(--radius);
   /* one unexposed frame on film, waiting for a picture */
   background:
-    repeating-linear-gradient(90deg, transparent 0 6px, var(--film-hole) 6px 13px) top 5px left / 100% 5px no-repeat,
-    repeating-linear-gradient(90deg, transparent 0 6px, var(--film-hole) 6px 13px) bottom 5px left / 100% 5px no-repeat,
+    repeating-linear-gradient(90deg, transparent 0 6px, var(--film-sprocket) 6px 13px) top 5px left / 100% 5px no-repeat,
+    repeating-linear-gradient(90deg, transparent 0 6px, var(--film-sprocket) 6px 13px) bottom 5px left / 100% 5px no-repeat,
     linear-gradient(var(--surface-2), var(--surface-2)) center / calc(100% - 20px) calc(100% - 40px) no-repeat,
     var(--film);
 }
@@ -90,7 +90,7 @@
 .holes {
   height: 6px;
   margin: 0 -10px;
-  background: repeating-linear-gradient(90deg, transparent 0 7px, var(--film-hole) 7px 15px);
+  background: repeating-linear-gradient(90deg, transparent 0 7px, var(--film-sprocket) 7px 15px);
 }
 
 .codes {

@@ -25,3 +25,13 @@
   font-size: var(--fs-6);
   font-weight: 650;
 }
+
+/* The new interface (/next/): the same line as the library's scope line. */
+:global(html[data-ui="next"]) .head {
+  height: var(--scope-h);
+  padding: 0 16px 0 10px;
+}
+
+:global(html[data-ui="next"]) .title {
+  font-size: var(--fs-5);
+}

@@ -2,6 +2,7 @@ import { useT, type MessageKey } from '../../../i18n'
 import { copyText, generatorCode } from '../../../lib/format'
 import { formatScore } from '../../../lib/imageInfo'
 import type { GenerationInfo } from '../../../lib/meta'
+import { isNextUi } from '../../../lib/uiLook'
 import styles from '../Card.module.css'
 
 // The film edge around a picture: the key parameters printed along its top
@@ -73,7 +74,7 @@ export function EdgeCodes({
             onClick={() => void copyText(value)}
           >
             {label && <span className={styles.codeKey}>{label}</span>}
-            {keepCase ? display : display.toUpperCase()}
+            {keepCase || isNextUi() ? display : display.toUpperCase()}
           </button>
         ))}
       </span>

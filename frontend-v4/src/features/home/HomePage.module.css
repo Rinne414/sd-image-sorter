@@ -222,3 +222,31 @@
     padding-block: 10px;
   }
 }
+
+/* The new interface (/next/): full width, and the library's name is the page
+   line, as the scope line is on the library page (docs/DESIGN.md §redesign-2026-10). */
+:global(html[data-ui="next"]) .page {
+  background: var(--bg);
+}
+
+:global(html[data-ui="next"]) .sheet {
+  max-width: none;
+  padding: 0 16px 40px;
+}
+
+:global(html[data-ui="next"]) .library {
+  display: flex;
+  align-items: center;
+  min-height: var(--scope-h);
+  margin: 0 -16px 18px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+:global(html[data-ui="next"]) .libraryName {
+  font-size: var(--fs-5);
+}
+
+:global(html[data-ui="next"]) .filmRow {
+  background: var(--stage);
+}

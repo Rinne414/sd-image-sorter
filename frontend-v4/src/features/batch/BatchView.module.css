@@ -97,3 +97,12 @@
   grid-row: 3;
   grid-column: 1;
 }
+
+/* The new interface (/next/): the same page line as every other page. */
+:global(html[data-ui="next"]) .head {
+  height: var(--scope-h);
+}
+
+:global(html[data-ui="next"]) .name {
+  font-size: var(--fs-5);
+}

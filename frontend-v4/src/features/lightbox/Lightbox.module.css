@@ -178,8 +178,8 @@
   overflow-y: hidden;
   scrollbar-width: none;
   background:
-    repeating-linear-gradient(90deg, transparent 0 8px, var(--film-hole) 8px 17px) top 4px left / 100% 6px no-repeat,
-    repeating-linear-gradient(90deg, transparent 0 8px, var(--film-hole) 8px 17px) bottom 4px left / 100% 6px no-repeat,
+    repeating-linear-gradient(90deg, transparent 0 8px, var(--film-sprocket) 8px 17px) top 4px left / 100% 6px no-repeat,
+    repeating-linear-gradient(90deg, transparent 0 8px, var(--film-sprocket) 8px 17px) bottom 4px left / 100% 6px no-repeat,
     var(--film);
   border-top: 1px solid var(--hairline);
 }
