@@ -1,0 +1,1907 @@
+{
+  "about": [
+    "Every user-facing feature entrance, with the classic interface (/) as the baseline (owner, 2026-10-23, M203).",
+    "classic: selectors in frontend/index.html; each must still exist. Every <button id> there belongs to a feature or to not_entrances.",
+    "vopus / next: where the same feature is entered in /vopus/ and /next/, or 'missing' with what is not ported yet.",
+    "Never delete a feature or a selector to make a check pass. A removal the owner agreed to goes to 'removed' with date, reason and the owner's words.",
+    "Checks: backend/tests/test_feature_entrances.py (fast, static) and tests/e2e/specs/feature-entrances.spec.ts (real browser)."
+  ],
+  "features": [
+    {
+      "id": "entry.missions",
+      "area": "entry",
+      "en": "Guided missions (LoRA dataset, batch organize, Pixiv set)",
+      "zh": "引导任务（LoRA 数据集、批量整理、Pixiv 投稿套图）",
+      "classic": [
+        "#entry-mission-lora",
+        "#entry-mission-organize",
+        "#entry-mission-pixiv",
+        "#nav-mission-chip-label",
+        "#nav-mission-exit"
+      ]
+    },
+    {
+      "id": "entry.continue",
+      "area": "entry",
+      "en": "Continue where you left off",
+      "zh": "从上次的地方继续",
+      "classic": [
+        "#entry-anchor-continue",
+        "#entry-resume-continue"
+      ]
+    },
+    {
+      "id": "entry.tool-cards",
+      "area": "entry",
+      "en": "Feature cards on the first screen",
+      "zh": "首页功能卡片",
+      "classic": [
+        "#entry-fn-censor",
+        "#entry-fn-sort",
+        "#entry-fn-reader",
+        "#entry-fn-privacy",
+        "#entry-fn-similar",
+        "#entry-fn-models",
+        "#entry-hero-swap"
+      ]
+    },
+    {
+      "id": "entry.all-features",
+      "area": "entry",
+      "en": "All features list",
+      "zh": "全部功能列表",
+      "classic": [
+        "#entry-all-tools"
+      ]
+    },
+    {
+      "id": "library.switch",
+      "area": "library",
+      "en": "Switch library",
+      "zh": "切换图库",
+      "classic": [
+        "#entry-library-switcher",
+        "#nav-library-chip",
+        "#entry-fn-gallery"
+      ]
+    },
+    {
+      "id": "library.manage",
+      "area": "library",
+      "en": "Manage libraries",
+      "zh": "管理图库",
+      "classic": [
+        "#entry-library-manage"
+      ]
+    },
+    {
+      "id": "library.clear",
+      "area": "library",
+      "en": "Clear current library (gallery page + Settings)",
+      "zh": "清空当前图库（图库页 + 设置）",
+      "classic": [
+        "#btn-sidebar-clear-library",
+        "#btn-settings-clear-library"
+      ]
+    },
+    {
+      "id": "library.roots",
+      "area": "library",
+      "en": "Library folders (add / refresh)",
+      "zh": "图库文件夹（添加 / 刷新）",
+      "classic": [
+        "#btn-manage-roots",
+        "#btn-refresh-folders",
+        "#btn-library-roots-add"
+      ]
+    },
+    {
+      "id": "library.import",
+      "area": "library",
+      "en": "Import images from a folder",
+      "zh": "从文件夹导入图片",
+      "classic": [
+        "#btn-scan",
+        "#empty-state-scan-btn",
+        "#btn-start-scan",
+        "#btn-browse-folder"
+      ]
+    },
+    {
+      "id": "library.import-diagnostics",
+      "area": "library",
+      "en": "Import diagnostics and log",
+      "zh": "导入诊断与日志",
+      "classic": [
+        "#btn-copy-scan-diagnostics",
+        "#btn-open-scan-log",
+        "#btn-copy-scan-log-path",
+        "#btn-stop-scan-from-diagnostics"
+      ]
+    },
+    {
+      "id": "library.find-moved",
+      "area": "library",
+      "en": "Find moved or renamed files",
+      "zh": "找回移动或改名的文件",
+      "classic": [
+        "#btn-reconnect-missing",
+        "#gallery-unreadable-banner-cta",
+        "#btn-start-reconnect",
+        "#btn-browse-reconnect-folder"
+      ]
+    },
+    {
+      "id": "library.missing-records",
+      "area": "library",
+      "en": "Missing files: show folders, clear records",
+      "zh": "缺失文件：查看文件夹、清除记录",
+      "classic": [
+        "#gallery-missing-toggle-details",
+        "#gallery-missing-clear-all"
+      ]
+    },
+    {
+      "id": "library.repair-review",
+      "area": "library",
+      "en": "Review repaired matches",
+      "zh": "检查修复结果",
+      "classic": [
+        "#btn-repair-review-prev",
+        "#btn-repair-review-next"
+      ]
+    },
+    {
+      "id": "jobs.background",
+      "area": "jobs",
+      "en": "Background jobs: open, stop, reset stuck",
+      "zh": "后台任务：查看、停止、重置卡住的任务",
+      "classic": [
+        "#bg-tag-open",
+        "#bg-tag-cancel",
+        "#bg-scan-open",
+        "#bg-scan-cancel",
+        "#bg-reconnect-open",
+        "#bg-reconnect-cancel",
+        "#bg-move-cancel",
+        "#bg-move-reset",
+        "#bg-delete-cancel",
+        "#bg-delete-reset",
+        "#bg-remove-cancel",
+        "#bg-remove-reset",
+        "#nav-ai-busy"
+      ]
+    },
+    {
+      "id": "nav.places",
+      "area": "shell",
+      "en": "Place tabs (gallery, reader, organize, censor, similar, dataset, reverse prompt, prompt helper, style finder, style map)",
+      "zh": "页面标签（图库、读图、分拣、打码、相似、数据集、反推、提示词助手、画风识别、画风地图）",
+      "classic": [
+        "#nav-tab-gallery",
+        "#nav-tab-reader",
+        "#nav-tab-sorting",
+        "#nav-tab-censor",
+        "#nav-tab-similar",
+        "#nav-tab-dataset",
+        "#nav-tab-reverse",
+        "#nav-tab-promptlab",
+        "#nav-tab-artist",
+        "#nav-tab-stylemap"
+      ]
+    },
+    {
+      "id": "nav.more-tools",
+      "area": "shell",
+      "en": "More tools menu",
+      "zh": "更多工具菜单",
+      "classic": [
+        "#nav-tools-toggle",
+        "#nav-tools-reverse",
+        "#nav-tools-promptlab",
+        "#nav-tools-artist",
+        "#nav-tools-stylemap",
+        "#nav-tools-reader",
+        "#nav-tools-sorting",
+        "#nav-tools-censor",
+        "#nav-tools-similar",
+        "#nav-tools-dataset",
+        "#nav-tools-dup-cleaner"
+      ]
+    },
+    {
+      "id": "nav.customize",
+      "area": "shell",
+      "en": "Customize tabs",
+      "zh": "自定义标签",
+      "classic": [
+        "#nav-tools-customize",
+        "#nav-customize-reset"
+      ]
+    },
+    {
+      "id": "shell.language",
+      "area": "shell",
+      "en": "Switch language",
+      "zh": "切换语言",
+      "classic": [
+        "#btn-language-toggle",
+        "#entry-lang-btn"
+      ]
+    },
+    {
+      "id": "shell.update",
+      "area": "shell",
+      "en": "Check for updates",
+      "zh": "检查更新",
+      "classic": [
+        "#btn-app-update",
+        "#entry-update-btn"
+      ]
+    },
+    {
+      "id": "shell.help",
+      "area": "shell",
+      "en": "Guide for the current page",
+      "zh": "当前页面的说明",
+      "classic": [
+        "#btn-help"
+      ]
+    },
+    {
+      "id": "shell.settings",
+      "area": "shell",
+      "en": "Settings and Model Center",
+      "zh": "设置与模型中心",
+      "classic": [
+        "#btn-open-model-manager",
+        "#entry-settings-btn"
+      ]
+    },
+    {
+      "id": "gallery.search",
+      "area": "gallery",
+      "en": "Search box with suggestions",
+      "zh": "搜索框与联想",
+      "classic": [
+        "#gallery-search-input",
+        "#gallery-search-clear"
+      ]
+    },
+    {
+      "id": "gallery.search-help",
+      "area": "gallery",
+      "en": "Search syntax help",
+      "zh": "搜索语法说明",
+      "classic": [
+        "#btn-search-help"
+      ]
+    },
+    {
+      "id": "gallery.generator-tabs",
+      "area": "gallery",
+      "en": "Generator tabs with counts (NAI, ComfyUI, Forge, WebUI, unknown)",
+      "zh": "生成器标签与数量（NAI、ComfyUI、Forge、WebUI、未知）",
+      "classic": [
+        "[data-gen=\"all\"]",
+        "[data-gen=\"nai\"]",
+        "[data-gen=\"comfyui\"]",
+        "[data-gen=\"forge\"]",
+        "[data-gen=\"webui\"]",
+        "[data-gen=\"unknown\"]"
+      ]
+    },
+    {
+      "id": "gallery.quick-chips",
+      "area": "gallery",
+      "en": "Quick filter chips (has params, aesthetic 7+, no caption)",
+      "zh": "快捷筛选（有参数、美学 7+、无描述）",
+      "classic": [
+        "#chip-has-metadata",
+        "#chip-aesthetic-7",
+        "#chip-no-caption"
+      ]
+    },
+    {
+      "id": "gallery.aspect",
+      "area": "gallery",
+      "en": "Aspect ratio quick filter",
+      "zh": "画幅快捷筛选",
+      "classic": [
+        "[data-aspect=\"square\"]",
+        "[data-aspect=\"landscape\"]",
+        "[data-aspect=\"portrait\"]"
+      ]
+    },
+    {
+      "id": "gallery.sort",
+      "area": "gallery",
+      "en": "Sort order and reverse",
+      "zh": "排序与倒序",
+      "classic": [
+        "#gallery-sort",
+        "#sort-reverse-btn"
+      ]
+    },
+    {
+      "id": "gallery.view-mode",
+      "area": "gallery",
+      "en": "View mode (grid, large, waterfall)",
+      "zh": "视图（网格、大图、瀑布流）",
+      "classic": [
+        "[data-size=\"grid\"]",
+        "[data-size=\"large\"]",
+        "[data-size=\"waterfall\"]"
+      ]
+    },
+    {
+      "id": "gallery.thumb-size",
+      "area": "gallery",
+      "en": "Thumbnail size",
+      "zh": "缩略图大小",
+      "classic": [
+        "#grid-size-slider",
+        "#grid-size-decrease",
+        "#grid-size-increase"
+      ]
+    },
+    {
+      "id": "gallery.random",
+      "area": "gallery",
+      "en": "Jump to a random image",
+      "zh": "随机跳到一张图",
+      "classic": [
+        "#btn-random"
+      ]
+    },
+    {
+      "id": "gallery.filter-editor",
+      "area": "gallery",
+      "en": "Filter editor (all conditions)",
+      "zh": "筛选编辑器（全部条件）",
+      "classic": [
+        "#btn-open-filters",
+        "#btn-toolbar-filters",
+        "#btn-apply-modal-filters",
+        "#btn-reset-filters"
+      ]
+    },
+    {
+      "id": "gallery.filter-summary",
+      "area": "gallery",
+      "en": "Active filters summary and clear",
+      "zh": "当前筛选摘要与清除",
+      "classic": [
+        "#btn-clear-filters",
+        "#btn-clear-artist",
+        "#gallery-pin-banner-clear"
+      ]
+    },
+    {
+      "id": "gallery.filter-presets",
+      "area": "gallery",
+      "en": "Saved filter presets (smart folders)",
+      "zh": "保存的筛选预设（智能文件夹）",
+      "classic": [
+        "#btn-save-filter-preset",
+        "#btn-smart-folders-manage",
+        "#smart-folders-list"
+      ]
+    },
+    {
+      "id": "gallery.folders",
+      "area": "gallery",
+      "en": "Folder tree",
+      "zh": "文件夹树",
+      "classic": [
+        "#folder-tree"
+      ]
+    },
+    {
+      "id": "gallery.collections",
+      "area": "gallery",
+      "en": "Collections",
+      "zh": "收藏集",
+      "classic": [
+        "#collections-list",
+        "#btn-new-collection"
+      ]
+    },
+    {
+      "id": "gallery.sidebar-collapse",
+      "area": "gallery",
+      "en": "Collapse / expand the sidebar",
+      "zh": "折叠 / 展开侧栏",
+      "classic": [
+        "#btn-collapse-desktop-sidebar",
+        "#btn-restore-desktop-sidebar"
+      ]
+    },
+    {
+      "id": "gallery.load-more",
+      "area": "gallery",
+      "en": "Load more images",
+      "zh": "加载更多图片",
+      "classic": [
+        "#load-more-btn"
+      ]
+    },
+    {
+      "id": "gallery.color-analysis",
+      "area": "gallery",
+      "en": "Color analysis (start, pause, run hidden)",
+      "zh": "颜色分析（开始、暂停、后台运行）",
+      "classic": [
+        "#btn-color-backfill-start",
+        "#btn-filter-color-backfill-start",
+        "#btn-tagger-color-start",
+        "#btn-tagger-color-cancel",
+        "#nav-color-progress",
+        "#btn-color-progress-pause",
+        "#btn-color-progress-hide",
+        "#btn-color-backfill-dismiss"
+      ]
+    },
+    {
+      "id": "gallery.unreadable-banner",
+      "area": "gallery",
+      "en": "Unreadable files banner (hide for now)",
+      "zh": "无法读取文件横幅（暂时隐藏）",
+      "classic": [
+        "#gallery-unreadable-banner-dismiss"
+      ]
+    },
+    {
+      "id": "select.mode",
+      "area": "selection",
+      "en": "Selection mode",
+      "zh": "选择模式",
+      "classic": [
+        "#btn-toggle-select",
+        "#btn-clear-selection"
+      ]
+    },
+    {
+      "id": "select.all-invert",
+      "area": "selection",
+      "en": "Select all matching / invert",
+      "zh": "全选匹配 / 反选",
+      "classic": [
+        "#btn-select-all",
+        "#btn-invert-selection-filtered"
+      ]
+    },
+    {
+      "id": "select.move-copy",
+      "area": "selection",
+      "en": "Move or copy picked images to a folder",
+      "zh": "把选中图片移动或复制到文件夹",
+      "classic": [
+        "#btn-move-selected",
+        "#btn-copy-selected"
+      ]
+    },
+    {
+      "id": "select.tag",
+      "area": "selection",
+      "en": "AI-tag picked images",
+      "zh": "AI 标注选中图片",
+      "classic": [
+        "#btn-tag-selected"
+      ]
+    },
+    {
+      "id": "select.to-censor",
+      "area": "selection",
+      "en": "Send picks to Censor",
+      "zh": "选中图片送去打码",
+      "classic": [
+        "#btn-send-to-censor"
+      ]
+    },
+    {
+      "id": "select.to-collection",
+      "area": "selection",
+      "en": "Add picks to a collection",
+      "zh": "选中图片加入收藏集",
+      "classic": [
+        "#btn-add-selected-to-collection"
+      ]
+    },
+    {
+      "id": "select.to-dataset",
+      "area": "selection",
+      "en": "Send picks to Dataset Maker",
+      "zh": "选中图片送到数据集制作",
+      "classic": [
+        "#btn-send-selection-to-dataset-maker"
+      ]
+    },
+    {
+      "id": "select.to-reader",
+      "area": "selection",
+      "en": "Open pick in Reader / Reverse Prompt",
+      "zh": "在读图 / 反推中打开选中图片",
+      "classic": [
+        "#btn-send-selection-to-reader",
+        "#btn-send-selection-to-reverse"
+      ]
+    },
+    {
+      "id": "select.to-privacy",
+      "area": "selection",
+      "en": "Send picks to Privacy Tools",
+      "zh": "选中图片送到隐私工具",
+      "classic": [
+        "#btn-send-selection-to-privacy"
+      ]
+    },
+    {
+      "id": "select.publish-set",
+      "area": "selection",
+      "en": "Publish set (order, censor-pair, export)",
+      "zh": "投稿套图（排序、打码配对、导出）",
+      "classic": [
+        "#btn-publish-selected",
+        "#btn-censor-to-publish-set",
+        "#btn-pub-repair",
+        "#btn-pub-add-selection",
+        "#btn-pub-export",
+        "#btn-pub-uncensored-skip",
+        "#btn-pub-uncensored-include"
+      ]
+    },
+    {
+      "id": "select.export-text",
+      "area": "selection",
+      "en": "Export prompts / tags / CSV / JSONL",
+      "zh": "导出提示词 / 标签 / CSV / JSONL",
+      "classic": [
+        "#btn-export-selected",
+        "#btn-download-export",
+        "#btn-copy-export",
+        "#btn-export-tags-alt"
+      ]
+    },
+    {
+      "id": "select.export-captions",
+      "area": "selection",
+      "en": "Export training captions (one file per image)",
+      "zh": "导出训练描述（每图一个文件）",
+      "classic": [
+        "#btn-batch-export-tags",
+        "#btn-start-batch-export",
+        "#btn-refresh-preview",
+        "#btn-batch-export-cancel-job"
+      ]
+    },
+    {
+      "id": "select.caption-editor",
+      "area": "selection",
+      "en": "Caption editor (large window)",
+      "zh": "描述编辑器（大窗口）",
+      "classic": [
+        "#btn-open-caption-editor",
+        "#btn-caption-editor-refresh"
+      ]
+    },
+    {
+      "id": "select.trait-pruner",
+      "area": "selection",
+      "en": "Suggest character traits to prune",
+      "zh": "建议删减的角色特征",
+      "classic": [
+        "#btn-export-trait-pruner",
+        "#btn-dataset-trait-pruner"
+      ]
+    },
+    {
+      "id": "select.remove",
+      "area": "selection",
+      "en": "Remove picks from the library (files kept)",
+      "zh": "从图库移除选中项（文件保留）",
+      "classic": [
+        "#btn-remove-selected-gallery"
+      ]
+    },
+    {
+      "id": "select.trash",
+      "area": "selection",
+      "en": "Move picked files to the trash",
+      "zh": "把选中文件移到回收站",
+      "classic": [
+        "#btn-delete-selected-files"
+      ]
+    },
+    {
+      "id": "select.more-menu",
+      "area": "selection",
+      "en": "More actions menu",
+      "zh": "更多操作菜单",
+      "classic": [
+        "#btn-gallery-action-more"
+      ]
+    },
+    {
+      "id": "tags.library",
+      "area": "tags",
+      "en": "Tags, prompts, LoRAs and checkpoints library",
+      "zh": "标签、提示词、LoRA 与模型库",
+      "classic": [
+        "#btn-tags-library",
+        "#btn-open-library-from-filter",
+        "#library-tab-tags",
+        "#library-tab-prompts",
+        "#library-tab-loras",
+        "#library-tab-checkpoints",
+        "#btn-library-show-all"
+      ]
+    },
+    {
+      "id": "tags.mass-editor",
+      "area": "tags",
+      "en": "Mass tag editor (find / replace, add, remove)",
+      "zh": "批量标签编辑（查找替换、添加、删除）",
+      "classic": [
+        "#btn-mass-tag-editor",
+        "#btn-selection-mass-tag-editor",
+        "#btn-filter-mass-tag-editor",
+        "#btn-mass-tag-dry-run",
+        "#btn-mass-tag-apply",
+        "#btn-mass-tag-confirm-apply"
+      ]
+    },
+    {
+      "id": "tags.ai-tagging",
+      "area": "tags",
+      "en": "AI tagging (WD14, model choice)",
+      "zh": "AI 标注（WD14、选择模型）",
+      "classic": [
+        "#btn-tag",
+        "#btn-start-tag",
+        "#btn-cancel-tag",
+        "#tagger-model-current",
+        "#btn-confirm-model-select",
+        "#btn-tag-scope-clear"
+      ]
+    },
+    {
+      "id": "tags.prefill-blacklist",
+      "area": "tags",
+      "en": "Tag blacklist presets (quality, meta)",
+      "zh": "标签黑名单预设（质量、元信息）",
+      "classic": [
+        "#btn-tag-prebl-quality",
+        "#btn-tag-prebl-meta",
+        "#btn-tag-prebl-clear"
+      ]
+    },
+    {
+      "id": "tags.import-export-json",
+      "area": "tags",
+      "en": "Export / import all tags as JSON",
+      "zh": "以 JSON 导出 / 导入全部标签",
+      "classic": [
+        "#btn-export-tags-json",
+        "#btn-import-tags"
+      ]
+    },
+    {
+      "id": "tags.smart-tag",
+      "area": "tags",
+      "en": "Smart Tag (WD14 + captioner)",
+      "zh": "智能标注（WD14 + 描述模型）",
+      "classic": [
+        "#btn-tag-modal-smart-tag-go",
+        "#btn-tagger-smart-go",
+        "#btn-tagger-nl-torii-smart",
+        "#btn-smart-tag-run",
+        "#btn-smart-tag-cancel-job",
+        "#btn-smart-tag-nl-setup",
+        "#btn-smart-tag-existing-skip",
+        "#btn-smart-tag-existing-include",
+        "#btn-tag-modal-smart-tag-dismiss"
+      ]
+    },
+    {
+      "id": "tags.vlm-caption",
+      "area": "tags",
+      "en": "VLM captioning (API captioner)",
+      "zh": "VLM 描述（API 描述模型）",
+      "classic": [
+        "#btn-vlm-start",
+        "#btn-vlm-cancel",
+        "#btn-vlm-retry-failed"
+      ]
+    },
+    {
+      "id": "tags.vlm-settings",
+      "area": "tags",
+      "en": "VLM settings (models, concurrency, test)",
+      "zh": "VLM 设置（模型、并发、测试）",
+      "classic": [
+        "#btn-vlm-settings",
+        "#btn-vlm-banner-settings-legacy",
+        "#btn-smart-tag-vlm-settings",
+        "#btn-vlm-fetch-models",
+        "#btn-vlm-probe-concurrency",
+        "#btn-vlm-test",
+        "#btn-vlm-save-settings"
+      ]
+    },
+    {
+      "id": "tags.vlm-chat",
+      "area": "tags",
+      "en": "VLM API chat (debug)",
+      "zh": "VLM API 对话（调试）",
+      "classic": [
+        "#btn-vlm-debug-chat",
+        "#btn-vlm-debug-chat-refresh"
+      ]
+    },
+    {
+      "id": "tags.aesthetic",
+      "area": "tags",
+      "en": "Aesthetic scoring",
+      "zh": "美学评分",
+      "classic": [
+        "#btn-tagger-aesthetic-start",
+        "#btn-tagger-aesthetic-cancel",
+        "#btn-tagger-aesthetic-setup",
+        "#btn-score-aesthetic",
+        "#btn-cancel-aesthetic",
+        "#btn-cancel-aesthetic-tab"
+      ]
+    },
+    {
+      "id": "image.view",
+      "area": "image",
+      "en": "One-image view with previous / next",
+      "zh": "单图查看（上一张 / 下一张）",
+      "classic": [
+        "#modal-prev-image",
+        "#modal-next-image"
+      ]
+    },
+    {
+      "id": "image.copy",
+      "area": "image",
+      "en": "Copy prompt, negative, tags, params, all",
+      "zh": "复制提示词、反向词、标签、参数、全部",
+      "classic": [
+        "#btn-copy-all",
+        "#btn-copy-prompt",
+        "#btn-copy-negative",
+        "#btn-copy-tags",
+        "#btn-copy-tags-category",
+        "#btn-copy-params",
+        "#btn-toggle-prompt-format"
+      ]
+    },
+    {
+      "id": "image.reread",
+      "area": "image",
+      "en": "Read metadata again",
+      "zh": "重新读取元数据",
+      "classic": [
+        "#btn-reparse-metadata"
+      ]
+    },
+    {
+      "id": "image.edit-metadata",
+      "area": "image",
+      "en": "Edit image metadata",
+      "zh": "编辑图片元数据",
+      "classic": [
+        "#btn-edit-metadata",
+        "#btn-meta-edit-save"
+      ]
+    },
+    {
+      "id": "image.open-folder",
+      "area": "image",
+      "en": "Open in folder",
+      "zh": "在文件夹中打开",
+      "classic": [
+        "#btn-open-folder"
+      ]
+    },
+    {
+      "id": "image.edit-tags",
+      "area": "image",
+      "en": "Edit this image's tags",
+      "zh": "编辑这张图的标签",
+      "classic": [
+        "#btn-edit-modal-tags",
+        "#btn-save-modal-tags",
+        "#btn-toggle-all-tags"
+      ]
+    },
+    {
+      "id": "image.edit-caption",
+      "area": "image",
+      "en": "Edit / copy this image's caption",
+      "zh": "编辑 / 复制这张图的描述",
+      "classic": [
+        "#btn-edit-caption",
+        "#btn-save-caption",
+        "#btn-copy-caption"
+      ]
+    },
+    {
+      "id": "reader.read",
+      "area": "reader",
+      "en": "Reader: read an image's parameters (drop / paste)",
+      "zh": "读图：读取图片参数（拖入 / 粘贴）",
+      "classic": [
+        "#reader-tool-tab-reader",
+        "#reader-paste-btn",
+        "#reader-clear",
+        "#reader-toggle-format"
+      ]
+    },
+    {
+      "id": "reader.copy",
+      "area": "reader",
+      "en": "Reader: copy as SD text, prompt, negative, params",
+      "zh": "读图：复制为 SD 文本、提示词、反向词、参数",
+      "classic": [
+        "#reader-copy-sd",
+        "#reader-copy-all",
+        "#reader-copy-prompt",
+        "#reader-copy-prompt-category",
+        "#reader-copy-negative",
+        "#reader-copy-params"
+      ]
+    },
+    {
+      "id": "reader.save-as",
+      "area": "reader",
+      "en": "Reader: save a new image with edited metadata",
+      "zh": "读图：另存为带新元数据的图片",
+      "classic": [
+        "#reader-save-metadata-as"
+      ]
+    },
+    {
+      "id": "privacy.obfuscate",
+      "area": "privacy",
+      "en": "Privacy Tools: protect / restore images",
+      "zh": "隐私工具：加密 / 还原图片",
+      "classic": [
+        "#reader-tool-tab-obfuscation",
+        "#obfuscate-settings-toggle",
+        "#obfuscate-btn-encode",
+        "#obfuscate-btn-decode",
+        "#obfuscate-btn-clear",
+        "#obfuscate-btn-download-all",
+        "#obfuscate-preview-copy",
+        "#obfuscate-preview-download"
+      ]
+    },
+    {
+      "id": "privacy.disguise",
+      "area": "privacy",
+      "en": "Privacy Tools: disguise cover pictures",
+      "zh": "隐私工具：伪装封面图",
+      "classic": [
+        "#disguise-default-set",
+        "#disguise-default-clear",
+        "#disguise-upload-pick",
+        "#disguise-upload-as-default",
+        "#disguise-redo-failed",
+        "#disguise-redo-all",
+        "#disguise-pack-copy",
+        "#disguise-pack-download",
+        "#disguise-pack-reveal",
+        "#disguise-btn-copy-all",
+        "#disguise-output-folder"
+      ]
+    },
+    {
+      "id": "autosep.scope",
+      "area": "organize",
+      "en": "Auto-Separate: image scope from gallery filters",
+      "zh": "自动分离：按图库筛选取图",
+      "classic": [
+        "#btn-autosep-filters",
+        "#btn-autosep-use-gallery-scope",
+        "#btn-autosep-resync-scope",
+        "#btn-autosep-keep-scope"
+      ]
+    },
+    {
+      "id": "autosep.configs",
+      "area": "organize",
+      "en": "Auto-Separate: saved rule sets",
+      "zh": "自动分离：保存的规则组",
+      "classic": [
+        "#btn-autosep-new-config",
+        "#btn-autosep-load-config",
+        "#btn-autosep-save-config",
+        "#btn-autosep-delete-config",
+        "#btn-autosep-rename-config"
+      ]
+    },
+    {
+      "id": "autosep.run",
+      "area": "organize",
+      "en": "Auto-Separate: preview and move",
+      "zh": "自动分离：预览并移动",
+      "classic": [
+        "#btn-preview-autosep",
+        "#btn-browse-destination",
+        "#btn-execute-autosep"
+      ]
+    },
+    {
+      "id": "autosep.settings",
+      "area": "organize",
+      "en": "Auto-Separate settings",
+      "zh": "自动分离设置",
+      "classic": [
+        "#btn-autosep-settings",
+        "#btn-reset-autosep-settings",
+        "#btn-save-autosep-settings"
+      ]
+    },
+    {
+      "id": "sort.session",
+      "area": "organize",
+      "en": "Manual sort: start, resume, discard, exit",
+      "zh": "手动分拣：开始、继续、放弃、退出",
+      "classic": [
+        "#btn-start-sorting",
+        "#btn-resume-sorting",
+        "#btn-discard-session",
+        "#btn-exit-sorting",
+        "#return-to-gallery-btn"
+      ]
+    },
+    {
+      "id": "sort.presets",
+      "area": "organize",
+      "en": "Manual sort: saved key layouts",
+      "zh": "手动分拣：保存的按键方案",
+      "classic": [
+        "#btn-sort-preset-load",
+        "#btn-sort-preset-save",
+        "#btn-sort-preset-delete",
+        "#sort-preset-select"
+      ]
+    },
+    {
+      "id": "sort.scope",
+      "area": "organize",
+      "en": "Manual sort: image scope and already-sorted toggle",
+      "zh": "手动分拣：取图范围与已分拣开关",
+      "classic": [
+        "#btn-manual-sort-filters",
+        "#btn-manual-sort-use-gallery-scope",
+        "#btn-manual-sort-resync-scope",
+        "#btn-manual-sort-keep-scope",
+        "#btn-sort-scope-sorted-toggle"
+      ]
+    },
+    {
+      "id": "sort.modes",
+      "area": "organize",
+      "en": "Manual sort modes (WASD, bracket A/B, cull keep/reject)",
+      "zh": "手动分拣模式（WASD、A/B 对决、去留筛选）",
+      "classic": [
+        "#sort-mode-switch",
+        "#bracket-btn-champion",
+        "#bracket-btn-challenger",
+        "#bracket-btn-skip",
+        "#bracket-btn-zoom",
+        "#cull-btn-keep",
+        "#cull-btn-reject",
+        "#cull-btn-skip"
+      ]
+    },
+    {
+      "id": "sort.undo",
+      "area": "organize",
+      "en": "Manual sort undo / redo",
+      "zh": "手动分拣撤销 / 重做",
+      "classic": [
+        "#bracket-btn-undo",
+        "#bracket-btn-redo",
+        "#cull-btn-undo",
+        "#cull-btn-redo"
+      ]
+    },
+    {
+      "id": "sort.focus-sound",
+      "area": "organize",
+      "en": "Manual sort focus mode and sounds",
+      "zh": "手动分拣专注模式与音效",
+      "classic": [
+        "#btn-sort-zen",
+        "#btn-sort-mute"
+      ]
+    },
+    {
+      "id": "sort.cooldown",
+      "area": "organize",
+      "en": "Manual sort cooldown between keys",
+      "zh": "手动分拣按键冷却",
+      "classic": [
+        "#manual-sort-cooldown-toggle",
+        "#manual-sort-cooldown-ms"
+      ]
+    },
+    {
+      "id": "censor.queue-sort",
+      "area": "censor",
+      "en": "Censor queue: auto-sort (rating, aesthetic, resolution) and profiles",
+      "zh": "打码队列：自动排序（分级、美学、分辨率）与方案",
+      "classic": [
+        "#qs-btn-auto-sort",
+        "#qs-sort-rating",
+        "#qs-sort-aesthetic",
+        "#qs-sort-resolution",
+        "#qs-manage-auto-sort",
+        "#qs-btn-add-section",
+        "#qs-profile-new",
+        "#qs-profile-save",
+        "#qs-profile-apply"
+      ]
+    },
+    {
+      "id": "censor.queue-filter",
+      "area": "censor",
+      "en": "Censor queue: filter, select matched, move",
+      "zh": "打码队列：筛选、选中匹配、移动",
+      "classic": [
+        "#qs-btn-filter",
+        "#qs-filter-apply",
+        "#qs-filter-select",
+        "#qs-filter-move",
+        "#qs-filter-gallery",
+        "#qs-filter-advanced",
+        "#btn-queue-filter"
+      ]
+    },
+    {
+      "id": "censor.queue-order",
+      "area": "censor",
+      "en": "Censor queue: reorder, select, manager",
+      "zh": "打码队列：调整顺序、选择、队列管理",
+      "classic": [
+        "#btn-open-queue-manager",
+        "#btn-queue-select-all",
+        "#btn-queue-move-top",
+        "#btn-queue-move-up",
+        "#btn-queue-move-down",
+        "#btn-queue-move-bottom",
+        "#btn-queue-manager-move-position",
+        "#btn-queue-manager-remove-selected"
+      ]
+    },
+    {
+      "id": "censor.tools",
+      "area": "censor",
+      "en": "Censor tools (brush, pen, eraser, clone, remove background)",
+      "zh": "打码工具（画笔、钢笔、橡皮、仿制、去背景）",
+      "classic": [
+        "[data-tool=\"brush\"]",
+        "[data-tool=\"pen\"]",
+        "[data-tool=\"eraser\"]",
+        "[data-tool=\"clone\"]",
+        "[data-tool=\"remove-bg\"]"
+      ]
+    },
+    {
+      "id": "censor.history",
+      "area": "censor",
+      "en": "Censor undo / redo / reset / show changes",
+      "zh": "打码撤销 / 重做 / 还原 / 显示改动",
+      "classic": [
+        "#btn-undo",
+        "#btn-redo",
+        "#btn-clear-edits",
+        "#btn-show-changes"
+      ]
+    },
+    {
+      "id": "censor.zoom",
+      "area": "censor",
+      "en": "Censor zoom",
+      "zh": "打码缩放",
+      "classic": [
+        "#btn-zoom-out",
+        "#btn-zoom-in",
+        "#btn-zoom-fit"
+      ]
+    },
+    {
+      "id": "censor.detect",
+      "area": "censor",
+      "en": "Auto-detect (current, all, settings, model file)",
+      "zh": "自动检测（当前、全部、设置、模型文件）",
+      "classic": [
+        "#btn-auto-detect-current",
+        "#btn-auto-detect-all-sidebar",
+        "#btn-open-detect-modal",
+        "#btn-run-auto-censor",
+        "#btn-auto-detect-current-modal",
+        "#btn-auto-detect-all-modal",
+        "#btn-browse-model",
+        "#censor-confidence-sidebar"
+      ]
+    },
+    {
+      "id": "censor.sam3",
+      "area": "censor",
+      "en": "SAM3 segment by text and refine",
+      "zh": "SAM3 按文字分割与精修",
+      "classic": [
+        "#btn-sam3-common-words",
+        "#btn-sam3-refine-all-sidebar",
+        "#btn-segment-text-current",
+        "#btn-sam3-batch-refine"
+      ]
+    },
+    {
+      "id": "censor.review",
+      "area": "censor",
+      "en": "Detection review (prev, next, approve, skip)",
+      "zh": "检测复核（上一张、下一张、通过、跳过）",
+      "classic": [
+        "#btn-review-prev",
+        "#btn-review-next",
+        "#btn-review-detect",
+        "#btn-review-approve",
+        "#btn-review-skip"
+      ]
+    },
+    {
+      "id": "censor.color-filters",
+      "area": "censor",
+      "en": "Image adjustments and filters",
+      "zh": "图像调整与滤镜",
+      "classic": [
+        "#btn-filter-vivid",
+        "#btn-filter-warm",
+        "#btn-filter-cool",
+        "#btn-filter-bw",
+        "#btn-filter-dramatic",
+        "#btn-filter-reset",
+        "#btn-apply-filters",
+        "#btn-apply-filters-selected",
+        "#btn-apply-filters-all",
+        "#filter-brightness"
+      ]
+    },
+    {
+      "id": "censor.save",
+      "area": "censor",
+      "en": "Save censored images (options, folder)",
+      "zh": "保存打码结果（选项、文件夹）",
+      "classic": [
+        "#btn-save-all-processed",
+        "#btn-confirm-save-options",
+        "#btn-save-browse-folder",
+        "#btn-save-apply-filters-current"
+      ]
+    },
+    {
+      "id": "censor.rename",
+      "area": "censor",
+      "en": "Rename one / batch rename",
+      "zh": "单张改名 / 批量改名",
+      "classic": [
+        "#btn-rename-single",
+        "#btn-batch-rename",
+        "#btn-queue-manager-batch-rename",
+        "#btn-apply-rename"
+      ]
+    },
+    {
+      "id": "censor.clear-queue",
+      "area": "censor",
+      "en": "Clear censor queue",
+      "zh": "清空打码队列",
+      "classic": [
+        "#btn-clear-queue"
+      ]
+    },
+    {
+      "id": "censor.media",
+      "area": "censor",
+      "en": "Censor GIFs and videos",
+      "zh": "GIF 与视频打码",
+      "classic": [
+        "#btn-media-censor-open",
+        "#media-censor-start",
+        "#media-censor-stop",
+        "#media-censor-browse-source",
+        "#media-censor-browse-output"
+      ]
+    },
+    {
+      "id": "censor.empty-open-gallery",
+      "area": "censor",
+      "en": "Empty censor: open gallery",
+      "zh": "打码为空时：打开图库",
+      "classic": [
+        "#btn-censor-empty-open-gallery"
+      ]
+    },
+    {
+      "id": "similar.index",
+      "area": "similar",
+      "en": "Build similarity index",
+      "zh": "建立相似度索引",
+      "classic": [
+        "#btn-similar-embed",
+        "#btn-similar-status-embed"
+      ]
+    },
+    {
+      "id": "similar.search",
+      "area": "similar",
+      "en": "Search similar by text, image id or upload",
+      "zh": "按文字、图片编号或上传图片找相似",
+      "classic": [
+        "#btn-similar-search-text",
+        "#btn-similar-search",
+        "#btn-similar-upload",
+        "#similar-search-threshold",
+        "#similar-search-scope",
+        "#btn-similar-load-more"
+      ]
+    },
+    {
+      "id": "similar.duplicates",
+      "area": "similar",
+      "en": "Find near-duplicates",
+      "zh": "查找近似重复",
+      "classic": [
+        "#btn-similar-duplicates",
+        "#btn-similar-duplicates-more"
+      ]
+    },
+    {
+      "id": "dup.cleanup",
+      "area": "similar",
+      "en": "Duplicate cleanup (scan, keep best)",
+      "zh": "重复清理（扫描、保留最佳）",
+      "classic": [
+        "#btn-similar-open-dup-cleaner",
+        "#btn-dup-scan",
+        "#btn-dup-cancel-scan",
+        "#btn-dup-apply-all",
+        "#btn-dup-load-more"
+      ]
+    },
+    {
+      "id": "reverse.run",
+      "area": "tools",
+      "en": "Reverse prompt: infer the prompt, suggest missed tags",
+      "zh": "反推：推断提示词、补充遗漏标签",
+      "classic": [
+        "#btn-reverse-run",
+        "#btn-reverse-cancel",
+        "#btn-reverse-tipo"
+      ]
+    },
+    {
+      "id": "promptlab.stats",
+      "area": "tools",
+      "en": "Prompt Helper: library stats (top tags, checkpoints, scored images, recipes)",
+      "zh": "提示词助手：图库统计（常用标签、模型、高分图、配方）",
+      "classic": [
+        "#pl-top-tags-more",
+        "#pl-high-tags-more",
+        "#pl-top-checkpoints-more",
+        "#pl-best-checkpoints-more",
+        "#pl-top-scored-images-more",
+        "#pl-recipe-suggestions-more"
+      ]
+    },
+    {
+      "id": "promptlab.compare",
+      "area": "tools",
+      "en": "Prompt Helper: compare two images",
+      "zh": "提示词助手：比较两张图",
+      "classic": [
+        "#pl-pick-a",
+        "#pl-pick-b",
+        "#pl-compare-go"
+      ]
+    },
+    {
+      "id": "promptlab.build",
+      "area": "tools",
+      "en": "Prompt Helper: build and clean a prompt",
+      "zh": "提示词助手：组装与清理提示词",
+      "classic": [
+        "#pl-pick-build",
+        "#pl-build-use-checked",
+        "#pl-build-copy-caption",
+        "#pl-build-clean-prompt",
+        "#pl-build-drop-quality",
+        "#pl-build-space-tags",
+        "#pl-build-reorder",
+        "#pl-build-copy",
+        "#pl-build-copy-all"
+      ]
+    },
+    {
+      "id": "promptlab.generate",
+      "area": "tools",
+      "en": "Prompt Helper: random / generate / validate / presets",
+      "zh": "提示词助手：随机、生成、校验、预设",
+      "classic": [
+        "#btn-promptlab-random",
+        "#btn-promptlab-clear",
+        "#btn-promptlab-generate",
+        "#btn-promptlab-copy",
+        "#btn-promptlab-validate",
+        "#btn-promptlab-save-preset",
+        "#btn-promptlab-apply-tagset",
+        "#btn-promptlab-use-gallery"
+      ]
+    },
+    {
+      "id": "promptlab.categories",
+      "area": "tools",
+      "en": "Prompt Helper: tag categories board",
+      "zh": "提示词助手：标签分类板",
+      "classic": [
+        "#btn-promptlab-recategorize",
+        "#btn-promptlab-category-board",
+        "#promptlab-category-board-submit"
+      ]
+    },
+    {
+      "id": "artist.identify",
+      "area": "tools",
+      "en": "Style Finder: identify artists",
+      "zh": "画风识别：识别画师",
+      "classic": [
+        "#btn-identify-all",
+        "#btn-identify-selected",
+        "#btn-artist-vocabulary-check",
+        "#btn-refresh-artist-stats",
+        "#btn-artist-load-more",
+        "[data-view=\"grid\"]",
+        "[data-view=\"list\"]"
+      ]
+    },
+    {
+      "id": "artist.clear",
+      "area": "tools",
+      "en": "Style Finder: clear all predictions",
+      "zh": "画风识别：清除全部识别结果",
+      "classic": [
+        "#btn-clear-artist-data"
+      ]
+    },
+    {
+      "id": "stylemap.build",
+      "area": "tools",
+      "en": "Style Map: build index (install UMAP, pause, cancel)",
+      "zh": "画风地图：建立索引（安装 UMAP、暂停、取消）",
+      "classic": [
+        "#stylemap-build-btn",
+        "#stylemap-empty-build",
+        "#stylemap-install-umap",
+        "#stylemap-retry-layout",
+        "#stylemap-index-pause",
+        "#stylemap-index-cancel",
+        "#stylemap-empty-similar"
+      ]
+    },
+    {
+      "id": "stylemap.view",
+      "area": "tools",
+      "en": "Style Map: axes, landmarks, box select, reset view, locate",
+      "zh": "画风地图：坐标轴、地标、框选、重置视图、定位",
+      "classic": [
+        "#stylemap-axes-toggle",
+        "#stylemap-axes-labels-toggle",
+        "#stylemap-landmarks-toggle",
+        "#stylemap-box-toggle",
+        "#stylemap-reset-view",
+        "#stylemap-locate-action",
+        "#stylemap-locate-clear",
+        "#stylemap-near-action",
+        "#stylemap-near-clear"
+      ]
+    },
+    {
+      "id": "stylemap.selection",
+      "area": "tools",
+      "en": "Style Map: send selection (collection, censor, dataset, gallery)",
+      "zh": "画风地图：发送选区（收藏集、打码、数据集、图库）",
+      "classic": [
+        "#stylemap-sel-collection",
+        "#stylemap-sel-censor",
+        "#stylemap-sel-dataset",
+        "#stylemap-sel-gallery",
+        "#stylemap-sel-clear"
+      ]
+    },
+    {
+      "id": "dataset.steps",
+      "area": "dataset",
+      "en": "Dataset Maker steps (import, workbench, export)",
+      "zh": "数据集制作步骤（导入、工作台、导出）",
+      "classic": [
+        "#dataset-tab-import",
+        "#dataset-tab-workbench",
+        "#dataset-tab-export"
+      ]
+    },
+    {
+      "id": "dataset.projects",
+      "area": "dataset",
+      "en": "Dataset projects (save, save as, rename, archive, restore, delete)",
+      "zh": "数据集项目（保存、另存、改名、归档、恢复、删除）",
+      "classic": [
+        "#btn-dataset-project-save-as",
+        "#btn-dataset-project-save",
+        "#btn-dataset-project-rename",
+        "#btn-dataset-project-archive",
+        "#btn-dataset-project-restore",
+        "#btn-dataset-project-delete"
+      ]
+    },
+    {
+      "id": "dataset.clear",
+      "area": "dataset",
+      "en": "Clear the Dataset Maker queue",
+      "zh": "清空数据集制作队列",
+      "classic": [
+        "#btn-dataset-clear"
+      ]
+    },
+    {
+      "id": "dataset.import",
+      "area": "dataset",
+      "en": "Dataset import (gallery picks, folder, audit)",
+      "zh": "数据集导入（图库选中、文件夹、检查）",
+      "classic": [
+        "#btn-dataset-import-gallery",
+        "#btn-dataset-folder-import-browse",
+        "#btn-dataset-folder-import-go",
+        "#btn-dataset-import-audit",
+        "#btn-dataset-import-select-all",
+        "#btn-dataset-import-remove-selected",
+        "#btn-dataset-folder-import-more",
+        "#btn-dataset-audit-run",
+        "#btn-dataset-audit-download"
+      ]
+    },
+    {
+      "id": "dataset.queue",
+      "area": "dataset",
+      "en": "Dataset queue (grid / list, tag include / exclude, select, remove)",
+      "zh": "数据集队列（网格 / 列表、按标签包含 / 排除、选择、移除）",
+      "classic": [
+        "#btn-dataset-queue-grid",
+        "#btn-dataset-queue-list",
+        "#btn-dataset-queue-tag-include",
+        "#btn-dataset-queue-tag-exclude",
+        "#btn-dataset-queue-clear-filters",
+        "#btn-dataset-queue-select-all",
+        "#btn-dataset-queue-remove-selected",
+        "#dataset-queue-caption-filter"
+      ]
+    },
+    {
+      "id": "dataset.compare-zoom",
+      "area": "dataset",
+      "en": "Dataset compare and zoom",
+      "zh": "数据集对比与缩放",
+      "classic": [
+        "#btn-dataset-split-view",
+        "#btn-dataset-zoom-out",
+        "#btn-dataset-zoom-in",
+        "#btn-dataset-zoom-reset"
+      ]
+    },
+    {
+      "id": "dataset.caption-type",
+      "area": "dataset",
+      "en": "Caption type (booru / natural language / both, auto)",
+      "zh": "描述类型（booru / 自然语言 / 两者、自动）",
+      "classic": [
+        "#btn-dataset-captype-selected",
+        "#btn-dataset-captype-all",
+        "#btn-dataset-captype-auto"
+      ]
+    },
+    {
+      "id": "dataset.masks",
+      "area": "dataset",
+      "en": "Masked training (paint, auto masks)",
+      "zh": "遮罩训练（绘制、自动遮罩）",
+      "classic": [
+        "#btn-dataset-mask-edit",
+        "#btn-dataset-mask-auto-all",
+        "#mask-tool-include",
+        "#mask-tool-exclude",
+        "#mask-tool-invert",
+        "#mask-tool-fill",
+        "#mask-tool-auto",
+        "#mask-editor-save",
+        "#mask-editor-delete"
+      ]
+    },
+    {
+      "id": "dataset.caption-history",
+      "area": "dataset",
+      "en": "Caption versions and history",
+      "zh": "描述版本与历史",
+      "classic": [
+        "#btn-dataset-save-caption-version",
+        "#btn-dataset-caption-history",
+        "#btn-dataset-annotation-history-more"
+      ]
+    },
+    {
+      "id": "dataset.editor",
+      "area": "dataset",
+      "en": "Caption editor (prev / next, undo, revert, drop, remove)",
+      "zh": "描述编辑（上一张 / 下一张、撤销、还原、丢弃、移除）",
+      "classic": [
+        "#btn-dataset-prev-image",
+        "#btn-dataset-next-image",
+        "#btn-dataset-revert-caption",
+        "#btn-dataset-undo-caption",
+        "#btn-dataset-drop-image",
+        "#btn-dataset-remove-image"
+      ]
+    },
+    {
+      "id": "dataset.trigger-quality",
+      "area": "dataset",
+      "en": "Trigger word and quality tags",
+      "zh": "触发词与质量标签",
+      "classic": [
+        "#btn-dataset-quickfill-trigger",
+        "#btn-dataset-quickfill-quality",
+        "#btn-dataset-cleanup-trigger"
+      ]
+    },
+    {
+      "id": "dataset.target-model",
+      "area": "dataset",
+      "en": "Target model presets and starter defaults",
+      "zh": "目标模型预设与入门默认值",
+      "classic": [
+        "#btn-dataset-target-model-apply",
+        "#btn-dataset-anime-defaults"
+      ]
+    },
+    {
+      "id": "dataset.tagging",
+      "area": "dataset",
+      "en": "Dataset tagging (Smart Tag, tag all)",
+      "zh": "数据集标注（智能标注、全部标注）",
+      "classic": [
+        "#btn-dataset-smart-tag",
+        "#btn-dataset-tag-all"
+      ]
+    },
+    {
+      "id": "dataset.to-collection",
+      "area": "dataset",
+      "en": "Add dataset images to a collection",
+      "zh": "数据集图片加入收藏集",
+      "classic": [
+        "#btn-dataset-add-to-collection"
+      ]
+    },
+    {
+      "id": "dataset.vocab",
+      "area": "dataset",
+      "en": "Dataset vocabulary and Chinese aid",
+      "zh": "数据集词表与中文辅助",
+      "classic": [
+        "#btn-dataset-vocab-refresh",
+        "#dataset-vocab-search",
+        "#btn-dataset-refresh-zh-aid"
+      ]
+    },
+    {
+      "id": "dataset.lora-prune",
+      "area": "dataset",
+      "en": "LoRA prune list (blacklist)",
+      "zh": "LoRA 删减列表（黑名单）",
+      "classic": [
+        "#btn-dataset-lora-prune-apply",
+        "#btn-dataset-lora-prune-clear"
+      ]
+    },
+    {
+      "id": "dataset.tag-cleanup",
+      "area": "dataset",
+      "en": "Tag cleanup (dedupe, prefix, template, category order, find / replace)",
+      "zh": "标签整理（去重、前缀、模板、分类顺序、查找替换）",
+      "classic": [
+        "#btn-dataset-dedupe-tags",
+        "#btn-dataset-clear-prefix",
+        "#btn-dataset-reset-template",
+        "#btn-dataset-apply-tag-category-order",
+        "#btn-dataset-find-replace"
+      ]
+    },
+    {
+      "id": "dataset.sepcon",
+      "area": "dataset",
+      "en": "Issues and tags review (health check, next unreviewed, TIPO)",
+      "zh": "问题与标签复核（健康检查、下一个未复核、TIPO）",
+      "classic": [
+        "#sepcon-tab-issues",
+        "#sepcon-tab-tags",
+        "#sepcon-issues-refresh",
+        "#sepcon-issues-retry",
+        "#sepcon-issues-prev",
+        "#sepcon-issues-next",
+        "#sepcon-next-unseen",
+        "#sepcon-health-run",
+        "#sepcon-tipo-suggest",
+        "#sepcon-rt-apply",
+        "#sepcon-issue-filter",
+        "#sepcon-search",
+        "#sepcon-sort"
+      ]
+    },
+    {
+      "id": "dataset.ccip",
+      "area": "dataset",
+      "en": "Character purity check (CCIP)",
+      "zh": "角色纯度检查（CCIP）",
+      "classic": [
+        "#ccip-run",
+        "#ccip-cancel",
+        "#ccip-prepare"
+      ]
+    },
+    {
+      "id": "dataset.readiness",
+      "area": "dataset",
+      "en": "Readiness check before export",
+      "zh": "导出前就绪检查",
+      "classic": [
+        "#btn-dataset-readiness-check",
+        "#btn-dataset-readiness-cancel",
+        "#btn-dataset-confirm-recheck",
+        "#btn-dataset-confirm-go"
+      ]
+    },
+    {
+      "id": "dataset.export",
+      "area": "dataset",
+      "en": "Export dataset (output folder, open folder)",
+      "zh": "导出数据集（输出文件夹、打开文件夹）",
+      "classic": [
+        "#btn-dataset-export",
+        "#btn-dataset-export-cancel",
+        "#btn-dataset-browse-output",
+        "#dataset-output-folder",
+        "#btn-dataset-open-folder",
+        "#btn-dataset-trainer-contract-retry"
+      ]
+    },
+    {
+      "id": "settings.general",
+      "area": "settings",
+      "en": "General settings (sound, first screen, hero, focus mode, UI scale)",
+      "zh": "常规设置（音效、首页、首页大图、专注模式、界面缩放）",
+      "classic": [
+        "#btn-settings-sound-toggle",
+        "#btn-settings-entry-toggle",
+        "#btn-settings-entry-hero-toggle",
+        "#btn-settings-comfort-zen",
+        "#settings-ui-scale"
+      ]
+    },
+    {
+      "id": "settings.interface",
+      "area": "settings",
+      "en": "Switch interface (classic / Vopus)",
+      "zh": "切换界面（经典 / Vopus）",
+      "classic": [
+        "#btn-settings-interface"
+      ]
+    },
+    {
+      "id": "settings.refresh-ui",
+      "area": "settings",
+      "en": "Hard refresh the UI",
+      "zh": "强制刷新界面",
+      "classic": [
+        "#btn-refresh-ui"
+      ]
+    },
+    {
+      "id": "settings.output-root",
+      "area": "settings",
+      "en": "Output folder root",
+      "zh": "输出文件夹根目录",
+      "classic": [
+        "#btn-settings-output-root-browse",
+        "#btn-settings-output-root-reset"
+      ]
+    },
+    {
+      "id": "settings.ai-defaults",
+      "area": "settings",
+      "en": "AI defaults (save / reset)",
+      "zh": "AI 默认值（保存 / 重置）",
+      "classic": [
+        "#btn-settings-save-ai-defaults",
+        "#btn-settings-reset-ai-defaults"
+      ]
+    },
+    {
+      "id": "settings.reset-all",
+      "area": "settings",
+      "en": "Reset all settings",
+      "zh": "重置全部设置",
+      "classic": [
+        "#btn-settings-reset-all"
+      ]
+    },
+    {
+      "id": "settings.models",
+      "area": "settings",
+      "en": "Model Center: download models",
+      "zh": "模型中心：下载模型",
+      "classic": [
+        "[data-settings-tab=\"models\"]",
+        "#btn-bulk-download-models"
+      ]
+    },
+    {
+      "id": "settings.metadata-repair",
+      "area": "settings",
+      "en": "Re-read ComfyUI prompts, recover missing text",
+      "zh": "重新读取 ComfyUI 提示词、找回缺失文字",
+      "classic": [
+        "#btn-metadata-reread-comfyui",
+        "#btn-metadata-reparse"
+      ]
+    },
+    {
+      "id": "settings.audit",
+      "area": "settings",
+      "en": "Environment audit",
+      "zh": "环境检查",
+      "classic": [
+        "[data-settings-tab=\"audit\"]",
+        "#btn-health-refresh"
+      ]
+    },
+    {
+      "id": "settings.disk",
+      "area": "settings",
+      "en": "Disk usage",
+      "zh": "磁盘占用",
+      "classic": [
+        "[data-settings-tab=\"disk\"]"
+      ]
+    }
+  ],
+  "not_entrances": [
+    {
+      "reason": "Closes or cancels the dialog or menu it sits in; the feature's entrance is listed separately",
+      "ids": [
+        "mobile-nav-close",
+        "obfuscate-preview-close",
+        "btn-close-autosep-overflow",
+        "btn-close-autosep-settings",
+        "btn-cancel-autosep-settings",
+        "qs-profile-close",
+        "btn-close-detect-modal",
+        "pl-image-picker-close",
+        "promptlab-category-board-close",
+        "promptlab-category-board-cancel",
+        "mask-editor-cancel",
+        "btn-dataset-confirm-cancel",
+        "btn-dataset-audit-close",
+        "btn-dataset-result-close",
+        "nav-customize-close",
+        "entry-catalog-close",
+        "model-manager-close",
+        "modal-close",
+        "btn-cancel-modal-tags",
+        "btn-cancel-caption",
+        "btn-library-roots-close",
+        "media-censor-close",
+        "btn-cancel-scan",
+        "btn-cancel-reconnect",
+        "btn-close-repair-review",
+        "btn-close-tag-modal",
+        "btn-close-export",
+        "btn-confirm-cancel",
+        "meta-editor-close",
+        "btn-meta-edit-cancel",
+        "btn-input-cancel",
+        "btn-close-batch-export",
+        "btn-cancel-batch-export",
+        "btn-caption-editor-done",
+        "btn-close-caption-editor",
+        "btn-close-search-help",
+        "btn-close-dup-cleaner",
+        "btn-close-publish-set",
+        "btn-pub-uncensored-cancel",
+        "btn-close-filter-modal",
+        "btn-close-rename",
+        "btn-cancel-rename",
+        "btn-close-save-options",
+        "btn-cancel-save-options",
+        "btn-close-queue-manager",
+        "btn-close-queue-manager-footer",
+        "btn-close-model-select",
+        "btn-cancel-model-select",
+        "btn-close-tags-library",
+        "btn-close-tags-library-2",
+        "btn-color-progress-close",
+        "btn-smart-tag-close",
+        "btn-smart-tag-existing-cancel",
+        "btn-smart-tag-cancel-modal",
+        "btn-vlm-debug-chat-close",
+        "btn-mass-tag-close",
+        "btn-mass-tag-confirm-cancel",
+        "bracket-btn-exit",
+        "cull-btn-exit",
+        "qs-btn-done",
+        "qs-filter-reset",
+        "btn-confirm-ok",
+        "btn-input-ok",
+        "btn-input-browse"
+      ]
+    },
+    {
+      "reason": "Mobile duplicate of a top-bar button (desktop only, CLAUDE.md)",
+      "ids": [
+        "mobile-menu-toggle",
+        "mobile-btn-scan",
+        "mobile-btn-tag",
+        "mobile-btn-model-manager",
+        "mobile-btn-tags-library",
+        "mobile-btn-mass-tag-editor",
+        "mobile-btn-language",
+        "mobile-btn-help",
+        "mobile-btn-app-update",
+        "mobile-filter-toggle",
+        "mobile-filter-header-btn"
+      ]
+    },
+    {
+      "reason": "One-time hint dismissal",
+      "ids": [
+        "similar-start-dismiss",
+        "promptlab-start-dismiss",
+        "artist-start-dismiss"
+      ]
+    },
+    {
+      "reason": "Click target inside a feature already listed (the image itself, sub-steps of a dialog)",
+      "ids": [
+        "bracket-champion",
+        "bracket-challenger",
+        "qs-profile-rename",
+        "qs-profile-delete",
+        "qs-profile-add-section",
+        "btn-queue-deselect-all",
+        "btn-queue-manager-select-all",
+        "btn-queue-manager-deselect-all",
+        "btn-queue-manager-move-top",
+        "btn-queue-manager-move-up",
+        "btn-queue-manager-move-down",
+        "btn-queue-manager-move-bottom",
+        "btn-dataset-import-clear-selection",
+        "btn-dataset-queue-clear-selection"
+      ]
+    }
+  ],
+  "removed": []
+}
