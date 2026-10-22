@@ -8,6 +8,82 @@ wrong — see `docs/AI_PRINCIPLES.md` for the authority order.
 
 ---
 
+## §redesign-2026-10 — The frontend redesign (owner, 2026-10-22)
+
+The owner: "I want to redesign the sorter, don't make them rules... I still
+thinking the sorter frontend is far to a 'suitable product'." So today's look
+(top bar, amber accent, 10/12/14/16 px radii, font stack, rules 12, 15 and 22
+below, and the look of `docs/DESIGN_VOPUS.md`) describes the current classic
+and Vopus interfaces. It is history for the redesign, not a rule for it. Small
+fixes to classic and Vopus stay consistent with their current look.
+
+**Product decisions that stand:** desktop and laptop only (1366×768 to
+2560×1440 and up), Simplified Chinese plus English, no feature or entrance
+removed, Clear current library visible on the gallery page plus a Settings
+entrance, the popup for one image plus a column for working across many
+(until the owner decides otherwise).
+
+**Decisions (owner answers, 2026-10-22: "1.A 2.A,C,D 3.C 4.A 5.A 6.A"):**
+
+1. **Where it lives.** A new opt-in interface at `/next/`, built from the
+   `frontend-v4` code (its data layer and feature components) with a new
+   shell, layout and tokens, and with every entrance the classic interface
+   has. Classic (`/`) and Vopus (`/vopus/`) are not restyled; the new
+   interface replaces nothing until the owner approves it.
+2. **What is least like a product today:** the gallery working screen, the
+   pages not matching each other, and the overall look.
+3. **How far:** look, layout and navigation (how pages and tools are
+   reached). Earlier attempts changed only the skin on a standard gallery
+   skeleton (Aurora, Graphite, three style prototypes, the 2026-09-30
+   restyle) and were rejected for that.
+4. **References:** capabilities only, never the look, from Lightroom
+   Classic's Library, Photo Mechanic, Hydrus, digiKam and Infinite Image
+   Browsing.
+5. **Shared behaviours join the redesign:** browser and mouse Back go up one
+   level (Vopus gets this too, through the shared code), a whole-interface
+   error fallback (never a white screen), and "reset all settings".
+6. **One dark theme**, made well, instead of a dark and light pair.
+
+**Why it is not yet a product (review 2026-10-22, real browser on a copy of
+the database, 1366×768 / 1920×1080 / 2560×1440, both languages):**
+- The images do not own the screen. Classic's gallery gives them 48% of a
+  1366×768 screen (4 thumbnails fully visible) and 63% at 1920×1080;
+  Vopus gives 48% at 1366×768 and keeps an empty inspector column about
+  28% wide until an image is clicked.
+- Features were added one at a time instead of being designed into one
+  screen: classic's gallery shows 69–71 controls before anything is
+  selected (9–11 of them icon-only), mostly framed alike, with amber meaning
+  primary action, current tab, selection and "all" at once. Vopus is down to
+  48–60 by moving tools into a menu, which the owner found over-simplified.
+- Beginners meet modes and overlays instead of direct handling: eleven
+  choices on the entry page before any image, seven unlabeled icon buttons,
+  a selection mode entered from the sidebar's bottom corner, a click that
+  covers the whole gallery with a popup, a filter form with an Apply button.
+- Classic has 39 text runs at 11–12 px in its toolbar and sidebar, too small
+  on the owner's 2560×1440 screen.
+- The look is a default rather than this product's own (see the blind check
+  below), and its identity lives on the entry page, not on the screen used
+  all day.
+
+**Blind-default check (2026-10-22).** Five isolated model sessions designed
+the gallery screen: two with no context, two with this product's real
+constraints (anonymised), one with the same constraints for an accounting
+office's document archive. What they produced regardless of context is a
+model default and must not be this product's identity: a near-black or warm
+brown-black surface with an amber accent (the current Graphite look), a
+darkroom, film or light-table metaphor (Vopus's concept matches the
+no-context answer), a bottom tray as the signature, keycap-style buttons with
+a dark lower lip, grease-pencil marks, a numbered pipeline line across the
+top, and IBM Plex or Inter type. A tray or a pipeline may still be used as a
+capability, never as the identity.
+
+**Process.** Show a few directions as small samples and let the owner pick;
+then build one screen, the gallery, at `/next/`, with before and after
+screenshots at 1366×768, 1920×1080 and 2560×1440 in both languages. The
+direction the owner picks is recorded here before the rest is built.
+
+---
+
 ## §principles — The design principles (macro layer)
 
 Distilled from owner directives 2025–2026; none of these are generic best-practice
@@ -85,6 +161,10 @@ like a temporary viewer or two peer "session vs permanent" galleries.
     per entrance.
 
 ### Visual-language layer (Graphite contract + de-AI craft)
+
+(Today's classic look. Since 2026-10-22 it is history for the redesign, see
+§redesign-2026-10; the "image is the only thing that may glow" stance and
+the craft layer below still apply to every interface.)
 
 12. **One accent. Color is not a category system.**
     Graphite surfaces are true-neutral (R=G=B). Exactly one accent
