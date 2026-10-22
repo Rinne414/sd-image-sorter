@@ -181,6 +181,27 @@ stay (they are deliberate, styled apart from the pick ✓N, see the
 selection badge comment in ui-refresh.css); the small-text item was a measuring mistake (see
 the corrected line in the diagnosis above).
 
+**Feature-entrance check (owner answer "2.A", 2026-10-23).** Before the
+redesign goes further, no entrance may disappear unnoticed.
+`docs/feature-entrances.json` lists 150 features with the classic interface
+as the baseline (every classic `<button id>` belongs to a feature, or to
+`not_entrances` with the reason: closing a dialog, a mobile duplicate, a
+one-time hint), and says for Vopus and `/next/` where each one is entered or
+what is missing. `backend/tests/test_feature_entrances.py` fails when a
+classic entrance or a Vopus/`/next/` test id is gone, or a new classic
+button is in no feature; `tests/e2e/specs/feature-entrances.spec.ts` opens
+every listed entrance in a real browser (with picks, an inspected or opened
+image, or a dataset and a Pixiv batch where needed) and lists what is not
+ported. A removal goes to `removed` with date, reason and the owner's words.
+Not ported on 2026-10-23: Vopus 11 missing and 13 in part, `/next/` 9
+missing and 11 in part (both lack tab customising, the disguise cover,
+GIF and video censoring, the style map, dataset to collection, hard refresh
+and the output-folder root; Vopus also lacks saving AI defaults, Reset all
+settings and Clear library on the gallery page). Entrances that need a
+running job, missing files, a sort session or an image read in the Reader
+are checked in the source only. Controls that classic builds in script
+(context menus) are not in the baseline yet.
+
 ---
 
 ## §principles — The design principles (macro layer)
