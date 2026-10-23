@@ -161,6 +161,8 @@ EXCLUDED_PREFIXES = (
     "testimage",
     "example",
     "scripts",
+    # browser-extension/build.py output; the program builds its own copy.
+    "browser-extension/dist",
     "docs/DELETION_LOG",
     "docs/IMPROVEMENT_PLAN",
     "docs/SECURITY_ARCHITECTURE",
