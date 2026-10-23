@@ -98,6 +98,7 @@ class SortSessionMixin:
         has_metadata: Optional[bool] = None,
         # Aurora Phase 3 + file-date Gallery filters (same trailing-kwarg rule).
         no_caption: Optional[bool] = None,
+        media_type: Optional[str] = None,
         aesthetic_unscored: Optional[bool] = None,
         min_saturation: Optional[float] = None,
         max_saturation: Optional[float] = None,
@@ -166,6 +167,7 @@ class SortSessionMixin:
             folder=folder,
             has_metadata=has_metadata,
             no_caption=no_caption,
+            media_type=media_type,
             aesthetic_unscored=aesthetic_unscored,
             min_saturation=min_saturation,
             max_saturation=max_saturation,

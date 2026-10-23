@@ -111,6 +111,7 @@ def selection_contract_db_filters(contract: Dict[str, Any]) -> Dict[str, Any]:
         "folder": contract.get("folder"),
         "has_metadata": contract.get("hasMetadata"),
         "no_caption": contract.get("noCaption"),
+        "media_type": contract.get("mediaType"),
         "aesthetic_unscored": contract.get("aestheticUnscored"),
         "min_saturation": contract.get("minSaturation"),
         "max_saturation": contract.get("maxSaturation"),
@@ -208,6 +209,7 @@ class SelectionMixin:
         has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
         # Aurora Phase 3 gallery filters
         no_caption: Optional[bool] = None,
+        media_type: Optional[str] = None,
         aesthetic_unscored: Optional[bool] = None,
         min_saturation: Optional[float] = None,
         max_saturation: Optional[float] = None,
@@ -300,6 +302,7 @@ class SelectionMixin:
             "hasMetadata": _coerce_optional_bool_filter(has_metadata, "hasMetadata"),
             # Aurora Phase 3 gallery filters
             "noCaption": _coerce_optional_bool_filter(no_caption, "noCaption"),
+            "mediaType": media_type if media_type in ("image", "video") else None,
             "aestheticUnscored": _coerce_optional_bool_filter(aesthetic_unscored, "aestheticUnscored"),
             "minSaturation": _coerce_optional_float_filter(min_saturation, "minSaturation"),
             "maxSaturation": _coerce_optional_float_filter(max_saturation, "maxSaturation"),
@@ -411,6 +414,7 @@ class SelectionMixin:
                 folder=filters.get("folder"),
                 has_metadata=filters.get("hasMetadata"),
                 no_caption=filters.get("noCaption"),
+                media_type=filters.get("mediaType"),
                 aesthetic_unscored=filters.get("aestheticUnscored"),
                 min_saturation=filters.get("minSaturation"),
                 max_saturation=filters.get("maxSaturation"),
@@ -527,6 +531,7 @@ class SelectionMixin:
         has_metadata: Optional[bool] = None,
         # Aurora Phase 3 gallery filters
         no_caption: Optional[bool] = None,
+        media_type: Optional[str] = None,
         aesthetic_unscored: Optional[bool] = None,
         min_saturation: Optional[float] = None,
         max_saturation: Optional[float] = None,
@@ -576,6 +581,7 @@ class SelectionMixin:
             folder=folder,
             has_metadata=has_metadata,
             no_caption=no_caption,
+            media_type=media_type,
             aesthetic_unscored=aesthetic_unscored,
             min_saturation=min_saturation,
             max_saturation=max_saturation,

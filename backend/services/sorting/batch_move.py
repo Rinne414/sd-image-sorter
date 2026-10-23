@@ -254,6 +254,7 @@ class BatchMoveMixin:
             # Aurora Phase 3 + file-date Gallery filters: without them the move
             # touched more pictures than the Gallery showed.
             no_caption=request.no_caption,
+            media_type=request.media_type,
             aesthetic_unscored=request.aesthetic_unscored,
             min_saturation=request.min_saturation,
             max_saturation=request.max_saturation,

@@ -70,7 +70,8 @@ def _make_db(tmp_path, rows: Sequence[tuple]) -> _SqliteDb:
             embedding BLOB,
             content_fingerprint TEXT,
             is_readable INTEGER DEFAULT 1,
-            library_id TEXT NOT NULL DEFAULT 'main'
+            library_id TEXT NOT NULL DEFAULT 'main',
+            media_type TEXT NOT NULL DEFAULT 'image'
         )
         """
     )

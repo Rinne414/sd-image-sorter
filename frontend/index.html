@@ -34,6 +34,7 @@
     <link rel="stylesheet" href="/static/css/style-map-axes.css">
     <link rel="stylesheet" href="/static/css/send-to-generator.css">
     <link rel="stylesheet" href="/static/css/collect.css">
+    <link rel="stylesheet" href="/static/css/video.css">
     <!-- tokens.css must stay the LAST stylesheet: it owns the Graphite palette
          and remaps every legacy token defined by the sheets above. -->
     <link rel="stylesheet" href="/static/css/tokens.css">
@@ -978,6 +979,23 @@
                         <ul class="missing-panel-list" id="gallery-missing-panel-list"></ul>
                         <p class="missing-panel-note" id="gallery-missing-panel-note" data-i18n="missing.filesAreKept">Clearing a record never deletes a file. If the files come back, re-scan the folder and the images return.</p>
                     </div>
+                    <!-- Videos are indexed but ffmpeg is missing: one-click install
+                         (video-support.js fills the text; no data-i18n on it). -->
+                    <div class="gallery-banner gallery-banner-video" id="gallery-video-banner" role="status" aria-live="polite" hidden>
+                        <span class="gallery-banner-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg></span>
+                        <div class="gallery-banner-copy">
+                            <strong class="gallery-banner-title" id="gallery-video-banner-title"></strong>
+                            <span class="gallery-banner-detail" id="gallery-video-banner-detail"></span>
+                        </div>
+                        <div class="gallery-banner-actions">
+                            <button type="button" class="btn btn-primary btn-small" id="gallery-video-banner-install">
+                                <span id="gallery-video-banner-install-label">Install video support</span>
+                            </button>
+                            <button type="button" class="btn btn-ghost btn-small" id="gallery-video-banner-dismiss" aria-label="Hide banner" data-i18n-aria="reconnect.banner.dismiss">
+                                <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></span>
+                            </button>
+                        </div>
+                    </div>
                     <!-- Owner 2026-09-30: the toolbar (count, generators, view,
                          search) stays pinned under the top bar while the grid
                          scrolls. -->
@@ -1093,6 +1111,20 @@
                              the generator tabs keep the header row's width on laptops.
                              Same ids/classes — handlers in app.js are unchanged. -->
                         <div class="gallery-search-tools">
+                            <div class="media-quick-toggle aspect-quick-toggle" id="media-quick-toggle" role="group" aria-label="Filter by media type" data-i18n-aria="gallery.mediaToggle">
+                                <button class="aspect-quick-btn media-quick-btn is-active" data-media="" type="button" aria-pressed="true" title="Pictures and videos" data-i18n-title="gallery.mediaAllTitle" aria-label="Pictures and videos" data-i18n-aria="gallery.mediaAllTitle">
+                                    <span aria-hidden="true">◫</span>
+                                    <span class="media-quick-label" data-i18n="gallery.mediaAll">All</span>
+                                </button>
+                                <button class="aspect-quick-btn media-quick-btn" data-media="image" type="button" aria-pressed="false" title="Pictures only" data-i18n-title="gallery.mediaPicturesTitle" aria-label="Pictures only" data-i18n-aria="gallery.mediaPicturesTitle">
+                                    <span aria-hidden="true">▣</span>
+                                    <span class="media-quick-label" data-i18n="gallery.mediaPictures">Pictures</span>
+                                </button>
+                                <button class="aspect-quick-btn media-quick-btn" data-media="video" type="button" aria-pressed="false" title="Videos only" data-i18n-title="gallery.mediaVideosTitle" aria-label="Videos only" data-i18n-aria="gallery.mediaVideosTitle">
+                                    <span aria-hidden="true">▶</span>
+                                    <span class="media-quick-label" data-i18n="gallery.mediaVideos">Videos</span>
+                                </button>
+                            </div>
                             <div class="aspect-quick-toggle" id="aspect-quick-toggle" role="group" aria-label="Filter by aspect ratio" data-i18n-aria="gallery.aspectToggle">
                                 <button class="aspect-quick-btn is-active" data-aspect="" type="button" aria-pressed="true" title="Any aspect ratio" data-i18n-title="gallery.aspectAll">
                                     <span aria-hidden="true">▦</span>
@@ -5826,6 +5858,15 @@
                             <button type="button" class="btn btn-ghost btn-small" id="btn-settings-comfyui-reset" data-i18n="settings.comfyuiReset">Use 127.0.0.1:8188</button>
                         </div>
                     </div>
+                    <div class="settings-row settings-video-row" id="settings-video-support">
+                        <div class="settings-row-copy">
+                            <strong data-i18n="video.settingsTitle">Video support</strong>
+                            <span id="settings-video-status">Checking for ffmpeg...</span>
+                        </div>
+                        <div class="settings-inline-control">
+                            <button type="button" class="btn btn-secondary btn-small" id="btn-video-install" hidden>Install video support</button>
+                        </div>
+                    </div>
                     <details class="guided-advanced-panel settings-preferences-panel ext-settings" id="settings-browser-ext">
                         <summary class="guided-advanced-summary">
                             <span data-i18n="ext.settingsTitle">Browser extension</span>
@@ -6063,6 +6104,16 @@
                     </div>
                     <div class="modal-image-container">
                         <img id="modal-image" src="" alt="Image preview">
+                        <div class="modal-video-stage" id="modal-video-stage" hidden>
+                            <video id="modal-video" controls playsinline preload="metadata"></video>
+                            <div class="modal-video-bar" role="group" aria-label="Video playback" data-i18n-aria="video.barAria">
+                                <button type="button" class="btn btn-ghost btn-small" id="modal-video-loop" aria-pressed="true">Loop: on</button>
+                                <button type="button" class="btn btn-ghost btn-small" id="modal-video-sound" aria-pressed="true">Sound: on</button>
+                                <button type="button" class="btn btn-ghost btn-small" id="modal-video-prev-frame" title="Previous frame (,)" data-i18n-title="video.prevFrameTip" aria-label="Previous frame" data-i18n-aria="video.prevFrame"><span aria-hidden="true">&#8249;</span> <span data-i18n="video.frame">Frame</span></button>
+                                <button type="button" class="btn btn-ghost btn-small" id="modal-video-next-frame" title="Next frame (.)" data-i18n-title="video.nextFrameTip" aria-label="Next frame" data-i18n-aria="video.nextFrame"><span data-i18n="video.frame">Frame</span> <span aria-hidden="true">&#8250;</span></button>
+                                <p class="modal-video-note" id="modal-video-note" role="status" aria-live="polite" hidden></p>
+                            </div>
+                        </div>
                     </div>
                 </div>
                     <div class="modal-info modal-info-workspace">
@@ -8537,6 +8588,8 @@
     <script src="/static/js/gallery/lifecycle-a11y.js"></script>
     <script src="/static/js/gallery/metadata-editor.js"></script>
     <script src="/static/js/gallery/comfort.js"></script>
+    <script src="/static/js/gallery/video-cards.js"></script>
+    <script src="/static/js/gallery/video-viewer.js"></script>
     <script src="/static/js/comfort-app.js"></script>
     <script src="/static/js/gallery.js"></script>
     <script src="/static/js/collections-ui.js"></script>
@@ -8547,6 +8600,7 @@
     <script src="/static/js/library-roots-ui.js"></script>
     <script src="/static/js/auto-refresh.js"></script>
     <script src="/static/js/folder-watch.js"></script>
+    <script src="/static/js/video-support.js"></script>
     <script src="/static/js/send-to-generator.js"></script>
     <script src="/static/js/collect.js"></script>
     <script src="/static/js/browser-extension.js"></script>

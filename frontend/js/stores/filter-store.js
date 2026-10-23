@@ -55,6 +55,8 @@
             minHeight: null,
             maxHeight: null,
             aspectRatio: '',
+            // Library media type: '' = all, 'image' = pictures, 'video' = videos.
+            mediaType: '',
             minAesthetic: null,
             maxAesthetic: null,
             // v3.3.3 WIRING-01: minimum user star rating (1-5; null = any).
@@ -133,6 +135,9 @@
             maxHeight: source.maxHeight ?? null,
             aspectRatio: ['square', 'landscape', 'portrait'].includes(String(source.aspectRatio || '').trim())
                 ? String(source.aspectRatio || '').trim()
+                : '',
+            mediaType: ['image', 'video'].includes(String(source.mediaType || '').trim())
+                ? String(source.mediaType || '').trim()
                 : '',
             minAesthetic: source.minAesthetic ?? null,
             maxAesthetic: source.maxAesthetic ?? null,

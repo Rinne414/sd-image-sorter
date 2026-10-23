@@ -365,12 +365,12 @@ class AestheticService:
 
             lib_sql, lib_params = current_library_sql()
             if force:
-                query = f"SELECT id, path FROM images WHERE {lib_sql}"
-                count_query = f"SELECT COUNT(*) FROM images WHERE {lib_sql}"
+                query = f"SELECT id, path FROM images WHERE media_type = 'image' AND {lib_sql}"
+                count_query = f"SELECT COUNT(*) FROM images WHERE media_type = 'image' AND {lib_sql}"
             else:
                 needs_score = _needs_score_sql()
-                query = f"SELECT id, path FROM images WHERE {needs_score} AND {lib_sql}"
-                count_query = f"SELECT COUNT(*) FROM images WHERE {needs_score} AND {lib_sql}"
+                query = f"SELECT id, path FROM images WHERE {needs_score} AND media_type = 'image' AND {lib_sql}"
+                count_query = f"SELECT COUNT(*) FROM images WHERE {needs_score} AND media_type = 'image' AND {lib_sql}"
                 lib_params = (AESTHETIC_SCORE_VERSION, *lib_params)
             count_row = conn.execute(count_query, lib_params).fetchone()
             total = int(count_row[0] or 0) if count_row else 0

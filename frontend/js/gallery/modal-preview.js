@@ -222,7 +222,10 @@ ${String(value)}`)
             window.SkeletonModal.showImageModal('image-modal', { keepImage: isRenavigation });
         }
 
-        const nextImageUrl = API?.getImageUrl?.(imageId) ?? `/api/image-file/${imageId}`;
+        // A video shows a still frame here while gallery/video-viewer.js plays it.
+        const nextImageUrl = summaryImage?.media_type === 'video'
+            ? `/api/image-thumbnail/${imageId}?size=512`
+            : (API?.getImageUrl?.(imageId) ?? `/api/image-file/${imageId}`);
         // When image loads, hide the skeleton
         modalImgEl.onload = () => {
             if (window.SkeletonModal) {
@@ -245,6 +248,7 @@ ${String(value)}`)
         } else {
             modalImgEl.src = nextImageUrl;
         }
+        window.VideoViewer?.show?.(summaryImage, imageId);
         $('#modal-filename').textContent = summaryImage?.filename || `Image #${imageId}`;
         const modalGenerator = $('#modal-generator');
         if (modalGenerator) {
@@ -531,6 +535,7 @@ ${String(value)}`)
             modalGeneratorFinal.textContent = this._formatGeneratorLabel(image.generator);
         }
         $('#modal-size').textContent = `${image.width}×${image.height} • ${formatSize(image.file_size)}`;
+        window.VideoViewer?.describe?.(image);
         this._renderModalRating(image);
         $('#modal-prompt-text').textContent = image.prompt || this._t('modal.noPrompt', null, 'No prompt');
         const parsedData = this._extractParsedData(image);

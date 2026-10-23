@@ -28,6 +28,9 @@ from fastapi.responses import FileResponse, StreamingResponse
 from PIL import Image, UnidentifiedImageError
 from starlette.concurrency import run_in_threadpool
 
+from config import is_video_path
+from services.video_tools import VideoToolsMissing
+
 import database as db
 from services.image_metadata_writer import (
     JPEG_LIMITATION_WARNING,
@@ -108,6 +111,25 @@ def parse_image(*args, **kwargs):
 def get_thumbnail_async(*args, **kwargs):
     """Facade-seam proxy (latent seam; returns the facade coroutine, awaited at the call site)."""
     return _svc().get_thumbnail_async(*args, **kwargs)
+
+
+def _placeholder_response(size: int, label: str, reason: str) -> StreamingResponse:
+    """A no-cache placeholder thumbnail; ``reason`` tells the client why."""
+    if label == "Video":
+        from services.video_preview import video_placeholder_thumbnail
+
+        body = video_placeholder_thumbnail(size)
+    else:
+        body = generate_placeholder_thumbnail(size, label=label)
+    return StreamingResponse(
+        io.BytesIO(body),
+        media_type="image/webp",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Thumbnail-Cache": "MISS",
+            "X-Thumbnail-Placeholder": reason,
+        },
+    )
 
 
 def _cleanup_stale_reader_uploads(temp_dir: Path, ttl_seconds: int) -> None:
@@ -429,6 +451,11 @@ class ServingMixin:
             ".webp": "image/webp",
             ".bmp": "image/bmp",
             ".gif": "image/gif",
+            ".mp4": "video/mp4",
+            ".m4v": "video/mp4",
+            ".mov": "video/quicktime",
+            ".webm": "video/webm",
+            ".mkv": "video/x-matroska",
         }
         return FileResponse(
             file_path,
@@ -478,17 +505,12 @@ class ServingMixin:
                     "X-Thumbnail-Cache": "HIT" if cache_hit else "MISS",
                 },
             )
+        except VideoToolsMissing:
+            return _placeholder_response(size, "Video", "VIDEO_TOOLS_MISSING")
         except (UnidentifiedImageError, OSError):
-            placeholder_bytes = generate_placeholder_thumbnail(size)
-            return StreamingResponse(
-                io.BytesIO(placeholder_bytes),
-                media_type="image/webp",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "X-Thumbnail-Cache": "MISS",
-                    "X-Thumbnail-Placeholder": "UNREADABLE",
-                },
-            )
+            if is_video_path(source_path):
+                return _placeholder_response(size, "Video", "VIDEO_UNREADABLE")
+            return _placeholder_response(size, "Unreadable", "UNREADABLE")
         except Exception as exc:
             raise HTTPException(status_code=500, detail="Failed to generate thumbnail") from exc
 

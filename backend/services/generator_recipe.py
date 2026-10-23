@@ -56,6 +56,12 @@ def _parsed_summary(row: Dict[str, Any]) -> Dict[str, Any]:
 def _chunks_from_file(path: str) -> Optional[Dict[str, Any]]:
     from metadata_parser import get_parser
 
+    from config import is_video_path
+
+    if is_video_path(path):
+        from services.video_probe import recipe_chunks
+
+        return recipe_chunks(path) or None
     parser = get_parser()
     try:
         loaded = parser._load_image_metadata(path)

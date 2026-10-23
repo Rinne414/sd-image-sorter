@@ -450,12 +450,12 @@ class SimilarityIndex(_IndexCoreMixin, _VectorCacheMixin, _TopKMixin):
                 if image_ids:
                     placeholders = ",".join("?" * len(image_ids))
                     cursor.execute(
-                        f"SELECT id, path, content_fingerprint FROM images WHERE id IN ({placeholders}) AND embedding IS NULL AND COALESCE(is_readable, 1) = 1",
+                        f"SELECT id, path, content_fingerprint FROM images WHERE id IN ({placeholders}) AND embedding IS NULL AND COALESCE(is_readable, 1) = 1 AND media_type = 'image'",
                         image_ids,
                     )
                 else:
                     cursor.execute(
-                        "SELECT id, path, content_fingerprint FROM images WHERE embedding IS NULL AND COALESCE(is_readable, 1) = 1"
+                        "SELECT id, path, content_fingerprint FROM images WHERE embedding IS NULL AND COALESCE(is_readable, 1) = 1 AND media_type = 'image'"
                     )
 
                 rows = cursor.fetchall()

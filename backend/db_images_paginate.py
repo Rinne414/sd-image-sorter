@@ -48,6 +48,7 @@ from db_query import (
     _apply_aesthetic_filter,
     _apply_saturation_filter,
     _apply_no_caption_filter,
+    _apply_media_type_filter,
     _apply_seed_filter,
     _apply_anime_aesthetic_filter,
     _apply_user_rating_filter,
@@ -114,6 +115,7 @@ def get_images_paginated(
     has_metadata: Optional[bool] = None,  # v3.3.2 small-opt: "has SD generation parameters" filter
     # Aurora Phase 3 gallery filters
     no_caption: Optional[bool] = None,
+    media_type: Optional[str] = None,
     aesthetic_unscored: Optional[bool] = None,
     min_saturation: Optional[float] = None,
     max_saturation: Optional[float] = None,
@@ -219,6 +221,7 @@ def get_images_paginated(
             conditions, params, min_saturation, max_saturation
         )
         conditions, params = _apply_no_caption_filter(conditions, params, no_caption)
+        conditions, params = _apply_media_type_filter(conditions, params, media_type)
         conditions, params = _apply_seed_filter(conditions, params, seed)
         conditions, params = _apply_anime_aesthetic_filter(
             conditions, params, anime_grades, min_waifu, max_waifu
@@ -340,6 +343,7 @@ def get_images_paginated(
                 folder=folder,
                 has_metadata=has_metadata,
                 no_caption=no_caption,
+                media_type=media_type,
                 aesthetic_unscored=aesthetic_unscored,
                 date_from=date_from,
                 date_to=date_to,
@@ -408,6 +412,7 @@ def _get_filtered_count(
     # Aurora Phase 3 gallery filters. Mirrored here so the cursor-pagination
     # first-page COUNT matches the page query when these filters are active.
     no_caption: Optional[bool] = None,
+    media_type: Optional[str] = None,
     aesthetic_unscored: Optional[bool] = None,
     min_saturation: Optional[float] = None,
     max_saturation: Optional[float] = None,
@@ -493,6 +498,7 @@ def _get_filtered_count(
         conditions, params, min_saturation, max_saturation
     )
     conditions, params = _apply_no_caption_filter(conditions, params, no_caption)
+    conditions, params = _apply_media_type_filter(conditions, params, media_type)
     conditions, params = _apply_seed_filter(conditions, params, seed)
     conditions, params = _apply_anime_aesthetic_filter(
         conditions, params, anime_grades, min_waifu, max_waifu

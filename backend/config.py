@@ -530,6 +530,18 @@ ARTIST_KALOSCOPE_CLASS_MAPPING: str = os.environ.get(
 # Allowed image extensions
 ALLOWED_IMAGE_EXTENSIONS: set = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tif', '.tiff'}
 
+# Video files indexed next to pictures (migration 065 derives media_type from
+# the same list; a new extension needs a migration too).
+ALLOWED_VIDEO_EXTENSIONS: frozenset = frozenset({'.mp4', '.webm', '.mkv', '.mov', '.m4v'})
+
+# Everything a scan or a watched folder indexes.
+ALLOWED_MEDIA_EXTENSIONS: frozenset = frozenset(ALLOWED_IMAGE_EXTENSIONS) | ALLOWED_VIDEO_EXTENSIONS
+
+
+def is_video_path(path: str) -> bool:
+    """True when the file name ends in one of the video extensions."""
+    return os.path.splitext(str(path))[1].lower() in ALLOWED_VIDEO_EXTENSIONS
+
 # Allowed model extensions
 ALLOWED_MODEL_EXTENSIONS: set = {'.onnx', '.pt', '.pth', '.safetensors'}
 
@@ -650,6 +662,13 @@ def get_update_dir() -> str:
     """Get the package-local update directory, creating it if necessary."""
     UPDATE_DIR.mkdir(parents=True, exist_ok=True)
     return str(UPDATE_DIR)
+
+
+def get_tools_dir() -> str:
+    """Folder for helper programs the user installs from inside the program (ffmpeg)."""
+    tools_dir = DATA_DIR / "tools"
+    tools_dir.mkdir(parents=True, exist_ok=True)
+    return str(tools_dir)
 
 
 def get_thumbnail_cache_dir() -> str:

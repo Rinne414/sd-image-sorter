@@ -486,6 +486,21 @@ function initBootListenersShell() {
         });
     });
 
+    // Gallery-header media-type quick-toggle (All / Pictures / Videos). Same
+    // shape as the aspect toggle: writes the FilterStore `mediaType` field,
+    // so the filter summary, selection scope and search box stay in step.
+    $$('.media-quick-btn[data-media]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const value = normalizeMediaTypeFilter(btn.dataset.media);
+            updateAppFilters((filters) => {
+                filters.mediaType = value;
+            });
+            updateFilterSummary();
+            syncMediaToggleWithFilters();
+            loadImages();
+        });
+    });
+
     // --- New Features ---
 
     // Generator quick-filter tabs

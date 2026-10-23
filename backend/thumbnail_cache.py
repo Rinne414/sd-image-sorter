@@ -337,6 +337,16 @@ def get_cached_thumbnail(source_path: str, size: int) -> Optional[Tuple[bytes, d
         return None
 
 
+def _open_thumbnail_source(source_path: str) -> Image.Image:
+    from config import is_video_path
+
+    if is_video_path(source_path):
+        from services.video_preview import grab_frame
+
+        return grab_frame(source_path, max(SUPPORTED_SIZES))
+    return Image.open(source_path)
+
+
 def generate_and_cache_thumbnail(source_path: str, size: int) -> Tuple[bytes, datetime]:
     """Generate a thumbnail and cache it to disk.
 
@@ -353,8 +363,8 @@ def generate_and_cache_thumbnail(source_path: str, size: int) -> Tuple[bytes, da
     source_mtime = os.path.getmtime(source_path)
     source_modified = datetime.fromtimestamp(source_mtime, tz=timezone.utc)
 
-    # Generate thumbnail
-    with Image.open(source_path) as source_img:
+    # Generate thumbnail (a video gives one frame through ffmpeg)
+    with _open_thumbnail_source(source_path) as source_img:
         thumb = source_img.copy()
 
         # Handle different color modes
@@ -507,6 +517,9 @@ def clear_cache() -> int:
                 except OSError as e:
                     logger.debug("Failed to delete cache file %s: %s", cache_file, e)
 
+    from services.video_preview import clear_previews
+
+    count += clear_previews()
     global _approx_cache_size_bytes
     _approx_cache_size_bytes = 0
     return count

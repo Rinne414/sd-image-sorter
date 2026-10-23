@@ -548,6 +548,21 @@ def _apply_no_caption_filter(conditions: List[str], params: List[Any],
     return conditions, params
 
 
+def _apply_media_type_filter(conditions: List[str], params: List[Any],
+                             media_type: Optional[str]) -> tuple:
+    """Restrict to pictures or videos (``images.media_type``, migration 065).
+
+    ``media_type`` is a virtual generated column computed from the file
+    extension. Only 'image' and 'video' narrow the result; any other value
+    (None, '', unknown text) is a no-op so a stale client never empties the
+    gallery.
+    """
+    if media_type in ("image", "video"):
+        conditions.append("i.media_type = ?")
+        params.append(media_type)
+    return conditions, params
+
+
 def _apply_seed_filter(conditions: List[str], params: List[Any],
                        seed: Optional[int]) -> tuple:
     """Match images generated with a specific seed (Aurora Phase 3).

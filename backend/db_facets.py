@@ -178,7 +178,7 @@ ISSUE_VOCABULARY: Tuple[IssueSpec, ...] = (
     ),
     IssueSpec(
         key="missing_dimensions",
-        sql=f"{_READABLE_SQL} AND {_NO_DIMENSIONS_SQL}",
+        sql=f"{_READABLE_SQL} AND media_type = 'image' AND {_NO_DIMENSIONS_SQL}",
         remedy="incomplete_scan_record",
         quality_weight=1.3,
         feeds_actionable=True,
@@ -196,14 +196,14 @@ ISSUE_VOCABULARY: Tuple[IssueSpec, ...] = (
     ),
     IssueSpec(
         key="untagged",
-        sql=f"{_READABLE_SQL} AND tagged_at IS NULL",
+        sql=f"{_READABLE_SQL} AND media_type = 'image' AND tagged_at IS NULL",
         remedy="untagged",
         quality_weight=0.5,
         feeds_actionable=True,
     ),
     IssueSpec(
         key="missing_embedding",
-        sql=f"{_READABLE_SQL} AND embedding IS NULL",
+        sql=f"{_READABLE_SQL} AND media_type = 'image' AND embedding IS NULL",
         remedy=None,
         reported_only_reason=(
             "Optional enrichment coverage, not a defect: the complement is "
@@ -216,7 +216,7 @@ ISSUE_VOCABULARY: Tuple[IssueSpec, ...] = (
     ),
     IssueSpec(
         key="missing_aesthetic",
-        sql=f"{_READABLE_SQL} AND aesthetic_score IS NULL",
+        sql=f"{_READABLE_SQL} AND media_type = 'image' AND aesthetic_score IS NULL",
         remedy=None,
         reported_only_reason=(
             "Optional enrichment coverage, same reasoning as missing_embedding: "

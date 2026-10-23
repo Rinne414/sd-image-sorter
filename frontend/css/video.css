@@ -1,0 +1,143 @@
+/* Videos in the library (S5): card badge, hover preview, viewer, banner. */
+
+/* ---------- Gallery card ---------- */
+.gallery-item.is-video {
+    position: relative;
+}
+
+.gallery-video-badge {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px 2px 6px;
+    border-radius: var(--r-pill, 999px);
+    background: rgba(0, 0, 0, 0.72);
+    color: #f2f2f2;
+    font-size: var(--fs-footnote, 11px);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    line-height: 18px;
+    pointer-events: none;
+}
+
+.gallery-video-badge::before {
+    content: "";
+    width: 0;
+    height: 0;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    border-left: 7px solid var(--accent, #C8873C);
+}
+
+.gallery-video-hover {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background: #000;
+    opacity: 0;
+    transition: opacity 120ms ease;
+    pointer-events: none;
+}
+
+.gallery-item.is-video-playing .gallery-video-hover {
+    opacity: 1;
+}
+
+.gallery-video-scrub {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 4;
+    height: 3px;
+    background: linear-gradient(
+        to right,
+        var(--accent, #C8873C) var(--scrub, 0%),
+        rgba(255, 255, 255, 0.18) var(--scrub, 0%)
+    );
+    pointer-events: none;
+}
+
+/* ---------- Preview (viewer) ---------- */
+.modal-image-container.is-video-preview #modal-image {
+    display: none;
+}
+
+.modal-video-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+}
+
+.modal-video-stage[hidden] {
+    display: none;
+}
+
+#modal-video {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    max-height: calc(100% - 44px);
+    background: #000;
+    border-radius: var(--r-ctl, 10px);
+    object-fit: contain;
+}
+
+.modal-video-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.modal-video-bar .btn[aria-pressed="true"] {
+    color: var(--accent, #C8873C);
+}
+
+.modal-video-note {
+    flex: 1 1 260px;
+    margin: 0 0 0 6px;
+    color: var(--text-muted, #a0a0a0);
+    font-size: var(--fs-body, 13px);
+}
+
+.modal-video-note[hidden] {
+    display: none;
+}
+
+.modal-video-note .modal-video-install {
+    margin-left: 6px;
+}
+
+/* ---------- Gallery banner ---------- */
+.gallery-banner-video {
+    background: var(--accent-soft, rgba(200, 135, 60, 0.12));
+    border-color: var(--accent-line, rgba(200, 135, 60, 0.45));
+}
+
+.gallery-banner-video .gallery-banner-copy {
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+}
+
+.gallery-banner-video .gallery-banner-title {
+    white-space: normal;
+}
+
+.gallery-banner-video .gallery-banner-detail {
+    display: block;
+    color: var(--text-muted, #a0a0a0);
+}

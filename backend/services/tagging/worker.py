@@ -610,9 +610,21 @@ def _tagging_worker_run(
             # image and would block "Collecting image list..." for minutes
             # on a 5M-id request before the first image is even tagged.
             # `get_images_by_ids` already chunks IN(...) at 500.
-            existing_ids = set(
-                worker_db.get_images_by_ids(list(request.image_ids)).keys()
-            )
+            existing_rows = worker_db.get_images_by_ids(list(request.image_ids))
+            # Videos are not tagged (yet): they are left out and counted.
+            existing_ids = {
+                img_id
+                for img_id, row in existing_rows.items()
+                if (row or {}).get("media_type") != "video"
+            }
+            skipped_videos = len(existing_rows) - len(existing_ids)
+            if skipped_videos:
+                send(
+                    "running",
+                    f"Skipped {skipped_videos} videos: videos are not tagged",
+                    key="videos_skipped",
+                    args={"count": skipped_videos},
+                )
             all_ids = [img_id for img_id in request.image_ids if img_id in existing_ids]
             id_batches = _iter_rescaling_batches(all_ids, lambda: batch_size)
             total = len(all_ids)

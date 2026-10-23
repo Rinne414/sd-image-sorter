@@ -88,6 +88,14 @@ _IMAGE_COLUMNS_BASE_FIELDS = (
     "brightness_histogram",
     "brightness_skew",
     "brightness_distribution",
+    # Videos (migration 065): media_type is generated from the path.
+    "media_type",
+    "duration_seconds",
+    "video_codec",
+    "video_fps",
+    "video_has_audio",
+    "video_probe_state",
+    "video_probe_error",
 )
 _IMAGE_COLUMNS_WITH_PROMPT_FIELDS = (
     "id",
@@ -125,6 +133,11 @@ _IMAGE_COLUMNS_WITH_PROMPT_FIELDS = (
     "color_temperature",
     "color_saturation",
     "brightness_distribution",
+    # Videos (migration 065): what a card needs for its badge and hover preview.
+    "media_type",
+    "duration_seconds",
+    "video_codec",
+    "video_probe_state",
 )
 _IMAGE_COLUMNS_LIGHTWEIGHT_FIELDS = (
     "id",
@@ -160,6 +173,11 @@ _IMAGE_COLUMNS_LIGHTWEIGHT_FIELDS = (
     "color_temperature",
     "color_saturation",
     "brightness_distribution",
+    # Videos (migration 065): what a card needs for its badge and hover preview.
+    "media_type",
+    "duration_seconds",
+    "video_codec",
+    "video_probe_state",
 )
 
 

@@ -386,6 +386,7 @@ run.bat
 | 第一次启动，或更新后依赖有变化 | PyPI。安装前会同时试 pypi.org 和清华、阿里、中科大镜像，选最快的 | 只下载 Python 套件，不送你的数据 |
 | 第一次用某个 AI 功能，或在模型中心点下载 | Hugging Face（失败时改用 hf-mirror.com）、ModelScope、GitHub、Civitai（隐私 YOLO 模型） | 只下载模型文件；有的功能还会自动安装它需要的 Python 套件 |
 | 检查更新 | GitHub | 只查询有没有新版本。原版界面只在你点「检查更新」时查；Vopus 界面默认在打开 30 秒后自动查一次，可以在设置里关掉 |
+| 你点「安装视频支持」 | GitHub（BtbN/FFmpeg-Builds） | 只下载 ffmpeg 的 LGPL 版本（Windows 约 77 MB，Linux 约 64 MB），按发布页的 SHA256 校验后放进程序的 data/tools/ffmpeg。系统里已有 ffmpeg 时不用下载 |
 | 你设置了云端 VLM / LLM，并用它打标、写描述或翻译 | 你填的服务（OpenAI 兼容接口、Anthropic、Google Gemini / Vertex） | **会送出图片**（缩小后的 JPEG）和提示词。不想上传图片，就不要设置云端服务，或改用本机的 Ollama |
 | 数据集翻译选了外部翻译服务 | Google 翻译、MyMemory、百度等 | 只送要翻译的标签或句子，不送图片。默认用你设置的 VLM |
 | 你点开的链接 | Civitai、GitHub、模型页面 | 在浏览器新标签页打开 |
@@ -797,6 +798,7 @@ Your pictures, tags and library data stay on your computer. The server only acce
 | First start, or after an update changes the dependencies | PyPI. Before installing, the launcher tries pypi.org and the Tsinghua, Aliyun and USTC mirrors and uses the fastest | Package downloads only; none of your data |
 | First use of an AI feature, or Download in the Model Center | Hugging Face (falls back to hf-mirror.com), ModelScope, GitHub, Civitai (privacy YOLO model) | Model file downloads only; some features also install the Python packages they need |
 | Checking for updates | GitHub | A version lookup only. The classic interface checks only when you press "Check update"; the Vopus interface checks once, 30 seconds after it opens, unless you turn that off in its settings |
+| You press "Install video support" | GitHub (BtbN/FFmpeg-Builds) | A download of the LGPL ffmpeg build only (about 77 MB on Windows, 64 MB on Linux), checked against the release's SHA256 list and unpacked into data/tools/ffmpeg. Not needed when ffmpeg is already on your system |
 | You set up a cloud VLM / LLM and use it to tag, describe or translate | The service you entered (OpenAI-compatible APIs, Anthropic, Google Gemini / Vertex) | **Your pictures** (downscaled JPEG) and the prompt. To keep pictures local, leave cloud services unset or use a local Ollama |
 | Dataset translation with an external translation service | Google Translate, MyMemory, Baidu and others | The tag or sentence text only, never pictures. The default uses your configured VLM |
 | Links you click | Civitai, GitHub, model pages | Opened in a new browser tab |

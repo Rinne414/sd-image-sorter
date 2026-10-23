@@ -223,6 +223,7 @@ def _filter_contract_db_kwargs(filters: BulkTagFilterContract) -> Dict[str, Any]
         "has_metadata": filters.hasMetadata,
         "scope": filters.scope,
         "no_caption": filters.noCaption,
+        "media_type": filters.mediaType,
         "aesthetic_unscored": filters.aestheticUnscored,
         "min_saturation": filters.minSaturation,
         "max_saturation": filters.maxSaturation,

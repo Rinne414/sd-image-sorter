@@ -32,6 +32,7 @@ function getAutoSepFilterSignature(filters) {
         minHeight: contract.minHeight ?? null,
         maxHeight: contract.maxHeight ?? null,
         aspectRatio: contract.aspectRatio || null,
+        mediaType: contract.mediaType || null,
         minAesthetic: contract.minAesthetic ?? null,
         maxAesthetic: contract.maxAesthetic ?? null,
         excludeTags: contract.excludeTags || [],
@@ -215,6 +216,7 @@ function _buildAutoSepImageQuery(filters, cursor = null, limit = 500) {
         colorHues: contract.colorHues?.length > 0 ? contract.colorHues : null,
         excludeColorHues: contract.excludeColorHues?.length > 0 ? contract.excludeColorHues : null,
         noCaption: contract.noCaption === true ? true : null,
+        mediaType: contract.mediaType || null,
         aestheticUnscored: contract.aestheticUnscored === true ? true : null,
         minSaturation: contract.minSaturation ?? null,
         maxSaturation: contract.maxSaturation ?? null,
@@ -386,6 +388,7 @@ async function updateAutoSepPreview() {
         typeof filters.hasMetadata === 'boolean' ||
         (filters.colorHues?.length > 0) || (filters.excludeColorHues?.length > 0) ||
         filters.noCaption === true || filters.aestheticUnscored === true ||
+        Boolean(filters.mediaType) ||
         filters.minSaturation != null || filters.maxSaturation != null ||
         filters.seed != null || Boolean(filters.dateFrom) || Boolean(filters.dateTo) ||
         (filters.animeGrades?.length > 0) || filters.minWaifu != null || filters.maxWaifu != null;

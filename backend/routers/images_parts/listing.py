@@ -340,6 +340,10 @@ async def get_images(
         default=None,
         description="When true, only images with neither an AI caption nor an NL caption (both empty). Aurora Phase 3.",
     ),
+    media_type: Optional[str] = Query(
+        default=None,
+        description="image or video: show only pictures or only videos. Anything else means no filter.",
+    ),
     aesthetic_unscored: Optional[bool] = Query(
         default=None,
         description="When true, only images with no aesthetic score. Takes precedence over min/max_aesthetic. Aurora Phase 3.",
@@ -438,6 +442,7 @@ async def get_images(
         folder=folder,
         has_metadata=has_metadata,
         no_caption=no_caption,
+        media_type=media_type,
         aesthetic_unscored=aesthetic_unscored,
         min_saturation=min_saturation,
         max_saturation=max_saturation,

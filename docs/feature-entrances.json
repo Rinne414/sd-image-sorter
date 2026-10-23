@@ -1752,6 +1752,59 @@
       }
     },
     {
+      "id": "gallery.media-filter",
+      "area": "gallery",
+      "en": "Media type filter: all, pictures only, videos only",
+      "zh": "媒体类型筛选：全部、只看图片、只看视频",
+      "classic": [
+        "#media-quick-toggle",
+        "[data-media=\"\"]",
+        "[data-media=\"image\"]",
+        "[data-media=\"video\"]"
+      ],
+      "vopus": {
+        "missing": "Vopus has no media type filter yet; it lists videos with the pictures"
+      },
+      "next": {
+        "missing": "The new interface has no media type filter yet"
+      }
+    },
+    {
+      "id": "image.videoPlayback",
+      "area": "image",
+      "en": "Play a video in the preview: loop, sound, frame steps, converted preview",
+      "zh": "在预览里播放视频：循环、声音、逐帧、转换后的预览",
+      "classic": [
+        "#modal-video-loop",
+        "#modal-video-sound",
+        "#modal-video-prev-frame",
+        "#modal-video-next-frame"
+      ],
+      "vopus": {
+        "missing": "Vopus shows a video's still frame only; play it in the classic preview"
+      },
+      "next": {
+        "missing": "The new interface shows a video's still frame only"
+      }
+    },
+    {
+      "id": "settings.videoSupport",
+      "area": "settings",
+      "en": "Install video support (ffmpeg, LGPL build)",
+      "zh": "安装视频支持（ffmpeg，LGPL 版本）",
+      "classic": [
+        "#settings-video-support",
+        "#btn-video-install",
+        "#gallery-video-banner-install"
+      ],
+      "vopus": {
+        "missing": "Vopus has no video support row; install it from classic Settings or the gallery banner"
+      },
+      "next": {
+        "missing": "The new interface has no video support row yet"
+      }
+    },
+    {
       "id": "image.reread",
       "area": "image",
       "en": "Read metadata again",
@@ -3951,7 +4004,8 @@
         "qs-filter-reset",
         "btn-confirm-ok",
         "btn-input-ok",
-        "btn-input-browse"
+        "btn-input-browse",
+        "gallery-video-banner-dismiss"
       ]
     },
     {

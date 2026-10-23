@@ -604,9 +604,13 @@
         if (_overlayBlockingPeek()) return;
         const el = _ensurePeekEl();
         const img = el.querySelector('.gallery-comfort-peek-img');
-        const url = (window.API && typeof window.API.getImageUrl === 'function')
-            ? window.API.getImageUrl(imageId)
-            : `/api/image-file/${imageId}`;
+        // A video card peeks at its still frame (an <img> cannot show the file).
+        const isVideoCard = document.querySelector(`.gallery-item.is-video[data-id="${imageId}"]`);
+        const url = isVideoCard
+            ? `/api/image-thumbnail/${imageId}?size=512`
+            : (window.API && typeof window.API.getImageUrl === 'function')
+                ? window.API.getImageUrl(imageId)
+                : `/api/image-file/${imageId}`;
         if (img && img.dataset.imageId !== String(imageId)) {
             img.dataset.imageId = String(imageId);
             img.src = url;
