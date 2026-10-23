@@ -211,7 +211,8 @@ def extension_revoke(pairing_id: str, request: Request) -> Dict[str, Any]:
 @router.post(
     "/install-folders", summary="Prepare the folders to load the extension from"
 )
-async def extension_install_folders() -> Dict[str, Any]:
+async def extension_install_folders(request: Request) -> Dict[str, Any]:
+    require_own_page(request, "write the extension folders")
     try:
         return await run_in_threadpool(prepare_install_folders)
     except OSError as exc:
@@ -221,7 +222,8 @@ async def extension_install_folders() -> Dict[str, Any]:
 
 
 @router.post("/open-folder", summary="Show an extension folder in the file manager")
-async def extension_open_folder(body: OpenFolderRequest) -> Dict[str, Any]:
+async def extension_open_folder(body: OpenFolderRequest, request: Request) -> Dict[str, Any]:
+    require_own_page(request, "open the extension folder")
     if body.browser not in TARGETS:
         raise HTTPException(status_code=400, detail="Unknown browser.")
     folders = await run_in_threadpool(prepare_install_folders)

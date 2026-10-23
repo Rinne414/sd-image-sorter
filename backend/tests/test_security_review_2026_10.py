@@ -194,3 +194,22 @@ def test_formats_the_program_converts_or_keeps_still_work(
         },
     )
     assert answer.status_code == 200, answer.text
+
+
+@pytest.mark.parametrize(
+    "method, path, kwargs",
+    [
+        ("post", "/api/collect/url", {"json": {"url": "https://example.com/a.png"}}),
+        ("post", "/api/collect/paste", {"files": {"file": ("a.png", b"x", "image/png")}}),
+        ("post", "/api/browser-extension/install-folders", {"json": {}}),
+        ("post", "/api/browser-extension/open-folder", {"json": {"browser": "chrome"}}),
+    ],
+)
+def test_collect_and_extension_folder_endpoints_refuse_other_local_pages(
+    test_client, method, path, kwargs
+):
+    """Another web app on a different loopback port cannot drive these."""
+    response = getattr(test_client, method)(
+        path, headers={"Origin": "http://127.0.0.1:3000"}, **kwargs
+    )
+    assert response.status_code == 403

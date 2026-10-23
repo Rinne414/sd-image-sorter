@@ -11,6 +11,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
 from db_collected_sources import get_collected_source
+from app_security import require_own_page
 from library_context import get_current_library_id
 from services.collect_download import DownloadError, site_root
 from services.collect_importer import collect_stream, collect_url
@@ -30,6 +31,7 @@ def _http_error(exc: CollectError | DownloadError) -> HTTPException:
 @router.post("/paste", summary="Save a pasted picture into today's collected folder")
 async def collect_paste(request: Request) -> Dict[str, Any]:
     """Multipart: ``file`` = the picture from the clipboard (any size)."""
+    require_own_page(request, "save a pasted picture")
     form = await request.form()
     upload = form.get("file")
     if not isinstance(upload, UploadFile):
@@ -49,7 +51,8 @@ async def collect_paste(request: Request) -> Dict[str, Any]:
 
 
 @router.post("/url", summary="Download a picture from a pasted address and save it")
-def collect_pasted_url(body: PasteUrlRequest) -> Dict[str, Any]:
+def collect_pasted_url(body: PasteUrlRequest, request: Request) -> Dict[str, Any]:
+    require_own_page(request, "download a picture by its address")
     try:
         return collect_url(
             body.url,
