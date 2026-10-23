@@ -536,6 +536,9 @@ def test_packaged_release_notes_require_one_checksums_section(source_bytes):
 
 def test_all_five_release_archives_use_packaged_release_notes(monkeypatch, tmp_path):
     release_builder = load_release_builder()
+    # The builder puts scripts/ on sys.path, so this is the module it uses.
+    from release_shell import ShellBuild
+
     fake_root = tmp_path / "repo"
     artifact_root = tmp_path / "artifacts"
     staging_root = artifact_root / "staging"
@@ -561,8 +564,14 @@ def test_all_five_release_archives_use_packaged_release_notes(monkeypatch, tmp_p
     (fake_root / "desktop" / "package.json").write_text('{"version": "0.4.0"}', encoding="utf-8")
     unpacked = tmp_path / "unpacked"
     unpacked.mkdir()
-    (unpacked / "SD Image Sorter.exe").write_bytes(b"MZ")
-    monkeypatch.setattr(release_builder, "build_desktop_shell", lambda root: unpacked)
+    (unpacked / "sd-image-sorter-shell.exe").write_bytes(b"MZ")
+    launcher = tmp_path / "sd-image-sorter-launcher.exe"
+    launcher.write_bytes(b"MZ")
+    monkeypatch.setattr(
+        release_builder,
+        "build_desktop_shell",
+        lambda root: ShellBuild(unpacked=unpacked, launcher=launcher),
+    )
     monkeypatch.setattr(release_builder, "prepare_embedded_python", lambda stage_dir: None)
     monkeypatch.setattr(
         release_builder,
@@ -1832,8 +1841,9 @@ def test_lazy_release_qa_accepts_windows_portable_archive_with_batch_launchers_a
         "sd-image-sorter/run-portable.bat",
         "sd-image-sorter/python/python.exe",
         "sd-image-sorter/SD Image Sorter.exe",
-        "sd-image-sorter/resources/app.asar",
-        "sd-image-sorter/resources.pak",
+        "sd-image-sorter/desktop/sd-image-sorter-shell.exe",
+        "sd-image-sorter/desktop/resources/app.asar",
+        "sd-image-sorter/desktop/resources.pak",
     }
 
     module.assert_archive_contents(names, package_kind="windows-portable")
