@@ -53,6 +53,10 @@ Object.assign(window.Gallery, {
                 app.openReaderFromImage?.(id, filename);
                 closeModal();
                 break;
+            case 'generator':
+                // A panel over the preview: the picture stays open underneath.
+                window.SendToGenerator?.open?.(id, { anchor: document.querySelector('#modal-tools-menu > summary') });
+                break;
             case 'stylemap':
                 window.StyleMap?.locateImage?.(id);
                 closeModal();

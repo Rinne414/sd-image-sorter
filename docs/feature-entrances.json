@@ -1695,6 +1695,24 @@
       }
     },
     {
+      "id": "image.sendToGenerator",
+      "area": "image",
+      "en": "Send to generator: WebUI / NovelAI text, ComfyUI workflow, run again in ComfyUI",
+      "zh": "送回生成器：WebUI / NovelAI 文本、ComfyUI 工作流、在 ComfyUI 再跑一次",
+      "classic": [
+        "#btn-send-to-generator",
+        "[data-modal-handoff=\"generator\"]",
+        "#settings-comfyui-url",
+        "#btn-settings-comfyui-reset"
+      ],
+      "vopus": {
+        "missing": "Vopus has no Send to generator panel or ComfyUI address yet; the classic preview and right-click menu have it"
+      },
+      "next": {
+        "missing": "The new interface has no Send to generator panel yet"
+      }
+    },
+    {
       "id": "image.reread",
       "area": "image",
       "en": "Read metadata again",

@@ -32,6 +32,7 @@
     <link rel="stylesheet" href="/static/css/style-map.css">
     <link rel="stylesheet" href="/static/css/style-map-locate.css">
     <link rel="stylesheet" href="/static/css/style-map-axes.css">
+    <link rel="stylesheet" href="/static/css/send-to-generator.css">
     <!-- tokens.css must stay the LAST stylesheet: it owns the Graphite palette
          and remaps every legacy token defined by the sheets above. -->
     <link rel="stylesheet" href="/static/css/tokens.css">
@@ -5814,6 +5815,16 @@
                         </div>
                     </div>
                     <div id="settings-output-root-browser" aria-live="polite"></div>
+                    <div class="settings-row settings-comfyui-row">
+                        <div class="settings-row-copy">
+                            <strong data-i18n="settings.comfyuiTitle">ComfyUI address</strong>
+                            <span data-i18n="settings.comfyuiBody">Run again in ComfyUI sends a picture's recipe to this address.</span>
+                        </div>
+                        <div class="settings-inline-control settings-output-root-control">
+                            <input type="text" id="settings-comfyui-url" class="input-field" autocomplete="off" spellcheck="false" placeholder="http://127.0.0.1:8188" aria-label="ComfyUI address" data-i18n-aria="settings.comfyuiTitle">
+                            <button type="button" class="btn btn-ghost btn-small" id="btn-settings-comfyui-reset" data-i18n="settings.comfyuiReset">Use 127.0.0.1:8188</button>
+                        </div>
+                    </div>
                     <details class="guided-advanced-panel settings-preferences-panel" id="settings-ai-defaults-panel">
                         <summary class="guided-advanced-summary">
                             <span data-i18n="settings.aiDefaultsTitle">AI defaults</span>
@@ -6022,6 +6033,7 @@
                                             <span aria-hidden="true">▾</span>
                                         </summary>
                                         <div class="modal-copy-menu-list">
+                                            <button class="modal-copy-menu-item modal-copy-menu-generator" id="btn-send-to-generator" type="button" aria-haspopup="dialog" title="Send to generator: WebUI, NovelAI or ComfyUI" data-i18n-title="sendGen.buttonTip"><span data-i18n="gallery.contextSendToGenerator">Send to generator…</span></button>
                                             <button class="modal-copy-menu-item" id="btn-copy-all" type="button" aria-label="Copy all image info to clipboard" data-i18n-aria="a11y.copyAllImageInfoToClipboard" data-i18n="modal.copyAll">Copy All</button>
                                             <button class="modal-copy-menu-item" id="btn-copy-prompt" type="button" aria-label="Copy prompt" data-i18n-aria="a11y.copyPrompt" title="Copy prompt only" data-i18n-title="tip.copyPromptOnly"><span data-i18n="modal.prompt">Prompt</span></button>
                                             <button class="modal-copy-menu-item" id="btn-copy-negative" type="button" aria-label="Copy negative" data-i18n-aria="a11y.copyNegative" title="Copy negative prompt only" data-i18n-title="tip.copyNegativePromptOnly"><span data-i18n="modal.negative">Negative</span></button>
@@ -6046,6 +6058,7 @@
                                                     <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="prompt" title="Open in Prompt Helper" data-i18n-title="gallery.contextPromptHelper"><svg class="icon" aria-hidden="true"><use href="#i-flask"/></svg> <span data-i18n="modal.promptHelper">Prompt</span></button>
                                                     <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="stylemap" title="View on the Style Map" data-i18n-title="gallery.contextViewOnStyleMap"><svg class="icon" aria-hidden="true"><use href="#i-compass"/></svg> <span data-i18n="nav.stylemap">Style Map</span></button>
                                                     <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="reader" title="Open in full Reader" data-i18n-title="modal.openInReader"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg> <span data-i18n="modal.fullReader">Full Reader</span></button>
+                                                    <button type="button" class="btn btn-ghost btn-small modal-handoff-btn" data-modal-handoff="generator" title="Send to generator: WebUI, NovelAI or ComfyUI" data-i18n-title="sendGen.buttonTip"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg> <span data-i18n="sendGen.button">Generator</span></button>
                                                 </div>
                                             </div>
                                             <div class="modal-tools-menu-section">
@@ -8452,6 +8465,7 @@
     <script src="/static/js/library-roots-ui.js"></script>
     <script src="/static/js/auto-refresh.js"></script>
     <script src="/static/js/folder-watch.js"></script>
+    <script src="/static/js/send-to-generator.js"></script>
     <script src="/static/js/autosep.js"></script>
     <!-- Auto-Separate family (decomposed VERBATIM from the former 1,981-line
          autosep.js; the tag above is the retained servable shim).

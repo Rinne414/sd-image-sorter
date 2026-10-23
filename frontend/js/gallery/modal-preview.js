@@ -158,6 +158,7 @@ ${String(value)}`)
         }
 
         this._initSectionToggles();
+        window.SendToGenerator?.close?.();
         const summaryImage = this.images.find(image => image.id === imageId) || window.App?.AppState?.images?.find(image => image.id === imageId);
         this.currentPreviewIndex = this.images.findIndex(image => image.id === imageId);
         this._currentPreviewId = imageId;
@@ -393,6 +394,14 @@ ${String(value)}`)
             this._t('modal.paramsCopied', null, 'Image settings copied')
         );
         $('#btn-copy-all').onclick = () => copyToClipboard(this._buildCopyAllText(this._lastModalImage, this._lastParsedData, this._lastModalTags, getPromptView()), this._t('modal.allCopied', null, 'All image info copied'));
+        const generatorButton = document.querySelector('#btn-send-to-generator');
+        if (generatorButton) {
+            generatorButton.onclick = (event) => {
+                this._closeModalCopyMenu();
+                this._closeModalToolsMenu();
+                window.SendToGenerator?.open?.(this._currentPreviewId, { anchor: document.querySelector('#modal-copy-menu > summary') || event.currentTarget });
+            };
+        }
         $('#btn-open-folder').onclick = async () => {
             const image = this._lastModalImage;
             if (!image?.id) return;

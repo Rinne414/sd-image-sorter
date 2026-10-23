@@ -108,6 +108,7 @@ Object.assign(window.Gallery, {
                 ? { label: t('gallery.contextCompareTwo', 'Compare 2 images (CLIP)'), icon: '⚖️', action: () => window.ClipTools?.compare?.(actionImageIds[0], actionImageIds[1]) }
                 : null,
             { label: t('gallery.contextPromptHelper', 'Prompt Helper'), icon: '\u{1F9EA}', action: () => app.openPromptBuildFromImage?.(image.id) },
+            { label: t('gallery.contextSendToGenerator', 'Send to generator…'), icon: '\u21AA', action: () => window.SendToGenerator?.open?.(image.id, { x: e.clientX, y: e.clientY }) },
             { label: t('gallery.contextReadMetadata', 'Metadata / Info'), icon: '\u{1F4D6}', action: () => app.openReaderFromImage?.(image.id, image.filename || '') },
             { label: t('gallery.contextReversePrompt', 'Send to Reverse Prompt'), icon: '\u{1F504}', action: () => app.openReversePromptFromImage?.(image.id, image.filename || '') },
             { label: labelWithScope('gallery.contextPrivacy', 'Send to Privacy Tools'), icon: '\u{1F6E1}', action: () => app.openPrivacyFromImages?.(actionImageIds) },
