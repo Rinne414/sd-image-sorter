@@ -40,8 +40,16 @@ PACKAGE_FORBIDDEN_PREFIXES = (
     "backend/tests/",
     "backend/venv/",
     "data/",
-    # The desktop shell ships built (SD Image Sorter.exe), never as sources.
-    "desktop/",
+    # The desktop shell ships built (SD Image Sorter.exe + desktop/ with the
+    # Electron files, Windows package only), never as sources.
+    "desktop/src/",
+    "desktop/test/",
+    "desktop/build/",
+    "desktop/launcher/",
+    "desktop/node_modules/",
+    "desktop/dist/",
+    "desktop/package.json",
+    "desktop/package-lock.json",
     # Vopus ships as its build (frontend-v4/dist) only.
     "frontend-v4/node_modules/",
     "frontend-v4/src/",
@@ -68,9 +76,19 @@ PACKAGE_REQUIRED_COMMON_APP_FILES = (
     "update/package-manifest.json",
 )
 
-# The desktop shell is part of the Windows package only, at the top of the folder.
+# The desktop shell is part of the Windows package only: the launcher at the top
+# of the folder, every Electron file in desktop/ (the launcher starts
+# desktop/sd-image-sorter-shell.exe).
 SHELL_EXE = "SD Image Sorter.exe"
-SHELL_REQUIRED_FILES = (SHELL_EXE, "resources/app.asar", "resources.pak")
+SHELL_DIR = "desktop/"
+SHELL_REQUIRED_FILES = (
+    SHELL_EXE,
+    SHELL_DIR + "sd-image-sorter-shell.exe",
+    SHELL_DIR + "resources/app.asar",
+    SHELL_DIR + "resources.pak",
+)
+# Electron files that must never sit loose at the top of the package.
+SHELL_MISPLACED_AT_TOP = ("resources.pak", "icudtl.dat", "ffmpeg.dll", "resources/app.asar", "locales/en-US.pak")
 
 V4_DIST_PREFIX = "frontend-v4/dist/"
 V4_INDEX_PATH = V4_DIST_PREFIX + "index.html"
@@ -269,10 +287,16 @@ def assert_shell_presence(normalized_names: set[str], *, package_kind: str) -> N
     if package_kind != "windows-portable":
         if SHELL_EXE in normalized_names:
             raise LazyQaError(f"{package_kind} archive must not include {SHELL_EXE}")
+        shell_files = sorted(name for name in normalized_names if name.startswith(SHELL_DIR))
+        if shell_files:
+            raise LazyQaError(f"{package_kind} archive must not include desktop shell files: {', '.join(shell_files[:5])}")
         return
     for required in SHELL_REQUIRED_FILES:
         if required not in normalized_names:
             raise LazyQaError(f"windows-portable archive missing desktop shell file: {required}")
+    misplaced = [name for name in SHELL_MISPLACED_AT_TOP if name in normalized_names]
+    if misplaced:
+        raise LazyQaError(f"windows-portable archive has desktop shell files at the top level (they belong in {SHELL_DIR}): {', '.join(misplaced)}")
 
 
 def assert_shell_not_managed(read_member: Callable[[str], bytes], names: Iterable[str]) -> None:
@@ -280,7 +304,7 @@ def assert_shell_not_managed(read_member: Callable[[str], bytes], names: Iterabl
     members = {normalize_archive_name(name): name for name in names}
     manifest = json.loads(read_member(members["update/package-manifest.json"]).decode("utf-8"))
     managed = {str(path) for path in manifest.get("managed_paths") or []}
-    shell_files = {name for name in members if name in SHELL_REQUIRED_FILES or name.startswith(("locales/", "resources/"))}
+    shell_files = {name for name in members if name in SHELL_REQUIRED_FILES or name.startswith(SHELL_DIR)}
     managed_shell = sorted(shell_files & managed)
     if managed_shell:
         raise LazyQaError(f"package-manifest.json manages desktop shell files: {', '.join(managed_shell[:5])}")

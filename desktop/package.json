@@ -20,7 +20,7 @@
   "build": {
     "appId": "io.github.rinne414.sd-image-sorter",
     "productName": "SD Image Sorter",
-    "executableName": "SD Image Sorter",
+    "executableName": "sd-image-sorter-shell",
     "directories": {
       "output": "dist",
       "buildResources": "build"

@@ -12,7 +12,11 @@ const DEFAULT_PORT = 8487;
 const PORT_TRIES = 20;
 const APP_ROOT_SEARCH_DEPTH = 6;
 
-/** Walk up from each start folder to the first one that holds backend/main.py. */
+/**
+ * Walk up from each start folder to the first one that holds backend/main.py.
+ * The shell exe sits in the package's desktop/ folder (one level below the
+ * program folder), in a checkout in desktop/dist/win-unpacked/ (three levels).
+ */
 function findAppRoot(startDirs, exists) {
     for (const start of startDirs.filter(Boolean)) {
         let dir = path.resolve(start);

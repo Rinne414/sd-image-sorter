@@ -83,6 +83,7 @@ class DesktopController {
     createShortcuts() {
         const plan = shortcutPlan({
             exePath: process.execPath,
+            appRoot: this.appRoot,
             desktopDir: app.getPath('desktop'),
             startMenuDir: path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
             appUserModelId: APP_USER_MODEL_ID,

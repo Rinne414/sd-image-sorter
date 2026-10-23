@@ -1,9 +1,10 @@
 """The Windows release package carries the desktop shell next to run-portable.bat.
 
-The shell (SD Image Sorter.exe) sits at the top of the package, is added after
-the package manifest so the in-app updater never manages it, is recorded in
-the release manifest with its own version, and stays out of every other
-package. The browser extension sources ship in every package so the program
+Only a small launcher (SD Image Sorter.exe) sits at the top of the package;
+the Electron shell and its ~20 loose files live in the desktop/ folder. Both
+are added after the package manifest so the in-app updater never manages
+them, the shell is recorded in the release manifest with its own version, and
+none of it goes into any other package. The browser extension sources ship in every package so the program
 can build the Chrome and Firefox folders on demand.
 """
 
@@ -17,8 +18,14 @@ import zipfile
 from pathlib import Path
 
 import pytest
+from typing import NamedTuple
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+class _ShellBuild(NamedTuple):
+    unpacked: Path
+    launcher: Path
 
 
 def _load(module_name: str, relative_path: str):
@@ -47,9 +54,9 @@ def qa():
     return _load("lazy_release_qa_for_shell_test", "scripts/lazy_release_qa.py")
 
 
-def _unpacked_shell(folder: Path) -> Path:
+def _unpacked_shell(folder: Path):
     files = {
-        "SD Image Sorter.exe": b"MZ",
+        "sd-image-sorter-shell.exe": b"MZ",
         "resources.pak": b"pak",
         "resources/app.asar": b"asar",
         "locales/en-US.pak": b"en",
@@ -58,43 +65,85 @@ def _unpacked_shell(folder: Path) -> Path:
         target = folder / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
-    return folder
+    launcher = folder.parent / "launcher-build" / "sd-image-sorter-launcher.exe"
+    launcher.parent.mkdir(parents=True, exist_ok=True)
+    launcher.write_bytes(b"MZlauncher")
+    return _ShellBuild(unpacked=folder, launcher=launcher)
 
 
 # --- staging ----------------------------------------------------------------
 
 
-def test_shell_files_land_at_the_top_of_the_package(shell, tmp_path):
+def test_only_the_launcher_is_at_the_top_and_every_shell_file_is_in_desktop(
+    shell, tmp_path
+):
     stage = tmp_path / "stage"
     stage.mkdir()
 
     added = shell.stage_desktop_shell(_unpacked_shell(tmp_path / "unpacked"), stage)
 
-    assert (stage / "SD Image Sorter.exe").read_bytes() == b"MZ"
-    assert (stage / "resources" / "app.asar").is_file()
+    assert (stage / "SD Image Sorter.exe").read_bytes() == b"MZlauncher"
+    assert (stage / "desktop" / "sd-image-sorter-shell.exe").read_bytes() == b"MZ"
+    assert (stage / "desktop" / "resources" / "app.asar").is_file()
     assert sorted(added) == [
         "SD Image Sorter.exe",
-        "locales/en-US.pak",
-        "resources.pak",
-        "resources/app.asar",
+        "desktop/locales/en-US.pak",
+        "desktop/resources.pak",
+        "desktop/resources/app.asar",
+        "desktop/sd-image-sorter-shell.exe",
+    ]
+    assert sorted(path.name for path in stage.iterdir()) == [
+        "SD Image Sorter.exe",
+        "desktop",
     ]
 
 
 def test_a_shell_file_never_overwrites_a_package_file(shell, tmp_path):
     stage = tmp_path / "stage"
-    (stage / "resources").mkdir(parents=True)
-    (stage / "resources" / "app.asar").write_bytes(b"mine")
+    (stage / "desktop" / "resources").mkdir(parents=True)
+    (stage / "desktop" / "resources" / "app.asar").write_bytes(b"mine")
 
     with pytest.raises(RuntimeError, match="collides"):
         shell.stage_desktop_shell(_unpacked_shell(tmp_path / "unpacked"), stage)
 
-    assert (stage / "resources" / "app.asar").read_bytes() == b"mine"
+    assert (stage / "desktop" / "resources" / "app.asar").read_bytes() == b"mine"
 
 
-def test_staging_needs_a_built_shell(shell, tmp_path):
+def test_staging_needs_a_built_shell_and_launcher(shell, tmp_path):
     (tmp_path / "empty").mkdir()
     with pytest.raises(FileNotFoundError):
-        shell.stage_desktop_shell(tmp_path / "empty", tmp_path)
+        shell.stage_desktop_shell(
+            _ShellBuild(unpacked=tmp_path / "empty", launcher=tmp_path / "x.exe"),
+            tmp_path,
+        )
+    build = _unpacked_shell(tmp_path / "unpacked")
+    build.launcher.unlink()
+    with pytest.raises(FileNotFoundError, match="launcher"):
+        shell.stage_desktop_shell(build, tmp_path / "stage")
+
+
+def test_a_missing_cargo_stops_the_build_with_a_clear_message(
+    shell, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(shell.shutil, "which", lambda name: None)
+    with pytest.raises(RuntimeError, match="cargo was not found.*rustup"):
+        shell.build_launcher(tmp_path)
+
+
+def test_the_launcher_crate_matches_the_names_the_package_uses(shell):
+    crate = ROOT / "desktop" / "launcher"
+    cargo = (crate / "Cargo.toml").read_text(encoding="utf-8")
+    source = (crate / "src" / "main.rs").read_text(encoding="utf-8")
+    assert shell.LAUNCHER_CARGO_BIN == "sd-image-sorter-launcher.exe"
+    assert 'name = "sd-image-sorter-launcher"' in cargo
+    assert (crate / "Cargo.lock").is_file()
+    assert f'"{shell.SHELL_EXE_NAME}"' in source
+    assert f'"{shell.SHELL_DIRNAME}"' in source
+    assert "windows_subsystem" in source
+    # The launcher gets the program icon and starts the renamed Electron exe.
+    assert "icon.ico" in (crate / "build.rs").read_text(encoding="utf-8")
+    package = json.loads((ROOT / "desktop" / "package.json").read_text("utf-8"))
+    assert package["build"]["executableName"] + ".exe" == shell.SHELL_EXE_NAME
 
 
 def test_shell_version_comes_from_its_package_json(shell, tmp_path):
@@ -134,7 +183,7 @@ def test_only_the_windows_package_holds_the_shell_and_the_updater_does_not_manag
     (fake_root / "desktop" / "package.json").write_text(
         '{"version": "0.4.0"}', encoding="utf-8"
     )
-    unpacked = _unpacked_shell(tmp_path / "unpacked")
+    shell_build = _unpacked_shell(tmp_path / "unpacked")
 
     def minimal_project(stage_dir):
         (stage_dir / "backend").mkdir(parents=True, exist_ok=True)
@@ -149,7 +198,7 @@ def test_only_the_windows_package_holds_the_shell_and_the_updater_does_not_manag
     monkeypatch.setattr(builder, "find_seven_zip", lambda: None)
     monkeypatch.setattr(builder, "copy_project", minimal_project)
     monkeypatch.setattr(builder, "build_frontend_v4", lambda: None)
-    monkeypatch.setattr(builder, "build_desktop_shell", lambda root: unpacked)
+    monkeypatch.setattr(builder, "build_desktop_shell", lambda root: shell_build)
     monkeypatch.setattr(builder, "prepare_embedded_python", lambda stage_dir: None)
     monkeypatch.setattr(
         builder, "prepare_bundled_linux_python", lambda stage_dir, arch: None
@@ -165,19 +214,26 @@ def test_only_the_windows_package_holds_the_shell_and_the_updater_does_not_manag
         managed = json.loads(archive.read("update/package-manifest.json"))[
             "managed_paths"
         ]
-    assert {"SD Image Sorter.exe", "resources/app.asar", "locales/en-US.pak"} <= names
+    assert {
+        "SD Image Sorter.exe",
+        "desktop/sd-image-sorter-shell.exe",
+        "desktop/resources/app.asar",
+        "desktop/locales/en-US.pak",
+    } <= names
+    assert not {"resources.pak", "resources/app.asar", "locales/en-US.pak"} & names
     assert "backend/main.py" in managed
-    assert not {"SD Image Sorter.exe", "resources/app.asar", "resources.pak"} & set(
-        managed
-    )
+    assert not [path for path in managed if path.startswith("desktop/")]
+    assert "SD Image Sorter.exe" not in managed
 
     with zipfile.ZipFile(by_name["sd-image-sorter-v9.9.9-app-patch.zip"]) as archive:
         assert "SD Image Sorter.exe" not in archive.namelist()
+        assert not [n for n in archive.namelist() if n.startswith("desktop/")]
     for name, asset in by_name.items():
         if name.endswith(".tar.gz"):
             with tarfile.open(asset, "r:gz") as archive:
                 assert not any(
-                    "SD Image Sorter.exe" in member for member in archive.getnames()
+                    "SD Image Sorter.exe" in member or member.startswith("desktop/")
+                    for member in archive.getnames()
                 )
 
     release_manifest = json.loads(
@@ -207,7 +263,8 @@ def test_a_failed_shell_build_stops_the_release(builder, shell, monkeypatch, tmp
     ("relative", "skipped"),
     [
         ("desktop/src/main.js", True),
-        ("desktop/dist/win-unpacked/SD Image Sorter.exe", True),
+        ("desktop/dist/win-unpacked/sd-image-sorter-shell.exe", True),
+        ("desktop/launcher/src/main.rs", True),
         ("desktop/package.json", True),
         ("browser-extension/dist/chrome/manifest.json", True),
         ("browser-extension/manifest.base.json", False),
@@ -284,6 +341,24 @@ def test_qa_refuses_a_shell_in_a_package_that_is_not_windows(qa):
 def test_qa_refuses_a_windows_package_without_the_shell(qa):
     with pytest.raises(qa.LazyQaError, match="desktop shell file"):
         qa.assert_shell_presence({"run-portable.bat"}, package_kind="windows-portable")
+
+
+def test_qa_refuses_shell_files_in_a_package_that_is_not_windows(qa):
+    with pytest.raises(qa.LazyQaError, match="desktop shell files"):
+        qa.assert_shell_presence({"desktop/resources.pak"}, package_kind="linux")
+
+
+def test_qa_refuses_electron_files_loose_at_the_top_of_the_windows_package(qa):
+    names = {*qa.SHELL_REQUIRED_FILES, "resources.pak"}
+    with pytest.raises(qa.LazyQaError, match="belong in desktop/"):
+        qa.assert_shell_presence(names, package_kind="windows-portable")
+    qa.assert_shell_presence(set(qa.SHELL_REQUIRED_FILES), package_kind="windows-portable")
+
+
+def test_qa_refuses_a_windows_package_without_the_inner_shell_exe(qa):
+    names = set(qa.SHELL_REQUIRED_FILES) - {"desktop/sd-image-sorter-shell.exe"}
+    with pytest.raises(qa.LazyQaError, match="sd-image-sorter-shell.exe"):
+        qa.assert_shell_presence(names, package_kind="windows-portable")
 
 
 def test_qa_refuses_a_manifest_that_manages_the_shell(qa):
