@@ -399,6 +399,15 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
                     label: appT('flow.ctaCreateCollection', 'Create collection'),
                     action: () => createCollectionFromScanFolder(ctaFolder),
                 });
+                // Folder watching is the way to keep an output folder current;
+                // offer it where the user has just imported one.
+                if (typeof window.FolderWatch?.watchFolder === 'function') {
+                    _scanCtaActions.push({
+                        icon: '#i-folders',
+                        label: appT('flow.ctaWatchFolder', 'Watch this folder for new pictures'),
+                        action: () => window.FolderWatch.watchFolder(ctaFolder),
+                    });
+                }
             }
             if (_scanSkippedOther > 0 && _scanSkippedPaths.length > 0) {
                 const pathsToClaim = _scanSkippedPaths.slice();

@@ -10114,8 +10114,28 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 
 /* v3.3.2 Library Navigation: multi-root management modal (library-roots-ui) */
+/* The idle rescan sits under the list as the second way in: watching (per
+   row) is instant, the idle rescan is a periodic sweep of every folder. */
+.library-roots-other {
+    border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+    margin: 12px 0 4px;
+    padding-top: 10px;
+}
+.library-roots-other-title {
+    color: var(--text-secondary);
+    font-size: var(--fs-label);
+    font-weight: 600;
+    margin: 0 0 6px;
+}
 .library-roots-autorefresh {
-    margin: 4px 0 14px;
+    margin: 0;
+}
+/* Folder tree header: the Library Folders entrance carries a word, so
+   watching and rescanning are findable without hovering an icon. */
+.sidebar-manage-roots {
+    gap: 5px;
+    padding-inline: 8px;
+    white-space: nowrap;
 }
 .library-roots-list {
     display: flex;
@@ -10871,7 +10891,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     display: flex;
     align-items: center;
     gap: 14px;
-    max-width: min(680px, calc(100vw - 48px));
+    max-width: min(920px, calc(100vw - 48px));
     padding: 12px 16px;
     border-radius: 14px;
     background: var(--glass-bg-strong, rgba(28, 28, 28, 0.94));
@@ -10904,7 +10924,17 @@ html.lang-zh #view-censor .queue-action-btn span {
 .pipeline-next-step .pns-actions {
     display: flex;
     gap: 8px;
-    flex: 0 0 auto;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+.pipeline-next-step .pns-actions .btn {
+    white-space: nowrap;
+}
+/* Four actions sit two by two, so a wrapped one never gets a row alone. */
+.pipeline-next-step .pns-actions:has(> .btn:nth-child(4):last-child) {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
 }
 .pipeline-next-step .pns-dismiss {
     flex: 0 0 auto;
