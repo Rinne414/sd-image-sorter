@@ -2608,6 +2608,363 @@ Resolve dropped filenames or folder name to a filesystem path.
 #### POST /api/import-files
 Import uploaded image files directly into the gallery.
 
+### Folder watching
+
+Errors in the sections from here to Background models follow the global error contract (`error`, `type`, `status_code`), plus `code` and `message` where a route sets them. A request body or path value that fails validation is `400` with `type: "ValidationError"`. Routes marked "only this program's own page" answer `403` to any other site or local web app, even though the general `/api` guard lets those through.
+
+Watching keeps the gallery current without a manual scan: while it is on for a library root, new or changed pictures under the folder are indexed within seconds, and files written while the program was closed are picked up when it starts. Local folders use native file events; network folders fall back to polling. The switch is stored per root (`watch` on the root row); a global pause sits on top of all of them.
+
+#### PATCH /api/library-roots/{root_id}/watch
+Turn watching on or off for one library root. Body: `{"watch": true}` (`watch` is required). Returns the updated root row (the same row `GET /api/library-roots` lists, plus `watch` as `0` or `1`) and makes the watcher re-read its folder list right away. **Only this program's own page may call it.**
+
+```json
+{
+  "id": 1,
+  "path": "L:/Pictures/AAA Reference",
+  "library_id": "main",
+  "label": null,
+  "enabled": 1,
+  "added_at": "2026-06-06T12:00:00",
+  "last_scanned_at": "2026-06-06T12:05:00",
+  "watch": 1
+}
+```
+
+Errors: `403` another site or local web app called it (`Only this program's own page can change folder watching.`); `404` `code: "library_root_not_found"` (`Library folder not found`) for an unknown `root_id`; `400` `ValidationError` when `watch` is missing or not a boolean.
+
+#### GET /api/watch/status
+Live state of the folder watcher. Read-only.
+
+| Field | Description |
+|-------|-------------|
+| `running` | The watcher's supervisor thread is alive |
+| `paused` | Watching is paused (see `POST /api/watch/pause`) |
+| `generation` | Counter that grows whenever watched pictures arrive; a client refreshes the gallery when it changes |
+| `roots[].mode` | `native` (file events) or `polling` (network folders) |
+| `roots[].state` | `starting`, `catching_up`, `watching`, `missing` (folder not found) or `error` |
+| `roots[].error` | Reason text when `state` is `error`, else `null` |
+| `roots[].imported` | Pictures imported since the watcher started |
+| `roots[].last_import_at`, `last_catch_up_at` | Timestamps, or `null` |
+
+```json
+{
+  "running": true,
+  "paused": false,
+  "generation": 12,
+  "roots": [
+    {
+      "root_id": 1,
+      "path": "L:/Pictures/AAA Reference",
+      "library_id": "main",
+      "mode": "native",
+      "state": "watching",
+      "error": null,
+      "imported": 4,
+      "last_import_at": "2026-10-23T09:14:02",
+      "last_catch_up_at": "2026-10-23T09:00:11"
+    }
+  ]
+}
+```
+
+#### POST /api/watch/pause
+Pause or resume every watched folder at once; each folder keeps its own switch. Resuming starts them again and first adds the pictures written while paused. A pause lasts until it is resumed or the program restarts. Body: `{"paused": true}` (`paused` is required). Returns the same shape as `GET /api/watch/status`. **Only this program's own page may call it.**
+
+Errors: `403` for another site or local web app (`Only this program's own page can pause folder watching.`); `400` `ValidationError` when `paused` is missing or not a boolean.
+
+### Send to generator
+
+Takes a picture's stored recipe back to the program that made it: WebUI parameters text, NovelAI text, or a ComfyUI workflow. The recipe is read from the picture file; if the file is gone, the raw metadata kept in the index is used (`metadata_source` says which).
+
+#### GET /api/images/{image_id}/generator-recipe
+Everything the Send to generator menu offers for one picture. Read-only.
+
+| Field | Description |
+|-------|-------------|
+| `source_format` | `nai` for NovelAI pictures, otherwise `sd` |
+| `has_prompt` | The picture has a positive or negative prompt (or its own WebUI text) |
+| `webui_text` | WebUI parameters text; empty when `has_prompt` is false |
+| `webui_is_original` | `true` when `webui_text` is the picture's own `parameters` text (WebUI, Forge and similar), `false` when it was rebuilt from the index |
+| `webui_settings_line` | The `Steps: ..., Sampler: ...` line built from the stored generation settings |
+| `nai_text` | NovelAI text for NovelAI pictures with a prompt, else `""` |
+| `metadata_source` | `file`, `stored` (raw copy in the index) or `null` |
+| `file_found` | The picture file was read (`metadata_source` is `file`) |
+| `comfyui` | `{has_api_prompt, has_workflow, seed_inputs, workflow}`; `workflow` is the UI workflow, ready to paste into ComfyUI (Ctrl+V), or `null` |
+| `comfyui_url` | The ComfyUI address from Settings (default `http://127.0.0.1:8188`), `null` if the saved address is unusable |
+| `workflow_file_stem` | Suggested file name (without `.json`) for a saved workflow |
+
+```json
+{
+  "image_id": 42,
+  "generator": "comfyui",
+  "source_format": "sd",
+  "has_prompt": true,
+  "webui_text": "1girl, sunset\nNegative prompt: lowres\nSteps: 28, Sampler: Euler a, CFG scale: 7, Seed: 123, Size: 832x1216, Model: animeXL",
+  "webui_is_original": false,
+  "webui_settings_line": "Steps: 28, Sampler: Euler a, CFG scale: 7, Seed: 123, Size: 832x1216, Model: animeXL",
+  "nai_text": "",
+  "metadata_source": "file",
+  "file_found": true,
+  "comfyui": {"has_api_prompt": true, "has_workflow": true, "seed_inputs": 1, "workflow": {"version": 0.4, "nodes": [], "extra": {}}},
+  "comfyui_url": "http://127.0.0.1:8188",
+  "workflow_file_stem": "sunset"
+}
+```
+
+Errors: `404` `code: "image_not_found"` (`Image not found`); `400` `ValidationError` for an `image_id` outside 1 to 2147483647.
+
+#### POST /api/images/{image_id}/comfyui/workflow-file
+Save the picture's ComfyUI workflow as a `.json` file in the `workflows` output folder (the UI workflow, else the API prompt). An existing name gets `_2`, `_3` and so on; the file is registered so it can be revealed with `POST /api/output-folders/reveal`. No body. **Only this program's own page may call it.**
+
+```json
+{
+  "saved": true,
+  "path": "L:/sd-image-sorter/output/workflows/sunset.json",
+  "filename": "sunset.json",
+  "kind": "workflow"
+}
+```
+
+`kind` is `workflow` or `api_prompt`. Errors: `403` for another site or local web app (`Only this program's own page can save a workflow file.`); `404` `image_not_found`; `422` `code: "no_comfyui_recipe"` (`This picture has no ComfyUI workflow to save.`); `503` `write_failed` when the folder cannot be written.
+
+#### POST /api/images/{image_id}/comfyui/queue
+Run the picture's recipe again: queues its stored API prompt on the ComfyUI address from Settings (`POST {address}/prompt`; redirects are not followed, system proxies are ignored). Body: `{"seed_mode": "new" | "same"}` (default `new`): `new` gives every numeric `seed` / `noise_seed` input a new random value (linked inputs are left alone), `same` keeps them as stored. The workflow rides along so the new picture embeds it. **Only this program's own page may call it.**
+
+```json
+{
+  "prompt_id": "9d1f0c2e-5a4b-4e7c-8f31-2b6a1c0d7e55",
+  "number": 3,
+  "comfyui_url": "http://127.0.0.1:8188",
+  "seed_mode": "new",
+  "seeds_changed": 1
+}
+```
+
+Errors carry `code`, `message` and, for ComfyUI refusals, `details` (ComfyUI's node error lines). `403` for another site or local web app; `404` `image_not_found`; `422` `no_comfyui_recipe` (no API prompt in the picture) or `rejected` (ComfyUI refused the prompt; the message carries its reason); `400` `bad_address` (the saved address is unusable); `502` `unreachable` (ComfyUI is not running at the address), `redirect` or `bad_answer` (the address does not answer like ComfyUI); `504` `timeout` (no answer within 60 s, connect 5 s).
+
+#### GET /api/settings/comfyui
+The ComfyUI address used by Run again. Returns `{"url": "http://127.0.0.1:8188", "custom_url": "", "default_url": "http://127.0.0.1:8188"}`: `url` is the address in use (`null` if the saved one is unusable), `custom_url` is what Settings stored (`""` = none).
+
+#### PATCH /api/settings/comfyui
+Set the ComfyUI address. Body: `{"url": "127.0.0.1:8189"}` (max 2048 characters). The address is normalised (`http://` is added, a trailing `/` removed); an empty `url`, or the default address, clears the custom setting. Returns the same shape as `GET /api/settings/comfyui`. **Only this program's own page may call it.**
+
+Errors: `400` `code: "bad_address"` (`...`) for a non-http(s) address, a missing host, a user name, `?` or `#`, or a bad port; `403` for another site or local web app (`Only this program's own page can change the ComfyUI address.`); `503` when the setting cannot be written.
+
+### Browser extension and collecting
+
+Pictures can reach the gallery from a browser extension, a pasted picture or a pasted address. Each is saved under the `collected` output folder, in a folder named for today's date, and then indexed into the gallery in the background. A format the gallery cannot show is converted to PNG first. A collected picture remembers where it came from.
+
+Three groups of routes:
+
+- `/api/ext/*` is the extension's own lane. `app_security` accepts the extension's own `chrome-extension://...` or `moz-extension://...` origin here and nowhere else; every call is a `POST` (any other method is refused). Everything except `ping` and `pair` needs the pairing token in the **`X-SD-Ext-Token`** header. A call without an approved token is answered `403 {"error": "...", "type": "Forbidden", "code": "ext_not_paired"}` before it reaches the route, so the extension can say "pair again" instead of "program not running". Only the SHA-256 of a token is stored. The `Host` rule of the request guard still applies.
+- `/api/browser-extension/*` is for the program's own page: answer a pairing request, list and revoke paired browsers, prepare the install folders.
+- `/api/collect/*` is for the program's own page: paste a picture or an address, read a picture's source.
+
+In the lists below, "own page" means the request has no `Sec-Fetch-Site` other than `same-origin` and any `Origin` is on the program's own port; another local web app, which the general `/api` guard still lets through, gets `403 Only this program's own page can ...`.
+
+#### POST /api/ext/ping
+Is the program running, and is this extension paired. No token needed. Send the token in `X-SD-Ext-Token` to learn its state. Returns `{"app": "SD Image Sorter", "version": "3.7.0", "pairing": "approved"}`; `pairing` is `pending`, `approved`, `denied` or `unknown` (no token, or an unknown one).
+
+#### POST /api/ext/pair
+Ask the user to pair this extension. No token header; the token is in the body. Body: `{"token": "<32 to 128 characters, A-Z a-z 0-9 _ ->", "name": "My Chrome", "browser": "chrome"}` (`name` up to 200 characters, `browser` is `chrome`, `edge`, `firefox` or `other`). The request waits in memory, up to 15 minutes, until the user presses Allow or Deny in the program's own page (`POST /api/browser-extension/pairings/{pairing_id}/decide`). One open request per extension: asking again replaces it. Returns `{"id": "3f9a1c07d2b4e856", "state": "pending"}`.
+
+Errors: `400` with a user-facing message (`The extension sent no usable token.`, `Only a browser extension can ask to be paired.`); `400` `ValidationError` for a bad body.
+
+#### POST /api/ext/pair/status
+The user's answer to a pairing request. Needs `X-SD-Ext-Token`; any token the program knows (waiting, denied or approved) is accepted. Returns `{"state": "pending" | "approved" | "denied" | "unknown"}`. A token the program does not know gets `403` with `code: "ext_not_paired"`.
+
+#### POST /api/ext/collect
+Save a picture the extension downloaded. Needs an approved `X-SD-Ext-Token`. Multipart form: `file` is the picture bytes (any size), `meta` is a JSON text with `source_url`, `page_url`, `page_title` and `filename` (all optional; each part other than the file is capped at 1 MB). The picture is stored in the library the user is looking at. Returns at once, with the picture indexed shortly after:
+
+```json
+{
+  "path": "L:/sd-image-sorter/output/collected/2026-10-23/cat.png",
+  "filename": "cat.png",
+  "folder": "L:/sd-image-sorter/output/collected/2026-10-23",
+  "converted_from": null,
+  "queued": true
+}
+```
+
+`converted_from` is the original format when the picture was converted to PNG, else `null`. Errors: `400` (`A 'file' part with the picture is required.`, `The picture details are not JSON.`, `The picture arrived empty.`); `403` `ext_not_paired`; `415` (`This is not a picture the program can read.`, or a format the gallery does not show that is too large or fails to convert to PNG). 
+
+#### POST /api/ext/collect-url
+Fallback when the extension could not fetch the picture itself: the program downloads it, with the page as `Referer` and no browser cookies. Needs an approved `X-SD-Ext-Token`. Body: `{"image_url": "https://...", "page_url": "https://...", "page_title": "..."}` (`image_url` required, up to 8192 characters; the other two optional). Returns the same shape as `POST /api/ext/collect`.
+
+Errors: `400` for an address that is not `http://` or `https://`; `403` `ext_not_paired`; `415` as above; `502` when the download fails (`The site answered 403 instead of the picture. ...`, `The picture could not be downloaded: ...`).
+
+#### GET /api/browser-extension/state
+Pairing requests waiting for an answer, and collect progress. The page polls this; each poll also tells the program which library the user is looking at, and pictures collected by the extension go there. Returns:
+
+```json
+{
+  "pending": [
+    {
+      "id": "3f9a1c07d2b4e856",
+      "origin": "chrome-extension://abcdefghijklmnopabcdefghijklmnop",
+      "name": "My Chrome",
+      "browser": "chrome",
+      "requested_at": "2026-10-23T09:20:41",
+      "state": "pending",
+      "paired_at": null,
+      "replaces_existing": false
+    }
+  ],
+  "collect": {"generation": 7, "waiting": 0, "imported": 12, "last_error": null}
+}
+```
+
+`replaces_existing` is true when the same extension is already paired, so allowing replaces that pairing. `collect.generation` grows whenever a collected batch was indexed; `last_error` is the user-facing reason when saving worked but adding to the gallery failed.
+
+#### GET /api/browser-extension/paired
+Browsers paired with this program. Returns `{"paired": [...]}` with the same fields as `pending` entries (`state` is `approved`, `paired_at` is set); the token hash is never returned.
+
+#### POST /api/browser-extension/pairings/{pairing_id}/decide
+Allow or deny a waiting pairing request. Body: `{"allow": true}`. Allowing stores the pairing and replaces an earlier pairing of the same extension. Returns the decided pairing (`state` is `approved` or `denied`). **Only this program's own page may call it**, because a web page must not be able to click Allow for itself.
+
+Errors: `403` `Only this program's own page can pair a browser.`; `404` `This request is no longer waiting. Ask again from the extension.`
+
+#### DELETE /api/browser-extension/pairings/{pairing_id}
+Revoke a paired browser; its token stops working at once. Returns `{"revoked": "3f9a1c07d2b4e856"}`. **Only this program's own page may call it.**
+
+Errors: `403` `Only this program's own page can revoke a paired browser.`; `404` `This browser is not paired.`
+
+#### POST /api/browser-extension/install-folders
+Write the folders to load the extension from (one for Chrome and Edge, one for Firefox) under the program's data folder, and return them. No body. **Only this program's own page may call it.**
+
+```json
+{
+  "chrome": "L:/sd-image-sorter/data/browser-extension/chrome",
+  "firefox": "L:/sd-image-sorter/data/browser-extension/firefox",
+  "version": "1.0.0"
+}
+```
+
+Errors: `403` for another site or local web app (`Only this program's own page can write the extension folders.`); `503` `The extension folders could not be written: ...`.
+
+#### POST /api/browser-extension/open-folder
+Show one extension folder in the file manager. Body: `{"browser": "chrome"}` (`chrome` or `firefox`). Returns `{"status": "ok", "path": "..."}`. **Only this program's own page may call it.**
+
+Errors: `400` `Unknown browser.`; `403` `Only this program's own page can open the extension folder.`; `501` `No file manager is available on this computer.`
+
+#### POST /api/collect/paste
+Save a picture pasted into the program's page. Multipart form with a `file` part (any size; the filename defaults to `pasted`). Saved like an extension picture, into the library the user is looking at (the `X-SD-Library-Id` header, as for other library calls). Returns the same shape as `POST /api/ext/collect`. **Only this program's own page may call it.**
+
+Errors: `400` `A 'file' part with the picture is required.` or `The picture arrived empty.`; `403` `Only this program's own page can save a pasted picture.`; `415` as for `POST /api/ext/collect`.
+
+#### POST /api/collect/url
+Download a picture from a pasted address and save it, with the site's root address as `Referer` and no cookies. Body: `{"url": "https://..."}` (1 to 8192 characters). Returns the same shape as `POST /api/ext/collect`. **Only this program's own page may call it.**
+
+Errors: `400` for an address that is not `http://` or `https://`; `403` `Only this program's own page can download a picture by its address.`; `415` as above; `502` when the download fails.
+
+#### GET /api/collect/source/{image_id}
+Where a collected picture came from. Read-only. Returns `{"source": null}` for a picture that was not collected, else:
+
+```json
+{
+  "source": {
+    "image_id": 42,
+    "source_url": "https://example.com/pics/cat.png",
+    "page_url": "https://example.com/gallery",
+    "page_title": "Cats",
+    "collected_at": "2026-10-23T09:21:07",
+    "via": "extension"
+  }
+}
+```
+
+`via` is `extension`, `paste` or `url`. `400` `ValidationError` for an `image_id` outside 1 to 2147483647.
+
+### Videos
+
+Videos are indexed alongside pictures (`media_type` is `video`). Reading their duration, codec and embedded generation recipe, and making a playable preview, needs ffmpeg/ffprobe, which the program can download once. The original file is served by `GET /api/image-file/{id}` (HTTP Range, so seeking works) and its thumbnail by `GET /api/image-thumbnail/{id}`.
+
+#### GET /api/video-support
+Whether video support is ready. Looks for ffmpeg/ffprobe again on every call, and starts reading the videos still waiting when the tools are found.
+
+```json
+{
+  "available": false,
+  "source": null,
+  "can_install": true,
+  "estimated_mb": 77,
+  "download_from": "github.com/BtbN/FFmpeg-Builds",
+  "install": {"state": "idle"},
+  "indexing": false,
+  "videos": 14,
+  "pending": 14,
+  "unreadable": 0
+}
+```
+
+`source` is where the tools were found: `installed` (by the program), `beside_program` or `path`. `can_install` is false on a system with no ready-made build (macOS: use a package manager). `estimated_mb` is the download size in MB (1,000,000 bytes) for this system, `null` when unknown. `install` is the installer's state: `{"state": "idle"}`, `{"state": "running", "phase": "looking" | "downloading" | "unpacking", "downloaded": 0, "total": null, "file": "..."}`, `{"state": "done", "phase": "done"}` or `{"state": "failed", "error": "..."}`. `videos`, `pending` and `unreadable` count indexed videos.
+
+#### POST /api/video-support/install
+Download the LGPL shared ffmpeg build from GitHub (BtbN/FFmpeg-Builds), check its SHA256 against the release's `checksums.sha256` (nothing is installed on a mismatch), and unpack it into the program's data folder. Runs in the background; poll `GET /api/video-support`. No body. Calling it while an install runs returns the running state. Returns the installer state. **Only this program's own page may call it.**
+
+Errors: `403` `Only this program's own page can install video support.`; `409` `code: "video_install_unsupported"` (`No ready-made ffmpeg for this system; install ffmpeg with your package manager`).
+
+#### GET /api/videos/{image_id}/playback
+How to play one video. `plays_in_browser` is whether the browser is expected to play the original (by codec); when it cannot, `converted` tells whether a playable preview exists (`status` is `none`, `queued`, `running`, `done` or `failed`), and `converted_url` is where it is served.
+
+```json
+{
+  "id": 7,
+  "codec": "hevc",
+  "duration": 12.5,
+  "fps": 24.0,
+  "has_audio": false,
+  "probe_state": "ready",
+  "probe_error": null,
+  "plays_in_browser": false,
+  "tools_available": true,
+  "converted": {"status": "none", "progress": 0.0, "error": null},
+  "converted_url": "/api/videos/7/converted"
+}
+```
+
+`probe_state` is `pending`, `ready` or `unreadable`. Errors: `404` `code: "video_not_found"` (`Video not found`) (unknown id, or not a video) or `video_file_missing` (the file is gone from disk, or is a symlink).
+
+#### POST /api/videos/{image_id}/converted
+Make a playable preview: convert the video to VP9/Opus WebM (the original is not changed). Cached on disk; one conversion runs at a time, and a failed one is retried. No body. Returns the job state `{"status": "queued", "progress": 0.0, "error": null}` (`done` at once when the preview exists); poll `GET /api/videos/{image_id}/playback`. **Only this program's own page may call it.**
+
+Errors: `403` `Only this program's own page can make a playable preview.`; `404` `video_not_found` or `video_file_missing`; `409` `code: "video_tools_missing"` (`Install video support first`).
+
+#### GET /api/videos/{image_id}/converted
+The converted WebM preview (`video/webm`), with HTTP Range support for seeking. Errors: `404` `video_not_found`, `video_file_missing`, or `code: "video_preview_missing"` (`No converted preview yet`) before `POST /api/videos/{image_id}/converted` has finished.
+
+### Background models
+
+AI models stay in memory after use so the next job starts fast. An idle model is released after a set time, and the user can release them at once. A model that a running job uses is never released.
+
+#### GET /api/background-models
+The models loaded right now, the idle setting, and recent loads that went to the CPU because the GPU was busy.
+
+```json
+{
+  "idle_unload_minutes": 10.0,
+  "models": [
+    {"key": "tagger", "device": "gpu", "in_use": false, "idle_seconds": 312.4}
+  ],
+  "last_release": {"keys": ["clip"], "reason": "idle", "at": 1792746000.5},
+  "gpu_busy_fallbacks": [
+    {"label": "wd-swinv2-tagger-v3", "free_mb": 900.0, "need_mb": 2200.0, "at": 1792745800.1}
+  ]
+}
+```
+
+`idle_unload_minutes` is `0` for "keep loaded until the program quits". `last_release` is `null` until something was released; `reason` is `idle` or `manual`. `gpu_busy_fallbacks` is newest first.
+
+#### PATCH /api/background-models
+Store how long an unused model stays loaded. Body: `{"minutes": 10}`: a number from `0` (never release) to `10080` (7 days); Settings offers 5, 10 and 30. Returns the same shape as `GET /api/background-models`. **Only this program's own page may call it.**
+
+Errors: `403` `Only this program's own page can change when AI models are freed.`; `400` `ValidationError` for a missing, negative or too large `minutes`.
+
+#### POST /api/background-models/unload
+Unload now: release every loaded model that no running job is using. No body. Returns `{"released": ["clip"], "busy": ["tagger"]}` merged into the same shape as `GET /api/background-models`; `busy` lists models kept because a job is using them. **Only this program's own page may call it.**
+
+Errors: `403` `Only this program's own page can unload AI models.`
+
 ### Support
 
 #### GET /api/support/diagnostics
@@ -2658,6 +3015,11 @@ Key response fields:
 | `channel_api_url` | string | Release metadata URL used by the update check |
 | `channel_web_url` | string | Human-facing release page URL |
 | `download_url_prefix` | string | Optional proxy prefix used for release asset downloads |
+| `shell_version` | string/null | Version of the desktop program running this backend; `null` when started from a browser launcher (only the desktop program reports one) |
+| `shell_update_required` | boolean | `true` when the newest release's manifest has a `min_shell_version` above `shell_version`: the in-app update cannot replace the desktop program, so `has_update` is forced to `false` |
+| `min_shell_version`, `latest_shell_version` | string | Only when `shell_update_required` is `true`: the oldest desktop program the release works with, and the desktop program version that release was built with (`shell_version` in the release manifest, `null` if absent) |
+
+The release manifest (`release-manifest.json`) may carry `shell_version` (the desktop program version the package was built with) and `min_shell_version` (the oldest desktop program the release runs on). When the running desktop program is older than `min_shell_version`, the status sets `shell_update_required` and explains in `update_unavailable_reason` that the full package must be downloaded instead (the explanation is bilingual).
 
 #### GET /api/updates/channel
 Get active update channel configuration.
