@@ -1,4 +1,6 @@
 import { useLibraries } from '../../../api/queries'
+import { useT } from '../../../i18n'
+import { libraryName } from '../../libraries/libraryName'
 import { useApp } from '../../../state/store'
 import { useAutoRefresh } from '../../library/autoRefreshRun'
 import { useSelectionDialog } from '../../selection/dialogs'
@@ -52,11 +54,12 @@ function AutoRefreshSection() {
 
 function LibrariesSection() {
   const t = useLT()
+  const tApp = useT()
   const libraryId = useApp((s) => s.libraryId)
   const library = useLibraries().data?.libraries.find((l) => l.id === libraryId)
   return (
     <Section title={t('libset.libraries.title')} testId="libset-libraries">
-      {library && <p className={styles.lead}>{t('libset.libraries.current', { name: library.name, n: library.image_count })}</p>}
+      {library && <p className={styles.lead}>{t('libset.libraries.current', { name: libraryName(library, tApp), n: library.image_count })}</p>}
       <p className={styles.hint}>{t('libset.libraries.hint')}</p>
       <div className={styles.row}>
         <button type="button" className="btn" onClick={() => useSelectionDialog.getState().showFor('libraries', null, 1)} data-testid="libset-manage">

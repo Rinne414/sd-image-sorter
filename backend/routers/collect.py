@@ -25,7 +25,7 @@ class PasteUrlRequest(BaseModel):
 
 
 def _http_error(exc: CollectError | DownloadError) -> HTTPException:
-    return HTTPException(status_code=exc.status_code, detail=exc.message)
+    return HTTPException(status_code=exc.status_code, detail=exc.detail())
 
 
 @router.post("/paste", summary="Save a pasted picture into today's collected folder")
@@ -36,7 +36,11 @@ async def collect_paste(request: Request) -> Dict[str, Any]:
     upload = form.get("file")
     if not isinstance(upload, UploadFile):
         raise HTTPException(
-            status_code=400, detail="A 'file' part with the picture is required."
+            status_code=400,
+            detail={
+                "code": "collect_no_file",
+                "message": "A 'file' part with the picture is required.",
+            },
         )
     try:
         return await run_in_threadpool(

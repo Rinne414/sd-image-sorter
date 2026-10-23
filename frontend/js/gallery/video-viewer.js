@@ -44,6 +44,7 @@
         prefs: loadPrefs(),
         _pollTimer: null,
         _triedConversion: false,
+        _tabbed: false,
 
         _els() {
             return {
@@ -66,6 +67,7 @@
                 return;
             }
             this.imageId = imageId;
+            this._tabbed = false;
             els.container?.classList.add('is-video-preview');
             els.stage.hidden = false;
             this._applyPrefs(els);
@@ -183,7 +185,7 @@
             try {
                 status = await window.App.API.post(`/api/videos/${imageId}/converted`, {});
             } catch (error) {
-                this._setNote(error?.apiData?.detail?.message || error?.message || '');
+                this._setNote(error?.message || '');
                 return;
             }
             this._followConversion(imageId, status);
@@ -289,7 +291,8 @@
                 this._savePrefs();
                 this._renderToggles(els);
             });
-            document.addEventListener('keydown', (event) => this._onKey(event));
+            // Capture: answer before a focused button turns Space into a click.
+            document.addEventListener('keydown', (event) => this._onKey(event), true);
             const modal = document.getElementById('image-modal');
             if (modal) {
                 new MutationObserver(() => {
@@ -298,13 +301,44 @@
             }
         },
 
+        togglePlay() {
+            const { video } = this._els();
+            if (!video || !this.imageId) return;
+            if (video.paused || video.ended) video.play().catch(() => {});
+            else video.pause();
+        },
+
+        // Keys while a video is open: , and . step a frame, Space and K play
+        // or pause. Space on a button the user reached with Tab still presses
+        // that button; the button the dialog focused on its own does not.
         _onKey(event) {
-            if (!this.imageId || (event.key !== ',' && event.key !== '.')) return;
-            if (!document.getElementById('image-modal')?.classList.contains('visible')) return;
-            if (event.ctrlKey || event.metaKey || event.altKey) return;
-            if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+            if (event.key === 'Tab') {
+                this._tabbed = true;
+                return;
+            }
+            const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+            if (!this.imageId || ![',', '.', ' ', 'k'].includes(key)) return;
+            if (!this._ownsKeys(event)) return;
+            if (key === ',' || key === '.') {
+                event.preventDefault();
+                this.step(key === ',' ? -1 : 1);
+                return;
+            }
+            const target = event.target instanceof Element ? event.target : null;
+            // The player's own controls already toggle on Space.
+            if (key === ' ' && target?.closest('#modal-video')) return;
+            if (key === ' ' && this._tabbed && target?.closest('button, a[href], summary, [role="button"]')) return;
             event.preventDefault();
-            this.step(event.key === ',' ? -1 : 1);
+            event.stopPropagation();
+            this.togglePlay();
+        },
+
+        _ownsKeys(event) {
+            if (!document.getElementById('image-modal')?.classList.contains('visible')) return false;
+            if (typeof isTopModal === 'function' && !isTopModal('image-modal')) return false;
+            if (event.ctrlKey || event.metaKey || event.altKey) return false;
+            const target = event.target;
+            return !(target instanceof Element && target.closest('input, textarea, select, [contenteditable="true"]'));
         },
     };
 

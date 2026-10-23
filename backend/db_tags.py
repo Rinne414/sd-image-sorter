@@ -897,7 +897,13 @@ def get_all_loras(*, limit: Optional[int] = None, search_query: Optional[str] = 
 
 
 def get_all_generators() -> List[Dict[str, Any]]:
-    """Get all generators with their counts (cached with 60s TTL)."""
+    """Get all generators with their counts (cached with 60s TTL).
+
+    A row whose metadata is still being read (``metadata_status = 'pending'``)
+    and has no generator yet is left out: during a big import it would
+    otherwise count as "unknown" for a few seconds. The page shows those rows
+    as "reading" through ``metadata_pending`` in /api/stats.
+    """
     from library_context import current_library_sql, get_current_library_id
 
     now = time.time()
@@ -917,6 +923,10 @@ def get_all_generators() -> List[Dict[str, Any]]:
             SELECT generator, COUNT(*) as count
             FROM images
             WHERE COALESCE(is_readable, 1) = 1 AND {lib_sql}
+              AND NOT (
+                LOWER(COALESCE(metadata_status, 'complete')) = 'pending'
+                AND LOWER(COALESCE(generator, 'unknown')) = 'unknown'
+              )
             GROUP BY generator
             ORDER BY count DESC
             """,

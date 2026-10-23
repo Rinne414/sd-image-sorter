@@ -598,6 +598,7 @@ def test_installer_refuses_a_checksum_mismatch(
     status = installer.status()
     assert status["state"] == "failed"
     assert "SHA256" in status["error"]
+    assert status["error_code"] == "video_install_checksum_mismatch"
     assert not (isolated_video_dirs["tools"] / "ffmpeg").exists()
 
 

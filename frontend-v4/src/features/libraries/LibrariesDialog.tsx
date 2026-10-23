@@ -5,6 +5,7 @@ import { useT, type MessageKey, type Params } from '../../i18n'
 import { useApp } from '../../state/store'
 import { Dialog } from '../../ui/Dialog'
 import { createLibrary, deleteLibrary, exportUrl, moveToLibrary, renameLibrary } from './libraries'
+import { libraryName } from './libraryName'
 import styles from './LibrariesDialog.module.css'
 
 const NAME_MAX = 80
@@ -12,8 +13,7 @@ const NAME_MAX = 80
 type T = (key: MessageKey, params?: Params) => string
 
 function displayName(lib: Library, t: T): string {
-  // The seeded default library is named in English in the database.
-  return lib.is_default && lib.name === 'Main library' ? t('rail.mainLibrary') : lib.name
+  return libraryName(lib, t)
 }
 
 /** Every library: switch, rename, export the index, delete (never the main one), and make a new one. */

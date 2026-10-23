@@ -17,6 +17,27 @@
     const ACTIVE_POLL_MS = 4000;
     const IDLE_POLL_MS = 30000;
 
+    function normalizePath(value) {
+        return String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+    }
+
+    /**
+     * The library root for an imported folder: the root with that exact path,
+     * else the deepest root that contains it (importing a subfolder of a
+     * registered root keeps that root). Case-insensitive, either slash.
+     */
+    function rootForPath(roots, folderPath) {
+        const wanted = normalizePath(folderPath);
+        if (!wanted) return null;
+        let best = null;
+        roots.forEach((root) => {
+            const path = normalizePath(root.path);
+            if (!path || (wanted !== path && !wanted.startsWith(`${path}/`))) return;
+            if (!best || path.length > normalizePath(best.path).length) best = root;
+        });
+        return best;
+    }
+
     const FolderWatch = {
         _timer: null,
         _generation: null,
@@ -80,6 +101,41 @@
             if (arrived) this._refreshViews();
         },
 
+        /**
+         * Turn watching on for the library folder that holds `folderPath`
+         * (offered after a folder import) and say what happened.
+         */
+        async watchFolder(folderPath) {
+            const app = window.App || {};
+            const folder = String(folderPath || '').split(/[\\/]/).filter(Boolean).pop() || folderPath;
+            const say = (key, fallback, type) => app.showToast?.(appT(key, fallback, { folder }), type);
+            let root;
+            try {
+                const data = await app.API.get('/api/library-roots');
+                root = rootForPath(Array.isArray(data?.roots) ? data.roots : [], folderPath);
+            } catch (error) {
+                say('libraryRoots.watchFailed', 'Could not change watching for this folder', 'error');
+                return false;
+            }
+            if (!root) {
+                say('flow.watchFolderNotFound', 'This folder is not in Library Folders, so it cannot be watched. Add it there first.', 'warning');
+                return false;
+            }
+            if (Number(root.watch) === 1) {
+                say('flow.watchFolderAlready', 'Already watching {folder}: new pictures join the gallery by themselves.', 'info');
+                return true;
+            }
+            try {
+                await app.API.patch(`/api/library-roots/${Number(root.id)}/watch`, { watch: true });
+            } catch (error) {
+                say('libraryRoots.watchFailed', 'Could not change watching for this folder', 'error');
+                return false;
+            }
+            say('flow.watchFolderOn', 'Watching {folder}: new pictures join the gallery by themselves. Turn it off in Library Folders.', 'success');
+            this.poke();
+            return true;
+        },
+
         _refreshViews() {
             // Forced: polls are 4 s apart, and a throttled call here would
             // drop this arrival for good (the next poll sees no change).
@@ -95,5 +151,6 @@
         FolderWatch.start();
     }
 
+    FolderWatch.rootForPath = rootForPath;
     window.FolderWatch = FolderWatch;
 })();

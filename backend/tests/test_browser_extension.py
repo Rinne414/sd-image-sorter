@@ -377,6 +377,7 @@ def test_a_file_that_is_not_a_picture_is_refused(test_client, registry):
         name="x.png",
     )
     assert answer.status_code == 415
+    assert answer.json()["code"] == "collect_not_picture"
     folder = config.output_root() / "collected" / datetime.now().strftime("%Y-%m-%d")
     assert not [p for p in folder.glob("*") if p.is_file()] if folder.exists() else True
 
@@ -446,6 +447,9 @@ def test_collect_by_url_sends_the_page_as_referer(test_client, registry):
         refused = test_client.post("/api/collect/url", json={"url": image_url})
         assert refused.status_code == 502
         assert "403" in refused.json()["error"]
+        # The page says it in the UI language from the code; English stays the fallback.
+        assert refused.json()["code"] == "collect_site_refused"
+        assert refused.json()["params"] == {"status": 403}
 
 
 def test_paste_saves_into_collected_and_converts_unknown_formats(test_client):
@@ -469,12 +473,11 @@ def test_paste_saves_into_collected_and_converts_unknown_formats(test_client):
         files={"file": ("pasted.png", _sd_png_bytes(), "image/png")},
     )
     assert plain.json()["converted_from"] is None
-    assert (
-        test_client.post(
-            "/api/collect/url", json={"url": "file:///C:/Windows/win.ini"}
-        ).status_code
-        == 400
+    not_web = test_client.post(
+        "/api/collect/url", json={"url": "file:///C:/Windows/win.ini"}
     )
+    assert not_web.status_code == 400
+    assert not_web.json()["code"] == "collect_url_not_web"
 
 
 def test_source_of_a_picture_that_was_not_collected_is_null(test_client):

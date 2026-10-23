@@ -31,6 +31,14 @@ from services import video_tools
 
 logger = logging.getLogger(__name__)
 
+
+class InstallError(RuntimeError):
+    """A known reason the install stopped; ``code`` names it for the page."""
+
+    def __init__(self, message: str, code: str) -> None:
+        super().__init__(message)
+        self.code = code
+
 RELEASE_API = "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/tags/latest"
 HTTP_TIMEOUT_SECONDS = 60
 CHUNK_BYTES = 1024 * 1024
@@ -89,7 +97,9 @@ def _extract(archive: Path, target: Path) -> None:
                     target_resolved not in destination.parents
                     and destination != target_resolved
                 ):
-                    raise RuntimeError(f"Unsafe path in archive: {member}")
+                    raise InstallError(
+                        f"Unsafe path in archive: {member}", "video_install_bad_archive"
+                    )
             bundle.extractall(target)
         return
     with tarfile.open(archive, "r:xz") as bundle:
@@ -104,7 +114,9 @@ def _bin_folder(unpacked: Path) -> Path:
             and (candidate.parent / f"ffmpeg{exe}").is_file()
         ):
             return candidate.parent.parent
-    raise RuntimeError("The download did not contain ffmpeg and ffprobe")
+    raise InstallError(
+        "The download did not contain ffmpeg and ffprobe", "video_install_bad_archive"
+    )
 
 
 class FfmpegInstaller:
@@ -124,8 +136,9 @@ class FfmpegInstaller:
     def start(self) -> Dict[str, Any]:
         tag = platform_tag()
         if tag is None:
-            raise RuntimeError(
-                "No ready-made ffmpeg for this system; install ffmpeg with your package manager"
+            raise InstallError(
+                "No ready-made ffmpeg for this system; install ffmpeg with your package manager",
+                "video_install_unsupported",
             )
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
@@ -155,14 +168,22 @@ class FfmpegInstaller:
             self._install(_bin_folder(unpacked), tools_dir / "ffmpeg")
             video_tools.forget_tools()
             if video_tools.find_tools(refresh=True) is None:
-                raise RuntimeError("ffmpeg was unpacked but could not be found")
+                raise InstallError(
+                    "ffmpeg was unpacked but could not be found", "video_install_bad_archive"
+                )
             self._set(state="done", phase="done")
             from services.video_index import get_video_indexer
 
             get_video_indexer().kick()
         except Exception as exc:
             logger.warning("Video support install failed: %s", exc)
-            self._set(state="failed", error=str(exc))
+            # error_code + error_params let the page say it in its language.
+            self._set(
+                state="failed",
+                error=str(exc),
+                error_code=getattr(exc, "code", "video_install_failed"),
+                error_params={"reason": str(exc)},
+            )
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
@@ -175,11 +196,15 @@ class FfmpegInstaller:
             (a for a in assets if a.get("name") == "checksums.sha256"), None
         )
         if asset is None or checksums is None:
-            raise RuntimeError("The ffmpeg release has no LGPL build for this system")
+            raise InstallError(
+                "The ffmpeg release has no LGPL build for this system", "video_install_no_build"
+            )
         with _open(checksums["browser_download_url"]) as response:
             expected = expected_sha256(response.read().decode("utf-8"), asset["name"])
         if not expected:
-            raise RuntimeError("The release lists no checksum for the download")
+            raise InstallError(
+                "The release lists no checksum for the download", "video_install_no_checksum"
+            )
         self._set(
             phase="downloading", file=asset["name"], total=int(asset.get("size") or 0)
         )
@@ -196,8 +221,9 @@ class FfmpegInstaller:
                 downloaded += len(chunk)
                 self._set(downloaded=downloaded)
         if digest.hexdigest().lower() != expected:
-            raise RuntimeError(
-                "The download does not match its published SHA256; not installed"
+            raise InstallError(
+                "The download does not match its published SHA256; not installed",
+                "video_install_checksum_mismatch",
             )
         return archive
 

@@ -61,7 +61,7 @@ def _token(request: Request) -> Optional[str]:
 
 
 def _http_error(exc: CollectError | DownloadError) -> HTTPException:
-    return HTTPException(status_code=exc.status_code, detail=exc.message)
+    return HTTPException(status_code=exc.status_code, detail=exc.detail())
 
 
 # Extension lane ------------------------------------------------------------
@@ -87,7 +87,9 @@ def ext_pair(body: PairRequest, request: Request) -> Dict[str, Any]:
             token=body.token,
         )
     except PairingError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=400, detail={"code": exc.code, "message": str(exc)}
+        ) from exc
     return {"id": pairing.id, "state": pairing.state}
 
 
@@ -104,7 +106,8 @@ def _meta_from_text(text: Optional[str]) -> Dict[str, Any]:
         meta = json.loads(text or "{}")
     except ValueError as exc:
         raise HTTPException(
-            status_code=400, detail="The picture details are not JSON."
+            status_code=400,
+            detail={"code": "ext_bad_meta", "message": "The picture details are not JSON."},
         ) from exc
     return meta if isinstance(meta, dict) else {}
 
@@ -117,7 +120,11 @@ async def ext_collect(request: Request) -> Dict[str, Any]:
     upload = form.get("file")
     if not isinstance(upload, UploadFile):
         raise HTTPException(
-            status_code=400, detail="A 'file' part with the picture is required."
+            status_code=400,
+            detail={
+                "code": "collect_no_file",
+                "message": "A 'file' part with the picture is required.",
+            },
         )
     meta_part = form.get("meta")
     meta = _meta_from_text(meta_part if isinstance(meta_part, str) else None)
@@ -189,13 +196,20 @@ def extension_decide(
     rejection = own_page_rejection(request)
     if rejection:
         raise HTTPException(
-            status_code=403, detail="Only this program's own page can pair a browser."
+            status_code=403,
+            detail={
+                "code": "ext_own_page_only",
+                "message": "Only this program's own page can pair a browser.",
+            },
         )
     decided = get_pairing_registry().decide(pairing_id, body.allow)
     if decided is None:
         raise HTTPException(
             status_code=404,
-            detail="This request is no longer waiting. Ask again from the extension.",
+            detail={
+                "code": "ext_request_gone",
+                "message": "This request is no longer waiting. Ask again from the extension.",
+            },
         )
     return decided
 
@@ -204,7 +218,10 @@ def extension_decide(
 def extension_revoke(pairing_id: str, request: Request) -> Dict[str, Any]:
     require_own_page(request, "revoke a paired browser")
     if not get_pairing_registry().revoke(pairing_id):
-        raise HTTPException(status_code=404, detail="This browser is not paired.")
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "ext_pairing_not_found", "message": "This browser is not paired."},
+        )
     return {"revoked": pairing_id}
 
 
@@ -217,7 +234,12 @@ async def extension_install_folders(request: Request) -> Dict[str, Any]:
         return await run_in_threadpool(prepare_install_folders)
     except OSError as exc:
         raise HTTPException(
-            status_code=503, detail=f"The extension folders could not be written: {exc}"
+            status_code=503,
+            detail={
+                "code": "ext_folders_failed",
+                "message": f"The extension folders could not be written: {exc}",
+                "params": {"reason": str(exc)},
+            },
         ) from exc
 
 
@@ -225,10 +247,16 @@ async def extension_install_folders(request: Request) -> Dict[str, Any]:
 async def extension_open_folder(body: OpenFolderRequest, request: Request) -> Dict[str, Any]:
     require_own_page(request, "open the extension folder")
     if body.browser not in TARGETS:
-        raise HTTPException(status_code=400, detail="Unknown browser.")
+        raise HTTPException(
+            status_code=400, detail={"code": "ext_unknown_browser", "message": "Unknown browser."}
+        )
     folders = await run_in_threadpool(prepare_install_folders)
     if not await run_in_threadpool(open_in_file_manager, Path(folders[body.browser])):
         raise HTTPException(
-            status_code=501, detail="No file manager is available on this computer."
+            status_code=501,
+            detail={
+                "code": "ext_no_file_manager",
+                "message": "No file manager is available on this computer.",
+            },
         )
     return {"status": "ok", "path": folders[body.browser]}

@@ -10,6 +10,7 @@ import { useBatches } from '../batch/batchApi'
 import { askNewBatch } from '../batch/dialogStore'
 import { BATCH_KINDS } from '../batch/labels'
 import { useJobs } from '../jobs/jobs'
+import { libraryName } from '../libraries/libraryName'
 import { currentLibraryParams } from '../library/params'
 import { openRandom } from '../library/randomOpen'
 import { useShortcutSheet } from '../library/ShortcutSheet'
@@ -120,7 +121,7 @@ function Palette() {
     ]
     for (const lib of libraries.data?.libraries ?? []) {
       if (lib.id === s.libraryId) continue
-      const name = lib.is_default && lib.name === 'Main library' ? translate(lang, 'rail.mainLibrary') : lib.name
+      const name = libraryName(lib, (key) => translate(lang, key))
       list.push(mk(`lib-${lib.id}`, 'palette.group.library', 'palette.cmd.switchTo', () => s.setLibrary(lib.id), undefined, { name }))
     }
     list.push(mk('random', 'palette.group.library', 'lib.palette.random', () => void openRandom()))

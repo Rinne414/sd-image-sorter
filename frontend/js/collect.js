@@ -34,9 +34,9 @@
         const response = await fetch(path, { method: 'POST', body: form, headers: { Accept: 'application/json' } });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
-            const message = data.error || data.detail;
-            const error = new Error(typeof message === 'string' ? message : `HTTP ${response.status}`);
+            const error = new Error(window.apiErrorText(data, `HTTP ${response.status}`));
             error.apiStatus = response.status;
+            error.apiData = data;
             throw error;
         }
         return data;

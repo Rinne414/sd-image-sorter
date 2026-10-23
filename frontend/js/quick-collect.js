@@ -14,6 +14,7 @@
     const LIBRARY_KEY = 'sd-library-workspace-v1';
     const CHANNEL = 'sd-image-sorter-collect';
     const PICTURE_TYPES = /^image\/(png|jpeg|webp|bmp|gif)$/;
+    const DEFAULT_LIBRARY_SEED_NAME = 'Main library';
 
     const t = (key, fallback, params) => {
         const text = window.I18n?.t?.(key, params);
@@ -39,10 +40,20 @@
         const response = await fetch(path, Object.assign({}, init, { headers }));
         const body = await response.json().catch(() => null);
         if (!response.ok) {
-            const detail = body?.detail;
-            throw new Error(typeof detail === 'string' ? detail : (detail?.message || `HTTP ${response.status}`));
+            throw new Error(window.apiErrorText(body, `HTTP ${response.status}`));
         }
         return body;
+    }
+
+    // The backend seeds the default library as "Main library"; until the user
+    // renames it, it is named in the UI language (主图库), as in the gallery
+    // (library-workspace.js libraryDisplayName).
+    function displayLibraryName(library) {
+        if (!library?.name) return null;
+        if (library.is_default && library.name === DEFAULT_LIBRARY_SEED_NAME) {
+            return t('library.defaultName', DEFAULT_LIBRARY_SEED_NAME);
+        }
+        return library.name;
     }
 
     function libraryName() {
@@ -60,7 +71,7 @@
     async function loadContext() {
         try {
             const [current, folders] = await Promise.all([api('/api/libraries/current'), api('/api/output-folders')]);
-            state.library = current?.library?.name || null;
+            state.library = displayLibraryName(current?.library);
             state.folder = folders?.folders?.collected || '';
         } catch (_error) {
             // The lead then names the folder and library generically.

@@ -79,7 +79,7 @@ function renderDiskUsage(data) {
             const count = Number(lib.image_count || 0);
             return `
                 <div class="disk-preserved-row">
-                    <span class="disk-preserved-name">${escapeHtml(lib.name || lib.id)}</span>
+                    <span class="disk-preserved-name">${escapeHtml(window.LibraryWorkspace?.getLibraryNameById?.(lib.id) || lib.name || lib.id)}</span>
                     <span class="disk-preserved-size">${escapeHtml(String(count))} ${escapeHtml(appT('disk.imagesUnit', 'images'))}</span>
                 </div>
             `;

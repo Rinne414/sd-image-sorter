@@ -955,9 +955,21 @@ body.entry-active {
     background: rgba(var(--blue-rgb), 0.08);
 }
 
+/* One icon box for every row, so a sprite icon (16px wide) and a colour
+   emoji (about 25px) put their titles at the same x. */
 .catalog-icon {
     font-size: 18px;
     flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 24px;
+}
+
+.catalog-icon .icon {
+    width: 18px;
+    height: 18px;
 }
 
 .catalog-copy {

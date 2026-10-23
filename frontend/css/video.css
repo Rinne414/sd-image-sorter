@@ -5,6 +5,14 @@
     position: relative;
 }
 
+/* Until the frame grab arrives (ffmpeg takes a moment per video), the card
+   shows the same play-mark tile the server sends when no frame can be read,
+   instead of a black box. The thumbnail covers it once loaded. */
+.gallery-item.is-video,
+.gallery-item.is-video .gallery-item-media {
+    background: #18181a url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='none' stroke='%23c8873c' stroke-width='1.2'/%3E%3Cpath d='M10 7.8v8.4l6.3-4.2z' fill='%23c8873c'/%3E%3C/svg%3E") center / 34% no-repeat;
+}
+
 .gallery-video-badge {
     position: absolute;
     right: 8px;

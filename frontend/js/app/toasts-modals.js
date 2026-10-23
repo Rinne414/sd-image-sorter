@@ -551,12 +551,19 @@ function showPipelineNextStep(opts = {}) {
     _setSpriteIcon(iconEl, opts.icon || 'i-check');
     titleEl.textContent = opts.title || '';
     actionsEl.innerHTML = '';
-    const actions = Array.isArray(opts.actions) ? opts.actions.slice(0, 3) : [];
+    const actions = Array.isArray(opts.actions) ? opts.actions : [];
     actions.forEach((a, i) => {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'btn btn-small ' + (i === 0 ? 'btn-primary' : 'btn-ghost');
-        btn.textContent = (a.icon ? a.icon + ' ' : '') + (a.label || '');
+        if (String(a.icon || '').startsWith('#i-')) {
+            // A sprite icon ('#i-folders') instead of a text glyph.
+            const iconEl = document.createElement('span');
+            _setSpriteIcon(iconEl, a.icon.slice(1));
+            btn.append(iconEl, ' ', a.label || '');
+        } else {
+            btn.textContent = (a.icon ? a.icon + ' ' : '') + (a.label || '');
+        }
         btn.addEventListener('click', () => {
             hidePipelineNextStep();
             _runPipelineNextStepAction(a.action);

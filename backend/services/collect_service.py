@@ -60,12 +60,20 @@ _name_lock = threading.Lock()
 
 
 class CollectError(Exception):
-    """A picture that could not be collected; the message is for the user."""
+    """A picture that could not be collected.
 
-    def __init__(self, message: str, status_code: int = 400) -> None:
+    ``code`` lets the page say it in the UI language; ``message`` is the
+    English fallback.
+    """
+
+    def __init__(self, message: str, status_code: int = 400, code: str = "collect_failed") -> None:
         super().__init__(message)
         self.message = message
         self.status_code = status_code
+        self.code = code
+
+    def detail(self) -> dict:
+        return {"code": self.code, "message": self.message, "params": {}}
 
 
 @dataclass(frozen=True)
@@ -144,7 +152,9 @@ def _picture_format(path: Path) -> str:
     except Image.DecompressionBombError:
         return "LARGE"
     except (OSError, ValueError) as exc:
-        raise CollectError("This is not a picture the program can read.", 415) from exc
+        raise CollectError(
+            "This is not a picture the program can read.", 415, "collect_not_picture"
+        ) from exc
 
 
 def _convert_to_png(path: Path) -> Path:
@@ -159,10 +169,13 @@ def _convert_to_png(path: Path) -> Path:
         raise CollectError(
             "This picture is in a format the gallery does not show and is too large to convert to PNG.",
             415,
+            "collect_too_large_to_convert",
         ) from exc
     except (OSError, ValueError) as exc:
         png_path.unlink(missing_ok=True)
-        raise CollectError("This picture could not be converted to PNG.", 415) from exc
+        raise CollectError(
+            "This picture could not be converted to PNG.", 415, "collect_convert_failed"
+        ) from exc
     path.unlink(missing_ok=True)
     return png_path
 
@@ -210,5 +223,5 @@ def save_collected_stream(
         raise
     if tmp_path.stat().st_size == 0:
         tmp_path.unlink(missing_ok=True)
-        raise CollectError("The picture arrived empty.", 400)
+        raise CollectError("The picture arrived empty.", 400, "collect_empty")
     return store_collected_file(tmp_path, suggested_name)

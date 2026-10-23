@@ -843,8 +843,9 @@
                                 <span class="sidebar-section-title" data-i18n="folders.title">Folders</span>
                             </button>
                             <div class="sidebar-section-actions">
-                                <button id="btn-manage-roots" class="btn btn-ghost btn-small btn-icon-only" title="Manage library folders" aria-label="Manage library folders" data-i18n-title="libraryRoots.manage" data-i18n-aria="libraryRoots.manage">
+                                <button id="btn-manage-roots" class="btn btn-ghost btn-small sidebar-manage-roots" title="Manage library folders: rescan, remove, watch for new pictures" aria-label="Manage library folders: rescan, remove, watch for new pictures" data-i18n-title="libraryRoots.manage" data-i18n-aria="libraryRoots.manage">
                                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-folders"/></svg></span>
+                                    <span data-i18n="libraryRoots.manageShort">Manage</span>
                                 </button>
                                 <button id="btn-refresh-folders" class="btn btn-ghost btn-small btn-icon-only" title="Refresh folder list" aria-label="Refresh folder list" data-i18n-title="folders.refresh" data-i18n-aria="folders.refresh">
                                     <span aria-hidden="true">⟳</span>
@@ -6424,15 +6425,18 @@
                 <h3 id="library-roots-modal-title" data-i18n="libraryRoots.title">Library Folders</h3>
                 <p class="modal-description" data-i18n="libraryRoots.description">Folders you've scanned as image sources. Remove a source (the image files stay on disk) or rescan it to pick up newly added images.</p>
 
-                <p class="library-roots-watch-hint" id="library-roots-watch-hint" data-i18n="libraryRoots.watchHint">Tick "Watch for new pictures" on your ComfyUI or WebUI output folder: new pictures show up in the gallery by themselves, without Scan.</p>
-
-                <label class="checkbox-label library-roots-autorefresh">
-                    <input type="checkbox" id="library-roots-autorefresh-toggle">
-                    <span class="checkbox-custom" aria-hidden="true"></span>
-                    <span class="checkbox-text" data-i18n="libraryRoots.autoRefresh">Auto-refresh these folders when idle (quick import, no AI tagging)</span>
-                </label>
+                <p class="library-roots-watch-hint" id="library-roots-watch-hint" data-i18n="libraryRoots.watchHint">Tick "Watch for new pictures" on your ComfyUI or WebUI output folder: new pictures show up in the gallery within seconds, without Scan.</p>
 
                 <div id="library-roots-list" class="library-roots-list" aria-live="polite"></div>
+
+                <div class="library-roots-other" role="group" aria-labelledby="library-roots-other-title">
+                    <p class="library-roots-other-title" id="library-roots-other-title" data-i18n="libraryRoots.otherWays">Other ways to pick up new pictures</p>
+                    <label class="checkbox-label library-roots-autorefresh">
+                        <input type="checkbox" id="library-roots-autorefresh-toggle">
+                        <span class="checkbox-custom" aria-hidden="true"></span>
+                        <span class="checkbox-text" data-i18n="libraryRoots.autoRefresh">Rescan all these folders now and then while the program is idle (for folders you do not watch; new pictures only, no AI tagging)</span>
+                    </label>
+                </div>
 
                 <div class="modal-actions">
                     <button class="btn btn-primary" id="btn-library-roots-add" data-i18n="libraryRoots.add">Add Folder…</button>
@@ -8540,6 +8544,7 @@
     <script src="/static/js/lang/zh-CN.js"></script>
     <script src="/static/js/guide-translations.js"></script>
     <script src="/static/js/i18n.js"></script>
+    <script src="/static/js/api-error-text.js"></script>
     <!-- guide.js decomposition (contextual-guide family; smart-tag precedent).
          Classic static tags sharing one global lexical scope: copy (data
          consts) -> engine (the window.Guide singleton object) -> boot (LAST:
