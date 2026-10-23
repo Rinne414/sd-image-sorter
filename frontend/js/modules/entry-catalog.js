@@ -88,6 +88,7 @@
             items: [
                 { icon: '🛡️', nameKey: 'tools.obfuscation', name: 'Privacy Tools', descKey: 'catalog.obfuscation', desc: 'Obfuscate images for upload sites and restore them back (inside Reader)', run: () => openReaderTool('obfuscation') },
                 { icon: '🧹', nameKey: 'dup.navTitle', name: 'Duplicate Cleanup', descKey: 'catalog.dup', desc: 'Scan the whole library for duplicates and clean them in one pass', run: () => { goView('gallery'); window.requestAnimationFrame(() => clickWhenReady('nav-tools-dup-cleaner', 10)); } },
+                { icon: '#i-folders', nameKey: 'libraryRoots.watch', name: 'Watch for new pictures', descKey: 'catalog.watch', desc: 'Watch your ComfyUI or WebUI output folder: new pictures join the gallery by themselves, no Scan', run: () => { goView('gallery'); window.LibraryRootsUI?.open?.(); } },
                 { icon: '#i-wand', nameKey: 'nav.reverse', name: 'Reverse Prompt', descKey: 'catalog.reverse', desc: 'Drop one image. If the file stored a prompt, that record is shown first; you can still infer from pixels to compare.', run: () => goView('reverse') },
                 { icon: '🧪', nameKey: 'nav.promptlab', name: 'Prompt Helper', descKey: 'catalog.promptlab', desc: 'Build prompts from your library: weights, templates, negatives', run: () => goView('promptlab') },
                 { icon: '🖌️', nameKey: 'nav.artist', name: 'Style Finder', descKey: 'catalog.artist', desc: 'Identify artists with a similar style', run: () => goView('artist') },

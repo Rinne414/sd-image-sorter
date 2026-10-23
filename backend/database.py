@@ -206,6 +206,8 @@ from db_library_roots import (
     get_library_root,
     remove_library_root,
     set_library_root_enabled,
+    set_library_root_watch,
+    list_watched_library_roots,
     touch_library_root_scanned,
 )
 from db_gallery_session import (

@@ -72,8 +72,10 @@
                 });
             }
 
-            document.getElementById('library-roots-list')
-                ?.addEventListener('click', (event) => this._onListClick(event));
+            const list = document.getElementById('library-roots-list');
+            list?.addEventListener('click', (event) => this._onListClick(event));
+            list?.addEventListener('change', (event) => this._onListChange(event));
+            window.addEventListener('folder-watch-status', (event) => this._showWatchStatus(event.detail));
             window.addEventListener('library-workspace-changed', () => {
                 const modal = document.getElementById('library-roots-modal');
                 if (modal && modal.classList.contains('visible')) {
@@ -137,6 +139,10 @@
             }
             metaParts.push(`${count} ${escapeHtml(t('libraryRoots.images', 'images'))}`);
             metaParts.push(escapeHtml(scanned));
+            const isWatched = Number(root.watch) === 1;
+            const watchState = isWatched
+                ? `<span class="library-root-watch-state" data-root-id="${id}">${escapeHtml(this._watchText(this._watchStatusFor(id)))}</span>`
+                : '';
             const rowClass = isMissing ? 'library-root-row is-missing' : 'library-root-row';
             const missingTitle = isMissing
                 ? ` title="${escapeHtml(t('libraryRoots.missingHint', 'This folder no longer exists on disk. Remove it, or reconnect it by scanning the folder again.'))}"`
@@ -145,16 +151,86 @@
                 + '<div class="library-root-info">'
                 + `<span class="library-root-path" title="${escapeHtml(root.path)}">${escapeHtml(root.path)}</span>`
                 + `<span class="library-root-meta">${metaParts.join(' · ')}</span>`
+                + watchState
                 + '</div>'
                 + '<div class="library-root-actions">'
+                + '<label class="checkbox-label library-root-watch">'
+                + `<input type="checkbox" data-action="watch" data-id="${id}"${isWatched ? ' checked' : ''}>`
+                + '<span class="checkbox-custom" aria-hidden="true"></span>'
+                + `<span class="checkbox-text">${escapeHtml(t('libraryRoots.watch', 'Watch for new pictures'))}</span>`
+                + '</label>'
                 + `<button type="button" class="btn btn-secondary btn-small" data-action="rescan" data-id="${id}">${escapeHtml(t('libraryRoots.rescan', 'Rescan'))}</button>`
                 + `<button type="button" class="btn btn-ghost btn-small danger" data-action="remove" data-id="${id}">${escapeHtml(t('libraryRoots.remove', 'Remove'))}</button>`
                 + '</div></div>';
         },
 
+        _onListChange(event) {
+            const box = event.target.closest('input[data-action="watch"]');
+            if (!box) return;
+            const id = Number(box.dataset.id);
+            if (Number.isFinite(id)) this._setWatch(id, box);
+        },
+
+        async _setWatch(id, box) {
+            const watch = box.checked;
+            box.disabled = true;
+            try {
+                await appRef().API?.patch?.(`/api/library-roots/${id}/watch`, { watch });
+            } catch (error) {
+                box.checked = !watch;
+                box.disabled = false;
+                toast(t('libraryRoots.watchFailed', 'Could not change watching for this folder'), 'error');
+                return;
+            }
+            toast(
+                watch
+                    ? t('libraryRoots.watchOn', 'Watching this folder: new pictures appear in the gallery by themselves')
+                    : t('libraryRoots.watchOff', 'Stopped watching this folder'),
+                'success',
+            );
+            window.FolderWatch?.poke?.();
+            await this.refresh();
+        },
+
+        _watchStatusFor(id) {
+            const roots = window.FolderWatch?.status?.()?.roots;
+            return Array.isArray(roots) ? roots.find((root) => Number(root.root_id) === id) : null;
+        },
+
+        _watchText(state) {
+            if (!state) return t('libraryRoots.watchStarting', 'Watching: starting…');
+            if (state.state === 'missing') return t('libraryRoots.watchMissing', 'Watching paused: the folder is not there. It resumes when the folder is back.');
+            if (state.state === 'error') {
+                return t('libraryRoots.watchError', 'Watching stopped: {error}. Retrying every 30 s.')
+                    .replace('{error}', String(state.error || ''));
+            }
+            if (state.state === 'catching_up' || state.state === 'starting') {
+                return t('libraryRoots.watchCatchingUp', 'Watching: adding pictures made while the app was closed…');
+            }
+            const base = state.mode === 'polling'
+                ? t('libraryRoots.watchPolling', 'Watching (network folder, checked every 15 s)')
+                : t('libraryRoots.watchActive', 'Watching');
+            const imported = Number(state.imported || 0);
+            if (!imported) return base;
+            const when = String(state.last_import_at || '').replace('T', ' ');
+            return `${base} · ${t('libraryRoots.watchImported', '{count} added, last at {when}')
+                .replace('{count}', String(imported))
+                .replace('{when}', when)}`;
+        },
+
+        _showWatchStatus(status) {
+            const list = document.getElementById('library-roots-list');
+            if (!list) return;
+            list.querySelectorAll('.library-root-watch-state').forEach((node) => {
+                const id = Number(node.dataset.rootId);
+                const roots = Array.isArray(status?.roots) ? status.roots : [];
+                node.textContent = this._watchText(roots.find((root) => Number(root.root_id) === id));
+            });
+        },
+
         _onListClick(event) {
             const trigger = event.target.closest('[data-action]');
-            if (!trigger) return;
+            if (!trigger || trigger.dataset.action === 'watch') return;
             const id = Number(trigger.dataset.id);
             if (!Number.isFinite(id)) return;
             if (trigger.dataset.action === 'rescan') this._rescan(id);

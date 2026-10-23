@@ -6,11 +6,12 @@ import gzip
 import logging
 import os
 import shutil
+import stat as stat_mode
 import threading
 import time
 import itertools
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, ThreadPoolExecutor, wait
-from typing import List, Dict, Any, Optional, Callable, Iterator
+from typing import List, Dict, Any, Optional, Callable, Iterator, Sequence
 from datetime import datetime
 from collections.abc import MutableMapping
 from pathlib import Path
@@ -234,6 +235,7 @@ def scan_folder(
     metadata_workers: int = DEFAULT_METADATA_WORKERS,
     precise_total: bool = True,
     restore_disguised: bool = True,
+    only_paths: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
     """
     Scan a folder for images and add them to the database.
@@ -245,6 +247,11 @@ def scan_folder(
         stop_requested: Optional callback returning True when the scan should stop
         restore_disguised: For each new or changed chat-disguise PNG, write its
             real picture beside it as ``<name>_real.png`` and index both
+        only_paths: Import just these files (the folder watcher's new or
+            changed pictures) instead of walking ``folder_path``. Each one goes
+            through the same unchanged check, other-library skip and metadata
+            parse as a walked file; missing, linked or non-picture paths are
+            skipped. ``recursive`` and ``cleanup_missing`` do not apply.
     
     Returns:
         {
@@ -402,7 +409,43 @@ def scan_folder(
             result["counted"] += 1
             result["total"] += 1
 
+    def _is_inside_root(path: str, root_real: str) -> bool:
+        # realpath resolves linked folders and junctions, so a file reached
+        # through one (which the walk would skip) lands outside the root here.
+        try:
+            return os.path.commonpath([root_real, os.path.realpath(path)]) == root_real
+        except ValueError:
+            return False
+
+    def _iter_only_paths():
+        seen_keys: set[str] = set()
+        root_real = os.path.realpath(normalized_folder_path)
+        for raw_path in only_paths or ():
+            _check_cancel()
+            path = os.fspath(raw_path)
+            key = _path_key(path)
+            if key in seen_keys or key in restored_keys:
+                continue
+            seen_keys.add(key)
+            if Path(path).suffix.lower() not in IMAGE_EXTENSIONS:
+                continue
+            if not _is_inside_root(path, root_real):
+                continue
+            try:
+                stat_result = os.stat(path, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            except OSError as exc:
+                _record_directory_issue(path, str(exc), "directory_os_error")
+                continue
+            if not stat_mode.S_ISREG(stat_result.st_mode):
+                continue
+            yield {"path": path, "stat": stat_result}
+
     def _iter_images():
+        if only_paths is not None:
+            yield from _iter_only_paths()
+            return
         pending_dirs = [os.fspath(folder)]
         root_dir = os.path.abspath(os.fspath(folder))
         seen_directory_ids: set[tuple[int, int]] = set()
@@ -483,7 +526,7 @@ def scan_folder(
                 _record_directory_issue(current_dir, str(exc), kind)
                 continue
 
-    if cleanup_missing:
+    if cleanup_missing and only_paths is None:
         _check_cancel()
         result["removed"] = _cleanup_missing_scope_entries(
             normalized_folder_path,

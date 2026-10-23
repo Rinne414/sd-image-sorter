@@ -349,6 +349,8 @@ function _refreshScanDrivenViews(force = false, options = {}) {
     }
     // P17: Refresh Folders tree after scan completes
     window.FolderTreeUI?.refresh?.();
+    // The library chip ("Main library · N") counts images too.
+    window.LibraryWorkspace?.refreshFromServer?.();
 }
 
 function getScanProgressMetrics(progress) {

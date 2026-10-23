@@ -134,7 +134,7 @@ from exceptions import (
 )
 
 # Import routers
-from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, disguise, censor_media, aesthetic, updates, disk, vlm, colors, tags_bulk, dataset, dataset_projects, annotations, smart_tag, collections, entry, libraries, duplicates, publish, metadata_repair, masks, style_map, output_folders, batches, batch_uploads, file_manager, image_lookup, interface
+from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, disguise, censor_media, aesthetic, updates, disk, vlm, colors, tags_bulk, dataset, dataset_projects, annotations, smart_tag, collections, entry, libraries, duplicates, publish, metadata_repair, masks, style_map, output_folders, batches, batch_uploads, file_manager, image_lookup, interface, folder_watch
 
 # Import services
 from services import (
@@ -143,6 +143,7 @@ from services import (
     CensorService,
     SimilarityService,
 )
+from services.folder_watch import get_folder_watch_service
 
 
 # Service instances (singleton pattern)
@@ -314,10 +315,12 @@ async def lifespan(app: FastAPI):
             name="boot-cache-warmup",
             daemon=True,
         ).start()
+        get_folder_watch_service().start()
 
     yield
     # Shutdown
     logger.info("Shutting down...")
+    get_folder_watch_service().stop()
 
 
 app = FastAPI(
@@ -426,6 +429,7 @@ app.include_router(batches.router)
 app.include_router(batch_uploads.router)
 app.include_router(metadata_repair.router)
 app.include_router(output_folders.router)
+app.include_router(folder_watch.router)
 app.include_router(file_manager.router)
 app.include_router(image_lookup.router)
 app.include_router(interface.router)

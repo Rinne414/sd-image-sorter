@@ -469,7 +469,12 @@ async def remove_library_root(
     service: SortingService = Depends(get_sorting_service),
 ):
     """Unregister a library root (does not delete its images)."""
-    return service.remove_library_root(root_id)
+    result = service.remove_library_root(root_id)
+    # A watched folder stops being watched right away, not at the next round.
+    from services.folder_watch import get_folder_watch_service
+
+    get_folder_watch_service().reload()
+    return result
 
 
 @router.post(

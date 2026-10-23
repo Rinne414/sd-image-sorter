@@ -182,6 +182,22 @@
       }
     },
     {
+      "id": "library.watch",
+      "area": "library",
+      "en": "Watch folders for new pictures",
+      "zh": "监看文件夹，自动收入新图",
+      "classic": [
+        "#btn-manage-roots",
+        "#library-roots-watch-hint"
+      ],
+      "vopus": {
+        "missing": "Vopus library settings have no watch switch yet; watching set in classic still runs"
+      },
+      "next": {
+        "missing": "The new interface has no watch switch yet; watching set in classic still runs"
+      }
+    },
+    {
       "id": "library.import",
       "area": "library",
       "en": "Import images from a folder",

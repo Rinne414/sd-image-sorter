@@ -10161,6 +10161,32 @@ html.lang-zh #view-censor .queue-action-btn span {
     color: var(--danger, #E58985);
     font-weight: 600;
 }
+/* Folder watching: hint, per-row switch and live state */
+.library-roots-watch-hint {
+    color: var(--text-secondary);
+    font-size: var(--fs-label);
+    margin: 0 0 8px;
+}
+/* Path on its own line, controls under it: the watch box on the left,
+   Rescan / Remove on the right. Long paths no longer get squeezed. */
+.library-root-row {
+    flex-wrap: wrap;
+}
+.library-root-info {
+    flex: 1 1 100%;
+}
+.library-root-actions {
+    align-items: center;
+    flex: 1 1 100%;
+}
+.library-root-watch {
+    margin-right: auto;
+    white-space: nowrap;
+}
+.library-root-watch-state {
+    color: var(--accent, var(--text-secondary));
+    font-size: var(--fs-label);
+}
 
 /* Add-to-collection picker (reuses .gallery-context-menu base look) */
 .collections-picker-menu {

@@ -6245,6 +6245,8 @@
                 <h3 id="library-roots-modal-title" data-i18n="libraryRoots.title">Library Folders</h3>
                 <p class="modal-description" data-i18n="libraryRoots.description">Folders you've scanned as image sources. Remove a source (the image files stay on disk) or rescan it to pick up newly added images.</p>
 
+                <p class="library-roots-watch-hint" id="library-roots-watch-hint" data-i18n="libraryRoots.watchHint">Tick "Watch for new pictures" on your ComfyUI or WebUI output folder: new pictures show up in the gallery by themselves, without Scan.</p>
+
                 <label class="checkbox-label library-roots-autorefresh">
                     <input type="checkbox" id="library-roots-autorefresh-toggle">
                     <span class="checkbox-custom" aria-hidden="true"></span>
@@ -8449,6 +8451,7 @@
     <script src="/static/js/sidebar-sections.js"></script>
     <script src="/static/js/library-roots-ui.js"></script>
     <script src="/static/js/auto-refresh.js"></script>
+    <script src="/static/js/folder-watch.js"></script>
     <script src="/static/js/autosep.js"></script>
     <!-- Auto-Separate family (decomposed VERBATIM from the former 1,981-line
          autosep.js; the tag above is the retained servable shim).

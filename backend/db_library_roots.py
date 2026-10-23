@@ -164,6 +164,31 @@ def set_library_root_enabled(root_id: int, enabled: bool) -> bool:
         return cursor.rowcount > 0
 
 
+def set_library_root_watch(root_id: int, watch: bool) -> bool:
+    """Turn folder watching on or off for one root. True if a row was updated."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE library_roots SET watch = ? WHERE id = ?",
+            (1 if watch else 0, int(root_id)),
+        )
+        return cursor.rowcount > 0
+
+
+def list_watched_library_roots() -> List[Dict[str, Any]]:
+    """Every enabled root with watching on, across all libraries, oldest first."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT * FROM library_roots
+            WHERE enabled = 1 AND watch = 1
+            ORDER BY id
+            """
+        )
+        return [_row_to_dict(row) for row in cursor.fetchall()]
+
+
 def touch_library_root_scanned(
     path: str,
     library_id: Optional[str] = None,
