@@ -11,6 +11,8 @@ export interface LibraryRoot {
   /** false: the folder is no longer on disk. */
   exists: boolean
   last_scanned_at: string | null
+  /** Folder watching (migration 063): 1 = new pictures are imported by themselves. */
+  watch?: number | boolean
 }
 
 export interface LibraryRootsResponse {

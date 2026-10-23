@@ -5,6 +5,7 @@ import { CommandPalette } from '../features/command/CommandPalette'
 import { HomePage } from '../features/home/HomePage'
 import { JobsRunner } from '../features/jobs/JobsRunner'
 import { startAutoRefresh } from '../features/library/autoRefreshRun'
+import { startFolderWatch } from '../features/settings/library/watchApi'
 import { DropImport } from '../features/import/DropImport'
 import { useLibraryArrival } from '../features/libraries/useArrival'
 import { useLibraryExists } from '../features/libraries/useLibraryExists'
@@ -38,6 +39,7 @@ export function App() {
 
   // Settings › Library › checking the source folders for new images while idle (off unless switched on).
   useEffect(() => startAutoRefresh(), [])
+  useEffect(() => startFolderWatch(), [])
 
   // Browser and mouse Back go up one level instead of leaving the program.
   useBackNav()

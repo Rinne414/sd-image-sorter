@@ -115,7 +115,20 @@
 
 .rootActions {
   display: flex;
+  align-items: center;
   gap: 4px;
+}
+
+.rootActions .check {
+  margin-right: 8px;
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
+/* The live line of a watched folder: what it is doing, how many pictures it added. */
+.watchState {
+  color: var(--text-2);
+  font-size: var(--fs-1);
 }
 
 .check {

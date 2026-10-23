@@ -191,10 +191,14 @@
         "#library-roots-watch-hint"
       ],
       "vopus": {
-        "missing": "Vopus library settings have no watch switch yet; watching set in classic still runs"
+        "at": "#/settings/library",
+        "find": "[data-testid=\"watch-hint\"]",
+        "note": "the switch is root-watch on each source-folder row, its live state root-watch-state; new pictures refresh the gallery by themselves"
       },
       "next": {
-        "missing": "The new interface has no watch switch yet; watching set in classic still runs"
+        "at": "#/settings/library",
+        "find": "[data-testid=\"watch-hint\"]",
+        "note": "same Settings › Library page as Vopus: root-watch per folder, live state root-watch-state"
       }
     },
     {
