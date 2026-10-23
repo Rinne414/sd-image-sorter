@@ -4,6 +4,7 @@ import { parseSearch, toImageParams } from '../../lib/searchQuery'
 import { useSavedSearches, type SavedSearch } from '../../state/savedSearches'
 import { useToasts } from '../../ui/toasts'
 import { useFavorites, useFolders, useGenerators, useLibraries } from '../../api/queries'
+import { libraryName } from '../libraries/libraryName'
 import { useSelectionDialog } from '../selection/dialogs'
 import { useClearRequest } from '../settings/library/ClearSection'
 import { useStatusDialogs } from '../status/dialogs'
@@ -127,9 +128,7 @@ function Section({ id, title, children }: { id: RailSectionId; title: string; ch
 
 export function displayName(name: string | undefined, isDefault: boolean | undefined, t: ReturnType<typeof useT>): string {
   if (!name) return '…'
-  // The seeded default library is named in English in the database.
-  if (isDefault && name === 'Main library') return t('rail.mainLibrary')
-  return name
+  return libraryName({ name, is_default: isDefault }, t)
 }
 
 function LibraryLabel({ name, count, texture }: { name: string; count: number | null; texture: string }) {

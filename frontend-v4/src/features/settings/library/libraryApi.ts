@@ -2,12 +2,14 @@ import { useQuery } from '@tanstack/react-query'
 import { api, ApiError, unwrap } from '../../../api/client'
 import { queryClient } from '../../../api/queryClient'
 import type { LibrariesResponse, LibraryHealth } from '../../../api/types'
+import { translate, useLang } from '../../../i18n'
 import { tailOfPath } from '../../../lib/paths'
 import { useApp } from '../../../state/store'
 import { useToasts } from '../../../ui/toasts'
 import { afterImport } from '../../import/afterImport'
 import { addJob, isQueueBusy, startingProgress, tr, useJobs } from '../../jobs/jobs'
 import { asScanSource } from '../../jobs/progress'
+import { libraryName } from '../../libraries/libraryName'
 import { lt } from '../libraryText'
 import { readBusy, type BusyWork } from './clearIndex'
 import { removalSummary, rootName } from './roots'
@@ -180,7 +182,7 @@ export async function clearFacts(): Promise<ClearFacts> {
   const records = library?.image_count ?? health.summary.total_images
   const untagged = health.issue_counts.untagged ?? 0
   return {
-    name: library?.name ?? libraryId,
+    name: library ? libraryName(library, (key) => translate(useLang.getState().lang, key)) : libraryId,
     records,
     tagged: Math.max(0, health.summary.total_images - untagged),
     rated: rated.total,

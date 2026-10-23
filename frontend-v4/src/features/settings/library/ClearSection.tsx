@@ -7,6 +7,7 @@ import { useApp } from '../../../state/store'
 import { Dialog } from '../../../ui/Dialog'
 import { useToasts } from '../../../ui/toasts'
 import { tr, useJobs } from '../../jobs/jobs'
+import { libraryName } from '../../libraries/libraryName'
 import { lt, useLT, type LibKey } from '../libraryText'
 import { refusedWorks, worksText, type BusyWork, type Work } from './clearIndex'
 import { clearFacts, clearIndex, probeBusy, stopWork, type ClearFacts } from './libraryApi'
@@ -47,6 +48,7 @@ export const useClearRequest = create<{ requested: boolean; request: () => void;
  */
 export function ClearSection() {
   const t = useLT()
+  const tApp = useT()
   const libraryId = useApp((s) => s.libraryId)
   const library = useLibraries().data?.libraries.find((l) => l.id === libraryId)
   const [checking, setChecking] = useState(false)
@@ -95,7 +97,7 @@ export function ClearSection() {
       <h3 id="libset-clear-title" className={styles.dangerTitle}>
         {t('libset.clear.title')}
       </h3>
-      <p className={styles.lead}>{t('libset.clear.lead', { name: library?.name ?? libraryId, n: library?.image_count ?? 0 })}</p>
+      <p className={styles.lead}>{t('libset.clear.lead', { name: library ? libraryName(library, tApp) : libraryId, n: library?.image_count ?? 0 })}</p>
       <div className={styles.row}>
         <button type="button" className="btn btn-danger" onClick={() => void start()} disabled={checking} data-testid="clear-index">
           {checking ? t('libset.clear.checking') : t('libset.clear.button')}

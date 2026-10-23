@@ -1,5 +1,6 @@
 import type { BatchKind, BatchSummary } from '../../api/types'
 import { useLibraries } from '../../api/queries'
+import { libraryName as libraryLabel } from '../libraries/libraryName'
 import { useLang, useT, type MessageKey } from '../../i18n'
 import { useApp } from '../../state/store'
 import { useBatches, useBatchTemplates } from '../batch/batchApi'
@@ -40,7 +41,7 @@ function Home({ film }: { film: Film | null }) {
   const library = libraries.data?.libraries.find((l) => l.id === libraryId)
   const recent = (batches.data ?? []).slice(0, CONTINUE_COUNT)
   const sort = useSortPending(true)
-  const libraryName = library?.is_default && library.name === 'Main library' ? t('rail.mainLibrary') : library?.name
+  const libraryName = library ? libraryLabel(library, t) : undefined
   // Without the film, the library's own count says it is empty.
   const empty = film ? film.empty : library?.image_count === 0
 

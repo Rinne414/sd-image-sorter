@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react'
+import { useT } from '../../../i18n'
 import { useApp } from '../../../state/store'
+import { libraryName } from '../../libraries/libraryName'
 import { Section } from '../about/Section'
 import { useLT } from '../libraryText'
 import { useSaved } from '../useSaved'
@@ -46,6 +48,7 @@ export function DiskTab() {
 
 function IndexSection({ index }: { index: LibraryIndex }) {
   const t = useLT()
+  const tApp = useT()
   const current = useApp((s) => s.libraryId)
   return (
     <Section title={t('disk.index.title')} testId="disk-index">
@@ -60,7 +63,7 @@ function IndexSection({ index }: { index: LibraryIndex }) {
           {index.libraries.map((lib) => (
             <li key={lib.id} className={styles.item} data-plain data-testid="disk-library">
               <span className={styles.itemName}>
-                {lib.name}
+                {libraryName(lib, tApp)}
                 {lib.id === current && <span className={styles.here}>{t('disk.index.current')}</span>}
               </span>
               <span className={`${styles.itemSize} mono`}>{t('disk.index.images', { n: lib.image_count })}</span>

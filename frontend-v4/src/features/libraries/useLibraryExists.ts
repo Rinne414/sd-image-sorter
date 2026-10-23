@@ -3,6 +3,7 @@ import { useLibraries } from '../../api/queries'
 import { translate, useLang } from '../../i18n'
 import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
+import { libraryName } from './libraryName'
 import { replacementLibrary } from './missingLibrary'
 
 /**
@@ -31,7 +32,7 @@ export function useLibraryExists(): void {
     s.setLibrary(next)
     const lang = useLang.getState().lang
     const lib = data.libraries.find((l) => l.id === next)
-    const name = lib?.is_default && lib.name === 'Main library' ? translate(lang, 'rail.mainLibrary') : (lib?.name ?? next)
+    const name = lib ? libraryName(lib, (key) => translate(lang, key)) : next
     useToasts.getState().push(translate(lang, 'libraries.gone', { name }), 'info')
   }, [data])
 }

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { imageFileUrl, thumbnailUrl } from '../../api/client'
 import { useLibraries } from '../../api/queries'
 import { useT } from '../../i18n'
+import { libraryName } from '../libraries/libraryName'
 import { folderName } from '../../lib/paths'
 import { useApp } from '../../state/store'
 import { Icon } from '../../ui/Icon'
@@ -120,7 +121,7 @@ export function useOtherLibrary(view: SessionView | null): OtherLibrary | null {
   if (!view || !isOtherLibrary(view, current)) return null
   if (view.libraryMixed || !view.libraryId) return { where: t('sort.library.mixed'), sentence: t('sort.otherLibrary.mixed') }
   const lib = libraries.data?.libraries.find((l) => l.id === view.libraryId)
-  const name = !lib ? view.libraryId : lib.is_default && lib.name === 'Main library' ? t('rail.mainLibrary') : lib.name
+  const name = lib ? libraryName(lib, t) : view.libraryId
   return { where: t('sort.library.named', { name }), sentence: t('sort.otherLibrary', { name }) }
 }
 
