@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'">
+    <title>SD Image Sorter</title>
+    <link rel="stylesheet" href="status.css">
+</head>
+<body>
+    <main class="status-card">
+        <img class="status-logo" src="../../build/icon.png" alt="" width="40" height="40">
+        <h1 id="status-title"></h1>
+        <p id="status-detail"></p>
+        <pre id="status-log" hidden></pre>
+        <div class="status-actions" id="status-actions" hidden>
+            <button type="button" id="status-retry" class="primary"></button>
+            <button type="button" id="status-open-log"></button>
+        </div>
+    </main>
+    <script src="status.js"></script>
+</body>
+</html>

@@ -12,6 +12,11 @@ deliver reliable events, so they are polled instead, and the status says so.
 
 Deleted or renamed-away files are left alone: their rows stay and show up as
 missing, exactly as after a manual scan. Nothing here deletes data.
+
+Watching can be paused as a whole (the desktop shell's tray menu does this):
+every worker stops, the switches per folder stay as they are, and resuming
+starts each worker again with a catch-up scan, so pictures written meanwhile
+are still added. A pause lasts until it is resumed or the program restarts.
 """
 
 from __future__ import annotations
@@ -216,6 +221,7 @@ class FolderWatchService:
         self._supervisor: Optional[threading.Thread] = None
         self._workers: Dict[tuple, _Worker] = {}
         self._generation = 0
+        self._paused = False
 
     @staticmethod
     def _default_list_roots() -> List[RootRow]:
@@ -256,11 +262,22 @@ class FolderWatchService:
         """Re-read the watched roots now (after a switch was flipped)."""
         self._reload.set()
 
+    def set_paused(self, paused: bool) -> None:
+        """Pause or resume every watched folder; resuming catches up first."""
+        with self._lock:
+            self._paused = bool(paused)
+        self._reload.set()
+
+    def is_paused(self) -> bool:
+        with self._lock:
+            return self._paused
+
     def status(self) -> Dict[str, Any]:
         with self._lock:
             running = self._supervisor is not None and self._supervisor.is_alive()
             return {
                 "running": running,
+                "paused": self._paused,
                 "generation": self._generation,
                 "roots": [worker.status.as_dict() for worker in self._workers.values()],
             }
@@ -273,7 +290,7 @@ class FolderWatchService:
             # being read still wakes the next round instead of being lost.
             self._reload.clear()
             try:
-                self._sync_workers(self._list_roots())
+                self._sync_workers([] if self.is_paused() else self._list_roots())
             except Exception:
                 logger.exception("Folder watch could not read the watched folders")
             self._reload.wait(SUPERVISOR_WAIT_SECONDS)

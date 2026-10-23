@@ -197,7 +197,8 @@
             return Array.isArray(roots) ? roots.find((root) => Number(root.root_id) === id) : null;
         },
 
-        _watchText(state) {
+        _watchText(state, paused = Boolean(window.FolderWatch?.status?.()?.paused)) {
+            if (paused) return t('libraryRoots.watchPaused', 'Watching paused from the tray menu. Resume it there; pictures added meanwhile are picked up then.');
             if (!state) return t('libraryRoots.watchStarting', 'Watching: starting…');
             if (state.state === 'missing') return t('libraryRoots.watchMissing', 'Watching paused: the folder is not there. It resumes when the folder is back.');
             if (state.state === 'error') {
@@ -224,7 +225,7 @@
             list.querySelectorAll('.library-root-watch-state').forEach((node) => {
                 const id = Number(node.dataset.rootId);
                 const roots = Array.isArray(status?.roots) ? status.roots : [];
-                node.textContent = this._watchText(roots.find((root) => Number(root.root_id) === id));
+                node.textContent = this._watchText(roots.find((root) => Number(root.root_id) === id), Boolean(status?.paused));
             });
         },
 

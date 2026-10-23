@@ -2222,6 +2222,23 @@ html:has(#view-gallery.active) {
     min-width: 180px;
 }
 
+/* Settings > Desktop (desktop shell only): the shortcut box is sized to its
+   content and reads as a key-capture field, not free text. */
+.settings-desktop-shortcut {
+    width: 17ch;
+    font-family: var(--font-mono);
+    text-align: center;
+    cursor: pointer;
+}
+
+.settings-desktop-shortcut:focus {
+    border-color: var(--accent-line);
+}
+
+.settings-row-copy span.settings-desktop-error {
+    color: var(--danger);
+}
+
 #settings-output-root-browser:empty {
     display: none;
 }

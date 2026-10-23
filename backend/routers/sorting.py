@@ -4,7 +4,7 @@ Handles scanning, moving, batch operations, and manual sort sessions.
 
 Refactored to use Service Layer pattern with dependency injection.
 """
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 
 from fastapi import APIRouter, Body, Depends, BackgroundTasks, File, HTTPException, Query, UploadFile
 
@@ -371,10 +371,15 @@ async def resolve_drop(
 @router.post("/import-files")
 async def import_files(
     files: List[UploadFile] = File(...),
+    destination: Literal["imports", "collected"] = Query("imports"),
     service: SortingService = Depends(get_sorting_service),
 ):
-    """Import uploaded image files directly into the gallery."""
-    return await service.import_uploaded_files(files)
+    """Import uploaded image files directly into the gallery.
+
+    ``destination=collected`` (Quick collect) keeps the copies in the
+    ``collected`` folder of the output root instead of the program's data folder.
+    """
+    return await service.import_uploaded_files(files, destination=destination)
 
 
 @router.post(

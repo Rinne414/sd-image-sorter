@@ -5895,6 +5895,52 @@
                         </div>
                     </details>
                 </section>
+                <!-- Desktop shell only (desktop/): shown by desktop-bridge.js when window.sdDesktop exists. -->
+                <section class="settings-home-panel settings-desktop-panel" id="settings-desktop-panel" aria-labelledby="settings-desktop-title" hidden>
+                    <div class="settings-home-header">
+                        <h3 id="settings-desktop-title" data-i18n="desktop.title">Desktop</h3>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-copy">
+                            <strong data-i18n="desktop.loginTitle">Start at login</strong>
+                            <span data-i18n="desktop.loginBody">Starts in the tray when you sign in, so watched folders are indexed without opening a window</span>
+                        </div>
+                        <button type="button" class="btn btn-ghost" id="btn-settings-desktop-login" aria-pressed="false">
+                            <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg></span>
+                            <span id="settings-desktop-login-label" data-i18n="desktop.off">Off</span>
+                        </button>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-copy">
+                            <strong data-i18n="desktop.closeTitle">Keep running when the window is closed</strong>
+                            <span data-i18n="desktop.closeBody">On: closing the window leaves the program in the tray and folder watching goes on. Off: closing the window quits.</span>
+                        </div>
+                        <button type="button" class="btn btn-ghost" id="btn-settings-desktop-close" aria-pressed="true">
+                            <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg></span>
+                            <span id="settings-desktop-close-label" data-i18n="desktop.on">On</span>
+                        </button>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-copy">
+                            <strong data-i18n="desktop.shortcutTitle">Shortcut to bring the window up</strong>
+                            <span id="settings-desktop-shortcut-status" data-i18n="desktop.shortcutBody">Works from any program and puts the cursor in the gallery search. Click the box, then press the keys.</span>
+                        </div>
+                        <div class="settings-inline-control">
+                            <input type="text" id="settings-desktop-shortcut" class="input-field settings-desktop-shortcut" readonly autocomplete="off" spellcheck="false" aria-label="Shortcut to bring the window up" data-i18n-aria="desktop.shortcutTitle">
+                            <button type="button" class="btn btn-ghost btn-small" id="btn-settings-desktop-shortcut-reset" data-i18n="desktop.shortcutReset">Use Ctrl+Alt+Space</button>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-copy">
+                            <strong data-i18n="quickCollect.title">Quick collect</strong>
+                            <span data-i18n="desktop.quickCollectBody">A small window that stays on top: drop or paste pictures into it to add them. Also in the tray menu.</span>
+                        </div>
+                        <button type="button" class="btn btn-ghost" id="btn-settings-desktop-quick-collect">
+                            <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg></span>
+                            <span data-i18n="desktop.quickCollectOpen">Open</span>
+                        </button>
+                    </div>
+                </section>
                 <!-- Reset all settings (owner baseline): preferences back to default, work stays. -->
                 <section class="settings-reset-all" id="settings-reset-all">
                     <h3 data-i18n="settings.resetAllTitle">Reset all settings</h3>
@@ -8550,6 +8596,8 @@
     <script src="/static/js/send-to-generator.js"></script>
     <script src="/static/js/collect.js"></script>
     <script src="/static/js/browser-extension.js"></script>
+    <script src="/static/js/desktop-settings.js"></script>
+    <script src="/static/js/desktop-bridge.js"></script>
     <script src="/static/js/autosep.js"></script>
     <!-- Auto-Separate family (decomposed VERBATIM from the former 1,981-line
          autosep.js; the tag above is the retained servable shim).

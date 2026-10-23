@@ -180,6 +180,9 @@ package-lock.json
 # V4 frontend is a real npm project: keep its manifest and lockfile.
 !frontend-v4/package.json
 !frontend-v4/package-lock.json
+# The desktop shell (desktop/) is one too.
+!desktop/package.json
+!desktop/package-lock.json
 
 # ToriiGate model files (auto-downloaded, very large)
 models/toriigate/
@@ -253,3 +256,7 @@ qa-sweep-*.md
 /*-AUDIT.md
 # browser-extension/build.py output
 browser-extension/dist/
+
+# Desktop shell (desktop/): dependencies and builds are never committed.
+/desktop/node_modules/
+/desktop/dist/

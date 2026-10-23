@@ -15,6 +15,10 @@ class RootWatchRequest(BaseModel):
     watch: bool
 
 
+class WatchPauseRequest(BaseModel):
+    paused: bool
+
+
 @router.patch(
     "/library-roots/{root_id}/watch",
     summary="Watch a library root",
@@ -50,3 +54,18 @@ def set_root_watch(root_id: int, request: RootWatchRequest):
 )
 def watch_status():
     return get_folder_watch_service().status()
+
+
+@router.post(
+    "/watch/pause",
+    summary="Pause or resume all folder watching",
+    description=(
+        "Pause stops watching every folder at once; each folder keeps its own "
+        "switch. Resume starts them again and first adds the pictures written "
+        "while paused. A pause lasts until resumed or until the program restarts."
+    ),
+)
+def pause_watching(request: WatchPauseRequest):
+    service = get_folder_watch_service()
+    service.set_paused(request.paused)
+    return service.status()

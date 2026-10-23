@@ -175,7 +175,7 @@ def test_watch_endpoints(test_client, tmp_path):
     assert [r["watch"] for r in listed if r["id"] == root["id"]] == [1]
 
     status = test_client.get("/api/watch/status").json()
-    assert set(status) == {"running", "generation", "roots"}
+    assert set(status) == {"running", "paused", "generation", "roots"}
 
 
 def test_only_paths_refuses_files_outside_the_folder(test_db, tmp_path):
