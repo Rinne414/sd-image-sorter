@@ -73,6 +73,23 @@ test('every view keeps its hidden elements hidden after the user navigates to it
   }
 })
 
+test('Settings keeps the desktop-only panel and every other hidden element hidden in a browser', async ({ page }) => {
+  await gotoApp(page)
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await page.evaluate(() => (window as any).App.showModal('settings-modal'))
+  const tabs = page.locator('.settings-modal-tab')
+  const count = await tabs.count()
+  for (let i = 0; i < count; i += 1) {
+    await tabs.nth(i).click()
+    await page.waitForTimeout(120)
+    const leaks = await leakingHiddenElements(page)
+    expect(leaks, `[hidden] overridden on Settings tab ${i}`).toEqual([])
+  }
+  // The Desktop panel belongs to the desktop shell only: its controls do
+  // nothing in a browser, so it must not show there.
+  await expect(page.locator('#settings-desktop-panel')).toBeHidden()
+})
+
 // ---------------------------------------------------------------------------
 // Artist cards must never clip their own content.
 // ---------------------------------------------------------------------------

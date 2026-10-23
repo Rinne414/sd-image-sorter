@@ -2705,7 +2705,10 @@ li > .icon {
    row and a second "build the index" card on top of the setup CTA. */
 #similar-stats[hidden],
 .similar-tabs[hidden],
-.scope-status-card[hidden] {
+.scope-status-card[hidden],
+/* Settings panels are display:grid. The Desktop panel stays hidden outside the
+   desktop shell; without this guard a browser showed it with dead controls. */
+.settings-home-panel[hidden] {
     display: none;
 }
 
