@@ -227,7 +227,9 @@ def test_caption_loads_native_runtime_and_generates_inside_runtime_guard(
     monkeypatch.setattr(florence2_captioner, "exclusive_ai_runtime", guard)
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
     monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
-    florence2_captioner._runtime_by_device.clear()
+    # A fresh dict that monkeypatch puts back: clearing the shared one left the
+    # fake runtime registered for every later test (model residency saw florence2).
+    monkeypatch.setattr(florence2_captioner, "_runtime_by_device", {})
 
     caption = florence2_captioner.caption_image(str(image_path), use_gpu=False)
 
