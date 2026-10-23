@@ -342,3 +342,24 @@ def update_trusted_model_folders(update) -> list[str]:
             settings["trusted_model_folders"] = new
             _write_app_settings(settings)
     return new
+
+
+DEFAULT_MODEL_IDLE_UNLOAD_MINUTES: float = 10.0
+
+
+def get_model_idle_unload_minutes() -> float:
+    """Minutes an unused AI model stays loaded; 0 = until the program quits."""
+    value = _read_app_settings().get("model_idle_unload_minutes")
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        return DEFAULT_MODEL_IDLE_UNLOAD_MINUTES
+    return float(value)
+
+
+def save_model_idle_unload_minutes(minutes: float) -> float:
+    """Store the idle time (0 = never release). Returns the stored value."""
+    stored = max(0.0, float(minutes))
+    with _app_settings_lock:
+        settings = _read_app_settings_for_update()
+        settings["model_idle_unload_minutes"] = stored
+        _write_app_settings(settings)
+    return stored

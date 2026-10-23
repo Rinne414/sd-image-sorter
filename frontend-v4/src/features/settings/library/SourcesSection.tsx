@@ -8,6 +8,8 @@ import { removeRoot, removeRoots, rescanRoot, useLibraryRoots } from './libraryA
 import styles from './LibrarySettings.module.css'
 import { missingRoots, orderRoots, rootsSummary, scannedAt } from './roots'
 import type { LibraryRoot } from './types'
+import { isWatched, watchLines, watchStateFor } from './watch'
+import { setRootWatch, useFolderWatch } from './watchApi'
 
 /** The folders this library imports from: rescan one (a job), or stop using one as a source. */
 export function SourcesSection() {
@@ -21,6 +23,9 @@ export function SourcesSection() {
   return (
     <Section title={t('libset.sources.title')} testId="libset-sources">
       <p className={styles.lead}>{t('libset.sources.lead')}</p>
+      <p className={styles.hint} data-testid="watch-hint">
+        {t('libset.watch.hint')}
+      </p>
       <div className={styles.bar}>
         <span className={styles.count} data-missing={missing > 0 || undefined} data-testid="roots-summary">
           {roots.data ? (missing > 0 ? t('libset.sources.summaryMissing', { folders, missing }) : t('libset.sources.summary', { folders })) : ''}
@@ -64,11 +69,20 @@ function RootRow({ root, onRemove }: { root: LibraryRoot; onRemove: () => void }
   const [busy, setBusy] = useState(false)
   const gone = root.exists === false
   const when = scannedAt(root.last_scanned_at)
+  // The switch shows the new value while the request runs, then the server's.
+  const [pendingWatch, setPendingWatch] = useState<boolean | null>(null)
+  const watched = pendingWatch ?? isWatched(root)
 
   const rescan = async () => {
     setBusy(true)
     await rescanRoot(root)
     setBusy(false)
+  }
+
+  const toggleWatch = async (on: boolean) => {
+    setPendingWatch(on)
+    await setRootWatch(root, on)
+    setPendingWatch(null)
   }
 
   return (
@@ -86,8 +100,13 @@ function RootRow({ root, onRemove }: { root: LibraryRoot; onRemove: () => void }
           <span>{t('libset.root.images', { n: root.image_count })}</span>
           <span>{when ? t('libset.root.scanned', { when }) : t('libset.root.never')}</span>
         </span>
+        {watched && pendingWatch === null && <WatchState rootId={root.id} />}
       </div>
       <div className={styles.rootActions}>
+        <label className={styles.check} data-testid="root-watch-label">
+          <input type="checkbox" checked={watched} disabled={pendingWatch !== null} onChange={(e) => void toggleWatch(e.target.checked)} data-testid="root-watch" />
+          {t('libset.watch.label')}
+        </label>
         <button type="button" className="btn" onClick={() => void rescan()} disabled={gone || busy} data-testid="root-rescan">
           {t('libset.root.rescan')}
         </button>
@@ -96,6 +115,18 @@ function RootRow({ root, onRemove }: { root: LibraryRoot; onRemove: () => void }
         </button>
       </div>
     </li>
+  )
+}
+
+/** What a watched folder is doing right now (live from GET /api/watch/status). */
+function WatchState({ rootId }: { rootId: number }) {
+  const t = useLT()
+  const status = useFolderWatch((s) => s.status)
+  const lines = watchLines(watchStateFor(status, rootId), status?.paused ?? false)
+  return (
+    <span className={styles.watchState} data-testid="root-watch-state" aria-live="polite">
+      {lines.map((line) => t(line.key, line.params)).join(' · ')}
+    </span>
   )
 }
 

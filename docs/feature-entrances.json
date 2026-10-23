@@ -191,10 +191,14 @@
         "#library-roots-watch-hint"
       ],
       "vopus": {
-        "missing": "Vopus library settings have no watch switch yet; watching set in classic still runs"
+        "at": "#/settings/library",
+        "find": "[data-testid=\"watch-hint\"]",
+        "note": "the switch is root-watch on each source-folder row, its live state root-watch-state; new pictures refresh the gallery by themselves"
       },
       "next": {
-        "missing": "The new interface has no watch switch yet; watching set in classic still runs"
+        "at": "#/settings/library",
+        "find": "[data-testid=\"watch-hint\"]",
+        "note": "same Settings › Library page as Vopus: root-watch per folder, live state root-watch-state"
       }
     },
     {
@@ -3837,6 +3841,22 @@
       },
       "next": {
         "missing": "There is no hard-refresh button for the interface in the new interface."
+      }
+    },
+    {
+      "id": "settings.background-models",
+      "area": "settings",
+      "en": "Background: loaded AI models, free them after idle, Unload now",
+      "zh": "后台：已加载的 AI 模型、闲置后释放、立即释放",
+      "classic": [
+        "#settings-background-idle",
+        "#btn-settings-background-unload"
+      ],
+      "vopus": {
+        "missing": "Vopus settings have no Background line yet; idle models are still freed with the classic setting"
+      },
+      "next": {
+        "missing": "The new interface has no Background line yet; idle models are still freed with the classic setting"
       }
     },
     {

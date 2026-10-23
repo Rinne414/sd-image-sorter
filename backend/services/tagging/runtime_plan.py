@@ -40,6 +40,21 @@ def _format_runtime_adjustment_message(runtime_info: Dict[str, Any]) -> str:
     return ", ".join(parts)
 
 
+def _gpu_busy_notice(model_name: str) -> str:
+    """Job-status sentence when the GPU lacks room for this model ("" = use it).
+
+    When this program's own model is on the card it is released before the
+    worker starts, so its memory is not counted here; the worker's loader
+    checks again with the card freed.
+    """
+    from ai_runtime_guard import gpu_resident_count
+    from gpu_headroom import decide_gpu, tagger_gpu_need_mb
+
+    if gpu_resident_count():
+        return ""
+    return decide_gpu(f"tagger:{model_name}", tagger_gpu_need_mb(model_name)).message()
+
+
 class RuntimePlanMixin:
     """Runtime-plan slice of TaggingService (assembled in services.tagging.service)."""
 
@@ -51,6 +66,10 @@ class RuntimePlanMixin:
         model_config = TAGGER_MODELS.get(model_name, {})
         runtime_backend = str(model_config.get("runtime_backend", "wd14")).lower()
         effective_use_gpu = bool(request.use_gpu)
+        # Another program (ComfyUI) holding the video memory: this job runs on
+        # the CPU and its status says so, instead of failing or freezing.
+        gpu_busy_notice = _gpu_busy_notice(model_name) if effective_use_gpu else ""
+        effective_use_gpu = effective_use_gpu and not gpu_busy_notice
         startup_notice = ""
         fetch_batch_size = 16 if effective_use_gpu else 8
         commit_interval = fetch_batch_size
@@ -179,7 +198,7 @@ class RuntimePlanMixin:
             "model_name": model_name,
             "effective_use_gpu": effective_use_gpu,
             "gpu_locked": False,
-            "startup_notice": startup_notice,
+            "startup_notice": f"{gpu_busy_notice} {startup_notice}".strip(),
             "fetch_batch_size": fetch_batch_size,
             "commit_interval": commit_interval,
             "gc_interval": gc_interval,

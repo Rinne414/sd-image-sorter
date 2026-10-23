@@ -46,10 +46,14 @@ def _metadata_executor_mode() -> str:
 
 def _create_metadata_executor(worker_count: int) -> Any:
     """Create the metadata worker executor. Process mode lets timeouts kill stuck C extensions."""
+    from process_priority import lower_current_thread_priority, lower_process_priority
+
     worker_count = max(1, int(worker_count or 1))
+    # Metadata workers run below normal priority so a big scan never makes the
+    # rest of the computer (or ComfyUI) feel slow; the API server keeps normal.
     if _metadata_executor_mode() == "process":
-        return _facade().ProcessPoolExecutor(max_workers=worker_count)  # decomposition: facade-resolved
-    return _facade().ThreadPoolExecutor(max_workers=worker_count)  # decomposition: facade-resolved (patched on image_manager)
+        return _facade().ProcessPoolExecutor(max_workers=worker_count, initializer=lower_process_priority)  # decomposition: facade-resolved
+    return _facade().ThreadPoolExecutor(max_workers=worker_count, initializer=lower_current_thread_priority)  # decomposition: facade-resolved (patched on image_manager)
 
 
 def _terminate_metadata_executor_workers(executor: Any) -> bool:

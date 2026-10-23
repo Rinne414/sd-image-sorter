@@ -28,9 +28,11 @@ from config import (
     TAGGER_USE_GPU,
     get_wd14_model_dir,
 )
+from gpu_headroom import decide_gpu, tagger_gpu_need_mb
 from ai_runtime_guard import (
     PRIORITY_NORMAL,
     claim_gpu_residency,
+    forget_gpu_residency,
     exclusive_ai_runtime,
     looks_like_cuda_oom,
 )
@@ -357,8 +359,28 @@ class WD14Tagger(
                     return
                 self._load_locked()
 
+    def _gpu_has_room(self) -> bool:
+        """False when another program (ComfyUI) holds the video memory this model needs.
+
+        The tagger then loads on the CPU for now; the next load (after an idle
+        release) asks the GPU again.
+        """
+        decision = decide_gpu(
+            f"tagger:{self.model_name}", tagger_gpu_need_mb(self.model_name)
+        )
+        if decision.use_gpu:
+            return True
+        forget_gpu_residency(self)
+        self._gpu_busy_fallback = True
+        logger.warning("%s: %s", self.model_name, decision.message())
+        return False
+
     def _load_locked(self):
         """Perform the one-time model + tag load. Caller must hold _load_lock."""
+        if getattr(self, "_gpu_busy_fallback", False):
+            # The last load fell back because the GPU was busy: ask again.
+            self._gpu_busy_fallback = False
+            self.use_gpu = True
         model_path, tags_path = self._get_model_paths()
         self._resolved_model_path = model_path
         self._resolved_tags_path = tags_path
@@ -413,12 +435,15 @@ class WD14Tagger(
             logger.info(f"Using providers: {providers} (GPU enabled)")
         else:
             logger.info(f"Using providers: {providers} (GPU disabled)")
-        sess_options = self._build_session_options(gpu_enabled=session_uses_gpu)
         if session_uses_gpu:
             # One GPU tagger session at a time: free any other resident model
             # (a previous singleton, another consensus tagger) before this one
             # allocates its VRAM.
             claim_gpu_residency(self, self.release_session, label=self.model_name)
+            if not self._gpu_has_room():
+                session_uses_gpu = False
+                providers = ["CPUExecutionProvider"]
+        sess_options = self._build_session_options(gpu_enabled=session_uses_gpu)
 
         try:
             self.session = self._create_session(
