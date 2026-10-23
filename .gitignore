@@ -251,3 +251,5 @@ qa-sweep-*.md
 # docs/ are unaffected.
 /*-audit.md
 /*-AUDIT.md
+# browser-extension/build.py output
+browser-extension/dist/

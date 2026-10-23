@@ -1,0 +1,59 @@
+:root {
+    --bg: #16181b;
+    --surface: #1e2024;
+    --surface-2: #2a2d32;
+    --line: #3a3e45;
+    --text: #eef0f2;
+    --muted: #b9bec5;
+    --good: #5cb27c;
+    --warn: #e0b04f;
+    --bad: #e2735d;
+    color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+h1 { margin: 0; font-size: 20px; font-weight: 600; }
+h2 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
+p { margin: 6px 0; }
+.muted { color: var(--muted); font-size: 14px; }
+
+button, input[type="text"] {
+    font: inherit;
+    font-size: 14px;
+    border-radius: 9px;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    color: var(--text);
+    padding: 8px 14px;
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--muted); }
+button.primary { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 600; }
+button:disabled { opacity: .5; cursor: default; }
+input[type="text"] { flex: 1 1 240px; min-width: 0; }
+
+.title-row { display: flex; align-items: center; gap: 12px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.row label { color: var(--muted); font-size: 14px; }
+.check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+
+.status { font-weight: 600; }
+.status::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; background: var(--muted); vertical-align: 1px; }
+.status[data-kind="good"]::before { background: var(--good); }
+.status[data-kind="warn"]::before { background: var(--warn); }
+.status[data-kind="bad"]::before { background: var(--bad); }
+
+.options .card { max-width: 760px; margin: 32px auto; padding: 24px 28px; background: var(--surface); border-radius: 16px; }
+.options .block { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+
+.popup { width: 320px; padding: 14px 16px; }
+.popup .stack { display: grid; gap: 8px; margin-top: 10px; }
+.popup .status { font-size: 14px; }

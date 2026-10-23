@@ -9,12 +9,12 @@ import re
 import threading
 import time
 from collections import defaultdict, deque
-from typing import Mapping, Optional
+from typing import Callable, Mapping, Optional
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from upload_limit import UploadSizeLimitMiddleware
 
 from config import (
@@ -144,16 +144,69 @@ def _origin_allowed(origin: Optional[str]) -> bool:
     return bool(parts.hostname) and _is_loopback_host(parts.hostname)
 
 
+# The browser extension lane (/api/ext/). An extension's service worker
+# sends its own origin (chrome-extension://<32 letters a-p> or
+# moz-extension://<uuid>), which the loopback Origin rule above refuses. On
+# this lane only, such an origin is accepted, every call is a POST (no link,
+# form or iframe can make one), and every endpoint except ping and the
+# pairing request needs the token the user approved inside the program
+# (services/ext_pairing.py). The Host rule stays as everywhere else.
+EXT_LANE_PREFIX = "/api/ext/"
+EXT_OPEN_PATHS = frozenset({"/api/ext/ping", "/api/ext/pair"})
+EXT_TOKEN_HEADER = "x-sd-ext-token"
+_EXT_ORIGIN_RE = re.compile(
+    r"^(chrome-extension://[a-p]{32}"
+    r"|moz-extension://[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+)
+ExtTokenCheck = Callable[[str, Optional[str], Optional[str]], bool]
+
+
+def is_extension_origin(origin: Optional[str]) -> bool:
+    return bool(origin) and bool(_EXT_ORIGIN_RE.match(str(origin)))
+
+
+def _ext_lane_rejection(
+    path: str, method: str, headers: Mapping[str, str], ext_token_check: Optional[ExtTokenCheck]
+) -> Optional[str]:
+    """Why an /api/ext request must be refused ("origin", "method", "token")."""
+    origin = headers.get("origin")
+    if origin is not None and not is_extension_origin(origin):
+        return "origin"
+    method = method.upper()
+    if method == "OPTIONS":
+        # A CORS preflight carries no token; it only asks which headers the
+        # real request may send (ext_lane_cors_middleware answers).
+        return None
+    if method != "POST":
+        return "method"
+    if path in EXT_OPEN_PATHS:
+        return None
+    token = headers.get(EXT_TOKEN_HEADER)
+    if not token or ext_token_check is None or not ext_token_check(path, origin, token):
+        return "token"
+    return None
+
+
 def api_request_rejection(
-    *, path: str, method: str, headers: Mapping[str, str], bound_port: int, testing: bool
+    *,
+    path: str,
+    method: str,
+    headers: Mapping[str, str],
+    bound_port: int,
+    testing: bool,
+    ext_token_check: Optional[ExtTokenCheck] = None,
 ) -> Optional[str]:
     """Why an /api request must be refused ("host", "origin",
-    "sec-fetch-site"), or None when it may proceed. Pure: the middleware
-    and the tests call it with the same arguments."""
+    "sec-fetch-site", and on the extension lane "method", "token"), or None
+    when it may proceed. Pure: the middleware and the tests call it with the
+    same arguments; ``ext_token_check(path, origin, token)`` decides whether
+    an extension token is paired."""
     if not path.startswith(API_GUARD_PREFIX):
         return None
     if not _host_header_allowed(headers.get("host"), bound_port=bound_port, testing=testing):
         return "host"
+    if path.startswith(EXT_LANE_PREFIX):
+        return _ext_lane_rejection(path, method, headers, ext_token_check)
     if not _origin_allowed(headers.get("origin")):
         return "origin"
     site = (headers.get("sec-fetch-site") or "").strip().lower()
@@ -218,6 +271,12 @@ def _log_rejection(reason: str, method: str, path: str, value: Optional[str]) ->
     )
 
 
+def _ext_token_check(path: str, origin: Optional[str], token: Optional[str]) -> bool:
+    from services.ext_pairing import check_ext_token
+
+    return check_ext_token(path, origin, token)
+
+
 async def api_request_guard_middleware(request: Request, call_next):
     """Refuse /api requests that another site or a rebound hostname sent."""
     reason = api_request_rejection(
@@ -226,17 +285,71 @@ async def api_request_guard_middleware(request: Request, call_next):
         headers=request.headers,
         bound_port=_bound_port(request),
         testing=_is_testing(),
+        ext_token_check=_ext_token_check,
     )
     if reason is not None:
-        _log_rejection(reason, request.method, request.url.path, request.headers.get(reason))
-        return JSONResponse(
-            status_code=403,
-            content={
-                "error": "This application only accepts requests from its own page",
-                "type": "Forbidden",
-            },
-        )
+        # Never log a token; "method" names no header.
+        logged_value = None if reason in ("token", "method") else request.headers.get(reason)
+        _log_rejection(reason, request.method, request.url.path, logged_value)
+        content = {
+            "error": "This application only accepts requests from its own page",
+            "type": "Forbidden",
+        }
+        if reason == "token":
+            # The extension says "pair again" instead of "not running".
+            content["code"] = "ext_not_paired"
+        return JSONResponse(status_code=403, content=content)
     return await call_next(request)
+
+
+EXT_CORS_ALLOW_HEADERS = "Content-Type, X-SD-Ext-Token"
+EXT_CORS_MAX_AGE_SECONDS = "600"
+
+
+def _ext_cors_origin(request: Request) -> Optional[str]:
+    """The extension origin to grant CORS to on this lane, or None. Ping and
+    the pairing request answer any extension origin; the rest only one that
+    is paired or waiting for the user's answer."""
+    path = request.url.path
+    origin = request.headers.get("origin")
+    if not path.startswith(EXT_LANE_PREFIX) or not is_extension_origin(origin):
+        return None
+    if path in EXT_OPEN_PATHS:
+        return origin
+    from services.ext_pairing import get_pairing_registry
+
+    return origin if get_pairing_registry().is_known_origin(origin) else None
+
+
+def _ext_preflight_response(request: Request, origin: Optional[str]) -> Response:
+    response = Response(status_code=204)
+    if origin is not None:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = EXT_CORS_ALLOW_HEADERS
+        response.headers["Access-Control-Max-Age"] = EXT_CORS_MAX_AGE_SECONDS
+        if request.headers.get("access-control-request-private-network") == "true":
+            response.headers["Access-Control-Allow-Private-Network"] = "true"
+    response.headers["Vary"] = "Origin"
+    return response
+
+
+async def ext_lane_cors_middleware(request: Request, call_next):
+    """CORS for the extension lane. Chrome and Firefox skip CORS for hosts an
+    extension has permission for, but older Firefox builds did not; the
+    global CORSMiddleware only knows loopback page origins."""
+    origin = _ext_cors_origin(request)
+    if (
+        request.method == "OPTIONS"
+        and request.url.path.startswith(EXT_LANE_PREFIX)
+        and "access-control-request-method" in request.headers
+    ):
+        return _ext_preflight_response(request, origin)
+    response = await call_next(request)
+    if origin is not None:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+    return response
 
 
 async def localhost_only_middleware(request: Request, call_next):
@@ -332,6 +445,9 @@ def configure_security_middleware(app: FastAPI) -> None:
             "X-SD-Library-Id",
         ],
     )
+    # Outside the global CORSMiddleware, which would refuse an extension
+    # preflight; inside the request guard, which checks every call first.
+    app.middleware("http")(ext_lane_cors_middleware)
     app.middleware("http")(localhost_only_middleware)
     app.middleware("http")(api_request_guard_middleware)
     app.middleware("http")(rate_limit_middleware)

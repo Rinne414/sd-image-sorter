@@ -26,6 +26,8 @@ AESTHETIC_COLUMNS = (
 )
 REPAIRED_TABLES = ("image_style_vectors", "sorted_images")
 BATCH_TABLES = ("batches", "batch_items", "batch_templates")
+# Tables later migrations add (064 collected_sources).
+TABLES_AFTER_062 = ("collected_sources",)
 
 
 def _schema_version(conn: sqlite3.Connection) -> int:
@@ -173,9 +175,10 @@ def test_a_main_051_database_comes_up_through_060_061_and_062(tmp_path, monkeypa
         after = _schema(conn)
         assert after == _schema(new)
     # Only the batch migrations added anything: 062 changed nothing here.
-    assert {name for kind, name in after - before if kind == "table"} == set(
-        BATCH_TABLES
-    )
+    # (Tables of migrations after 062 are not part of this question.)
+    assert {name for kind, name in after - before if kind == "table"} - set(
+        TABLES_AFTER_062
+    ) == set(BATCH_TABLES)
 
 
 def test_a_fresh_database_lands_on_062(test_db):

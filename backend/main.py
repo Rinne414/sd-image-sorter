@@ -134,7 +134,7 @@ from exceptions import (
 )
 
 # Import routers
-from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, disguise, censor_media, aesthetic, updates, disk, vlm, colors, tags_bulk, dataset, dataset_projects, annotations, smart_tag, collections, entry, libraries, duplicates, publish, metadata_repair, masks, style_map, output_folders, batches, batch_uploads, file_manager, image_lookup, interface, folder_watch, generator_recipe
+from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, disguise, censor_media, aesthetic, updates, disk, vlm, colors, tags_bulk, dataset, dataset_projects, annotations, smart_tag, collections, entry, libraries, duplicates, publish, metadata_repair, masks, style_map, output_folders, batches, batch_uploads, file_manager, image_lookup, interface, folder_watch, generator_recipe, browser_extension, collect
 
 # Import services
 from services import (
@@ -431,6 +431,9 @@ app.include_router(metadata_repair.router)
 app.include_router(output_folders.router)
 app.include_router(folder_watch.router)
 app.include_router(generator_recipe.router)
+app.include_router(browser_extension.ext_router)
+app.include_router(browser_extension.router)
+app.include_router(collect.router)
 app.include_router(file_manager.router)
 app.include_router(image_lookup.router)
 app.include_router(interface.router)

@@ -1,0 +1,194 @@
+{
+  "extName": {
+    "message": "SD Image Sorter"
+  },
+  "extDescription": {
+    "message": "把任何网页上的图片存进本机的 SD Image Sorter，并记下来源网页。"
+  },
+  "badgePaired": {
+    "message": "已连接并配对（$1）"
+  },
+  "badgeOffline": {
+    "message": "$1 上没有运行"
+  },
+  "badgeUnpaired": {
+    "message": "尚未配对，请打开选项进行配对"
+  },
+  "badgePending": {
+    "message": "等待你在程序里按“允许”"
+  },
+  "menuSaveImage": {
+    "message": "保存到 SD Image Sorter"
+  },
+  "menuSavePage": {
+    "message": "保存本页图片..."
+  },
+  "errorOffline": {
+    "message": "SD Image Sorter 没有运行，或不在扩展选项里设置的地址。"
+  },
+  "errorNotPaired": {
+    "message": "这个浏览器还没有和 SD Image Sorter 配对。请打开扩展选项，按“与程序配对”。"
+  },
+  "errorSaveFailed": {
+    "message": "没有保存：$1"
+  },
+  "errorReadFailed": {
+    "message": "无法从网页读取这张图片。"
+  },
+  "errorExtensionReloaded": {
+    "message": "扩展已更新或重新加载。请刷新本页后再试。"
+  },
+  "savedOne": {
+    "message": "已保存到 SD Image Sorter：$1"
+  },
+  "savedConverted": {
+    "message": "（已从 $1 转为 PNG）"
+  },
+  "savedMany": {
+    "message": "已保存 $1 张图片到 SD Image Sorter。"
+  },
+  "savedSomeFailed": {
+    "message": "已保存 $1 张；$2 张没有保存。第一个原因：$3"
+  },
+  "pairName": {
+    "message": "本机的 $1"
+  },
+  "browserOther": {
+    "message": "浏览器"
+  },
+  "dropHere": {
+    "message": "拖到这里，保存到 SD Image Sorter"
+  },
+  "dropHint": {
+    "message": "会一并记下来源网页"
+  },
+  "saving": {
+    "message": "正在保存到 SD Image Sorter..."
+  },
+  "pickerTitle": {
+    "message": "保存本页图片"
+  },
+  "pickerShowSmall": {
+    "message": "也显示小图"
+  },
+  "pickerSelectAll": {
+    "message": "全选"
+  },
+  "pickerSelectNone": {
+    "message": "全不选"
+  },
+  "cancel": {
+    "message": "取消"
+  },
+  "close": {
+    "message": "关闭"
+  },
+  "pickerSave": {
+    "message": "保存 $1 张图片"
+  },
+  "pickerHiddenSmall": {
+    "message": "已隐藏小图（图标、按钮）：$1 张"
+  },
+  "pickerEmpty": {
+    "message": "本页没有找到图片。"
+  },
+  "pickerFullSize": {
+    "message": "- 原图"
+  },
+  "pickerSaving": {
+    "message": "正在保存第 $1 / $2 张..."
+  },
+  "optionsTitle": {
+    "message": "SD Image Sorter 浏览器扩展"
+  },
+  "optionsLead": {
+    "message": "把任何网页上的图片存进本机的 SD Image Sorter，并记下来源网页。"
+  },
+  "connectionTitle": {
+    "message": "连接"
+  },
+  "addressLabel": {
+    "message": "程序地址"
+  },
+  "saveAddress": {
+    "message": "保存"
+  },
+  "testConnection": {
+    "message": "测试连接"
+  },
+  "addressNote": {
+    "message": "只接受本机地址（127.0.0.1 或 localhost）。默认是 http://127.0.0.1:8487。"
+  },
+  "addressInvalid": {
+    "message": "请填写本机地址，例如 http://127.0.0.1:8487。"
+  },
+  "pairTitle": {
+    "message": "配对"
+  },
+  "pairLead": {
+    "message": "程序会在自己的窗口里询问“允许这个浏览器扩展吗？”。在那里允许之前，什么都不能保存。"
+  },
+  "pairButton": {
+    "message": "与程序配对"
+  },
+  "pairAgainButton": {
+    "message": "重新配对"
+  },
+  "forgetButton": {
+    "message": "忘记这次配对"
+  },
+  "permissionTitle": {
+    "message": "网页访问权限"
+  },
+  "permissionLead": {
+    "message": "浏览器还没有给这个扩展网页访问权限，所以它读不到图片，也连不上程序。"
+  },
+  "permissionButton": {
+    "message": "允许访问"
+  },
+  "saveTitle": {
+    "message": "保存"
+  },
+  "dropBoxLabel": {
+    "message": "拖动图片时显示投放框"
+  },
+  "saveLead": {
+    "message": "在图片上右键选择“保存到 SD Image Sorter”，或选择“保存本页图片...”一次挑选多张。图片存到程序输出文件夹的 collected/<日期> 下，并出现在图库里。"
+  },
+  "statusChecking": {
+    "message": "正在检查..."
+  },
+  "statusOffline": {
+    "message": "$1 上没有运行 SD Image Sorter。请先启动程序，再按“测试连接”。"
+  },
+  "statusUnpaired": {
+    "message": "已连接 $2 上的 SD Image Sorter $1。尚未配对：请按“与程序配对”。"
+  },
+  "statusPending": {
+    "message": "等待你在 SD Image Sorter 里按“允许”..."
+  },
+  "statusDenied": {
+    "message": "SD Image Sorter 拒绝了这次配对。按“与程序配对”可再次请求。"
+  },
+  "statusPaired": {
+    "message": "已连接并配对 $2 上的 SD Image Sorter $1。"
+  },
+  "statusPairExpired": {
+    "message": "配对请求没有及时得到回应，或程序已重启。请再按“与程序配对”。"
+  },
+  "statusForgotten": {
+    "message": "这个浏览器已忘记配对。要在程序里也移除它，请在 设置 > 浏览器扩展 里按“撤销”。"
+  },
+  "openProgram": {
+    "message": "打开 SD Image Sorter"
+  },
+  "openOptions": {
+    "message": "选项与配对"
+  },
+  "popupUnpaired": {
+    "message": "程序正在运行，但这个浏览器还没有配对。"
+  },
+  "popupPaired": {
+    "message": "已连接。在任意图片上右键即可保存。"
+  }
+}

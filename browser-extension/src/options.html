@@ -1,0 +1,58 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title data-msg="optionsTitle">SD Image Sorter</title>
+    <link rel="stylesheet" href="ui.css">
+</head>
+<body class="options">
+    <main class="card">
+        <header class="title-row">
+            <img src="icons/icon48.png" width="40" height="40" alt="">
+            <div>
+                <h1 data-msg="optionsTitle">SD Image Sorter</h1>
+                <p class="muted" data-msg="optionsLead">Save pictures from any web page into SD Image Sorter, with the page they came from.</p>
+            </div>
+        </header>
+
+        <section class="block">
+            <h2 data-msg="connectionTitle">Connection</h2>
+            <p class="status" id="status" role="status" aria-live="polite"></p>
+            <div class="row">
+                <label for="address" data-msg="addressLabel">Program address</label>
+                <input id="address" type="text" spellcheck="false" autocomplete="off" placeholder="http://127.0.0.1:8487">
+                <button id="save-address" type="button" data-msg="saveAddress">Save</button>
+                <button id="test" type="button" data-msg="testConnection">Test connection</button>
+            </div>
+            <p class="muted" id="address-note" data-msg="addressNote">Only an address on this computer (127.0.0.1 or localhost) is accepted.</p>
+        </section>
+
+        <section class="block">
+            <h2 data-msg="pairTitle">Pairing</h2>
+            <p class="muted" data-msg="pairLead">The program asks "Allow this browser extension?" in its own window. Until you allow it there, nothing can be saved.</p>
+            <div class="row">
+                <button id="pair" type="button" class="primary" data-msg="pairButton">Pair with the program</button>
+                <button id="forget" type="button" data-msg="forgetButton">Forget this pairing</button>
+            </div>
+        </section>
+
+        <section class="block" id="permission-block" hidden>
+            <h2 data-msg="permissionTitle">Access to web pages</h2>
+            <p class="muted" data-msg="permissionLead">The browser has not given this extension access to web pages, so it cannot read pictures or reach the program.</p>
+            <div class="row">
+                <button id="grant" type="button" class="primary" data-msg="permissionButton">Allow access</button>
+            </div>
+        </section>
+
+        <section class="block">
+            <h2 data-msg="saveTitle">Saving</h2>
+            <label class="check"><input id="drop-box" type="checkbox"> <span data-msg="dropBoxLabel">Show a drop box while I drag a picture</span></label>
+            <p class="muted" data-msg="saveLead">Right-click a picture and choose "Save to SD Image Sorter", or "Save pictures on this page..." to pick several. Pictures go to the program's output folder, collected/date, and appear in the gallery.</p>
+        </section>
+    </main>
+    <script src="program.js"></script>
+    <script src="i18n-page.js"></script>
+    <script src="options.js"></script>
+</body>
+</html>

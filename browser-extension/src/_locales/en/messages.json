@@ -1,0 +1,194 @@
+{
+  "extName": {
+    "message": "SD Image Sorter"
+  },
+  "extDescription": {
+    "message": "Save pictures from any web page into SD Image Sorter on this computer, with the page they came from."
+  },
+  "badgePaired": {
+    "message": "connected and paired ($1)"
+  },
+  "badgeOffline": {
+    "message": "not running at $1"
+  },
+  "badgeUnpaired": {
+    "message": "not paired yet - open the options to pair"
+  },
+  "badgePending": {
+    "message": "waiting for Allow in the program"
+  },
+  "menuSaveImage": {
+    "message": "Save to SD Image Sorter"
+  },
+  "menuSavePage": {
+    "message": "Save pictures on this page..."
+  },
+  "errorOffline": {
+    "message": "SD Image Sorter is not running, or not at the address set in the extension options."
+  },
+  "errorNotPaired": {
+    "message": "This browser is not paired with SD Image Sorter. Open the extension options and press Pair."
+  },
+  "errorSaveFailed": {
+    "message": "Not saved: $1"
+  },
+  "errorReadFailed": {
+    "message": "This picture could not be read from the page."
+  },
+  "errorExtensionReloaded": {
+    "message": "The extension was updated or reloaded. Reload this page and try again."
+  },
+  "savedOne": {
+    "message": "Saved to SD Image Sorter: $1"
+  },
+  "savedConverted": {
+    "message": " (converted from $1 to PNG)"
+  },
+  "savedMany": {
+    "message": "Saved $1 pictures to SD Image Sorter."
+  },
+  "savedSomeFailed": {
+    "message": "Saved $1 pictures; $2 not saved. First reason: $3"
+  },
+  "pairName": {
+    "message": "$1 on this computer"
+  },
+  "browserOther": {
+    "message": "Browser"
+  },
+  "dropHere": {
+    "message": "Drop here to save to SD Image Sorter"
+  },
+  "dropHint": {
+    "message": "Saved with the page it came from"
+  },
+  "saving": {
+    "message": "Saving to SD Image Sorter..."
+  },
+  "pickerTitle": {
+    "message": "Save pictures on this page"
+  },
+  "pickerShowSmall": {
+    "message": "Show small pictures too"
+  },
+  "pickerSelectAll": {
+    "message": "Select all"
+  },
+  "pickerSelectNone": {
+    "message": "Select none"
+  },
+  "cancel": {
+    "message": "Cancel"
+  },
+  "close": {
+    "message": "Close"
+  },
+  "pickerSave": {
+    "message": "Save $1 pictures"
+  },
+  "pickerHiddenSmall": {
+    "message": "Small pictures hidden (icons, buttons): $1"
+  },
+  "pickerEmpty": {
+    "message": "No pictures found on this page."
+  },
+  "pickerFullSize": {
+    "message": "- full size"
+  },
+  "pickerSaving": {
+    "message": "Saving $1 of $2..."
+  },
+  "optionsTitle": {
+    "message": "SD Image Sorter - browser extension"
+  },
+  "optionsLead": {
+    "message": "Save pictures from any web page into SD Image Sorter on this computer, with the page they came from."
+  },
+  "connectionTitle": {
+    "message": "Connection"
+  },
+  "addressLabel": {
+    "message": "Program address"
+  },
+  "saveAddress": {
+    "message": "Save"
+  },
+  "testConnection": {
+    "message": "Test connection"
+  },
+  "addressNote": {
+    "message": "Only an address on this computer (127.0.0.1 or localhost) is accepted. The default is http://127.0.0.1:8487."
+  },
+  "addressInvalid": {
+    "message": "Write an address on this computer, for example http://127.0.0.1:8487."
+  },
+  "pairTitle": {
+    "message": "Pairing"
+  },
+  "pairLead": {
+    "message": "The program asks \"Allow this browser extension?\" in its own window. Nothing can be saved until you allow it there."
+  },
+  "pairButton": {
+    "message": "Pair with the program"
+  },
+  "pairAgainButton": {
+    "message": "Pair again"
+  },
+  "forgetButton": {
+    "message": "Forget this pairing"
+  },
+  "permissionTitle": {
+    "message": "Access to web pages"
+  },
+  "permissionLead": {
+    "message": "The browser has not given this extension access to web pages, so it cannot read pictures or reach the program."
+  },
+  "permissionButton": {
+    "message": "Allow access"
+  },
+  "saveTitle": {
+    "message": "Saving"
+  },
+  "dropBoxLabel": {
+    "message": "Show a drop box while I drag a picture"
+  },
+  "saveLead": {
+    "message": "Right-click a picture and choose \"Save to SD Image Sorter\", or \"Save pictures on this page...\" to pick several. Pictures go to the program's output folder under collected/<date> and appear in its gallery."
+  },
+  "statusChecking": {
+    "message": "Checking..."
+  },
+  "statusOffline": {
+    "message": "SD Image Sorter is not running at $1. Start it, then press Test connection."
+  },
+  "statusUnpaired": {
+    "message": "Connected to SD Image Sorter $1 at $2. Not paired yet: press Pair with the program."
+  },
+  "statusPending": {
+    "message": "Waiting for you to press Allow in SD Image Sorter..."
+  },
+  "statusDenied": {
+    "message": "SD Image Sorter said no to this pairing. Press Pair to ask again."
+  },
+  "statusPaired": {
+    "message": "Connected and paired with SD Image Sorter $1 at $2."
+  },
+  "statusPairExpired": {
+    "message": "The pairing request was not answered in time or the program restarted. Press Pair to ask again."
+  },
+  "statusForgotten": {
+    "message": "This browser forgot the pairing. To remove it from the program too, use Settings > Browser extension > Revoke."
+  },
+  "openProgram": {
+    "message": "Open SD Image Sorter"
+  },
+  "openOptions": {
+    "message": "Options and pairing"
+  },
+  "popupUnpaired": {
+    "message": "The program is running, but this browser is not paired yet."
+  },
+  "popupPaired": {
+    "message": "Connected. Right-click any picture to save it."
+  }
+}

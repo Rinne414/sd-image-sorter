@@ -33,6 +33,7 @@
     <link rel="stylesheet" href="/static/css/style-map-locate.css">
     <link rel="stylesheet" href="/static/css/style-map-axes.css">
     <link rel="stylesheet" href="/static/css/send-to-generator.css">
+    <link rel="stylesheet" href="/static/css/collect.css">
     <!-- tokens.css must stay the LAST stylesheet: it owns the Graphite palette
          and remaps every legacy token defined by the sheets above. -->
     <link rel="stylesheet" href="/static/css/tokens.css">
@@ -5825,6 +5826,48 @@
                             <button type="button" class="btn btn-ghost btn-small" id="btn-settings-comfyui-reset" data-i18n="settings.comfyuiReset">Use 127.0.0.1:8188</button>
                         </div>
                     </div>
+                    <details class="guided-advanced-panel settings-preferences-panel ext-settings" id="settings-browser-ext">
+                        <summary class="guided-advanced-summary">
+                            <span data-i18n="ext.settingsTitle">Browser extension</span>
+                            <span class="guided-advanced-hint" id="settings-ext-summary-hint" data-i18n="ext.settingsHint">Save pictures from web pages with the page they came from.</span>
+                        </summary>
+                        <div class="guided-advanced-body ext-settings-body">
+                            <p class="ext-settings-lead" data-i18n="ext.settingsLead">Right-click a picture on any web page and choose "Save to SD Image Sorter", or drag it onto the box the extension shows. It is saved in collected/&lt;date&gt; in your output folder, appears in the gallery and keeps the page it came from. Install the extension once:</p>
+                            <div class="ext-install-grid">
+                                <div class="ext-install-card">
+                                    <strong data-i18n="ext.chromeTitle">Chrome / Edge</strong>
+                                    <ol>
+                                        <li data-i18n="ext.chromeStep1">Open chrome://extensions (Edge: edge://extensions).</li>
+                                        <li data-i18n="ext.chromeStep2">Turn on Developer mode.</li>
+                                        <li data-i18n="ext.chromeStep3">Press Load unpacked and choose this folder:</li>
+                                    </ol>
+                                    <div class="ext-path-row">
+                                        <code id="settings-ext-chrome-path" class="ext-path">-</code>
+                                        <button type="button" class="btn btn-ghost btn-small" id="btn-settings-ext-copy-chrome" data-i18n="ext.copyPath">Copy</button>
+                                        <button type="button" class="btn btn-secondary btn-small" id="btn-settings-ext-open-chrome" data-i18n="ext.openFolder">Open folder</button>
+                                    </div>
+                                </div>
+                                <div class="ext-install-card">
+                                    <strong data-i18n="ext.firefoxTitle">Firefox</strong>
+                                    <ol>
+                                        <li data-i18n="ext.firefoxStep1">Open about:debugging#/runtime/this-firefox.</li>
+                                        <li data-i18n="ext.firefoxStep2">Press Load Temporary Add-on and choose manifest.json in this folder:</li>
+                                        <li data-i18n="ext.firefoxStep3">Firefox removes a temporary add-on when it closes; load it again after a restart.</li>
+                                    </ol>
+                                    <div class="ext-path-row">
+                                        <code id="settings-ext-firefox-path" class="ext-path">-</code>
+                                        <button type="button" class="btn btn-ghost btn-small" id="btn-settings-ext-copy-firefox" data-i18n="ext.copyPath">Copy</button>
+                                        <button type="button" class="btn btn-secondary btn-small" id="btn-settings-ext-open-firefox" data-i18n="ext.openFolder">Open folder</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="ext-settings-note" data-i18n="ext.pairNote">Then open the extension's options and press "Pair with the program". This program asks you to allow it; only an extension you allow here can save pictures.</p>
+                            <div class="ext-paired">
+                                <strong data-i18n="ext.pairedTitle">Paired browsers</strong>
+                                <ul class="ext-paired-list" id="settings-ext-paired-list" aria-live="polite"></ul>
+                            </div>
+                        </div>
+                    </details>
                     <details class="guided-advanced-panel settings-preferences-panel" id="settings-ai-defaults-panel">
                         <summary class="guided-advanced-summary">
                             <span data-i18n="settings.aiDefaultsTitle">AI defaults</span>
@@ -6084,6 +6127,13 @@
                                 </div>
                                 <button id="btn-open-folder" class="btn-icon" title="Open in folder" data-i18n-title="modal.openFolder"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg></button>
                             </div>
+                            <div class="modal-collected-source" id="modal-collected-source" hidden>
+                                <span class="modal-collected-label" data-i18n="collect.sourceLabel">Collected from</span>
+                                <span id="modal-collected-source-page" class="modal-collected-page"></span>
+                                <span id="modal-collected-source-when" class="modal-collected-when"></span>
+                                <a id="modal-collected-source-open" class="modal-collected-link" target="_blank" rel="noopener noreferrer" data-i18n="collect.openPage">Open page</a>
+                                <a id="modal-collected-source-image" class="modal-collected-link" target="_blank" rel="noopener noreferrer" data-i18n="collect.openPicture">Picture address</a>
+                            </div>
                             <div class="modal-meta">
                                 <span class="meta-item"><strong>Generator:</strong> <span id="modal-generator">-</span></span>
                                 <span class="meta-item"><strong>Size:</strong> <span id="modal-size">-</span></span>
@@ -6342,6 +6392,10 @@
                     </label>
                 </div>
                 <div class="helper-text" id="scan-storage-hint" data-i18n="scan.storageHint">Local SSD folders scan best; network and cloud folders read slowly and can look stuck.</div>
+                <div class="collect-paste-row">
+                    <span class="collect-paste-copy" data-i18n="collect.pasteRowHint">A picture or a picture address on the clipboard? Paste it into the gallery (Ctrl+V); it is saved in collected/&lt;date&gt; in your output folder.</span>
+                    <button type="button" class="btn btn-secondary btn-small" id="btn-paste-picture" data-i18n="collect.pasteButton">Paste picture</button>
+                </div>
                 <details class="guided-advanced-panel" id="scan-advanced-options">
                     <summary class="guided-advanced-summary">
                         <span data-i18n="scan.advancedSummary">Advanced options</span>
@@ -7022,6 +7076,34 @@
                 <div class="modal-actions">
                     <button class="btn btn-ghost" id="btn-confirm-cancel" data-i18n="modal.cancel">Cancel</button>
                     <button class="btn btn-primary danger" id="btn-confirm-ok" data-i18n="modal.yes">Yes, proceed</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Browser extension pairing: answered only here, never by a web page. -->
+        <div class="modal" id="ext-pair-modal" role="alertdialog" aria-modal="true" aria-labelledby="ext-pair-title" aria-describedby="ext-pair-message">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content modal-small">
+                <h3 id="ext-pair-title" data-i18n="ext.pairTitle">Allow this browser extension?</h3>
+                <p id="ext-pair-message"></p>
+                <p class="modal-description" data-i18n="ext.pairScope">It can save pictures into this program and nothing else: it cannot read, change or delete your library. You can revoke it in Settings > Browser extension.</p>
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" id="btn-ext-pair-deny" type="button" data-i18n="ext.deny">Deny</button>
+                    <button class="btn btn-primary" id="btn-ext-pair-allow" type="button" data-i18n="ext.allow">Allow</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- A pasted picture address: the program downloads it after a yes. -->
+        <div class="modal" id="collect-url-modal" role="dialog" aria-modal="true" aria-labelledby="collect-url-title" aria-describedby="collect-url-message">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content modal-small">
+                <h3 id="collect-url-title" data-i18n="collect.urlTitle">Save this picture from the web?</h3>
+                <p id="collect-url-message"></p>
+                <code class="collect-url-value" id="collect-url-value"></code>
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" id="btn-collect-url-cancel" type="button" data-i18n="modal.cancel">Cancel</button>
+                    <button class="btn btn-primary" id="btn-collect-url-save" type="button" data-i18n="collect.urlSave">Save this picture</button>
                 </div>
             </div>
         </div>
@@ -8466,6 +8548,8 @@
     <script src="/static/js/auto-refresh.js"></script>
     <script src="/static/js/folder-watch.js"></script>
     <script src="/static/js/send-to-generator.js"></script>
+    <script src="/static/js/collect.js"></script>
+    <script src="/static/js/browser-extension.js"></script>
     <script src="/static/js/autosep.js"></script>
     <!-- Auto-Separate family (decomposed VERBATIM from the former 1,981-line
          autosep.js; the tag above is the retained servable shim).

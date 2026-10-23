@@ -159,6 +159,7 @@ ${String(value)}`)
 
         this._initSectionToggles();
         window.SendToGenerator?.close?.();
+        window.CollectedSource?.hide?.();
         const summaryImage = this.images.find(image => image.id === imageId) || window.App?.AppState?.images?.find(image => image.id === imageId);
         this.currentPreviewIndex = this.images.findIndex(image => image.id === imageId);
         this._currentPreviewId = imageId;
@@ -522,6 +523,8 @@ ${String(value)}`)
             }
             pathEl.closest('.modal-path-row')?.style.setProperty('display', image.path ? '' : 'none');
         }
+        // Saved from a web page or pasted: "Collected from ... Open page".
+        window.CollectedSource?.show?.(image.id);
         const modalGeneratorFinal = $('#modal-generator');
         if (modalGeneratorFinal) {
             modalGeneratorFinal.dataset.generatorValue = this._normalizeGenerator(image.generator);

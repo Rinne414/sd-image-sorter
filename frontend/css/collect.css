@@ -1,0 +1,183 @@
+/* Collecting pictures: browser extension settings, Paste picture, source line
+   in the preview (frontend/js/browser-extension.js, frontend/js/collect.js). */
+
+/* Settings > Browser extension */
+.ext-settings-body {
+    display: grid;
+    gap: 12px;
+}
+
+.ext-settings-lead,
+.ext-settings-note {
+    margin: 0;
+    color: var(--text-secondary, var(--text-muted));
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.ext-install-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 12px;
+    align-items: start;
+}
+
+.ext-install-card {
+    display: grid;
+    gap: 6px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-2);
+}
+
+.ext-install-card strong {
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.ext-install-card ol {
+    margin: 0;
+    padding-left: 20px;
+    color: var(--text-secondary, var(--text-muted));
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.ext-path-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.ext-path {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: var(--surface-1, rgba(0, 0, 0, 0.2));
+    font-size: 12px;
+    user-select: all;
+}
+
+.ext-paired {
+    display: grid;
+    gap: 6px;
+}
+
+.ext-paired > strong {
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.ext-paired-list {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.ext-paired-list li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.ext-paired-when,
+.ext-paired-list .ext-paired-empty {
+    color: var(--text-muted);
+}
+
+.ext-paired-list li .btn {
+    margin-left: auto;
+}
+
+/* Import dialog: Paste picture */
+.collect-paste-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+}
+
+.collect-paste-copy {
+    flex: 1 1 auto;
+    color: var(--text-secondary, var(--text-muted));
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.collect-paste-row .btn {
+    flex: 0 0 auto;
+}
+
+/* Preview: Collected from ... */
+.modal-collected-source {
+    margin: 4px 0 8px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary, var(--text-muted));
+    overflow-wrap: anywhere;
+}
+
+/* One line of text that wraps like a sentence: label, page, when, links. */
+.modal-collected-source > * + * {
+    margin-left: 6px;
+}
+
+.modal-collected-when:not(:empty)::before,
+.modal-collected-link::before {
+    content: "\00B7";
+    display: inline-block;
+    margin-right: 6px;
+    color: var(--text-muted);
+}
+
+.modal-collected-link {
+    color: var(--text-primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    white-space: nowrap;
+}
+
+.modal-collected-link:hover {
+    color: var(--accent-primary);
+}
+
+.modal-collected-source[hidden],
+.modal-collected-source [hidden] {
+    display: none !important;
+}
+
+.modal-collected-label {
+    color: var(--text-muted);
+}
+
+.modal-collected-page {
+    color: var(--text-primary);
+}
+
+.modal-collected-when {
+    color: var(--text-muted);
+}
+
+/* A pasted picture address */
+.collect-url-value {
+    display: block;
+    margin: 0 0 12px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--surface-2);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+    max-height: 120px;
+    overflow: auto;
+}

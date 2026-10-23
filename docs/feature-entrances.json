@@ -198,6 +198,45 @@
       }
     },
     {
+      "id": "library.collect-paste",
+      "area": "library",
+      "en": "Paste a picture or a picture address to save it into collected/<date>",
+      "zh": "粘贴图片或图片地址，存进 collected/<日期>",
+      "classic": [
+        "#btn-paste-picture",
+        "#btn-collect-url-save",
+        "#btn-collect-url-cancel"
+      ],
+      "vopus": {
+        "missing": "Vopus has no paste-to-collect yet; Ctrl+V in the classic gallery and Paste picture in its import dialog have it"
+      },
+      "next": {
+        "missing": "The new interface has no paste-to-collect yet"
+      }
+    },
+    {
+      "id": "library.browser-extension",
+      "area": "library",
+      "en": "Browser extension: save pictures from web pages with their source page (pairing, paired browsers, install folders)",
+      "zh": "浏览器扩展：从网页保存图片并记下来源（配对、已配对浏览器、安装文件夹）",
+      "classic": [
+        "#settings-browser-ext",
+        "#btn-settings-ext-copy-chrome",
+        "#btn-settings-ext-open-chrome",
+        "#btn-settings-ext-copy-firefox",
+        "#btn-settings-ext-open-firefox",
+        "#btn-ext-pair-allow",
+        "#btn-ext-pair-deny",
+        "#modal-collected-source"
+      ],
+      "vopus": {
+        "missing": "Vopus has no browser extension settings, pairing prompt or source line yet; pairing and Revoke are in classic Settings, and collected pictures appear in every interface"
+      },
+      "next": {
+        "missing": "The new interface has no browser extension settings, pairing prompt or source line yet"
+      }
+    },
+    {
       "id": "library.import",
       "area": "library",
       "en": "Import images from a folder",
