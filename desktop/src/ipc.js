@@ -6,10 +6,14 @@
  * page (a local file) may only retry or open the log folder.
  */
 
+const path = require('node:path');
+
 const { ipcMain } = require('electron');
 
-const { isBackendUrl } = require('./paths');
+const { isBackendUrl, isStatusPageUrl } = require('./paths');
 const { startNativeDrag } = require('./drag');
+
+const STATUS_PAGE = path.join(__dirname, 'pages', 'status.html');
 
 function senderUrl(event) {
     return event.senderFrame?.url || event.sender.getURL();
@@ -20,7 +24,7 @@ function fromBackend(event, getPort) {
 }
 
 function fromStatusPage(event) {
-    return senderUrl(event).startsWith('file:');
+    return isStatusPageUrl(senderUrl(event), STATUS_PAGE);
 }
 
 function refuse() {
@@ -38,9 +42,9 @@ function refuse() {
  * @param {() => void} deps.openLogFolder
  */
 function registerIpc(deps) {
-    ipcMain.handle('sd:start-drag', (event, paths) => {
+    ipcMain.handle('sd:start-drag', (event, imageIds, libraryId) => {
         if (!fromBackend(event, deps.getPort)) return refuse();
-        return startNativeDrag(event.sender, paths, deps.dragIcon);
+        return startNativeDrag(event.sender, { imageIds, libraryId, port: deps.getPort() }, deps.dragIcon);
     });
     ipcMain.handle('sd:get-settings', (event) => {
         if (!fromBackend(event, deps.getPort)) return refuse();

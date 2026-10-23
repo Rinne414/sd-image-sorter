@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 import database as db
+from app_security import require_own_page
 from services.folder_watch import get_folder_watch_service
 
 router = APIRouter(prefix="/api", tags=["folder-watch"])
@@ -65,7 +66,8 @@ def watch_status():
         "while paused. A pause lasts until resumed or until the program restarts."
     ),
 )
-def pause_watching(request: WatchPauseRequest):
+def pause_watching(request: WatchPauseRequest, http_request: Request):
+    require_own_page(http_request, "pause folder watching")
     service = get_folder_watch_service()
     service.set_paused(request.paused)
     return service.status()

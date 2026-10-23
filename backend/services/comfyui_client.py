@@ -20,6 +20,8 @@ CLIENT_ID = "sd-image-sorter"
 # Queueing returns at once; a slow answer means a busy or stuck ComfyUI.
 CONNECT_TIMEOUT_SECONDS = 5.0
 ANSWER_TIMEOUT_SECONDS = 60.0
+# A node error line is a sentence; the rest of a long answer is not for the user.
+ERROR_LINE_MAX_CHARS = 300
 
 
 @dataclass
@@ -65,6 +67,13 @@ def configured_comfyui_url() -> str:
     return normalize_comfyui_url(config.get_comfyui_url_setting())
 
 
+def _clip(value: Any) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) > ERROR_LINE_MAX_CHARS:
+        return text[: ERROR_LINE_MAX_CHARS - 3] + "..."
+    return text
+
+
 def _node_error_lines(payload: Dict[str, Any]) -> List[str]:
     lines: List[str] = []
     node_errors = payload.get("node_errors")
@@ -73,11 +82,11 @@ def _node_error_lines(payload: Dict[str, Any]) -> List[str]:
     for node_id, info in node_errors.items():
         if not isinstance(info, dict):
             continue
-        node_type = info.get("class_type") or "node"
+        node_type = _clip(info.get("class_type") or "node")
         for error in info.get("errors") or []:
             if isinstance(error, dict):
                 detail = error.get("details") or error.get("message") or ""
-                lines.append(f"{node_type} #{node_id}: {detail}".strip())
+                lines.append(f"{node_type} #{_clip(node_id)}: {_clip(detail)}".strip())
     return lines
 
 
@@ -88,8 +97,10 @@ def _rejected(response: httpx.Response, base_url: str) -> ComfyUIError:
         payload = {}
     payload = payload if isinstance(payload, dict) else {}
     error = payload.get("error")
-    reason = error.get("message") if isinstance(error, dict) else None
-    reason = reason or response.text.strip()[:500] or f"HTTP {response.status_code}"
+    # Only ComfyUI's own error message and node errors reach the user, never a
+    # raw body (an address pointed at another program would echo its page).
+    reason = _clip(error.get("message") if isinstance(error, dict) else None)
+    reason = reason or f"HTTP {response.status_code}"
     return ComfyUIError(
         code="rejected",
         message=f"ComfyUI at {base_url} did not queue this recipe: {reason}",

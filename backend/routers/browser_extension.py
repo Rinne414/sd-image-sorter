@@ -20,7 +20,7 @@ from starlette.datastructures import UploadFile
 
 from app_diagnostics import _open_path_in_file_manager as open_in_file_manager
 from app_info import APP_VERSION
-from app_security import EXT_TOKEN_HEADER, own_page_rejection
+from app_security import EXT_TOKEN_HEADER, own_page_rejection, require_own_page
 from library_context import get_current_library_id
 from services.browser_extension_package import TARGETS, prepare_install_folders
 from services.collect_download import DownloadError
@@ -201,7 +201,8 @@ def extension_decide(
 
 
 @router.delete("/pairings/{pairing_id}", summary="Revoke a paired browser")
-def extension_revoke(pairing_id: str) -> Dict[str, Any]:
+def extension_revoke(pairing_id: str, request: Request) -> Dict[str, Any]:
+    require_own_page(request, "revoke a paired browser")
     if not get_pairing_registry().revoke(pairing_id):
         raise HTTPException(status_code=404, detail="This browser is not paired.")
     return {"revoked": pairing_id}

@@ -17,7 +17,6 @@
 
     const desktop = window.sdDesktop || null;
     const COLLECT_CHANNEL = 'sd-image-sorter-collect';
-    const BY_IDS_CHUNK = 2000;
     const FOCUS_ATTEMPTS = 20;
     const DEFAULT_SHORTCUT = 'Control+Alt+Space';
     const QUICK_COLLECT_URL = '/static/quick-collect.html';
@@ -45,16 +44,10 @@
         return ids.length ? ids : [id];
     }
 
-    async function dragPaths(ids, image) {
-        const known = new Map((appState()?.images || []).map((row) => [Number(row.id), row.path]));
-        known.set(Number(image.id), image.path);
-        const missing = ids.filter((id) => !known.get(id));
-        for (let start = 0; start < missing.length; start += BY_IDS_CHUNK) {
-            const chunk = missing.slice(start, start + BY_IDS_CHUNK);
-            const result = await window.App.API.post('/api/images/by-ids', { image_ids: chunk });
-            (result?.images || []).forEach((row) => known.set(Number(row.id), row.path));
-        }
-        return ids.map((id) => known.get(id)).filter(Boolean);
+    /** The library this tab shows; the shell asks the backend for the files in it. */
+    function currentLibraryId() {
+        const headers = window.LibraryWorkspace?.libraryHeaders?.({}) || {};
+        return headers['X-SD-Library-Id'] || 'main';
     }
 
     function clearOwnDragOnNextMove() {
@@ -64,9 +57,9 @@
 
     async function runNativeDrag(image, card) {
         try {
-            const paths = await dragPaths(await dragIds(image, card), image);
-            if (!paths.length) return;
-            await desktop.startDrag(paths);
+            const ids = await dragIds(image, card);
+            if (!ids.length) return;
+            await desktop.startDrag(ids, currentLibraryId());
         } catch (error) {
             window.Logger?.warn?.('Native drag could not start', { error });
             if (typeof showToast === 'function') {
@@ -82,7 +75,7 @@
      * the drag (the browser drag is cancelled), false in a normal browser.
      */
     function startNativeDrag(event, image) {
-        if (!desktop?.startDrag || !image?.path) return false;
+        if (!desktop?.startDrag || !image?.id) return false;
         event.preventDefault();
         ownDragActive = true;
         runNativeDrag(image, event.currentTarget);
