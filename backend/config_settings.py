@@ -301,6 +301,25 @@ def save_output_root_setting(value: str) -> str:
     return cleaned
 
 
+def get_comfyui_url_setting() -> str:
+    """The ComfyUI address the user set in Settings; "" = the default address."""
+    value = _read_app_settings().get("comfyui_url")
+    return value.strip() if isinstance(value, str) else ""
+
+
+def save_comfyui_url_setting(value: str) -> str:
+    """Store the ComfyUI address ("" clears it). Returns the stored value."""
+    cleaned = str(value or "").strip()
+    with _app_settings_lock:
+        settings = _read_app_settings_for_update()
+        if cleaned:
+            settings["comfyui_url"] = cleaned
+        else:
+            settings.pop("comfyui_url", None)
+        _write_app_settings(settings)
+    return cleaned
+
+
 def get_trusted_model_folders() -> list[str]:
     """Folders the user added in Model Center whose model files load like the
     program's own models folder (model_roots.py); stored as entered."""

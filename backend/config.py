@@ -181,7 +181,7 @@ OUTPUT_DIR: Path = Path(
         str(PACKAGE_ROOT / "output"),
     )
 ).expanduser()
-OUTPUT_FEATURES: tuple[str, ...] = ("censor", "publish", "video-censor")
+OUTPUT_FEATURES: tuple[str, ...] = ("censor", "publish", "video-censor", "workflows")
 UPDATE_CHANNEL_CONFIG_PATH: Path = CONFIG_DIR / "update-channel.json"
 DOWNLOAD_MIRROR_CONFIG_PATH: Path = CONFIG_DIR / "download-mirror.json"
 APP_SETTINGS_CONFIG_PATH: Path = CONFIG_DIR / "app-settings.json"
@@ -210,6 +210,8 @@ from config_settings import (
     update_trusted_model_folders,
     get_output_root_setting,
     save_output_root_setting,
+    get_comfyui_url_setting,
+    save_comfyui_url_setting,
 )
 MANUAL_SORT_SESSION_FILE: str = os.environ.get(
     "SD_IMAGE_SORTER_SORT_SESSION_FILE",
