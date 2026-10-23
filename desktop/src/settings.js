@@ -13,6 +13,7 @@ const DEFAULT_SHORTCUT = 'Control+Alt+Space';
 const DEFAULTS = Object.freeze({
     closeToTray: true,
     closeNoticeShown: false,
+    shortcutsOffered: false,
     shortcut: DEFAULT_SHORTCUT,
 });
 
@@ -22,6 +23,7 @@ function sanitize(raw) {
     return {
         closeToTray: typeof source.closeToTray === 'boolean' ? source.closeToTray : DEFAULTS.closeToTray,
         closeNoticeShown: typeof source.closeNoticeShown === 'boolean' ? source.closeNoticeShown : DEFAULTS.closeNoticeShown,
+        shortcutsOffered: typeof source.shortcutsOffered === 'boolean' ? source.shortcutsOffered : DEFAULTS.shortcutsOffered,
         shortcut: typeof source.shortcut === 'string' ? source.shortcut.trim().slice(0, 100) : DEFAULTS.shortcut,
     };
 }

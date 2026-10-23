@@ -557,6 +557,12 @@ def test_all_five_release_archives_use_packaged_release_notes(monkeypatch, tmp_p
     monkeypatch.setattr(release_builder, "find_seven_zip", lambda: None)
     monkeypatch.setattr(release_builder, "copy_project", copy_minimal_project)
     monkeypatch.setattr(release_builder, "build_frontend_v4", lambda: None)
+    (fake_root / "desktop").mkdir()
+    (fake_root / "desktop" / "package.json").write_text('{"version": "0.4.0"}', encoding="utf-8")
+    unpacked = tmp_path / "unpacked"
+    unpacked.mkdir()
+    (unpacked / "SD Image Sorter.exe").write_bytes(b"MZ")
+    monkeypatch.setattr(release_builder, "build_desktop_shell", lambda root: unpacked)
     monkeypatch.setattr(release_builder, "prepare_embedded_python", lambda stage_dir: None)
     monkeypatch.setattr(
         release_builder,
@@ -1765,6 +1771,8 @@ def _lazy_release_common_archive_names():
         "sd-image-sorter/frontend/js/app.js",
         "sd-image-sorter/frontend/js/gallery.js",
         "sd-image-sorter/frontend-v4/dist/index.html",
+        "sd-image-sorter/browser-extension/manifest.base.json",
+        "sd-image-sorter/browser-extension/src/background.js",
         "sd-image-sorter/update/package-manifest.json",
     }
 
@@ -1823,6 +1831,9 @@ def test_lazy_release_qa_accepts_windows_portable_archive_with_batch_launchers_a
         "sd-image-sorter/run.sh",
         "sd-image-sorter/run-portable.bat",
         "sd-image-sorter/python/python.exe",
+        "sd-image-sorter/SD Image Sorter.exe",
+        "sd-image-sorter/resources/app.asar",
+        "sd-image-sorter/resources.pak",
     }
 
     module.assert_archive_contents(names, package_kind="windows-portable")

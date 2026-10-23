@@ -40,6 +40,8 @@ PACKAGE_FORBIDDEN_PREFIXES = (
     "backend/tests/",
     "backend/venv/",
     "data/",
+    # The desktop shell ships built (SD Image Sorter.exe), never as sources.
+    "desktop/",
     # Vopus ships as its build (frontend-v4/dist) only.
     "frontend-v4/node_modules/",
     "frontend-v4/src/",
@@ -60,8 +62,15 @@ PACKAGE_REQUIRED_COMMON_APP_FILES = (
     "frontend/js/app.js",
     "frontend/js/gallery.js",
     "frontend-v4/dist/index.html",
+    # The program builds the Chrome and Firefox extension folders from these.
+    "browser-extension/manifest.base.json",
+    "browser-extension/src/background.js",
     "update/package-manifest.json",
 )
+
+# The desktop shell is part of the Windows package only, at the top of the folder.
+SHELL_EXE = "SD Image Sorter.exe"
+SHELL_REQUIRED_FILES = (SHELL_EXE, "resources/app.asar", "resources.pak")
 
 V4_DIST_PREFIX = "frontend-v4/dist/"
 V4_INDEX_PATH = V4_DIST_PREFIX + "index.html"
@@ -242,6 +251,8 @@ def assert_archive_contents(names: Iterable[str], *, package_kind: str) -> None:
         preview = ", ".join(internal_reports[:10])
         raise LazyQaError(f"{package_kind} archive contains internal release-work file: {preview}")
 
+    assert_shell_presence(normalized_names, package_kind=package_kind)
+
     has_python = any(name.startswith("python/") for name in normalized_names)
     if package_kind == "windows-portable" and not has_python:
         raise LazyQaError("windows-portable archive does not include embedded python/")
@@ -251,6 +262,28 @@ def assert_archive_contents(names: Iterable[str], *, package_kind: str) -> None:
         raise LazyQaError("app-patch archive must not include embedded python/")
     if package_kind == "linux" and has_python:
         raise LazyQaError("linux archive must not include embedded python/")
+
+
+def assert_shell_presence(normalized_names: set[str], *, package_kind: str) -> None:
+    """The Windows package holds the desktop shell; no other package may."""
+    if package_kind != "windows-portable":
+        if SHELL_EXE in normalized_names:
+            raise LazyQaError(f"{package_kind} archive must not include {SHELL_EXE}")
+        return
+    for required in SHELL_REQUIRED_FILES:
+        if required not in normalized_names:
+            raise LazyQaError(f"windows-portable archive missing desktop shell file: {required}")
+
+
+def assert_shell_not_managed(read_member: Callable[[str], bytes], names: Iterable[str]) -> None:
+    """The in-app updater must not manage (replace or delete) the shell's files."""
+    members = {normalize_archive_name(name): name for name in names}
+    manifest = json.loads(read_member(members["update/package-manifest.json"]).decode("utf-8"))
+    managed = {str(path) for path in manifest.get("managed_paths") or []}
+    shell_files = {name for name in members if name in SHELL_REQUIRED_FILES or name.startswith(("locales/", "resources/"))}
+    managed_shell = sorted(shell_files & managed)
+    if managed_shell:
+        raise LazyQaError(f"package-manifest.json manages desktop shell files: {', '.join(managed_shell[:5])}")
 
 
 def assert_frontend_v4_build(
@@ -293,6 +326,8 @@ def _check_package_archive(
     raw_names = list(names)
     assert_archive_contents(raw_names, package_kind=package_kind)
     members = {normalize_archive_name(name): name for name in raw_names}
+    if package_kind == "windows-portable":
+        assert_shell_not_managed(read_member, raw_names)
     assert_frontend_v4_build(
         members,
         lambda path: read_member(members[path]).decode("utf-8"),
@@ -322,6 +357,10 @@ def check_release_packages(artifact_root: Path, version: str | None) -> None:
     entries = manifest.get("assets") or []
     if len(entries) < 3:
         raise LazyQaError(f"Manifest has too few assets: {manifest_path}")
+
+    for field in ("shell_version", "min_shell_version"):
+        if not str(manifest.get(field) or "").strip():
+            raise LazyQaError(f"Release manifest has no {field}: {manifest_path}")
 
     seen_names = {entry.get("name", "") for entry in entries}
     required_suffixes = (

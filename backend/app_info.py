@@ -25,5 +25,10 @@ LINUX_FULL_ASSET_TEMPLATE = "sd-image-sorter-v{version}-linux.tar.gz"
 # the right tarball for the running machine.
 LINUX_PORTABLE_ASSET_TEMPLATE = "sd-image-sorter-v{version}-linux-portable-{arch}.tar.gz"
 LINUX_PORTABLE_ASSET_ARCHES = ("x86_64", "aarch64")
+# Oldest desktop shell (SD Image Sorter.exe, desktop/package.json version) this
+# app version still works with. The in-app updater never replaces the shell, so
+# raise this only when a release needs a newer one; the release manifest
+# carries it as min_shell_version.
+MIN_SHELL_VERSION = "0.1.0"
 PACKAGE_MANIFEST_RELATIVE_PATH = "update/package-manifest.json"
 INSTALLED_MANIFEST_RELATIVE_PATH = "update/installed-manifest.json"

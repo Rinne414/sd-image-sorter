@@ -75,6 +75,9 @@ class TrayController {
             { type: 'separator' },
             this.watchingItem(),
             { type: 'separator' },
+            ...(this.actions.createShortcuts
+                ? [{ label: this.t('createShortcuts'), click: () => this.actions.createShortcuts() }]
+                : []),
             { label: this.t('quit'), click: () => this.actions.quit() },
         ];
     }

@@ -30,17 +30,17 @@
 
 <p align="center">
   <sub>
-    Windows → <code>windows-portable.zip</code> ·
+    Windows → <code>windows-portable.zip</code> (extract, double-click <code>SD Image Sorter.exe</code>) ·
     Linux without Python 3.12+ → <code>linux-portable-x86_64.tar.gz</code> / <code>linux-portable-aarch64.tar.gz</code> ·
     Linux with Python 3.12+ → <code>linux.tar.gz</code><br>
-    Windows 选 <code>windows-portable.zip</code> ·
+    Windows 选 <code>windows-portable.zip</code>（解压后双击 <code>SD Image Sorter.exe</code>）·
     Linux 没装 Python 3.12+ 选 <code>linux-portable-x86_64.tar.gz</code> / <code>linux-portable-aarch64.tar.gz</code> ·
     已有 Python 3.12+ 选 <code>linux.tar.gz</code>
   </sub>
 </p>
 
 > [!IMPORTANT]
-> Local-first: gallery, tagging, and models stay on disk. Optional cloud VLM captioning runs only with a user-supplied API key and does upload images to that provider. No account required.
+> Local-first: gallery, tagging, and models stay on disk. Only model and package downloads, update checks and the optional cloud VLM go online (see the "what goes online" table below); cloud VLM captioning runs only with a user-supplied API key and does upload images to that provider. No account required.
 
 <a name="zh-cn"></a>
 
@@ -253,6 +253,16 @@ Eagle、Billfish 是通用素材库，不列入这张 SD 工作流细表。详�
 - 需要重启时一键重启（启动器会原地重开），回来后接着把剩下的准备完
 - 考虑过但暂时没加的模型和原因：[docs/MODELS_CONSIDERED.md](docs/MODELS_CONSIDERED.md)
 
+### 17. 常驻桌面、监看与收集
+
+- **常驻桌面程序（Windows）**：`SD Image Sorter.exe` 把程序放在托盘里。关窗口不退出；托盘菜单有 打开、快速收集、暂停/恢复监看文件夹、创建快捷方式、退出；全局快捷键（默认 Ctrl+Alt+Space）把窗口叫出来并停在搜索框；可以设为登录时在托盘里启动；可以把图库里的图当作真实文件拖出来，交给资源管理器等其他程序。程序不发送任何统计，托盘程序只和本机的 127.0.0.1 服务通信。
+- **监看文件夹**：在 设置 > 图库文件夹 勾选「监看新图」，指向 ComfyUI 或 WebUI 的输出文件夹，新图会自己进图库，不用点 Scan；程序关着时生成的图，下次启动会补上。网络文件夹每 15 秒查一次。
+- **发回生成器**：右键一张图 →「发送到生成器…」。可以复制 WebUI / NovelAI 的提示词，复制或保存 ComfyUI 工作流（粘贴到 ComfyUI 画布，或把 .json 拖进去），也可以「在 ComfyUI 里再跑一次」（新种子或原种子）。ComfyUI 地址默认 `127.0.0.1:8188`，在设置里改。
+- **浏览器扩展（Chrome / Edge / Firefox）**：在网页上右键图片 →「保存到 SD Image Sorter」，图片连同来源页面存进输出文件夹的 `collected/<日期>`，并出现在图库里。安装一次：打开 设置 > 浏览器扩展，按页面上的步骤操作——Chrome / Edge：打开 `chrome://extensions`（Edge 是 `edge://extensions`），打开「开发者模式」，点「加载已解压的扩展程序」，选页面上显示的文件夹；Firefox：打开 `about:debugging#/runtime/this-firefox`，点「临时载入附加组件」，选该文件夹里的 `manifest.json`（Firefox 关闭后会移除临时附加组件，重启后要再载入一次）。然后打开扩展的选项，点「与程序配对」，在程序里确认并核对扩展 ID。只有你允许过的扩展能存图，而且只能存图，读不到也改不了你的图库；可以在 设置 > 浏览器扩展 里撤销。
+- **粘贴收集**：在图库里按 Ctrl+V，粘贴一张图或一个图片地址，就存进 `collected/<日期>` 并加入图库。
+- **视频**：文件夹里的视频也会进图库：鼠标放上去播放，打开后可以读它的提示词，还有「视频」筛选。需要 ffmpeg 时点「安装视频支持」，会从 GitHub 下载 LGPL 版 ffmpeg（Windows 约 77 MB，Linux 约 64 MB），按发布页的 SHA256 校验；系统里已有 ffmpeg 就不用下载。
+- **Linux**：这一版的 Linux 包只有浏览器模式（`./run.sh` / `./run-portable.sh`），没有托盘程序；监看文件夹、发回生成器、浏览器扩展、粘贴收集和视频在浏览器模式里照常可用，监看只在程序运行时进行。
+
 ## 这工具最适合谁
 
 - Stable Diffusion / NovelAI / ComfyUI 重度用户
@@ -266,7 +276,7 @@ Eagle、Billfish 是通用素材库，不列入这张 SD 工作流细表。详�
 
 | 你的系统 | 下载这个文件 | 启动方式 |
 |:--|:--|:--|
-| **Windows** | `sd-image-sorter-<版本>-windows-portable.zip` | 解压后双击 `run-portable.bat` |
+| **Windows** | `sd-image-sorter-<版本>-windows-portable.zip`（约 165 MB） | 解压后双击 `SD Image Sorter.exe`（常驻托盘的桌面程序）；只想用浏览器就双击 `run-portable.bat` |
 | **Linux，没装 Python 3.12+** | Intel/AMD 用 `sd-image-sorter-<版本>-linux-portable-x86_64.tar.gz`（约 80 MB）；ARM / 树莓派用 `sd-image-sorter-<版本>-linux-portable-aarch64.tar.gz`（约 75 MB） | 解压后 `./run-portable.sh` |
 | **Linux，已有 Python 3.12+** | `sd-image-sorter-<版本>-linux.tar.gz` | 解压后 `./run.sh` |
 
@@ -277,9 +287,11 @@ Eagle、Billfish 是通用素材库，不列入这张 SD 工作流细表。详�
 
 1. 在 [Releases 页面](https://github.com/Rinne414/sd-image-sorter/releases/latest) 下载 `windows-portable.zip`
 2. 解压到任意目录
-3. 双击 `run-portable.bat`
-4. 浏览器会自动打开 `http://localhost:8487`（请用近两年的桌面浏览器：Chrome / Edge 89+、Firefox 108+、Safari 16.4+；画风地图需要 WebGL）
+3. 双击 `SD Image Sorter.exe`。第一次启动会弹出一个控制台窗口，安装核心组件（要联网，要几分钟，进度都在那个窗口里）；之后程序在自己的窗口里打开。第一次还会问要不要在桌面和开始菜单放快捷方式（不需要管理员权限，也可以之后在托盘菜单里创建）
+4. 只想用浏览器：双击 `run-portable.bat`，浏览器会自动打开 `http://localhost:8487`（请用近两年的桌面浏览器：Chrome / Edge 89+、Firefox 108+、Safari 16.4+；画风地图需要 WebGL）。两种启动方式用的是同一个文件夹里的同一份数据，不要同时开两个
 5. 首次使用请点击右上角 **Setup Now** 下载所需的 AI 模型
+6. 退出：托盘图标右键 → 退出。关闭窗口只是收到托盘，文件夹监看继续工作（可在 设置 > 桌面 里改成关闭即退出）
+7. 程序内更新只更新程序文件，不会替换 `SD Image Sorter.exe`。如果某个版本需要新的桌面程序，「检查更新」会告诉你去下载完整包，不会半途更新
 
 ### Linux
 
@@ -389,6 +401,9 @@ run.bat
 | 你点「安装视频支持」 | GitHub（BtbN/FFmpeg-Builds） | 只下载 ffmpeg 的 LGPL 版本（Windows 约 77 MB，Linux 约 64 MB），按发布页的 SHA256 校验后放进程序的 data/tools/ffmpeg。系统里已有 ffmpeg 时不用下载 |
 | 你设置了云端 VLM / LLM，并用它打标、写描述或翻译 | 你填的服务（OpenAI 兼容接口、Anthropic、Google Gemini / Vertex） | **会送出图片**（缩小后的 JPEG）和提示词。不想上传图片，就不要设置云端服务，或改用本机的 Ollama |
 | 数据集翻译选了外部翻译服务 | Google 翻译、MyMemory、百度等 | 只送要翻译的标签或句子，不送图片。默认用你设置的 VLM |
+| 你点「在 ComfyUI 里再跑一次」 | 你在设置里填的 ComfyUI 地址，默认是本机的 `127.0.0.1:8188` | 这张图的 ComfyUI 工作流。地址是本机时数据不出这台电脑；只有你自己把地址改成别的电脑，才会送到那里 |
+| 浏览器扩展保存图片 | 只连本程序的 127.0.0.1 | 你右键的那张图及来源页面地址，只交给本程序；扩展不连任何其他服务器，也没有统计 |
+| 桌面程序（`SD Image Sorter.exe`） | 只连本机 127.0.0.1 的服务 | 什么也不对外发送，没有统计、没有崩溃上报 |
 | 你点开的链接 | Civitai、GitHub、模型页面 | 在浏览器新标签页打开 |
 
 想换来源：模型下载在模型中心的「下载来源」里切换；环境变量 `SD_IMAGE_SORTER_PYPI_MIRROR` 指定 PyPI 镜像（指定后不再测速），`HF_ENDPOINT` 指定 Hugging Face 地址。
@@ -705,6 +720,7 @@ Eagle and Billfish are general asset managers and are not in this SD-workflow ta
 - **Caption Editor**: Dedicated full-screen workbench for editing LoRA training captions
 - **Pixiv Set Publishing**: censor, order, batch rename, and export a ready-to-upload set (metadata can be stripped)
 - **Model Center**: one place for every AI model; first-use setup states size and restart needs, and restarts in place
+- **Resident desktop program, folder watching, send to generator, browser extension, paste to collect, videos**: see "Always-on desktop program, watching and collecting" below
 - **Models we considered but have not added**, and why: [docs/MODELS_CONSIDERED.md](docs/MODELS_CONSIDERED.md)
 
 ### Screenshots
@@ -717,7 +733,7 @@ Every build lives under **Assets** on the **[Releases page](https://github.com/R
 
 | Your system | Download this file | How to start it |
 |:--|:--|:--|
-| **Windows** | `sd-image-sorter-<version>-windows-portable.zip` | Extract, double-click `run-portable.bat` |
+| **Windows** | `sd-image-sorter-<version>-windows-portable.zip` (about 165 MB) | Extract, double-click `SD Image Sorter.exe` (the desktop program that stays in the tray); to use only the browser, double-click `run-portable.bat` instead |
 | **Linux without Python 3.12+** | `sd-image-sorter-<version>-linux-portable-x86_64.tar.gz` (Intel/AMD, ~80 MB) or `sd-image-sorter-<version>-linux-portable-aarch64.tar.gz` (ARM / Raspberry Pi, ~75 MB) | Extract, run `./run-portable.sh` |
 | **Linux with Python 3.12+** | `sd-image-sorter-<version>-linux.tar.gz` | Extract, run `./run.sh` |
 
@@ -728,9 +744,11 @@ Every build lives under **Assets** on the **[Releases page](https://github.com/R
 
 1. Download `windows-portable.zip` from the [Releases page](https://github.com/Rinne414/sd-image-sorter/releases/latest)
 2. Extract it anywhere
-3. Double-click `run-portable.bat`
-4. Your browser opens `http://localhost:8487` (use a desktop browser from the last two years: Chrome / Edge 89+, Firefox 108+, Safari 16.4+; the Style Map needs WebGL)
+3. Double-click `SD Image Sorter.exe`. The first start opens a console window that installs the core packages (needs the internet, takes a few minutes, progress shows in that window); after that the program opens in its own window. The first start also asks whether to add desktop and Start menu shortcuts (no administrator rights needed; the tray menu can make them later)
+4. Prefer the browser? Double-click `run-portable.bat`: your browser opens `http://localhost:8487` (use a desktop browser from the last two years: Chrome / Edge 89+, Firefox 108+, Safari 16.4+; the Style Map needs WebGL). Both ways use the same data in the same folder; do not run both at once
 5. First time? Click **Setup Now** (top-right) to download the AI models you need
+6. To quit: right-click the tray icon and choose Quit. Closing the window only sends the program to the tray, where folder watching keeps working (Settings > Desktop can make closing quit instead)
+7. The in-app update replaces program files but never `SD Image Sorter.exe`. When a release needs a newer desktop program, "Check update" tells you to download the full package instead of updating half-way
 
 On NVIDIA machines, first launch may spend extra time at `Checking Windows ONNX Runtime package state...` while installing CUDA / cuDNN runtime wheels. The launcher now shows real pip progress there; it is not frozen.
 
@@ -777,6 +795,16 @@ cd sd-image-sorter
 > macOS users can run `./run.sh` directly. Apple Silicon and Intel Macs both support the core gallery, organization, and ONNX features. General Torch-backed AI requires **macOS 14+ on Apple Silicon**; SAM3 remains NVIDIA CUDA-only and is unavailable on macOS. Intel or older macOS is rejected before an unsafe legacy Torch install while the core app remains usable.
 
 
+### Always-on desktop program, watching and collecting
+
+- **Desktop program (Windows)**: `SD Image Sorter.exe` keeps the program in the tray. Closing the window does not quit it; the tray menu has Open, Quick collect, Pause / Resume folder watching, Create shortcuts and Quit. A global shortcut (default Ctrl+Alt+Space) brings the window up with the cursor in the search box; it can start hidden at sign-in; pictures can be dragged out of the gallery as real files into other programs such as Explorer. It sends no statistics and talks only to the local 127.0.0.1 server.
+- **Folder watching**: in Settings > Library folders tick "Watch for new pictures" on your ComfyUI or WebUI output folder; new pictures join the gallery by themselves, no Scan. Pictures made while the program was closed are added at the next start. Network folders are checked every 15 seconds.
+- **Send to generator**: right-click a picture and choose "Send to generator...". Copy the WebUI or NovelAI prompt, copy or save the ComfyUI workflow (paste it on the ComfyUI canvas, or drop the .json on it), or "Run in ComfyUI" again with a new or the same seed. The ComfyUI address defaults to `127.0.0.1:8188`; change it in Settings.
+- **Browser extension (Chrome / Edge / Firefox)**: right-click a picture on any web page and choose "Save to SD Image Sorter"; it is saved in `collected/<date>` in your output folder together with the page it came from, and shows up in the gallery. Install it once: open Settings > Browser extension and follow the steps shown. Chrome / Edge: open `chrome://extensions` (Edge: `edge://extensions`), turn on Developer mode, press Load unpacked and choose the folder shown. Firefox: open `about:debugging#/runtime/this-firefox`, press Load Temporary Add-on and choose `manifest.json` in that folder (Firefox removes a temporary add-on when it closes, so load it again after a restart). Then open the extension's options and press "Pair with the program"; the program asks you to allow it and shows the extension ID to compare. An allowed extension can save pictures and nothing else (it cannot read, change or delete your library); revoke it in Settings > Browser extension.
+- **Paste to collect**: press Ctrl+V in the gallery with a picture or a picture address on the clipboard; it is saved in `collected/<date>` and added to the gallery.
+- **Videos**: videos in your folders join the gallery: hover a card to play it, open it to read its prompt, and use the Videos filter. When ffmpeg is needed, press "Install video support": it downloads the LGPL ffmpeg build from GitHub (about 77 MB on Windows, 64 MB on Linux) and checks it against the release's SHA256 list; nothing is downloaded when ffmpeg is already on your system.
+- **Linux**: this release's Linux packages are browser mode only (`./run.sh` / `./run-portable.sh`); there is no tray program. Folder watching, send to generator, the browser extension, paste to collect and videos work in browser mode as usual; watching runs only while the program is running.
+
 ### What Works Immediately vs. What Needs Setup?
 
 | Status | Features | Notes |
@@ -801,6 +829,9 @@ Your pictures, tags and library data stay on your computer. The server only acce
 | You press "Install video support" | GitHub (BtbN/FFmpeg-Builds) | A download of the LGPL ffmpeg build only (about 77 MB on Windows, 64 MB on Linux), checked against the release's SHA256 list and unpacked into data/tools/ffmpeg. Not needed when ffmpeg is already on your system |
 | You set up a cloud VLM / LLM and use it to tag, describe or translate | The service you entered (OpenAI-compatible APIs, Anthropic, Google Gemini / Vertex) | **Your pictures** (downscaled JPEG) and the prompt. To keep pictures local, leave cloud services unset or use a local Ollama |
 | Dataset translation with an external translation service | Google Translate, MyMemory, Baidu and others | The tag or sentence text only, never pictures. The default uses your configured VLM |
+| You press "Run in ComfyUI" | The ComfyUI address you set in Settings, `127.0.0.1:8188` by default (this computer) | The picture's ComfyUI workflow. With a local address it never leaves this computer; it goes elsewhere only if you point the address at another computer |
+| The browser extension saves a picture | Only this program at 127.0.0.1 | The picture you right-clicked and its page address, handed to this program only. The extension contacts no other server and has no statistics |
+| The desktop program (`SD Image Sorter.exe`) | Only the local server at 127.0.0.1 | Nothing leaves this computer: no statistics, no crash reports |
 | Links you click | Civitai, GitHub, model pages | Opened in a new browser tab |
 
 To change sources: switch the model download source in the Model Center; set `SD_IMAGE_SORTER_PYPI_MIRROR` to pin a PyPI mirror (this skips the speed test) and `HF_ENDPOINT` to choose the Hugging Face endpoint.
