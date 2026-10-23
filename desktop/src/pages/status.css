@@ -1,0 +1,61 @@
+:root {
+    color-scheme: dark;
+    --bg: #0E0E0F;
+    --surface: #151517;
+    --border: #2B2B2E;
+    --text: #E8E8EA;
+    --text-2: #A6A6AB;
+    --accent: #C8873C;
+    --accent-bright: #D8974C;
+    --on-accent: #17120A;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+}
+
+.status-card {
+    width: min(640px, calc(100vw - 48px));
+    padding: 28px 32px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+}
+
+.status-logo { border-radius: 8px; }
+h1 { margin: 14px 0 6px; font-size: 15px; font-weight: 600; }
+p { margin: 0; color: var(--text-2); }
+
+pre {
+    margin: 16px 0 0;
+    max-height: 280px;
+    overflow: auto;
+    padding: 12px;
+    background: #09090A;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text-2);
+    font: 11px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace;
+    white-space: pre-wrap;
+}
+
+.status-actions { display: flex; gap: 8px; margin-top: 18px; }
+
+button {
+    padding: 7px 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+}
+
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+button.primary:hover { background: var(--accent-bright); }

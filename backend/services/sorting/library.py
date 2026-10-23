@@ -399,8 +399,14 @@ class LibraryMixin:
         """Escape SQL LIKE wildcards so user input matches literally."""
         return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
-    async def import_uploaded_files(self, files) -> Dict[str, Any]:
+    async def import_uploaded_files(
+        self, files, destination: str = "imports"
+    ) -> Dict[str, Any]:
         """Save uploaded files to imports dir and add them to the gallery.
+
+        ``destination="collected"`` saves into ``output_root()/collected``
+        (Quick collect) instead of ``DATA_DIR/imports``. Files that are not
+        pictures are listed in ``skipped`` so the caller can say so.
 
         Path-traversal hardening: the browser-supplied filename is reduced to
         its basename via ``Path(name).name`` so values like ``../../etc/x.png``
@@ -408,16 +414,21 @@ class LibraryMixin:
         verify it resolves underneath ``import_dir.resolve()`` as a defense in
         depth against weird Windows path semantics.
         """
-        from config import DATA_DIR
-        import_dir = (Path(DATA_DIR) / "imports").resolve()
+        from config import DATA_DIR, default_output_folder
+        if destination == "collected":
+            import_dir = default_output_folder("collected").resolve()
+        else:
+            import_dir = (Path(DATA_DIR) / "imports").resolve()
         import_dir.mkdir(parents=True, exist_ok=True)
 
         IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
         saved_paths: List[Path] = []
+        skipped: List[str] = []
         for upload in files:
             raw_name = upload.filename or ""
             ext = Path(raw_name).suffix.lower()
             if ext not in IMAGE_EXTS:
+                skipped.append(Path(raw_name).name)
                 continue
             # Basename only — strips any "../" or absolute paths the browser sent.
             safe_stem_name = Path(raw_name).name
@@ -451,14 +462,20 @@ class LibraryMixin:
 
         if records:
             batch_result = add_images_batch(records, return_statuses=True)
-            for path_str, status in (batch_result.get("statuses") or {}).items():
-                image_ids.append(batch_result.get("ids", {}).get(path_str))
+            # The batch reports a status per written path, not ids; read the
+            # ids of those rows so callers can point at the new pictures.
+            written = list((batch_result.get("statuses") or {}).keys())
+            rows = db.get_image_scan_state_by_paths(written) if written else {}
+            image_ids = [row.get("id") for row in rows.values()]
 
         return {
             "imported": len(records) - errors,
             "errors": errors,
             "total": len(records),
             "image_ids": [i for i in image_ids if i],
+            "skipped": skipped,
+            "folder": str(import_dir),
+            "saved": [str(path) for path in saved_paths],
         }
 
     @staticmethod

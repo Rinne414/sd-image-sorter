@@ -61,12 +61,16 @@ function initGalleryDropZone() {
         e.preventDefault();
         dragCounter = 0;
         overlay.classList.remove('visible');
+        if (window.DesktopBridge?.isOwnDragActive?.()) return;
         _handleGalleryDrop(e);
     });
 }
 
 function _hasFolderOrImageFiles(e) {
     if (!e.dataTransfer) return false;
+    // A native drag-out started from this gallery (desktop shell) carries the
+    // gallery's own files; dropping it back here must not import copies.
+    if (window.DesktopBridge?.isOwnDragActive?.()) return false;
     const types = e.dataTransfer.types;
     return types && (types.includes('Files') || types.indexOf('Files') >= 0);
 }

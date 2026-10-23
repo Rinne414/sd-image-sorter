@@ -198,6 +198,40 @@
       }
     },
     {
+      "id": "desktop.settings",
+      "area": "settings",
+      "en": "Desktop program: start at login, keep running in the tray, global shortcut (Settings > Desktop, only inside the desktop shell)",
+      "zh": "桌面版：登录时启动、关闭窗口后留在托盘、全局快捷键（设置 > 桌面，仅在桌面版中显示）",
+      "classic": [
+        "#settings-desktop-panel",
+        "#btn-settings-desktop-login",
+        "#btn-settings-desktop-close",
+        "#settings-desktop-shortcut",
+        "#btn-settings-desktop-shortcut-reset"
+      ],
+      "vopus": {
+        "missing": "Vopus has no Desktop settings section yet; the desktop shell opens the classic or Vopus page, and its tray menu works with either"
+      },
+      "next": {
+        "missing": "The new interface has no Desktop settings section yet"
+      }
+    },
+    {
+      "id": "desktop.quick-collect",
+      "area": "library",
+      "en": "Quick collect: drop or paste pictures into a small window to add them (copies in output/collected)",
+      "zh": "快速收集：把图拖进或粘贴进小窗口即可加入图库（副本在 output/collected）",
+      "classic": [
+        "#btn-settings-desktop-quick-collect"
+      ],
+      "vopus": {
+        "missing": "Vopus has no Quick collect entrance; the desktop tray menu opens it for any interface"
+      },
+      "next": {
+        "missing": "The new interface has no Quick collect entrance; the desktop tray menu opens it for any interface"
+      }
+    },
+    {
       "id": "library.import",
       "area": "library",
       "en": "Import images from a folder",

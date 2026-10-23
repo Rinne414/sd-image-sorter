@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="quickCollect.title">Quick collect</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="stylesheet" href="/static/css/tokens.css">
+    <link rel="stylesheet" href="/static/css/quick-collect.css">
+</head>
+<body>
+    <main class="qc" id="quick-collect">
+        <header class="qc-head">
+            <h1 data-i18n="quickCollect.title">Quick collect</h1>
+            <p class="qc-lead" id="qc-lead">Drop pictures here. A copy is kept in the collected folder and added to the gallery.</p>
+        </header>
+        <label class="qc-drop" id="qc-drop" for="qc-file-input">
+            <svg class="qc-drop-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-4.5-4.5M12 15l4.5-4.5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span class="qc-drop-text" data-i18n="quickCollect.drop">Drop pictures here, or paste one with Ctrl+V</span>
+            <span class="qc-drop-choose" data-i18n="quickCollect.choose">Choose files…</span>
+            <input type="file" id="qc-file-input" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif" multiple hidden>
+        </label>
+        <section class="qc-log" aria-live="polite">
+            <p class="qc-empty" id="qc-empty" data-i18n="quickCollect.empty">Nothing collected yet in this window.</p>
+            <ol class="qc-results" id="qc-results"></ol>
+        </section>
+    </main>
+    <script src="/static/js/lang/en.js"></script>
+    <script src="/static/js/lang/zh-CN.js"></script>
+    <script src="/static/js/i18n.js"></script>
+    <script src="/static/js/quick-collect.js"></script>
+</body>
+</html>

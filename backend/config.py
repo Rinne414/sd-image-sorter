@@ -181,7 +181,7 @@ OUTPUT_DIR: Path = Path(
         str(PACKAGE_ROOT / "output"),
     )
 ).expanduser()
-OUTPUT_FEATURES: tuple[str, ...] = ("censor", "publish", "video-censor")
+OUTPUT_FEATURES: tuple[str, ...] = ("censor", "publish", "video-censor", "collected")
 UPDATE_CHANNEL_CONFIG_PATH: Path = CONFIG_DIR / "update-channel.json"
 DOWNLOAD_MIRROR_CONFIG_PATH: Path = CONFIG_DIR / "download-mirror.json"
 APP_SETTINGS_CONFIG_PATH: Path = CONFIG_DIR / "app-settings.json"

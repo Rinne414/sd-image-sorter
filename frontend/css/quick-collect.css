@@ -1,0 +1,104 @@
+/* Quick collect: the small always-on-top drop window (desktop shell, or a
+   browser popup). Uses the classic tokens (tokens.css). */
+
+html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+}
+
+.qc {
+    box-sizing: border-box;
+    height: 100%;
+    display: grid;
+    grid-template-rows: auto minmax(160px, 1fr) minmax(0, auto);
+    gap: 12px;
+    padding: 16px;
+}
+
+.qc-head h1 {
+    margin: 0;
+    font-size: var(--fs-screen-title);
+    font-weight: 600;
+}
+
+.qc-lead {
+    margin: 4px 0 0;
+    color: var(--text-2);
+    overflow-wrap: anywhere;
+}
+
+.qc-drop {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px;
+    border: 1.5px dashed var(--border-strong);
+    border-radius: var(--r-card);
+    background: var(--surface-1);
+    color: var(--text-2);
+    text-align: center;
+    cursor: pointer;
+    transition: border-color var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out);
+}
+
+.qc-drop:hover,
+.qc-drop:focus-within { border-color: var(--accent-line); }
+
+.qc-drop.is-over {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--text);
+}
+
+.qc-drop.is-busy { cursor: progress; }
+
+.qc-drop-icon { width: 32px; height: 32px; color: var(--accent); }
+.qc-drop-text { font-size: 14px; color: var(--text); }
+
+.qc-drop-choose {
+    padding: 5px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-ctl);
+    background: var(--surface-2);
+    color: var(--text);
+    font-weight: 500;
+}
+
+.qc-drop:hover .qc-drop-choose { background: var(--surface-3); }
+
+.qc-log {
+    max-height: 40vh;
+    overflow-y: auto;
+}
+
+.qc-empty { margin: 0; color: var(--muted); }
+
+.qc-results {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 6px;
+}
+
+.qc-result {
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-ctl);
+    background: var(--surface-1);
+    overflow-wrap: anywhere;
+}
+
+.qc-result-line { display: block; }
+.qc-result-line + .qc-result-line { margin-top: 2px; color: var(--text-2); }
+.qc-result.is-ok .qc-result-line:first-child::before { content: "\2713  "; color: var(--success); }
+.qc-result.is-warn .qc-result-line:first-child::before { content: "!  "; color: var(--warning); font-weight: 700; }
+.qc-result.is-error .qc-result-line:first-child::before { content: "\00D7  "; color: var(--danger); font-weight: 700; }
+.qc-result-time { color: var(--muted); font-family: var(--font-mono); font-size: var(--fs-footnote); }

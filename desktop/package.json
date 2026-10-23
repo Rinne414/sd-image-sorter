@@ -1,0 +1,52 @@
+{
+  "name": "sd-image-sorter-desktop",
+  "productName": "SD Image Sorter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optional desktop shell for SD Image Sorter: tray, global shortcut, native drag-out, Quick collect.",
+  "author": "Rinne414",
+  "license": "MIT",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/paths.test.js",
+    "dist": "electron-builder --win dir",
+    "dist:linux": "electron-builder --linux dir"
+  },
+  "devDependencies": {
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "io.github.rinne414.sd-image-sorter",
+    "productName": "SD Image Sorter",
+    "executableName": "SD Image Sorter",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**",
+      "build/icon.png",
+      "package.json"
+    ],
+    "electronLanguages": [
+      "en-US",
+      "zh-CN"
+    ],
+    "win": {
+      "target": [
+        "dir"
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": true
+    },
+    "linux": {
+      "target": [
+        "dir"
+      ],
+      "category": "Graphics",
+      "icon": "build/icon.png"
+    }
+  }
+}

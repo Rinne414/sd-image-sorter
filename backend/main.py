@@ -762,5 +762,10 @@ if __name__ == "__main__":
         )
     )
     app_lifecycle.attach_server(server)
+    import desktop_lifeline
+
+    desktop_lifeline.start_if_requested(
+        lambda: app_lifecycle.request_exit(restart=False)
+    )
     server.run()
     sys.exit(app_lifecycle.exit_code_after_shutdown())
