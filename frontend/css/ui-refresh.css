@@ -11940,7 +11940,8 @@ html.lang-zh #view-censor .queue-action-btn span {
         min-width: 200px;
     }
 
-    .gallery-search-tools .aspect-quick-btn [data-i18n="common.all"] {
+    .gallery-search-tools .aspect-quick-btn [data-i18n="common.all"],
+    .gallery-search-tools .media-quick-btn .media-quick-label {
         display: none;
     }
 

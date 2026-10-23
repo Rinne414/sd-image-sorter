@@ -157,6 +157,10 @@ Object.assign(window.Gallery, {
         const showToast = app.showToast || window.showToast;
         const id = Number(this._currentPreviewId);
         if (!this._modalAnalysisActions.has(action) || !Number.isFinite(id) || this._modalAnalysisRunning.size > 0) return;
+        if (window.VideoViewer?.imageId === id) {
+            showToast?.(this._t('video.analysisPictureOnly', null, 'Scoring and tagging work on pictures only; videos are skipped.'), 'info');
+            return;
+        }
 
         this._setModalAnalysisBusy(action, true);
         try {

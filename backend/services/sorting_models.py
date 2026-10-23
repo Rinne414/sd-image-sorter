@@ -388,6 +388,8 @@ class SortFilterRequest(BaseModel):
     # contract (SelectionIdsRequest) carries them. Without them a move or a
     # sort session touched more pictures than the Gallery showed.
     no_caption: Optional[bool] = None
+    # 'image' or 'video' (library media type); anything else means no filter.
+    media_type: Optional[str] = None
     aesthetic_unscored: Optional[bool] = None
     min_saturation: Optional[float] = Field(default=None, ge=0, le=255)
     max_saturation: Optional[float] = Field(default=None, ge=0, le=255)
@@ -405,6 +407,11 @@ class SortFilterRequest(BaseModel):
         if v is None:
             return None
         return normalize_anime_grades(v) or None
+
+    @field_validator("media_type", mode="before")
+    @classmethod
+    def normalize_media_type(cls, v: Any) -> Optional[str]:
+        return v if v in ("image", "video") else None
 
     @field_validator("aspect_ratio")
     @classmethod
@@ -573,6 +580,7 @@ class BatchMoveRequest(SortFilterRequest):
             self.max_waifu,
             # Only True narrows the set; False is "no restriction" in the DB layer.
             self.no_caption or None,
+            self.media_type,
             self.aesthetic_unscored or None,
         )
         # ``self.aspect_ratio`` is acceptable as a filter even though it has

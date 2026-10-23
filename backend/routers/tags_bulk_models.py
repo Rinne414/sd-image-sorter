@@ -97,6 +97,7 @@ class BulkTagFilterContract(BaseModel):
     # without them an edit by filter touched more pictures than the Gallery showed.
     scope: Optional[str] = Field(default=None, pattern="^(current_session|library)$")
     noCaption: Optional[bool] = None
+    mediaType: Optional[str] = None
     aestheticUnscored: Optional[bool] = None
     minSaturation: Optional[float] = Field(default=None, ge=0, le=255)
     maxSaturation: Optional[float] = Field(default=None, ge=0, le=255)

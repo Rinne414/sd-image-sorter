@@ -60,6 +60,12 @@ function normalizeAspectRatioFilter(value) {
     return VALID_ASPECT_RATIO_FILTERS.has(text) ? text : '';
 }
 
+// '' = pictures and videos, 'image' = pictures only, 'video' = videos only.
+function normalizeMediaTypeFilter(value) {
+    const text = String(value || '').trim().toLowerCase();
+    return text === 'image' || text === 'video' ? text : '';
+}
+
 function normalizePromptMatchMode(value) {
     const text = String(value || '').trim().toLowerCase();
     return VALID_PROMPT_MATCH_MODES.has(text) ? text : 'exact';

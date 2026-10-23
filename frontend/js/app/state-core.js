@@ -174,6 +174,7 @@ window.AppFilterAccess = {
         if (filters.minHeight) params.set('min_height', filters.minHeight);
         if (filters.maxHeight) params.set('max_height', filters.maxHeight);
         if (filters.aspectRatio) params.set('aspect_ratio', filters.aspectRatio);
+        if (filters.mediaType === 'image' || filters.mediaType === 'video') params.set('media_type', filters.mediaType);
         if (filters.dateFrom) params.set('date_from', filters.dateFrom);
         if (filters.dateTo) params.set('date_to', filters.dateTo);
         if (filters.minAesthetic) params.set('min_aesthetic', filters.minAesthetic);
@@ -275,6 +276,9 @@ if (AppFilterStore) {
         // single source of truth, regardless of what changed aspectRatio.
         if (typeof syncAspectToggleWithFilters === 'function') {
             syncAspectToggleWithFilters();
+        }
+        if (typeof syncMediaToggleWithFilters === 'function') {
+            syncMediaToggleWithFilters();
         }
     });
 }

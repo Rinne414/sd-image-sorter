@@ -43,6 +43,12 @@
         landscape: 'landscape', 横图: 'landscape', 横: 'landscape',
     };
 
+    const MEDIA_ALIASES = {
+        image: 'image', images: 'image', picture: 'image', pictures: 'image',
+        图片: 'image', 图: 'image',
+        video: 'video', videos: 'video', 视频: 'video',
+    };
+
     const TEMPERATURE_ALIASES = {
         warm: 'warm', 暖: 'warm', 暖色: 'warm',
         cool: 'cool', 冷: 'cool', 冷色: 'cool',
@@ -89,6 +95,7 @@
         height: 'height', 高: 'height', 高度: 'height',
         size: 'size', 尺寸: 'size',
         aspect: 'aspect', ratio: 'aspect', 比例: 'aspect',
+        type: 'type', media: 'type', 类型: 'type', 媒体: 'type',
         color: 'color', theme: 'color', temp: 'color', temperature: 'color',
         颜色: 'color', 主题: 'color', 色温: 'color',
         light: 'light', dist: 'light', 光影: 'light',
@@ -115,6 +122,7 @@
         generator: GENERATOR_VALUES,
         rating: ['general', 'sensitive', 'questionable', 'explicit'],
         aspect: ['square', 'portrait', 'landscape'],
+        type: ['image', 'video'],
         color: ['warm', 'cool', 'neutral',
             'red', 'orange', 'yellow', 'green', 'cyan', 'blue',
             'purple', 'pink', 'brown', 'white', 'black', 'gray'],
@@ -143,6 +151,7 @@
         { syntax: 'width / height OP N', example: 'width>=1024 height<=2048', descKey: 'searchHelp.dimensions' },
         { syntax: 'size:WxH', example: 'size:1024x1536', descKey: 'searchHelp.size' },
         { syntax: 'aspect:VALUE', example: 'aspect:portrait', descKey: 'searchHelp.aspect' },
+        { syntax: 'type:VALUE', example: 'type:video', descKey: 'searchHelp.type' },
         { syntax: 'color:VALUE', example: 'color:warm', descKey: 'searchHelp.color' },
         { syntax: 'brightness / saturation OP N', example: 'brightness>=180 sat<=60', descKey: 'searchHelp.brightness' },
         { syntax: 'seed:N', example: 'seed:314159', descKey: 'searchHelp.seed' },
@@ -415,6 +424,16 @@
                 }
                 result.scalars.aspectRatio = aspect;
                 pushFilterPart(result, 'aspect', '', aspect);
+                return;
+            }
+            case 'type': {
+                const media = MEDIA_ALIASES[value.toLowerCase()];
+                if (!media) {
+                    pushWarning(result, token, 'searchWarn.type', 'image / video');
+                    return;
+                }
+                result.scalars.mediaType = media;
+                pushFilterPart(result, 'type', '', media);
                 return;
             }
             case 'color': {

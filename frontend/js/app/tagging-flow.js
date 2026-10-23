@@ -515,6 +515,7 @@ function tagStatusText(progress) {
         case 'runtime_notice': return appT('tagger.msg.runtimeNotice', 'Applying the runtime settings for this run...');
         case 'gpu_load_failed': return withReason('tagger.msg.gpuLoadFailed', 'GPU load failed. Continuing on CPU instead.', args.reason_key);
         case 'collecting': return appT('tagger.msg.collecting', 'Collecting the image list...');
+        case 'videos_skipped': return fill('tagger.msg.videosSkipped', 'Skipped {count} videos: videos are not tagged.', { count: args.count ?? '' });
         case 'tagging_started': return fill('tagger.msg.taggingStarted', 'Model loaded. Images to tag: {total}', { total });
         case 'skipped_unreadable': return fill('tagger.msg.skippedUnreadable', 'Skipped an unreadable image: {item}', { item: args.item || '' });
         case 'skipped_changed': return fill('tagger.msg.skippedChanged', 'Skipped a changed or unverifiable image: {item}', { item: args.item || '' });

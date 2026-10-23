@@ -23,6 +23,7 @@ function _galleryHasActiveFilter() {
     if (f.minWidth != null || f.maxWidth != null) return true;
     if (f.minHeight != null || f.maxHeight != null) return true;
     if (f.aspectRatio) return true;
+    if (f.mediaType) return true;
     if (f.minAesthetic != null || f.maxAesthetic != null) return true;
     if (f.animeGrades?.length || f.minWaifu != null || f.maxWaifu != null) return true;
     if (f.dateFrom || f.dateTo) return true;

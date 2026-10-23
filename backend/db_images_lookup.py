@@ -195,7 +195,7 @@ def get_images_missing_color_data(limit: int = 100) -> List[Dict[str, Any]]:
         cursor.execute(
             f"""
             SELECT id, path FROM images
-            WHERE avg_brightness IS NULL AND is_readable = 1 AND {lib_sql}
+            WHERE avg_brightness IS NULL AND is_readable = 1 AND media_type = 'image' AND {lib_sql}
             LIMIT ?
             """,
             (*lib_params, limit),
@@ -209,7 +209,7 @@ def count_images_missing_color_data() -> int:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            f"SELECT COUNT(*) FROM images WHERE avg_brightness IS NULL AND is_readable = 1 AND {lib_sql}",
+            f"SELECT COUNT(*) FROM images WHERE avg_brightness IS NULL AND is_readable = 1 AND media_type = 'image' AND {lib_sql}",
             lib_params,
         )
         row = cursor.fetchone()
@@ -297,7 +297,7 @@ def get_untagged_images(limit: int = 100) -> List[Dict[str, Any]]:
         cursor = conn.cursor()
         cursor.execute(
             f"SELECT {_IMAGE_COLUMNS_BARE} FROM images "
-            f"WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 AND {lib_sql} LIMIT ?",
+            f"WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 AND media_type = 'image' AND {lib_sql} LIMIT ?",
             (*lib_params, limit),
         )
         return _rows_to_dicts(cursor.fetchall())
@@ -314,7 +314,7 @@ def get_all_image_ids() -> List[int]:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            f"SELECT id FROM images WHERE COALESCE(is_readable, 1) = 1 AND {lib_sql} ORDER BY id",
+            f"SELECT id FROM images WHERE COALESCE(is_readable, 1) = 1 AND media_type = 'image' AND {lib_sql} ORDER BY id",
             lib_params,
         )
         while True:
@@ -337,7 +337,7 @@ def get_untagged_image_ids() -> List[int]:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT id FROM images "
-            f"WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 AND {lib_sql} ORDER BY id",
+            f"WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 AND media_type = 'image' AND {lib_sql} ORDER BY id",
             lib_params,
         )
         while True:
@@ -353,7 +353,7 @@ def count_all_image_ids() -> int:
     lib_sql, lib_params = _library_clause()
     with get_db() as conn:
         row = conn.execute(
-            f"SELECT COUNT(*) FROM images WHERE COALESCE(is_readable, 1) = 1 AND {lib_sql}",
+            f"SELECT COUNT(*) FROM images WHERE COALESCE(is_readable, 1) = 1 AND media_type = 'image' AND {lib_sql}",
             lib_params,
         ).fetchone()
         return int(row[0] or 0) if row else 0
@@ -365,7 +365,7 @@ def count_untagged_image_ids() -> int:
     with get_db() as conn:
         row = conn.execute(
             "SELECT COUNT(*) FROM images "
-            f"WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 AND {lib_sql}",
+            f"WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 AND media_type = 'image' AND {lib_sql}",
             lib_params,
         ).fetchone()
         return int(row[0] or 0) if row else 0
@@ -378,7 +378,7 @@ def iter_all_image_id_chunks(chunk_size: int = 1000) -> Iterator[List[int]]:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            f"SELECT id FROM images WHERE COALESCE(is_readable, 1) = 1 AND {lib_sql} ORDER BY id",
+            f"SELECT id FROM images WHERE COALESCE(is_readable, 1) = 1 AND media_type = 'image' AND {lib_sql} ORDER BY id",
             lib_params,
         )
         while True:
@@ -396,7 +396,7 @@ def iter_untagged_image_id_chunks(chunk_size: int = 1000) -> Iterator[List[int]]
         cursor = conn.cursor()
         cursor.execute(
             "SELECT id FROM images "
-            f"WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 AND {lib_sql} ORDER BY id",
+            f"WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 AND media_type = 'image' AND {lib_sql} ORDER BY id",
             lib_params,
         )
         while True:

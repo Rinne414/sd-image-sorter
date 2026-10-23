@@ -93,25 +93,25 @@ Object.assign(window.Gallery, {
             { label: labelWithScope('gallery.contextMoveImage', 'Move...'), icon: '\u{1F4C1}', action: () => app.moveOrCopyGalleryImages?.(actionImageIds, 'move', { source: 'context' }) },
             { label: labelWithScope('gallery.contextCopyImage', 'Copy...'), icon: '\u{1F4C4}', action: () => app.moveOrCopyGalleryImages?.(actionImageIds, 'copy', { source: 'context' }) },
             { type: 'separator' },
-            { label: labelWithScope('gallery.contextSendToCensor', 'Send to Censor'), icon: '\u{1F533}', action: () => {
+            { pictureOnly: true, label: labelWithScope('gallery.contextSendToCensor', 'Send to Censor'), icon: '\u{1F533}', action: () => {
                 if (typeof app.addToCensorQueue === 'function') {
                     app.addToCensorQueue(actionImageIds);
                 } else {
                     app.showToast?.(t('gallery.contextSendToCensorFailed', 'Failed to send image to Edit'), 'error');
                 }
             }},
-            { label: labelWithScope('modal.addToDataset', 'Add to dataset'), icon: '\u{1F4E6}', action: () => app.addToDatasetMaker?.(actionImageIds, { switchView: true, showToast: true }) },
-            { label: t('gallery.contextFindSimilar', 'Find Similar'), icon: '\u{1F50E}', action: () => app.openSimilarFromImage?.(image.id) },
-            { label: t('gallery.contextViewOnStyleMap', 'View on the Style Map'), icon: '🧭', action: () => window.StyleMap?.locateImage?.(image.id) },
-            { label: t('gallery.contextNearDuplicates', 'Find near-duplicates (CLIP)'), icon: '\u{1F46F}', action: () => window.ClipTools?.near?.(image.id) },
+            { pictureOnly: true, label: labelWithScope('modal.addToDataset', 'Add to dataset'), icon: '\u{1F4E6}', action: () => app.addToDatasetMaker?.(actionImageIds, { switchView: true, showToast: true }) },
+            { pictureOnly: true, label: t('gallery.contextFindSimilar', 'Find Similar'), icon: '\u{1F50E}', action: () => app.openSimilarFromImage?.(image.id) },
+            { pictureOnly: true, label: t('gallery.contextViewOnStyleMap', 'View on the Style Map'), icon: '🧭', action: () => window.StyleMap?.locateImage?.(image.id) },
+            { pictureOnly: true, label: t('gallery.contextNearDuplicates', 'Find near-duplicates (CLIP)'), icon: '\u{1F46F}', action: () => window.ClipTools?.near?.(image.id) },
             actionCount === 2
-                ? { label: t('gallery.contextCompareTwo', 'Compare 2 images (CLIP)'), icon: '⚖️', action: () => window.ClipTools?.compare?.(actionImageIds[0], actionImageIds[1]) }
+                ? { pictureOnly: true, label: t('gallery.contextCompareTwo', 'Compare 2 images (CLIP)'), icon: '⚖️', action: () => window.ClipTools?.compare?.(actionImageIds[0], actionImageIds[1]) }
                 : null,
             { label: t('gallery.contextPromptHelper', 'Prompt Helper'), icon: '\u{1F9EA}', action: () => app.openPromptBuildFromImage?.(image.id) },
             { label: t('gallery.contextSendToGenerator', 'Send to generator…'), icon: '\u21AA', action: () => window.SendToGenerator?.open?.(image.id, { x: e.clientX, y: e.clientY }) },
             { label: t('gallery.contextReadMetadata', 'Metadata / Info'), icon: '\u{1F4D6}', action: () => app.openReaderFromImage?.(image.id, image.filename || '') },
-            { label: t('gallery.contextReversePrompt', 'Send to Reverse Prompt'), icon: '\u{1F504}', action: () => app.openReversePromptFromImage?.(image.id, image.filename || '') },
-            { label: labelWithScope('gallery.contextPrivacy', 'Send to Privacy Tools'), icon: '\u{1F6E1}', action: () => app.openPrivacyFromImages?.(actionImageIds) },
+            { pictureOnly: true, label: t('gallery.contextReversePrompt', 'Send to Reverse Prompt'), icon: '\u{1F504}', action: () => app.openReversePromptFromImage?.(image.id, image.filename || '') },
+            { pictureOnly: true, label: labelWithScope('gallery.contextPrivacy', 'Send to Privacy Tools'), icon: '\u{1F6E1}', action: () => app.openPrivacyFromImages?.(actionImageIds) },
             checkpointFilterValue ? { label: t('gallery.contextFilterCheckpoint', 'Filter by Checkpoint'), icon: '\u{1F50D}', action: () => {
                 if (app.AppState) {
                     app.updateFilters?.((filters) => {
@@ -164,6 +164,10 @@ Object.assign(window.Gallery, {
             label.textContent = item.label;
 
             button.append(icon, label);
+            if (item.pictureOnly && image?.media_type === 'video') {
+                button.disabled = true;
+                button.title = t('video.pictureOnly', 'Works on pictures only, not videos');
+            }
             button.addEventListener('click', (event) => {
                 Promise.resolve(item.action(event, menu)).catch((error) => {
                     const message = typeof formatUserError === 'function'

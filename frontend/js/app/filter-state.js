@@ -28,6 +28,7 @@ function createDefaultFilterState() {
         minHeight: null,
         maxHeight: null,
         aspectRatio: '',
+        mediaType: '',
         minAesthetic: null,
         maxAesthetic: null,
         dateFrom: null,
@@ -77,6 +78,7 @@ function cloneFilterState(filters) {
         minHeight: source.minHeight ?? null,
         maxHeight: source.maxHeight ?? null,
         aspectRatio: normalizeAspectRatioFilter(source.aspectRatio),
+        mediaType: normalizeMediaTypeFilter(source.mediaType),
         minAesthetic: source.minAesthetic ?? null,
         maxAesthetic: source.maxAesthetic ?? null,
         dateFrom: source.dateFrom ?? null,
@@ -175,6 +177,7 @@ function buildSelectionFilterRequest(filters = AppState?.filters || createDefaul
         minHeight: source.minHeight ?? null,
         maxHeight: source.maxHeight ?? null,
         aspectRatio: normalizeAspectRatioFilter(source.aspectRatio) || null,
+        mediaType: normalizeMediaTypeFilter(source.mediaType) || null,
         minAesthetic: source.minAesthetic ?? null,
         maxAesthetic: source.maxAesthetic ?? null,
         dateFrom: source.dateFrom ?? null,
@@ -265,6 +268,7 @@ function buildAdvancedFilterContract(filters = AppState?.filters || createDefaul
 function buildNewerFilterSignatureKeys(request) {
     const keys = {};
     if (request.noCaption === true) keys.noCaption = true;
+    if (normalizeMediaTypeFilter(request.mediaType)) keys.mediaType = request.mediaType;
     if (request.aestheticUnscored === true) keys.aestheticUnscored = true;
     if (request.minSaturation != null) keys.minSaturation = request.minSaturation;
     if (request.maxSaturation != null) keys.maxSaturation = request.maxSaturation;

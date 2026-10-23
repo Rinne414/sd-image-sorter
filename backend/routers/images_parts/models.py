@@ -137,6 +137,7 @@ class SelectionIdsRequest(BaseModel):
     scope: Optional[str] = Field(default=None, pattern="^(current_session|library)$")
     # Aurora Phase 3 gallery filters (compose with selection tokens)
     noCaption: Optional[bool] = Field(default=None)
+    mediaType: Optional[str] = Field(default=None)  # 'image' or 'video'
     aestheticUnscored: Optional[bool] = Field(default=None)
     minSaturation: Optional[float] = Field(default=None, ge=0, le=255)
     maxSaturation: Optional[float] = Field(default=None, ge=0, le=255)

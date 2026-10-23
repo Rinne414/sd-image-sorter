@@ -176,6 +176,8 @@ const API = {
         if (filters.maxHeight) params.set('max_height', filters.maxHeight);
         const aspectRatio = normalizeAspectRatioFilter(filters.aspectRatio);
         if (aspectRatio) params.set('aspect_ratio', aspectRatio);
+        const mediaType = normalizeMediaTypeFilter(filters.mediaType);
+        if (mediaType) params.set('media_type', mediaType);
         if (filters.dateFrom) params.set('date_from', filters.dateFrom);
         if (filters.dateTo) params.set('date_to', filters.dateTo);
         if (filters.minAesthetic) params.set('min_aesthetic', filters.minAesthetic);
@@ -241,6 +243,8 @@ const API = {
         if (filters.maxHeight) params.set('max_height', filters.maxHeight);
         const aspectRatio = normalizeAspectRatioFilter(filters.aspectRatio);
         if (aspectRatio) params.set('aspect_ratio', aspectRatio);
+        const mediaType = normalizeMediaTypeFilter(filters.mediaType);
+        if (mediaType) params.set('media_type', mediaType);
         if (filters.dateFrom) params.set('date_from', filters.dateFrom);
         if (filters.dateTo) params.set('date_to', filters.dateTo);
         if (filters.minAesthetic) params.set('min_aesthetic', filters.minAesthetic);
@@ -469,7 +473,10 @@ const API = {
             const map = new Map();
             for (const image of images) {
                 if (image?.id == null) continue;
-                const version = image.source_mtime_ns ?? image.source_file_mtime;
+                let version = image.source_mtime_ns ?? image.source_file_mtime;
+                // A video's frame arrives once ffmpeg has read it: a new URL
+                // replaces the placeholder the browser already holds.
+                if (image.media_type === 'video' && version != null) version = `${version}-${image.video_probe_state || ''}`;
                 if (version != null && version !== '') map.set(Number(image.id), String(version));
             }
             cache = { source: images, size: images.length, map };

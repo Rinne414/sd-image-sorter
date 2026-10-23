@@ -134,7 +134,7 @@ from exceptions import (
 )
 
 # Import routers
-from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, disguise, censor_media, aesthetic, updates, disk, vlm, colors, tags_bulk, dataset, dataset_projects, annotations, smart_tag, collections, entry, libraries, duplicates, publish, metadata_repair, masks, style_map, output_folders, batches, batch_uploads, file_manager, image_lookup, interface, folder_watch, generator_recipe, browser_extension, collect
+from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, disguise, censor_media, aesthetic, updates, disk, vlm, colors, tags_bulk, dataset, dataset_projects, annotations, smart_tag, collections, entry, libraries, duplicates, publish, metadata_repair, masks, style_map, output_folders, batches, batch_uploads, file_manager, image_lookup, interface, folder_watch, generator_recipe, browser_extension, collect, videos
 
 # Import services
 from services import (
@@ -144,6 +144,7 @@ from services import (
     SimilarityService,
 )
 from services.folder_watch import get_folder_watch_service
+from services.video_index import get_video_indexer
 
 
 # Service instances (singleton pattern)
@@ -316,6 +317,8 @@ async def lifespan(app: FastAPI):
             daemon=True,
         ).start()
         get_folder_watch_service().start()
+        # Videos indexed while ffmpeg was missing, or before a restart.
+        get_video_indexer().kick()
 
     yield
     # Shutdown
@@ -434,6 +437,7 @@ app.include_router(generator_recipe.router)
 app.include_router(browser_extension.ext_router)
 app.include_router(browser_extension.router)
 app.include_router(collect.router)
+app.include_router(videos.router)
 app.include_router(file_manager.router)
 app.include_router(image_lookup.router)
 app.include_router(interface.router)

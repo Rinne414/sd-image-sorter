@@ -226,6 +226,7 @@ Object.assign(window.Gallery, {
             true
         );
         this._attachGalleryOrderBadge(item, index);
+        this._decorateVideoCard?.(item, image);
 
         // Add event listeners
         item.addEventListener('click', (event) => {
@@ -271,7 +272,9 @@ Object.assign(window.Gallery, {
             e.dataTransfer.setData('text/uri-list', absoluteUrl);
             e.dataTransfer.setData('text/plain', absoluteUrl);
             const mimeType = originalFilename.toLowerCase().endsWith('.png') ? 'image/png' :
-                originalFilename.toLowerCase().endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+                originalFilename.toLowerCase().endsWith('.webp') ? 'image/webp' :
+                /\.webm$/i.test(originalFilename) ? 'video/webm' :
+                /\.(mp4|m4v|mov|mkv)$/i.test(originalFilename) ? 'video/mp4' : 'image/jpeg';
             e.dataTransfer.setData('DownloadURL', `${mimeType}:${originalFilename}:${absoluteUrl}`);
             const img = item.querySelector('img');
             if (img && img.src) {
@@ -380,6 +383,7 @@ Object.assign(window.Gallery, {
             false
         );
         this._attachGalleryOrderBadge(item, index);
+        this._decorateVideoCard?.(item, image);
 
         // Prevent the browser from dragging the rendered thumbnail/webp directly.
         // We always want the gallery card drag payload to point at the original file URL.
@@ -431,7 +435,9 @@ Object.assign(window.Gallery, {
             e.dataTransfer.setData('text/uri-list', absoluteUrl);
             e.dataTransfer.setData('text/plain', absoluteUrl);
             const mimeType = originalFilename.toLowerCase().endsWith('.png') ? 'image/png' :
-                originalFilename.toLowerCase().endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+                originalFilename.toLowerCase().endsWith('.webp') ? 'image/webp' :
+                /\.webm$/i.test(originalFilename) ? 'video/webm' :
+                /\.(mp4|m4v|mov|mkv)$/i.test(originalFilename) ? 'video/mp4' : 'image/jpeg';
             e.dataTransfer.setData('DownloadURL', `${mimeType}:${originalFilename}:${absoluteUrl}`);
             const img = item.querySelector('img');
             if (img && img.src) {

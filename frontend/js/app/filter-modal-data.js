@@ -606,6 +606,19 @@ function syncAspectToggleWithFilters() {
     });
 }
 
+// Reflect the current FilterStore mediaType on the gallery-header
+// All / Pictures / Videos toggle. Safe no-op when the toggle is not in the DOM.
+function syncMediaToggleWithFilters() {
+    const buttons = $$('.media-quick-btn[data-media]');
+    if (!buttons.length) return;
+    const current = normalizeMediaTypeFilter(AppState.filters.mediaType);
+    buttons.forEach(btn => {
+        const isActive = normalizeMediaTypeFilter(btn.dataset.media) === current;
+        btn.classList.toggle('is-active', isActive);
+        btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+}
+
 function resetAllFilters() {
     const filterState = getFilterModalState();
     copyFilterState(filterState, createDefaultFilterState());

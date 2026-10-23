@@ -18,6 +18,8 @@ from pathlib import Path
 import json
 
 from config import ALLOWED_IMAGE_EXTENSIONS as IMAGE_EXTENSIONS
+from config import ALLOWED_MEDIA_EXTENSIONS as SCANNED_EXTENSIONS
+from config import is_video_path
 from database import (
     add_images_batch,
     add_gallery_session_paths,
@@ -143,6 +145,12 @@ def _parse_metadata_job(job: Dict[str, Any]) -> Dict[str, Any]:
     image_path = job["path"]
     filename = job["filename"]
     compute_content_fingerprint = bool(job.get("compute_content_fingerprint"))
+    if is_video_path(image_path):
+        # Videos are listed from file facts here; the background video
+        # indexer probes them afterwards, so a scan never waits on ffprobe.
+        from services.video_index import video_scan_result
+
+        return video_scan_result(image_path, filename)
 
     try:
         stat_result = os.stat(image_path)
@@ -427,7 +435,7 @@ def scan_folder(
             if key in seen_keys or key in restored_keys:
                 continue
             seen_keys.add(key)
-            if Path(path).suffix.lower() not in IMAGE_EXTENSIONS:
+            if Path(path).suffix.lower() not in SCANNED_EXTENSIONS:
                 continue
             if not _is_inside_root(path, root_real):
                 continue
@@ -486,7 +494,7 @@ def scan_folder(
                                 continue
                             if not entry.is_file(follow_symlinks=False):
                                 continue
-                            if Path(entry.name).suffix.lower() not in IMAGE_EXTENSIONS:
+                            if Path(entry.name).suffix.lower() not in SCANNED_EXTENSIONS:
                                 continue
                             if _path_key(entry.path) in restored_keys:
                                 continue
@@ -590,6 +598,11 @@ def scan_folder(
         if not pending_records:
             return
         counts = add_images_batch(pending_records, return_statuses=True)
+        video_paths = [r["path"] for r in pending_records if r.get("video_probe_state")]
+        if video_paths:
+            from services.video_index import queue_scanned_videos
+
+            queue_scanned_videos(video_paths)
         result["skipped_other_library"] = int(result.get("skipped_other_library") or 0) + int(
             counts.get("skipped_other_library") or 0
         )

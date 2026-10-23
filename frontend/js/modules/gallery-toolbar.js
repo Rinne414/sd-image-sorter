@@ -33,6 +33,7 @@
         minUserRating: null,
         minWidth: null, maxWidth: null, minHeight: null, maxHeight: null,
         aspectRatio: '',
+        mediaType: '',
         brightnessMin: null, brightnessMax: null,
         minSaturation: null, maxSaturation: null,
         colorTemperature: '', brightnessDistribution: '',

@@ -45,6 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const aestheticStatusReady = refreshAestheticStatus();
     updateFilterSummary();
     syncAspectToggleWithFilters();
+    syncMediaToggleWithFilters();
     updateSelectionUI();
     resumeScanProgress();
     resumeReconnectProgress();

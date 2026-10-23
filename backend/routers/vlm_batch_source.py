@@ -78,6 +78,7 @@ def _filters_to_selection_kwargs(filters: Dict[str, Any]) -> Dict[str, Any]:
         # caption that same set (a paid API bills per picture).
         "scope": pick("scope"),
         "no_caption": pick("noCaption", "no_caption"),
+        "media_type": pick("mediaType", "media_type"),
         "aesthetic_unscored": pick("aestheticUnscored", "aesthetic_unscored"),
         "min_saturation": pick("minSaturation", "min_saturation"),
         "max_saturation": pick("maxSaturation", "max_saturation"),

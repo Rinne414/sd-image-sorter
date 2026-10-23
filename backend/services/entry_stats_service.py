@@ -84,7 +84,7 @@ def _pick_hero(conn, hero_seed: int) -> Optional[Dict[str, Any]]:
     lib_sql, lib_params = current_library_sql()
     rows = conn.execute(
         "SELECT id, filename FROM images "
-        f"WHERE user_rating = 5 AND COALESCE(is_readable, 1) = 1 AND {lib_sql} "
+        f"WHERE user_rating = 5 AND COALESCE(is_readable, 1) = 1 AND media_type = 'image' AND {lib_sql} "
         "ORDER BY id",
         lib_params,
     ).fetchall()
@@ -115,7 +115,7 @@ def get_hero_pool(limit: int = 60) -> Dict[str, Any]:
         f"""
         SELECT id, (user_rating = 5) AS starred
         FROM images
-        WHERE COALESCE(is_readable, 1) = 1 AND {lib_sql}
+        WHERE COALESCE(is_readable, 1) = 1 AND media_type = 'image' AND {lib_sql}
         ORDER BY (user_rating = 5) DESC, indexed_at DESC, id DESC
         LIMIT ?
         """,

@@ -31,6 +31,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
+from config import is_video_path
+
 logger = logging.getLogger(__name__)
 
 DEBOUNCE_MS = 1500
@@ -43,6 +45,9 @@ SUPERVISOR_WAIT_SECONDS = 30
 INGEST_METADATA_WORKERS = 1
 PNG_TAIL_BYTES = 12
 PNG_GRACE_FACTOR = 10
+# A video ffprobe cannot read yet waits up to this many stable periods (the
+# indexer keeps retrying after that, so a slow encoder never loses the file).
+VIDEO_GRACE_FACTOR = 30
 
 NETWORK_FS_TYPES = frozenset(
     {"nfs", "nfs4", "cifs", "smb3", "smbfs", "fuse.sshfs", "9p", "afs", "ncpfs"}
@@ -53,9 +58,25 @@ IngestFn = Callable[[RootRow, Optional[Sequence[str]], Callable[[], bool]], int]
 
 
 def _picture_extensions() -> frozenset[str]:
-    from config import ALLOWED_IMAGE_EXTENSIONS
+    from config import ALLOWED_MEDIA_EXTENSIONS
 
-    return frozenset(ext.lower() for ext in ALLOWED_IMAGE_EXTENSIONS)
+    return frozenset(ext.lower() for ext in ALLOWED_MEDIA_EXTENSIONS)
+
+
+def video_is_complete(path: str) -> bool:
+    """A video is finished once ffprobe reads a duration (an MP4 writes its
+    index last). Without ffprobe there is nothing to ask: size stability decides."""
+    from services import video_probe, video_tools
+
+    if video_tools.find_tools() is None:
+        return True
+    try:
+        video_probe.probe(path)
+    except video_probe.VideoProbeError:
+        return False
+    except video_tools.VideoToolsMissing:
+        return True
+    return True
 
 
 def is_network_path(path: str) -> bool:
@@ -494,6 +515,12 @@ class FolderWatchService:
                 path.lower().endswith(".png")
                 and not png_is_complete(path)
                 and quiet_for < self._stable_seconds * PNG_GRACE_FACTOR
+            ):
+                continue
+            if (
+                is_video_path(path)
+                and quiet_for < self._stable_seconds * VIDEO_GRACE_FACTOR
+                and not video_is_complete(path)
             ):
                 continue
             ready.append(path)

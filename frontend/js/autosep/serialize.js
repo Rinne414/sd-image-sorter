@@ -25,6 +25,7 @@ function serializeAutoSepFilters(filters) {
         minHeight: source.minHeight ?? null,
         maxHeight: source.maxHeight ?? null,
         aspectRatio: source.aspectRatio || '',
+        mediaType: ['image', 'video'].includes(source.mediaType) ? source.mediaType : '',
         minAesthetic: source.minAesthetic ?? null,
         maxAesthetic: source.maxAesthetic ?? null,
         // v3.2.2 per-item exclude filters
@@ -86,6 +87,7 @@ function buildAutoSepScopeFilters(contract) {
         colorHues: contract.colorHues,
         excludeColorHues: contract.excludeColorHues,
         noCaption: contract.noCaption,
+        mediaType: contract.mediaType || null,
         aestheticUnscored: contract.aestheticUnscored,
         minSaturation: contract.minSaturation,
         maxSaturation: contract.maxSaturation,
