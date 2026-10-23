@@ -11,13 +11,15 @@
  * or a feature install), as in run-portable.bat.
  */
 
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const net = require('node:net');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 
 const {
-    backendUrl, buildBackendEnv, candidatePorts, foldersToCreate, looksLikeSorter, planBackend, resolvePython,
+    backendUrl, buildBackendEnv, candidatePorts, foldersToCreate, looksLikeSorter, needsDependencySetup, planBackend,
+    resolvePython,
 } = require('./paths');
 
 const PROBE_TIMEOUT_MS = 1500;
@@ -67,7 +69,8 @@ async function choosePlan(envPort) {
 }
 
 class BackendProcess {
-    constructor({ appRoot, platform, baseEnv, logDir, onExit }) {
+    constructor({ appRoot, platform, baseEnv, logDir, onExit, shellVersion }) {
+        this.shellVersion = shellVersion;
         this.appRoot = appRoot;
         this.platform = platform;
         this.baseEnv = baseEnv;
@@ -83,6 +86,43 @@ class BackendProcess {
         return resolvePython(this.appRoot, this.platform, fs.existsSync, this.baseEnv.SD_IMAGE_SORTER_PYTHON);
     }
 
+    /** True when the package's own Python has not installed (or must refresh) its packages. */
+    needsSetup() {
+        const python = this.python();
+        const readFile = (file) => {
+            try {
+                return fs.readFileSync(file);
+            } catch {
+                return null;
+            }
+        };
+        const md5 = (data) => crypto.createHash('md5').update(data).digest('hex');
+        return needsDependencySetup({ appRoot: this.appRoot, python, env: this.baseEnv, readFile, md5 });
+    }
+
+    /**
+     * Run run-portable.bat in setup-only mode (it installs the core packages
+     * and exits before starting the server). It gets its own console window
+     * so the user sees pip's progress, exactly as when double-clicking the
+     * launcher. Resolves with the exit code.
+     */
+    runSetup() {
+        const launcher = path.join(this.appRoot, 'run-portable.bat');
+        if (this.platform !== 'win32' || !fs.existsSync(launcher)) {
+            return Promise.resolve(1);
+        }
+        return new Promise((resolve) => {
+            const child = spawn('cmd.exe', ['/c', launcher], {
+                cwd: this.appRoot,
+                env: { ...this.baseEnv, SD_IMAGE_SORTER_SETUP_ONLY: '1' },
+                stdio: 'ignore',
+                windowsHide: false,
+            });
+            child.once('error', () => resolve(1));
+            child.once('exit', (code) => resolve(code === null ? 1 : code));
+        });
+    }
+
     start(port) {
         const python = this.python();
         if (!python) {
@@ -91,6 +131,7 @@ class BackendProcess {
         this.port = port;
         const env = buildBackendEnv({
             appRoot: this.appRoot, python, platform: this.platform, baseEnv: this.baseEnv, port, parentPid: process.pid,
+            shellVersion: this.shellVersion,
         });
         for (const folder of foldersToCreate(env)) fs.mkdirSync(folder, { recursive: true });
         fs.mkdirSync(this.logDir, { recursive: true });

@@ -28,6 +28,16 @@ BACKEND_ROOT = ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from app_info import MIN_SHELL_VERSION  # noqa: E402
+from release_shell import (  # noqa: E402
+    build_desktop_shell,
+    shell_manifest_fields,
+    stage_desktop_shell,
+)
 from update_worker import (  # noqa: E402
     INSTALLED_MANIFEST_RELATIVE_PATH,
     PACKAGE_MANIFEST_RELATIVE_PATH,
@@ -163,6 +173,10 @@ EXCLUDED_PREFIXES = (
     "scripts",
     # browser-extension/build.py output; the program builds its own copy.
     "browser-extension/dist",
+    # The desktop shell ships built (SD Image Sorter.exe, added by
+    # release_shell.py to the Windows package only); its sources, lockfile,
+    # node_modules and dist never go into a package.
+    "desktop",
     "docs/DELETION_LOG",
     "docs/IMPROVEMENT_PLAN",
     "docs/SECURITY_ARCHITECTURE",
@@ -289,7 +303,32 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_SPLIT_SIZE_MB,
         help="Maximum size for split zip volumes, default: %(default)s",
     )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Write the packages here instead of artifacts/release (emptied of earlier release files first)",
+    )
     return parser.parse_args()
+
+
+def configure_output_root(output_dir: Path) -> None:
+    """Point the build at another output folder; refuse a folder that holds anything but release output."""
+    global ARTIFACT_ROOT, STAGING_ROOT, BOOTSTRAP_DOWNLOAD_ROOT
+    resolved = output_dir.resolve()
+    if resolved == ROOT or resolved in ROOT.parents:
+        raise ValueError(f"--output-dir must not be the repository or one of its parents: {resolved}")
+    if resolved.exists():
+        foreign = [
+            item.name
+            for item in resolved.iterdir()
+            if item.name != "staging" and not item.name.startswith("sd-image-sorter-v")
+        ]
+        if foreign:
+            raise ValueError(f"--output-dir holds files that are not release output ({foreign[0]}): {resolved}")
+    ARTIFACT_ROOT = resolved
+    STAGING_ROOT = ARTIFACT_ROOT / "staging"
+    BOOTSTRAP_DOWNLOAD_ROOT = STAGING_ROOT / "_downloads"
 
 
 def find_seven_zip() -> Path | None:
@@ -885,6 +924,14 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             ")\n"
             "echo.\n"
             "\n"
+            "REM -- The desktop shell (SD Image Sorter.exe) runs this launcher once with\n"
+            "REM    SD_IMAGE_SORTER_SETUP_ONLY=1 so a first start installs the packages,\n"
+            "REM    then starts the server itself.\n"
+            "if \"!SD_IMAGE_SORTER_SETUP_ONLY!\"==\"1\" (\n"
+            "    echo [OK] Setup finished. SD Image Sorter starts now.\n"
+            "    exit /b 0\n"
+            ")\n"
+            "\n"
             "echo [Info] Checking startup readiness...\n"
             "pushd backend\n"
             "\"!PYTHON_CMD!\" model_health.py --startup\n"
@@ -1399,6 +1446,8 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
     # Every package ships the Vopus build that copy_project picks up from
     # frontend-v4/dist, so build it before the previous packages are cleared.
     build_frontend_v4()
+    # The Windows package also ships the desktop shell, built from desktop/.
+    shell_unpacked = build_desktop_shell(ROOT)
     seven_zip = find_seven_zip()
     if ARTIFACT_ROOT.exists():
         shutil.rmtree(ARTIFACT_ROOT)
@@ -1412,6 +1461,9 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
         write_release_notes(stage_dir, version)
         prepare_embedded_python(stage_dir)
         write_package_manifest(stage_dir, version)
+        # After the manifest on purpose: the in-app updater only replaces files
+        # the manifest lists, and the shell's files are locked while it runs.
+        stage_desktop_shell(shell_unpacked, stage_dir)
 
     assets.append(stage_archive("windows-portable", version, seven_zip, populate=populate_windows_portable))
 
@@ -1561,7 +1613,12 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
         )
 
     manifest_path = ARTIFACT_ROOT / f"sd-image-sorter-v{version}-release-manifest.json"
-    manifest_path.write_text(json.dumps({"version": version, "assets": manifest_entries}, indent=2), encoding="utf-8")
+    release_manifest = {
+        "version": version,
+        **shell_manifest_fields(ROOT, MIN_SHELL_VERSION),
+        "assets": manifest_entries,
+    }
+    manifest_path.write_text(json.dumps(release_manifest, indent=2), encoding="utf-8")
     assets.append(manifest_path)
     shutil.rmtree(STAGING_ROOT, ignore_errors=True)
     return assets
@@ -1570,6 +1627,8 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
 def main() -> int:
     args = parse_args()
     try:
+        if args.output_dir is not None:
+            configure_output_root(args.output_dir)
         assets = build_release_assets(args.version, args.split_size_mb)
     except Exception as exc:  # pragma: no cover - release script should fail loudly
         print(f"[release] FAILED: {exc}", file=sys.stderr)
@@ -1578,7 +1637,7 @@ def main() -> int:
 
     print("[release] Built assets:")
     for asset in assets:
-        print(f"  - {asset.relative_to(ROOT)}")
+        print(f"  - {asset.relative_to(ROOT) if asset.is_relative_to(ROOT) else asset}")
     return 0
 
 

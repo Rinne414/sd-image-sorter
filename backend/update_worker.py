@@ -452,6 +452,19 @@ def restart_only(manifest_path: Path) -> int:
     return 0
 
 
+def _mark_failed_for_shell(manifest_path: Path) -> None:
+    """Rename a failed shell-managed update's manifest so the desktop shell stops waiting for it.
+
+    The shell waits while ``update/state/pending-update-*.json`` exists; a
+    failed worker would otherwise leave it there and keep the shell waiting.
+    """
+    try:
+        if _read_json(manifest_path).get("shell_managed"):
+            manifest_path.replace(manifest_path.with_name(manifest_path.name + ".failed"))
+    except Exception:
+        return
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Apply a staged SD Image Sorter update")
     parser.add_argument("--manifest", required=True, help="Path to the pending update manifest")
@@ -475,6 +488,7 @@ def main() -> int:
         except Exception:
             log_path = None
         _log(f"Update worker failed: {exc}", log_path=log_path)
+        _mark_failed_for_shell(manifest_path)
         return 1
 
 

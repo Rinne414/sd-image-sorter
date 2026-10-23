@@ -194,6 +194,8 @@ COMMON_FILES = {
     "frontend/index.html": "",
     "frontend/js/app.js": "",
     "frontend/js/gallery.js": "",
+    "browser-extension/manifest.base.json": "{}",
+    "browser-extension/src/background.js": "",
     "update/package-manifest.json": "{}",
     **VOPUS_BUILD,
 }
@@ -203,6 +205,9 @@ FILES_BY_ASSET = {
         "run.sh": "",
         "run-portable.bat": "",
         "python/python.exe": "",
+        "SD Image Sorter.exe": "",
+        "resources/app.asar": "",
+        "resources.pak": "",
     },
     "app-patch.zip": {"run.bat": "", "run.sh": "", "run-portable.bat": ""},
     "linux.tar.gz": {"run.sh": ""},
@@ -249,7 +254,15 @@ def _write_release(artifact_root: Path, *, drop_from: str = "", drop: str = "") 
         )
     manifest = artifact_root / "sd-image-sorter-v9.9.9-release-manifest.json"
     manifest.write_text(
-        json.dumps({"version": "9.9.9", "assets": entries}), encoding="utf-8"
+        json.dumps(
+            {
+                "version": "9.9.9",
+                "shell_version": "0.1.0",
+                "min_shell_version": "0.1.0",
+                "assets": entries,
+            }
+        ),
+        encoding="utf-8",
     )
 
 

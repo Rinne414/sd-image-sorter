@@ -81,7 +81,7 @@ function packageDirs(appRoot, baseEnv) {
 }
 
 /** Environment for the backend child: the launcher's folders plus the shell's switches. */
-function buildBackendEnv({ appRoot, python, platform, baseEnv, port, parentPid }) {
+function buildBackendEnv({ appRoot, python, platform, baseEnv, port, parentPid, shellVersion }) {
     const dirs = packageDirs(appRoot, baseEnv);
     const dataDir = dirs.SD_IMAGE_SORTER_DATA_DIR;
     const env = {
@@ -97,6 +97,9 @@ function buildBackendEnv({ appRoot, python, platform, baseEnv, port, parentPid }
         SD_IMAGE_SORTER_RESTART_LOOP: '1',
         // The backend stops itself when this process ends (backend/desktop_lifeline.py).
         SD_IMAGE_SORTER_PARENT_PID: String(parentPid),
+        // The in-app updater reads this: it never replaces the shell, and holds
+        // back a release that needs a newer one (backend/services/shell_compat.py).
+        ...(shellVersion ? { SD_IMAGE_SORTER_SHELL_VERSION: String(shellVersion) } : {}),
         SD_IMAGE_SORTER_OPEN_BROWSER: '0',
         SD_IMAGE_SORTER_PORT: String(port),
         PYTHONNOUSERSITE: '1',
@@ -109,6 +112,29 @@ function buildBackendEnv({ appRoot, python, platform, baseEnv, port, parentPid }
             .join(path.delimiter);
     }
     return env;
+}
+
+/**
+ * True when the package's own Python still has to install its packages: the
+ * same check run-portable.bat makes (MD5 of the requirements file against
+ * backend/.requirements_hash). Only the portable interpreter is ever set up
+ * this way; a venv or an override is the user's own.
+ */
+function needsDependencySetup({ appRoot, python, env, readFile, md5 }) {
+    if (!python || python.kind !== 'portable') return false;
+    const name = env.SD_IMAGE_SORTER_INSTALL_FULL_AI === '1' ? 'requirements.txt' : 'requirements-core.txt';
+    const requirements = readFile(path.join(appRoot, 'backend', name));
+    if (requirements === null) return false;
+    const recorded = readFile(path.join(appRoot, 'backend', '.requirements_hash'));
+    if (recorded === null) return true;
+    const text = recorded.toString('utf8').trim().toLowerCase();
+    // run-portable.bat writes "installed" when certutil was not available.
+    return text !== 'installed' && text !== md5(requirements).toLowerCase();
+}
+
+/** Names of update manifests whose worker has not finished (the worker deletes each when done). */
+function pendingUpdateFiles(names) {
+    return names.filter((name) => /^pending-update-.+\.json$/u.test(name));
 }
 
 /** Folders the backend expects to exist before it starts. */
@@ -206,6 +232,8 @@ module.exports = {
     isBackendUrl,
     isStatusPageUrl,
     looksLikeSorter,
+    needsDependencySetup,
+    pendingUpdateFiles,
     planBackend,
     resolvePython,
 };

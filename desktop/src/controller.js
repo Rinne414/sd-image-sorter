@@ -7,13 +7,14 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { app, globalShortcut, shell } = require('electron');
+const { app, dialog, globalShortcut, shell } = require('electron');
 
 const autostart = require('./autostart');
 const { BackendProcess, choosePlan, waitUntilReady } = require('./backend');
 const { registerIpc } = require('./ipc');
-const { backendUrl, candidatePorts, findAppRoot } = require('./paths');
+const { backendUrl, candidatePorts, findAppRoot, pendingUpdateFiles } = require('./paths');
 const { SettingsStore } = require('./settings');
+const { shortcutPlan, writeShortcuts } = require('./shortcuts');
 const { registerShortcut } = require('./shortcut');
 const { makeTranslator, pickLanguage } = require('./strings');
 const { TrayController } = require('./tray');
@@ -21,6 +22,9 @@ const { WindowManager } = require('./windows');
 
 const ICON = path.join(__dirname, '..', 'build', 'icon.png');
 const LOG_LINES = 40;
+const UPDATE_POLL_MS = 1000;
+const UPDATE_WAIT_MS = 15 * 60 * 1000;
+const APP_USER_MODEL_ID = 'io.github.rinne414.sd-image-sorter';
 
 class DesktopController {
     constructor({ startHidden }) {
@@ -51,7 +55,12 @@ class DesktopController {
             iconPath: ICON,
             t: this.t,
             getPort: () => this.port,
-            actions: { open: () => this.open(), quickCollect: () => this.openQuickCollect(), quit: () => this.quit() },
+            actions: {
+                open: () => this.open(),
+                quickCollect: () => this.openQuickCollect(),
+                quit: () => this.quit(),
+                createShortcuts: this.canMakeShortcuts() ? () => this.createShortcuts() : null,
+            },
         });
         this.applyShortcut(this.settings.get().shortcut);
         registerIpc({
@@ -63,7 +72,46 @@ class DesktopController {
             retryStart: () => this.retryStart(),
             openLogFolder: () => this.openLogFolder(),
         });
-        return this.startBackend();
+        return this.startBackend().then(() => this.offerShortcuts());
+    }
+
+    canMakeShortcuts() {
+        return process.platform === 'win32' && app.isPackaged;
+    }
+
+    /** Make the desktop and Start-menu shortcuts and say, in the shell's own words, what happened. */
+    createShortcuts() {
+        const plan = shortcutPlan({
+            exePath: process.execPath,
+            desktopDir: app.getPath('desktop'),
+            startMenuDir: path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
+            appUserModelId: APP_USER_MODEL_ID,
+        });
+        const { created, failed } = writeShortcuts(shell, plan);
+        const folderName = (file) => path.basename(path.dirname(file));
+        const places = created.map(folderName).join(', ');
+        const lost = failed.map((item) => folderName(item.file)).join(', ');
+        let key = 'shortcutsDone';
+        if (failed.length > 0) key = created.length > 0 ? 'shortcutsPartial' : 'shortcutsFailed';
+        this.tray.notify(this.t('tooltip'), this.t(key, { places, failed: lost }));
+        return created.length > 0;
+    }
+
+    /** First run of the packaged program: offer the shortcuts once; the tray menu can make them later. */
+    async offerShortcuts() {
+        if (!this.canMakeShortcuts() || this.startHidden || this.settings.get().shortcutsOffered) return;
+        const { response, checkboxChecked } = await dialog.showMessageBox(this.windows.main || null, {
+            type: 'question',
+            title: this.t('shortcutsTitle'),
+            message: this.t('shortcutsAsk'),
+            buttons: [this.t('shortcutsCreate'), this.t('shortcutsLater')],
+            defaultId: 0,
+            cancelId: 1,
+            checkboxLabel: this.t('shortcutsNever'),
+            noLink: true,
+        });
+        if (response === 0) this.createShortcuts();
+        if (response === 0 || checkboxChecked) this.settings.update({ shortcutsOffered: true });
     }
 
     statusTarget(titleKey, detail, { log = '', actions = false, params = {} } = {}) {
@@ -102,9 +150,10 @@ class DesktopController {
         }
         this.backend = new BackendProcess({
             appRoot: this.appRoot, platform: process.platform, baseEnv: this.env, logDir: this.logDir,
-            onExit: (info) => this.onBackendExit(info),
+            onExit: (info) => this.onBackendExit(info), shellVersion: app.getVersion(),
         });
         try {
+            if (this.backend.needsSetup() && !(await this.runFirstSetup())) return false;
             this.backend.start(port);
             await waitUntilReady(port, () => Boolean(this.backend?.child));
             return true;
@@ -112,6 +161,15 @@ class DesktopController {
             this.reportStartFailure(error);
             return false;
         }
+    }
+
+    /** Install the package's core Python packages in a visible console; false when that failed. */
+    async runFirstSetup() {
+        this.windows.load(this.statusTarget('setupTitle', this.t('setupDetail')));
+        const code = await this.backend.runSetup();
+        if (code === 0) return true;
+        this.showError('setupFailed', { code });
+        return false;
     }
 
     reportStartFailure(error) {
@@ -133,8 +191,40 @@ class DesktopController {
             }
             return;
         }
+        if (this.pendingUpdateNames().length > 0) {
+            await this.finishUpdate();
+            return;
+        }
         this.port = null;
         this.showError('backendExited', { code }, this.backend.tailLog(LOG_LINES));
+    }
+
+    pendingUpdateNames() {
+        if (!this.appRoot) return [];
+        const stateDir = path.join(this.env.SD_IMAGE_SORTER_UPDATE_DIR || path.join(this.appRoot, 'update'), 'state');
+        try {
+            return pendingUpdateFiles(fs.readdirSync(stateDir));
+        } catch {
+            return [];
+        }
+    }
+
+    /**
+     * The backend stopped for an in-app update: its worker replaces the files
+     * and deletes the pending manifest (or renames it when it failed). Wait for
+     * that, then start the server again; the shell itself is never replaced.
+     */
+    async finishUpdate() {
+        this.windows.load(this.statusTarget('updating', this.t('updatingDetail')));
+        const deadline = Date.now() + UPDATE_WAIT_MS;
+        while (this.pendingUpdateNames().length > 0 && Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, UPDATE_POLL_MS));
+        }
+        const timedOut = this.pendingUpdateNames().length > 0;
+        this.port = null;
+        this.backend = null;
+        await this.startBackend();
+        if (timedOut) this.tray.notify(this.t('tooltip'), this.t('updateStuck'));
     }
 
     retryStart() {

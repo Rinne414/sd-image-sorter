@@ -34,7 +34,7 @@ npm run dist:linux # unpacked Linux build (run on Linux)
 1. Ports to try: `SD_IMAGE_SORTER_PORT`, else 8487, then the next 19 ports.
 2. A port whose `GET /api/updates/boot-id` answers is an SD Image Sorter that already runs (from `run.bat` or another launcher): the shell **attaches** to it and never stops it.
 3. Otherwise the shell starts the backend on the first free port: `python main.py --port <port>` from `backend/`, with the same package-local folders `run-portable.bat` sets (`data/`, `data/config`, models, caches, `TEMP`). Values already set in the environment win.
-4. Python, in this order: `SD_IMAGE_SORTER_PYTHON` (dev override), the portable package's `python\python.exe` (`python/bin/python3` on Linux), then `backend\venv\Scripts\python.exe` (`backend/venv/bin/python`) made by `run.bat` / `run.sh`. The shell does not install packages; when Python is missing it says to run `run.bat` once.
+4. Python, in this order: `SD_IMAGE_SORTER_PYTHON` (dev override), the portable package's `python\python.exe` (`python/bin/python3` on Linux), then `backend\venv\Scripts\python.exe` (`backend/venv/bin/python`) made by `run.bat` / `run.sh`. The shell never installs packages itself. In the portable package it runs `run-portable.bat` once in setup-only mode (see Windows package) when the packages are missing or `requirements-core.txt` changed; for a venv it says to run `run.bat`.
 5. The program folder is the first folder holding `backend/main.py`, looked for upward from the shell executable (so `desktop/dist/win-unpacked/` in a checkout and a future `shell/` folder in the portable package both work), or `SD_IMAGE_SORTER_APP_ROOT`.
 6. No PowerShell or cmd in between: Node starts `python.exe` directly (`windowsHide`), which avoids the Huorong pattern of a hidden PowerShell making HTTP calls.
 7. Exit code 75 (restart after an update or a feature install) restarts the backend on the same port and reloads the page, as the launchers' restart loop does.
@@ -59,7 +59,22 @@ A stdin-pipe lifeline was built first and rejected: on Windows a thread blocked 
 
 ### Updater
 
-Not wired yet. Plan from the research: the shell is a separate, rarely changing layer with its own version (`desktop/package.json`, now 0.1.0); `app-patch.zip` keeps patching `backend/` and `frontend/`; a future manifest field `min_shell_version` tells when a new shell download is needed. Nothing in the running updater changes with this slice.
+The shell is a separate, rarely changing layer with its own version (`desktop/package.json`, 0.1.0). `app-patch.zip` patches `backend/` and `frontend/` and never the shell: its files are locked while the shell runs, so they are not in `update/package-manifest.json` (`managed_paths`) and the updater can neither replace nor delete them.
+
+- The release manifest (`sd-image-sorter-v<version>-release-manifest.json`) carries `shell_version` (what that package ships) and `min_shell_version` (from `MIN_SHELL_VERSION` in `backend/app_info.py`: the oldest shell this app version works with; raise it only when a release needs a newer shell).
+- The shell passes its version to the backend in `SD_IMAGE_SORTER_SHELL_VERSION`. Only then does `get_status` read the manifest (`backend/services/shell_compat.py`). When the running shell is older than `min_shell_version`, `has_update` is false, `shell_update_required` is true and `update_unavailable_reason` says (English / Chinese) to download the full package; `prepare_update` refuses, so nothing is installed half-way. A manifest that cannot be read does not block. Browser launchers never set the variable, so nothing changes for them.
+- Applying an update inside the shell: the backend writes `update/state/pending-update-<version>.json` with `shell_managed: true` and `relaunch: false` (no launcher is started: run-portable.bat would open a second server), then exits. The shell sees the exit, finds the pending file, shows "Installing the update" and waits until the worker deletes it (it renames it to `.failed` when it fails; 15 minutes at most), then starts the backend again on the same port and reloads. If `requirements-core.txt` changed, the setup step runs first.
+
+## Windows package
+
+`scripts/build_release_packages.py` builds the shell (`npm ci` and `npm run dist` in `desktop/`, like Vopus) and `scripts/release_shell.py` copies the unpacked folder to the **top** of `windows-portable.zip`, after the package manifest is written. The user extracts it and double-clicks `SD Image Sorter.exe`; `run-portable.bat` is unchanged (browser mode). Only the Windows package carries the shell; the app patch and every Linux package do not, and `desktop/` sources never ship.
+
+- The shell finds `backend\main.py` by walking up from its exe (depth 0 in the package) and the package's own `python\python.exe`.
+- First start: the portable Python has no packages yet. The shell runs `cmd /c run-portable.bat` with `SD_IMAGE_SORTER_SETUP_ONLY=1` in a visible console window (pip progress, internet needed); the launcher installs the core packages and exits before starting the server. The check is the launcher's own (MD5 of `backend/requirements-core.txt` against `backend/.requirements_hash`), done in Node, so a normal start costs nothing.
+- Shortcuts: on first start the packaged shell asks once whether to create a desktop and a Start-menu shortcut (`shell.writeShortcutLink`, per-user folders, no administrator rights); the tray menu has "Create desktop and Start menu shortcuts" to make them later. Quit is in the tray menu.
+- Size: `windows-portable.zip` grows by the Electron runtime (about 165 MB in total, from about 22 MB).
+- Linux: not shipped, and a Linux build was not attempted. A tarball made on Windows loses the execute bits, Chromium's sandbox helper needs setuid or `--no-sandbox`, and no Linux desktop was available to run one, so a Linux shell would ship unverified. Linux stays browser mode until it can be built and tried on Linux.
+- Release QA (`scripts/lazy_release_qa.py`) refuses a Windows package without the shell files, any other package with them, a package manifest that manages them, and a release manifest without the two shell versions.
 
 ## Shell choice: spike measurements (2026-10-23)
 

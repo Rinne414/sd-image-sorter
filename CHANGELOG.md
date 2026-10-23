@@ -5,6 +5,36 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+SD Image Sorter can now stay resident: the Windows package opens a desktop program that lives in the tray, watches your generator output folders and adds new pictures to the gallery by itself. Pictures also arrive from web pages (browser extension), from the clipboard (Ctrl+V) and from video files, and any picture can be sent back to ComfyUI, WebUI or NovelAI.
+
+现在程序可以常驻：Windows 包里有一个住在托盘里的桌面程序，监看生成器的输出文件夹，新图自己进图库。图片也可以从网页（浏览器扩展）、剪贴板（Ctrl+V）和视频文件进来，任何一张图都能发回 ComfyUI、WebUI 或 NovelAI。
+
+### Added / 新增
+
+- **Desktop program (Windows) / 桌面程序（Windows）**: `SD Image Sorter.exe` sits at the top of `windows-portable.zip` next to `run-portable.bat`, which still starts the browser mode unchanged. Closing the window keeps it in the tray (Quit is in the tray menu); the tray menu also has Open, Quick collect, Pause / Resume folder watching and Create shortcuts; a global shortcut (default Ctrl+Alt+Space) focuses the gallery search; start at sign-in is optional; gallery pictures can be dragged out as files. The first start installs the core packages in a visible console window (internet needed) and offers desktop and Start menu shortcuts (no administrator rights). It sends nothing anywhere.
+  - `SD Image Sorter.exe` 在 `windows-portable.zip` 的最上层，和 `run-portable.bat` 并列；`run-portable.bat` 仍照旧启动浏览器模式。关闭窗口会收进托盘（退出在托盘菜单里）；托盘菜单还有 打开、快速收集、暂停/恢复监看文件夹、创建快捷方式；全局快捷键（默认 Ctrl+Alt+Space）跳到图库搜索；可选登录时自动启动；图库里的图可以当作文件拖出去。第一次启动会在可见的控制台窗口里安装核心组件（要联网），并询问是否创建桌面和开始菜单快捷方式（不需要管理员权限）。它不对外发送任何东西。
+- **Folder watching / 监看文件夹**: Settings > Library Folders > "Watch for new pictures" adds new pictures from a ComfyUI or WebUI output folder to the gallery without Scan, catches up on pictures made while the program was closed, and has a Vopus and new-interface switch.
+  - 设置 > 图库文件夹 > 「监看新图」：ComfyUI 或 WebUI 输出文件夹里的新图不用 Scan 就进图库，程序关着时生成的图下次启动会补上；Vopus 和新界面里也有这个开关。
+- **Send to generator / 发回生成器**: right-click a picture > "Send to generator...": copy the WebUI or NovelAI prompt, copy or save the ComfyUI workflow, or run it again in ComfyUI with a new or the same seed. The ComfyUI address (default 127.0.0.1:8188) is set in Settings.
+  - 右键图片 >「发送到生成器…」：复制 WebUI 或 NovelAI 的提示词，复制或保存 ComfyUI 工作流，或在 ComfyUI 里用新种子或原种子再跑一次。ComfyUI 地址（默认 127.0.0.1:8188）在设置里改。
+- **Browser extension and paste to collect / 浏览器扩展与粘贴收集**: a Chrome / Edge / Firefox extension saves a right-clicked web picture with its source page into `collected/<date>`; install steps and pairing are in Settings > Browser extension, and the program builds the Chrome and Firefox folders itself (no build step). Ctrl+V in the gallery saves a pasted picture or picture address the same way. The extension talks only to 127.0.0.1.
+  - Chrome / Edge / Firefox 扩展可以把网页上右键的图片连同来源页面存进 `collected/<日期>`；安装步骤和配对在 设置 > 浏览器扩展，Chrome 和 Firefox 的文件夹由程序自己生成（无需构建）。在图库里按 Ctrl+V 可以用同样的方式保存粘贴的图片或图片地址。扩展只和 127.0.0.1 通信。
+- **Videos in the library / 图库里的视频**: videos in watched and scanned folders join the gallery (hover to play, read the prompt, Videos filter). ffmpeg (LGPL build, about 77 MB on Windows) downloads only when you press "Install video support"; a system ffmpeg is used when there is one.
+  - 被扫描和监看的文件夹里的视频会进图库（悬停播放、读提示词、「视频」筛选）。ffmpeg（LGPL 版，Windows 约 77 MB）只在你点「安装视频支持」时下载；系统里已有就直接用。
+- **Resident resource use / 常驻时的资源占用**: idle AI models are freed, work falls back to the CPU while the GPU is busy, and background work runs below normal priority.
+  - 闲置的 AI 模型会释放，GPU 忙时改用 CPU，后台任务用低于正常的优先级运行。
+
+### Changed / 变更
+
+- **In-app update and the desktop program / 程序内更新与桌面程序**: the update (`app-patch.zip`) only replaces program files and never touches `SD Image Sorter.exe`, which is locked while it runs. The release manifest now records `shell_version` and `min_shell_version`; when a release needs a newer desktop program, "Check update" says so and points to the full package instead of installing half-way. Inside the desktop program the update restarts the server by itself.
+  - 更新包（`app-patch.zip`）只替换程序文件，不会碰运行中被锁定的 `SD Image Sorter.exe`。发布清单新增 `shell_version` 和 `min_shell_version`；某个版本需要更新的桌面程序时，「检查更新」会说明并指向完整包，不会更新到一半。在桌面程序里更新后服务会自己重启。
+- **Package sizes / 包的大小**: `windows-portable.zip` grows from about 22 MB to about 165 MB because it carries the desktop program (Electron). The Linux packages stay browser mode only, with no desktop program.
+  - `windows-portable.zip` 因为带上桌面程序（Electron），从约 22 MB 增加到约 165 MB。Linux 包仍然只有浏览器模式，没有桌面程序。
+- **README / 说明**: the Windows steps, the resident features and the "what goes online" table (ComfyUI address calls stay on this computer unless you point them elsewhere, the ffmpeg download, the extension talks only to 127.0.0.1) are updated.
+  - 更新了 Windows 的启动步骤、常驻功能的说明和「哪些功能会联网」表（ComfyUI 地址的调用默认只在本机，除非你把地址指向别处；ffmpeg 下载；扩展只和 127.0.0.1 通信）。
+
 ## [3.7.0] - 2026-10-17
 
 One program now serves two interfaces: the classic one stays the start page and Vopus, the second interface, is switched on in Settings. The database is copied before every upgrade, and libraries that Vopus 1.0.0 had upgraded are repaired. Moves, undo, exports and batch censoring always say how they ended. Letter shortcuts no longer swallow browser keys such as Ctrl+Shift+R, and the browser Back button goes up one level like Esc.

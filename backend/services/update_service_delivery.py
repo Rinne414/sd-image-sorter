@@ -40,6 +40,7 @@ from app_info import (
     WINDOWS_FULL_ASSET_TEMPLATE,
 )
 from config import DATA_DIR
+from services.shell_compat import running_shell_version, shell_requirement
 from update_worker import PACKAGE_MANIFEST_RELATIVE_PATH
 
 
@@ -326,6 +327,37 @@ class _UpdateDeliveryMixin:
         )
         return status
 
+    def _apply_shell_requirement(self, status: dict[str, Any]) -> dict[str, Any]:
+        """Hold back an in-app update when the running desktop shell is too old for it.
+
+        Only the desktop shell reports a version, so browser launchers never
+        fetch the manifest here. An unreadable manifest does not block: the
+        download step reads it again and fails there if it is really broken.
+        """
+        shell_version = running_shell_version()
+        status["shell_version"] = shell_version
+        status["shell_update_required"] = False
+        asset = status.get("asset") or {}
+        manifest_url = str(asset.get("manifest_download_url") or "").strip()
+        if not shell_version or not status.get("has_update") or not manifest_url:
+            return status
+        try:
+            manifest = self._read_release_manifest(manifest_url)
+        except Exception as exc:
+            logger.warning("Could not read the release manifest for the shell check: %s", exc)
+            return status
+        block = shell_requirement(manifest, shell_version, str(status.get("latest_version") or ""))
+        if block is None:
+            return status
+        return {
+            **status,
+            "has_update": False,
+            "shell_update_required": True,
+            "min_shell_version": block["min_shell_version"],
+            "latest_shell_version": block["latest_shell_version"],
+            "update_unavailable_reason": block["reason"],
+        }
+
     def get_status(self, *, force: bool = False) -> dict[str, Any]:
         now = time.time()
         with self._lock:
@@ -338,7 +370,7 @@ class _UpdateDeliveryMixin:
 
         try:
             release = self._read_release_json()
-            status = self._build_status(release)
+            status = self._apply_shell_requirement(self._build_status(release))
         except Exception as exc:
             logger.warning("Failed to check for updates: %s", exc)
             status = self._build_status(None, error=self._format_update_error(exc))
@@ -469,6 +501,9 @@ class _UpdateDeliveryMixin:
     ) -> Path:
         launcher_path = self._resolve_launcher_path()
         timestamp = int(time.time())
+        # Under the desktop shell the shell itself starts the server again once
+        # the worker is done; relaunching a launcher would open a second one.
+        shell_managed = running_shell_version() is not None
         payload = {
             "created_at": timestamp,
             "current_pid": os.getpid() if current_pid is None else int(current_pid),
@@ -476,7 +511,8 @@ class _UpdateDeliveryMixin:
             "archive_path": str(archive_path),
             "target_version": version,
             "launcher_path": str(launcher_path),
-            "relaunch": bool(relaunch),
+            "relaunch": bool(relaunch) and not shell_managed,
+            "shell_managed": shell_managed,
             "log_path": str(self._logs_dir() / f"update-{timestamp}.log"),
             "update_root": str(_svc().UPDATE_DIR),
         }

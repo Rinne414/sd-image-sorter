@@ -9,7 +9,7 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/paths.test.js test/drag-resolver.test.js",
+    "test": "node --test test/paths.test.js test/drag-resolver.test.js test/package-layout.test.js",
     "dist": "electron-builder --win dir",
     "dist:linux": "electron-builder --linux dir"
   },

@@ -115,7 +115,7 @@ test('shortcut text becomes an Electron accelerator', () => {
 
 test('settings keep known keys with the right types', () => {
     assert.deepEqual(sanitize({ closeToTray: 'yes', shortcut: 5, extra: 1 }), {
-        closeToTray: true, closeNoticeShown: false, shortcut: 'Control+Alt+Space',
+        closeToTray: true, closeNoticeShown: false, shortcutsOffered: false, shortcut: 'Control+Alt+Space',
     });
     assert.equal(sanitize({ closeToTray: false }).closeToTray, false);
 });
