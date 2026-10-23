@@ -328,6 +328,13 @@ function formatApiError(status, errorData = {}) {
         if (explained) return explained;
     }
 
+    // A coded error is said in the UI language (api-error-text.js); its
+    // English message stays the fallback.
+    if (errorData && errorData.code && typeof window.apiErrorText === 'function') {
+        const said = window.apiErrorText(errorData, '');
+        if (said) return said;
+    }
+
     // Use error detail if provided
     if (errorData.detail) return errorData.detail;
     if (errorData.error) return errorData.error;

@@ -136,7 +136,13 @@
             const changed = this.generation !== null && generation !== this.generation;
             this.generation = generation;
             if (!changed) return;
-            if (collect.last_error) toast(collect.last_error, 'error');
+            if (collect.last_error) {
+                toast(window.apiErrorText({
+                    code: collect.last_error_code,
+                    params: collect.last_error_params,
+                    message: collect.last_error,
+                }), 'error');
+            }
             if (typeof _refreshScanDrivenViews === 'function') {
                 _refreshScanDrivenViews(true, { refreshGallery: true });
             }

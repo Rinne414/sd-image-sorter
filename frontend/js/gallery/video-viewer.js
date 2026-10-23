@@ -183,7 +183,7 @@
             try {
                 status = await window.App.API.post(`/api/videos/${imageId}/converted`, {});
             } catch (error) {
-                this._setNote(error?.apiData?.detail?.message || error?.message || '');
+                this._setNote(error?.message || '');
                 return;
             }
             this._followConversion(imageId, status);

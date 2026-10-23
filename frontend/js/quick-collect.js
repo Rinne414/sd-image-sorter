@@ -39,8 +39,7 @@
         const response = await fetch(path, Object.assign({}, init, { headers }));
         const body = await response.json().catch(() => null);
         if (!response.ok) {
-            const detail = body?.detail;
-            throw new Error(typeof detail === 'string' ? detail : (detail?.message || `HTTP ${response.status}`));
+            throw new Error(window.apiErrorText(body, `HTTP ${response.status}`));
         }
         return body;
     }

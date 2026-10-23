@@ -13,6 +13,7 @@ from app_security import require_own_page
 from services import generator_recipe
 from services.comfyui_client import (
     DEFAULT_COMFYUI_URL,
+    ComfyUIAddressError,
     ComfyUIError,
     configured_comfyui_url,
     normalize_comfyui_url,
@@ -33,7 +34,12 @@ def _not_found() -> HTTPException:
 def _comfy_error(error: ComfyUIError) -> HTTPException:
     return HTTPException(
         status_code=error.status_code,
-        detail={"code": error.code, "message": error.message, "details": error.details},
+        detail={
+            "code": error.code,
+            "message": error.message,
+            "details": error.details,
+            "params": error.params,
+        },
     )
 
 
@@ -71,8 +77,9 @@ async def save_workflow_file(http_request: Request, image_id: int = ImageId):
         raise HTTPException(
             status_code=503,
             detail={
-                "code": "write_failed",
+                "code": "workflow_write_failed",
                 "message": f"Could not save the workflow: {exc}",
+                "params": {"reason": str(exc)},
             },
         ) from exc
     if not result["saved"]:
@@ -141,14 +148,21 @@ def set_comfyui_setting(request: ComfyUISettingRequest, http_request: Request):
     if text:
         try:
             stored = normalize_comfyui_url(text)
-        except ValueError as exc:
+        except ComfyUIAddressError as exc:
             raise HTTPException(
-                status_code=400, detail={"code": "bad_address", "message": str(exc)}
+                status_code=400, detail={"code": exc.code, "message": str(exc)}
             ) from exc
         if stored == DEFAULT_COMFYUI_URL:
             stored = ""
     try:
         config.save_comfyui_url_setting(stored)
     except OSError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "settings_write_failed",
+                "message": f"The setting could not be saved: {exc}",
+                "params": {"reason": str(exc)},
+            },
+        ) from exc
     return _describe_comfyui_setting()

@@ -42,7 +42,11 @@ STATE_UNKNOWN = "unknown"
 
 
 class PairingError(ValueError):
-    """A pairing request that cannot be accepted; the message is for the user."""
+    """A pairing request that cannot be accepted; ``code`` names it for the page."""
+
+    def __init__(self, message: str, code: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass
@@ -118,9 +122,11 @@ class PairingRegistry:
     ) -> Pairing:
         """Record a pairing request; it waits for the user's Allow or Deny."""
         if not TOKEN_RE.match(token or ""):
-            raise PairingError("The extension sent no usable token.")
+            raise PairingError("The extension sent no usable token.", "ext_bad_token")
         if origin is not None and not is_extension_origin(origin):
-            raise PairingError("Only a browser extension can ask to be paired.")
+            raise PairingError(
+                "Only a browser extension can ask to be paired.", "ext_not_extension"
+            )
         browser = browser if browser in BROWSERS else "other"
         name = " ".join(str(name or "").split())[:NAME_MAX_CHARS] or "Browser extension"
         pairing = Pairing(

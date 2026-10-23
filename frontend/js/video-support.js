@@ -71,7 +71,7 @@
             try {
                 await window.App.API.post('/api/video-support/install', {});
             } catch (error) {
-                const message = error?.apiData?.detail?.message || error?.message || '';
+                const message = error?.message || '';
                 const toast = window.App?.showToast || window.showToast;
                 toast?.(t('video.installFailed', 'Video support was not installed: {reason}', { reason: message }), 'error');
             }
@@ -93,7 +93,8 @@
             const install = s.install || {};
             if (install.state === 'running') return this._progressText(install);
             if (install.state === 'failed') {
-                return t('video.statusFailed', 'The install failed: {reason}', { reason: install.error || '' });
+                const reason = window.apiErrorText({ code: install.error_code, params: install.error_params, message: install.error }, '');
+                return t('video.statusFailed', 'The install failed: {reason}', { reason });
             }
             if (s.available) {
                 const where = {

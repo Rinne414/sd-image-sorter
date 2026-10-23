@@ -173,7 +173,6 @@
 
         _render(recipe, image) {
             const panel = this._panel;
-            this._comfyUrl = recipe.comfyui_url || '';
             const head = el('div', 'stg-head');
             head.append(el('strong', '', t('sendGen.title', 'Send to generator')));
             if (recipe.metadata_source === 'stored') {
@@ -267,7 +266,7 @@
                 this._say(message, false);
                 window.App.showToast?.(message, 'success');
             } catch (error) {
-                this._say(error?.apiData?.message || error?.message || String(error), true);
+                this._say(error?.message || String(error), true);
             } finally {
                 trigger.disabled = false;
             }
@@ -293,11 +292,11 @@
 
         _queueError(error) {
             const data = error?.apiData || {};
-            const known = {
-                unreachable: () => t('sendGen.unreachable', 'ComfyUI is not reachable at {url}. Start ComfyUI, or check the address in Settings.', { url: this._comfyUrl }),
-                no_comfyui_recipe: () => t('sendGen.noComfyRun', 'This picture has no ComfyUI recipe to run. Its prompt can still be copied.'),
-            };
-            const message = known[data.code]?.() || data.message || error?.message || String(error);
+            // error.message is already in the UI language (apiError.<code>);
+            // a missing recipe reads differently here than for Save.
+            const message = data.code === 'no_comfyui_recipe'
+                ? t('sendGen.noComfyRun', 'This picture has no ComfyUI recipe to run. Its prompt can still be copied.')
+                : (error?.message || String(error));
             const details = Array.isArray(data.details) ? data.details : [];
             return [message, ...details].join('\n');
         },
@@ -311,12 +310,14 @@
 
     // Settings > ComfyUI address. Empty field = the default address.
     const ComfyUISetting = {
-        async sync() {
+        // force: put the saved address back even while the field has focus
+        // (after a refused address, the field must not keep the bad text).
+        async sync(force = false) {
             const input = document.getElementById('settings-comfyui-url');
             if (!input) return;
             try {
                 const data = await window.App.API.get('/api/settings/comfyui');
-                if (document.activeElement !== input) input.value = data.custom_url || '';
+                if (force || document.activeElement !== input) input.value = data.custom_url || '';
                 input.placeholder = data.default_url;
             } catch (_error) {
                 window.App.showToast?.(t('settings.comfyuiLoadFailed', 'Could not read the ComfyUI address.'), 'error');
@@ -324,13 +325,15 @@
         },
 
         async save(url) {
+            let refused = false;
             try {
                 await window.App.API.patch('/api/settings/comfyui', { url });
                 window.App.showToast?.(t('settings.comfyuiSaved', 'ComfyUI address saved'), 'success');
             } catch (error) {
-                window.App.showToast?.(error?.apiData?.message || error?.message || String(error), 'error');
+                refused = true;
+                window.App.showToast?.(t('settings.comfyuiRefused', 'Not saved: {reason}', { reason: error?.message || String(error) }), 'error');
             }
-            await this.sync();
+            await this.sync(refused);
         },
 
         init() {

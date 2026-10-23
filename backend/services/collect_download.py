@@ -14,7 +14,7 @@ import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 from urllib.parse import unquote, urlsplit
 
 import httpx
@@ -30,12 +30,27 @@ BROWSER_USER_AGENT = (
 
 
 class DownloadError(Exception):
-    """A picture that could not be downloaded; the message is for the user."""
+    """A picture that could not be downloaded.
 
-    def __init__(self, message: str, status_code: int = 502) -> None:
+    ``code`` (+ ``params``) lets the page say it in the UI language;
+    ``message`` is the English fallback.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        status_code: int = 502,
+        code: str = "collect_download_failed",
+        params: Optional[Dict[str, Any]] = None,
+    ) -> None:
         super().__init__(message)
         self.message = message
         self.status_code = status_code
+        self.code = code
+        self.params = params or {}
+
+    def detail(self) -> Dict[str, Any]:
+        return {"code": self.code, "message": self.message, "params": self.params}
 
 
 @dataclass(frozen=True)
@@ -51,7 +66,9 @@ def check_web_url(url: str) -> str:
     parts = urlsplit(text)
     if parts.scheme.lower() not in ("http", "https") or not parts.hostname:
         raise DownloadError(
-            "Only http:// and https:// picture addresses can be downloaded.", 400
+            "Only http:// and https:// picture addresses can be downloaded.",
+            400,
+            code="collect_url_not_web",
         )
     return text
 
@@ -122,6 +139,8 @@ def download_picture(
                         " If it only shows the picture to signed-in visitors, save it"
                         " with the browser extension instead.",
                         502,
+                        code="collect_site_refused",
+                        params={"status": response.status_code},
                     )
                 for chunk in response.iter_bytes(CHUNK_BYTES):
                     out.write(chunk)
@@ -129,7 +148,12 @@ def download_picture(
                 content_type = response.headers.get("content-type", "")
     except httpx.HTTPError as exc:
         tmp_path.unlink(missing_ok=True)
-        raise DownloadError(f"The picture could not be downloaded: {exc}", 502) from exc
+        raise DownloadError(
+            f"The picture could not be downloaded: {exc}",
+            502,
+            code="collect_download_failed",
+            params={"reason": str(exc)},
+        ) from exc
     except BaseException:
         tmp_path.unlink(missing_ok=True)
         raise

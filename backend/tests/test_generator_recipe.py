@@ -313,7 +313,9 @@ def test_queue_when_comfyui_is_down_names_the_address(test_client, library):
 
     assert response.status_code == 502
     detail = response.json()
-    assert detail["code"] == "unreachable"
+    assert detail["code"] == "comfyui_unreachable"
+    # The page says it in its own language from the code and this address.
+    assert detail["params"] == {"address": address}
     assert f"ComfyUI is not reachable at {address}" in detail["message"]
 
 
@@ -371,7 +373,7 @@ def test_queue_reports_comfyui_refusal_and_never_follows_a_redirect(
         f"/api/images/{library['comfy.png']}/comfyui/queue", json={}
     )
     assert redirected.status_code == 502
-    assert redirected.json()["code"] == "redirect"
+    assert redirected.json()["code"] == "comfyui_redirect"
     assert len(fake_comfy.received) == 2
 
 
@@ -411,3 +413,40 @@ def test_comfyui_address_setting(test_client):
 
     cleared = test_client.patch("/api/settings/comfyui", json={"url": ""})
     assert cleared.json()["custom_url"] == ""
+
+
+def test_comfyui_address_rejects_hosts_that_are_not_hosts(test_client):
+    """A space, a quote or a dotted number that is no IPv4 address used to be
+    saved as e.g. http://abc def; each is refused with a code and the saved
+    address stays as it was."""
+    test_client.patch("/api/settings/comfyui", json={"url": "127.0.0.1:8190"})
+    cases = {
+        "abc def": "comfyui_address_spaces",
+        "http://abc def:8188": "comfyui_address_spaces",
+        "999.1.1.1:8188": "comfyui_address_host",
+        "http://host\"name:8188": "comfyui_address_host",
+        "-bad-.local": "comfyui_address_host",
+        "ftp://host:21": "comfyui_address_scheme",
+        "http://host:99999": "comfyui_address_port",
+        "http://host:0": "comfyui_address_port",
+        "http://host:8188/a<b": "comfyui_address_path",
+        "http://host:8188/?x=1": "comfyui_address_extras",
+    }
+    for bad, code in cases.items():
+        refused = test_client.patch("/api/settings/comfyui", json={"url": bad})
+        assert refused.status_code == 400, bad
+        assert refused.json()["code"] == code, bad
+        assert refused.json()["error"], bad
+    assert test_client.get("/api/settings/comfyui").json()["url"] == "http://127.0.0.1:8190"
+    test_client.patch("/api/settings/comfyui", json={"url": ""})
+
+
+def test_comfyui_address_accepts_every_real_host_form():
+    from services.comfyui_client import normalize_comfyui_url
+
+    assert normalize_comfyui_url("") == "http://127.0.0.1:8188"
+    assert normalize_comfyui_url("localhost:8188") == "http://localhost:8188"
+    assert normalize_comfyui_url("[::1]:8188") == "http://[::1]:8188"
+    assert normalize_comfyui_url("https://comfy-box.lan/comfy/") == "https://comfy-box.lan/comfy"
+    assert normalize_comfyui_url("comfy_ui:8188") == "http://comfy_ui:8188"
+    assert normalize_comfyui_url("192.168.1.5") == "http://192.168.1.5"

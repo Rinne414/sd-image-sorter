@@ -91,6 +91,7 @@ class CollectImporter:
         self._generation = 0
         self._imported = 0
         self._last_error: Optional[str] = None
+        self._last_error_params: Dict[str, Any] = {}
         self._ui_library_id = "main"
 
     # The library the classic page shows; the extension does not know it.
@@ -118,6 +119,9 @@ class CollectImporter:
                 "waiting": self._busy,
                 "imported": self._imported,
                 "last_error": self._last_error,
+                # The page says it in the UI language; last_error is the fallback.
+                "last_error_code": "collect_index_failed" if self._last_error else None,
+                "last_error_params": dict(self._last_error_params),
             }
 
     def wait_idle(self, timeout: float = 30.0) -> bool:
@@ -152,17 +156,20 @@ class CollectImporter:
 
     def _import(self, library_id: str, folder: Path, jobs: List[CollectJob]) -> None:
         error: Optional[str] = None
+        params: Dict[str, Any] = {}
         stored = 0
         try:
             stored = _import_group(library_id, folder, jobs)
         except Exception as exc:  # the worker must survive one bad batch
             logger.exception("Importing collected pictures failed")
             error = f"Saved in {folder}, but adding to the gallery failed: {exc}"
+            params = {"folder": str(folder), "reason": str(exc)}
         with self._lock:
             self._busy -= len(jobs)
             self._imported += stored
             self._generation += 1
             self._last_error = error
+            self._last_error_params = params
         if stored:
             from services.sorting_service import invalidate_library_health_cache
 
