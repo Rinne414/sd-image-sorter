@@ -6242,7 +6242,7 @@ window.I18nLang_zhCN = {
     'reverse.tipoFailed': '标签推荐失败',
 
     // Browser extension and collecting pictures (S3/S4)
-    'catalog.browserExtension': '浏览器扩展：在任意网页的图片上右键，连同来源网页一起存进本程序',
+    'catalog.browserExtension': '在任意网页的图片上右键，连同来源网页一起存进本程序',
     'catalog.collectPaste': '粘贴图片或图片地址（在图库按 Ctrl+V），存进 collected/<日期>',
     'ext.settingsTitle': '浏览器扩展',
     'ext.settingsHint': '从网页保存图片，并记下来源网页。',

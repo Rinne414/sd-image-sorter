@@ -6256,7 +6256,7 @@ window.I18nLang_en = {
     'reverse.tipoFailed': 'Tag suggestion failed',
 
     // Browser extension and collecting pictures (S3/S4)
-    'catalog.browserExtension': 'Browser extension: right-click a picture on any web page to save it here with the page it came from',
+    'catalog.browserExtension': 'Right-click a picture on any web page to save it here with the page it came from',
     'catalog.collectPaste': 'Paste a picture or a picture address (Ctrl+V in the gallery) to save it into collected/<date>',
     'ext.settingsTitle': 'Browser extension',
     'ext.settingsHint': 'Save pictures from web pages with the page they came from.',
