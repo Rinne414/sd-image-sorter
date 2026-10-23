@@ -3,13 +3,15 @@
 /**
  * Native drag-out: the gallery asks for a drag of the real picture files, so
  * Explorer, Photoshop, ComfyUI and browser upload fields receive files, not a
- * URL. Only absolute paths to existing files are accepted.
+ * URL. The page sends image ids; paths come from the backend and only
+ * absolute paths to existing files are dragged.
  */
 
 const fs = require('node:fs');
 const { nativeImage } = require('electron');
 
 const { cleanDragPaths } = require('./paths');
+const { resolveImagePaths, fetchImagesByIds } = require('./drag-resolver');
 
 const DRAG_ICON_SIZE = 96;
 
@@ -36,8 +38,13 @@ async function dragIcon(file, fallbackIcon) {
     return nativeImage.createFromPath(fallbackIcon);
 }
 
-/** Start the OS drag. On Windows this returns once the drop finished. */
-async function startNativeDrag(webContents, paths, fallbackIcon) {
+/**
+ * Start the OS drag. On Windows this returns once the drop finished.
+ * `request` = { imageIds, libraryId, port }: the paths come from the backend.
+ */
+async function startNativeDrag(webContents, request, fallbackIcon) {
+    const { imageIds, libraryId, port } = request;
+    const paths = await resolveImagePaths(imageIds, (chunk) => fetchImagesByIds(port, libraryId, chunk));
     const files = cleanDragPaths(paths, isFile);
     if (!files.length) return { ok: false, count: 0, reason: 'no-files' };
     const icon = await dragIcon(files[0], fallbackIcon);

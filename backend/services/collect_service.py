@@ -40,6 +40,22 @@ FORMAT_EXTENSIONS = {
     "TIFF": ".tif",
 }
 
+# What a collected file may be opened as. Pillow can also open EPS (runs
+# Ghostscript) and other legacy formats; web bytes never get those.
+OPENABLE_FORMATS = (
+    "PNG", "JPEG", "MPO", "WEBP", "GIF", "BMP", "DIB", "TIFF",
+    "ICO", "CUR", "AVIF", "HEIF",
+)
+
+
+
+def _openable_formats() -> list[str]:
+    """OPENABLE_FORMATS that this Pillow build has (AVIF/HEIF depend on plugins);
+    Image.open raises KeyError for a name nobody registered."""
+    Image.init()
+    return [name for name in OPENABLE_FORMATS if name in Image.OPEN]
+
+
 _name_lock = threading.Lock()
 
 
@@ -123,7 +139,7 @@ def _picture_format(path: Path) -> str:
     if sniffed:
         return sniffed
     try:
-        with Image.open(path) as image:
+        with Image.open(path, formats=_openable_formats()) as image:
             return str(image.format or "")
     except Image.DecompressionBombError:
         return "LARGE"
@@ -134,7 +150,7 @@ def _picture_format(path: Path) -> str:
 def _convert_to_png(path: Path) -> Path:
     png_path = path.with_suffix(".png.part")
     try:
-        with Image.open(path) as image:
+        with Image.open(path, formats=_openable_formats()) as image:
             image.load()
             mode = "RGBA" if "A" in image.getbands() or image.mode == "P" else "RGB"
             image.convert(mode).save(png_path, format="PNG")

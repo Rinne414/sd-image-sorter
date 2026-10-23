@@ -6,6 +6,7 @@
  */
 
 const path = require('node:path');
+const { fileURLToPath } = require('node:url');
 
 const DEFAULT_PORT = 8487;
 const PORT_TRIES = 20;
@@ -178,6 +179,22 @@ function isBackendUrl(url, port) {
     }
 }
 
+/**
+ * True only for the shell's own bundled start-up page (query and hash allowed):
+ * any other file: URL is a dropped or linked file and must not get shell powers.
+ */
+function isStatusPageUrl(url, statusPagePath, platform = process.platform) {
+    try {
+        const parsed = new URL(url);
+        if (parsed.protocol !== 'file:' || parsed.host !== '') return false;
+        const actual = path.resolve(fileURLToPath(parsed));
+        const expected = path.resolve(statusPagePath);
+        return platform === 'win32' ? actual.toLowerCase() === expected.toLowerCase() : actual === expected;
+    } catch {
+        return false;
+    }
+}
+
 module.exports = {
     DEFAULT_PORT,
     backendUrl,
@@ -187,6 +204,7 @@ module.exports = {
     findAppRoot,
     foldersToCreate,
     isBackendUrl,
+    isStatusPageUrl,
     looksLikeSorter,
     planBackend,
     resolvePython,

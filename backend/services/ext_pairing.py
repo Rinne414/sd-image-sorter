@@ -142,10 +142,13 @@ class PairingRegistry:
         return pairing
 
     def pending(self) -> List[Dict[str, Any]]:
+        """Waiting requests; ``replaces_existing`` is true when the same
+        extension (origin) is already paired, so allowing replaces that pairing."""
         with self._lock:
             self._drop_expired()
+            paired_origins = {p.origin for p in self._load() if p.origin}
             return [
-                p.public()
+                {**p.public(), "replaces_existing": p.origin in paired_origins}
                 for _at, p in self._pending.values()
                 if p.state == STATE_PENDING
             ]

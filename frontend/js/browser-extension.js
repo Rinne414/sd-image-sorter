@@ -47,6 +47,11 @@
         return String(item.name || '').includes(label) ? item.name : `${item.name} (${label})`;
     }
 
+    /** The extension's own address: chrome-extension://<id> or moz-extension://<uuid>. */
+    function extensionId(item) {
+        return item.origin ? String(item.origin).replace(/^[a-z-]+:\/\//i, '').replace(/\/$/, '') : '';
+    }
+
     // Pairing prompt ---------------------------------------------------------------
 
     const Pairing = {
@@ -63,6 +68,10 @@
                 '"{name}" asks to save pictures into this program. Allow it only if you just pressed Pair in the extension.',
                 { name: displayName(request) },
             );
+            const id = extensionId(request);
+            document.getElementById('ext-pair-id').textContent = id || t('ext.pairIdNone', 'unknown');
+            document.getElementById('ext-pair-unknown').hidden = Boolean(id);
+            document.getElementById('ext-pair-replaces').hidden = !request.replaces_existing;
             showModal('ext-pair-modal', { initialFocus: document.getElementById('btn-ext-pair-deny') });
         },
 
@@ -179,6 +188,10 @@
             const name = document.createElement('span');
             name.className = 'ext-paired-name';
             name.textContent = displayName(item);
+            const id = document.createElement('code');
+            id.className = 'ext-paired-id';
+            id.textContent = extensionId(item) || t('ext.pairIdNone', 'unknown');
+            id.title = t('ext.pairedIdTitle', 'Extension ID: compare it with the browser\'s extensions page');
             const when = document.createElement('span');
             when.className = 'ext-paired-when';
             when.textContent = t('ext.pairedOn', 'paired {when}', { when: formatWhen(item.paired_at) });
@@ -187,7 +200,7 @@
             revoke.className = 'btn btn-ghost btn-small danger';
             revoke.textContent = t('ext.revoke', 'Revoke');
             revoke.addEventListener('click', () => this.revoke(item, revoke));
-            row.append(name, when, revoke);
+            row.append(name, id, when, revoke);
             return row;
         },
 

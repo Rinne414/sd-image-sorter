@@ -10,11 +10,12 @@
 const path = require('node:path');
 const { BrowserWindow, shell } = require('electron');
 
-const { isBackendUrl } = require('./paths');
+const { isBackendUrl, isStatusPageUrl } = require('./paths');
 
 const HIDDEN_RELEASE_MS = 10 * 60 * 1000;
 const BACKGROUND = '#0E0E0F';
 const PRELOAD = path.join(__dirname, 'preload.js');
+const STATUS_PAGE = path.join(__dirname, 'pages', 'status.html');
 
 function webPreferences() {
     return { preload: PRELOAD, contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false };
@@ -28,8 +29,10 @@ function guardNavigation(win, getPort) {
         if (/^https?:\/\//iu.test(url)) shell.openExternal(url);
         return { action: 'deny' };
     });
+    // A picture dropped on the window outside a drop zone would navigate to its
+    // file: URL; only the bundled start-up page may be a file: page here.
     contents.on('will-navigate', (event, url) => {
-        if (url.startsWith('file:') || isBackendUrl(url, getPort())) return;
+        if (isStatusPageUrl(url, STATUS_PAGE) || isBackendUrl(url, getPort())) return;
         event.preventDefault();
         if (/^https?:\/\//iu.test(url)) shell.openExternal(url);
     });
@@ -85,7 +88,7 @@ class WindowManager {
         this.lastLoad = target;
         const win = this.main || this.createMain(target.show !== false);
         if (target.url) return win.loadURL(target.url);
-        return win.loadFile(path.join(__dirname, 'pages', 'status.html'), { query: target.query || {} });
+        return win.loadFile(STATUS_PAGE, { query: target.query || {} });
     }
 
     /** Bring the window up, re-creating it when it was released while hidden. */

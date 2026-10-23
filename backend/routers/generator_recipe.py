@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Path as FastAPIPath
+from fastapi import APIRouter, HTTPException, Path as FastAPIPath, Request
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 import config
+from app_security import require_own_page
 from services import generator_recipe
 from services.comfyui_client import (
     DEFAULT_COMFYUI_URL,
@@ -99,7 +100,10 @@ class QueueRequest(BaseModel):
         "new random value; linked inputs are left alone."
     ),
 )
-async def queue_in_comfyui(request: QueueRequest, image_id: int = ImageId):
+async def queue_in_comfyui(
+    request: QueueRequest, http_request: Request, image_id: int = ImageId
+):
+    require_own_page(http_request, "send a recipe to ComfyUI")
     try:
         return await run_in_threadpool(
             generator_recipe.queue_in_comfyui, image_id, request.seed_mode
@@ -129,7 +133,8 @@ async def get_comfyui_setting():
 
 
 @router.patch("/settings/comfyui", summary="Set the ComfyUI address (empty = default)")
-def set_comfyui_setting(request: ComfyUISettingRequest):
+def set_comfyui_setting(request: ComfyUISettingRequest, http_request: Request):
+    require_own_page(http_request, "change the ComfyUI address")
     text = request.url.strip()
     stored = ""
     if text:

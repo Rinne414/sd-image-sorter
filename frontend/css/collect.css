@@ -93,6 +93,28 @@
     color: var(--text-muted);
 }
 
+.ext-pair-id-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 8px 0 0;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.ext-pair-id-row code,
+.ext-paired-id {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 12px;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+    user-select: all;
+}
+
+.ext-pair-warning {
+    color: var(--warning, var(--accent));
+}
+
 .ext-paired-list li .btn {
     margin-left: auto;
 }

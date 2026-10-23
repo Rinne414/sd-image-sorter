@@ -7132,6 +7132,10 @@
             <div class="modal-content modal-small">
                 <h3 id="ext-pair-title" data-i18n="ext.pairTitle">Allow this browser extension?</h3>
                 <p id="ext-pair-message"></p>
+                <p class="ext-pair-id-row"><span data-i18n="ext.pairIdLabel">Extension ID</span> <code id="ext-pair-id"></code></p>
+                <p class="modal-description" data-i18n="ext.pairIdHint">Compare this ID with the one on the browser's extensions page (chrome://extensions, edge://extensions, or about:debugging in Firefox). If they differ, press Deny.</p>
+                <p class="modal-description ext-pair-warning" id="ext-pair-unknown" hidden data-i18n="ext.pairIdUnknown">The browser did not say which extension this is. Deny unless you just pressed Pair yourself.</p>
+                <p class="modal-description ext-pair-warning" id="ext-pair-replaces" hidden data-i18n="ext.pairReplaces">This extension is already paired. Allowing replaces the existing pairing.</p>
                 <p class="modal-description" data-i18n="ext.pairScope">It can save pictures into this program and nothing else: it cannot read, change or delete your library. You can revoke it in Settings > Browser extension.</p>
                 <div class="modal-actions">
                     <button class="btn btn-ghost" id="btn-ext-pair-deny" type="button" data-i18n="ext.deny">Deny</button>

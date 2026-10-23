@@ -12,7 +12,7 @@ from collections import defaultdict, deque
 from typing import Callable, Mapping, Optional
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from upload_limit import UploadSizeLimitMiddleware
@@ -251,6 +251,17 @@ def own_page_rejection(request: Request) -> Optional[str]:
     if not _is_loopback_host(parts.hostname or "") or port != _bound_port(request):
         return OWN_PAGE_ONLY_ERROR
     return None
+
+
+def require_own_page(request: Request, what: str) -> None:
+    """Raise 403 unless the request is from this program's own page (or a
+    non-browser client); ``what`` finishes "Only this program's own page can ...".
+    """
+    if own_page_rejection(request):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Only this program's own page can {what}.",
+        )
 
 
 def _log_rejection(reason: str, method: str, path: str, value: Optional[str]) -> None:
