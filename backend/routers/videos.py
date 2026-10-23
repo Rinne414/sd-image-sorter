@@ -9,10 +9,11 @@ from __future__ import annotations
 import os
 from typing import Any, Dict
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
 import db_videos
+from app_security import require_own_page
 from services import ffmpeg_install, video_preview, video_tools
 from services.video_index import get_video_indexer
 
@@ -70,7 +71,8 @@ def video_support_status() -> Dict[str, Any]:
         "program's data folder. Runs in the background; poll GET /api/video-support."
     ),
 )
-def install_video_support() -> Dict[str, Any]:
+def install_video_support(request: Request) -> Dict[str, Any]:
+    require_own_page(request, "install video support")
     try:
         return ffmpeg_install.get_installer().start()
     except RuntimeError as exc:
@@ -116,7 +118,8 @@ def video_playback(image_id: int) -> Dict[str, Any]:
         "original is not changed). Cached; one conversion runs at a time."
     ),
 )
-def request_converted_preview(image_id: int) -> Dict[str, Any]:
+def request_converted_preview(image_id: int, request: Request) -> Dict[str, Any]:
+    require_own_page(request, "make a playable preview")
     row = _video_row(image_id)
     if video_tools.find_tools() is None:
         raise HTTPException(

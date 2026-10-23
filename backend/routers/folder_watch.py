@@ -29,7 +29,8 @@ class WatchPauseRequest(BaseModel):
         "written while the app was closed are picked up when it starts."
     ),
 )
-def set_root_watch(root_id: int, request: RootWatchRequest):
+def set_root_watch(root_id: int, request: RootWatchRequest, http_request: Request):
+    require_own_page(http_request, "change folder watching")
     if db.get_library_root(root_id) is None:
         raise HTTPException(
             status_code=404,

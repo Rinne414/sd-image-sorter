@@ -1,6 +1,6 @@
 """What AI models are loaded right now, when idle ones are released, and "Unload now"."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
@@ -8,6 +8,7 @@ from config_settings import (
     get_model_idle_unload_minutes,
     save_model_idle_unload_minutes,
 )
+from app_security import require_own_page
 from gpu_headroom import recent_fallbacks
 from model_residency import get_model_residency
 
@@ -36,14 +37,16 @@ async def get_background_models() -> dict:
 
 
 @router.patch("")
-async def set_idle_unload(request: IdleUnloadRequest) -> dict:
+async def set_idle_unload(request: IdleUnloadRequest, http_request: Request) -> dict:
+    require_own_page(http_request, "change when AI models are freed")
     """Store how long an unused model stays loaded (0 = keep it until the program quits)."""
     await run_in_threadpool(save_model_idle_unload_minutes, request.minutes)
     return await run_in_threadpool(_describe)
 
 
 @router.post("/unload")
-async def unload_models_now() -> dict:
+async def unload_models_now(http_request: Request) -> dict:
+    require_own_page(http_request, "unload AI models")
     """Release every loaded model a running job is not using."""
     result = await run_in_threadpool(get_model_residency().release_now)
     return {**result, **(await run_in_threadpool(_describe))}

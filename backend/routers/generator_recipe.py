@@ -61,7 +61,8 @@ async def get_generator_recipe(image_id: int = ImageId):
         "folder; an existing name gets _2, _3 ..."
     ),
 )
-async def save_workflow_file(image_id: int = ImageId):
+async def save_workflow_file(http_request: Request, image_id: int = ImageId):
+    require_own_page(http_request, "save a workflow file")
     try:
         result = await run_in_threadpool(generator_recipe.save_workflow_file, image_id)
     except generator_recipe.RecipeNotFound as exc:

@@ -203,6 +203,12 @@ def test_formats_the_program_converts_or_keeps_still_work(
         ("post", "/api/collect/paste", {"files": {"file": ("a.png", b"x", "image/png")}}),
         ("post", "/api/browser-extension/install-folders", {"json": {}}),
         ("post", "/api/browser-extension/open-folder", {"json": {"browser": "chrome"}}),
+        ("post", "/api/video-support/install", {"json": {}}),
+        ("post", "/api/videos/1/converted", {"json": {}}),
+        ("patch", "/api/library-roots/1/watch", {"json": {"watch": True}}),
+        ("post", "/api/images/1/comfyui/workflow-file", {"json": {}}),
+        ("patch", "/api/background-models", {"json": {"minutes": 5}}),
+        ("post", "/api/background-models/unload", {"json": {}}),
     ],
 )
 def test_collect_and_extension_folder_endpoints_refuse_other_local_pages(
