@@ -144,6 +144,8 @@ from services import (
     SimilarityService,
 )
 from services.folder_watch import get_folder_watch_service
+from routers import background_models
+from model_residency import start_idle_sweeper, stop_idle_sweeper
 
 
 # Service instances (singleton pattern)
@@ -316,10 +318,12 @@ async def lifespan(app: FastAPI):
             daemon=True,
         ).start()
         get_folder_watch_service().start()
+        start_idle_sweeper()
 
     yield
     # Shutdown
     logger.info("Shutting down...")
+    stop_idle_sweeper()
     get_folder_watch_service().stop()
 
 
@@ -430,6 +434,7 @@ app.include_router(batch_uploads.router)
 app.include_router(metadata_repair.router)
 app.include_router(output_folders.router)
 app.include_router(folder_watch.router)
+app.include_router(background_models.router)
 app.include_router(generator_recipe.router)
 app.include_router(browser_extension.ext_router)
 app.include_router(browser_extension.router)

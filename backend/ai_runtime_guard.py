@@ -265,12 +265,34 @@ def _register_job(
             "vram_mb": vram_mb,
             "started_at": time.time(),
         }
-        return job_id
+    _notify_activity(label)
+    return job_id
 
 
 def _unregister_job(job_id: int) -> None:
     with _jobs_lock:
-        _active_jobs.pop(job_id, None)
+        info = _active_jobs.pop(job_id, None)
+    if info is not None:
+        _notify_activity(info["label"])
+
+
+# Lease start/end listeners. model_residency uses them to know when each model
+# was last used, so idle models can be released without per-model timers.
+_activity_listeners: List[Callable[[str], None]] = []
+
+
+def add_activity_listener(listener: Callable[[str], None]) -> None:
+    """Call ``listener(label)`` whenever a lease starts or ends."""
+    if listener not in _activity_listeners:
+        _activity_listeners.append(listener)
+
+
+def _notify_activity(label: str) -> None:
+    for listener in list(_activity_listeners):
+        try:
+            listener(label)
+        except Exception:  # noqa: BLE001 - a listener must never break a lease
+            logger.debug("AI runtime activity listener failed", exc_info=True)
 
 
 def get_ai_jobs_snapshot() -> Dict[str, Any]:

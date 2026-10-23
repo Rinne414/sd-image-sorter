@@ -5826,6 +5826,25 @@
                             <button type="button" class="btn btn-ghost btn-small" id="btn-settings-comfyui-reset" data-i18n="settings.comfyuiReset">Use 127.0.0.1:8188</button>
                         </div>
                     </div>
+                    <div class="settings-row settings-background-row" id="settings-background-row">
+                        <div class="settings-row-copy">
+                            <strong data-i18n="settings.backgroundTitle">Background</strong>
+                            <span id="settings-background-status" aria-live="polite">No AI model is loaded right now.</span>
+                            <span id="settings-background-note" hidden></span>
+                        </div>
+                        <div class="settings-inline-control">
+                            <label class="settings-inline-control">
+                                <span data-i18n="settings.backgroundIdleLabel">Free unused AI models after</span>
+                                <select id="settings-background-idle" class="input-field">
+                                    <option value="5" data-i18n="settings.backgroundIdle5">5 minutes</option>
+                                    <option value="10" data-i18n="settings.backgroundIdle10" selected>10 minutes</option>
+                                    <option value="30" data-i18n="settings.backgroundIdle30">30 minutes</option>
+                                    <option value="0" data-i18n="settings.backgroundIdleNever">Never</option>
+                                </select>
+                            </label>
+                            <button type="button" class="btn btn-secondary btn-small" id="btn-settings-background-unload" data-i18n="settings.backgroundUnload">Unload now</button>
+                        </div>
+                    </div>
                     <details class="guided-advanced-panel settings-preferences-panel ext-settings" id="settings-browser-ext">
                         <summary class="guided-advanced-summary">
                             <span data-i18n="ext.settingsTitle">Browser extension</span>
@@ -8597,6 +8616,7 @@
     <script src="/static/js/library-roots-ui.js"></script>
     <script src="/static/js/auto-refresh.js"></script>
     <script src="/static/js/folder-watch.js"></script>
+    <script src="/static/js/background-models-ui.js"></script>
     <script src="/static/js/send-to-generator.js"></script>
     <script src="/static/js/collect.js"></script>
     <script src="/static/js/browser-extension.js"></script>

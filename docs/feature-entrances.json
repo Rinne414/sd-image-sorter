@@ -3787,6 +3787,22 @@
       }
     },
     {
+      "id": "settings.background-models",
+      "area": "settings",
+      "en": "Background: loaded AI models, free them after idle, Unload now",
+      "zh": "后台：已加载的 AI 模型、闲置后释放、立即释放",
+      "classic": [
+        "#settings-background-idle",
+        "#btn-settings-background-unload"
+      ],
+      "vopus": {
+        "missing": "Vopus settings have no Background line yet; idle models are still freed with the classic setting"
+      },
+      "next": {
+        "missing": "The new interface has no Background line yet; idle models are still freed with the classic setting"
+      }
+    },
+    {
       "id": "settings.output-root",
       "area": "settings",
       "en": "Output folder root",

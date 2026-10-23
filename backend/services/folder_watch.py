@@ -31,6 +31,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
+from process_priority import lower_current_thread_priority
+
 logger = logging.getLogger(__name__)
 
 DEBOUNCE_MS = 1500
@@ -285,6 +287,7 @@ class FolderWatchService:
     # Supervisor ----------------------------------------------------------
 
     def _supervise(self) -> None:
+        lower_current_thread_priority()
         while not self._stop.is_set():
             # Cleared before reading, so a switch flipped while the list is
             # being read still wakes the next round instead of being lost.
@@ -372,6 +375,7 @@ class FolderWatchService:
                 self._generation += 1
 
     def _run_worker(self, worker: _Worker) -> None:
+        lower_current_thread_priority()
         while not worker.stop.is_set():
             try:
                 if not Path(str(worker.root["path"])).is_dir():
@@ -397,6 +401,7 @@ class FolderWatchService:
             return
 
         def run() -> None:
+            lower_current_thread_priority()
             try:
                 self._import(worker, None)
                 if not worker.stop.is_set():

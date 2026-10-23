@@ -240,6 +240,9 @@ def _tagging_worker_main(
     The child process starts at the contextvar default (``main``), so without
     this a Mass Tag started in library B would count and tag main's images.
     """
+    from process_priority import lower_process_priority
+
+    lower_process_priority()
     token = set_current_library_id(runtime_plan_payload.get("library_id"))
     try:
         _tagging_worker_run(runtime_plan_payload, progress_queue, cancel_event)

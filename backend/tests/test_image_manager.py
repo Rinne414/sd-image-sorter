@@ -1179,7 +1179,7 @@ def test_scan_folder_terminates_stuck_metadata_worker_after_timeout(test_db, tmp
 
     class FakeExecutor:
         instances = []
-        def __init__(self, max_workers=None):
+        def __init__(self, max_workers=None, initializer=None):
             self.max_workers = max_workers
             self.future = FakeFuture()
             self.terminated = 0
@@ -1226,7 +1226,7 @@ def test_scan_folder_terminates_pending_metadata_workers_on_cancel(test_db, tmp_
 
     class FakeExecutor:
         instances = []
-        def __init__(self, max_workers=None):
+        def __init__(self, max_workers=None, initializer=None):
             self.future = FakeFuture()
             self.terminated = 0
             self.shutdowns = []
@@ -1275,7 +1275,7 @@ def test_scan_folder_does_not_terminate_thread_executor_when_timeout_has_no_kill
             raise AssertionError("timed-out future should not be awaited")
 
     class FakeThreadOnlyExecutor:
-        def __init__(self, max_workers=None):
+        def __init__(self, max_workers=None, initializer=None):
             self.future = FakeFuture()
             self.shutdowns = []
         def submit(self, fn, job):

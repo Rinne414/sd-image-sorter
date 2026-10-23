@@ -129,6 +129,17 @@ def _isolate_hardware_probe_cache():
 
 
 @pytest.fixture(autouse=True)
+def _no_real_free_vram_probe(monkeypatch):
+    """The GPU-busy check never reads this machine's card (ComfyUI may be
+    using it while tests run); "unknown" keeps the GPU allowed, as before.
+    Tests of the check patch the probe themselves."""
+    import gpu_headroom
+
+    monkeypatch.setattr(gpu_headroom, "_probe_free_vram_mb", lambda: None)
+    gpu_headroom.clear_recent_fallbacks()
+
+
+@pytest.fixture(autouse=True)
 def _no_automatic_model_source_discovery(monkeypatch):
     """The suite never looks for a ComfyUI install or the global Hugging Face
     cache on the machine it runs on (tests that exercise discovery pass their

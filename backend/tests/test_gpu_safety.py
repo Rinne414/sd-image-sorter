@@ -495,3 +495,28 @@ def test_cl_tagger_batch_honours_the_preferred_gpu_batch_size(monkeypatch, tmp_p
     assert batch_sizes == [2, 2, 1]
     assert results == [{"ok": True}] * 5
     assert info["initial_chunk_size"] == 2
+
+
+# --- GPU busy (another program holds the video memory) -> CPU ---------------------
+
+
+def test_wd14_loads_on_cpu_when_the_gpu_is_busy_and_retries_gpu_next_load(
+    monkeypatch, fake_gpu_ort
+):
+    import gpu_headroom
+
+    monkeypatch.setattr(gpu_headroom, "_probe_free_vram_mb", lambda: 400.0)
+    tagger = _gpu_tagger(monkeypatch, "wd-swinv2-tagger-v3")
+    tagger.load()
+
+    assert tagger.session.get_providers() == ["CPUExecutionProvider"]
+    assert tagger.use_gpu is False
+    assert ai_runtime_guard.gpu_resident_count() == 0
+    assert gpu_headroom.recent_fallbacks()[0]["label"] == "tagger:wd-swinv2-tagger-v3"
+
+    monkeypatch.setattr(gpu_headroom, "_probe_free_vram_mb", lambda: 20000.0)
+    tagger.release_session()
+    tagger.load()
+
+    assert "CUDAExecutionProvider" in tagger.session.get_providers()
+    assert tagger.use_gpu is True
