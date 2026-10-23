@@ -393,6 +393,12 @@ class FolderWatchService:
                 worker.status.imported += count
                 worker.status.last_import_at = _now_text()
                 self._generation += 1
+        if count > 0:
+            # The library report (untagged counts and the like) is cached; new
+            # pictures make it stale, exactly as after a manual scan.
+            from services.sorting_service import invalidate_library_health_cache
+
+            invalidate_library_health_cache()
 
     def _run_worker(self, worker: _Worker) -> None:
         lower_current_thread_priority()

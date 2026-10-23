@@ -163,6 +163,10 @@ class CollectImporter:
             self._imported += stored
             self._generation += 1
             self._last_error = error
+        if stored:
+            from services.sorting_service import invalidate_library_health_cache
+
+            invalidate_library_health_cache()
 
 
 _importer = CollectImporter()

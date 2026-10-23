@@ -467,6 +467,10 @@ class LibraryMixin:
             written = list((batch_result.get("statuses") or {}).keys())
             rows = db.get_image_scan_state_by_paths(written) if written else {}
             image_ids = [row.get("id") for row in rows.values()]
+            if written:
+                from services.sorting_service import invalidate_library_health_cache
+
+                invalidate_library_health_cache()
 
         return {
             "imported": len(records) - errors,

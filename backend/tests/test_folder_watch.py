@@ -206,3 +206,21 @@ def test_folder_that_disappears_shows_missing_then_resumes(watcher, tmp_path):
     parked.rename(folder)
     back = _png(folder / "back.png", 7)
     assert _wait_until(lambda: _indexed([back]) == {"back.png"}, timeout=60)
+
+
+def test_watched_import_drops_the_cached_library_report(test_db, tmp_path):
+    """New pictures from a watched folder make the untagged counts stale."""
+    import services.sorting_service as sorting_service
+    from services.folder_watch import RootStatus, _Worker
+
+    sorting_service._LIBRARY_HEALTH_CACHE[("main", 8)] = (time.time(), {"stale": True})
+    service = FolderWatchService(ingest=lambda root, paths, stop: 2)
+    worker = _Worker(
+        root={"id": 1, "path": str(tmp_path), "library_id": "main"},
+        polling=True,
+        status=RootStatus(root_id=1, path=str(tmp_path), library_id="main", mode="polling"),
+    )
+
+    service._import(worker, [str(tmp_path / "new.png")])
+
+    assert sorting_service._LIBRARY_HEALTH_CACHE == {}
