@@ -260,3 +260,4 @@ browser-extension/dist/
 # Desktop shell (desktop/): dependencies and builds are never committed.
 /desktop/node_modules/
 /desktop/dist/
+/desktop/launcher/target/

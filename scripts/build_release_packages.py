@@ -173,8 +173,9 @@ EXCLUDED_PREFIXES = (
     "scripts",
     # browser-extension/build.py output; the program builds its own copy.
     "browser-extension/dist",
-    # The desktop shell ships built (SD Image Sorter.exe, added by
-    # release_shell.py to the Windows package only); its sources, lockfile,
+    # The desktop shell ships built (SD Image Sorter.exe launcher + desktop/
+    # with the Electron files, added by release_shell.py to the Windows
+    # package only); its sources, launcher crate, lockfile,
     # node_modules and dist never go into a package.
     "desktop",
     "docs/DELETION_LOG",
@@ -1447,7 +1448,7 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
     # frontend-v4/dist, so build it before the previous packages are cleared.
     build_frontend_v4()
     # The Windows package also ships the desktop shell, built from desktop/.
-    shell_unpacked = build_desktop_shell(ROOT)
+    shell_build = build_desktop_shell(ROOT)
     seven_zip = find_seven_zip()
     if ARTIFACT_ROOT.exists():
         shutil.rmtree(ARTIFACT_ROOT)
@@ -1463,7 +1464,7 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
         write_package_manifest(stage_dir, version)
         # After the manifest on purpose: the in-app updater only replaces files
         # the manifest lists, and the shell's files are locked while it runs.
-        stage_desktop_shell(shell_unpacked, stage_dir)
+        stage_desktop_shell(shell_build, stage_dir)
 
     assets.append(stage_archive("windows-portable", version, seven_zip, populate=populate_windows_portable))
 

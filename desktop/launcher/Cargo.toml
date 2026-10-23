@@ -1,0 +1,21 @@
+[package]
+name = "sd-image-sorter-launcher"
+version = "0.1.0"
+edition = "2021"
+description = "SD Image Sorter"
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "sd-image-sorter-launcher"
+path = "src/main.rs"
+
+[build-dependencies]
+winresource = "0.1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

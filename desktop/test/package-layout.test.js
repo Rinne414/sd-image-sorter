@@ -1,7 +1,8 @@
 'use strict';
 
-// The packaged Windows layout: SD Image Sorter.exe sits at the top of the
-// extracted folder, next to backend\, python\ and run-portable.bat.
+// The packaged Windows layout: the user starts SD Image Sorter.exe at the top
+// of the extracted folder (next to backend\, python\ and run-portable.bat);
+// the Electron shell and its files live in the desktop\ subfolder.
 
 const assert = require('node:assert/strict');
 const path = require('node:path');
@@ -20,11 +21,25 @@ const PACKAGE_FILES = new Set([
     path.join(ROOT, 'run-portable.bat'),
 ]);
 
-test('exe at the top of the package finds backend and the bundled python', () => {
-    const exePath = path.join(ROOT, 'SD Image Sorter.exe');
-    assert.equal(findAppRoot([path.dirname(exePath), path.join(exePath, 'resources', 'app.asar')], exists(PACKAGE_FILES)), ROOT);
+const SHELL_DIR = path.join(ROOT, 'desktop');
+const SHELL_EXE = path.join(SHELL_DIR, 'sd-image-sorter-shell.exe');
+
+test('the shell in desktop/ finds the program folder above it and the bundled python', () => {
+    const asar = path.join(SHELL_DIR, 'resources', 'app.asar');
+    assert.equal(findAppRoot([path.dirname(SHELL_EXE), asar], exists(PACKAGE_FILES)), ROOT);
+    assert.equal(findAppRoot([asar], exists(PACKAGE_FILES)), ROOT);
     const python = resolvePython(ROOT, 'win32', exists(PACKAGE_FILES));
     assert.deepEqual(python, { python: path.join(ROOT, 'python', 'python.exe'), kind: 'portable' });
+});
+
+test('a copy of the package in a folder with spaces and CJK characters resolves the same way', () => {
+    const root = path.resolve('/Downloads/SD Image Sorter v1 (副本)/package');
+    const files = new Set([path.join(root, 'backend', 'main.py'), path.join(root, 'python', 'python.exe')]);
+    assert.equal(findAppRoot([path.join(root, 'desktop')], exists(files)), root);
+});
+
+test('the shell in desktop/ does not mistake its own folder for the program folder', () => {
+    assert.equal(findAppRoot([SHELL_DIR], exists(new Set([path.join(SHELL_DIR, 'resources.pak')]))), null);
 });
 
 test('the backend learns the shell version only when there is one', () => {
@@ -74,15 +89,16 @@ test('only unfinished update manifests count as pending', () => {
 });
 
 test('shortcut plan covers the desktop and the Start menu, skipping an unknown folder', () => {
-    const exePath = path.join(ROOT, 'SD Image Sorter.exe');
+    const exePath = SHELL_EXE;
     const plan = shortcutPlan({
-        exePath, desktopDir: path.resolve('/Users/me/Desktop'), startMenuDir: path.resolve('/Users/me/Programs'),
+        exePath, appRoot: ROOT, desktopDir: path.resolve('/Users/me/Desktop'), startMenuDir: path.resolve('/Users/me/Programs'),
         appUserModelId: 'id',
     });
     assert.deepEqual(plan.map((item) => path.basename(item.file)), ['SD Image Sorter.lnk', 'SD Image Sorter.lnk']);
     assert.equal(plan[0].options.target, exePath);
+    assert.equal(plan[0].options.icon, exePath);
     assert.equal(plan[0].options.cwd, ROOT);
-    assert.equal(shortcutPlan({ exePath, desktopDir: null, startMenuDir: path.resolve('/p'), appUserModelId: 'id' }).length, 1);
+    assert.equal(shortcutPlan({ exePath, appRoot: ROOT, desktopDir: null, startMenuDir: path.resolve('/p'), appUserModelId: 'id' }).length, 1);
 });
 
 test('writing shortcuts reports each failure instead of claiming success', () => {
