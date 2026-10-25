@@ -166,9 +166,12 @@ async function setUnderscores(page: Page, on: boolean) {
 async function redrawn(page: Page, action: () => Promise<unknown>) {
   await page.evaluate(() => { (window as any).__queueBoxBefore = (window as any).V321Integration._queueScrollContainer })
   await action()
+  // The newest refresh has drawn, and its list is the one on screen.
   await expect.poll(() => page.evaluate(() => {
-    const box = (window as any).V321Integration._queueScrollContainer
-    return Boolean(box && box.isConnected && box !== (window as any).__queueBoxBefore)
+    const v = (window as any).V321Integration
+    const box = v._queueScrollContainer
+    return Boolean(v._previewGeneration && v._previewDrawnGeneration === v._previewGeneration
+      && box && box.isConnected && box !== (window as any).__queueBoxBefore)
   })).toBe(true)
 }
 
@@ -190,7 +193,9 @@ async function idAtPosition(page: Page, position: number): Promise<number> {
 }
 
 async function renderPreview(page: Page) {
-  await page.locator('#btn-refresh-preview').click()
+  // Choosing the content mode already started a refresh; wait for the list
+  // this click draws, not an earlier one it replaces.
+  await redrawn(page, () => page.locator('#btn-refresh-preview').click())
   await expect(page.locator('#export-preview-list .export-preview-queue-item').first()).toBeVisible()
 }
 

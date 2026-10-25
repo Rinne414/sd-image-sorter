@@ -224,3 +224,42 @@ def test_settings_remember_which_preset_the_prompts_came_from(
         test_client.get("/api/vlm/settings").json()["prompt_preset_id"]
         == "custom-0123abcd"
     )
+
+
+def _write_file(payload) -> None:
+    store.PRESETS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    store.PRESETS_PATH.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_saving_keeps_rows_fields_and_keys_this_version_does_not_use(test_client):
+    _write_file({
+        "version": 1,
+        "note": "kept by hand",
+        "presets": [
+            {"id": "custom-aaaaaaaa", "name": "Mine", "user_prompt": "hi", "color": "red"},
+            {"id": "my-own-id", "name": "Hand made"},
+            "garbage",
+        ],
+    })
+
+    _create(test_client, name="New one")
+
+    on_disk = json.loads(store.PRESETS_PATH.read_text(encoding="utf-8"))
+    assert on_disk["note"] == "kept by hand"
+    rows = on_disk["presets"]
+    assert rows[0]["color"] == "red" and rows[0]["user_prompt"] == "hi"
+    assert {"id": "my-own-id", "name": "Hand made"} in rows and "garbage" in rows
+    assert [r.get("name") for r in rows if isinstance(r, dict)][:2] == ["Mine", "New one"]
+
+
+def test_a_file_with_an_unknown_layout_is_refused_not_overwritten(test_client):
+    for payload in ([{"id": "custom-abcdef12", "name": "x"}], {"presets": None}, {"version": 99, "presets": []}):
+        _write_file(payload)
+        before = store.PRESETS_PATH.read_text(encoding="utf-8")
+
+        listing = test_client.get("/api/vlm/presets").json()
+        create = _create(test_client)
+
+        assert listing["custom_presets_problem"], payload
+        assert create.status_code == 409, payload
+        assert store.PRESETS_PATH.read_text(encoding="utf-8") == before

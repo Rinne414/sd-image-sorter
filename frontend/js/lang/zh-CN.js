@@ -5169,6 +5169,7 @@ window.I18nLang_zhCN = {
     'dataset.quickfillTriggerTooltip': '把这个触发词加入通用标签，让它出现在每张 caption .txt 里。',
     'dataset.quickfillTriggerDone': '触发词已设为「{trigger}」，每个 .txt 里只出现一次。',
     'dataset.quickfillTriggerFailed': '自动 caption 没能全部更新：{reason} 这次什么都没改。',
+    'dataset.tagRefreshFailed': '打标已经完成，但数据集制作没能显示新标签：{reason} 重新打开这张图或刷新页面即可看到。',
     'dataset.quickfillTriggerSuperseded': '加触发词时 caption 设置变了。你的新输入已保留，请再点一次「加入 caption」。',
     'dataset.cleanupTriggerTooltip': '删除一个已确认的旧触发词并加入黑名单',
     'dataset.cleanupTriggerTitle': '删除旧触发词',

@@ -35,6 +35,13 @@ def test_keep_original_filenames_keeps_every_legal_name_exactly():
         assert render_stem("{filename}", image_filename=name, index=1) == stem
 
 
+def test_original_names_windows_refuses_are_still_cleaned():
+    """A picture from Linux named ``a:b?`` or a stale DB filename with a
+    separator must not reach the output folder as it is."""
+    assert render_stem("{filename}", image_filename="a:b?.png", index=1) == "a_b_"
+    assert render_stem("{filename}", image_filename="sub/dir.png", index=1) == "dir"
+
+
 def test_patterns_that_add_text_are_still_cleaned():
     assert render_stem("{filename}_a:b", image_filename="pic.png", index=1) == "pic_a_b"
     assert render_stem("../{filename}", image_filename="pic.png", index=1) == "pic"

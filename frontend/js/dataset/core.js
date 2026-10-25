@@ -550,9 +550,18 @@
         // its captions show the new tags without re-importing or restarting.
         // Smart Tag refreshes Dataset Maker itself (smart-tag/run.js).
         _bindTagChangeRefresh() {
-            const refresh = () => {
+            const refresh = async () => {
                 if (!this.imageIds || this.imageIds.length === 0) return;
-                this._refreshAllCaptions().catch(() => { /* the queue keeps its last captions */ });
+                const result = await this._refreshAllCaptions().catch((error) => ({
+                    status: 'failed',
+                    error: error?.message || String(error),
+                }));
+                // 'superseded' means a newer refresh took over: nothing to say.
+                if (result?.status === 'failed') {
+                    this._toast(this._t('dataset.tagRefreshFailed',
+                        'Tagging finished, but Dataset Maker could not show the new tags: {reason} Open the image again or reload to see them.',
+                        { reason: result.error }), 'error', 8000);
+                }
             };
             document.addEventListener('taggingCompleted', refresh);
             document.addEventListener('vlmBatchCompleted', refresh);

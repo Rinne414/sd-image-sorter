@@ -5171,6 +5171,7 @@ window.I18nLang_en = {
     'dataset.quickfillTriggerTooltip': 'Add this trigger word to Common tags so it appears in every caption .txt.',
     'dataset.quickfillTriggerDone': 'Trigger set to "{trigger}". It appears once in every caption .txt.',
     'dataset.quickfillTriggerFailed': 'Couldn\'t update every generated caption: {reason} Nothing was changed.',
+    'dataset.tagRefreshFailed': 'Tagging finished, but Dataset Maker could not show the new tags: {reason} Open the image again or reload to see them.',
     'dataset.quickfillTriggerSuperseded': 'Caption settings changed while the trigger was being added. Your newer input was kept; click Add to captions again.',
     'dataset.cleanupTriggerTooltip': 'Remove and blacklist one confirmed old trigger',
     'dataset.cleanupTriggerTitle': 'Remove old trigger',

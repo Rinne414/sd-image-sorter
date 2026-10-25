@@ -40,6 +40,8 @@ from utils.unique_names import first_free_path
 
 _PATTERN_VAR = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)(?::(\d{1,2})d)?\}")
 _DEFAULT_PATTERN = "{filename}"
+# Path separators, Windows-illegal characters and control characters.
+_UNPORTABLE_NAME_CHARS = re.compile(r'[\x00-\x1f\x7f-\x9f<>:"/\\|?*]')
 _MAX_PADDING_DIGITS = 8
 
 
@@ -91,11 +93,18 @@ def render_stem(
         return match.group(0)
 
     expanded = _PATTERN_VAR.sub(_replace, pat)
-    # "Keep original filenames" (the pattern is just {filename}): the name is
-    # already on disk, so it is legal as it is. Cleaning it would turn
-    # ``a..b`` into ``a.b`` or drop outer spaces, and the exported pair would
-    # no longer carry the source picture's name (issue #5).
-    if pat == _DEFAULT_PATTERN and expanded == stem and stem.strip():
+    # "Keep original filenames" (the pattern is just {filename}): a name that
+    # is legal everywhere is kept exactly. Cleaning it would turn ``a..b``
+    # into ``a.b`` or drop outer spaces, and the exported pair would no longer
+    # carry the source picture's name (issue #5). A name with a separator or a
+    # character Windows refuses (from another OS, or a stale DB filename)
+    # still goes through sanitize_filename below.
+    if (
+        pat == _DEFAULT_PATTERN
+        and expanded == stem
+        and stem.strip()
+        and not _UNPORTABLE_NAME_CHARS.search(stem)
+    ):
         return stem
     rendered = expanded.strip()
     if not rendered:

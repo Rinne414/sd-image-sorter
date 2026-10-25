@@ -459,31 +459,71 @@ def _filter_text_caption_tokens(value: str, blacklist: set[str]) -> List[str]:
 
 
 # SD prompt syntax that is not part of a tag: extra networks (<lora:x:0.8>),
-# BREAK, emphasis brackets, "(tag:1.2)" weights and NovelAI "1.3::tag::".
-_PROMPT_EXTRA_NETWORK = re.compile(r"<[^<>]*>")
+# BREAK, emphasis brackets around a tag, "(tag:1.2)" weights and NovelAI
+# "1.3::tag::". A tag's own brackets stay: "2b_(nier:automata)", "(o)_(o)",
+# ":)" and the escaped "hatsune_miku \(vocaloid\)".
+_PROMPT_EXTRA_NETWORK = re.compile(r"<[A-Za-z_]+:[^<>]*>")
 _PROMPT_BREAK = re.compile(r"\bBREAK\b")
-_PROMPT_BRACKETS = re.compile(r"[(){}\[\]]")
-_PROMPT_TRAILING_WEIGHT = re.compile(r":\s*-?\d+(?:\.\d+)?\s*$")
+_PROMPT_WEIGHT = re.compile(r"(?<=\S):\s*-?\d+(?:\.\d+)?\s*$")
 _PROMPT_NAI_WEIGHT = re.compile(r"^-?\d+(?:\.\d+)?::|::$")
+_PROMPT_PAIRS = {"(": ")", "[": "]", "{": "}"}
 _ESCAPED_OPEN, _ESCAPED_CLOSE = "\x00", "\x01"
 
 
-def _prompt_tag_tokens(prompt: str) -> List[str]:
-    """The tags of a tag-style prompt, without SD weighting syntax.
+def _wraps_whole_token(token: str) -> bool:
+    """True when the bracket at the start closes at the very end."""
+    opener = token[:1]
+    closer = _PROMPT_PAIRS.get(opener)
+    if not closer or not token.endswith(closer):
+        return False
+    depth = 0
+    for index, char in enumerate(token):
+        if char == opener:
+            depth += 1
+        elif char == closer:
+            depth -= 1
+            if depth == 0 and index != len(token) - 1:
+                return False
+    return depth == 0
 
-    Escaped brackets belong to the tag (``hatsune_miku \\(vocaloid\\)`` ->
-    ``hatsune_miku (vocaloid)``); every other bracket is emphasis.
-    """
+
+def _strip_prompt_emphasis(token: str) -> str:
+    """Drop emphasis brackets and weights around one comma-separated tag."""
+    emphasised = False
+    # A group split by commas leaves its bracket on the first or last tag:
+    # "(blue eyes, red hair:1.2)" -> "(blue eyes" and "red hair:1.2)".
+    for opener, closer in _PROMPT_PAIRS.items():
+        while token.startswith(opener) and token.count(opener) > token.count(closer):
+            token, emphasised = token[1:].lstrip(), True
+        while token.endswith(closer) and token.count(closer) > token.count(opener):
+            token, emphasised = token[:-1].rstrip(), True
+    while True:
+        if _wraps_whole_token(token):
+            token, emphasised = token[1:-1].strip(), True
+            continue
+        if emphasised:
+            unweighted = _PROMPT_WEIGHT.sub("", token).strip()
+            if unweighted != token:
+                token = unweighted
+                continue
+        return token
+
+
+def _prompt_tag_tokens(prompt: str) -> List[str]:
+    """The tags of a tag-style prompt, without SD weighting syntax."""
     text = _PROMPT_EXTRA_NETWORK.sub(",", prompt)
     text = _PROMPT_BREAK.sub(",", text)
     text = text.replace("\\(", _ESCAPED_OPEN).replace("\\)", _ESCAPED_CLOSE)
     tokens: List[str] = []
-    for raw in re.split(r"[,\n|]", text):
-        token = _PROMPT_BRACKETS.sub("", raw)
-        token = _PROMPT_NAI_WEIGHT.sub("", token.strip())
-        token = _PROMPT_TRAILING_WEIGHT.sub("", token)
+    for raw in re.split(r"[,\n]", text):
+        original = " ".join(raw.split())
+        token = _PROMPT_NAI_WEIGHT.sub("", original).strip()
+        token = _strip_prompt_emphasis(token)
+        # A kaomoji such as ":)" is all brackets and punctuation: keep it whole.
+        if not re.search(r"\w", token):
+            token = original
         token = token.replace(_ESCAPED_OPEN, "(").replace(_ESCAPED_CLOSE, ")")
-        token = " ".join(token.split()).strip(",")
+        token = token.strip(" ,")
         if token:
             tokens.append(token)
     return tokens

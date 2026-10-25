@@ -17,6 +17,7 @@ import os
 import re
 import secrets
 import threading
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
@@ -113,6 +114,38 @@ def builtin_presets() -> Dict[str, Dict[str, Any]]:
     }
 
 
+_ENTRY_FIELDS = (
+    "id",
+    "name",
+    "output_format",
+    "created_at",
+    "updated_at",
+    *PROMPT_FIELDS,
+)
+
+
+@dataclass
+class _Store:
+    """The presets file as read: what the dialog uses, and what it must keep.
+
+    ``kept_rows`` are rows this version cannot use (hand edits, a damaged row)
+    and ``top`` holds top-level keys other than ``presets``; both are written
+    back unchanged, so saving one preset never loses anything else in the file.
+    """
+
+    presets: List[Dict[str, Any]] = field(default_factory=list)
+    kept_rows: List[Any] = field(default_factory=list)
+    top: Dict[str, Any] = field(default_factory=dict)
+
+
+def _unreadable(reason: str) -> PresetFileUnreadableError:
+    return PresetFileUnreadableError(
+        f"Your saved prompt presets in {PRESETS_PATH.name} {reason} "
+        "Fix or remove the file; nothing was changed.",
+        file=str(PRESETS_PATH),
+    )
+
+
 def _entry_from_file(raw: Any) -> Optional[Dict[str, Any]]:
     """One saved preset, or None when the row is not a usable preset."""
     if not isinstance(raw, Mapping):
@@ -132,59 +165,69 @@ def _entry_from_file(raw: Any) -> Optional[Dict[str, Any]]:
         "created_at": str(raw.get("created_at") or ""),
         "updated_at": str(raw.get("updated_at") or ""),
     }
-    for field in PROMPT_FIELDS:
-        entry[field] = str(raw.get(field) or "")
+    for prompt_field in PROMPT_FIELDS:
+        entry[prompt_field] = str(raw.get(prompt_field) or "")
+    extra = {key: value for key, value in raw.items() if key not in _ENTRY_FIELDS}
+    if extra:
+        entry["_extra"] = extra
     return entry
 
 
-def _read_custom_presets() -> List[Dict[str, Any]]:
-    """Every saved preset in the user's order. Raises on a file that cannot be read."""
+def _public(entry: Mapping[str, Any]) -> Dict[str, Any]:
+    return {key: value for key, value in entry.items() if key != "_extra"}
+
+
+def _read_store() -> _Store:
+    """The presets file. Raises when it cannot be read or has an unknown layout."""
     try:
         text = PRESETS_PATH.read_text(encoding="utf-8")
     except FileNotFoundError:
-        return []
+        return _Store()
     except OSError as exc:
-        raise PresetFileUnreadableError(
-            f"Your saved prompt presets in {PRESETS_PATH.name} could not be read ({exc}).",
-            file=str(PRESETS_PATH),
-        ) from exc
+        raise _unreadable(f"could not be read ({exc}).") from exc
     try:
         payload = json.loads(text) if text.strip() else {}
     except ValueError as exc:
-        raise PresetFileUnreadableError(
-            f"Your saved prompt presets in {PRESETS_PATH.name} are not valid JSON "
-            f"(line {getattr(exc, 'lineno', '?')}). Fix or remove the file; "
-            "nothing was changed.",
-            file=str(PRESETS_PATH),
+        raise _unreadable(
+            f"are not valid JSON (line {getattr(exc, 'lineno', '?')})."
         ) from exc
-    rows = payload.get("presets") if isinstance(payload, Mapping) else None
-    if rows is None:
-        return []
+    if not isinstance(payload, dict):
+        raise _unreadable("have an unexpected layout.")
+    version = payload.get("version", FILE_VERSION)
+    if not isinstance(version, int) or version > FILE_VERSION:
+        raise _unreadable("were saved by a newer version of the program.")
+    rows = payload.get("presets", [])
     if not isinstance(rows, list):
-        raise PresetFileUnreadableError(
-            f"Your saved prompt presets in {PRESETS_PATH.name} have an unexpected layout. "
-            "Fix or remove the file; nothing was changed.",
-            file=str(PRESETS_PATH),
-        )
-    presets: List[Dict[str, Any]] = []
+        raise _unreadable("have an unexpected layout.")
+    store = _Store(
+        top={key: value for key, value in payload.items() if key != "presets"}
+    )
     seen: set = set()
     for raw in rows:
         entry = _entry_from_file(raw)
         if entry is None or entry["id"] in seen:
+            store.kept_rows.append(raw)
             continue
         seen.add(entry["id"])
-        presets.append(entry)
-    return presets
+        store.presets.append(entry)
+    return store
 
 
-def _write_custom_presets(presets: List[Dict[str, Any]]) -> None:
+def _read_custom_presets() -> List[Dict[str, Any]]:
+    """Every saved preset in the user's order. Raises on a file that cannot be read."""
+    return [_public(entry) for entry in _read_store().presets]
+
+
+def _write_store(store: _Store) -> None:
     rows = [
-        {key: value for key, value in preset.items() if key != "builtin"}
-        for preset in presets
+        {
+            **preset.get("_extra", {}),
+            **{key: preset[key] for key in _ENTRY_FIELDS if key in preset},
+        }
+        for preset in store.presets
     ]
-    data = json.dumps(
-        {"version": FILE_VERSION, "presets": rows}, indent=2, ensure_ascii=False
-    ).encode("utf-8")
+    payload = {**store.top, "version": FILE_VERSION, "presets": rows + store.kept_rows}
+    data = json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")
     PRESETS_PATH.parent.mkdir(parents=True, exist_ok=True)
     staging, descriptor = create_staging_sibling(PRESETS_PATH)
     try:
@@ -242,9 +285,9 @@ def _new_id(taken: set) -> str:
 
 
 def _apply_fields(entry: Dict[str, Any], fields: Mapping[str, Any]) -> None:
-    for field in PROMPT_FIELDS:
-        if fields.get(field) is not None:
-            entry[field] = str(fields[field])
+    for prompt_field in PROMPT_FIELDS:
+        if fields.get(prompt_field) is not None:
+            entry[prompt_field] = str(fields[prompt_field])
     if fields.get("output_format") is not None:
         entry["output_format"] = _clean_output_format(fields["output_format"])
 
@@ -267,7 +310,8 @@ def create_preset(
     if preset_id is not None and not CUSTOM_ID_PATTERN.match(preset_id):
         raise PresetError("That is not a preset id.", preset_id=preset_id)
     with _lock:
-        presets = _read_custom_presets()
+        store = _read_store()
+        presets = store.presets
         _assert_name_free(presets, clean)
         taken = {preset["id"] for preset in presets}
         if preset_id in taken:
@@ -283,12 +327,12 @@ def create_preset(
             "created_at": now,
             "updated_at": now,
         }
-        for field in PROMPT_FIELDS:
-            entry[field] = ""
+        for prompt_field in PROMPT_FIELDS:
+            entry[prompt_field] = ""
         _apply_fields(entry, fields)
         presets.append(entry)
-        _write_custom_presets(presets)
-        return dict(entry)
+        _write_store(store)
+        return _public(entry)
 
 
 def _find_custom(presets: List[Dict[str, Any]], preset_id: str) -> Dict[str, Any]:
@@ -308,7 +352,8 @@ def update_preset(
 ) -> Dict[str, Any]:
     """Rename a saved preset and/or replace its prompts; omitted values stay."""
     with _lock:
-        presets = _read_custom_presets()
+        store = _read_store()
+        presets = store.presets
         entry = _find_custom(presets, preset_id)
         if name is not None:
             clean = _clean_name(name)
@@ -318,15 +363,15 @@ def update_preset(
             entry["name"] = clean
         _apply_fields(entry, fields)
         entry["updated_at"] = _now_iso()
-        _write_custom_presets(presets)
-        return dict(entry)
+        _write_store(store)
+        return _public(entry)
 
 
 def delete_preset(preset_id: str) -> Dict[str, Any]:
     """Remove a saved preset and return it, so the dialog can offer Undo."""
     with _lock:
-        presets = _read_custom_presets()
-        entry = _find_custom(presets, preset_id)
-        remaining = [preset for preset in presets if preset["id"] != preset_id]
-        _write_custom_presets(remaining)
-        return dict(entry)
+        store = _read_store()
+        entry = _find_custom(store.presets, preset_id)
+        store.presets = [preset for preset in store.presets if preset["id"] != preset_id]
+        _write_store(store)
+        return _public(entry)

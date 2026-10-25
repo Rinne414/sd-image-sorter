@@ -66,6 +66,46 @@ def test_sd_prompt_syntax_is_removed_from_the_prompt_tags():
     ]
 
 
+def test_tags_that_look_like_syntax_survive():
+    caption = _merged(
+        ":3, ^_^, >_<, nier:automata, honkai:_star_rail, re:zero, (:3:1.1)",
+        [],
+        normalize_tag_underscores=False,
+    )
+
+    assert _parts(caption) == [":3", "^_^", ">_<", "nier:automata", "honkai:_star_rail", "re:zero"]
+
+
+def test_unescaped_brackets_that_belong_to_a_tag_are_kept():
+    """NovelAI and many ComfyUI prompts write a tag's own brackets unescaped."""
+    caption = _merged(
+        "2b_(nier:automata), hatsune miku (vocaloid), (o)_(o), :), ;), >:), |_|, tag:12",
+        [],
+        normalize_tag_underscores=False,
+    )
+
+    assert _parts(caption) == [
+        "2b_(nier:automata)",
+        "hatsune miku (vocaloid)",
+        "(o)_(o)",
+        ":)",
+        ";)",
+        ">:)",
+        "|_|",
+        "tag:12",
+    ]
+
+
+def test_weights_are_removed_only_inside_emphasis():
+    caption = _merged(
+        "((masterpiece)), (blue eyes, red hair:1.2), (2b_(nier:automata):1.1), [[[smile]]], <lyco:x:0.5>",
+        [],
+        normalize_tag_underscores=False,
+    )
+
+    assert _parts(caption) == ["masterpiece", "blue eyes", "red hair", "2b_(nier:automata)", "smile"]
+
+
 def test_the_blacklist_also_removes_prompt_tags():
     caption = _merged(
         "masterpiece, 1girl, long_hair",

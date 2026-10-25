@@ -374,6 +374,10 @@ Object.assign(window.V321Integration, {
     },
 
     async refreshPreview() {
+        // Refreshes can overlap (a tagging run ends while an option changes):
+        // only the newest one may write the caches and draw.
+        const generation = (this._previewGeneration = (this._previewGeneration || 0) + 1);
+        const isStale = () => generation !== this._previewGeneration;
         this._dropRenderedPreviews();
         // v3.2.1 task #33: target the editor modal's container if it's open
         const editorOpen = document.getElementById('caption-editor-modal')?.classList.contains('visible');
@@ -384,6 +388,7 @@ Object.assign(window.V321Integration, {
 
         const contentMode = document.getElementById('batch-export-content-mode')?.value;
         const source = await this._loadQueueSource();
+        if (isStale()) return;
         const ids = source.firstIds || source.ids || [];
         if (!ids.length) {
             list.style.display = 'block';
@@ -415,6 +420,7 @@ Object.assign(window.V321Integration, {
                 return;
             }
             const data = await r.json();
+            if (isStale()) return;
             for (const item of (data.results || [])) {
                 this.previewCache.set(item.image_id, item.rendered || '');
                 this.previewMetadata.set(item.image_id, { filename: item.filename || '', thumbnail_path: item.thumbnail_path || '' });
@@ -432,6 +438,9 @@ Object.assign(window.V321Integration, {
         });
 
         this._renderPreviewWorkbench();
+        // Which refresh the list on screen comes from (the newest one drew it
+        // when this equals _previewGeneration).
+        this._previewDrawnGeneration = generation;
     },
 
     _getCurrentExportOptions() {

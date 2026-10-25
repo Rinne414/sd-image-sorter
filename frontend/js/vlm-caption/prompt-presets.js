@@ -18,6 +18,7 @@ Object.assign(window.VLMCaption, {
     _presetsProblem: '',
     _activePresetId: '',
     _presetUndo: null,
+    _presetUndoKind: '',
     _presetNameMode: '',
 
     _BUILTIN_PRESET_LABEL_KEYS: {
@@ -142,12 +143,13 @@ Object.assign(window.VLMCaption, {
         }
     },
 
-    _showPresetStatus(message, type = 'info', undo = null) {
+    _showPresetStatus(message, type = 'info', undo = null, undoKind = '') {
         const box = document.getElementById('vlm-preset-status');
         const text = document.getElementById('vlm-preset-status-text');
         const undoBtn = document.getElementById('btn-vlm-preset-undo');
         if (!box || !text) return;
         this._presetUndo = typeof undo === 'function' ? undo : null;
+        this._presetUndoKind = this._presetUndo ? undoKind : '';
         text.textContent = message;
         box.className = `vlm-preset-status vlm-status vlm-status-${type}`;
         box.hidden = !message;
@@ -184,6 +186,7 @@ Object.assign(window.VLMCaption, {
             this._tp('vlmSettings.presetApplied', 'Applied “{name}”.', { name: this._presetLabel(preset) }),
             'success',
             changed ? () => this._restorePromptSnapshot(before) : null,
+            'apply',
         );
     },
 
@@ -333,6 +336,7 @@ Object.assign(window.VLMCaption, {
             this._tp('vlmSettings.presetDeleted', 'Deleted “{name}”. The prompts stay in the boxes.', { name: deleted.name }),
             'info',
             () => this._restoreDeletedPreset(deleted),
+            'delete',
         );
     },
 
@@ -403,11 +407,16 @@ Object.assign(window.VLMCaption, {
             }
         });
         ['vlm-system-prompt', 'vlm-user-prompt', 'vlm-user-prompt-with-tags'].forEach((id) => {
-            on(id, 'input', () => this._syncPresetControls());
+            on(id, 'input', () => {
+                // Typing again makes "undo the applied preset" stale: it would
+                // throw away what was just typed.
+                if (this._presetUndoKind === 'apply') this._clearPresetStatus();
+                this._syncPresetControls();
+            });
         });
-        document.querySelectorAll('#vlm-output-format .vlm-segmented-btn').forEach((btn) => {
-            btn.addEventListener('click', () => this._syncPresetControls());
-        });
+        // On the group, so it runs after the buttons' own handlers have
+        // switched the format.
+        on('vlm-output-format', 'click', () => this._syncPresetControls());
         on('vlm-include-tags', 'change', () => this._refreshWithTagsPromptVisibility());
         document.addEventListener('languageChanged', () => {
             if (this._presetOrder.length) this._renderPresetSelect();
