@@ -3165,7 +3165,16 @@ Probe concurrent VLM health-check capacity and optionally persist the stable wor
 List available models for the configured provider (calls provider's `models` API or falls back to a curated list).
 
 #### GET /api/vlm/presets
-List built-in system-prompt presets (general LoRA NL, Anima/FLUX detailed, single-sentence, character LoRA, NSFW-tolerant, danbooru, hybrid).
+List the prompt presets: the built-in ones (general LoRA NL, Anima/FLUX detailed, Krea 2 long NL, single-sentence, character LoRA, NSFW-tolerant, danbooru, hybrid; `builtin: true`), then the user's own (`builtin: false`, ids `custom-<hex>`). Returns `{presets: {id: {name, output_format, system_prompt, user_prompt, user_prompt_with_tags, builtin, ...}}, custom_presets_problem}`; `custom_presets_problem` is `""`, or says why `data/config/vlm-prompt-presets.json` could not be read (the built-in presets are still listed).
+
+#### POST /api/vlm/presets
+Save the user's own prompt preset at the end of the list. Body: `{name, output_format?, system_prompt?, user_prompt?, user_prompt_with_tags?, id?}` (`id` only when Undo brings back a just-deleted preset). Returns `{preset}`. Errors use `{code, message, params}`: `vlm_preset_name_taken` (409, `params.existing_id`), `vlm_preset_name_required` (400), `vlm_preset_builtin` (403), `vlm_preset_file_unreadable` (409, the file is never overwritten), `vlm_preset_file_busy` (503).
+
+#### PATCH /api/vlm/presets/{preset_id}
+Rename a saved preset and/or replace its prompts; only the fields present change. Returns `{preset}`. Built-in presets answer 403 `vlm_preset_builtin`; an unknown id answers 404 `vlm_preset_not_found`.
+
+#### DELETE /api/vlm/presets/{preset_id}
+Delete a saved preset and return it as `{deleted}` so the dialog can offer Undo. Built-in presets cannot be deleted (403).
 
 #### POST /api/vlm/caption
 Caption a single indexed image. Body: `{image_id, tags?}`. Returns
