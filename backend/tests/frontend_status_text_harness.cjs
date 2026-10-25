@@ -28,10 +28,16 @@ load(lang === 'zh-CN' ? 'lang/zh-CN.js' : 'lang/en.js');
 const table = sandbox.I18nLang_zhCN || sandbox.I18nLang_en;
 sandbox.I18n = {
   getLang: () => lang,
-  t: (key) => (Object.prototype.hasOwnProperty.call(table, key) ? table[key] : key),
+  // Fills {param} placeholders the way frontend/js/i18n.js does.
+  t: (key, params) => {
+    let text = Object.prototype.hasOwnProperty.call(table, key) ? table[key] : key;
+    for (const [name, value] of Object.entries(params || {})) text = text.split(`{${name}}`).join(String(value));
+    return text;
+  },
 };
 for (const file of [
   'modules/utils/errors.js',
+  'api-error-text.js',
   'app/constants-prefs.js',
   'app/scan-progress-lifecycle.js',
   'app/tagging-flow.js',

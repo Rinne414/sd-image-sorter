@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import config
+from ai_runtime_guard import CpuMemoryShortError
 from config import DEFAULT_TAGGER_MODEL, TAGGER_MODELS
 from image_fingerprint import compute_image_content_fingerprint
 from library_context import reset_current_library_id, set_current_library_id
@@ -1060,6 +1061,16 @@ def _tagging_worker_run(
                             if cpu_pause_seconds > 0:
                                 time.sleep(cpu_pause_seconds)
                 except Exception as error:
+                    if isinstance(error, CpuMemoryShortError):
+                        # Every later batch would be refused the same way.
+                        if tags_batch:
+                            worker_db.add_tags_batch(
+                                tags_batch,
+                                default_source="tagger",
+                                replace_scope="pipeline",
+                            )
+                            tags_batch = []
+                        raise
                     logger.error(
                         "Error tagging batch starting at %s: %s", batch_start, error
                     )
@@ -1116,6 +1127,8 @@ def _tagging_worker_run(
                 total_tag_count=total_tag_count,
             ),
         )
+    except CpuMemoryShortError as error:
+        send("error", str(error), key="cpu_memory_short", args=error.message_args())
     except Exception as error:
         send(
             "error",

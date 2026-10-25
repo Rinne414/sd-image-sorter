@@ -484,6 +484,14 @@ async function startTagging() {
 // The backend still sends an English `message` for API compatibility; the UI
 // builds its own sentence from message_key + message_args + the counters so it
 // follows the language. An unknown key falls back to a generic localized line.
+// The tagger's refusal to run on the CPU without enough free memory
+// (apiError.tagger_cpu_memory_short*, filled with model / need_gb / free_gb).
+function taggerCpuMemoryShortText(args, fallback) {
+    const data = args && typeof args === 'object' ? args : {};
+    if (typeof window.apiErrorText !== 'function') return fallback || '';
+    return window.apiErrorText({ code: data.code, params: data, message: fallback });
+}
+
 function tagStatusText(progress) {
     const key = progress?.message_key;
     if (!key) return '';
@@ -549,6 +557,7 @@ function tagStatusText(progress) {
             return errors > 0 ? base + fill('tagger.progressErrorSuffix', ', {errors} failed', { errors }) : base;
         }
         case 'worker_crashed': return appT('tagger.msg.workerCrashed', 'The tagger process stopped unexpectedly. The program is still running, but this tagging run was stopped.');
+        case 'cpu_memory_short': return appT('tagger.msg.stoppedBecause', 'Tagging stopped: {reason}', { reason: taggerCpuMemoryShortText(args, progress.message) });
         case 'setup_failed': return appT('tagger.msg.setupFailed', 'Tagging could not start. Check available system resources and the log, then try again.');
         case 'schedule_failed': return withCause(appT('tagger.msg.scheduleFailed', 'Could not schedule the tagging task.'), args.detail);
         case 'monitor_error': return withCause(appT('tagger.msg.monitorError', 'Lost track of the tagging process. This tagging run was stopped.'), args.detail);

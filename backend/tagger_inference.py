@@ -17,6 +17,7 @@ import numpy as np
 from PIL import Image
 
 from ai_runtime_guard import (
+    CpuMemoryShortError,
     PRIORITY_BATCH,
     PRIORITY_NORMAL,
     exclusive_ai_runtime,
@@ -336,6 +337,8 @@ class _InferenceFlowMixin:
                                 self._finalize_processed_images(1)
                                 del single_input
                                 del output
+                            except CpuMemoryShortError:
+                                raise
                             except Exception as error:
                                 logger.error(
                                     "Error tagging %s: %s",

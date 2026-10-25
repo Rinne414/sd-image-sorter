@@ -44,7 +44,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from ai_runtime_guard import PRIORITY_INTERACTIVE, AiRuntimeBusyError
+from ai_runtime_guard import PRIORITY_INTERACTIVE, AiRuntimeBusyError, CpuMemoryShortError
 from config import ALLOWED_IMAGE_EXTENSIONS
 from utils.path_validation import normalize_user_path, validate_file_path
 
@@ -171,6 +171,11 @@ def tag_single_image(request: SingleImageTagRequest) -> Dict[str, Any]:
             )
     except HTTPException:
         raise
+    except CpuMemoryShortError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": exc.code, "message": str(exc), "params": exc.params},
+        ) from exc
     except AiRuntimeBusyError:
         # "Busy" is not "could not run". The tagger is fine; something else
         # holds the shared runtime. main.py answers this with a 409 that names

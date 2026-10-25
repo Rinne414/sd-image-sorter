@@ -250,6 +250,7 @@
             case 'failed_all': return withDetail(fill('smartTag.msg.failedAll', 'Smart Tag failed for all {count} images', { count: failed }), args.detail);
             case 'failed_caption_profile': return withDetail(fill('smartTag.msg.failedCaptionProfile', 'Caption profile {profile} failed for all {count} images', { profile: args.profile || '', count: failed }), args.detail);
             case 'failed': return withDetail(smartTagT('smartTag.msg.failed', 'Smart Tag failed'), args.detail);
+            case 'cpu_memory_short': return fill('smartTag.msg.stoppedBecause', 'Smart Tag stopped: {reason}', { reason: typeof taggerCpuMemoryShortText === 'function' ? taggerCpuMemoryShortText(args, snap.message) : (snap.message || '') });
             case 'queued_unknown': return smartTagT('smartTag.msg.queuedUnknown', 'This queued Smart Tag run is no longer known (the program restarted or its result was dropped).');
             case 'queued_start_failed': return fill('aiQueue.startFailed', 'Queued job failed to start: {error}', { error: args.detail || '' });
             default: return smartTagT('smartTag.msg.generic', 'Smart Tag is working...');

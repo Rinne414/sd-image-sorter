@@ -8,12 +8,15 @@ would not fit in the free memory is refused with a clear message.
 
 from types import SimpleNamespace
 
+import numpy as np
+
 import pytest
 
 import tagger as tagger_module
 from config import DEFAULT_TAGGER_MODEL, TAGGER_MODELS
 from services.tagging import default_model
 from services.tagging.default_model import pick_default_tagger_model
+from services.tagging.worker import _E2ETaggingStub
 
 # Captured at import, before conftest swaps it for the hardware-free stand-in.
 REAL_DEFAULT_TAGGER_MODEL = default_model.default_tagger_model
@@ -307,3 +310,154 @@ def test_one_picture_per_call_keeps_the_chunk_but_not_the_gpu_check():
     assert TAGGER_MODELS[PIXAI]["graph_batch_size"] == 1
     assert recommend_tagger_config(roomy, model_name=PIXAI)["recommended_batch_size"] > 1
     assert tagger_gpu_need_mb(PIXAI) >= TAGGER_MODELS[PIXAI]["activation_mb_per_image"]
+
+
+# --- The refusal reaches the user, in their language, and stops the run ----
+
+
+def _refusal(cause="gpu_busy"):
+    from ai_runtime_guard import CpuMemoryShortError
+
+    return CpuMemoryShortError(
+        "PixAI v1.0 on the CPU needs about 6 GB of free memory and 3.1 GB is free.",
+        code=f"tagger_cpu_memory_short_{cause}",
+        params={"model": PIXAI, "need_gb": "6", "free_gb": "3.1"},
+    )
+
+
+def test_the_refusal_carries_a_code_and_its_numbers(monkeypatch):
+    from ai_runtime_guard import CpuMemoryShortError
+
+    _free_ram(monkeypatch, 3.1)
+    with pytest.raises(CpuMemoryShortError) as refused:
+        _bare(PIXAI, gpu_busy=True)._ensure_cpu_memory()
+    assert refused.value.code == "tagger_cpu_memory_short_gpu_busy"
+    assert refused.value.params == {"model": PIXAI, "need_gb": "6", "free_gb": "3.1"}
+
+    with pytest.raises(CpuMemoryShortError) as plain:
+        _bare(PIXAI)._ensure_cpu_memory()
+    assert plain.value.code == "tagger_cpu_memory_short"
+
+
+def test_one_picture_at_a_time_stops_on_the_refusal_instead_of_failing_each(monkeypatch):
+    """PixAI v1.0 runs one picture per call; each picture's error was caught,
+    so a refusal became "every picture failed" with the GPU retried each time."""
+    from ai_runtime_guard import CpuMemoryShortError
+
+    tagger = _bare(PIXAI)
+    tagger._loaded = True
+    tagger._supports_true_batch = False
+    calls = []
+    monkeypatch.setattr(tagger, "_runtime_chunk_size", lambda *_a: 4, raising=False)
+    monkeypatch.setattr(
+        tagger,
+        "_preprocess_paths",
+        lambda paths: [np.zeros((448, 448, 3), dtype=np.float32) for _ in paths],
+        raising=False,
+    )
+
+    def refuse(_input):
+        calls.append(1)
+        raise _refusal("gpu_stopped")
+
+    monkeypatch.setattr(tagger, "_run_inference", refuse, raising=False)
+
+    with pytest.raises(CpuMemoryShortError):
+        tagger.tag_batch(["a.png", "b.png", "c.png"])
+    assert len(calls) == 1
+
+
+class _RefusingAfterFirstBatch(_E2ETaggingStub):
+    """Tags the first batch, then is refused the way PixAI v1.0 would be."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def tag_batch(self, image_paths, **kwargs):
+        self.calls += 1
+        if self.calls > 1:
+            raise _refusal()
+        return super().tag_batch(image_paths, **kwargs)
+
+
+def test_mass_tag_stops_with_the_coded_reason_and_keeps_the_tags_so_far(
+    fake_tagger_env, monkeypatch, tmp_path
+):
+    import database as db
+    import services.tagging.worker as worker
+    from tests.test_tagging_pins_worker import _add_image, _payload, _run_worker
+
+    stub = _RefusingAfterFirstBatch()
+    monkeypatch.setattr(worker, "_e2e_tagger_getter", lambda **_k: stub)
+    ids = [_add_image(tmp_path, f"short-{index}.png") for index in range(6)]
+
+    messages = _run_worker(_payload(ids))
+
+    terminal = messages[-1]
+    assert terminal["status"] == "error", terminal
+    assert terminal["message_key"] == "cpu_memory_short", terminal["message"]
+    assert terminal["message_args"] == {
+        "code": "tagger_cpu_memory_short_gpu_busy",
+        "model": PIXAI,
+        "need_gb": "6",
+        "free_gb": "3.1",
+    }
+    assert stub.calls == 2
+    tagged = [image_id for image_id in ids if db.get_image_tags(image_id)]
+    assert tagged == ids[:4]
+
+
+def test_smart_tag_does_not_turn_a_refusal_into_pictures_without_tags():
+    from ai_runtime_guard import CpuMemoryShortError
+    from services.smart_tag.tagging import _tag_batch_with_thresholds
+
+    class Refusing:
+        model_name = PIXAI
+
+        def tag_batch(self, _paths, **_kwargs):
+            raise _refusal()
+
+        def tag(self, _path, **_kwargs):
+            raise _refusal()
+
+    with pytest.raises(CpuMemoryShortError):
+        _tag_batch_with_thresholds(
+            Refusing(),
+            ["a.png", "b.png"],
+            general_threshold=0.35,
+            character_threshold=0.85,
+            copyright_threshold=0.35,
+        )
+
+
+def test_single_picture_tagging_answers_the_coded_refusal(test_client, monkeypatch, tmp_path):
+    from PIL import Image
+
+    from services import single_image_tag_service
+
+    class Refusing:
+        model_name = PIXAI
+
+        def tag(self, _path, **_kwargs):
+            raise _refusal("gpu_start_failed")
+
+    monkeypatch.setattr(single_image_tag_service, "_load_tagger", lambda **_k: Refusing())
+    image = tmp_path / "one.png"
+    Image.new("RGB", (32, 32), color="red").save(image)
+
+    response = test_client.post("/api/tag/single", json={"image_path": str(image)})
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["code"] == "tagger_cpu_memory_short_gpu_start_failed"
+    assert body["params"] == {"model": PIXAI, "need_gb": "6", "free_gb": "3.1"}
+    assert "6 GB of free memory" in body["error"]
+
+
+@pytest.fixture
+def fake_tagger_env(test_db, monkeypatch):
+    from tests.test_tagging_pins_worker import tsvc
+
+    monkeypatch.setenv("SD_IMAGE_SORTER_E2E_FAKE_TAGGER", "1")
+    monkeypatch.setattr(tsvc, "verify_image_readable", lambda path: (True, None))
+    return test_db

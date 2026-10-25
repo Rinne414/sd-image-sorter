@@ -17,6 +17,7 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
+from ai_runtime_guard import CpuMemoryShortError
 from config import TAGGER_MODELS
 from services.smart_tag.jobs import SmartTagJobState
 from services.smart_tag.request import SmartTagRequest
@@ -283,6 +284,8 @@ def _tag_batch_with_thresholds(
                 # OppaiOracle). Retry with the trimmed kwargs on the next loop;
                 # if that was already the trimmed pass, drop to per-image below.
                 continue
+            except CpuMemoryShortError:
+                raise
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "smart-tag tag_batch failed (%s); falling back to per-image tagging.",
@@ -315,6 +318,8 @@ def _tag_batch_with_thresholds(
                     copyright_threshold=copyright_threshold,
                 )
             )
+        except CpuMemoryShortError:
+            raise
         except Exception as exc:  # noqa: BLE001
             logger.warning("smart-tag per-image tag failed for %s: %s", path, exc)
             out.append({})

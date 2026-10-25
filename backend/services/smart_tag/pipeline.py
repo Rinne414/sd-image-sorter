@@ -29,6 +29,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from ai_runtime_guard import CpuMemoryShortError
 from services.smart_tag.caption_phase import _build_caption_phase, _run_caption_phase
 from services.smart_tag.consensus import compute_consensus_tags
 from services.smart_tag.jobs import (
@@ -781,6 +782,10 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                 vlm_provider=vlm_provider,
                 nl_tagger=nl_tagger,
             )
+    except CpuMemoryShortError as exc:
+        job.status = "failed"
+        job.set_message("cpu_memory_short", str(exc), **exc.message_args())
+        logger.warning("smart-tag stopped: %s", exc)
     except Exception as exc:  # noqa: BLE001
         job.status = "failed"
         job.set_message("failed", f"Smart Tag failed: {exc}", detail=str(exc))

@@ -31,12 +31,23 @@ from config import (
 from gpu_headroom import decide_gpu, tagger_cuda_options, tagger_gpu_need_mb
 from ai_runtime_guard import (
     PRIORITY_NORMAL,
+    CpuMemoryShortError,
     claim_gpu_residency,
     forget_gpu_residency,
     exclusive_ai_runtime,
     looks_like_cuda_oom,
 )
 from model_download_sources import endpoint_label, get_hf_endpoint_order
+
+# Why a run would land on the CPU, as the refusal says it (its code suffix).
+CPU_FALLBACK_CAUSES = {
+    "gpu_busy": "Another program is using the GPU memory it needs, so it would run on the CPU. ",
+    "gpu_start_failed": "The GPU could not start it, so it would run on the CPU. ",
+    "gpu_stopped": (
+        "The GPU stopped running it (often another program took its memory), "
+        "so it would continue on the CPU. "
+    ),
+}
 from tag_writer_provenance import ModelFileIdentity, model_file_snapshot
 from utils.path_validation import normalize_user_path
 
@@ -393,7 +404,7 @@ class WD14Tagger(
         logger.warning("%s: %s", self.model_name, decision.message())
         return False
 
-    def _ensure_cpu_memory(self, reason: str = "") -> None:
+    def _ensure_cpu_memory(self, cause: str = "") -> None:
         """Refuse a CPU session that would not fit in the free memory.
 
         A model that states ``minimum_cpu_available_ram_gb`` (PixAI v1.0: one
@@ -414,16 +425,20 @@ class WD14Tagger(
             return
         if free_gb >= need_gb:
             return
-        if not reason and getattr(self, "_gpu_busy_fallback", False):
-            reason = (
-                "Another program is using the GPU memory it needs, so it would "
-                "run on the CPU. "
-            )
-        raise RuntimeError(
+        if not cause and getattr(self, "_gpu_busy_fallback", False):
+            cause = "gpu_busy"
+        reason = CPU_FALLBACK_CAUSES.get(cause, "")
+        raise CpuMemoryShortError(
             f"{reason}{self.model_name} on the CPU needs about {need_gb:.0f} GB of "
             f"free memory and {free_gb:.1f} GB is free. Close programs you are not "
             "using (for example ComfyUI), or tag with a lighter model such as "
-            "wd-swinv2-tagger-v3."
+            "wd-swinv2-tagger-v3.",
+            code="tagger_cpu_memory_short" + (f"_{cause}" if reason else ""),
+            params={
+                "model": self.model_name,
+                "need_gb": f"{need_gb:.0f}",
+                "free_gb": f"{free_gb:.1f}",
+            },
         )
 
     def _load_locked(self):
@@ -512,9 +527,7 @@ class WD14Tagger(
                     self.model_name,
                     e,
                 )
-                self._ensure_cpu_memory(
-                    "The GPU could not start it, so it would run on the CPU. "
-                )
+                self._ensure_cpu_memory("gpu_start_failed")
                 cpu_providers = ["CPUExecutionProvider"]
                 cpu_options = self._build_session_options(gpu_enabled=False)
                 self.session = self._create_session(
@@ -546,10 +559,7 @@ class WD14Tagger(
             self.model_name,
             error,
         )
-        self._ensure_cpu_memory(
-            "The GPU stopped running it (often another program took its memory), "
-            "so it would continue on the CPU. "
-        )
+        self._ensure_cpu_memory("gpu_stopped")
         cpu_options = self._build_session_options(gpu_enabled=False)
         self.session = self._create_session(
             self._resolved_model_path,

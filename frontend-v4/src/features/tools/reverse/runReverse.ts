@@ -1,4 +1,6 @@
-import { api, unwrap } from '../../../api/client'
+import { api, ApiError, unwrap } from '../../../api/client'
+import { translate, useLang } from '../../../i18n'
+import { refusalOfProgress, taggerRefusal, type TaggerRefusal } from '../../jobs/taggerRefusal'
 import type { TargetModel } from '../../batch/datasetSettings'
 import { queuedRunAnswer, smartTagCancelQuery } from '../../jobs/smartTagJob'
 import type { TagOptions } from '../../tagging/tagJob'
@@ -47,8 +49,16 @@ export async function runTagger(path: string, o: TagOptions, hooks: Hooks): Prom
     return { mode: 'tagger', prompt: tagsToPrompt(tags), tags }
   } catch (error) {
     if (hooks.signal.aborted) throw new Cancelled()
+    const body = error instanceof ApiError && error.body && typeof error.body === 'object' ? (error.body as Raw) : {}
+    const refusal = error instanceof ApiError ? taggerRefusal(error.code, body.params) : null
+    if (refusal) throw new Error(refusalText(refusal))
     throw error
   }
+}
+
+/** The tagger's "not enough free memory on the CPU" answer, in the UI language. */
+function refusalText(refusal: TaggerRefusal): string {
+  return translate(useLang.getState().lang, refusal.key, refusal.params)
 }
 
 /** Stops our run only: its job, or its place in the AI queue while it waits. */
@@ -102,7 +112,8 @@ function jobOfPlace(raw: Raw, queueId: string, enqueuedAt: string | undefined, s
   if (signal.aborted) throw new Cancelled()
   if (now.state === 'lost') throw new Error(tt('reverse.lost'))
   const errors = Array.isArray(raw.errors) ? (raw.errors as Raw[]) : []
-  throw new Error(str(raw.message) || str(errors[0]?.error) || str(raw.status))
+  const refusal = refusalOfProgress(raw)
+  throw new Error(refusal ? refusalText(refusal) : str(raw.message) || str(errors[0]?.error) || str(raw.status))
 }
 
 /** The vision model, alone or given the tagger's tags. */
@@ -113,7 +124,8 @@ export async function runSmartTag(mode: Exclude<ReverseMode, 'tagger'>, path: st
   if (status === 'cancelled' && hooks.signal.aborted) throw new Cancelled()
   if (status === 'failed' || status === 'error' || status === 'cancelled') {
     const errors = Array.isArray(last.errors) ? (last.errors as Raw[]) : []
-    throw new Error(str(last.message) || str(errors[0]?.error) || status)
+    const refusal = refusalOfProgress(last)
+    throw new Error(refusal ? refusalText(refusal) : str(last.message) || str(errors[0]?.error) || status)
   }
   const page = unwrap<Raw>(await api.GET('/api/smart-tag/results', { params: { query: { job_id: jobId, offset: 0, limit: 1 } } }))
   const out = captionOf(page, last)

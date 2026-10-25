@@ -98,6 +98,25 @@ class AiRuntimeBusyError(RuntimeError):
         self.timeout_seconds = timeout_seconds
 
 
+class CpuMemoryShortError(RuntimeError):
+    """A tagger refused to start (or go on) on the CPU without enough free RAM.
+
+    ``code`` (``tagger_cpu_memory_short`` plus the cause, e.g.
+    ``_gpu_busy``) and ``params`` (``model``, ``need_gb``, ``free_gb``) let each
+    interface say it in its own language as ``apiError.<code>``; the message is
+    the English fallback. Tagging loops stop on it instead of failing every
+    picture the same way.
+    """
+
+    def __init__(self, message: str, *, code: str, params: Dict[str, Any]) -> None:
+        super().__init__(message)
+        self.code = code
+        self.params = dict(params)
+
+    def message_args(self) -> Dict[str, Any]:
+        return {"code": self.code, **self.params}
+
+
 def _default_lock_wait_seconds() -> float:
     """How long the CROSS-PROCESS file lock may be waited for.
 

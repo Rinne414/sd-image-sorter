@@ -8,6 +8,7 @@ import { readSortRules } from './sortRulesJob' // sortrules/sortundo: sort by co
 import { readScanExtras, type ScanExtras } from './scanExtras' // scan: stall + other library
 import { readOllama } from './ollamaJob' // ollama: an Ollama model download, read in ollamaJob.ts
 import { readArtist } from './artistJob' // artist: style identification, read in artistJob.ts
+import { refusalOfProgress, type TaggerRefusal } from './taggerRefusal'
 // Reads the backend's progress payloads for long jobs into one shape.
 // move/copy: GET /api/move/progress · trash: GET /api/images/delete-selected/progress
 // · remove: GET /api/images/remove-selected/progress · tag: GET /api/tag/progress
@@ -82,6 +83,8 @@ export interface JobProgress {
   restartAdvised: boolean
   /** install and smarttag: the backend no longer knows how this download or queued run ended (it restarted, or many ended since). */
   lost?: boolean
+  /** tag and smarttag: stopped because the tagger would not fit in the free memory on the CPU. */
+  refusal?: TaggerRefusal
   /** reconnect only: found files that match several missing records and wait for the user. */
   toReview: number
   /** scan only: finding and adding files, then reading their generation details. */
@@ -166,7 +169,8 @@ function readTag(base: JobProgress, raw: Raw, ctx: ReadContext, prev?: JobProgre
   const topTags = rows(obj(raw.last_run_stats).top_tags)
     .map((r) => ({ tag: str(r.tag), count: num(r.count) }))
     .filter((t) => t.tag)
-  return { ...base, succeeded: num(raw.tagged), failedCount: num(raw.errors), topTags }
+  const refusal = refusalOfProgress(raw)
+  return { ...base, succeeded: num(raw.tagged), failedCount: num(raw.errors), topTags, ...(refusal ? { refusal } : {}) }
 }
 
 /** Colour analysis reports a running flag instead of a status word. */

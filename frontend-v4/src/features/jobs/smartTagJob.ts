@@ -1,5 +1,6 @@
 import type { MessageKey } from '../../i18n'
 import type { JobFailure, JobProgress, JobStatus } from './progress'
+import { refusalOfProgress } from './taggerRefusal'
 
 // Reads a Smart Tag run (a dataset batch's tag step) for the Jobs drawer:
 // GET /api/smart-tag/progress. The backend may queue a run behind other AI
@@ -110,6 +111,7 @@ export function readSmartTag(base: JobProgress, raw: Raw, ctx: SmartTagContext =
   if (ctx.jobId !== undefined && str(raw.job_id) !== ctx.jobId && str(raw.status) !== 'idle') return { ...base, status: 'error' }
   const status = STATUS[str(raw.status)] ?? 'error'
   const failed = failures(raw.errors)
+  const refusal = status === 'error' ? refusalOfProgress(raw) : null
   return {
     ...base,
     status,
@@ -119,5 +121,6 @@ export function readSmartTag(base: JobProgress, raw: Raw, ctx: SmartTagContext =
     failedCount: Math.max(num(raw.failed), failed.length),
     failures: failed,
     message: status === 'error' ? str(raw.message) : '',
+    ...(refusal ? { refusal } : {}),
   }
 }

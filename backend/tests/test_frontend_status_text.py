@@ -156,3 +156,47 @@ def test_an_unknown_reason_key_falls_back_to_the_plain_sentence():
     [result] = _run("zh-CN", [_gpu("gpu_load_failed", "something_new")])
 
     assert result["text"] == "GPU 载入失败，改用 CPU 继续。"
+
+
+def _cpu_short(code: str) -> dict:
+    return {
+        "fn": "tagStatusText",
+        "progress": {
+            "status": "error",
+            "message": "English fallback sentence",
+            "message_key": "cpu_memory_short",
+            "message_args": {
+                "code": code,
+                "model": "pixai-tagger-v1.0",
+                "need_gb": "6",
+                "free_gb": "3.1",
+            },
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    "lang, code, must_contain",
+    [
+        ("zh-CN", "tagger_cpu_memory_short_gpu_busy", ("打标已停止", "另一个程序占着", "6 GB", "3.1 GB", "ComfyUI")),
+        ("zh-CN", "tagger_cpu_memory_short_gpu_stopped", ("打标已停止", "已经打好的标签都保留了", "6 GB")),
+        ("zh-CN", "tagger_cpu_memory_short", ("pixai-tagger-v1.0 用 CPU 跑需要约 6 GB",)),
+        ("en", "tagger_cpu_memory_short_gpu_busy", ("Tagging stopped", "Another program is using", "6 GB", "3.1 GB")),
+        ("en", "tagger_cpu_memory_short_gpu_start_failed", ("The GPU could not start pixai-tagger-v1.0",)),
+    ],
+)
+def test_the_cpu_memory_refusal_is_said_in_the_ui_language(lang, code, must_contain):
+    """The refusal names the model, the memory it needs and has, and what to do;
+    it never falls back to the English sentence or to generic advice."""
+    [result] = _run(lang, [_cpu_short(code)])
+
+    for fragment in must_contain:
+        assert fragment in result["text"]
+    assert "English fallback sentence" not in result["text"]
+    assert "{" not in result["text"]
+
+
+def test_an_unknown_refusal_code_shows_the_backend_sentence():
+    [result] = _run("zh-CN", [_cpu_short("tagger_cpu_memory_short_new_cause")])
+
+    assert result["text"] == "打标已停止：English fallback sentence"
