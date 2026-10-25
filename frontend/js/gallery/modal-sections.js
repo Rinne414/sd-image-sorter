@@ -416,7 +416,7 @@ Object.assign(window.Gallery, {
             charsList.innerHTML = parsedData.character_prompts.map((c, i) => {
                 const centerStr = c.center ? ` (${c.center.x?.toFixed?.(2) || c.center.x}, ${c.center.y?.toFixed?.(2) || c.center.y})` : '';
                 const negHtml = c.negative_prompt
-                    ? `<div class="char-negative"><strong>${negLabel}:</strong> ${window.escapeHtml(c.negative_prompt)}</div>`
+                    ? `<div class="char-negative"><strong>${window.I18n.labelColon(negLabel)}</strong> ${window.escapeHtml(c.negative_prompt)}</div>`
                     : '';
                 return `
                     <div class="character-card">

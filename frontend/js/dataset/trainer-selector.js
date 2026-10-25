@@ -553,7 +553,7 @@
                 'dataset.trainerContractsFailed',
                 'Trainer contracts unavailable',
             );
-            status.textContent = `${prefix}: ${state.errorMessage}`;
+            status.textContent = window.I18n.joinLabel(prefix, state.errorMessage);
         } else {
             status.textContent = this._t(
                 'dataset.trainerContractsReady',

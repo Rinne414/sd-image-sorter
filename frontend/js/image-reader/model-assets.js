@@ -109,7 +109,7 @@ Object.assign(window.ImageReader, {
                     <div class="reader-model-asset-block">
                         <div class="reader-model-asset-title">${this._escapeHtml(this._t('reader.primaryModel', 'Primary Model'))}</div>
                         <div class="reader-model-asset-value">${this._escapeHtml(assets.primary_model_name)}</div>
-                        <div class="reader-model-asset-title">${this._escapeHtml(this._t('reader.primaryModelType', 'Primary Model Type'))}: ${this._escapeHtml(primaryModelType)}</div>
+                        <div class="reader-model-asset-title">${this._escapeHtml(window.I18n.joinLabel(this._t('reader.primaryModelType', 'Primary Model Type'), primaryModelType))}</div>
                     </div>
                 `);
             }

@@ -98,7 +98,7 @@ async function loadCensorModelStatus() {
                     : '';
 
                 banner.className = classes.join(' ');
-                banner.innerHTML = `<strong>${escapeHtml(censorT('censor.modelReadyLabel', null, 'Detection Ready'))}:</strong> ${escapeHtml(readyNotes || censorT('common.none', null, 'None'))} ${escapeHtml(recommended)}${extra}`;
+                banner.innerHTML = `<strong>${escapeHtml(window.I18n.labelColon(censorT('censor.modelReadyLabel', null, 'Detection Ready')))}</strong> ${escapeHtml(readyNotes || censorT('common.none', null, 'None'))} ${escapeHtml(recommended)}${extra}`;
             }
             if (simpleGuide) {
                 simpleGuide.textContent = legacy?.simple_user_advice || censorT(
@@ -143,7 +143,7 @@ function getSelectedLegacyModelRecord() {
 }
 
 function formatCensorCapabilityLine(labelKey, value, fallbackLabel) {
-    return `${censorT(labelKey, null, fallbackLabel)}: ${value}`;
+    return window.I18n.joinLabel(censorT(labelKey, null, fallbackLabel), value);
 }
 
 function formatCensorYesNo(value) {

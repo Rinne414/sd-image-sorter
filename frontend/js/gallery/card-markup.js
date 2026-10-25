@@ -52,7 +52,7 @@ Object.assign(window.Gallery, {
                 : `<img ${imgAttributes} alt="${safeFilename}" draggable="false"${highResAttr}>`;
 
             const aestheticBadge = image.aesthetic_score != null
-                ? `<span class="gallery-item-aesthetic" title="${this._escapeHtml(this._t('filter.aestheticTitle', null, 'Aesthetic Score'))}: ${Number(image.aesthetic_score).toFixed(1)}">${Number(image.aesthetic_score).toFixed(1)}</span>`
+                ? `<span class="gallery-item-aesthetic" title="${this._escapeHtml(window.I18n.joinLabel(this._t('filter.aestheticTitle', null, 'Aesthetic Score'), Number(image.aesthetic_score).toFixed(1)))}">${Number(image.aesthetic_score).toFixed(1)}</span>`
                 : '';
 
             return `

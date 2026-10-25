@@ -182,7 +182,7 @@
             const msg = err?.message || String(err);
             if (typeof window.showToast === 'function') {
                 window.showToast(
-                    `${smartTagT('smartTag.progressCheckFailed', 'Smart Tag progress check failed')}: ${msg}`,
+                    window.I18n.joinLabel(smartTagT('smartTag.progressCheckFailed', 'Smart Tag progress check failed'), msg),
                     'error'
                 );
             }
@@ -207,7 +207,7 @@
             (text, name) => text.split(`{${name}}`).join(String(values[name])),
             smartTagT(i18nKey, fallback),
         );
-        const withDetail = (text, detail) => (detail ? `${text}: ${detail}` : text);
+        const withDetail = (text, detail) => (detail ? window.I18n.joinLabel(text, detail) : text);
         const ok = snap.succeeded || 0;
         const failed = snap.failed || 0;
         const skipped = snap.skipped || 0;

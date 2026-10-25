@@ -73,9 +73,9 @@ function renderAutoSepConfigControls() {
         }
         const filterSummary = window.formatFilterSummary?.(filters);
         if (filterSummary) {
-            summaryParts.push(`${tKey('filter.tags', 'Tags', '标签')}: ${filterSummary.tags}`);
-            summaryParts.push(`${tKey('filter.prompts', 'Prompts', '提示词')}: ${filterSummary.prompts}`);
-            summaryParts.push(`${tKey('filter.sizeRules', 'Size Rules', '尺寸规则')}: ${filterSummary.dimensions}`);
+            summaryParts.push(window.I18n.joinLabel(tKey('filter.tags', 'Tags', '标签'), filterSummary.tags));
+            summaryParts.push(window.I18n.joinLabel(tKey('filter.prompts', 'Prompts', '提示词'), filterSummary.prompts));
+            summaryParts.push(window.I18n.joinLabel(tKey('filter.sizeRules', 'Size Rules', '尺寸规则'), filterSummary.dimensions));
         }
         summary.textContent = summaryParts.join(' • ');
     }

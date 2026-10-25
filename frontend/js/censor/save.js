@@ -288,7 +288,7 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
         } catch (e) {
             Logger.error(e);
             item.batchStatus = 'failed';
-            item.batchError = `${censorT('censor.saveFailed', null, 'Save failed')}: ${e?.message || e || ''}`.trim();
+            item.batchError = window.I18n.joinLabel(censorT('censor.saveFailed', null, 'Save failed'), e?.message || e || '').trim();
             failedCount += 1;
         }
     });

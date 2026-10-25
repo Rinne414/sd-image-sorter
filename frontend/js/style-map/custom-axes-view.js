@@ -178,12 +178,12 @@ export class CustomAxesView {
                 const info = result.axes?.[axis];
                 if (!info) continue;
                 const label = t(`stylemap.axis.${axis}`, axis);
-                if (!info.applied) add(`${label}: ${t('stylemap.customTooFew', 'not applied, fewer than 2 usable pictures at an end')}`, 'warn');
+                if (!info.applied) add(window.I18n.joinLabel(label, t('stylemap.customTooFew', 'not applied, fewer than 2 usable pictures at an end')), 'warn');
                 else if (!info.separable) {
-                    add(`${label}: ${t('stylemap.customNotSeparable', 'These two groups are hard to tell apart ({agree}/{total}); the model may not see this difference. Add more pictures, or use more typical ones.', { agree: info.agree, total: info.total })}`, 'warn');
+                    add(window.I18n.joinLabel(label, t('stylemap.customNotSeparable', 'These two groups are hard to tell apart ({agree}/{total}); the model may not see this difference. Add more pictures, or use more typical ones.', { agree: info.agree, total: info.total })), 'warn');
                 }
                 if (info.missing_ids?.length) {
-                    add(`${label}: ${t('stylemap.customMissing', '{n} pictures could not be used (not in this library, or no style data yet)', { n: info.missing_ids.length })}`, 'warn');
+                    add(window.I18n.joinLabel(label, t('stylemap.customMissing', '{n} pictures could not be used (not in this library, or no style data yet)', { n: info.missing_ids.length })), 'warn');
                 }
             }
             for (const warning of result.warnings || []) {

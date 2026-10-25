@@ -566,7 +566,7 @@ function tagStatusText(progress) {
             const failed = appT('tagger.msg.failed', 'Tagging failed');
             const detail = typeof window.formatUserError === 'function' && args.detail
                 ? window.formatUserError(args.detail) : '';
-            return detail ? `${failed}: ${detail}` : failed;
+            return detail ? window.I18n.joinLabel(failed, detail) : failed;
         }
         default: return appT('tagger.msg.working', 'Tagging in progress...');
     }

@@ -100,11 +100,11 @@ Object.assign(window.ArtistIdent, {
             const detailItems = [];
             if (result.message) detailItems.push(this.localizeDiagnosticsMessage(result.message));
             if (result.missing_dependencies?.length) {
-                detailItems.push(`${this.tText('Missing dependencies', '缺少依赖')}: ${result.missing_dependencies.join(', ')}`);
+                detailItems.push(window.I18n.joinLabel(this.tText('Missing dependencies', '缺少依赖'), result.missing_dependencies.join(', ')));
             }
             if (result.runtime_note) detailItems.push(this.localizeDiagnosticsMessage(result.runtime_note));
-            if (result.runtime_path) detailItems.push(`${this.tText('Runtime path', '运行时路径')}: ${result.runtime_path}`);
-            if (result.checkpoint_path) detailItems.push(`${this.tText('Checkpoint path', '检查点路径')}: ${result.checkpoint_path}`);
+            if (result.runtime_path) detailItems.push(window.I18n.joinLabel(this.tText('Runtime path', '运行时路径'), result.runtime_path));
+            if (result.checkpoint_path) detailItems.push(window.I18n.joinLabel(this.tText('Checkpoint path', '检查点路径'), result.checkpoint_path));
             banner.className = classes.join(' ');
             // ENTRY-06: shared "needs setup -> open Model Manager" affordance,
             // reusing the global data-action="open-model-guidance" handler.

@@ -121,7 +121,7 @@ function scanStatusText(progress) {
                 ? appT(codedKey, '', { path: args.path || '', reason: args.reason || '' })
                 : '';
             const cause = (coded && coded !== codedKey ? coded : '') || progress.message_detail || '';
-            return cause ? `${failed}: ${cause}` : failed;
+            return cause ? window.I18n.joinLabel(failed, cause) : failed;
         }
         case 'aborted': return appT('scan.msg.aborted', 'Import ended unexpectedly');
         default: return '';

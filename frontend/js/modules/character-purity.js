@@ -212,7 +212,7 @@
                     const failed = t('Character-purity analysis failed', '角色纯度分析失败');
                     const detail = args.detail && typeof window.formatUserError === 'function'
                         ? window.formatUserError(args.detail) : '';
-                    return detail ? `${failed}: ${detail}` : failed;
+                    return detail ? window.I18n.joinLabel(failed, detail) : failed;
                 }
                 default: return '';
             }

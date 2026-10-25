@@ -72,7 +72,7 @@
             const dropTitle = (DM._t?.('dataset.confidenceDropTag', 'Drop this tag from the caption'))
                 || 'Drop this tag from the caption';
             x.title = dropTitle;
-            x.setAttribute('aria-label', `${dropTitle}: ${t.tag}`);
+            x.setAttribute('aria-label', window.I18n.joinLabel(dropTitle, t.tag));
             x.innerHTML = "<svg class=\"icon\" aria-hidden=\"true\"><use href=\"#i-close\"/></svg>";
             x.addEventListener('click', () => dropTagFromCaption(String(t.tag || '')));
             node.appendChild(x);

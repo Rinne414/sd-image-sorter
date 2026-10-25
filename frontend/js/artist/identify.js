@@ -159,7 +159,7 @@ Object.assign(window.ArtistIdent, {
                 const failed = this.tKey('artist.identificationFailed', 'Artist identification failed', '画师识别失败');
                 const detail = progress.message_detail && typeof window.formatUserError === 'function'
                     ? window.formatUserError(progress.message_detail) : '';
-                return detail ? `${failed}: ${detail}` : failed;
+                return detail ? window.I18n.joinLabel(failed, detail) : failed;
             }
             default:
                 return '';

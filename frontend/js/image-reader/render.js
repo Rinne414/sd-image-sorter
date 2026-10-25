@@ -129,7 +129,7 @@ Object.assign(window.ImageReader, {
                     : '';
                 const slot = entry?.index != null ? entry.index + 1 : index + 1;
                 const negHtml = negative
-                    ? `<div class="char-negative"><strong>${this._escapeHtml(negLabel)}:</strong> ${this._escapeHtml(negative)}</div>`
+                    ? `<div class="char-negative"><strong>${this._escapeHtml(window.I18n.labelColon(negLabel))}</strong> ${this._escapeHtml(negative)}</div>`
                     : '';
                 return `
                     <div class="character-card">

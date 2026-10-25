@@ -60,7 +60,7 @@ Object.assign(window.PromptLab, {
                     </div>
                 </div>`;
         } catch (e) {
-            window.App?.showToast?.(`${this._t('promptlab.compareFailed', 'Compare failed')}: ${e.message || e}`, 'error');
+            window.App?.showToast?.(window.I18n.joinLabel(this._t('promptlab.compareFailed', 'Compare failed'), e.message || e), 'error');
         }
     },
 

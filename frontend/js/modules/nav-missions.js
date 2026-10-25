@@ -367,7 +367,7 @@
             ? t('navCustom.moveUp', 'Move up')
             : t('navCustom.moveDown', 'Move down');
         button.title = text;
-        button.setAttribute('aria-label', `${text}: ${label}`);
+        button.setAttribute('aria-label', window.I18n.joinLabel(text, label));
         button.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#i-arrow-up"/></svg>';
         return button;
     }

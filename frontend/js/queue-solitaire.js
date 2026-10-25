@@ -411,28 +411,28 @@
         }
 
         if (hasMeaningfulSummary(summary.generators)) {
-            parts.push(`${t('filter.generators', 'Generators')}: ${summary.generators}`);
+            parts.push(window.I18n.joinLabel(t('filter.generators', 'Generators'), summary.generators));
         }
         if (hasMeaningfulSummary(summary.ratings)) {
-            parts.push(`${t('filter.ratings', 'Ratings')}: ${summary.ratings}`);
+            parts.push(window.I18n.joinLabel(t('filter.ratings', 'Ratings'), summary.ratings));
         }
         if (hasMeaningfulSummary(summary.tags)) {
-            parts.push(`${t('filter.tags', 'Tags')}: ${summary.tags}`);
+            parts.push(window.I18n.joinLabel(t('filter.tags', 'Tags'), summary.tags));
         }
         if (hasMeaningfulSummary(summary.prompts)) {
-            parts.push(`${t('filter.prompts', 'Prompts')}: ${summary.prompts}`);
+            parts.push(window.I18n.joinLabel(t('filter.prompts', 'Prompts'), summary.prompts));
         }
         if (hasMeaningfulSummary(summary.search)) {
-            parts.push(`${t('filter.search', 'Search')}: ${summary.search}`);
+            parts.push(window.I18n.joinLabel(t('filter.search', 'Search'), summary.search));
         }
         if (hasMeaningfulSummary(summary.checkpoints)) {
-            parts.push(`${t('filter.checkpoints', 'Checkpoints')}: ${summary.checkpoints}`);
+            parts.push(window.I18n.joinLabel(t('filter.checkpoints', 'Checkpoints'), summary.checkpoints));
         }
         if (hasMeaningfulSummary(summary.loras)) {
-            parts.push(`${t('filter.loras', 'LoRAs')}: ${summary.loras}`);
+            parts.push(window.I18n.joinLabel(t('filter.loras', 'LoRAs'), summary.loras));
         }
         if (hasMeaningfulSummary(summary.dimensions)) {
-            parts.push(`${t('filter.sizeRules', 'Size Rules')}: ${summary.dimensions}`);
+            parts.push(window.I18n.joinLabel(t('filter.sizeRules', 'Size Rules'), summary.dimensions));
         }
 
         const minAesthetic = filters.minAesthetic;
@@ -468,19 +468,19 @@
         const maxAesthetic = document.getElementById('qs-filter-aesthetic-max')?.value?.trim();
         const resolution = document.getElementById('qs-filter-resolution')?.value || '';
 
-        if (keyword) parts.push(`${t('filter.search', 'Search')}: ${keyword}`);
-        if (generator) parts.push(`${t('filter.generators', 'Generators')}: ${generator}`);
-        if (rating) parts.push(`${t('filter.ratings', 'Ratings')}: ${rating}`);
-        if (checkpointQuery) parts.push(`${t('filter.checkpoints', 'Checkpoints')}: ${checkpointQuery}`);
-        if (loraQuery) parts.push(`${t('filter.loras', 'LoRAs')}: ${loraQuery}`);
-        if (resolution) parts.push(`${t('filter.sizeRules', 'Size Rules')}: ${resolution.toUpperCase()}`);
+        if (keyword) parts.push(window.I18n.joinLabel(t('filter.search', 'Search'), keyword));
+        if (generator) parts.push(window.I18n.joinLabel(t('filter.generators', 'Generators'), generator));
+        if (rating) parts.push(window.I18n.joinLabel(t('filter.ratings', 'Ratings'), rating));
+        if (checkpointQuery) parts.push(window.I18n.joinLabel(t('filter.checkpoints', 'Checkpoints'), checkpointQuery));
+        if (loraQuery) parts.push(window.I18n.joinLabel(t('filter.loras', 'LoRAs'), loraQuery));
+        if (resolution) parts.push(window.I18n.joinLabel(t('filter.sizeRules', 'Size Rules'), resolution.toUpperCase()));
 
         const dimensions = [];
         if (minW || maxW) dimensions.push(`W ${minW || 0}-${maxW || '∞'}`);
         if (minH || maxH) dimensions.push(`H ${minH || 0}-${maxH || '∞'}`);
         if (aspect) dimensions.push(aspect);
         if (dimensions.length) {
-            parts.push(`${t('filter.sizeRules', 'Size Rules')}: ${dimensions.join(', ')}`);
+            parts.push(window.I18n.joinLabel(t('filter.sizeRules', 'Size Rules'), dimensions.join(', ')));
         }
 
         if (minAesthetic || maxAesthetic) {
@@ -544,7 +544,7 @@
             return;
         }
 
-        setSummaryText(`${modeLabel}: ${parts.join(' • ')}`);
+        setSummaryText(window.I18n.joinLabel(modeLabel, parts.join(' • ')));
     }
 
     function clearQuickFilterInputs() {

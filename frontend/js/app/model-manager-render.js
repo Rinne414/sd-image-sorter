@@ -133,14 +133,14 @@ function renderModelManager(models = []) {
         const locationBlock = locationLines.length ? `
                 <details class="model-card-location">
                     <summary title="${escapeHtml(locationLines.map(([, value]) => value).join('\n'))}">${escapeHtml(appT('models.location', 'File location'))}</summary>
-                    ${locationLines.map(([label, value]) => `<div class="model-card-path">${escapeHtml(label)}:<code>${escapeHtml(value)}</code></div>`).join('')}
+                    ${locationLines.map(([label, value]) => `<div class="model-card-path">${escapeHtml(window.I18n.labelColon(label))}<code>${escapeHtml(value)}</code></div>`).join('')}
                 </details>
             ` : '';
         // MS1c: a model used from a trusted folder (ComfyUI, an HF cache) says so;
         // the full path sits in the location fold above.
         const sourceLine = _modelSourceLine(model);
         const installedVariants = Array.isArray(model.installed_variants) && model.installed_variants.length
-            ? `<div class="model-card-hint">${escapeHtml(appT('models.installedVariants', 'Installed variants'))}: ${escapeHtml(model.installed_variants.join(', '))}</div>`
+            ? `<div class="model-card-hint">${escapeHtml(window.I18n.joinLabel(appT('models.installedVariants', 'Installed variants'), model.installed_variants.join(', ')))}</div>`
             : '';
         const externalLinks = Array.isArray(model.external_links) ? model.external_links.map((link) => {
             // Defense in depth: only allow http(s) URLs in the model registry. Block javascript:, data:,

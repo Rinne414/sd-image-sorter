@@ -68,7 +68,7 @@ Object.assign(window.VLMCaption, {
                 return `${mark}${row.level}(${row.elapsed_ms || 0}ms)`;
             }).join(' ');
             const msg = data.status === 'ok'
-                ? `${this._t('vlmSettings.probeOk', 'Max stable concurrency')}: ${recommended}${detail ? ` — ${detail}` : ''}`
+                ? window.I18n.joinLabel(this._t('vlmSettings.probeOk', 'Max stable concurrency'), `${recommended}${detail ? ` — ${detail}` : ''}`)
                 : (data.message || this._t('vlmSettings.probeFailed', 'Probe did not find a stable level'));
             this._showStatus('vlm-status', msg, data.status === 'ok' ? 'success' : 'error');
         } catch (e) {

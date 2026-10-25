@@ -26,8 +26,13 @@ function load(file) {
 
 load(lang === 'zh-CN' ? 'lang/zh-CN.js' : 'lang/en.js');
 const table = sandbox.I18nLang_zhCN || sandbox.I18nLang_en;
+load('i18n.js');
+const realJoinLabel = sandbox.I18n.joinLabel;
 sandbox.I18n = {
   getLang: () => lang,
+  currentLang: lang,
+  // The real helper, so the label/value colon follows the real language rule.
+  joinLabel: realJoinLabel,
   // Fills {param} placeholders the way frontend/js/i18n.js does.
   t: (key, params) => {
     let text = Object.prototype.hasOwnProperty.call(table, key) ? table[key] : key;

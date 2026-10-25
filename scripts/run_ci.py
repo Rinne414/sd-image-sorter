@@ -316,14 +316,8 @@ def _run_ci(
             "frontend js syntax",
             [
                 sys.executable,
-                "-c",
-                (
-                    "import subprocess, sys; "
-                    "node = sys.argv[1]; files = sys.argv[2:]; "
-                    "failed = [path for path in files if subprocess.run([node, '--check', path]).returncode != 0]; "
-                    "print(f'Checked {len(files)} frontend JS files'); "
-                    "sys.exit(1 if failed else 0)"
-                ),
+                # node --check per classic script; ES modules are parsed as modules.
+                "scripts/check_frontend_js_syntax.py",
                 str(HOST_NODE_EXECUTABLE),
                 *[str(path) for path in FRONTEND_JS_FILES],
             ],

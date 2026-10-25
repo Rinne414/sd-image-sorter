@@ -99,7 +99,7 @@
             if (state === 'common') commonBtn.classList.add('active-common');
             commonBtn.textContent = '+';
             commonBtn.title = DM._t('dataset.vocabAddCommon', 'Add to Common tags');
-            commonBtn.setAttribute('aria-label', `${commonBtn.title}: ${it.tag}`);
+            commonBtn.setAttribute('aria-label', window.I18n.joinLabel(commonBtn.title, it.tag));
             commonBtn.addEventListener('click', () => setTagState(it.tag, state === 'common' ? null : 'common'));
             const blacklistBtn = document.createElement('button');
             blacklistBtn.type = 'button';
@@ -107,7 +107,7 @@
             if (state === 'blacklist') blacklistBtn.classList.add('active-blacklist');
             blacklistBtn.textContent = '-';
             blacklistBtn.title = DM._t('dataset.vocabAddBlacklist', 'Add to Blacklist');
-            blacklistBtn.setAttribute('aria-label', `${blacklistBtn.title}: ${it.tag}`);
+            blacklistBtn.setAttribute('aria-label', window.I18n.joinLabel(blacklistBtn.title, it.tag));
             blacklistBtn.addEventListener('click', () => setTagState(it.tag, state === 'blacklist' ? null : 'blacklist'));
             actions.append(commonBtn, blacklistBtn);
             node.append(lbl, c, actions);

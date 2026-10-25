@@ -253,7 +253,7 @@
                 chip.className = 'gsq-chip';
                 chip.textContent = part.op
                     ? `${keyLabel(part.key)} ${part.op} ${part.value}`
-                    : `${keyLabel(part.key)}: ${part.value}`;
+                    : window.I18n.joinLabel(keyLabel(part.key), part.value);
             }
             host.appendChild(chip);
         });
@@ -262,7 +262,7 @@
         if (free) {
             const chip = document.createElement('span');
             chip.className = 'gsq-chip gsq-chip-free';
-            chip.textContent = `${t('searchPreview.free', 'free text')}: ${free}`;
+            chip.textContent = window.I18n.joinLabel(t('searchPreview.free', 'free text'), free);
             host.appendChild(chip);
         }
 

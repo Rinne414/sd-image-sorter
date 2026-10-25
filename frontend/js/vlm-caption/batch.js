@@ -203,7 +203,7 @@ Object.assign(window.VLMCaption, {
             const parts = [
                 `${this._t('vlm.progressDone', 'Done')} ${completed}/${total || done}`,
                 `${this._t('vlm.progressFailed', 'Failed')} ${failed}`,
-                `${this._t('vlm.progressApi', 'API')}: ${this._formatApiStatus(data)}`,
+                window.I18n.joinLabel(this._t('vlm.progressApi', 'API'), this._formatApiStatus(data)),
             ];
             if (Number(data.tokens_used || 0) > 0) {
                 parts.push(`${data.tokens_used} tokens`);
@@ -219,7 +219,7 @@ Object.assign(window.VLMCaption, {
         this._showBatchUI(false, { keepPanel: true });
         this.lastProgress = data;
         this.lastFailedImageIds = this._extractFailedImageIds(data);
-        const msg = `${this._t('vlm.summaryDone', 'Done')}! ${data.completed || 0} ${this._t('vlm.summaryCaptioned', 'captioned')}, ${data.failed || 0} ${this._t('vlm.summaryFailed', 'failed')}, ${data.tokens_used || 0} tokens. ${this._t('vlm.progressApi', 'API')}: ${this._formatApiStatus(data)}`;
+        const msg = `${this._t('vlm.summaryDone', 'Done')}! ${data.completed || 0} ${this._t('vlm.summaryCaptioned', 'captioned')}, ${data.failed || 0} ${this._t('vlm.summaryFailed', 'failed')}, ${data.tokens_used || 0} tokens. ${window.I18n.joinLabel(this._t('vlm.progressApi', 'API'), this._formatApiStatus(data))}`;
         this._announceBatch(msg, data.failed ? 'warning' : 'success');
 
         this._syncRetryFailedButton(data);

@@ -260,7 +260,7 @@
                 const status = document.createElement('span');
                 status.className = 'media-censor-status';
                 status.textContent = item.status === 'error' && item.error
-                    ? `${this._statusLabel(item.status)}: ${item.error}`
+                    ? window.I18n.joinLabel(this._statusLabel(item.status), item.error)
                     : item.status === 'done'
                         ? this._t('mediaCensor.doneFrames', 'Done · {count} frame(s) censored', { count: item.censored_frames })
                         : this._statusLabel(item.status);

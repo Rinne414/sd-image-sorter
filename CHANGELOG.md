@@ -73,6 +73,9 @@ SD Image Sorter can now stay resident: the Windows package opens a desktop progr
 - **Library clicks on a filter you already have / 在「库」里点已有的筛选**: picking `blue_eyes` in the Library next to a typed `blue eyes` made a second chip for the same term, and clicking a tag, prompt, LoRA or checkpoint that was already a filter did nothing at all. Every way of adding a prompt filter now uses one spelling, and such a click closes the Library and says the value is already a filter.
   - 在「库」里点 `blue_eyes`，旁边已有手打的 `blue eyes` 时会多出一个同义的筛选；点一个已经在筛选里的标签、提示词、LoRA 或模型则毫无反应。现在加入提示词筛选的每条路都用同一种写法，这样的点击会关闭「库」并说明它已在筛选中。
 
+- **Chinese labels use the Chinese colon / 中文标签改用全角冒号**: about sixty places joined a label and its value with an English colon in code, so the Chinese interface showed lines such as `打标失败: …` and `自由文本: blue` beside the language pack's `：`. They now use `：` in Chinese (`打标失败：…`) and stay `Label: value` in English.
+  - 程序里大约六十处用英文冒号把标签和值拼在一起，中文界面因此出现 `打标失败: …`、`自由文本: blue` 这类写法，和语言包里的 `：` 不一致。现在中文用 `：`（`打标失败：…`），英文仍是 `Label: value`。
+
 ## [3.7.0] - 2026-10-17
 
 One program now serves two interfaces: the classic one stays the start page and Vopus, the second interface, is switched on in Settings. The database is copied before every upgrade, and libraries that Vopus 1.0.0 had upgraded are repaired. Moves, undo, exports and batch censoring always say how they ended. Letter shortcuts no longer swallow browser keys such as Ctrl+Shift+R, and the browser Back button goes up one level like Esc.

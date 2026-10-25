@@ -37,7 +37,7 @@ async function showRemoveBackgroundPreview() {
                         </select>
                     </div>
                     <div class="form-group">
-                        <label for="remove-bg-threshold">${censorT('censor.edgeThreshold', null, 'Edge Threshold')}: <span id="remove-bg-threshold-value">0.5</span></label>
+                        <label for="remove-bg-threshold">${window.I18n.joinLabel(censorT('censor.edgeThreshold', null, 'Edge Threshold'), '<span id="remove-bg-threshold-value">0.5</span>')}</label>
                         <input type="range" id="remove-bg-threshold" min="0" max="1" step="0.05" value="0.5" class="slider">
                         <small>${censorT('censor.edgeThresholdHint', null, 'Higher = stricter detection, lower = more permissive')}</small>
                     </div>

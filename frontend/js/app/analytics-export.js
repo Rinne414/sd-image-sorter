@@ -894,7 +894,7 @@ function _showExportValidationWarnings(validation) {
         return `${label} ×${w.count}${example}`;
     });
     showToast(
-        `${appT('exportValidation.title', 'Training-data check')}: ${parts.join(' · ')}`,
+        window.I18n.joinLabel(appT('exportValidation.title', 'Training-data check'), parts.join(' · ')),
         'warning',
         { duration: 12000 },
     );

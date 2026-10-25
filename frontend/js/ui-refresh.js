@@ -132,7 +132,7 @@
         _setSummaryStrongs: function (selector, keys) {
             var nodes = document.querySelectorAll(selector + ' strong');
             for (var i = 0; i < nodes.length && i < keys.length; i++) {
-                nodes[i].textContent = this._t(keys[i]) + ':';
+                nodes[i].textContent = window.I18n.labelColon(this._t(keys[i]));
             }
         },
 

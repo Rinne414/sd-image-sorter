@@ -260,7 +260,7 @@
                 const message = typeof detail === 'string'
                     ? detail
                     : (detail?.error || detail?.message || `HTTP ${r.status}`);
-                renderPreviewError(list, `${DM._t?.('dataset.exportPreviewFailed', 'Preview failed') || 'Preview failed'}: ${message}`);
+                renderPreviewError(list, window.I18n.joinLabel(DM._t?.('dataset.exportPreviewFailed', 'Preview failed') || 'Preview failed', message));
                 return;
             }
         } catch (e) {

@@ -155,7 +155,7 @@
                 : smartTagT('smartTag.errorImagePath', 'Image {id}').replace('{id}', () => errorSource))
             : smartTagT('smartTag.errorImage', 'Image');
         const errorSuffix = firstError
-            ? ` · ${errorLabel}: ${String(firstError.error)}`
+            ? ` · ${window.I18n.joinLabel(errorLabel, String(firstError.error))}`
             : '';
         const errorText = firstError ? String(firstError.error) : '';
         const failedErrorSuffix = firstError

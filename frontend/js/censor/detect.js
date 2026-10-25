@@ -804,7 +804,7 @@ async function detectAllImages() {
         } catch (e) {
             Logger.error('Detection error for', item.id, e);
             item.batchStatus = 'failed';
-            item.batchError = `${censorT('censor.detectFailed', null, 'Detection failed')}: ${e?.message || e || ''}`.trim();
+            item.batchError = window.I18n.joinLabel(censorT('censor.detectFailed', null, 'Detection failed'), e?.message || e || '').trim();
             failedCount += 1;
         }
     });
@@ -939,7 +939,7 @@ async function runSam3BatchRefine() {
                     refinedIds.delete(refined.image_id);
                     failedErrorById.set(
                         refined.image_id,
-                        `${censorT('censor.maskApplyFailed', null, 'Mask apply failed')}: ${maskErr?.message || ''}`.trim()
+                        window.I18n.joinLabel(censorT('censor.maskApplyFailed', null, 'Mask apply failed'), maskErr?.message || '').trim()
                     );
                 }
             }
@@ -949,7 +949,7 @@ async function runSam3BatchRefine() {
             if (!includedIds.has(item.id)) return;
             if (failedErrorById.has(item.id)) {
                 item.batchStatus = 'failed';
-                item.batchError = `${censorT('censor.sam3RefineFailed', null, 'SAM3 refine failed')}: ${failedErrorById.get(item.id)}`;
+                item.batchError = window.I18n.joinLabel(censorT('censor.sam3RefineFailed', null, 'SAM3 refine failed'), failedErrorById.get(item.id));
             }
         });
 
@@ -973,7 +973,7 @@ async function runSam3BatchRefine() {
         CensorState.queue.forEach((item) => {
             if (!includedIds.has(item.id)) return;
             item.batchStatus = 'failed';
-            item.batchError = `${censorT('censor.sam3BatchAborted', null, 'SAM3 batch aborted')}: ${e?.message || e || ''}`.trim();
+            item.batchError = window.I18n.joinLabel(censorT('censor.sam3BatchAborted', null, 'SAM3 batch aborted'), e?.message || e || '').trim();
         });
         renderQueue();
         showToast(

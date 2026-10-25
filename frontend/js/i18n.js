@@ -230,6 +230,26 @@
         },
 
         /**
+         * Join a translated label and a value. Chinese uses the full-width colon
+         * with no space (the language pack's house style), other languages "label: value".
+         * @param {string} label
+         * @param {*} value
+         * @returns {string}
+         */
+        joinLabel: function (label, value) {
+            return label + (String(this.currentLang).indexOf('zh') === 0 ? '\uFF1A' : ': ') + value;
+        },
+
+        /**
+         * A translated label with its colon, for a value that follows in its own element.
+         * @param {string} label
+         * @returns {string}
+         */
+        labelColon: function (label) {
+            return label + (String(this.currentLang).indexOf('zh') === 0 ? '\uFF1A' : ':');
+        },
+
+        /**
          * Get list of supported language codes.
          * @returns {string[]}
          */
