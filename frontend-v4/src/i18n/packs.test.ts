@@ -37,7 +37,7 @@ const PACKS = zhFiles.map((path) => {
 /** Real jargon a Chinese reader sees as it is. */
 const JARGON = new Set([
   // models, products, services
-  ...['LoRA', 'ONNX', 'WD14', 'WD', 'VLM', 'CLIP', 'CCIP', 'TIPO', 'ToriiGate', 'Ollama', 'Kaloscope', 'PixAI', 'Camie', 'kohya'],
+  ...['LoRA', 'ONNX', 'WD14', 'WD', 'VLM', 'CLIP', 'CCIP', 'TIPO', 'ToriiGate', 'Ollama', 'Kaloscope', 'PixAI', 'Camie', 'kohya', 'DINOv3'],
   ...['ComfyUI', 'NovelAI', 'NAI', 'Pixiv', 'Krea', 'Flux', 'FLUX', 'YOLO', 'SAM', 'SAM3', 'NudeNet', 'OppaiOracle', 'Anima', 'Danbooru'],
   ...['Booru', 'Civitai', 'GitHub', 'HuggingFace', 'ModelScope', 'NVIDIA', 'OpenAI', 'Gemini', 'Anthropic', 'Claude', 'Google', 'Vertex'],
   ...['OpenRouter', 'Qwen', 'JoyCaption', 'EVA02', 'SwinV2', 'ViT', 'U2Net', 'UNet', 'rembg', 'Lucida', 'LSNet', 'PyTorch', 'Python'],

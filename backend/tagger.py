@@ -28,7 +28,7 @@ from config import (
     TAGGER_USE_GPU,
     get_wd14_model_dir,
 )
-from gpu_headroom import decide_gpu, tagger_gpu_need_mb
+from gpu_headroom import decide_gpu, tagger_cuda_options, tagger_gpu_need_mb
 from ai_runtime_guard import (
     PRIORITY_NORMAL,
     claim_gpu_residency,
@@ -197,6 +197,7 @@ class WD14Tagger(
         self._pad_color: Tuple[int, int, int] = (255, 255, 255)
         self._metadata_format: str = "wd14_csv"
         self._resize_mode: str = "letterbox"
+        self._resize_resample: str = "bicubic"
         self._rating_fallback_mode: str = "none"
 
         # Session recreation counters (BSOD prevention for GPU mode)
@@ -204,6 +205,9 @@ class WD14Tagger(
         self._session_refresh_interval: int = 0
         self._learned_stable_gpu_batch_size: Optional[int] = None
         self._successful_gpu_batch_runs: int = 0
+        # Smallest GPU batch that ran out of memory on this session: the batch
+        # is never raised back to it (that would only fail and rebuild again).
+        self._gpu_oom_chunk_size: Optional[int] = None
 
     @staticmethod
     def _resolve_model_profile(model_name: str, model_path: Optional[str]) -> str:
@@ -270,7 +274,7 @@ class WD14Tagger(
         session = ort.InferenceSession(
             model_path,
             sess_options=sess_options,
-            providers=providers,
+            providers=self._providers_with_options(providers),
         )
         identity_after, sha256_after = model_file_snapshot(model_path)
         if (
@@ -283,6 +287,20 @@ class WD14Tagger(
         self._loaded_model_file_identity = identity_after
         self._loaded_model_file_sha256 = sha256_after
         return session
+
+    def _providers_with_options(self, providers: List[str]) -> List[Any]:
+        """Attach the memory limit of a memory-hungry model to its CUDA provider."""
+        options = (
+            tagger_cuda_options(self.model_name)
+            if "CUDAExecutionProvider" in providers
+            else None
+        )
+        if not options:
+            return providers
+        return [
+            (name, options) if name == "CUDAExecutionProvider" else name
+            for name in providers
+        ]
 
     def _create_session(
         self,
@@ -398,6 +416,9 @@ class WD14Tagger(
             model_config.get("metadata_format", "wd14_csv")
         ).lower()
         self._resize_mode = str(model_config.get("resize_mode", "letterbox")).lower()
+        self._resize_resample = str(
+            model_config.get("resize_resample", "bicubic")
+        ).lower()
         self._rating_fallback_mode = str(
             model_config.get("rating_fallback_mode", "none")
         ).lower()
@@ -497,6 +518,7 @@ class WD14Tagger(
         self.use_gpu = False
         self._learned_stable_gpu_batch_size = None
         self._successful_gpu_batch_runs = 0
+        self._gpu_oom_chunk_size = None
         self._refresh_session_metadata()
 
     def _run_true_batch_with_backoff(
@@ -575,6 +597,9 @@ class WD14Tagger(
                             preferred_chunk_size,
                             max(current_chunk_size + 1, current_chunk_size * 2),
                         )
+                        oom_size = getattr(self, "_gpu_oom_chunk_size", None)
+                        if oom_size:
+                            next_candidate = min(next_candidate, oom_size - 1)
                         if next_candidate > chunk_size:
                             chunk_size = next_candidate
                             raised_after_stable_runs = True
@@ -622,6 +647,10 @@ class WD14Tagger(
                     )
                     self._successful_gpu_batch_runs = 0
                     raised_after_stable_runs = False
+                    self._gpu_oom_chunk_size = min(
+                        current_chunk_size,
+                        getattr(self, "_gpu_oom_chunk_size", None) or current_chunk_size,
+                    )
                     self._recreate_session()
                     if retry_cooldown_seconds > 0:
                         time.sleep(retry_cooldown_seconds)

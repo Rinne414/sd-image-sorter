@@ -44,6 +44,16 @@ describe('tagger readiness', () => {
     expect(readiness(v1, wd14(['wd-swinv2-tagger-v3']))).toBe('download')
   })
 
+  test('DanbooruTagQuery B/16 and L/16 sit on the WD14 card with their sizes and are not the default pick', () => {
+    expect(taggerInfo('danbooru-tag-query-b16')).toMatchObject({
+      label: 'DanbooruTagQuery B/16', note: 'tagger.note.dtqB16', card: 'wd14', variant: 'danbooru-tag-query-b16', sizeHint: '370 MB',
+    })
+    expect(taggerInfo('danbooru-tag-query-l16')).toMatchObject({
+      label: 'DanbooruTagQuery L/16', note: 'tagger.note.dtqL16', card: 'wd14', variant: 'danbooru-tag-query-l16', sizeHint: '1.2 GB',
+    })
+    expect(taggerInfo('danbooru-tag-query-b16').familyPick).toBeUndefined()
+  })
+
   test('captioners are not offered as taggers', () => {
     expect(isTagger('toriigate-0.5')).toBe(false)
     expect(isTagger('wd-swinv2-tagger-v3')).toBe(true)

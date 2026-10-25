@@ -26,7 +26,13 @@ _PIXAI_V1_RATINGS = {
     "rating:q": "questionable",
     "rating:e": "explicit",
 }
-_JSON_METADATA_FORMATS = {"camie_v2", "pixai_v1"}
+# DanbooruTagQuery (realphongha/danbooru-tag-query, issue #20) ships its
+# vocabulary as two files: tag_to_id.json (tag -> output index) and, beside it,
+# tag_category.json (tag -> danbooru category code). Codes follow
+# selected_tags.csv: 0 general, 1 artist, 3 copyright, 4 character, 5 meta.
+DTQ_CATEGORY_FILE = "tag_category.json"
+_DTQ_GENERAL_OVERRIDES = {1: "artist", 5: "meta"}
+_JSON_METADATA_FORMATS = {"camie_v2", "pixai_v1", "dtq_json"}
 
 
 class _TagTableMixin:
@@ -103,6 +109,8 @@ class _TagTableMixin:
                 candidate_names.extend(
                     ["camie-tagger-v2-metadata.json", "metadata.json"]
                 )
+            elif metadata_format == "dtq_json":
+                candidate_names.append("tag_to_id.json")
             else:
                 candidate_names.append("selected_tags.csv")
 
@@ -148,6 +156,10 @@ class _TagTableMixin:
 
         if self._metadata_format == "pixai_v1":
             self._load_pixai_v1_tags(tags_path)
+            return
+
+        if self._metadata_format == "dtq_json":
+            self._load_dtq_tags(tags_path)
             return
 
         if self._metadata_format == "camie_v2" or tags_path.lower().endswith(".json"):
@@ -264,3 +276,51 @@ class _TagTableMixin:
                 f"PixAI tag file {tags_path} has {len(self.tags)} tags; the model "
                 f"expects {expected_total}."
             )
+
+    def _load_dtq_tags(self, tags_path: str) -> None:
+        """Load DanbooruTagQuery's ``tag_to_id.json`` and the categories beside it.
+
+        Model index = the id in ``tag_to_id.json``. The ids must be exactly
+        0..N-1: a gap or a repeat would shift every tag after it, so such a file
+        is rejected instead of tagging pictures with the wrong names.
+        """
+        with open(tags_path, "r", encoding="utf-8") as f:
+            tag_to_id = json.load(f)
+        category_path = os.path.join(os.path.dirname(tags_path), DTQ_CATEGORY_FILE)
+        if not os.path.exists(category_path):
+            raise ValueError(
+                f"{DTQ_CATEGORY_FILE} is missing beside {tags_path}; "
+                f"{self.model_name} needs it to tell characters from general tags."
+            )
+        with open(category_path, "r", encoding="utf-8") as f:
+            categories = json.load(f)
+        if not isinstance(tag_to_id, dict) or not isinstance(categories, dict):
+            raise ValueError(
+                f"{tags_path} and {DTQ_CATEGORY_FILE} must each map tag names to "
+                "numbers; one of them has another layout."
+            )
+        try:
+            ordered = sorted((int(index), str(tag)) for tag, index in tag_to_id.items())
+            codes = {str(tag): int(code or 0) for tag, code in categories.items()}
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"{tags_path} or {DTQ_CATEGORY_FILE} holds a value that is not a number."
+            ) from exc
+        if [index for index, _ in ordered] != list(range(len(ordered))):
+            raise ValueError(
+                f"Tag file {tags_path} does not number its {len(ordered)} tags 0 to "
+                f"{len(ordered) - 1}, so its tags cannot be matched to the model output."
+            )
+        for tag_idx, tag_name in ordered:
+            self.tags.append(tag_name)
+            code = codes.get(tag_name, 0)
+            if code == 3:
+                self.copyright_tags.append((tag_idx, tag_name))
+            elif code == 4:
+                self.character_tags.append((tag_idx, tag_name))
+            else:
+                self.general_tags.append((tag_idx, tag_name))
+                if code in _DTQ_GENERAL_OVERRIDES:
+                    self._general_category_overrides[tag_name] = (
+                        _DTQ_GENERAL_OVERRIDES[code]
+                    )

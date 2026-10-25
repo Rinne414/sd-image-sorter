@@ -102,18 +102,20 @@ function prepareSpecForTagger(modelName) {
             confirmBytes: 2.7 * 1024 * 1024 * 1024,
         };
     }
-    // Download sizes of the WD14-card models larger than the ~446 MB default.
-    const largeWd14Gb = {
-        'wd-eva02-large-tagger-v3': 1.2,
-        'pixai-tagger-v0.9': 1.2,
-        'pixai-tagger-v1.0': 2.0,
-    }[name];
+    // Download sizes of the WD14-card models that differ from the ~446 MB default.
+    const wd14DownloadMb = {
+        'wd-eva02-large-tagger-v3': 1.2 * 1024,
+        'pixai-tagger-v0.9': 1.2 * 1024,
+        'pixai-tagger-v1.0': 2.0 * 1024,
+        'danbooru-tag-query-b16': 370,
+        'danbooru-tag-query-l16': 1.2 * 1024,
+    }[name] || 446;
     return {
         modelId: 'wd14',
         variant: name,
         label: name,
-        sizeHint: largeWd14Gb ? `~${largeWd14Gb} GB` : '~446 MB',
-        confirmBytes: (largeWd14Gb ? largeWd14Gb * 1024 : 446) * 1024 * 1024,
+        sizeHint: wd14DownloadMb >= 1024 ? `~${Number((wd14DownloadMb / 1024).toFixed(1))} GB` : `~${wd14DownloadMb} MB`,
+        confirmBytes: wd14DownloadMb * 1024 * 1024,
     };
 }
 

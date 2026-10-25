@@ -207,6 +207,8 @@ export const zhCN = {
   'tagger.note.pixai': '找到的标签最多，但会很有把握地标错；用来训练前请检查',
   'tagger.note.oppai': '动漫插画的普通标签最准；分级偏松，别单靠它判断分级',
   'tagger.note.cl': '新词表的可选打标器；用来训练前请检查',
+  'tagger.note.dtqB16': '基于 DINOv3；体积和 SwinV2 相当，还会标出作品名和更新的角色',
+  'tagger.note.dtqL16': '基于 DINOv3；和 EVA02 一样准，多了作品名，速度更快',
   'tagger.note.custom': '自定义模型',
 
   'tagedit.title': '改 {n} 张图的标签',

@@ -207,6 +207,109 @@ TAGGER_MODELS: dict = {
         "default_max_tags_per_image": 80,
         "supports_rating": True,
     },
+    # DanbooruTagQuery (realphongha, issue #20): DINOv3 ViT backbone with a
+    # cross-attention tag-query head, trained on danbooru2025 metadata (posts
+    # up to 2025, tags seen at least 100 times). 11,424 tags: general,
+    # character and copyright; no rating head, so the rating is derived from
+    # the tags. ONNX: pixel_values [B, 3, 448, 448] -> raw logits [B, 11424].
+    # Official preprocessing (deploy/danbooru_deploy/core.py): fit inside
+    # 448 x 448 on black, /255, ImageNet mean/std. The tag names keep their
+    # danbooru underscores. Weights are under Meta's DINOv3 License.
+    "danbooru-tag-query-b16": {
+        "writer_family": "danbooru_tag_query",
+        "repo_id": "realphongha/danbooru-tag-query",
+        "revision": "d2f8da27a23db4adf95c3e663af183b92784ad3e",
+        "model_file": "models/DanbooruTagQuery_b16_448x448/model.onnx",
+        "tags_file": "models/DanbooruTagQuery_b16_448x448/tag_to_id.json",
+        "external_data_files": ["models/DanbooruTagQuery_b16_448x448/tag_category.json"],
+        "size_bytes": 387_406_778,
+        "sha256": "aef21a2a04605ba1b059e6a14471dbc6fec7589753afb92f352336ef60caa987",
+        "tags_sha256": "00959521d85ff61574d6cd35ac909dc67cf68cb65ba6267cf27ff64785ee5935",
+        "external_data_pins": {
+            "models/DanbooruTagQuery_b16_448x448/tag_category.json": {
+                "size_bytes": 246_458,
+                "sha256": "32490933a3054325a6c9d941123fc5ace3fe1f535826756083ce201ef243b396",
+            },
+        },
+        # Working memory per picture. The tag-query head attends 11,424
+        # queries to every image patch. Measured 2026-10-25: 653 MB on CPU
+        # (batch 1 vs 4; SwinV2 ~110 MB); on the GPU B/16 fit one picture but
+        # not two under a 1.5 GB arena, so up to ~1.1 GB. Batches are sized
+        # from this and the free memory (hardware_monitor.memory_bound_batch),
+        # and the CUDA session gets a hard memory limit
+        # (gpu_headroom.tagger_cuda_options), not the 448 px WD caps.
+        "activation_mb_per_image": 1100,
+        "runtime_safety_tier": "balanced",
+        "metadata_format": "dtq_json",
+        "input_layout": "nchw",
+        "input_normalization": "imagenet",
+        "resize_mode": "letterbox",
+        # Official preprocessing resizes with BILINEAR; the default BICUBIC
+        # letterbox changed 7% of tags (Jaccard 0.933 on 60 real images).
+        "resize_resample": "bilinear",
+        "pad_color": [0, 0, 0],
+        "image_size": 448,
+        "output_index": 0,
+        "output_activation": "sigmoid",
+        # Measured on 240 of the owner's own pictures against their prompts
+        # (2026-10-25): at 0.35 it gives about as many tags as SwinV2 at its
+        # default (median 36 vs 37). Character recall is flat from 0.20 to
+        # 0.70 while precision rises, so characters sit higher. Series tags
+        # stay at the general threshold: Mass Tag and single-picture tagging
+        # pass no separate series threshold (it follows the general one), and
+        # 0.35 found 80 of 116 prompt series. The model card's 0.20 is its
+        # best macro-F1 on danbooru labels; here it gave 48 tags per picture.
+        "default_threshold": 0.35,
+        "default_character_threshold": 0.60,
+        "default_copyright_threshold": 0.35,
+        "default_max_tags_per_image": 60,
+        "supports_rating": False,
+        "rating_fallback_mode": "derive_from_tags",
+    },
+    "danbooru-tag-query-l16": {
+        "writer_family": "danbooru_tag_query",
+        "repo_id": "realphongha/danbooru-tag-query",
+        "revision": "d2f8da27a23db4adf95c3e663af183b92784ad3e",
+        "model_file": "models/DanbooruTagQuery_l16_448x448/model.onnx",
+        "tags_file": "models/DanbooruTagQuery_l16_448x448/tag_to_id.json",
+        "external_data_files": ["models/DanbooruTagQuery_l16_448x448/tag_category.json"],
+        "size_bytes": 1_276_459_645,
+        "sha256": "728ba1d2d8838c03b6e868b4d769c9de01f8ec76433748ed29962983c4dc3652",
+        "tags_sha256": "00959521d85ff61574d6cd35ac909dc67cf68cb65ba6267cf27ff64785ee5935",
+        "external_data_pins": {
+            "models/DanbooruTagQuery_l16_448x448/tag_category.json": {
+                "size_bytes": 246_458,
+                "sha256": "32490933a3054325a6c9d941123fc5ace3fe1f535826756083ce201ef243b396",
+            },
+        },
+        # Working memory per picture. Measured 2026-10-25: 600 MB on CPU
+        # (batch 1 vs 4). The GPU figure is not measured (the PC crashed during
+        # that test); the head has 16 attention heads to B/16's 12, so B/16's
+        # ~1.1 GB GPU bound is scaled to 1400 MB. Batches are sized from this,
+        # the weights and the free memory, and the CUDA session gets a hard
+        # memory limit, so a low estimate only costs a halved batch.
+        "activation_mb_per_image": 1400,
+        "runtime_safety_tier": "heavy",
+        "metadata_format": "dtq_json",
+        "input_layout": "nchw",
+        "input_normalization": "imagenet",
+        "resize_mode": "letterbox",
+        # Official preprocessing resizes with BILINEAR; the default BICUBIC
+        # letterbox changed 7% of tags (Jaccard 0.933 on 60 real images).
+        "resize_resample": "bilinear",
+        "pad_color": [0, 0, 0],
+        "image_size": 448,
+        "output_index": 0,
+        "output_activation": "sigmoid",
+        # Same measurement as B/16: at 0.35 a median of 35 tags per picture
+        # (EVA02 at its 0.35 default: 46) with better prompt precision.
+        "default_threshold": 0.35,
+        "default_character_threshold": 0.60,
+        "default_copyright_threshold": 0.35,
+        "default_max_tags_per_image": 60,
+        "supports_rating": False,
+        "rating_fallback_mode": "derive_from_tags",
+    },
     "toriigate-0.5": {
         "repo_id": "Minthy/ToriiGate-0.5",
         # ToriiGate downloads via snapshot_download in toriigate_tagger.py

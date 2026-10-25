@@ -817,6 +817,8 @@ def test_digest_cache_prevents_rehashing_unchanged_files(comfy, tmp_path, monkey
         ("camie-tagger-v2", 788_983_561, "ab0aaf25", "de9f962e"),
         (PIXAI09, 1_271_365_854, "a8d47909", "76b5dd39"),
         ("pixai-tagger-v1.0", 2_633_225, "563f4576", "0d34f207"),
+        ("danbooru-tag-query-b16", 387_406_778, "aef21a2a", "00959521"),
+        ("danbooru-tag-query-l16", 1_276_459_645, "728ba1d2", "00959521"),
     ],
 )
 def test_tagger_catalog_size_and_sha_pins(variant, size_bytes, sha_prefix, tags_prefix):
@@ -832,6 +834,17 @@ def test_pixai_v1_external_data_pin():
     pins = TAGGER_MODELS["pixai-tagger-v1.0"]["external_data_pins"]
     assert pins["model.onnx.data"]["size_bytes"] == 1_955_123_200
     assert pins["model.onnx.data"]["sha256"].startswith("4de1c25a")
+
+
+def test_danbooru_tag_query_category_file_pin():
+    for variant, sub in (
+        ("danbooru-tag-query-b16", "DanbooruTagQuery_b16_448x448"),
+        ("danbooru-tag-query-l16", "DanbooruTagQuery_l16_448x448"),
+    ):
+        pins = TAGGER_MODELS[variant]["external_data_pins"]
+        pin = pins[f"models/{sub}/tag_category.json"]
+        assert pin["size_bytes"] == 246_458
+        assert pin["sha256"].startswith("32490933")
 
 
 def test_oppai_oracle_carries_no_external_pins():

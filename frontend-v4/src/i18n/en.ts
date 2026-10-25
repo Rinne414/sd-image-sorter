@@ -207,6 +207,8 @@ export const en: Record<MessageKey, string> = {
   'tagger.note.pixai': 'Finds the most tags but is confidently wrong at times; review before training',
   'tagger.note.oppai': 'Best general tags on anime art; ratings run loose, do not rely on it alone for ratings',
   'tagger.note.cl': 'Optional tagger with a new vocabulary; review before training',
+  'tagger.note.dtqB16': 'Built with DINOv3; SwinV2 size, and it also names the series and newer characters',
+  'tagger.note.dtqL16': 'Built with DINOv3; EVA02-level tags plus series names, faster than EVA02',
   'tagger.note.custom': 'Custom model',
 
   'tagedit.title': 'Edit tags on {n} images',

@@ -366,6 +366,42 @@ def _collect_system_info() -> Dict[str, Any]:
 # keep the 448 px cap rather than a larger one. Decision D46.
 BATCH_CAP_REFERENCE_SIZE = 448
 
+# Share of the free GPU memory / free RAM one batch may use when a model states
+# its working memory per picture (``activation_mb_per_image``). The rest stays
+# for the session's weights, other programs and fragmentation.
+GPU_BATCH_MEMORY_SHARE = 0.5
+CPU_BATCH_MEMORY_SHARE = 0.25
+
+
+def memory_bound_batch(
+    batch_size: int,
+    per_image_mb: Any,
+    free_mb: Optional[float],
+    share: float,
+    weights_mb: float = 0.0,
+) -> int:
+    """Clamp ``batch_size`` so weights plus the batch fit in ``share`` of ``free_mb``.
+
+    Models whose working memory per picture is far above the 448 px WD models
+    the caps were tuned on (DanbooruTagQuery: ~0.65-1.1 GB vs ~0.11 GB) state it
+    in the registry; without the figure or the free memory the batch is
+    unchanged. The result is never below 1.
+    """
+    try:
+        per_image = float(per_image_mb or 0)
+    except (TypeError, ValueError):
+        per_image = 0.0
+    if per_image <= 0 or not free_mb:
+        return batch_size
+    budget = float(free_mb) * share - max(0.0, float(weights_mb or 0))
+    return max(1, min(batch_size, int(budget // per_image)))
+
+
+def _model_weights_mb(model_config: Dict[str, Any]) -> float:
+    from gpu_headroom import model_weights_mb
+
+    return model_weights_mb(model_config)
+
 
 def gpu_input_area_scale(model_config: Dict[str, Any]) -> float:
     """Factor (<= 1) applied to GPU batch caps for the model's input size."""
@@ -507,6 +543,13 @@ def recommend_tagger_config(
         batch_size = max(
             1, int(apply_gpu_model_cap(batch_size) * gpu_input_area_scale(model_config))
         )
+        batch_size = memory_bound_batch(
+            batch_size,
+            model_config.get("activation_mb_per_image"),
+            available_vram_mb if available_vram_mb is not None else vram_mb,
+            GPU_BATCH_MEMORY_SHARE,
+            weights_mb=_model_weights_mb(model_config),
+        )
     else:
         # CPU / fallback runtimes: keep memory-pressure clamps, but do not waste
         # modern 32-64GB desktops with tiny queue chunks during huge library runs.
@@ -525,6 +568,13 @@ def recommend_tagger_config(
         if total_ram_gb >= 24 and available_ram_gb >= 4:
             batch_size = max(batch_size, 8)
         batch_size = max(1, apply_cpu_model_cap(batch_size))
+        batch_size = memory_bound_batch(
+            batch_size,
+            model_config.get("activation_mb_per_image"),
+            float(available_ram_gb) * 1024 if available_ram_gb else None,
+            CPU_BATCH_MEMORY_SHARE,
+            weights_mb=_model_weights_mb(model_config),
+        )
 
     session_refresh_interval = 0
 

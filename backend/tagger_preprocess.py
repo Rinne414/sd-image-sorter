@@ -135,8 +135,16 @@ class _PreprocessMixin:
             )
             new_size = (int(old_size[0] * ratio), int(old_size[1] * ratio))
             # P2-13a: BICUBIC matches the official wd14 letterbox resample
-            # (LANCZOS produced slightly different tag confidences).
-            resized_image = image.resize(new_size, Image.Resampling.BICUBIC)
+            # (LANCZOS produced slightly different tag confidences). A model
+            # trained on bilinear resizes asks for it: DanbooruTagQuery's
+            # official preprocessing is BILINEAR, and BICUBIC changed 7% of
+            # its tags (issue #20).
+            resample = (
+                Image.Resampling.BILINEAR
+                if getattr(self, "_resize_resample", "bicubic") == "bilinear"
+                else Image.Resampling.BICUBIC
+            )
+            resized_image = image.resize(new_size, resample)
             processed_image = Image.new("RGB", (width, height), self._pad_color)
             paste_pos = ((width - new_size[0]) // 2, (height - new_size[1]) // 2)
             processed_image.paste(resized_image, paste_pos)

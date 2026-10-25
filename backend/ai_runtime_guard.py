@@ -925,5 +925,7 @@ def looks_like_cuda_oom(exc: BaseException) -> bool:
             "cudnn_status_alloc_failed",
             "failed to allocate memory",
             "out of memory",
+            # ONNX Runtime's arena at its gpu_mem_limit (gpu_headroom.tagger_cuda_options).
+            "is smaller than requested bytes",
         )
     )

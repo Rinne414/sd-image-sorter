@@ -34,6 +34,9 @@ const CATALOG: Record<string, TaggerInfo> = {
     sizeHint: '2 GB',
     familyPick: 'tagging.pixaiPick',
   },
+  // Issue #20: DINOv3 taggers trained on 2025 danbooru data, same runtime as WD.
+  'danbooru-tag-query-b16': WD('DanbooruTagQuery B/16', 'tagger.note.dtqB16', '370 MB'),
+  'danbooru-tag-query-l16': WD('DanbooruTagQuery L/16', 'tagger.note.dtqL16', '1.2 GB'),
   'oppai-oracle-v1.1': { label: 'OppaiOracle v1.1', note: 'tagger.note.oppai', card: 'oppai-oracle', variant: null, sizeHint: '947 MB' },
   'cl-tagger-v2': { label: 'CL Tagger v2', note: 'tagger.note.cl', card: 'cl-tagger-v2', variant: null, sizeHint: '2.7 GB' },
 }

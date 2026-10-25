@@ -59,6 +59,10 @@ const TAGGER_MODEL_ALIASES = {
     'pixai': 'pixai-tagger-v0.9',
     'pixai v1': 'pixai-tagger-v1.0',
     'pixai v1.0': 'pixai-tagger-v1.0',
+    'dtq': 'danbooru-tag-query-b16',
+    'danbooru tag query': 'danbooru-tag-query-b16',
+    'dtq b16': 'danbooru-tag-query-b16',
+    'dtq l16': 'danbooru-tag-query-l16',
 };
 
 const TAGGER_MODEL_I18N_PREFIXES = {
@@ -70,6 +74,8 @@ const TAGGER_MODEL_I18N_PREFIXES = {
     'camie-tagger-v2': 'tagger.model.camieV2',
     'pixai-tagger-v0.9': 'tagger.model.pixaiV09',
     'pixai-tagger-v1.0': 'tagger.model.pixaiV10',
+    'danbooru-tag-query-b16': 'tagger.model.dtqB16',
+    'danbooru-tag-query-l16': 'tagger.model.dtqL16',
     'toriigate-0.5': 'tagger.model.toriigate05',
 };
 

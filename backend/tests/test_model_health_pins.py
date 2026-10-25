@@ -682,7 +682,13 @@ def test_health_wd14_installed_models_lists_wd14_runtime_models_only(
         and not config.get("captioner_only")
     }
 
-    assert {"camie-tagger-v2", "pixai-tagger-v0.9", "pixai-tagger-v1.0"} <= wd14_names
+    assert {
+        "camie-tagger-v2",
+        "pixai-tagger-v0.9",
+        "pixai-tagger-v1.0",
+        "danbooru-tag-query-b16",
+        "danbooru-tag-query-l16",
+    } <= wd14_names
     assert not {"oppai-oracle-v1.1", "cl-tagger-v2", "toriigate-0.5"} & wd14_names
 
     assert isinstance(wd14["installed_models"], list)

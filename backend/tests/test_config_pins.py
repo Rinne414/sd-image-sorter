@@ -527,6 +527,8 @@ class TestTaggerModelsCatalog:
             "camie-tagger-v2",
             "pixai-tagger-v0.9",
             "pixai-tagger-v1.0",
+            "danbooru-tag-query-b16",
+            "danbooru-tag-query-l16",
             "toriigate-0.5",
             "oppai-oracle-v1.1",
             "cl-tagger-v2",
