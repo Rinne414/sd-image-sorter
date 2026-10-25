@@ -302,6 +302,12 @@ const API = {
         return this.post('/api/images/count', buildSelectionFilterRequest(filters), options);
     },
 
+    // The generator tabs: images per generator under a filter payload
+    // (its generator lists are ignored). Returns {counts, total, exact}.
+    async countImagesByGenerator(request, options = {}) {
+        return this.post('/api/images/generator-counts', request, options);
+    },
+
     async createSelectionToken(filters = {}, chunkSize = FILTERED_SELECTION_CHUNK_SIZE, options = {}) {
         const payload = {
             ...buildSelectionFilterRequest(filters),

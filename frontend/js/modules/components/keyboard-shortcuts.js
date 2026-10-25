@@ -14,6 +14,11 @@ const KeyboardShortcutsPanel = (function () {
             { key: 'F', descKey: 'shortcuts.gallery.filters', fallback: 'Open the filter editor.' },
             { key: 'G / L / W', descKey: 'shortcuts.gallery.views', fallback: 'Grid, large or waterfall view.' },
             { key: 'R', descKey: 'shortcuts.gallery.random', fallback: 'Show a random image.' },
+            { key: '[ / ]', descKey: 'shortcuts.gallery.thumbSize', fallback: 'Smaller or larger thumbnails.' },
+            { key: 'Delete', descKey: 'shortcuts.gallery.remove', fallback: 'Remove the selected images from the gallery (the files stay on disk).' },
+            { key: 'Ctrl+V', descKey: 'shortcuts.gallery.paste', fallback: 'Save a copied picture or picture address into collected/<date>.' },
+            { key: 'Space / K', descKey: 'shortcuts.gallery.videoPlay', fallback: 'Play or pause the video in the preview.' },
+            { key: ', / .', descKey: 'shortcuts.gallery.videoStep', fallback: 'Step the video one frame back or forward.' },
         ],
         manual: [
             { key: 'W/A/S/D', descKey: 'shortcuts.manual.move', fallback: 'Send the image to one of the four folders.' },
@@ -57,12 +62,21 @@ const KeyboardShortcutsPanel = (function () {
         return `${label.icon} ${t(label.key, label.fallback)}`;
     }
 
+    // Keys and descriptions are text (", / .", "collected/<date>"), not markup.
+    function escapeText(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
     function renderPanel(panel) {
         let bodyHtml = '';
         for (const [section, items] of Object.entries(SHORTCUTS)) {
             bodyHtml += `<div class="shortcuts-group"><h4 class="shortcuts-group-title">${getSectionLabel(section)}</h4><ul class="shortcuts-list">`;
             bodyHtml += items.map((shortcut) => (
-                `<li class="shortcut-item"><span class="shortcut-key">${shortcut.key}</span><span class="shortcut-description">${t(shortcut.descKey, shortcut.fallback)}</span></li>`
+                `<li class="shortcut-item"><span class="shortcut-key">${escapeText(shortcut.key)}</span><span class="shortcut-description">${escapeText(t(shortcut.descKey, shortcut.fallback))}</span></li>`
             )).join('');
             bodyHtml += '</ul></div>';
         }

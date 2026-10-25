@@ -1375,7 +1375,7 @@ def test_metadata_resolving_chip_is_driven_by_stats_contract():
     assert "gallery.metadataResolving" in source
     assert "gallery.scanResolving" in source
     assert (
-        "countEl.textContent = countsResolving && count === 0 ? '…' : String(count);"
+        "countEl.textContent = resolving && count === 0 ? '…' : String(count);"
         in source
     )
 

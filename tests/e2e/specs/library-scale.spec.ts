@@ -394,3 +394,36 @@ test('library search failure replaces results with an actionable error state', a
   await expect(page.locator('#library-stats-text')).toContainText('search index unavailable')
   await expect(page.locator('#library-content .library-tag')).toHaveCount(0)
 })
+
+test('a Library prompt that is already a filter in another spelling adds no second chip', async ({ page }) => {
+  // "blue_eyes" from the Library next to a typed "blue eyes" made two chips
+  // for one term (2026-10-26); every way of adding a prompt filter now stores
+  // the same normalized spelling.
+  await page.route('**/api/tags/library**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ tags: [{ tag: 'some_tag', count: 1 }], total: 1 }),
+  }))
+  await page.route('**/api/prompts/library**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ prompts: [{ prompt: 'Blue_Eyes', count: 3 }, { prompt: 'long_hair', count: 2 }], total: 2 }),
+  }))
+  await gotoGallery(page)
+  await page.evaluate(() => {
+    const app = (window as any).App
+    app.AppState.filters.prompts = ['blue eyes']
+  })
+  await page.locator('#btn-tags-library').click()
+  await page.locator('#library-tab-prompts').click()
+  await page.locator('#library-content .library-tag[data-prompt="Blue_Eyes"]').click()
+  expect(await page.evaluate(() => (window as any).App.AppState.filters.prompts)).toEqual(['blue eyes'])
+  // The click is not a dead one: it closes the Library and says why nothing was added.
+  await expect(page.locator('#tags-library-modal')).not.toHaveClass(/visible/)
+  await expect(page.locator('.toast', { hasText: '"blue eyes" is already a filter' })).toBeVisible()
+
+  await page.locator('#btn-tags-library').click()
+  await page.locator('#library-tab-prompts').click()
+  await page.locator('#library-content .library-tag[data-prompt="long_hair"]').click()
+  expect(await page.evaluate(() => (window as any).App.AppState.filters.prompts)).toEqual(['blue eyes', 'long hair'])
+})

@@ -82,6 +82,7 @@ from routers.images_parts.models import (
     ExportSelectionRequest,
     ExportSelectionResponse,
     FilteredImageCountResponse,
+    GeneratorCountsResponse,
     OpenFolderRequest,
     ReconnectMissingFilesRequest,
     RemoveSelectedImagesRequest,

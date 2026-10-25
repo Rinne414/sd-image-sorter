@@ -66,6 +66,13 @@ function normalizeMediaTypeFilter(value) {
     return text === 'image' || text === 'video' ? text : '';
 }
 
+// One spelling per prompt filter chip: "Blue_Eyes" and "blue eyes" are the
+// same term (the backend matches them alike), so every way of adding one
+// stores and compares this form.
+function normalizePromptFilterTerm(value) {
+    return String(value || '').toLowerCase().replace(/_/g, ' ').trim();
+}
+
 function normalizePromptMatchMode(value) {
     const text = String(value || '').trim().toLowerCase();
     return VALID_PROMPT_MATCH_MODES.has(text) ? text : 'exact';

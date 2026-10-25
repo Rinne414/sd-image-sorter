@@ -35,52 +35,29 @@ async function loadStats() {
             ? Number(stats.total_images)
             : totalCount;
 
-        // Update generator tab counts
-        const countAll = $('#count-all');
-        if (countAll) countAll.textContent = reportedTotal;
+        // Stored before the tabs render: they and the image-count label read
+        // the library numbers from here.
+        AppState.analytics = {
+            checkpoints: stats.checkpoints || [],
+            loras: stats.loras || [],
+            top_tags: stats.top_tags || [],
+            generatorCounts: genCounts,
+            totalImages: reportedTotal,
+            metadataPending,
+            metadataStatus: stats.metadata_status || stats.metadata_status_counts || {},
+            countsResolving,
+            scanStatus,
+            scanLibraryReady
+        };
+
         // The image-count label renders "shown / library total" off this very
         // number, and stats can land after the gallery load — re-render it so
         // the pair never disagrees just because of arrival order.
         if (typeof applyGalleryCountLabel === 'function' && !AppState.isLoading) {
             applyGalleryCountLabel();
         }
-
-        ['nai', 'comfyui', 'forge', 'webui', 'unknown'].forEach(gen => {
-            const countEl = $(`#count-${gen}`);
-            if (countEl) {
-                const count = genCounts[gen] || 0;
-                countEl.textContent = countsResolving && count === 0 ? '…' : String(count);
-                countEl.title = countsResolving
-                    ? appT('gallery.metadataResolvingTitle', 'Generator counts are still resolving while metadata is being read or scan import is still running.')
-                    : '';
-            }
-        });
-
-        // The "Others" tab bundles every uncommon generator (Fooocus,
-        // reForge, Gemini, gpt-image, ...) — its count must reflect the
-        // sum so the badge matches the gallery once the user clicks it.
-        const othersCount = OTHERS_GENERATOR_BUNDLE.reduce(
-            (sum, gen) => sum + (genCounts[gen] || 0),
-            0
-        );
-        const countOthersEl = $('#count-others');
-        const othersTab = $('.gen-tab[data-gen="others"]');
-        const activeOtherGenerators = OTHERS_GENERATOR_BUNDLE
-            .filter((gen) => (genCounts[gen] || 0) > 0)
-            .map((gen) => `${formatGeneratorLabel(gen)} (${genCounts[gen]})`);
-        const othersHint = activeOtherGenerators.length > 0
-            ? appT('generator.othersActiveHint', 'Grouped generators: {generators}', {
-                generators: activeOtherGenerators.join(', '),
-            }).replace('{generators}', activeOtherGenerators.join(', '))
-            : appT('generator.othersHint', 'Groups uncommon generators');
-        if (countOthersEl) {
-            countOthersEl.textContent = countsResolving && othersCount === 0 ? '…' : String(othersCount);
-            countOthersEl.title = countsResolving
-                ? appT('gallery.metadataResolvingTitle', 'Generator counts are still resolving while metadata is being read or scan import is still running.')
-                : othersHint;
-        }
-        if (othersTab) othersTab.title = othersHint;
-        syncGeneratorRailOverflow();
+        // A tagging run or import changes the counts under the filters too.
+        refreshGeneratorTabCounts({ force: true });
 
         const metadataChip = $('#metadata-status-chip');
         // The chip sits above the grid and comes and goes with metadata
@@ -115,25 +92,122 @@ async function loadStats() {
             AppState.githubUrl = stats.github_url || '';
         }
 
-        // Store analytics for later use
-        AppState.analytics = {
-            checkpoints: stats.checkpoints || [],
-            loras: stats.loras || [],
-            top_tags: stats.top_tags || [],
-            generatorCounts: genCounts,
-            totalImages: reportedTotal,
-            metadataPending,
-            metadataStatus: stats.metadata_status || stats.metadata_status_counts || {},
-            countsResolving,
-            scanStatus,
-            scanLibraryReady
-        };
-
         // Update model filters summary UI
         updateModelSelectionSummaries();
 
     } catch (error) {
         Logger.error('Failed to load stats:', error);
+    }
+}
+
+const GENERATOR_TAB_RESOLVING_TITLE_KEY = 'gallery.metadataResolvingTitle';
+const GENERATOR_TAB_RESOLVING_TITLE = 'Generator counts are still resolving while metadata is being read or scan import is still running.';
+
+/**
+ * Write the generator tab badges.
+ * @param {Object<string, number>} genCounts images per generator
+ * @param {number} total the All tab
+ * @param {{resolving?: boolean, filtered?: boolean, title?: string}} [state]
+ *   filtered: the numbers are what the current filters leave
+ */
+function renderGeneratorTabCounts(genCounts, total, { resolving = false, filtered = false, title = '' } = {}) {
+    const counts = genCounts || {};
+    const libraryCounts = AppState.analytics?.generatorCounts || {};
+    const resolvingTitle = appT(GENERATOR_TAB_RESOLVING_TITLE_KEY, GENERATOR_TAB_RESOLVING_TITLE);
+    const badgeTitle = (count, libraryCount) => {
+        if (resolving) return resolvingTitle;
+        if (filtered) {
+            return appT('gallery.tabCountFiltered', '{count} match the current filters ({total} in the library)', {
+                count,
+                total: libraryCount,
+            });
+        }
+        return title;
+    };
+
+    const countAll = $('#count-all');
+    if (countAll) {
+        countAll.textContent = String(total);
+        countAll.title = badgeTitle(total, AppState.analytics?.totalImages ?? total);
+    }
+
+    ['nai', 'comfyui', 'forge', 'webui', 'unknown'].forEach(gen => {
+        const countEl = $(`#count-${gen}`);
+        if (countEl) {
+            const count = counts[gen] || 0;
+            countEl.textContent = resolving && count === 0 ? '…' : String(count);
+            countEl.title = badgeTitle(count, libraryCounts[gen] || 0);
+        }
+    });
+
+    // The "Others" tab bundles every uncommon generator (Fooocus,
+    // reForge, Gemini, gpt-image, ...) — its count must reflect the
+    // sum so the badge matches the gallery once the user clicks it.
+    const othersCount = OTHERS_GENERATOR_BUNDLE.reduce(
+        (sum, gen) => sum + (counts[gen] || 0),
+        0
+    );
+    const countOthersEl = $('#count-others');
+    const othersTab = $('.gen-tab[data-gen="others"]');
+    const activeOtherGenerators = OTHERS_GENERATOR_BUNDLE
+        .filter((gen) => (counts[gen] || 0) > 0)
+        .map((gen) => `${formatGeneratorLabel(gen)} (${counts[gen]})`);
+    const othersHint = activeOtherGenerators.length > 0
+        ? appT('generator.othersActiveHint', 'Grouped generators: {generators}', {
+            generators: activeOtherGenerators.join(', '),
+        }).replace('{generators}', activeOtherGenerators.join(', '))
+        : appT('generator.othersHint', 'Groups uncommon generators');
+    if (countOthersEl) {
+        countOthersEl.textContent = resolving && othersCount === 0 ? '…' : String(othersCount);
+        countOthersEl.title = resolving ? resolvingTitle : othersHint;
+    }
+    if (othersTab) othersTab.title = othersHint;
+    syncGeneratorRailOverflow();
+}
+
+// The tabs count what the current filters leave, so each one shows what
+// clicking it would show. The generator filters themselves are left out (the
+// tabs choose the generator); with no other filter on, the library counts
+// from /api/stats are the same numbers and need no request.
+let _generatorTabCountsKey = null;
+let _generatorTabCountsSequence = 0;
+
+function generatorTabFilterRequest(filters) {
+    return {
+        ...buildSelectionFilterRequest(filters),
+        generators: [],
+        excludeGenerators: [],
+        sortBy: 'newest',
+    };
+}
+
+async function refreshGeneratorTabCounts({ force = false } = {}) {
+    const analytics = AppState.analytics;
+    if (!analytics) return;
+    const request = generatorTabFilterRequest(AppState.filters);
+    const key = JSON.stringify(request);
+    if (key === JSON.stringify(generatorTabFilterRequest(createDefaultFilterState()))) {
+        _generatorTabCountsKey = null;
+        _generatorTabCountsSequence += 1;
+        renderGeneratorTabCounts(analytics.generatorCounts, analytics.totalImages, {
+            resolving: analytics.countsResolving,
+        });
+        return;
+    }
+    if (!force && key === _generatorTabCountsKey) return;
+    _generatorTabCountsKey = key;
+    const sequence = ++_generatorTabCountsSequence;
+    try {
+        const result = await API.countImagesByGenerator(request);
+        if (sequence !== _generatorTabCountsSequence) return;
+        renderGeneratorTabCounts(result?.counts || {}, Number(result?.total || 0), { filtered: true });
+    } catch (error) {
+        if (sequence !== _generatorTabCountsSequence) return;
+        _generatorTabCountsKey = null;
+        Logger.warn('Generator tab counts for the current filters failed', error);
+        renderGeneratorTabCounts(analytics.generatorCounts, analytics.totalImages, {
+            title: appT('gallery.tabCountUnfiltered', 'Whole library: the counts for the current filters could not be read'),
+        });
     }
 }
 

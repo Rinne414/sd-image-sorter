@@ -304,10 +304,9 @@ function initBootListenersGallery() {
                 const input = e.target.value.trim();
                 if (input) {
                     const filterState = getFilterModalState();
-                    // Normalize: lowercase + underscore→space, then dedup against existing
-                    const normalize = s => s.toLowerCase().replace(/_/g, ' ').trim();
-                    const prompts = input.split(',').map(p => normalize(p)).filter(p => p.length > 0);
-                    const existingNormalized = filterState.prompts.map(normalize);
+                    // Normalize, then dedup against existing
+                    const prompts = input.split(',').map(normalizePromptFilterTerm).filter(p => p.length > 0);
+                    const existingNormalized = filterState.prompts.map(normalizePromptFilterTerm);
                     const newPrompts = prompts.filter(prompt => !existingNormalized.includes(prompt));
                     if (newPrompts.length > 0) {
                         filterState.prompts = [...filterState.prompts, ...newPrompts];

@@ -193,8 +193,13 @@ function applyGalleryCountLabel() {
     if (!imageCount) return;
 
     const shown = _galleryCountText();
+    // The All tab counts what the filters leave; the library total is kept
+    // with the stats.
+    const analyticsTotal = Number(AppState.analytics?.totalImages);
     const totalEl = document.getElementById('count-all');
-    const libraryTotal = totalEl ? parseInt(totalEl.textContent, 10) : NaN;
+    const libraryTotal = Number.isFinite(analyticsTotal) && AppState.analytics
+        ? analyticsTotal
+        : (totalEl ? parseInt(totalEl.textContent, 10) : NaN);
     const shownNum = parseInt(shown, 10);
 
     if (Number.isFinite(libraryTotal) && libraryTotal > 0

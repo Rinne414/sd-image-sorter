@@ -342,7 +342,8 @@ def get_filtered_image_count(
     anime_grades: Optional[List[str]] = None,
     min_waifu: Optional[float] = None,
     max_waifu: Optional[float] = None,
-) ->int:
+    group_by_generator: bool = False,
+) -> Any:
     """Get count of images matching filters without loading image data.
 
     Memory-efficient: Only returns a count, doesn't load any image rows.
@@ -353,16 +354,20 @@ def get_filtered_image_count(
         Same filters as get_images()
 
     Returns:
-        Number of matching images
+        Number of matching images, or with ``group_by_generator`` a
+        ``{generator: count}`` dict (use ``get_filtered_generator_counts``)
     """
     if image_ids is not None and len(image_ids) == 0:
-        return 0
+        return {} if group_by_generator else 0
 
     with get_db() as conn:
         cursor = conn.cursor()
 
         # Build count query
-        query = "SELECT COUNT(DISTINCT i.id) FROM images i"
+        selected = (
+            "i.generator, COUNT(DISTINCT i.id)" if group_by_generator else "COUNT(DISTINCT i.id)"
+        )
+        query = f"SELECT {selected} FROM images i"
 
         conditions: List[str] = []
         params: List[Any] = []
@@ -466,8 +471,30 @@ def get_filtered_image_count(
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
+        if group_by_generator:
+            cursor.execute(query + " GROUP BY i.generator", params)
+            counts: Dict[str, int] = {}
+            for generator, count in cursor.fetchall():
+                key = str(generator or "unknown")
+                counts[key] = counts.get(key, 0) + int(count)
+            return counts
+
         cursor.execute(query, params)
         return cursor.fetchone()[0]
+
+
+def get_filtered_generator_counts(**filters: Any) -> Dict[str, int]:
+    """Images per generator under every filter except the generator ones.
+
+    The generator tabs above the gallery choose the generator, so each tab
+    counts what clicking it would show: the same WHERE clause as
+    ``get_filtered_image_count``, without ``generators`` and
+    ``exclude_generators``.
+    """
+    return get_filtered_image_count(
+        **{**filters, "generators": None, "exclude_generators": None},
+        group_by_generator=True,
+    )
 
 
 def get_filtered_image_ids(

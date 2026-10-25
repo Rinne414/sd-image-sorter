@@ -233,6 +233,9 @@ async function loadImages(appendMode = false, options = {}) {
         if (imageCount) {
             applyGalleryCountLabel();
         }
+        if (!appendMode && typeof refreshGeneratorTabCounts === 'function') {
+            refreshGeneratorTabCounts();
+        }
 
         // Clean stale selections on fresh load, but do not corrupt true filtered-result selection.
         if (AppState.selectedIds && AppState.selectedIds.size > 0 && !appendMode) {

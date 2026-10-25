@@ -466,6 +466,22 @@ class SelectionMixin:
             "exact": exact,
         }
 
+    def count_filtered_images_by_generator(self, **filters: Any) -> Dict[str, Any]:
+        """Images per generator for the generator tabs, under the other filters.
+
+        Same payload and ``exact`` meaning as ``count_filtered_images``; the
+        payload's generator include/exclude lists are ignored, because the
+        tabs are what choose the generator.
+        """
+        contract = self._build_selection_filter_contract(**filters)
+        exact = not bool(contract["prompts"]) or contract["promptMatchMode"] == _svc().PROMPT_MATCH_MODE_CONTAINS
+        counts = db.get_filtered_generator_counts(**selection_contract_db_filters(contract))
+        return {
+            "counts": counts,
+            "total": sum(counts.values()),
+            "exact": exact,
+        }
+
     def get_selection_chunk(self, selection_token: str, *, offset: int = 0, limit: int = SELECTION_TOKEN_DEFAULT_CHUNK) -> Dict[str, Any]:
         """Resolve one ordered chunk of image IDs from a selection token."""
         contract = self._decode_selection_token(selection_token)

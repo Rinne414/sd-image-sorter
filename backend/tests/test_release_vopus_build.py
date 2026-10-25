@@ -334,7 +334,9 @@ def test_release_qa_refuses_vopus_sources_in_a_package(qa, member):
 def test_full_ci_skips_the_browser_tests_when_the_vopus_build_fails(
     monkeypatch, tmp_path, capsys
 ):
-    from scripts import run_ci
+    # By path, like the other scripts here: `from scripts import run_ci` only
+    # worked when an earlier test had put the repo root on sys.path.
+    run_ci = _load_script("run_ci_for_vopus_test", "scripts/run_ci.py")
 
     commands: list[tuple[str, ...]] = []
 

@@ -42,5 +42,6 @@ from db_images_paginate import (
 from db_images_query import (
     get_images,
     get_filtered_image_count,
+    get_filtered_generator_counts,
     get_filtered_image_ids,
 )

@@ -71,7 +71,7 @@
         const result = await SdisProgram.requestPairing();
         if (!result.ok) {
             await refreshStatus();
-            if (!result.offline) showStatus(t('errorSaveFailed', [String(result.data?.error || result.data?.detail || result.status)]), 'bad');
+            if (!result.offline) showStatus(t('errorSaveFailed', [SdisProgram.errorText(result)]), 'bad');
             return;
         }
         showStatus(t('statusPending'), 'warn');

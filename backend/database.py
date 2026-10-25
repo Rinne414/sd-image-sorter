@@ -307,6 +307,7 @@ from db_images_read import (
     get_missing_image_reconnect_candidates,
     get_images,
     get_filtered_image_count,
+    get_filtered_generator_counts,
     get_filtered_image_ids,
     get_images_paginated,
     _get_filtered_count,

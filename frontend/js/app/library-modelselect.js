@@ -165,6 +165,13 @@ function openTagsLibrary(options = {}) {
     loadLibraryContent();
 }
 
+// Clicking a value that is already a filter closes the Library like an add
+// and says so, instead of doing nothing.
+function finishLibraryClickOnExistingFilter(value) {
+    finishTagsLibraryInteraction();
+    showToast(appT('library.alreadyFilter', '"{value}" is already a filter', { value }), 'info');
+}
+
 function finishTagsLibraryInteraction() {
     const returnFilterOptions = libraryData.returnFilterOptions;
     hideModal('tags-library-modal');
@@ -398,6 +405,8 @@ function renderLibraryTags(tags) {
                 }
                 finishTagsLibraryInteraction();
                 showToast(appT('library.addedFilter', 'Added "{value}" to filters').replace('{value}', tag), 'success');
+            } else {
+                finishLibraryClickOnExistingFilter(tag);
             }
         });
     });
@@ -420,9 +429,9 @@ function renderLibraryPrompts(prompts) {
 
     content.querySelectorAll('.library-tag').forEach(el => {
         el.addEventListener('click', () => {
-            const prompt = el.dataset.prompt;
+            const prompt = normalizePromptFilterTerm(el.dataset.prompt);
             const filterState = libraryData.filterState || AppState.filters;
-            if (!filterState.prompts.includes(prompt)) {
+            if (prompt && !filterState.prompts.map(normalizePromptFilterTerm).includes(prompt)) {
                 filterState.prompts = [...filterState.prompts, prompt];
                 if (!libraryData.returnFilterOptions) {
                     updateFilterSummary();
@@ -430,6 +439,8 @@ function renderLibraryPrompts(prompts) {
                 }
                 finishTagsLibraryInteraction();
                 showToast(appT('library.addedFilter', 'Added "{value}" to filters').replace('{value}', prompt), 'success');
+            } else {
+                finishLibraryClickOnExistingFilter(prompt);
             }
         });
     });
@@ -463,6 +474,8 @@ function renderLibraryLoras(loras) {
                 }
                 finishTagsLibraryInteraction();
                 showToast(appT('library.addedFilter', 'Added "{value}" to filters').replace('{value}', lora), 'success');
+            } else {
+                finishLibraryClickOnExistingFilter(lora);
             }
         });
     });
@@ -502,6 +515,8 @@ function renderLibraryCheckpoints(checkpoints) {
                 }
                 finishTagsLibraryInteraction();
                 showToast(appT('library.addedFilter', 'Added "{value}" to filters').replace('{value}', el.dataset.checkpoint), 'success');
+            } else {
+                finishLibraryClickOnExistingFilter(el.dataset.checkpoint);
             }
         });
     });

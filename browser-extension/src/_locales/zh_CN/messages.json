@@ -190,5 +190,62 @@
   },
   "popupPaired": {
     "message": "已连接。在任意图片上右键即可保存。"
+  },
+  "apiError_collect_failed": {
+    "message": "图片没能保存。"
+  },
+  "apiError_collect_url_not_web": {
+    "message": "只能下载 http:// 或 https:// 开头的图片地址。"
+  },
+  "apiError_collect_site_refused": {
+    "message": "网站返回了 $1，没有给出图片。"
+  },
+  "apiError_collect_download_failed": {
+    "message": "图片没能下载：$1"
+  },
+  "apiError_collect_not_picture": {
+    "message": "这不是程序能读的图片。"
+  },
+  "apiError_collect_too_large_to_convert": {
+    "message": "这张图片的格式图库不能显示，而且太大，无法转成 PNG。"
+  },
+  "apiError_collect_convert_failed": {
+    "message": "这张图片没能转成 PNG。"
+  },
+  "apiError_collect_empty": {
+    "message": "收到的图片是空的。"
+  },
+  "apiError_collect_no_file": {
+    "message": "请求里没有图片。"
+  },
+  "apiError_collect_index_failed": {
+    "message": "已保存到 $1，但加入图库时出错：$2"
+  },
+  "apiError_ext_bad_token": {
+    "message": "扩展没有发来可用的令牌。请在扩展选项里重新配对。"
+  },
+  "apiError_ext_not_extension": {
+    "message": "只有浏览器扩展才能申请配对。"
+  },
+  "apiError_ext_bad_meta": {
+    "message": "程序读不懂扩展发来的图片信息。请到设置 > 浏览器扩展里更新扩展。"
+  },
+  "apiError_ext_pairing_not_found": {
+    "message": "这个浏览器没有配对。"
+  },
+  "apiError_ext_request_gone": {
+    "message": "这个配对请求已经不在等待了。请在扩展里重新申请。"
+  },
+  "apiError_ext_own_page_only": {
+    "message": "只有程序自己的页面才能做这件事。"
+  },
+  "apiError_ext_unknown_browser": {
+    "message": "未知的浏览器。"
+  },
+  "apiError_ext_folders_failed": {
+    "message": "扩展文件夹没能写入：$1"
+  },
+  "apiError_ext_no_file_manager": {
+    "message": "这台电脑上没有可用的文件管理器。"
   }
 }

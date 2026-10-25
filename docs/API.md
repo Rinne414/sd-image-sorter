@@ -329,6 +329,11 @@ Count the images matching a gallery filter payload without returning rows or IDs
 
 Request body is the same filter payload as `selection-ids` (all include/exclude filters, `tagMode`, `folder`, `collectionId`, `hasMetadata`, color fields, and the Aurora Phase 3 fields such as `noCaption`). Powers the gallery Smart Folders sidebar: pinned filter presets poll this for live counts. Response: `{ "count": 123, "exact": true }`. `exact=false` mirrors the selection-token `exact_total` semantics — prompt terms in `exact` match mode are post-filtered after SQL, so the count can over-report for those payloads.
 
+#### POST /api/images/generator-counts
+Count the images per generator for the generator tabs above the gallery.
+
+Request body is the same filter payload as `POST /api/images/count`. Its `generators` and `excludeGenerators` are ignored, because the tabs are what choose the generator: each count is what that tab would show with the other filters as they are. Response: `{ "counts": { "comfyui": 120, "nai": 4 }, "total": 124, "exact": true }` — `total` is the sum (the All tab) and `exact` has the same meaning as on `POST /api/images/count`.
+
 #### POST /api/images/selection-token
 Create a stateless token for chunked filtered-selection ID retrieval.
 

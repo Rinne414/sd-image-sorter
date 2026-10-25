@@ -192,6 +192,13 @@ class FilteredImageCountResponse(BaseModel):
     exact: bool = True
 
 
+class GeneratorCountsResponse(BaseModel):
+    """Response for POST /api/images/generator-counts (the generator tabs)."""
+    counts: Dict[str, int] = Field(default_factory=dict)
+    total: int = 0
+    exact: bool = True
+
+
 class ExportSelectionImage(BaseModel):
     id: int
     filename: str = ""

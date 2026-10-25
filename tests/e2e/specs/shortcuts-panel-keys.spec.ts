@@ -32,4 +32,11 @@ test('the panel names the keys the handlers bind', async ({ page }) => {
   await expect(keyFor(page, /detect/i)).toHaveText('D')
   await expect(keyFor(page, /selection mode/i)).toHaveText('S')
   await expect(keyFor(page, /filter editor/i)).toHaveText('F')
+  // Left out until 2026-10-26: the thumbnail size, Delete, paste and the video keys.
+  await expect(keyFor(page, /larger thumbnails/i)).toHaveText('[ / ]')
+  await expect(keyFor(page, /files stay on disk/i)).toHaveText('Delete')
+  await expect(keyFor(page, /copied picture/i)).toHaveText('Ctrl+V')
+  await expect(page.locator('#keyboard-shortcuts-panel .shortcut-item', { hasText: /copied picture/i })).toContainText('collected/<date>')
+  await expect(keyFor(page, /play or pause the video/i)).toHaveText('Space / K')
+  await expect(keyFor(page, /one frame/i)).toHaveText(', / .')
 })

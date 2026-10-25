@@ -136,10 +136,7 @@ function explain(result) {
         SdisProgram.setSettings({ pairState: 'none' });
         return { ok: false, stop: true, text: t('errorNotPaired') };
     }
-    // The program answers errors as {error}; FastAPI validation as {detail}.
-    const message = result.data?.error || result.data?.detail;
-    const detail = typeof message === 'string' ? message : `HTTP ${result.status}`;
-    return { ok: false, text: t('errorSaveFailed', [detail]) };
+    return { ok: false, text: t('errorSaveFailed', [SdisProgram.errorText(result)]) };
 }
 
 async function uploadBlob(blob, item, source) {

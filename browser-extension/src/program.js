@@ -18,6 +18,31 @@
         return chrome.i18n.getMessage(key, substitutions) || key;
     }
 
+    // The values each coded error message takes, in its $1, $2 order.
+    const ERROR_PARAMS = {
+        collect_site_refused: ['status'],
+        collect_download_failed: ['reason'],
+        collect_index_failed: ['folder', 'reason'],
+        ext_folders_failed: ['reason'],
+    };
+
+    /**
+     * The program's error in the extension's language: the message for its
+     * code (messages.json apiError_<code>), else the program's own sentence.
+     */
+    function errorText(result) {
+        const data = (result && result.data) || {};
+        const code = typeof data.code === 'string' ? data.code : '';
+        const params = data.params && typeof data.params === 'object' ? data.params : {};
+        if (/^[a-z_]+$/.test(code)) {
+            const values = (ERROR_PARAMS[code] || []).map((name) => String(params[name] ?? ''));
+            const known = chrome.i18n.getMessage(`apiError_${code}`, values);
+            if (known) return known;
+        }
+        const message = data.error || data.detail;
+        return typeof message === 'string' ? message : `HTTP ${result ? result.status : ''}`.trim();
+    }
+
     /** "127.0.0.1:8487/" -> "http://127.0.0.1:8487"; null when it is not this computer. */
     function normalizeAddress(raw) {
         let text = String(raw || '').trim();
@@ -145,6 +170,7 @@
     root.SdisProgram = {
         DEFAULT_ADDRESS,
         t,
+        errorText,
         normalizeAddress,
         getSettings,
         setSettings,

@@ -104,7 +104,9 @@
             var count = button.querySelector('.gen-count');
             var countHtml = '';
             if (count) {
-                countHtml = '<span class="gen-count" id="' + count.id + '">' + this._escape(count.textContent) + '</span>';
+                // Keep the badge's tooltip (what the count means under the filters).
+                var countTitle = count.title ? ' title="' + this._escape(count.title) + '"' : '';
+                countHtml = '<span class="gen-count" id="' + count.id + '"' + countTitle + '>' + this._escape(count.textContent) + '</span>';
             }
             button.innerHTML = this._escape(this._t(key)) + ' ' + countHtml;
         },

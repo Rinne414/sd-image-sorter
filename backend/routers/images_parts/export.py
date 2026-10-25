@@ -13,6 +13,7 @@ from routers.images import (
     ExportSelectionRequest,
     ExportSelectionResponse,
     FilteredImageCountResponse,
+    GeneratorCountsResponse,
     SelectionIdsRequest,
     SelectionIdsResponse,
     get_image_service,
@@ -114,6 +115,81 @@ async def get_selection_ids(
         min_waifu=request.minWaifu,
         max_waifu=request.maxWaifu,
     )
+
+
+def _filter_payload_kwargs(request: SelectionIdsRequest) -> dict:
+    """The gallery filter payload as ImageService keyword arguments."""
+    return {
+        "generators": request.generators,
+        "tags": request.tags,
+        "tag_mode": request.tagMode,
+        "ratings": request.ratings,
+        "checkpoints": request.checkpoints,
+        "loras": request.loras,
+        "prompts": request.prompts,
+        "prompt_match_mode": request.promptMatchMode,
+        "artist": request.artist,
+        "search": request.search,
+        "sort_by": request.sortBy,
+        "min_width": request.minWidth,
+        "max_width": request.maxWidth,
+        "min_height": request.minHeight,
+        "max_height": request.maxHeight,
+        "aspect_ratio": request.aspectRatio,
+        "min_aesthetic": request.minAesthetic,
+        "max_aesthetic": request.maxAesthetic,
+        "date_from": request.dateFrom,
+        "date_to": request.dateTo,
+        "min_user_rating": request.minUserRating,
+        "brightness_min": request.brightnessMin,
+        "brightness_max": request.brightnessMax,
+        "color_temperature": request.colorTemperature,
+        "brightness_distribution": request.brightnessDistribution,
+        "exclude_tags": request.excludeTags,
+        "exclude_generators": request.excludeGenerators,
+        "exclude_ratings": request.excludeRatings,
+        "exclude_checkpoints": request.excludeCheckpoints,
+        "exclude_loras": request.excludeLoras,
+        "exclude_prompts": request.excludePrompts,
+        "exclude_colors": request.excludeColors,
+        "color_hues": request.colorHues,
+        "exclude_color_hues": request.excludeColorHues,
+        "collection_id": request.collectionId,
+        "scope": request.scope,
+        "folder": request.folder,
+        "has_metadata": request.hasMetadata,
+        "no_caption": request.noCaption,
+        "media_type": request.mediaType,
+        "aesthetic_unscored": request.aestheticUnscored,
+        "min_saturation": request.minSaturation,
+        "max_saturation": request.maxSaturation,
+        "seed": request.seed,
+        "anime_grades": request.animeGrades,
+        "min_waifu": request.minWaifu,
+        "max_waifu": request.maxWaifu,
+    }
+
+
+@router.post(
+    "/images/generator-counts",
+    response_model=GeneratorCountsResponse,
+    summary="Count images per generator under a gallery filter payload",
+    description="""
+Count the images per generator for the generator tabs above the gallery.
+
+The request body is the same filter payload as `/api/images/count`. The
+payload's `generators` and `excludeGenerators` are ignored, because the tabs
+are what choose the generator: each count is what that tab would show with the
+other filters as they are. `total` is the sum (the All tab); `exact` has the
+same meaning as on `/api/images/count`.
+    """,
+)
+async def count_filtered_images_by_generator(
+    request: SelectionIdsRequest,
+    service: ImageService = Depends(get_image_service),
+):
+    """Return the per-generator counts for the gallery filter payload."""
+    return service.count_filtered_images_by_generator(**_filter_payload_kwargs(request))
 
 
 @router.post(

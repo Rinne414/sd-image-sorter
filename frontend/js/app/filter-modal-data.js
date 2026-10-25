@@ -365,11 +365,10 @@ const _debouncedPromptSearch = debounce(async (query) => {
                 suggestionsEl.classList.add('visible');
                 suggestionsEl.querySelectorAll('.tag-suggestion').forEach(el => {
                     el.addEventListener('click', () => {
-                        const prompt = el.dataset.prompt;
+                        const prompt = normalizePromptFilterTerm(el.dataset.prompt);
                         const filterState = getFilterModalState();
-                        const normalize = s => s.toLowerCase().replace(/_/g, ' ').trim();
-                        const normalizedExisting = filterState.prompts.map(normalize);
-                        if (!normalizedExisting.includes(normalize(prompt))) {
+                        const normalizedExisting = filterState.prompts.map(normalizePromptFilterTerm);
+                        if (prompt && !normalizedExisting.includes(prompt)) {
                             filterState.prompts = [...filterState.prompts, prompt];
                             renderModalActivePrompts();
                         }
@@ -402,11 +401,10 @@ const _debouncedPromptSearch = debounce(async (query) => {
 
         suggestionsEl.querySelectorAll('.tag-suggestion').forEach(el => {
             el.addEventListener('click', () => {
-                const prompt = el.dataset.prompt;
+                const prompt = normalizePromptFilterTerm(el.dataset.prompt);
                 const filterState = getFilterModalState();
-                const normalize = s => s.toLowerCase().replace(/_/g, ' ').trim();
-                const normalizedExisting = filterState.prompts.map(normalize);
-                if (!normalizedExisting.includes(normalize(prompt))) {
+                const normalizedExisting = filterState.prompts.map(normalizePromptFilterTerm);
+                if (prompt && !normalizedExisting.includes(prompt)) {
                     filterState.prompts = [...filterState.prompts, prompt];
                     renderModalActivePrompts();
                 }

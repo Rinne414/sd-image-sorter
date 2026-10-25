@@ -61,6 +61,18 @@ SD Image Sorter can now stay resident: the Windows package opens a desktop progr
 - **"Keep original filenames" keeps every name / 「保留原文件名」不再改名** (issue #5): Dataset Maker turned `a..b.png` into `a.b.png` and dropped spaces at the ends of a name; the exported picture and caption now carry the source picture's exact name.
   - 数据集制作会把 `a..b.png` 改成 `a.b.png`、去掉名字首尾的空格；现在导出的图片和标签文件保留原图的完整名字。
 
+- **The generator tabs count what the filters leave / 生成器分页的张数跟着筛选变**: with a search or another filter on, the tabs above the gallery still showed the whole library's count per generator, so "ComfyUI (500)" could open a gallery of 20. Each tab now shows how many pictures it would open with the other filters as they are (the tooltip also gives the library count), and the library counts come back when the filters clear.
+  - 开着搜索或其他筛选时，图库上方的生成器分页仍显示整个图库的张数，「ComfyUI (500)」点开可能只有 20 张。现在每个分页显示在其他筛选不变时点开会有几张（提示里也写图库共几张），清掉筛选后回到图库张数。
+
+- **The browser extension says the program's errors in your language / 浏览器扩展用你的语言说出错误**: a refused save showed the program's English sentence even in a Chinese browser (a site that refused the picture, a file that is not a picture, a pairing that expired). The extension now has every such message in English and Chinese.
+  - 保存被拒时（网站不给图、文件不是图片、配对已过期），扩展在中文浏览器里也显示程序的英文句子。现在每一种都有中英文。
+
+- **The shortcuts panel lists every gallery key / 快捷键面板列出图库的所有按键**: [ and ] (thumbnail size), Delete (remove the selected pictures from the gallery; the files stay), Ctrl+V (save a copied picture), Space or K (play or pause a video in the preview) and , or . (one frame back or forward) were missing.
+  - 面板漏了 [ 和 ]（缩略图大小）、Delete（把选中的图片移出图库，文件保留）、Ctrl+V（保存复制的图片）、Space 或 K（播放或暂停预览里的视频）、, 或 .（后退或前进一帧）。
+
+- **Library clicks on a filter you already have / 在「库」里点已有的筛选**: picking `blue_eyes` in the Library next to a typed `blue eyes` made a second chip for the same term, and clicking a tag, prompt, LoRA or checkpoint that was already a filter did nothing at all. Every way of adding a prompt filter now uses one spelling, and such a click closes the Library and says the value is already a filter.
+  - 在「库」里点 `blue_eyes`，旁边已有手打的 `blue eyes` 时会多出一个同义的筛选；点一个已经在筛选里的标签、提示词、LoRA 或模型则毫无反应。现在加入提示词筛选的每条路都用同一种写法，这样的点击会关闭「库」并说明它已在筛选中。
+
 ## [3.7.0] - 2026-10-17
 
 One program now serves two interfaces: the classic one stays the start page and Vopus, the second interface, is switched on in Settings. The database is copied before every upgrade, and libraries that Vopus 1.0.0 had upgraded are repaired. Moves, undo, exports and batch censoring always say how they ended. Letter shortcuts no longer swallow browser keys such as Ctrl+Shift+R, and the browser Back button goes up one level like Esc.
