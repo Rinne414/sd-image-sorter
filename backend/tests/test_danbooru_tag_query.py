@@ -350,7 +350,7 @@ class _DtqSession:
         logits[:, 0] = 3.0  # 1girl
         logits[:, 1] = -1.0  # long_hair: p=0.27 > 0.20
         logits[:, 2] = 0.5  # hatsune_miku: p=0.62
-        logits[:, 4] = 0.0  # cleavage: p=0.5 -> questionable
+        logits[:, 4] = 0.0  # cleavage: p=0.5 -> sensitive (danbooru rating lines)
         return [logits]
 
 
@@ -399,7 +399,7 @@ def test_tagging_reads_logits_and_takes_the_rating_from_the_tags(monkeypatch, tm
     ]
     assert [t["tag"] for t in first["character_tags"]] == ["hatsune_miku"]
     assert first["copyright_tags"] == []
-    assert first["rating"] == "questionable"
+    assert first["rating"] == "sensitive"
 
 
 @pytest.mark.parametrize(

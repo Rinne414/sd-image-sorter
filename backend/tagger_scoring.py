@@ -201,43 +201,65 @@ class _ScoringMixin:
             if item.get("tag")
         }
 
+        # Danbooru's own rating lines: sex and genitals are explicit, nudity
+        # and visible nipples questionable, revealing clothes sensitive.
+        # Against EVA02's rating head on 240 real pictures (2026-10-25) the
+        # older lists (nipples / nude explicit, swimsuit / cleavage
+        # questionable) agreed 139/240 for DanbooruTagQuery B/16 and called 37
+        # pictures explicit that the head rated lower; these agree 177/240
+        # with 4, and miss no more explicit pictures (4 before and after).
         explicit_markers = {
             "sex",
             "vaginal",
             "penis",
             "pussy",
             "anus",
+            "uncensored",
+            "cum",
+            "cum_in_pussy",
+            "fellatio",
+            "paizuri",
+            "handjob",
+            "cunnilingus",
+            "masturbation",
+            "pubic_hair",
+            "clitoris",
+            "erection",
+            "testicles",
+            "ejaculation",
+            "female_ejaculation",
+            "after_sex",
+            "sex_from_behind",
+            "cowgirl_position",
+            "missionary",
+            "doggystyle",
+            "spread_pussy",
+        }
+        questionable_markers = {
             "nipples",
             "nude",
             "completely_nude",
-            "uncensored",
-            "cum",
-            "fellatio",
-            "masturbation",
             "breasts_out",
             "topless",
             "no_panties",
             "pantyshot",
-            "pubic_hair",
-        }
-        questionable_markers = {
             "lingerie",
             "underwear",
             "panties",
             "bra",
             "cameltoe",
-            "cleavage",
             "see-through",
-            "wet",
-            "swimsuit",
-            "bikini",
-            "navel",
-            "thighhighs",
             "garter_straps",
             "bondage",
             "bdsm",
         }
         sensitive_markers = {
+            "cleavage",
+            "navel",
+            "thighhighs",
+            "wet",
+            "swimsuit",
+            "bikini",
             "midriff",
             "bare_shoulders",
             "stomach",

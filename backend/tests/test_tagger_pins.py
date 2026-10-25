@@ -680,7 +680,10 @@ def test_load_tags_camie_json_records_general_category_overrides(tmp_path):
 def test_derive_fallback_rating_marker_precedence():
     derive = _bare()._derive_fallback_rating
     assert derive({"general_tags": [{"tag": "pussy"}]}) == "explicit"
-    assert derive({"general_tags": [{"tag": "bikini"}]}) == "questionable"
+    # Danbooru's lines (2026-10-25): nudity is questionable, swimwear sensitive.
+    assert derive({"general_tags": [{"tag": "nipples"}]}) == "questionable"
+    assert derive({"general_tags": [{"tag": "panties"}]}) == "questionable"
+    assert derive({"general_tags": [{"tag": "bikini"}]}) == "sensitive"
     assert derive({"general_tags": [{"tag": "midriff"}]}) == "sensitive"
     assert derive({"general_tags": [{"tag": "1girl"}]}) == "general"
     assert derive({"general_tags": []}) == "unknown"
