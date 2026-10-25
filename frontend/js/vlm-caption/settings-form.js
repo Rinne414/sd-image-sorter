@@ -50,6 +50,9 @@ Object.assign(window.VLMCaption, {
         const modal = document.getElementById('vlm-settings-modal');
         if (!modal) return;
         this.populateSettingsForm();
+        this._clearPresetStatus();
+        this._closePresetNameRow();
+        this.loadPresets();
         // Through the app's dialog handling: Escape closes it and focus comes
         // back, also when it is opened over AI tagging or Smart Tag.
         if (typeof window.App?.showModal === 'function') window.App.showModal('vlm-settings-modal');
@@ -75,8 +78,10 @@ Object.assign(window.VLMCaption, {
         this._setVal('vlm-nsfw-retry-prompt', s.nsfw_retry_prompt || '');
         this._setVal('vlm-system-prompt', s.system_prompt || '');
         this._setVal('vlm-user-prompt', s.user_prompt || '');
-        this._currentPresetWithTags = s.user_prompt_with_tags || '';
+        this._setVal('vlm-user-prompt-with-tags', s.user_prompt_with_tags || '');
         this._setChecked('vlm-include-tags', s.include_tags_as_context ?? true);
+        this._activePresetId = s.prompt_preset_id || '';
+        this._refreshWithTagsPromptVisibility();
         // v3.2.1 fields
         this._setOutputFormat(s.output_format || 'nl_caption');
         this._setVal('vlm-http-proxy', s.http_proxy || '');
@@ -89,6 +94,7 @@ Object.assign(window.VLMCaption, {
         // clear the textarea so the user only sends a new value if they type one.
         this._setVal('vlm-vertex-sa-json', s.service_account_json_display ? '' : (s.service_account_json || ''));
         this._refreshAdvancedSectionsVisibility();
+        this._syncPresetControls();
     },
 
     _setOutputFormat(value) {
@@ -151,7 +157,8 @@ Object.assign(window.VLMCaption, {
             nsfw_retry_prompt: this._getVal('vlm-nsfw-retry-prompt'),
             system_prompt: this._getVal('vlm-system-prompt'),
             user_prompt: this._getVal('vlm-user-prompt'),
-            user_prompt_with_tags: this._currentPresetWithTags || '',
+            user_prompt_with_tags: this._getVal('vlm-user-prompt-with-tags'),
+            prompt_preset_id: this._activePresetId || '',
             include_tags_as_context: this._getChecked('vlm-include-tags'),
             output_format: this._getOutputFormat(),
             http_proxy: this._getVal('vlm-http-proxy'),

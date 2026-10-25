@@ -151,6 +151,53 @@
     white-space: nowrap;
 }
 
+/* Prompt presets (issue #21): the list and the buttons for the chosen
+   preset share one line, like the model field and its Fetch button. */
+.vlm-preset-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.vlm-preset-row + .vlm-preset-row {
+    margin-top: 8px;
+}
+
+.vlm-preset-row > .input-field {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.vlm-preset-row > .btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.vlm-preset-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* .btn and the flex rows set display, which beats the hidden attribute. */
+.vlm-preset-row[hidden],
+.vlm-preset-row > .btn[hidden],
+.vlm-preset-status[hidden],
+.vlm-preset-status > .btn-link[hidden],
+#vlm-user-prompt-with-tags-group[hidden] {
+    display: none;
+}
+
+.vlm-preset-status .btn-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
 .export-preview-header {
     display: grid;
     /* Title, help, Refresh and Open Editor on one line; Open Editor used to
@@ -2261,14 +2308,10 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-areas:
-        "title    title"
-        "desc     desc"
-        "provider prompt"
-        "endpoint prompt"
-        "apikey   prompt"
-        "model    prompt"
-        "output   prompt"
-        "advanced advanced"
+        "title      title"
+        "desc       desc"
+        "connection prompt"
+        "advanced   advanced"
         "localm   localm"
         "proxy    proxy"
         "vertex   vertex"
@@ -2280,11 +2323,9 @@
 
 #vlm-settings-modal .modal-content > h3 { grid-area: title; }
 #vlm-settings-modal .modal-content > .modal-description { grid-area: desc; }
-#vlm-settings-modal .modal-content > .form-group:has(#vlm-provider) { grid-area: provider; }
-#vlm-settings-modal .modal-content > .form-group:has(#vlm-endpoint) { grid-area: endpoint; }
-#vlm-settings-modal .modal-content > .form-group:has(#vlm-api-key) { grid-area: apikey; }
-#vlm-settings-modal .modal-content > .form-group:has(#vlm-model) { grid-area: model; }
-#vlm-settings-modal .modal-content > .vlm-output-format-group { grid-area: output; }
+/* The connection fields pack at the top of their column; the prompt
+   column beside them is taller and sets the row height. */
+#vlm-settings-modal .modal-content > .vlm-settings-connection { grid-area: connection; align-self: start; min-width: 0; }
 #vlm-settings-modal .modal-content > #vlm-prompt-details { grid-area: prompt; }
 #vlm-settings-modal .modal-content > details:has(#vlm-max-retries) { grid-area: advanced; }
 #vlm-settings-modal .modal-content > details:has(#vlm-local-models) { grid-area: localm; }
@@ -2315,3 +2356,4 @@
    roomy so system/user prompts are editable without scrolling. */
 #vlm-settings-modal #vlm-prompt-details #vlm-system-prompt { min-height: 84px; }
 #vlm-settings-modal #vlm-prompt-details #vlm-user-prompt { min-height: 128px; }
+#vlm-settings-modal #vlm-prompt-details #vlm-user-prompt-with-tags { min-height: 84px; }

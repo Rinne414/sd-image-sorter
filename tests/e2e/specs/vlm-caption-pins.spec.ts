@@ -120,6 +120,8 @@ test('window.VLMCaption is an unsealed object literal exposing the seams + docum
       'populateSettingsForm', '_collectSettingsForm', 'saveSettings', '_saveBeforeAction',
       '_setOutputFormat', '_getOutputFormat', '_bindOutputFormat',
       '_refreshAdvancedSectionsVisibility', '_autoDetectProvider', 'applyPreset',
+      // saved prompt presets (prompt-presets.js, issue #21):
+      'loadPresets', '_bindPresetEvents', 'saveActivePresetChanges', 'deleteActivePreset',
       'testConnection', 'fetchModels',
       // batch:
       'cancelBatch', 'retryFailedImages', 'startPolling', 'stopPolling', 'pollProgress',
@@ -216,7 +218,7 @@ test('openSettingsModal shows the modal and populateSettingsForm maps settings (
       vertexLocation: val('vlm-vertex-location'),
       saJson: val('vlm-vertex-sa-json'),
       outputFormat: V._getOutputFormat(),
-      currentPresetWithTags: V._currentPresetWithTags,
+      withTagsPrompt: val('vlm-user-prompt-with-tags'),
       vertexDetailsHidden: (document.getElementById('vlm-vertex-details') as HTMLElement)?.hidden,
       proxyBadgeHidden: (document.getElementById('vlm-proxy-active-badge') as HTMLElement)?.hidden,
     }
@@ -238,7 +240,7 @@ test('openSettingsModal shows the modal and populateSettingsForm maps settings (
   expect(probe.vertexLocation).toBe('europe-west1')
   expect(probe.saJson).toBe('') // masked service account -> textarea cleared
   expect(probe.outputFormat).toBe('both')
-  expect(probe.currentPresetWithTags).toBe('usr+tags')
+  expect(probe.withTagsPrompt).toBe('usr+tags') // shown in its own box, not kept out of sight
   expect(probe.vertexDetailsHidden).toBe(false) // provider=gemini reveals the vertex section
   expect(probe.proxyBadgeHidden).toBe(false) // proxies present -> "active" badge shown
 })
@@ -270,7 +272,7 @@ test('_collectSettingsForm serializes the form: temperature 0 kept, masked api_k
     set('vlm-vertex-location', '') // empty -> default us-central1
     set('vlm-api-key', '*** (configured)') // masked -> omitted
     set('vlm-vertex-sa-json', '') // empty -> omitted
-    V._currentPresetWithTags = 'withtags'
+    set('vlm-user-prompt-with-tags', 'withtags')
     const masked = V._collectSettingsForm()
 
     set('vlm-api-key', 'sk-real-key') // real -> included
@@ -661,15 +663,15 @@ test('applyPreset loads the preset prompts, stores the with-tags variant, and sw
     return {
       system: (document.getElementById('vlm-system-prompt') as HTMLTextAreaElement)?.value,
       user: (document.getElementById('vlm-user-prompt') as HTMLTextAreaElement)?.value,
-      withTags: V._currentPresetWithTags,
+      withTags: (document.getElementById('vlm-user-prompt-with-tags') as HTMLTextAreaElement)?.value,
       outputFormat: V._getOutputFormat(),
-      statusClass: document.getElementById('vlm-status')?.className,
+      statusClass: document.getElementById('vlm-preset-status')?.className,
     }
   })
 
   expect(probe.system).toBe('sys-p')
   expect(probe.user).toBe('usr-p') // textarea always shows the plain user prompt
-  expect(probe.withTags).toBe('usr-p-tags') // with-tags variant stored separately
+  expect(probe.withTags).toBe('usr-p-tags') // with-tags variant in its own box
   expect(probe.outputFormat).toBe('danbooru_tags')
   expect(probe.statusClass).toContain('vlm-status-success')
 })

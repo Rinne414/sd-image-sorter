@@ -135,13 +135,27 @@ EXPECTED_ROUTE_TABLE = [
     ("/api/vlm/local-models/pull/progress", ["GET"], "pull_progress", "pull_progress"),
     ("/api/vlm/local-models/delete", ["POST"], "delete_model", "delete_model"),
     ("/api/vlm/local-models/start-ollama", ["POST"], "start_ollama", "start_ollama"),
+    # Saved prompt presets (issue #21), routers/vlm_presets.py.
+    ("/api/vlm/presets", ["POST"], "create_prompt_preset", "create_prompt_preset"),
+    (
+        "/api/vlm/presets/{preset_id}",
+        ["PATCH"],
+        "update_prompt_preset",
+        "update_prompt_preset",
+    ),
+    (
+        "/api/vlm/presets/{preset_id}",
+        ["DELETE"],
+        "delete_prompt_preset",
+        "delete_prompt_preset",
+    ),
 ]
 
 # sha256 of the serialized table — a single canary that flips on ANY route
 # add/remove/rename/reorder/method change. Recompute intentionally when the
 # route surface is meant to change; never silently.
 EXPECTED_ROUTE_TABLE_SHA256 = (
-    "168f9030ce44a42e33415a960f170a0327e82a265be2ac33d155c7e9ed7208e3"
+    "cb0344fdbc03a03cb0f129daed06e738884eeebe61743329385ccbc25d8b599d"
 )
 
 
@@ -234,8 +248,8 @@ class TestRouteTableIdentity:
         for route in vlm.router.routes:
             assert len(route.methods) == 1
 
-    def test_route_count_is_eighteen(self):
-        assert len(vlm.router.routes) == 18
+    def test_route_count_is_twenty_one(self):
+        assert len(vlm.router.routes) == 21
 
 
 # ============================================================================
@@ -462,6 +476,9 @@ class TestImportSeamCensus:
         "pull_progress",
         "delete_model",
         "start_ollama",
+        "create_prompt_preset",
+        "update_prompt_preset",
+        "delete_prompt_preset",
     )
 
     # Symbols the reader net (test_routers/test_vlm.py) monkeypatches on the

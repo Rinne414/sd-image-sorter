@@ -1,8 +1,9 @@
 /**
  * vlm-caption/connection-models.js — vlm-caption.js decomposition (verbatim Object.assign mixin).
  * Method bodies moved BYTE-IDENTICAL from frontend/js/vlm-caption.js pre-cut
- * lines 290-361 + 573-810 (of 1,073): testConnection, fetchModels,
- * applyPreset, then the "Local Model Management" section —
+ * lines 290-361 + 573-810 (of 1,073): testConnection, fetchModels, then
+ * the "Local Model Management" section (applyPreset moved to
+ * vlm-caption/prompt-presets.js with the saved presets, issue #21) —
  * _populateModelSuggestions (datalist), loadRecommendedModels (Ollama
  * install/run branches + model cards), confirmDeleteModel (App.showConfirm /
  * window.confirm fallback), deleteModel, pullModel, _startPullPolling and
@@ -103,30 +104,6 @@ Object.assign(window.VLMCaption, {
             }
         } catch (e) {
             this._showStatus('vlm-model-list-status', `Error: ${e.message}`, 'error');
-        }
-    },
-
-    async applyPreset(presetId) {
-        if (!presetId) return;
-        try {
-            const resp = await fetch('/api/vlm/presets');
-            const data = await resp.json();
-            const preset = data.presets?.[presetId];
-            if (!preset) return;
-            this._setVal('vlm-system-prompt', preset.system_prompt || '');
-            // Always show the regular user_prompt in the textarea.
-            // The with_tags variant is stored separately and used by the
-            // backend when the image has existing tags.
-            this._setVal('vlm-user-prompt', preset.user_prompt || '');
-            // Store the with_tags prompt in a hidden field so it gets saved
-            this._currentPresetWithTags = preset.user_prompt_with_tags || '';
-            // Auto-set output_format to match the preset
-            if (preset.output_format) {
-                this._setOutputFormat(preset.output_format);
-            }
-            this._showStatus('vlm-status', `Applied preset: ${preset.name}`, 'success');
-        } catch (e) {
-            this._showStatus('vlm-status', `Error loading presets: ${e.message}`, 'error');
         }
     },
 

@@ -189,6 +189,17 @@ def _isolate_interface_choice(tmp_path, monkeypatch):
     monkeypatch.setattr(interface_preference, "CONFIG_DIR", tmp_path / "interface-config")
 
 
+@pytest.fixture(autouse=True)
+def _isolate_vlm_prompt_presets(tmp_path, monkeypatch):
+    """Saved VLM prompt presets go to the test's own folder, never to the
+    developer's ``CONFIG_DIR/vlm-prompt-presets.json``."""
+    from services import vlm_prompt_presets
+
+    monkeypatch.setattr(
+        vlm_prompt_presets, "PRESETS_PATH", tmp_path / "vlm-prompt-presets.json"
+    )
+
+
 # ============================================================================
 # Test Database Fixture
 # ============================================================================

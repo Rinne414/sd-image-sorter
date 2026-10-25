@@ -81,6 +81,9 @@ class SaveSettingsRequest(BaseModel):
     system_prompt: Optional[str] = None
     user_prompt: Optional[str] = None
     user_prompt_with_tags: Optional[str] = None
+    # The preset the prompts were last applied from or saved as ("" = none),
+    # so the dialog reopens on it.
+    prompt_preset_id: Optional[str] = Field(default=None, max_length=64)
     include_tags_as_context: Optional[bool] = None
     max_image_size: Optional[int] = Field(default=None, ge=128, le=4096)
     nsfw_retry_prompt: Optional[str] = None

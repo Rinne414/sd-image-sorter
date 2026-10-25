@@ -54,7 +54,7 @@ Object.assign(window.VLMCaption, {
         document.getElementById('btn-vlm-probe-concurrency')?.addEventListener('click', () => this.probeConcurrency());
         document.getElementById('btn-vlm-fetch-models')?.addEventListener('click', () => this.fetchModels());
         document.getElementById('btn-vlm-save-settings')?.addEventListener('click', () => this.saveSettings());
-        document.getElementById('vlm-preset-select')?.addEventListener('change', (e) => this.applyPreset(e.target.value));
+        this._bindPresetEvents();
         document.getElementById('btn-vlm-retry-failed')?.addEventListener('click', () => this.retryFailedImages());
         document.addEventListener('click', (event) => {
             const trigger = event.target?.closest?.('[data-vlm-debug-chat]');

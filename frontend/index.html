@@ -8891,6 +8891,7 @@
     <script src="/static/js/vlm-caption/batch.js"></script>
     <script src="/static/js/vlm-caption/workflow-ui.js"></script>
     <script src="/static/js/vlm-caption/debug-chat.js"></script>
+    <script src="/static/js/vlm-caption/prompt-presets.js"></script>
     <script src="/static/js/vlm-caption/boot.js"></script>
     <script src="/static/js/vlm-caption.js"></script>
     <!-- v321 family: verbatim Object.assign decomposition of v321-ui.js
@@ -9236,6 +9237,9 @@
             <h3><svg class="icon" aria-hidden="true"><use href="#i-cpu"/></svg> <span data-i18n="vlmSettings.title">VLM Captioning Settings</span></h3>
             <p class="modal-description" data-i18n="vlmSettings.description">Set up the vision language model (VLM) that writes natural-language captions.</p>
 
+            <!-- Left column: the connection. Grouped so it keeps its own height
+                 next to the taller prompt column (vlm.css). -->
+            <div class="vlm-settings-connection">
             <div class="form-group">
                 <label for="vlm-provider" data-i18n="vlmSettings.provider">Provider</label>
                 <select id="vlm-provider" class="input-field">
@@ -9289,6 +9293,7 @@
                     NL writes the sentence to <code>ai_caption</code> / <code>nl_caption</code>. Tags writes danbooru tags to the tags table. Both asks the model for JSON and splits it.
                 </small>
             </div>
+            </div>
 
             <!-- v3.5.0 audit: prompts are what users actually tune, so this
                  panel ships EXPANDED and lives in the right column of the
@@ -9298,16 +9303,27 @@
                 <div style="padding-top:8px">
                     <div class="form-group">
                         <label for="vlm-preset-select" data-i18n="vlmSettings.preset">Preset</label>
-                        <select id="vlm-preset-select" class="input-field">
-                            <option value="" data-i18n="vlmSettings.presetSelect">— Select a preset —</option>
-                            <option value="lora_training" data-i18n="vlmSettings.presetLora">LoRA Training (General)</option>
-                            <option value="anima_flux" data-i18n="vlmSettings.presetAnimaFlux">Anima / FLUX (Detailed NL)</option>
-                            <option value="short_caption" data-i18n="vlmSettings.presetShort">Short Caption</option>
-                            <option value="character_lora" data-i18n="vlmSettings.presetCharacterLora">Character LoRA Training</option>
-                            <option value="nsfw_relaxed" data-i18n="vlmSettings.presetNsfw">NSFW-Tolerant (Local Models)</option>
-                            <option value="vlm_danbooru" data-i18n="vlmSettings.presetDanbooru">Danbooru Tags (VLM as tagger)</option>
-                            <option value="vlm_hybrid" data-i18n="vlmSettings.presetHybrid">Hybrid (NL + Tags)</option>
-                        </select>
+                        <!-- Issue #21: the shipped presets, then the user's own
+                             (vlm-caption/prompt-presets.js fills the list). Only
+                             the buttons that apply to the chosen preset show. -->
+                        <div class="vlm-preset-row" id="vlm-preset-actions">
+                            <select id="vlm-preset-select" class="input-field">
+                                <option value="" data-i18n="vlmSettings.presetSelect">— Select a preset —</option>
+                            </select>
+                            <button type="button" class="btn btn-small btn-ghost" id="btn-vlm-preset-save" hidden data-i18n="vlmSettings.presetSaveChanges">Save changes</button>
+                            <button type="button" class="btn btn-small btn-ghost" id="btn-vlm-preset-save-as" data-i18n="vlmSettings.presetSaveAs">Save as new preset</button>
+                            <button type="button" class="btn btn-small btn-ghost btn-icon" id="btn-vlm-preset-rename" hidden title="Rename this preset" aria-label="Rename this preset" data-i18n-title="vlmSettings.presetRenameTitle" data-i18n-aria="vlmSettings.presetRenameTitle"><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg></button>
+                            <button type="button" class="btn btn-small btn-ghost btn-icon danger" id="btn-vlm-preset-delete" hidden title="Delete this preset" aria-label="Delete this preset" data-i18n-title="vlmSettings.presetDeleteTitle" data-i18n-aria="vlmSettings.presetDeleteTitle"><svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg></button>
+                        </div>
+                        <div class="vlm-preset-row" id="vlm-preset-name-row" hidden>
+                            <input type="text" id="vlm-preset-name" class="input-field" maxlength="200" autocomplete="off" placeholder="Name for this preset" data-i18n-placeholder="vlmSettings.presetNamePlaceholder" aria-label="Preset name" data-i18n-aria="vlmSettings.presetNameLabel">
+                            <button type="button" class="btn btn-small btn-primary" id="btn-vlm-preset-name-ok" data-i18n="vlmSettings.presetNameSave">Save preset</button>
+                            <button type="button" class="btn btn-small btn-ghost" id="btn-vlm-preset-name-cancel" data-i18n="common.cancel">Cancel</button>
+                        </div>
+                        <div class="vlm-preset-status" id="vlm-preset-status" role="status" aria-live="polite" hidden>
+                            <span id="vlm-preset-status-text"></span>
+                            <button type="button" class="btn-link" id="btn-vlm-preset-undo" hidden data-i18n="vlmSettings.presetUndo">Undo</button>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="vlm-system-prompt" data-i18n="vlmSettings.systemPrompt">System Prompt</label>
@@ -9320,6 +9336,15 @@
                     </div>
                     <div class="form-group">
                         <label><input type="checkbox" id="vlm-include-tags" checked> <span data-i18n="vlmSettings.includeTags">Include danbooru tags as context</span></label>
+                    </div>
+                    <!-- Sent instead of the user prompt when the picture already has
+                         tags and the box above is ticked. It used to be kept out of
+                         sight, so edits to the user prompt seemed to do nothing on
+                         tagged pictures. -->
+                    <div class="form-group" id="vlm-user-prompt-with-tags-group">
+                        <label for="vlm-user-prompt-with-tags" data-i18n="vlmSettings.userPromptWithTags">User prompt when the picture has tags</label>
+                        <textarea id="vlm-user-prompt-with-tags" class="input-field" rows="3" placeholder="Leave empty to send the user prompt above with the tags added" data-i18n-placeholder="vlmSettings.userPromptWithTagsPlaceholder"></textarea>
+                        <small class="helper-text" data-i18n="vlmSettings.userPromptWithTagsHelper">Used for pictures that already have tags. {tags} becomes those tags. Leave it empty and the user prompt above is sent with the tags added at the end.</small>
                     </div>
                 </div>
             </details>

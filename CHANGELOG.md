@@ -25,6 +25,13 @@ SD Image Sorter can now stay resident: the Windows package opens a desktop progr
   - 被扫描和监看的文件夹里的视频会进图库（悬停播放、读提示词、图库上方的「视频」筛选）。ffmpeg（LGPL 版，Windows 约 77 MB）只在你点「安装视频支持」时下载；系统里已有就直接用。
 - **Resident resource use / 常驻时的资源占用**: idle AI models are freed (Settings > Background > Free unused AI models after), work falls back to the CPU while the GPU is busy, and background work runs below normal priority.
   - 闲置的 AI 模型会释放（设置 > 后台 >「闲置的 AI 模型多久后释放」），GPU 忙时改用 CPU，后台任务用低于正常的优先级运行。
+- **Your own VLM prompt presets / 自己的 VLM 提示词预设** (issue #21): in VLM Captioning Settings > Prompt Configuration, "Save as new preset" keeps the prompts in the boxes under a name of your choice; your presets are listed under "My presets" after the built-in ones, and you can save changes into one, rename it or delete it. Deleting a preset, or applying one over prompts you typed, can be undone from the line under the list. The dialog reopens on the preset you last used. Presets are kept in `data/config/vlm-prompt-presets.json`, so updates leave them alone; the built-in presets cannot be changed. The Krea 2 preset, which had no entry in the list, is now there.
+  - 在「VLM 描述设置 > 提示词配置」里，「另存为新预设」会用你起的名字保存框里的提示词；你的预设列在内置预设之后的「我的预设」里，可以保存修改、重命名或删除。删除预设、或用预设覆盖了你自己写的提示词，都可以在列表下方那行撤销。对话框会停在你上次用的预设。预设存在 `data/config/vlm-prompt-presets.json`，更新不会动它；内置预设不能修改。之前列表里漏掉的 Krea 2 预设现在也在了。
+
+### Fixed / 修复
+
+- **The prompt for pictures that already have tags / 图片已有标签时用的提示词**: VLM captioning sends a separate user prompt for pictures that already have tags, but it was kept out of sight, so editing the User Prompt seemed to do nothing on tagged pictures. It is now its own box, "User prompt when the picture has tags", shown while "Include danbooru tags as context" is ticked; leave it empty to send the User Prompt with the tags added at the end.
+  - VLM 描述给已经有标签的图片发送的是另一段 User Prompt，但它原本看不到，所以改了 User Prompt 在有标签的图上好像没用。现在它有自己的输入框「图片已有标签时用的 User Prompt」，勾选「把 danbooru 标签作为上下文」时显示；留空时发送 User Prompt 并在末尾附上标签。
 
 ### Changed / 变更
 

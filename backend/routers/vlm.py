@@ -314,7 +314,12 @@ async def detect_provider_endpoint(request: DetectProviderRequest):
 
 @router.get("/presets")
 async def get_presets():
-    return {"presets": PROMPT_PRESETS}
+    # Built-in presets first, then the user's own (issue #21). A damaged
+    # presets file still lists the built-in ones and says what is wrong.
+    from services.vlm_prompt_presets import list_all_presets
+
+    presets, problem = list_all_presets()
+    return {"presets": presets, "custom_presets_problem": problem}
 
 
 @router.get("/settings")
@@ -893,4 +898,10 @@ def _record_error(image_id: Optional[int], message: str, error_type: str) -> Non
 from routers.vlm_ollama import (
     _do_pull, _pull_state, delete_model, get_recommended_models, pull_model,
     pull_progress, start_ollama,
+)
+
+# Saved prompt presets (issue #21) -- after the Ollama routes, so they take the
+# next positions in the route table.
+from routers.vlm_presets import (
+    create_prompt_preset, delete_prompt_preset, update_prompt_preset,
 )

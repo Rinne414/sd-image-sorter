@@ -1671,6 +1671,28 @@
       }
     },
     {
+      "id": "tags.vlm-prompt-presets",
+      "area": "tags",
+      "en": "VLM prompt presets: save, change, rename, delete your own (issue #21)",
+      "zh": "VLM 提示词预设：保存、修改、重命名、删除自己的预设（issue #21）",
+      "classic": [
+        "#vlm-preset-select",
+        "#btn-vlm-preset-save",
+        "#btn-vlm-preset-save-as",
+        "#btn-vlm-preset-rename",
+        "#btn-vlm-preset-delete",
+        "#btn-vlm-preset-name-ok",
+        "#btn-vlm-preset-name-cancel",
+        "#btn-vlm-preset-undo"
+      ],
+      "vopus": {
+        "missing": "Vopus lists saved presets in Settings > AI and applies them, but cannot save, rename or delete them yet; the classic VLM settings dialog has it"
+      },
+      "next": {
+        "missing": "The new interface cannot save, rename or delete prompt presets yet"
+      }
+    },
+    {
       "id": "tags.vlm-chat",
       "area": "tags",
       "en": "VLM API chat (debug)",
