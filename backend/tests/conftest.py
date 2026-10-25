@@ -140,6 +140,20 @@ def _no_real_free_vram_probe(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_hardware_default_tagger(monkeypatch):
+    """The UI's default tagger never comes from the card of the machine the
+    suite runs on (a 12 GB+ NVIDIA card picks PixAI v1.0); tests of the
+    choice call pick_default_tagger_model with their own hardware."""
+    from services.tagging import default_model
+
+    monkeypatch.setattr(
+        default_model,
+        "default_tagger_model",
+        lambda: default_model.pick_default_tagger_model({}),
+    )
+
+
+@pytest.fixture(autouse=True)
 def _no_automatic_model_source_discovery(monkeypatch):
     """The suite never looks for a ComfyUI install or the global Hugging Face
     cache on the machine it runs on (tests that exercise discovery pass their

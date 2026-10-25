@@ -5,7 +5,8 @@ Moved verbatim from services/tagging_service.py (decomposition 2026-07).
 
 from typing import Any, Dict
 
-from config import DEFAULT_TAGGER_MODEL, TAGGER_MODELS
+from config import TAGGER_MODELS
+from services.tagging import default_model
 
 CUSTOM_PROFILE_ALIASES = {
     "": "wd14",
@@ -53,11 +54,10 @@ TAGGER_MODEL_HINTS = {
         "stability_score": 3,
     },
     "wd-swinv2-tagger-v3": {
-        "summary": "Balanced quality and speed. Good default if you are not sure.",
+        "summary": "Light and fast, and runs on any computer. Its tag list (shared with EVA02) stops around early 2024 and has no series tags. The default when there is no NVIDIA GPU with 12 GB or more.",
         "speed": "Medium",
         "memory": "Medium",
-        "best_for": "Recommended general use",
-        "recommended": True,
+        "best_for": "Fast tagging on any hardware",
         "safe_mode_note": "Uses GPU by default. Switch to CPU manually only when troubleshooting.",
         "gpu_default": True,
         "gpu_confirmation_required": False,
@@ -130,7 +130,7 @@ TAGGER_MODEL_HINTS = {
         "stability_score": 3,
     },
     "pixai-tagger-v1.0": {
-        "summary": "PixAI Tagger v1.0 (2026): 30,877 tags including characters, series and artist styles, reading images at 1008 px. The app uses the official preprocessing and per-category thresholds.",
+        "summary": "PixAI Tagger v1.0 (2026): 30,877 tags including characters, series and artist styles, reading images at 1008 px. The default on an NVIDIA GPU with 12 GB or more: on 240 real pictures it named 130 of 168 prompt characters (SwinV2 79) and 110 of 126 series (SwinV2 none), with general tags as good. The app uses the official preprocessing and per-category thresholds.",
         "speed": "Slow",
         "memory": "High",
         "best_for": "Characters, series and artist styles with a modern tag space",
@@ -138,7 +138,7 @@ TAGGER_MODEL_HINTS = {
         "gpu_default": True,
         "gpu_confirmation_required": False,
         "gpu_locked": False,
-        "runtime_note": "One image per GPU call, about 7.5 GB of GPU memory and about 0.5 s per image on an RTX 3090 (v0.9: about 0.1 s). On CPU it is much slower.",
+        "runtime_note": "One image per GPU call, about 8.3 GB of free GPU memory and about 0.5 s per image on an RTX 3090 (SwinV2: about 0.05 s). On the CPU it is much slower and needs about 6 GB of free memory.",
         "quality_score": 4,
         "speed_score": 1,
         "stability_score": 3,
@@ -220,6 +220,7 @@ class CatalogMixin:
 
     def get_tagger_models(self) -> Dict[str, Any]:
         """Return tagger model catalog with UI/runtime guidance."""
+        default_name = default_model.default_tagger_model()
         models = [
             {
                 "name": name,
@@ -245,9 +246,7 @@ class CatalogMixin:
                 "best_for": TAGGER_MODEL_HINTS.get(name, {}).get(
                     "best_for", "General use"
                 ),
-                "recommended": TAGGER_MODEL_HINTS.get(name, {}).get(
-                    "recommended", False
-                ),
+                "recommended": name == default_name,
                 "safe_mode_note": TAGGER_MODEL_HINTS.get(name, {}).get(
                     "safe_mode_note",
                     "Switch to CPU only when troubleshooting runtime issues.",
@@ -309,5 +308,5 @@ class CatalogMixin:
         ]
         return {
             "models": models,
-            "default": DEFAULT_TAGGER_MODEL,
+            "default": default_name,
         }

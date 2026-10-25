@@ -190,6 +190,19 @@ TAGGER_MODELS: dict = {
             },
         },
         "runtime_safety_tier": "heavy",
+        # Measured 2026-10-26 on 240 pictures (RTX 3090, batch 1): the
+        # process held about 8.2 GB of video memory, far above the heavy
+        # tier's 3 GB. With this figure the GPU check asks for weights +
+        # this + the CUDA runtime (about 8.3 GB), so a busier card runs it on
+        # the CPU instead of paging into RAM; the hard session limit
+        # (gpu_headroom.tagger_cuda_options, weights + two pictures, ~13.4 GB)
+        # only bites on cards larger than that. On the CPU
+        # one picture peaked at 4.75 GB (weights 2 GB), hence the RAM floor.
+        "activation_mb_per_image": 5800,
+        "minimum_cpu_available_ram_gb": 6,
+        # One picture per session call: only one picture's working memory is
+        # live at a time, so batch planning keeps its (area-scaled) chunk.
+        "graph_batch_size": 1,
         "metadata_format": "pixai_v1",
         "input_layout": "nchw",
         "input_normalization": "minus_one_to_one",

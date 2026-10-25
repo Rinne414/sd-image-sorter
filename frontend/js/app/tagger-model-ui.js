@@ -86,6 +86,9 @@ function getTaggerLocalizedScale(value) {
 
 let _taggerModelCatalog = [];
 let _taggerModelCatalogMap = new Map();
+// The tagger the backend preselects on this computer (`default` of
+// GET /api/tagger/models: PixAI v1.0 on a 12 GB+ NVIDIA GPU, else SwinV2).
+let _taggerCatalogDefaultModel = '';
 let _suppressTaggerPreferencePersistence = false;
 const TAGGER_CHUNK_OPTIONS = [1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 24, 32, 48, 64];
 

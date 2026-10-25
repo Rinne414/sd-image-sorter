@@ -231,7 +231,11 @@ async function loadTaggerModels() {
         const models = (Array.isArray(result.models) ? result.models : [])
             .filter((model) => !model?.captioner_only);
         const defaultModel = normalizeTaggerModelName(result.default, 'wd-swinv2-tagger-v3');
-        const currentValue = normalizeTaggerModelName(select.value, defaultModel);
+        // The first fill replaces the page's placeholder option, which nobody
+        // chose; a later refill keeps what the user has picked since.
+        const isFirstFill = !_taggerCatalogDefaultModel;
+        const currentValue = isFirstFill ? '' : normalizeTaggerModelName(select.value, defaultModel);
+        _taggerCatalogDefaultModel = defaultModel;
         _taggerModelCatalog = models;
         _taggerModelCatalogMap = new Map(
             models

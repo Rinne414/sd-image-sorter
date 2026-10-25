@@ -87,10 +87,20 @@ def test_registry_pins_the_repo_files_and_the_official_contract(variant, sub, ti
     assert "DINOv3" in TAGGER_MODEL_HINTS[variant]["summary"]
 
 
-def test_the_app_default_stays_swinv2():
-    """Adding the models does not change what existing users tag with."""
+def test_the_app_default_is_never_a_danbooru_tag_query_model():
+    """Its rating is worked out from tags (177/240 against a rating head), so
+    the light default stays SwinV2 and a large card picks PixAI v1.0
+    (test_default_tagger_model)."""
+    from services.tagging.default_model import pick_default_tagger_model
+
     assert DEFAULT_TAGGER_MODEL == "wd-swinv2-tagger-v3"
-    assert TAGGER_MODEL_HINTS["wd-swinv2-tagger-v3"].get("recommended") is True
+    big_card = {
+        "torch_cuda_available": True,
+        "gpu_vram_total_mb": 24576,
+        "onnx_providers": ["CUDAExecutionProvider", "CPUExecutionProvider"],
+    }
+    for info in ({}, big_card):
+        assert pick_default_tagger_model(info) not in (B16, L16)
     assert not TAGGER_MODEL_HINTS[B16].get("recommended")
 
 

@@ -198,7 +198,7 @@ export const zhCN = {
   'tagging.otherDownload': '{name} 正在下载，等它完成再开始。',
   'tagging.needsRestart': '{name} 装好了，但要先重启程序才能用。',
 
-  'tagger.note.swinv2': '速度和准确度平衡，拿不准就选它',
+  'tagger.note.swinv2': '轻快，任何电脑都能跑；标签表只到 2024 年初左右，没有作品标签',
   'tagger.note.eva02': '最准，但慢、占显存多',
   'tagger.note.convnext': '比大模型快，准确度还不错',
   'tagger.note.vit': '最快最轻，准确度低一些；适合配置弱的电脑',

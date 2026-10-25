@@ -119,6 +119,11 @@ const e2eStubModulesDir = path.join(e2eFixtureRoot, `python-stubs-${basePort}`)
 
 process.env.SD_IMAGE_SORTER_DATA_DIR = process.env.SD_IMAGE_SORTER_DATA_DIR || e2eDataDir
 process.env.SD_IMAGE_SORTER_DB_PATH = process.env.SD_IMAGE_SORTER_DB_PATH || e2eDatabasePath
+// The UI's default tagger follows the GPU (PixAI v1.0 on a 12 GB+ NVIDIA card,
+// SwinV2 elsewhere). Specs run the same on every machine; the choice itself is
+// covered by backend/tests/test_default_tagger_model.py.
+process.env.SD_IMAGE_SORTER_DEFAULT_TAGGER_MODEL =
+  process.env.SD_IMAGE_SORTER_DEFAULT_TAGGER_MODEL || 'wd-swinv2-tagger-v3'
 
 function ensureFile(filePath: string, size: number, fill: string) {
   if (fs.existsSync(filePath) && fs.statSync(filePath).size === size) {

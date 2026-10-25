@@ -397,6 +397,18 @@ def memory_bound_batch(
     return max(1, min(batch_size, int(budget // per_image)))
 
 
+def _batch_activation_mb(model_config: Dict[str, Any]) -> Any:
+    """Working memory per picture that a batch multiplies (None: not batched).
+
+    A graph fixed at one picture per call (PixAI v1.0) holds one picture's
+    working memory whatever the chunk size; its figure still sizes the GPU
+    check and the CUDA limit (gpu_headroom), not the chunk.
+    """
+    if model_config.get("graph_batch_size") == 1:
+        return None
+    return model_config.get("activation_mb_per_image")
+
+
 def _model_weights_mb(model_config: Dict[str, Any]) -> float:
     from gpu_headroom import model_weights_mb
 
@@ -545,7 +557,7 @@ def recommend_tagger_config(
         )
         batch_size = memory_bound_batch(
             batch_size,
-            model_config.get("activation_mb_per_image"),
+            _batch_activation_mb(model_config),
             available_vram_mb if available_vram_mb is not None else vram_mb,
             GPU_BATCH_MEMORY_SHARE,
             weights_mb=_model_weights_mb(model_config),
@@ -570,7 +582,7 @@ def recommend_tagger_config(
         batch_size = max(1, apply_cpu_model_cap(batch_size))
         batch_size = memory_bound_batch(
             batch_size,
-            model_config.get("activation_mb_per_image"),
+            _batch_activation_mb(model_config),
             float(available_ram_gb) * 1024 if available_ram_gb else None,
             CPU_BATCH_MEMORY_SHARE,
             weights_mb=_model_weights_mb(model_config),

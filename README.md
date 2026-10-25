@@ -501,6 +501,7 @@ run.bat
 - `ToriiGate` 不是 WD14 ONNX 模型，而是多模态 VLM。它的风险等级明显更高，所以现在强制 `chunk = 1`。
 - 之前 UI 里如果出现过 `32` 之类的值，那只是旧的通用显示逻辑，不代表 `ToriiGate` 真会按 32 跑。
 - 输入图比 448 px 大的模型，GPU 上限按输入面积缩小：`pixai-tagger-v1.0` 读 1008 px，上限约为同级模型的 1/5（最少 1）；它的 ONNX 本身也固定每次一张图。
+- `pixai-tagger-v1.0` 要约 8.3 GB 空闲显存才上 GPU（别的程序占着显存时改用 CPU）；用 CPU 时需要约 6 GB 空闲内存，不够就不开始，并说明缺多少、可以怎么做。
 - 每个 GPU 批次跑完后，打标会按这一批的计算时间休息一小段，让 GPU 大约 85% 的时间在工作，而不是一直满载。用环境变量 `SD_IMAGE_SORTER_GPU_DUTY_CYCLE` 调整（如 `0.7` 或 `70` 表示 70%；`1` 或 `off` 关闭）。
 - 同一时间只有一个打标模型留在 GPU 上：换模型或多模型 Smart Tag 会先释放上一个模型的显存。
 
@@ -560,11 +561,11 @@ run.bat
 
 | 模型 | 大小 | 用途 |
 |:--|:--|:--|
-| wd-swinv2-tagger-v3 | ~446 MB | AI 打标默认模型 |
+| wd-swinv2-tagger-v3 | ~446 MB | AI 打标默认模型（没有 12 GB 以上 NVIDIA 显卡时） |
 | wd-eva02-large-tagger-v3 | ~1.2 GB | 更高质量打标 |
 | camie-tagger-v2 | ~1.3 GB | 更新标签空间 |
 | pixai-tagger-v0.9 | ~1.2 GB | 更新标签空间 |
-| pixai-tagger-v1.0 | ~2 GB | 角色、作品和画师画风（1008 px） |
+| pixai-tagger-v1.0 | ~2 GB | 角色、作品和画师画风（1008 px）；有 12 GB 以上 NVIDIA 显卡时是默认打标模型 |
 | danbooru-tag-query-b16 | ~370 MB | 2025 年的 danbooru 标签，体积和 SwinV2 相当（基于 DINOv3） |
 | danbooru-tag-query-l16 | ~1.2 GB | 同一套标签的大号版本（基于 DINOv3） |
 | CLIP ViT-B/32 vision + text | ~600 MB | 相似图搜索（FastEmbed 成对估计） |
@@ -899,6 +900,7 @@ ToriiGate:
 | `toriigate-0.5` | always fixed to `1` |
 
 - Models that read images larger than 448 px get a GPU cap scaled by the input area: `pixai-tagger-v1.0` reads 1008 px, so its cap is about 1/5 of its tier's (never below 1); its ONNX graph also runs one image per call.
+- `pixai-tagger-v1.0` goes on the GPU only with about 8.3 GB of free video memory (when another program holds it, it runs on the CPU). On the CPU it needs about 6 GB of free memory; with less it does not start and says what is short and what to do.
 - After every GPU batch the tagger rests for a share of that batch's compute time, so the GPU is busy about 85% of the time instead of running flat out. Set `SD_IMAGE_SORTER_GPU_DUTY_CYCLE` to change it (`0.7` or `70` = 70%; `1` or `off` disables it).
 - Only one tagger model stays on the GPU at a time: switching models or a multi-tagger Smart Tag run releases the previous model's VRAM first.
 

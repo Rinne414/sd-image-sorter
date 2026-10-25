@@ -198,7 +198,7 @@ export const en: Record<MessageKey, string> = {
   'tagging.otherDownload': '{name} is downloading; start this when it finishes.',
   'tagging.needsRestart': '{name} is installed, but the app must restart before it can be used.',
 
-  'tagger.note.swinv2': 'Balanced speed and accuracy; the safe pick',
+  'tagger.note.swinv2': 'Light and fast on any computer; its tag list stops around early 2024 and has no series',
   'tagger.note.eva02': 'Most accurate; slow and memory-hungry',
   'tagger.note.convnext': 'Faster than the large ones, still decent',
   'tagger.note.vit': 'Fastest and lightest, less accurate; for weak PCs',

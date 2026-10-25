@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import type { TaggerModel } from '../../api/queries'
 import { useT } from '../../i18n'
 import styles from './TagDialog.module.css'
@@ -31,8 +32,21 @@ export function TaggerList({ list, chosen, cards, statusKnown, onPick }: Props) 
     }
   }
   const custom = chosen === CUSTOM_MODEL
+  const listRef = useRef<HTMLDivElement>(null)
+  // The chosen tagger can sit below the list's fold (PixAI v1.0, the default on
+  // a 12 GB+ NVIDIA card, is the eighth row): bring it into view inside the
+  // list only, never scrolling the dialog or the page.
+  useEffect(() => {
+    const box = listRef.current
+    const row = box?.querySelector<HTMLElement>('[data-checked]')
+    if (!box || !row) return
+    const boxRect = box.getBoundingClientRect()
+    const rowRect = row.getBoundingClientRect()
+    if (rowRect.bottom > boxRect.bottom) box.scrollTop += rowRect.bottom - boxRect.bottom
+    else if (rowRect.top < boxRect.top) box.scrollTop -= boxRect.top - rowRect.top
+  }, [chosen, list.length])
   return (
-    <div className={styles.list} role="radiogroup" aria-label={t('tagging.tagger')}>
+    <div ref={listRef} className={styles.list} role="radiogroup" aria-label={t('tagging.tagger')}>
       {list.map((m) => {
         const inf = taggerInfo(m.name)
         const r = readiness(inf, cards)

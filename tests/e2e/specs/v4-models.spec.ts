@@ -288,8 +288,8 @@ test('the page: counts, what works now, the download source, and cards that say 
   const pixai = wd.getByTestId('other-taggers').locator('[data-variant="pixai-tagger-v1.0"]')
   await expect(pixai).toContainText('Best PixAI')
   await expect(pixai).toContainText('about 2 GB · Not downloaded')
-  await expect(pixai).toContainText('7.5 GB of GPU memory')
-  await expect(pixai).toContainText('5× slower')
+  await expect(pixai).toContainText('8.3 GB of free GPU memory')
+  await expect(pixai).toContainText('10× slower than SwinV2')
   await expect(wd).toContainText('SD_IMAGE_SORTER_GPU_DUTY_CYCLE')
   await wd.getByTestId('model-variant').selectOption('wd-eva02-large-tagger-v3')
   await expect(wd.getByTestId('model-facts')).toContainText('about 1.2 GB')
@@ -571,7 +571,7 @@ test('Chinese: the page, a card and the bulk dialog have no English left but nam
   await expect(page.getByTestId('settings-tab-models')).toHaveText('模型中心')
   await expect(cardOf(page, 'wd14').getByTestId('model-status')).toHaveText('已就绪')
   await expect(cardOf(page, 'clip').getByTestId('model-prepare')).toHaveText('立即准备')
-  await expect(cardOf(page, 'wd14').getByTestId('other-taggers')).toContainText('约占 7.5 GB 显存')
+  await expect(cardOf(page, 'wd14').getByTestId('other-taggers')).toContainText('需要约 8.3 GB 空闲显存')
   // strip the names, file names and jargon a Chinese UI keeps; no English words must remain
   const allowed = /(WD14|WD|SwinV2|EVA02|ConvNeXt|ViT|Large|Camie|PixAI|OppaiOracle|CL Tagger|ToriiGate|Florence-2|Base|TIPO|CLIP|FastEmbed|Kaloscope|LSNet|Lucida|rembg|U2Net|YOLO|NudeNet|SAM|Hugging Face|HuggingFace|hf-mirror(\.com)?|ModelScope|Civitai|Danbooru|NVIDIA|CUDA|PyTorch|CPU|GPU|GGUF|Ollama|AI|WASD|app|data|models|yolo|json|txt|onnx|pt|pth|csv|kaloscope2\.0|lsnet_model|comfyui-lsnet-runtime|best_checkpoint|class_mapping|SD_IMAGE_SORTER_GPU_DUTY_CYCLE|off|v\d[\w.-]*|\d+(\.\d+)?\s?(MB|GB|%)|200M-ft|320n)/g
   const text = (await page.getByTestId('model-center').innerText()).replace(allowed, '')

@@ -800,6 +800,8 @@ Get the checkpoint (base model) library for the Library tab's Checkpoints facet.
 #### GET /api/tagger/models
 Get available tagger models and runtime guidance. Each model item includes default thresholds, GPU/runtime guidance, and Custom profile metadata such as `custom_profile_supported`, `custom_metadata_format`, and `custom_tags_file_hint`. v3.5.0: each item also carries `captioner_only` — `true` marks caption-only models (ToriiGate) that stay in the catalog for Smart Tag and model downloads but are hidden from the gallery tagger dropdown and rejected by `/api/tag` with a 400. Florence-2 Base is a separate Smart Tag local captioner and is intentionally absent from this booru tagger endpoint. `cl-tagger-v2` is an optional gated booru tagger exposed here; its fixed revision is downloaded only after explicit user preparation from official Hugging Face and its weights are never bundled in portable releases. `pixai-tagger-v1.0` (1008 px input, 30,877 tags) is prepared through the WD14 model card; GPU batch caps shrink with a model's input area relative to 448 px.
 
+`default` is the tagger the UI preselects on this computer: `pixai-tagger-v1.0` when ONNX Runtime has CUDA and an NVIDIA GPU has 12 GB or more, otherwise `wd-swinv2-tagger-v3`; `SD_IMAGE_SORTER_DEFAULT_TAGGER_MODEL`, when set, always wins. Exactly that model has `recommended: true`. A tagging request without `model_name` still uses `wd-swinv2-tagger-v3` (or the setting), which runs on any hardware.
+
 #### POST /api/tag/start
 Start background tagging (alias for POST /api/tag).
 
@@ -814,7 +816,7 @@ Start background tagging.
 | `threshold` | float | 0.35 | Threshold for general tags after score normalization |
 | `character_threshold` | float | 0.85 | Threshold for character tags after score normalization |
 | `retag_all` | bool | false | Re-tag already tagged images when no explicit `image_ids` are supplied |
-| `model_name` | string \| null | default tagger | Built-in tagger model name, or the selected Custom profile when `model_path` is used. Captioner-only models (`toriigate-0.5`) are rejected with 400 — caption with Smart Tag's natural-language mode instead (v3.5.0 owner decision). `cl-tagger-v2` is a dedicated downloaded model and does not accept the Custom ONNX path |
+| `model_name` | string \| null | `wd-swinv2-tagger-v3` | Built-in tagger model name, or the selected Custom profile when `model_path` is used. Captioner-only models (`toriigate-0.5`) are rejected with 400 — caption with Smart Tag's natural-language mode instead (v3.5.0 owner decision). `cl-tagger-v2` is a dedicated downloaded model and does not accept the Custom ONNX path |
 | `model_path` | string \| null | null | Local Custom ONNX model path; must exist and end in `.onnx`. User-supplied files are never deleted or re-downloaded by the repair path |
 | `tags_path` | string \| null | null | Optional local tag metadata path for Custom ONNX only; requires `model_path`. If supplied, it must exist and match the selected profile extension. If omitted, the tagger auto-detects profile-specific metadata next to the model: WD14/PixAI use `selected_tags.csv`; Camie uses `camie-tagger-v2-metadata.json` or `metadata.json` |
 | `custom_profile` | string \| null | null | Custom ONNX profile: `wd14`, `camie-tagger-v2`, or `pixai-tagger-v0.9`. `toriigate-0.5` is rejected because ToriiGate is not ONNX |

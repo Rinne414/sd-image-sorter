@@ -22,7 +22,9 @@ from typing import Any, Dict, List, Optional
 
 # What a model needs free before it goes on the GPU: its weights, the runtime
 # workspace and a small batch. Measured loads on a 3090: WD14 SwinV2/ViT about
-# 0.9-1.2 GB, EVA02-Large and the 1008 px PixAI about 2.5-3 GB. ToriiGate has
+# 0.9-1.2 GB, EVA02-Large and the 1008 px PixAI about 2.5-3 GB (PixAI v1.0
+# needs about 8.3 GB once it runs and says so with activation_mb_per_image,
+# see tagger_gpu_need_mb). ToriiGate has
 # its own, larger floor (toriigate_tagger.TORIIGATE_GPU_MIN_FREE_MB).
 TAGGER_GPU_NEED_MB: Dict[str, float] = {
     "light": 1200.0,

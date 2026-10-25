@@ -519,7 +519,9 @@ async def get_tagger_models(
     service: TaggingService = Depends(get_tagging_service),
 ):
     """Get available WD14 tagger models."""
-    return service.get_tagger_models()
+    # The default comes from the hardware probe (torch, nvidia-smi), which
+    # must not stall the event loop on the first call.
+    return await run_in_threadpool(service.get_tagger_models)
 
 
 @router.get("/tag/scope-count")

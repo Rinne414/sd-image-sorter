@@ -393,6 +393,39 @@ class WD14Tagger(
         logger.warning("%s: %s", self.model_name, decision.message())
         return False
 
+    def _ensure_cpu_memory(self, reason: str = "") -> None:
+        """Refuse a CPU session that would not fit in the free memory.
+
+        A model that states ``minimum_cpu_available_ram_gb`` (PixAI v1.0: one
+        1008 px picture peaked at 4.75 GB) would otherwise page the PC to a
+        standstill, typically when another program holds the GPU and the
+        tagger falls back to the CPU.
+        """
+        need_gb = float(
+            MODELS.get(self.model_name, {}).get("minimum_cpu_available_ram_gb") or 0
+        )
+        if need_gb <= 0:
+            return
+        try:
+            import psutil
+
+            free_gb = psutil.virtual_memory().available / 2**30
+        except Exception:
+            return
+        if free_gb >= need_gb:
+            return
+        if not reason and getattr(self, "_gpu_busy_fallback", False):
+            reason = (
+                "Another program is using the GPU memory it needs, so it would "
+                "run on the CPU. "
+            )
+        raise RuntimeError(
+            f"{reason}{self.model_name} on the CPU needs about {need_gb:.0f} GB of "
+            f"free memory and {free_gb:.1f} GB is free. Close programs you are not "
+            "using (for example ComfyUI), or tag with a lighter model such as "
+            "wd-swinv2-tagger-v3."
+        )
+
     def _load_locked(self):
         """Perform the one-time model + tag load. Caller must hold _load_lock."""
         if getattr(self, "_gpu_busy_fallback", False):
@@ -464,6 +497,8 @@ class WD14Tagger(
             if not self._gpu_has_room():
                 session_uses_gpu = False
                 providers = ["CPUExecutionProvider"]
+        if not session_uses_gpu:
+            self._ensure_cpu_memory()
         sess_options = self._build_session_options(gpu_enabled=session_uses_gpu)
 
         try:
@@ -476,6 +511,9 @@ class WD14Tagger(
                     "Failed to initialize %s on GPU, retrying on CPU: %s",
                     self.model_name,
                     e,
+                )
+                self._ensure_cpu_memory(
+                    "The GPU could not start it, so it would run on the CPU. "
                 )
                 cpu_providers = ["CPUExecutionProvider"]
                 cpu_options = self._build_session_options(gpu_enabled=False)
@@ -507,6 +545,10 @@ class WD14Tagger(
             "GPU inference failed for %s, switching to CPU: %s",
             self.model_name,
             error,
+        )
+        self._ensure_cpu_memory(
+            "The GPU stopped running it (often another program took its memory), "
+            "so it would continue on the CPU. "
         )
         cpu_options = self._build_session_options(gpu_enabled=False)
         self.session = self._create_session(

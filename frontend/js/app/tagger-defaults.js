@@ -363,7 +363,10 @@ function applyStoredTaggerDefaults(options = {}) {
 function resetTaggerDefaultControls() {
     const modelSelect = $('#tag-model-select');
     if (modelSelect) {
-        const defaultModel = getAvailableTaggerOptionValue('wd-swinv2-tagger-v3') || modelSelect.querySelector('option:not([disabled])')?.value || modelSelect.value;
+        const defaultModel = getAvailableTaggerOptionValue(_taggerCatalogDefaultModel)
+            || getAvailableTaggerOptionValue('wd-swinv2-tagger-v3')
+            || modelSelect.querySelector('option:not([disabled])')?.value
+            || modelSelect.value;
         modelSelect.value = defaultModel;
     }
 
