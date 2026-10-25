@@ -1,6 +1,6 @@
 ﻿# SD Image Sorter API Documentation
 
-**Version:** 3.7.0
+**Version:** 3.8.0
 **Base URL:** `http://127.0.0.1:8487` (default; configurable via `SD_IMAGE_SORTER_PORT`)
 **Interactive Docs:** `http://127.0.0.1:8487/docs` (Swagger UI, same port as runtime)
 
@@ -2770,7 +2770,7 @@ Three groups of routes:
 In the lists below, "own page" means the request has no `Sec-Fetch-Site` other than `same-origin` and any `Origin` is on the program's own port; another local web app, which the general `/api` guard still lets through, gets `403 Only this program's own page can ...`.
 
 #### POST /api/ext/ping
-Is the program running, and is this extension paired. No token needed. Send the token in `X-SD-Ext-Token` to learn its state. Returns `{"app": "SD Image Sorter", "version": "3.7.0", "pairing": "approved"}`; `pairing` is `pending`, `approved`, `denied` or `unknown` (no token, or an unknown one).
+Is the program running, and is this extension paired. No token needed. Send the token in `X-SD-Ext-Token` to learn its state. Returns `{"app": "SD Image Sorter", "version": "3.8.0", "pairing": "approved"}`; `pairing` is `pending`, `approved`, `denied` or `unknown` (no token, or an unknown one).
 
 #### POST /api/ext/pair
 Ask the user to pair this extension. No token header; the token is in the body. Body: `{"token": "<32 to 128 characters, A-Z a-z 0-9 _ ->", "name": "My Chrome", "browser": "chrome"}` (`name` up to 200 characters, `browser` is `chrome`, `edge`, `firefox` or `other`). The request waits in memory, up to 15 minutes, until the user presses Allow or Deny in the program's own page (`POST /api/browser-extension/pairings/{pairing_id}/decide`). One open request per extension: asking again replaces it. Returns `{"id": "3f9a1c07d2b4e856", "state": "pending"}`.

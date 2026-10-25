@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.8.0] - 2026-10-26
+
+SD Image Sorter can now stay running as a desktop program on Windows (tray, a global shortcut, pictures dragged out as files) and gather pictures by itself: watched output folders, a browser extension, paste, and videos in the same library. The tag panel picks PixAI v1.0 on an NVIDIA card with 12 GB or more for fresher characters and series, the DanbooruTagQuery taggers join the list, your own VLM prompt presets are kept, and the LoRA export writes each tag once.
+
 SD Image Sorter can now stay resident: the Windows package opens a desktop program that lives in the tray, watches your generator output folders and adds new pictures to the gallery by itself. Pictures also arrive from web pages (browser extension), from the clipboard (Ctrl+V) and from video files, and any picture can be sent back to ComfyUI, WebUI or NovelAI.
 
 现在程序可以常驻：Windows 包里有一个住在托盘里的桌面程序，监看生成器的输出文件夹，新图自己进图库。图片也可以从网页（浏览器扩展）、剪贴板（Ctrl+V）和视频文件进来，任何一张图都能送回 ComfyUI、WebUI 或 NovelAI。
@@ -32,6 +36,12 @@ SD Image Sorter can now stay resident: the Windows package opens a desktop progr
 
 - **Open in Dataset Maker from Batch export / 从批量导出打开数据集制作** (issue #5): the caption export dialog writes captions only; a line under "Where to save sidecar files" now offers "Open in Dataset Maker", which takes the selected pictures there, where the Export step copies pictures and captions under paired new names (001.png + 001.txt).
   - 批量导出 caption 的对话框只写 caption 文件；「sidecar 文件保存位置」下面新增一行「在数据集制作中打开」，把选中的图带过去，在数据集制作的「导出」步骤里把图片和标签文件一起复制、成对重新命名（001.png + 001.txt）。
+
+- **Clear current library where you can see it / 「清空当前图库」放在看得到的地方**: the gallery sidebar's first line names the open library and offers Clear library at its right, away from Select Images and Import; Settings > General ends with the same action, and Vopus has it at the foot of the library rail and in Settings > Library. All of them check for running jobs first and ask with the library's name; the files on disk stay.
+  - 图库侧栏第一行写出当前打开的图库，右边就是「清空图库」，和「选择图片」「导入」分开；设置 > 常规 的最后也有同一个操作，Vopus 在图库侧栏底部和 设置 > 图库 里。它们都会先检查有没有正在跑的任务，再用图库名字确认；硬盘上的文件不动。
+
+- **Reset all settings / 恢复所有设置**: Settings (classic) and Settings > Appearance (Vopus) can put every preference the program keeps in the browser (language, sizes, sound, start page, tabs, panels, tool options) back to its default, after a question that starts on Cancel. Libraries, saved searches, presets, drafts, jobs and the folders you picked stay.
+  - 设置（经典界面）和 设置 > 外观（Vopus）可以把程序存在浏览器里的偏好（语言、大小、声音、起始页、标签页、面板、工具选项）恢复成默认值，确认框默认选中「取消」。图库、保存的搜索、预设、草稿、任务和你选过的文件夹都保留。
 
 ### Changed / 变更
 
@@ -75,6 +85,18 @@ SD Image Sorter can now stay resident: the Windows package opens a desktop progr
 
 - **Chinese labels use the Chinese colon / 中文标签改用全角冒号**: about sixty places joined a label and its value with an English colon in code, so the Chinese interface showed lines such as `打标失败: …` and `自由文本: blue` beside the language pack's `：`. They now use `：` in Chinese (`打标失败：…`) and stay `Label: value` in English.
   - 程序里大约六十处用英文冒号把标签和值拼在一起，中文界面因此出现 `打标失败: …`、`自由文本: blue` 这类写法，和语言包里的 `：` 不一致。现在中文用 `：`（`打标失败：…`），英文仍是 `Label: value`。
+
+- **An error nothing caught is said on screen / 没人接住的错误会显示出来**: when part of the classic interface fails, a strip at the bottom says what failed and that the library was not touched, with Reload and Copy the error (personal paths hidden), instead of leaving a half-working page.
+  - 经典界面有部分出错时，底部会出现一条说明：什么出错了、图库没有被改动，并提供「重新加载」和「复制错误」（个人路径已隐藏），不会只留下一个半坏的页面。
+
+- **Laptop screens and missing files / 笔记本屏幕与丢失的文件**: at 1366×768 the search row stays on one line, so the pictures start higher. The missing-files banner offers Find Moved Files and Show folders first and puts clearing the records last; a library whose every file is missing says how many and how to get them back, instead of "No images yet".
+  - 1366×768 下搜索栏保持一行，图片从更高的位置开始。文件丢失提示先给「找回移动的文件」和「显示文件夹」，清除记录放到最后；所有文件都找不到的图库会说明有多少张、怎么找回来，而不是显示「还没有图片」。
+
+- **Back in Vopus / Vopus 里的后退**: the browser and mouse Back buttons return to the page shown before and Forward comes back; with the big picture or a menu open, Back closes it and stays. On the first page, Back warns once before leaving the program.
+  - 浏览器后退键和鼠标侧键会回到上一个页面，前进键回来；打开大图或菜单时，后退会先把它关掉、留在原页。在第一个页面按后退会先提醒一次，再按才离开程序。
+
+- **The open library's name / 当前图库的名字**: the entry page could show 主图库 / Main library over the name of the library you had open after the language was applied again, and quick collect, disk usage and Vopus settings said "Main library" in the Chinese interface; they now show the open library's name, and the default library is named in the interface language until you rename it.
+  - 语言重新套用后，入口页可能把你打开的图库名字换回「主图库 / Main library」；快速收集、磁盘占用和 Vopus 设置在中文界面里写「Main library」。现在都显示当前图库的名字，默认图库在改名前跟着界面语言显示。
 
 ## [3.7.0] - 2026-10-17
 

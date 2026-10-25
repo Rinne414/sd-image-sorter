@@ -63,6 +63,14 @@
 - **更快**：图库翻页从 0.36 秒降到 0.045 秒；批量打标 1000 张从 170 秒降到 106 秒（实测）。
 - **中英文完整**：中文界面里的按钮提示也都是中文。
 
+### v3.8.0
+
+- **桌面程序（Windows）**：解压后双击 `SD Image Sorter.exe`，关掉窗口会留在托盘；Ctrl+Alt+Space 随时叫出；图库里的图可以直接拖进别的程序。`run-portable.bat` 照旧用浏览器打开。
+- **自己收集新图**：给输出文件夹勾上「监看新图片」，ComfyUI / WebUI 新出的图几秒内进图库；浏览器扩展右键存网上的图；在图库里 Ctrl+V 粘贴；视频也能放进图库。
+- **送回生成器**：右键图片可以复制 WebUI / NovelAI 提示词、复制或保存 ComfyUI 工作流，或直接在 ComfyUI 再跑一次。
+- **打标更新**：12 GB 以上的 NVIDIA 显卡默认用 PixAI v1.0（认得更多新角色，会标作品名）；新增 DanbooruTagQuery B/16 与 L/16；VLM 提示词可以存成自己的预设。
+- **导出更顺**：LoRA caption 每个标签只写一次，导出预览跟着最新的标签，生成器分页的张数跟着筛选变。
+
 ### v3.7.0
 
 - **两套界面，同一个图库**：经典界面仍是首页，第二套界面 Vopus 在设置 → 界面里切换，选择会被记住。
@@ -673,6 +681,14 @@ Eagle and Billfish are general asset managers and are not in this SD-workflow ta
 - **No hard stops**: caps and export gates became warnings with a choice.
 - **Faster**: gallery page 0.36 s to 0.045 s; Mass Tag on 1,000 images 170 s to 106 s (measured).
 - **Complete Chinese and English UI**, tooltips included.
+
+### v3.8.0
+
+- **Desktop program (Windows)**: extract and double-click `SD Image Sorter.exe`; closing the window keeps it in the tray, Ctrl+Alt+Space brings it back, and gallery pictures can be dragged into other programs. `run-portable.bat` still opens the browser mode.
+- **Pictures come in by themselves**: tick "Watch for new pictures" on an output folder and new ComfyUI or WebUI pictures join the gallery within seconds; the browser extension saves a right-clicked web picture; Ctrl+V in the gallery pastes one; videos join the library too.
+- **Send to generator**: right-click a picture to copy its WebUI or NovelAI prompt, copy or save its ComfyUI workflow, or run it again in ComfyUI.
+- **Tagging**: on an NVIDIA GPU with 12 GB or more the default is PixAI v1.0 (more of the newer characters, and series names); DanbooruTagQuery B/16 and L/16 are new; VLM prompts can be saved as your own presets.
+- **Smoother export**: the LoRA caption writes each tag once, the export preview follows your newest tags, and the generator tabs count what the filters leave.
 
 ### v3.7.0
 
