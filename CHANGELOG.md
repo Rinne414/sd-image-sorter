@@ -27,11 +27,8 @@ SD Image Sorter can now stay resident: the Windows package opens a desktop progr
   - 闲置的 AI 模型会释放（设置 > 后台 >「闲置的 AI 模型多久后释放」），GPU 忙时改用 CPU，后台任务用低于正常的优先级运行。
 - **Your own VLM prompt presets / 自己的 VLM 提示词预设** (issue #21): in VLM Captioning Settings > Prompt Configuration, "Save as new preset" keeps the prompts in the boxes under a name of your choice; your presets are listed under "My presets" after the built-in ones, and you can save changes into one, rename it or delete it. Deleting a preset, or applying one over prompts you typed, can be undone from the line under the list. The dialog reopens on the preset you last used. Presets are kept in `data/config/vlm-prompt-presets.json`, so updates leave them alone; the built-in presets cannot be changed. The Krea 2 preset, which had no entry in the list, is now there.
   - 在「VLM 描述设置 > 提示词配置」里，「另存为新预设」会用你起的名字保存框里的提示词；你的预设列在内置预设之后的「我的预设」里，可以保存修改、重命名或删除。删除预设、或用预设覆盖了你自己写的提示词，都可以在列表下方那行撤销。对话框会停在你上次用的预设。预设存在 `data/config/vlm-prompt-presets.json`，更新不会动它；内置预设不能修改。之前列表里漏掉的 Krea 2 预设现在也在了。
-
-### Fixed / 修复
-
-- **The prompt for pictures that already have tags / 图片已有标签时用的提示词**: VLM captioning sends a separate user prompt for pictures that already have tags, but it was kept out of sight, so editing the User Prompt seemed to do nothing on tagged pictures. It is now its own box, "User prompt when the picture has tags", shown while "Include danbooru tags as context" is ticked; leave it empty to send the User Prompt with the tags added at the end.
-  - VLM 描述给已经有标签的图片发送的是另一段 User Prompt，但它原本看不到，所以改了 User Prompt 在有标签的图上好像没用。现在它有自己的输入框「图片已有标签时用的 User Prompt」，勾选「把 danbooru 标签作为上下文」时显示；留空时发送 User Prompt 并在末尾附上标签。
+- **Open in Dataset Maker from Batch export / 从批量导出打开数据集制作** (issue #5): the caption export dialog writes captions only; a line under "Where to save sidecar files" now offers "Open in Dataset Maker", which takes the selected pictures there, where the Export step copies pictures and captions under paired new names (001.png + 001.txt).
+  - 批量导出 caption 的对话框只写 caption 文件；「sidecar 文件保存位置」下面新增一行「在数据集制作中打开」，把选中的图带过去，在数据集制作的「导出」步骤里把图片和标签文件一起复制、成对重新命名（001.png + 001.txt）。
 
 ### Changed / 变更
 
@@ -41,6 +38,17 @@ SD Image Sorter can now stay resident: the Windows package opens a desktop progr
   - `windows-portable.zip` 因为带上桌面程序（Electron），从约 22 MB 增加到约 165 MB。Linux 包仍然只有浏览器模式，没有桌面程序。
 - **README / 说明**: the Windows steps, the resident features and the "what goes online" table (ComfyUI address calls stay on this computer unless you point them elsewhere, the ffmpeg download, the extension talks only to 127.0.0.1) are updated.
   - 更新了 Windows 的启动步骤、常驻功能的说明和「哪些功能会联网」表（ComfyUI 地址的调用默认只在本机，除非你把地址指向别处；ffmpeg 下载；扩展只和 127.0.0.1 通信）。
+
+### Fixed / 修复
+
+- **The prompt for pictures that already have tags / 图片已有标签时用的提示词**: VLM captioning sends a separate user prompt for pictures that already have tags, but it was kept out of sight, so editing the User Prompt seemed to do nothing on tagged pictures. It is now its own box, "User prompt when the picture has tags", shown while "Include danbooru tags as context" is ticked; leave it empty to send the User Prompt with the tags added at the end.
+  - VLM 描述给已经有标签的图片发送的是另一段 User Prompt，但它原本看不到，所以改了 User Prompt 在有标签的图上好像没用。现在它有自己的输入框「图片已有标签时用的 User Prompt」，勾选「把 danbooru 标签作为上下文」时显示；留空时发送 User Prompt 并在末尾附上标签。
+- **The export preview shows the tags you have now / 导出预览显示当前的标签** (issue #5): after AI tagging, Smart Tag or VLM captioning, the Batch export preview and Dataset Maker showed the old tags until the program was restarted, and changing an export option re-rendered only the first 50 pictures. The preview now draws again when the dialog opens, when a tagging run ends and on every option change, for every picture; your own caption edits stay.
+  - AI 打标、Smart Tag 或 VLM 描述完成后，批量导出预览和数据集制作仍显示旧标签，要重启程序才更新；改导出选项也只重画前 50 张。现在打开对话框、打标结束、每次改选项都会对所有图重画预览，你自己改过的 caption 保留。
+- **The default LoRA caption stops repeating tags / 默认 LoRA caption 不再重复标签** (issue #5): "LoRA caption file" wrote a tag-style prompt as it was next to the tag rows, so shared tags appeared twice (`long_hair` and `long hair`) and the prompt kept its underscores with "Convert tag underscores to spaces" ticked. Such a prompt is now split into its tags, cleaned of weights, `<lora:…>` and BREAK, given the same underscore and blacklist rules, and each tag is written once. A sentence-style prompt is kept as written; "Prompt text" still writes the raw prompt.
+  - 「LoRA caption 文件」以前把标签式 prompt 原样放在标签前面，相同的标签会出现两次（`long_hair` 和 `long hair`），勾了「把标签的下划线换成空格」prompt 里的下划线也还在。现在这类 prompt 会拆成标签，去掉权重、`<lora:…>` 和 BREAK，套用同样的下划线和黑名单规则，每个标签只写一次。句子式 prompt 照原样保留；「Prompt 文本」模式仍写原始 prompt。
+- **"Keep original filenames" keeps every name / 「保留原文件名」不再改名** (issue #5): Dataset Maker turned `a..b.png` into `a.b.png` and dropped spaces at the ends of a name; the exported picture and caption now carry the source picture's exact name.
+  - 数据集制作会把 `a..b.png` 改成 `a.b.png`、去掉名字首尾的空格；现在导出的图片和标签文件保留原图的完整名字。
 
 ## [3.7.0] - 2026-10-17
 

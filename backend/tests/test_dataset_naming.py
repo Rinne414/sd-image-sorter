@@ -26,6 +26,20 @@ def test_filename_preserves_special_chars():
     assert render_stem("{filename}", image_filename="with.commas, sort.png", index=1) == "with.commas, sort"
 
 
+def test_keep_original_filenames_keeps_every_legal_name_exactly():
+    """Issue #5: "Keep original filenames" means the exact name on disk, so a
+    trainer pairing by basename finds the same names as in the source folder.
+    Double dots and outer spaces are legal file names and must survive."""
+    for name in ("a..b.png", " spaced name .png", "1 (2)_1.png", "x...final.png"):
+        stem = name.rsplit(".", 1)[0]
+        assert render_stem("{filename}", image_filename=name, index=1) == stem
+
+
+def test_patterns_that_add_text_are_still_cleaned():
+    assert render_stem("{filename}_a:b", image_filename="pic.png", index=1) == "pic_a_b"
+    assert render_stem("../{filename}", image_filename="pic.png", index=1) == "pic"
+
+
 def test_index_pattern():
     assert render_stem("subject_{index}", image_filename="orig.png", index=7) == "subject_7"
 

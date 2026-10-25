@@ -17,11 +17,12 @@ services.tag_training_filters) are origin-module seams and stay verbatim.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
 
-from caption_format import caption_format_for_storage
+from caption_format import CAPTION_FORMAT_TAGS, caption_format_for_storage
 from services.caption_dialect import (
     ai_caption_nl_fallback,
     caption_reads_as_prose,
@@ -457,6 +458,62 @@ def _filter_text_caption_tokens(value: str, blacklist: set[str]) -> List[str]:
     return output
 
 
+# SD prompt syntax that is not part of a tag: extra networks (<lora:x:0.8>),
+# BREAK, emphasis brackets, "(tag:1.2)" weights and NovelAI "1.3::tag::".
+_PROMPT_EXTRA_NETWORK = re.compile(r"<[^<>]*>")
+_PROMPT_BREAK = re.compile(r"\bBREAK\b")
+_PROMPT_BRACKETS = re.compile(r"[(){}\[\]]")
+_PROMPT_TRAILING_WEIGHT = re.compile(r":\s*-?\d+(?:\.\d+)?\s*$")
+_PROMPT_NAI_WEIGHT = re.compile(r"^-?\d+(?:\.\d+)?::|::$")
+_ESCAPED_OPEN, _ESCAPED_CLOSE = "\x00", "\x01"
+
+
+def _prompt_tag_tokens(prompt: str) -> List[str]:
+    """The tags of a tag-style prompt, without SD weighting syntax.
+
+    Escaped brackets belong to the tag (``hatsune_miku \\(vocaloid\\)`` ->
+    ``hatsune_miku (vocaloid)``); every other bracket is emphasis.
+    """
+    text = _PROMPT_EXTRA_NETWORK.sub(",", prompt)
+    text = _PROMPT_BREAK.sub(",", text)
+    text = text.replace("\\(", _ESCAPED_OPEN).replace("\\)", _ESCAPED_CLOSE)
+    tokens: List[str] = []
+    for raw in re.split(r"[,\n|]", text):
+        token = _PROMPT_BRACKETS.sub("", raw)
+        token = _PROMPT_NAI_WEIGHT.sub("", token.strip())
+        token = _PROMPT_TRAILING_WEIGHT.sub("", token)
+        token = token.replace(_ESCAPED_OPEN, "(").replace(_ESCAPED_CLOSE, ")")
+        token = " ".join(token.split()).strip(",")
+        if token:
+            tokens.append(token)
+    return tokens
+
+
+def _merged_prompt_parts(
+    prompt: str,
+    blacklist: set[str],
+    *,
+    normalize: bool,
+    verbatim: frozenset = frozenset(),
+) -> List[str]:
+    """The prompt's share of the merged LoRA caption (issue #5).
+
+    A tag-style prompt mostly repeats the picture's tag rows. Kept whole it
+    wrote those tags twice and kept its underscores even with the underscore
+    option on, so it is split into tags that get the rows' blacklist and
+    underscore rule; the join then drops the repeats. A prose prompt is a
+    sentence whose commas belong to it, so it stays as written.
+    """
+    if not prompt or caption_format_for_storage(prompt) != CAPTION_FORMAT_TAGS:
+        return _filter_text_caption_tokens(prompt, blacklist)
+    blocked = {_normalize_caption_transform_token(tag) for tag in blacklist if str(tag or "").strip()}
+    tokens = [
+        token for token in _prompt_tag_tokens(prompt)
+        if _normalize_caption_transform_token(token) not in blocked
+    ]
+    return _maybe_normalize_underscores(tokens, normalize=normalize, verbatim=verbatim)
+
+
 def _split_text_caption_tokens(value: str, blacklist: set[str]) -> List[str]:
     """Comma tokens of a tag-list caption, blacklisted ones removed."""
     blocked = {" ".join(str(tag or "").split()).strip().lower() for tag in blacklist if str(tag or "").strip()}
@@ -600,7 +657,12 @@ def build_sidecar_content(
         return _join_caption_parts([
             prefix,
             *caption_parts,
-            *_filter_text_caption_tokens(prompt, blacklist),
+            *_merged_prompt_parts(
+                prompt,
+                blacklist,
+                normalize=underscore_apply,
+                verbatim=trigger_tag_names(tags),
+            ),
             *filtered_tags,
         ])
     if mode == "nl_caption":

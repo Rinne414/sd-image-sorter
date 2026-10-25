@@ -554,6 +554,8 @@ function showBatchExportModal() {
     $('#batch-export-progress').style.display = 'none';
     $('#btn-start-batch-export').disabled = false;
     showModal('batch-export-modal');
+    // A preview from the last time may hold old tags or another selection.
+    window.V321Integration?.onExportSourceChanged?.();
 }
 
 // "Next to each image" vs "one folder" and that folder come back next time.

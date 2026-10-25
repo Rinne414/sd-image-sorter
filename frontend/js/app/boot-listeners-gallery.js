@@ -366,6 +366,10 @@ function initBootListenersGallery() {
     // --- Batch Tag Export Modal ---
     $('#btn-batch-export-tags')?.addEventListener('click', showBatchExportModal);
     $('#btn-close-batch-export')?.addEventListener('click', () => hideModal('batch-export-modal'));
+    $('#btn-batch-export-to-dataset')?.addEventListener('click', async () => {
+        hideModal('batch-export-modal');
+        await sendSelectionToDatasetMaker();
+    });
     $('#btn-cancel-batch-export')?.addEventListener('click', () => hideModal('batch-export-modal'));
     $('#btn-start-batch-export')?.addEventListener('click', executeBatchExport);
     $('#batch-export-content-mode')?.addEventListener('change', (event) => {

@@ -2557,6 +2557,8 @@ window.I18nLang_zhCN = {
     'batchExport.combinedDownloaded': '合并导出已保存为 {filename}。',
     'batchExport.combinedLargeDownloaded': '合并导出内容较大，已生成下载文件，避免浏览器卡死。',
     'batchExport.outputModeBesideImageHelper': '每个 .txt / .json 写在原图所在的文件夹。适合图分散在很多子文件夹，或训练工具按文件夹读取的情况。',
+    'batchExport.datasetHint': '需要连图片一起复制，并和标签文件一起重新命名（001.png + 001.txt）？数据集制作的「导出」步骤可以做到。',
+    'batchExport.datasetOpen': '在数据集制作中打开',
     'batchExport.advancedSummary': '高级选项',
     'batchExport.advancedHint': 'Class Token 和黑名单只影响训练 caption 模式。',
     // v3.2.1 LoRA 训练模板 + 即时预览

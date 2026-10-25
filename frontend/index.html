@@ -7342,6 +7342,13 @@
                         </label>
                     </div>
                     <small class="helper-text" data-i18n="batchExport.outputModeBesideImageHelper">Writes each .txt / .json next to its source image. Good when your library spans many subfolders or your trainer reads per folder.</small>
+                    <!-- Issue #5: this dialog writes captions only. Copying the
+                         pictures with their captions under new paired names is
+                         Dataset Maker's Export step; send the selection there. -->
+                    <div class="batch-export-dataset-hint">
+                        <span data-i18n="batchExport.datasetHint">Need the pictures copied too, renamed together with their captions (001.png + 001.txt)? Dataset Maker does that in its Export step.</span>
+                        <button type="button" class="btn btn-small btn-ghost" id="btn-batch-export-to-dataset" data-i18n="batchExport.datasetOpen">Open in Dataset Maker</button>
+                    </div>
                 </div>
 
                 <div class="form-group" id="batch-export-folder-group">
@@ -7413,7 +7420,7 @@
                     <div class="export-preview-pane" id="export-preview-group">
                         <div class="export-preview-header">
                             <strong data-i18n="batchExport.livePreview">Live preview</strong>
-                            <span class="helper-text" data-i18n="batchExport.livePreviewHelper">(first 5 selected images)</span>
+                            <span class="helper-text" data-i18n="batchExport.livePreviewHelper">Preview selected images, edit captions, and adjust shared tags before export.</span>
                             <button class="btn btn-small btn-ghost" id="btn-refresh-preview" type="button">
                                 <span><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg> <span data-i18n="batchExport.refreshPreview">Refresh</span></span>
                             </button>

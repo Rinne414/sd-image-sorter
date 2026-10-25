@@ -108,6 +108,22 @@
     max-width: 1280px;
 }
 
+/* "Copy the pictures too" line under the destination choice (issue #5):
+   the sentence and its button share one line. */
+.batch-export-dataset-hint {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+    color: var(--text-secondary);
+    font-size: var(--fs-body);
+}
+
+.batch-export-dataset-hint > .btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
 /* Vertical stack: template section on top, preview below */
 .batch-export-grid {
     display: flex;

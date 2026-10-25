@@ -1156,7 +1156,8 @@
       "en": "Send picks to Dataset Maker",
       "zh": "选中图片送到数据集制作",
       "classic": [
-        "#btn-send-selection-to-dataset-maker"
+        "#btn-send-selection-to-dataset-maker",
+        "#btn-batch-export-to-dataset"
       ],
       "vopus": {
         "at": "#/library",

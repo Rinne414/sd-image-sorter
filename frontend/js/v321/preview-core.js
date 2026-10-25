@@ -103,6 +103,12 @@ Object.assign(window.V321Integration, {
             });
         }
 
+        // Issue #5: tags written after the preview was drawn (a tagging run,
+        // Smart Tag, VLM captioning) must show up without a restart.
+        const onTagsChanged = () => this.onExportSourceChanged();
+        document.addEventListener('taggingCompleted', onTagsChanged);
+        document.addEventListener('vlmBatchCompleted', onTagsChanged);
+
         // P1-17: trait-pruning checklist feeding the export blacklist.
         window.TraitPruner?.attach({
             button: document.getElementById('btn-export-trait-pruner'),
@@ -343,7 +349,32 @@ Object.assign(window.V321Integration, {
         return allowLoadedFallback ? this._getLoadedGalleryImageIds(normalizedCap) : [];
     },
 
+    // Rendered captions are only valid for the options and tags they were
+    // made from. Every refresh starts over, so a picture beyond the first 50
+    // never keeps a render from an older content mode or an older tag set
+    // (issue #5). The user's own edits (editedCaptions / editedNl /
+    // captionTypes) stay.
+    _dropRenderedPreviews({ metadata = false } = {}) {
+        this.previewCache.clear();
+        this.nlCache.clear();
+        this.previewResults = [];
+        if (metadata) this.previewMetadata.clear();
+    },
+
+    _previewIsShown() {
+        const workbench = '.export-preview-workbench';
+        return Boolean(document.querySelector(`#export-preview-list ${workbench}, #caption-editor-list ${workbench}`));
+    },
+
+    /** The dialog opened again, or tags changed underneath it: draw it again. */
+    onExportSourceChanged() {
+        this._dropRenderedPreviews({ metadata: true });
+        const modalOpen = document.getElementById('batch-export-modal')?.classList.contains('visible');
+        if (modalOpen && this._previewIsShown()) this.refreshPreview();
+    },
+
     async refreshPreview() {
+        this._dropRenderedPreviews();
         // v3.2.1 task #33: target the editor modal's container if it's open
         const editorOpen = document.getElementById('caption-editor-modal')?.classList.contains('visible');
         const targetId = editorOpen ? 'caption-editor-list' : 'export-preview-list';

@@ -224,6 +224,8 @@
                 try { await dm._refreshAllCaptions(); } catch (_e) { /* ignore */ }
             }
         }
+        // The Batch export preview may be showing these pictures' old tags.
+        try { window.V321Integration?.onExportSourceChanged?.(); } catch (_e) { /* ignore */ }
         activeJobId = null;
         activeQueueId = null;
         forgetOwnSmartTagRun();

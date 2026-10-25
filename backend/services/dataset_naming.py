@@ -90,7 +90,14 @@ def render_stem(
         # Unknown variable: keep the literal so the user notices and fixes it
         return match.group(0)
 
-    rendered = _PATTERN_VAR.sub(_replace, pat).strip()
+    expanded = _PATTERN_VAR.sub(_replace, pat)
+    # "Keep original filenames" (the pattern is just {filename}): the name is
+    # already on disk, so it is legal as it is. Cleaning it would turn
+    # ``a..b`` into ``a.b`` or drop outer spaces, and the exported pair would
+    # no longer carry the source picture's name (issue #5).
+    if pat == _DEFAULT_PATTERN and expanded == stem and stem.strip():
+        return stem
+    rendered = expanded.strip()
     if not rendered:
         raise NamingError(
             f"Naming pattern {pat!r} produced an empty filename for image "

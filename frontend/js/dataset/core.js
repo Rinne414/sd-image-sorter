@@ -500,6 +500,7 @@
             this._syncOutputModeUi?.();
             this._initCaptionHelpAutoOpen();
             this._bindBeforeUnload();
+            this._bindTagChangeRefresh();
             this._resumeExportProgress?.();
             void this._restorePendingProjectSettings?.().then(async () => {
                 await this._fetchMissingMeta?.();
@@ -543,6 +544,18 @@
                     e.returnValue = '';
                 }
             });
+        },
+
+        // Issue #5: after AI tagging or VLM captioning finishes, the queue and
+        // its captions show the new tags without re-importing or restarting.
+        // Smart Tag refreshes Dataset Maker itself (smart-tag/run.js).
+        _bindTagChangeRefresh() {
+            const refresh = () => {
+                if (!this.imageIds || this.imageIds.length === 0) return;
+                this._refreshAllCaptions().catch(() => { /* the queue keeps its last captions */ });
+            };
+            document.addEventListener('taggingCompleted', refresh);
+            document.addEventListener('vlmBatchCompleted', refresh);
         },
 
         _initCaptionHelpAutoOpen() {

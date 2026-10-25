@@ -2381,6 +2381,8 @@ window.I18nLang_en = {
     'batchExport.combinedDownloaded': 'Combined export saved as {filename}.',
     'batchExport.combinedLargeDownloaded': 'Large combined export was generated as a download so the browser does not freeze.',
     'batchExport.outputModeBesideImageHelper': 'Writes each .txt / .json next to its source image. Good when your library spans many subfolders or your trainer reads per folder.',
+    'batchExport.datasetHint': 'Need the pictures copied too, renamed together with their captions (001.png + 001.txt)? Dataset Maker does that in its Export step.',
+    'batchExport.datasetOpen': 'Open in Dataset Maker',
     'batchExport.advancedSummary': 'Advanced options',
     'batchExport.advancedHint': 'Class token and blacklist apply to training-caption modes.',
     // v3.2.1 LoRA template + live preview
