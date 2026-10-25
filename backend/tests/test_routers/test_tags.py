@@ -1857,7 +1857,10 @@ class TestExportTagsBatch:
 
         assert response.status_code == 200
         content = (output_dir / "multiline_caption.txt").read_text(encoding="utf-8")
-        assert content == "portrait soft smile, best quality cinematic light, cinematic light"
+        # Issue #5: a tag-style prompt is split into its tags (the newline is a
+        # separator, not a space inside one tag) and deduplicated against the
+        # tag rows, so "cinematic light" is written once.
+        assert content == "portrait soft smile, best quality, cinematic light"
         assert "\n" not in content
 
     def test_export_batch_tags_nl_mode_excludes_original_prompt(self, test_client, test_db, tmp_path: Path):
