@@ -347,7 +347,7 @@ test('a run still going when the page reloads writes its folder results once it 
   await page.reload({ waitUntil: 'domcontentloaded' })
   over = true
   await expect(page.getByTestId('tag-step')).toBeVisible()
-  await expect(page.getByTestId('tag-report-state')).toContainText('2 folder images got their results as captions', { timeout: 15_000 })
+  await expect(page.getByTestId('tag-report-state')).toContainText('2 folder images got the results as captions', { timeout: 15_000 })
   const written = await heads(page)
   for (const file of folderFiles) {
     const head = written.find((h) => h.item.item_type === 'local' && sameFile(h.item.path, file))
@@ -510,7 +510,7 @@ test('a batch run that started out queued survives a reload and still writes its
   await expect(job).not.toContainText('Queued')
   await page.keyboard.press('Escape')
   phase = 'done'
-  await expect(page.getByTestId('tag-report-state')).toContainText('2 folder images got their results as captions', { timeout: 15_000 })
+  await expect(page.getByTestId('tag-report-state')).toContainText('2 folder images got the results as captions', { timeout: 15_000 })
   await expectFolderCaptions(page, '1girl, queued_tag')
   expect(await page.evaluate(() => localStorage.getItem('sd-v4-dataset-tag-runs'))).toBe('[]')
 })
@@ -524,7 +524,7 @@ test('a queued batch run that started and ended while no page watched still writ
   await page.goto('/api/libraries', { waitUntil: 'domcontentloaded' })
   phase = 'done'
   await openTagStep(page)
-  await expect(page.getByTestId('tag-report-state')).toContainText('2 folder images got their results as captions', { timeout: 15_000 })
+  await expect(page.getByTestId('tag-report-state')).toContainText('2 folder images got the results as captions', { timeout: 15_000 })
   await expectFolderCaptions(page, '1girl, away_tag')
   expect(await page.evaluate(() => localStorage.getItem('sd-v4-dataset-tag-runs'))).toBe('[]')
 })

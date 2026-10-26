@@ -35,5 +35,5 @@ test('the Aesthetic tab says how many scores are old and will be redone', async 
 test('with no old scores the Aesthetic tab keeps the plain wording', async ({ page }) => {
   await openAestheticTab(page, { available: true, message: null, scored_count: 10, outdated_count: 0, to_score_count: 3 })
 
-  await expect(page.locator('#tagger-aesthetic-scope')).toContainText('This run scores the images in this library with no aesthetic score yet: 3.re yet.')
+  await expect(page.locator('#tagger-aesthetic-scope')).toContainText('This run scores the images in this library with no aesthetic score yet: 3.')
 })

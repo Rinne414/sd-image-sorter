@@ -350,7 +350,7 @@ test('each is removable; a changed file can be re-added as it is now; the Librar
   await expect(issue(page, 'file_changed')).toHaveCount(0)
   await expect.poll(async () => (await localIn(page))[0]?.source_status).toBe('available')
   // the re-added file was not part of the last size / near-duplicate check, and the page says so
-  await expect(page.getByTestId('check-unchecked')).toContainText('1 image was added after the last check')
+  await expect(page.getByTestId('check-unchecked')).toContainText('Added after the last check: 1 image.')
 
   // changed again: "Check again" reads the project again and lists it; this time it is taken out
   changeFolderFile(11)

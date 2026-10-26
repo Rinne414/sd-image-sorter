@@ -436,7 +436,7 @@ test('a detector that did not run is reported as a detector error, with one batc
   const notes = page.locator('#censor-batch-notes')
   await expect(notes).toBeVisible()
   await expect(notes.locator('.guide-steps li')).toHaveCount(3)
-  await expect(notes.locator('.guide-steps li').first()).toContainText(/\b1 image\b(?!s)/)
+  await expect(notes.locator('.guide-steps li').first()).toContainText(/^1 image(?!s)/)
   await notes.locator('[data-guide-close]').click()
   await expect(notes).toHaveCount(0)
 

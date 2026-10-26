@@ -1418,7 +1418,7 @@ test.describe('Smoke Tests', () => {
 
     const toast = page.locator('#toast-container .toast').last()
     await expect(toast).toBeVisible()
-    await expect(toast).toContainText(/Protected 1\/1 images|已处理|已保护/i)
+    await expect(toast).toContainText(/Protected 1\/1 image\b|已处理|已保护/i)
 
     await page.locator('#obfuscate-settings-toggle').click()
     await expect(page.locator('#obfuscate-advanced-settings')).toBeVisible()

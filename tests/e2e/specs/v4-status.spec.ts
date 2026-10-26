@@ -112,7 +112,7 @@ test('a colour search that finds nothing says why and offers the analysis', asyn
   await input.press('Enter')
   await expect(page.getByTestId('result-count')).toHaveText('0 images')
   const hint = page.getByTestId('color-hint')
-  await expect(hint).toContainText('5 images have no colour analysis yet')
+  await expect(hint).toContainText('No colour analysis yet: 5 images.')
   await page.getByRole('button', { name: 'Analyse colours now' }).click()
   await expect.poll(() => colors.analyses).toBe(1)
 })

@@ -439,7 +439,7 @@ test('save-all wire format: /save-data payload, strip default, unedited items ex
     name_conflict: 'unique',
   })
 
-  await expect(page.locator('#toast-container .toast', { hasText: 'were not exported' }).first()).toBeVisible()
+  await expect(page.locator('#toast-container .toast', { hasText: '1 uncensored image was not exported' }).first()).toBeVisible()
   expect((await itemState(page, IMAGES[0].id)).batchStatus).toBe('saved')
   expect((await itemState(page, IMAGES[1].id)).batchStatus).toBe('skipped')
   const savedBadge = page.locator(
