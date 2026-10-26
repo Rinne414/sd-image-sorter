@@ -491,6 +491,9 @@ class DatasetAuditRequest(BaseModel):
     enable_phash: bool = True
     enable_untagged: bool = True
     extra_tag_counts: Dict[str, int] = Field(default_factory=dict)
+    # Tag counts of the captions the Dataset Maker exports, by Library image
+    # id; they replace the Library tag count for the empty-caption check.
+    caption_tag_counts: Dict[int, int] = Field(default_factory=dict)
     item_limit: int = Field(default=AUDIT_RESPONSE_ITEM_LIMIT, ge=0, le=50_000)
     # Compare every pair for near duplicates on large sets (slower).
     near_duplicate_full: bool = False
@@ -552,6 +555,7 @@ def post_dataset_audit(payload: DatasetAuditRequest) -> Dict[str, Any]:
             phash_max=payload.phash_max,
             dim_min=payload.dim_min,
             extra_tag_counts=payload.extra_tag_counts,
+            caption_tag_counts=payload.caption_tag_counts,
             enable_aesthetic=bool(payload.enable_aesthetic),
             enable_phash=bool(payload.enable_phash),
             enable_untagged=bool(payload.enable_untagged),

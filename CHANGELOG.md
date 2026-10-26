@@ -30,6 +30,8 @@ The dataset Check step gets three checks: subject-count conflicts with a fix, po
 
 - **Dataset export waits for caption versions / 数据集导出等 caption 版本读完**: a project reads its saved caption versions after it opens, page by page in a large project. Until they are read, Export and Check are disabled and say "Reading the project's caption versions..."; before, they could be pressed and showed an English "Saved caption versions are not loaded" in either language, and the check stayed failed until it was run again. A failed read says "Can't read the project's caption versions right now. Reload the project, then export.", and its message no longer says "Could not save caption version".
   - 项目打开后会读取保存的 caption 版本，大项目分页读取。读完之前「导出」和「检查」会停用，并显示「正在读取项目的 caption 版本...」；以前可以按下，中英文界面都会出现英文的 "Saved caption versions are not loaded"，检查会一直停在失败，要再跑一次。读取失败时提示「现在读不到项目的 caption 版本。重新载入项目后再导出。」，失败消息也不再写成「无法保存 caption 版本」。
+- **"Empty captions" in the classic Quality Audit / 经典审计里的「空 caption」**: Library pictures were judged by their Library tags, so a picture with a caption typed in the Dataset Maker was listed as "would export empty .txt files", and one whose caption was cleared there was not. The check now reads the caption each picture exports, for Library and folder pictures alike (Vopus already did).
+  - 图库里的图以前按图库标签判断，所以在数据集制作里打了 caption 的图会被列为「会导出空的 .txt」，在这里清空了 caption 的图反而不会。现在图库图和文件夹图一样，按每张图实际导出的 caption 判断（Vopus 本来就是这样）。
 - **Style Map recompute / 画风地图重新计算**: asking for a recompute again (or from a second tab) while the same map is being computed takes that result instead of computing it a second time.
   - 同一张画风地图正在计算时再要求重新计算（或从另一个标签页），会直接用这次的结果，不再重算一遍。
 

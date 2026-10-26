@@ -7816,6 +7816,10 @@ export interface components {
             extra_tag_counts?: {
                 [key: string]: number;
             };
+            /** Caption Tag Counts */
+            caption_tag_counts?: {
+                [key: string]: number;
+            };
             /**
              * Item Limit
              * @default 5000

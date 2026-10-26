@@ -54,34 +54,35 @@
         const phashMax = checkPhash && Number.isFinite(parsedPhash) ? parsedPhash : null;
         const dimMin = checkDim && Number.isFinite(parsedDim) ? parsedDim : null;
 
+        // The empty-caption check judges the caption each picture exports
+        // (tag box and text as composed), not its Library tags: a caption
+        // typed in the Workbench counts, and so does one cleared there.
+        const captionTagCount = (id) => {
+            const text = DM._captionTokens?.finalCaption
+                ? DM._captionTokens.finalCaption(id)
+                : String(DM._booruTextFor?.(id) || '');
+            return text.split(',').filter((part) => part.trim()).length;
+        };
+
         // Split into image_ids (positive) and image_paths (resolved
         // from negative ds_id-derived ids).
         const imageIds = [];
         const imagePaths = [];
+        const captionTagCounts = {};
+        const extraTagCounts = {};
         for (const id of DM.imageIds) {
             if (DM.isLocalId && DM.isLocalId(id)) {
                 if (DM._localIdUsesManifest?.(id)) continue;
                 const p = DM.localItemPaths?.get?.(id);
-                if (p) imagePaths.push(p);
+                if (!p) continue;
+                imagePaths.push(p);
+                extraTagCounts[p] = captionTagCount(id);
             } else {
                 imageIds.push(Number(id));
+                captionTagCounts[Number(id)] = captionTagCount(id);
             }
         }
         const datasetScanTokens = DM._getDatasetScanTokenSources?.() || [];
-
-        // Local items have no DB tags; supply a per-path tag count
-        // proxy derived from whether captionEdits has a non-empty
-        // string for them. The audit treats >0 as "tagged".
-        const extraTagCounts = {};
-        if (DM.localItemPaths) {
-            for (const [id, absPath] of DM.localItemPaths.entries()) {
-                const edit = DM.captionEdits?.get?.(id);
-                if (edit && String(edit).trim()) {
-                    // Use the comma count + 1 as a rough tag count.
-                    extraTagCounts[absPath] = String(edit).split(',').filter(Boolean).length || 1;
-                }
-            }
-        }
 
         setStatus(DM._t('dataset.auditRunning', 'Running audit...'));
         AUDIT_STATE.running = true;
@@ -105,6 +106,7 @@
                     enable_phash: checkPhash && phashMax !== null,
                     enable_untagged: checkCaptions,
                     extra_tag_counts: extraTagCounts,
+                    caption_tag_counts: captionTagCounts,
                     item_limit: 50000,
                     near_duplicate_full: fullNearDuplicate === true,
                 }),

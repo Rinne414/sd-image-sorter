@@ -3421,9 +3421,12 @@ Body:
   "enable_phash": true,
   "enable_untagged": true,
   "extra_tag_counts": {"C:/dataset/local_001.png": 5},
+  "caption_tag_counts": {"1": 3, "2": 0},
   "item_limit": 5000
 }
 ```
+
+`extra_tag_counts` (by path) and `caption_tag_counts` (by Library image id) are the tag counts of the captions the Dataset Maker exports; the `untagged` check uses them instead of the Library tags, so a caption typed in the Dataset Maker counts and one cleared there leaves the picture untagged. Pictures not listed keep their Library tag count.
 
 Returns `{summary, items[], items_truncated, items_returned, duplicate_groups[]}`. `summary` aggregates `{total, low_quality_count, duplicate_pairs, untagged_count, small_count, missing_count, avg_aesthetic, near_duplicate_check_limited, near_duplicate_checked, near_duplicate_attempted, near_duplicate_hashes, near_duplicate_failed, near_duplicate_unavailable_count, near_duplicate_error}`. The `near_duplicate_*` fields describe the perceptual-hash pass: `near_duplicate_check_limited` is `true` when the dataset exceeded the O(N²) near-duplicate cap (5000 images), at which point only exact-hash duplicate groups are reported. Each `items[]` row carries `{image_id, abs_path, filename, width, height, tag_count, aesthetic_score, phash_hex, flags}` where `flags` is a list drawn from `low_quality` / `untagged` / `small` / `missing`. `duplicate_groups[]` clusters images whose perceptual-hash hamming distance is `<= phash_max`; each group is `{phash_hex, image_ids[], abs_paths[]}`. `near_duplicate_full: true` compares every pair even above the 5000-image cap (slower). `item_limit` caps `items[]` (default 5000, max 50000); `items_truncated` / `items_returned` flag when the per-row list was trimmed even though the summary still reflects the full set.
 

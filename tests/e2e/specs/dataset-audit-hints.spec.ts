@@ -407,6 +407,35 @@ test.describe('blurry and flat pictures in the Quality Audit', () => {
 
 // ---- 3. exact Anima token counts ----------------------------------------------
 
+test.describe('the empty-caption check reads the captions the export writes', () => {
+  test('typed and cleared Dataset Maker captions are counted for Library and folder pictures', async ({ page }) => {
+    await boot(page)
+    const audits: Array<Record<string, any>> = []
+    await page.route('**/api/dataset/audit', (route) => {
+      audits.push(route.request().postDataJSON() as Record<string, any>)
+      return json(route, EMPTY_AUDIT)
+    })
+    await page.route('**/api/dataset/quality', (route) => json(route, qualityAnswer({})))
+    await seedQueue(page, [
+      { id: 701, filename: 'typed.png', caption: '1girl, smile, outdoors' },
+      { id: 702, filename: 'cleared.png', caption: '' },
+    ])
+    await page.evaluate(() => {
+      const dm = (window as any).DatasetMaker
+      dm.localItemPaths.set(-5, 'C:/pics/local-one.png')
+      dm.imageIds = [...dm.imageIds, -5]
+      dm.meta.set(-5, { filename: 'local-one.png', width: 512, height: 512, abs_path: 'C:/pics/local-one.png' })
+      dm.captions.set(-5, 'sky, cloud')
+      dm._updateCount?.()
+    })
+    await openAudit(page)
+    await expect.poll(() => audits.length).toBeGreaterThan(0)
+    // Library tags would call 701 untagged and 702 tagged; the export writes the opposite.
+    expect(audits[0].caption_tag_counts).toEqual({ 701: 3, 702: 0 })
+    expect(audits[0].extra_tag_counts).toEqual({ 'C:/pics/local-one.png': 2 })
+  })
+})
+
 async function chooseAnima(page: Page) {
   await page.evaluate(() => {
     const select = document.getElementById('dataset-target-model') as HTMLSelectElement

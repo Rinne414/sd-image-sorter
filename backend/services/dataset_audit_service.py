@@ -375,6 +375,7 @@ def audit_dataset(
     phash_max: Optional[int] = None,
     dim_min: Optional[int] = None,
     extra_tag_counts: Optional[Dict[str, int]] = None,
+    caption_tag_counts: Optional[Dict[int, int]] = None,
     enable_aesthetic: bool = True,
     enable_phash: bool = True,
     enable_untagged: bool = True,
@@ -396,6 +397,10 @@ def audit_dataset(
                              by the frontend so local items can also
                              be flagged ``untagged`` based on their
                              localStorage caption length
+    * ``caption_tag_counts`` - optional ``{image_id: tag_count}`` of the
+                             captions the Dataset Maker exports; for
+                             those Library rows it replaces the Library
+                             tag count in the ``untagged`` check
     * ``enable_aesthetic`` / ``enable_phash`` / ``enable_untagged`` -
                              hard-off switches the frontend can flip when
                              a user wants a focused pass without paying the
@@ -527,6 +532,9 @@ def audit_dataset(
             seen_ids.add(image_id)
             image_ids_clean.append(image_id)
 
+    caption_counts: Dict[int, int] = {
+        int(k): int(v or 0) for k, v in (caption_tag_counts or {}).items()
+    }
     if image_ids_clean:
         try:
             import database as db
@@ -549,7 +557,10 @@ def audit_dataset(
                             "flags": ["missing"],
                         })
                         continue
-                    _process_row(_row_for_image_id(image_id, record, tags_map))
+                    row = _row_for_image_id(image_id, record, tags_map)
+                    if image_id in caption_counts:
+                        row["tag_count"] = caption_counts[image_id]
+                    _process_row(row)
         except Exception as exc:
             logger.error("audit: DB lookup failed: %s", exc)
             for image_id in image_ids_clean:

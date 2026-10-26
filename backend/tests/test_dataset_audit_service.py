@@ -200,6 +200,31 @@ def test_audit_extra_tag_counts_handles_local_captions(audit_sandbox):
     assert untagged == ["small.png"]
 
 
+def test_audit_judges_library_pictures_by_the_caption_they_export(
+    test_db, tmp_path: Path
+):
+    """A Library picture with no Library tags but a caption typed in the
+    Dataset Maker is not empty; one whose caption was cleared there is, even
+    with Library tags. Without the counts the Library tags decide, as before."""
+    ids = []
+    for name in ("typed.png", "cleared.png"):
+        path = tmp_path / name
+        Image.new("RGB", (640, 640), color=(90, 120, 150)).save(path)
+        ids.append(
+            test_db.add_image(path=str(path), filename=name, width=640, height=640)
+        )
+    typed, cleared = ids
+    test_db.add_tags(cleared, [{"tag": "1girl"}, {"tag": "smile"}])
+
+    def untagged(report):
+        return sorted(it["filename"] for it in report["items"] if "untagged" in it["flags"])
+
+    assert untagged(audit_dataset(image_ids=ids)) == ["typed.png"]
+    report = audit_dataset(image_ids=ids, caption_tag_counts={typed: 3, cleared: 0})
+    assert untagged(report) == ["cleared.png"]
+    assert report["summary"]["untagged_count"] == 1
+
+
 def test_audit_no_thresholds_means_no_flags_other_than_untagged(audit_sandbox):
     """User asked for no-hard-limit defaults. With every threshold
     omitted the audit should not surface ``low_quality`` or ``small``
