@@ -28,7 +28,8 @@ English counts read right for one; leftover English in Chinese mode is translate
 
 ## Validation / 验证
 
-VALIDATION_PENDING
+GitHub CI run 40380041166 (Linux full suite with browser tests and click coverage, macOS, Windows, Linux portable x86_64 and aarch64): 5 of 5 green; browser tests 1,928 passed, 0 failed, 0 flaky. Locally: backend 9,235 passed plus the new count, i18n and preview checks; Vopus typecheck and 1,173 unit tests; every changed browser spec rerun. The new browser tests for a picture opened during an import fail on 3.8.0 and pass now. A fresh 3.8.1 Windows package was extracted and run as a new user (English and Chinese counts, both interfaces, no console errors). 3.8.0 itself was checked on the published packages: Firefox 158 extension (pair, Allow, save a picture with its page), Linux x86_64 package in Ubuntu, desktop tray, folder-watch switch, Quick collect, and a gallery drag handing the real file to Windows (the drop into another program needs a hand-held mouse).
+  - GitHub CI（40380041166：Linux 完整测试含浏览器测试和点击覆盖、macOS、Windows、Linux 便携版 x86_64 与 aarch64）5 项全部通过；浏览器测试 1,928 通过、0 失败、0 个偶发。本机：后端 9,235 通过，另加新的数量、多语言和预览检查；Vopus 类型检查和 1,173 个单元测试；每个改动过的浏览器测试都重跑。新加的「导入中打开图片」浏览器测试在 3.8.0 上失败、现在通过。全新的 3.8.1 Windows 包解压后以新用户身份运行（中英文数量、两套界面、无控制台错误）。3.8.0 本身也用发布的包检查过：Firefox 158 扩展（配对、在程序里允许、连同来源页面保存图片）、Ubuntu 上的 Linux x86_64 包、桌面程序托盘、监看开关、快速收集，以及从图库拖出时把真实文件交给 Windows（放进别的程序那一步要真人按住鼠标）。
 
 ---
 
