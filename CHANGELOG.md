@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.9.0] - 2026-10-27
+
+The dataset Check step gets three checks: subject-count conflicts with a fix, possibly blurry or very flat pictures, and exact Anima token counts (classic interface and Vopus). Export and Check wait until a project's caption versions are read.
+
+数据集的检查步骤新增三项：人数标签冲突的修正、可能糊或过平的图、Anima 的精确 token 数（经典界面和 Vopus 都有）。项目的 caption 版本读完之前，导出和检查会等待。
+
 ### Added / 新增
 
 - **Subject-count conflicts in the Check step / 检查步骤的人数标签冲突**: a caption that says `1girl` and `2girls` (or `multiple girls`), or `solo` beside two or more people, is listed with a fix to preview. The fix keeps the higher count and takes `solo` off multi-subject pictures (`solo_focus` is left alone); you tick the pictures to change and apply them in one undoable step. The idea is from BooruDatasetTagManagerPlus; the code is new.
@@ -17,6 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 可能偏软或糊（拉普拉斯方差低）、或过于平（几乎同一种颜色）的图，会作为提示列出并带上数值。分数用 CPU 在后台任务里算（300 张约 3 秒），按文件缓存，从不删除文件。清晰度阈值可改（默认 50，依据 1,000 张真实二次元图和 10 张手工模糊的图；0 为不查糊图），没有任何阈值能把柔和上色和真的糊分开，所以提示只说“可能”；阈值怎么定的、哪里不准，写在 `docs/MODELS_CONSIDERED.md`。思路来自 lora-dataset-studio（非商业许可，只借思路，代码为新写）。
 - **The same three checks in the classic interface / 经典界面里的同样三项检查**: the classic Dataset Maker now has what Vopus got first. The Review Cockpit health check lists subject-count conflicts with a tick per picture, one Apply and one Undo. The Quality Audit gets "Blurry / flat" (a sharpness field, scored in the background with progress and a Stop button, shown as badges that filter the queue) and "Long captions" (an estimate until Anima's two tokenizer files, about 14 MB, are downloaded on request; then exact Qwen3 and T5 counts, also in the caption editor's counter).
   - 经典数据集制作现在也有 Vopus 先得到的三项检查。审阅驾驶舱的健康检查会列出人数标签冲突，可逐张勾选、一键应用、一键撤销；审计里新增「糊图 / 过平」（清晰度输入框，后台评分，有进度和停止按钮，结果是可过滤队列的徽章）和「过长的 caption」（Anima 的两个分词器文件约 14 MB，按需下载前只是估算，下载后用 Qwen3 和 T5 精确计数，caption 编辑器下的计数也一样）。
+- **Limits of the new checks / 新检查的限制**: subject-count fixes work on Library pictures, not on folder pictures; a conflicting tag that comes from the batch's common tags cannot be removed from one picture's caption (a message says so), and Undo restores only the captions not edited after the fix. The blur threshold of 50 was chosen on 1,000 ComfyUI pictures judged by a model, not rated by people, plus copies blurred by hand: soft or dark anime art can still be listed, so raise the field (for example to 60) or set it to 0 to skip blur. Exact token counts are for Anima only; other base models keep the estimate.
+  - 人数标签修正只对图库里的图有效，文件夹里的图不行；冲突的标签如果来自这批图的通用标签，就没法只从一张图的 caption 里去掉（会有提示）；撤销只恢复修正之后没有再编辑过的 caption。清晰度阈值 50 是用 1,000 张 ComfyUI 图（由模型判断，不是人工评分）和手工模糊的副本定的：柔和或偏暗的二次元图仍可能被列出，可以把数值调高（例如 60），或设为 0 不查糊图。精确 token 数只针对 Anima，其他底模仍是估算。
+
+### Fixed / 修复
+
+- **Dataset export waits for caption versions / 数据集导出等 caption 版本读完**: a project reads its saved caption versions after it opens, page by page in a large project. Until they are read, Export and Check are disabled and say "Reading the project's caption versions..."; before, they could be pressed and showed an English "Saved caption versions are not loaded" in either language, and the check stayed failed until it was run again. A failed read says "Can't read the project's caption versions right now. Reload the project, then export.", and its message no longer says "Could not save caption version".
+  - 项目打开后会读取保存的 caption 版本，大项目分页读取。读完之前「导出」和「检查」会停用，并显示「正在读取项目的 caption 版本...」；以前可以按下，中英文界面都会出现英文的 "Saved caption versions are not loaded"，检查会一直停在失败，要再跑一次。读取失败时提示「现在读不到项目的 caption 版本。重新载入项目后再导出。」，失败消息也不再写成「无法保存 caption 版本」。
+- **Style Map recompute / 画风地图重新计算**: asking for a recompute again (or from a second tab) while the same map is being computed takes that result instead of computing it a second time.
+  - 同一张画风地图正在计算时再要求重新计算（或从另一个标签页），会直接用这次的结果，不再重算一遍。
 
 ## [3.8.1] - 2026-10-27
 

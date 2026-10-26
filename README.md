@@ -63,6 +63,10 @@
 - **更快**：图库翻页从 0.36 秒降到 0.045 秒；批量打标 1000 张从 170 秒降到 106 秒（实测）。
 - **中英文完整**：中文界面里的按钮提示也都是中文。
 
+### v3.9.0
+
+- **数据集检查新增三项**：人数标签冲突的修正（可预览、逐张勾选、可撤销）、可能糊或过平的图的提示、Anima 的精确 token 数（第一次使用时下载约 14 MB 的分词器文件）；经典界面和 Vopus 都有。
+
 ### v3.8.1
 
 - **英文数量与中文补全**：英文界面数量为 1 时用单数，不再写 image(s)；中文界面里残留的英文提示补上中文。
@@ -685,6 +689,10 @@ Eagle and Billfish are general asset managers and are not in this SD-workflow ta
 - **No hard stops**: caps and export gates became warnings with a choice.
 - **Faster**: gallery page 0.36 s to 0.045 s; Mass Tag on 1,000 images 170 s to 106 s (measured).
 - **Complete Chinese and English UI**, tooltips included.
+
+### v3.9.0
+
+- **Three new dataset checks**: subject-count conflicts with a fix to preview, tick and undo; hints for possibly blurry or very flat pictures; exact Anima token counts (a 14 MB tokenizer download the first time). In the classic interface and Vopus.
 
 ### v3.8.1
 
