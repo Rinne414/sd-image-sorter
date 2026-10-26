@@ -58,6 +58,20 @@
         );
     }
 
+    // The open project's caption versions decide what each export entry uses,
+    // so preview, check and export wait until they are read.
+    function captionVersionsUnreadyReason(datasetMaker) {
+        const project = datasetMaker._activeProject;
+        if (!project || datasetMaker._annotationHeadsReadyForProject(project)) return '';
+        if (datasetMaker._annotationHeadsStatus === 'error') {
+            return datasetMaker._t(
+                'dataset.captionVersionsUnavailable',
+                'Can\'t read the project\'s caption versions right now. Reload the project, then export.',
+            );
+        }
+        return datasetMaker._t('dataset.captionVersionsLoading', 'Reading the project\'s caption versions...');
+    }
+
     function requirePositiveInteger(value, fieldName) {
         if (!Number.isSafeInteger(value) || value <= 0) {
             throw new TypeError(`${fieldName} must be a positive safe integer.`);
@@ -595,7 +609,7 @@
                 });
                 this._toast(
                     this._t(
-                        'dataset.annotationSaveFailed',
+                        'dataset.annotationLoadFailed',
                         'Could not load caption versions: {error}',
                         { error: String(error) },
                     ),
@@ -611,7 +625,10 @@
                         const ta = document.getElementById('dataset-editor-textarea');
                         if (ta) ta.value = this._booruTextFor(this.activeId);
                     }
-                    this._refreshExportPreview?.();
+                    // Export, Check and the preview waited for these versions
+                    // (_baseExportDisabledReason); this also refreshes the preview.
+                    this._updateExportEnabled?.();
+                    this._renderReadiness?.();
                 }
             }
         },
@@ -964,7 +981,9 @@
     const originalBaseExportDisabledReason = DM._baseExportDisabledReason;
     DM._baseExportDisabledReason = function () {
         const manifestReason = projectManifestRevisionRequiredReason(this);
-        return manifestReason || originalBaseExportDisabledReason.call(this);
+        return manifestReason
+            || captionVersionsUnreadyReason(this)
+            || originalBaseExportDisabledReason.call(this);
     };
 
     const originalBuildExportPayload = DM._buildExportPayload;
@@ -975,11 +994,8 @@
         const payload = originalBuildExportPayload.call(this);
         const project = this._activeProject;
         if (!project) return payload;
-        if (!this._annotationHeadsReadyForProject(project)) {
-            throw new Error(
-                'Saved caption versions are not loaded. Wait for version history and retry.',
-            );
-        }
+        const unreadyReason = captionVersionsUnreadyReason(this);
+        if (unreadyReason) throw new Error(unreadyReason);
         const selections = {};
         for (const rawId of this.imageIds) {
             const id = Number(rawId);

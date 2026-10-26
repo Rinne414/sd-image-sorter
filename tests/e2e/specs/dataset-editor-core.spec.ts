@@ -1380,6 +1380,8 @@ test('trigger quickfill freezes dynamic captions as durable export drafts', asyn
 
   await expect.poll(() => page.evaluate(() => {
     const dm = (window as any).DatasetMaker
+    // The payload is refused while saved caption versions load; keep polling.
+    if (dm._activeProject && !dm._annotationHeadsReadyForProject(dm._activeProject)) return 'caption versions still loading'
     const payload = dm._buildExportPayload()
     return {
       commonTags: (document.getElementById('dataset-common-tags') as HTMLTextAreaElement).value,
@@ -1401,6 +1403,8 @@ test('trigger quickfill freezes dynamic captions as durable export drafts', asyn
   await page.locator('#dataset-blacklist').fill('frown')
   await expect.poll(() => page.evaluate(() => {
     const dm = (window as any).DatasetMaker
+    // The payload is refused while saved caption versions load; keep polling.
+    if (dm._activeProject && !dm._annotationHeadsReadyForProject(dm._activeProject)) return 'caption versions still loading'
     return {
       generated: dm._booruTextFor(702),
       generatedOverride: dm.captionEdits.get(702),
@@ -1421,6 +1425,8 @@ test('trigger quickfill freezes dynamic captions as durable export drafts', asyn
   await page.waitForFunction(() => (window as any).DatasetMaker?._pendingProjectSettings === null)
   await expect.poll(() => page.evaluate(() => {
     const dm = (window as any).DatasetMaker
+    // The payload is refused while saved caption versions load; keep polling.
+    if (dm._activeProject && !dm._annotationHeadsReadyForProject(dm._activeProject)) return 'caption versions still loading'
     return {
       generated: dm._booruTextFor(702),
       generatedOverride: dm.captionEdits.get(702),
@@ -1694,6 +1700,8 @@ test('trigger quickfill deduplicates equivalent tokens in multiline captions', a
 
   await expect.poll(() => page.evaluate(() => {
     const dm = (window as any).DatasetMaker
+    // The payload is refused while saved caption versions load; keep polling.
+    if (dm._activeProject && !dm._annotationHeadsReadyForProject(dm._activeProject)) return 'caption versions still loading'
     return {
       caption: dm.captionEdits.get(703),
       exportCaption: dm._buildExportPayload().image_overrides['703'],
@@ -2589,6 +2597,8 @@ test('trigger quickfill writes Gallery and local captions when the template omit
   await expect(page.locator('#dataset-common-tags')).toHaveValue('Local_Template_Token')
   await expect.poll(() => page.evaluate(({ localId, localPath }) => {
     const dm = (window as any).DatasetMaker
+    // The payload is refused while saved caption versions load; keep polling.
+    if (dm._activeProject && !dm._annotationHeadsReadyForProject(dm._activeProject)) return 'caption versions still loading'
     const payload = dm._buildExportPayload()
     return {
       galleryCaption: dm.captionEdits.get(701),
@@ -2822,6 +2832,8 @@ test('trigger quickfill freezes local and Gallery captions without changing sour
   await page.locator('#btn-dataset-quickfill-trigger').click()
   await expect.poll(() => page.evaluate(() => {
     const dm = (window as any).DatasetMaker
+    // The payload is refused while saved caption versions load; keep polling.
+    if (dm._activeProject && !dm._annotationHeadsReadyForProject(dm._activeProject)) return 'caption versions still loading'
     const payload = dm._buildExportPayload()
     return {
       localBaseline: dm.captions.get(-705),
@@ -2971,6 +2983,8 @@ test('trigger quickfill creates a frozen draft over an active project revision',
   await page.locator('#btn-dataset-quickfill-trigger').click()
   await expect.poll(() => page.evaluate(() => {
     const dm = (window as any).DatasetMaker
+    // The payload is refused while saved caption versions load; keep polling.
+    if (dm._activeProject && !dm._annotationHeadsReadyForProject(dm._activeProject)) return 'caption versions still loading'
     return dm._buildExportPayload().annotation_selections['701']
   })).toEqual({
     kind: 'frozen_draft',
@@ -3214,6 +3228,8 @@ test('failed project validation preserves the active project annotation heads', 
   await expect(page.locator('#toast-container .toast.success')).toContainText('Project_A_Token')
   await expect.poll(() => page.evaluate(() => {
     const dm = (window as any).DatasetMaker
+    // The payload is refused while saved caption versions load; keep polling.
+    if (dm._activeProject && !dm._annotationHeadsReadyForProject(dm._activeProject)) return 'caption versions still loading'
     return dm._buildExportPayload().annotation_selections['701']
   })).toEqual({
     kind: 'frozen_draft',
@@ -3334,6 +3350,8 @@ test('trigger quickfill creates a visible NL draft over an active project revisi
   )
   await expect.poll(() => page.evaluate(() => {
     const dm = (window as any).DatasetMaker
+    // The payload is refused while saved caption versions load; keep polling.
+    if (dm._activeProject && !dm._annotationHeadsReadyForProject(dm._activeProject)) return 'caption versions still loading'
     return dm._buildExportPayload().annotation_selections['701']
   })).toEqual({
     kind: 'frozen_draft',
@@ -3382,6 +3400,8 @@ test('trigger quickfill respects an explicitly empty active project revision', a
   await page.locator('#btn-dataset-quickfill-trigger').click()
   await expect.poll(() => page.evaluate(() => {
     const dm = (window as any).DatasetMaker
+    // The payload is refused while saved caption versions load; keep polling.
+    if (dm._activeProject && !dm._annotationHeadsReadyForProject(dm._activeProject)) return 'caption versions still loading'
     return dm._buildExportPayload().annotation_selections['701']
   })).toEqual({
     kind: 'frozen_draft',

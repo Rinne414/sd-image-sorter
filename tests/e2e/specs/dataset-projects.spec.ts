@@ -1220,6 +1220,72 @@ test('saving a project revision invalidates trigger quickfill before caption cac
   })).toEqual({ revision: 2, caption: 'old baseline' })
 })
 
+async function openProjectWithHeldCaptionVersions(page: Page, id: number) {
+  const stored = project(id, 'Many caption versions', 1, [{
+    position: 0,
+    source_image_id: 101,
+    image_id: 101,
+    missing: false,
+  }], null)
+  await page.route('**/api/dataset/projects', (route) => route.fulfill({
+    json: { projects: [projectSummary(stored)] },
+  }))
+  await page.route(`**/api/dataset/projects/${id}`, (route) => route.fulfill({ json: stored }))
+  await openDataset(page)
+  await page.waitForFunction(() => (window as any).DatasetMaker?._trainerContractState?.status === 'ready')
+  let answer: (fulfill: { status: number, json: unknown }) => void = () => {}
+  const held = new Promise<{ status: number, json: unknown }>((resolve) => { answer = resolve })
+  let requests = 0
+  await page.route(`**/api/annotations/projects/${id}/training-captions/heads**`, async (route) => {
+    requests += 1
+    return route.fulfill(await held)
+  })
+  await page.getByTestId('dataset-project-selector').selectOption(String(id))
+  // The project finishes loading only after its caption versions are read;
+  // the Export tab is open to the user meanwhile.
+  await expect.poll(() => requests).toBeGreaterThan(0)
+  await page.locator('#dataset-tab-export').click()
+  await page.locator('#dataset-output-folder').fill('C:/training/caption-versions')
+  return answer
+}
+
+test('Check and Export wait while the project\'s caption versions are read', async ({ page }) => {
+  const answer = await openProjectWithHeldCaptionVersions(page, 97)
+
+  // A large project reads its caption versions page by page; until then the
+  // export would not know which caption each picture uses.
+  const reading = 'Reading the project\'s caption versions...'
+  await expect(page.locator('#btn-dataset-export')).toBeDisabled()
+  await expect(page.locator('#dataset-export-disabled-hint')).toHaveText(reading)
+  await expect(page.getByTestId('dataset-readiness-check')).toBeDisabled()
+  await expect(page.getByTestId('dataset-readiness-check')).toHaveAttribute('title', reading)
+
+  answer({
+    status: 200,
+    json: { project_id: 97, items: [], has_more: false, next_after_subject_id: null },
+  })
+  await expect(page.getByTestId('dataset-project-status')).toHaveAttribute('data-state', 'loaded')
+  await expect(page.locator('#btn-dataset-export')).toBeEnabled()
+  await expect(page.getByTestId('dataset-readiness-check')).toBeEnabled()
+  await expect(page.locator('#dataset-export-disabled-hint')).toBeHidden()
+})
+
+test('a failed read of the caption versions says so and asks for a reload', async ({ page }) => {
+  const answer = await openProjectWithHeldCaptionVersions(page, 98)
+
+  answer({ status: 500, json: { detail: 'disk unavailable' } })
+  await expect(page.locator('#toast-container .toast.error').last()).toContainText('Could not load caption versions')
+  await expect(page.locator('#btn-dataset-export')).toBeDisabled()
+  await expect(page.locator('#dataset-export-disabled-hint')).toHaveText(
+    'Can\'t read the project\'s caption versions right now. Reload the project, then export.',
+  )
+  await page.evaluate(() => (window as any).I18n.setLang('zh-CN'))
+  await expect(page.getByTestId('dataset-readiness-check')).toHaveAttribute(
+    'title',
+    '现在读不到项目的 caption 版本。重新载入项目后再导出。',
+  )
+})
+
 test('rename changes only the project name and preserves saved settings', async ({ page }) => {
   let renameBody: Record<string, unknown> | null = null
   const stored = {
@@ -1274,6 +1340,8 @@ test('rename changes only the project name and preserves saved settings', async 
   })
   await expect.poll(() => page.evaluate(() => {
     const dm = (window as any).DatasetMaker
+    // The payload is refused while saved caption versions load; keep polling.
+    if (dm._activeProject && !dm._annotationHeadsReadyForProject(dm._activeProject)) return 'caption versions still loading'
     return {
       status: dm._annotationHeadsStatus,
       owner: dm._annotationHeadsOwner,
@@ -1289,6 +1357,8 @@ test('rename changes only the project name and preserves saved settings', async 
   await expect(page.locator('#toast-container .toast.success')).toContainText('unsaved_token')
   await expect.poll(() => page.evaluate(() => {
     const dm = (window as any).DatasetMaker
+    // The payload is refused while saved caption versions load; keep polling.
+    if (dm._activeProject && !dm._annotationHeadsReadyForProject(dm._activeProject)) return 'caption versions still loading'
     return dm._buildExportPayload().annotation_selections['101']
   })).toEqual({
     kind: 'frozen_draft',
@@ -3221,6 +3291,8 @@ test('project lifecycle migrates revision drafts and restores the unsaved Librar
   await waitForAnnotationHeads(2)
   await expect.poll(() => page.evaluate(() => {
     const dm = (window as any).DatasetMaker
+    // The payload is refused while saved caption versions load; keep polling.
+    if (dm._activeProject && !dm._annotationHeadsReadyForProject(dm._activeProject)) return 'caption versions still loading'
     return {
       owner: dm._annotationHeadsOwner,
       selection: dm._buildExportPayload().annotation_selections['301'],
@@ -3242,6 +3314,8 @@ test('project lifecycle migrates revision drafts and restores the unsaved Librar
   await waitForAnnotationHeads(3)
   await expect.poll(() => page.evaluate(() => {
     const dm = (window as any).DatasetMaker
+    // The payload is refused while saved caption versions load; keep polling.
+    if (dm._activeProject && !dm._annotationHeadsReadyForProject(dm._activeProject)) return 'caption versions still loading'
     return {
       owner: dm._annotationHeadsOwner,
       selection: dm._buildExportPayload().annotation_selections['301'],

@@ -850,6 +850,8 @@ test('path-source NL-only writeback persists the session, refreshes export, and 
 
   await expect.poll(() => page.evaluate(() => {
     const dm = (window as any).DatasetMaker
+    // The payload is refused while saved caption versions load; keep polling.
+    if (dm._activeProject && !dm._annotationHeadsReadyForProject(dm._activeProject)) return 'caption versions still loading'
     const calls = (window as any).__smartTagWritebackCalls
     const exportPayload = dm._buildExportPayload()
     const path = 'C:/dataset/nl-only-writeback.png'
