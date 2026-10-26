@@ -8115,6 +8115,13 @@ html.lang-zh #view-censor .queue-action-btn span {
         overflow: hidden;
     }
 
+    /* Stats has no inner scroller of its own: with more checkpoints or a long
+       recipe line its cards ran past the laptop screen and the bottom ones
+       (Recipe Suggestions' buttons) were cut off. It scrolls instead. */
+    #view-promptlab #promptlab-mode-stats.active {
+        overflow-y: auto;
+    }
+
     #view-promptlab .promptlab-random-layout {
         height: calc(100vh - var(--nav-height, 72px) - 116px);
         min-height: 0;
