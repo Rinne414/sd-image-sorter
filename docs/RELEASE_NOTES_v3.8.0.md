@@ -47,7 +47,8 @@ A tray desktop program; pictures and videos come in by themselves; PixAI v1.0 by
 
 ## Validation / 验证
 
-VALIDATION_PENDING
+Local Windows gate: backend 9,228 passed (13 skipped) on the final dependency pins; Vopus typecheck, build and 1,172 unit tests passed; dependency audit clean; browser tests for every area this release touched passed (481 in one run, plus the reruns of each fix); a fresh Windows package was extracted and run as a new user in browser mode (import, thumbnails, both interfaces, no console errors) and as the desktop program (started hidden, backend started by it, Quit stops it). GitHub CI on d1d057ab (Linux full suite with browser tests and click coverage, macOS, Windows, Linux portable x86_64 and aarch64): 5 of 5 green; browser tests 1,925 passed, 0 failed, 1 flaky (a test's own request hit a reset connection; the test now reads through the page).
+  - 本机 Windows：在最终的依赖版本上后端 9,228 通过（13 跳过）；Vopus 类型检查、构建和 1,172 个单元测试通过；依赖安全检查无问题；本版改动到的每个部分的浏览器测试都通过（一次 481 个，另加每个修正的重跑）；把全新的 Windows 包解压后以新用户身份运行：浏览器模式（导入、缩略图、两套界面、无控制台错误）和桌面程序（隐藏启动、由它启动后端、退出时后端随之停止）都正常。GitHub CI（d1d057ab：Linux 完整测试含浏览器测试和点击覆盖、macOS、Windows、Linux 便携版 x86_64 与 aarch64）5 项全部通过；浏览器测试 1,925 通过、0 失败、1 个偶发（测试自己的请求遇到被重置的连接，现已改为经由页面读取）。
 
 ---
 

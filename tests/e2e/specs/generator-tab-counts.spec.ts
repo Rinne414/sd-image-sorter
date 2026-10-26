@@ -41,7 +41,9 @@ async function openGallery(page: Page, lang: 'en' | 'zh-CN') {
 }
 
 async function libraryCounts(page: Page) {
-  const stats = await (await page.request.get('/api/stats')).json()
+  // Through the page: the browser retries a kept-alive connection the server
+  // has just closed; page.request does not (an ECONNRESET flake on CI).
+  const stats = await page.evaluate(async () => (await fetch('/api/stats')).json())
   const counts: Record<string, number> = {}
   for (const row of stats.generators) counts[row.generator] = row.count
   return { counts, total: Number(stats.total_images) }
