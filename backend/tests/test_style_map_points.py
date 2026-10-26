@@ -86,6 +86,30 @@ def _store_clip(test_db, image_ids, vectors):
             )
 
 
+class _CountingLock:
+    """A lock that counts the callers that have asked for it."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._changed = threading.Condition()
+        self.asked = 0
+
+    def __enter__(self):
+        with self._changed:
+            self.asked += 1
+            self._changed.notify_all()
+        self._lock.acquire()
+        return self
+
+    def __exit__(self, *exc):
+        self._lock.release()
+        return False
+
+    def wait_for_asked(self, count: int, timeout: float) -> bool:
+        with self._changed:
+            return self._changed.wait_for(lambda: self.asked >= count, timeout)
+
+
 def _service():
     from services.style_map_service import StyleMapService
 
@@ -626,6 +650,61 @@ class TestCache:
         assert payloads and all(isinstance(payload, bytes) for payload in payloads)
         assert json.loads(payloads[0])["status"] == "ok"
 
+    def test_a_refresh_still_reading_when_the_result_lands_takes_it(
+        self, test_db, tmp_path, monkeypatch
+    ):
+        """A refresh counts from when it arrives, not from when its library
+        reads finish: a slow read must not compute the same map again."""
+        ids = _make_images(test_db, tmp_path, 4)
+        _store_kaloscope(test_db, ids, _random_units(4, seed=38))
+        service = _service()
+        service.points("kaloscope")  # warm entry that every refresh must ignore
+        calls = {"n": 0}
+        late_arrived = threading.Event()
+        stored = threading.Event()
+        real_compute = service._compute
+        real_map_key = service._map_key
+        real_put = service._cache_put
+
+        def compute(*args, **kwargs):
+            calls["n"] += 1
+            late_arrived.wait(timeout=30)
+            return real_compute(*args, **kwargs)
+
+        def map_key(*args, **kwargs):
+            key = real_map_key(*args, **kwargs)
+            if threading.current_thread().name == "late":
+                late_arrived.set()
+                stored.wait(timeout=30)  # still reading when the result lands
+            return key
+
+        def put(*args, **kwargs):
+            real_put(*args, **kwargs)
+            stored.set()
+
+        monkeypatch.setattr(service, "_compute", compute)
+        monkeypatch.setattr(service, "_map_key", map_key)
+        monkeypatch.setattr(service, "_cache_put", put)
+        results = {}
+
+        def worker():
+            name = threading.current_thread().name
+            results[name] = service.points("kaloscope", refresh=True)
+
+        threads = [
+            threading.Thread(target=worker, name=name) for name in ("first", "late")
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        assert calls["n"] == 1, (
+            "a refresh that arrived during the computation recomputed"
+        )
+        assert results["first"]["cached"] is False
+        assert results["late"]["cached"] is True
+        assert results["late"]["points"] == results["first"]["points"]
+
     def test_queued_refreshes_reuse_the_result_computed_while_they_waited(
         self, test_db, tmp_path, monkeypatch
     ):
@@ -634,11 +713,15 @@ class TestCache:
         service = _service()
         service.points("kaloscope")  # warm entry that every refresh must ignore
         calls = {"n": 0}
+        queued = []
         real = service._compute
+        lock = _CountingLock()
+        monkeypatch.setattr(service, "_compute_lock", lock)
 
         def slow(*args, **kwargs):
             calls["n"] += 1
-            time.sleep(0.3)
+            # Finish only once the other two refreshes wait behind this one.
+            queued.append(lock.wait_for_asked(3, timeout=30))
             return real(*args, **kwargs)
 
         monkeypatch.setattr(service, "_compute", slow)
@@ -650,9 +733,9 @@ class TestCache:
         threads = [threading.Thread(target=worker) for _ in range(3)]
         for thread in threads:
             thread.start()
-            time.sleep(0.05)  # the later ones queue behind the first
         for thread in threads:
             thread.join()
+        assert queued == [True]
         assert calls["n"] == 1, (
             "refreshes queued behind a fresh result must not recompute"
         )

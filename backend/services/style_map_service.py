@@ -240,19 +240,21 @@ class StyleMapService(
     ) -> bytes:
         """JSON bytes (what the route returns). ``refresh`` skips the cache read;
         ``model_path`` = the user's local checkpoint (None: official weights)."""
+        # Read when the request arrives, before the map key: a refresh that
+        # arrives while the same map is computed takes that result.
+        with self._cache_lock:
+            requested_at = self._stamp
         normalized, model_version, ids, key = self._map_key(
             space, selection_token, model_path
         )
         entry = None if refresh else self._cache_get(key)
         cached = entry is not None
         if entry is None:
-            with self._cache_lock:
-                waited_since = self._stamp
             with self._compute_lock:
                 entry = self._cache_get(key)
                 # A refresh that queued behind another computation of the same
                 # map takes that fresh result instead of recomputing it again.
-                if entry is not None and (not refresh or entry[1] > waited_since):
+                if entry is not None and (not refresh or entry[1] > requested_at):
                     cached = True
                 else:
                     with blas_budget():
