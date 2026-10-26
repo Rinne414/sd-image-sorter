@@ -104,7 +104,7 @@ test('read errors are read again and missing text is recovered, each from its ro
   const next = report.getByTestId('report-next')
   await expect(next.locator('[data-step="missingText"]')).toContainText('3 images have neither a prompt nor a caption')
   await expect(next.locator('[data-step="missingText"]').getByRole('button', { name: 'Recover text' })).toBeEnabled()
-  await expect(next.locator('[data-step="missing"]')).toContainText('1 image cannot be read')
+  await expect(next.locator('[data-step="missing"]')).toContainText('Cannot be read: 1 image.')
   await expect(report.getByTestId('report-samples')).toContainText(`${PREFIX}03.png`)
   await expect(report.getByTestId('report-breakdown')).toContainText('No prompt and no caption')
 

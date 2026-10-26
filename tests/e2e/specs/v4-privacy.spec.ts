@@ -248,7 +248,7 @@ test('a huge image is flagged and never refused, a broken one says why, and a sl
   await expect(items).toHaveCount(2)
   await expect(items.nth(0).getByTestId('privacy-item-huge')).toHaveText('Very large (42.0 MP): it will be slow and use a lot of memory.')
   await expect(items.nth(0).getByTestId('privacy-item-source')).toHaveText('The browser cannot show this image')
-  await expect(page.getByTestId('privacy-huge-count')).toContainText('1 image is over 40 MP')
+  await expect(page.getByTestId('privacy-huge-count')).toContainText('Over 40 MP, processed slowly and with a lot of memory: 1 image.')
   await expect(page.getByTestId('privacy-protect-all')).toBeEnabled()
 
   // 99 passes over 9 MP take seconds: long enough to cancel in the middle
