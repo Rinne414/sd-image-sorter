@@ -107,6 +107,9 @@ SD Image Sorter can now stay resident: the Windows package opens a desktop progr
 - **Vopus menus: a click keeps the submenu open / Vopus 菜单：点击不会把子菜单关掉**: moving to "Rate" or "Add to batch" opened the submenu, and the click that usually follows closed it again. A click on such a row now only opens it.
   - 移到「评分」或「加入批次」时子菜单已经打开，接着的点击反而把它关掉。现在点这种项目只会打开。
 
+- **Prompt Lab Stats on a laptop screen / 笔记本屏幕上的提示词助手统计页**: at 768 px high the Stats page was clipped instead of scrolling, so with more checkpoints or a longer recipe line the Recipe Suggestions buttons (Try in Gallery, Use in Random, Send to Build) were out of reach. Stats now scrolls.
+  - 在 768 像素高的屏幕上，统计页超出部分会被直接裁掉而不能滚动；模型多一些或配方那行长一些时，「配方建议」里的按钮（在图库里试、用在随机里、送到构建）就点不到了。现在统计页可以滚动。
+
 ## [3.7.0] - 2026-10-17
 
 One program now serves two interfaces: the classic one stays the start page and Vopus, the second interface, is switched on in Settings. The database is copied before every upgrade, and libraries that Vopus 1.0.0 had upgraded are repaired. Moves, undo, exports and batch censoring always say how they ended. Letter shortcuts no longer swallow browser keys such as Ctrl+Shift+R, and the browser Back button goes up one level like Esc.
