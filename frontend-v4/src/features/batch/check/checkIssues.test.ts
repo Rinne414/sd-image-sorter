@@ -234,6 +234,48 @@ describe('the final captions', () => {
     expect(byKind(captionIssues(withLong, form({ targetModel: 'flux' })), 'too_long')).toEqual([])
   })
 
+  it('Anima: exact Qwen3 and T5 counts replace the estimate, and either one over 512 is too long', () => {
+    const anima = form({ targetModel: 'anima' })
+    const caption = 'mychar, solo, red hair'
+    const captions = new Map([
+      ['lib:1', caption],
+      ['lib:2', caption],
+      ['lib:3', caption],
+    ])
+    const exact = new Map([
+      ['lib:1', { qwen: 300, t5: 510 }],
+      ['lib:2', { qwen: 520, t5: 100 }],
+      ['lib:3', { qwen: 512, t5: 513 }],
+    ])
+    const over = byKind(captionIssues(captions, anima, exact), 'too_long')[0]
+    expect(over?.keys).toEqual(['lib:2', 'lib:3'])
+    expect(over?.notes).toEqual({ 'lib:2': '520/100', 'lib:3': '512/513' })
+    expect(over?.params).toEqual({ budget: 512, exact: 1 })
+    // the estimate of this short caption is far under the budget: the exact counts are what flagged it
+    expect(estimateTokens(caption)).toBeLessThan(512)
+  })
+
+  it('Anima: a caption the exact counts do not cover keeps the estimate, and the issue says so', () => {
+    const anima = form({ targetModel: 'anima' })
+    const long = Array.from({ length: 200 }, (_, i) => `tag number ${i}`).join(', ')
+    const captions = new Map([
+      ['lib:1', 'mychar, solo'],
+      ['lib:2', long],
+    ])
+    const over = byKind(captionIssues(captions, anima, new Map([['lib:1', { qwen: 4, t5: 5 }]])), 'too_long')[0]
+    expect(over?.keys).toEqual(['lib:2'])
+    expect(Number(over?.notes?.['lib:2'])).toBeGreaterThan(512)
+    expect(over?.params?.exact).toBe(0)
+    // no exact counts at all (not downloaded yet): the estimate, flagged as not exact
+    expect(byKind(captionIssues(captions, anima, null), 'too_long')[0]?.params?.exact).toBe(0)
+  })
+
+  it('exact counts are only used for Anima', () => {
+    const captions = new Map([['lib:1', 'mychar, solo']])
+    const exact = new Map([['lib:1', { qwen: 9999, t5: 9999 }]])
+    expect(byKind(captionIssues(captions, form({ targetModel: 'flux' }), exact), 'too_long')).toEqual([])
+  })
+
   it('tags that always go together are paired; the rule tags are left out', () => {
     const pairs = cooccurringPairs(finals.values(), new Set(['mychar', 'solo']))
     expect(pairs).toEqual([{ a: 'red hair', b: 'smile', together: 3, ratio: 1 }])

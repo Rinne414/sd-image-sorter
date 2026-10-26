@@ -31,6 +31,7 @@ in `models/aesthetic/` at the project root.
 | Censor detection | NudeNet, legacy YOLO, SAM3 | Model Manager / existing source paths | Detector semantics stay separate from matting. |
 | Training masks | `egeorcun/lucida` | Model Manager | Commit-pinned BiRefNet matte; opt-in, MIT weights, remote code loaded only from the local verified snapshot. |
 | Similarity search | `Qdrant/clip-ViT-B-32-vision` + text tower | Model Manager | Both vision and text FastEmbed directories must be complete. |
+| Anima caption token counts | `Qwen/Qwen3-0.6B` and `google/flan-t5-xxl` (`tokenizer.json` only) | Dataset Check step, on request (about 14 MB) | Apache-2.0 tokenizer data files, no weights; commit-pinned and SHA-256 verified. The T5 v1.1 XXL tokenizer is read from `google/flan-t5-xxl`, whose `spiece.model` is byte-identical to `google/t5-v1_1-xxl` (which publishes no fast tokenizer). Counting uses the `tokenizers` package. |
 | Aesthetic score | LAION head + CLIP ViT-L/14 | Model Manager | Head and backbone/runtime must both be ready. |
 | Artist identification | Kaloscope 2.0 + LSNet runtime | Model Manager | Downloaded on demand; not part of a release asset. |
 | OppaiOracle / ToriiGate | Existing optional catalog entries | Individual Prepare | Alternatives, not required for the recommended feature set. |

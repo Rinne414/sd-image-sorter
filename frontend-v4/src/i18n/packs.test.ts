@@ -57,7 +57,7 @@ const JARGON = new Set([
 ])
 
 /** Jargon of more than one word. */
-const JARGON_PHRASES = ['PNG Info', 'GPT Image', 'Clip skip', 'Hugging Face', 'LM Studio', 'SD Image Sorter', 'Class Token', 'Florence-2 Base', 'CL Tagger']
+const JARGON_PHRASES = ['PNG Info', 'GPT Image', 'Clip skip', 'Hugging Face', 'LM Studio', 'SD Image Sorter', 'Class Token', 'Florence-2 Base', 'CL Tagger', 'T5 v1.1 XXL']
 
 /** Words typed exactly so: the search line's words (V4's search syntax) and folder names on disk. */
 const TYPED = new Set([

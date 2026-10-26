@@ -3441,6 +3441,24 @@ Returns `{scores_version, total, scored, pending, unreadable, missing, job_id, s
 
 ---
 
+#### GET /api/dataset/caption-tokens/status
+
+Whether the exact caption tokenizers are ready (Dataset Check step, Anima). Returns `{available, tokenizers_package, files[], download_bytes, download_bytes_total, preparing, step, error}`. `files[]` is `{id, label, size_bytes, present}` for `qwen3_0_6b` (Qwen3-0.6B, 11.4 MB) and `t5_v1_1_xxl` (T5 v1.1 XXL, 2.4 MB); `present` is `true` only for a file whose SHA-256 matches the pin. `available` needs both files and the `tokenizers` Python package. `download_bytes` is what is still to download (about 14 MB from nothing). `step` is `package`, a file id, or empty while `preparing`; `error` is the last failure.
+
+---
+
+#### POST /api/dataset/caption-tokens/prepare
+
+Get the tokenizers ready, once: installs the `tokenizers` package into the app's environment when it is missing (a small wheel that `transformers` and `fastembed` already pull in), then downloads each tokenizer file from the Hugging Face commit it is pinned to, verified by SHA-256 (a wrong file is never kept, a verified one is never fetched again; the download source follows the Download Source setting). Qwen3-0.6B comes from `Qwen/Qwen3-0.6B`; the T5 v1.1 XXL file comes from `google/flan-t5-xxl`, whose `spiece.model` is byte-identical to `google/t5-v1_1-xxl` (which publishes no fast `tokenizer.json`). Both are Apache-2.0. Runs on a background thread; returns `{status: "started" | "running" | "ready"}` and progress shows in the status endpoint.
+
+---
+
+#### POST /api/dataset/caption-tokens
+
+Exact token counts of captions with the tokenizers a base model reads them with. Body: `{"profile": "anima", "texts": ["1girl, solo", "..."]}`; only `anima` exists (`400` for another name). Returns `{profile, available, metrics: [{id, label}], missing[], counts[]}`; `counts[i]` is `{qwen3_0_6b, t5_v1_1_xxl}` for `texts[i]`. Qwen3 counts the text as written with no special tokens; T5 counts it with whitespace runs collapsed to one space and one end token added (measured equal to SentencePiece on 4,000 generated captions). `available: false` (with `missing` and an empty `counts`) means a file or the package is not there yet; no number is guessed.
+
+---
+
 #### POST /api/dataset/character-purity
 
 Start a background CCIP character-purity analysis over a Dataset Maker selection (roadmap #9, v1). CCIP (deepghs/ccip_onnx, `ccip-caformer-24-randaug-pruned`, pure onnxruntime — no dghs-imgutils dependency) embeds every gallery image, runs the LEARNED pairwise comparator (`model_metrics.onnx`, not raw cosine), anchors the set on its **medoid** (minimum total difference = the most typical image) and ranks every image by distance-to-medoid. Images above `threshold` (default 0.178, the variant's published operating point; LOWER = same character) are flagged as suspected outliers. **Advisory only**: nothing is moved, deleted, or edited — the result is a review list. Known caveats surfaced in the UI: multi-character images confuse the model, and chibi/style variance legitimately raises distances.

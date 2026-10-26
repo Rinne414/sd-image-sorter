@@ -44,6 +44,12 @@ const SETTINGS: ReadonlySet<IssueKind> = new Set(['trigger_missing', 'trigger_co
 /** Their images have no caption to edit (the file is gone or changed). */
 const LOCKED: ReadonlySet<IssueKind> = new Set(['file_changed', 'file_missing', 'unreadable'])
 
+/** One note: a number ("123": about that many tokens) or two exact Anima counts ("123/130"). */
+function noteText(t: ReturnType<typeof useT>, key: MessageKey, value: string): string {
+  const [qwen, t5] = value.split('/')
+  return t5 !== undefined && key === 'dataset.check.tokens' ? t('dataset.check.tokensExact', { q: Number(qwen), t5: Number(t5) }) : t(key, { n: Number(value) })
+}
+
 /** The kinds whose note is one number, and how each is worded. */
 const NOTE_TEXT: Partial<Record<IssueKind, MessageKey>> = {
   too_long: 'dataset.check.tokens',
@@ -66,11 +72,12 @@ export function IssueCard({ issue, entries, actions, scope }: Props) {
   const n = issue.keys.length
   const text = issue.text
   const title = text ? (lang === 'en' ? text.en : text.zh) : t(ISSUE_TEXT[issue.kind].title, { n, ...issue.params })
-  const detail = text ? (lang === 'en' ? text.detailEn : text.detailZh) : t(ISSUE_TEXT[issue.kind].detail, { n, ...issue.params })
+  const detailKey = issue.kind === 'too_long' && issue.params?.exact ? 'dataset.check.tooLong.detail.exact' : ISSUE_TEXT[issue.kind].detail
+  const detail = text ? (lang === 'en' ? text.detailEn : text.detailZh) : t(detailKey, { n, ...issue.params })
   const openable = !LOCKED.has(issue.kind)
   const toggleTag = (next: string) => setTag((now) => (now === next ? null : next))
   const noteKey = NOTE_TEXT[issue.kind]
-  const notes = noteKey && issue.notes ? Object.fromEntries(Object.entries(issue.notes).map(([k, v]) => [k, t(noteKey, { n: Number(v) })])) : issue.notes
+  const notes = noteKey && issue.notes ? Object.fromEntries(Object.entries(issue.notes).map(([k, v]) => [k, noteText(t, noteKey, v)])) : issue.notes
 
   return (
     <article className={styles.issue} data-severity={issue.severity} data-kind={issue.kind} data-testid="check-issue">

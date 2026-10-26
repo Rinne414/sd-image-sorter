@@ -15,6 +15,12 @@ const TOKEN_BUDGET: Record<TargetModel, number> = { '': 75, sdxl: 75, flux: 512,
 
 export const tokenBudget = (model: TargetModel): number => TOKEN_BUDGET[model]
 
+/** Exact counts of one caption with the two tokenizers Anima uses (Qwen3-0.6B and T5 v1.1 XXL), by entry key. */
+export type ExactTokens = ReadonlyMap<string, { qwen: number; t5: number }>
+
+/** The longer of the two Anima counts: either one over the budget cuts the caption. */
+export const longestExact = (c: { qwen: number; t5: number }): number => Math.max(c.qwen, c.t5)
+
 /**
  * An estimate of the CLIP tokens of a caption (V3.5's QW-1 counter): exact
  * BPE needs the whole vocabulary, so each word counts one token per four
@@ -108,18 +114,28 @@ export function companions(finals: ReadonlyMap<string, string>, tag: string, ski
   return { carriers, rows }
 }
 
-/** Issues the final captions show. */
-export function captionIssues(finals: ReadonlyMap<string, string>, form: DatasetForm): CheckIssue[] {
+/**
+ * Issues the final captions show. `exact` (Anima only, once its tokenizers are
+ * downloaded) replaces the estimate: a caption is too long when either of its
+ * two counts is over the budget, and its note names both ("123/130"). A caption
+ * the exact counts do not cover yet keeps the estimate, so no caption goes
+ * unchecked while they load; `params.exact` says whether every one was counted.
+ */
+export function captionIssues(finals: ReadonlyMap<string, string>, form: DatasetForm, exact: ExactTokens | null = null): CheckIssue[] {
   const budget = tokenBudget(form.targetModel)
+  const useExact = form.targetModel === 'anima' ? exact : null
   const empty: string[] = []
   const long: string[] = []
   const notes: Record<string, string> = {}
+  let allExact = useExact !== null
   for (const [key, caption] of finals) {
     if (ownEmpty(caption, form)) empty.push(key)
-    const tokens = estimateTokens(caption)
+    const counted = useExact?.get(key)
+    if (!counted) allExact = false
+    const tokens = counted ? longestExact(counted) : estimateTokens(caption)
     if (tokens > budget) {
       long.push(key)
-      notes[key] = String(tokens)
+      notes[key] = counted ? `${counted.qwen}/${counted.t5}` : String(tokens)
     }
   }
   const skip = ruleTagKeys(form)
@@ -128,7 +144,7 @@ export function captionIssues(finals: ReadonlyMap<string, string>, form: Dataset
   const rare = rareTags(captions, skip)
   return [
     ...(empty.length ? [issue('empty_caption', 'captions', { keys: empty })] : []),
-    ...(long.length ? [issue('too_long', 'captions', { keys: long, notes, params: { budget } })] : []),
+    ...(long.length ? [issue('too_long', 'captions', { keys: long, notes, params: { budget, exact: allExact ? 1 : 0 } })] : []),
     ...(pairs.length ? [issue('cooccur', 'captions', { pairs })] : []),
     ...(rare.length ? [issue('rare_tags', 'captions', { tags: rare })] : []),
   ]

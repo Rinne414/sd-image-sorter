@@ -20,6 +20,7 @@ import { loadCheckOptions, saveCheckOptions, type CheckOptions } from './checkOp
 import styles from './CheckStep.module.css'
 import { IssueCard, type IssueActions } from './IssueCard'
 import { PurityCard } from './PurityCard'
+import { TokenCountsCard } from './TokenCountsCard'
 import { autoMaskImages, MaskCard } from '../masks/MaskCard'
 import { MaskEditor, openMaskEditor, useMaskEditor } from '../masks/MaskEditor'
 import type { TagDetailScope } from './TagDetail'
@@ -121,6 +122,7 @@ export function CheckStep({ batch, next, onNext }: Props) {
             total={entries.length}
             onSettings={() => setSettingsPanel(true)}
           />
+          {form?.targetModel === 'anima' && <TokenCountsCard />}
           <MaskCard ids={scope.ids} folderCount={scope.folderCount} />
           <PurityCard batch={batch} ids={scope.ids} folderCount={scope.folderCount} />
         </div>

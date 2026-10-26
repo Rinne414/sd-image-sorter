@@ -809,5 +809,13 @@ export const zhCNDataset = {
   'dataset.check.source.quality': '所有图：可能糊、过于平（后台计算）',
   'dataset.check.state.checkingOf': '检查中… {done} / {total}',
   'dataset.check.quality.stopped': '图片评分被中止了。',
+  'dataset.check.tokensExact': '{q} / {t5}',
+  'dataset.check.tooLong.detail.exact': '两个精确计数（Qwen3-0.6B 和 T5 v1.1 XXL，图下依次写 Qwen3-0.6B / T5）里至少有一个超过 {budget} 个 token：文本编码器每个只读前 {budget} 个左右，其余会被截掉。请把重要的标签放前面，或在设置里限制标签数量。',
+  'dataset.check.tokenizers.title': 'Anima 的 token 计数',
+  'dataset.check.tokenizers.ready': '精确：每条 caption 都用 Qwen3-0.6B 和 T5 v1.1 XXL 计数，这是 Anima 读取它用的两个分词器。',
+  'dataset.check.tokenizers.estimate': '在两个分词器文件到位之前，token 数只是估算（约每 4 个字母 1 个，中文和长词会不准）：约 {mb} MB，只下载一次。',
+  'dataset.check.tokenizers.package': '会先安装很小的分词器组件。',
+  'dataset.check.tokenizers.download': '下载以获得精确计数（{mb} MB）',
+  'dataset.check.tokenizers.busy': '下载中…',
   'dataset.check.subjectSome': '已改 {n} / {total} 张。其余的标签来自批次规则（通用标签），请到设置里改。',
 } as const

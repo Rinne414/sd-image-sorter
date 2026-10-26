@@ -808,5 +808,13 @@ export const enDataset: Record<keyof typeof zhCNDataset, string> = {
   'dataset.check.source.quality': 'Every image: possibly blurry, very flat (scored in the background)',
   'dataset.check.state.checkingOf': 'Checking… {done} of {total}',
   'dataset.check.quality.stopped': 'The picture scoring was stopped.',
+  'dataset.check.tokensExact': '{q} / {t5}',
+  'dataset.check.tooLong.detail.exact': 'Over {budget} tokens in at least one of the two exact counts (Qwen3-0.6B or T5 v1.1 XXL; each picture shows them as Qwen3-0.6B / T5): the text encoder reads about the first {budget} of each and cuts the rest. Put the important tags first, or limit the tag count in the settings.',
+  'dataset.check.tokenizers.title': 'Anima token counts',
+  'dataset.check.tokenizers.ready': 'Exact: every caption is counted with Qwen3-0.6B and with T5 v1.1 XXL, the two tokenizers Anima reads it with.',
+  'dataset.check.tokenizers.estimate': 'Token counts are only estimates (about one token per four letters, and wrong for Chinese or long words) until the two tokenizer files are here: about {mb} MB, downloaded once.',
+  'dataset.check.tokenizers.package': 'The small tokenizers package is installed first.',
+  'dataset.check.tokenizers.download': 'Download for exact counts ({mb} MB)',
+  'dataset.check.tokenizers.busy': 'Downloading…',
   'dataset.check.subjectSome': 'Changed {n} of {total} captions. The other tags come from the batch rules (common tags), so change them in the settings.',
 }

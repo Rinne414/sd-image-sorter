@@ -11,6 +11,7 @@ import { useMaskStatus } from '../masks/maskApi'
 import type { CheckOptions } from './checkOptions'
 import { usePurityResults } from './purityRun'
 import { useImageQuality, useQualityProgress, type QualityProgress } from './qualityApi'
+import { useExactTokens, useTokenizerStatus } from './tokenApi'
 
 /** What one source is doing: not for these images, still asking, done (and what it covered), or failed. */
 export type SourceStatus = 'na' | 'checking' | 'done' | 'failed'
@@ -52,6 +53,9 @@ export function useChecks(batch: Batch, entries: readonly Entry[], o: CheckOptio
   const audit = useAudit(batch, entries, o, run)
   const aesthetic = useFolderAesthetic(batch, entries, o, run)
   const quality = useImageQuality(batch, entries, o, run)
+  const anima = form?.targetModel === 'anima'
+  const tokenizers = useTokenizerStatus(anima)
+  const exact = useExactTokens(batch, form, finals.data, !!tokenizers.data?.available)
   const qualityProgress = useQualityProgress((s) => s.byBatch[batch.id] ?? null)
   const health = useHealth(batch, entries, form, finals.data, run)
   const purity = usePurityResults((s) => s.byBatch[batch.id])
@@ -64,7 +68,7 @@ export function useChecks(batch: Batch, entries: readonly Entry[], o: CheckOptio
     return mergeIssues(
       [
         projectIssues(entries),
-        finals.data && form ? captionIssues(finals.data.captions, form) : [],
+        finals.data && form ? captionIssues(finals.data.captions, form, exact.data ?? null) : [],
         heads.data && form ? tagStyleIssues(heads.data, form.normalizeUnderscores) : [],
         review.data ? reviewIssues(review.data, index) : [],
         audit.data ? auditIssues(audit.data, index) : [],
@@ -76,13 +80,13 @@ export function useChecks(batch: Batch, entries: readonly Entry[], o: CheckOptio
       ],
       entries.map((e) => e.key),
     )
-  }, [entries, finals.data, heads.data, form, review.data, audit.data, aesthetic.data, quality.data, health.data, purity, ratings, masks.data, scope.ids, exportsMasks])
+  }, [entries, finals.data, exact.data, heads.data, form, review.data, audit.data, aesthetic.data, quality.data, health.data, purity, ratings, masks.data, scope.ids, exportsMasks])
 
   const summary = audit.data?.summary
   const auditWarning = summary?.near_duplicate_error ? 'phashError' : summary?.near_duplicate_check_limited ? 'phashLimited' : null
   const captionCount = finals.data ? finals.data.captions.size + finals.data.failed.size : 0
   const sources: SourceState[] = [
-    stateOf('captions', heads.isError ? heads : { ...finals, isFetching: finals.isFetching || heads.isFetching }, entries.length > 0, captionCount),
+    stateOf('captions', heads.isError ? heads : { ...finals, isFetching: finals.isFetching || heads.isFetching || exact.isFetching }, entries.length > 0, captionCount),
     stateOf('health', health, scope.ids.length > 0, health.data?.images ?? 0, health.data?.images_truncated ? 'healthCut' : null),
     stateOf('review', review, scope.ids.length > 0, scope.ids.length),
     stateOf('audit', audit, scope.ids.length + scope.paths.length > 0, audit.data?.sent.length ?? 0, auditWarning),

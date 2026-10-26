@@ -238,6 +238,9 @@ GROUP_IMPORTS: dict[str, tuple[str, ...]] = {
 
 IMPORT_TO_PACKAGE_HINT: dict[str, str] = {
     "fastembed": "fastembed>=0.4.0",
+    # Exact caption token counts (services/caption_tokenizer_service.py): a small
+    # wheel that fastembed and transformers already pull in on a full install.
+    "tokenizers": "tokenizers>=0.22.0",
     "torch": "torch>=2.0.0",
     "open_clip": "open-clip-torch>=2.24.0",
     "transformers": "transformers>=5.6.0",
