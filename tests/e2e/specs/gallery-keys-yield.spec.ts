@@ -115,6 +115,20 @@ test('Escape on the image context menu closes it and keeps the Gallery selection
   expect(await selectedCount(page)).toBe(2)
 })
 
+test('Escape pressed the moment the context menu opens still closes it', async ({ page }) => {
+  // The Escape listener used to be attached a tick after the menu appeared, so
+  // on a busy machine an early Escape left the menu open (a CI-order flake).
+  await openGalleryWithSelection(page)
+  const stillOpen = await page.evaluate(() => {
+    const card = document.querySelectorAll('#gallery-grid .gallery-item')[2] as HTMLElement
+    const box = card.getBoundingClientRect()
+    card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: box.x + 20, clientY: box.y + 20 }))
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    return document.querySelectorAll('.gallery-context-menu').length
+  })
+  expect(stillOpen).toBe(0)
+})
+
 test('a view letter typed in the More actions menu of a selection leaves the Gallery alone', async ({ page }) => {
   await openGalleryWithSelection(page)
   await page.locator('#btn-gallery-action-more').click()

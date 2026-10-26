@@ -382,9 +382,11 @@
                 document.removeEventListener('keydown', closeOnEscape);
             }
         };
+        // Escape works at once; only the outside click waits a tick, so the
+        // click that opened the menu does not close it.
+        document.addEventListener('keydown', closeOnEscape);
         setTimeout(() => {
             document.addEventListener('click', closeOnOutside);
-            document.addEventListener('keydown', closeOnEscape);
         }, 0);
 
         return menu;

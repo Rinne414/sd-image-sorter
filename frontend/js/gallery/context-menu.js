@@ -201,9 +201,12 @@ Object.assign(window.Gallery, {
         const closeOnEscape = (event) => {
             if (event.key === 'Escape') closeMenu();
         };
+        // Escape works at once; only the outside-click listener waits a tick,
+        // so the click that opened the menu does not close it (an Escape
+        // pressed in that tick used to leave the menu open on a busy machine).
+        document.addEventListener('keydown', closeOnEscape);
         setTimeout(() => {
             document.addEventListener('click', closeMenu);
-            document.addEventListener('keydown', closeOnEscape);
         }, 0);
     },
 
