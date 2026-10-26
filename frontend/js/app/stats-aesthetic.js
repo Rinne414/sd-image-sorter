@@ -67,8 +67,9 @@ async function loadStats() {
         const updateMetadataChip = () => {
             if (countsResolving) {
                 metadataChip.textContent = metadataPending > 0
-                    ? appT('gallery.metadataResolving', 'Reading image info: {count} pending')
-                        .replace('{count}', String(metadataPending))
+                    ? I18n.format(appT('gallery.metadataResolving', 'Reading image info: {count} pending'), {
+                        count: String(metadataPending),
+                    })
                     : appT('gallery.scanResolving', 'Scanning library: generator counts are not final yet');
                 metadataChip.title = appT('gallery.metadataResolvingTitle', 'Generator counts are still resolving while metadata is being read or scan import is still running.');
                 metadataChip.hidden = false;
@@ -157,7 +158,7 @@ function renderGeneratorTabCounts(genCounts, total, { resolving = false, filtere
     const othersHint = activeOtherGenerators.length > 0
         ? appT('generator.othersActiveHint', 'Grouped generators: {generators}', {
             generators: activeOtherGenerators.join(', '),
-        }).replace('{generators}', activeOtherGenerators.join(', '))
+        })
         : appT('generator.othersHint', 'Groups uncommon generators');
     if (countOthersEl) {
         countOthersEl.textContent = resolving && othersCount === 0 ? '…' : String(othersCount);
@@ -266,8 +267,8 @@ function renderAestheticUi(state) {
     if (startButtons.length === 0) return;
 
     const t = (key, fallback, params) => {
-        const translated = window.I18n?.t?.(key, params);
-        return translated && translated !== key ? translated : (fallback || key);
+        const value = window.I18n.t(key, params);
+        return value && value !== key ? value : window.I18n.format(fallback || key, params);
     };
     const busy = state.starting || state.running;
 
@@ -464,7 +465,7 @@ async function pollAestheticProgress() {
         const batchError = String(progress?.error || '').trim();
         if (batchError) {
             showToast(
-                appT('gallery.aestheticFailed', 'Aesthetic scoring failed: {error}').replace('{error}', batchError),
+                I18n.format(appT('gallery.aestheticFailed', 'Aesthetic scoring failed: {error}'), { error: batchError }),
                 'error'
             );
             if (completed > 0) {
@@ -479,7 +480,7 @@ async function pollAestheticProgress() {
             const errors = Number(progress?.errors || 0);
             showToast(
                 errors > 0
-                    ? appT('gallery.aestheticCompletedWarn', 'Aesthetic scoring finished with {errors} errors.').replace('{errors}', errors)
+                    ? I18n.format(appT('gallery.aestheticCompletedWarn', 'Aesthetic scoring finished with {errors} errors.'), { errors: errors })
                     : appT('gallery.aestheticCompleted', 'Aesthetic scoring completed.'),
                 errors > 0 ? 'warning' : 'success'
             );

@@ -92,11 +92,7 @@ function clearPrepareResumeQueue() {
 
 function _prepareRestartT(key, fallback, params) {
     if (typeof appT === 'function') return appT(key, fallback, params);
-    if (!params) return fallback;
-    return Object.keys(params).reduce(
-        (text, name) => text.split(`{${name}}`).join(String(params[name])),
-        fallback,
-    );
+    return window.I18n.format(fallback, params);
 }
 
 function ensurePrepareRestartBanner() {
@@ -352,7 +348,7 @@ function maybeResumePrepareQueue({ resumeNow } = {}) {
             showToast(
                 _prepareRestartT(
                     'models.restartResumeExplain',
-                    '{count} model(s) were waiting after the last restart. Setup will continue now.',
+                    '{count} models were waiting after the last restart. Setup will continue now.',
                     { count: resume.items.length },
                 ),
                 'info',

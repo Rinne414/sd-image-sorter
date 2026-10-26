@@ -404,7 +404,7 @@ function renderLibraryTags(tags) {
                     loadImages();
                 }
                 finishTagsLibraryInteraction();
-                showToast(appT('library.addedFilter', 'Added "{value}" to filters').replace('{value}', tag), 'success');
+                showToast(I18n.format(appT('library.addedFilter', 'Added "{value}" to filters'), { value: tag }), 'success');
             } else {
                 finishLibraryClickOnExistingFilter(tag);
             }
@@ -438,7 +438,7 @@ function renderLibraryPrompts(prompts) {
                     loadImages();
                 }
                 finishTagsLibraryInteraction();
-                showToast(appT('library.addedFilter', 'Added "{value}" to filters').replace('{value}', prompt), 'success');
+                showToast(I18n.format(appT('library.addedFilter', 'Added "{value}" to filters'), { value: prompt }), 'success');
             } else {
                 finishLibraryClickOnExistingFilter(prompt);
             }
@@ -473,7 +473,7 @@ function renderLibraryLoras(loras) {
                     loadImages();
                 }
                 finishTagsLibraryInteraction();
-                showToast(appT('library.addedFilter', 'Added "{value}" to filters').replace('{value}', lora), 'success');
+                showToast(I18n.format(appT('library.addedFilter', 'Added "{value}" to filters'), { value: lora }), 'success');
             } else {
                 finishLibraryClickOnExistingFilter(lora);
             }
@@ -514,7 +514,7 @@ function renderLibraryCheckpoints(checkpoints) {
                     loadImages();
                 }
                 finishTagsLibraryInteraction();
-                showToast(appT('library.addedFilter', 'Added "{value}" to filters').replace('{value}', el.dataset.checkpoint), 'success');
+                showToast(I18n.format(appT('library.addedFilter', 'Added "{value}" to filters'), { value: el.dataset.checkpoint }), 'success');
             } else {
                 finishLibraryClickOnExistingFilter(el.dataset.checkpoint);
             }

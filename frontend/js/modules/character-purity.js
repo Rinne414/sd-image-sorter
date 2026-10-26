@@ -194,8 +194,7 @@
         // message_args + the counters. A failed run's raw error is shown as received.
         _statusText(progress) {
             const args = progress.message_args || {};
-            const fill = (text, values) => Object.keys(values).reduce(
-                (out, name) => out.split(`{${name}}`).join(String(values[name])), text);
+            const fill = (text, values) => I18n.format(text, values);
             switch (progress.message_key) {
                 case 'starting': return t('Starting character-purity analysis...', '正在启动角色纯度分析...');
                 case 'extracting': return t('Extracting CCIP embeddings...', '正在提取 CCIP 特征...');
@@ -293,10 +292,14 @@
             const summary = document.createElement('div');
             summary.className = 'ccip-summary';
             summary.textContent = outliers.length === 0
-                ? t(`✅ ${result.extracted} images analyzed — all within threshold ${threshold}.`,
-                    `✅ 已分析 ${result.extracted} 张图 — 全部在阈值 ${threshold} 以内。`)
-                : t(`${result.extracted} images analyzed — ${outliers.length} suspected outlier(s) above threshold ${threshold}:`,
-                    `已分析 ${result.extracted} 张图 — ${outliers.length} 张疑似离群（超过阈值 ${threshold}）：`);
+                ? I18n.format(t(
+                    `✅ {extracted} images analyzed — all within threshold {threshold}.`,
+                    `✅ 已分析 {extracted} 张图 — 全部在阈值 {threshold} 以内。`,
+                ), { extracted: result.extracted, threshold })
+                : I18n.format(t(
+                    `{extracted} images analyzed — {lengthCount} suspected outliers above threshold {threshold}:`,
+                    `已分析 {extracted} 张图 — {lengthCount} 张疑似离群（超过阈值 {threshold}）：`,
+                ), { extracted: result.extracted, lengthCount: outliers.length, threshold });
             wrap.appendChild(summary);
 
             if (result.failed > 0 || this._skippedLocal > 0) {
@@ -307,8 +310,10 @@
                     parts.push(t(`${result.failed} unreadable/missing images skipped`, `跳过 ${result.failed} 张缺失/无法读取的图片`));
                 }
                 if (this._skippedLocal > 0) {
-                    parts.push(t(`${this._skippedLocal} local-import images skipped — not in the DB`,
-                        `跳过 ${this._skippedLocal} 张本地导入图片 — 尚未入库`));
+                    parts.push(I18n.format(t(
+                        `{_skippedLocal} local-import images skipped — not in the DB`,
+                        `跳过 {_skippedLocal} 张本地导入图片 — 尚未入库`,
+                    ), { _skippedLocal: this._skippedLocal }));
                 }
                 note.textContent = `(${parts.join(' · ')})`;
                 wrap.appendChild(note);
@@ -325,9 +330,10 @@
 
             const footer = document.createElement('div');
             footer.className = 'ccip-note';
-            footer.textContent = t(
-                `${inlierCount} image(s) within threshold. Advisory only — click a row to locate the image in the queue; nothing is moved or deleted.`,
-                `${inlierCount} 张图在阈值以内。仅供参考 — 点击行可在队列中定位该图；不会移动或删除任何文件。`);
+            footer.textContent = I18n.format(t(
+                `{inlierCount} images within threshold. Advisory only — click a row to locate the image in the queue; nothing is moved or deleted.`,
+                `{inlierCount} 张图在阈值以内。仅供参考 — 点击行可在队列中定位该图；不会移动或删除任何文件。`,
+            ), { inlierCount });
             wrap.appendChild(footer);
 
             this._setStatus('');

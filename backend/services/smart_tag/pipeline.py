@@ -59,6 +59,7 @@ from services.smart_tag.tagging import (
     _resolve_tagger_by_model,
     _tag_batch_with_thresholds,
 )
+from text_counts import count_text
 
 # Shared logger: keep the historical channel name so log capture, filtering,
 # and support-log diagnostics behave exactly as before the decomposition.
@@ -230,11 +231,11 @@ def _run_windowed_pipeline(
     if ctx.use_vlm:
         job.set_message(
             "smart_tagging_vlm",
-            f"Smart-tagging {job.total} image(s) (VLM x{ctx.worker_count})...",
+            f"Smart-tagging {count_text(job.total, 'image')} (VLM x{ctx.worker_count})...",
             workers=ctx.worker_count,
         )
     else:
-        job.set_message("smart_tagging", f"Smart-tagging {job.total} image(s)...")
+        job.set_message("smart_tagging", f"Smart-tagging {count_text(job.total, 'image')}...")
 
     for window in _iter_windows(req, SMART_TAG_PIPELINE_WINDOW, job):
         if job.cancel_requested:
@@ -251,7 +252,7 @@ def _run_windowed_pipeline(
             booru_batch_size = _apply_memory_pressure(job, tagger, booru_batch_size)
             job.set_message(
                 "tagging_batch",
-                f"Tagging {len(valid)} image(s) on GPU...",
+                f"Tagging {count_text(len(valid), 'image')} on GPU...",
                 count=len(valid),
             )
             raw_results = _tag_batch_with_thresholds(
@@ -364,7 +365,7 @@ def _run_two_phase_local_captioner_pipeline(
     job.phase_completion = 0.0
     job.set_message(
         "phase1",
-        f"Smart-tagging {job.total} image(s) (phase 1/2: booru tags)...",
+        f"Smart-tagging {count_text(job.total, 'image')} (phase 1/2: booru tags)...",
     )
 
     pending_items: List[Tuple[str, int, str, Dict[str, Any]]] = []
@@ -405,7 +406,7 @@ def _run_two_phase_local_captioner_pipeline(
         job.phase_completion = min(1.0, len(pending_items) / total)
         job.set_message(
             "phase1_progress",
-            f"Phase 1/2: tagged {len(pending_items)}/{total} image(s)...",
+            f"Phase 1/2: tagged {len(pending_items)}/{count_text(total, 'image')}...",
             done=len(pending_items),
             total=total,
         )
@@ -441,7 +442,7 @@ def _run_two_phase_local_captioner_pipeline(
     device_note = f" {job.caption_device_note}" if job.caption_device_note else ""
     job.set_message(
         "phase2",
-        f"Phase 2/2: captioning {len(pending_items)} image(s) "
+        f"Phase 2/2: captioning {count_text(len(pending_items), 'image')} "
         f"with {captioner_label}...{device_note}",
         count=len(pending_items),
         captioner=captioner_label,
@@ -668,8 +669,8 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                 # _run_pipeline handler — instead of persisting empty tag sets
                 # and counting each one as a success.
                 raise RuntimeError(
-                    f"Could not load any of the {tagger_count} selected tagger "
-                    "model(s), so no tags were written. "
+                    f"Could not load {'the selected tagger model' if tagger_count == 1 else f'any of the {tagger_count} selected tagger models'}, "
+                    "so no tags were written. "
                     f"{_describe_tagger_load_failures(tagger_load_failures)}"
                 )
 
@@ -758,9 +759,9 @@ def _run_pipeline(job: SmartTagJobState, req: SmartTagRequest) -> None:
                 degraded_reason = ""
                 if tagger_load_failures:
                     degraded_reason = (
-                        f"{len(tagger_load_failures)} of {tagger_count} selected "
-                        "tagger model(s) could not be loaded and contributed no "
-                        f"tags: {_describe_tagger_load_failures(tagger_load_failures)}"
+                        f"Not loaded, so no tags came from them: {len(tagger_load_failures)} of "
+                        f"{count_text(tagger_count, 'selected tagger model')}. "
+                        f"{_describe_tagger_load_failures(tagger_load_failures)}"
                     )
                 _finish_job(job, req, degraded_reason=degraded_reason)
         elif req.enable_vlm and req.natural_language_mode == "toriigate":

@@ -23,6 +23,7 @@ from services.tagging.request import (
     CombinedTagExportRequest,
     ExportPreviewRequest,
 )
+from text_counts import count_text
 
 # NOTE(decomposition): keep the historical logger channel so log routing
 # and output stay byte-identical after the services/tagging split.
@@ -319,7 +320,7 @@ class ExportsMixin:
                 "step": "exporting",
                 "current": 0,
                 "total": total,
-                "message": f"Exporting tags for {total} images...",
+                "message": f"Exporting tags for {count_text(total, 'image')}...",
                 "started_at": time.time(),
                 "updated_at": time.time(),
             }
@@ -345,7 +346,7 @@ class ExportsMixin:
                         "step": "done",
                         "current": total,
                         "total": total,
-                        "message": f"Export complete: {int(result.get('exported', 0) or 0)} files.",
+                        "message": f"Export complete: {count_text(int(result.get('exported', 0) or 0), 'file')}.",
                         "operation": "export",
                         "result": result,
                         "started_at": self._export_progress.get("started_at"),
@@ -385,7 +386,7 @@ class ExportsMixin:
         background_tasks.add_task(run_export)
         return {
             "status": "started",
-            "message": f"Exporting {total} images in background",
+            "message": f"Exporting {count_text(total, 'image')} in background",
             "total": total,
             "operation": "export",
         }
@@ -409,7 +410,7 @@ class ExportsMixin:
         job_id = bulk_jobs.create_job(
             JOB_KIND_EXPORT_SIDECARS,
             total=total,
-            message=f"Exporting {total} images...",
+            message=f"Exporting {count_text(total, 'image')}...",
             message_key="exporting",
         )
 

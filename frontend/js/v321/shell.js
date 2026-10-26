@@ -89,8 +89,8 @@ Object.assign(window.V321Integration, {
             const restored = this.restoreCaptionEdits();
             if (restored > 0) {
                 window.showToast?.(this._i18n('batchExport.captionEditsRestored',
-                    'Caption edits for {count} image(s) that were not exported yet are back; the next training-caption export uses them.',
-                    { count: restored }).replace('{count}', String(restored)), 'info');
+                    'Caption edits for {count} images that were not exported yet are back; the next training-caption export uses them.',
+                    { count: restored }), 'info');
             }
         });
         window.addEventListener('beforeunload', (e) => {

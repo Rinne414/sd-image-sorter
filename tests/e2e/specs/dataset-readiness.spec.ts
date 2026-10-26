@@ -1018,13 +1018,13 @@ test('Export runs the check in its dialog and can skip the images with problems'
   const dialog = page.locator('#dataset-confirm-modal')
   const status = page.getByTestId('dataset-confirm-check-status')
   await expect(dialog).toBeVisible()
-  await expect(status).toHaveText('1 problem(s) stop this export.')
+  await expect(status).toHaveText('1 problem stops this export.')
   await expect(page.getByTestId('dataset-confirm-check-issues')).toContainText(blocker.message)
   await expect(page.locator('#btn-dataset-confirm-go')).toBeDisabled()
   await expect(page.locator('#dataset-confirm-skip-row'))
-    .toHaveText('Skip the 1 image(s) with problems and export the rest')
+    .toHaveText('Skip the 1 image with problems and export the rest')
   await expect(page.locator('#dataset-confirm-empty-row'))
-    .toHaveText('Write an empty caption file for the 1 image(s) with no caption')
+    .toHaveText('Write an empty caption file for the 1 image with no caption')
   expect(readinessBodies).toHaveLength(1)
   expect(readinessBodies[0]).not.toHaveProperty('skip_blocked_items')
 
@@ -1053,7 +1053,7 @@ test('Export runs the check in its dialog and can skip the images with problems'
 
   await page.getByTestId('dataset-confirm-skip-blocked').check()
   await expect(status).toHaveText(
-    '1 pair(s) passed the check. Notes are listed below. 1 image(s) with problems will be skipped.')
+    '1 pair passed the check. Notes are listed below. 1 image with problems will be skipped.')
   await expect(page.locator('#btn-dataset-confirm-go')).toBeEnabled()
   expect(readinessBodies).toHaveLength(2)
   expect(readinessBodies[1]).toMatchObject({ skip_blocked_items: true })
@@ -1064,7 +1064,7 @@ test('Export runs the check in its dialog and can skip the images with problems'
     skip_blocked_items: true,
     readiness_report_id: 'job-auto-skip',
   })
-  await expect(page.locator('#dataset-result-detail')).toContainText('1 image(s) were skipped.')
+  await expect(page.locator('#dataset-result-detail')).toContainText('1 image was skipped.')
   expect(await page.evaluate(() => (window as any).DatasetMaker._buildExportPayload()))
     .not.toHaveProperty('skip_blocked_items')
   expect(consoleErrors).toEqual([])

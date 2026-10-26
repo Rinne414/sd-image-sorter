@@ -56,11 +56,7 @@
     function t(key, fallback, params) {
         const translated = window.I18n?.t?.(key, params);
         if (translated && translated !== key) return translated;
-        let text = fallback;
-        for (const [name, value] of Object.entries(params || {})) {
-            text = text.split(`{${name}}`).join(String(value));
-        }
-        return text;
+        return window.I18n.format(fallback, params);
     }
 
     function currentToken(el) {

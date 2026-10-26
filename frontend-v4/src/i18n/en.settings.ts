@@ -121,7 +121,7 @@ export const enSettings: Record<keyof typeof zhCNSettings, string> = {
   'about.install.what': 'This downloads the {latest} update package{size} and replaces the program files in this folder (backend, interface and launch scripts) with it. Your images, library index, settings and downloaded models are left alone.',
   'about.install.size': ' (about {size})',
   'about.install.restart': 'Once installed the app restarts by itself, usually in one to three minutes; this page reloads when the app is back.',
-  'about.install.jobs': '{n} jobs in the Jobs drawer are not finished; installing stops them.',
+  'about.install.jobs': 'Not finished in the Jobs drawer: {n} jobs. Installing stops unfinished jobs.',
   'about.install.ok': 'Download and install',
   'about.install.failed': 'Could not install the update: {reason}',
   'about.install.upToDate': 'You already have the latest version; nothing to install.',

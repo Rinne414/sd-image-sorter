@@ -34,18 +34,8 @@
     function $(id) { return document.getElementById(id); }
 
     function t(key, fallback, params) {
-        const i18n = window.I18n;
-        if (i18n && typeof i18n.t === 'function') {
-            const value = i18n.t(key, params);
-            if (value && value !== key) return value;
-        }
-        let text = fallback || key;
-        if (params) {
-            Object.keys(params).forEach((name) => {
-                text = text.split('{' + name + '}').join(String(params[name]));
-            });
-        }
-        return text;
+        const value = window.I18n.t(key, params);
+        return value && value !== key ? value : window.I18n.format(fallback || key, params);
     }
 
     function showToast(message, kind) {
@@ -212,7 +202,7 @@
                     };
                 });
             if (missing > 0) {
-                showToast(t('pub.missingSkipped', '{count} image(s) were not found in the library and were skipped', { count: missing }), 'warning');
+                showToast(t('pub.missingSkipped', '{count} images were not found in the library and were skipped', { count: missing }), 'warning');
             }
         } catch (err) {
             showToast(t('pub.loadFailed', 'Could not load the publish set'), 'error');
@@ -518,7 +508,7 @@
         box.replaceChildren();
         box.hidden = false;
         const summary = makeEl('div', 'pub-result-line pub-result-ok',
-            t('pub.exportedSummary', 'Exported {count} file(s) to {folder}', {
+            t('pub.exportedSummary', 'Exported {count} files to {folder}', {
                 count: result.exported.length, folder: result.output_folder,
             }) + ' · ' + metadataSummary(result.metadata_option));
         box.appendChild(summary);
@@ -547,11 +537,11 @@
         }
         if (leftOut > 0) {
             box.appendChild(makeEl('div', 'pub-result-line pub-result-warn',
-                t('pub.leftOutUncensored', '{count} picture(s) without a censored version were left out.', { count: leftOut })));
+                t('pub.leftOutUncensored', '{count} pictures without a censored version were left out.', { count: leftOut })));
         }
         if (result.skipped_existing.length) {
             box.appendChild(makeEl('div', 'pub-result-line pub-result-warn',
-                t('pub.skippedExisting', '{count} file(s) already existed and were skipped (enable Overwrite to replace)', {
+                t('pub.skippedExisting', '{count} files already existed and were skipped (enable Overwrite to replace)', {
                     count: result.skipped_existing.length,
                 })));
         }
@@ -583,7 +573,7 @@
         answerUncensoredCheck('cancel');
         const panel = $('pub-uncensored-check');
         $('pub-uncensored-title').textContent = t('pub.uncensoredTitle',
-            '{count} image(s) would be exported uncensored, with the original pixels:', { count: items.length });
+            '{count} images would be exported uncensored, with the original pixels:', { count: items.length });
         const list = $('pub-uncensored-list');
         list.replaceChildren();
         items.forEach((item) => {
@@ -675,7 +665,7 @@
                         metadata: metadataSummary(result.metadata_option),
                     }), censoredCount === result.exported.length && !hasFileWarnings ? 'success' : 'warning');
             } else if (result.errors.length) {
-                showToast(t('pub.exportPartial', 'Export finished with {count} error(s); see details', {
+                showToast(t('pub.exportPartial', 'Export finished with {count} errors; see details', {
                     count: result.errors.length,
                 }), 'warning');
             }

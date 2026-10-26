@@ -41,34 +41,39 @@ function scanSkippedOtherLibraryPaths(progress) {
 
 function _scanDoneText(progress) {
     const num = (value) => Number(value || 0);
-    const parts = [appT('scan.msg.doneNew', 'Import complete. New images: {count}.')
-        .replace('{count}', String(num(progress.new ?? progress.result?.new)))];
+    const parts = [I18n.format(appT('scan.msg.doneNew', 'Import complete. New images: {count}.'), {
+        count: String(num(progress.new ?? progress.result?.new)),
+    })];
     const updated = num(progress.updated ?? progress.result?.updated);
     const removed = num(progress.removed ?? progress.result?.removed);
     const issues = num(progress.errors ?? progress.result?.errors);
     const restored = num(progress.result?.disguise_restored);
     const restoreFailed = num(progress.result?.disguise_restore_failed);
-    if (updated) parts.push(appT('scan.msg.doneUpdated', 'Updated: {count}.').replace('{count}', String(updated)));
-    if (removed) parts.push(appT('scan.msg.doneRemoved', 'Missing records removed: {count}.').replace('{count}', String(removed)));
-    if (issues) parts.push(appT('scan.msg.doneIssues', 'Images with issues: {count}.').replace('{count}', String(issues)));
+    if (updated) parts.push(I18n.format(appT('scan.msg.doneUpdated', 'Updated: {count}.'), { count: String(updated) }));
+    if (removed) parts.push(I18n.format(appT('scan.msg.doneRemoved', 'Missing records removed: {count}.'), { count: String(removed) }));
+    if (issues) parts.push(I18n.format(appT('scan.msg.doneIssues', 'Images with issues: {count}.'), { count: String(issues) }));
     if (restored) {
-        parts.push(appT('scan.msg.doneRestored', 'Disguise images restored: {count}. Each real picture sits next to its original.')
-            .replace('{count}', String(restored)));
+        parts.push(I18n.format(appT('scan.msg.doneRestored', 'Disguise images restored: {count}. Each real picture sits next to its original.'), {
+            count: String(restored),
+        }));
     }
     if (restoreFailed) {
-        parts.push(appT('scan.msg.doneRestoreFailed', 'Disguise images that could not be restored: {count}.')
-            .replace('{count}', String(restoreFailed)));
+        parts.push(I18n.format(appT('scan.msg.doneRestoreFailed', 'Disguise images that could not be restored: {count}.'), {
+            count: String(restoreFailed),
+        }));
     }
     if (progress.missing_text_notice) {
-        parts.push(appT(
+        parts.push(I18n.format(appT(
             'scan.msg.doneMissingText',
             '{missing} of {total} images have no prompt and no caption text. Run Recover Missing Text in Settings.',
-        ).replace('{missing}', String(num(progress.metadata_missing_text)))
-            .replace('{total}', String(num(progress.metadata_prompt_total))));
+        ), {
+            missing: String(num(progress.metadata_missing_text)),
+            total: String(num(progress.metadata_prompt_total)),
+        }));
     }
     const names = (progress.recent_errors || progress.result?.recent_errors || [])
         .slice(-3).map((item) => item?.filename).filter(Boolean).join(', ');
-    if (names) parts.push(appT('scan.msg.doneIssueItems', 'Images with issues: {names}.').replace('{names}', () => names));
+    if (names) parts.push(I18n.format(appT('scan.msg.doneIssueItems', 'Images with issues: {names}.'), { names: () => names }));
     return parts.join(' ');
 }
 
@@ -266,21 +271,24 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
     const extraParts = [];
     if (metrics.isCounting) {
         extraParts.push(
-            appT('progress.discoveredCount', '{count} found')
-                .replace('{count}', String(metrics.counted || metrics.processed || 0))
+            I18n.format(appT('progress.discoveredCount', '{count} found'), {
+                count: String(metrics.counted || metrics.processed || 0),
+            })
         );
     } else if (metrics.totalFinal && metrics.total > metrics.processed && !metrics.showingMetadata) {
         // "0 left" says nothing once every file is in.
         extraParts.push(
-            appT('progress.left', '{count} left')
-                .replace('{count}', String(metrics.total - metrics.processed))
+            I18n.format(appT('progress.left', '{count} left'), {
+                count: String(metrics.total - metrics.processed),
+            })
         );
     }
     if (metrics.metadataTotal > 0) {
         extraParts.push(
-            appT('progress.metadataCount', '{current}/{total} metadata')
-                .replace('{current}', String(metrics.metadataProcessed))
-                .replace('{total}', String(metrics.metadataTotal))
+            I18n.format(appT('progress.metadataCount', '{current}/{total} metadata'), {
+                current: String(metrics.metadataProcessed),
+                total: String(metrics.metadataTotal),
+            })
         );
         // While reading metadata the main line already says the total is still
         // being counted; saying it twice crowded the progress line.
@@ -288,18 +296,20 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
             extraParts.push(appT('progress.detailsStillCounting', 'details total still being checked'));
         }
     }
-    if (newCount > 0) extraParts.push(appT('progress.newCount', '{count} new').replace('{count}', newCount));
-    if (updatedCount > 0) extraParts.push(appT('progress.updatedCount', '{count} updated').replace('{count}', updatedCount));
-    if (removedCount > 0) extraParts.push(appT('progress.removedCount', '{count} removed').replace('{count}', removedCount));
-    if (errorCount > 0) extraParts.push(appT('progress.failedCount', '{count} failed').replace('{count}', errorCount));
+    if (newCount > 0) extraParts.push(I18n.format(appT('progress.newCount', '{count} new'), { count: newCount }));
+    if (updatedCount > 0) extraParts.push(I18n.format(appT('progress.updatedCount', '{count} updated'), { count: updatedCount }));
+    if (removedCount > 0) extraParts.push(I18n.format(appT('progress.removedCount', '{count} removed'), { count: removedCount }));
+    if (errorCount > 0) extraParts.push(I18n.format(appT('progress.failedCount', '{count} failed'), { count: errorCount }));
 
     let scanDetail = progress.current_item || scanStatusText(progress) || appT('scan.backgroundImporting', 'Still importing images...');
     if (metrics.isCounting) {
-        scanDetail = appT('progress.countingImages', 'Counting images... {count} found')
-            .replace('{count}', String(metrics.counted || metrics.processed || 0));
+        scanDetail = I18n.format(appT('progress.countingImages', 'Counting images... {count} found'), {
+            count: String(metrics.counted || metrics.processed || 0),
+        });
     } else if (metrics.totalFinal && metrics.processed === 0 && metrics.total > 0) {
-        scanDetail = appT('progress.foundStarting', 'Found {total} images. Starting scan...')
-            .replace('{total}', String(metrics.total));
+        scanDetail = I18n.format(appT('progress.foundStarting', 'Found {total} images. Starting scan...'), {
+            total: String(metrics.total),
+        });
     } else if (metrics.showingMetadata && !metrics.metadataTotalFinal) {
         scanDetail = appT('progress.detailsStillCounting', 'details total still being checked');
     }
@@ -374,10 +384,12 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
         const _scanAutoTagOn = !!document.getElementById('scan-auto-tag')?.checked;
         if (_scanSkippedOther > 0) {
             showToast(
-                appT(
+                I18n.format(appT(
                     'scan.skippedOtherLibrary',
-                    '{count} image(s) already belong to another library and were not reassigned.',
-                ).replace('{count}', String(_scanSkippedOther)),
+                    '{count} images already belong to another library and were not reassigned.',
+                ), {
+                    count: String(_scanSkippedOther),
+                }),
                 'warning',
             );
         }
@@ -413,10 +425,12 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
                 const pathsToClaim = _scanSkippedPaths.slice();
                 _scanCtaActions.push({
                     icon: '↪️',
-                    label: appT(
+                    label: I18n.format(appT(
                         'scan.claimOtherLibraryCta',
                         'Move {count} into this library',
-                    ).replace('{count}', String(_scanSkippedOther)),
+                    ), {
+                        count: String(_scanSkippedOther),
+                    }),
                     action: () => {
                         if (typeof window.LibraryWorkspace?.claimPaths === 'function') {
                             return window.LibraryWorkspace.claimPaths(pathsToClaim);
@@ -427,7 +441,7 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
             showPipelineNextStep({
                 icon: 'i-check',
                 title: _scanNewCount > 0
-                    ? appT('flow.scanDoneTitle', 'Imported {count} images. What next?').replace('{count}', String(_scanNewCount))
+                    ? I18n.format(appT('flow.scanDoneTitle', 'Imported {count} images. What next?'), { count: String(_scanNewCount) })
                     : appT('flow.scanDoneTitleZero', 'Import complete. What next?'),
                 actions: _scanCtaActions,
             });
@@ -483,7 +497,7 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
     } else if (progress.status === 'cancelled') {
         const cancelCount = Number(progress.processed ?? progress.current ?? 0);
         const cancelMsg = cancelCount > 0
-            ? appT('scan.cancelledAfterCount', 'Import cancelled after {count} scanned.').replace('{count}', String(cancelCount))
+            ? I18n.format(appT('scan.cancelledAfterCount', 'Import cancelled after {count} scanned.'), { count: String(cancelCount) })
             : appT('scan.cancelled', 'Import cancelled');
         showToast(cancelMsg, 'info');
         $('#scan-progress-container').style.display = 'none';
@@ -542,10 +556,12 @@ async function handleManualScanProgress(progress, retryCount, scheduleNext, iden
             ? progress.status
             : '<missing>';
         showToast(
-            appT(
+            I18n.format(appT(
                 'scan.unknownStatus',
                 'Import progress stopped (status: {status}). Reload the page; if it keeps happening, restart SD Image Sorter.'
-            ).replace('{status}', statusLabel),
+            ), {
+                status: statusLabel,
+            }),
             'error'
         );
         $('#scan-progress-container').style.display = 'none';
@@ -625,7 +641,7 @@ function createAutoRefreshBackgroundScanMessages() {
         ),
         completedWithErrors: appT(
             'libraryRoots.autoRefreshCompletedWithErrors',
-            'Idle library refresh finished with {count} scan issue(s).'
+            'Idle library refresh finished with {count} scan issues.'
         ),
         cancelled: appT(
             'libraryRoots.autoRefreshCancelled',
@@ -659,7 +675,7 @@ function createLibraryRescanBackgroundScanMessages() {
         ),
         completedWithErrors: appT(
             'libraryRoots.rescanCompletedWithErrors',
-            'Library Rescan finished with {count} scan issue(s).'
+            'Library Rescan finished with {count} scan issues.'
         ),
         cancelled: appT(
             'libraryRoots.rescanCancelled',
@@ -723,8 +739,7 @@ function createBackgroundScanProgressConsumer(messages) {
                 const terminalErrorCount = Number(progress.errors || progress.result?.errors || 0);
                 if (terminalErrorCount > 0) {
                     showToast(
-                        `${messages.completedWithErrors
-                            .replace('{count}', String(terminalErrorCount))} ${messages.recoveryHint}`,
+                        `${I18n.format(messages.completedWithErrors, { count: String(terminalErrorCount) })} ${messages.recoveryHint}`,
                         'warning'
                     );
                 }
@@ -754,7 +769,7 @@ function createBackgroundScanProgressConsumer(messages) {
                 status: statusLabel,
             });
             showToast(
-                `${messages.unknownStatus.replace('{status}', statusLabel)} ${messages.recoveryHint}`,
+                `${I18n.format(messages.unknownStatus, { status: statusLabel })} ${messages.recoveryHint}`,
                 'error'
             );
         },

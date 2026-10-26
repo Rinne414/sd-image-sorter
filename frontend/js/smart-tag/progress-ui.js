@@ -48,9 +48,9 @@
         const values = { tagged: snap.succeeded || 0, skipped: snap.skipped || 0, failed };
         done.dataset.status = tone;
         title.textContent = smartTagT(titleKey, titleFallback);
-        counts.textContent = Object.keys(values).reduce(
-            (text, name) => text.split(`{${name}}`).join(String(values[name])),
+        counts.textContent = I18n.format(
             smartTagT('smartTag.doneCounts', '{tagged} tagged · {skipped} skipped · {failed} failed'),
+            values,
         );
         done.hidden = false;
     }
@@ -104,8 +104,9 @@
                 pipelineQueuedSince = Date.now();
                 setProgressUI({
                     percent: 0,
-                    text: smartTagT('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish')
-                        .replace('{position}', String(queuedEntries[0].position || 1)),
+                    text: I18n.format(smartTagT('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish'), {
+                        position: String(queuedEntries[0].position || 1),
+                    }),
                     preview: '',
                 });
             } else {
@@ -138,8 +139,9 @@
             if (!isLive && queuedEntries.length > 0) {
                 setProgressUI({
                     percent: 0,
-                    text: smartTagT('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish')
-                        .replace('{position}', String(queuedEntries[0].position || 1)),
+                    text: I18n.format(smartTagT('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish'), {
+                        position: String(queuedEntries[0].position || 1),
+                    }),
                     preview: '',
                 });
                 return;
@@ -158,8 +160,9 @@
                     showProgress(false);
                     if (typeof window.showToast === 'function') {
                         window.showToast(
-                            smartTagT('aiQueue.startFailed', 'Queued job failed to start: {error}')
-                                .replace('{error}', String(startError.error || '')),
+                            I18n.format(smartTagT('aiQueue.startFailed', 'Queued job failed to start: {error}'), {
+                                error: String(startError.error || ''),
+                            }),
                             'error'
                         );
                     }
@@ -203,10 +206,7 @@
         const key = snap && snap.message_key;
         if (!key) return '';
         const args = snap.message_args || {};
-        const fill = (i18nKey, fallback, values = {}) => Object.keys(values).reduce(
-            (text, name) => text.split(`{${name}}`).join(String(values[name])),
-            smartTagT(i18nKey, fallback),
-        );
+        const fill = (i18nKey, fallback, values = {}) => I18n.format(smartTagT(i18nKey, fallback), values);
         const withDetail = (text, detail) => (detail ? window.I18n.joinLabel(text, detail) : text);
         const ok = snap.succeeded || 0;
         const failed = snap.failed || 0;
@@ -289,8 +289,10 @@
         }
 
         const keyedText = smartTagStatusText(snap);
-        const counts = smartTagT('smartTag.msg.progressCounts', 'succeeded {ok}, failed {failed}')
-            .replace('{ok}', String(snap.succeeded || 0)).replace('{failed}', String(snap.failed || 0));
+        const counts = I18n.format(smartTagT('smartTag.msg.progressCounts', 'succeeded {ok}, failed {failed}'), {
+            ok: String(snap.succeeded || 0),
+            failed: String(snap.failed || 0),
+        });
         let text = keyedText || snap.message || status;
         if (total > 0) {
             let stagePrefix = '';

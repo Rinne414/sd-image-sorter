@@ -32,6 +32,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 import ccip
 import database as db
+from text_counts import count_text
 
 logger = logging.getLogger(__name__)
 
@@ -341,7 +342,7 @@ def start_character_purity(
             "extracted": 0,
             "failed": 0,
             "result": None,
-            "message": f"Starting character-purity analysis for {len(image_ids)} images...",
+            "message": f"Starting character-purity analysis for {count_text(len(image_ids), 'image')}...",
             "message_key": "starting",
             "message_args": {},
             "started_at": started_at,
@@ -358,7 +359,7 @@ def start_character_purity(
                     "status": "running",
                     "step": "extracting",
                     "failed": failed,
-                    "message": f"Extracting CCIP embeddings for {len(resolved['paths'])} images...",
+                    "message": f"Extracting CCIP embeddings for {count_text(len(resolved['paths']), 'image')}...",
                     "message_key": "extracting",
                     "message_args": {},
                 },
@@ -479,6 +480,6 @@ def start_character_purity(
         status="started",
         job_id=job_id,
         total=len(image_ids),
-        message=f"Character-purity analysis started for {len(image_ids)} images.",
+        message=f"Character-purity analysis started for {count_text(len(image_ids), 'image')}.",
         message_key="started",
     )

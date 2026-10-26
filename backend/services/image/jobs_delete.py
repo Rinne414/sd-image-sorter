@@ -22,6 +22,7 @@ from services.bulk_job_service import (
     JOB_KIND_DELETE_FILES,
     get_bulk_job_service,
 )
+from text_counts import count_text
 
 # NOTE(decomposition): keep the historical logger channel so log routing and
 # output stay byte-identical after the package split.
@@ -255,7 +256,7 @@ class DeleteJobsMixin:
                 "step": "starting",
                 "current": 0,
                 "total": total_count,
-                "message": f"Starting delete of {total_count} images...",
+                "message": f"Starting delete of {count_text(total_count, 'image')}...",
                 "started_at": time.time(),
                 "updated_at": time.time(),
             }
@@ -278,7 +279,7 @@ class DeleteJobsMixin:
                             "deleted": deleted,
                             "message": (
                                 f"Cancelled at {processed}/{total_count}. "
-                                f"Trashed {deleted} images so far."
+                                f"Trashed {count_text(deleted, 'image')} so far."
                             ),
                             "current_item": None,
                             "recent_errors": errors[-3:],
@@ -342,7 +343,7 @@ class DeleteJobsMixin:
                         "total": total_count,
                         "errors": len(errors),
                         "deleted": deleted,
-                        "message": f"Completed! Trashed {deleted} images." + (f" {len(errors)} errors." if errors else ""),
+                        "message": f"Completed! Trashed {count_text(deleted, 'image')}." + (f" {count_text(len(errors), 'error')}." if errors else ""),
                         "current_item": None,
                         "recent_errors": errors[-3:],
                         "operation": "delete",
@@ -383,7 +384,7 @@ class DeleteJobsMixin:
         background_tasks.add_task(run_delete)
         return {
             "status": "started",
-            "message": f"Deleting {total_count} images in background",
+            "message": f"Deleting {count_text(total_count, 'image')} in background",
             "total": total_count,
             "count": total_count,
             "operation": "delete",
@@ -473,7 +474,7 @@ class DeleteJobsMixin:
         job_id = bulk_jobs.create_job(
             JOB_KIND_DELETE_FILES,
             total=len(image_ids),
-            message=f"Deleting {len(image_ids)} images...",
+            message=f"Deleting {count_text(len(image_ids), 'image')}...",
         )
 
         def process_chunk(chunk_ids: List[int]) -> Dict[str, Any]:

@@ -157,9 +157,10 @@ async function requestStopTagging() {
         _tagMinimizedToBackground = true;
         _updateBgTagProgress(
             _tagLastProgressPercent,
-            appT('tagger.progressCancelling', 'Cancelling... {current}/{total}')
-                .replace('{current}', String(_tagLastCurrent))
-                .replace('{total}', String(_tagLastTotal)),
+            I18n.format(appT('tagger.progressCancelling', 'Cancelling... {current}/{total}'), {
+                current: String(_tagLastCurrent),
+                total: String(_tagLastTotal),
+            }),
             'cancelling'
         );
         showToast(appT('tagger.cancellingAfterCurrent', 'Cancelling after current image...'), 'info');
@@ -460,8 +461,9 @@ async function startTagging() {
         $('#tag-progress-fill').style.width = '0%';
         _tagLastProgressPercent = 0;
         if (isQueued) {
-            _tagLastProgressText = appT('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish')
-                .replace('{position}', String(startResp.queue_position || 1));
+            _tagLastProgressText = I18n.format(appT('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish'), {
+                position: String(startResp.queue_position || 1),
+            });
         } else {
             _tagLastProgressText = gpuLocked
                 ? t('tag.preparingMaxQuality', 'Preparing Max Quality model on CPU...')
@@ -593,8 +595,9 @@ async function pollTagProgress(retryCount = 0) {
         if (!['running', 'cancelling'].includes(progress.status)) {
             if (_queuedEntries.length > 0) {
                 _tagQueuedWaiting = true;
-                const queuedText = appT('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish')
-                    .replace('{position}', String(_queuedEntries[0].position || 1));
+                const queuedText = I18n.format(appT('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish'), {
+                    position: String(_queuedEntries[0].position || 1),
+                });
                 const queuedFill = $('#tag-progress-fill');
                 if (queuedFill) {
                     queuedFill.classList.add('is-indeterminate');
@@ -619,8 +622,9 @@ async function pollTagProgress(retryCount = 0) {
                     _tagPollingActive = false;
                     clearTagProgressTimer();
                     _hideBgTagProgress();
-                    showToast(appT('aiQueue.startFailed', 'Queued job failed to start: {error}')
-                        .replace('{error}', String(startError.error || '')), 'error');
+                    showToast(I18n.format(appT('aiQueue.startFailed', 'Queued job failed to start: {error}'), {
+                        error: String(startError.error || ''),
+                    }), 'error');
                     $('#tag-progress-container').style.display = 'none';
                     unlockLiveProgressText('#tag-progress-text', 'modal.tagLoadingModel', 'Loading model...');
                     setTaggingUiState(false);
@@ -654,9 +658,9 @@ async function pollTagProgress(retryCount = 0) {
 
         const remaining = total > 0 ? Math.max(0, total - current) : 0;
         const extraParts = [];
-        if (total > 0) extraParts.push(appT('progress.left', '{count} left').replace('{count}', remaining));
-        if (tagged > 0) extraParts.push(appT('progress.taggedCount', '{count} tagged').replace('{count}', tagged));
-        if (errors > 0) extraParts.push(appT('progress.failedCount', '{count} failed').replace('{count}', errors));
+        if (total > 0) extraParts.push(I18n.format(appT('progress.left', '{count} left'), { count: remaining }));
+        if (tagged > 0) extraParts.push(I18n.format(appT('progress.taggedCount', '{count} tagged'), { count: tagged }));
+        if (errors > 0) extraParts.push(I18n.format(appT('progress.failedCount', '{count} failed'), { count: errors }));
 
         let progressText = buildOperationProgressText({
             completed: current,
@@ -669,9 +673,10 @@ async function pollTagProgress(retryCount = 0) {
         });
 
         if (progress.status === 'cancelling') {
-            progressText = tagStatusText(progress) || appT('tagger.progressCancelling', 'Cancelling... {current}/{total}')
-                .replace('{current}', current)
-                .replace('{total}', Math.max(total, current));
+            progressText = tagStatusText(progress) || I18n.format(appT('tagger.progressCancelling', 'Cancelling... {current}/{total}'), {
+                current: current,
+                total: Math.max(total, current),
+            });
         }
 
         $('#tag-progress-text').textContent = progressText;
@@ -697,7 +702,7 @@ async function pollTagProgress(retryCount = 0) {
                 showPipelineNextStep({
                     icon: 'i-tag',
                     title: _taggedCount > 0
-                        ? appT('flow.tagDoneTitle', 'Tagged {count} images. What next?').replace('{count}', String(_taggedCount))
+                        ? I18n.format(appT('flow.tagDoneTitle', 'Tagged {count} images. What next?'), { count: String(_taggedCount) })
                         : appT('flow.tagDoneTitleZero', 'Tagging complete. What next?'),
                     actions: [
                         { icon: '🗂️', label: appT('nav.sorting', 'Organize'), action: 'view:sorting' },

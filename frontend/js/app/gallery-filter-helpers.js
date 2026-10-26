@@ -150,9 +150,10 @@ function _applyGalleryEmptyStateVariant(emptyState) {
             hintEl.removeAttribute('data-i18n');
             hintEl.dataset.i18nLocked = missing > 0 ? '1' : '';
             if (missing > 0) {
-                hintEl.textContent = t(hintKey,
-                    'The library has {count} images, but their files are not where they were: usually the folder was moved or renamed, or the drive is unplugged. Use Find Moved Files above to re-link them, or import a folder.')
-                    .replace('{count}', missing.toLocaleString());
+                hintEl.textContent = I18n.format(t(hintKey,
+                    'The library has {count} images, but their files are not where they were: usually the folder was moved or renamed, or the drive is unplugged. Use Find Moved Files above to re-link them, or import a folder.'), {
+                    count: missing.toLocaleString(),
+                });
             } else {
                 delete hintEl.dataset.i18nLocked;
                 hintEl.setAttribute('data-i18n', hintKey);

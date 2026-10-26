@@ -1922,7 +1922,7 @@ test('named project blocks preview readiness and export until a paged manifest i
     dm._updateExportEnabled()
   }, { projectValue: stored, token: scanToken, item: firstItem })
 
-  const blockedReason = 'Click Save to store these 2 image(s) as a new project version before you preview, check or export.'
+  const blockedReason = 'Click Save to store the 2 images as a new project version before you preview, check or export.'
   await expect(page.getByTestId('dataset-readiness-check')).toBeDisabled()
   await expect(page.getByTestId('dataset-readiness-check')).toHaveAttribute('title', blockedReason)
   await expect(page.locator('#btn-dataset-export')).toBeDisabled()

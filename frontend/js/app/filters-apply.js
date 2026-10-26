@@ -89,7 +89,7 @@ function applyTagFiltersFromExternal(tags, options = {}) {
 
     const label = String(options.label || '').trim();
     const message = label
-        ? appT('tagCategory.findAppliedNamed', 'Showing images matching {category} tags', { category: label }).replace('{category}', label)
+        ? appT('tagCategory.findAppliedNamed', 'Showing images matching {category} tags', { category: label })
         : appT('tagCategory.findApplied', 'Showing images matching those tags');
     showToast(message, 'success');
     return true;

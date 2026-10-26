@@ -331,7 +331,7 @@ test('only images without a result: skipped ones are counted, and nothing starts
   await expect(page.getByTestId('artist-skip')).toBeChecked()
   await expect(page.getByTestId('artist-run')).toContainText('This library has 6 with a result.')
   await page.getByTestId('artist-go').click()
-  await expect(toast(page, '6 already had a result and were skipped.')).toBeVisible()
+  await expect(toast(page, 'Skipped, already had a result: 6.')).toBeVisible()
   await expect(toast(page, /Style: /)).toBeVisible({ timeout: 15_000 })
 
   allDone = true

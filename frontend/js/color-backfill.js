@@ -85,10 +85,10 @@
             if (!banner) return;
             const detail = document.getElementById("color-backfill-banner-detail");
             if (detail) {
-                detail.textContent = this.t(
-                    `${missingCount.toLocaleString()} images haven't been analyzed yet. Sort and filter results will be incomplete until backfill finishes.`,
-                    `还有 ${missingCount.toLocaleString()} 张图未分析。排序和筛选会不完整，直到补算完成。`,
-                );
+                detail.textContent = I18n.format(this.t(
+                    `{missingCount} images haven't been analyzed yet. Sort and filter results will be incomplete until backfill finishes.`,
+                    `还有 {missingCount} 张图未分析。排序和筛选会不完整，直到补算完成。`,
+                ), { missingCount: missingCount.toLocaleString() });
             }
             const startBtn = document.getElementById("btn-color-backfill-start");
             if (startBtn) {
@@ -136,7 +136,7 @@
                     || (window.I18n?.getLang?.() === "zh-CN"
                         ? `色彩筛选还需分析 {count} 张图。`
                         : `Color filters need analysis on {count} more images.`);
-                titleEl.textContent = tmpl.replace("{count}", missing.toLocaleString());
+                titleEl.textContent = I18n.format(tmpl, { count: missing.toLocaleString() });
             }
             banner.hidden = false;
         },
@@ -173,14 +173,14 @@
             const all = Math.max(missing, Number(data.total));
             this._toast(
                 all > Number(data.total)
-                    ? this.t(
-                        `Color analysis started — ${all.toLocaleString()} images to analyze, ${Number(data.total).toLocaleString()} per round until none are left.`,
-                        `已开始补算 ${all.toLocaleString()} 张图的色彩，每批 ${Number(data.total).toLocaleString()} 张，自动接着做到全部完成。`,
-                    )
-                    : this.t(
-                        `Color analysis started — ${data.total.toLocaleString()} images queued.`,
-                        `已开始补算 ${data.total.toLocaleString()} 张图的色彩。`,
-                    ),
+                    ? I18n.format(this.t(
+                        `Color analysis started — {all} images to analyze, {n} per round until none are left.`,
+                        `已开始补算 {all} 张图的色彩，每批 {n} 张，自动接着做到全部完成。`,
+                    ), { all: all.toLocaleString(), n: Number(data.total).toLocaleString() })
+                    : I18n.format(this.t(
+                        `Color analysis started — {total} images queued.`,
+                        `已开始补算 {total} 张图的色彩。`,
+                    ), { total: data.total.toLocaleString() }),
                 "info",
             );
             this.openToast();
@@ -223,10 +223,10 @@
             if (!next || !Number(next.total)) return false;
             this.wasRunning = true;
             this._toast(
-                this.t(
-                    `${this.sessionCompleted.toLocaleString()} images analyzed, ${missing.toLocaleString()} left — continuing with the next ${Number(next.total).toLocaleString()}.`,
-                    `已分析 ${this.sessionCompleted.toLocaleString()} 张，还剩 ${missing.toLocaleString()} 张，继续下一批 ${Number(next.total).toLocaleString()} 张。`,
-                ),
+                I18n.format(this.t(
+                    `{sessionCompleted} images analyzed, {missing} left — continuing with the next {n}.`,
+                    `已分析 {sessionCompleted} 张，还剩 {missing} 张，继续下一批 {n} 张。`,
+                ), { sessionCompleted: this.sessionCompleted.toLocaleString(), missing: missing.toLocaleString(), n: Number(next.total).toLocaleString() }),
                 "info",
             );
             this.startPolling();
@@ -291,10 +291,10 @@
             } else if (justFinished && Number(data.failed || 0) > 0) {
                 // Every image failed — say so instead of ending silently.
                 this._toast(
-                    this.t(
-                        `Color analysis finished, but all ${Number(data.failed).toLocaleString()} image(s) failed. Check the backend log for details.`,
-                        `色彩分析结束，但 ${Number(data.failed).toLocaleString()} 张图全部失败。详情请查看后端日志。`,
-                    ),
+                    I18n.format(this.t(
+                        `Color analysis finished, but all {n} images failed. Check the backend log for details.`,
+                        `色彩分析结束，但 {n} 张图全部失败。详情请查看后端日志。`,
+                    ), { n: Number(data.failed).toLocaleString() }),
                     "error",
                 );
             }
@@ -333,10 +333,10 @@
             const analyzed = this.continueRounds ? this.sessionCompleted : Number(data.completed || 0);
             this.continueRounds = false;
             this._fetchMissingCount().then((missing) => {
-                const done = this.t(
-                    `Color analysis done — ${analyzed.toLocaleString()} images analyzed.`,
-                    `色彩分析完成 — 已分析 ${analyzed.toLocaleString()} 张。`,
-                );
+                const done = I18n.format(this.t(
+                    `Color analysis done — {analyzed} images analyzed.`,
+                    `色彩分析完成 — 已分析 {analyzed} 张。`,
+                ), { analyzed: analyzed.toLocaleString() });
                 const left = missing > 0
                     ? this.t(
                         ` ${missing.toLocaleString()} could not be analyzed yet.`,
@@ -396,10 +396,10 @@
             if (pctEl) pctEl.textContent = `${pct}%`;
             if (currentEl) {
                 if (showingDone) {
-                    currentEl.textContent = this.t(
-                        `Done — ${data.completed.toLocaleString()} images analyzed`,
-                        `已完成 — 共分析 ${data.completed.toLocaleString()} 张`,
-                    );
+                    currentEl.textContent = I18n.format(this.t(
+                        `Done — {completed} images analyzed`,
+                        `已完成 — 共分析 {completed} 张`,
+                    ), { completed: data.completed.toLocaleString() });
                 } else {
                     currentEl.textContent = data.current_image
                         ? this.t(`Current: ${data.current_image}`, `当前：${data.current_image}`)
@@ -413,7 +413,7 @@
                 } else if (showingDone || !data.running) {
                     pauseBtn.disabled = true;
                     pauseBtn.textContent = data.failed > 0
-                        ? this.t(`Done with ${data.failed} error(s)`, `完成 (${data.failed} 错误)`)
+                        ? I18n.format(this.t(`Done with {failed} errors`, `完成 ({failed} 错误)`), { failed: data.failed })
                         : this.t("Done", "完成");
                 } else {
                     pauseBtn.disabled = false;

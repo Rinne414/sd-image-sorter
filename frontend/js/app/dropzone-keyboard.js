@@ -193,8 +193,9 @@ async function _handleFolderDrop(folderName, files, folderFiles) {
         input.dispatchEvent(new Event('input', { bubbles: true }));
     }
     showToast(
-        appT('gallery.dropHintBrowse', "Couldn't locate \"{name}\": browsers don't share a folder's full path. Pick it with Browse to scan it.")
-            .replace('{name}', folderName || (droppedFiles[0]?.name) || ''),
+        I18n.format(appT('gallery.dropHintBrowse', "Couldn't locate \"{name}\": browsers don't share a folder's full path. Pick it with Browse to scan it."), {
+            name: folderName || (droppedFiles[0]?.name) || '',
+        }),
         'warning'
     );
     if (input && typeof window.showFolderBrowser === 'function') {
@@ -207,8 +208,9 @@ async function _handleFolderDrop(folderName, files, folderFiles) {
 function _confirmCopyDroppedImages(count) {
     return new Promise((resolve) => {
         showConfirm(
-            appT('gallery.dropCopyTitle', 'Copy {count} images into the library?')
-                .replace('{count}', String(count)),
+            I18n.format(appT('gallery.dropCopyTitle', 'Copy {count} images into the library?'), {
+                count: String(count),
+            }),
             appT(
                 'gallery.dropCopyBody',
                 'Dropped files are copied into the imports folder of this program (data/imports), and the copy is added to the current library. Your original files stay where they are, untouched. To keep images in their own folder instead, cancel and use Import Images.'
@@ -222,8 +224,9 @@ function _confirmCopyDroppedImages(count) {
 async function _handleImageFilesDrop(imageFiles) {
     if (!(await _confirmCopyDroppedImages(imageFiles.length))) return;
     showToast(
-        appT('gallery.importingDropped', 'Importing {count} images...')
-            .replace('{count}', String(imageFiles.length)),
+        I18n.format(appT('gallery.importingDropped', 'Importing {count} images...'), {
+            count: String(imageFiles.length),
+        }),
         'info'
     );
     try {
@@ -232,8 +235,9 @@ async function _handleImageFilesDrop(imageFiles) {
         const errors = result?.errors || 0;
         if (imported > 0) {
             showToast(
-                appT('gallery.importedDropped', 'Imported {count} images into gallery')
-                    .replace('{count}', String(imported))
+                I18n.format(appT('gallery.importedDropped', 'Imported {count} images into gallery'), {
+                    count: String(imported),
+                })
                     + (errors > 0 ? ` (${errors} failed)` : ''),
                 'success'
             );
@@ -254,7 +258,7 @@ function _openScanWithPath(folderPath) {
         input.value = folderPath;
         input.dispatchEvent(new Event('input', { bubbles: true }));
     }
-    showToast(appT('gallery.dropFolderDetected', 'Folder detected: {path}').replace('{path}', folderPath), 'info');
+    showToast(I18n.format(appT('gallery.dropFolderDetected', 'Folder detected: {path}'), { path: folderPath }), 'info');
 }
 
 // Everything that answers the keyboard itself while open (Escape closes it).

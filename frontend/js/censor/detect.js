@@ -68,7 +68,7 @@ function readCensorDetectionWarnings(result) {
         warnings.push(censorT(
             'censor.faceGuardDropped',
             { count: skippedOnFaces },
-            'Face guard skipped {count} detection(s) sitting on a face. Check the face if it really shows something to hide.'
+            'Face guard skipped {count} detections sitting on a face. Check the face if it really shows something to hide.'
         ));
     }
     return Array.from(new Set(warnings));
@@ -111,9 +111,9 @@ function showCensorBatchWarningSummary(items) {
         ? censorT(
             'censor.batchDetectorFailedSummary',
             { count: detectorErrorImages, backends: Array.from(failedBackends).join(', ') },
-            '{backends} did not run on {count} image(s), so those results may be incomplete.'
+            '{backends} did not run on {count} images, so those results may be incomplete.'
         )
-        : censorT('censor.batchNotesSummary', { count: notes.size }, 'The batch left {count} detection note(s).');
+        : censorT('censor.batchNotesSummary', { count: notes.size }, 'The batch left {count} detection notes.');
     window.App.showToast(message, 'warning', {
         duration: 8000,
         actionLabel: censorT('censor.batchNotesDetails', null, 'Details'),
@@ -133,7 +133,7 @@ function showCensorBatchWarningDetails(notes) {
             'Each note once, with how many images it came from. Images whose detector did not run are marked "Detector error" in the queue.'
         ),
         steps: Array.from(notes, ([text, count]) => ({
-            title: censorT('censor.batchNotesImageCount', { count }, '{count} image(s)'),
+            title: censorT('censor.batchNotesImageCount', { count }, '{count} images'),
             text,
         })),
         maxWidth: '680px',
@@ -440,7 +440,7 @@ async function autoCensorBatch() {
             censorT(
                 'censor.batchProcessingNoneDetected',
                 { total: emptyCount },
-                `Auto-censor ran on ${emptyCount} image(s) but found no regions. Try lowering the confidence threshold or switching the detection model.`
+                `Auto-censor ran on ${emptyCount} images but found no regions. Try lowering the confidence threshold or switching the detection model.`
             ),
             'warning'
         );
@@ -450,7 +450,7 @@ async function autoCensorBatch() {
             censorT(
                 'censor.batchProcessingSomeEmpty',
                 { applied: appliedCount, empty: emptyCount },
-                `Auto-censor applied to ${appliedCount} image(s); ${emptyCount} had no detectable regions.`
+                `Auto-censor applied to ${appliedCount} images; ${emptyCount} had no detectable regions.`
             ),
             'success'
         );
@@ -676,10 +676,10 @@ async function detectImage(item, silent, executionPlan) {
                 const usedMask = bakeResult.shouldUseMask;
                 window.App.showToast(
                     usedMask && bakeResult.shouldUseBoxes
-                        ? censorT('censor.autoCensorAppliedMixed', { count: regions.length }, 'Applied mixed auto-censor to {count} region(s)')
+                        ? censorT('censor.autoCensorAppliedMixed', { count: regions.length }, 'Applied mixed auto-censor to {count} regions')
                         : (usedMask
-                            ? censorT('censor.autoCensorAppliedMask', { count: regions.length }, 'Applied auto-censor mask to {count} matched region(s)')
-                            : censorT('censor.autoCensorAppliedBoxes', { count: regions.length }, 'Applied box-based auto-censor to {count} region(s)')),
+                            ? censorT('censor.autoCensorAppliedMask', { count: regions.length }, 'Applied auto-censor mask to {count} matched regions')
+                            : censorT('censor.autoCensorAppliedBoxes', { count: regions.length }, 'Applied box-based auto-censor to {count} regions')),
                     'success'
                 );
             }

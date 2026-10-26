@@ -135,6 +135,10 @@ function countProblems(text: string): string[] {
   for (const [phrase] of text.matchAll(/\bthese \{\w+\}/g)) problems.push(`"${phrase}": write "the {n}" ("these 1" reads wrong)`)
   // "1 of 5 images are": format() does not reach a verb past "of", so such a sentence is reworded
   for (const [phrase] of text.matchAll(/\{\w+\} of [^,.;:!?]*? (?:are|were|have)\b/g)) problems.push(`"${phrase}": reword, the count takes a singular verb when it is 1`)
+  // format() only reaches a verb right after the count or its noun
+  const lateVerb = new RegExp(`\\{\\w+\\} (?:[a-z-]+ )?(?:${Object.keys(PLURALS).join('|')}) (?:in|on|at|from|with|without|for)\\b[^,.;:!?]*? (?:are|were|have)\\b`, 'g')
+  for (const [phrase] of text.matchAll(lateVerb)) problems.push(`"${phrase}": reword, the verb after the phrase stays plural for 1`)
+  for (const [phrase] of text.matchAll(/\{\w+\}[^,.;:!?]*? and (?:are|were|have)\b/g)) problems.push(`"${phrase}": reword, the second verb after "and" stays plural for 1`)
   return problems
 }
 

@@ -315,9 +315,10 @@ Object.assign(window.Gallery, {
             animeItem.style.display = grade ? '' : 'none';
             if (grade) {
                 const top = Math.max(1, Math.round((1 - Number(image.aesthetic_anime_pct || 0)) * 100));
-                animeText.textContent = this._t('modal.animeGradeValue', { grade, top }, '{grade} · top {top}%')
-                    .replace('{grade}', grade)
-                    .replace('{top}', String(top));
+                animeText.textContent = I18n.format(this._t('modal.animeGradeValue', { grade, top }, '{grade} · top {top}%'), {
+                    grade: grade,
+                    top: String(top),
+                });
             }
         }
 

@@ -318,8 +318,9 @@
             if (count > 0 && this.activeId != null) {
                 this._setActive(this.activeId);
             }
-            const msg = this._t('dataset.replaceResult', '{count} captions updated')
-                .replace('{count}', count);
+            const msg = I18n.format(this._t('dataset.replaceResult', '{count} captions updated'), {
+                count: count,
+            });
             if (window.showToast) window.showToast(msg, count > 0 ? 'success' : 'info');
         } finally {
             if (btn) {

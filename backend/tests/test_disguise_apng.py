@@ -362,7 +362,7 @@ def test_the_scan_summary_says_how_many_real_pictures_were_restored(test_client,
 
     assert progress["status"] == "done"
     assert "还原了 1 张伪装图" in progress["message"]
-    assert "Restored 1 disguise image(s)" in progress["message"]
+    assert "Restored 1 disguise image;" in progress["message"]
 
 
 def test_the_scan_summary_names_restores_that_failed(test_client, tmp_path: Path, monkeypatch) -> None:
@@ -377,4 +377,4 @@ def test_the_scan_summary_names_restores_that_failed(test_client, tmp_path: Path
     progress = test_client.get("/api/scan/progress").json()
 
     assert "1 张伪装图没能还原" in progress["message"]
-    assert "1 disguise image(s) could not be restored" in progress["message"]
+    assert "1 disguise image could not be restored" in progress["message"]

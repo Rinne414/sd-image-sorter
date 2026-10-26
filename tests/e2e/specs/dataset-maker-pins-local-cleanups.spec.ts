@@ -435,7 +435,7 @@ test('beside_image stays available when some imports have no known path and says
     reason: '',
     imageIds: [901],
   })
-  expect(state.warning).toContain('1 image(s) have no known file path, so they are left out.')
+  expect(state.warning).toContain('No known file path, so left out: 1 image.')
 })
 
 // ---------------------------------------------------------------------------

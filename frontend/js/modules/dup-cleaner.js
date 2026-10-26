@@ -26,16 +26,8 @@
     };
 
     function t(key, fallback, params) {
-        const i18n = window.I18n;
-        if (i18n && typeof i18n.t === 'function') {
-            const value = i18n.t(key, params);
-            if (value && value !== key) return value;
-        }
-        let text = fallback;
-        Object.entries(params || {}).forEach(([name, val]) => {
-            text = text.replace(`{${name}}`, String(val));
-        });
-        return text;
+        const value = window.I18n.t(key, params);
+        return value && value !== key ? value : window.I18n.format(fallback, params);
     }
 
     function $(id) { return document.getElementById(id); }
@@ -346,14 +338,14 @@
                 'Every image in this group is checked, so the whole group goes to the trash, keeper included. Continue?',
             ));
             if (!confirmAll) return;
-        } else if (!window.confirm(t('dup.confirmDelete', 'Move {count} image(s) to the trash?', { count: ids.length }))) {
+        } else if (!window.confirm(t('dup.confirmDelete', 'Move {count} images to the trash?', { count: ids.length }))) {
             return;
         }
         const ok = await runDelete(ids);
         if (ok) {
             card.remove();
             adjustSummaryAfterDelete(ids.length);
-            showToast(t('dup.deleted', 'Moved {count} image(s) to trash', { count: ids.length }), 'success');
+            showToast(t('dup.deleted', 'Moved {count} images to trash', { count: ids.length }), 'success');
             window.App?.markGalleryNeedsRefresh?.();
         }
     }
@@ -391,7 +383,7 @@
         if (ids.length === 0) return;
         const ok = await runDelete(ids);
         if (ok) {
-            showToast(t('dup.deleted', 'Moved {count} image(s) to trash', { count: ids.length }), 'success');
+            showToast(t('dup.deleted', 'Moved {count} images to trash', { count: ids.length }), 'success');
             window.App?.markGalleryNeedsRefresh?.();
             await loadGroups(true);
         }

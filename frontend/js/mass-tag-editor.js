@@ -329,10 +329,10 @@
                 const selectionToken = window.AppFilterAccess?.getActiveSelectionToken?.();
                 if (selectionToken) {
                     const total = Number(window.AppFilterAccess?.getSelectionTotal?.() || 0);
-                    this.scopeLabel = this.t(
-                        `${total.toLocaleString()} selected images`,
-                        `已选 ${total.toLocaleString()} 张`,
-                    );
+                    this.scopeLabel = I18n.format(this.t(
+                        `{total} selected images`,
+                        `已选 {total} 张`,
+                    ), { total: total.toLocaleString() });
                     return {
                         scopeFields: { selection_token: selectionToken },
                         scopeSize: total,
@@ -342,10 +342,10 @@
 
                 const rawIds = window.AppFilterAccess?.getSelectedImageIds?.() || [];
                 const ids = this._getExplicitSelectionIds();
-                this.scopeLabel = this.t(
-                    `${ids.length.toLocaleString()} selected images`,
-                    `已选 ${ids.length.toLocaleString()} 张`,
-                );
+                this.scopeLabel = I18n.format(this.t(
+                    `{length} selected images`,
+                    `已选 {length} 张`,
+                ), { length: ids.length.toLocaleString() });
                 if (rawIds.length > ids.length) {
                     this._setStatus(
                         this.t(
@@ -377,14 +377,14 @@
                 const selectionToken = tokenData.selection_token;
                 const total = tokenData.total_estimate ?? 0;
                 const countText = tokenData.exact_total === false
-                    ? this.t(
-                        `${Number(total).toLocaleString()} estimated images`,
-                        `约 ${Number(total).toLocaleString()} 张`,
-                    )
-                    : this.t(
-                        `${Number(total).toLocaleString()} images`,
-                        `${Number(total).toLocaleString()} 张`,
-                    );
+                    ? I18n.format(this.t(
+                        `{n} estimated images`,
+                        `约 {n} 张`,
+                    ), { n: Number(total).toLocaleString() })
+                    : I18n.format(this.t(
+                        `{n} images`,
+                        `{n} 张`,
+                    ), { n: Number(total).toLocaleString() });
                 this.scopeLabel = this.t(
                     `current filter — ${countText}`,
                     `当前筛选 — ${countText}`,
@@ -727,7 +727,7 @@
                 const tabTitle = (lang === "zh-CN" ? TAB_TITLES_ZH : TAB_TITLES_EN)[this.activeTab] || this.activeTab;
                 const detailLines = [
                     [this.t("Operation", "操作"), tabTitle],
-                    [this.t("Scope", "范围"), this.scopeLabel || `${scopeSize.toLocaleString()} images`],
+                    [this.t("Scope", "范围"), this.scopeLabel || I18n.format(this.t('{n} images', '{n} 张'), { n: scopeSize.toLocaleString() })],
                 ];
                 if (this.activeTab === "find_replace") {
                     detailLines.push([this.t("Find", "查找"), body.find]);
@@ -744,8 +744,10 @@
                 if (this.lastDryRunResult && this.lastDryRunResult.affected_images != null) {
                     detailLines.push([
                         this.t("Dry-run affected", "试算影响"),
-                        this.t(`${this.lastDryRunResult.affected_images.toLocaleString()} images`,
-                              `${this.lastDryRunResult.affected_images.toLocaleString()} 张`),
+                        I18n.format(this.t(
+                            `{affected_images} images`,
+                            `{affected_images} 张`,
+                        ), { affected_images: this.lastDryRunResult.affected_images.toLocaleString() }),
                     ]);
                 }
                 // Build DOM with textContent so user values cannot inject HTML.
@@ -929,12 +931,14 @@
                     }
                     const skipped = (result.skipped_conflicts || []).length;
                     const msg = skipped > 0
-                        ? this.t(
-                            `Undone: ${result.restored} images restored, ${skipped} skipped (edited since).`,
-                            `已撤销：恢复 ${result.restored} 张，跳过 ${skipped} 张（此后被编辑过）。`)
-                        : this.t(
-                            `Undone: ${result.restored} images restored.`,
-                            `已撤销：恢复 ${result.restored} 张。`);
+                        ? I18n.format(this.t(
+                            `Undone: {restored} images restored, {skipped} skipped (edited since).`,
+                            `已撤销：恢复 {restored} 张，跳过 {skipped} 张（此后被编辑过）。`,
+                        ), { restored: result.restored, skipped })
+                        : I18n.format(this.t(
+                            `Undone: {restored} images restored.`,
+                            `已撤销：恢复 {restored} 张。`,
+                        ), { restored: result.restored });
                     const warning = responseWarningMessage(result);
                     this._setStatus(
                         warning ? `${msg} ${warning}` : msg,

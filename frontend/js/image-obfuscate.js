@@ -70,8 +70,9 @@
         },
 
         _t(key, fallback, params) {
-            const v = window.I18n?.t?.(key, params); return (v && v !== key) ? v : fallback;
-        },
+    const value = window.I18n.t(key, params);
+    return value && value !== key ? value : window.I18n.format(fallback, params);
+},
 
         _getBaseName(item) {
             if (!item) return 'image';
@@ -285,7 +286,7 @@
             }
             this._renderQueue();
             window.App?.showToast?.(
-                this._t('tools.addedImages', `Added ${ids.length} image(s)`, { count: ids.length }),
+                this._t('tools.addedImages', `Added ${ids.length} images`, { count: ids.length }),
                 'success'
             );
             return true;
@@ -335,7 +336,7 @@
 
             this._renderQueue();
             window.App?.showToast?.(
-                this._t('tools.addedImages', `Added ${imageFiles.length} image(s)`, { count: imageFiles.length }),
+                this._t('tools.addedImages', `Added ${imageFiles.length} images`, { count: imageFiles.length }),
                 'success'
             );
         },
@@ -347,7 +348,7 @@
 
             if (countEl) {
                 countEl.textContent = this._queue.length
-                    ? this._t('tools.imageCount', `${this._queue.length} image(s)`, { count: this._queue.length })
+                    ? this._t('tools.imageCount', `${this._queue.length} images`, { count: this._queue.length })
                     : '';
             }
 

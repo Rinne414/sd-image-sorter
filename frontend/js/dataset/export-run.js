@@ -350,16 +350,16 @@
             const pairs = Number(summary.trainable_pairs || 0);
             const base = state === 'ready'
                 ? dm._t('dataset.confirmCheckReady',
-                    '{pairs} image and caption pair(s) passed the check.', { pairs })
+                    '{pairs} image and caption pairs passed the check.', { pairs })
                 : dm._t('dataset.confirmCheckWarnings',
-                    '{pairs} pair(s) passed the check. Notes are listed below.', { pairs });
+                    '{pairs} pairs passed the check. Notes are listed below.', { pairs });
             const skipped = Number(summary.skippable_items || 0);
             if (!options.skip_blocked_items || skipped <= 0) return base;
             return `${base} ${dm._t('dataset.confirmSkippedNote',
-                '{count} image(s) with problems will be skipped.', { count: skipped })}`;
+                '{count} images with problems will be skipped.', { count: skipped })}`;
         }
         if (state === 'blocked') {
-            return dm._t('dataset.confirmCheckBlocked', '{count} problem(s) stop this export.',
+            return dm._t('dataset.confirmCheckBlocked', '{count} problems stop this export.',
                 { count: Number(report?.summary?.blocker_count || 0) });
         }
         if (CONFIRM_RETRY_STATES.has(state)) {
@@ -409,10 +409,10 @@
         allowEmpty.checked = options.allow_empty_captions;
         if (summary) {
             skipLabel.textContent = this._t('dataset.confirmSkipBlocked',
-                'Skip the {count} image(s) with problems and export the rest',
+                'Skip the {count} images with problems and export the rest',
                 { count: summary.skippable_items });
             emptyLabel.textContent = this._t('dataset.confirmAllowEmpty',
-                'Write an empty caption file for the {count} image(s) with no caption',
+                'Write an empty caption file for the {count} images with no caption',
                 { count: summary.empty_caption_items });
         }
         const skippable = Number(summary?.skippable_items || 0);
@@ -557,7 +557,7 @@
         const withoutPath = Number(this._sidecarCapabilityStats?.().unknown || 0);
         if (withoutPath > 0) {
             items.push(this._t('dataset.confirmSummaryNoPath',
-                '<strong>{count}</strong> image(s) have no known file path. They are left out.',
+                '<strong>{count}</strong> images have no known file path. They are left out.',
                 { count: withoutPath }));
         }
         // innerHTML sink: `items` is trusted markup. Every entry interpolates
@@ -628,7 +628,7 @@
             const policy = document.getElementById('dataset-overwrite')?.value || 'unique';
             const [policyKey, policyFallback] = CONFIRM_FOLDER_POLICY_TEXT[policy] || CONFIRM_FOLDER_POLICY_TEXT.unique;
             parts.push(this._t('dataset.confirmFolderHasFiles',
-                'This folder already has {files} file(s), {images} of them pictures.',
+                'This folder already has {files} files, {images} of them pictures.',
                 { files, images: Number(status.image_count || 0) }));
             if (status.has_export_manifest === true) {
                 parts.push(this._t('dataset.confirmFolderHasExport', 'It already holds an earlier dataset export.'));
@@ -1134,7 +1134,7 @@
                     { count: exported, folder: escapeHtml(folder) });
                 if (skipped > 0) {
                     html += ` ${this._t('dataset.resultDetailSkipped',
-                        '<strong>{count}</strong> image(s) were skipped.', { count: skipped })}`;
+                        '<strong>{count}</strong> images were skipped.', { count: skipped })}`;
                 }
             } else if (resolved === 'partial') {
                 html = this._t('dataset.resultDetailPartial',

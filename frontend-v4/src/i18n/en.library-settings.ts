@@ -85,7 +85,7 @@ export const enLibrarySettings: Record<keyof typeof zhCNLibrarySettings, string>
 
   // Library › at the bottom: clearing the index
   'libset.clear.title': 'Clear this library’s index',
-  'libset.clear.lead': 'Deletes all {n} image records of library “{name}”, with their tags and ratings. The image files on disk stay, and other libraries are not affected.',
+  'libset.clear.lead': 'Deletes all {n} image records of library “{name}”, with the tags and ratings. The image files on disk stay, and other libraries are not affected.',
   'libset.clear.button': 'Clear index…',
   'libset.clear.checking': 'Checking…',
   'libset.clear.busy': '{work} is still running; stop it before clearing.',

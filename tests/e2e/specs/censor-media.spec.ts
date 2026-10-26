@@ -72,7 +72,7 @@ test('the dialog lists the folder, starts a job with the Censor page settings an
 
   await page.locator('#media-censor-folder').fill(folder)
   await page.locator('#media-censor-folder').dispatchEvent('change')
-  await expect(page.locator('#media-censor-found')).toContainText('Found 1 GIF(s) and 1 video(s).')
+  await expect(page.locator('#media-censor-found')).toContainText('Found 1 GIF and 1 video.')
   await page.locator('#media-censor-style').selectOption('blur')
   await page.locator('#media-censor-every').fill('3')
   await page.locator('#media-censor-start').click()
@@ -86,7 +86,7 @@ test('the dialog lists the folder, starts a job with the Censor page settings an
   // root's video-censor folder, which Settings can move (owner 2026-10-04).
   await expect(page.locator('#media-censor-output')).toHaveValue('')
   await expect(page.locator('.media-censor-row.is-done')).toHaveCount(2)
-  await expect(page.locator('.media-censor-row').first()).toContainText('Done · 7 frame(s) censored')
+  await expect(page.locator('.media-censor-row').first()).toContainText('Done · 7 frames censored')
   await expect(page.locator('#media-censor-stop')).toBeHidden()
   await page.locator('.media-censor-row').first().getByRole('button').click()
   await expect.poll(() => revealed.length).toBe(1)

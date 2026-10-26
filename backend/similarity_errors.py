@@ -6,6 +6,7 @@ re-imports every class, so ``similarity.SimilaritySearchWindowTooLargeError``
 imports all of them from ``similarity`` and maps them to HTTP codes, and
 tests/test_similarity_pins.py pins the hierarchy and attributes.
 """
+from text_counts import count_text
 
 
 class SimilarityError(RuntimeError):
@@ -40,7 +41,7 @@ class SimilarityInsufficientEmbeddingsError(SimilarityError):
 
     def __init__(self, embedded_count: int, minimum_required: int = 2):
         super().__init__(
-            f"Need at least {minimum_required} embedded images before duplicate search is meaningful."
+            f"Need at least {count_text(minimum_required, 'embedded image')} before duplicate search is meaningful."
         )
         self.embedded_count = embedded_count
         self.minimum_required = minimum_required
@@ -51,7 +52,7 @@ class SimilarityDuplicateSearchTooLargeError(SimilarityError):
 
     def __init__(self, embedded_count: int, max_embeddings: int):
         super().__init__(
-            f"Duplicate search is limited to {max_embeddings} embedded images for synchronous checks."
+            f"Duplicate search is limited to {count_text(max_embeddings, 'embedded image')} for synchronous checks."
         )
         self.embedded_count = embedded_count
         self.max_embeddings = max_embeddings

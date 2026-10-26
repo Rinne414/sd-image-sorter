@@ -311,7 +311,7 @@ test('workbench renders pairs, drag reorders, and exports through the UI', async
   await page.locator('#btn-pub-export').click()
   await page.locator('#btn-pub-uncensored-skip').click()
   await expect(page.locator('.pub-result-line.pub-result-ok')).toBeVisible()
-  await expect(page.locator('.pub-result-line.pub-result-warn', { hasText: 'were left out' })).toContainText('2 picture(s)')
+  await expect(page.locator('.pub-result-line.pub-result-warn', { hasText: 'Left out, no censored version' })).toContainText('2 pictures')
   await expect.poll(() => fsSync.existsSync(path.join(censoredOnlyDir, 'set_01.png'))).toBe(true)
   expect(fsSync.readdirSync(censoredOnlyDir)).toEqual(['set_01.png'])
 

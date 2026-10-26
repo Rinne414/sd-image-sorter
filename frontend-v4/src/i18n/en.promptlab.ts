@@ -39,7 +39,7 @@ export const enPromptLab: Record<keyof typeof zhCNPromptLab, string> = {
   'pl.stats.noExamples': 'No image has an aesthetic score yet.',
   'pl.stats.noPromptText': '(no prompt)',
   'pl.empty.no_checkpoint_metadata': 'No image in this library records which model made it.',
-  'pl.empty.checkpoint_metadata_only_on_missing_files': 'The {n} images that record a model are missing from disk, so they are left out.',
+  'pl.empty.checkpoint_metadata_only_on_missing_files': 'Every image that records a model is missing from disk ({n}), so none are counted.',
   'pl.empty.no_scored_images': 'Models are ranked by aesthetic score, and no image here is scored yet.',
   'pl.empty.not_enough_scored_images_per_checkpoint': 'No model has {min} scored images yet ({scored} scored in all).',
   'pl.empty.unknown': 'No model data yet.',

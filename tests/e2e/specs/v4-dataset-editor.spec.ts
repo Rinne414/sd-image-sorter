@@ -651,7 +651,7 @@ test('the delete confirmation says how many hand-edited captions go with the bat
   const row = page.getByTestId('batch-row').filter({ hasText: `${NAME} set` })
   await row.getByRole('button', { name: 'Delete…' }).click()
   const dialog = page.getByTestId('batch-delete-dialog')
-  await expect(dialog.getByTestId('dataset-delete-edited')).toHaveText('This includes 4 captions you edited by hand, with their history.')
+  await expect(dialog.getByTestId('dataset-delete-edited')).toHaveText('This includes 4 captions you edited by hand, with the edit history.')
   await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()
   await dialog.getByRole('button', { name: 'Cancel' }).click()
 })

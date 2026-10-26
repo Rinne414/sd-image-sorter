@@ -30,13 +30,7 @@
         if (typeof window.appT === 'function') return window.appT(key, fallback, params);
         const val = window.I18n?.t?.(key, params);
         if (val && val !== key) return val;
-        let text = fallback || key;
-        if (params && typeof params === 'object') {
-            for (const [k, v] of Object.entries(params)) {
-                text = String(text).split(`{${k}}`).join(String(v));
-            }
-        }
-        return text;
+        return window.I18n.format(fallback || key, params);
     }
 
     function _readLocal() {
@@ -430,7 +424,7 @@
             moveLabel.className = 'entry-library-menu-note';
             moveLabel.textContent = _t(
                 'library.moveSelectionHint',
-                'Move {count} selected image(s) into…',
+                'Move {count} selected images into…',
                 { count: String(selectedCount) },
             );
             menu.appendChild(moveLabel);
@@ -527,7 +521,7 @@
                 window.showToast(
                     _t(
                         'library.movedToast',
-                        'Moved {count} image(s) to “{name}”',
+                        'Moved {count} images to “{name}”',
                         {
                             count: String(data.moved || 0),
                             name: targetName || targetLibraryId,
@@ -547,7 +541,7 @@
                     data.moved > 0
                         ? _t(
                             'library.movePartiallyFailed',
-                            'Moved {moved} of {total} image(s) to “{name}”; the rest could not be moved',
+                            'Moved {moved} of {total} images to “{name}”; the rest could not be moved',
                             { moved: String(data.moved), total: String(ids.length), name: targetName || targetLibraryId },
                         )
                         : _t('library.moveFailed', 'Could not move images'),
@@ -590,7 +584,7 @@
                 window.showToast(
                     _t(
                         'library.claimedToast',
-                        'Claimed {count} image(s) into this library',
+                        'Claimed {count} images into this library',
                         { count: String(data.moved || 0) },
                     ),
                     'success',

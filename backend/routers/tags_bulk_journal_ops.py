@@ -28,6 +28,7 @@ from routers.tags_bulk_models import (
     BulkTagScopeRequest,
     JournalApiResult,
 )
+from text_counts import count_text
 
 # The moved bodies keep logging under the pre-split logger name so existing
 # log filtering/handler config is unchanged (same pattern as
@@ -237,7 +238,7 @@ def _commit_tag_updates(
         write_updates(updates)
     except Exception as exc:
         detail = (
-            f"Bulk tag update failed for {len(image_ids)} image(s) beginning with "
+            f"Bulk tag update failed for {count_text(len(image_ids), 'image')} beginning with "
             f"image_id={first_image_id}; all changes were rolled back. Cause: "
             f"{type(exc).__name__}: {exc}"
         )

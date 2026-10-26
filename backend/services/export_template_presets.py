@@ -130,7 +130,7 @@ PRESETS: Dict[str, Dict[str, Any]] = {
 
 # Variable reference for documentation
 TEMPLATE_VARIABLES: List[Dict[str, str]] = [
-    {"name": "{trigger}", "description": "Trigger word(s) for the LoRA"},
+    {"name": "{trigger}", "description": "Trigger words for the LoRA"},
     {"name": "{tags}", "description": "All tags from the local tagger, comma-separated"},
     {"name": "{tags:filtered}", "description": "Tags after blacklist + replace + max-N processing"},
     {"name": "{tags:N}", "description": "Top N tags by confidence (e.g., {tags:20})"},

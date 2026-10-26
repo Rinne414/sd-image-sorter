@@ -134,8 +134,9 @@ function updateAutoSepSettingsSummary() {
 
     if (destination) {
         parts.push(
-            tKey('autosep.summaryDestination', 'Current destination: {path}', '当前目标：{path}')
-                .replace('{path}', destination)
+            I18n.format(tKey('autosep.summaryDestination', 'Current destination: {path}', '当前目标：{path}'), {
+                path: destination,
+            })
         );
     }
 

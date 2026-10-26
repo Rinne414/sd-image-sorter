@@ -109,7 +109,7 @@ function refreshRenameSelectionUi() {
     }
 
     help.textContent = checkbox.checked
-        ? censorT('censor.renameSelectedOnlyHelp', { count: selectedCount }, 'Only the {count} selected item(s) will be renamed; the rest stay as they are.')
+        ? censorT('censor.renameSelectedOnlyHelp', { count: selectedCount }, 'Only the {count} selected items will be renamed; the rest stay as they are.')
         : censorT('censor.renameWholeQueueSelectedHelp', { count: selectedCount }, 'You have {count} selected, but this preview covers the whole queue.');
 }
 
@@ -182,8 +182,8 @@ function updateRenamePreview() {
 
     const selectedCount = getOrderedSelectedQueueIds().length;
     const previewScope = document.getElementById('rename-only-selected')?.checked && selectedCount > 0
-        ? censorT('censor.renamePreviewSelected', { count: targets.length }, 'Previewing {count} selected item(s).')
-        : censorT('censor.renamePreviewQueue', { count: targets.length }, 'Previewing {count} queue item(s).');
+        ? censorT('censor.renamePreviewSelected', { count: targets.length }, 'Previewing {count} selected items.')
+        : censorT('censor.renamePreviewQueue', { count: targets.length }, 'Previewing {count} queue items.');
     const extensionNote = censorT('censor.renameExtensionNote', null, ' Final export extension still follows Save Options.');
     previewSummary.textContent = `${previewScope}${extensionNote}`;
 
@@ -192,7 +192,7 @@ function updateRenamePreview() {
         previewAlert.textContent = censorT(
             'censor.renameDuplicateNamesPreview',
             { count: duplicateCount },
-            '{count} group(s) of output names clash in this preview. Fix the pattern before renaming.'
+            '{count} groups of output names clash in this preview. Fix the pattern before renaming.'
         );
     } else {
         previewAlert.className = 'rename-preview-alert';
@@ -264,8 +264,8 @@ async function applyBatchRename() {
     window.App.showToast(
         pending > 0
             ? censorT('censor.renamedCountWithPending', { count: targets.length, pending },
-                'Renamed {count} image(s). The {pending} not loaded yet continue the numbering in queue order.')
-            : censorT('censor.renamedCount', { count: targets.length }, 'Renamed {count} image(s)'),
+                'Renamed {count} images. The {pending} not loaded yet continue the numbering in queue order.')
+            : censorT('censor.renamedCount', { count: targets.length }, 'Renamed {count} images'),
         'success'
     );
 }

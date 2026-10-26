@@ -22,6 +22,7 @@ from services.sorting import move_journal
 from services.sorting.move import describe_readability_failure, normalize_reported_cause
 from services.sorting_models import BatchMoveGroup, BatchMoveRequest
 from utils.path_validation import normalize_user_path, validate_folder_path
+from text_counts import count_text
 
 _SPLIT_FOLDER_UNSAFE = re.compile(r'[<>:"/\\|?*\x00-\x1f]+')
 
@@ -294,7 +295,7 @@ class BatchMoveMixin:
                 "step": "starting",
                 "current": 0,
                 "total": total_count,
-                "message": f"正在准备{'复制' if operation == 'copy' else '移动'} {total_count} 张图片 / Starting {operation} of {total_count} images...",
+                "message": f"正在准备{'复制' if operation == 'copy' else '移动'} {total_count} 张图片 / Starting {operation} of {count_text(total_count, 'image')}...",
                 "message_key": "starting",
                 "errors": 0,
                 "moved": 0,
@@ -361,7 +362,7 @@ class BatchMoveMixin:
                             "message": (
                                 f"已取消（{processed}/{total_count}），已{'复制' if operation == 'copy' else '移动'} {moved} 张 / "
                                 f"Cancelled at {processed}/{total_count}. "
-                                f"{completed_verb_local} {moved} images so far."
+                                f"{completed_verb_local} {count_text(moved, 'image')} so far."
                             ),
                             "current_item": None,
                             "recent_errors": errors[-3:],
@@ -512,7 +513,7 @@ class BatchMoveMixin:
                         "total": total_count,
                         "errors": len(errors),
                         "moved": moved,
-                        "message": f"完成！已{'复制' if operation == 'copy' else '移动'} {moved} 张图片 / Done! {completed_verb} {moved} images." + (f" {len(errors)} 张失败 / {len(errors)} errors." if errors else ""),
+                        "message": f"完成！已{'复制' if operation == 'copy' else '移动'} {moved} 张图片 / Done! {completed_verb} {count_text(moved, 'image')}." + (f" {len(errors)} 张失败 / {count_text(len(errors), 'error')}." if errors else ""),
                         "message_key": "done",
                         "current_item": None,
                         "recent_errors": errors[-3:],
@@ -566,7 +567,7 @@ class BatchMoveMixin:
         progress_verb = "Copying" if operation == "copy" else "Moving"
         return {
             "status": "started",
-            "message": f"后台{'复制' if operation == 'copy' else '移动'} {total_count} 张图片中 / {progress_verb} {total_count} images in background",
+            "message": f"后台{'复制' if operation == 'copy' else '移动'} {total_count} 张图片中 / {progress_verb} {count_text(total_count, 'image')} in background",
             "message_key": "started",
             "total": total_count,
             "count": total_count,

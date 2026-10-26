@@ -169,7 +169,7 @@ function renderDiskUsage(data) {
                 const errors = Array.isArray(result?.errors) ? result.errors : [];
                 const totalFreed = cleaned.reduce((sum, e) => sum + Number(e.freed_bytes || 0), 0);
                 if (errors.length > 0) {
-                    showToast(appT('disk.cleanedWithErrors', 'Cleaned {freed}, but {count} item(s) had problems.', { freed: _formatBytes(totalFreed), count: errors.length }), 'warning');
+                    showToast(appT('disk.cleanedWithErrors', 'Cleaned {freed}, but {count} items had problems.', { freed: _formatBytes(totalFreed), count: errors.length }), 'warning');
                 } else {
                     showToast(appT('disk.cleanedSuccess', 'Freed {freed} of disk space.', { freed: _formatBytes(totalFreed) }), 'success');
                 }

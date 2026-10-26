@@ -76,14 +76,15 @@ async function deleteGalleryImagesByIds(imageIds) {
 
     const examples = selectionToken ? '' : getSelectedGalleryExamples(ids);
     const title = appT('selection.deleteConfirmTitle', 'Move selected image files to Trash?');
-    const message = appT(
+    const message = I18n.format(appT(
         'selection.deleteConfirmBody',
-        'This moves {count} original file(s) to the Recycle Bin / Trash and removes them from the gallery. To clean up records only, use Remove from Gallery. Examples: {examples}'
-    )
-        .replace('{count}', count)
-        .replace('{examples}', examples || (selectionToken
-            ? appT('selection.filteredExamples', 'current filtered selection')
-            : ids.slice(0, 5).join(', ')));
+        'This moves {count} original files to the Recycle Bin / Trash and removes them from the gallery. To clean up records only, use Remove from Gallery. Examples: {examples}'
+    ), {
+        count: count,
+        examples: examples || (selectionToken
+                ? appT('selection.filteredExamples', 'current filtered selection')
+                : ids.slice(0, 5).join(', ')),
+    });
 
     showConfirm(title, message, async () => {
         try {
@@ -140,8 +141,9 @@ async function deleteGalleryImagesByIds(imageIds) {
 
             if (result?.status === 'cancelled') {
                 showToast(
-                    appT('selection.deleteCancelled', 'Stopped. Moved {count} file(s) to Trash before cancelling.')
-                        .replace('{count}', result.deleted || 0),
+                    I18n.format(appT('selection.deleteCancelled', 'Stopped. Moved {count} files to Trash before cancelling.'), {
+                        count: result.deleted || 0,
+                    }),
                     'info'
                 );
                 return;
@@ -152,17 +154,19 @@ async function deleteGalleryImagesByIds(imageIds) {
             const failedCount = Number.isFinite(result.error_count) ? result.error_count : failed.length;
             if (failedCount > 0) {
                 showToast(
-                    appT('selection.deletePartial', 'Moved {deleted} file(s) to Trash. {failed} failed.')
-                        .replace('{deleted}', result.deleted || 0)
-                        .replace('{failed}', failedCount),
+                    I18n.format(appT('selection.deletePartial', 'Moved {deleted} files to Trash. {failed} failed.'), {
+                        deleted: result.deleted || 0,
+                        failed: failedCount,
+                    }),
                     'warning'
                 );
                 return;
             }
 
             showToast(
-                appT('selection.deleteSuccess', 'Moved {count} image file(s) to Trash.')
-                    .replace('{count}', result.deleted || 0),
+                I18n.format(appT('selection.deleteSuccess', 'Moved {count} image files to Trash.'), {
+                    count: result.deleted || 0,
+                }),
                 'success'
             );
         } catch (error) {
@@ -190,14 +194,15 @@ async function removeGalleryImagesByIds(imageIds) {
 
     const examples = selectionToken ? '' : getSelectedGalleryExamples(ids);
     const title = appT('selection.removeConfirmTitle', 'Remove selected images from gallery?');
-    const message = appT(
+    const message = I18n.format(appT(
         'selection.removeConfirmBody',
-        'This removes {count} record(s) from this gallery only. Files stay on disk, and scanning again brings them back. Examples: {examples}'
-    )
-        .replace('{count}', count)
-        .replace('{examples}', examples || (selectionToken
-            ? appT('selection.filteredExamples', 'current filtered selection')
-            : ids.slice(0, 5).join(', ')));
+        'This removes {count} records from this gallery only. Files stay on disk, and scanning again brings them back. Examples: {examples}'
+    ), {
+        count: count,
+        examples: examples || (selectionToken
+                ? appT('selection.filteredExamples', 'current filtered selection')
+                : ids.slice(0, 5).join(', ')),
+    });
 
     showConfirm(title, message, async () => {
         try {
@@ -250,8 +255,9 @@ async function removeGalleryImagesByIds(imageIds) {
 
             if (result?.status === 'cancelled') {
                 showToast(
-                    appT('selection.removeCancelled', 'Stopped. Removed {count} image record(s) before cancelling.')
-                        .replace('{count}', result?.removed || 0),
+                    I18n.format(appT('selection.removeCancelled', 'Stopped. Removed {count} image records before cancelling.'), {
+                        count: result?.removed || 0,
+                    }),
                     'info'
                 );
                 return;
@@ -264,17 +270,19 @@ async function removeGalleryImagesByIds(imageIds) {
                 : (Array.isArray(result?.missing_ids) ? result.missing_ids.length : 0);
             if (missingCount > 0) {
                 showToast(
-                    appT('selection.removePartial', 'Removed {removed} image record(s). {missing} were already missing from the gallery.')
-                        .replace('{removed}', result?.removed || 0)
-                        .replace('{missing}', missingCount),
+                    I18n.format(appT('selection.removePartial', 'Removed {removed} image records. {missing} were already missing from the gallery.'), {
+                        removed: result?.removed || 0,
+                        missing: missingCount,
+                    }),
                     'warning'
                 );
                 return;
             }
 
             showToast(
-                appT('selection.removeSuccess', 'Removed {count} image record(s) from the gallery. Files were not deleted.')
-                    .replace('{count}', result?.removed || 0),
+                I18n.format(appT('selection.removeSuccess', 'Removed {count} image records from the gallery. Files were not deleted.'), {
+                    count: result?.removed || 0,
+                }),
                 'success'
             );
         } catch (error) {
@@ -343,10 +351,12 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
             ? (normalizedOperation === 'copy'
                 ? appT('gallery.contextCopyPromptTitle', 'Copy image')
                 : appT('gallery.contextMovePromptTitle', 'Move image'))
-            : appT('selection.destinationPromptTitle', '{operation} selected images')
-                .replace('{operation}', operationLabel),
-        appT('selection.destinationPromptBody', 'Enter the destination folder path for {count} selected image(s).')
-            .replace('{count}', totalCount),
+            : I18n.format(appT('selection.destinationPromptTitle', '{operation} selected images'), {
+                operation: operationLabel,
+            }),
+        I18n.format(appT('selection.destinationPromptBody', 'Enter the destination folder path for {count} selected images.'), {
+            count: totalCount,
+        }),
         getRecentMoveDestinations()[0] || '',
         { browseFolder: true, suggestions: getRecentMoveDestinations() }
     );
@@ -360,15 +370,16 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
         : (normalizedOperation === 'copy'
             ? appT('selection.copyConfirmTitle', 'Copy selected image files?')
             : appT('selection.moveConfirmTitle', 'Move selected image files?'));
-    const confirmBody = (isSingleContext
+    const confirmBody = I18n.format((isSingleContext
         ? (normalizedOperation === 'copy'
             ? appT('gallery.contextCopyConfirmBody', 'This copies the file to: {destination}. Original stays in place.')
             : appT('gallery.contextMoveConfirmBody', 'This moves the original file to: {destination}'))
         : (normalizedOperation === 'copy'
-            ? appT('selection.copyConfirmBody', 'This copies {count} file(s) to: {destination}. Originals stay in place.')
-            : appT('selection.moveConfirmBody', 'This moves {count} original file(s) to: {destination}')))
-        .replace('{count}', totalCount)
-        .replace('{destination}', trimmedDestination);
+            ? appT('selection.copyConfirmBody', 'This copies {count} files to: {destination}. Originals stay in place.')
+            : appT('selection.moveConfirmBody', 'This moves {count} original files to: {destination}'))), {
+        count: totalCount,
+        destination: trimmedDestination,
+    });
 
     showConfirm(confirmTitle, confirmBody, async () => {
         try {
@@ -392,8 +403,9 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
             }
             if (finalProgress?.status === 'error') {
                 showToast(
-                    (finalProgress.message_key ? '' : finalProgress.message) || appT('selection.moveCopyFailed', 'Failed to {operation} selected images')
-                        .replace('{operation}', operationLabel.toLowerCase()),
+                    (finalProgress.message_key ? '' : finalProgress.message) || I18n.format(appT('selection.moveCopyFailed', 'Failed to {operation} selected images'), {
+                        operation: operationLabel.toLowerCase(),
+                    }),
                     'error'
                 );
                 // Files moved before the failure are gone from their source —
@@ -438,8 +450,9 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
             // not known what moved, so not "completed" and not "failed".
             if (results.length === 0 && finalProgress?.status === 'idle') {
                 showToast(
-                    appT('selection.moveCopyUnknown', '{operation} ended without a report; the program may have restarted. Check the destination folder.')
-                        .replace('{operation}', operationLabel),
+                    I18n.format(appT('selection.moveCopyUnknown', '{operation} ended without a report; the program may have restarted. Check the destination folder.'), {
+                        operation: operationLabel,
+                    }),
                     'warning'
                 );
                 return;
@@ -447,9 +460,10 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
 
             if (finalProgress?.status === 'cancelled') {
                 showToast(
-                    appT('selection.moveCopyCancelled', '{operation} cancelled after {count} image(s).')
-                        .replace('{operation}', operationLabel)
-                        .replace('{count}', successes.length),
+                    I18n.format(appT('selection.moveCopyCancelled', '{operation} cancelled after {count} images.'), {
+                        operation: operationLabel,
+                        count: successes.length,
+                    }),
                     'info'
                 );
                 return;
@@ -457,26 +471,29 @@ async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {
 
             if (failed.length > 0) {
                 showToast(
-                    appT('selection.moveCopyPartial', '{operation} completed for {success} image(s). {failed} failed.')
-                        .replace('{operation}', operationLabel)
-                        .replace('{success}', successes.length)
-                        .replace('{failed}', failed.length),
+                    I18n.format(appT('selection.moveCopyPartial', '{operation} completed for {success} images. {failed} failed.'), {
+                        operation: operationLabel,
+                        success: successes.length,
+                        failed: failed.length,
+                    }),
                     successes.length > 0 ? 'warning' : 'error'
                 );
                 return;
             }
 
             showToast(
-                appT('selection.moveCopySuccess', '{operation} completed for {count} image(s).')
-                    .replace('{operation}', operationLabel)
-                    .replace('{count}', successes.length),
+                I18n.format(appT('selection.moveCopySuccess', '{operation} completed for {count} images.'), {
+                    operation: operationLabel,
+                    count: successes.length,
+                }),
                 'success'
             );
         } catch (error) {
             _hideBgMoveProgress();
             showToast(
-                formatUserError(error, appT('selection.moveCopyFailed', 'Failed to {operation} selected images')
-                    .replace('{operation}', operationLabel.toLowerCase())),
+                formatUserError(error, I18n.format(appT('selection.moveCopyFailed', 'Failed to {operation} selected images'), {
+                    operation: operationLabel.toLowerCase(),
+                })),
                 'error'
             );
         }

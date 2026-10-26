@@ -1159,7 +1159,7 @@ def test_metadata_provenance_reports_unknown_tag_sources_without_model_guessing(
     assert issue["source_provider"] == "metadata_provenance"
     assert issue["heuristic"] is False
     evidence = {row["label_en"]: row["value_en"] for row in issue["evidence"]}
-    assert evidence["Persisted tag source"] == "3 legacy/unknown row(s)"
+    assert evidence["Persisted tag source"] == "3 legacy/unknown rows"
     rendered = json.dumps(issue).lower()
     for unsupported_claim in ("wd14", "vlm", "translation", "sidecar"):
         assert unsupported_claim not in rendered

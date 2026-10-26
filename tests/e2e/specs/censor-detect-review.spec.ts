@@ -174,7 +174,7 @@ test('detect current: request wire format, region sort, box bake, processed mark
   })
 
   await expect(
-    page.locator('#toast-container .toast', { hasText: 'Applied box-based auto-censor to 2 region(s)' }).first()
+    page.locator('#toast-container .toast', { hasText: 'Applied box-based auto-censor to 2 regions' }).first()
   ).toBeVisible()
 
   // Regions stored sorted by confidence, highest first.
@@ -426,7 +426,7 @@ test('a detector that did not run is reported as a detector error, with one batc
   const warnings = page.locator('#toast-container .toast.warning')
   await expect(warnings).toHaveCount(1)
   await expect(warnings.first().locator('.toast-message')).toHaveText(
-    'Legacy YOLO did not run on 3 image(s), so those results may be incomplete.'
+    'Legacy YOLO did not run on 3 images, so those results may be incomplete.'
   )
   await expect(page.locator('#toast-container')).not.toContainText('found no regions')
   await expect(page.locator('#toast-container')).not.toContainText('Batch processing complete')
@@ -436,7 +436,7 @@ test('a detector that did not run is reported as a detector error, with one batc
   const notes = page.locator('#censor-batch-notes')
   await expect(notes).toBeVisible()
   await expect(notes.locator('.guide-steps li')).toHaveCount(3)
-  await expect(notes.locator('.guide-steps li').first()).toContainText('1 image(s)')
+  await expect(notes.locator('.guide-steps li').first()).toContainText(/\b1 image\b(?!s)/)
   await notes.locator('[data-guide-close]').click()
   await expect(notes).toHaveCount(0)
 
@@ -544,7 +544,7 @@ test('box shape mode strips polygon/mask geometry from stored regions', async ({
     { label: 'exposed_breasts', confidence: 0.9, hasPolygon: false, hasMask: false },
   ])
   await expect(
-    page.locator('#toast-container .toast', { hasText: 'Applied box-based auto-censor to 1 region(s)' }).first()
+    page.locator('#toast-container .toast', { hasText: 'Applied box-based auto-censor to 1 region' }).first()
   ).toBeVisible()
   await expect.poll(() => isPixelBlack(page, 12, 12)).toBe(true)
 })
@@ -572,7 +572,7 @@ test('precise shape: combined_mask drives a mask bake (not boxes)', async ({ pag
 
   // The mask path announces itself distinctly from the box path.
   await expect(
-    page.locator('#toast-container .toast', { hasText: 'Applied auto-censor mask to 1 matched region(s)' }).first()
+    page.locator('#toast-container .toast', { hasText: 'Applied auto-censor mask to 1 matched region' }).first()
   ).toBeVisible()
   await expect(page.locator(`#censor-queue-list .queue-thumb-v2[data-id="${IMAGES[0].id}"]`)).toHaveClass(/processed/)
   // The all-white combined mask covers the WHOLE image — including pixels far
@@ -656,7 +656,7 @@ test('review conveyor: detect → checklist → exclude one → approve bakes an
 
   await page.locator('#btn-review-detect').click()
   await expect.poll(() => detectCalls.length).toBe(1)
-  await expect(page.locator('#censor-review-status')).toContainText('2 region(s) found')
+  await expect(page.locator('#censor-review-status')).toContainText('2 regions found')
 
   // Checklist rows: label (underscores humanized) + confidence, sorted desc.
   const rows = page.locator('#censor-review-regions .censor-review-region')
@@ -676,7 +676,7 @@ test('review conveyor: detect → checklist → exclude one → approve bakes an
 
   await page.locator('#btn-review-approve').click()
   await expect(
-    page.locator('#toast-container .toast', { hasText: 'Approved 1 region(s)' }).first()
+    page.locator('#toast-container .toast', { hasText: 'Approved 1 region;' }).first()
   ).toBeVisible()
 
   // The kept region baked (thumb processed) and the conveyor auto-advanced.

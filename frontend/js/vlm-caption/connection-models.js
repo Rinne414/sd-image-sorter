@@ -94,10 +94,10 @@ Object.assign(window.VLMCaption, {
                 list.querySelectorAll('.vlm-model-item').forEach(btn => {
                     btn.addEventListener('click', () => {
                         this._setVal('vlm-model', btn.dataset.model);
-                        this._showStatus('vlm-model-list-status', `Selected: ${btn.dataset.model}`, 'success');
+                        this._showStatus('vlm-model-list-status', I18n.format(this._t('vlmSettings.modelPicked', 'Selected: {model}'), { model: btn.dataset.model }), 'success');
                     });
                 });
-                this._showStatus('vlm-model-list-status', `${data.models.length} models found`, 'success');
+                this._showStatus('vlm-model-list-status', I18n.format(this._t('vlmSettings.modelsFound', '{count} models found'), { count: data.models.length }), 'success');
             } else {
                 list.innerHTML = '<span class="helper-text">No models found. Type model name manually above.</span>';
                 this._showStatus('vlm-model-list-status', 'No models returned', 'info');
@@ -190,8 +190,9 @@ Object.assign(window.VLMCaption, {
                     this._setVal('vlm-provider', 'openai_compat');
                     this._showStatus(
                         'vlm-status',
-                        this._t('vlmSettings.modelSelected', 'Selected {model}; endpoint set to Ollama')
-                            .replace('{model}', btn.dataset.vlmUse),
+                        I18n.format(this._t('vlmSettings.modelSelected', 'Selected {model}; endpoint set to Ollama'), {
+                            model: btn.dataset.vlmUse,
+                        }),
                         'success'
                     );
                 });
@@ -209,10 +210,12 @@ Object.assign(window.VLMCaption, {
         if (!normalized) return;
 
         const title = this._t('vlmSettings.deleteModelTitle', 'Delete local model?');
-        const message = this._t(
+        const message = I18n.format(this._t(
             'vlmSettings.deleteModelConfirm',
             'Delete {model} from Ollama? You can download it again later.'
-        ).replace('{model}', normalized);
+        ), {
+            model: normalized,
+        });
         const runDelete = () => { void this.deleteModel(normalized, trigger); };
 
         if (typeof window.App?.showConfirm === 'function') {
@@ -232,7 +235,7 @@ Object.assign(window.VLMCaption, {
         }
         this._showStatus(
             'vlm-status',
-            this._t('vlmSettings.deletingModelNamed', 'Deleting {model}...').replace('{model}', normalized),
+            I18n.format(this._t('vlmSettings.deletingModelNamed', 'Deleting {model}...'), { model: normalized }),
             'info'
         );
 
@@ -246,8 +249,9 @@ Object.assign(window.VLMCaption, {
                 const err = await resp.json().catch(() => ({}));
                 this._showStatus(
                     'vlm-status',
-                    this._t('vlmSettings.deleteModelFailed', 'Delete failed: {reason}')
-                        .replace('{reason}', err.detail || resp.statusText),
+                    I18n.format(this._t('vlmSettings.deleteModelFailed', 'Delete failed: {reason}'), {
+                        reason: err.detail || resp.statusText,
+                    }),
                     'error'
                 );
                 if (trigger) {
@@ -261,15 +265,16 @@ Object.assign(window.VLMCaption, {
             }
             this._showStatus(
                 'vlm-status',
-                this._t('vlmSettings.deleteModelDone', 'Deleted {model}.').replace('{model}', normalized),
+                I18n.format(this._t('vlmSettings.deleteModelDone', 'Deleted {model}.'), { model: normalized }),
                 'success'
             );
             await this.loadRecommendedModels();
         } catch (e) {
             this._showStatus(
                 'vlm-status',
-                this._t('vlmSettings.deleteModelFailed', 'Delete failed: {reason}')
-                    .replace('{reason}', e.message || e),
+                I18n.format(this._t('vlmSettings.deleteModelFailed', 'Delete failed: {reason}'), {
+                    reason: e.message || e,
+                }),
                 'error'
             );
             if (trigger) {

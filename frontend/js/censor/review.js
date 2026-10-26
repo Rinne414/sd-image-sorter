@@ -271,7 +271,7 @@ async function censorReviewDetect() {
 
         setStatus(regions.length === 0
             ? censorT('censor.reviewNoRegions', null, 'No regions detected. Try a lower confidence or another model.')
-            : censorT('censor.reviewRegionsFound', { count: regions.length }, '{count} region(s) found. Uncheck any you want to leave uncensored.'));
+            : censorT('censor.reviewRegionsFound', { count: regions.length }, '{count} regions found. Uncheck any you want to leave uncensored.'));
         if (detectionWarnings.length > 0) {
             window.App.showToast(detectionWarnings.join(' '), 'warning');
         }
@@ -336,7 +336,7 @@ async function censorReviewApprove() {
         const count = keptRaw.length;
         window.App.showToast(
             count > 0
-                ? censorT('censor.reviewApproved', { count }, 'Approved {count} region(s); moved to the next image')
+                ? censorT('censor.reviewApproved', { count }, 'Approved {count} regions; moved to the next image')
                 : censorT('censor.reviewApprovedNone', null, 'Approved with nothing censored; moved on'),
             'success'
         );

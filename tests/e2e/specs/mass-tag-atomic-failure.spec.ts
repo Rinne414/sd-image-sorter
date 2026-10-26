@@ -193,7 +193,7 @@ test('undo keeps its applied result visible when redo is unavailable', async ({ 
   await page.locator('#mass-tag-undo-op').click()
 
   await expect(page.locator('#mass-tag-status')).toHaveText(
-    `Undone: 1 images restored. ${redoWarning}`,
+    `Undone: 1 image restored. ${redoWarning}`,
   )
   await expect(page.locator('#mass-tag-status')).toHaveClass(/vlm-status-warning/)
   await expect(page.locator('#mass-tag-result')).toBeVisible()

@@ -284,7 +284,7 @@ test('the counts come first; the run sends no trigger, skips tagged images, and 
 
   // the job ends in the drawer; the folder results become AI revisions
   await expect(page.getByTestId('tag-report-state')).toHaveText(
-    'Done. The Library images\' tags are updated; 2 folder images got their results as captions (marked as AI output).',
+    'Done. The Library images\' tags are updated; 2 folder images got the results as captions (marked as AI output).',
     { timeout: 15_000 },
   )
   const written = await heads(page)

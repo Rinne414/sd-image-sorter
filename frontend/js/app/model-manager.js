@@ -244,14 +244,14 @@ async function promptBulkDownloadModels() {
         if (summary) {
             summary.textContent = appT(
                 'models.bulkSelectionSummary',
-                '{count} model(s) selected · estimated download {size}',
+                '{count} models selected · estimated download {size}',
                 { count: selected.length, size: _formatBulkBytes(totalBytes) },
             );
         }
         const okButton = document.getElementById('btn-confirm-ok');
         if (okButton) {
             okButton.disabled = selected.length === 0;
-            okButton.textContent = appT('models.bulkConfirmOk', 'Download {count} model(s) (~{size})', {
+            okButton.textContent = appT('models.bulkConfirmOk', 'Download {count} models (~{size})', {
                 count: selected.length,
                 size: _formatBulkBytes(totalBytes),
             });
@@ -493,7 +493,7 @@ async function runBulkDownload(items) {
         } else if (failures.length === 0) {
             banner.style.borderColor = 'var(--color-success, #4A9D69)';
             banner.style.background = 'rgba(34, 197, 94, 0.1)';
-            banner.textContent = appT('models.bulkDoneAll', 'All {count} model(s) downloaded successfully.', { count: total });
+            banner.textContent = appT('models.bulkDoneAll', 'All {count} models downloaded successfully.', { count: total });
             setTimeout(() => { if (banner.parentNode) banner.remove(); }, 10000);
         } else {
             banner.style.borderColor = 'var(--color-danger, var(--danger))';
@@ -509,7 +509,7 @@ async function runBulkDownload(items) {
     }
 
     if (failures.length === 0 && !needsRestart) {
-        showToast(appT('models.bulkDoneAll', 'All {count} model(s) downloaded successfully.', { count: total }), 'success');
+        showToast(appT('models.bulkDoneAll', 'All {count} models downloaded successfully.', { count: total }), 'success');
     } else if (!needsRestart) {
         const okCount = total - failures.length;
         showToast(appT(

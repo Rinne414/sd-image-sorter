@@ -27,18 +27,15 @@ function load(file) {
 load(lang === 'zh-CN' ? 'lang/zh-CN.js' : 'lang/en.js');
 const table = sandbox.I18nLang_zhCN || sandbox.I18nLang_en;
 load('i18n.js');
-const realJoinLabel = sandbox.I18n.joinLabel;
+const real = sandbox.I18n;
 sandbox.I18n = {
   getLang: () => lang,
   currentLang: lang,
-  // The real helper, so the label/value colon follows the real language rule.
-  joinLabel: realJoinLabel,
-  // Fills {param} placeholders the way frontend/js/i18n.js does.
-  t: (key, params) => {
-    let text = Object.prototype.hasOwnProperty.call(table, key) ? table[key] : key;
-    for (const [name, value] of Object.entries(params || {})) text = text.split(`{${name}}`).join(String(value));
-    return text;
-  },
+  // The real helpers, so the colon and the {param} filling (with singular
+  // words for a count of 1) follow the real rules.
+  joinLabel: real.joinLabel,
+  format: real.format,
+  t: (key, params) => real.format(Object.prototype.hasOwnProperty.call(table, key) ? table[key] : key, params),
 };
 for (const file of [
   'modules/utils/errors.js',

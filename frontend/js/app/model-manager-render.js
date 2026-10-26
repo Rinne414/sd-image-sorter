@@ -96,7 +96,7 @@ function renderModelManager(models = []) {
         document.getElementById('model-mirror-select')?.addEventListener('change', async (e) => {
             try {
                 await API.setMirror(e.target.value);
-                showToast(appT('models.mirrorSaved', 'Download source saved: {mirror}').replace('{mirror}', labels[e.target.value] || e.target.value), 'success');
+                showToast(I18n.format(appT('models.mirrorSaved', 'Download source saved: {mirror}'), { mirror: labels[e.target.value] || e.target.value }), 'success');
             } catch (err) {
                 showToast(formatUserError(err, 'Failed to save'), 'error');
             }

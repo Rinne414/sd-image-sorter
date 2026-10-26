@@ -48,7 +48,7 @@ export const enPrivacy: Record<keyof typeof zhCNPrivacy, string> = {
   'privacy.summary.decode': 'Restored {done}/{total} images',
   'privacy.summary.failed': '{main}; {n} failed, the reason is under each image',
   'privacy.summary.stopped': 'Cancelled after {done}/{total} images',
-  'privacy.hugeCount': '{n} images are over 40 MP: they will be processed, but slowly and with a lot of memory.',
+  'privacy.hugeCount': 'Over 40 MP, processed slowly and with a lot of memory: {n} images.',
 
   // one image in the queue
   'privacy.item.name': 'File name for downloads',

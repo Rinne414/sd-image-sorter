@@ -108,7 +108,7 @@ Object.assign(window.ArtistIdent, {
             imagesPreview.innerHTML = `
                 <div class="preview-placeholder">
                     <button class="btn btn-primary btn-small" id="btn-filter-by-artist">
-                        <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg> ${escapeHtml(this.tText(`View ${countLabel} images in Gallery`, `在图库中查看这 ${countLabel} 张图`))}
+                        <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg> ${escapeHtml(I18n.format(this.tText(`View {countLabel} images in Gallery`, `在图库中查看这 {countLabel} 张图`), { countLabel }))}
                     </button>
                     <button class="btn btn-ghost btn-small" id="btn-clear-artist-filter" style="margin-top: 8px;">
                         <svg class="icon" aria-hidden="true"><use href="#i-close"/></svg> ${escapeHtml(this.tText('Clear Artist Filter', '清除画师筛选'))}

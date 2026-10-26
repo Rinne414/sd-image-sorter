@@ -204,9 +204,10 @@ function applyGalleryCountLabel() {
 
     if (Number.isFinite(libraryTotal) && libraryTotal > 0
             && Number.isFinite(shownNum) && shownNum !== libraryTotal) {
-        imageCount.textContent = appT('gallery.imageCountOf', '{count} of {total} images')
-            .replace('{count}', shown)
-            .replace('{total}', String(libraryTotal));
+        imageCount.textContent = I18n.format(appT('gallery.imageCountOf', '{count} of {total} images'), {
+            count: shown,
+            total: String(libraryTotal),
+        });
         const missing = (window.UnreadableBanner && typeof window.UnreadableBanner.getLastCount === 'function')
             ? window.UnreadableBanner.getLastCount()
             : null;
@@ -223,8 +224,9 @@ function applyGalleryCountLabel() {
     }
 
     imageCount.removeAttribute('title');
-    imageCount.textContent = appT('gallery.imageCount', '{count} images')
-        .replace('{count}', shown);
+    imageCount.textContent = I18n.format(appT('gallery.imageCount', '{count} images'), {
+        count: shown,
+    });
 }
 
 function refreshLocalizedImageCount() {

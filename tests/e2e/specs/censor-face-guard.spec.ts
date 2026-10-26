@@ -66,7 +66,7 @@ test('detect sends face guard on by default and says when it skipped a face', as
 
   await expect.poll(() => calls.length).toBe(1)
   expect(calls[0].face_guard).toBe(true)
-  await expect(page.locator('#toast-container .toast', { hasText: 'Face guard skipped 2 detection(s)' }).first()).toBeVisible()
+  await expect(page.locator('#toast-container .toast', { hasText: 'Face guard skipped 2 detections' }).first()).toBeVisible()
 })
 
 test('turning face guard off is sent and remembered', async ({ page }) => {

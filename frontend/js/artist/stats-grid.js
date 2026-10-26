@@ -147,7 +147,7 @@ Object.assign(window.ArtistIdent, {
                     <div class="artist-avatar">${initials}</div>
                     <div class="artist-info">
                         <span class="artist-name">${displayName}</span>
-                        <span class="artist-count">${countLabel} images</span>
+                        <span class="artist-count">${I18n.format(this.tText('{count} images', '{count} 张'), { count: countLabel })}</span>
                     </div>
                     <div class="artist-metrics">
                         <span class="artist-metric"><strong>${escapeHtml(this.tText('Avg', '平均'))}</strong> ${avgConfidence}</span>
@@ -165,7 +165,7 @@ Object.assign(window.ArtistIdent, {
                 <div class="artist-avatar">${initials}</div>
                 <div class="artist-info">
                     <span class="artist-name">${displayName}</span>
-                    <span class="artist-count">${countLabel} images</span>
+                    <span class="artist-count">${I18n.format(this.tText('{count} images', '{count} 张'), { count: countLabel })}</span>
                     <span class="artist-confidence-summary">${escapeHtml(this.tText('Avg', '平均'))} ${avgConfidence} · ${escapeHtml(this.tText('Peak', '最高'))} ${maxConfidence}</span>
                 </div>
                 <div class="artist-progress" aria-hidden="true">

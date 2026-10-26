@@ -138,7 +138,8 @@
     }
 
     function t(key, fallback, params) {
-        const v = window.I18n?.t?.(key, params); return (v && v !== key) ? v : fallback;
+        const value = window.I18n.t(key, params);
+        return value && value !== key ? value : window.I18n.format(fallback, params);
     }
 
     async function fetchImageDetailFallback(id) {
@@ -245,7 +246,7 @@
     function removeSection(sectionId) {
         const idx = state.sections.findIndex(s => s.id === sectionId);
         if (idx < 0 || state.sections[idx].id === 'unsorted') return;
-        pushUndo(`Remove section "${state.sections[idx].name}"`);
+        pushUndo(t('queueSolitaire.undoRemoveSection', 'Remove section "{name}"', { name: state.sections[idx].name }));
         const items = state.sections[idx].items;
         state.sections.splice(idx, 1);
         // Move orphan items back to unsorted
@@ -259,7 +260,7 @@
         const targetSection = state.sections.find(s => s.id === targetSectionId);
         if (!targetSection) return;
 
-        pushUndo(`Move ${imageIds.length} image(s) to "${targetSection.name}"`);
+        pushUndo(t('queueSolitaire.undoMove', 'Move {count} images to "{name}"', { count: imageIds.length, name: targetSection.name }));
 
         const idSet = new Set(imageIds);
         // Remove from all sections
@@ -277,7 +278,7 @@
 
     // ── Auto-Sort ─────────────────────────────────────────────────────
     async function autoSortByRating() {
-        pushUndo('Auto-sort by rating');
+        pushUndo(t('queueSolitaire.undoSortRating', 'Auto-sort by rating'));
         const allIds = getAllImageIds();
         await ensureImageDetails(allIds);
         const ratingMap = {};
@@ -305,7 +306,7 @@
     }
 
     function autoSortByAesthetic() {
-        pushUndo('Auto-sort by aesthetic');
+        pushUndo(t('queueSolitaire.undoSortAesthetic', 'Auto-sort by aesthetic score'));
         const allIds = getAllImageIds();
         const great = [], good = [], low = [], unscored = [];
 
@@ -328,7 +329,7 @@
     }
 
     function autoSortByResolution() {
-        pushUndo('Auto-sort by resolution');
+        pushUndo(t('queueSolitaire.undoSortResolution', 'Auto-sort by resolution'));
         const allIds = getAllImageIds();
         const hd = [], sd = [], unknown = [];
 
@@ -814,7 +815,7 @@
             collapsed: false,
         });
 
-        pushUndo(`Auto-sort profile "${profile.name}"`);
+        pushUndo(t('queueSolitaire.undoSortProfile', 'Auto-sort profile "{name}"', { name: profile.name }));
         state.sections = nextSections;
         state.filterMatches.clear();
         state.galleryFilterMode = false;
@@ -822,7 +823,7 @@
         updateQueueFilterSummary();
         render();
         window.App?.showToast?.(
-            t('queueSolitaire.profileApplied', 'Applied profile "{name}"', { name: profile.name }).replace('{name}', profile.name),
+            t('queueSolitaire.profileApplied', 'Applied profile "{name}"', { name: profile.name }),
             'success'
         );
     }
@@ -883,7 +884,7 @@
         saveAutoSortProfiles();
         renderProfileManager();
         window.App?.showToast?.(
-            t('queueSolitaire.profileSaved', 'Saved profile "{name}"', { name: profile.name }).replace('{name}', profile.name),
+            t('queueSolitaire.profileSaved', 'Saved profile "{name}"', { name: profile.name }),
             'success'
         );
     }
@@ -1041,7 +1042,6 @@
 
         setFilterMatchCountText(
             t('queueSolitaire.matching', '{count} matching', { count: state.filterMatches.size })
-                .replace('{count}', state.filterMatches.size)
         );
 
         updateQueueFilterSummary();
@@ -1108,7 +1108,6 @@
                     state.filterMatches = backendMatches;
                     setFilterMatchCountText(
                         t('queueSolitaire.galleryMatching', '{count} matching (gallery filters)', { count: state.filterMatches.size })
-                            .replace('{count}', state.filterMatches.size)
                     );
                     updateQueueFilterSummary();
                     render();
@@ -1127,10 +1126,11 @@
         }
 
         setFilterMatchCountText(
-            (fromGallery
+            I18n.format((fromGallery
                 ? t('queueSolitaire.galleryMatching', '{count} matching (gallery filters)', { count: state.filterMatches.size })
-                : t('queueSolitaire.advancedMatching', '{count} matching (advanced filters)', { count: state.filterMatches.size }))
-                .replace('{count}', state.filterMatches.size)
+                : t('queueSolitaire.advancedMatching', '{count} matching (advanced filters)', { count: state.filterMatches.size })), {
+                count: state.filterMatches.size,
+            })
         );
 
         updateQueueFilterSummary();
@@ -1229,12 +1229,9 @@
                 'queueSolitaire.stats',
                 '{images} images · {sections} sections · {selected} selected',
                 { images: totalImages, sections: state.sections.length, selected: state.selected.size }
-            )
-                .replace('{images}', totalImages)
-                .replace('{sections}', state.sections.length)
-                .replace('{selected}', state.selected.size);
+            );
             const matchingSuffix = state.filterMatches.size
-                ? ` · ${t('queueSolitaire.matching', '{count} matching', { count: state.filterMatches.size }).replace('{count}', state.filterMatches.size)}`
+                ? ` · ${t('queueSolitaire.matching', '{count} matching', { count: state.filterMatches.size })}`
                 : '';
             statsEl.textContent = `${baseStats}${matchingSuffix}`;
         }
@@ -1492,9 +1489,7 @@
             'queueSolitaire.renameMessage',
             'Rename {count} images in "{section}". Enter a base name such as "keep".',
             { count: section.items.length, section: section.name }
-        )
-            .replace('{count}', section.items.length)
-            .replace('{section}', section.name);
+        );
         const baseName = window.App?.showInputModal
             ? await window.App.showInputModal(title, message, section.name.toLowerCase().replace(/\s+/g, '_'))
             : window.prompt(message, section.name.toLowerCase().replace(/\s+/g, '_'));
@@ -1514,9 +1509,7 @@
                 'queueSolitaire.renamed',
                 'Renamed {count} images with prefix "{name}"',
                 { count: section.items.length, name: baseName }
-            )
-                .replace('{count}', section.items.length)
-                .replace('{name}', baseName),
+            ),
             'success'
         );
     }
@@ -1556,7 +1549,6 @@
                 render();
                 showUndoToast(
                     t('queueSolitaire.undoToast', 'Undone: {description}', { description: desc })
-                        .replace('{description}', desc)
                 );
             }
             return;

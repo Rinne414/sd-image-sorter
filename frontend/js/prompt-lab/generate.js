@@ -55,7 +55,7 @@ Object.assign(window.PromptLab, {
 
             if (result.warnings?.length > 0) {
                 showToast(
-                    this._t('promptlab.generatedWarnings', 'Generated with {count} warning(s)', { count: result.warnings.length }),
+                    this._t('promptlab.generatedWarnings', 'Generated with {count} warnings', { count: result.warnings.length }),
                     'info'
                 );
             }
@@ -125,7 +125,7 @@ Object.assign(window.PromptLab, {
 
             if (violations.length > 0 || result.valid === false) {
                 showToast(
-                    this._t('promptlab.conflictsFound', 'Found {count} conflict(s)', { count: violations.length }),
+                    this._t('promptlab.conflictsFound', 'Found {count} conflicts', { count: violations.length }),
                     'error'
                 );
             } else {

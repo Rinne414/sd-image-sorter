@@ -729,7 +729,7 @@ function bindEvents() {
             window.App?.showToast?.(
                 censorT('censor.queueAddFailed', {
                     count: failedIds.length,
-                }, 'Failed to queue {count} image(s) for Censor.'),
+                }, 'Failed to queue {count} images for Censor.'),
                 'error'
             );
         }

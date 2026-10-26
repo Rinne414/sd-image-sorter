@@ -214,7 +214,7 @@
             if (effectiveMode === 'beside_image' && stats.unknown > 0) {
                 warning.hidden = false;
                 warning.textContent = this._t('dataset.outputModeBesideUnknown',
-                    '{count} image(s) have no known file path, so they are left out. The rest get a .txt beside the original.',
+                    '{count} images have no known file path, so they are left out. The rest get a .txt beside the original.',
                     { count: stats.unknown });
             } else if (effectiveMode === 'beside_image') {
                 warning.hidden = false;

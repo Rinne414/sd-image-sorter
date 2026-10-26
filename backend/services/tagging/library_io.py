@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import database as db
 from library_context import current_library_sql
 from services.tagging.request import VALID_SORT_OPTIONS, TagImportRequest
+from text_counts import count_text
 
 # Why an import row changed nothing. ``skipped`` in the import result is their
 # sum; each is also reported on its own so the UI can say why.
@@ -293,7 +294,7 @@ class LibraryIOMixin:
         return {
             "status": "ok",
             "images_fixed": fixed_count,
-            "message": f"Cleaned up rating tags for {fixed_count} images",
+            "message": f"Cleaned up rating tags for {count_text(fixed_count, 'image')}",
         }
 
     def get_scope_count(self, retag_all: bool = False) -> Dict[str, Any]:

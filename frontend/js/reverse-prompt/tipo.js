@@ -229,7 +229,7 @@ Object.assign(window.ReversePrompt, {
 
         host.appendChild(this._noteLine('reverse-tipo-line', this._t(
             'reverse.tipoProposals',
-            'TIPO suggests {count} tag(s) the taggers never scored. Check the ones you want.',
+            'TIPO suggests {count} tags the taggers never scored. Check the ones you want.',
             'TIPO 推荐了 {count} 个打标器从未评分的标签，请勾选你想要的。',
             { count: proposals.length }
         )));
@@ -280,7 +280,7 @@ Object.assign(window.ReversePrompt, {
             const added = this._appendToDraft(picked);
             window.App?.showToast?.(this._t(
                 'reverse.tipoApplied',
-                'Added {count} tag(s) to the draft',
+                'Added {count} tags to the draft',
                 '已把 {count} 个标签加入草稿',
                 { count: added }
             ), 'success');

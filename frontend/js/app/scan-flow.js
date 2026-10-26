@@ -149,16 +149,18 @@ async function createCollectionFromScanFolder(folderPath) {
             added = Number(result?.added || 0);
         }
         showToast(
-            appT('flow.collectionCreatedToast', 'Collection "{name}" created with {count} images.')
-                .replace('{name}', name)
-                .replace('{count}', String(added)),
+            I18n.format(appT('flow.collectionCreatedToast', 'Collection "{name}" created with {count} images.'), {
+                name: name,
+                count: String(added),
+            }),
             'success'
         );
         try { window.CollectionsUI?.refresh?.(); } catch (_e) { /* sidebar refresh is best-effort */ }
     } catch (err) {
         showToast(
-            appT('flow.collectionCreateFailedToast', 'Could not create the collection: {error}')
-                .replace('{error}', err?.message || String(err)),
+            I18n.format(appT('flow.collectionCreateFailedToast', 'Could not create the collection: {error}'), {
+                error: err?.message || String(err),
+            }),
             'error'
         );
     }
@@ -198,7 +200,7 @@ async function startScan() {
         resetProgressTracker(_scanBackgroundProgressTracker);
         _scanLibraryReadyHandled = false;
         _scanLastAutoRefreshAt = 0;
-        $('#scan-progress-text').textContent = appT('progress.countingImages', 'Counting images... {count} found').replace('{count}', '0');
+        $('#scan-progress-text').textContent = I18n.format(appT('progress.countingImages', 'Counting images... {count} found'), { count: '0' });
         _scanStartToastAt = Date.now();
         showToast(
             appT('scan.startedToast', 'Import started. The first images will appear soon, and the rest of the details will keep filling in.'),
@@ -255,10 +257,12 @@ async function requestStopScan() {
     }
     if (!['starting', 'running', 'cancelling'].includes(status)) {
         showToast(
-            appT(
+            I18n.format(appT(
                 'scan.cancelUnavailableStatus',
                 'The import can\'t be stopped right now (status: {status}). Reload the page and try again.'
-            ).replace('{status}', status || '<missing>'),
+            ), {
+                status: status || '<missing>',
+            }),
             'error'
         );
         return;
@@ -286,9 +290,10 @@ async function requestStopScan() {
         $('#scan-progress-text').textContent = (result?.status === 'cancelled')
             ? appT('scan.cancelled', 'Scan cancelled')
             : totalFinal
-                ? appT('scan.cancelling', 'Cancelling scan... {current}/{total}')
-                    .replace('{current}', String(processed))
-                    .replace('{total}', String(total || '?'))
+                ? I18n.format(appT('scan.cancelling', 'Cancelling scan... {current}/{total}'), {
+                    current: String(processed),
+                    total: String(total || '?'),
+                })
                 : appT('scan.backgroundCancelling', 'Stopping scan...');
         showToast(
             result?.status === 'cancelled'
@@ -434,17 +439,19 @@ function _updateBgScanProgress(progress) {
     }
 
     if (metrics.isCounting) {
-        textEl.textContent = appT('progress.countingImages', 'Counting images... {count} found')
-            .replace('{count}', String(metrics.counted || metrics.processed || 0));
+        textEl.textContent = I18n.format(appT('progress.countingImages', 'Counting images... {count} found'), {
+            count: String(metrics.counted || metrics.processed || 0),
+        });
         return;
     }
 
     const extraParts = [];
     if (metrics.showingMetadata && metrics.metadataTotal > 0) {
         extraParts.push(
-            appT('progress.metadataCount', '{current}/{total} details')
-                .replace('{current}', String(metrics.metadataProcessed))
-                .replace('{total}', String(metrics.metadataTotal))
+            I18n.format(appT('progress.metadataCount', '{current}/{total} details'), {
+                current: String(metrics.metadataProcessed),
+                total: String(metrics.metadataTotal),
+            })
         );
         if (!metrics.metadataTotalFinal) {
             extraParts.push(appT('progress.detailsStillCounting', 'details total still being checked'));
@@ -452,8 +459,9 @@ function _updateBgScanProgress(progress) {
     } else if (metrics.totalFinal && metrics.total > metrics.processed) {
         // "0 left" says nothing once every file is in.
         extraParts.push(
-            appT('progress.left', '{count} left')
-                .replace('{count}', String(metrics.total - metrics.processed))
+            I18n.format(appT('progress.left', '{count} left'), {
+                count: String(metrics.total - metrics.processed),
+            })
         );
     }
 

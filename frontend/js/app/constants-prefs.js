@@ -46,13 +46,8 @@ function throttle(func, limit) {
 // i18n helper for app-level dynamic strings.
 function appT(key, fallback, params) {
     const val = window.I18n?.t?.(key, params);
-    let text = (val && val !== key) ? val : (fallback || key);
-    if (params && typeof params === 'object') {
-        for (const [paramKey, paramValue] of Object.entries(params)) {
-            text = String(text).split(`{${paramKey}}`).join(String(paramValue));
-        }
-    }
-    return text;
+    if (val && val !== key) return val;
+    return window.I18n.format(fallback || key, params);
 }
 
 function normalizeAspectRatioFilter(value) {

@@ -86,6 +86,9 @@
   "pickerSave": {
     "message": "保存 $1 张图片"
   },
+  "pickerSaveOne": {
+    "message": "保存 1 张图片"
+  },
   "pickerHiddenSmall": {
     "message": "已隐藏小图（图标、按钮）：$1 张"
   },

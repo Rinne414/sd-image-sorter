@@ -33,11 +33,7 @@ Object.assign(window.VLMCaption, {
     },
 
     _tp(key, fallback, params = {}) {
-        let text = this._t(key, fallback);
-        Object.entries(params).forEach(([name, value]) => {
-            text = text.split(`{${name}}`).join(String(value));
-        });
-        return text;
+        return I18n.format(this._t(key, fallback), params);
     },
 
     _presetLabel(preset) {

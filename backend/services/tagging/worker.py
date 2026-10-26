@@ -40,6 +40,7 @@ from tag_writer_provenance import (
     replace_wd14_runtime_providers,
 )
 from utils.source_paths import resolve_existing_indexed_image_path
+from text_counts import count_text
 
 # NOTE(decomposition): keep the historical logger channel so log routing
 # and output stay byte-identical after the services/tagging split.
@@ -625,7 +626,7 @@ def _tagging_worker_run(
             if skipped_videos:
                 send(
                     "running",
-                    f"Skipped {skipped_videos} videos: videos are not tagged",
+                    f"Skipped {count_text(skipped_videos, 'video')}: videos are not tagged",
                     key="videos_skipped",
                     args={"count": skipped_videos},
                 )
@@ -647,7 +648,7 @@ def _tagging_worker_run(
 
         send(
             "running",
-            f"Model loaded. Tagging {total} images...",
+            f"Model loaded. Tagging {count_text(total, 'image')}...",
             current=0,
             total_override=total,
             key="tagging_started",
@@ -1097,7 +1098,7 @@ def _tagging_worker_run(
         if cancel_event.is_set():
             send(
                 "cancelled",
-                f"Tagging cancelled. Processed {total_processed}/{total} images.",
+                f"Tagging cancelled. Processed {total_processed}/{count_text(total, 'image')}.",
                 key="cancelled",
                 last_run_stats=_build_last_run_stats(
                     tagging_start_time,
@@ -1115,7 +1116,7 @@ def _tagging_worker_run(
         )
         send(
             "done",
-            f"Completed! Processed {total_processed} images: {total_tagged} tagged"
+            f"Completed! Processed {count_text(total_processed, 'image')}: {total_tagged} tagged"
             + (f", {total_errors} failed." if total_errors else "."),
             key="done",
             last_run_stats=_build_last_run_stats(

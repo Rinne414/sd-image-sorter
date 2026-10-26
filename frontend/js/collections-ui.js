@@ -32,8 +32,8 @@
     }
 
     function t(key, fallback, params) {
-        const value = window.I18n?.t?.(key, params);
-        return (value && value !== key) ? value : fallback;
+        const value = window.I18n.t(key, params);
+        return value && value !== key ? value : window.I18n.format(fallback, params);
     }
 
     function toast(message, type) {
@@ -176,8 +176,7 @@
             const indicator = document.createElement('div');
             indicator.id = 'collections-browsing';
             indicator.className = 'collections-browsing';
-            const label = t('collections.browsing', 'Browsing: {name}', { name })
-                .replace('{name}', name || '');
+            const label = t('collections.browsing', 'Browsing: {name}', { name });
             indicator.innerHTML = `<span class="collections-browsing-label">${escapeHtml(label)}</span>`
                 + `<button type="button" id="collections-clear-browse" class="collections-browsing-clear" `
                 + `title="${escapeHtml(t('collections.clearBrowse', 'Stop browsing this collection'))}" `
@@ -293,8 +292,9 @@
 
         deleteConfirm(id, name) {
             const app = appRef();
-            const confirmMessage = t('collections.deleteConfirm', 'Delete "{name}"? Images stay on disk.')
-                .replace('{name}', name || '');
+            const confirmMessage = I18n.format(t('collections.deleteConfirm', 'Delete "{name}"? Images stay on disk.'), {
+                name: name || '',
+            });
             const runDelete = async () => {
                 try {
                     await app.API?.deleteCollection?.(id);
@@ -450,12 +450,10 @@
                 if (this._favoritesId != null && Number(collectionId) === Number(this._favoritesId)) {
                     window.Gallery?.hydrateFavorites?.();
                 }
-                const message = t('collections.addedToast', 'Added {count} image(s) to {name}', {
+                const message = t('collections.addedToast', 'Added {count} images to {name}', {
                     count: added,
                     name,
-                })
-                    .replace('{count}', String(added))
-                    .replace('{name}', name || '');
+                });
                 toast(message, 'success');
                 await this.refresh();
             } catch (error) {

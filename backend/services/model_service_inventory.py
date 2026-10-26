@@ -16,6 +16,8 @@ import importlib.util
 from pathlib import Path
 from typing import Any, Dict, List
 
+from text_counts import count_text
+
 from services.model_service_csd import csd_card
 
 
@@ -211,7 +213,7 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
     # -- WD14 --
     if wd14_default_ready:
         wd14_message_key = "models.wd14.readyCount"
-        wd14_message = f"{len(installed_wd14)} WD14 variant(s) are ready."
+        wd14_message = f"Ready: {count_text(len(installed_wd14), 'WD14 variant')}."
         wd14_message_params = {"count": len(installed_wd14)}
     else:
         wd14_message_key = "models.wd14.missing"

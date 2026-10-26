@@ -37,6 +37,7 @@ from services.derived_state_service import (
     write_artist_predictions,
 )
 from utils.source_paths import resolve_existing_indexed_image_path
+from text_counts import count_text
 
 
 logger = logging.getLogger(__name__)
@@ -444,7 +445,7 @@ class ArtistService:
 
         emit({
             "step": "identifying",
-            "message": f"Identifying {len(image_ids)} image(s)...",
+            "message": f"Identifying {count_text(len(image_ids), 'image')}...",
             "message_key": "identifying",
         })
 

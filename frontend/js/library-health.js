@@ -50,10 +50,8 @@
     }
 
     function t(key, fallback, params) {
-        var translated = window.I18n && typeof window.I18n.t === 'function'
-            ? window.I18n.t(key, params)
-            : key;
-        return translated && translated !== key ? translated : (fallback || key);
+        var value = window.I18n.t(key, params);
+        return value && value !== key ? value : window.I18n.format(fallback || key, params);
     }
 
     function escapeHtml(value) {

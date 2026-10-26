@@ -115,9 +115,10 @@ Object.assign(SeparationConsole, {
                 const report = await response.json();
                 this._rtLastDryRun = report;
                 if (status) {
-                    status.textContent = sepconT(
-                        `${report.with_scores}/${report.requested} images have scores · ${report.images_changed} would change (+${report.tags_added} / −${report.tags_removed} tags)`,
-                        `${report.with_scores}/${report.requested} 张有分数记录 · ${report.images_changed} 张会变（+${report.tags_added} / −${report.tags_removed} 个标签）`);
+                    status.textContent = I18n.format(sepconT(
+                        `{with_scores}/{requested} images have scores · {images_changed} would change (+{tags_added} / −{tags_removed} tags)`,
+                        `{with_scores}/{requested} 张有分数记录 · {images_changed} 张会变（+{tags_added} / −{tags_removed} 个标签）`,
+                    ), { with_scores: report.with_scores, requested: report.requested, images_changed: report.images_changed, tags_added: report.tags_added, tags_removed: report.tags_removed });
                 }
                 if (apply) apply.disabled = !(report.with_scores > 0);
             } catch (e) {
@@ -146,8 +147,10 @@ Object.assign(SeparationConsole, {
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const report = await response.json();
                 window.App?.showToast?.(
-                    sepconT(`Re-threshold applied: ${report.images_changed} images updated (+${report.tags_added} / −${report.tags_removed})`,
-                      `重定门槛已套用：更新 ${report.images_changed} 张（+${report.tags_added} / −${report.tags_removed}）`),
+                    I18n.format(sepconT(
+                        `Re-threshold applied: {images_changed} images updated (+{tags_added} / −{tags_removed})`,
+                        `重定门槛已套用：更新 {images_changed} 张（+{tags_added} / −{tags_removed}）`,
+                    ), { images_changed: report.images_changed, tags_added: report.tags_added, tags_removed: report.tags_removed }),
                     'success');
                 if (status) {
                     status.textContent = sepconT(

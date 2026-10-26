@@ -43,6 +43,7 @@ from services.smart_tag.tagging import (
     _tag_image_with_thresholds,
     _toriigate_nl_text,
 )
+from text_counts import count_text
 
 # Shared logger: keep the historical channel name so log capture, filtering,
 # and support-log diagnostics behave exactly as before the decomposition.
@@ -81,12 +82,12 @@ def _terminal_job_outcome(
             return (
                 "failed",
                 f"Caption profile {req.caption_profile.value!r} failed for all "
-                f"{job.failed} image(s). Provider error: {last_error}",
+                f"{count_text(job.failed, 'image')}. Provider error: {last_error}",
             )
         detail = f" Last error: {last_error}" if last_error else ""
         return (
             "failed",
-            f"Smart Tag failed for all {job.failed} image(s).{detail}",
+            f"Smart Tag failed for all {count_text(job.failed, 'image')}.{detail}",
         )
     suffix = f" {degraded_reason}" if degraded_reason else ""
     if job.failed > 0 or degraded_reason:

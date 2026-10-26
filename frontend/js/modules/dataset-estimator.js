@@ -64,9 +64,10 @@
                 bytes += Number(dm?.meta?.get?.(Number(id))?.file_size || 0);
             }
             const sizePart = bytes ? ` · ${formatBytes(bytes)}` : '';
-            line.textContent = t(
-                `${images} images${sizePart} · ≈ ${steps.toLocaleString()} steps`,
-                `${images} 张图${sizePart} · 约 ${steps.toLocaleString()} steps`);
+            line.textContent = I18n.format(t(
+                `{images} images{sizePart} · ≈ {steps} steps`,
+                `{images} 张图{sizePart} · 约 {steps} steps`,
+            ), { images, sizePart, steps: steps.toLocaleString() });
             line.title = t(
                 'kohya convention: ceil(images × repeats ÷ batch) × epochs. Actual steps vary with bucketing/gradient accumulation.',
                 'kohya 惯例：ceil(图数 × repeats ÷ batch) × epochs。实际步数受 bucketing/梯度累积影响。');

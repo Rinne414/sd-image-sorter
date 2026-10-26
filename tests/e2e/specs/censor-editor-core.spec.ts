@@ -399,7 +399,7 @@ test('save-all wire format: /save-data payload, strip default, unedited items ex
   await expect(page.locator('#save-metadata-option')).toHaveValue('strip')
   await expect(page.locator('#save-format-option')).toHaveValue('png')
   await expect(page.locator('#save-unedited-group')).toBeVisible()
-  await expect(page.locator('#save-unedited-label')).toHaveText('2 image(s) in the queue have no censoring')
+  await expect(page.locator('#save-unedited-label')).toHaveText('No censoring yet: 2 images in the queue')
   await expect(page.locator('#save-unedited-option')).toHaveValue('include')
   await page.locator('#save-unedited-option').selectOption('skip')
   await page.locator('#save-output-folder').fill(OUTPUT_FOLDER)
@@ -421,7 +421,7 @@ test('save-all wire format: /save-data payload, strip default, unedited items ex
   await page.locator('#btn-save-all-processed').click()
   await expect(page.locator('#save-options-modal.visible')).toBeVisible()
   await expect(page.locator('#save-output-folder')).toHaveValue(OUTPUT_FOLDER)
-  await expect(page.locator('#save-unedited-label')).toHaveText('1 image(s) in the queue have no censoring')
+  await expect(page.locator('#save-unedited-label')).toHaveText('No censoring yet: 1 image in the queue')
   await expect(page.locator('#save-unedited-option')).toHaveValue('skip')
   await page.locator('#btn-confirm-save-options').click()
 

@@ -14,6 +14,7 @@ import os
 from typing import Tuple
 
 from config import TAGGER_MODELS as MODELS
+from text_counts import count_text
 
 logger = logging.getLogger("tagger")
 
@@ -273,7 +274,7 @@ class _TagTableMixin:
                         )
         if expected_total and len(self.tags) != expected_total:
             raise ValueError(
-                f"PixAI tag file {tags_path} has {len(self.tags)} tags; the model "
+                f"PixAI tag file {tags_path} has {count_text(len(self.tags), 'tag')}; the model "
                 f"expects {expected_total}."
             )
 
@@ -308,7 +309,7 @@ class _TagTableMixin:
             ) from exc
         if [index for index, _ in ordered] != list(range(len(ordered))):
             raise ValueError(
-                f"Tag file {tags_path} does not number its {len(ordered)} tags 0 to "
+                f"Tag file {tags_path} does not number its {count_text(len(ordered), 'tag')} 0 to "
                 f"{len(ordered) - 1}, so its tags cannot be matched to the model output."
             )
         for tag_idx, tag_name in ordered:

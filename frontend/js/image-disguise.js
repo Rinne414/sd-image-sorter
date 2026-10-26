@@ -61,10 +61,9 @@
         },
 
         _t(key, fallback, params) {
-            const value = window.I18n?.t?.(key, params);
-            if (value && value !== key) return value;
-            return String(fallback).replace(/\{(\w+)\}/g, (_, name) => (params && name in params ? params[name] : `{${name}}`));
-        },
+    const value = window.I18n.t(key, params);
+    return value && value !== key ? value : window.I18n.format(fallback, params);
+},
 
         // ── settings ────────────────────────────────────────────────
 
@@ -367,7 +366,7 @@
             }
             const message = waiting
                 ? this._t('disguise.summaryWithWaiting', 'Made {done}; {waiting} need a cover', { done, waiting })
-                : this._t('disguise.summary', 'Made {done} disguise image(s)', { done });
+                : this._t('disguise.summary', 'Made {done} disguise images', { done });
             this._toast(message, waiting ? 'warning' : (done ? 'success' : 'error'));
         },
 
@@ -498,7 +497,7 @@
                 body: JSON.stringify({ tokens }),
             });
             if (response.ok) {
-                this._toast(this._t('disguise.copied', 'Copied as file(s) - paste into the chat window', { count: tokens.length }), 'success');
+                this._toast(this._t('disguise.copied', 'Copied as files - paste into the chat window', { count: tokens.length }), 'success');
                 return;
             }
             const key = response.status === 501 ? 'disguise.copyUnsupported' : 'disguise.copyFailed';
@@ -573,7 +572,7 @@
                 const text = byId('disguise-needs-cover-text');
                 if (text && waiting.length) {
                     const reasons = [...new Set(waiting.map((item) => this.reasonLabel(item.disguiseReason)))].join('; ');
-                    text.textContent = this._t('disguise.needsCoverBar', '{count} picture(s) need a cover ({reasons})', { count: waiting.length, reasons });
+                    text.textContent = this._t('disguise.needsCoverBar', '{count} pictures need a cover ({reasons})', { count: waiting.length, reasons });
                 }
             }
             const card = byId('disguise-pack-result');

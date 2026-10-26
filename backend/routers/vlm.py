@@ -820,7 +820,7 @@ async def _run_batch(image_source: _BatchImageSource) -> None:
                     _batch_state["api_message"] = "Cancel requested; waiting for active API calls to finish"
                 elif _batch_state["active_requests"] > 0:
                     _batch_state["api_status"] = "waiting"
-                    _batch_state["api_message"] = f"Waiting for {_batch_state['active_requests']} API response(s)"
+                    _batch_state["api_message"] = f"Waiting for {count_text(_batch_state['active_requests'], 'API response')}"
 
     async def produce_ids(queue: asyncio.Queue) -> None:
         try:
@@ -895,6 +895,7 @@ def _record_error(image_id: Optional[int], message: str, error_type: str) -> Non
 # Ollama local-model endpoints -- imported LAST so route positions 13-17
 # register after the 12 endpoints above (registration order == route table;
 # the sha256 pin in tests/test_vlm_router_pins.py flips on any reorder).
+from text_counts import count_text
 from routers.vlm_ollama import (
     _do_pull, _pull_state, delete_model, get_recommended_models, pull_model,
     pull_progress, start_ollama,

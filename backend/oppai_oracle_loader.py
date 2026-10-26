@@ -380,7 +380,7 @@ class _LoaderMixin:
         missing = {"pixel_values", "padding_mask"} - input_names
         if missing:
             raise RuntimeError(
-                f"OppaiOracle ONNX is missing required input(s) {sorted(missing)}; "
+                f"OppaiOracle ONNX lacks the required inputs {sorted(missing)}; "
                 f"got {sorted(input_names)}. Re-download or check the model file."
             )
 

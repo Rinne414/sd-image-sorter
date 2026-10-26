@@ -206,7 +206,7 @@ function syncTaggerModelUi(options = {}) {
     if (disabledNotice && disabledTitle && disabledBody) {
         if (modelDisabled) {
             disabledNotice.hidden = false;
-            disabledTitle.textContent = appT('tagger.disabledNotRunnable', '{model} is not runnable in the current build.').replace('{model}', normalizedModel);
+            disabledTitle.textContent = I18n.format(appT('tagger.disabledNotRunnable', '{model} is not runnable in the current build.'), { model: normalizedModel });
             disabledBody.textContent = meta?.disabled_reason || appT('tagger.disabledFallback', 'Use one of the ONNX taggers above for now.');
         } else {
             disabledNotice.hidden = true;
@@ -256,7 +256,7 @@ function syncTaggerModelUi(options = {}) {
         } else if (riskyGpu) {
             gpuHelp.textContent = appT('tagger.gpuHelpRiskyOverride', 'GPU mode is active. Automatic hardware limits still apply.');
         } else if (meta?.safe_mode_note) {
-            gpuHelp.textContent = appT('tagger.gpuHelpRecommendedNote', 'Recommended GPU mode is active. {note}').replace('{note}', meta.safe_mode_note);
+            gpuHelp.textContent = I18n.format(appT('tagger.gpuHelpRecommendedNote', 'Recommended GPU mode is active. {note}'), { note: meta.safe_mode_note });
         } else {
             gpuHelp.textContent = appT('tagger.gpuHelpRecommendedDefault', 'GPU mode is active for this model.');
         }

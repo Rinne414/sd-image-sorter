@@ -47,6 +47,7 @@ from utils.atomic_staging import (
     publish_staging_file,
 )
 from utils.source_paths import resolve_existing_indexed_image_path
+from text_counts import count_text
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +64,13 @@ _COPY_BLOCK_BYTES = 1024 * 1024
 class BatchExportMissingCensoredError(batch_db.BatchError):
     def __init__(self, missing: list[dict[str, Any]]):
         self.missing = missing
-        super().__init__(f"{len(missing)} item(s) have no censored copy")
+        super().__init__(f"No censored copy: {count_text(len(missing), 'item')}")
 
 
 class BatchExportSourcesMissingError(batch_db.BatchError):
     def __init__(self, missing: list[dict[str, Any]]):
         self.missing = missing
-        super().__init__(f"{len(missing)} original file(s) are missing on disk")
+        super().__init__(f"Missing on disk: {count_text(len(missing), 'original file')}")
 
 
 class BatchExportDuplicateNamesError(batch_db.BatchError):

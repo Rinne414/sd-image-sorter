@@ -151,8 +151,9 @@
             const rows = visible.map((name) => this._rowHtml(name)).join('');
             const overflow = pins.length > MAX_VISIBLE
                 ? `<button type="button" class="smart-folder-more" data-smart-folder-manage="1">${escapeHtml(
-                    t('+{count} more — manage presets', '还有 {count} 个 — 管理预设')
-                        .replace('{count}', String(pins.length - MAX_VISIBLE)))}</button>`
+                    I18n.format(t('+{count} more — manage presets', '还有 {count} 个 — 管理预设'), {
+                        count: String(pins.length - MAX_VISIBLE),
+                    }))}</button>`
                 : '';
             list.innerHTML = rows + overflow;
         },

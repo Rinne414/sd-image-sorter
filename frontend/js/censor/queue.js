@@ -317,7 +317,7 @@ async function addTokenBackedQueue(sourcePayload) {
         CensorState.tokenQueueSource = null;
         renderQueue();
         window.App?.showToast?.(
-            formatUserError(error, censorT('censor.queueAddFailed', { count: source.total || 1 }, 'Failed to queue {count} image(s) for Censor.')),
+            formatUserError(error, censorT('censor.queueAddFailed', { count: source.total || 1 }, 'Failed to queue {count} images for Censor.')),
             'error'
         );
         return false;
@@ -353,8 +353,8 @@ function renderTokenQueueLoadMoreControl(list) {
     const button = control.querySelector('button');
     if (summary) {
         summary.textContent = total > loaded
-            ? `Loaded ${loaded.toLocaleString()} of ${total.toLocaleString()} filtered images`
-            : `Loaded ${loaded.toLocaleString()} filtered images`;
+            ? censorT('censor.queueLoadedOf', { loaded: loaded.toLocaleString(), total: total.toLocaleString() }, 'Loaded {loaded} of {total} filtered images')
+            : censorT('censor.queueLoaded', { loaded: loaded.toLocaleString() }, 'Loaded {loaded} filtered images');
     }
     if (button) {
         button.textContent = source.loading
@@ -436,7 +436,7 @@ function getCensorBatchOutcomePresentation(item) {
             failureTooltip: censorT(
                 'censor.batchOutcomeDetectorErrorTooltip',
                 { count: Number(item.batchRegionCount) || 0, reason: failureReason },
-                'Found {count} region(s), but a detector did not run, so some may be missed:\n{reason}'
+                'Found {count} regions, but a detector did not run, so some may be missed:\n{reason}'
             ),
         });
     }
@@ -601,7 +601,7 @@ function showCensorBatchStopped(batch, toastOptions = {}) {
     const reason = formatUserError(batch.stopError);
     window.App.showToast(
         censorT('censor.batchStopped', { done: batch.completed, total: batch.total, reason },
-            'Stopped after {done} of {total} image(s): the rest of the selection could not be loaded ({reason}).'),
+            'Stopped after {done} of {total} images: the rest of the selection could not be loaded ({reason}).'),
         'error',
         toastOptions
     );
@@ -672,7 +672,7 @@ async function sendCensorQueueToPublishSet() {
     }
     if (failedCount > 0) {
         window.App.showToast(censorT('censor.publishPrepareFailed', { count: failedCount },
-            '{count} censored image(s) could not be prepared; Publish Set marks them as not censored.'), 'warning');
+            '{count} censored images could not be prepared; Publish Set marks them as not censored.'), 'warning');
     }
     window.PublishSet.open(entries);
 }

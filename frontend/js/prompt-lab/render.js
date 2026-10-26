@@ -225,7 +225,7 @@ Object.assign(window.PromptLab, {
             const count = item.tag_count ?? (item.members || item.tags || []).length;
             const parts = [];
             if (item.category) parts.push(item.category);
-            parts.push(this._t('promptlab.tagCount', '{count} tags', { count }).replace('{count}', count));
+            parts.push(this._t('promptlab.tagCount', '{count} tags', { count }));
             return parts.join(' · ');
         }
 

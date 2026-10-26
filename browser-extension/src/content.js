@@ -253,7 +253,8 @@
         function sync() {
             const shown = visible();
             [...chosen].forEach((url) => { if (!shown.some((pic) => pic.url === url)) chosen.delete(url); });
-            save.textContent = t('pickerSave', [String(chosen.size)]);
+            // chrome.i18n has no plural forms: one picture has its own message.
+            save.textContent = t(chosen.size === 1 ? 'pickerSaveOne' : 'pickerSave', [String(chosen.size)]);
             save.disabled = !chosen.size;
             const hidden = all.length - shown.length;
             status.textContent = hidden ? t('pickerHiddenSmall', [String(hidden)]) : '';

@@ -48,7 +48,7 @@
     "message": "Saved $1 pictures to SD Image Sorter."
   },
   "savedSomeFailed": {
-    "message": "Saved $1 pictures; $2 not saved. First reason: $3"
+    "message": "Saved: $1. Not saved: $2. First reason: $3"
   },
   "pairName": {
     "message": "$1 on this computer"
@@ -85,6 +85,9 @@
   },
   "pickerSave": {
     "message": "Save $1 pictures"
+  },
+  "pickerSaveOne": {
+    "message": "Save 1 picture"
   },
   "pickerHiddenSmall": {
     "message": "Small pictures hidden (icons, buttons): $1"

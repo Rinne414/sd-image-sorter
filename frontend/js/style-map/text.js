@@ -3,11 +3,7 @@
 export function t(key, fallback, params) {
     const appT = window.appT;
     if (typeof appT === 'function') return appT(key, fallback, params);
-    let text = fallback || key;
-    for (const [name, value] of Object.entries(params || {})) {
-        text = String(text).split(`{${name}}`).join(String(value));
-    }
-    return text;
+    return window.I18n.format(fallback || key, params);
 }
 
 export function formatError(error) {

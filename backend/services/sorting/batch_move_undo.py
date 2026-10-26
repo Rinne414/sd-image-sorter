@@ -25,6 +25,7 @@ import database as db
 from services.sorting import move_journal
 from services.sorting_models import BatchMoveUndoRequest
 from utils.reported_cause import normalize_reported_cause
+from text_counts import count_text
 
 logger = logging.getLogger("services.sorting_service")
 
@@ -157,7 +158,7 @@ class BatchMoveUndoMixin:
                 "status": "running",
                 "step": "undoing",
                 "total": total,
-                "message": f"Undoing a sort run of {total} images",
+                "message": f"Undoing a sort run of {count_text(total, 'image')}",
                 "operation": "undo",
                 "started_at": time.time(),
                 "updated_at": time.time(),

@@ -26,10 +26,9 @@
         _timer: null,
 
         _t(key, fallback, params) {
-            const value = window.I18n?.t?.(key, params);
-            if (value && value !== key) return value;
-            return String(fallback).replace(/\{(\w+)\}/g, (_, name) => (params && name in params ? params[name] : `{${name}}`));
-        },
+    const value = window.I18n.t(key, params);
+    return value && value !== key ? value : window.I18n.format(fallback, params);
+},
 
         init() {
             if (this._bound) return;
@@ -119,7 +118,7 @@
             }
             this._listing = body;
             if (found) {
-                let text = this._t('mediaCensor.found', 'Found {gifs} GIF(s) and {videos} video(s).', {
+                let text = this._t('mediaCensor.found', 'Found {gifs} GIFs and {videos} videos.', {
                     gifs: body.gifs.length,
                     videos: body.videos.length,
                 });
@@ -219,7 +218,7 @@
                 this._render(snapshot);
                 if (['done', 'done_with_errors', 'cancelled'].includes(snapshot.status)) {
                     this._setRunning(false);
-                    this._toast(this._t('mediaCensor.finished', 'Finished {done} of {total} file(s).', snapshot), snapshot.status === 'done' ? 'success' : 'warning');
+                    this._toast(this._t('mediaCensor.finished', 'Finished {done} of {total} files.', snapshot), snapshot.status === 'done' ? 'success' : 'warning');
                     return;
                 }
                 this._poll();
@@ -262,7 +261,7 @@
                 status.textContent = item.status === 'error' && item.error
                     ? window.I18n.joinLabel(this._statusLabel(item.status), item.error)
                     : item.status === 'done'
-                        ? this._t('mediaCensor.doneFrames', 'Done · {count} frame(s) censored', { count: item.censored_frames })
+                        ? this._t('mediaCensor.doneFrames', 'Done · {count} frames censored', { count: item.censored_frames })
                         : this._statusLabel(item.status);
                 row.append(name, bar, status);
                 if (item.status === 'done' && item.output) {

@@ -19,9 +19,7 @@
     const t = (key, fallback, params) => {
         const text = window.I18n?.t?.(key, params);
         if (text && text !== key) return text;
-        let out = fallback;
-        for (const [name, value] of Object.entries(params || {})) out = out.split(`{${name}}`).join(String(value));
-        return out;
+        return window.I18n.format(fallback, params);
     };
 
     function libraryId() {

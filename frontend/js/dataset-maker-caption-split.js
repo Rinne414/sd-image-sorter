@@ -128,7 +128,7 @@
         this._refreshExportPreview?.();
         const label = this._captionTypeLabel(type);
         this._toast(this._t('dataset.captionTypeApplied',
-            'Set {count} image(s) to "{type}".', { count: ids.length, type: label }), 'success', 2500);
+            'Set {count} images to "{type}".', { count: ids.length, type: label }), 'success', 2500);
     };
 
     // Auto rule: images that HAVE a natural-language sentence become "both"

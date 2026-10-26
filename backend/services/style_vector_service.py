@@ -61,6 +61,7 @@ from services.style_vector_prepare import (  # noqa: F401 - re-exported names
     PreparedPicture as _Prepared,
     prepare_picture,
 )
+from text_counts import count_text
 
 logger = logging.getLogger(__name__)
 
@@ -366,7 +367,7 @@ class StyleVectorService:
             )
             return {"status": "idle", "total": 0, "space": normalized}
 
-        self._update(total=len(rows), message=f"Queued {len(rows)} image(s).")
+        self._update(total=len(rows), message=f"Queued {count_text(len(rows), 'image')}.")
         background_tasks.add_task(
             self._run_extraction,
             normalized,
@@ -716,7 +717,7 @@ class StyleVectorService:
             paused=False,
             step="cancelled",
             current_item=None,
-            message=f"Cancelled after {processed}/{total} image(s); {written} stored, {kept} kept.",
+            message=f"Cancelled after {processed}/{count_text(total, 'image')}; {written} stored, {kept} kept.",
         )
         logger.info("Style vector extraction cancelled at %d/%d", processed, total)
 
@@ -748,7 +749,7 @@ class StyleVectorService:
                 space=space,
             )
             self._update(
-                step="extracting", message=f"Extracting {len(rows)} style vector(s)..."
+                step="extracting", message=f"Extracting {count_text(len(rows), 'style vector')}..."
             )
 
             processed = written = kept = errors = 0
@@ -772,7 +773,7 @@ class StyleVectorService:
                     paused=False,
                     step="error",
                     current_item=None,
-                    message=f"No style vector could be stored: all {errors} image(s) failed. See recent issues.",
+                    message=f"No style vector could be stored: all {count_text(errors, 'image')} failed. See recent issues.",
                 )
                 return
             self._update(
@@ -780,7 +781,7 @@ class StyleVectorService:
                 paused=False,
                 step="done",
                 current_item=None,
-                message=f"Stored {written} style vector(s), kept {kept}; {errors} failed.",
+                message=f"Stored {count_text(written, 'style vector')}, kept {kept}; {errors} failed.",
             )
         except Exception as exc:
             logger.error("Style vector extraction failed: %s", exc)

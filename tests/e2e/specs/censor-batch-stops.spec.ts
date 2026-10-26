@@ -82,7 +82,7 @@ async function expectStoppedSummary(page: Page, unreadablePageRequests: () => nu
   await expect.poll(unreadablePageRequests).toBeGreaterThan(0)
   await expect(page.locator('#censor-loading')).toBeHidden()
   await expect(page.locator('#toast-container .toast.error').last()).toContainText(
-    'Stopped after 2 of 2 image(s): the rest of the selection could not be loaded',
+    'Stopped after 2 of 2 images: the rest of the selection could not be loaded',
   )
 }
 

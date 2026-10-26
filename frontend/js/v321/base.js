@@ -57,8 +57,8 @@ const V321Integration = {
         return this._escapeHtml(value);
     },
     _i18n(key, fallback, params) {
-        const translated = window.I18n?.t?.(key, params);
-        return (translated && translated !== key) ? translated : fallback;
+        const value = window.I18n.t(key, params);
+        return value && value !== key ? value : window.I18n.format(fallback, params);
     },
 };
 

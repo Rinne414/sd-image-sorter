@@ -105,7 +105,7 @@ test('the library search moves every match into subfolders; undo puts them back 
   await page.getByTestId('sort-rules-undo').click()
   await expect(run(page)).toHaveAttribute('data-kind', 'undo')
   await expect(run(page)).toHaveAttribute('data-status', 'done')
-  await expect(page.getByTestId('sort-rules-headline')).toHaveText('Undone: 5 images are back where they were.')
+  await expect(page.getByTestId('sort-rules-headline')).toHaveText('Undone: 5 images back in place.')
   await expect(page.getByTestId('sort-rules-failures')).toContainText(files[0]!)
   await expect(page.getByTestId('sort-rules-failures')).toContainText('Another file with the same name is in its old place')
   for (const name of files.slice(1)) {
@@ -229,7 +229,7 @@ test('several rules sort into their own folders in one run, first match wins; on
   await page.getByTestId('sort-rules-undo').click()
   await expect(run(page)).toHaveAttribute('data-kind', 'undo')
   await expect(run(page)).toHaveAttribute('data-status', 'done')
-  await expect(page.getByTestId('sort-rules-headline')).toHaveText('Undone: 6 images are back where they were.')
+  await expect(page.getByTestId('sort-rules-headline')).toHaveText('Undone: 6 images back in place.')
   for (let i = 0; i < COUNT; i++) expect(fs.existsSync(src(name(i))), name(i)).toBe(true)
 
   // the rules are kept in a preset, the added one too

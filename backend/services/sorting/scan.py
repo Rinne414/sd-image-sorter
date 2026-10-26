@@ -31,6 +31,7 @@ from utils.path_validation import (
     normalize_user_path,
     validate_folder_path,
 )
+from text_counts import count_text
 
 # NOTE(decomposition): keep the historical logger channel — tests attach
 # handlers / caplog filters to "services.sorting_service" (heartbeat pins),
@@ -337,7 +338,7 @@ class ScanMixin:
                     elif phase == "counted":
                         state_current = 0
                         state_total = import_total or total
-                        message = f"共发现 {state_total} 张图片，开始导入 / Found {state_total} images, importing..."
+                        message = f"共发现 {state_total} 张图片，开始导入 / Found {count_text(state_total, 'image')}, importing..."
                         message_key = "counted"
                         current_item = None
                         step = "importing"
@@ -443,24 +444,24 @@ class ScanMixin:
                 prompt_total = prompt_coverage["total"]
                 missing_prompt = prompt_coverage["missing_prompt"]
                 missing_text = prompt_coverage["missing_text"]
-                summary = f"完成！已索引 {new_count} 张图片 / Done! {new_count} images indexed."
+                summary = f"完成！已索引 {new_count} 张图片 / Done! {count_text(new_count, 'image')} indexed."
                 if updated_count:
                     summary += f" 更新 {updated_count} 张 / {updated_count} updated."
                 if removed_count:
                     summary += f" 移除 {removed_count} 条失效记录 / {removed_count} missing removed."
                 if errors:
-                    summary += f" {errors} 个问题 / {errors} scan issue(s)."
+                    summary += f" {errors} 个问题 / {count_text(errors, 'scan issue')}."
                 restored_count = result.get("disguise_restored", 0)
                 if restored_count:
                     summary += (
                         f" 还原了 {restored_count} 张伪装图，真图存在原图旁边 / "
-                        f"Restored {restored_count} disguise image(s); each real picture sits next to its original."
+                        f"Restored {count_text(restored_count, 'disguise image')}; each real picture sits next to its original."
                     )
                 restore_failed = result.get("disguise_restore_failed", 0)
                 if restore_failed:
                     summary += (
                         f" {restore_failed} 张伪装图没能还原 / "
-                        f"{restore_failed} disguise image(s) could not be restored."
+                        f"{count_text(restore_failed, 'disguise image')} could not be restored."
                     )
                 # "Done! N indexed." on its own reads as a clean success even
                 # when most of those rows stored no text at all.
@@ -481,8 +482,8 @@ class ScanMixin:
                     summary += (
                         f" {missing_text}/{prompt_total} 张既没有提示词也没有描述文本，"
                         "可在设置中运行「找回缺失文字」/ "
-                        f"{missing_text} of {prompt_total} images have no prompt and no "
-                        "caption text — run Recover Missing Text in Settings."
+                        f"no prompt and no caption text: {missing_text} of {count_text(prompt_total, 'image')}"
+                        " — run Recover Missing Text in Settings."
                     )
                 recent_errors = result.get("recent_errors") or []
                 if recent_errors:

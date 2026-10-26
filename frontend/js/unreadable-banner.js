@@ -43,21 +43,8 @@
     }
 
     function appT(key, fallback, params) {
-        var t = window.I18n && typeof window.I18n.t === 'function'
-            ? window.I18n.t(key, params)
-            : null;
-        if (t && t !== key) return t;
-        if (typeof fallback === 'string') {
-            if (params && typeof params === 'object') {
-                return fallback.replace(/\{(\w+)\}/g, function (_, name) {
-                    return Object.prototype.hasOwnProperty.call(params, name)
-                        ? String(params[name])
-                        : '{' + name + '}';
-                });
-            }
-            return fallback;
-        }
-        return key;
+        var value = window.I18n.t(key, params);
+        return value && value !== key ? value : window.I18n.format(fallback || key, params);
     }
 
     function isDismissedThisSession() {
@@ -208,7 +195,7 @@
 
         lockedText($('#gallery-unreadable-banner-title'), appT(
             'reconnect.banner.title',
-            '{count} image(s) can\'t be opened: their original files are missing.',
+            '{count} images can\'t be opened: their original files are missing.',
             { count: summary.total }
         ));
         lockedText($('#gallery-unreadable-banner-detail'), detailFor(summary));

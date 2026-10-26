@@ -90,7 +90,7 @@ async function loadCensorModelStatus() {
                     extraNotes.push(censorT(
                         'censor.generalModelCount',
                         { count: legacy.general_model_count },
-                        '{count} general YOLO model(s) installed for compatibility tests'
+                        '{count} general YOLO models installed for compatibility tests'
                     ));
                 }
                 const extra = extraNotes.length
@@ -408,8 +408,8 @@ function syncAdvancedLegacyModelUi(legacyModel) {
     }
 
     help.textContent = CensorState.showAdvancedLegacyModels
-        ? censorT('censor.advancedModelsVisible', { count: generalCount }, '{count} advanced fixed-class YOLO model(s) are listed below. They\'re for compatibility and segmentation tests, not everyday censoring.')
-        : censorT('censor.advancedModelsHidden', { count: generalCount }, '{count} advanced fixed-class YOLO model(s) are hidden; everyday censoring doesn\'t need them. Only turn this on for compatibility tests.');
+        ? censorT('censor.advancedModelsVisible', { count: generalCount }, '{count} advanced fixed-class YOLO models are listed below. They\'re for compatibility and segmentation tests, not everyday censoring.')
+        : censorT('censor.advancedModelsHidden', { count: generalCount }, '{count} advanced fixed-class YOLO models are hidden; everyday censoring doesn\'t need them. Only turn this on for compatibility tests.');
 }
 
 function updateSelectedLegacyModelHelp(legacyModel) {

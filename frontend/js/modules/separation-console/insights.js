@@ -77,8 +77,10 @@ Object.assign(SeparationConsole, {
             title.textContent = gaps.length === 0
                 ? sepconT(`No missed images for "${row.spelling}" (scores ${band}). Images tagged before v3.5.x have no score records — re-tag to collect them.`,
                     `「${row.spelling}」没有疑似漏打的图（分数区间 ${band}）。旧版本打的标没有分数记录 — 重新打标后才可用。`)
-                : sepconT(`${gaps.length} image(s) probably missed "${row.spelling}" (score ${band}):`,
-                    `${gaps.length} 张图疑似漏打「${row.spelling}」（分数 ${band}）：`);
+                : I18n.format(sepconT(
+                    `{lengthCount} images probably missed "{spelling}" (score {band}):`,
+                    `{lengthCount} 张图疑似漏打「{spelling}」（分数 {band}）：`,
+                ), { lengthCount: gaps.length, spelling: row.spelling, band });
             head.appendChild(title);
             head.appendChild(this._actionBtn('✕', sepconT('Close', '关闭'),
                 () => { panel.hidden = true; panel.textContent = ''; }));
@@ -170,18 +172,24 @@ Object.assign(SeparationConsole, {
                     'info');
             } else if (warningText) {
                 window.App?.showToast?.(
-                    sepconT(`Added "${row.spelling}" to ${added} images. ${warningText}`,
-                      `已给 ${added} 张图补上「${row.spelling}」。${warningText}`),
+                    I18n.format(sepconT(
+                        `Added "{spelling}" to {added} images. {warningText}`,
+                        `已给 {added} 张图补上「{spelling}」。{warningText}`,
+                    ), { spelling: row.spelling, added, warningText }),
                     'warning');
             } else if (result?.undo_available) {
                 window.App?.showToast?.(
-                    sepconT(`Added "${row.spelling}" to ${added} images (undo in Mass Tag Editor)`,
-                      `已给 ${added} 张图补上「${row.spelling}」（可在批量标签编辑器撤销）`),
+                    I18n.format(sepconT(
+                        `Added "{spelling}" to {added} images (undo in Mass Tag Editor)`,
+                        `已给 {added} 张图补上「{spelling}」（可在批量标签编辑器撤销）`,
+                    ), { spelling: row.spelling, added }),
                     'success');
             } else {
                 window.App?.showToast?.(
-                    sepconT(`Added "${row.spelling}" to ${added} images`,
-                      `已给 ${added} 张图补上「${row.spelling}」`),
+                    I18n.format(sepconT(
+                        `Added "{spelling}" to {added} images`,
+                        `已给 {added} 张图补上「{spelling}」`,
+                    ), { spelling: row.spelling, added }),
                     'success');
             }
             this.findGaps(row);
@@ -244,9 +252,10 @@ Object.assign(SeparationConsole, {
             if (info.canonical && info.canonical !== row.key) {
                 lines.push(sepconT(`Alias of "${info.canonical}"`, `是「${info.canonical}」的别名`));
             }
-            lines.push(sepconT(
-                `Library: ${info.library_count} images · danbooru popularity: ${info.found_in_vocab ? info.danbooru_count.toLocaleString() : sepconT('not in vocab', '词表外')}`,
-                `库内 ${info.library_count} 张 · danbooru 热度：${info.found_in_vocab ? info.danbooru_count.toLocaleString() : '词表外'}`));
+            lines.push(I18n.format(sepconT(
+                `Library: {library_count} images · danbooru popularity: {n}`,
+                `库内 {library_count} 张 · danbooru 热度：{n2}`,
+            ), { library_count: info.library_count, n: info.found_in_vocab ? info.danbooru_count.toLocaleString() : sepconT('not in vocab', '词表外'), n2: info.found_in_vocab ? info.danbooru_count.toLocaleString() : '词表外' }));
             if ((info.aliases || []).length) {
                 lines.push(sepconT('Aliases: ', '别名：') + info.aliases.slice(0, 8).join(', '));
             }
@@ -267,9 +276,10 @@ Object.assign(SeparationConsole, {
             if (coTags.length) {
                 const header = document.createElement('div');
                 header.className = 'sepcon-gap-line sepcon-cooccur-header';
-                header.textContent = sepconT(
-                    `Co-occurs within the queue (${row.ids.length} images carry "${row.spelling}"):`,
-                    `队列内共现（${row.ids.length} 张图带有「${row.spelling}」）：`);
+                header.textContent = I18n.format(sepconT(
+                    `Co-occurs within the queue ({lengthCount} images carry "{spelling}"):`,
+                    `队列内共现（{lengthCount} 张图带有「{spelling}」）：`,
+                ), { lengthCount: row.ids.length, spelling: row.spelling });
                 panel.appendChild(header);
                 for (const entry of coTags) {
                     const line = document.createElement('div');
@@ -321,8 +331,10 @@ Object.assign(SeparationConsole, {
             title.textContent = models.length === 0
                 ? sepconT(`No stored scores for "${row.spelling}" — images tagged before v3.5.x have no records.`,
                     `「${row.spelling}」没有分数记录 — 旧版本打的标没有记录，重新打标后可用。`)
-                : sepconT(`Who scored "${row.spelling}" (${report.scope_images} images in scope):`,
-                    `「${row.spelling}」的模型视角（范围 ${report.scope_images} 张）：`);
+                : I18n.format(sepconT(
+                    `Who scored "{spelling}" ({scope_images} images in scope):`,
+                    `「{spelling}」的模型视角（范围 {scope_images} 张）：`,
+                ), { spelling: row.spelling, scope_images: report.scope_images });
             head.appendChild(title);
             head.appendChild(this._actionBtn('✕', sepconT('Close', '关闭'),
                 () => { panel.hidden = true; panel.textContent = ''; }));

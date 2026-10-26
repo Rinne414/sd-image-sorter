@@ -33,6 +33,7 @@ from metadata_parser import PARSED_METADATA_VERSION
 from services import duplicate_group_service
 from services.dataset_consistency_service import RATING_TAG_NAMES, _fold
 from tag_writer_provenance import ImageContentFingerprint, TagWriterProvenance
+from text_counts import count_text
 
 
 REVIEW_SCHEMA_VERSION = 1
@@ -1367,7 +1368,7 @@ def _metadata_provenance_issues(
                 _localized_evidence(
                     "Persisted tag source",
                     "已存标签来源",
-                    f"{unknown_tag_source_count} legacy/unknown row(s)",
+                    f"{count_text(unknown_tag_source_count, 'legacy/unknown row')}",
                     f"{unknown_tag_source_count} 条旧版/未知记录",
                 )
             )
@@ -1607,8 +1608,8 @@ def _partial_scope_reason(
 ) -> Tuple[str, str]:
     unmaterialized_count = request.logical_count - database_count - request.local_path_count
     return (
-        f"Review covers {database_count} database image(s) only; "
-        f"{request.local_path_count} local-path item(s) and "
+        f"Review covers {count_text(database_count, 'database image')} only; "
+        f"{count_text(request.local_path_count, 'local-path item')} and "
         f"{unmaterialized_count} other logical item(s) are not materialized.",
         f"当前仅审阅 {database_count} 张数据库图片；"
         f"{request.local_path_count} 个本地路径项目和 "
@@ -1745,7 +1746,7 @@ def _metadata_provenance_provider_state(
     if sidecar_requested and unevaluated_sidecar_count:
         partial_reasons_en.append(
             "Sidecar fallback evidence is unevaluated for "
-            f"{unevaluated_sidecar_count} image(s); no source was inferred."
+            f"{count_text(unevaluated_sidecar_count, 'image')}; no source was inferred."
         )
         partial_reasons_zh.append(
             f"{unevaluated_sidecar_count} 张图片尚未评估 Sidecar 回退来源；"
@@ -1782,8 +1783,8 @@ def _metadata_provenance_provider_state(
         if len(identity_labels) > 3:
             rendered_identities += f"; +{len(identity_labels) - 3} more"
         writer_reason_en = (
-            f"WD14 writer provenance is available for {len(known_writer_ids)} image(s); "
-            f"{unknown_writer_count} tagger image(s) remain legacy/unknown."
+            f"WD14 writer provenance is available for {count_text(len(known_writer_ids), 'image')}; "
+            f"still legacy/unknown: {count_text(unknown_writer_count, 'tagger image')}."
         )
         writer_reason_zh = (
             f"WD14 写入器来源已覆盖 {len(known_writer_ids)} 张图片；"
@@ -1868,7 +1869,7 @@ def _dimension_provider_state(
         return ReviewProviderState(
             provider="dimensions",
             status="partial",
-            reason_en=f"Stored dimensions are unavailable for {unavailable_dimensions} image(s).",
+            reason_en=f"Stored dimensions are unavailable for {count_text(unavailable_dimensions, 'image')}.",
             reason_zh=f"{unavailable_dimensions} 张图片没有已存尺寸。",
             observed_at=None,
         )
@@ -1901,7 +1902,7 @@ def _aesthetic_provider_state(
         return ReviewProviderState(
             provider="aesthetic_scores",
             status="partial",
-            reason_en=f"Stored aesthetic scores are unavailable for {unavailable_aesthetics} image(s).",
+            reason_en=f"Stored aesthetic scores are unavailable for {count_text(unavailable_aesthetics, 'image')}.",
             reason_zh=f"{unavailable_aesthetics} 张图片没有已存美学评分。",
             observed_at=None,
         )

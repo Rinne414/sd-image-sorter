@@ -222,8 +222,9 @@
     function updateFooter() {
         const countEl = document.getElementById('repair-review-count');
         if (countEl) {
-            countEl.textContent = t('repairReview.pendingCount', '{count} pending')
-                .replace('{count}', String(state.total));
+            countEl.textContent = I18n.format(t('repairReview.pendingCount', '{count} pending'), {
+                count: String(state.total),
+            });
         }
         const prevBtn = document.getElementById('btn-repair-review-prev');
         const nextBtn = document.getElementById('btn-repair-review-next');

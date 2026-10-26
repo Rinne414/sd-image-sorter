@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 from PIL import Image, ImageFilter
+from text_counts import count_text
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,7 @@ def reshape(
     warnings = []
     if failed_fits:
         warnings.append(
-            f"Fit could not trace {failed_fits} region(s) and used an ellipse there instead."
+            f"Fit could not trace {count_text(failed_fits, 'region')} and used an ellipse there instead."
         )
     return shaped, warnings
 

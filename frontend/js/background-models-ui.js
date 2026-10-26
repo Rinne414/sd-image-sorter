@@ -32,9 +32,8 @@
     };
 
     function t(key, fallback, params) {
-        const value = window.I18n?.t?.(key, params);
-        if (value && value !== key) return value;
-        return String(fallback).replace(/\{(\w+)\}/g, (_, name) => (params && name in params ? params[name] : `{${name}}`));
+        const value = window.I18n.t(key, params);
+        return value && value !== key ? value : window.I18n.format(fallback, params);
     }
 
     function api() {

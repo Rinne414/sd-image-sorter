@@ -164,6 +164,7 @@ from services.dataset_export.engine import (
     preview_dataset_export,
 )
 from services.dataset_export.readiness_authorization import authorize_dataset_export
+from text_counts import count_text
 
 
 def export_dataset(
@@ -251,7 +252,7 @@ def start_dataset_export(
         job_id = service.create_single_flight_job(
             JOB_KIND_DATASET_EXPORT,
             total=requested_total,
-            message=f"Starting dataset export for {requested_total} images...",
+            message=f"Starting dataset export for {count_text(requested_total, 'image')}...",
             queued_cancel_result=queued_cancel_result,
         )
     except BulkJobAlreadyRunningError as exc:
@@ -334,7 +335,7 @@ def start_dataset_export(
         current = int(progress.get("current", 0) or 0)
         total = int(progress.get("total", requested_total) or requested_total)
         message = (
-            f"Cancelled at {current}/{total}. Exported {result.exported} images."
+            f"Cancelled at {current}/{total}. Exported {count_text(result.exported, 'image')}."
             if result.status == "cancelled"
             else (
                 f"Dataset export finished: {result.exported} exported, "
@@ -368,5 +369,5 @@ def start_dataset_export(
         job_id=job_id,
         total=requested_total,
         output_folder=str(output_path or ""),
-        message=f"Dataset export started for {requested_total} images.",
+        message=f"Dataset export started for {count_text(requested_total, 'image')}.",
     )

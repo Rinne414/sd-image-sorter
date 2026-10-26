@@ -83,7 +83,7 @@
             if (!el) return;
             // Respect the dynamic-text lock used by callers that need to
             // override a button's label at runtime (e.g. the bulk-download
-            // confirmation OK button shows "Download N model(s) (~X GB)"
+            // confirmation OK button shows "Download N models (~X GB)"
             // and must NOT be reset to the static "modal.yes" key while
             // the dialog is open).
             if (el.dataset && el.dataset.i18nLocked === '1') return;

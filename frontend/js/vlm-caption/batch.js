@@ -131,8 +131,9 @@ Object.assign(window.VLMCaption, {
                 if (queuedEntries.length > 0) {
                     this._showBatchUI(true);
                     this._showStatus('vlm-batch-status',
-                        this._t('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish')
-                            .replace('{position}', String(queuedEntries[0].position || 1)), 'info');
+                        I18n.format(this._t('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish'), {
+                            position: String(queuedEntries[0].position || 1),
+                        }), 'info');
                     return;
                 }
                 // Queued entry left the queue without ever running: surface
@@ -146,8 +147,9 @@ Object.assign(window.VLMCaption, {
                     this.isRunning = false;
                     this._showBatchUI(false, { keepPanel: true });
                     this._announceBatch(
-                        this._t('aiQueue.startFailed', 'Queued job failed to start: {error}')
-                            .replace('{error}', String(startError.error || '')), 'error');
+                        I18n.format(this._t('aiQueue.startFailed', 'Queued job failed to start: {error}'), {
+                            error: String(startError.error || ''),
+                        }), 'error');
                     return;
                 }
                 this._queuedSince = 0;
@@ -325,7 +327,7 @@ Object.assign(window.VLMCaption, {
         const shown = Number.isFinite(count)
             ? (exact ? '' : '~') + count.toLocaleString()
             : this._t('vlm.confirmWholeViewAll', 'all');
-        const title = this._t('vlm.confirmWholeViewTitle', 'Caption {count} images with the VLM?').replace('{count}', shown);
+        const title = I18n.format(this._t('vlm.confirmWholeViewTitle', 'Caption {count} images with the VLM?'), { count: shown });
         const body = this._t('vlm.confirmWholeViewBody',
             'Nothing is selected, so every image the current Gallery filter shows gets a caption. A paid API provider bills for each image.');
         if (typeof window.showConfirm !== 'function') return window.confirm(`${title}\n\n${body}`);

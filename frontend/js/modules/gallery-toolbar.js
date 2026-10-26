@@ -777,8 +777,9 @@
         const clearBtn = document.getElementById('btn-tag-scope-clear');
         if (!note || !text) return;
         if (Array.isArray(armedTagIds) && armedTagIds.length) {
-            text.textContent = t('tagModal.scopeSelected', 'Tagging only the {count} selected images.')
-                .replace('{count}', String(armedTagIds.length));
+            text.textContent = I18n.format(t('tagModal.scopeSelected', 'Tagging only the {count} selected images.'), {
+                count: String(armedTagIds.length),
+            });
             if (clearBtn) clearBtn.hidden = false;
             note.hidden = false;
             return;
@@ -812,8 +813,8 @@
         if (request !== scopeCountRequest || !Number.isFinite(count) || Array.isArray(armedTagIds)) return;
         const shown = count.toLocaleString();
         text.textContent = retagAll
-            ? t('tagModal.scopeLibraryAllCount', 'This run re-tags every image in this library, {count} in all; AI tags are replaced, tags you added by hand stay.').replace('{count}', shown)
-            : t('tagModal.scopeLibraryUntaggedCount', 'This run tags the {count} images in this library that have no AI tags yet.').replace('{count}', shown);
+            ? I18n.format(t('tagModal.scopeLibraryAllCount', 'This run re-tags every image in this library, {count} in all; AI tags are replaced, tags you added by hand stay.'), { count: shown })
+            : I18n.format(t('tagModal.scopeLibraryUntaggedCount', 'This run tags the {count} images in this library that have no AI tags yet.'), { count: shown });
     }
 
     function disarmTagSelection() {

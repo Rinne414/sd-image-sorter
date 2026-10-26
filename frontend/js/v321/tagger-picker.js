@@ -267,23 +267,27 @@ Object.assign(window.V321Integration, {
      *  scored ones that only lack those scores (extra). */
     _aestheticScopeText(toScore, outdated, extra, i18n) {
         const needsScore = Math.max(0, toScore - extra);
-        const extraText = i18n('tagger.aestheticScopeExtra',
-            'It also adds the newly installed anime scores to {extra} images that already have an aesthetic score.')
-            .replace('{extra}', extra.toLocaleString());
+        const extraText = I18n.format(i18n('tagger.aestheticScopeExtra',
+            'It also adds the newly installed anime scores to {extra} images that already have an aesthetic score.'), {
+            extra: extra.toLocaleString(),
+        });
         if (needsScore === 0 && extra > 0) {
-            return i18n('tagger.aestheticScopeOnlyExtra',
-                'Every image already has an aesthetic score. This run adds the newly installed anime scores to {extra} of them.')
-                .replace('{extra}', extra.toLocaleString());
+            return I18n.format(i18n('tagger.aestheticScopeOnlyExtra',
+                'Every image already has an aesthetic score. This run adds the newly installed anime scores to {extra} of them.'), {
+                extra: extra.toLocaleString(),
+            });
         }
         const scoreText = outdated > 0
-            ? i18n('tagger.aestheticScopeCountOutdated',
-                'This run scores {count} images: {unscored} without a score and {outdated} whose score came from an older build that set up CLIP wrongly (off by up to about 1 point).')
-                .replace('{count}', needsScore.toLocaleString())
-                .replace('{unscored}', Math.max(0, needsScore - outdated).toLocaleString())
-                .replace('{outdated}', outdated.toLocaleString())
-            : i18n('tagger.aestheticScopeCount',
-                'This run scores the {count} images in this library that have no aesthetic score yet.')
-                .replace('{count}', needsScore.toLocaleString());
+            ? I18n.format(i18n('tagger.aestheticScopeCountOutdated',
+                'This run scores {count} images: {unscored} without a score and {outdated} whose score came from an older build that set up CLIP wrongly (off by up to about 1 point).'), {
+                count: needsScore.toLocaleString(),
+                unscored: Math.max(0, needsScore - outdated).toLocaleString(),
+                outdated: outdated.toLocaleString(),
+            })
+            : I18n.format(i18n('tagger.aestheticScopeCount',
+                'This run scores the {count} images in this library that have no aesthetic score yet.'), {
+                count: needsScore.toLocaleString(),
+            });
         return extra > 0 ? `${scoreText} ${extraText}` : scoreText;
     },
 

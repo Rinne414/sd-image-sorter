@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 import database as db
 from tag_rules import categorize_tag
+from text_counts import count_text
 
 logger = logging.getLogger(__name__)
 
@@ -243,7 +244,7 @@ def build_consistency_report(request: ConsistencyReportRequest) -> Dict[str, Any
         if trigger_missing:
             findings.append(_finding(
                 "trigger-coverage", "high",
-                f"Trigger only present in {covered}/{total} images",
+                f"Trigger only present in {covered}/{count_text(total, 'image')}",
                 f"触发词只出现在 {covered}/{total} 张图中",
                 "Every caption must carry the trigger, or the images without it teach the model that the character appears WITHOUT being asked — identity bleeds into unrelated prompts.",
                 "每张图的 caption 都必须带触发词；缺少触发词的图会教模型“不用提示也出现这个角色”，导致身份渗漏到无关提示词里。",
@@ -289,7 +290,7 @@ def build_consistency_report(request: ConsistencyReportRequest) -> Dict[str, Any
     if rating_multi:
         findings.append(_finding(
             "rating-duplicates", "medium",
-            f"{len(rating_multi)} images carry more than one rating tag",
+            f"More than one rating tag: {count_text(len(rating_multi), 'image')}",
             f"{len(rating_multi)} 张图带有多个 rating 标签",
             "Multiple rating rows usually mean mixed tagger runs. Conflicting ratings are noise in training captions and confuse rating filters.",
             "多个 rating 行通常来自多次不同的打标。互相矛盾的 rating 在训练 caption 中是噪声，也会干扰评级过滤。",
@@ -299,7 +300,7 @@ def build_consistency_report(request: ConsistencyReportRequest) -> Dict[str, Any
     if rating_zero and len(rating_zero) < total:
         findings.append(_finding(
             "rating-missing", "info",
-            f"{len(rating_zero)} images have no rating tag",
+            f"No rating tag: {count_text(len(rating_zero), 'image')}",
             f"{len(rating_zero)} 张图没有 rating 标签",
             "Not harmful for training, but rating-based filtering and export rating tokens skip these images.",
             "对训练无害，但基于评级的过滤和导出 rating 变量会跳过这些图。",
@@ -318,7 +319,7 @@ def build_consistency_report(request: ConsistencyReportRequest) -> Dict[str, Any
     if total >= 10 and low_freq:
         findings.append(_finding(
             "low-frequency-tags", "info",
-            f"{len(low_freq)} tags appear on exactly one image",
+            f"On exactly one image: {count_text(len(low_freq), 'tag')}",
             f"{len(low_freq)} 个标签只出现在一张图上",
             "One-off tags contribute almost nothing and are often tagger noise or misspellings. Review and prune the meaningless ones — keep genuinely rare but real attributes.",
             "只出现一次的标签几乎没有训练贡献，常是打标噪声或拼写错误。请检查并清除无意义的；真实存在的罕见特征可以保留。",
@@ -334,7 +335,7 @@ def build_consistency_report(request: ConsistencyReportRequest) -> Dict[str, Any
     if variant_groups:
         findings.append(_finding(
             "spelling-variants", "medium",
-            f"{len(variant_groups)} tags exist in multiple spellings",
+            f"Written in more than one spelling: {count_text(len(variant_groups), 'tag')}",
             f"{len(variant_groups)} 个标签存在多种拼写",
             "The trainer treats 'blue_eyes' and 'Blue Eyes' as different words — each spelling learns separately and both stay weak. Unify with find & replace.",
             "训练器把 'blue_eyes' 与 'Blue Eyes' 当成不同词——每种拼写各学一半，都学不好。请用批量查找替换统一拼写。",
@@ -369,7 +370,7 @@ def build_consistency_report(request: ConsistencyReportRequest) -> Dict[str, Any
     if duplicate_pairs:
         findings.append(_finding(
             "cooccurring-duplicates", "info",
-            f"{len(duplicate_pairs)} tag pairs always appear together",
+            f"Always together: {count_text(len(duplicate_pairs), 'tag pair')}",
             f"{len(duplicate_pairs)} 组标签总是成对出现",
             "Tags that co-occur on (almost) every image are redundant to the model — consider keeping one, or check whether they are alias spellings/implications.",
             "几乎总是成对出现的标签对模型是冗余信息——考虑留一个，或检查它们是否是别名拼写/蕴含关系。",

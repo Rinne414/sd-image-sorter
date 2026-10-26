@@ -70,6 +70,7 @@ from services.dataset_export.planning import (
 )
 from services.dataset_session_service import virtual_image_record_for_path
 from utils.path_validation import normalize_user_path
+from text_counts import count_text
 
 
 DATASET_READINESS_RULE_VERSION = "dataset-readiness-v1"
@@ -343,10 +344,10 @@ def _dialect_advisory_issue(
         source_path=sample_paths[0] if sample_paths else None,
         destination=None,
         observed=(
-            f"{affected} caption(s) render as {advisory.caption_format}; "
+            f"Rendered as {advisory.caption_format}: {count_text(affected, 'caption')}; "
             f"first: {', '.join(sample_paths)}"
             if sample_paths
-            else f"{affected} caption(s) render as {advisory.caption_format}"
+            else f"Rendered as {advisory.caption_format}: {count_text(affected, 'caption')}"
         ),
         expected=(
             f"captions in the {advisory.expected_dialect} dialect"
@@ -506,7 +507,7 @@ def plan_dataset_readiness(
         progress_callback(
             processed,
             total_requested,
-            f"Checked {processed} of {total_requested} dataset items",
+            f"Checked {processed} of {count_text(total_requested, 'dataset item')}",
         )
 
     def process_unreadable(image_id: int, raw_path: str) -> None:
@@ -541,7 +542,7 @@ def plan_dataset_readiness(
         nonlocal empty_caption_items
         if cancellation_requested():
             raise DatasetReadinessCancelledError(
-                f"Dataset readiness cancelled after {processed} of {total_requested} items"
+                f"Dataset readiness cancelled after {processed} of {count_text(total_requested, 'item')}"
             )
 
         raw_image_id = record.get("id")
@@ -1158,14 +1159,14 @@ def plan_dataset_readiness(
         processed += 1
         emit_progress()
 
-    progress_callback(0, total_requested, f"Checking {total_requested} dataset items")
+    progress_callback(0, total_requested, f"Checking {count_text(total_requested, 'dataset item')}")
     for image_id_chunk in _iter_chunks(
         _iter_unique_image_ids(request.image_ids),
         DATASET_EXPORT_DB_CHUNK_SIZE,
     ):
         if cancellation_requested():
             raise DatasetReadinessCancelledError(
-                f"Dataset readiness cancelled after {processed} of {total_requested} items"
+                f"Dataset readiness cancelled after {processed} of {count_text(total_requested, 'item')}"
             )
         ids = [int(image_id) for image_id in image_id_chunk]
         images_map = db.get_images_by_ids(ids) if ids else {}
@@ -1193,7 +1194,7 @@ def plan_dataset_readiness(
         nonlocal processed
         if cancellation_requested():
             raise DatasetReadinessCancelledError(
-                f"Dataset readiness cancelled after {processed} of {total_requested} items"
+                f"Dataset readiness cancelled after {processed} of {count_text(total_requested, 'item')}"
             )
         source_identity = _inspect_source(raw_path, cancellation_requested)
         if source_identity is None:

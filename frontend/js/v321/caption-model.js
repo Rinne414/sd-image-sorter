@@ -143,7 +143,7 @@ Object.assign(window.V321Integration, {
         for (const id of ids) this._setCaptionType(id, type);
         if (typeof window.showToast === 'function') {
             window.showToast(
-                this._i18n('dataset.captionTypeApplied', 'Set {count} image(s) to "{type}".',
+                this._i18n('dataset.captionTypeApplied', 'Set {count} images to "{type}".',
                     { count: ids.length, type: this._captionTypeDisplayLabel(type) }),
                 'success'
             );

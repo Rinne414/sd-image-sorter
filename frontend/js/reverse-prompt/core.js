@@ -55,9 +55,7 @@ window.ReversePrompt = {
                 const lang = window.I18n?.getLang?.() || document.documentElement.lang || '';
                 if (String(lang).toLowerCase().startsWith('zh') && zh) text = zh;
             } catch (_error) { /* keep the English fallback */ }
-            for (const [name, value] of Object.entries(params || {})) {
-                text = String(text).split(`{${name}}`).join(String(value));
-            }
+            text = window.I18n.format(text, params);
         }
         return text;
     },

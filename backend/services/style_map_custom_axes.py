@@ -39,6 +39,7 @@ from exceptions import ValidationError
 from library_context import current_library_sql
 from services import style_map_umap
 from services.style_map_axes import require_layout
+from text_counts import count_text
 
 AXIS_NAMES: Tuple[str, ...] = ("x", "y", "z")
 MIN_EXAMPLES = 2
@@ -165,14 +166,14 @@ def parse_definitions(
         both = sorted(set(a) & set(b))
         if both:
             raise ValidationError(
-                f"Axis {name}: picture(s) {both[:5]} are in both boxes. "
+                f"Axis {name}: in both boxes: {both[:5]}. "
                 "A picture can only be an example of one box of an axis.",
                 field="axes",
             )
         for end, ids in (("left", a), ("right", b)):
             if len(ids) < MIN_EXAMPLES:
                 raise ValidationError(
-                    f"Axis {name}: the {end} box needs at least {MIN_EXAMPLES} example pictures, got {len(ids)}",
+                    f"Axis {name}: the {end} box needs at least {count_text(MIN_EXAMPLES, 'example picture')}, got {len(ids)}",
                     field="axes",
                 )
         definitions[name] = (a, b)

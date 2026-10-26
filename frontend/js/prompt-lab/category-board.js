@@ -224,7 +224,7 @@ Object.assign(window.PromptLab, {
             this.renderCategoryBrowser();
             this.renderSlotBuilder();
             window.App?.showToast?.(
-                this._t('promptlab.categoryBoardSaved', 'Saved {count} category suggestion(s).', { count: changes.length }).replace('{count}', changes.length),
+                this._t('promptlab.categoryBoardSaved', 'Saved {count} category suggestions.', { count: changes.length }),
                 'success'
             );
             this.closeCategoryBoard();

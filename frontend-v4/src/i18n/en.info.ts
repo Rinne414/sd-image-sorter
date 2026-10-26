@@ -26,9 +26,9 @@ export const enInfo: Record<keyof typeof zhCNInfo, string> = {
 
   'info.sort.aesUnscored': 'No aesthetic score yet for {n} of these images: they sort last by aesthetic score, and aesthetic filters do not find them.',
   'info.sort.aesAction': 'Score the {n}',
-  'info.sort.colorMissing': '{n} images in the library have no colour analysis: they sort last by brightness, saturation or brightness spread.',
+  'info.sort.colorMissing': 'Pictures without colour analysis ({n} in the library) sort last by brightness, saturation or brightness spread.',
   'info.sort.dismiss': 'Hide for this sort',
-  'info.filter.colorMissing': '{n} images in the library have no colour analysis yet, so this colour filter left them out.',
+  'info.filter.colorMissing': 'Pictures without colour analysis yet ({n} in the library) are left out by this colour filter.',
   'info.filter.dismiss': 'Hide for this filter',
 
   'info.i2i.label': 'img2img',

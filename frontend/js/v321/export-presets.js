@@ -51,8 +51,8 @@ Object.assign(window.V321Integration, {
             if (droppedEdits > 0) {
                 this.markCaptionEditsChanged();
                 window.showToast?.(this._i18n('batchExport.captionEditsClearedForMode',
-                    'Caption edits for {count} image(s) were cleared: they were written for the previous content format.',
-                    { count: droppedEdits }).replace('{count}', String(droppedEdits)), 'warning');
+                    'Caption edits for {count} images were cleared: they were written for the previous content format.',
+                    { count: droppedEdits }), 'warning');
             }
             this.refreshPreview();
         };

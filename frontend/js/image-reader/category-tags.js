@@ -82,7 +82,7 @@ Object.assign(window.ImageReader, {
                         const group = groups.find((item) => item.group.id === button.dataset.group);
                         if (!group) return;
                         const label = this._t(group.group.labelKey, group.group.fallback);
-                        copy.copyTags(group.groupTags, this._t('tagCategory.groupCopied', 'Copied {category} tags', { category: label }).replace('{category}', label));
+                        copy.copyTags(group.groupTags, this._t('tagCategory.groupCopied', 'Copied {category} tags', { category: label }));
                     });
                 });
                 container.querySelectorAll('.reader-category-find').forEach((button) => {

@@ -858,12 +858,13 @@ async function executeBatchExport() {
             hideModal('batch-export-modal');
         } else if (result.status === 'partial' || exported > 0 || skipped > 0) {
             const baseMessage = exported > 0
-                ? appT('batchExport.partialSuccess', 'Exported {count} file(s). {failed} failed.')
-                    .replace('{count}', exported)
-                    .replace('{failed}', errorCount)
+                ? I18n.format(appT('batchExport.partialSuccess', 'Exported {count} files. {failed} failed.'), {
+                    count: exported,
+                    failed: errorCount,
+                })
                 : appT('batchExport.noFilesWritten', 'No .txt / .json files were written.');
             const skippedMessage = skipped > 0
-                ? ` ${appT('batchExport.skippedExisting', 'Skipped {skipped} existing file(s).').replace('{skipped}', skipped)}`
+                ? ` ${I18n.format(appT('batchExport.skippedExisting', 'Skipped {skipped} existing files.'), { skipped: skipped })}`
                 : '';
             showToast(`${baseMessage}${skippedMessage}`.trim(), errorCount > 0 || skipped > 0 ? 'warning' : 'success');
             hideModal('batch-export-modal');

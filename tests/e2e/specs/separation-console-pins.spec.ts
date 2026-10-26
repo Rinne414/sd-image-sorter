@@ -331,7 +331,7 @@ test('find-missed action: posts the queue ids to coverage-gaps and bulk-adds the
 
   const panel = page.locator('#sepcon-gaps')
   await expect(panel).toBeVisible()
-  await expect(panel).toContainText('2 image(s) probably missed')
+  await expect(panel).toContainText('2 images probably missed')
   await expect(panel).toContainText('miss-a.png')
   await expect(panel).toContainText('0.31')
   expect(gapCalls).toHaveLength(1)
@@ -377,7 +377,7 @@ test('find-missed reads every page of gaps and adds the tag to all of them', asy
   await clickRowAction(page, /^1girl$/, 3)
 
   const panel = page.locator('#sepcon-gaps')
-  await expect(panel).toContainText('3 image(s) probably missed')
+  await expect(panel).toContainText('3 images probably missed')
   expect(offsets).toEqual([0, 2])
   await panel.getByRole('button', { name: /to all 3/ }).click()
   await expect.poll(() => bulkCalls.length).toBe(1)
@@ -486,7 +486,7 @@ test('health check uses effective captions and fixes only the project draft', as
   const out = page.locator('#sepcon-health-results')
   await expect(out).toBeVisible()
   await expect(out).toContainText('3 images checked')
-  await expect(out).toContainText('1 finding(s)')
+  await expect(out).toContainText(/\b1 finding\b(?!s)/)
   await expect(out).toContainText('[warn] Trigger word missing from 2 images')
   expect(reportCalls).toHaveLength(1)
   expect(reportCalls[0].image_ids).toEqual([601, 602, 603])

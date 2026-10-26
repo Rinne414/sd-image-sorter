@@ -114,8 +114,10 @@ Object.assign(SeparationConsole, {
             title.textContent = proposals.length === 0
                 ? sepconT('TIPO found no in-vocabulary tags to add — the caption set already covers its ideas.',
                     'TIPO 没有找到可补充的词表内标签 — 现有 caption 已覆盖它的建议。')
-                : sepconT(`TIPO proposes ${proposals.length} tag(s) the taggers never scored — review and pick:`,
-                    `TIPO 推荐了 ${proposals.length} 个打标器从未评分的标签 — 请人工挑选：`);
+                : I18n.format(sepconT(
+                    `TIPO proposes {lengthCount} tags the taggers never scored — review and pick:`,
+                    `TIPO 推荐了 {lengthCount} 个打标器从未评分的标签 — 请人工挑选：`,
+                ), { lengthCount: proposals.length });
             head.appendChild(title);
             head.appendChild(this._actionBtn('✕', sepconT('Close', '关闭'),
                 () => { panel.hidden = true; panel.textContent = ''; }));
@@ -170,7 +172,7 @@ Object.assign(SeparationConsole, {
                 const picked = boxes.filter(b => b.checked).map(b => b.value);
                 const added = this._appendToCommonTags(picked);
                 window.App?.showToast?.(
-                    sepconT(`Added ${added} tag(s) to Common tags`, `已把 ${added} 个标签加入公共标签`),
+                    I18n.format(sepconT(`Added {added} tags to Common tags`, `已把 {added} 个标签加入公共标签`), { added }),
                     'success');
             });
             panel.appendChild(apply);

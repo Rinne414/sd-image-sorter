@@ -157,24 +157,26 @@ function _formatReconnectStatus(progress) {
     const pixelMismatch = Number(progress?.pixel_mismatch || 0);
     const errors = Number(progress?.errors || 0);
     const base = missingTotal > 0
-        ? appT('reconnect.progressText', 'Checked {checked} files · found {matched}/{missing} missing')
-            .replace('{checked}', String(checked))
-            .replace('{matched}', String(matched))
-            .replace('{missing}', String(missingTotal))
-        : appT('reconnect.progressNoMissing', 'Checking files... {checked} checked')
-            .replace('{checked}', String(checked));
+        ? I18n.format(appT('reconnect.progressText', 'Checked {checked} files · found {matched}/{missing} missing'), {
+            checked: String(checked),
+            matched: String(matched),
+            missing: String(missingTotal),
+        })
+        : I18n.format(appT('reconnect.progressNoMissing', 'Checking files... {checked} checked'), {
+            checked: String(checked),
+        });
     const extras = [];
     if (ambiguous) {
-        extras.push(appT('reconnect.ambiguousShort', '{count} need review').replace('{count}', String(ambiguous)));
+        extras.push(I18n.format(appT('reconnect.ambiguousShort', '{count} need review'), { count: String(ambiguous) }));
     }
     if (conflicts) {
-        extras.push(appT('reconnect.conflictsShort', '{count} already in gallery').replace('{count}', String(conflicts)));
+        extras.push(I18n.format(appT('reconnect.conflictsShort', '{count} already in gallery'), { count: String(conflicts) }));
     }
     if (pixelMismatch) {
-        extras.push(appT('reconnect.pixelMismatchShort', 'pixels differ: {count}').replace('{count}', String(pixelMismatch)));
+        extras.push(I18n.format(appT('reconnect.pixelMismatchShort', 'pixels differ: {count}'), { count: String(pixelMismatch) }));
     }
     if (errors) {
-        extras.push(appT('reconnect.errorsShort', '{count} errors').replace('{count}', String(errors)));
+        extras.push(I18n.format(appT('reconnect.errorsShort', '{count} errors'), { count: String(errors) }));
     }
     return extras.length ? `${base} · ${extras.join(' · ')}` : base;
 }
@@ -212,9 +214,10 @@ function _renderReconnectResultPanel(progress) {
         if (!items.length) return `<div class="reconnect-result-empty">${escapeHtml(emptyText)}</div>`;
         const shown = items.slice(0, 5);
         const more = total > shown.length
-            ? `<div class="reconnect-result-empty">${escapeHtml(appT('reconnect.showingFirst', 'Showing the first {shown} of {total}.')
-                .replace('{shown}', String(shown.length))
-                .replace('{total}', String(total)))}</div>`
+            ? `<div class="reconnect-result-empty">${escapeHtml(I18n.format(appT('reconnect.showingFirst', 'Showing the first {shown} of {total}.'), {
+                shown: String(shown.length),
+                total: String(total),
+            }))}</div>`
             : '';
         return shown.map(renderItem).join('') + more;
     };
@@ -224,17 +227,19 @@ function _renderReconnectResultPanel(progress) {
     // inside "still missing".
     const pixelMismatch = Number(result.pixel_mismatch || 0);
     const pixelMismatchLine = pixelMismatch > 0
-        ? `<span class="reconnect-result-note">${escapeHtml(appT('reconnect.pixelMismatchSummary', 'Records not relinked because the pixels differ: {count} (a same-name, same-size file was found for each).')
-            .replace('{count}', String(pixelMismatch)))}</span>`
+        ? `<span class="reconnect-result-note">${escapeHtml(I18n.format(appT('reconnect.pixelMismatchSummary', 'Records not relinked because the pixels differ: {count} (a same-name, same-size file was found for each).'), {
+            count: String(pixelMismatch),
+        }))}</span>`
         : '';
 
     panel.innerHTML = `
         <div class="reconnect-result-summary">
             <strong>${escapeHtml(appT('reconnect.resultTitle', 'Search result'))}</strong>
-            <span>${escapeHtml(appT(resultSummaryKey, '{matched} reconnected · {missing} still missing')
-                .replace('{matched}', String(matched))
-                .replace('{missing}', String(missing))
-                .replace('{libraryMissing}', String(libraryMissingTotal)))}</span>
+            <span>${escapeHtml(I18n.format(appT(resultSummaryKey, '{matched} reconnected · {missing} still missing'), {
+                matched: String(matched),
+                missing: String(missing),
+                libraryMissing: String(libraryMissingTotal),
+            }))}</span>
             ${pixelMismatchLine}
         </div>
         <details class="reconnect-result-group" open>
@@ -251,7 +256,7 @@ function _renderReconnectResultPanel(progress) {
             <summary>${escapeHtml(appT('reconnect.resultNeedsReview', 'Need your choice'))} <span>${Number(result.review_pending_total || needsReview.length || 0)}</span></summary>
             ${Number(result.review_pending_total || needsReview.length || 0) > 0 ? `
                 <button type="button" class="btn btn-primary btn-small reconnect-open-repair-review" id="btn-open-repair-review">
-                    ${escapeHtml(appT('repairReview.openButton', 'Review & fix these matches ({count})').replace('{count}', String(Number(result.review_pending_total || needsReview.length || 0))))}
+                    ${escapeHtml(I18n.format(appT('repairReview.openButton', 'Review & fix these matches ({count})'), { count: String(Number(result.review_pending_total || needsReview.length || 0)) }))}
                 </button>` : ''}
             ${renderItems(needsReview, (item) => `
                 <div class="reconnect-result-item">
@@ -317,13 +322,15 @@ function _renderReconnectResultPanel(progress) {
 function _reconnectTerminalText(progress) {
     const key = progress?.message_key;
     if (key === 'done') {
-        return appT('reconnect.doneStatus', 'Records relinked: {matched} · still missing: {missing}')
-            .replace('{matched}', String(Number(progress.matched || 0)))
-            .replace('{missing}', String(Number(progress.still_missing ?? progress.result?.still_missing ?? 0)));
+        return I18n.format(appT('reconnect.doneStatus', 'Records relinked: {matched} · still missing: {missing}'), {
+            matched: String(Number(progress.matched || 0)),
+            missing: String(Number(progress.still_missing ?? progress.result?.still_missing ?? 0)),
+        });
     }
     if (key === 'cancelled') {
-        return appT('reconnect.cancelledStatus', 'Search stopped · files checked: {checked}')
-            .replace('{checked}', String(Number(progress.checked_files || 0)));
+        return I18n.format(appT('reconnect.cancelledStatus', 'Search stopped · files checked: {checked}'), {
+            checked: String(Number(progress.checked_files || 0)),
+        });
     }
     if (key === 'error') return appT('reconnect.failedStatus', 'Search failed');
     return '';
@@ -488,12 +495,13 @@ async function pollReconnectProgress(retryCount = 0) {
                 ? 'reconnect.doneNoMatchesToast'
                 : 'reconnect.doneToast';
             showToast(
-                appT(doneKey, 'Found {matched} moved images. {missing} still missing. {ambiguous} need review. {conflicts} already in gallery.')
-                    .replace('{matched}', String(matched))
-                    .replace('{missing}', String(stillMissing))
-                    .replace('{libraryMissing}', String(libraryMissingTotal))
-                    .replace('{ambiguous}', String(ambiguous))
-                    .replace('{conflicts}', String(conflicts)),
+                I18n.format(appT(doneKey, 'Found {matched} moved images. {missing} still missing. {ambiguous} need review. {conflicts} already in gallery.'), {
+                    matched: String(matched),
+                    missing: String(stillMissing),
+                    libraryMissing: String(libraryMissingTotal),
+                    ambiguous: String(ambiguous),
+                    conflicts: String(conflicts),
+                }),
                 ambiguous > 0 || stillMissing > 0 || conflicts > 0 || (missingTotal === 0 && libraryMissingTotal > 0) ? 'warning' : 'success'
             );
             _hideBgReconnectProgress();

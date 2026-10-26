@@ -266,7 +266,7 @@
             return;
         }
 
-        showLoading(true, censorT('censor.filterApplyBatchLoading', { count: targetIds.length }, 'Filter · applying to {count} image(s)...'));
+        showLoading(true, censorT('censor.filterApplyBatchLoading', { count: targetIds.length }, 'Filter · applying to {count} images...'));
         let applied = 0;
         const historyEntry = {
             type: 'filter-batch',
@@ -324,7 +324,7 @@
 
             setSliders(FILTER_DEFAULTS);
             pushFilterActionHistory(historyEntry);
-            window.App?.showToast?.(censorT('censor.filtersAppliedCount', { count: applied }, 'Applied filters to {count} image(s)'), 'success');
+            window.App?.showToast?.(censorT('censor.filtersAppliedCount', { count: applied }, 'Applied filters to {count} images'), 'success');
         } finally {
             showLoading(false);
         }

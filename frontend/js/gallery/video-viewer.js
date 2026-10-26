@@ -18,10 +18,8 @@
     const PICTURE_ONLY_HANDOFFS = new Set(['censor', 'similar', 'dataset', 'stylemap']);
 
     function t(key, fallback, params) {
-        const value = window.I18n?.t?.(key, params);
-        if (value && value !== key) return value;
-        if (!params) return fallback;
-        return fallback.replace(/\{(\w+)\}/g, (_m, name) => String(params[name] ?? ''));
+        const value = window.I18n.t(key, params);
+        return value && value !== key ? value : window.I18n.format(fallback, params);
     }
 
     function loadPrefs() {

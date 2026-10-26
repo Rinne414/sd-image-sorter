@@ -192,8 +192,9 @@ Object.assign(window.V321Integration, {
         const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
         const armed = window.GalleryToolbar?.consumeTagSelectionIds?.() || null;
         if (armed && armed.length) {
-            scopeEl.textContent = i18n('tagger.smartScopeSelected', 'Scoped to the {count} images selected in Gallery.')
-                .replace('{count}', String(armed.length));
+            scopeEl.textContent = I18n.format(i18n('tagger.smartScopeSelected', 'Scoped to the {count} images selected in Gallery.'), {
+                count: String(armed.length),
+            });
         } else {
             scopeEl.textContent = i18n('tagger.smartScopeAll', 'Runs on the Gallery selection, filtered scope, or Dataset Maker queue you set up next.');
         }

@@ -30,8 +30,8 @@
     }
 
     function t(key, fallback, params) {
-        const value = window.I18n?.t?.(key, params);
-        return (value && value !== key) ? value : fallback;
+        const value = window.I18n.t(key, params);
+        return value && value !== key ? value : window.I18n.format(fallback, params);
     }
 
     function escapeHtml(value) {
@@ -270,7 +270,7 @@
             // Reuse the Collections "Browsing: …" chrome, but the folder
             // variant wraps so the FULL path is always visible (no ellipsis).
             indicator.className = 'collections-browsing folder-tree-browsing';
-            const label = t('folders.scoped', 'Folder: {name}').replace('{name}', name);
+            const label = I18n.format(t('folders.scoped', 'Folder: {name}'), { name: name });
             indicator.innerHTML = `<span class="folder-tree-browsing-label" title="${escapeHtml(name)}">${escapeHtml(label)}</span>`
                 + '<button type="button" id="folder-tree-clear" class="collections-browsing-clear" '
                 + `title="${escapeHtml(t('folders.clearScope', 'Show all folders'))}" `

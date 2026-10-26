@@ -27,8 +27,8 @@
     const PANEL_CLASS = 'trait-pruner-panel';
 
     function t(key, fallback, params) {
-        const value = window.I18n?.t?.(key, params);
-        return (value && value !== key) ? value : fallback;
+        const value = window.I18n.t(key, params);
+        return value && value !== key ? value : window.I18n.format(fallback, params);
     }
 
     function toast(message, kind) {
@@ -151,7 +151,7 @@
             const added = appendTags(config.textarea, picked, config.separator);
             toast(
                 added
-                    ? t('traitPruner.added', 'Added {count} trait tag(s) to the blacklist.', { count: added })
+                    ? t('traitPruner.added', 'Added {count} trait tags to the blacklist.', { count: added })
                     : t('traitPruner.allPresent', 'All checked traits were already blacklisted.'),
                 added ? 'success' : 'info'
             );

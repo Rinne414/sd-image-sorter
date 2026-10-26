@@ -183,11 +183,12 @@ function describeTaggerModel(meta) {
     const quality = Number(meta.quality_score || 0);
     const speed = Number(meta.speed_score || 0);
     const stability = Number(meta.stability_score || 0);
-    return appT('tagger.descSummaryFormat', '{summary} Q{quality}/5 \u2022 S{speed}/5 \u2022 Stable {stability}/5.')
-        .replace('{summary}', summary)
-        .replace('{quality}', quality)
-        .replace('{speed}', speed)
-        .replace('{stability}', stability);
+    return I18n.format(appT('tagger.descSummaryFormat', '{summary} Q{quality}/5 \u2022 S{speed}/5 \u2022 Stable {stability}/5.'), {
+        summary: summary,
+        quality: quality,
+        speed: speed,
+        stability: stability,
+    });
 }
 
 function describeTaggerRuntime(options = {}) {
@@ -216,7 +217,7 @@ function describeTaggerRuntime(options = {}) {
 
     if (gpuEnabled) {
         const focus = meta?.best_for
-            ? appT('tagger.bestForPrefix', ' Best for: {bestFor}.').replace('{bestFor}', meta.best_for)
+            ? I18n.format(appT('tagger.bestForPrefix', ' Best for: {bestFor}.'), { bestFor: meta.best_for })
             : '';
         return `${appT('tagger.runtimeAdaptiveGpu', 'Adaptive GPU mode is active. The app is already using the recommended fast path for this hardware.')}${focus}`;
     }
@@ -361,12 +362,12 @@ function getTaggerMinimumHardwareText(meta) {
         const segments = [];
         if (gpuParts.length) {
             segments.push(
-                appT('tagger.minimumGpuPrefix', 'GPU minimum: {requirements}.').replace('{requirements}', gpuParts.join(' + '))
+                I18n.format(appT('tagger.minimumGpuPrefix', 'GPU minimum: {requirements}.'), { requirements: gpuParts.join(' + ') })
             );
         }
         if (cpuParts.length) {
             segments.push(
-                appT('tagger.minimumCpuPrefix', 'CPU minimum: {requirements}.').replace('{requirements}', cpuParts.join(' + '))
+                I18n.format(appT('tagger.minimumCpuPrefix', 'CPU minimum: {requirements}.'), { requirements: cpuParts.join(' + ') })
             );
         }
         return segments.join(' ');
@@ -400,7 +401,7 @@ function renderTaggerModelSnapshot(meta, options = {}) {
         const profileName = getCustomTaggerProfile();
         const profileMeta = profileName && profileName !== 'wd14' ? getLocalizedTaggerMeta(profileName, getTaggerModelMeta(profileName)) : null;
         if (profileMeta?.description) {
-            subtitleEl.textContent = appT('tagger.customProfileSubtitle', 'Custom local model using {profile} profile.').replace('{profile}', profileName);
+            subtitleEl.textContent = I18n.format(appT('tagger.customProfileSubtitle', 'Custom local model using {profile} profile.'), { profile: profileName });
             badgesEl.innerHTML = [
                 `<span class="tagger-model-badge is-warning">${escapeHtml(appT('tagger.customBadge', 'Custom'))}</span>`,
                 `<span class="tagger-model-badge">${escapeHtml(profileName)}</span>`,
@@ -422,13 +423,13 @@ function renderTaggerModelSnapshot(meta, options = {}) {
     const badges = [];
     if (meta?.speed) {
         badges.push({
-            text: appT('tagger.badgeSpeed', 'Speed {value}').replace('{value}', getTaggerLocalizedScale(meta.speed)),
+            text: I18n.format(appT('tagger.badgeSpeed', 'Speed {value}'), { value: getTaggerLocalizedScale(meta.speed) }),
         });
     }
     if (meta?.memory) {
         const memorySource = String(rawMeta?.memory || meta.memory || '');
         badges.push({
-            text: appT('tagger.badgeMemory', 'Memory {value}').replace('{value}', getTaggerLocalizedScale(meta.memory)),
+            text: I18n.format(appT('tagger.badgeMemory', 'Memory {value}'), { value: getTaggerLocalizedScale(meta.memory) }),
             tone: /high/i.test(memorySource) ? 'is-warning' : '',
         });
     }
@@ -619,12 +620,13 @@ function syncTaggerRuntimeChunkUi(options = {}) {
     const riskLevel = String(recommendation?.risk_level || 'medium').toLowerCase();
 
     if (batchRecommendation) {
-        batchRecommendation.textContent = (isCustom
+        batchRecommendation.textContent = I18n.format((isCustom
             ? (gpuEnabled
                 ? appT('tagger.chunkHelpRecommendedCustomGpu', 'Recommended starting chunk size: {chunk}. Keep custom GPU runs conservative until the model proves stable.')
                 : appT('tagger.chunkHelpRecommendedCustomCpu', 'Recommended starting chunk size: {chunk}. Increase only when tuning throughput.'))
-            : appT('tagger.chunkHelpRecommended', 'Recommended chunk size: {chunk}. Leave this alone unless you are deliberately tuning throughput.'))
-            .replace('{chunk}', recommendedChunk);
+            : appT('tagger.chunkHelpRecommended', 'Recommended chunk size: {chunk}. Leave this alone unless you are deliberately tuning throughput.')), {
+            chunk: recommendedChunk,
+        });
     }
 
     if (chunkChip) {
@@ -642,8 +644,8 @@ function syncTaggerRuntimeChunkUi(options = {}) {
 
     if (selectedChunk > recommendedChunk) {
         batchHelp.textContent = gpuEnabled
-            ? appT('tagger.chunkHelpOverGpu', 'You chose {chosen}, above the recommended {recommended}. Expect more VRAM use and a higher crash risk.').replace('{chosen}', selectedChunk).replace('{recommended}', recommendedChunk)
-            : appT('tagger.chunkHelpOverCpu', 'You chose {chosen}, above the recommended {recommended}. It may be faster but uses more RAM.').replace('{chosen}', selectedChunk).replace('{recommended}', recommendedChunk);
+            ? I18n.format(appT('tagger.chunkHelpOverGpu', 'You chose {chosen}, above the recommended {recommended}. Expect more VRAM use and a higher crash risk.'), { chosen: selectedChunk, recommended: recommendedChunk })
+            : I18n.format(appT('tagger.chunkHelpOverCpu', 'You chose {chosen}, above the recommended {recommended}. It may be faster but uses more RAM.'), { chosen: selectedChunk, recommended: recommendedChunk });
         return;
     }
 

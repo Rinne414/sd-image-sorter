@@ -5808,7 +5808,7 @@ test.describe('Smoke Tests', () => {
     await page.locator('#promptlab-categories .cat-tag').filter({ hasText: 'school_uniform' }).click()
     await page.locator('#btn-promptlab-validate').click()
 
-    await expect(page.locator('#toast-container .toast.error .toast-message').last()).toContainText('Found 1 conflict(s)')
+    await expect(page.locator('#toast-container .toast.error .toast-message').last()).toContainText(/Found 1 conflict\b(?!s)/)
   })
 
   test('artist filter should sync into gallery summary and clear cleanly', async ({ page }) => {

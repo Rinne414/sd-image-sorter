@@ -286,7 +286,7 @@ async function loadSystemInfo() {
         if (batchEl) {
             batchEl.removeAttribute('data-i18n');
             const recommendedChunk = rec.recommended_batch_size || 8;
-            batchEl.textContent = fbT('tagger.chunkHelpRecommended', 'Recommended chunk size: {chunk}. Leave this alone unless you are deliberately tuning throughput.').replace('{chunk}', recommendedChunk);
+            batchEl.textContent = I18n.format(fbT('tagger.chunkHelpRecommended', 'Recommended chunk size: {chunk}. Leave this alone unless you are deliberately tuning throughput.'), { chunk: recommendedChunk });
         }
 
         // Set recommended runtime chunk size in the advanced dropdown

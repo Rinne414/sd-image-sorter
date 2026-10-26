@@ -263,7 +263,7 @@ Object.assign(window.Gallery, {
         });
 
         item.addEventListener('dragstart', (e) => {
-            // Desktop shell: drag the real file(s) instead (desktop-bridge.js).
+            // Desktop shell: drag the real files instead (desktop-bridge.js).
             if (window.DesktopBridge?.startNativeDrag?.(e, image)) return;
             // Use full image URL (not thumbnail) so ComfyUI gets the original with workflow metadata
             const imgUrl = `/api/image-file/${image.id}`;
@@ -426,7 +426,7 @@ Object.assign(window.Gallery, {
         });
 
         item.addEventListener('dragstart', (e) => {
-            // Desktop shell: drag the real file(s) instead (desktop-bridge.js).
+            // Desktop shell: drag the real files instead (desktop-bridge.js).
             if (window.DesktopBridge?.startNativeDrag?.(e, image)) return;
             // Use full image URL (not thumbnail) so ComfyUI gets the original with workflow metadata
             const imgUrl = `/api/image-file/${image.id}`;

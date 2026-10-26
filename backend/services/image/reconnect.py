@@ -22,6 +22,7 @@ from fastapi import HTTPException
 
 import database as db
 from utils.path_validation import ALLOWED_IMAGE_EXTENSIONS, normalize_user_path, validate_folder_path
+from text_counts import count_text
 
 # NOTE(decomposition): keep the historical logger channel so log routing and
 # output stay byte-identical after the package split.
@@ -625,7 +626,7 @@ class ReconnectMixin:
                 pixel_mismatch=int(snapshot.get("pixel_mismatch", 0) or 0),
                 skipped=int(snapshot.get("skipped", 0) or 0),
                 errors=errors,
-                message=f"Checked {checked} files. Reconnected {matched}/{missing_total} missing files.",
+                message=f"Checked {count_text(checked, 'file')}. Reconnected {matched}/{count_text(missing_total, 'missing file')}.",
                 message_key="searching",
                 current_item=snapshot.get("current_item"),
                 updated_at=time.time(),
@@ -672,7 +673,7 @@ class ReconnectMixin:
                         "still_missing": result.get("still_missing", 0),
                         "message_key": "done",
                         "message": (
-                            f"Reconnected {result.get('matched', 0)} missing files. "
+                            f"Reconnected {count_text(result.get('matched', 0), 'missing file')}. "
                             f"{result.get('still_missing', 0)} still missing."
                         ),
                         "current_item": None,
@@ -691,7 +692,7 @@ class ReconnectMixin:
                         "status": "cancelled",
                         "step": "cancelled",
                         "message_key": "cancelled",
-                        "message": f"Stopped after checking {current.get('checked_files', 0)} files.",
+                        "message": f"Stopped after checking {count_text(current.get('checked_files', 0), 'file')}.",
                         "updated_at": now,
                     },
                 )

@@ -48,7 +48,7 @@ Object.assign(window.PromptLab, {
         const record = this._getImageRecord(numericId);
         option.textContent = label
             || record?.filename
-            || this._t('promptlab.imageOptionFallback', 'Image #{id}', { id: value }).replace('{id}', value);
+            || this._t('promptlab.imageOptionFallback', 'Image #{id}', { id: value });
         select.appendChild(option);
         return true;
     },
@@ -195,7 +195,7 @@ Object.assign(window.PromptLab, {
                 const groupId = this._decodeDataValue(button.dataset.buildCategoryCopy);
                 const item = groups.find(({ group }) => group.id === groupId);
                 if (!item) return;
-                copy.copyTags(item.tags, this._t('tagCategory.groupCopied', 'Copied {category} tags', { category: this._getBuildGroupLabel(item.group) }).replace('{category}', this._getBuildGroupLabel(item.group)));
+                copy.copyTags(item.tags, this._t('tagCategory.groupCopied', 'Copied {category} tags', { category: this._getBuildGroupLabel(item.group) }));
             });
         });
         groupsContainer.querySelectorAll('[data-build-category-find]').forEach((button) => {
@@ -335,9 +335,7 @@ Object.assign(window.PromptLab, {
                 this._t('promptlab.randomDraftLoadedPartial', 'Loaded {assigned} tags into Random. {unmatched} did not match known categories.', {
                     assigned: assigned.length,
                     unmatched: unmatched.length,
-                })
-                    .replace('{assigned}', assigned.length)
-                    .replace('{unmatched}', unmatched.length),
+                }),
                 'info'
             );
             return;
@@ -345,8 +343,7 @@ Object.assign(window.PromptLab, {
 
         if (assigned.length) {
             window.App?.showToast?.(
-                this._t('promptlab.randomDraftLoadedFull', 'Loaded {count} tags into Random and generated a draft.', { count: assigned.length })
-                    .replace('{count}', assigned.length),
+                this._t('promptlab.randomDraftLoadedFull', 'Loaded {count} tags into Random and generated a draft.', { count: assigned.length }),
                 'success'
             );
             return;

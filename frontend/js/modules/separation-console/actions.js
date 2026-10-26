@@ -47,8 +47,10 @@ Object.assign(SeparationConsole, {
                 dm._refreshQueueItem?.(Number(id));
             }
             window.App?.showToast?.(
-                sepconT(`Removed "${row.spelling}" from ${row.ids.length} captions`,
-                  `已从 ${row.ids.length} 条 caption 移除「${row.spelling}」`),
+                I18n.format(sepconT(
+                    `Removed "{spelling}" from {lengthCount} captions`,
+                    `已从 {lengthCount} 条 caption 移除「{spelling}」`,
+                ), { spelling: row.spelling, lengthCount: row.ids.length }),
                 'success');
             this.refresh();
         },
@@ -127,7 +129,7 @@ Object.assign(SeparationConsole, {
                 const line = document.createElement('div');
                 line.className = 'sepcon-leak-line';
                 line.textContent = sepconT(
-                    `"${trait}" appears in ${count} NL caption(s) — edit them or re-run Smart Tag (the trait list is now sent to the VLM).`,
+                    `"${trait}" appears in ${count} NL captions — edit them or re-run Smart Tag (the trait list is now sent to the VLM).`,
                     `「${trait}」出现在 ${count} 条 NL 描述中 — 请手动修改，或重跑 Smart Tag（特征清单现在会传给 VLM）。`);
                 box.appendChild(line);
             }

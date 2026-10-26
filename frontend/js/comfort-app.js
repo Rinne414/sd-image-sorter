@@ -21,13 +21,7 @@
         if (typeof window.appT === 'function') return window.appT(key, fallback, params);
         const val = window.I18n?.t?.(key, params);
         if (val && val !== key) return val;
-        let text = fallback || key;
-        if (params && typeof params === 'object') {
-            for (const [k, v] of Object.entries(params)) {
-                text = String(text).split(`{${k}}`).join(String(v));
-            }
-        }
-        return text;
+        return window.I18n.format(fallback || key, params);
     }
 
     function isZen() {

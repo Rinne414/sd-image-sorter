@@ -143,7 +143,7 @@
         // Reuse the existing toast helper if available; fall back to alert.
         const noiseStripped = snap.noise_stripped_count || 0;
         const noiseSuffix = noiseStripped > 0
-            ? smartTagT('smartTag.noiseSuffix', ' · {count} noise tags removed').replace('{count}', String(noiseStripped))
+            ? I18n.format(smartTagT('smartTag.noiseSuffix', ' · {count} noise tags removed'), { count: String(noiseStripped) })
             : '';
         const firstError = Array.isArray(snap.errors)
             ? snap.errors.find((entry) => entry && entry.error)
@@ -151,8 +151,8 @@
         const errorSource = String(firstError?.image_id || '').trim();
         const errorLabel = errorSource
             ? (/^-?\d+$/.test(errorSource)
-                ? smartTagT('smartTag.errorImageId', 'Image #{id}').replace('{id}', () => errorSource)
-                : smartTagT('smartTag.errorImagePath', 'Image {id}').replace('{id}', () => errorSource))
+                ? I18n.format(smartTagT('smartTag.errorImageId', 'Image #{id}'), { id: () => errorSource })
+                : I18n.format(smartTagT('smartTag.errorImagePath', 'Image {id}'), { id: () => errorSource }))
             : smartTagT('smartTag.errorImage', 'Image');
         const errorSuffix = firstError
             ? ` · ${window.I18n.joinLabel(errorLabel, String(firstError.error))}`
@@ -167,10 +167,9 @@
         // even the caption or trigger word, so the toast counts them.
         const skipped = snap.skipped || 0;
         const skippedSuffix = skipped > 0
-            ? smartTagT('smartTag.skippedSuffix', ' · {count} skipped (already had tags)').replace('{count}', String(skipped))
+            ? I18n.format(smartTagT('smartTag.skippedSuffix', ' · {count} skipped (already had tags)'), { count: String(skipped) })
             : '';
-        const fill = (template, values) => Object.keys(values)
-            .reduce((text, name) => text.split(`{${name}}`).join(String(values[name])), template);
+        const fill = (template, values) => I18n.format(template, values);
         const isWarning = status === 'warning' || (status === 'completed' && fail > 0);
         const message = status === 'cancelled'
             ? fill(smartTagT('smartTag.cancelledToast', 'Smart Tag cancelled at {done}/{total}{extra}'),
@@ -246,7 +245,7 @@
         answerExistingChoice('cancel');
         const panel = smartTag$('#smart-tag-existing-check');
         if (!panel) return Promise.resolve('skip');
-        const fill = (key, fallback) => smartTagT(key, fallback).replace('{count}', String(count));
+        const fill = (key, fallback) => I18n.format(smartTagT(key, fallback), { count: String(count) });
         smartTag$('#smart-tag-existing-title').textContent = fill('smartTag.existingTitle',
             '{count} of these images already have tags.');
         smartTag$('#btn-smart-tag-existing-skip').textContent = fill('smartTag.existingSkip', 'Skip those {count}');
@@ -350,9 +349,10 @@
                 + Number(form.dataset_scan_token ? (getDatasetSources().datasetScanTotal || 0) : 0);
             const total = explicitTotal + tokenTotal;
             if (total > 100) {
-                const proceed = window.confirm(
-                    `This will overwrite existing captions on ${total} images. Continue?`
-                );
+                const proceed = window.confirm(I18n.format(
+                    smartTagT('smartTag.confirmOverwriteCaptions', 'This will overwrite existing captions on {total} images. Continue?'),
+                    { total },
+                ));
                 if (!proceed) return;
             }
         }
@@ -417,8 +417,9 @@
                 }
                 setProgressUI({
                     percent: 0,
-                    text: smartTagT('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish')
-                        .replace('{position}', String(snap.queue_position || 1)),
+                    text: I18n.format(smartTagT('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish'), {
+                        position: String(snap.queue_position || 1),
+                    }),
                     preview: '',
                 });
                 startProgressPolling();

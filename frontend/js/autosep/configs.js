@@ -67,8 +67,9 @@ function renderAutoSepConfigControls() {
         const summaryParts = [];
         if (selectedConfig.destination) {
             summaryParts.push(
-                tKey('autosep.summaryDestination', 'Current destination: {path}', '当前目标：{path}')
-                    .replace('{path}', selectedConfig.destination)
+                I18n.format(tKey('autosep.summaryDestination', 'Current destination: {path}', '当前目标：{path}'), {
+                    path: selectedConfig.destination,
+                })
             );
         }
         const filterSummary = window.formatFilterSummary?.(filters);
@@ -118,7 +119,7 @@ async function createAutoSepConfig() {
     // claim success when the config actually persisted.
     if (persisted) {
         window.App?.showToast?.(
-            tKey('autosep.configSaved', 'Saved config "{name}"', '已保存配置“{name}”').replace('{name}', name.trim()),
+            I18n.format(tKey('autosep.configSaved', 'Saved config "{name}"', '已保存配置“{name}”'), { name: name.trim() }),
             'success'
         );
     }
@@ -144,7 +145,7 @@ async function saveCurrentAutoSepConfig() {
         if (select) select.value = config.id;
         if (persisted) {
             window.App?.showToast?.(
-                tKey('autosep.configUpdated', 'Updated config "{name}"', '已更新配置“{name}”').replace('{name}', config.name),
+                I18n.format(tKey('autosep.configUpdated', 'Updated config "{name}"', '已更新配置“{name}”'), { name: config.name }),
                 'success'
             );
         }
@@ -173,7 +174,7 @@ function loadSelectedAutoSepConfig() {
     renderAutoSepConfigControls();
     updateAutoSepSettingsSummary();
     window.App?.showToast?.(
-        tKey('autosep.configLoaded', 'Loaded config "{name}"', '已载入配置“{name}”').replace('{name}', config.name),
+        I18n.format(tKey('autosep.configLoaded', 'Loaded config "{name}"', '已载入配置“{name}”'), { name: config.name }),
         'success'
     );
 }
@@ -202,14 +203,15 @@ function deleteSelectedAutoSepConfig() {
 
     window.App.showConfirm(
         tKey('autosep.deleteConfigTitle', 'Delete Config', '删除配置'),
-        tKey('autosep.deleteConfigMessage', 'Delete "{name}"? This only removes the saved config.', '要删除“{name}”吗？这只会移除已保存的配置。')
-            .replace('{name}', config.name),
+        I18n.format(tKey('autosep.deleteConfigMessage', 'Delete "{name}"? This only removes the saved config.', '要删除“{name}”吗？这只会移除已保存的配置。'), {
+            name: config.name,
+        }),
         () => {
             AutoSepState.configs = AutoSepState.configs.filter((entry) => entry.id !== config.id);
             saveAutoSepConfigs();
             renderAutoSepConfigControls();
             window.App?.showToast?.(
-                tKey('autosep.configDeleted', 'Deleted config "{name}"', '已删除配置“{name}”').replace('{name}', config.name),
+                I18n.format(tKey('autosep.configDeleted', 'Deleted config "{name}"', '已删除配置“{name}”'), { name: config.name }),
                 'info'
             );
         }

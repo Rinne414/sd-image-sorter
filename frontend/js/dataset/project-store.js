@@ -409,7 +409,7 @@
             if (editCount > 0) {
                 parts.push(this._t(
                     'dataset.projectCaptionEdits',
-                    '{count} caption or caption-mode edit(s)',
+                    '{count} caption or caption-mode edits',
                     { count: editCount },
                 ));
             }

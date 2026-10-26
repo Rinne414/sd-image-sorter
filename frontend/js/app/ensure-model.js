@@ -41,7 +41,7 @@ function _setupConfirmMessage(modelId, sizeHint, plan) {
     const packageCount = Array.isArray(plan?.packages) ? plan.packages.length : 0;
     if (packageCount > 0) {
         lines.push(featureInstallT('featureInstall.confirmPackages',
-            'It also installs {count} Python package(s).', { count: packageCount }));
+            'It also installs {count} Python packages.', { count: packageCount }));
     }
     if (plan?.restart_likely === true) {
         lines.push(featureInstallT('featureInstall.confirmRestart',
@@ -59,10 +59,7 @@ function _setupConfirmMessage(modelId, sizeHint, plan) {
 function featureInstallT(key, fallback, params) {
     const translated = window.I18n?.t?.(key, params);
     if (translated && translated !== key) return translated;
-    if (!params) return fallback;
-    return Object.keys(params).reduce((text, name) => (
-        text.split(`{${name}}`).join(String(params[name]))
-    ), fallback);
+    return window.I18n.format(fallback, params);
 }
 
 function featureInstallConfirm(title, message) {

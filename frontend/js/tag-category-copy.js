@@ -45,8 +45,8 @@
     const FIND_GROUP_IDS = ['appearance', 'clothing', 'pose', 'scenery', 'style'];
 
     function t(key, fallback, params) {
-        const value = window.I18n?.t?.(key, params);
-        return value && value !== key ? value : fallback;
+        const value = window.I18n.t(key, params);
+        return value && value !== key ? value : window.I18n.format(fallback, params);
     }
 
     function escapeHtml(value) {
@@ -433,7 +433,7 @@
             button.addEventListener('click', () => {
                 copyTags(
                     preset.id === 'trainingCaption' ? cleanPromptTags(presetTags, { spaces: false }) : presetTags,
-                    t('tagCategory.purposeCopied', 'Copied {purpose}', { purpose: label }).replace('{purpose}', label)
+                    t('tagCategory.purposeCopied', 'Copied {purpose}', { purpose: label })
                 );
                 removeMenu();
             });
@@ -456,7 +456,7 @@
             button.addEventListener('click', () => {
                 copyTags(
                     groupTags,
-                    t('tagCategory.groupCopied', 'Copied {category} tags', { category: label }).replace('{category}', label)
+                    t('tagCategory.groupCopied', 'Copied {category} tags', { category: label })
                 );
                 removeMenu();
             });

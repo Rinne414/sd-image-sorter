@@ -134,7 +134,7 @@ test('the Aesthetic tab says which pictures only get the Waifu score', async ({ 
   })
 
   await expect(page.locator('#tagger-aesthetic-scope')).toHaveText(
-    'This run scores the 2 images in this library that have no aesthetic score yet. '
+    'This run scores the images in this library with no aesthetic score yet: 2. '
       + 'It also adds the newly installed anime scores to 6 images that already have an aesthetic score.',
   )
 })

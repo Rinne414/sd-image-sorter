@@ -110,7 +110,7 @@ function refreshUneditedSaveOption() {
     const label = document.getElementById('save-unedited-label');
     if (label) {
         label.textContent = censorT('save.uneditedCount', { count: uneditedCount },
-            '{count} image(s) in the queue have no censoring');
+            '{count} images in the queue have no censoring');
     }
     const select = document.getElementById('save-unedited-option');
     if (select) {
@@ -316,13 +316,13 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
         // Nothing was censored — say so plainly instead of a green "Saved 0".
         window.App.showToast(
             censorT('censor.saveNothingProcessed', { skipped: skippedCount },
-                'Nothing saved: none of the {skipped} image(s) are censored, and the save options leave uncensored images out.'),
+                'Nothing saved: none of the {skipped} images are censored, and the save options leave uncensored images out.'),
             'warning'
         );
     } else if (skippedCount > 0) {
         window.App.showToast(
             censorT('censor.saveSkippedUnprocessed', { count, skipped: skippedCount },
-                'Saved {count} censored image(s); {skipped} uncensored image(s) were not exported.'),
+                'Saved {count} censored images; {skipped} uncensored images were not exported.'),
             'warning'
         );
     } else if (asIsCount > 0) {
@@ -343,7 +343,7 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', 
     if (existingSkippedCount > 0) {
         window.App.showToast(
             censorT('censor.saveSkippedExisting', { count: existingSkippedCount },
-                '{count} image(s) skipped: a file with the same name is already there.'),
+                '{count} images skipped: a file with the same name is already there.'),
             'warning',
             openFolder
         );

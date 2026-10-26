@@ -83,8 +83,8 @@ Object.assign(window.PromptLab, {
                     ? leaders.slice(0, this.statsVisibleCounts.bestCheckpoints).map((entry) => {
                         const cleanName = entry.name.replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt)$/i, '') || entry.name;
                         const metaText = entry.avg_score != null
-                            ? `★ ${Number(entry.avg_score || 0).toFixed(2)} · ${entry.count} images`
-                            : `${entry.count} images`;
+                            ? `★ ${Number(entry.avg_score || 0).toFixed(2)} · ${this._t('promptlab.imageCount', '{count} images', { count: entry.count })}`
+                            : this._t('promptlab.imageCount', '{count} images', { count: entry.count });
                         const matchingRecipe = (stats.checkpoint_recipes || []).find(recipe => recipe.name === entry.name);
                         const recipeTags = Array.isArray(matchingRecipe?.tags) ? matchingRecipe.tags : [];
                         const recipePreview = recipeTags.slice(0, 8);
@@ -137,8 +137,8 @@ Object.assign(window.PromptLab, {
                         const tags = Array.isArray(entry.tags) ? entry.tags : [];
                         const tagPreview = tags.slice(0, 8);
                         const metaText = entry.avg_score != null
-                            ? `★ ${Number(entry.avg_score || 0).toFixed(2)} · ${entry.count} images`
-                            : `${entry.count} images`;
+                            ? `★ ${Number(entry.avg_score || 0).toFixed(2)} · ${this._t('promptlab.imageCount', '{count} images', { count: entry.count })}`
+                            : this._t('promptlab.imageCount', '{count} images', { count: entry.count });
                         return `<div class="promptlab-action-card">
                             <div class="promptlab-action-title"><svg class="icon" aria-hidden="true"><use href="#i-flask"/></svg> ${escapeHtml(cleanName)}</div>
                             <div class="promptlab-action-meta">${metaText}<br>${escapeHtml(tagPreview.join(', '))}</div>

@@ -27,6 +27,12 @@ describe('an English count of 1 reads in the singular', () => {
     expect(format('{n} match', { n: 1 })).toBe('1 matches')
   })
 
+  test('a count after a preposition is not the subject of the verb', () => {
+    expect(format('Caption edits for {n} images were cleared', { n: 1 })).toBe('Caption edits for 1 image were cleared')
+    expect(format('Caption edits for {n} images that were not exported', { n: 1 })).toBe('Caption edits for 1 image that was not exported')
+    expect(format('{n} problems stop this export.', { n: 1 })).toBe('1 problem stops this export.')
+  })
+
   test('a count given as text counts too; anything else is left alone', () => {
     expect(format('{n} images', { n: '1' })).toBe('1 image')
     expect(format('{name} images', { name: 'Two' })).toBe('Two images')

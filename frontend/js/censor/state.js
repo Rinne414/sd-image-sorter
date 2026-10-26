@@ -262,18 +262,10 @@ function cloneEditOperations(operations = []) {
     });
 }
 
-function formatCensorFallback(text, params = null) {
-    if (!params || typeof params !== 'object') return text;
-    return Object.entries(params).reduce(
-        (out, [token, value]) => out.replaceAll(`{${token}}`, String(value)),
-        text
-    );
-}
-
 function censorT(key, params = null, fallback = '') {
     const translated = window.I18n?.t?.(key, params || undefined);
     if (translated && translated !== key) return translated;
-    return formatCensorFallback(fallback || key, params);
+    return window.I18n.format(fallback || key, params);
 }
 
 function isEditableTarget(target) {

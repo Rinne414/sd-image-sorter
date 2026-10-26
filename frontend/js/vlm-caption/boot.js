@@ -36,8 +36,9 @@ Object.assign(window.VLMCaption, {
             if (!data.running) {
                 this._queuedSince = Date.now();
                 this._showStatus('vlm-batch-status',
-                    this._t('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish')
-                        .replace('{position}', String(queuedEntries[0].position || 1)), 'info');
+                    I18n.format(this._t('aiQueue.queuedProgress', 'Queued #{position}, waiting for the current AI job to finish'), {
+                        position: String(queuedEntries[0].position || 1),
+                    }), 'info');
             } else {
                 this._updateProgressUI(data);
                 this._showStatus('vlm-batch-status', this._t('vlm.captionRunning', 'Captioning images...'), 'info');

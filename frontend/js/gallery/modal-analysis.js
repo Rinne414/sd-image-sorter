@@ -186,7 +186,7 @@ Object.assign(window.Gallery, {
                 await app.refreshAestheticStatus?.();
                 const scoreText = Number.isFinite(score) ? score.toFixed(2) : '-';
                 showToast?.(
-                    this._t('modal.scoreThisDone', { score: scoreText }, 'Aesthetic score updated: {score}').replace('{score}', scoreText),
+                    I18n.format(this._t('modal.scoreThisDone', { score: scoreText }, 'Aesthetic score updated: {score}'), { score: scoreText }),
                     'success'
                 );
                 return;

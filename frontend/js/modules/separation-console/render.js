@@ -48,9 +48,10 @@ Object.assign(SeparationConsole, {
             // (CLIP 75 / T5+Qwen-VL 512); unset targets keep the historical
             // CLIP default because it is the strictest common case.
             const budget = window.TargetModel?.tokenBudget?.() || 75;
-            counter.textContent = sepconT(
-                `${tagCount} tags · ≈${tokens} tokens`,
-                `${tagCount} 个标签 · ≈${tokens} tokens`);
+            counter.textContent = I18n.format(sepconT(
+                `{tagCount} tags · ≈{tokens} tokens`,
+                `{tagCount} 个标签 · ≈{tokens} tokens`,
+            ), { tagCount, tokens });
             const over = tokens > budget;
             counter.classList.toggle('dataset-token-counter-over', over);
             // Red alone said nothing: say why and what to do, right under it.
@@ -106,9 +107,10 @@ Object.assign(SeparationConsole, {
             const seen = this._loadSeen();
             const seenCount = this._queueIds().filter(id => seen[id]).length;
             if (statsEl) {
-                statsEl.textContent = sepconT(
-                    `${total} images · ${counts.size} tags · reviewed ${seenCount}/${total}`,
-                    `${total} 张图 · ${counts.size} 个标签 · 已过目 ${seenCount}/${total}`);
+                statsEl.textContent = I18n.format(sepconT(
+                    `{total} images · {size} tags · reviewed {seenCount}/{total}`,
+                    `{total} 张图 · {size} 个标签 · 已过目 {seenCount}/{total}`,
+                ), { total, size: counts.size, seenCount });
             }
             this._renderLeaks();
 
@@ -145,9 +147,10 @@ Object.assign(SeparationConsole, {
             if (overflow) {
                 overflow.hidden = rows.length <= 800;
                 if (rows.length > 800) {
-                    overflow.textContent = sepconT(
-                        `Showing 800 of ${rows.length} tags — narrow with search.`,
-                        `仅显示 800/${rows.length} 个标签 — 请用搜索缩小范围。`);
+                    overflow.textContent = I18n.format(sepconT(
+                        `Showing 800 of {lengthCount} tags — narrow with search.`,
+                        `仅显示 800/{lengthCount} 个标签 — 请用搜索缩小范围。`,
+                    ), { lengthCount: rows.length });
                 }
             }
         },

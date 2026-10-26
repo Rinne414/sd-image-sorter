@@ -119,7 +119,7 @@ def test_fit_falls_back_to_an_ellipse_when_there_is_nothing_to_trace() -> None:
 
     assert region["shape"] == "ellipse"
     assert warnings == [
-        "Fit could not trace 1 region(s) and used an ellipse there instead."
+        "Fit could not trace 1 region and used an ellipse there instead."
     ]
 
 

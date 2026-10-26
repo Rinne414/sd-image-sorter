@@ -18,6 +18,76 @@
     var SUPPORTED_LANGS = ['en', 'zh-CN'];
     var DEFAULT_LANG = 'en';
 
+    // English counts read right when the count is 1: "{count} images are too
+    // small" is written "1 image is too small". The packs keep one plural
+    // sentence; when a count is exactly 1, format() writes the noun that
+    // follows it (maybe after one modifier, "{count} folder images") and a
+    // verb right after it ("are", "have") in the singular. The lists are the
+    // ones in frontend-v4/src/i18n/plural.ts; backend/tests/test_i18n_plural.py
+    // keeps them equal and holds every English count in lang/en.js to them.
+    // Chinese has no plural and never matches.
+    var PLURALS = {
+        images: 'image', pictures: 'picture', videos: 'video', sources: 'source', conditions: 'condition',
+        records: 'record', tags: 'tag', captions: 'caption', tokens: 'token', stars: 'star', pairs: 'pair',
+        groups: 'group', words: 'word', times: 'time', steps: 'step', rounds: 'round', originals: 'original',
+        models: 'model', megapixels: 'megapixel', folders: 'folder', threads: 'thread', notes: 'note',
+        frames: 'frame', issues: 'issue', duplicates: 'duplicate', details: 'detail', conflicts: 'conflict',
+        categories: 'category', batches: 'batch', artists: 'artist', areas: 'area', epochs: 'epoch',
+        files: 'file', requests: 'request', posts: 'post', favorites: 'favorite', collections: 'collection',
+        libraries: 'library', presets: 'preset', rules: 'rule', sets: 'set', results: 'result', names: 'name',
+        entries: 'entry', boxes: 'box', copies: 'copy', masks: 'mask', jobs: 'job', matches: 'match',
+        filters: 'filter', items: 'item', previews: 'preview', errors: 'error', warnings: 'warning',
+        seconds: 'second', minutes: 'minute', grades: 'grade', comparisons: 'comparison', sections: 'section',
+        prompts: 'prompt', blockers: 'blocker', regions: 'region', variants: 'variant', suggestions: 'suggestion',
+        problems: 'problem', packages: 'package', edits: 'edit', detections: 'detection', candidates: 'candidate',
+        GIFs: 'GIF', outliers: 'outlier', findings: 'finding'
+    };
+    var MODIFIERS = [
+        'folder', 'image', 'old', 'more', 'new', 'edited', 'hand-edited', 'untagged', 'uncensored', 'selected',
+        'scored', 'picked', 'generated', 'extra', 'common', 'other', 'library', 'clearable',
+        'indexed', 'matching', 'filter', 'unique', 'flagged', 'duplicate', 'redundant', 'censored', 'queued',
+        'ready-made', 'gallery', 'moved', 'sidecar', 'noise', 'local', 'dataset', 'unreadable', 'middle',
+        'near-identical', 'scan', 'original', 'unconfirmed', 'detection', 'matched', 'queue', 'category',
+        'existing', 'trait', 'disguise', 'missing', 'suspected', 'filtered'
+    ];
+    var VERBS = {
+        are: 'is', were: 'was', have: 'has', do: 'does', look: 'looks', spell: 'spells', share: 'shares',
+        match: 'matches', belong: 'belongs', use: 'uses', need: 'needs', stop: 'stops', lack: 'lacks'
+    };
+    var LINKS = ['that', 'which', 'who'];
+    var ADVERBS = ['already', 'now', 'still', 'just', 'also', 'more'];
+    // A count after one of these is not the subject ("Caption edits for {n}
+    // images were cleared"): its verb stays, unless a link word ties the verb
+    // to the counted noun ("for {n} images that were not exported").
+    var PREPOSITION_BEFORE = /\b(?:for|of|with|from|on|in|into|to|by|at|about|than|after|before|across|per|between|among)\s+(?:the\s+|all\s+|these\s+)?$/i;
+
+    function keysOf(map) {
+        return Object.keys(map).join('|');
+    }
+
+    // "{count}", maybe closed by an inline tag ("<strong>{count}</strong> images"),
+    // then an optional "modifier noun" and an optional "link adverb verb".
+    var COUNTED = new RegExp(
+        '\\{(\\w+)\\}(</[a-z]+>)?' +
+        '(?: (?:(' + MODIFIERS.join('|').replace(/-/g, '\\-') + ') )?(' + keysOf(PLURALS) + ')\\b)?' +
+        '(?:(?: (' + LINKS.join('|') + '))?(?: (' + ADVERBS.join('|') + '))? (' + keysOf(VERBS) + ')\\b)?',
+        'g'
+    );
+
+    /** The template with every count that is exactly 1 followed by singular words. */
+    function singularize(template, params) {
+        return template.replace(COUNTED, function (match, key, tag, mod, noun, link, adverb, verb, offset) {
+            if (String(params[key]) !== '1' || (!noun && !verb)) return match;
+            var out = '{' + key + '}' + (tag || '');
+            if (noun) out += ' ' + (mod ? mod + ' ' : '') + PLURALS[noun];
+            if (verb) {
+                var isSubject = link || !PREPOSITION_BEFORE.test(template.slice(0, offset));
+                out += (link ? ' ' + link : '') + (adverb ? ' ' + adverb : '') + ' ' + (isSubject ? VERBS[verb] : verb);
+            }
+            return out;
+        });
+    }
+
     var I18n = {
         currentLang: DEFAULT_LANG,
         translations: {},
@@ -129,17 +199,29 @@
                     ? fallbackPack[key]
                     : key;
 
-            // Interpolate {param} placeholders
-            if (params && typeof params === 'object') {
-                var keys = Object.keys(params);
-                for (var i = 0; i < keys.length; i++) {
-                    var placeholder = '{' + keys[i] + '}';
-                    text = text.split(placeholder).join(String(params[keys[i]]));
-                }
-            }
-
-            return text;
+            return this.format(text, params);
         },
+
+        /**
+         * Fill {param} placeholders (every occurrence, values verbatim, no
+         * `$` patterns), writing a count of exactly 1 with singular words.
+         * The same SECURITY CONTRACT as t() applies to the params.
+         *
+         * @param {string} template - Text with {param} placeholders
+         * @param {Object} [params] - Values for the placeholders
+         * @returns {string}
+         */
+        format: function (template, params) {
+            var text = String(template == null ? '' : template);
+            if (!params || typeof params !== 'object') return text;
+            // One pass: a value that contains "{other}" is not filled again.
+            return singularize(text, params).replace(/\{(\w+)\}/g, function (match, key) {
+                return Object.prototype.hasOwnProperty.call(params, key) ? String(params[key]) : match;
+            });
+        },
+
+        /** The singular lists, read by backend/tests/test_i18n_plural.py. */
+        pluralRules: { PLURALS: PLURALS, MODIFIERS: MODIFIERS, VERBS: VERBS },
 
         /**
          * Apply translations to all DOM elements with data-i18n attributes.

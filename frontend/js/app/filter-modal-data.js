@@ -137,7 +137,7 @@ async function runFilterCountPreview() {
             const customApply = FilterModalController.applyButtonText;
             applyButton.textContent = customApply
                 ? `${customApply} · ~${total.toLocaleString()}`
-                : appT('filter.applyWithCount', 'Apply · ~{count} images').replace('{count}', total.toLocaleString());
+                : I18n.format(appT('filter.applyWithCount', 'Apply · ~{count} images'), { count: total.toLocaleString() });
         }
     } catch (e) { /* aborted / offline — keep the last label */ }
 }

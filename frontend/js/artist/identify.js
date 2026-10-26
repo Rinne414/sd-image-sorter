@@ -76,10 +76,10 @@ Object.assign(window.ArtistIdent, {
         if (errors > 0) {
             return {
                 level: 'warning',
-                message: this.tText(
-                    `Artist identification finished with ${errors} error(s).`,
-                    `画师识别完成，但有 ${errors} 个错误。`
-                ),
+                message: I18n.format(this.tText(
+                    `Artist identification finished with {errors} errors.`,
+                    `画师识别完成，但有 {errors} 个错误。`,
+                ), { errors }),
             };
         }
 
@@ -92,7 +92,7 @@ Object.assign(window.ArtistIdent, {
                 level: 'warning',
                 message: this.tKey(
                     'artist.completionNoConfident',
-                    'Finished {count} image(s) with no confident match: {unconfirmed} unconfirmed candidate(s), {none} with no match. Those artists are probably not in this model\u2019s vocabulary.',
+                    'Finished {count} images with no confident match: {unconfirmed} unconfirmed candidates, {none} with no match. Those artists are probably not in this model\u2019s vocabulary.',
                     '已完成 {count} 张，但没有高置信度匹配：{unconfirmed} 个低置信度候选，{none} 个没有匹配。这些画师大概率不在此模型的词表里。',
                     { count: results.length, unconfirmed, none: noMatch }
                 ),
@@ -104,7 +104,7 @@ Object.assign(window.ArtistIdent, {
                 level: 'success',
                 message: this.tKey(
                     'artist.completionTiered',
-                    'Identified {count} image(s): {confident} confident, {unconfirmed} unconfirmed, {none} no match.',
+                    'Identified {count} images: {confident} confident, {unconfirmed} unconfirmed, {none} no match.',
                     '已完成 {count} 张：{confident} 个高置信度，{unconfirmed} 个低置信度候选，{none} 个没有匹配。',
                     { count: results.length, confident, unconfirmed, none: noMatch }
                 ),
@@ -116,7 +116,7 @@ Object.assign(window.ArtistIdent, {
                 level: 'success',
                 message: this.tKey(
                     'artist.completionCounted',
-                    'Identified {count} image(s).',
+                    'Identified {count} images.',
                     '已完成 {count} 张图片的画师识别。',
                     { count: targetCount }
                 ),
@@ -142,7 +142,7 @@ Object.assign(window.ArtistIdent, {
             case 'loading_runtime':
                 return this.tKey('artist.loadingModel', 'Loading artist model...', '正在载入画师模型...');
             case 'identifying':
-                return this.tKey('artist.msg.identifying', 'Identifying {count} image(s)...', '正在识别 {count} 张图片...', {
+                return this.tKey('artist.msg.identifying', 'Identifying {count} images...', '正在识别 {count} 张图片...', {
                     count: Number(progress.total || 0),
                 });
             case 'identifying_item':
@@ -276,10 +276,10 @@ Object.assign(window.ArtistIdent, {
                 imageIds = imageIds.concat((imagesResult.images || []).map(img => img.id));
 
                 if (progressText) {
-                    progressText.textContent = this.tText(
-                        `Collected ${imageIds.length} images...`,
-                        `已收集 ${imageIds.length} 张图片...`
-                    );
+                    progressText.textContent = I18n.format(this.tText(
+                        `Collected {lengthCount} images...`,
+                        `已收集 {lengthCount} 张图片...`,
+                    ), { lengthCount: imageIds.length });
                 }
 
                 if (!imagesResult.has_more || !imagesResult.next_cursor) {
@@ -294,10 +294,10 @@ Object.assign(window.ArtistIdent, {
             }
 
             if (progressText) {
-                progressText.textContent = this.tText(
-                    `Starting identification of ${imageIds.length} images...`,
-                    `正在启动 ${imageIds.length} 张图片的识别...`
-                );
+                progressText.textContent = I18n.format(this.tText(
+                    `Starting identification of {lengthCount} images...`,
+                    `正在启动 {lengthCount} 张图片的识别...`,
+                ), { lengthCount: imageIds.length });
             }
 
             // Start batch identification
@@ -426,7 +426,7 @@ Object.assign(window.ArtistIdent, {
             if (progressText) {
                 progressText.textContent = this.tKey(
                     'artist.identifyingSelected',
-                    'Identifying {count} selected image(s)...',
+                    'Identifying {count} selected images...',
                     '正在识别 {count} 张已选图片...',
                     { count: selectedImageIds.length }
                 );

@@ -82,25 +82,32 @@ Object.assign(SeparationConsole, {
             summary.className = 'sepcon-health-summary';
             const findingCount = (report.findings || []).length;
             summary.textContent = findingCount === 0
-                ? sepconT(`✅ ${report.images} images checked — no issues found.`,
-                    `✅ 已检查 ${report.images} 张图 — 未发现问题。`)
-                : sepconT(`${report.images} images checked — ${findingCount} finding(s):`,
-                    `已检查 ${report.images} 张图 — ${findingCount} 项发现：`);
+                ? I18n.format(sepconT(
+                    `✅ {images} images checked — no issues found.`,
+                    `✅ 已检查 {images} 张图 — 未发现问题。`,
+                ), { images: report.images })
+                : I18n.format(sepconT(
+                    `{images} images checked — {findingCount} findings:`,
+                    `已检查 {images} 张图 — {findingCount} 项发现：`,
+                ), { images: report.images, findingCount });
             out.appendChild(summary);
             if (skippedLocal > 0) {
                 const note = document.createElement('div');
                 note.className = 'sepcon-health-note';
-                note.textContent = sepconT(`(${skippedLocal} local-import images skipped — not in the DB)`,
-                    `（跳过 ${skippedLocal} 张本地导入图片 — 尚未入库）`);
+                note.textContent = I18n.format(sepconT(
+                    `({skippedLocal} local-import images skipped — not in the DB)`,
+                    `（跳过 {skippedLocal} 张本地导入图片 — 尚未入库）`,
+                ), { skippedLocal });
                 out.appendChild(note);
             }
             const scopeTotal = Math.max(Number(report.images_in_scope || 0), Number(galleryTotal || 0));
             if (report.images_truncated || scopeTotal > Number(report.images || 0)) {
                 const note = document.createElement('div');
                 note.className = 'sepcon-health-note';
-                note.textContent = sepconT(
-                    `Checked only the first ${report.images} of ${scopeTotal} images.`,
-                    `只检查了前 ${report.images} 张，共 ${scopeTotal} 张。`);
+                note.textContent = I18n.format(sepconT(
+                    `Checked only the first {images} of {scopeTotal} images.`,
+                    `只检查了前 {images} 张，共 {scopeTotal} 张。`,
+                ), { images: report.images, scopeTotal });
                 out.appendChild(note);
             }
             for (const finding of report.findings || []) {
@@ -136,8 +143,10 @@ Object.assign(SeparationConsole, {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'btn btn-secondary btn-small';
-            btn.textContent = sepconT(`Add trigger to ${imageIds.length} images`,
-                `一键给 ${imageIds.length} 张图补触发词`);
+            btn.textContent = I18n.format(sepconT(
+                `Add trigger to {lengthCount} images`,
+                `一键给 {lengthCount} 张图补触发词`,
+            ), { lengthCount: imageIds.length });
             btn.addEventListener('click', async () => {
                 btn.disabled = true;
                 try {

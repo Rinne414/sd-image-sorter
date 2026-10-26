@@ -16,7 +16,7 @@ Object.assign(window.Gallery, {
         // Remove existing menu
         document.querySelector('.gallery-context-menu')?.remove();
         document.querySelector('.collections-picker-menu')?.remove();
-        const t = (key, fallback, params) => { const v = window.I18n?.t?.(key, params); return (v && v !== key) ? v : fallback; };
+        const t = (key, fallback, params) => { const v = window.I18n?.t?.(key, params); return (v && v !== key) ? v : window.I18n.format(fallback, params); };
         const app = window.App || {};
         const imageId = Number(image?.id);
         const selectedIds = app.AppState?.selectedIds instanceof Set ? app.AppState.selectedIds : new Set();
@@ -42,7 +42,6 @@ Object.assign(window.Gallery, {
 
         const scopeLabel = actionCount > 1
             ? t('gallery.contextApplyToSelected', 'Use selected ({count})', { count: actionCount })
-                .replace('{count}', String(actionCount))
             : '';
         const labelWithScope = (key, fallback) => {
             const label = t(key, fallback);

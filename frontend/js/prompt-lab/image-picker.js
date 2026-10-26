@@ -183,7 +183,7 @@ Object.assign(window.PromptLab, {
 
     _renderPickerGrid(images, grid, count) {
         if (count) {
-            count.textContent = this._t('promptlab.pickImageCount', '{count} images', { count: images.length }).replace('{count}', images.length);
+            count.textContent = this._t('promptlab.pickImageCount', '{count} images', { count: images.length });
         }
 
         if (!images.length) {

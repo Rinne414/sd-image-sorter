@@ -105,8 +105,8 @@ function buildProgressText({
 
     if (primaryLabel) parts.push(primaryLabel);
     if (total > 0) parts.push(`${completed}/${total}`);
-    if (meta.etaText) parts.push(appT('progress.eta', 'ETA {time}').replace('{time}', meta.etaText));
-    else if (meta.elapsedText) parts.push(appT('progress.elapsed', 'Elapsed {time}').replace('{time}', meta.elapsedText));
+    if (meta.etaText) parts.push(I18n.format(appT('progress.eta', 'ETA {time}'), { time: meta.etaText }));
+    else if (meta.elapsedText) parts.push(I18n.format(appT('progress.elapsed', 'Elapsed {time}'), { time: meta.elapsedText }));
 
     // A progress carrying message_key is localised by the caller (its
     // defaultMessage); the raw backend sentence is never shown for it.
@@ -135,8 +135,8 @@ function buildOperationProgressText({
     if (primaryLabel) parts.push(primaryLabel);
     if (total > 0) parts.push(`${completed}/${total}`);
     extraParts.filter(Boolean).forEach((part) => parts.push(part));
-    if (showEta && meta.etaText) parts.push(appT('progress.eta', 'ETA {time}').replace('{time}', meta.etaText));
-    else if (meta.elapsedText) parts.push(appT('progress.elapsed', 'Elapsed {time}').replace('{time}', meta.elapsedText));
+    if (showEta && meta.etaText) parts.push(I18n.format(appT('progress.eta', 'ETA {time}'), { time: meta.etaText }));
+    else if (meta.elapsedText) parts.push(I18n.format(appT('progress.elapsed', 'Elapsed {time}'), { time: meta.elapsedText }));
 
     parts.push(detail || defaultMessage);
     return parts.join(' · ');

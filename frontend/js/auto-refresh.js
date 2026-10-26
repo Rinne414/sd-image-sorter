@@ -97,23 +97,26 @@
                     status: statusLabel,
                 });
                 app.showToast(
-                    appT(
+                    I18n.format(appT(
                         'libraryRoots.autoRefreshUnexpectedStart',
                         'Idle library refresh did not start (status: {status}, reason: {reason}, detail: {detail}). Open Library Folders and run Rescan.'
-                    )
-                        .replace('{status}', statusLabel)
-                        .replace('{reason}', reasonLabel)
-                        .replace('{detail}', detailLabel),
+                    ), {
+                        status: statusLabel,
+                        reason: reasonLabel,
+                        detail: detailLabel,
+                    }),
                     'error'
                 );
             } catch (error) {
                 const detail = error instanceof Error ? error.message : String(error);
                 window.Logger?.error?.('Idle auto-refresh start failed', { error });
                 app.showToast(
-                    appT(
+                    I18n.format(appT(
                         'libraryRoots.autoRefreshStartFailed',
                         'Could not start idle library refresh: {detail}. Open Library Folders and run Rescan.'
-                    ).replace('{detail}', detail),
+                    ), {
+                        detail: detail,
+                    }),
                     'error'
                 );
             }

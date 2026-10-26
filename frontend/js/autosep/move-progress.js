@@ -81,8 +81,8 @@ function showAutosepMoveProgress(total) {
     }
     document.getElementById('autosep-move-fill').style.width = '0%';
     document.getElementById('autosep-move-text').textContent = operationMode === 'copy'
-        ? tKey('autosep.preparingCopy', `Preparing to copy ${total} images in the background...`, `准备在后台复制 ${total} 张图片...`)
-        : tKey('autosep.preparingMove', `Preparing to move ${total} images in the background...`, `准备在后台移动 ${total} 张图片...`);
+        ? I18n.format(tKey('autosep.preparingCopy', `Preparing to copy {total} images in the background...`, `准备在后台复制 {total} 张图片...`), { total })
+        : I18n.format(tKey('autosep.preparingMove', `Preparing to move {total} images in the background...`, `准备在后台移动 {total} 张图片...`), { total });
     renderAutosepMoveErrors([]);
 
     const cancelBtn = document.getElementById('btn-cancel-autosep-move');
@@ -612,7 +612,7 @@ async function executeAutoSeparateWithProgress() {
             tKey('autosep.confirmExecuteTitle', 'Confirm Auto-Separate', '确认自动分类'),
             window.I18n?.getLang?.() === 'zh-CN'
                 ? `要把 ${total} 张匹配图片${operationMode === 'copy' ? '复制到' : '移动到'}：\n${destination}${allWarn}\n操作模式：${operationLabel}\n${scopeLine}\n继续前先确认上方预览列表。`
-                : `${operationMode === 'copy' ? 'Copy' : 'Move'} ${total} matching images to:\n${destination}${allWarn}\nAction mode: ${operationLabel}\n${scopeLine}\nReview the preview list above before continuing.`,
+                : `${operationMode === 'copy' ? 'Copy' : 'Move'} ${I18n.format('{total} matching images', { total })} to:\n${destination}${allWarn}\nAction mode: ${operationLabel}\n${scopeLine}\nReview the preview list above before continuing.`,
             executeMove,
             undefined,
             // Copying leaves the originals in place; only a move gets the red button.

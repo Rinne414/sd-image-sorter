@@ -53,7 +53,7 @@
         if (count === 0) return '';
         return datasetMaker._t(
             'dataset.projectManifestRevisionRequired',
-            'Click Save to store these {count} image(s) as a new project version before you preview, check or export.',
+            'Click Save to store these {count} images as a new project version before you preview, check or export.',
             { count },
         );
     }

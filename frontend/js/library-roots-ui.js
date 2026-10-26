@@ -21,8 +21,8 @@
     }
 
     function t(key, fallback, params) {
-        const value = window.I18n?.t?.(key, params);
-        return (value && value !== key) ? value : fallback;
+        const value = window.I18n.t(key, params);
+        return value && value !== key ? value : window.I18n.format(fallback, params);
     }
 
     function toast(message, type) {
@@ -131,7 +131,7 @@
             const count = Number(root.image_count || 0);
             const isMissing = root.exists === false;
             const scanned = root.last_scanned_at
-                ? t('libraryRoots.scannedAt', 'Last scanned {when}').replace('{when}', String(root.last_scanned_at).replace('T', ' '))
+                ? I18n.format(t('libraryRoots.scannedAt', 'Last scanned {when}'), { when: String(root.last_scanned_at).replace('T', ' ') })
                 : t('libraryRoots.neverScanned', 'Never scanned');
             const metaParts = [];
             if (isMissing) {
@@ -202,8 +202,9 @@
             if (!state) return t('libraryRoots.watchStarting', 'Watching: starting…');
             if (state.state === 'missing') return t('libraryRoots.watchMissing', 'Watching paused: the folder is not there. It resumes when the folder is back.');
             if (state.state === 'error') {
-                return t('libraryRoots.watchError', 'Watching stopped: {error}. Retrying every 30 s.')
-                    .replace('{error}', String(state.error || ''));
+                return I18n.format(t('libraryRoots.watchError', 'Watching stopped: {error}. Retrying every 30 s.'), {
+                    error: String(state.error || ''),
+                });
             }
             if (state.state === 'catching_up' || state.state === 'starting') {
                 return t('libraryRoots.watchCatchingUp', 'Watching: adding pictures made while the app was closed…');
@@ -214,9 +215,10 @@
             const imported = Number(state.imported || 0);
             if (!imported) return base;
             const when = String(state.last_import_at || '').replace('T', ' ');
-            return `${base} · ${t('libraryRoots.watchImported', '{count} added, last at {when}')
-                .replace('{count}', String(imported))
-                .replace('{when}', when)}`;
+            return `${base} · ${I18n.format(t('libraryRoots.watchImported', '{count} added, last at {when}'), {
+                count: String(imported),
+                when: when,
+            })}`;
         },
 
         _showWatchStatus(status) {

@@ -20,6 +20,7 @@ from services.bulk_job_service import (
     JOB_KIND_REMOVE_FROM_GALLERY,
     get_bulk_job_service,
 )
+from text_counts import count_text
 
 # NOTE(decomposition): keep the historical logger channel so log routing and
 # output stay byte-identical after the package split.
@@ -258,7 +259,7 @@ class RemoveJobsMixin:
                 "step": "starting",
                 "current": 0,
                 "total": total_count,
-                "message": f"Starting remove of {total_count} images...",
+                "message": f"Starting remove of {count_text(total_count, 'image')}...",
                 "started_at": time.time(),
                 "updated_at": time.time(),
             }
@@ -281,7 +282,7 @@ class RemoveJobsMixin:
                             "missing_ids": missing_ids,
                             "message": (
                                 f"Cancelled at {processed}/{total_count}. "
-                                f"Removed {removed} records so far."
+                                f"Removed {count_text(removed, 'record')} so far."
                             ),
                             "operation": "remove",
                             "started_at": self._remove_progress.get("started_at"),
@@ -307,7 +308,7 @@ class RemoveJobsMixin:
                         total=total_count,
                         removed=removed,
                         missing_ids=missing_ids,
-                        message=f"Removed {removed} records ({processed}/{total_count})",
+                        message=f"Removed {count_text(removed, 'record')} ({processed}/{total_count})",
                         operation="remove",
                         updated_at=time.time(),
                     ):
@@ -323,7 +324,7 @@ class RemoveJobsMixin:
                         "total": total_count,
                         "removed": removed,
                         "missing_ids": missing_ids,
-                        "message": f"Completed! Removed {removed} records." + (
+                        "message": f"Completed! Removed {count_text(removed, 'record')}." + (
                             f" {len(missing_ids)} already missing." if missing_ids else ""
                         ),
                         "operation": "remove",
@@ -360,7 +361,7 @@ class RemoveJobsMixin:
         background_tasks.add_task(run_remove)
         return {
             "status": "started",
-            "message": f"Removing {total_count} images in background",
+            "message": f"Removing {count_text(total_count, 'image')} in background",
             "total": total_count,
             "count": total_count,
             "operation": "remove",
@@ -376,7 +377,7 @@ class RemoveJobsMixin:
         job_id = bulk_jobs.create_job(
             JOB_KIND_REMOVE_FROM_GALLERY,
             total=len(image_ids),
-            message=f"Removing {len(image_ids)} images...",
+            message=f"Removing {count_text(len(image_ids), 'image')}...",
         )
 
         def process_chunk(chunk_ids: List[int]) -> Dict[str, Any]:

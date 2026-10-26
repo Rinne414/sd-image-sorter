@@ -498,7 +498,8 @@ def test_dataset_folder_import_has_paged_large_folder_controls():
     assert "exportPreviewManifestNote" in pipeline_source
     assert "confirmSummaryManifestPreview" not in zh_source
     assert "dataset.importGalleryManifestCount" in zh_source
-    assert "Object.entries(params)" in app_source
+    # appT fills {params} in its fallback too (I18n.format, test_i18n_plural.py)
+    assert "window.I18n.format(fallback || key, params)" in app_source
 
 
 def test_dataset_folder_import_append_keeps_current_tab_and_shows_busy_state():
@@ -1505,7 +1506,7 @@ def test_gallery_context_menu_has_workflow_actions_and_trash_is_explicit():
     assert "moveOrCopyGalleryImages" in app_source
     assert "deleteGalleryImagesByIds" in app_source
     assert "removeGalleryImagesByIds" in app_source
-    assert "moves {count} original file(s) to the Recycle Bin / Trash" in app_source
+    assert "moves {count} original files to the Recycle Bin / Trash" in app_source
     assert "emitSelectionStateChanged" in app_source
 
 

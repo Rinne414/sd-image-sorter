@@ -19,13 +19,8 @@
     const SEED_MODE_KEY = 'sd-send-to-generator-seed-mode';
 
     function t(key, fallback, params) {
-        let text = fallback;
-        const translated = window.I18n?.t?.(key, params);
-        if (translated && translated !== key) return translated;
-        Object.entries(params || {}).forEach(([name, value]) => {
-            text = text.replace(`{${name}}`, String(value));
-        });
-        return text;
+        const value = window.I18n.t(key, params);
+        return value && value !== key ? value : window.I18n.format(fallback, params);
     }
 
     function readSeedMode() {

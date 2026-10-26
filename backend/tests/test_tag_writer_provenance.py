@@ -1240,8 +1240,8 @@ def test_review_treats_mismatched_writer_fingerprint_as_stale(
     state = next(
         item for item in response.provider_states if item.provider == "metadata_provenance"
     )
-    assert "available for 0 image(s)" in state.reason_en
-    assert "1 tagger image(s) remain legacy/unknown" in state.reason_en
+    assert "available for 0 images" in state.reason_en
+    assert "still legacy/unknown: 1 tagger image." in state.reason_en
 
 
 def test_review_rejects_malformed_writer_provenance_and_skips_unrequested_reads(

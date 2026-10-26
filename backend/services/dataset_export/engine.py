@@ -139,6 +139,7 @@ from utils.atomic_staging import (
     publish_staging_file,
 )
 from utils.path_validation import normalize_user_path
+from text_counts import count_text
 
 
 _PIL_OUTPUT_FORMATS = {
@@ -510,7 +511,7 @@ def _export_dataset(
             "step": "loading",
             "current": 0,
             "total": requested_total,
-            "message": f"Preparing {requested_total} dataset items...",
+            "message": f"Preparing {count_text(requested_total, 'dataset item')}...",
             "output_folder": str(output_path or ""),
             "output_mode": output_mode,
         })
@@ -1462,7 +1463,7 @@ def _export_dataset(
         return _export_record(record, [])
 
     try:
-        _emit(f"Exporting 0/{total_expected} images...")
+        _emit(f"Exporting 0/{count_text(total_expected, 'image')}...")
 
         # ---- DB-source records in bounded chunks ----
         for image_id_chunk in _iter_chunks(_iter_unique_image_ids(request.image_ids or []), _svc().DATASET_EXPORT_DB_CHUNK_SIZE):
@@ -1544,7 +1545,7 @@ def _export_dataset(
 
         if cancelled:
             status = "cancelled"
-            _emit(f"Cancelled at {processed}/{total_expected}. Exported {exported} images.")
+            _emit(f"Cancelled at {processed}/{total_expected}. Exported {count_text(exported, 'image')}.")
         elif error_count == 0:
             status = "ok"
         elif exported == 0:

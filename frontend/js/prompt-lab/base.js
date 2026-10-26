@@ -80,8 +80,9 @@ const PromptLab = {
     },
 
     _t(key, fallback, params) {
-        const v = window.I18n?.t?.(key, params); return (v && v !== key) ? v : (fallback || key);
-    },
+    const value = window.I18n.t(key, params);
+    return value && value !== key ? value : window.I18n.format(fallback || key, params);
+},
 
     _renderStatsEmpty(message) {
         return `<div class="promptlab-empty-note">${escapeHtml(message)}</div>`;
