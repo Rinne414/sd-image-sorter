@@ -615,6 +615,7 @@ function syncMediaToggleWithFilters() {
         btn.classList.toggle('is-active', isActive);
         btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
     });
+    if (typeof syncMediaToggle === 'function') syncMediaToggle(Number(AppState.analytics?.videoCount || 0));
 }
 
 function resetAllFilters() {

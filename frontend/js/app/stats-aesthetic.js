@@ -43,6 +43,7 @@ async function loadStats() {
             top_tags: stats.top_tags || [],
             generatorCounts: genCounts,
             totalImages: reportedTotal,
+            videoCount: Number(stats.video_count || 0),
             metadataPending,
             metadataStatus: stats.metadata_status || stats.metadata_status_counts || {},
             countsResolving,
@@ -58,6 +59,7 @@ async function loadStats() {
         }
         // A tagging run or import changes the counts under the filters too.
         refreshGeneratorTabCounts({ force: true });
+        syncMediaToggle(Number(stats.video_count || 0));
 
         const metadataChip = $('#metadata-status-chip');
         // The chip sits above the grid and comes and goes with metadata
@@ -169,6 +171,17 @@ function renderGeneratorTabCounts(genCounts, total, { resolving = false, filtere
 // clicking it would show. The generator filters themselves are left out (the
 // tabs choose the generator); with no other filter on, the library counts
 // from /api/stats are the same numbers and need no request.
+// The All / Pictures / Videos toggle does nothing in a library without
+// videos, so it shows only when there are some (or its filter is on, so it
+// can be switched off); the search row then makes room for it.
+function syncMediaToggle(videoCount) {
+    const toggle = $('#media-quick-toggle');
+    if (!toggle) return;
+    const shown = videoCount > 0 || Boolean(normalizeMediaTypeFilter(AppState.filters?.mediaType));
+    toggle.hidden = !shown;
+    toggle.closest('.gallery-search-row')?.classList.toggle('has-media-toggle', shown);
+}
+
 let _generatorTabCountsKey = null;
 let _generatorTabCountsSequence = 0;
 

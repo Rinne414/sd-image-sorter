@@ -11976,10 +11976,34 @@ html.lang-zh #view-censor .queue-action-btn span {
     }
 
     .gallery-search-tools .sort-dropdown {
-        width: 9.5rem;
-        min-width: 9.5rem;
-        max-width: 9.5rem;
+        width: 9rem;
+        min-width: 9rem;
+        max-width: 9rem;
     }
+
+    /* With a video library the media toggle joins the row: the box starts
+       smaller and the quick chips and toggles are a little tighter. */
+    .gallery-search-row.has-media-toggle .gallery-search-box {
+        flex-basis: 180px;
+        min-width: 170px;
+    }
+
+    .gallery-search-row.has-media-toggle .gallery-chip {
+        padding: 5px 8px;
+    }
+
+    .gallery-search-row.has-media-toggle .gallery-search-tools {
+        gap: 6px;
+    }
+
+    .gallery-search-row.has-media-toggle .gallery-search-tools .aspect-quick-btn {
+        padding: 4px 7px;
+    }
+}
+
+/* Shown only when the open library has videos (or the media filter is on). */
+.media-quick-toggle[hidden] {
+    display: none !important;
 }
 
 .gallery-chip {

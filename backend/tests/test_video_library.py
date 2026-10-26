@@ -635,3 +635,16 @@ def test_watcher_waits_until_ffprobe_reads_the_video(tmp_path):
 
     assert ready == [str(done)]
     assert str(half) in pending, "a video ffprobe cannot read yet keeps waiting"
+
+
+def test_stats_count_the_videos_of_the_open_library(test_db, test_client, tmp_path, monkeypatch):
+    """The gallery shows its All / Pictures / Videos toggle only when the open
+    library has videos (2026-10-26)."""
+    monkeypatch.setattr(video_index.VideoIndexer, "kick", lambda self: None)
+    assert test_client.get("/api/stats").json()["video_count"] == 0
+
+    (tmp_path / "clip.mp4").write_bytes(b"\x00" * 64)
+    scan_folder(str(tmp_path), quick_import=True, precise_total=False)
+
+    assert test_client.get("/api/stats").json()["video_count"] == 1
+    assert db_videos.count_library_videos() == 1

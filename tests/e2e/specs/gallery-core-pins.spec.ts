@@ -358,6 +358,9 @@ test('failed refresh removes skeletons and restores the settled Gallery state', 
     if (imageCount) imageCount.textContent = '6 of 5 images'
     const libraryCount = document.querySelector('#count-all')
     if (libraryCount) libraryCount.textContent = '5'
+    // The label reads the library total from the stats (the All tab follows
+    // the filters since 2026-10-26).
+    window.App.AppState.analytics = { ...(window.App.AppState.analytics || {}), totalImages: 5 }
     const emptyState = document.querySelector<HTMLElement>('#gallery-empty-state')
     if (emptyState) emptyState.style.display = 'none'
     return {

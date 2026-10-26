@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import BackgroundTasks, HTTPException
 
 import database as db
+import db_videos
 from app_info import APP_VERSION, GITHUB_REPOSITORY_URL
 from services.gallery_job_gate import gallery_job_transition
 from services.sorting_models import (
@@ -291,6 +292,8 @@ class LibraryMixin:
         scan_progress = self.get_scan_progress()
         return {
             "total_images": db.get_image_count(),
+            # Videos in this library: the gallery shows its media toggle only then.
+            "video_count": db_videos.count_library_videos(),
             "generators": db.get_all_generators(),
             "top_tags": analytics_data["top_tags"],
             "checkpoints": analytics_data["checkpoints"],

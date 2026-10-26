@@ -135,12 +135,12 @@ test('createDefaultFilterState returns the FilterStore default shape (incl. date
     }
   })
 
-  // FilterStore.createDefaultFilterState (stores/filter-store.js) has exactly 47
-  // keys. Bump this when a real filter field is added there — and make sure the
+  // FilterStore.createDefaultFilterState (stores/filter-store.js) has exactly 48
+  // keys (mediaType joined with the video library, 2026-10-23). Bump this when a real filter field is added there — and make sure the
   // snake_case query builders + cloneState allowlist get it too (a key missing
   // from EITHER store function is silently stripped every cycle — the date-
   // filter bug this suite originally pinned).
-  expect(probe.keyCount).toBe(47)
+  expect(probe.keyCount).toBe(48)
   expect(probe.matchesFilterStore).toBe(true)
   expect(probe.generatorsLen).toBe(14) // PRIMARY_GENERATORS + OTHERS bundle
   expect(probe.ratings).toEqual(['general', 'sensitive', 'questionable', 'explicit'])
@@ -164,7 +164,7 @@ test('createDefaultFilterState returns the FilterStore default shape (incl. date
 // 3. buildSelectionFilterRequest — the camelCase selection/token contract.
 // ---------------------------------------------------------------------------
 
-test('buildSelectionFilterRequest emits the 46-key camelCase selection contract', async ({ page }) => {
+test('buildSelectionFilterRequest emits the 47-key camelCase selection contract', async ({ page }) => {
   const probe = await page.evaluate(() => {
     const App = (window as AnyWin).App
     const req = App.buildSelectionFilterRequest(App.createDefaultFilterState())
@@ -197,9 +197,10 @@ test('buildSelectionFilterRequest emits the 46-key camelCase selection contract'
     }
   })
 
-  // buildSelectionFilterRequest returns 46 keys, including the Gallery scope
+  // buildSelectionFilterRequest returns 47 keys (mediaType joined with the video
+  // library, 2026-10-23), including the Gallery scope
   // consumed by count and selection-token endpoints.
-  expect(probe.keyCount).toBe(46)
+  expect(probe.keyCount).toBe(47)
   expect(probe.hasDateFrom).toBe(true)
   expect(probe.hasDateTo).toBe(true)
   expect(probe.hasCollectionId).toBe(true)

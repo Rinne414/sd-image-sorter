@@ -77,6 +77,19 @@ def save_video_facts(
     _invalidate_facet_caches()
 
 
+def count_library_videos() -> int:
+    """Videos in the open library (the gallery's media toggle shows only then)."""
+    from library_context import current_library_sql
+
+    lib_sql, lib_params = current_library_sql()
+    with get_db() as conn:
+        row = conn.execute(
+            f"SELECT COUNT(*) FROM images WHERE media_type = 'video' AND {lib_sql}",
+            lib_params,
+        ).fetchone()
+    return int(row[0] or 0)
+
+
 def video_counts() -> Dict[str, int]:
     """How many videos are indexed, and how many still wait for probing."""
     with get_db() as conn:
