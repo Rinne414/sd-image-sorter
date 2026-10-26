@@ -174,7 +174,7 @@ def test_worker_missing_file_marks_unreadable_and_counts_error(
     assert terminal["status"] == "done"
     assert terminal["errors"] == 1
     assert terminal["tagged"] == 0
-    assert terminal["message"] == "Completed! Processed 1 images: 0 tagged, 1 failed."
+    assert terminal["message"] == "Completed! Processed 1 image: 0 tagged, 1 failed."
     assert any(
         "Skipped unreadable image: gone_missing.png (File not found)" in m["message"]
         for m in messages
@@ -247,7 +247,7 @@ def test_worker_filters_nonexistent_image_ids_from_total(
     assert terminal["status"] == "done"
     assert terminal["current"] == 1
     assert terminal["tagged"] == 1
-    assert terminal["message"] == "Completed! Processed 1 images: 1 tagged."
+    assert terminal["message"] == "Completed! Processed 1 image: 1 tagged."
 
 
 def test_worker_pre_tag_blacklist_drops_rows_before_write(

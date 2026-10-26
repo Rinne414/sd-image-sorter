@@ -66,7 +66,7 @@ def test_done_state_has_key_and_counts(test_db, tmp_path):
     assert progress["message_key"] == "done"
     assert progress["matched"] == 1
     assert progress["still_missing"] == 0
-    assert progress["message"].startswith("Reconnected 1 missing files.")
+    assert progress["message"].startswith("Reconnected 1 missing file.")
 
 
 def test_cancelled_state_has_key(test_db, tmp_path, monkeypatch):

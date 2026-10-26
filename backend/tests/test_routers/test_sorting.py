@@ -1738,7 +1738,7 @@ class TestBatchMove:
 
         progress = isolated_sorting_service.get_batch_move_progress()
         assert progress["status"] == "done"
-        assert "Copied 1 images" in progress["message"]
+        assert "Copied 1 image." in progress["message"]
         assert "Moved" not in progress["message"]
 
 
