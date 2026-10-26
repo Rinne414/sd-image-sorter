@@ -98,6 +98,15 @@ SD Image Sorter can now stay resident: the Windows package opens a desktop progr
 - **The open library's name / 当前图库的名字**: the entry page could show 主图库 / Main library over the name of the library you had open after the language was applied again, and quick collect, disk usage and Vopus settings said "Main library" in the Chinese interface; they now show the open library's name, and the default library is named in the interface language until you rename it.
   - 语言重新套用后，入口页可能把你打开的图库名字换回「主图库 / Main library」；快速收集、磁盘占用和 Vopus 设置在中文界面里写「Main library」。现在都显示当前图库的名字，默认图库在改名前跟着界面语言显示。
 
+- **The search row on a laptop with videos / 有视频时笔记本上的搜索栏**: the All / Pictures / Videos switch pushed the aspect toggle and sort onto a third row at 1366×768. The switch now appears only when the open library has videos (or its filter is on), and then the row makes room for it.
+  - 「全部 / 图片 / 视频」开关在 1366×768 下把宽高比和排序挤到第三行。现在只有当前图库里有视频（或这个筛选开着）时才显示它，显示时搜索栏会给它腾出位置。
+
+- **A review left from an earlier Find Moved Files run / 上一次「找回移动的文件」留下的待选**: when a run found no new ambiguous match but an earlier one was still waiting, "Need your choice 1" stayed folded with its "Review & fix these matches" button inside. The group now opens whenever something waits for your choice.
+  - 这次没有新的需要你选的匹配、但上一次留下的还没处理时，「需要你选择 1」会折叠着，「检查并修复这些匹配」按钮藏在里面。现在只要有待选的就会展开。
+
+- **Vopus menus: a click keeps the submenu open / Vopus 菜单：点击不会把子菜单关掉**: moving to "Rate" or "Add to batch" opened the submenu, and the click that usually follows closed it again. A click on such a row now only opens it.
+  - 移到「评分」或「加入批次」时子菜单已经打开，接着的点击反而把它关掉。现在点这种项目只会打开。
+
 ## [3.7.0] - 2026-10-17
 
 One program now serves two interfaces: the classic one stays the start page and Vopus, the second interface, is switched on in Settings. The database is copied before every upgrade, and libraries that Vopus 1.0.0 had upgraded are repaired. Moves, undo, exports and batch censoring always say how they ended. Letter shortcuts no longer swallow browser keys such as Ctrl+Shift+R, and the browser Back button goes up one level like Esc.

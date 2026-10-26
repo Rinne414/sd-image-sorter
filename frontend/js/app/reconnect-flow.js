@@ -247,7 +247,7 @@ function _renderReconnectResultPanel(progress) {
                 </div>
             `, matched || updated.length)}
         </details>
-        <details class="reconnect-result-group" ${needsReview.length ? 'open' : ''}>
+        <details class="reconnect-result-group" ${needsReview.length || Number(result.review_pending_total || 0) > 0 ? 'open' : ''}>
             <summary>${escapeHtml(appT('reconnect.resultNeedsReview', 'Need your choice'))} <span>${Number(result.review_pending_total || needsReview.length || 0)}</span></summary>
             ${Number(result.review_pending_total || needsReview.length || 0) > 0 ? `
                 <button type="button" class="btn btn-primary btn-small reconnect-open-repair-review" id="btn-open-repair-review">

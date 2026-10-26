@@ -193,7 +193,9 @@ export function ContextMenu({ x, y, label, header, groups, onClose, focusFirst =
               expanded={sub?.item.id === item.id}
               onChoose={choose}
               onPointerOver={(el) => pointerOver(item, el)}
-              onOpen={(el) => (sub?.item.id === item.id ? setSub(null) : openSub(item, el, false))}
+              // A click opens the submenu and never closes it: the pointer has
+              // usually opened it already on the way, and a toggle then shut it.
+              onOpen={(el) => openSub(item, el, false)}
             />
           ))}
         </div>
