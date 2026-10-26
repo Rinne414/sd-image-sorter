@@ -378,6 +378,9 @@ test.describe('Aurora Phase 3 — repair review (Roadmap-C)', () => {
     const started = page.waitForResponse((response: any) => response.url().endsWith('/api/images/reconnect-missing/start'))
     await page.locator('#btn-start-reconnect').click()
     expect((await started).ok()).toBe(true)
+    // The search runs in the background and the dialog closes once the start
+    // answer is read. Wait for that: a fast search can be done before it.
+    await expect(page.locator('#reconnect-modal.visible')).toHaveCount(0)
 
     let progress: any = null
     await expect.poll(async () => {
@@ -396,9 +399,8 @@ test.describe('Aurora Phase 3 — repair review (Roadmap-C)', () => {
     }
 
     // Reopen the reconnect modal: the result panel carries the review CTA.
-    if (!await page.locator('#reconnect-modal.visible').isVisible()) {
-      await page.locator('#btn-reconnect-missing').click()
-    }
+    await page.locator('#btn-reconnect-missing').click()
+    await expect(page.locator('#reconnect-modal.visible')).toBeVisible()
     await expect(page.locator('#btn-open-repair-review')).toBeVisible({ timeout: 10000 })
     await page.locator('#btn-open-repair-review').click()
     await expect(page.locator('#repair-review-modal.visible')).toBeVisible()

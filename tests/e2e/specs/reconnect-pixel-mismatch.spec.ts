@@ -190,6 +190,7 @@ test('the summary reads in Chinese', async ({ page, request }, testInfo) => {
   const started = page.waitForResponse((response: any) => response.url().endsWith('/api/images/reconnect-missing/start'))
   await page.locator('#btn-start-reconnect').click()
   expect((await started).ok()).toBe(true)
+  await expect(page.locator('#reconnect-modal.visible')).toHaveCount(0)
   await expect.poll(async () => {
     const progress = await (await request.get('/api/images/reconnect-missing/progress')).json()
     return String(progress.status || '')
