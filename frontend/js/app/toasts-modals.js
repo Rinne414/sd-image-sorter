@@ -408,7 +408,14 @@ function showModal(modalId, options = {}) {
         const namedStart = modal.dataset.initialFocus ? modal.querySelector(modal.dataset.initialFocus) : null;
         const firstFocus = options.initialFocus || namedStart || modal.querySelector('.modal-close');
         if (firstFocus && isTopmost) {
-            setTimeout(() => firstFocus.focus(), 100);
+            setTimeout(() => {
+                // Not when another dialog opened on top in the meantime, nor when
+                // focus is already inside this one (the user, or the code that
+                // opened it, put it there): a late focus used to pull it out of
+                // a confirmation or off the control it had just been handed back to.
+                if (_topOpenModal()?.modal !== modal || modal.contains(document.activeElement)) return;
+                firstFocus.focus();
+            }, 100);
         }
     }
 }

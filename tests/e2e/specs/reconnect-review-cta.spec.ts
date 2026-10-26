@@ -18,10 +18,16 @@ test('an earlier pending review keeps its button in sight after a run without ne
     localStorage.setItem('sd-sorter-entry-skip-session', '1')
     localStorage.setItem('sd-image-sorter-lang', 'en')
   })
+  // The page reads the progress once at start-up too, so the run only counts
+  // after Start: idle before, running once, then done.
+  let started = false
   let polls = 0
-  await page.route('**/api/images/reconnect-missing/start', (route) =>
-    route.fulfill({ json: { status: 'started', message: 'started' } }))
+  await page.route('**/api/images/reconnect-missing/start', (route) => {
+    started = true
+    return route.fulfill({ json: { status: 'started', message: 'started' } })
+  })
   await page.route('**/api/images/reconnect-missing/progress', (route) => {
+    if (!started) return route.fulfill({ json: { status: 'idle' } })
     polls += 1
     if (polls < 2) return route.fulfill({ json: { status: 'running', step: 'searching', current: 1, total: 2 } })
     return route.fulfill({
@@ -44,11 +50,13 @@ test('an earlier pending review keeps its button in sight after a run without ne
   await page.locator('#reconnect-folder-path').fill(FOLDER)
   await page.locator('#btn-start-reconnect').click()
 
-  // The search runs in the background; its result is read in the reopened dialog.
+  // The search runs in the background (the dialog closes); its result is read
+  // in the reopened dialog once the done answer has been drawn.
+  await expect(page.locator('#reconnect-modal.visible')).toHaveCount(0)
   await expect.poll(() => polls, { timeout: 15000 }).toBeGreaterThanOrEqual(2)
-  if (!await page.locator('#reconnect-modal.visible').isVisible()) {
-    await page.locator('#btn-reconnect-missing').click()
-  }
+  await expect(page.locator('#reconnect-progress-fill')).not.toHaveClass(/is-indeterminate/)
+  await page.locator('#btn-reconnect-missing').click()
+  await expect(page.locator('#reconnect-modal.visible')).toBeVisible()
   const cta = page.locator('#btn-open-repair-review')
   await expect(cta).toBeVisible({ timeout: 15000 })
   await expect(cta).toContainText('(1)')

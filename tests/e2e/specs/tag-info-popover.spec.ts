@@ -201,6 +201,8 @@ test('the keyboard path opens the popover from the highlighted suggestion', asyn
 
   await input.press('ArrowRight')
   await expect(page.locator('.cap-ac-info')).toBeVisible()
+  // The details load after the popover opens (a slow CI read "Loading tag details…").
+  await expect(page.locator('.cap-ac-info')).not.toContainText('Loading')
   expect(await popoverText(page)).toContain('hatsune_miku')
 
   // Layered dismissal: the first Escape takes the popover, the second the

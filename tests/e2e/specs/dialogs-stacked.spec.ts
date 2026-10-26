@@ -98,3 +98,30 @@ test('a dialog hidden by hand and opened again hands focus back to its new opene
   await expect(page.locator('#scan-modal')).not.toHaveClass(/visible/)
   await expect(page.locator('#stack-opener-2')).toBeFocused()
 })
+
+// A dialog moves focus to its start control 100 ms after it opens. That late
+// focus must not pull focus out of a confirmation opened meanwhile, nor off a
+// control inside the dialog that focus already reached (a CI flake of the
+// focus-back test above).
+test('a confirmation opened right after a dialog keeps the focus', async ({ page }) => {
+  await openApp(page)
+  await page.evaluate(() => {
+    document.getElementById('stack-opener')!.focus()
+    ;(window as any).App.showModal('scan-modal')
+    ;(window as any).App.showConfirm('Stacked', 'Opened within the first 100 ms')
+  })
+  await expect(page.locator('#confirm-modal')).toHaveClass(/visible/)
+  await page.waitForTimeout(300)
+  expect(await page.evaluate(() => Boolean(document.activeElement?.closest('#confirm-modal')))).toBe(true)
+})
+
+test('focus already inside a dialog stays where it is', async ({ page }) => {
+  await openApp(page)
+  await page.evaluate(() => {
+    document.getElementById('stack-opener')!.focus()
+    ;(window as any).App.showModal('scan-modal')
+    ;(document.getElementById('btn-browse-folder') as HTMLElement).focus()
+  })
+  await page.waitForTimeout(300)
+  await expect(page.locator('#btn-browse-folder')).toBeFocused()
+})
