@@ -36,7 +36,8 @@ Dataset Check adds subject-count fixes, blur hints and exact Anima token counts.
 
 ## Validation / 验证
 
-VALIDATION_PENDING
+GitHub CI run 40414067489 (Linux full suite with browser tests and click coverage, macOS, Windows, Linux portable x86_64 and aarch64): 5 of 5 green; backend 9,131 passed; browser tests 1,943 passed, 0 failed, 0 flaky. Locally, without retries: the 33 dataset, Find Moved Images and Smart Tag browser spec files (324 tests) and the audit spec (13 tests). The new tests for Export waiting on caption versions, the failed-read message, the Style Map recompute and the empty-caption check fail on 3.8.1's code and pass now. On a fresh 3.9.0 Windows package, as a new user with real pictures: a typed 1girl, 2girls, solo caption got the subject-count fix (2girls kept, 1girl and solo taken off, one Undo); the audit scored four pictures and listed the blurred and the flat one; Anima showed the estimate, downloaded its two tokenizers (14 MB, into the package's own folder) and then counted exactly.
+  - GitHub CI（40414067489：Linux 完整测试含浏览器测试和点击覆盖、macOS、Windows、Linux 便携版 x86_64 与 aarch64）5 项全部通过；后端 9,131 通过；浏览器测试 1,943 通过、0 失败、0 个偶发。本机（不重试）：数据集、查找移动的图片和 Smart Tag 的 33 个浏览器测试文件（324 个测试）以及审计测试（13 个）。新加的测试（导出等 caption 版本、读取失败的提示、画风地图重新计算、空 caption 检查）在 3.8.1 的代码上失败、现在通过。在全新的 3.9.0 Windows 包里以新用户身份用真实图片走了一遍：输入 1girl, 2girls, solo 的 caption 得到人数修正（保留 2girls、去掉 1girl 和 solo，可一步撤销）；审计给四张图评分，列出了糊图和过平的图；选 Anima 后先显示估算，下载两个分词器（14 MB，放在程序自己的文件夹里）后改为精确计数。
 
 ---
 
