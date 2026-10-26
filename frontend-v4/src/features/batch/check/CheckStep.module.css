@@ -502,3 +502,85 @@ button.thumb:focus-visible .pic {
   font-size: var(--fs-3);
   border-radius: var(--radius);
 }
+
+/* Subject-count fixes: one row per image, ticked to apply. */
+.subjectFixes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.subjectList {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.subjectRow {
+  display: grid;
+  grid-template-columns: auto 44px minmax(0, 190px) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.subjectRow input {
+  accent-color: var(--accent);
+}
+
+.subjectPic {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  overflow: hidden;
+  background: var(--stage);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.subjectPic img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.subjectName {
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subjectTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.keepTag,
+.dropTag {
+  padding: 2px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  font-size: var(--fs-2);
+}
+
+.keepTag {
+  color: var(--text);
+}
+
+.dropTag {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  text-decoration: line-through;
+}

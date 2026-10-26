@@ -101,6 +101,23 @@ describe('many captions', () => {
     expect(changes[0]?.before.booru_caption).toBe('smile, dress')
   })
 
+  it('takes each image its own tags out, whatever the spelling', () => {
+    const contents = new Map([
+      ['a', c('1girl, 2girls, solo, smile')],
+      ['b', c('1_girl, Solo_Focus, smile')],
+      ['c', c('solo, multiple_girls')],
+    ])
+    const drops = new Map([
+      ['a', ['1girl', 'solo']],
+      ['c', ['solo']],
+    ])
+    const changes = planOp(contents, ['a', 'b', 'c'], { kind: 'removeEach', drops }, categoryOf)
+    expect(changes.map((ch) => [ch.key, ch.after.booru_caption])).toEqual([
+      ['a', '2girls, smile'],
+      ['c', 'multiple_girls'],
+    ])
+  })
+
   it('counts each tag once per caption, most used first, in its usual spelling', () => {
     const rows = tagFrequency([
       ['a', c('long_hair, smile, smile')],

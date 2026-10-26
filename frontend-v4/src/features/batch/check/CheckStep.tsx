@@ -3,8 +3,10 @@ import { queryClient } from '../../../api/queryClient'
 import type { Batch } from '../../../api/types'
 import { useT } from '../../../i18n'
 import { useApp } from '../../../state/store'
+import { useToasts } from '../../../ui/toasts'
 import { projectKey, readdEntries } from '../datasetApi'
 import { runBulk } from '../edit/bulkRun'
+import { renderInitialContents } from '../edit/initialContents'
 import { styleOf } from '../edit/tagStyle'
 import { captionHolder } from '../edit/useCaptionSession'
 import { stepLabel } from '../labels'
@@ -81,6 +83,19 @@ export function CheckStep({ batch, next, onNext }: Props) {
       if (id !== null) openMaskEditor(scope.ids, id)
     },
     autoMask: (keys) => autoMaskImages(keys.map(idOf).filter((id): id is number => id !== null)),
+    fixSubjects: async (fixes) => {
+      const picked = fixes.flatMap((f) => byKey.get(f.key) ?? [])
+      if (!form || picked.length === 0) return
+      try {
+        // The captions as they start, so images nobody edited yet can be changed (only the ticked ones are rendered).
+        const initial = await renderInitialContents(form, picked)
+        const op = { kind: 'removeEach', drops: new Map(fixes.map((f) => [f.key, f.drop])) } as const
+        const changed = await runBulk(batch, captionHolder(batch.id).session, { label: t('dataset.check.subjectLabel'), op, keys: fixes.map((f) => f.key), initial, entries: byKey, categoryOf: () => 'unknown' })
+        if (changed < fixes.length) useToasts.getState().push(t('dataset.check.subjectSome', { n: changed, total: fixes.length }), 'info')
+      } catch (error) {
+        useToasts.getState().push(t('error.generic', { reason: error instanceof Error ? error.message : String(error) }), 'error')
+      }
+    },
     unifyStyle: (keys) => {
       if (!form) return
       const op = { kind: 'style', style: styleOf(form.normalizeUnderscores) } as const

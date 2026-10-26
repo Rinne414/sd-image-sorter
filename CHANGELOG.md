@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added / 新增
+
+- **Subject-count conflicts in the Check step / 检查步骤的人数标签冲突**: a caption that says `1girl` and `2girls` (or `multiple girls`), or `solo` beside two or more people, is listed with a fix to preview. The fix keeps the higher count and takes `solo` off multi-subject pictures (`solo_focus` is left alone); you tick the pictures to change and apply them in one undoable step. The idea is from BooruDatasetTagManagerPlus; the code is new.
+  - 同一张图的 caption 里 `1girl` 和 `2girls`（或 `multiple girls`）并存，或多人图带 `solo`，会列出可预览的修正：保留较高的人数、去掉多人图上的 `solo`（不动 `solo_focus`），勾选要改的图后一步应用，可一步撤销。思路来自 BooruDatasetTagManagerPlus，代码为新写。
+
 ## [3.8.1] - 2026-10-27
 
 English counts read right for one across the classic interface, Vopus, the program's messages and the browser extension, and the lines that stayed English in Chinese mode are translated.

@@ -134,6 +134,42 @@ describe('each source says what it found, by entry key', () => {
     expect(byKind(healthIssues(report, keys, { ratingsInCaptions: false }), 'rating_conflict')).toEqual([])
   })
 
+  it('subject-count conflicts become one issue with the fix for each image, to preview and tick', () => {
+    const finding = (fix: HealthReport['findings'][number]['fix']): HealthReport => ({
+      images: 3,
+      findings: [{ id: 'subject-count-conflict', severity: 'medium', title_en: 't', title_zh: 't', detail_en: 'd', detail_zh: 'd', fix, data: {} }],
+    })
+    const proposals = [
+      { image_id: 2, keep: ['2girls'], drop: ['1girl', 'solo'] },
+      { image_id: 99, keep: ['2girls'], drop: ['solo'] },
+      { image_id: 3, keep: [], drop: [] },
+    ]
+    const found = byKind(healthIssues(finding({ proposals }), keys, { ratingsInCaptions: true }), 'subject_count')
+    expect(found).toHaveLength(1)
+    expect(found[0]).toMatchObject({ severity: 'medium', keys: ['lib:2'], subjectFixes: [{ key: 'lib:2', keep: ['2girls'], drop: ['1girl', 'solo'] }] })
+    // nothing to propose for any image in the batch: no issue
+    expect(byKind(healthIssues(finding({ proposals: proposals.slice(1) }), keys, { ratingsInCaptions: true }), 'subject_count')).toEqual([])
+    expect(byKind(healthIssues(finding(null), keys, { ratingsInCaptions: true }), 'subject_count')).toEqual([])
+  })
+
+  it('subject-count fixes of images that left the batch are dropped when the issues merge', () => {
+    const issue = {
+      id: 'subject_count',
+      kind: 'subject_count',
+      severity: 'medium',
+      keys: ['lib:3', 'lib:1', 'lib:gone'],
+      sources: ['health'],
+      subjectFixes: [
+        { key: 'lib:3', keep: [], drop: ['solo'] },
+        { key: 'lib:1', keep: [], drop: ['1girl'] },
+        { key: 'lib:gone', keep: [], drop: ['solo'] },
+      ],
+    } as CheckIssue
+    const [merged] = mergeIssues([[issue]], order)
+    expect(merged?.keys).toEqual(['lib:1', 'lib:3'])
+    expect(merged?.subjectFixes?.map((s) => s.key)).toEqual(['lib:1', 'lib:3'])
+  })
+
   it('character purity names the outliers with their distance', () => {
     const found = purityIssues({ items: [{ image_id: 1, distance: 0.41, outlier: true }, { image_id: 2, distance: 0.05, outlier: false }] }, keys)
     expect(found[0]).toMatchObject({ kind: 'character_outlier', keys: ['lib:1'], notes: { 'lib:1': '0.41' } })

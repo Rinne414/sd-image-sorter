@@ -790,4 +790,13 @@ export const enDataset: Record<keyof typeof zhCNDataset, string> = {
   'dataset.check.tagStyle': '{n} edited captions spell some tags another way',
   'dataset.check.tagStyle.detail': 'One tag in two spellings (blue_sky and blue sky) is two different words to the trainer. Write them the way the template of this batch does; one step undoes it.',
   'dataset.check.unifyStyle': 'Write tags one way ({n})',
+  'dataset.check.subjectCount': '{n} captions have subject counts that contradict each other',
+  'dataset.check.subjectCount.detail': 'A caption that says one girl and two girls, or "solo" beside two or more people, tells the trainer nothing true about how many people are in the picture. The fix below keeps the higher count and takes "solo" off pictures with more than one subject ("solo focus" is a different tag and stays). Untick the pictures to leave as they are; one step undoes it.',
+  'dataset.check.subjectApply': 'Apply to the {n} ticked',
+  'dataset.check.subjectTickAll': 'Tick all',
+  'dataset.check.subjectUntickAll': 'Untick all',
+  'dataset.check.subjectKeeps': 'Stays in the caption',
+  'dataset.check.subjectDrops': 'Taken out of the caption',
+  'dataset.check.subjectLabel': 'fix subject counts',
+  'dataset.check.subjectSome': 'Changed {n} of {total} captions. The other tags come from the batch rules (common tags), so change them in the settings.',
 }

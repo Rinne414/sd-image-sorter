@@ -23,6 +23,7 @@ export type IssueKind =
   | 'fullbody'
   | 'rating_conflict'
   | 'rating_missing'
+  | 'subject_count'
   | 'rare_tags'
   | 'cooccur'
   | 'no_mask'
@@ -30,6 +31,13 @@ export type IssueKind =
 
 export type Severity = 'high' | 'medium' | 'low'
 export type IssueSource = 'project' | 'captions' | 'review' | 'audit' | 'health' | 'purity' | 'masks'
+
+/** One image's subject-count fix: keep these count tags, take these out (tags as the backend folds them). */
+export interface SubjectFix {
+  key: string
+  keep: string[]
+  drop: string[]
+}
 
 export interface TagPair {
   a: string
@@ -53,6 +61,8 @@ export interface CheckIssue {
   tags?: string[]
   /** cooccur: tags that go together. */
   pairs?: TagPair[]
+  /** subject_count: the proposed fix for each image, to preview and tick. */
+  subjectFixes?: SubjectFix[]
   /** A short fact per image (a size, a token count, a score). */
   notes?: Record<string, string>
   params?: Record<string, number>
@@ -78,6 +88,7 @@ const SEVERITY: Record<IssueKind, Severity> = {
   fullbody: 'medium',
   rating_conflict: 'medium',
   rating_missing: 'low',
+  subject_count: 'medium',
   rare_tags: 'low',
   cooccur: 'low',
   no_mask: 'low',
@@ -234,7 +245,7 @@ export interface HealthFinding {
   title_zh: string
   detail_en: string
   detail_zh: string
-  fix: { image_ids?: number[] } | null
+  fix: { image_ids?: number[]; proposals?: { image_id: number; keep: string[]; drop: string[] }[] } | null
   data: Record<string, unknown>
 }
 
@@ -267,6 +278,13 @@ function healthIssue(f: HealthFinding, report: HealthReport, index: KeyIndex, ra
       return ratingsInCaptions ? issue('rating_conflict', 'health', { keys: keysOf(idsIn(f.data.image_ids)) }) : null
     case 'rating-missing':
       return ratingsInCaptions ? issue('rating_missing', 'health', { keys: keysOf(idsIn(f.data.image_ids)) }) : null
+    case 'subject-count-conflict': {
+      const subjectFixes = (f.fix?.proposals ?? []).flatMap((p) => {
+        const key = lookup(index, p.image_id, null)
+        return key && Array.isArray(p.drop) && p.drop.length > 0 ? [{ key, keep: p.keep ?? [], drop: p.drop }] : []
+      })
+      return subjectFixes.length ? issue('subject_count', 'health', { keys: subjectFixes.map((s) => s.key), subjectFixes }) : null
+    }
     case 'composition-fullbody': {
       const dist = (f.data.distribution ?? {}) as Record<string, number>
       return issue('fullbody', 'health', { params: { n: (dist['full body'] ?? 0) + (dist['wide shot'] ?? 0), total: report.images } })
@@ -349,6 +367,7 @@ function combine(a: CheckIssue, b: CheckIssue): CheckIssue {
     ...(a.groups || b.groups ? { groups: [...(a.groups ?? []), ...(b.groups ?? [])] } : {}),
     ...(a.tags || b.tags ? { tags: [...new Set([...(a.tags ?? []), ...(b.tags ?? [])])] } : {}),
     ...(a.pairs || b.pairs ? { pairs: [...pairs.values()] } : {}),
+    ...(a.subjectFixes || b.subjectFixes ? { subjectFixes: [...(a.subjectFixes ?? []), ...(b.subjectFixes ?? [])] } : {}),
     ...(a.notes || b.notes ? { notes: { ...b.notes, ...a.notes } } : {}),
     sources: [...new Set([...a.sources, ...b.sources])],
   }
@@ -368,7 +387,8 @@ function tidy(found: CheckIssue, rank: ReadonlyMap<string, number>): CheckIssue 
   const imageKeys = groups ? groups.flat().sort(byRank) : keys
   if (imageKeys.length === 0 && !SET_KINDS.has(found.kind)) return null
   const notes = found.notes ? Object.fromEntries(Object.entries(found.notes).filter(([k]) => inBatch(k))) : undefined
-  return { ...found, keys: imageKeys, ...(groups ? { groups } : {}), ...(notes ? { notes } : {}) }
+  const subjectFixes = found.subjectFixes?.filter((s) => inBatch(s.key)).sort((x, y) => byRank(x.key, y.key))
+  return { ...found, keys: imageKeys, ...(groups ? { groups } : {}), ...(notes ? { notes } : {}), ...(subjectFixes ? { subjectFixes } : {}) }
 }
 
 /** One issue per id from every source, images once in batch order; high first. */

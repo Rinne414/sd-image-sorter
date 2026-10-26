@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { useLang, useT } from '../../../i18n'
 import type { Entry } from '../entries'
 import { tagHolders } from './captionChecks'
-import type { CheckIssue, IssueKind, TagPair } from './checkIssues'
+import type { CheckIssue, IssueKind, SubjectFix, TagPair } from './checkIssues'
 import styles from './CheckStep.module.css'
 import { ISSUE_TEXT, SEVERITY_TEXT } from './issueText'
 import { TagDetail, type TagDetailScope } from './TagDetail'
+import { SubjectFixes } from './SubjectFixes'
 import { Thumbs } from './Thumbs'
 
 export interface IssueActions {
@@ -19,6 +20,8 @@ export interface IssueActions {
   autoMask: (keys: readonly string[]) => void
   /** Rewrite these edited captions' tags the way the batch writes them (one undoable change). */
   unifyStyle: (keys: readonly string[]) => void
+  /** Take the contradicting count tags out of these captions (one undoable change). */
+  fixSubjects: (fixes: readonly SubjectFix[]) => Promise<void>
 }
 
 const REMOVE: ReadonlySet<IssueKind> = new Set(['file_changed', 'file_missing', 'unreadable', 'empty_caption', 'small', 'low_aesthetic', 'character_outlier'])
@@ -31,9 +34,10 @@ const PICK: ReadonlySet<IssueKind> = new Set([
   'character_outlier',
   'rating_conflict',
   'rating_missing',
+  'subject_count',
   'duplicates',
 ])
-const OPEN: ReadonlySet<IssueKind> = new Set(['empty_caption', 'too_long', 'trigger_coverage', 'tag_style'])
+const OPEN: ReadonlySet<IssueKind> = new Set(['empty_caption', 'too_long', 'trigger_coverage', 'tag_style', 'subject_count'])
 const SETTINGS: ReadonlySet<IssueKind> = new Set(['trigger_missing', 'trigger_collision', 'trigger_coverage', 'too_long', 'rating_conflict', 'rating_missing'])
 /** Their images have no caption to edit (the file is gone or changed). */
 const LOCKED: ReadonlySet<IssueKind> = new Set(['file_changed', 'file_missing', 'unreadable'])
@@ -68,7 +72,9 @@ export function IssueCard({ issue, entries, actions, scope }: Props) {
         <h3 className={styles.issueTitle}>{title}</h3>
       </header>
       <p className={styles.detail}>{detail}</p>
-      {issue.groups ? (
+      {issue.subjectFixes ? (
+        <SubjectFixes fixes={issue.subjectFixes} entries={entries} onApply={actions.fixSubjects} onOpen={actions.open} />
+      ) : issue.groups ? (
         <div className={styles.groups}>
           {issue.groups.map((group) => (
             <Thumbs key={group[0]} keys={group} entries={entries} notes={notes} onOpen={actions.open} firstKept />

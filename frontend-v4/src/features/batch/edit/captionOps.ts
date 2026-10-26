@@ -14,6 +14,8 @@ export type FindTarget = 'tags' | 'words' | 'both'
 export type BulkOp =
   | { kind: 'add'; tags: string[]; position: Position }
   | { kind: 'remove'; tags: string[] }
+  /** Each image loses its own tags (by entry key): a fix that differs from one picture to the next. */
+  | { kind: 'removeEach'; drops: ReadonlyMap<string, readonly string[]> }
   | { kind: 'replace'; find: string; replace: string; mode: FindMode; target: FindTarget; ignoreCase: boolean }
   | { kind: 'dedupe' }
   | { kind: 'removeCategories'; categories: string[] }
@@ -106,12 +108,14 @@ function sortByCategory(content: CaptionContent, order: readonly string[], categ
 }
 
 /** One caption after the operation. */
-export function applyOp(content: CaptionContent, op: BulkOp, categoryOf: CategoryOf): CaptionContent {
+export function applyOp(content: CaptionContent, op: BulkOp, categoryOf: CategoryOf, key = ''): CaptionContent {
   switch (op.kind) {
     case 'add':
       return addTags(content, op.tags, op.position)
     case 'remove':
       return removeTags(content, op.tags)
+    case 'removeEach':
+      return removeTags(content, op.drops.get(key) ?? [])
     case 'replace': {
       if (op.mode === 'tag') return op.find.trim() ? replaceTag(content, op.find, op.replace) : content
       const pattern = findPattern(op.find, op.mode, op.ignoreCase)
@@ -149,7 +153,7 @@ export function planOp(
   for (const key of keys) {
     const before = contents.get(key)
     if (!before) continue
-    const after = applyOp(before, op, categoryOf)
+    const after = applyOp(before, op, categoryOf, key)
     if (!sameContent(before, after)) out.push({ key, before, after })
   }
   return out

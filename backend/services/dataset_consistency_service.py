@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 import database as db
 from tag_rules import categorize_tag
+from services.subject_count_rules import resolve_subject_counts
 from text_counts import count_text
 
 logger = logging.getLogger(__name__)
@@ -193,6 +194,7 @@ def build_consistency_report(request: ConsistencyReportRequest) -> Dict[str, Any
     rating_zero: List[int] = []
     rating_multi: List[int] = []
     shot_counts: Counter = Counter()
+    subject_plans: List[Dict[str, Any]] = []
 
     for start in range(0, total, 500):
         chunk = ids[start : start + 500]
@@ -221,6 +223,13 @@ def build_consistency_report(request: ConsistencyReportRequest) -> Dict[str, Any
                 rating_zero.append(image_id)
             elif rating_rows > 1:
                 rating_multi.append(image_id)
+            # What trains is the final caption; the Library's own tags only
+            # stand in when the caller sent no captions.
+            plan = resolve_subject_counts(
+                effective_captions[image_id] if effective_captions is not None else unique
+            )
+            if plan:
+                subject_plans.append({"image_id": image_id, **plan})
             if (
                 trigger_fold
                 and effective_captions is not None
@@ -305,6 +314,18 @@ def build_consistency_report(request: ConsistencyReportRequest) -> Dict[str, Any
             "Not harmful for training, but rating-based filtering and export rating tokens skip these images.",
             "对训练无害，但基于评级的过滤和导出 rating 变量会跳过这些图。",
             data={"image_ids": rating_zero[:50]},
+        ))
+
+    # ---- subject-count conflicts ----------------------------------------------
+    if subject_plans:
+        findings.append(_finding(
+            "subject-count-conflict", "medium",
+            f"Subject-count tags contradict each other: {count_text(len(subject_plans), 'image')}",
+            f"{len(subject_plans)} 张图的人数标签互相矛盾",
+            "A caption such as '1girl, 2girls, solo' says the picture has one, two and exactly one character at once. The trainer learns noise about how many people there are. Keep the higher count and drop 'solo' on pictures with more than one subject; 'solo focus' is a different tag and is left alone.",
+            "像 '1girl, 2girls, solo' 这样的 caption 同时说图里有一个、两个、且只有一个角色，训练器学到的人数信息是噪声。建议保留较高的人数，并在多人图上去掉 'solo'；'solo focus' 是另一个标签，不会被动。",
+            fix={"action": "resolve_subject_counts", "proposals": subject_plans},
+            data={"count": len(subject_plans), "image_ids": [p["image_id"] for p in subject_plans[:50]]},
         ))
 
     # ---- low-frequency junk ---------------------------------------------------

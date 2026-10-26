@@ -19,6 +19,7 @@ export const ISSUE_TEXT: Record<IssueKind, { title: MessageKey; detail: MessageK
   fullbody: { title: 'dataset.check.fullbody', detail: 'dataset.check.fullbody.detail' },
   rating_conflict: { title: 'dataset.check.ratingConflict', detail: 'dataset.check.ratingConflict.detail' },
   rating_missing: { title: 'dataset.check.ratingMissing', detail: 'dataset.check.ratingMissing.detail' },
+  subject_count: { title: 'dataset.check.subjectCount', detail: 'dataset.check.subjectCount.detail' },
   rare_tags: { title: 'dataset.check.rareTags', detail: 'dataset.check.rareTags.detail' },
   cooccur: { title: 'dataset.check.cooccur', detail: 'dataset.check.cooccur.detail' },
   no_mask: { title: 'dataset.check.noMask', detail: 'dataset.check.noMask.detail' },

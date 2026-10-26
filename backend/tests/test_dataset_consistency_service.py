@@ -201,3 +201,78 @@ def test_consistency_report_says_when_it_checked_only_the_first_images(
     assert report["images"] == 2
     assert report["images_in_scope"] == 3
     assert report["images_truncated"] is True
+
+
+def test_consistency_report_flags_subject_count_conflicts_in_final_captions(
+    test_client,
+    tmp_path,
+):
+    import database as db
+
+    # The Library tags are all fine; the final captions (what trains) are not.
+    ids = [
+        _add_image(db, tmp_path, "sc-0.png", ["1girl", "solo"]),
+        _add_image(db, tmp_path, "sc-1.png", ["1girl", "solo"]),
+        _add_image(db, tmp_path, "sc-2.png", ["1girl", "solo"]),
+    ]
+    response = test_client.post("/api/tags/consistency/report", json={
+        "image_ids": ids,
+        "trigger": "",
+        "training_purpose": "",
+        "effective_captions": [
+            {"image_id": ids[0], "caption": "1girl, 2girls, solo, smile"},
+            {"image_id": ids[1], "caption": "1_girl, solo focus, smile"},
+            {"image_id": ids[2], "caption": "solo, Multiple_Girls"},
+        ],
+    })
+
+    assert response.status_code == 200
+    findings = {f["id"]: f for f in response.json()["findings"]}
+    finding = findings["subject-count-conflict"]
+    assert finding["severity"] == "medium"
+    assert finding["title_en"] == "Subject-count tags contradict each other: 2 images"
+    assert finding["title_zh"] and finding["detail_en"] and finding["detail_zh"]
+    assert finding["data"]["count"] == 2
+    assert finding["fix"] == {
+        "action": "resolve_subject_counts",
+        "proposals": [
+            {"image_id": ids[0], "keep": ["2girls"], "drop": ["1girl", "solo"]},
+            {"image_id": ids[2], "keep": ["multiple girls"], "drop": ["solo"]},
+        ],
+    }
+
+
+def test_consistency_report_reads_library_tags_without_effective_captions(
+    test_client,
+    tmp_path,
+):
+    import database as db
+
+    ids = [
+        _add_image(db, tmp_path, "sc-lib-0.png", ["1boy", "2boys", "solo_focus"]),
+        _add_image(db, tmp_path, "sc-lib-1.png", ["1boy", "solo"]),
+    ]
+    response = test_client.post("/api/tags/consistency/report", json={"image_ids": ids})
+
+    assert response.status_code == 200
+    findings = {f["id"]: f for f in response.json()["findings"]}
+    proposals = findings["subject-count-conflict"]["fix"]["proposals"]
+    assert proposals == [{"image_id": ids[0], "keep": ["2boys"], "drop": ["1boy"]}]
+    assert findings["subject-count-conflict"]["title_en"] == "Subject-count tags contradict each other: 1 image"
+
+
+def test_consistency_report_has_no_subject_finding_when_counts_agree(
+    test_client,
+    tmp_path,
+):
+    import database as db
+
+    ids = [_add_image(db, tmp_path, "sc-ok-0.png", ["1girl", "solo", "1boy"])]
+    response = test_client.post("/api/tags/consistency/report", json={
+        "image_ids": ids,
+        "trigger": "",
+        "effective_captions": [{"image_id": ids[0], "caption": "2girls, multiple girls, solo focus"}],
+    })
+
+    assert response.status_code == 200
+    assert "subject-count-conflict" not in {f["id"] for f in response.json()["findings"]}

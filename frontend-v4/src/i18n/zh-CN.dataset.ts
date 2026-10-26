@@ -791,4 +791,13 @@ export const zhCNDataset = {
   'dataset.check.tagStyle': '{n} 张改过的 caption 里有另一种标签写法',
   'dataset.check.tagStyle.detail': '同一个标签写成两种样子（如 blue_sky 和 blue sky），训练器会当成两个不同的词。统一成这个批次模板的写法，一步就能撤销。',
   'dataset.check.unifyStyle': '统一标签写法（{n} 张）',
+  'dataset.check.subjectCount': '{n} 张图的人数标签互相矛盾',
+  'dataset.check.subjectCount.detail': '一张图的 caption 同时写了一个人和两个人，或者在两人以上的图上写了 solo，训练器就学不到图里到底有几个人。下面的修正保留较高的人数，并在多人图上去掉 solo（solo_focus 是另一个标签，不会被动）。不想改的图请取消勾选，一步就能撤销。',
+  'dataset.check.subjectApply': '应用到已勾选的 {n} 张',
+  'dataset.check.subjectTickAll': '全部勾选',
+  'dataset.check.subjectUntickAll': '全部取消',
+  'dataset.check.subjectKeeps': '保留在 caption 里',
+  'dataset.check.subjectDrops': '从 caption 里去掉',
+  'dataset.check.subjectLabel': '修正人数标签',
+  'dataset.check.subjectSome': '已改 {n} / {total} 张。其余的标签来自批次规则（通用标签），请到设置里改。',
 } as const
