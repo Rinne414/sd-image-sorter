@@ -110,7 +110,7 @@ function refreshUneditedSaveOption() {
     const label = document.getElementById('save-unedited-label');
     if (label) {
         label.textContent = censorT('save.uneditedCount', { count: uneditedCount },
-            '{count} images in the queue have no censoring');
+            'No censoring yet: {count} images in the queue');
     }
     const select = document.getElementById('save-unedited-option');
     if (select) {

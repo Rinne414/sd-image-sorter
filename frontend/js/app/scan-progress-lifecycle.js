@@ -73,7 +73,7 @@ function _scanDoneText(progress) {
     }
     const names = (progress.recent_errors || progress.result?.recent_errors || [])
         .slice(-3).map((item) => item?.filename).filter(Boolean).join(', ');
-    if (names) parts.push(I18n.format(appT('scan.msg.doneIssueItems', 'Images with issues: {names}.'), { names: () => names }));
+    if (names) parts.push(I18n.format(appT('scan.msg.doneIssueItems', 'Images with issues: {names}.'), { names }));
     return parts.join(' ');
 }
 

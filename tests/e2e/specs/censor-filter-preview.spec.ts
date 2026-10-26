@@ -141,6 +141,8 @@ test('an unapplied preview is labelled on the canvas and offered for applying be
   })).toBe(true)
 
   await page.locator('#btn-cancel-save-options').click()
+  // The dialog is closed before the editor is used again (a CI run once found it still open here).
+  await expect(page.locator('#save-options-modal.visible')).toHaveCount(0)
   await page.locator('#btn-filter-warm').click()
   await expect(badge).toBeVisible()
   await page.locator('#btn-filter-reset').click()

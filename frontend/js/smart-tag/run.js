@@ -151,8 +151,8 @@
         const errorSource = String(firstError?.image_id || '').trim();
         const errorLabel = errorSource
             ? (/^-?\d+$/.test(errorSource)
-                ? I18n.format(smartTagT('smartTag.errorImageId', 'Image #{id}'), { id: () => errorSource })
-                : I18n.format(smartTagT('smartTag.errorImagePath', 'Image {id}'), { id: () => errorSource }))
+                ? I18n.format(smartTagT('smartTag.errorImageId', 'Image #{id}'), { id: errorSource })
+                : I18n.format(smartTagT('smartTag.errorImagePath', 'Image {id}'), { id: errorSource }))
             : smartTagT('smartTag.errorImage', 'Image');
         const errorSuffix = firstError
             ? ` · ${window.I18n.joinLabel(errorLabel, String(firstError.error))}`

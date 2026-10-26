@@ -198,6 +198,48 @@ def _count_problems(text: str, plurals: dict, modifiers: set) -> list[str]:
     return problems
 
 
+def _call_text(src: str, start: int) -> str:
+    """The text of the call that opens at src[start] == '(' (strings skipped roughly)."""
+    depth, i, quote = 0, start, ""
+    while i < len(src):
+        c = src[i]
+        if quote:
+            if c == "\\":
+                i += 2
+                continue
+            if c == quote:
+                quote = ""
+        elif c in "'\"`":
+            quote = c
+        elif c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+            if depth == 0:
+                return src[start : i + 1]
+        i += 1
+    return src[start:]
+
+
+def test_format_values_are_values_not_functions():
+    """I18n.format writes values as given: a replacer function (the old
+    .replace(x, () => value) idiom) would print its own source."""
+    problems = []
+    for path in sorted((ROOT / "frontend" / "js").rglob("*.js")):
+        if "vendor" in path.parts:
+            continue
+        src = path.read_text(encoding="utf-8")
+        for m in re.finditer(r"I18n\.format\(", src):
+            call = _call_text(src, m.end() - 1)
+            if re.search(
+                r"[{,]\s*\w+\s*:\s*(?:\([^)]*\)|\w+)\s*=>|[{,]\s*\w+\s*:\s*function\b",
+                call,
+            ):
+                line = src.count("\n", 0, m.start()) + 1
+                problems.append(f"{path.relative_to(ROOT).as_posix()}:{line}")
+    assert problems == []
+
+
 def test_the_error_screen_does_not_need_i18n():
     """error-fallback.js loads before i18n.js so a failed page still says what happened."""
     text = (ROOT / "frontend" / "js" / "error-fallback.js").read_text(encoding="utf-8")
