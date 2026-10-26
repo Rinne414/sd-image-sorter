@@ -35,8 +35,21 @@
 2026-10-27：不用模型，做成数据集检查步骤里的**提示**：整张图缩成最长边 512 的灰度图，算拉普拉斯方差（清晰度）、边缘占比和平坦色块占比，只用 CPU，在后台任务里算，结果按文件（路径、大小、修改时间）缓存。列出"可能糊"和"过于平"的图，只提示，从不删除文件。
 上面表里的 Q-Align quality 版仍然没加：它是模型，要额外下载，而且没和人工评分比较过；这个简单的算法在 300 张测试图上约 3 秒，不用下载。思路来自 shira-qwq/lora-dataset-studio（非商业许可，只借思路，代码自己写）。
 
-阈值怎么定的（诚实地说）：清晰度默认低于 60 提示，这和那个工具的参考值同量级，并且在 3 张照片和 1 张合成图（scikit-learn 和 matplotlib 自带的示例图）上对照过：高斯模糊 σ≈1 像素（512 尺度）时分数约 30–230，σ≈1.5 约 12–62，σ≥2 都在 30 以下，没糊的原图都在 500 以上。过平按"几乎全是同色或平滑渐变的 8x8 块"≥92% 提示；合成的二次元风格图里，主体占画面 20% 以上就不会被提示，占 10% 以下会被提示。
-没有验证的地方：没有拿大量真实二次元图做过标定；大片平滑色块、柔和上色的二次元图清晰度分数天生偏低，会被误报为"可能糊"。所以阈值可以在检查步骤里改（0 为不查糊图），也只是提示。边缘占比只显示、不参与判断。
+阈值怎么定的（诚实地说）：2026-10-27 第一版只在 3 张照片和 1 张合成图上对过，默认 60。同日又拿真实的二次元图重新标定，默认改为 **50**。样本是 ComfyUI 输出文件夹里的 18,328 张图（png 和 jpg，只读不改），随机抽 1,000 张（种子 20261027）；其中 30% 来自 `testing` 文件夹，那是故意糊着做的实验图（多半是 `anima_drift_*` 的一团糊），另外补抽了 1,000 张不在 `testing` 里的图，不含 `testing` 的共 1,695 张。清晰度分数的分位数（1000 张）：1% 为 22.9，5% 为 50.2，10% 为 122，中位数 1012，90% 为 2630。
+
+| 清晰度低于 | 1000 张里被提示 | 不含 `testing` 的 1,695 张里被提示 | 肉眼看过的 60 张里：被提示 / 其中真的糊 / 其中干净 | 手工模糊的 10 张真图（σ=4 / 6 / 10）抓到几张 |
+|---|---|---|---|---|
+| 30 | 2.5% | 0.12% | 26 / 24 / 2 | 3 / 7 / 10 |
+| 40 | 3.9% | 0.24% | 32 / 29 / 3 | 4 / 8 / 10 |
+| **50（默认）** | 4.9% | 0.24% | 34 / 31 / 3 | 5 / 9 / 10 |
+| 60（旧默认） | 6.1% | 0.41% | 45 / 36 / 9 | 7 / 9 / 10 |
+| 80 | 7.6% | 1.0% | 54 / 38 / 14 | 7 / 9 / 10 |
+
+肉眼检查：对 60 张不同的图（分数最低的那些、旧阈值 60 附近的 10 张、60–150 之间随机抽的、以及 34–56 区间和 `testing` 之外补看的）逐张看原图，判断“训练集策展者会不会因为糊而丢掉”：38 张真的糊，4 张略软，16 张柔和上色但干净，2 张清晰。真的糊的几乎都是 `anima_drift` 的糊团（分数 10–64）。被误提示的干净图：柔和上色的二次元图 `anima_test_00015`（28.6）、`anima_test_00115`（50.7）、`anima_test_00090` 和 `anima_test_00198`（58.5）；偏暗或极简的 3D 画面 `storm_00147`（17）、`storm_00177`（59.8）、`still_00026`（54.6）、`storm_00016`（57.8）；蓝色调线稿（31.6）。同样是 58 分左右，既有干净的二次元图，也有真的糊图，没有任何一个阈值能把它们分开。
+手工模糊：取 10 张清晰的真图（992–2848 像素），在原分辨率上做高斯模糊 σ=2、4、6、10 像素后评分。原图分数 696–3394，全部高于 500。评分前图被缩到最长边 512，所以有效模糊 = σ ÷ 缩小倍数；同样的有效模糊，分数随内容相差约 3 倍（0.89 像素时 44、57、126）。σ=10 全部抓到，σ=6 在 50 和 60 都是 9/10，σ=4 在 50 是 5/10、60 是 7/10，σ=2 在 100 以内几乎都抓不到。
+为什么是 50：在 50 到 60 之间，看过的图里多提示 5 张真糊（都是糊团）和 6 张干净图；不含 `testing` 的 1,695 张里多提示 3 张，全是干净的偏暗或极简画面。代价是 σ=4 的手工模糊图少抓 2 张（大图、轻度模糊）。糊图提示的严重度本来就是最低的“低”，而且只列出不删除，所以这里宁可少打扰：按真实图库，默认只提示约 0.24% 的正常图。因为没有一个阈值能干净地分开，提示的措辞改成“可能偏软或糊”，说明里写明柔和上色、偏暗和极简的图分数也会偏低。
+没有采纳的办法：边缘占比（`edge`）。只看抽样里的糊团它很好用（`edge` ≤ 0.009 的平衡准确率 0.90，清晰度分数是 0.85），但手工模糊的真图仍保留大量边缘（σ=4 时 `edge` 都在 0.055 以上，0/10 抓到），偏暗的画面又和糊团分不开；数据不支持换一个新的评分函数，所以它仍然只显示、不参与判断。
+没有验证的地方：没有人工打分的标准集，“糊 / 不糊”是我一个人逐张看出来的；样本只来自一个人的图库（二次元和插画为主，含 3D 视频帧，没有照片），而且图库里一大块是故意做糊的实验图，所以“被提示的比例”比一般数据集高得多，不含实验图时才接近日常。分数还和图大小、内容有关：大图轻度模糊分数仍然很高，不会被提示；偏暗或极简的画面分数低，会被误报。所以阈值可以在检查步骤里改（0 为不查糊图），结果只是提示。
 
 ---
 
@@ -73,5 +86,18 @@ Already in the app: Wenaka Privacy YOLO, NudeNet, SAM3, plus the new **deepghs a
 2026-10-27: done without a model, as a **hint** in the dataset Check step. Each picture is shrunk to a grey copy of at most 512 px on the long side, and three numbers are computed: the variance of the Laplacian (sharpness), the share of edge pixels and the share of flat 8x8 blocks. CPU only, run as a background job, cached per file (path, size, modification time). The step lists "possibly blurry" and "very flat" pictures; it only lists them and never deletes a file.
 The Q-Align quality variant in the table above is still not added: it is a model with an extra download and was never compared with human ratings, while this simple measure scores 300 test pictures in about 3 seconds with nothing to download. The idea comes from shira-qwq/lora-dataset-studio (non-commercial licence: the idea only, the code is our own).
 
-How the thresholds were chosen, honestly: a blur score under 60 is listed by default, the same order of magnitude as that tool's review value, and checked on 3 photos and 1 synthetic picture (the sample images bundled with scikit-learn and matplotlib). A Gaussian blur of about 1 px (at the 512 scale) scores about 30-230, about 1.5 px scores 12-62, 2 px or more is under 30, and the unblurred originals are all above 500. "Very flat" means at least 92% of the 8x8 blocks are one colour or a smooth gradient; on synthetic anime-style pictures a subject filling 20% of the frame or more is not listed, one filling 10% or less is.
-What is not validated: it was not calibrated on a large set of real anime pictures. Anime with large smooth colour areas and soft shading naturally scores low and will be listed as "possibly blurry" by mistake, so the threshold can be changed in the Check step (0 skips blur) and the result is only a hint. The edge share is shown for the reader and does not decide a flag.
+How the thresholds were chosen, honestly: the first version (2026-10-27) was checked on only 3 photos and 1 synthetic picture and used 60. The same day it was calibrated again on real anime pictures and the default became **50**. The pictures are the 18,328 files (png and jpg, read in place, never changed) in the ComfyUI output folder: a random 1,000 (seed 20261027), of which 30% come from a `testing` folder of deliberately smeared experiments (mostly `anima_drift_*` mush), plus another 1,000 drawn from outside `testing`, which gives 1,695 pictures outside it. Blur score percentiles (the 1,000): 1% 22.9, 5% 50.2, 10% 122, median 1012, 90% 2630.
+
+| blur score under | listed, the 1,000 | listed, the 1,695 outside `testing` | looked at (60 pictures): listed / really blurry / clean | 10 real pictures blurred by hand (sigma 4 / 6 / 10): how many caught |
+|---|---|---|---|---|
+| 30 | 2.5% | 0.12% | 26 / 24 / 2 | 3 / 7 / 10 |
+| 40 | 3.9% | 0.24% | 32 / 29 / 3 | 4 / 8 / 10 |
+| **50 (default)** | 4.9% | 0.24% | 34 / 31 / 3 | 5 / 9 / 10 |
+| 60 (old default) | 6.1% | 0.41% | 45 / 36 / 9 | 7 / 9 / 10 |
+| 80 | 7.6% | 1.0% | 54 / 38 / 14 | 7 / 9 / 10 |
+
+Looking at them: 60 different pictures (the lowest scores, 10 around the old threshold of 60, random ones between 60 and 150, and extras from the 34-56 band and from outside `testing`) were opened as the original files and judged as a LoRA curator would ("would I drop this for blur?"): 38 really blurry, 4 slightly soft, 16 soft-shaded but clean, 2 sharp. The really blurry ones are almost all `anima_drift` mush (scores 10-64). The clean pictures that were listed: soft-shaded anime `anima_test_00015` (28.6), `anima_test_00115` (50.7), `anima_test_00090` and `anima_test_00198` (58.5); dark or minimal 3D scenes `storm_00147` (17), `storm_00177` (59.8), `still_00026` (54.6) and `storm_00016` (57.8); a blue-tinted line drawing (31.6). Around 58 there are both clean anime and really blurry pictures with the same score, so no threshold separates them.
+Blurring by hand: 10 sharp real pictures (992-2848 px) were blurred with a Gaussian of sigma 2, 4, 6 and 10 px at full resolution and scored. The originals scored 696-3394, all above 500. A picture is shrunk to a long side of 512 before scoring, so the effective blur is sigma divided by the shrink factor, and the same effective blur scores about 3 times differently depending on the picture (0.89 px gave 44, 57 and 126). Sigma 10 was caught every time, sigma 6 caught 9 of 10 at both 50 and 60, sigma 4 caught 5 of 10 at 50 and 7 of 10 at 60, and sigma 2 was caught almost never up to 100.
+Why 50: between 50 and 60 the looked-at set gains 5 really blurry pictures (all mush) and 6 clean ones, and among the 1,695 pictures outside `testing` it gains 3 listed pictures, all clean dark or minimal scenes. The price is 2 of the 10 sigma-4 copies no longer caught (large pictures, light blur). The hint is the lowest severity ("low") and only lists, so it should bother rarely: on a real library the default lists about 0.24% of ordinary pictures. Because no single threshold separates soft shading from blur, the wording became "may be soft or blurry" and the explanation says that soft-shaded, dark and minimal pictures score low too.
+Not adopted: the edge share (`edge`). On the smeared experiments alone it looks better (`edge` <= 0.009 has a balanced accuracy of 0.90 against 0.85 for the blur score), but blurred real pictures keep plenty of edges (at sigma 4 every one has `edge` above 0.055, 0 of 10 caught) and dark scenes look like mush to it. The data does not support a new scoring function, so the edge share is still only shown and decides nothing.
+What is not validated: there is no human-rated set, "blurry or not" is one person looking at each picture; the sample is one library (anime and illustration, some 3D video frames, no photos) in which a large part is deliberately smeared experiments, so the share of listed pictures is far above what an ordinary dataset gives and only the part outside `testing` looks like everyday use. The score also depends on picture size and content: a large, lightly blurred picture still scores high and is not listed, and dark or minimal scenes score low and are listed by mistake. So the threshold can be changed in the Check step (0 skips blur) and the result is only a hint.

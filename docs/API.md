@@ -3431,13 +3431,13 @@ Returns `{summary, items[], items_truncated, items_returned, duplicate_groups[]}
 
 #### POST /api/dataset/quality
 
-Picture quality hints for the Dataset Check step: which pictures look possibly blurry or very flat. CPU only, in the background, cached. Review only: nothing is changed, moved or deleted.
+Picture quality hints for the Dataset Check step: which pictures may be soft or blurry, or are very flat. CPU only, in the background, cached. Review only: nothing is changed, moved or deleted.
 
-Body: `{"image_ids": [1, 2, 3], "image_paths": ["C:/dataset/local_001.png"], "start": true, "blur_below": 60, "flat_above": 0.92}`. Either list may be empty but not both (`400`). `start: false` only reads what is scored already and never starts a job. `blur_below` and `flat_above` are optional and move the review thresholds (defaults 60 and 0.92, see `docs/MODELS_CONSIDERED.md`).
+Body: `{"image_ids": [1, 2, 3], "image_paths": ["C:/dataset/local_001.png"], "start": true, "blur_below": 50, "flat_above": 0.92}`. Either list may be empty but not both (`400`). `start: false` only reads what is scored already and never starts a job. `blur_below` and `flat_above` are optional and move the review thresholds (defaults 50 and 0.92, chosen on real pictures, see `docs/MODELS_CONSIDERED.md`).
 
 Each picture is read once, on a grey copy of at most 512 px on the long side, and gets three numbers: `blur` (variance of the Laplacian, 0-255 grey; low is soft), `edge` (share of pixels with a gradient of 16 grey levels or more) and `flat` (share of 8x8 blocks where every colour channel moves by 4 levels or less). The numbers are cached per file (path, size, modification time and `scores_version`) in `<cache>/image-quality.sqlite3`; a changed file is scored again.
 
-Returns `{scores_version, total, scored, pending, unreadable, missing, job_id, started, thresholds: {blur_below, flat_above}, items[]}`. `pending` pictures are scored by one bulk job (`job_id`, poll `GET /api/bulk-jobs/{job_id}`, then ask again); `started` is `false` and `job_id` is the running job's when an earlier quality job is still going. `unreadable` pictures could not be decoded, `missing` files are gone. `items[]` lists only the scored pictures worth a look: `{image_id, abs_path, blur, edge, flat, flags}` (`image_id` is `0` for a folder file) where `flags` is `["flat"]` (very flat / low detail) or `["blurry"]` (possibly blurry), never both. The job's `result` is `{scored, unreadable}`.
+Returns `{scores_version, total, scored, pending, unreadable, missing, job_id, started, thresholds: {blur_below, flat_above}, items[]}`. `pending` pictures are scored by one bulk job (`job_id`, poll `GET /api/bulk-jobs/{job_id}`, then ask again); `started` is `false` and `job_id` is the running job's when an earlier quality job is still going. `unreadable` pictures could not be decoded, `missing` files are gone. `items[]` lists only the scored pictures worth a look: `{image_id, abs_path, blur, edge, flat, flags}` (`image_id` is `0` for a folder file) where `flags` is `["flat"]` (very flat / low detail) or `["blurry"]` (may be soft or blurry), never both. The job's `result` is `{scored, unreadable}`.
 
 ---
 

@@ -180,7 +180,7 @@ def test_endpoint_scores_in_the_background_then_lists_what_to_review(
     assert by_name["soft.png"]["flags"] == ["blurry"]
     assert by_name["soft.png"]["image_id"] == ids[1]
     assert by_name["flat.png"]["flags"] == ["flat"]
-    assert again["thresholds"] == {"blur_below": 60.0, "flat_above": 0.92}
+    assert again["thresholds"] == {"blur_below": 50.0, "flat_above": 0.92}
 
     strict = test_client.post(
         "/api/dataset/quality",

@@ -194,11 +194,11 @@
             },
             {
                 flag: 'blurry',
-                label: t('dataset.auditBadgeBlurry', 'Possibly blurry'),
+                label: t('dataset.auditBadgeBlurry', 'May be soft or blurry'),
                 count: summary.blurry_count || 0,
                 removable: true,
                 nextCopy: t('dataset.auditNextBlurry',
-                    'These have few sharp edges, so a trainer would learn soft detail. It is only a hint: look first, because anime with large smooth areas can score low too. Remove the ones you do not want (the files stay).'),
+                    'These have few sharp edges. That can be real blur or just soft shading: anime with large smooth areas, dark scenes and minimal art score low too. It is only a hint, so look first. Remove the ones you do not want (the files stay).'),
             },
             {
                 flag: 'flat',
@@ -503,7 +503,7 @@
             badges.appendChild(makeBadge('small', t('dataset.auditBadgeSmall', 'Small'), summary.small_count));
         }
         if ((summary.blurry_count || 0) > 0) {
-            badges.appendChild(makeBadge('blurry', t('dataset.auditBadgeBlurry', 'Possibly blurry'), summary.blurry_count));
+            badges.appendChild(makeBadge('blurry', t('dataset.auditBadgeBlurry', 'May be soft or blurry'), summary.blurry_count));
         }
         if ((summary.flat_count || 0) > 0) {
             badges.appendChild(makeBadge('flat', t('dataset.auditBadgeFlat', 'Very flat'), summary.flat_count));
@@ -634,7 +634,7 @@
         untagged: 'Untagged',
         small: 'Small',
         duplicate: 'Duplicates',
-        blurry: 'Possibly blurry',
+        blurry: 'May be soft or blurry',
         flat: 'Very flat',
         too_long: 'Caption too long',
     };

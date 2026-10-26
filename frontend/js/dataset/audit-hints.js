@@ -28,7 +28,7 @@
     const MAX_ROUNDS = 20;
     // Must equal BLUR_REVIEW_BELOW in backend/services/image_quality_scores.py
     // (backend/tests/test_frontend_contract.py pins the two together).
-    const DEFAULT_BLUR_BELOW = 60;
+    const DEFAULT_BLUR_BELOW = 50;
     const TERMINAL = new Set(['done', 'error', 'cancelled']);
 
     const running = { jobId: null, stopped: false };
@@ -133,7 +133,7 @@
                     'Stopped: {done} of {total} pictures scored. Run again to continue; scored pictures are remembered.',
                     { done: answer.scored, total: answer.total })
                 : t('dataset.auditQualityDone',
-                    'Blur check: {scored} pictures scored, {blurry} possibly blurry, {flat} very flat.',
+                    'Blur check: {scored} pictures scored, {blurry} may be soft or blurry, {flat} very flat.',
                     { scored: answer.scored, blurry: count('blurry'), flat: count('flat') }));
             const lost = (answer.unreadable || 0) + (answer.missing || 0);
             if (lost > 0) {

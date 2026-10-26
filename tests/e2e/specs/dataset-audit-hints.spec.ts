@@ -240,7 +240,7 @@ async function openAudit(page: Page) {
 function qualityAnswer(extra: Record<string, unknown>) {
   return {
     scores_version: 1, total: 3, scored: 3, pending: 0, unreadable: 0, missing: 0, job_id: null, started: false,
-    thresholds: { blur_below: 60, flat_above: 0.92 }, items: [], ...extra,
+    thresholds: { blur_below: 50, flat_above: 0.92 }, items: [], ...extra,
   }
 }
 
@@ -285,7 +285,7 @@ test.describe('blurry and flat pictures in the Quality Audit', () => {
     await openAudit(page)
 
     // The sharpness field starts at the backend's default and the controls are in the audit.
-    await expect(page.locator('#dataset-audit-blur-below')).toHaveValue('60')
+    await expect(page.locator('#dataset-audit-blur-below')).toHaveValue('50')
     // Progress shows while the job runs, with a way to stop it.
     await expect(page.locator('#dataset-audit-hints-progress')).toBeVisible()
     await expect(page.locator('#btn-dataset-audit-quality-stop')).toBeVisible()
@@ -293,13 +293,13 @@ test.describe('blurry and flat pictures in the Quality Audit', () => {
 
     await expect(page.locator('#dataset-audit-hints-progress')).toBeHidden()
     await expect(page.locator('#btn-dataset-audit-quality-stop')).toBeHidden()
-    await expect(page.locator('#dataset-audit-status')).toContainText('Blur check: 3 pictures scored, 1 possibly blurry, 1 very flat.')
-    await expect(page.locator('.dataset-audit-badge[data-flag="blurry"]')).toContainText('Possibly blurry')
+    await expect(page.locator('#dataset-audit-status')).toContainText('Blur check: 3 pictures scored, 1 may be soft or blurry, 1 very flat.')
+    await expect(page.locator('.dataset-audit-badge[data-flag="blurry"]')).toContainText('May be soft or blurry')
     await expect(page.locator('.dataset-audit-badge[data-flag="blurry"]')).toContainText('1')
     await expect(page.locator('.dataset-audit-badge[data-flag="flat"]')).toContainText('Very flat')
 
     // Library pictures go by id, a folder file by path; the default threshold is sent; a job is started.
-    expect(qualityBodies[0]).toMatchObject({ image_ids: [701, 702, 703], image_paths: ['C:/pics/local-one.png'], start: true, blur_below: 60 })
+    expect(qualityBodies[0]).toMatchObject({ image_ids: [701, 702, 703], image_paths: ['C:/pics/local-one.png'], start: true, blur_below: 50 })
 
     // The first finding becomes the queue filter (the queue highlights what it lists) and offers the next step.
     expect(await page.evaluate(() => (window as any).DatasetMaker._auditState.activeFilter)).toBe('blurry')
@@ -333,7 +333,7 @@ test.describe('blurry and flat pictures in the Quality Audit', () => {
     await page.locator('#btn-dataset-audit-run').click()
     await expect(page.locator('.dataset-audit-badge[data-flag="flat"]')).toBeVisible()
     await expect(page.locator('.dataset-audit-badge[data-flag="blurry"]')).toHaveCount(0)
-    expect(bodies.map((b) => b.blur_below)).toEqual([60, 0])
+    expect(bodies.map((b) => b.blur_below)).toEqual([50, 0])
 
     await page.locator('#dataset-audit-check-blur').uncheck()
     await expect(page.locator('#dataset-audit-blur-below')).toBeDisabled()
@@ -400,8 +400,8 @@ test.describe('blurry and flat pictures in the Quality Audit', () => {
     await seedQueue(page, [{ id: 701, filename: 'a.png', caption: '1girl' }])
     await openAudit(page)
     await expect(page.locator('label:has(#dataset-audit-check-blur)')).toContainText('糊图 / 过平：清晰度低于')
-    await expect(page.locator('.dataset-audit-badge[data-flag="blurry"]')).toContainText('可能糊')
-    await expect(page.locator('#dataset-audit-status')).toContainText('糊图检查：已评分 3 张，可能糊 1 张，过于平 0 张。')
+    await expect(page.locator('.dataset-audit-badge[data-flag="blurry"]')).toContainText('可能偏软或糊')
+    await expect(page.locator('#dataset-audit-status')).toContainText('糊图检查：已评分 3 张，可能偏软或糊 1 张，过于平 0 张。')
   })
 })
 

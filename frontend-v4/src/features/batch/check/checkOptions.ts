@@ -16,7 +16,7 @@ export interface CheckOptions {
   scoreFolders: boolean
 }
 
-export const DEFAULT_CHECK_OPTIONS: CheckOptions = { minSide: 512, minAesthetic: 4.5, blurBelow: 60, nearDistance: 5, everyPair: false, scoreFolders: false }
+export const DEFAULT_CHECK_OPTIONS: CheckOptions = { minSide: 512, minAesthetic: 4.5, blurBelow: 50, nearDistance: 5, everyPair: false, scoreFolders: false }
 
 const KEY = 'sd-v4-dataset-check'
 

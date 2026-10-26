@@ -116,6 +116,23 @@ def test_unreadable_and_tiny_files_have_no_scores(tmp_path):
     assert score_image(str(tmp_path / "missing.png")) is None
 
 
+def test_the_default_leaves_soft_shaded_anime_alone():
+    """Calibrated on real pictures (docs/MODELS_CONSIDERED.md): 50, not 60.
+
+    Clean anime art with smooth airbrush shading and crisp outlines scored 51-59
+    (and so did dark or minimal scenes), while the pictures a trainer would drop
+    for blur sit mostly under 50. The numbers are those of real files.
+    """
+    assert BLUR_REVIEW_BELOW == 50.0
+    soft_shaded_but_clean = QualityScores(blur=58.5, edge=0.0389, flat=0.30)
+    smeared_mush = QualityScores(blur=33.2, edge=0.0067, flat=0.22)
+
+    assert quality_flags(soft_shaded_but_clean) == []
+    assert quality_flags(smeared_mush) == ["blurry"]
+    assert quality_flags(QualityScores(blur=49.9, edge=0.01, flat=0.1)) == ["blurry"]
+    assert quality_flags(QualityScores(blur=50.0, edge=0.01, flat=0.1)) == []
+
+
 def test_thresholds_can_be_moved():
     scores = QualityScores(blur=80.0, edge=0.05, flat=0.5)
 

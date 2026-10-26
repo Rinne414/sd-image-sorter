@@ -38,8 +38,9 @@ EDGE_GRADIENT_MIN = 16.0
 FLAT_BLOCK = 8
 FLAT_BLOCK_RANGE = 4
 
-# Review thresholds (see docs/MODELS_CONSIDERED.md, "Blurry and flat pictures").
-BLUR_REVIEW_BELOW = 60.0
+# Review thresholds (see docs/MODELS_CONSIDERED.md, "Blurry and flat pictures":
+# 50 was chosen on 1,000 real pictures with 10 real pictures blurred by hand).
+BLUR_REVIEW_BELOW = 50.0
 FLAT_REVIEW_ABOVE = 0.92
 
 
@@ -108,7 +109,7 @@ def quality_flags(
     blur_below: float = BLUR_REVIEW_BELOW,
     flat_above: float = FLAT_REVIEW_ABOVE,
 ) -> list[str]:
-    """``flat`` (very flat / low detail) or ``blurry`` (possibly blurry), never both.
+    """``flat`` (very flat / low detail) or ``blurry`` (may be soft or blurry), never both.
 
     A flat picture has no edges at all, so its Laplacian variance is near zero;
     calling it "blurry" as well would only say the same thing twice. The edge
