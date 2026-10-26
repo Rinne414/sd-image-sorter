@@ -86,8 +86,14 @@
   }
 }
 
+/* The bar never wraps or scrolls, so on a laptop the version, the Ctrl K hint
+   and the Settings word give way too (wider fonts, e.g. on Linux, needed
+   about 74 px more at 1366). The gear keeps the name in its title. */
 @media (max-width: 1440px) {
-  .find span {
+  .find span,
+  .find kbd,
+  .version,
+  .settingsLabel {
     display: none;
   }
 

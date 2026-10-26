@@ -181,10 +181,11 @@ export function NextTopBar() {
         onClick={() => app().openSettings()}
         aria-current={page === 'settings' ? 'page' : undefined}
         title={t('settings.gear')}
+        aria-label={t('settings.title')}
         data-testid="settings-button"
       >
         <Icon name="gear" />
-        {t('settings.title')}
+        <span className={styles.settingsLabel}>{t('settings.title')}</span>
       </button>
     </header>
   )
