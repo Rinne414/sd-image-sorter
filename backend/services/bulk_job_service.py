@@ -43,6 +43,8 @@ JOB_KIND_REPARSE_METADATA = "reparse_metadata"
 JOB_KIND_DATASET_READINESS = "dataset_readiness"
 JOB_KIND_DATASET_EXPORT = "dataset_export"
 JOB_KIND_MASK_AUTO_BATCH = "mask_auto_batch"
+# Dataset Check step: blur / flat-colour hints scored in the background.
+JOB_KIND_IMAGE_QUALITY = "image_quality"
 VALID_JOB_KINDS = {
     JOB_KIND_DELETE_FILES,
     JOB_KIND_REMOVE_FROM_GALLERY,
@@ -52,6 +54,7 @@ VALID_JOB_KINDS = {
     JOB_KIND_DATASET_READINESS,
     JOB_KIND_DATASET_EXPORT,
     JOB_KIND_MASK_AUTO_BATCH,
+    JOB_KIND_IMAGE_QUALITY,
 }
 
 STATUS_QUEUED = "queued"

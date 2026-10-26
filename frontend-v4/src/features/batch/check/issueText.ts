@@ -13,6 +13,8 @@ export const ISSUE_TEXT: Record<IssueKind, { title: MessageKey; detail: MessageK
   duplicates: { title: 'dataset.check.duplicates', detail: 'dataset.check.duplicates.detail' },
   small: { title: 'dataset.check.small', detail: 'dataset.check.small.detail' },
   low_aesthetic: { title: 'dataset.check.lowAesthetic', detail: 'dataset.check.lowAesthetic.detail' },
+  blurry: { title: 'dataset.check.blurry', detail: 'dataset.check.blurry.detail' },
+  flat: { title: 'dataset.check.flat', detail: 'dataset.check.flat.detail' },
   too_long: { title: 'dataset.check.tooLong', detail: 'dataset.check.tooLong.detail' },
   tag_style: { title: 'dataset.check.tagStyle', detail: 'dataset.check.tagStyle.detail' },
   character_outlier: { title: 'dataset.check.outlier', detail: 'dataset.check.outlier.detail' },

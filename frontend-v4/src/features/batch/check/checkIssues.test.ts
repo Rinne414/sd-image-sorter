@@ -10,11 +10,13 @@ import {
   mergeIssues,
   projectIssues,
   purityIssues,
+  qualityIssues,
   readAuditReport,
   reviewIssues,
   type AuditReport,
   type CheckIssue,
   type HealthReport,
+  type QualityAnswer,
   type ReviewIssueRow,
 } from './checkIssues'
 
@@ -132,6 +134,27 @@ describe('each source says what it found, by entry key', () => {
     expect(byKind(found, 'rare_tags')).toEqual([])
     // rating tags left out of the captions by the settings: rating checks do not apply
     expect(byKind(healthIssues(report, keys, { ratingsInCaptions: false }), 'rating_conflict')).toEqual([])
+  })
+
+  it('picture quality hints: possibly blurry and very flat are separate hints, each with its number', () => {
+    const answer: QualityAnswer = {
+      total: 4,
+      scored: 4,
+      pending: 0,
+      unreadable: 0,
+      missing: 0,
+      job_id: null,
+      started: false,
+      items: [
+        { image_id: 1, abs_path: 'D:/lib/1.png', blur: 23.4, edge: 0.04, flat: 0.1, flags: ['blurry'] },
+        { image_id: 0, abs_path: 'c:/DS/a.png', blur: 0, edge: 0, flat: 0.987, flags: ['flat'] },
+        { image_id: 77, abs_path: 'D:/lib/gone.png', blur: 3, edge: 0, flat: 0.1, flags: ['blurry'] },
+      ],
+    }
+    const found = qualityIssues(answer, keys)
+    expect(byKind(found, 'blurry')[0]).toMatchObject({ severity: 'low', sources: ['quality'], keys: ['lib:1'], notes: { 'lib:1': '23' } })
+    expect(byKind(found, 'flat')[0]).toMatchObject({ keys: ['dir:C:/ds/a.png'], notes: { 'dir:C:/ds/a.png': '99' } })
+    expect(qualityIssues({ ...answer, items: [] }, keys)).toEqual([])
   })
 
   it('subject-count conflicts become one issue with the fix for each image, to preview and tick', () => {

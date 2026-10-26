@@ -30,6 +30,14 @@
 |---|---|---|---|
 | ntd11 anime NSFW segmentation（Civitai） | 二次元私处分割模型，有些工具在用 | 没有清楚的授权，也没有能固定版本、校验文件的官方下载地址 | 作者给出明确授权和稳定的下载源时 |
 
+### 糊图与过平图（"筛掉糊图"）
+
+2026-10-27：不用模型，做成数据集检查步骤里的**提示**：整张图缩成最长边 512 的灰度图，算拉普拉斯方差（清晰度）、边缘占比和平坦色块占比，只用 CPU，在后台任务里算，结果按文件（路径、大小、修改时间）缓存。列出"可能糊"和"过于平"的图，只提示，从不删除文件。
+上面表里的 Q-Align quality 版仍然没加：它是模型，要额外下载，而且没和人工评分比较过；这个简单的算法在 300 张测试图上约 3 秒，不用下载。思路来自 shira-qwq/lora-dataset-studio（非商业许可，只借思路，代码自己写）。
+
+阈值怎么定的（诚实地说）：清晰度默认低于 60 提示，这和那个工具的参考值同量级，并且在 3 张照片和 1 张合成图（scikit-learn 和 matplotlib 自带的示例图）上对照过：高斯模糊 σ≈1 像素（512 尺度）时分数约 30–230，σ≈1.5 约 12–62，σ≥2 都在 30 以下，没糊的原图都在 500 以上。过平按"几乎全是同色或平滑渐变的 8x8 块"≥92% 提示；合成的二次元风格图里，主体占画面 20% 以上就不会被提示，占 10% 以下会被提示。
+没有验证的地方：没有拿大量真实二次元图做过标定；大片平滑色块、柔和上色的二次元图清晰度分数天生偏低，会被误报为"可能糊"。所以阈值可以在检查步骤里改（0 为不查糊图），也只是提示。边缘占比只显示、不参与判断。
+
 ---
 
 ## English
@@ -59,3 +67,11 @@ Already in the app: Wenaka Privacy YOLO, NudeNet, SAM3, plus the new **deepghs a
 | Model | What it is | Why not yet | When we would add it |
 |---|---|---|---|
 | ntd11 anime NSFW segmentation (Civitai) | Anime private-part segmentation some tools use | No clear license and no official download we can pin and verify | When its author publishes a clear license and a stable source |
+
+### Blurry and flat pictures ("drop blurry images")
+
+2026-10-27: done without a model, as a **hint** in the dataset Check step. Each picture is shrunk to a grey copy of at most 512 px on the long side, and three numbers are computed: the variance of the Laplacian (sharpness), the share of edge pixels and the share of flat 8x8 blocks. CPU only, run as a background job, cached per file (path, size, modification time). The step lists "possibly blurry" and "very flat" pictures; it only lists them and never deletes a file.
+The Q-Align quality variant in the table above is still not added: it is a model with an extra download and was never compared with human ratings, while this simple measure scores 300 test pictures in about 3 seconds with nothing to download. The idea comes from shira-qwq/lora-dataset-studio (non-commercial licence: the idea only, the code is our own).
+
+How the thresholds were chosen, honestly: a blur score under 60 is listed by default, the same order of magnitude as that tool's review value, and checked on 3 photos and 1 synthetic picture (the sample images bundled with scikit-learn and matplotlib). A Gaussian blur of about 1 px (at the 512 scale) scores about 30-230, about 1.5 px scores 12-62, 2 px or more is under 30, and the unblurred originals are all above 500. "Very flat" means at least 92% of the 8x8 blocks are one colour or a smooth gradient; on synthetic anime-style pictures a subject filling 20% of the frame or more is not listed, one filling 10% or less is.
+What is not validated: it was not calibrated on a large set of real anime pictures. Anime with large smooth colour areas and soft shading naturally scores low and will be listed as "possibly blurry" by mistake, so the threshold can be changed in the Check step (0 skips blur) and the result is only a hint. The edge share is shown for the reader and does not decide a flag.

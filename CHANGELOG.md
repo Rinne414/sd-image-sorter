@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Subject-count conflicts in the Check step / 检查步骤的人数标签冲突**: a caption that says `1girl` and `2girls` (or `multiple girls`), or `solo` beside two or more people, is listed with a fix to preview. The fix keeps the higher count and takes `solo` off multi-subject pictures (`solo_focus` is left alone); you tick the pictures to change and apply them in one undoable step. The idea is from BooruDatasetTagManagerPlus; the code is new.
   - 同一张图的 caption 里 `1girl` 和 `2girls`（或 `multiple girls`）并存，或多人图带 `solo`，会列出可预览的修正：保留较高的人数、去掉多人图上的 `solo`（不动 `solo_focus`），勾选要改的图后一步应用，可一步撤销。思路来自 BooruDatasetTagManagerPlus，代码为新写。
+- **Blurry and very flat pictures in the Check step / 检查步骤里的糊图和过平图**: pictures that look possibly blurry (low Laplacian variance) or very flat (almost one colour) are listed as hints with their numbers. They are scored on the CPU in a background job (300 pictures take about 3 seconds), cached per file, and never deleted. The blur threshold can be changed (0 skips it); how it was chosen, and where it is weak, is written in `docs/MODELS_CONSIDERED.md`. The idea is from lora-dataset-studio (non-commercial licence, so only the idea; the code is new).
+  - 看起来可能糊（拉普拉斯方差低）或过于平（几乎同一种颜色）的图，会作为提示列出并带上数值。分数用 CPU 在后台任务里算（300 张约 3 秒），按文件缓存，从不删除文件。清晰度阈值可改（0 为不查糊图）；阈值怎么定的、哪里不准，写在 `docs/MODELS_CONSIDERED.md`。思路来自 lora-dataset-studio（非商业许可，只借思路，代码为新写）。
 
 ## [3.8.1] - 2026-10-27
 

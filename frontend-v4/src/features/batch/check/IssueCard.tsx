@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useLang, useT } from '../../../i18n'
+import { useLang, useT, type MessageKey } from '../../../i18n'
 import type { Entry } from '../entries'
 import { tagHolders } from './captionChecks'
 import type { CheckIssue, IssueKind, SubjectFix, TagPair } from './checkIssues'
@@ -24,12 +24,14 @@ export interface IssueActions {
   fixSubjects: (fixes: readonly SubjectFix[]) => Promise<void>
 }
 
-const REMOVE: ReadonlySet<IssueKind> = new Set(['file_changed', 'file_missing', 'unreadable', 'empty_caption', 'small', 'low_aesthetic', 'character_outlier'])
+const REMOVE: ReadonlySet<IssueKind> = new Set(['file_changed', 'file_missing', 'unreadable', 'empty_caption', 'small', 'low_aesthetic', 'blurry', 'flat', 'character_outlier'])
 const PICK: ReadonlySet<IssueKind> = new Set([
   'empty_caption',
   'trigger_coverage',
   'small',
   'low_aesthetic',
+  'blurry',
+  'flat',
   'too_long',
   'character_outlier',
   'rating_conflict',
@@ -41,6 +43,13 @@ const OPEN: ReadonlySet<IssueKind> = new Set(['empty_caption', 'too_long', 'trig
 const SETTINGS: ReadonlySet<IssueKind> = new Set(['trigger_missing', 'trigger_collision', 'trigger_coverage', 'too_long', 'rating_conflict', 'rating_missing'])
 /** Their images have no caption to edit (the file is gone or changed). */
 const LOCKED: ReadonlySet<IssueKind> = new Set(['file_changed', 'file_missing', 'unreadable'])
+
+/** The kinds whose note is one number, and how each is worded. */
+const NOTE_TEXT: Partial<Record<IssueKind, MessageKey>> = {
+  too_long: 'dataset.check.tokens',
+  blurry: 'dataset.check.blurNote',
+  flat: 'dataset.check.flatNote',
+}
 
 interface Props {
   issue: CheckIssue
@@ -60,10 +69,8 @@ export function IssueCard({ issue, entries, actions, scope }: Props) {
   const detail = text ? (lang === 'en' ? text.detailEn : text.detailZh) : t(ISSUE_TEXT[issue.kind].detail, { n, ...issue.params })
   const openable = !LOCKED.has(issue.kind)
   const toggleTag = (next: string) => setTag((now) => (now === next ? null : next))
-  const notes =
-    issue.kind === 'too_long' && issue.notes
-      ? Object.fromEntries(Object.entries(issue.notes).map(([k, v]) => [k, t('dataset.check.tokens', { n: Number(v) })]))
-      : issue.notes
+  const noteKey = NOTE_TEXT[issue.kind]
+  const notes = noteKey && issue.notes ? Object.fromEntries(Object.entries(issue.notes).map(([k, v]) => [k, t(noteKey, { n: Number(v) })])) : issue.notes
 
   return (
     <article className={styles.issue} data-severity={issue.severity} data-kind={issue.kind} data-testid="check-issue">

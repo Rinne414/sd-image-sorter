@@ -10,6 +10,7 @@ const SOURCE_TEXT: Record<SourceState['id'], MessageKey> = {
   health: 'dataset.check.source.health',
   review: 'dataset.check.source.review',
   audit: 'dataset.check.source.audit',
+  quality: 'dataset.check.source.quality',
   aesthetic: 'dataset.check.source.aesthetic',
 }
 
@@ -53,7 +54,9 @@ export function ChecksPanel({ sources, form, options, onOptions, scope, total, o
               {s.status === 'na'
                 ? t('dataset.check.state.na')
                 : s.status === 'checking'
-                  ? t('dataset.check.state.checking')
+                  ? s.progress && s.progress.total > 0
+                    ? t('dataset.check.state.checkingOf', { done: s.progress.done, total: s.progress.total })
+                    : t('dataset.check.state.checking')
                   : s.status === 'failed'
                     ? t('dataset.check.failed', { reason: s.error ?? '?' })
                     : t('dataset.check.state.done', { n: s.count })}
@@ -80,7 +83,7 @@ const NEAR_DUPLICATE_LIMIT = 5000
 
 function Thresholds({ options, onOptions, folderCount, total }: { options: CheckOptions; onOptions: (o: CheckOptions) => void; folderCount: number; total: number }) {
   const t = useT()
-  const num = (field: 'minSide' | 'minAesthetic' | 'nearDistance', lo: number, hi: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
+  const num = (field: 'minSide' | 'minAesthetic' | 'blurBelow' | 'nearDistance', lo: number, hi: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = Number(e.target.value)
     if (Number.isFinite(v) && v >= lo && v <= hi) onOptions({ ...options, [field]: v })
   }
@@ -93,6 +96,10 @@ function Thresholds({ options, onOptions, folderCount, total }: { options: Check
       <label className={styles.field}>
         <span>{t('dataset.check.minAesthetic')}</span>
         <input type="number" min={0} max={10} step={0.5} value={options.minAesthetic} onChange={num('minAesthetic', 0, 10)} />
+      </label>
+      <label className={styles.field}>
+        <span>{t('dataset.check.blurBelow')}</span>
+        <input type="number" min={0} max={10000} step={10} value={options.blurBelow} onChange={num('blurBelow', 0, 10000)} data-testid="check-blur-below" />
       </label>
       <label className={styles.field}>
         <span>{t('dataset.check.nearDistance')}</span>

@@ -6,22 +6,25 @@ import { useProjectHeads } from '../datasetTagApi'
 import type { Entry } from '../entries'
 import { captionIssues, tagStyleIssues } from './captionChecks'
 import { checkScope, sentKeys, useAudit, useFinalCaptions, useFolderAesthetic, useHealth, useReviewQueue } from './checkApi'
-import { auditIssues, healthIssues, keyIndex, maskIssues, mergeIssues, projectIssues, purityIssues, reviewIssues, type CheckIssue } from './checkIssues'
+import { auditIssues, healthIssues, keyIndex, maskIssues, mergeIssues, projectIssues, purityIssues, qualityIssues, reviewIssues, type CheckIssue } from './checkIssues'
 import { useMaskStatus } from '../masks/maskApi'
 import type { CheckOptions } from './checkOptions'
 import { usePurityResults } from './purityRun'
+import { useImageQuality, useQualityProgress, type QualityProgress } from './qualityApi'
 
 /** What one source is doing: not for these images, still asking, done (and what it covered), or failed. */
 export type SourceStatus = 'na' | 'checking' | 'done' | 'failed'
 
 export interface SourceState {
-  id: 'captions' | 'health' | 'review' | 'audit' | 'aesthetic'
+  id: 'captions' | 'health' | 'review' | 'audit' | 'quality' | 'aesthetic'
   status: SourceStatus
   error: string | null
   /** A note the source gave (near duplicates unavailable, a check cut short). */
   warning: 'phashError' | 'phashLimited' | 'healthCut' | null
   /** How many images it covered. */
   count: number
+  /** How far a long background check has got (the picture quality scoring). */
+  progress: QualityProgress | null
   retry: () => void
 }
 
@@ -33,9 +36,9 @@ interface QueryLike {
   refetch: () => unknown
 }
 
-function stateOf(id: SourceState['id'], q: QueryLike, applies: boolean, count: number, warning: SourceState['warning'] = null): SourceState {
+function stateOf(id: SourceState['id'], q: QueryLike, applies: boolean, count: number, warning: SourceState['warning'] = null, progress: QualityProgress | null = null): SourceState {
   const status: SourceStatus = !applies ? 'na' : q.isError ? 'failed' : q.isFetching || q.data === undefined ? 'checking' : 'done'
-  return { id, status, error: q.isError ? (q.error?.message ?? '?') : null, warning: status === 'done' ? warning : null, count, retry: () => void q.refetch() }
+  return { id, status, error: q.isError ? (q.error?.message ?? '?') : null, warning: status === 'done' ? warning : null, count, progress: status === 'checking' ? progress : null, retry: () => void q.refetch() }
 }
 
 /** Every check over the batch, merged into one list of issues. `run` goes up with "Check again". */
@@ -48,6 +51,8 @@ export function useChecks(batch: Batch, entries: readonly Entry[], o: CheckOptio
   const review = useReviewQueue(batch, entries, o, ratings, run)
   const audit = useAudit(batch, entries, o, run)
   const aesthetic = useFolderAesthetic(batch, entries, o, run)
+  const quality = useImageQuality(batch, entries, o, run)
+  const qualityProgress = useQualityProgress((s) => s.byBatch[batch.id] ?? null)
   const health = useHealth(batch, entries, form, finals.data, run)
   const purity = usePurityResults((s) => s.byBatch[batch.id])
   const scope = useMemo(() => checkScope(entries), [entries])
@@ -64,13 +69,14 @@ export function useChecks(batch: Batch, entries: readonly Entry[], o: CheckOptio
         review.data ? reviewIssues(review.data, index) : [],
         audit.data ? auditIssues(audit.data, index) : [],
         aesthetic.data ? auditIssues(aesthetic.data, index) : [],
+        quality.data ? qualityIssues(quality.data, index) : [],
         health.data ? healthIssues(health.data, index, { ratingsInCaptions: ratings }) : [],
         purity ? purityIssues(purity, index) : [],
         masks.data ? maskIssues(masks.data, scope.ids, index, exportsMasks) : [],
       ],
       entries.map((e) => e.key),
     )
-  }, [entries, finals.data, heads.data, form, review.data, audit.data, aesthetic.data, health.data, purity, ratings, masks.data, scope.ids, exportsMasks])
+  }, [entries, finals.data, heads.data, form, review.data, audit.data, aesthetic.data, quality.data, health.data, purity, ratings, masks.data, scope.ids, exportsMasks])
 
   const summary = audit.data?.summary
   const auditWarning = summary?.near_duplicate_error ? 'phashError' : summary?.near_duplicate_check_limited ? 'phashLimited' : null
@@ -80,6 +86,7 @@ export function useChecks(batch: Batch, entries: readonly Entry[], o: CheckOptio
     stateOf('health', health, scope.ids.length > 0, health.data?.images ?? 0, health.data?.images_truncated ? 'healthCut' : null),
     stateOf('review', review, scope.ids.length > 0, scope.ids.length),
     stateOf('audit', audit, scope.ids.length + scope.paths.length > 0, audit.data?.sent.length ?? 0, auditWarning),
+    stateOf('quality', quality, scope.ids.length + scope.paths.length > 0, quality.data?.sent.length ?? 0, null, qualityProgress),
     ...(o.scoreFolders ? [stateOf('aesthetic', aesthetic, scope.paths.length > 0 && o.minAesthetic > 0, scope.paths.length)] : []),
   ]
   // Images added after the last costly check (the audit and review queue run again only when asked).

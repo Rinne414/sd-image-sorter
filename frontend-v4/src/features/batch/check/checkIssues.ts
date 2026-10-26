@@ -17,6 +17,8 @@ export type IssueKind =
   | 'duplicates'
   | 'small'
   | 'low_aesthetic'
+  | 'blurry'
+  | 'flat'
   | 'too_long'
   | 'tag_style'
   | 'character_outlier'
@@ -30,7 +32,7 @@ export type IssueKind =
   | 'health_other'
 
 export type Severity = 'high' | 'medium' | 'low'
-export type IssueSource = 'project' | 'captions' | 'review' | 'audit' | 'health' | 'purity' | 'masks'
+export type IssueSource = 'project' | 'captions' | 'review' | 'audit' | 'quality' | 'health' | 'purity' | 'masks'
 
 /** One image's subject-count fix: keep these count tags, take these out (tags as the backend folds them). */
 export interface SubjectFix {
@@ -82,6 +84,8 @@ const SEVERITY: Record<IssueKind, Severity> = {
   duplicates: 'medium',
   small: 'medium',
   low_aesthetic: 'medium',
+  blurry: 'low',
+  flat: 'low',
   too_long: 'medium',
   tag_style: 'medium',
   character_outlier: 'medium',
@@ -233,6 +237,57 @@ export function auditIssues(report: AuditReport, index: KeyIndex): CheckIssue[] 
     ...(missing.length ? [issue('file_missing', 'audit', { keys: missing })] : []),
     ...(low.length ? [issue('low_aesthetic', 'audit', { keys: low, notes: scores })] : []),
     ...(groups.length ? [issue('duplicates', 'audit', { keys: groups.flat(), groups })] : []),
+  ]
+}
+
+// ---- picture quality hints (POST /api/dataset/quality) --------------------------------------
+
+export interface QualityItem {
+  image_id: number
+  abs_path: string
+  blur: number
+  edge: number
+  flat: number
+  /** `blurry` (possibly blurry) or `flat` (very flat / low detail), never both. */
+  flags: string[]
+}
+
+export interface QualityAnswer {
+  total: number
+  scored: number
+  pending: number
+  unreadable: number
+  missing: number
+  job_id: string | null
+  started: boolean
+  items: QualityItem[]
+}
+
+/**
+ * The pictures the quality check says are possibly blurry or very flat: one
+ * hint each, never an action on the file. The note is one number (the blur
+ * score, or the flat share in percent) which the card words per language.
+ */
+export function qualityIssues(answer: QualityAnswer, index: KeyIndex): CheckIssue[] {
+  const blurry: string[] = []
+  const flat: string[] = []
+  const blurNotes: Record<string, string> = {}
+  const flatNotes: Record<string, string> = {}
+  for (const item of Array.isArray(answer.items) ? answer.items : []) {
+    const key = lookup(index, item.image_id, item.abs_path)
+    if (!key) continue
+    if (item.flags.includes('blurry')) {
+      blurry.push(key)
+      blurNotes[key] = String(Math.round(item.blur))
+    }
+    if (item.flags.includes('flat')) {
+      flat.push(key)
+      flatNotes[key] = String(Math.round(item.flat * 100))
+    }
+  }
+  return [
+    ...(blurry.length ? [issue('blurry', 'quality', { keys: blurry, notes: blurNotes })] : []),
+    ...(flat.length ? [issue('flat', 'quality', { keys: flat, notes: flatNotes })] : []),
   ]
 }
 

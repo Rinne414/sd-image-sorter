@@ -4762,6 +4762,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/dataset/quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Possibly blurry and very flat pictures, scored in the background
+         * @description Scores every picture on the CPU, keeps the numbers in a cache, and lists the pictures that look possibly blurry or very flat. Unscored pictures are scored by one bulk job (`job_id`; poll `/api/bulk-jobs/{job_id}`, then ask again). Review only: nothing is changed or deleted.
+         */
+        post: operations["post_dataset_quality_api_dataset_quality_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/dataset/audit": {
         parameters: {
             query?: never;
@@ -7664,6 +7684,28 @@ export interface components {
         CreateLibraryBody: {
             /** Name */
             name: string;
+        };
+        /** DatasetQualityRequest */
+        DatasetQualityRequest: {
+            /** Image Ids */
+            image_ids?: number[];
+            /** Image Paths */
+            image_paths?: string[];
+            /**
+             * Start
+             * @default true
+             */
+            start: boolean;
+            /**
+             * Blur Below
+             * @default 60
+             */
+            blur_below: number;
+            /**
+             * Flat Above
+             * @default 0.92
+             */
+            flat_above: number;
         };
         /**
          * DatasetAuditRequest
@@ -19118,6 +19160,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_dataset_quality_api_dataset_quality_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatasetQualityRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
             };
             /** @description Validation Error */
             422: {
