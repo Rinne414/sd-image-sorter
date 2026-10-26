@@ -1038,7 +1038,8 @@ def test_dev_requirements_keep_platform_specific_wheels_guarded():
     assert "uv pip compile --universal" in text
     assert "--no-emit-package pip" in text
     assert "--no-emit-package setuptools" not in text
-    assert "setuptools==83.0.0" in text
+    # The security floor in requirements-core.in reaches the dev lock too.
+    assert "setuptools==84.2.1" in text
 
     assert input_text.splitlines()[0] == "-r requirements-core.txt"
     forbidden_prefixes = (

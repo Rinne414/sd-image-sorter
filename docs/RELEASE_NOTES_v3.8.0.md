@@ -29,6 +29,9 @@ A tray desktop program; pictures and videos come in by themselves; PixAI v1.0 by
 - **Clearer gallery**: the generator tabs count what the filters leave; Clear current library sits on the gallery page and in Settings (Vopus too); Reset all settings is in Settings; an unexpected error is said on screen with Reload and Copy; the shortcuts panel lists every gallery key; Chinese labels use the Chinese colon; ratings worked out from tags follow danbooru's lines; browser and mouse Back work in Vopus; the All / Pictures / Videos switch shows only when the library has videos and the laptop search row stays on one line; Prompt Lab's Stats scrolls on a laptop screen; a Find Moved Files review left from an earlier run keeps its button in sight; a click keeps a Vopus submenu open.
   - **图库更清楚**：生成器分页的张数跟着筛选变；「清空当前图库」放在图库页和设置里（Vopus 也有）；设置里可以恢复所有设置；没人接住的错误会显示在页面上，带「重新加载」和「复制」；快捷键面板列出图库的所有按键；中文标签改用全角冒号；由标签推算的分级改用 danbooru 的标准；Vopus 里浏览器和鼠标的后退键可以用了；「全部 / 图片 / 视频」开关只在图库有视频时显示，笔记本上的搜索栏保持一行；提示词助手的统计页在笔记本屏幕上可以滚动；上一次「找回移动的文件」留下的待选，按钮不再藏起来；点击不会再把 Vopus 的子菜单关掉。
 
+- **Security updates**: Pillow 13.0.0 (37 image-parsing advisories published in October 2026), filelock 4.2.4, setuptools 84.2.1, certifi 2026.10.23; fastembed 0.9.1 to match Pillow 13.
+  - **安全更新**：Pillow 13.0.0（2026 年 10 月公布的 37 个图片解析漏洞）、filelock 4.2.4、setuptools 84.2.1、certifi 2026.10.23；fastembed 升到 0.9.1 以配合 Pillow 13。
+
 ---
 
 ## Upgrading / 升级注意

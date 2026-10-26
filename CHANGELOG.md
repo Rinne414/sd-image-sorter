@@ -110,6 +110,9 @@ SD Image Sorter can now stay resident: the Windows package opens a desktop progr
 - **Prompt Lab Stats on a laptop screen / 笔记本屏幕上的提示词助手统计页**: at 768 px high the Stats page was clipped instead of scrolling, so with more checkpoints or a longer recipe line the Recipe Suggestions buttons (Try in Gallery, Use in Random, Send to Build) were out of reach. Stats now scrolls.
   - 在 768 像素高的屏幕上，统计页超出部分会被直接裁掉而不能滚动；模型多一些或配方那行长一些时，「配方建议」里的按钮（在图库里试、用在随机里、送到构建）就点不到了。现在统计页可以滚动。
 
+- **Security updates / 安全更新**: Pillow 13.0.0 (37 image-parsing advisories published in October 2026), filelock 4.2.4, setuptools 84.2.1 and certifi 2026.10.23; fastembed moves to 0.9.1, the first release that works with Pillow 13.
+  - Pillow 13.0.0（2026 年 10 月公布的 37 个图片解析漏洞）、filelock 4.2.4、setuptools 84.2.1、certifi 2026.10.23；fastembed 升到 0.9.1（第一个能配合 Pillow 13 的版本）。
+
 ## [3.7.0] - 2026-10-17
 
 One program now serves two interfaces: the classic one stays the start page and Vopus, the second interface, is switched on in Settings. The database is copied before every upgrade, and libraries that Vopus 1.0.0 had upgraded are repaired. Moves, undo, exports and batch censoring always say how they ended. Letter shortcuts no longer swallow browser keys such as Ctrl+Shift+R, and the browser Back button goes up one level like Esc.

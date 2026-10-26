@@ -34,7 +34,7 @@ def test_requirement_lock_map_uses_release_pins():
     )
 
     assert lock_map["transformers"] == "transformers==5.10.4"
-    assert lock_map["fastembed"] == "fastembed==0.8.0"
+    assert lock_map["fastembed"] == "fastembed==0.9.1"
     assert lock_map["torch"] == expected_torch
     assert lock_map["opencv_python"] == expected_opencv
     assert optional_dependencies._lock_package_spec("transformers>=5.6.0") == "transformers==5.10.4"
@@ -701,13 +701,13 @@ def _command_requirements(command: tuple[str, ...]) -> tuple[str, ...]:
     ),
     (
         (
-            "fastembed==0.8.0",
+            "fastembed==0.9.1",
             "fastembed",
             "onnxruntime-gpu",
             (
                 "numpy>=1.26; python_version >= '3'",
                 "onnxruntime>=1.17.0,!=1.20.0",
-                "pillow>=10.3.0,<13.0",
+                "pillow>=10.3.0,<14.0",
                 "tokenizers>=0.15,<1.0",
                 "requests>=2.31; python_version < '3'",
             ),
@@ -848,11 +848,11 @@ def test_ort_consumers_keep_normal_resolver_without_gpu_or_directml_provider(
     monkeypatch.setattr(optional_dependencies, "_running_in_virtualenv", lambda: True)
     calls = _record_pip_calls(monkeypatch)
 
-    optional_dependencies.install_packages(["fastembed==0.8.0"])
+    optional_dependencies.install_packages(["fastembed==0.9.1"])
 
     assert len(calls) == 1
     assert "--no-deps" not in calls[0]
-    assert _command_requirements(calls[0]) == ("fastembed==0.8.0",)
+    assert _command_requirements(calls[0]) == ("fastembed==0.9.1",)
 
 
 def test_ort_consumer_rejects_provider_below_installed_metadata_requirement(
@@ -893,7 +893,7 @@ def test_ort_consumer_rejects_provider_below_installed_metadata_requirement(
     monkeypatch.setitem(sys.modules, "onnxruntime", onnxruntime_module)
 
     with pytest.raises(optional_dependencies.RuntimeDependencyError) as error:
-        optional_dependencies.install_packages(["fastembed==0.8.0"])
+        optional_dependencies.install_packages(["fastembed==0.9.1"])
 
     message = str(error.value)
     assert "onnxruntime>=1.22" in message

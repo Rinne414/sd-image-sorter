@@ -16,10 +16,19 @@ onnxruntime==1.19.2; sys_platform == "darwin" and python_version < "3.13"
 onnxruntime==1.23.2; sys_platform == "darwin" and python_version >= "3.13"
 onnxruntime==1.21.0; sys_platform == "win32" and python_version < "3.13"
 onnxruntime>=1.20.0; sys_platform == "win32" and python_version >= "3.13"
-# Security floor: Pillow 12.3.0 fixes multiple untrusted-image parsing issues.
-Pillow>=12.3.0
-# Security floor: setuptools 83.0.0 fixes GHSA-h35f-9h28-mq5c, a Unicode-normalization exclusion bypass in macOS source distributions.
-setuptools>=83.0.0
+# Security floor: Pillow 13.0.0 fixes the untrusted-image parsing advisories
+# published 2026-10 (CVE-2026-112390..112901 range, 37 ids). 13.0 drops only
+# Python 3.10; its removals (Image._show, ImageCms product_name/info,
+# ExifTags.IFD.Makernote, fromarray mode that changes the dtype) are unused
+# here (checked 2026-10-26: every fromarray(..., mode=) gets uint8 data).
+Pillow>=13.0.0
+# Security floor: setuptools 84.1.0 (advisory 2026-10; 83.0.0 fixed GHSA-h35f-9h28-mq5c).
+setuptools>=84.1.0
+# Security floors for transitive packages (huggingface-hub/torch, httpx):
+# filelock 4.2.1 and certifi 2026.10.19 fix the 2026-10 advisories. Nothing
+# here calls filelock directly; 4.x tightens ReadWriteLock and timeout types.
+filelock>=4.2.1
+certifi>=2026.10.19
 # numpy: 3.12 stays on the 1.x ABI (matches existing onnxruntime/SAM3 binary
 # builds, see ADR-AI-20260524 in docs/AI_DECISION_LOG.md). 3.13 has no cp313
 # wheel for numpy 1.26.4 (last 1.x release), so the resolver picks 2.x.
