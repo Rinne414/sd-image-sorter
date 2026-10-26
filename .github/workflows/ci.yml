@@ -11,7 +11,8 @@ env:
 
 jobs:
   linux-full:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, which Playwright's chromium does not support yet.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -182,7 +183,8 @@ jobs:
           # python-build-standalone every time.
           PIP_CACHE_DIR: ${{ runner.temp }}/pip-cache
         run: |
-          python scripts/build_release_packages.py
+          # The Windows package (desktop shell) builds only on Windows.
+          python scripts/build_release_packages.py --skip-windows-package
 
       - name: Verify both arch assets landed in artifacts/release/
         run: |

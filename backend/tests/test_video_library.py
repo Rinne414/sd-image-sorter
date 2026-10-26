@@ -441,11 +441,18 @@ def test_video_thumbnail_is_a_real_frame(
     assert frame.size == (256, 192)
 
 
+@pytest.mark.parametrize(
+    "tag, can_install",
+    [("win64", True), ("linux64", True), (None, False)],
+)
 def test_video_thumbnail_without_ffmpeg_is_a_labelled_placeholder(
-    test_db, test_client, tmp_path, isolated_video_dirs, monkeypatch
+    test_db, test_client, tmp_path, isolated_video_dirs, monkeypatch, tag, can_install
 ):
+    """Where a build exists (Windows, Linux) the size is offered; on a system
+    without one (macOS) the page asks for a package-manager ffmpeg instead."""
     monkeypatch.setattr(video_index.VideoIndexer, "kick", lambda self: None)
     monkeypatch.setattr(video_tools, "_discover", lambda: None)
+    monkeypatch.setattr(ffmpeg_install, "platform_tag", lambda: tag)
     video_tools.forget_tools()
     (tmp_path / "clip.mp4").write_bytes(b"\x00" * 64)
     scan_folder(str(tmp_path), quick_import=True, precise_total=False)
@@ -458,7 +465,8 @@ def test_video_thumbnail_without_ffmpeg_is_a_labelled_placeholder(
     assert response.headers["X-Thumbnail-Placeholder"] == "VIDEO_TOOLS_MISSING"
     assert status["available"] is False
     assert status["videos"] == 1 and status["pending"] == 1
-    assert status["estimated_mb"]
+    assert status["can_install"] is can_install
+    assert bool(status["estimated_mb"]) is can_install
 
 
 def test_video_file_supports_http_range(test_db, test_client, tmp_path, monkeypatch):

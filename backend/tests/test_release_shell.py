@@ -386,3 +386,68 @@ def test_qa_refuses_a_release_manifest_without_shell_versions(qa, tmp_path):
 
     with pytest.raises(qa.LazyQaError, match="shell_version"):
         qa.check_release_packages(tmp_path, "9.9.9")
+
+
+# --- building on Linux / macOS (CI) ---------------------------------------------
+
+
+def _fake_release_tree(builder, monkeypatch, tmp_path, version="9.9.9"):
+    fake_root = tmp_path / "repo"
+    artifact_root = tmp_path / "artifacts"
+    notes = fake_root / "docs" / f"RELEASE_NOTES_v{version}.md"
+    notes.parent.mkdir(parents=True)
+    notes.write_bytes(b"## v9.9.9 -- Test\n\nSummary.\n\n## Checksums\n\nx\n")
+    (fake_root / "desktop").mkdir()
+    (fake_root / "desktop" / "package.json").write_text('{"version": "0.4.0"}', encoding="utf-8")
+
+    def minimal_project(stage_dir):
+        (stage_dir / "backend").mkdir(parents=True, exist_ok=True)
+        (stage_dir / "backend" / "main.py").write_text("pass\n", encoding="utf-8")
+
+    monkeypatch.setattr(builder, "ROOT", fake_root)
+    monkeypatch.setattr(builder, "ARTIFACT_ROOT", artifact_root)
+    monkeypatch.setattr(builder, "STAGING_ROOT", artifact_root / "staging")
+    monkeypatch.setattr(builder, "BOOTSTRAP_DOWNLOAD_ROOT", artifact_root / "staging" / "_downloads")
+    monkeypatch.setattr(builder, "find_seven_zip", lambda: None)
+    monkeypatch.setattr(builder, "copy_project", minimal_project)
+    monkeypatch.setattr(builder, "build_frontend_v4", lambda: None)
+    monkeypatch.setattr(builder, "prepare_embedded_python", lambda stage_dir: None)
+    monkeypatch.setattr(builder, "prepare_bundled_linux_python", lambda stage_dir, arch: None)
+
+
+def test_without_the_windows_package_the_shell_is_not_built(builder, monkeypatch, tmp_path):
+    """CI builds the Linux packages on Linux, where the Windows launcher and the
+    Electron shell cannot be built (the v3.8.0 candidate failed there)."""
+    _fake_release_tree(builder, monkeypatch, tmp_path)
+    monkeypatch.setattr(builder, "build_desktop_shell", lambda root: pytest.fail("shell built"))
+
+    assets = builder.build_release_assets("9.9.9", 1900, include_windows=False)
+
+    names = {asset.name for asset in assets}
+    assert "sd-image-sorter-v9.9.9-windows-portable.zip" not in names
+    assert {
+        "sd-image-sorter-v9.9.9-app-patch.zip",
+        "sd-image-sorter-v9.9.9-linux.tar.gz",
+        "sd-image-sorter-v9.9.9-linux-portable-x86_64.tar.gz",
+        "sd-image-sorter-v9.9.9-linux-portable-aarch64.tar.gz",
+        "sd-image-sorter-v9.9.9-release-manifest.json",
+    } <= names
+    manifest = json.loads(
+        next(a for a in assets if a.name.endswith("release-manifest.json")).read_text(encoding="utf-8")
+    )
+    assert not [entry for entry in manifest["assets"] if "windows-portable" in json.dumps(entry)]
+
+
+def test_a_full_release_off_windows_is_refused_with_the_way_out(builder, monkeypatch, capsys):
+    monkeypatch.setattr(builder.sys, "platform", "linux")
+    monkeypatch.setattr(builder.sys, "argv", ["build_release_packages.py", "--version", "9.9.9"])
+    monkeypatch.setattr(builder, "build_release_assets", lambda *a, **k: pytest.fail("built"))
+
+    assert builder.main() == 1
+    assert "--skip-windows-package" in capsys.readouterr().err
+
+
+def test_ci_builds_the_linux_packages_without_the_windows_one():
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "build_release_packages.py --skip-windows-package" in workflow

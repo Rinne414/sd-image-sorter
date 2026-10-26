@@ -305,6 +305,15 @@ def parse_args() -> argparse.Namespace:
         help="Maximum size for split zip volumes, default: %(default)s",
     )
     parser.add_argument(
+        "--skip-windows-package",
+        action="store_true",
+        help=(
+            "Build every package except windows-portable, which carries the desktop "
+            "shell (Electron + a Windows launcher) and builds only on Windows; for CI "
+            "on Linux and macOS"
+        ),
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=None,
@@ -1443,12 +1452,15 @@ def stage_archive(name: str, version: str, seven_zip: Path | None, *, populate) 
     return archive_path
 
 
-def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
+def build_release_assets(
+    version: str, split_size_mb: int, *, include_windows: bool = True
+) -> list[Path]:
     # Every package ships the Vopus build that copy_project picks up from
     # frontend-v4/dist, so build it before the previous packages are cleared.
     build_frontend_v4()
-    # The Windows package also ships the desktop shell, built from desktop/.
-    shell_build = build_desktop_shell(ROOT)
+    # The Windows package also ships the desktop shell, built from desktop/;
+    # without it (CI on Linux / macOS) the shell is not built at all.
+    shell_build = build_desktop_shell(ROOT) if include_windows else None
     seven_zip = find_seven_zip()
     if ARTIFACT_ROOT.exists():
         shutil.rmtree(ARTIFACT_ROOT)
@@ -1464,9 +1476,13 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
         write_package_manifest(stage_dir, version)
         # After the manifest on purpose: the in-app updater only replaces files
         # the manifest lists, and the shell's files are locked while it runs.
+        assert shell_build is not None
         stage_desktop_shell(shell_build, stage_dir)
 
-    assets.append(stage_archive("windows-portable", version, seven_zip, populate=populate_windows_portable))
+    if include_windows:
+        assets.append(stage_archive("windows-portable", version, seven_zip, populate=populate_windows_portable))
+    else:
+        print("[release] windows-portable: skipped (--skip-windows-package)")
 
     # === Linux: app only, no models, no Python (uses system Python) ===
     def populate_linux(stage_dir: Path) -> None:
@@ -1627,10 +1643,22 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
 
 def main() -> int:
     args = parse_args()
+    if not args.skip_windows_package and sys.platform != "win32":
+        print(
+            "[release] FAILED: the Windows package carries the desktop shell, which "
+            "builds only on Windows. Build the release on Windows, or pass "
+            "--skip-windows-package to build the other packages here.",
+            file=sys.stderr,
+        )
+        return 1
     try:
         if args.output_dir is not None:
             configure_output_root(args.output_dir)
-        assets = build_release_assets(args.version, args.split_size_mb)
+        assets = build_release_assets(
+            args.version,
+            args.split_size_mb,
+            include_windows=not args.skip_windows_package,
+        )
     except Exception as exc:  # pragma: no cover - release script should fail loudly
         print(f"[release] FAILED: {exc}", file=sys.stderr)
         traceback.print_exc()
