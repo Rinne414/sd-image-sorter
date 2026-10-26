@@ -126,6 +126,12 @@ Object.assign(SeparationConsole, {
                     && finding.fix?.image_ids?.length) {
                     card.appendChild(this._healthFixButton(finding));
                 }
+                if (finding.id === 'subject-count-conflict'
+                    && finding.fix?.action === 'resolve_subject_counts') {
+                    // Preview with a tick per picture; nothing changes until Apply.
+                    const preview = window.SubjectFixes?.build(finding, this.dm);
+                    if (preview) card.appendChild(preview);
+                }
                 out.appendChild(card);
             }
         },

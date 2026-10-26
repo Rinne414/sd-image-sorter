@@ -88,6 +88,10 @@
         updateAuditResidueStrip();
     }
 
+    // Findings of audit-hints.js (blur, flat, long captions): not part of the
+    // audit endpoint's answer, so they live in their own lists on the report.
+    const HINT_ITEM_LISTS = { blurry: 'quality_items', flat: 'quality_items', too_long: 'token_items' };
+
     function getAuditMatches(flag) {
         const flaggedIds = new Set();
         const flaggedPaths = new Set();
@@ -102,7 +106,9 @@
                 }
             }
         } else {
-            for (const it of (AUDIT_STATE.lastReport.items || [])) {
+            // The blur / flat / long-caption hints keep their findings in their own lists.
+            const source = HINT_ITEM_LISTS[flag] || 'items';
+            for (const it of (AUDIT_STATE.lastReport[source] || [])) {
                 if (!(it.flags || []).includes(flag)) continue;
                 if (it.image_id && it.image_id > 0) flaggedIds.add(Number(it.image_id));
                 if (it.abs_path) flaggedPaths.add(String(it.abs_path));
@@ -119,6 +125,9 @@
             low_quality: 'low_quality_count',
             untagged: 'untagged_count',
             small: 'small_count',
+            blurry: 'blurry_count',
+            flat: 'flat_count',
+            too_long: 'too_long_count',
         }[flag];
         return Number(key ? summary[key] : 0) || 0;
     }
@@ -130,7 +139,7 @@
     }
 
     function auditIssueIsTruncated(flag, report = AUDIT_STATE.lastReport) {
-        if (!report?.items_truncated || flag === 'duplicate') return false;
+        if (!report?.items_truncated || flag === 'duplicate' || HINT_ITEM_LISTS[flag]) return false;
         return knownAuditMatchCount(flag, report) < auditSummaryCount(flag, report);
     }
 
@@ -182,6 +191,30 @@
                 removable: false,
                 nextCopy: t('dataset.auditNextDuplicate',
                     'Duplicates are selected for you. Keep the best one in each group and remove the rest by hand.'),
+            },
+            {
+                flag: 'blurry',
+                label: t('dataset.auditBadgeBlurry', 'Possibly blurry'),
+                count: summary.blurry_count || 0,
+                removable: true,
+                nextCopy: t('dataset.auditNextBlurry',
+                    'These have few sharp edges, so a trainer would learn soft detail. It is only a hint: look first, because anime with large smooth areas can score low too. Remove the ones you do not want (the files stay).'),
+            },
+            {
+                flag: 'flat',
+                label: t('dataset.auditBadgeFlat', 'Very flat'),
+                count: summary.flat_count || 0,
+                removable: true,
+                nextCopy: t('dataset.auditNextFlat',
+                    'These are almost one colour or a smooth gradient, so there is little to learn from them. It is only a hint. Remove the ones you do not want (the files stay).'),
+            },
+            {
+                flag: 'too_long',
+                label: t('dataset.auditBadgeTooLong', 'Caption too long'),
+                count: summary.too_long_count || 0,
+                removable: false,
+                nextCopy: t('dataset.auditNextTooLong',
+                    'The text encoder cuts everything past its token limit. Select them, put the important tags first and remove tags that add little in Workbench.'),
             },
         ].filter((it) => Number(it.count || 0) > 0);
     }
@@ -469,6 +502,15 @@
         if ((summary.small_count || 0) > 0) {
             badges.appendChild(makeBadge('small', t('dataset.auditBadgeSmall', 'Small'), summary.small_count));
         }
+        if ((summary.blurry_count || 0) > 0) {
+            badges.appendChild(makeBadge('blurry', t('dataset.auditBadgeBlurry', 'Possibly blurry'), summary.blurry_count));
+        }
+        if ((summary.flat_count || 0) > 0) {
+            badges.appendChild(makeBadge('flat', t('dataset.auditBadgeFlat', 'Very flat'), summary.flat_count));
+        }
+        if ((summary.too_long_count || 0) > 0) {
+            badges.appendChild(makeBadge('too_long', t('dataset.auditBadgeTooLong', 'Caption too long'), summary.too_long_count));
+        }
         if (badges.children.length === 0) {
             const ok = document.createElement('span');
             ok.className = 'dataset-audit-status';
@@ -577,6 +619,9 @@
         untagged: 'dataset.auditBadgeUntagged',
         small: 'dataset.auditBadgeSmall',
         duplicate: 'dataset.auditBadgeDuplicate',
+        blurry: 'dataset.auditBadgeBlurry',
+        flat: 'dataset.auditBadgeFlat',
+        too_long: 'dataset.auditBadgeTooLong',
     };
 
     // Fallback English strings for the audit-residue strip when a label
@@ -589,6 +634,9 @@
         untagged: 'Untagged',
         small: 'Small',
         duplicate: 'Duplicates',
+        blurry: 'Possibly blurry',
+        flat: 'Very flat',
+        too_long: 'Caption too long',
     };
 
     function ensureAuditResidueStyles() {

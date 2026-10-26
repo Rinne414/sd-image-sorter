@@ -3304,6 +3304,36 @@
       }
     },
     {
+      "id": "dataset.audit-hints",
+      "area": "dataset",
+      "en": "Audit hints: blurry / flat pictures and long captions (exact Anima token counts)",
+      "zh": "审核提示：糊图 / 过平的图和过长的 caption（Anima 精确 token 计数）",
+      "classic": [
+        "#dataset-audit-check-blur",
+        "#dataset-audit-check-tokens",
+        "#btn-dataset-audit-quality-stop",
+        "#btn-dataset-audit-tokens-prepare"
+      ],
+      "vopus": {
+        "at": "#/batch",
+        "open": [
+          "[data-testid=\"rail-step\"][data-step-id=\"check\"]"
+        ],
+        "find": "[data-testid=\"check-step\"]",
+        "needs": "batch",
+        "note": "blurry / flat and too-long issues in check-issues; the tokenizer download is check-tokenizers-download"
+      },
+      "next": {
+        "at": "#/batch",
+        "open": [
+          "[data-testid=\"rail-step\"][data-step-id=\"check\"]"
+        ],
+        "find": "[data-testid=\"check-issues\"]",
+        "needs": "batch",
+        "note": "check-issues"
+      }
+    },
+    {
       "id": "dataset.queue",
       "area": "dataset",
       "en": "Dataset queue (grid / list, tag include / exclude, select, remove)",

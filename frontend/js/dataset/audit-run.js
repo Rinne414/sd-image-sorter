@@ -132,6 +132,9 @@
                     : ` ${DM._t('dataset.auditPhashCheckedShort', 'Near-duplicate checked {count}.', { count: counts.near_duplicate_hashes || 0 })}`)
                 : '';
             setStatus(baseStatus + phashStatus);
+            // Blur / flat and long-caption hints (audit-hints.js) add their own badges to this report.
+            const hintNotes = await DM._runAuditHints?.({ imageIds, imagePaths, report: data }) || [];
+            if (hintNotes.length) setStatus([baseStatus + phashStatus, ...hintNotes].join(' '));
         } catch (e) {
             setStatus(e.message || String(e));
         } finally {
@@ -182,6 +185,7 @@
             'dataset-audit-check-dim',
             'dataset-audit-check-phash',
             'dataset-audit-check-aesthetic',
+            'dataset-audit-check-blur',
         ]) {
             $(id)?.addEventListener('change', updateAuditOptionControls);
         }
@@ -193,6 +197,7 @@
             ['dataset-audit-check-dim', 'dataset-audit-dim-min'],
             ['dataset-audit-check-phash', 'dataset-audit-phash-max'],
             ['dataset-audit-check-aesthetic', 'dataset-audit-aesthetic-max'],
+            ['dataset-audit-check-blur', 'dataset-audit-blur-below'],
         ];
         for (const [checkId, inputId] of mapping) {
             const check = $(checkId);

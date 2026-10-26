@@ -20,6 +20,7 @@
     <link rel="stylesheet" href="/static/css/mass-tag-editor.css">
     <link rel="stylesheet" href="/static/css/dataset-maker.css">
     <link rel="stylesheet" href="/static/css/dataset-pipeline.css">
+    <link rel="stylesheet" href="/static/css/dataset-checks.css">
     <link rel="stylesheet" href="/static/css/smart-tag-hint.css">
     <link rel="stylesheet" href="/static/css/tag-power.css">
     <link rel="stylesheet" href="/static/css/tag-stats-modal.css">
@@ -5633,13 +5634,35 @@
                                         <span data-i18n="dataset.auditCheckAesthetic">Low aesthetic</span>
                                         <input type="number" id="dataset-audit-aesthetic-max" step="0.1" value="4.5" placeholder="4.5">
                                     </label>
+                                    <label class="dataset-audit-threshold">
+                                        <input type="checkbox" id="dataset-audit-check-blur" checked>
+                                        <span data-i18n="dataset.auditCheckBlur">Blurry / flat: sharpness under</span>
+                                        <input type="number" id="dataset-audit-blur-below" min="0" max="10000" step="10" value="60" placeholder="60"
+                                               title="Pictures scoring under this are listed as possibly blurry. 0 lists only the very flat ones. Anime with large smooth areas can score low too."
+                                               data-i18n-title="dataset.auditBlurTitle">
+                                    </label>
+                                    <label class="dataset-audit-threshold">
+                                        <input type="checkbox" id="dataset-audit-check-tokens" checked>
+                                        <span data-i18n="dataset.auditCheckTokens">Long captions</span>
+                                        <span class="dchk-limit" id="dataset-audit-tokens-limit"></span>
+                                    </label>
+                                </div>
+                                <div class="dchk dchk-prepare" id="dataset-audit-tokens-prepare" hidden>
+                                    <p class="dchk-note" id="dataset-audit-tokens-note"></p>
+                                    <button type="button" class="btn btn-secondary btn-small" id="btn-dataset-audit-tokens-prepare"></button>
                                 </div>
                                 <div class="dataset-audit-actions">
                                     <button type="button" class="btn btn-primary btn-small" id="btn-dataset-audit-run"
                                             data-i18n="dataset.auditRun">Run audit</button>
                                     <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-audit-download"
                                             data-i18n="dataset.auditDownload" hidden>Download report (.json)</button>
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-audit-quality-stop"
+                                            data-i18n="dataset.auditQualityStop" hidden>Stop scoring</button>
                                     <span class="dataset-audit-status" id="dataset-audit-status" aria-live="polite"></span>
+                                </div>
+                                <div class="dataset-readiness-progress" id="dataset-audit-hints-progress" role="progressbar"
+                                     aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" hidden>
+                                    <span id="dataset-audit-hints-progress-fill"></span>
                                 </div>
                                 <div class="dataset-audit-results" id="dataset-audit-results" hidden>
                                     <div class="dataset-audit-badges" id="dataset-audit-badges"></div>
@@ -8955,6 +8978,7 @@
     <script src="/static/js/modules/separation-console/issues.js"></script>
     <script src="/static/js/modules/separation-console/boot.js"></script>
     <script src="/static/js/modules/separation-console.js"></script>
+    <script src="/static/js/modules/subject-fixes.js"></script>
     <script src="/static/js/modules/character-purity.js"></script>
     <script src="/static/js/modules/mask-editor.js"></script>
     <script src="/static/js/modules/target-model.js"></script>

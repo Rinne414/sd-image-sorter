@@ -674,6 +674,10 @@
         '/static/js/dataset/lora-prune.js',
         '/static/js/dataset/audit.js',
         '/static/js/dataset/audit-run.js',
+        // Blur / flat and long-caption hints join the audit report; they read
+        // audit.js's exports and run from audit-run.js at click time.
+        '/static/js/dataset/caption-tokens.js',
+        '/static/js/dataset/audit-hints.js',
         '/static/js/dataset/vocab.js',
         '/static/js/dataset/defaults-pairchip.js',
         '/static/js/dataset/export-preview.js',

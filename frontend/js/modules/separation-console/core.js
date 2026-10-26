@@ -126,6 +126,8 @@
             // QW-1: live token budget under the booru caption box.
             document.getElementById('dataset-editor-textarea')?.addEventListener(
                 'input', () => this._updateTokenCounter());
+            // Exact Anima counts arrive (or the base model changes): redraw the counter.
+            window.addEventListener('captiontokens:changed', () => this._updateTokenCounter());
             this._initRethreshold(details);
             this._initReviewIssues(details);
         },

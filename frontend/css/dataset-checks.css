@@ -1,0 +1,215 @@
+/* Dataset checks: the subject-count fix preview in the health check, the
+   blurry / flat picture hints card and the caption length card. Feature-local
+   layout only; colours come from the shared tokens. */
+
+.dchk [hidden],
+.dchk-subject [hidden] {
+    display: none !important;
+}
+
+.dchk-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 6px 0;
+}
+
+.dchk-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary, #BDBDBD);
+}
+
+.dchk-field input {
+    width: 88px;
+}
+
+.dchk-status,
+.dchk-note {
+    margin: 4px 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-secondary, #BDBDBD);
+    overflow-wrap: anywhere;
+}
+
+.dchk-note-warn {
+    color: var(--warning, #D39F64);
+}
+
+.dchk-progress {
+    height: 3px;
+    margin: 6px 0;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.10);
+}
+
+.dchk-progress > span {
+    display: block;
+    width: 0;
+    height: 100%;
+    background: var(--accent-secondary, #D29C5E);
+    transition: width 160ms ease;
+}
+
+.dchk-results {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.dchk-summary {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.dchk-group-title {
+    margin: 6px 0 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary, #EDEDED);
+}
+
+.dchk-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.dchk-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 4px 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+}
+
+button.dchk-row {
+    width: 100%;
+    cursor: pointer;
+}
+
+button.dchk-row:hover {
+    background: rgba(255, 255, 255, 0.09);
+}
+
+.dchk-row:focus-visible,
+.dchk-pic:focus-visible {
+    outline: 2px solid rgba(var(--accent-rgb), 0.7);
+    outline-offset: 1px;
+}
+
+.dchk-pic {
+    flex: 0 0 auto;
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+}
+
+.dchk-pic img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.dchk-thumb {
+    flex: 0 0 auto;
+    width: 48px;
+    height: 48px;
+    object-fit: cover;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.25);
+}
+
+.dchk-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dchk-metric {
+    flex: 0 0 auto;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary, #BDBDBD);
+}
+
+.dchk-prepare {
+    margin: 6px 0;
+}
+
+/* Subject-count fixes */
+.dchk-subject {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.dchk-subject-main {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.dchk-subject-main .dchk-name {
+    flex: 0 0 auto;
+}
+
+.dchk-subject-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 4px;
+    min-width: 0;
+}
+
+.dchk-tag {
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: 1.5;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.dchk-tag-keep {
+    color: var(--text-secondary, #BDBDBD);
+}
+
+.dchk-tag-drop {
+    color: var(--danger, #E58884);
+    border-color: rgba(var(--danger-rgb), 0.5);
+    background: rgba(var(--danger-rgb), 0.08);
+    text-decoration: line-through;
+}
+
+.dchk-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
