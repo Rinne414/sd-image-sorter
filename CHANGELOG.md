@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.8.1] - 2026-10-27
+
+English counts read right for one across the classic interface, Vopus, the program's messages and the browser extension, and the lines that stayed English in Chinese mode are translated.
+
+英文数量为 1 时用单数（经典界面、Vopus、程序消息和浏览器扩展），中文界面里残留的英文提示补上中文。
+
+### Fixed / 修复
+
+- **English counts / 英文数量**: every count in the classic interface, Vopus, the program's messages and the browser extension says the singular for one ("1 image is", "1 region", "1 problem stops this export"), and no text writes "image(s)" any more. Sentences that could not read right for one were reworded.
+  - 经典界面、Vopus、程序消息和浏览器扩展里的英文数量为 1 时用单数（如 "1 image is"、"1 region"），不再写 "image(s)"；数量为 1 时读不通的英文句子改写了。
+- **Chinese where English was left / 补齐中文**: Queue Solitaire's undo messages, the Censor queue's "loaded" line, the image counts in Prompt Lab's stats, the Smart Tag overwrite question, the VLM model list status, the artist cards' image count and the Mass Tag scope follow the language setting.
+  - 队列接龙的撤销提示、打码队列的「已载入」、提示词实验室统计里的张数、Smart Tag 覆盖确认、VLM 模型列表状态、画师卡片的张数和批量标签的范围，现在都跟着语言设置走。
+- **Text with special characters / 特殊字符**: file names, tags and other values that contain `$&` or `{…}` show exactly as written in messages.
+  - 文件名、标签等内容里有 `$&` 或 `{…}` 时，消息里原样显示。
+
 ## [3.8.0] - 2026-10-26
 
 SD Image Sorter can now stay running as a desktop program on Windows (tray, a global shortcut, pictures dragged out as files) and gather pictures by itself: watched output folders, a browser extension, paste, and videos in the same library. The tag panel picks PixAI v1.0 on an NVIDIA card with 12 GB or more for fresher characters and series, the DanbooruTagQuery taggers join the list, your own VLM prompt presets are kept, and the LoRA export writes each tag once.

@@ -63,6 +63,10 @@
 - **更快**：图库翻页从 0.36 秒降到 0.045 秒；批量打标 1000 张从 170 秒降到 106 秒（实测）。
 - **中英文完整**：中文界面里的按钮提示也都是中文。
 
+### v3.8.1
+
+- **英文数量与中文补全**：英文界面数量为 1 时用单数，不再写 image(s)；中文界面里残留的英文提示补上中文。
+
 ### v3.8.0
 
 - **桌面程序（Windows）**：解压后双击 `SD Image Sorter.exe`，关掉窗口会留在托盘；Ctrl+Alt+Space 随时叫出；图库里的图可以直接拖进别的程序。`run-portable.bat` 照旧用浏览器打开。
@@ -681,6 +685,10 @@ Eagle and Billfish are general asset managers and are not in this SD-workflow ta
 - **No hard stops**: caps and export gates became warnings with a choice.
 - **Faster**: gallery page 0.36 s to 0.045 s; Mass Tag on 1,000 images 170 s to 106 s (measured).
 - **Complete Chinese and English UI**, tooltips included.
+
+### v3.8.1
+
+- **English counts and Chinese gaps**: English counts read right for one and no longer say image(s); the lines that stayed English in Chinese mode are translated.
 
 ### v3.8.0
 
