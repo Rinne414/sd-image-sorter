@@ -265,7 +265,7 @@ ${String(value)}`)
         // gets a metadata-only detector but no in-pixel detector,
         // add it here so the user is aware.
         this._updateAiProviderNote(summaryImage?.generator);
-        $('#modal-size').textContent = summaryImage ? `${summaryImage.width || '?'}×${summaryImage.height || '?'} • ${formatSize(summaryImage.file_size || 0)}` : '-';
+        $('#modal-size').textContent = summaryImage ? this._sizeText(summaryImage, formatSize) : '-';
         this._renderModalRating(summaryImage || { id: imageId, user_rating: 0 });
         $('#modal-prompt-text').textContent = summaryImage?.prompt || this._t('modal.loadingPrompt', null, 'Loading prompt…');
         $('#modal-negative-text').textContent = this._t('modal.loadingNegative', null, 'Loading…');
@@ -493,6 +493,7 @@ ${String(value)}`)
                 return;
             }
             this._hydratePreview(result.image, result.tags);
+            this._followPendingMetadata(imageId, requestId, API);
         } catch (error) {
             if (requestId !== this.currentPreviewRequestId) {
                 return;
@@ -500,6 +501,39 @@ ${String(value)}`)
             $('#modal-loading-state').textContent = this._t('modal.failedLoadDetails', null, 'Failed to load details');
             showToast?.(this._t('modal.failedLoadDetails', null, 'Failed to load details'), 'error');
         }
+    },
+
+    /** "512×640 • 4.2 KB"; only the file size while the pixel size is not read yet. */
+    _sizeText(image, formatSize) {
+        const dims = image.width && image.height ? `${image.width}×${image.height}` : '';
+        return [dims, formatSize(image.file_size || 0)].filter(Boolean).join(' • ');
+    },
+
+    /**
+     * A picture opened while a quick import is still reading its metadata:
+     * read it again until it is done, then fill the preview in, unless the
+     * preview moved on or the tags or caption are being edited.
+     */
+    _followPendingMetadata(imageId, requestId, API) {
+        const isCurrent = () => requestId === this.currentPreviewRequestId
+            && document.getElementById('image-modal')?.classList.contains('visible');
+        let tries = 0;
+        const check = async () => {
+            if (!isCurrent() || this._lastModalImage?.metadata_status !== 'pending') return;
+            tries += 1;
+            try {
+                const next = await API.getImage(imageId);
+                if (!isCurrent()) return;
+                if (next?.image?.metadata_status !== 'pending') {
+                    if (!this._tagsEditMode && !this._captionEditMode) this._hydratePreview(next.image, next.tags);
+                    return;
+                }
+            } catch (_error) {
+                // Try again on the next round; the preview already shows the reading state.
+            }
+            if (tries < PENDING_METADATA_MAX_TRIES) setTimeout(check, PENDING_METADATA_POLL_MS);
+        };
+        setTimeout(check, PENDING_METADATA_POLL_MS);
     },
 
     _hydratePreview(image, tags) {
@@ -532,9 +566,11 @@ ${String(value)}`)
         const modalGeneratorFinal = $('#modal-generator');
         if (modalGeneratorFinal) {
             modalGeneratorFinal.dataset.generatorValue = this._normalizeGenerator(image.generator);
-            modalGeneratorFinal.textContent = this._formatGeneratorLabel(image.generator);
+            modalGeneratorFinal.textContent = image.metadata_status === 'pending'
+                ? this._t('modal.metadataReadingShort', null, 'Reading…')
+                : this._formatGeneratorLabel(image.generator);
         }
-        $('#modal-size').textContent = `${image.width}×${image.height} • ${formatSize(image.file_size)}`;
+        $('#modal-size').textContent = this._sizeText(image, formatSize);
         window.VideoViewer?.describe?.(image);
         this._renderModalRating(image);
         $('#modal-prompt-text').textContent = image.prompt || this._t('modal.noPrompt', null, 'No prompt');

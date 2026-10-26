@@ -20,7 +20,7 @@ import { displayTag } from '../batch/edit/tagStyle'
 import { addTags, removeTag, reparse, saveCaptions } from './cardEdits'
 import { CopyButton, Section } from './CardParts'
 import { EdgeCodes, type EdgeFacts } from './sections/FilmEdge'
-import { CivitaiResources, Facts, NoParamsNote, OtherModels, PromptNodes, SidecarCaption, useI2iLabel } from '../info/CardInfo'
+import { CivitaiResources, Facts, NoParamsNote, OtherModels, PromptNodes, ReadingNote, SidecarCaption, useI2iLabel } from '../info/CardInfo'
 import { ColorSection } from '../info/ColorSection'
 import { copyAndSay, openImageFolder } from '../library/fileActions'
 import { menuItemsOf } from '../selection/actions'
@@ -128,7 +128,8 @@ function CardBody({ id, variant, look, onWord }: BodyProps) {
 
       {variant === 'panel' && look === 'plain' && gen && <EdgeCodes {...edge} inline keepCase />}
 
-      {image && !image.prompt && !gen?.characters.length && <NoParamsNote generator={image.generator} />}
+      {image?.metadata_status === 'pending' && <ReadingNote />}
+      {image && image.metadata_status !== 'pending' && !image.prompt && !gen?.characters.length && <NoParamsNote generator={image.generator} />}
 
       {image?.prompt && (
         <Section label={t('card.prompt')} copy={image.prompt}>

@@ -2053,6 +2053,8 @@ window.I18nLang_en = {
     'modal.viewAsSD': 'View as SD',
     'modal.viewAsNAI': 'View as NovelAI',
     'modal.noPrompt': 'No prompt',
+    'modal.metadataReading': 'Still reading this picture\'s details…',
+    'modal.metadataReadingShort': 'Reading…',
     'modal.promptUnrecoverable': 'Couldn\'t recover a prompt from this file. It may be generated at run time (wildcards, dynamic prompts) or stripped on export.',
     // Closed-source AI provider hint shown in the image-detail modal
     // for gemini / gpt-image. Reminds users we currently identify

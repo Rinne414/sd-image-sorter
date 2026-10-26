@@ -68,6 +68,7 @@ export const enInfo: Record<keyof typeof zhCNInfo, string> = {
   'info.noParams.gemini': 'Gemini does not embed generation parameters. This image was identified from its Content Credentials / EXIF; the invisible SynthID watermark in its pixels is not checked by this app.',
   'info.noParams.gptImage': 'GPT Image does not embed generation parameters. This image was identified from its Content Credentials / EXIF; OpenAI’s pixel watermark has no public detector, and this app does not check it.',
   'info.noParams.runtime': 'No prompt could be read: it may have been put together at run time (wildcards, dynamic prompts), or removed on export.',
+  'info.reading': 'Still reading this picture\'s details…',
   'info.noParams.none': 'This image carries no generation parameters: it may not be AI-generated, or they were removed when it was saved.',
 
   'info.color.title': 'Colours',

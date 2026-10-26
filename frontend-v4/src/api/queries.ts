@@ -59,6 +59,9 @@ export function useImages(params: ImageQueryParams) {
   })
 }
 
+/** How often a picture whose metadata a quick import is still reading is read again. */
+const PENDING_METADATA_POLL_MS = 1500
+
 export function useImageDetail(id: number | null) {
   return useQuery({
     queryKey: ['image', id],
@@ -68,6 +71,7 @@ export function useImageDetail(id: number | null) {
         await api.GET('/api/images/{image_id}', { params: { path: { image_id: id as number } }, signal }),
       ),
     staleTime: 60_000,
+    refetchInterval: (query) => (query.state.data?.image.metadata_status === 'pending' ? PENDING_METADATA_POLL_MS : false),
   })
 }
 

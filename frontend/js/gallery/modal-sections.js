@@ -169,12 +169,15 @@ Object.assign(window.Gallery, {
             // means the graph's text lives at runtime (wildcards, dynamic
             // prompts) or was stripped — say so instead of a bare "No prompt".
             const generator = String(this._lastModalImage?.generator || '').toLowerCase();
-            const isUnrecoverable = !promptView.promptText
+            const isReading = this._lastModalImage?.metadata_status === 'pending';
+            const isUnrecoverable = !promptView.promptText && !isReading
                 && (generator === 'comfyui' || generator === 'unknown');
-            promptText.textContent = promptView.promptText
-                || (isUnrecoverable
+            const emptyText = isReading
+                ? this._t('modal.metadataReading', null, 'Still reading this picture\'s details…')
+                : isUnrecoverable
                     ? this._t('modal.promptUnrecoverable', null, 'Couldn\'t recover a prompt from this file. It may be generated at run time (wildcards, dynamic prompts) or stripped on export.')
-                    : this._t('modal.noPrompt', null, 'No prompt'));
+                    : this._t('modal.noPrompt', null, 'No prompt');
+            promptText.textContent = promptView.promptText || emptyText;
             promptText.classList.toggle('prompt-unrecoverable-note', isUnrecoverable);
         }
         if (negText) {

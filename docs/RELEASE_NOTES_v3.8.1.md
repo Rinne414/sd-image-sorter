@@ -12,6 +12,8 @@ English counts read right for one; leftover English in Chinese mode is translate
   - 经典界面、Vopus、程序消息和浏览器扩展里的英文数量为 1 时用单数（如 "1 image is"、"1 region"），不再写 "image(s)"；数量为 1 时读不通的英文句子改写了。
 - **Chinese where English was left / 补齐中文**: Queue Solitaire's undo messages, the Censor queue's "loaded" line, the image counts in Prompt Lab's stats, the Smart Tag overwrite question, the VLM model list status, the artist cards' image count and the Mass Tag scope follow the language setting.
   - 队列接龙的撤销提示、打码队列的「已载入」、提示词实验室统计里的张数、Smart Tag 覆盖确认、VLM 模型列表状态、画师卡片的张数和批量标签的范围，现在都跟着语言设置走。
+- **A picture opened during an import / 导入中打开的图片**: a picture opened while a quick import is still reading it says "Still reading this picture's details…" and fills in by itself, instead of "Size null×null", "Generator Unknown" or "Couldn't recover a prompt" (classic preview and Vopus card).
+  - 快速导入还在读取时打开的图片，会显示「还在读取这张图的信息…」并在读完后自动填上，不再显示 "null×null"、「未知生成器」或「没能读出提示词」（经典预览和 Vopus 卡片）。
 - **Text with special characters / 特殊字符**: file names, tags and other values that contain `$&` or `{…}` show exactly as written in messages.
   - 文件名、标签等内容里有 `$&` 或 `{…}` 时，消息里原样显示。
 

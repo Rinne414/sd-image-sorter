@@ -2238,6 +2238,8 @@ window.I18nLang_zhCN = {
     'modal.viewAsSD': '查看为 SD 格式',
     'modal.viewAsNAI': '查看为 NovelAI 格式',
     'modal.noPrompt': '无提示词',
+    'modal.metadataReading': '还在读取这张图的信息…',
+    'modal.metadataReadingShort': '读取中…',
     'modal.promptUnrecoverable': '没能从文件里读出提示词。可能是运行时才生成的（比如 wildcard、动态提示词），或者导出时被去掉了。',
     // 闭源 AI 厂商（Gemini / gpt-image）的提示信息：当前只读了文件
     // 的 Content Credentials / EXIF 元数据来识别厂商。像素层的隐形

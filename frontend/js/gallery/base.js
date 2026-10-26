@@ -107,6 +107,11 @@ function isGalleryImageSelected(AppState, imageId) {
     return idIsExcluded;
 }
 
+// A preview opened while a quick import still reads the picture's metadata
+// reads the record again this often, for up to about a minute.
+const PENDING_METADATA_POLL_MS = 1500;
+const PENDING_METADATA_MAX_TRIES = 40;
+
 /**
  * Gallery Virtual Scrolling Configuration
  */

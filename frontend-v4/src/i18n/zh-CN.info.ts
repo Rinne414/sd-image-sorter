@@ -70,6 +70,7 @@ export const zhCNInfo = {
   'info.noParams.gemini': 'Gemini 生成的图不写入生成参数。这张是从内容凭证 / EXIF 认出来的；图里的 SynthID 隐形水印，本应用没有检查。',
   'info.noParams.gptImage': 'GPT Image 生成的图不写入生成参数。这张是从内容凭证 / EXIF 认出来的；OpenAI 的像素水印没有公开的检测工具，本应用没有检查。',
   'info.noParams.runtime': '读不出提示词：可能是运行时才拼出来的（通配符、动态提示词），也可能导出时被清掉了。',
+  'info.reading': '还在读取这张图的信息…',
   'info.noParams.none': '这张图没有生成参数：可能不是 AI 生成的，或者保存时被清掉了。',
 
   'info.color.title': '色彩',

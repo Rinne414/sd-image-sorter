@@ -155,6 +155,16 @@ const NO_PARAMS: Record<NonNullable<ReturnType<typeof noParamsReason>>, MessageK
   none: 'info.noParams.none',
 }
 
+/** A quick import is still reading this picture's metadata: no reason to explain yet. */
+export function ReadingNote() {
+  const t = useT()
+  return (
+    <p className={styles.note} data-testid="card-reading">
+      {t('info.reading')}
+    </p>
+  )
+}
+
 /** Why there is no prompt: some generators never write one. */
 export function NoParamsNote({ generator }: { generator: string | null }) {
   const t = useT()
