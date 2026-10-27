@@ -1606,17 +1606,37 @@ def _partial_scope_reason(
     request: DatasetReviewRequest,
     database_count: int,
 ) -> Tuple[str, str]:
-    # Every picture that is not a Library row came from a folder (listed in the
-    # page or still in its scan); the Health check and the audit check those.
-    folder_count = request.logical_count - database_count
-    are, them = ("is", "it") if folder_count == 1 else ("are", "them")
-    return (
-        f"Covers the {count_text(database_count, 'Library picture')} only: "
-        f"{count_text(folder_count, 'picture')} from a folder {are} not in the Library, "
-        f"so these checks skip {them}. The Health check and the Quality Audit check folder pictures.",
-        f"只检查图库里的 {database_count} 张图：来自文件夹的 {folder_count} 张图不在图库中，"
-        "这些检查会跳过它们。训练前健检和审计会检查文件夹里的图。",
+    # Every queued picture without a Library id came from a folder (listed in
+    # the page or still in its scan); a Library id without a row was removed
+    # from the Library after it was queued.
+    library_count = len(_unique_image_ids(request.image_ids))
+    folder_count = max(0, request.logical_count - library_count)
+    gone_count = max(0, library_count - database_count)
+    head_en = (
+        f"Covers the {count_text(database_count, 'Library picture')} only"
+        if database_count
+        else "Covers no Library pictures"
     )
+    head_zh = f"只检查图库里的 {database_count} 张图" if database_count else "没有可检查的图库图片"
+    parts_en: List[str] = []
+    parts_zh: List[str] = []
+    if folder_count:
+        are, them = ("is", "it") if folder_count == 1 else ("are", "them")
+        parts_en.append(
+            f"{count_text(folder_count, 'picture')} from a folder {are} not in the Library, "
+            f"so these checks skip {them}"
+        )
+        parts_zh.append(f"来自文件夹的 {folder_count} 张图不在图库中，这些检查会跳过它们")
+    if gone_count:
+        verb = "was" if gone_count == 1 else "were"
+        parts_en.append(f"{count_text(gone_count, 'picture')} {verb} removed from the Library")
+        parts_zh.append(f"{gone_count} 张图已从图库中移除")
+    reason_en = f"{head_en}: {'; '.join(parts_en)}." if parts_en else f"{head_en}."
+    reason_zh = f"{head_zh}：{'；'.join(parts_zh)}。" if parts_zh else f"{head_zh}。"
+    if folder_count:
+        reason_en += " The Health check and the Quality Audit check folder pictures."
+        reason_zh += "训练前健检和审计会检查文件夹里的图。"
+    return reason_en, reason_zh
 
 
 def _scope_provider_state(

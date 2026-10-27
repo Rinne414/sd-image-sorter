@@ -310,9 +310,11 @@
     }
 
     const REVIEW_ERROR_EMPTY_DATABASE_SCOPE = 'empty_database_scope';
+    const REVIEW_ERROR_EMPTY_DATASET = 'empty_dataset';
+    const REVIEW_LOCAL_ERRORS = new Set([REVIEW_ERROR_EMPTY_DATABASE_SCOPE, REVIEW_ERROR_EMPTY_DATASET]);
 
     function reviewLocalError(code) {
-        if (code !== REVIEW_ERROR_EMPTY_DATABASE_SCOPE) {
+        if (!REVIEW_LOCAL_ERRORS.has(code)) {
             throw new RangeError(`Unsupported Review Cockpit local error code: ${code}`);
         }
         const error = new RangeError(`Review Cockpit local error: ${code}`);
@@ -327,14 +329,15 @@
     function reviewErrorState(error) {
         const message = String(error?.message || error);
         return {
-            code: error?.reviewCode === REVIEW_ERROR_EMPTY_DATABASE_SCOPE
-                ? REVIEW_ERROR_EMPTY_DATABASE_SCOPE
-                : null,
+            code: REVIEW_LOCAL_ERRORS.has(error?.reviewCode) ? error.reviewCode : null,
             message,
         };
     }
 
     function reviewErrorMessage(errorState) {
+        if (errorState.code === REVIEW_ERROR_EMPTY_DATASET) {
+            return sepconT('Add pictures to the dataset first.', '请先把图片加入数据集。');
+        }
         if (errorState.code === REVIEW_ERROR_EMPTY_DATABASE_SCOPE) {
             // These checks read what the Library stores; folder pictures have the Health check and the Quality Audit.
             return sepconT(
@@ -527,7 +530,8 @@
             try {
                 const payload = this._reviewRequest(cursor);
                 if (payload.image_ids.length === 0) {
-                    throw reviewLocalError(REVIEW_ERROR_EMPTY_DATABASE_SCOPE);
+                    const empty = this._queueIds().length === 0 && !(this.dm?._getLogicalDatasetCount?.() > 0);
+                    throw reviewLocalError(empty ? REVIEW_ERROR_EMPTY_DATASET : REVIEW_ERROR_EMPTY_DATABASE_SCOPE);
                 }
                 const response = await fetch('/api/dataset/review-queue', {
                     method: 'POST',

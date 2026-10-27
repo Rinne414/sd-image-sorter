@@ -245,12 +245,15 @@ def test_a_folder_import_sent_by_its_scan_is_scored(test_client, pictures, tmp_p
     )
     source = {"scan_token": scan["scan_token"], "exclude_paths": [str(pictures / "sharp.png")]}
 
+    from services.dataset_session.manifest_store import iter_scan_manifest_paths
+
+    listed = list(iter_scan_manifest_paths(scan["scan_token"]))
+    assert str(pictures / "sharp.png") in listed
     started = test_client.post(
         "/api/dataset/quality", json={"dataset_scan_tokens": [source]}
     ).json()
-    # Four files in the folder, one taken out of the dataset (broken.png is
-    # not listed by the scan: it is not a readable picture).
-    assert started["total"] + started["missing"] >= 2
+    # Every listed picture but the one taken out of the dataset.
+    assert started["total"] + started["missing"] == len(listed) - 1
     assert started["started"] is True
     final = test_client.post(
         "/api/dataset/quality", json={"dataset_scan_tokens": [source], "start": False}

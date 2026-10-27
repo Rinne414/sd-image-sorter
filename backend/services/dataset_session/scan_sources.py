@@ -14,12 +14,11 @@ from typing import Any, Dict, Iterable, List
 def scan_source_paths(sources: Iterable[Dict[str, Any]]) -> List[str]:
     """Every picture of the listed folder scans, minus the ones taken out of the dataset.
 
-    Raises ValueError for a scan token that is unknown or expired. The paths are
-    also trusted for the local-thumbnail endpoint, since the results show them.
+    Raises ValueError for a scan token that is unknown or expired. The listed
+    paths (not the excluded ones) are also trusted for the local-thumbnail
+    endpoint, since the results show them; each scan is read once.
     """
-    from services.dataset_session.allowlist import (
-        register_scan_manifest_paths_for_session,
-    )
+    from services.dataset_session.allowlist import _register_thumbnail_paths
     from services.dataset_session.manifest_store import iter_scan_manifest_paths
 
     out: List[str] = []
@@ -34,10 +33,11 @@ def scan_source_paths(sources: Iterable[Dict[str, Any]]) -> List[str]:
             for path in ((source or {}).get("exclude_paths") or [])
             if str(path)
         }
-        out.extend(
+        paths = [
             path
             for path in iter_scan_manifest_paths(token)
             if str(path) not in excluded
-        )
-        register_scan_manifest_paths_for_session(token)
+        ]
+        _register_thumbnail_paths(paths)
+        out.extend(paths)
     return out

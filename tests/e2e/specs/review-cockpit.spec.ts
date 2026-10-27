@@ -192,7 +192,7 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
-test('empty database scope fails explicitly in the active language', async ({ page }) => {
+test('an empty dataset says to add pictures, in the active language', async ({ page }) => {
   await boot(page)
   await openIssues(page)
   await page.locator('#btn-language-toggle').click()
@@ -205,14 +205,35 @@ test('empty database scope fails explicitly in the active language', async ({ pa
   })
   await page.getByTestId('review-cockpit-refresh').click()
 
-  await expect(page.getByTestId('review-cockpit-error')).toContainText(
-    '训练前健检和审计会检查文件夹里的图。',
-  )
+  // An empty dataset is not "every picture comes from a folder".
+  await expect(page.getByTestId('review-cockpit-error')).toContainText('请先把图片加入数据集。')
 
   await page.locator('#btn-language-toggle').click()
+  await expect(page.getByTestId('review-cockpit-error')).toContainText('Add pictures to the dataset first.')
+})
+
+test('a dataset made only from a folder says which checks look at folder pictures', async ({ page }) => {
+  await boot(page)
+  await openIssues(page)
+  await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    dm.imageIds = [-41, -42]
+    dm.meta.clear()
+    dm.captions.clear()
+    for (const id of [-41, -42]) {
+      dm.meta.set(id, { filename: `folder${id}.png`, width: 512, height: 512, abs_path: `C:/set/folder${id}.png` })
+      dm.localItemPaths.set(id, `C:/set/folder${id}.png`)
+      dm.captions.set(id, '1girl')
+    }
+    window.dispatchEvent(new CustomEvent('dataset:changed'))
+  })
+  await page.getByTestId('review-cockpit-refresh').click()
+
   await expect(page.getByTestId('review-cockpit-error')).toContainText(
-    'The Health check and the Quality Audit check folder pictures.',
+    'every picture here comes from a folder. The Health check and the Quality Audit check folder pictures.',
   )
+  await page.locator('#btn-language-toggle').click()
+  await expect(page.getByTestId('review-cockpit-error')).toContainText('训练前健检和审计会检查文件夹里的图。')
 })
 
 test('HTTP detail matching a local error code remains server text across languages', async ({ page }) => {

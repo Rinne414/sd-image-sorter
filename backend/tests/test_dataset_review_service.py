@@ -2370,6 +2370,43 @@ def test_review_queue_filters_persisted_duplicate_members_to_current_scope(
     assert "scope fingerprint" in state["reason_en"].lower()
 
 
+def test_review_scope_says_one_folder_picture_and_a_picture_removed_from_the_library(
+    test_client,
+    tmp_path,
+):
+    image_path = tmp_path / "kept.png"
+    image_path.write_bytes(b"image")
+    image_id = _add_image(
+        test_client,
+        image_path,
+        width=512,
+        height=512,
+        is_readable=True,
+        aesthetic_score=None,
+    )
+    removed_id = image_id + 9999
+    response = test_client.post(
+        "/api/dataset/review-queue",
+        json=_payload(
+            [image_id, removed_id],
+            issue_kinds=["empty_caption"],
+            logical_count=3,
+            local_path_count=1,
+        ),
+    )
+
+    assert response.status_code == 200, response.text
+    scope = next(row for row in response.json()["provider_states"] if row["provider"] == "scope")
+    assert scope["status"] == "partial"
+    # One folder picture, and a Library id whose row was removed: not called a folder picture.
+    assert scope["reason_en"] == (
+        "Covers the 1 Library picture only: 1 picture from a folder is not in the Library, "
+        "so these checks skip it; 1 picture was removed from the Library. "
+        "The Health check and the Quality Audit check folder pictures."
+    )
+    assert "1 张图已从图库中移除" in scope["reason_zh"]
+
+
 def test_review_queue_discloses_unsupported_logical_items_and_calls_no_heavy_provider(
     test_client,
     tmp_path,

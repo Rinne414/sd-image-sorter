@@ -330,3 +330,32 @@ def test_folder_scan_response_shape_is_pinned(test_client, tmp_path: Path):
         assert item["sidecar_caption_format"] in (
             None, "tags", "natural", "mixed", "unknown",
         )
+
+
+def test_audit_counts_typed_captions_of_a_folder_scan_by_path(test_client, tmp_path, monkeypatch):
+    """A folder import goes by its scan; its typed captions come as extra_tag_counts by path."""
+    import services.dataset_session_service as dataset_session_service
+
+    folder = tmp_path / "scan-folder"
+    folder.mkdir()
+    for name in ("typed.png", "empty.png"):
+        Image.new("RGB", (64, 64), (120, 90, 60)).save(folder / name)
+    scan_dir = tmp_path / "scan-manifests"
+    scan_dir.mkdir()
+    monkeypatch.setattr(dataset_session_service, "_SCAN_DIR", scan_dir)
+    scan = dataset_session_service.scan_folder_for_dataset(str(folder), recursive=False, limit=10)
+    # The page keys a typed caption by the item's abs_path (DM.localItemPaths).
+    typed = next(item["abs_path"] for item in scan["items"] if Path(item["abs_path"]).name == "typed.png")
+
+    resp = test_client.post("/api/dataset/audit", json={
+        "dataset_scan_tokens": [{"scan_token": scan["scan_token"], "exclude_paths": []}],
+        "extra_tag_counts": {typed: 2},
+        "enable_aesthetic": False,
+        "enable_phash": False,
+        "enable_untagged": True,
+    })
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["summary"]["untagged_count"] == 1
+    untagged = [item for item in body["items"] if "untagged" in item["flags"]]
+    assert [Path(item["abs_path"]).name for item in untagged] == ["empty.png"]
