@@ -221,7 +221,7 @@ Object.assign(API, {
         });
         if (!response.ok) {
             const err = await response.json().catch(() => ({}));
-            throw new Error(err.detail || 'Import failed');
+            throw new Error(err.error || err.detail || 'Import failed');
         }
         return response.json();
     },

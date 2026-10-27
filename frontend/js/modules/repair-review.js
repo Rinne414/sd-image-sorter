@@ -192,7 +192,7 @@
             });
             const payload = await resp.json().catch(() => ({}));
             if (!resp.ok) {
-                throw new Error(payload.detail || payload.message || `HTTP ${resp.status}`);
+                throw new Error(payload.error || payload.detail || payload.message || `HTTP ${resp.status}`);
             }
             row.remove();
             state.total = Math.max(0, state.total - 1);

@@ -296,7 +296,7 @@
             });
             if (!response.ok) {
                 const body = await response.json().catch(() => ({}));
-                showToast(body.detail || t('pub.openFolderFailed', 'Could not open the folder'), 'warning');
+                showToast(body.error || body.detail || t('pub.openFolderFailed', 'Could not open the folder'), 'warning');
             }
         } catch (err) {
             showToast(String(err && err.message || err), 'warning');

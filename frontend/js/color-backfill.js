@@ -199,7 +199,7 @@
                 });
                 if (!resp.ok) {
                     const err = await resp.json().catch(() => ({}));
-                    this._toast(err.detail || resp.statusText, "error");
+                    this._toast(err.error || err.detail || resp.statusText, "error");
                     return null;
                 }
                 return await resp.json();

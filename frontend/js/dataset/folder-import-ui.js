@@ -97,7 +97,7 @@
             if (!r.ok) {
                 const body = await r.json().catch(() => ({}));
                 if (status) {
-                    status.textContent = body.detail || `${r.status} ${r.statusText}`;
+                    status.textContent = body.error || body.detail || `${r.status} ${r.statusText}`;
                 }
                 return;
             }
@@ -341,7 +341,7 @@
                 });
                 if (!r.ok) {
                     const body = await r.json().catch(() => ({}));
-                    DM._toast(body.detail || `Upload failed: ${r.status}`, 'error', 5000);
+                    DM._toast(body.error || body.detail || `Upload failed: ${r.status}`, 'error', 5000);
                     return;
                 }
                 const data = await r.json();

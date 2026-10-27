@@ -250,7 +250,7 @@ Object.assign(window.VLMCaption, {
                 this._showStatus(
                     'vlm-status',
                     I18n.format(this._t('vlmSettings.deleteModelFailed', 'Delete failed: {reason}'), {
-                        reason: err.detail || resp.statusText,
+                        reason: err.error || err.detail || resp.statusText,
                     }),
                     'error'
                 );
@@ -299,7 +299,7 @@ Object.assign(window.VLMCaption, {
             });
             if (!resp.ok) {
                 const err = await resp.json().catch(() => ({}));
-                this._showStatus('vlm-status', `Pull failed: ${err.detail || resp.statusText}`, 'error');
+                this._showStatus('vlm-status', `Pull failed: ${err.error || err.detail || resp.statusText}`, 'error');
                 return;
             }
             this._showStatus('vlm-status', `Downloading ${modelName}...`, 'info');
@@ -343,7 +343,7 @@ Object.assign(window.VLMCaption, {
                 setTimeout(() => this.loadRecommendedModels(), 2000);
             } else {
                 const err = await resp.json().catch(() => ({}));
-                this._showStatus('vlm-status', `Cannot start Ollama: ${err.detail || ''}`, 'error');
+                this._showStatus('vlm-status', `Cannot start Ollama: ${err.error || err.detail || ''}`, 'error');
             }
         } catch (e) {
             this._showStatus('vlm-status', `Error: ${e.message}`, 'error');

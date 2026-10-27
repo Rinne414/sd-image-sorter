@@ -206,7 +206,7 @@ Object.assign(window.SimilarImages, {
             );
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.detail || `API Error: ${response.status}`);
+                throw new Error(errorData.error || errorData.detail || `API Error: ${response.status}`);
             }
             const result = await response.json();
             if (requestToken !== this.activeSearchToken) return;

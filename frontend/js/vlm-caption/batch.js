@@ -54,7 +54,7 @@ Object.assign(window.VLMCaption, {
             if (!resp.ok) {
                 const err = await resp.json().catch(() => ({}));
                 this._showBatchUI(false, { keepPanel: true });
-                this._showStatus('vlm-batch-status', `Failed: ${err.detail || resp.statusText}`, 'error');
+                this._showStatus('vlm-batch-status', `Failed: ${err.error || err.detail || resp.statusText}`, 'error');
                 return;
             }
             const startData = await resp.json().catch(() => ({}));

@@ -115,7 +115,7 @@
     // Translate an HTTP error into a friendly, actionable message.
     async function explainError(response) {
         let detail = '';
-        try { const j = await response.json(); detail = (j && (j.detail || j.message)) || ''; } catch (_e) { /* */ }
+        try { const j = await response.json(); detail = (j && (j.error || j.detail || j.message)) || ''; } catch (_e) { /* */ }
         if (response.status === 409) {
             return t('clipTools.notIndexed',
                 'These images are not indexed yet. Open Similar and click Build Similarity Index first.');

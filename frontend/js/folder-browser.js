@@ -24,7 +24,7 @@ async function fetchFolderContents(path) {
     });
     if (!resp.ok) {
         const errData = await resp.json().catch(function() { return {}; });
-        throw new Error(errData.detail || 'Failed to browse folder');
+        throw new Error(errData.error || errData.detail || 'Failed to browse folder');
     }
     return resp.json();
 }
