@@ -11,6 +11,7 @@ import { recentBatches } from '../batch/addPicks'
 import { useBatches } from '../batch/batchApi'
 import { askNewBatch } from '../batch/dialogStore'
 import { BATCH_KINDS } from '../batch/labels'
+import { openMediaCensor } from '../censor/media/mediaStore'
 import { pasteFromClipboard } from '../collect/collectActions'
 import { useJobs } from '../jobs/jobs'
 import { libraryName } from '../libraries/libraryName'
@@ -172,6 +173,7 @@ function Palette() {
     list.push(mk('import', 'palette.group.library', 'palette.cmd.import', () => useSelectionDialog.getState().showFor('import', null, 1)))
     list.push(mk('paste-picture', 'palette.group.library', 'collect.palette.paste', () => void pasteFromClipboard()))
     list.push(mk('quick-collect', 'palette.group.library', 'desktop.palette.quickCollect', () => openQuickCollect()))
+    list.push(mk('media-censor', 'palette.group.library', 'mediacensor.open', () => openMediaCensor()))
     list.push(mk('libraries', 'palette.group.library', 'palette.cmd.libraries', () => useSelectionDialog.getState().showFor('libraries', null, 1)))
     if (useJobs.getState().jobs.length > 0) {
       list.push(mk('jobs', 'palette.group.library', 'palette.cmd.jobs', () => useJobs.getState().setDrawerOpen(true)))

@@ -32,6 +32,13 @@ test('Customize top bar opens its dialog', async ({ page }) => {
   await expect(page.getByTestId('navcustom-dialog')).toBeVisible()
 })
 
+test('Censor GIFs and videos opens its dialog for a folder', async ({ page }) => {
+  await open(page)
+  await runEntry(page, 'censor gifs', 'Censor GIFs and videos')
+  await expect(page.getByTestId('mediacensor-dialog')).toBeVisible()
+  await expect(page.getByTestId('mediacensor-folder')).toBeVisible()
+})
+
 test('settings entries open their tab with the section in view and focus on it', async ({ page }) => {
   await open(page)
   await runEntry(page, 'video support', 'Video support (install ffmpeg)')
