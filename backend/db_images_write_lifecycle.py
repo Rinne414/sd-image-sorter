@@ -251,9 +251,9 @@ def mark_images_unreadable(checked_paths: Dict[int, str], read_error: Optional[s
     """Mark rows unreadable in one transaction (same rule as ``mark_image_unreadable``).
 
     ``checked_paths`` maps each id to the path that was found missing; a row
-    whose path changed since (a move in between) is left as it is: the path is
-    part of the UPDATE itself, so no move can slip between check and mark.
-    Returns the ids that were marked. The gallery listing marks every file it
+    whose path changed since (a move in between) is left as it is. The write
+    lock is taken before the paths are read, so no move can slip between the
+    check and the mark. Returns the ids that were marked. The gallery listing marks every file it
     cannot find, and a connection and a commit per row (~6 ms) held the listing
     of a library on an unplugged drive for minutes.
     """
@@ -262,33 +262,31 @@ def mark_images_unreadable(checked_paths: Dict[int, str], read_error: Optional[s
     stored_cause = _stored_unreadable_cause(read_error)
     marked: List[int] = []
     with get_db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
         cursor = conn.cursor()
         for image_id, checked_path in checked_paths.items():
-            if _mark_unreadable(cursor, image_id, stored_cause, only_at_path=checked_path):
-                marked.append(image_id)
+            row = cursor.execute("SELECT path FROM images WHERE id = ?", (image_id,)).fetchone()
+            if row is None or row[0] != checked_path:
+                continue
+            _mark_unreadable(cursor, image_id, stored_cause)
+            marked.append(image_id)
     if marked:
         _invalidate_tags_cache()
     return marked
 
 
-def _mark_unreadable(
-    cursor, image_id: int, stored_cause: Optional[str], *, only_at_path: Optional[str] = None
-) -> bool:
-    """Flag one row unreadable (optionally only while it has ``only_at_path``)."""
-    path_clause = "" if only_at_path is None else " AND path = ?"
-    path_params = () if only_at_path is None else (only_at_path,)
+def _mark_unreadable(cursor, image_id: int, stored_cause: Optional[str]) -> None:
     cursor.execute(
-        f"""
+        """
         UPDATE images
         SET is_readable = 0,
             read_error = ?,
             metadata_status = 'error',
             indexed_at = CURRENT_TIMESTAMP
-        WHERE id = ?{path_clause}
+        WHERE id = ?
         """,
-        (stored_cause, image_id, *path_params),
+        (stored_cause, image_id),
     )
-    return cursor.rowcount > 0
 
 def mark_image_unreadable_by_path(path: str, read_error: Optional[str]) -> None:
     """Mark an existing image row as unreadable based on its file path.
