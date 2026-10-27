@@ -15,6 +15,7 @@ const COOLDOWN_KEY = 'manual_sort_cooldown_ms_v1'
 const SOUND_KEY = 'sort-audio-enabled'
 const FOCUS_KEY = 'manual_sort_zen_v1'
 const INFO_KEY = 'sd-v4-sort-info'
+const AUTO_PREVIEW_KEY = 'sd-v4-sort-auto-preview'
 
 /** Allowed cooldown between two keys, as V3.5 offers it. */
 export const COOLDOWN_MIN_MS = 100
@@ -83,10 +84,13 @@ interface PrefsState {
   sound: boolean
   focus: boolean
   info: boolean
+  /** Sort by condition shows the matching images as the rule changes (on unless switched off). */
+  autoPreview: boolean
   setCooldown: (ms: number) => void
   setSound: (on: boolean) => void
   setFocus: (on: boolean) => void
   setInfo: (on: boolean) => void
+  setAutoPreview: (on: boolean) => void
 }
 
 export const useSortPrefs = create<PrefsState>((set) => ({
@@ -94,6 +98,7 @@ export const useSortPrefs = create<PrefsState>((set) => ({
   sound: read(SOUND_KEY) === 'true',
   focus: read(FOCUS_KEY) === '1',
   info: read(INFO_KEY) === '1',
+  autoPreview: read(AUTO_PREVIEW_KEY) !== '0',
   setCooldown: (ms) => {
     const cooldownMs = clampCooldown(ms)
     write(COOLDOWN_KEY, String(cooldownMs))
@@ -110,6 +115,10 @@ export const useSortPrefs = create<PrefsState>((set) => ({
   setInfo: (info) => {
     write(INFO_KEY, info ? '1' : '0')
     set({ info })
+  },
+  setAutoPreview: (autoPreview) => {
+    write(AUTO_PREVIEW_KEY, autoPreview ? '1' : '0')
+    set({ autoPreview })
   },
 }))
 

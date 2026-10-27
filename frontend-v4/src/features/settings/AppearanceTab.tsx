@@ -6,6 +6,7 @@ import { useApp } from '../../state/store'
 import { isNextUi } from '../../lib/uiLook'
 import { useTheme, type ThemeMode } from '../../theme'
 import { pushRefusal } from '../jobs/refusalToast'
+import { useSortPrefs } from '../sort/sortPrefs'
 import styles from './AppearanceTab.module.css'
 import { useUiScale } from './uiScaleStore'
 import { useSaved } from './useSaved'
@@ -27,7 +28,7 @@ const START_PAGES: { value: StartPage; label: MessageKey }[] = [
   { value: 'library', label: 'settings.start.library' },
 ]
 
-type Section = 'theme' | 'lang' | 'scale' | 'start' | 'film'
+type Section = 'theme' | 'lang' | 'scale' | 'start' | 'film' | 'sound' | 'focus'
 
 /**
  * Settings › Appearance: theme, language, interface zoom, the page V4 opens
@@ -72,6 +73,7 @@ export function AppearanceTab() {
       />
       <ScaleChoice saved={saved === 'scale'} onSaved={() => mark('scale')} />
       <HomeChoices saved={saved} mark={mark} />
+      <SortChoices saved={saved} mark={mark} />
       {next ? <NextInterfaceNote /> : <InterfaceChoice />}
       <ResetAllSection />
     </div>
@@ -174,6 +176,47 @@ function HomeChoices({ saved, mark }: { saved: Section | null; mark: (section: S
         }}
       >
         <p className={styles.hint}>{t('settings.film.hint')}</p>
+      </Choice>
+    </>
+  )
+}
+
+/** The sort sound and focus mode: the same stored choices as on the Sort page's option row, set here too. */
+function SortChoices({ saved, mark }: { saved: Section | null; mark: (section: Section) => void }) {
+  const t = useT()
+  const sound = useSortPrefs((s) => s.sound)
+  const focus = useSortPrefs((s) => s.focus)
+  const onOff = [
+    { value: 'on', label: t('partialsa.opt.on') },
+    { value: 'off', label: t('partialsa.opt.off') },
+  ]
+  return (
+    <>
+      <Choice
+        name="sound"
+        title={t('partialsa.sound.title')}
+        saved={saved === 'sound'}
+        options={onOff}
+        value={sound ? 'on' : 'off'}
+        onChange={(v) => {
+          useSortPrefs.getState().setSound(v === 'on')
+          mark('sound')
+        }}
+      >
+        <p className={styles.hint}>{t('partialsa.sound.hint')}</p>
+      </Choice>
+      <Choice
+        name="focus"
+        title={t('partialsa.focus.title')}
+        saved={saved === 'focus'}
+        options={onOff}
+        value={focus ? 'on' : 'off'}
+        onChange={(v) => {
+          useSortPrefs.getState().setFocus(v === 'on')
+          mark('focus')
+        }}
+      >
+        <p className={styles.hint}>{t('partialsa.focus.hint')}</p>
       </Choice>
     </>
   )

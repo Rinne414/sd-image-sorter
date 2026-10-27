@@ -7,6 +7,7 @@ import { parseSearch } from '../../lib/searchQuery'
 import { useApp } from '../../state/store'
 import { FilterPanel } from '../library/FilterPanel'
 import { isEverything, SPLITS, type RuleSetup, type RunRecord, type SplitBy } from './rules'
+import { useSortPrefs } from './sortPrefs'
 import { FolderLabel } from './SetupParts'
 import { SlotFolderDialog } from './SlotFolderDialog'
 import styles from './SortPage.module.css'
@@ -61,9 +62,14 @@ export function ConditionField({ query, count, onQuery, note, testId = 'sort-con
 export function RulePreview({ params, picks, query }: { params: Record<string, string | number | boolean> | null; picks: number[] | null; query: string }) {
   const t = useT()
   const libraryId = useApp((s) => s.libraryId)
+  const auto = useSortPrefs((s) => s.autoPreview)
+  // With the automatic preview off, a preview is asked for per rule: a changed rule asks again.
+  const ruleKey = JSON.stringify(params)
+  const [askedFor, setAskedFor] = useState<string | null>(null)
+  const waiting = params !== null && !auto && askedFor !== ruleKey
   const page = useQuery({
     queryKey: ['sort-rules-preview', libraryId, params],
-    enabled: params !== null,
+    enabled: params !== null && !waiting,
     queryFn: async ({ signal }) => unwrap<ImagesPage>(await api.GET('/api/images', { params: { query: { ...params, limit: PREVIEW } as never }, signal })),
     staleTime: 30_000,
   })
@@ -77,7 +83,17 @@ export function RulePreview({ params, picks, query }: { params: Record<string, s
   return (
     <section className={styles.rulePreview} data-testid="sort-rule-preview">
       <h2 className={styles.section}>{t('sort.rules.preview')}</h2>
-      {ids.length === 0 && (params === null || page.isSuccess) ? (
+      {params !== null && (
+        <label className={`${styles.inlineOption} ${styles.previewSwitch}`} title={t('partialsa.preview.autoHint')}>
+          <input type="checkbox" checked={auto} onChange={(e) => useSortPrefs.getState().setAutoPreview(e.target.checked)} data-testid="sort-auto-preview" />
+          {t('partialsa.preview.auto')}
+        </label>
+      )}
+      {waiting ? (
+        <button type="button" className="btn" onClick={() => setAskedFor(ruleKey)} data-testid="sort-show-preview">
+          {t('partialsa.preview.show')}
+        </button>
+      ) : ids.length === 0 && (params === null || page.isSuccess) ? (
         <p className={styles.note}>{t('sort.rules.previewNone')}</p>
       ) : (
         <div className={styles.thumbs}>

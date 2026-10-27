@@ -13,6 +13,7 @@ import { useOtherLibrary } from '../sort/StageParts'
 import { continueSort, newSort, useSortPending } from '../sort/sortStore'
 import { useSelectionDialog } from '../selection/dialogs'
 import { FilmStrip } from './FilmStrip'
+import { HomeTools } from './HomeTools'
 import styles from './HomePage.module.css'
 import { useFilm, type Film } from './useFilm'
 
@@ -75,6 +76,7 @@ function Home({ film }: { film: Film | null }) {
                 ))}
               </ul>
             )}
+            <HomeTools />
           </div>
 
           <div className={styles.column}>

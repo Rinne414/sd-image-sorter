@@ -1,0 +1,68 @@
+.tools {
+  margin-top: 4px;
+}
+
+.heading {
+  margin: 22px 0 12px;
+  font-size: var(--fs-3);
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* Six cards under where you left off: two to a row, three on a wide screen. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+  padding: 14px 18px;
+  border: 1px solid transparent;
+  background: var(--surface-1);
+  color: var(--text);
+  text-align: left;
+  border-radius: var(--radius-lg);
+  transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+
+.card:hover {
+  border-color: var(--accent-line);
+  background: var(--surface-2);
+}
+
+.title {
+  font-size: var(--fs-4);
+  font-weight: 650;
+}
+
+.body {
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}
+
+@media (min-width: 1900px) {
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-height: 820px) {
+  .heading {
+    margin: 14px 0 10px;
+  }
+
+  .grid {
+    gap: 10px;
+  }
+
+  .card {
+    padding: 10px 16px;
+  }
+}

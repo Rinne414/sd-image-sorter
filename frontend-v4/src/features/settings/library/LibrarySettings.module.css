@@ -256,3 +256,39 @@
   font-size: var(--fs-2);
   line-height: 1.6;
 }
+
+/* Repair prompts and text: each repair is a text block and its Start button at the right. */
+.repair {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.repairText {
+  min-width: 0;
+}
+
+.repair > :global(.btn) {
+  flex: none;
+}
+
+.repairCount {
+  margin: 8px 0 0;
+  color: var(--text);
+  font-size: var(--fs-2);
+}
+
+.repairResult {
+  margin: 8px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+
+.repairResult[data-tone="error"] {
+  color: var(--danger);
+}

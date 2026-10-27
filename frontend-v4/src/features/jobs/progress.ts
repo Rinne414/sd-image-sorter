@@ -3,7 +3,9 @@ import { readPurity, readPurityDownload } from './purityJob'
 import { readMasks } from './maskJob'
 import { readAesthetic } from './aestheticJob'
 import { readDatasetExport } from './datasetExportJob'
-import { readReparse } from './reparseJob' // reparse/reread
+import { readReparse, readRecomfy } from './reparseJob' // reparse/reread/recomfy
+import { readColors } from './colorsJob' // partialsa: colour analysis, read in colorsJob.ts
+import type { RepairResult } from './repairResult' // partialsa: what a metadata repair found
 import { readSortRules } from './sortRulesJob' // sortrules/sortundo: sort by condition and its undo
 import { readScanExtras, type ScanExtras } from './scanExtras' // scan: stall + other library
 import { readOllama } from './ollamaJob' // ollama: an Ollama model download, read in ollamaJob.ts
@@ -62,6 +64,7 @@ export type JobKind =
   | 'video' // video: the ffmpeg download for video support (GET /api/video-support)
   | 'mediacensor' // mediacensor: censoring GIFs and videos (GET /api/censor/media/jobs/{id})
   | 'stylemap' // stylemap: the Style Map's style index (GET /api/style-map/vectors/progress)
+  | 'recomfy' // partialsa: every ComfyUI prompt read again (POST /api/metadata/reparse, scope comfyui)
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
 
 export interface JobFailure {
@@ -99,7 +102,9 @@ export interface JobProgress {
   updated: number
   /** scan only: no visible progress for a while; images left to another library. */
   scan?: ScanExtras
-  /** stylemap only: the run is paused (the drawer offers Resume). */
+  /** reparse and recomfy only: what the finished run found (Settings reports it). */
+  repair?: RepairResult
+  /** stylemap and colors: the run is paused (the drawer offers Resume). */
   paused?: boolean
   /** reconnect only: found files already in the library under another record. */
   alreadyIndexed?: number
@@ -182,24 +187,6 @@ function readTag(base: JobProgress, raw: Raw, ctx: ReadContext, prev?: JobProgre
     .filter((t) => t.tag)
   const refusal = refusalOfProgress(raw)
   return { ...base, succeeded: num(raw.tagged), failedCount: num(raw.errors), topTags, ...(refusal ? { refusal } : {}) }
-}
-
-/** Colour analysis reports a running flag instead of a status word. */
-function readColors(base: JobProgress, raw: Raw): JobProgress {
-  const running = raw.running === true
-  const status = running ? (raw.cancel_requested === true ? 'cancelling' : 'running') : 'done'
-  const completed = num(raw.completed)
-  const failed = num(raw.failed)
-  return {
-    ...base,
-    status,
-    current: completed + failed,
-    total: num(raw.total),
-    succeeded: completed,
-    failedCount: failed,
-    currentItem: str(raw.current_image) || null,
-    message: '',
-  }
 }
 
 /** The identity the backend asks for to stop or confirm a scan (an import is `manual`). */
@@ -380,6 +367,8 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
       return readMediaCensor(base, raw, ctx.mediaCensor ?? { jobId: '', folder: '' }, prev) // mediacensor
     case 'stylemap': // stylemap
       return readStyleMap(base, raw, prev) // stylemap
+    case 'recomfy': // partialsa
+      return readRecomfy(base, raw, ctx.reparseJobId) // partialsa
   }
 }
 

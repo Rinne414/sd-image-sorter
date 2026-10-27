@@ -25,6 +25,7 @@ export const SETTING_KEYS: readonly string[] = [
   'sd-v4-lexicon',
   // tool and step options
   'sd-v4-sort-info',
+  'sd-v4-sort-auto-preview',
   'manual_sort_cooldown_ms_v1',
   'sort-audio-enabled',
   'manual_sort_zen_v1',
