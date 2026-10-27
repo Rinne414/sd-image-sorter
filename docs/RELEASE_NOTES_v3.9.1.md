@@ -36,7 +36,8 @@ Checks cover folder pictures; exact tokens per model; unreadable pictures keep A
 
 ## Validation / 验证
 
-VALIDATION_PENDING
+GitHub CI run 40515556525 (Linux full suite with browser tests and click coverage, macOS, Windows, Linux portable x86_64 and aarch64): 5 of 5 green; backend 9,208 passed; browser tests 1,973 passed, 0 failed, 0 flaky; V Opus unit tests 1,183 passed. The new tests for the search row and for the folder-scan audit and blur check fail on the code before the fix and pass now. On a fresh 3.9.1 Windows package, as a new user, with four pictures imported from a folder (none in the Library): the health check fixed a typed 1girl, 2girls, solo caption (2girls kept); SDXL downloaded its 2 MB CLIP tokenizer and then counted exactly; the Quality Audit said 3 untagged (the captioned one counted), scored all four and listed the blurred and the flat one; character purity downloaded its model (150 MB) and flagged the flat picture. Classic in English and Chinese and V Opus opened with no console errors.
+  - GitHub CI（40515556525：Linux 完整测试含浏览器测试和点击覆盖、macOS、Windows、Linux 便携版 x86_64 与 aarch64）5 项全部通过；后端 9,208 通过；浏览器测试 1,973 通过、0 失败、0 个偶发；V Opus 单元测试 1,183 通过。新加的测试（搜索栏、文件夹扫描的审计和模糊检查）在修复前的代码上失败、现在通过。在全新的 3.9.1 Windows 包里以新用户身份，从文件夹导入四张图（都不在图库里）：训练前健检修正了输入的 1girl, 2girls, solo（保留 2girls）；SDXL 下载 2 MB 的 CLIP 分词器后改为精确计数；审计显示 3 张没有 caption（有 caption 的那张算进去了），四张都评了分并列出糊图和过平的图；角色纯度下载模型（150 MB）后标出了过平的那张。经典界面中英文和 V Opus 打开都没有控制台错误。
 
 ---
 
