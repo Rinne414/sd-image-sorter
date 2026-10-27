@@ -67,4 +67,7 @@ export const zhCNPartialsA = {
   'partialsa.preview.auto': '规则一改就自动预览',
   'partialsa.preview.autoHint': '图库很大、预览很慢时可以关掉，需要时再点「显示预览」。',
   'partialsa.preview.show': '显示预览',
+  'partialsa.palette.showUnreadable': '重新显示无法读取的文件那一行',
+  'partialsa.palette.pauseColors': '暂停颜色分析',
+  'partialsa.palette.resumeColors': '继续颜色分析',
 } as const

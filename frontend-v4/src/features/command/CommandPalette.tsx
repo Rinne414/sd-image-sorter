@@ -13,7 +13,7 @@ import { askNewBatch } from '../batch/dialogStore'
 import { BATCH_KINDS } from '../batch/labels'
 import { openMediaCensor } from '../censor/media/mediaStore'
 import { pasteFromClipboard } from '../collect/collectActions'
-import { useJobs } from '../jobs/jobs'
+import { pauseJob, useJobs } from '../jobs/jobs'
 import { libraryName } from '../libraries/libraryName'
 import { currentLibraryParams } from '../library/params'
 import { openRandom } from '../library/randomOpen'
@@ -31,6 +31,7 @@ import { useSimilar } from '../similar/similarStore'
 import { useOtherLibrary } from '../sort/StageParts'
 import { continueSort, sortImages, useSortPending } from '../sort/sortStore'
 import { useStatusDialogs } from '../status/dialogs'
+import { useRowHides } from '../status/hideRows'
 import { useUpdates } from '../settings/about/updateStore'
 import { unloadMessages } from '../settings/background/background'
 import { unloadModelsNow } from '../settings/background/backgroundApi'
@@ -175,6 +176,15 @@ function Palette() {
     list.push(mk('quick-collect', 'palette.group.library', 'desktop.palette.quickCollect', () => openQuickCollect()))
     list.push(mk('media-censor', 'palette.group.library', 'mediacensor.open', () => openMediaCensor()))
     list.push(mk('libraries', 'palette.group.library', 'palette.cmd.libraries', () => useSelectionDialog.getState().showFor('libraries', null, 1)))
+    // A running colour analysis can be paused or resumed from here too.
+    const colors = useJobs.getState().jobs.find((j) => j.kind === 'colors' && j.progress.status === 'running')
+    if (colors) {
+      const paused = Boolean((colors.progress as { paused?: boolean }).paused)
+      list.push(mk('colors-pause', 'palette.group.library', paused ? 'partialsa.palette.resumeColors' : 'partialsa.palette.pauseColors', () => void pauseJob(colors, !paused)))
+    }
+    if (useRowHides.getState().unreadableAt !== null) {
+      list.push(mk('show-unreadable', 'palette.group.library', 'partialsa.palette.showUnreadable', () => useRowHides.getState().showUnreadable()))
+    }
     if (useJobs.getState().jobs.length > 0) {
       list.push(mk('jobs', 'palette.group.library', 'palette.cmd.jobs', () => useJobs.getState().setDrawerOpen(true)))
     }
@@ -194,6 +204,7 @@ function Palette() {
     list.push(mk('vlm-presets', 'palette.group.settings', 'aipresets.palette.presets', () => openSettingsAt('ai', 'vlm-preset-actions')))
     list.push(mk('ai-defaults', 'palette.group.settings', 'aipresets.palette.defaults', () => openSettingsAt('ai', 'ai-defaults')))
     list.push(mk('video-support', 'palette.group.settings', 'video.palette.support', () => openSettingsAt('models', 'video-support')))
+    list.push(mk('repair-text', 'palette.group.settings', 'partialsa.repair.title', () => openSettingsAt('library', 'libset-repair')))
     list.push(mk('shortcuts', 'lib.palette.groupHelp', 'lib.palette.shortcuts', () => useShortcutSheet.getState().open(s.page)))
     return list
   }, [lang, libraries.data, batches.data, picks, bulk, single, sortPending, sortElsewhere])

@@ -65,4 +65,7 @@ export const enPartialsA: Record<keyof typeof zhCNPartialsA, string> = {
   'partialsa.preview.auto': 'Preview automatically when the rule changes',
   'partialsa.preview.autoHint': 'Turn it off if the library is large and the preview is slow; use Show preview when you want it.',
   'partialsa.preview.show': 'Show preview',
+  'partialsa.palette.showUnreadable': 'Show the unreadable files line again',
+  'partialsa.palette.pauseColors': 'Pause colour analysis',
+  'partialsa.palette.resumeColors': 'Resume colour analysis',
 }

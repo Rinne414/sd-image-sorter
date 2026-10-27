@@ -51,6 +51,10 @@ test('settings entries open their tab with the section in view and focus on it',
 
   await runEntry(page, 'prompt presets', 'VLM prompt presets')
   await expect(page.getByTestId('vlm-preset-save-as')).toBeFocused()
+
+  await runEntry(page, 'repair prompts', 'Repair prompts and text')
+  await expect(page).toHaveURL(/#\/settings\/library/)
+  await expect(page.getByTestId('libset-repair')).toBeInViewport()
 })
 
 test('Free the AI models now says what it did', async ({ page }) => {
