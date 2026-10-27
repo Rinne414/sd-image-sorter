@@ -1832,10 +1832,16 @@
         "[data-media=\"video\"]"
       ],
       "vopus": {
-        "missing": "Vopus has no media type filter yet; it lists videos with the pictures"
+        "at": "#/library",
+        "find": "[data-testid=\"media-toggle\"]",
+        "needs": "library with videos",
+        "note": "All / Pictures / Videos beside the search line; shown only while the library holds videos (or a media: filter is on). Also media:video in the search line"
       },
       "next": {
-        "missing": "The new interface has no media type filter yet"
+        "at": "#/library",
+        "find": "[data-testid=\"media-toggle\"]",
+        "needs": "library with videos",
+        "note": "the same toggle inside the scope line; shown only while the library holds videos"
       }
     },
     {
@@ -1850,10 +1856,16 @@
         "#modal-video-next-frame"
       ],
       "vopus": {
-        "missing": "Vopus shows a video's still frame only; play it in the classic preview"
+        "at": "#/library",
+        "find": "[data-testid=\"video-loop\"], [data-testid=\"video-sound\"], [data-testid=\"video-prev-frame\"], [data-testid=\"video-next-frame\"]",
+        "needs": "opened video",
+        "note": "opening a video (double-click) plays it in the big image: native controls, Loop, Sound, frame steps (comma, period), a converted preview when the browser cannot play it"
       },
       "next": {
-        "missing": "The new interface shows a video's still frame only"
+        "at": "#/library",
+        "find": "[data-testid=\"video-loop\"], [data-testid=\"video-sound\"], [data-testid=\"video-prev-frame\"], [data-testid=\"video-next-frame\"]",
+        "needs": "opened video",
+        "note": "the same player in the big image (the lightbox is shared)"
       }
     },
     {
@@ -1867,10 +1879,14 @@
         "#gallery-video-banner-install"
       ],
       "vopus": {
-        "missing": "Vopus has no video support row; install it from classic Settings or the gallery banner"
+        "at": "#/settings/models",
+        "find": "[data-testid=\"video-support\"]",
+        "note": "Settings > Models, last section; the library banner (video-banner-install) offers it too while the library holds videos and ffmpeg is missing"
       },
       "next": {
-        "missing": "The new interface has no video support row yet"
+        "at": "#/settings/models",
+        "find": "[data-testid=\"video-support\"]",
+        "note": "Settings > Models, last section; the same banner above the library"
       }
     },
     {

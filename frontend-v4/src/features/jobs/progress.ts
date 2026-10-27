@@ -8,6 +8,7 @@ import { readSortRules } from './sortRulesJob' // sortrules/sortundo: sort by co
 import { readScanExtras, type ScanExtras } from './scanExtras' // scan: stall + other library
 import { readOllama } from './ollamaJob' // ollama: an Ollama model download, read in ollamaJob.ts
 import { readArtist } from './artistJob' // artist: style identification, read in artistJob.ts
+import { readVideoInstall } from './videoJob' // video: the ffmpeg download for video support, read in videoJob.ts
 import { refusalOfProgress, type TaggerRefusal } from './taggerRefusal'
 // Reads the backend's progress payloads for long jobs into one shape.
 // move/copy: GET /api/move/progress · trash: GET /api/images/delete-selected/progress
@@ -56,6 +57,7 @@ export type JobKind =
   | 'sortundo' // sortundo: undoing a sort-by-condition run
   | 'ollama' // ollama: an Ollama model download (GET /api/vlm/local-models/pull/progress)
   | 'artist' // artist: style identification (GET /api/artists/batch-progress)
+  | 'video' // video: the ffmpeg download for video support (GET /api/video-support)
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
 
 export interface JobFailure {
@@ -363,6 +365,8 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
       return readOllama(base, raw, ctx.ollamaModel) // ollama
     case 'artist': // artist
       return readArtist(base, raw, prev) // artist
+    case 'video': // video
+      return readVideoInstall(base, raw) // video
   }
 }
 

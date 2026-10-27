@@ -37,6 +37,7 @@ const FIELDS: Record<string, Field> = {
   min_height: { to: 'minHeight' },
   max_height: { to: 'maxHeight' },
   aspect_ratio: { to: 'aspectRatio' },
+  media_type: { to: 'mediaType' },
   color_temperature: { to: 'colorTemperature' },
   brightness_distribution: { to: 'brightnessDistribution' },
   brightness_min: { to: 'brightnessMin' },

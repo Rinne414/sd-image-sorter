@@ -18,6 +18,7 @@ import { Rail } from './Rail'
 import { fetchImageAt } from './randomOpen'
 import { useLibraryKeys } from './useLibraryKeys'
 import { useShownImages } from './useShownImages'
+import { VideoBanner } from '../video/VideoBanner'
 
 export function LibraryPage() {
   const t = useT()
@@ -75,6 +76,7 @@ export function LibraryPage() {
       {railOpen && <Rail texture={texture} />}
       <main className={styles.main}>
         <QueryBar total={total} about={shown.totalAbout} inputRef={inputRef} />
+        <VideoBanner />
         {adding && <AddingBanner target={adding} />}
         {!similar && <SortNotice params={params} found={!shown.loading && !shown.empty && !shown.error} />}
         {similar && <SimilarBanner query={similar} count={images.length} loading={shown.loading} error={shown.error} retry={shown.retry} />}

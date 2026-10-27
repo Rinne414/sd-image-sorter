@@ -18,6 +18,7 @@ export const SETTING_KEYS: readonly string[] = [
   'sd-v4-rail-folded',
   'sd-v4-folder-tree',
   'sd-v4-lightbox-info',
+  'sd-v4-video-viewer',
   'sd-v4-reader-folds',
   'sd-v4-lexicon',
   // tool and step options

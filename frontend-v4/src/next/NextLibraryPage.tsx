@@ -19,6 +19,7 @@ import { LibraryFooter } from './LibraryFooter'
 import styles from './NextLibraryPage.module.css'
 import { withPromptWord } from './promptWord'
 import { ScopeLine } from './ScopeLine'
+import { VideoBanner } from '../features/video/VideoBanner'
 
 /** Grid cells are portrait: most generated images are 2:3, so a square cell cuts heads and feet. */
 const GRID_RATIO = 1.4
@@ -86,6 +87,7 @@ export function NextLibraryPage() {
     <div className={styles.page} data-card={showCard || undefined}>
       <main className={styles.main}>
         <ScopeLine total={total} about={shown.totalAbout} inputRef={inputRef} />
+        <VideoBanner />
         {adding && <AddingBanner target={adding} />}
         {!similar && <SortNotice params={params} found={!shown.loading && !shown.empty && !shown.error} />}
         {similar && <SimilarBanner query={similar} count={images.length} loading={shown.loading} error={shown.error} retry={shown.retry} />}

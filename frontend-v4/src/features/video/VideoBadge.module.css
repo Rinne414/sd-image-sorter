@@ -1,0 +1,24 @@
+/* Over a thumbnail, above the hover caption strip (20px) so the two never overlap. */
+.badge {
+  position: absolute;
+  left: 6px;
+  bottom: 26px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 12px);
+  height: 18px;
+  padding: 0 6px;
+  overflow: hidden;
+  border-radius: 9px;
+  background: var(--tile-caption-bg);
+  color: var(--on-image);
+  font-size: var(--fs-1);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.badge svg {
+  flex-shrink: 0;
+}

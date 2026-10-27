@@ -14,6 +14,8 @@ import { adoptReparse, driveReparse } from './reparseDriver' // reparse/reread
 import { adoptSortRules, driveSortRules } from './sortRulesDriver' // sortrules/sortundo
 import { driveOllama, ollamaAdoption } from './ollamaDriver' // ollama
 import { adoptArtist, driveArtist } from './artistDriver' // artist
+import { driveVideo } from './videoDriver' // video
+import { adoptVideoInstall } from './videoJob' // video
 import { jobHeadline } from './headline'
 
 // Every long job the user started (or that was already running when V4
@@ -70,6 +72,7 @@ type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors'
   | 'sortrules' | 'sortundo' // sortrules/sortundo
   | 'ollama'
   | 'artist' // artist
+  | 'video' // video
 
 // Censor work over a batch (detecting, SAM3 refining, filters) runs one at a time.
 const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind === 'refine' || kind === 'adjust' ? 'detect' : kind)
@@ -174,6 +177,7 @@ const DRIVERS: Record<Queue, Driver> = {
   sortrules: driveSortRules, // sortrules
   sortundo: driveSortRules, // sortundo (the same batch-move slot)
   ollama: driveOllama, // ollama: an Ollama model download (it cannot be stopped)
+  video: driveVideo, // video: the ffmpeg download for video support (it cannot be stopped)
   artist: driveArtist, // artist: style identification (the backend runs one batch at a time)
 }
 
@@ -332,6 +336,7 @@ export async function adoptRunningJobs(): Promise<void> {
     adopt('sortrules', adoptSortRules), // sortrules/sortundo
     adopt('ollama', ollamaAdoption), // ollama
     adopt('artist', adoptArtist), // artist
+    adopt('video', adoptVideoInstall), // video
     adopt('smarttag', adoptSmartTag),
     adopt('install', (raw) => {
       const result = (raw.prepare_result ?? {}) as Record<string, unknown>
@@ -385,6 +390,7 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   sortrules: ['images', 'image', 'folders', 'image-count', 'library-health', 'missing-summary'], // sortrules
   sortundo: ['images', 'image', 'folders', 'image-count', 'library-health', 'missing-summary'], // sortundo
   ollama: ['vlm-local-models'], // ollama: the AI services page lists what Ollama has
+  video: ['video-support', 'image-count', 'images', 'image'], // video: video support turns the library's videos into readable items
   artist: ['artist-stats', 'artist-images', 'images', 'image-count'], // artist: the style tool's numbers and lists, an artist: search
 }
 

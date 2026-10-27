@@ -1,0 +1,39 @@
+/* All / Pictures / Videos: one connected control, under the search box beside the chips. */
+.group {
+  display: inline-grid;
+  grid-auto-flow: column;
+  height: 26px;
+  flex-shrink: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 0;
+  background: var(--surface-1);
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+
+.option + .option {
+  border-left: 1px solid var(--line-strong);
+}
+
+.option:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.option[aria-pressed='true'] {
+  background: var(--wash-strong);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}

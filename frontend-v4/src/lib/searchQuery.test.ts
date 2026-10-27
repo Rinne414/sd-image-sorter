@@ -85,6 +85,14 @@ describe('parseSearch', () => {
     expect(params('prompt:"long hair"')).toMatchObject({ prompts: 'long hair' })
   })
 
+  test('media: pictures only or videos only, by name or alias; a bad value warns', () => {
+    expect(params('media:video')).toMatchObject({ media_type: 'video' })
+    expect(params('type:图片')).toMatchObject({ media_type: 'image' })
+    expect(params('silver')).not.toHaveProperty('media_type')
+    const bad = parseSearch('media:gif').parts.find((p) => p.kind === 'warn')
+    expect(bad).toMatchObject({ reason: 'media' })
+  })
+
   test('bad values warn with the legal ones; unknown keys stay free text', () => {
     const q = parseSearch('rating:blue gen:midjourney foo:bar width:wide')
     const reasons = q.parts.filter((p) => p.kind === 'warn').map((p) => (p.kind === 'warn' ? p.reason : ''))

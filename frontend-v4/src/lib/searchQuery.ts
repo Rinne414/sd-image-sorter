@@ -31,6 +31,11 @@ const RATING_ALIASES: Record<string, string> = {
   explicit: 'explicit', e: 'explicit', 限制级: 'explicit',
 }
 
+const MEDIA_ALIASES: Record<string, 'image' | 'video'> = {
+  image: 'image', images: 'image', picture: 'image', pictures: 'image', pic: 'image', 图片: 'image', 图: 'image',
+  video: 'video', videos: 'video', clip: 'video', 视频: 'video',
+}
+
 const ASPECT_ALIASES: Record<string, string> = {
   square: 'square', 方图: 'square', 方: 'square',
   portrait: 'portrait', 竖图: 'portrait', 竖: 'portrait',
@@ -65,7 +70,7 @@ const DISTRIBUTION_VALUES = ['left_heavy', 'right_heavy', 'middle_heavy', 'edge_
 export type QueryKey =
   | 'tag' | 'checkpoint' | 'lora' | 'prompt' | 'generator' | 'rating' | 'score' | 'stars'
   | 'width' | 'height' | 'size' | 'aspect' | 'color' | 'light' | 'brightness' | 'saturation'
-  | 'seed' | 'date' | 'artist' | 'folder' | 'has' | 'no'
+  | 'seed' | 'date' | 'artist' | 'folder' | 'has' | 'no' | 'media'
 
 const KEY_ALIASES: Record<string, QueryKey> = {
   tag: 'tag', t: 'tag', 标签: 'tag',
@@ -90,6 +95,7 @@ const KEY_ALIASES: Record<string, QueryKey> = {
   folder: 'folder', 文件夹: 'folder',
   has: 'has', 有: 'has',
   no: 'no', 无: 'no',
+  media: 'media', type: 'media', 媒体: 'media', 类型: 'media',
 }
 
 /** Keys whose values autocomplete from a library endpoint. */
@@ -110,6 +116,7 @@ export const ENUM_SUGGESTIONS: Partial<Record<QueryKey, readonly string[]>> = {
   has: ['params'],
   no: ['params', 'caption'],
   score: ['none'],
+  media: ['image', 'video'],
   date: ['today', '7d', '30d'],
 }
 
@@ -117,7 +124,7 @@ const NEGATABLE = new Set<QueryKey>(['tag', 'checkpoint', 'lora', 'prompt', 'gen
 
 export type WarnReason =
   | 'number' | 'date' | 'size' | 'generator' | 'rating' | 'aspect' | 'color' | 'light'
-  | 'notNegatable' | 'starsMinOnly' | 'has' | 'no' | 'anyTagAlone'
+  | 'notNegatable' | 'starsMinOnly' | 'has' | 'no' | 'anyTagAlone' | 'media'
 
 /** One line of the search-syntax help; descriptions live in the language packs. */
 export const SYNTAX_ROWS: { syntax: string; example: string; key: string }[] = [
@@ -145,6 +152,7 @@ export const SYNTAX_ROWS: { syntax: string; example: string; key: string }[] = [
   { syntax: 'folder:VALUE', example: 'folder:keep', key: 'folder' },
   { syntax: 'has:params / no:params', example: 'has:params', key: 'hasParams' },
   { syntax: 'no:caption', example: 'no:caption', key: 'noCaption' },
+  { syntax: 'media:VALUE', example: 'media:video', key: 'media' },
   { syntax: 'key:a..b', example: 'score:6..8', key: 'range' },
   { syntax: 'contains(text)', example: 'contains(red)', key: 'contains' },
 ]
@@ -172,6 +180,7 @@ export interface Scalars {
   folder?: string
   hasMetadata?: boolean
   noCaption?: boolean
+  mediaType?: 'image' | 'video'
 }
 
 /** One recognised piece of the query, shown as a chip. `token` is its index in `tokens`. */
@@ -592,6 +601,16 @@ function handleToken(r: ParsedQuery, token: string, index: number, today: Date, 
       setScalar('folder', value)
       filter('folder', '', value)
       return
+    case 'media': {
+      const kind = MEDIA_ALIASES[value.toLowerCase()] ?? MEDIA_ALIASES[value]
+      if (!kind) {
+        warn('media', 'image / video')
+        return
+      }
+      setScalar('mediaType', kind)
+      filter('media', '', kind)
+      return
+    }
     case 'has': {
       const what = value.toLowerCase()
       if (what === 'params' || what === 'metadata' || what === '参数') {
@@ -688,6 +707,7 @@ export function toImageParams(q: ParsedQuery, scope: ScopeFilter, sortBy: string
   put('folder', s.folder ?? scope.folder)
   if (s.hasMetadata !== undefined) put('has_metadata', s.hasMetadata)
   if (s.noCaption) put('no_caption', true)
+  put('media_type', s.mediaType)
   if (scope.favoritesCollectionId !== null) put('collection_id', scope.favoritesCollectionId)
   return p
 }

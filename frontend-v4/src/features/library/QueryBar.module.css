@@ -48,6 +48,18 @@
   background: var(--surface-2);
 }
 
+/* Under the box: the media toggle (when the library has videos) and the chips of what the line was read as. */
+.sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.sub:empty {
+  display: none;
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;

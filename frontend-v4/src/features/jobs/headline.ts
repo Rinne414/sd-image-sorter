@@ -37,6 +37,7 @@ const RUNNING: Record<JobKind, MessageKey> = {
   sortundo: 'sort.rules.job.undoing', // sortundo
   ollama: 'jobs.running.install', // ollama: "Downloading <model>"
   artist: 'tools.artist.job.running', // artist
+  video: 'video.job.running', // video
 }
 
 const DONE: Record<JobKind, MessageKey> = {
@@ -67,6 +68,7 @@ const DONE: Record<JobKind, MessageKey> = {
   sortundo: 'sort.rules.job.undone', // sortundo
   ollama: 'jobs.done.install', // ollama: "<model> is ready"
   artist: 'tools.artist.job.done', // artist
+  video: 'video.job.done', // video
 }
 
 /** An install that can only be used after a restart says so, never "is ready". */

@@ -13,6 +13,7 @@ import { FilterPanel } from './FilterPanel'
 import { SemanticInput } from './SemanticInput'
 import { pickImageFile, useImageDrop } from '../similar/imageSearch'
 import { useSimilar } from '../similar/similarStore'
+import { MediaToggle } from '../video/MediaToggle'
 
 const APPLY_DELAY_MS = 300
 const RATING_NAMES: Record<string, MessageKey> = {
@@ -217,13 +218,16 @@ export function QueryBar({ total, about = false, inputRef, railToggle = true }: 
               ))}
             </ul>
           )}
-          {parsed.parts.length > 0 && (
-            <div className={styles.chips} data-testid="query-chips">
-              {parsed.parts.map((part, i) => (
-                <Chip key={`${part.token}-${i}`} part={part} onRemove={() => removePart(part)} />
-              ))}
-            </div>
-          )}
+          <div className={styles.sub}>
+            <MediaToggle text={draft} current={parsed.scalars.mediaType ?? ''} onChange={(next) => setText(next, true)} />
+            {parsed.parts.length > 0 && (
+              <div className={styles.chips} data-testid="query-chips">
+                {parsed.parts.map((part, i) => (
+                  <Chip key={`${part.token}-${i}`} part={part} onRemove={() => removePart(part)} />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -295,7 +299,7 @@ function Chip({ part, onRemove }: { part: Part; onRemove: () => void }) {
         title={part.hint || t('query.clear')}
       >
         <span>{t('query.warning', { token: part.raw })}</span>
-        <span className={styles.chipKey}>{t(`searchWarn.${part.reason}` as MessageKey)}</span>
+        <span className={styles.chipKey}>{part.reason === 'media' ? t('video.media.warn') : t(`searchWarn.${part.reason}` as MessageKey)}</span>
         <Icon name="close" size={11} />
       </button>
     )
@@ -305,11 +309,12 @@ function Chip({ part, onRemove }: { part: Part; onRemove: () => void }) {
   let value = part.value
   if (part.kind === 'filter' && key === 'generator') value = generatorName(part.value, t)
   if (part.kind === 'filter' && key === 'rating' && RATING_NAMES[part.value]) value = t(RATING_NAMES[part.value]!)
+  if (part.kind === 'filter' && key === 'media') value = t(part.value === 'video' ? 'video.media.video' : 'video.media.image')
   return (
     <button type="button" className={styles.chip} data-kind={negated ? 'exclude' : key} onClick={onRemove} title={t('query.clear')}>
       <span className={styles.chipKey}>
         {negated ? `${t('qkey.not')} ` : ''}
-        {t(`qkey.${key}` as MessageKey)}
+        {key === 'media' ? t('video.media.chipKey') : t(`qkey.${key}` as MessageKey)}
       </span>
       <span>
         {part.kind === 'filter' && part.op ? `${OP_NAMES[part.op] ? t(OP_NAMES[part.op]!) : part.op} ` : ''}
@@ -353,7 +358,7 @@ function SyntaxHelp({ onExample }: { onExample: (example: string) => void }) {
                       {row.example}
                     </button>
                   </td>
-                  <td>{t(`searchHelp.${row.key}` as MessageKey)}</td>
+                  <td>{row.key === 'media' ? t('video.media.syntax') : t(`searchHelp.${row.key}` as MessageKey)}</td>
                 </tr>
               ))}
             </tbody>

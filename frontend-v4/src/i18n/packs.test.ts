@@ -50,6 +50,8 @@ const JARGON = new Set([
   // hardware, web, units
   ...['GPU', 'CPU', 'CUDA', 'API', 'URL', 'HTTP', 'HTTPS', 'http', 'https', 'localhost', 'SOCKS', 'socks5', 'VPN', 'SSD', 'RGB', 'HDR', 'DPI'],
   ...['GB', 'MB', 'KB', 'B', 'MP', 'px', 'ms', 'ID', 'MIT', 'NSFW'],
+  // video support
+  ...['ffmpeg', 'LGPL', 'VP9', 'PATH'],
   // generation and training words
   ...['SEED', 'CFG', 'caption', 'Caption', 'token', 'tokens', 'V3.5', 'Vopus'],
   // a language named in its own language (the language picker)
@@ -63,7 +65,7 @@ const JARGON_PHRASES = ['PNG Info', 'GPT Image', 'Clip skip', 'Hugging Face', 'L
 const TYPED = new Set([
   ...['general', 'sensitive', 'questionable', 'explicit', 'comfyui', 'nai', 'webui', 'forge', 'square', 'portrait', 'landscape'],
   ...['warm', 'cool', 'neutral', 'red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink', 'brown', 'white', 'black', 'gray'],
-  ...['today', '7d', 'YYYY-MM-DD', 'YYYY-MM', 'YYYY', 'score', 'width', 'height', 'brightness', 'saturation', 'unrated'],
+  ...['image', 'video', 'today', '7d', 'YYYY-MM-DD', 'YYYY-MM', 'YYYY', 'score', 'width', 'height', 'brightness', 'saturation', 'unrated'],
   ...['off', 'data', 'models', 'imports', 'kaloscope2.0', 'mychar'],
 ])
 

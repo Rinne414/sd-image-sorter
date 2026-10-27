@@ -10,6 +10,8 @@ import { useApp, type Layout, type TileSize } from '../../state/store'
 import { Icon } from '../../ui/Icon'
 import { PickMark } from '../../ui/PickMark'
 import { NEAR_DUPLICATE, percent } from '../similar/ranking'
+import { VideoBadge } from '../video/VideoBadge'
+import { formatDuration, isVideo } from '../video/videoMedia'
 import { useCardMenu } from './CardMenu'
 import { dragPayload, INTERNAL_DRAG } from './drag'
 import styles from './Gallery.module.css'
@@ -95,6 +97,7 @@ type Translate = (key: MessageKey, params?: Params) => string
 function tileLabel(t: Translate, img: ImageSummary, n: number, total: number | null, favorite: boolean, picked: boolean): string {
   const name = img.filename ?? ''
   const parts = [total === null ? t('browse.tile.labelOpen', { n, name }) : t('browse.tile.label', { n, total, name })]
+  if (isVideo(img)) parts.push(t('video.tileSpoken', { time: formatDuration(img.duration_seconds) }))
   if (img.user_rating) parts.push(t('browse.tile.stars', { n: img.user_rating }))
   if (favorite) parts.push(t('browse.tile.favorite'))
   if (picked) parts.push(t('browse.tile.picked'))
@@ -366,6 +369,7 @@ const Tile = memo(function Tile(p: TileProps) {
         decoding="async"
         draggable={false}
       />
+      <VideoBadge img={p.img} />
       <div className={styles.edge}>
         {p.score !== undefined ? (
           <span className={`${styles.score} mono`} data-near={p.score >= NEAR_DUPLICATE || undefined} data-testid="tile-score">

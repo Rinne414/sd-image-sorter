@@ -12,6 +12,9 @@ import { copyAndSay, openImageFolder } from '../library/fileActions'
 import { lightboxKey, type LightboxKey } from '../library/keys'
 import { Icon } from '../../ui/Icon'
 import { useLayer } from '../../ui/layers'
+import { activeVideoControl } from '../video/videoControl'
+import { isVideo, videoKey } from '../video/videoMedia'
+import { VideoStage } from '../video/VideoStage'
 import styles from './Lightbox.module.css'
 import { useZoom } from './useZoom'
 
@@ -71,6 +74,8 @@ export function Lightbox({ images, total, totalAbout = false, hasMore, fetchMore
 
   const index = images.findIndex((img) => img.id === id)
   const current = index >= 0 ? images[index] : undefined
+  // A video plays in place of the picture; zoom and the picture's pan do not apply to it.
+  const video = isVideo(current ?? detail.data?.image)
   const zoom = useZoom({
     id,
     stageRef,
@@ -139,6 +144,7 @@ export function Lightbox({ images, total, totalAbout = false, hasMore, fetchMore
         toggleInfo()
         return true
       case 'zoom':
+        if (video) return false
         zoom.toggle()
         return true
     }
@@ -149,6 +155,17 @@ export function Lightbox({ images, total, totalAbout = false, hasMore, fetchMore
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target) || !isTop()) return
       const cur = useApp.getState().lightboxId
+      // An open video: Space and K play or pause, comma and period step a frame (the player's own controls keep their Space).
+      const vk = video ? videoKey(e) : null
+      const control = vk ? activeVideoControl() : null
+      if (vk && control) {
+        if (vk.type === 'toggle' && e.target instanceof Element && e.target.closest('video')) return
+        if (vk.type === 'toggle') control.toggle()
+        else control.step(vk.dir)
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
       const action = lightboxKey(e)
       if (cur === null || !action || !act(action, cur)) return
       e.preventDefault()
@@ -240,15 +257,17 @@ export function Lightbox({ images, total, totalAbout = false, hasMore, fetchMore
             {picked ? t('lightbox.picked') : t('lightbox.pick')} <kbd>Space</kbd>
           </button>
         )}
-        {zoom.percent !== null && (
+        {!video && zoom.percent !== null && (
           <span className={`${styles.zoom} mono`} title={`${t('info.zoom.level', { n: zoom.percent })}
 ${t('info.zoom.hint')}`} data-testid="lightbox-zoom">
             {zoom.percent}%
           </span>
         )}
-        <button type="button" className="btn" aria-pressed={zoom.zoomed} onClick={() => zoom.toggle()} data-testid="lightbox-zoom-toggle">
-          {zoom.zoomed ? t('lightbox.fit') : t('lightbox.actual')} <kbd>Z</kbd>
-        </button>
+        {!video && (
+          <button type="button" className="btn" aria-pressed={zoom.zoomed} onClick={() => zoom.toggle()} data-testid="lightbox-zoom-toggle">
+            {zoom.zoomed ? t('lightbox.fit') : t('lightbox.actual')} <kbd>Z</kbd>
+          </button>
+        )}
         <button type="button" className="btn" aria-pressed={info} onClick={toggleInfo}>
           {t('lightbox.info')} <kbd>I</kbd>
         </button>
@@ -268,6 +287,9 @@ ${t('info.zoom.hint')}`} data-testid="lightbox-zoom">
           <button type="button" className={`${styles.nav} ${styles.prev}`} onClick={() => go(-1)} disabled={atStart} aria-label={t('lightbox.prev')}>
             <Icon name="left" size={28} />
           </button>
+          {video ? (
+            <VideoStage id={id} summary={current} />
+          ) : (
           <div
             ref={wrapRef}
             className={styles.imgWrap}
@@ -289,6 +311,7 @@ ${t('info.zoom.hint')}`} data-testid="lightbox-zoom">
               onLoad={() => setLoadedId(id)}
             />
           </div>
+          )}
           <button type="button" className={`${styles.nav} ${styles.next}`} onClick={() => go(1)} disabled={atEnd} aria-label={t('lightbox.next')}>
             <Icon name="right" size={28} />
           </button>

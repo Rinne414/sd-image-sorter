@@ -12,6 +12,7 @@ import { saveMirror, useMirror, useModelCards } from './modelsApi'
 import { useMT, type ModelKey } from './modelText'
 import { RestartBanner } from './RestartBanner'
 import type { ModelCenterCard } from './types'
+import { VideoSupportSection } from '../../video/VideoSupportSection'
 
 const FOCUS_MS = 2400
 
@@ -45,6 +46,7 @@ export function ModelCenterTab() {
       <MirrorChoice />
       <CardGroup title="mc.group.essentials" cards={essentials} lit={lit} testId="model-group-essentials" />
       <CardGroup title="mc.group.others" cards={others} lit={lit} testId="model-group-others" />
+      <VideoSupportSection />
       {bulkOpen && <BulkDialog onClose={() => setBulkOpen(false)} />}
     </div>
   )
