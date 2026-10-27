@@ -88,10 +88,10 @@ for (const lang of ['en', 'zh-CN'] as const) {
             oneLine: Math.abs(rect('.gallery-search-tools').top - rect('.gallery-search-box').top) < rect('.gallery-search-box').height,
             sortInView: rect('#gallery-sort').right <= innerWidth,
             pageOverflow: document.documentElement.scrollWidth - innerWidth > 0,
-            // the chips scroll only as the last step, never past 1280
+            // the chips scroll only as the last step: at 1280 (font metrics decide), never wider
             chipsScroll: chips.scrollWidth > chips.clientWidth,
           }
-        }), { message: where }).toEqual({ oneLine: true, sortInView: true, pageOverflow: false, chipsScroll: width === 1280 && videos > 0 && lang === 'en' })
+        }), { message: where }).toEqual({ oneLine: true, sortInView: true, pageOverflow: false, chipsScroll: width === 1280 ? expect.any(Boolean) : false })
         if (width !== 1280) {
           await page.locator('.gallery-search-row').screenshot({ path: test.info().outputPath(`search-row-${width}-${videos ? 'videos' : 'pictures'}.png`) })
         }

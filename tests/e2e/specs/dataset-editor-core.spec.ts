@@ -178,6 +178,14 @@ test('split view refreshes on gallery image change, never for local items', asyn
 })
 
 test('Separation Console hooks lazily: seen-marking + token counter after open', async ({ page }) => {
+  // No base model chosen counts as SDXL (CLIP); its tokenizer is not downloaded here.
+  await page.route('**/api/dataset/caption-tokens/status**', (route) => route.fulfill({
+    json: {
+      profile: 'sdxl', model: 'SDXL', limit: 75, available: false, tokenizers_package: true,
+      files: [{ id: 'clip_vit_l_14', label: 'CLIP ViT-L/14', size_bytes: 2224003, present: false }],
+      download_bytes: 2224003, download_bytes_total: 2224003, preparing: false, step: '', error: null,
+    },
+  }))
   await page.route('**/api/tags/scores/stats', async (route) => {
     await route.fulfill({
       json: { enabled: true, floor: 0.15, total_rows: 0, images_with_scores: 0, models: [], estimated_bytes: 0 },
@@ -198,8 +206,11 @@ test('Separation Console hooks lazily: seen-marking + token counter after open',
   const seen = await page.evaluate(() => JSON.parse(localStorage.getItem('sd-image-sorter-dataset-seen') || '{}'))
   expect(seen['702']).toBe(true)
   // The token counter is created next to the booru box and reflects 702's
-  // caption: "1girl, frown" = 2 tags, ceil(5/4)+ceil(5/4)+1 comma = 5 tokens.
-  await expect(page.locator('#dataset-token-counter')).toHaveText('2 tags · ≈5 tokens')
+  // caption: "1girl, frown" = 2 tags, ceil(5/4)+ceil(5/4)+1 comma = 5 tokens,
+  // an estimate until the CLIP tokenizer is there (offered with its size).
+  const counter = page.locator('#dataset-token-counter')
+  await expect(counter).toContainText('2 tags · ≈5 tokens')
+  await expect(counter.locator('[data-testid="token-counter-get-exact"]')).toHaveText('Exact counts (2 MB, once)')
 })
 
 test('confidence pills refresh on _setActive; hidden again for local items', async ({ page }) => {

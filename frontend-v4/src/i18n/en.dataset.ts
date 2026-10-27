@@ -82,7 +82,7 @@ export const enDataset: Record<keyof typeof zhCNDataset, string> = {
   'dataset.modelHint.none': 'The default template: trigger, tags, common tags.',
   'dataset.modelHint.sdxl': 'CLIP encoder, about 75 tokens: keep tags short, the important ones first. Template: Illustrious / Pony.',
   'dataset.modelHint.flux': 'T5 encoder (512 tokens): natural-language descriptions first, the trigger in front. Add descriptions in the AI tagging step.',
-  'dataset.modelHint.krea2': 'Train LoRAs on Krea-2-Raw; its Qwen3-VL encoder takes 512 tokens and was trained mostly on long natural-language captions. Tags help search, not training.',
+  'dataset.modelHint.krea2': 'Train LoRAs on Krea-2-Raw; its Qwen3-VL encoder reads 507 tokens of a caption (512 with its prompt template) and was trained mostly on long natural-language captions. Tags help search, not training.',
   'dataset.modelHint.anima': 'Booru-native vocabulary: tag lists work well. The template follows the Anima model card: quality, safety, count, trigger, characters, series, @artists, other tags.',
   'dataset.set.purpose': 'Purpose',
   'dataset.purpose.none': 'Not set',

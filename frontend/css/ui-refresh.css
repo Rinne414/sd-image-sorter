@@ -12012,8 +12012,14 @@ html.lang-zh #view-censor .queue-action-btn span {
     }
 }
 
-/* Step 2, narrower still: the chips and toggles pack tighter. */
+/* Step 2, narrower still: the search box may go down to 170px before the
+   chips have to scroll, and the chips and toggles pack tighter. */
 @container gallery-search (max-width: 940px) {
+    .gallery-search-box {
+        flex-basis: 170px;
+        min-width: 170px;
+    }
+
     .gallery-quick-chips .gallery-chip {
         padding: 5px 8px;
     }
@@ -12028,6 +12034,11 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 
 @container gallery-search (max-width: 1060px) {
+    .gallery-search-row.has-media-toggle .gallery-search-box {
+        flex-basis: 170px;
+        min-width: 170px;
+    }
+
     .gallery-search-row.has-media-toggle .gallery-quick-chips .gallery-chip {
         padding: 5px 8px;
     }
