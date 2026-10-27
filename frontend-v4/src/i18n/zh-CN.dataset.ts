@@ -799,7 +799,7 @@ export const zhCNDataset = {
   'dataset.check.subjectKeeps': '保留在 caption 里',
   'dataset.check.subjectDrops': '从 caption 里去掉',
   'dataset.check.subjectLabel': '修正人数标签',
-  'dataset.check.subjectCommonNote': '批次的通用标签会把 {tags} 加到每张图上，所以单张图的 caption 去不掉它。请先把它移进 caption：没有这个冲突的图会保留它（还没有它的 caption 会写进去），然后“应用”就能把它从这些图上去掉。',
+  'dataset.check.subjectCommonNote': '批次的通用标签会把 {tags} 加到每张图上，所以单张图的 caption 去不掉它。把它移进 caption：其他图都会保留它（还没有它的 caption 会写进去），然后“应用”就能把它从这些图上去掉。这样写入的 caption 会把批次的其他通用标签排在前面，和所有编辑过的 caption 一样。',
   'dataset.check.subjectMoveCommon': '把 {tags} 移进 caption',
   'dataset.check.subjectMoveLabel': '把 {tags} 从通用标签移进 caption',
   'dataset.check.subjectMovedOnly': '已把 {tags} 移出通用标签；其他图自己的 caption 里本来就有它。',

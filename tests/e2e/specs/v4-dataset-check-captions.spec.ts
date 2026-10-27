@@ -163,7 +163,7 @@ async function openCheck(page: Page): Promise<void> {
   await expect(page.getByTestId('check-step')).toBeVisible()
 }
 
-test('a dataset batch: three Library images and a folder image, "solo" in the common tags', async ({ page }) => {
+test('a dataset batch: three Library images and a folder image, "solo, masterpiece" in the common tags', async ({ page }) => {
   await openV4(page, '#/batch')
   const made = await apiJson<{ batch: { id: number; dataset_project_id: number } }>(page, '/api/batches', {
     method: 'POST',
@@ -177,8 +177,8 @@ test('a dataset batch: three Library images and a folder image, "solo" in the co
     body: { folder_path: path.dirname(folderFile), recursive: false, include_thumbnails: false, limit: 10, offset: 0 },
   })
   expect(scan.status).toBe(200)
-  await putSettings(page, (s) => ({ ...s, caption_render: { ...s.caption_render, common_tags: ['solo'] } }))
-  expect((await project(page)).settings.caption_render.common_tags).toEqual(['solo'])
+  await putSettings(page, (s) => ({ ...s, caption_render: { ...s.caption_render, common_tags: ['solo', 'masterpiece'] } }))
+  expect((await project(page)).settings.caption_render.common_tags).toEqual(['solo', 'masterpiece'])
 })
 
 test('the folder image is checked too; "solo" from the common tags moves into the captions, and Undo puts it back', async ({ page }) => {
@@ -207,12 +207,12 @@ test('the folder image is checked too; "solo" from the common tags moves into th
 
   await subject.getByTestId('check-subject-move-common').click()
   // Only C lacked "solo" in its own caption: it gets it at the end, where the template put it.
-  await expect.poll(async () => (await project(page)).settings.caption_render.common_tags).toEqual([])
+  await expect.poll(async () => (await project(page)).settings.caption_render.common_tags).toEqual(['masterpiece'])
   expect(await savedCaptions(page)).toEqual({ [String(ids[2])]: '1girl, smile, solo' })
 
-  // One Undo puts "solo" back into the common tags and C's caption back as it was.
+  // One Undo puts "solo" back where it stood in the common tags and C's caption back as it was.
   await page.getByRole('button', { name: 'Undo' }).last().click()
-  await expect.poll(async () => (await project(page)).settings.caption_render.common_tags).toEqual(['solo'])
+  await expect.poll(async () => (await project(page)).settings.caption_render.common_tags).toEqual(['solo', 'masterpiece'])
   expect((await savedCaptions(page))[String(ids[2])]).toBe('1girl, smile')
 })
 
@@ -221,7 +221,7 @@ test('after the move the fix takes the extra count tag off both pictures, the fo
   const subject = issue(page, 'subject_count')
   await expect(subject.getByTestId('check-subject-common')).toBeVisible({ timeout: 30_000 })
   await subject.getByTestId('check-subject-move-common').click()
-  await expect.poll(async () => (await project(page)).settings.caption_render.common_tags).toEqual([])
+  await expect.poll(async () => (await project(page)).settings.caption_render.common_tags).toEqual(['masterpiece'])
 
   // The check reads the captions again: "solo" is no longer the batch's, only 1girl contradicts.
   await expect(subject.getByTestId('check-subject-common')).toHaveCount(0, { timeout: 30_000 })

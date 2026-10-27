@@ -5,6 +5,7 @@ import { useT } from '../../../i18n'
 import { useApp } from '../../../state/store'
 import { useToasts } from '../../../ui/toasts'
 import { projectKey, readdEntries, saveProjectSettings } from '../datasetApi'
+import { splitList } from '../datasetSettings'
 import { runBulk } from '../edit/bulkRun'
 import { splitTags, tagKey } from '../edit/captionContent'
 import { renderInitialContents } from '../edit/initialContents'
@@ -105,12 +106,34 @@ export function CheckStep({ batch, next, onNext }: Props) {
       if (!form || moves.length === 0) return
       const style = styleOf(form.normalizeUnderscores)
       const quoted = moves.map((m) => `“${m.tag}”`).join(', ')
-      const common = (add: boolean) => () => saveProjectSettings(batch.id, (current) => moves.reduce((s, m) => withCommonTag(s, m.tag, add, style), current))
+      // Where each tag stood in the common tags, so an undo puts it back in place
+      // (the order is the order the rules write them in front of edited captions).
+      const before = splitList(form.commonTags)
+      const places = new Map(moves.map((m) => [m.tag, before.findIndex((tag) => tagKey(tag) === tagKey(m.tag))] as const))
+      // An undo waits for the tags to be taken out, and one pressed before that keeps them in.
+      let removing: Promise<boolean> | null = null
+      let undone = false
+      const takeOut = () =>
+        (removing ??= saveProjectSettings(batch.id, (current) => moves.reduce((s, m) => withCommonTag(s, m.tag, false, style), current)))
+      const putBack = async () => {
+        undone = true
+        if (removing) await removing
+        return saveProjectSettings(batch.id, (current) => {
+          const list = [...current.caption_render.common_tags]
+          const order = [...moves].sort((a, b) => (places.get(a.tag) ?? list.length) - (places.get(b.tag) ?? list.length))
+          for (const m of order) {
+            if (list.some((tag) => tagKey(tag) === tagKey(m.tag))) continue
+            const at = places.get(m.tag) ?? -1
+            list.splice(at < 0 ? list.length : Math.min(at, list.length), 0, m.tag)
+          }
+          return { ...current, caption_render: { ...current.caption_render, common_tags: list } }
+        })
+      }
       try {
         // Every other image keeps the tag: written into its own caption where it is
-        // not there yet, at the end the rules put it (edited captions get the common
-        // tags in front, never-edited ones at the end of the template), so its
-        // final caption stays as it was.
+        // not there yet, where the rules put it (edited captions get the common tags
+        // in front, never-edited ones at the end of the template). A caption written
+        // this way lists the other common tags first, as every edited caption does.
         const unedited = entries.filter((e) => !heads?.get(e.key)?.content)
         const initial = unedited.length ? await renderInitialContents(form, unedited) : new Map()
         const adds = new Map<string, { tags: string[]; position: 'front' | 'back' }>()
@@ -127,14 +150,15 @@ export function CheckStep({ batch, next, onNext }: Props) {
         }
         if (adds.size > 0) {
           const op = { kind: 'addEach', adds } as const
-          const changed = await runBulk(batch, captionHolder(batch.id).session, { label: t('dataset.check.subjectMoveLabel', { tags: quoted }), op, keys: [...adds.keys()], initial, entries: byKey, categoryOf: () => 'unknown', restore: common(true) })
+          const changed = await runBulk(batch, captionHolder(batch.id).session, { label: t('dataset.check.subjectMoveLabel', { tags: quoted }), op, keys: [...adds.keys()], initial, entries: byKey, categoryOf: () => 'unknown', restore: putBack })
           if (changed < adds.size) return // nothing or only some written: the common tags stay as they are
+          if (undone) return // undone already: the captions are back and the tags stay common
         }
-        if (!(await common(false)())) return
+        if (!(await takeOut())) return
         if (adds.size === 0) {
           useToasts.getState().push(t('dataset.check.subjectMovedOnly', { tags: quoted }), 'info', {
             label: t('toast.undo'),
-            run: () => void common(true)().then((ok) => ok && useToasts.getState().push(t('dataset.check.subjectMoveUndone', { tags: quoted }), 'info')),
+            run: () => void putBack().then((ok) => ok && useToasts.getState().push(t('dataset.check.subjectMoveUndone', { tags: quoted }), 'info')),
           })
         }
       } catch (error) {

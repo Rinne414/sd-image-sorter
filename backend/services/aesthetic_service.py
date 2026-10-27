@@ -212,7 +212,9 @@ class AestheticService:
             lib_sql, lib_params = current_library_sql()
             with db.get_db() as conn:
                 row = conn.execute(
-                    f"SELECT COUNT(*) FROM images WHERE aesthetic_score IS NOT NULL AND {lib_sql}",
+                    # A picture that cannot be read keeps its score but is not in the library view.
+                    f"SELECT COUNT(*) FROM images WHERE aesthetic_score IS NOT NULL "
+                    f"AND COALESCE(is_readable, 1) = 1 AND {lib_sql}",
                     lib_params,
                 ).fetchone()
                 return int(row[0] or 0)
@@ -226,7 +228,9 @@ class AestheticService:
             lib_sql, lib_params = current_library_sql()
             with db.get_db() as conn:
                 row = conn.execute(
+                    # Rescoring skips pictures that cannot be read, so they are not counted as due.
                     f"SELECT COUNT(*) FROM images WHERE aesthetic_score IS NOT NULL "
+                    f"AND COALESCE(is_readable, 1) = 1 "
                     f"AND (aesthetic_version IS NULL OR aesthetic_version < ?) AND {lib_sql}",
                     (AESTHETIC_SCORE_VERSION, *lib_params),
                 ).fetchone()

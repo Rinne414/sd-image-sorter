@@ -210,7 +210,9 @@ def text_for(spec: TokenizerSpec, text: str) -> str:
 # ---- status and counting -------------------------------------------------------
 
 _prepare_lock = threading.Lock()
-_prepare_state: Dict[str, Any] = {"active": False, "error": None, "step": ""}
+# One download at a time; a model asked for while another downloads waits its
+# turn. Each model has its own "preparing" and its own error.
+_prepare_state: Dict[str, Any] = {"active": False, "queue": [], "errors": {}, "step": ""}
 
 
 def _profile(profile: str) -> CountProfile:
@@ -238,7 +240,10 @@ def get_status(profile: str = DEFAULT_PROFILE) -> Dict[str, Any]:
     ]
     package = tokenizers_installed()
     with _prepare_lock:
-        state = dict(_prepare_state)
+        waiting = profile in _prepare_state["queue"]
+        current = bool(_prepare_state["queue"]) and _prepare_state["queue"][0] == profile
+        step = _prepare_state["step"] if current else ""
+        error = _prepare_state["errors"].get(profile)
     return {
         "profile": profile,
         "model": PROFILES[profile].label,
@@ -248,9 +253,9 @@ def get_status(profile: str = DEFAULT_PROFILE) -> Dict[str, Any]:
         "files": files,
         "download_bytes": sum(f["size_bytes"] for f in files if not f["present"]),
         "download_bytes_total": sum(f["size_bytes"] for f in files),
-        "preparing": bool(state["active"]),
-        "step": state["step"],
-        "error": state["error"],
+        "preparing": waiting,
+        "step": step,
+        "error": error,
     }
 
 
@@ -317,24 +322,37 @@ def prepare_blocking(profile: str = DEFAULT_PROFILE) -> None:
 
 
 def start_prepare(profile: str = DEFAULT_PROFILE) -> Dict[str, Any]:
-    """Run ``prepare_blocking`` for ``profile`` on a background thread; one at a time."""
+    """Queue ``profile``'s download and run the queue on a background thread, one at a time."""
     status = get_status(profile)
     if status["available"]:
         return {"status": "ready"}
     with _prepare_lock:
-        if _prepare_state["active"]:
+        if profile in _prepare_state["queue"]:
             return {"status": "running"}
-        _prepare_state.update({"active": True, "error": None, "step": ""})
+        _prepare_state["queue"].append(profile)
+        _prepare_state["errors"].pop(profile, None)
+        if _prepare_state["active"]:
+            return {"status": "queued"}
+        _prepare_state["active"] = True
 
     def worker() -> None:
-        error: Optional[str] = None
-        try:
-            prepare_blocking(profile)
-        except Exception as exc:  # noqa: BLE001 - shown through the status endpoint
-            logger.exception("Tokenizer download failed")
-            error = str(exc)
-        with _prepare_lock:
-            _prepare_state.update({"active": False, "error": error, "step": ""})
+        while True:
+            with _prepare_lock:
+                if not _prepare_state["queue"]:
+                    _prepare_state.update({"active": False, "step": ""})
+                    return
+                current = _prepare_state["queue"][0]
+                _prepare_state["step"] = ""
+            error: Optional[str] = None
+            try:
+                prepare_blocking(current)
+            except Exception as exc:  # noqa: BLE001 - shown through the status endpoint
+                logger.exception("Tokenizer download failed")
+                error = str(exc)
+            with _prepare_lock:
+                _prepare_state["queue"].pop(0)
+                if error:
+                    _prepare_state["errors"][current] = error
 
     threading.Thread(
         target=worker, name="caption-tokenizer-prepare", daemon=True

@@ -107,6 +107,25 @@ def test_outdated_scores_count_as_to_score_and_are_reported(
     assert service.count_images_to_score(force=True) == 3
 
 
+def test_a_picture_that_cannot_be_read_is_not_counted_as_scored_or_due(
+    test_db, tmp_path: Path
+) -> None:
+    """It keeps its score (it still describes the picture) but is out of the library view."""
+    gone = _add(test_db, tmp_path, "gone.png")
+    with test_db.get_db() as conn:
+        conn.execute(
+            "UPDATE images SET aesthetic_score = 5, aesthetic_version = NULL WHERE id = ?",
+            (gone,),
+        )
+        conn.commit()
+    test_db.mark_image_unreadable(gone, "File not found")
+
+    status = AestheticService().get_status(lambda: True)
+
+    assert status["scored_count"] == 0
+    assert status["outdated_count"] == 0
+
+
 def test_score_all_re_scores_outdated_rows_and_leaves_current_ones(
     test_db, tmp_path: Path, monkeypatch
 ) -> None:

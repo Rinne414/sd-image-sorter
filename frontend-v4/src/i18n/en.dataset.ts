@@ -798,7 +798,7 @@ export const enDataset: Record<keyof typeof zhCNDataset, string> = {
   'dataset.check.subjectKeeps': 'Stays in the caption',
   'dataset.check.subjectDrops': 'Taken out of the caption',
   'dataset.check.subjectLabel': 'fix subject counts',
-  'dataset.check.subjectCommonNote': 'The batch’s common tags put {tags} on every picture, so no single caption can lose it. Move it into the captions first: the pictures without this conflict keep it (it is written into their captions where it is missing), then Apply can take it off these.',
+  'dataset.check.subjectCommonNote': 'The batch’s common tags put {tags} on every picture, so no single caption can lose it. Move it into the captions: every other picture keeps it (it is written into its caption where it is missing), then Apply can take it off these. A caption written this way lists the batch’s other common tags first, as every edited caption does.',
   'dataset.check.subjectMoveCommon': 'Move {tags} into the captions',
   'dataset.check.subjectMoveLabel': 'move {tags} from the common tags into the captions',
   'dataset.check.subjectMovedOnly': 'Took {tags} out of the common tags; every other picture already has it in its own caption.',

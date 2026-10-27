@@ -197,6 +197,7 @@
                 return;
             }
             this._jobId = body.job_id;
+            this._missedPolls = 0;
             this._rememberFolders(sourceFolder, outputFolder);
             this._render(body);
             this._setRunning(true);
@@ -221,6 +222,7 @@
                     const response = await fetch(`/api/censor/media/jobs/${encodeURIComponent(this._jobId)}`);
                     if (response.status === 404) {
                         // The program no longer knows the job (it was restarted).
+                        this._missedPolls = 0;
                         this._setRunning(false);
                         this._toast(this._t('mediaCensor.jobGone',
                             'The censoring job is no longer running (the program was restarted). Files it finished are in the output folder.'), 'warning');

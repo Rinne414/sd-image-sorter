@@ -362,3 +362,37 @@ def test_the_endpoints_take_the_base_model(test_client, specs):
     assert test_client.post(
         "/api/dataset/caption-tokens/prepare", params={"profile": "nope"}
     ).status_code == 400
+
+
+def test_a_second_model_waits_its_turn_and_each_keeps_its_own_error(specs, monkeypatch):
+    """Asking for SDXL while Anima downloads used to answer "running" for Anima's
+    download, show Anima's progress and error on SDXL, and never fetch SDXL."""
+    import threading
+
+    monkeypatch.setattr(svc, "_prepare_state", {"active": False, "queue": [], "errors": {}, "step": ""})
+    release = threading.Event()
+    done: list[str] = []
+
+    def fake_prepare(profile):
+        if profile == "anima":
+            release.wait(5)
+            raise RuntimeError("anima mirror down")
+        done.append(profile)
+
+    monkeypatch.setattr(svc, "prepare_blocking", fake_prepare)
+
+    assert svc.start_prepare("anima") == {"status": "started"}
+    assert svc.start_prepare("sdxl") == {"status": "queued"}
+    assert svc.get_status("sdxl")["preparing"] is True
+    assert svc.get_status("anima")["preparing"] is True
+
+    release.set()
+    for _ in range(200):
+        if not svc._prepare_state["active"]:
+            break
+        time.sleep(0.01)
+
+    assert done == ["sdxl"]
+    assert svc.get_status("anima")["error"] == "anima mirror down"
+    assert svc.get_status("sdxl")["error"] is None
+    assert svc.get_status("sdxl")["preparing"] is False

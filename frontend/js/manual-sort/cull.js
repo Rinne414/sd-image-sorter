@@ -307,7 +307,9 @@ function reportCullRouting(routeStats, counts, dests) {
             ),
             'warning',
             {
+                // Not closed by a stray click: it holds the decisions still to save.
                 persistent: true,
+                dismissible: false,
                 actionLabel: manualSortText('manual.cullRetry', 'Retry', '重试'),
                 onAction: async () => {
                     const again = await collectCullDecisions(routeStats.unsaved, dests);
