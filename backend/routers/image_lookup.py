@@ -4,6 +4,8 @@ Similarity search, duplicate review and other ranked views get image ids from
 their own endpoints; this turns them into the same rows the gallery lists
 (size, generator, rating), keeping the caller's order. Ids that are gone or
 belong to another library are left out, so a stale list shows what still exists.
+Each row carries its ``media_type`` (image or video), so a caller can tell the
+moving pictures in a pick apart without asking for every image's details.
 """
 
 from typing import Any, Dict, List
@@ -21,7 +23,7 @@ _CHUNK = 500
 _SUMMARY_COLUMNS = (
     "id, path, filename, generator, width, height, file_size, checkpoint, "
     "checkpoint_normalized, loras, user_rating, aesthetic_score, is_readable, "
-    "metadata_status, created_at, library_order_time"
+    "metadata_status, created_at, library_order_time, media_type"
 )
 
 
@@ -61,8 +63,8 @@ def images_by_ids(image_ids: List[int]) -> List[Dict[str, Any]]:
     "/by-ids",
     summary="Gallery rows for a list of image ids",
     description="""
-Return the gallery's summary rows (size, generator, rating, ...) for the given
-image ids, in the order given. Ids that no longer exist or belong to another
+Return the gallery's summary rows (size, generator, rating, media_type, ...)
+for the given image ids, in the order given. Ids that no longer exist or belong to another
 library are left out. At most 2000 ids per request.
     """,
 )

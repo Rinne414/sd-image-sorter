@@ -240,6 +240,19 @@ export class StyleMapScene {
     // Capture phase: a pointer tool (box select) may take the press before the orbit controls.
     listen('pointerdown', (e) => this.onPointerDown(e), true)
     listen('pointerup', (e) => this.onPointerUp(e))
+    // A lost graphics context (a driver reset, the GPU taken by another program) may come back:
+    // asking for it keeps the page, and the restored context draws the map at once, not on the next pointer move.
+    const lost = (e: Event) => e.preventDefault()
+    const restored = () => {
+      this.render()
+      this.requestRender()
+    }
+    canvas.addEventListener('webglcontextlost', lost)
+    canvas.addEventListener('webglcontextrestored', restored)
+    this.cleanup.push(() => {
+      canvas.removeEventListener('webglcontextlost', lost)
+      canvas.removeEventListener('webglcontextrestored', restored)
+    })
     this.controls.addEventListener('change', () => this.requestRender())
     this.resizeObserver = new ResizeObserver(() => this.resize())
     this.resizeObserver.observe(canvas.parentElement ?? canvas)
@@ -276,8 +289,12 @@ export class StyleMapScene {
     const { count, positions, sizes, ids, members } = cloud
     const colors = new Float32Array(count * 3)
     for (let i = 0; i < count; i += 1) colors.set(NO_DATA_RGB, i * 3)
+    // Nothing is under the pointer or lit on the new dots until the pointer moves again.
     this.hovered = -1
+    this.canvas.style.cursor = ''
+    this.canvas.dataset.hovered = ''
     this.focus = null
+    this.canvas.dataset.focused = '0'
     this.selected = null
     this.canvas.dataset.picked = '0'
     this.hoverRing.visible = false
@@ -347,6 +364,10 @@ export class StyleMapScene {
   /** Light one region (`labels[i]`: the region of dot i); null restores the plain map. */
   setFocus(labels: Int8Array | null, region: number | null): void {
     this.focus = region === null || !labels ? null : { labels, region }
+    let lit = 0
+    if (this.focus) for (const label of this.focus.labels) if (label === this.focus.region) lit += 1
+    // How many dots the open landmark lights (the end-to-end tests read it).
+    this.canvas.dataset.focused = String(lit)
     this.repaintColors()
   }
 

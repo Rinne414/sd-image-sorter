@@ -369,3 +369,13 @@ export function afterIndexJob(): void {
   armRetries()
   void refresh(true)
 }
+
+// Another library while the map is open (Ctrl K "Switch to…"): the dots on
+// screen are the old library's pictures. Answers still on their way are
+// dropped and the new library's map is read. (The picks, My axes and the
+// nearest-pictures card follow the library on their own.)
+useApp.subscribe((s, prev) => {
+  if (s.libraryId === prev.libraryId || !open) return
+  closeMap()
+  openMap()
+})

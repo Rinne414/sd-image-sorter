@@ -3,7 +3,7 @@ import path from 'node:path'
 import { expect, test, type Page } from '../fixtures/click-ledger'
 
 import { markModelsReady } from '../fixtures/model-status'
-import { cleanupImages, dbPath, pageOverflow, repoRoot, runBackendScript, seedImages, VIEWPORTS } from '../fixtures/v4-seed'
+import { cleanupImages, dbPath, pageOverflow, repoRoot, runBackendScript, seedImages, tmpRoot, VIEWPORTS } from '../fixtures/v4-seed'
 
 /**
  * V Opus 画风地图 (Style Map, stage 1): the tool page, the index job, the
@@ -270,11 +270,19 @@ test('the map: dot colours with a legend, the layout line, axis meanings, labels
   await marks.click()
   await expect(page.getByTestId('stylemap-landmark').first()).toBeVisible()
 
-  // Orbit, then reset: the dots stay drawn and nothing broke.
-  const box = (await canvas(page).boundingBox())!
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  // A press and drag that starts on a landmark's picture starts no picture drag (the page stays live).
+  const card = (await page.getByTestId('stylemap-landmark').first().boundingBox())!
+  await page.mouse.move(card.x + card.width / 2, card.y + card.height / 3)
   await page.mouse.down()
-  await page.mouse.move(box.x + box.width / 2 + 200, box.y + box.height / 2 + 40, { steps: 8 })
+  await page.mouse.move(card.x + card.width / 2 + 120, card.y + card.height / 3 + 30, { steps: 6 })
+  await page.mouse.up()
+  expect(await page.locator('[data-testid="stylemap-landmark"] img').first().getAttribute('draggable')).toBe('false')
+
+  // Orbit (from an open spot near the corner), then reset: the dots stay drawn and nothing broke.
+  const box = (await canvas(page).boundingBox())!
+  await page.mouse.move(box.x + 24, box.y + 40)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 224, box.y + 80, { steps: 8 })
   await page.mouse.up()
   await page.getByTestId('stylemap-reset-view').click()
   await expectDots(page, WITH_VECTORS - 1)
@@ -344,6 +352,15 @@ test('find a picture: it is ringed and previewed; pointing at its dot previews i
   // What the box does not understand is said; a name that matches nothing says so.
   await input.fill('nosuchpicture-zz.png')
   await expect(page.getByTestId('stylemap-locate-pop')).toContainText('No picture on this map matches.')
+
+  // The Enter that confirms a Chinese input method's composition is the composition's, not the list's.
+  await input.fill(`${PREFIX}05.png`)
+  await expect(row).toContainText(`${PREFIX}05.png`)
+  await input.evaluate((el) => el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', isComposing: true, bubbles: true, cancelable: true })))
+  await page.waitForTimeout(300)
+  await expect(page.getByTestId('stylemap-locate-pop')).toBeVisible()
+  await expect(row).toContainText(`${PREFIX}05.png`)
+  await expect(canvas(page)).toHaveAttribute('data-rings', '')
 
   // Enter right after typing another name goes to that picture, never to the answer still listed for the old text.
   await input.fill(`${PREFIX}03.png`)
@@ -575,10 +592,19 @@ test('the pick goes to a new batch, a dataset batch, the Library (exactly those 
   expect(answer.total).toBe(WITH_VECTORS)
   expect(new Set(answer.images.map((img) => img.id))).toEqual(picked)
   await expect(page.getByTestId('pinned-banner')).toContainText(`${WITH_VECTORS} pictures from the Style Map`)
+  // They arrive picked, through the library's own "select all matches": every bulk action is one click away.
+  await expect(page.getByTestId('selection-bar')).toHaveAttribute('aria-label', `${WITH_VECTORS} picked`)
+  await expect(page.getByTestId('select-all-matching')).toHaveCount(0)
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('sd-v4-library-pins') ?? '{}').main?.count)).toBe(WITH_VECTORS)
   await page.screenshot({ path: path.join(SHOTS, 'library-pinned.png') })
+  // Esc: first the picks go, then the set (the whole search is back).
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('selection-bar')).toHaveCount(0)
+  await expect(page.getByTestId('pinned-banner')).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('pinned-banner')).toHaveCount(0)
   await expect(page.getByTestId('query-input')).toHaveValue(TOKEN)
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('sd-v4-library-pins') ?? '{}').main)).toBeUndefined()
 
   // Back on the map the pick is still there; Show in Library again, and the banner's button is the way back too.
   await page.getByTestId('tools-menu').click()
@@ -589,6 +615,7 @@ test('the pick goes to a new batch, a dataset batch, the Library (exactly those 
   await page.getByTestId('pinned-back').click()
   await expect(page.getByTestId('pinned-banner')).toHaveCount(0)
   await expect(page.getByTestId('query-input')).toHaveValue(TOKEN)
+  await page.keyboard.press('Escape')
 
   // Censor: a quick censor batch of these pictures, opened on its censor step.
   await page.getByTestId('tools-menu').click()
@@ -601,6 +628,83 @@ test('the pick goes to a new batch, a dataset batch, the Library (exactly those 
   expect((await itemsOf(censorId)).ids).toEqual(picked)
 })
 
+test('the Library keeps the set from the map across a reload until "Show everything"; a set the server dropped is forgotten without a word', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  const pins = () => page.evaluate(() => JSON.parse(localStorage.getItem('sd-v4-library-pins') ?? '{}') as Record<string, { id: number; count: number }>)
+  const pinToLibrary = async () => {
+    await page.getByTestId('tools-menu').click()
+    await page.locator('[data-item="tool-stylemap"]').click()
+    await expectDots(page, WITH_VECTORS - 1)
+    await landmarksOff(page)
+    await dragOverMap(page, 'box', true)
+    await expect(page.getByTestId('stylemap-selbar-count')).toHaveAttribute('data-count', String(WITH_VECTORS))
+    await page.getByTestId('stylemap-sel-library').click()
+    await expect(page.getByTestId('pinned-banner')).toContainText(`${WITH_VECTORS} pictures from the Style Map`)
+  }
+  await openMap(page, { route: '#/library' })
+  await pinToLibrary()
+
+  // A reload shows the same set again, with its banner (the picks of the last visit are not kept, as always).
+  const setId = (await pins()).main!.id
+  const shown = page.waitForResponse((res) => res.url().includes('/api/images?') && res.url().includes(`collection_id=${setId}`))
+  await page.reload()
+  await expect(page.getByTestId('pinned-banner')).toContainText(`${WITH_VECTORS} pictures from the Style Map`)
+  expect(((await (await shown).json()) as { total: number }).total).toBe(WITH_VECTORS)
+
+  // "Show everything" forgets it: the next reload shows the whole search.
+  await page.getByTestId('pinned-back').click()
+  await expect(page.getByTestId('pinned-banner')).toHaveCount(0)
+  expect((await pins()).main).toBeUndefined()
+  await page.reload()
+  await expect(page.getByTestId('tile').first()).toBeVisible()
+  await expect(page.getByTestId('pinned-banner')).toHaveCount(0)
+
+  // The server dropped the set (pruned, the library cleared): the reload shows everything and says nothing.
+  await pinToLibrary()
+  const gone = (await pins()).main!.id
+  expect((await page.request.delete(`/api/collections/pinned/${gone}`, { headers: { 'X-SD-Library-Id': 'main' } })).ok()).toBe(true)
+  await page.reload()
+  await expect(page.getByTestId('tile').first()).toBeVisible()
+  await expect(page.getByTestId('pinned-banner')).toHaveCount(0)
+  await expect.poll(async () => (await pins()).main).toBeUndefined()
+  await expect(page.locator('[aria-live="polite"][role="status"] [data-tone]')).toHaveCount(0)
+})
+
+test('another library while the map is open: its own map is read, the old dots and the nearest-pictures list go', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  const made = (await (await page.request.post('/api/libraries', { data: { name: 'v4sm other library' } })).json()) as { id?: string; library?: { id: string } }
+  const other = made.id ?? made.library?.id
+  expect(other).toBeTruthy()
+  const switchTo = async (name: string) => {
+    await page.keyboard.press('Control+k')
+    await page.keyboard.type(`Switch to ${name}`)
+    const option = page.getByTestId('palette').getByRole('option').filter({ hasText: `Switch to ${name}` }).first()
+    await expect(option).toBeVisible()
+    await option.click()
+  }
+  try {
+    const ids = await seededIds(page)
+    await openMap(page, { route: '#/library' })
+    await page.locator(`[data-testid="tile"][data-id="${ids[`${PREFIX}04.png`]}"]`).dblclick()
+    await page.getByTestId('lightbox-stylemap').click()
+    await expect(page.getByTestId('stylemap-near-list')).toBeVisible({ timeout: 20_000 })
+    await expectDots(page, WITH_VECTORS - 1)
+
+    await switchTo('v4sm other library')
+    await expect(page).toHaveURL(/#\/tools\/stylemap$/)
+    await expect(canvas(page)).toHaveAttribute('data-points', '0', { timeout: 20_000 })
+    await expect(page.getByTestId('stylemap-scope')).toContainText('The library has no pictures yet.')
+    await expect(page.getByTestId('stylemap-near-list')).toHaveCount(0)
+    await expect(canvas(page)).toHaveAttribute('data-rings', '')
+
+    // Back to the first library: its dots return.
+    await switchTo('Main library')
+    await expectDots(page, WITH_VECTORS - 1)
+  } finally {
+    if (other) await page.request.delete(`/api/libraries/${encodeURIComponent(other)}`)
+  }
+})
+
 test('My axes: example pictures from the pick, named ends, Apply lays the map out along them and is kept; Back restores the model layout', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   const ids = await seededIds(page)
@@ -610,6 +714,14 @@ test('My axes: example pictures from the pick, named ends, Apply lays the map ou
   })
   await openMap(page)
   await expectDots(page, WITH_VECTORS - 1)
+  // A landmark lights its region's dots (the canvas counts them).
+  const firstMark = page.getByTestId('stylemap-landmark').first()
+  await expect(firstMark).toBeVisible({ timeout: 15_000 })
+  await firstMark.hover()
+  await expect(canvas(page)).not.toHaveAttribute('data-focused', '0')
+  const lit = (await canvas(page).getAttribute('data-focused'))!
+  await page.mouse.move(5, 5)
+  await expect(canvas(page)).toHaveAttribute('data-focused', '0')
   await landmarksOff(page)
   await page.getByTestId('stylemap-axes-toggle').click()
   await page.getByTestId('stylemap-axes-tab-custom').click()
@@ -664,6 +776,12 @@ test('My axes: example pictures from the pick, named ends, Apply lays the map ou
   await page.getByTestId('stylemap-custom-revert').click()
   await expect(page.getByTestId('stylemap-canvas-card')).not.toHaveAttribute('data-custom', 'true')
   await expect(page.getByTestId('stylemap-landmark').first()).toBeVisible({ timeout: 15_000 })
+  // The same landmark lights the same dots as before My axes: worked out from the dots on screen, not the axes' layout.
+  await page.getByTestId('stylemap-axes-close').click()
+  await page.getByTestId('stylemap-landmark').first().hover()
+  await expect(canvas(page)).toHaveAttribute('data-focused', lit)
+  await page.mouse.move(5, 5)
+  await page.getByTestId('stylemap-axes-toggle').click()
   await page.getByTestId('stylemap-axes-tab-model').click()
   await expect(page.getByTestId('stylemap-axes-hidden')).toHaveCount(0)
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('sd-stylemap-custom-axes:main') ?? 'null')?.applied)).toBe(false)
@@ -730,6 +848,78 @@ test('Chinese: the drag switch, the pick bar, the Library banner and My axes rea
   await page.getByTestId('stylemap-sel-library').click()
   await expect(page.getByTestId('pinned-banner')).toContainText(`来自画风地图的 ${WITH_VECTORS} 张`)
   await expect(page.getByTestId('pinned-back')).toContainText('显示全部')
+})
+
+test('Censor on 5,000 picked pictures tells stills from GIFs and videos in a few requests, not one per picture', async ({ page }) => {
+  test.setTimeout(240_000)
+  const BIG = 5000
+  const BIG_PREFIX = 'v4smbig-'
+  const BIG_TOKEN = 'v4smbigtoken'
+  const BIG_DIR = 'v4-stylemap-big'
+  runBackendScript(`
+import io, sqlite3, sys
+from pathlib import Path
+from PIL import Image
+sys.path.insert(0, ${JSON.stringify(path.join(repoRoot, 'backend'))})
+from utils.source_paths import indexed_image_path_casefold
+root = Path(${JSON.stringify(tmpRoot)}) / ${JSON.stringify(BIG_DIR)}
+root.mkdir(parents=True, exist_ok=True)
+buf = io.BytesIO()
+Image.new("RGB", (8, 8), (90, 120, 160)).save(buf, format="PNG")
+png = buf.getvalue()
+with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
+    for i in range(${BIG}):
+        # The two oldest (never on the library's loaded pages) are a GIF and a video.
+        ext = "gif" if i == ${BIG - 2} else "mp4" if i == ${BIG - 1} else "png"
+        name = f"${BIG_PREFIX}{i:04d}.{ext}"
+        path = (root / name).resolve()
+        path.write_bytes(png)
+        cur = conn.execute(
+            """INSERT INTO images (path, filename, generator, prompt, metadata_json, width, height, file_size, source_size,
+                   is_readable, metadata_status, created_at, library_order_time, user_rating, library_id)
+               VALUES (?, ?, 'nai', ?, '{}', 8, 8, ?, ?, 1, 'complete', datetime('now'), datetime('now', ?), 0, 'main')""",
+            (str(path), name, "${BIG_TOKEN}, 1girl", len(png), len(png), f"-{i} seconds"),
+        )
+        conn.execute("INSERT INTO image_path_identities (image_id, path_key) VALUES (?, ?)", (cur.lastrowid, indexed_image_path_casefold(str(path))))
+        conn.execute("INSERT OR IGNORE INTO image_prompt_tokens (image_id, token) VALUES (?, ?)", (cur.lastrowid, "${BIG_TOKEN}"))
+    conn.commit()
+print("ok")
+`)
+  try {
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    const asked = { byIds: 0, details: 0 }
+    page.on('request', (req) => {
+      const url = req.url()
+      if (url.includes('/api/images/by-ids')) asked.byIds += 1
+      else if (/\/api\/images\/\d+(\?|$)/.test(url)) asked.details += 1
+    })
+    await openMap(page, { route: '#/library', query: BIG_TOKEN })
+    await page.getByTestId('tile').first().click({ modifiers: ['Control'] })
+    await page.getByTestId('select-all-matching').click()
+    await expect(page.getByTestId('selection-bar')).toHaveAttribute('aria-label', `${BIG.toLocaleString('en')} picked`, { timeout: 30_000 })
+
+    // (The old lookup asked for every picture's details, 8 at a time: 41.9 s for these 5,000 on this PC, 2026-10-28.)
+    asked.byIds = 0
+    asked.details = 0
+    const started = Date.now()
+    await page.getByTestId('selection-bar').getByRole('button', { name: /More/ }).click()
+    await page.locator('[data-item="censor"]').click()
+    await expect(page).toHaveURL(/#\/batch\/\d+$/, { timeout: 120_000 })
+    const ms = Date.now() - started
+    madeBatches.add(Number(/#\/batch\/(\d+)$/.exec(page.url())![1]))
+    const line = `Censor AFTER (rows in chunks): ${BIG} pictures to an open censor batch in ${ms} ms; ${asked.byIds} row requests, ${asked.details} detail requests`
+    test.info().annotations.push({ type: 'perf', description: line })
+    console.log(line)
+    // 5,000 ids, 2,000 per request; the library's loaded pages need no request at all.
+    expect(asked.byIds).toBeLessThanOrEqual(3)
+    expect(asked.details).toBeLessThan(10)
+    // The GIF and the video (known only from those rows) went to the GIF and video censor, the rest to the batch.
+    await expect(page.getByTestId('mediacensor-picks')).toHaveText('Your selection: 1 GIF and 1 video')
+    const censorBatch = (await (await page.request.get(page.url().replace(/^.*#\/batch\//, '/api/batches/'), { headers: { 'X-SD-Library-Id': 'main' } })).json()) as { item_count: number }
+    expect(censorBatch.item_count).toBe(BIG - 2)
+  } finally {
+    cleanupImages(BIG_PREFIX, [BIG_DIR])
+  }
 })
 
 test('30,000 dots stay smooth: drawn, turned and pointed at without long frames', async ({ page }) => {

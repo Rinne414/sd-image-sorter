@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { ApiError } from '../../api/client'
 import { rawJson } from '../../api/raw'
+import { useApp } from '../../state/store'
 import { tr } from '../jobs/jobs'
 import { useArtistPrefs } from '../tools/artist/artistPrefs'
 import { cachedMapQuery } from './mapRequest'
@@ -207,3 +208,8 @@ function accept(answer: NearAnswer, signature: string, source: NearSource): void
   if (source.kind === 'library') setPreview({ id: source.id, members: 1 })
   focusQuery = false
 }
+
+// Another library: the picture asked about (and its answer) belong to the one left.
+useApp.subscribe((s, prev) => {
+  if (s.libraryId !== prev.libraryId) clearNear()
+})

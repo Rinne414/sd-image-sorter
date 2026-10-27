@@ -8,6 +8,7 @@ import { addJob, isQueueBusy, startingProgress, tr, useJobs, type Job } from '..
 import { isFinished, readProgress } from '../jobs/progress'
 import type { ModelCard } from '../tagging/taggers'
 import { modelConfig, useArtistPrefs } from '../tools/artist/artistPrefs'
+import { followPause, startClock, type RunClock } from './status'
 import type { Space } from './types'
 
 // "Build style index": POST /api/style-map/vectors/start over the map's scope,
@@ -21,8 +22,23 @@ const VECTORS = '/api/style-map/vectors'
 
 const toast = (text: string, tone: 'info' | 'error' = 'info') => useToasts.getState().push(text, tone)
 
-/** When each index job began (job id -> ms), for the time left; a job found running uses the backend's start. */
-export const indexStartedAt = new Map<string, number>()
+/**
+ * Each index job's working time (job id -> clock), for the time left: when it
+ * began (a job found running uses the backend's start) and how long it sat
+ * paused, so a pause never stretches the estimate.
+ */
+export const indexClocks = new Map<string, RunClock>()
+
+// Pause and resume (on the page or in the Jobs drawer) move the clocks.
+useJobs.subscribe((s) => {
+  const now = Date.now()
+  for (const job of s.jobs) {
+    const clock = job.kind === 'stylemap' ? indexClocks.get(job.id) : undefined
+    if (!clock) continue
+    const next = followPause(clock, job.progress.paused === true, now)
+    if (next !== clock) indexClocks.set(job.id, next)
+  }
+})
 
 /** The running (or last) index job in the drawer. */
 export const latestIndexJob = (jobs: readonly Job[]): Job | null => jobs.find((j) => j.kind === 'stylemap') ?? null
@@ -63,7 +79,7 @@ async function post(space: Space, token: string | null, settings: Record<string,
     }
     const total = Number(answer?.total ?? 0)
     const job = addJob({ kind: 'stylemap', progress: startingProgress(total), count: total })
-    indexStartedAt.set(job.id, Date.now())
+    indexClocks.set(job.id, startClock(Date.now()))
   } catch (error) {
     if (error instanceof ApiError && error.status === 409) toast(tr('stylemap.index.busy'), 'error')
     else toast(tr('stylemap.index.startFailed', { reason: (error as Error).message }), 'error')
@@ -126,7 +142,8 @@ export async function followRunningIndex(): Promise<void> {
     if (raw?.running !== true || isQueueBusy('stylemap')) return
     const progress = readProgress('stylemap', raw)
     const job = addJob({ kind: 'stylemap', progress, count: progress.total, adopted: true })
-    if (typeof raw.started_at === 'number') indexStartedAt.set(job.id, raw.started_at * 1000)
+    // The backend says when it began, not how long it was paused: a pause now starts counting from here.
+    if (typeof raw.started_at === 'number') indexClocks.set(job.id, startClock(raw.started_at * 1000, progress.paused === true))
   } catch {
     // unreachable for now: the page shows what it can
   }

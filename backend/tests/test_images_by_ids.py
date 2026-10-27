@@ -55,6 +55,26 @@ def test_images_of_another_library_are_left_out(test_client, tmp_path):
     assert response.json()["images"] == []
 
 
+def test_rows_say_which_are_videos(test_client, tmp_path):
+    """The censor splits a pick into stills and moving pictures from these rows (one request per chunk)."""
+    still = _add(test_client, tmp_path, "still.png")
+    gif = _add(test_client, tmp_path, "loop.gif")
+    # media_type is generated from the file name, so the .mp4 is a video as soon as it is added.
+    clip = _add(test_client, tmp_path, "clip.mp4")
+
+    response = test_client.post(
+        "/api/images/by-ids", json={"image_ids": [still, gif, clip]}
+    )
+
+    assert response.status_code == 200
+    rows = {row["id"]: row for row in response.json()["images"]}
+    assert rows[still]["media_type"] == "image"
+    assert rows[clip]["media_type"] == "video"
+    # A GIF is a still as far as the media type goes: its file name says it moves.
+    assert rows[gif]["media_type"] == "image" and rows[gif]["filename"] == "loop.gif"
+    assert rows[clip]["path"].endswith("clip.mp4")
+
+
 def test_an_empty_list_is_fine(test_client):
     response = test_client.post("/api/images/by-ids", json={"image_ids": []})
 
