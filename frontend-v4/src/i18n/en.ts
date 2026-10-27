@@ -142,7 +142,7 @@ export const en: Record<MessageKey, string> = {
   'query.clear': 'Clear',
   'query.warning': "Didn't understand: {token}",
 
-  'sort.label': 'Sort',
+  'sort.current': 'Sort: {name}',
   'sort.newest': 'Newest',
   'sort.user_rating': 'My stars',
   'sort.aesthetic': 'Aesthetic score',

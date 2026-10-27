@@ -125,6 +125,15 @@
   white-space: nowrap;
 }
 
+/* The info card open on a laptop narrows the bar: the search box needs the
+   width more than the count needs a steady edge. (No container query here: its
+   layout containment would move the Filter panel, which is position: fixed.) */
+@media (max-width: 1600px) {
+  .bar[data-card-open] .count {
+    min-width: 0;
+  }
+}
+
 /* value suggestions under the box */
 .suggest {
   position: absolute;

@@ -133,7 +133,7 @@ export function QueryBar({ total, about = false, inputRef, railToggle = true }: 
   }
 
   return (
-    <div className={styles.bar} {...drop.props} data-dropping={drop.over || undefined} data-testid="query-bar">
+    <div className={styles.bar} {...drop.props} data-dropping={drop.over || undefined} data-card-open={cardOpen || undefined} data-testid="query-bar">
       {drop.over && <div className={styles.dropHint}>{t('sim.dropHint')}</div>}
       {railToggle && !railOpen && (
         <button
@@ -258,7 +258,7 @@ export function QueryBar({ total, about = false, inputRef, railToggle = true }: 
         </div>
       )}
       <Menu
-        label={`${t('sort.label')}：${t(`sort.${sort}` as MessageKey)}${sortReverse && canReverse(sort) ? ' ↑' : ''}`}
+        label={`${t('sort.current', { name: t(`sort.${sort}` as MessageKey) })}${sortReverse && canReverse(sort) ? ' ↑' : ''}`}
         items={[
           ...SORTS.map((s) => ({
             id: s.base,

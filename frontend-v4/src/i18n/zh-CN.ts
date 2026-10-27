@@ -142,7 +142,7 @@ export const zhCN = {
   'query.clear': '清空',
   'query.warning': '看不懂：{token}',
 
-  'sort.label': '排序',
+  'sort.current': '排序：{name}',
   'sort.newest': '最新',
   'sort.user_rating': '我的评分',
   'sort.aesthetic': '美学分',
