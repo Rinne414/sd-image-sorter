@@ -1,0 +1,20 @@
+.select {
+  min-width: 140px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface-1);
+  color: var(--text);
+}
+
+.select:focus-visible {
+  border-color: var(--accent);
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.note {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+}

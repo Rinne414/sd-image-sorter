@@ -10,6 +10,7 @@ import { JobsRunner } from '../features/jobs/JobsRunner'
 import { useLibraryArrival } from '../features/libraries/useArrival'
 import { useLibraryExists } from '../features/libraries/useLibraryExists'
 import { startAutoRefresh } from '../features/library/autoRefreshRun'
+import { listenForCollected } from '../features/settings/desktop/collected'
 import { startFolderWatch } from '../features/settings/library/watchApi'
 import { appKey } from '../features/library/keys'
 import { ShortcutSheet } from '../features/library/ShortcutSheet'
@@ -48,6 +49,8 @@ export function NextApp() {
   // Settings › Library › checking the source folders for new images while idle (off unless switched on).
   useEffect(() => startAutoRefresh(), [])
   useEffect(() => startFolderWatch(), [])
+  // Quick collect (its own small window) added pictures: show them.
+  useEffect(() => listenForCollected(), [])
 
   useBackNav()
   useBackgroundErrors()

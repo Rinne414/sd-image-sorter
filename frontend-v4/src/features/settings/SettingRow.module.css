@@ -1,0 +1,44 @@
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 20px;
+  padding: 10px 0;
+  border-top: 1px solid var(--hairline);
+  min-width: 0;
+}
+
+.row:first-of-type {
+  border-top: 0;
+}
+
+.copy {
+  display: flex;
+  flex: 1 1 320px;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.title {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.body {
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.control {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}

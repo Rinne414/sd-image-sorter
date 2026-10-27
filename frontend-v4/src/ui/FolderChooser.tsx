@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { api, unwrapAnswer } from '../api/client'
 import { useT, type MessageKey } from '../i18n'
-import { folderNameProblem, joinFolder, tailOfPath, type FolderNameProblem } from '../lib/paths'
+import { folderNameProblem, joinFolder, parentFolder, tailOfPath, type FolderNameProblem } from '../lib/paths'
 import { Dialog } from './Dialog'
 import styles from './FolderChooser.module.css'
 import { Icon } from './Icon'
@@ -126,9 +126,14 @@ export function FolderChooser({
     if (userMoved.current) return
     const from = start ?? ''
     wanted.current = from
-    void browse(from, true).then((ok) => {
-      if (!ok && from && !userMoved.current) void browse('', true)
-    })
+    // A start that is not there yet (<output>/publish before the first export) opens at the nearest folder above it that is.
+    const open = async (path: string): Promise<void> => {
+      if (await browse(path, true) || userMoved.current) return
+      const up = parentFolder(path)
+      if (up) await open(up)
+      else if (path) await browse('', true)
+    }
+    void open(from)
   }, [browse, start])
 
   useLayer(naming, () => {

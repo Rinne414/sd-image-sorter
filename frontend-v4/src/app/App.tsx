@@ -5,6 +5,7 @@ import { CommandPalette } from '../features/command/CommandPalette'
 import { HomePage } from '../features/home/HomePage'
 import { JobsRunner } from '../features/jobs/JobsRunner'
 import { startAutoRefresh } from '../features/library/autoRefreshRun'
+import { listenForCollected } from '../features/settings/desktop/collected'
 import { startFolderWatch } from '../features/settings/library/watchApi'
 import { CollectHost } from '../features/collect/CollectHost'
 import { DropImport } from '../features/import/DropImport'
@@ -42,6 +43,8 @@ export function App() {
   // Settings › Library › checking the source folders for new images while idle (off unless switched on).
   useEffect(() => startAutoRefresh(), [])
   useEffect(() => startFolderWatch(), [])
+  // Quick collect (its own small window) added pictures: show them.
+  useEffect(() => listenForCollected(), [])
 
   // Browser and mouse Back go up one level instead of leaving the program.
   useBackNav()

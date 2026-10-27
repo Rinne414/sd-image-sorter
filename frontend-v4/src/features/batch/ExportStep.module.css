@@ -73,6 +73,17 @@
   color: var(--muted);
 }
 
+.folder[data-default] {
+  color: var(--text-2);
+}
+
+.folderDefault {
+  margin: 6px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}
+
 .choice {
   display: flex;
   align-items: flex-start;

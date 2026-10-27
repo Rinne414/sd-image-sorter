@@ -267,10 +267,16 @@
         "#btn-settings-desktop-shortcut-reset"
       ],
       "vopus": {
-        "missing": "Vopus has no Desktop settings section yet; the desktop shell opens the classic or Vopus page, and its tray menu works with either"
+        "at": "#/settings/desktop",
+        "find": "[data-testid=\"desktop-login\"]",
+        "needs": "desktop shell",
+        "note": "Start at login, keep running in the tray and the shortcut box exist only inside the desktop program (window.sdDesktop); a plain browser shows desktop-browser-note instead"
       },
       "next": {
-        "missing": "The new interface has no Desktop settings section yet"
+        "at": "#/settings/desktop",
+        "find": "[data-testid=\"desktop-login\"]",
+        "needs": "desktop shell",
+        "note": "Start at login, keep running in the tray and the shortcut box exist only inside the desktop program (window.sdDesktop); a plain browser shows desktop-browser-note instead"
       }
     },
     {
@@ -282,10 +288,14 @@
         "#btn-settings-desktop-quick-collect"
       ],
       "vopus": {
-        "missing": "Vopus has no Quick collect entrance; the desktop tray menu opens it for any interface"
+        "at": "#/settings/desktop",
+        "find": "[data-testid=\"desktop-quick-collect\"]",
+        "note": "Settings > Desktop > Quick collect > Open; works in a browser (popup) and in the desktop program"
       },
       "next": {
-        "missing": "The new interface has no Quick collect entrance; the desktop tray menu opens it for any interface"
+        "at": "#/settings/desktop",
+        "find": "[data-testid=\"desktop-quick-collect\"]",
+        "note": "Settings > Desktop > Quick collect > Open; works in a browser (popup) and in the desktop program"
       }
     },
     {
@@ -3946,10 +3956,12 @@
         "#btn-refresh-ui"
       ],
       "vopus": {
-        "missing": "Vopus has no hard-refresh button for the interface"
+        "at": "#/settings/about",
+        "find": "[data-testid=\"hard-refresh-button\"]"
       },
       "next": {
-        "missing": "There is no hard-refresh button for the interface in the new interface."
+        "at": "#/settings/about",
+        "find": "[data-testid=\"hard-refresh-button\"]"
       }
     },
     {
@@ -3962,10 +3974,14 @@
         "#btn-settings-background-unload"
       ],
       "vopus": {
-        "missing": "Vopus settings have no Background line yet; idle models are still freed with the classic setting"
+        "at": "#/settings/models",
+        "find": "[data-testid=\"background-idle\"]",
+        "note": "also background-unload"
       },
       "next": {
-        "missing": "The new interface has no Background line yet; idle models are still freed with the classic setting"
+        "at": "#/settings/models",
+        "find": "[data-testid=\"background-idle\"]",
+        "note": "also background-unload"
       }
     },
     {
@@ -3978,10 +3994,14 @@
         "#btn-settings-output-root-reset"
       ],
       "vopus": {
-        "missing": "Vopus has no single output-folder root; each export asks for its folder"
+        "at": "#/settings/disk",
+        "find": "[data-testid=\"output-root-input\"]",
+        "note": "also output-root-browse, output-root-reset"
       },
       "next": {
-        "missing": "There is no output folder root setting in the new interface; each export chooses its own folder."
+        "at": "#/settings/disk",
+        "find": "[data-testid=\"output-root-input\"]",
+        "note": "also output-root-browse, output-root-reset"
       }
     },
     {

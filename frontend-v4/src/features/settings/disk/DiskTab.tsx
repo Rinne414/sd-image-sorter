@@ -3,6 +3,7 @@ import { useT } from '../../../i18n'
 import { useApp } from '../../../state/store'
 import { libraryName } from '../../libraries/libraryName'
 import { Section } from '../about/Section'
+import { OutputRootSection } from '../output/OutputRootSection'
 import { useLT } from '../libraryText'
 import { useSaved } from '../useSaved'
 import { CleanSection, KeptSection, RuntimeSection } from './DiskParts'
@@ -38,6 +39,7 @@ export function DiskTab() {
     <div className={styles.sections} data-testid="disk-settings">
       {data.library_index && <IndexSection index={data.library_index} />}
       <ThumbSection data={data} />
+      <OutputRootSection />
       {/* new sizes after a clean or a refresh start the ticks over */}
       <CleanSection key={cleanKey(data.safe_to_clean ?? [])} entries={data.safe_to_clean ?? []} />
       <KeptSection entries={data.preserved ?? []} />

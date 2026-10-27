@@ -7,7 +7,7 @@ export type Page = 'home' | 'library' | 'batch' | 'sort' | 'settings' | 'tools'
 /** The pages behind the top-bar tabs and the logo; settings and tools remember one to go back to. */
 export type MainPage = 'home' | 'library' | 'batch' | 'sort'
 
-export const SETTINGS_TABS = ['appearance', 'library', 'models', 'ai', 'disk', 'about'] as const
+export const SETTINGS_TABS = ['appearance', 'library', 'models', 'ai', 'disk', 'desktop', 'about'] as const
 export type SettingsTab = (typeof SETTINGS_TABS)[number]
 
 export const TOOL_IDS = ['reader', 'reverse', 'promptlab', 'artist', 'lexicon', 'privacy'] as const

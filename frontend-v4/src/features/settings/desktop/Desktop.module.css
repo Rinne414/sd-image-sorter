@@ -1,0 +1,46 @@
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 860px;
+  min-width: 0;
+}
+
+.lead {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.hint {
+  margin: 8px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+
+.state {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.shortcut {
+  width: 190px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface-1);
+  color: var(--text);
+  text-align: center;
+  cursor: pointer;
+}
+
+.shortcut:focus {
+  border-color: var(--accent);
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.bad {
+  color: var(--danger);
+}
