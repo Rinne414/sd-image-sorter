@@ -2,6 +2,7 @@ import { useLibraries } from '../../../api/queries'
 import { useT } from '../../../i18n'
 import { libraryName } from '../../libraries/libraryName'
 import { useApp } from '../../../state/store'
+import { ExtensionSection } from '../../collect/ExtensionSection'
 import { useAutoRefresh } from '../../library/autoRefreshRun'
 import { useSelectionDialog } from '../../selection/dialogs'
 import { Section } from '../about/Section'
@@ -24,6 +25,7 @@ export function LibraryTab() {
       <AutoRefreshSection />
       <LibrariesSection />
       <TagBackupSection />
+      <ExtensionSection />
       <ClearSection />
     </div>
   )

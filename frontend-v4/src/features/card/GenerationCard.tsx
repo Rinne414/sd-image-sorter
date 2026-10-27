@@ -22,6 +22,7 @@ import { CopyButton, Section } from './CardParts'
 import { EdgeCodes, type EdgeFacts } from './sections/FilmEdge'
 import { CivitaiResources, Facts, NoParamsNote, OtherModels, PromptNodes, ReadingNote, SidecarCaption, useI2iLabel } from '../info/CardInfo'
 import { ColorSection } from '../info/ColorSection'
+import { CollectedFrom } from '../collect/CollectedFrom'
 import { sendToGenerator } from '../generator/generatorStore'
 import { copyAndSay, openImageFolder } from '../library/fileActions'
 import { menuItemsOf } from '../selection/actions'
@@ -126,6 +127,8 @@ function CardBody({ id, variant, look, onWord }: BodyProps) {
       )}
 
       {variant === 'panel' && image?.path && <FileRow id={id} path={image.path} />}
+
+      {image && <CollectedFrom id={id} />}
 
       {variant === 'panel' && look === 'plain' && gen && <EdgeCodes {...edge} inline keepCase />}
 

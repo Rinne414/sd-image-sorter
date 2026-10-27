@@ -1,0 +1,46 @@
+.text {
+  margin: 0 0 10px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.idRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0 0 8px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.code {
+  display: block;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: var(--fs-2);
+  overflow-wrap: anywhere;
+  max-height: 96px;
+  overflow-y: auto;
+}
+
+.idRow .code {
+  display: inline-block;
+  padding: 2px 6px;
+}
+
+.hint {
+  margin: 0 0 8px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+
+.warn {
+  margin: 0 0 8px;
+  color: var(--warn);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}

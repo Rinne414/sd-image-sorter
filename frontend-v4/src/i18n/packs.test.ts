@@ -39,6 +39,7 @@ const JARGON = new Set([
   // models, products, services
   ...['LoRA', 'ONNX', 'WD14', 'WD', 'VLM', 'CLIP', 'CCIP', 'TIPO', 'ToriiGate', 'Ollama', 'Kaloscope', 'PixAI', 'Camie', 'kohya', 'DINOv3'],
   ...['ComfyUI', 'NovelAI', 'NAI', 'Pixiv', 'Krea', 'Flux', 'FLUX', 'YOLO', 'SAM', 'SAM3', 'NudeNet', 'OppaiOracle', 'Anima', 'Danbooru'],
+  ...['Chrome', 'Edge', 'Firefox'],
   ...['Booru', 'Civitai', 'GitHub', 'HuggingFace', 'ModelScope', 'NVIDIA', 'OpenAI', 'Gemini', 'Anthropic', 'Claude', 'Google', 'Vertex'],
   ...['OpenRouter', 'Qwen', 'JoyCaption', 'EVA02', 'SwinV2', 'ViT', 'U2Net', 'UNet', 'rembg', 'Lucida', 'LSNet', 'PyTorch', 'Python'],
   ...['OneTrainer', 'SDXL', 'SD', 'Pony', 'Illustrious', 'NoobAI', 'A1111', 'WebUI', 'Forge', 'SynthID', 'ControlNet', 'FastEmbed', 'T5'],
@@ -64,7 +65,7 @@ const TYPED = new Set([
   ...['general', 'sensitive', 'questionable', 'explicit', 'comfyui', 'nai', 'webui', 'forge', 'square', 'portrait', 'landscape'],
   ...['warm', 'cool', 'neutral', 'red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink', 'brown', 'white', 'black', 'gray'],
   ...['today', '7d', 'YYYY-MM-DD', 'YYYY-MM', 'YYYY', 'score', 'width', 'height', 'brightness', 'saturation', 'unrated'],
-  ...['off', 'data', 'models', 'imports', 'kaloscope2.0', 'mychar'],
+  ...['off', 'data', 'models', 'imports', 'collected', 'kaloscope2.0', 'mychar'],
 ])
 
 /** Danbooru tags given as examples: tags are English by nature. */
