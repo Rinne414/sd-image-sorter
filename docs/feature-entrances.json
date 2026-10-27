@@ -212,10 +212,20 @@
         "#btn-collect-url-cancel"
       ],
       "vopus": {
-        "missing": "Vopus has no paste-to-collect yet; Ctrl+V in the classic gallery and Paste picture in its import dialog have it"
+        "at": "#/library",
+        "open": [
+          "[data-testid=\"import-button\"]"
+        ],
+        "find": "[data-testid=\"import-paste-picture\"]",
+        "note": "Ctrl+V on the library page saves a pasted picture or asks about a pasted picture address"
       },
       "next": {
-        "missing": "The new interface has no paste-to-collect yet"
+        "at": "#/library",
+        "open": [
+          "[data-testid=\"import-button\"]"
+        ],
+        "find": "[data-testid=\"import-paste-picture\"]",
+        "note": "Ctrl+V on the library page saves a pasted picture or asks about a pasted picture address"
       }
     },
     {
@@ -234,10 +244,14 @@
         "#modal-collected-source"
       ],
       "vopus": {
-        "missing": "Vopus has no browser extension settings, pairing prompt or source line yet; pairing and Revoke are in classic Settings, and collected pictures appear in every interface"
+        "at": "#/settings/library",
+        "find": "[data-testid=\"ext-settings\"]",
+        "note": "The pairing prompt (ext-pair-dialog) opens wherever you are when a browser extension asks; the source line shows on a collected picture's card"
       },
       "next": {
-        "missing": "The new interface has no browser extension settings, pairing prompt or source line yet"
+        "at": "#/settings/library",
+        "find": "[data-testid=\"ext-settings\"]",
+        "note": "The pairing prompt (ext-pair-dialog) opens wherever you are when a browser extension asks; the source line shows on a collected picture's card"
       }
     },
     {

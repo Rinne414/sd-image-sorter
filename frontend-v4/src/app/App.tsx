@@ -6,6 +6,7 @@ import { HomePage } from '../features/home/HomePage'
 import { JobsRunner } from '../features/jobs/JobsRunner'
 import { startAutoRefresh } from '../features/library/autoRefreshRun'
 import { startFolderWatch } from '../features/settings/library/watchApi'
+import { CollectHost } from '../features/collect/CollectHost'
 import { DropImport } from '../features/import/DropImport'
 import { useLibraryArrival } from '../features/libraries/useArrival'
 import { useLibraryExists } from '../features/libraries/useLibraryExists'
@@ -81,6 +82,7 @@ export function App() {
       <HealthDialog />
       <JobsRunner />
       <DropImport />
+      <CollectHost />
       <SelectionDialogs />
       <GeneratorDialog />
       <BatchDialogs />
