@@ -83,4 +83,6 @@ export const enDesktop: Record<keyof typeof zhCNDesktop, string> = {
   'desktop.out.feature.workflows': 'ComfyUI workflows',
   'desktop.out.feature.collected': 'Quick collect',
   'desktop.out.exportDefault': 'With no folder picked, files go to {path} (change it in Settings › Disk & cache).',
+  'desktop.palette.quickCollect': 'Open Quick collect',
+  'desktop.palette.unload': 'Free the AI models now',
 }

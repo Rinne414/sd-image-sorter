@@ -83,4 +83,6 @@ export const zhCNDesktop = {
   'desktop.out.feature.workflows': 'ComfyUI 工作流',
   'desktop.out.feature.collected': '快速收集',
   'desktop.out.exportDefault': '没有另选文件夹时存到 {path}（可在设置 › 磁盘与缓存里更改）。',
+  'desktop.palette.quickCollect': '打开快速收集',
+  'desktop.palette.unload': '立即释放 AI 模型',
 }

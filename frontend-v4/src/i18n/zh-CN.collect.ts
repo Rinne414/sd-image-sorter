@@ -89,4 +89,5 @@ export const zhCNCollect = {
   'collect.pair.pairedToast': '{browser} 已配对。在网页图片上右键即可保存到这里。',
   'collect.pair.deniedToast': '已拒绝配对，扩展不能保存图片。',
   'collect.pair.decideFailed': '无法保存你的回答',
+  'collect.palette.paste': '收集剪贴板里的图片',
 }

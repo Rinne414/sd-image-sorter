@@ -1,19 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLibraries } from '../../api/queries'
+import type { SettingsTab } from '../../lib/route'
 import { translate, useLang, useT, type Lang, type MessageKey, type Params } from '../../i18n'
 import { useApp } from '../../state/store'
 import { useTheme } from '../../theme'
 import { useLayer } from '../../ui/layers'
+import { useToasts } from '../../ui/toasts'
 import { recentBatches } from '../batch/addPicks'
 import { useBatches } from '../batch/batchApi'
 import { askNewBatch } from '../batch/dialogStore'
 import { BATCH_KINDS } from '../batch/labels'
+import { pasteFromClipboard } from '../collect/collectActions'
 import { useJobs } from '../jobs/jobs'
 import { libraryName } from '../libraries/libraryName'
 import { currentLibraryParams } from '../library/params'
 import { openRandom } from '../library/randomOpen'
 import { useShortcutSheet } from '../library/ShortcutSheet'
+import { useNavCustomizeOpen } from '../navcustom/navStore'
 import { paletteText, runnable, type ImageAction } from '../selection/actions'
 import { useBulkActions, useImageActions } from '../selection/actionOps'
 import { useSelectionDialog } from '../selection/dialogs'
@@ -27,6 +31,10 @@ import { useOtherLibrary } from '../sort/StageParts'
 import { continueSort, sortImages, useSortPending } from '../sort/sortStore'
 import { useStatusDialogs } from '../status/dialogs'
 import { useUpdates } from '../settings/about/updateStore'
+import { unloadMessages } from '../settings/background/background'
+import { unloadModelsNow } from '../settings/background/backgroundApi'
+import { openQuickCollect } from '../settings/desktop/shell'
+import { browserEnv, hardRefresh } from '../settings/refresh/hardRefresh'
 import { restartApp } from '../settings/restart'
 import { useUiScale } from '../settings/uiScaleStore'
 import { command, matches, type Command } from './commands'
@@ -60,6 +68,31 @@ const SHELL_OPS: ShellOps = {
     void useUpdates.getState().check(true)
   },
   restart: () => void restartApp(),
+}
+
+/** Open a Settings tab and bring one of its sections into view, with the focus on its first control. */
+function openSettingsAt(tab: SettingsTab, testId: string): void {
+  useApp.getState().openSettings(tab)
+  const reveal = (tries: number) => {
+    const section = document.querySelector<HTMLElement>(`[data-testid="${testId}"]`)
+    if (section) {
+      section.scrollIntoView({ block: 'center' })
+      section.querySelector<HTMLElement>('button:not([disabled]), input, select')?.focus()
+      return
+    }
+    if (tries > 0) requestAnimationFrame(() => reveal(tries - 1))
+  }
+  requestAnimationFrame(() => reveal(60))
+}
+
+/** Free the loaded AI models and say what happened. */
+async function unloadNow(lang: Lang): Promise<void> {
+  const text = (key: MessageKey, params?: Params) => translate(lang, key, params)
+  try {
+    for (const line of unloadMessages(await unloadModelsNow(), text)) useToasts.getState().push(line, 'info')
+  } catch (error) {
+    useToasts.getState().push(error instanceof Error ? error.message : String(error), 'error')
+  }
 }
 
 /** Turn the query bar to "by meaning" and put the caret in it. */
@@ -137,6 +170,8 @@ function Palette() {
       list.push(mk('sort-continue', 'palette.group.go', key, () => continueSort(), undefined, { where: sortElsewhere ?? '' }))
     }
     list.push(mk('import', 'palette.group.library', 'palette.cmd.import', () => useSelectionDialog.getState().showFor('import', null, 1)))
+    list.push(mk('paste-picture', 'palette.group.library', 'collect.palette.paste', () => void pasteFromClipboard()))
+    list.push(mk('quick-collect', 'palette.group.library', 'desktop.palette.quickCollect', () => openQuickCollect()))
     list.push(mk('libraries', 'palette.group.library', 'palette.cmd.libraries', () => useSelectionDialog.getState().showFor('libraries', null, 1)))
     if (useJobs.getState().jobs.length > 0) {
       list.push(mk('jobs', 'palette.group.library', 'palette.cmd.jobs', () => useJobs.getState().setDrawerOpen(true)))
@@ -151,6 +186,12 @@ function Palette() {
     if (picks.length > 0) for (const a of runnable(bulk)) list.push(fromAction(a, 'palette.group.selection', 'sel', lang))
     for (const a of runnable(single)) list.push(fromAction(a, 'palette.group.image', 'img', lang))
     list.push(...shellCommands(lang, SHELL_OPS))
+    list.push(mk('customize-places', 'palette.group.view', 'navcustom.open', () => useNavCustomizeOpen.getState().setOpen(true)))
+    list.push(mk('hard-refresh', 'palette.group.settings', 'desktop.refresh.title', () => void hardRefresh(browserEnv())))
+    list.push(mk('unload-models', 'palette.group.settings', 'desktop.palette.unload', () => void unloadNow(lang)))
+    list.push(mk('vlm-presets', 'palette.group.settings', 'aipresets.palette.presets', () => openSettingsAt('ai', 'vlm-preset-actions')))
+    list.push(mk('ai-defaults', 'palette.group.settings', 'aipresets.palette.defaults', () => openSettingsAt('ai', 'ai-defaults')))
+    list.push(mk('video-support', 'palette.group.settings', 'video.palette.support', () => openSettingsAt('models', 'video-support')))
     list.push(mk('shortcuts', 'lib.palette.groupHelp', 'lib.palette.shortcuts', () => useShortcutSheet.getState().open(s.page)))
     return list
   }, [lang, libraries.data, batches.data, picks, bulk, single, sortPending, sortElsewhere])

@@ -50,4 +50,6 @@ export const enAiPresets: Record<keyof typeof zhCNAiPresets, string> = {
   'aipresets.defaults.undone': 'Your earlier settings are back.',
   'aipresets.defaults.gpu': 'GPU',
   'aipresets.defaults.cpu': 'CPU',
+  'aipresets.palette.presets': 'VLM prompt presets (save, rename, delete)',
+  'aipresets.palette.defaults': 'AI defaults (save or reset)',
 }

@@ -50,4 +50,6 @@ export const zhCNAiPresets = {
   'aipresets.defaults.undone': '之前的设置已恢复。',
   'aipresets.defaults.gpu': 'GPU',
   'aipresets.defaults.cpu': 'CPU',
+  'aipresets.palette.presets': 'VLM 提示词预设（保存、改名、删除）',
+  'aipresets.palette.defaults': 'AI 默认设置（保存或恢复）',
 }

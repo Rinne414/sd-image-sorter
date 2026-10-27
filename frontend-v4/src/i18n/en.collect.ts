@@ -87,4 +87,5 @@ export const enCollect: Record<keyof typeof zhCNCollect, string> = {
   'collect.pair.pairedToast': '{browser} is paired. Right-click a picture on a web page to save it here.',
   'collect.pair.deniedToast': 'Pairing refused. The extension cannot save pictures.',
   'collect.pair.decideFailed': 'The answer could not be saved',
+  'collect.palette.paste': 'Collect the picture on the clipboard',
 }

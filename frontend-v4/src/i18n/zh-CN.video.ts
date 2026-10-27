@@ -85,4 +85,5 @@ export const zhCNVideo = {
   'video.job.running': '正在安装视频支持',
   'video.job.done': '视频支持已装好',
   'video.job.label': '视频支持',
+  'video.palette.support': '视频支持（安装 ffmpeg）',
 }

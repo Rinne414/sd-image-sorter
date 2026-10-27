@@ -85,4 +85,5 @@ export const enVideo: Record<keyof typeof zhCNVideo, string> = {
   'video.job.running': 'Installing video support',
   'video.job.done': 'Video support is installed',
   'video.job.label': 'Video support',
+  'video.palette.support': 'Video support (install ffmpeg)',
 }
