@@ -2094,10 +2094,14 @@
         "#disguise-output-folder"
       ],
       "vopus": {
-        "missing": "Vopus Privacy has no cover-picture disguise option"
+        "at": "#/tools/privacy",
+        "find": "[data-testid=\"privacy-mode-disguise\"]",
+        "note": "the Chat disguise mode of Privacy; its cover, pack and save-folder settings appear once it is chosen; make and restore are privacy-protect-all and privacy-restore-all with files in the queue"
       },
       "next": {
-        "missing": "Privacy scramble has no cover-picture (disguise) feature."
+        "at": "#/tools/privacy",
+        "find": "[data-testid=\"privacy-mode-disguise\"]",
+        "note": "same Privacy page, reached from More > Privacy scramble: the Chat disguise mode"
       }
     },
     {

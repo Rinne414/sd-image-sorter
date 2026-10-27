@@ -1,0 +1,170 @@
+/* The chat disguise's controls (left column) and its notices above the queue. */
+.select,
+.input,
+.number {
+  min-width: 0;
+  height: var(--control-h);
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-3);
+  border-radius: var(--radius);
+}
+
+.select,
+.input {
+  width: 100%;
+}
+
+.number {
+  width: 88px;
+}
+
+.select:focus,
+.input:focus,
+.number:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* what goes with the chosen cover: its picture, its buttons */
+.extra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--stage);
+}
+
+.color {
+  flex: none;
+  width: 36px;
+  height: var(--control-h);
+  padding: 2px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.inline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-left: 24px;
+}
+
+.inlineLabel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+}
+
+.inlineLabel .select {
+  width: auto;
+  max-width: 100%;
+}
+
+.advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.folderRow {
+  display: flex;
+  gap: 8px;
+}
+
+/* ---- above the queue ---- */
+.notices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notices:empty {
+  display: none;
+}
+
+.needsCover {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--warn);
+  background: var(--wash);
+}
+
+.needsCoverText {
+  flex: 1 1 240px;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.pack {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--ok);
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+
+.packThumb {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  background: var(--stage);
+  border-radius: var(--radius);
+}
+
+.packText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+  overflow-wrap: anywhere;
+}
+
+.packName {
+  color: var(--text);
+}
+
+.packActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* where a picture's file was written: on the card, under the status */
+.saved {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}

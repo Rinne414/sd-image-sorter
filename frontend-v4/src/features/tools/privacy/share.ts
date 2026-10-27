@@ -1,8 +1,10 @@
 import type { DragEvent } from 'react'
 import { useToasts } from '../../../ui/toasts'
 import { TOOL_RESULT_DRAG } from '../intake/intakeFiles'
+import { copyMade } from './disguise/disguiseShare'
+import { crc32 } from './engine/crc32'
 import { buildZip, type ZipEntry } from './engine/zip'
-import { resultName, uniqueNames, zipName } from './names'
+import { resultName, safeName, stemOf, uniqueNames, zipName } from './names'
 import { pt } from './privacyText'
 import { usePrivacy, type QueueItem } from './privacyStore'
 import { runJpeg } from './workerClient'
@@ -32,6 +34,14 @@ const isSimple = (item: QueueItem) => item.result?.compat === 'small_tomato'
 /** The file a download hands out: the PNG, or for Simple mode the JPEG made from it. */
 async function downloadable(item: QueueItem): Promise<{ name: string; blob: Blob; crc: number }> {
   const result = item.result!
+  if (result.disguise) {
+    // the file as the program wrote it, under the name it was saved with
+    return { name: result.disguise.fileName, blob: result.blob, crc: crc32(new Uint8Array(await result.blob.arrayBuffer())) }
+  }
+  if (result.restored) {
+    const name = `${safeName(item.rename?.trim() || `${stemOf(item.fileName)}_real`)}.png`
+    return { name, blob: result.blob, crc: crc32(new Uint8Array(await result.blob.arrayBuffer())) }
+  }
   if (!isSimple(item)) return { name: resultName(item.fileName, item.rename, '.png'), blob: result.blob, crc: result.crc }
   const jpeg = await runJpeg(result.blob)
   return { name: resultName(item.fileName, item.rename, '.jpg'), blob: jpeg.blob, crc: jpeg.crc }
@@ -49,6 +59,8 @@ export async function downloadItem(item: QueueItem): Promise<void> {
 
 export async function copyItem(item: QueueItem): Promise<void> {
   if (!item.result) return
+  // a disguise is copied as the file itself, by the program
+  if (item.result.disguise) return copyMade([item.result.disguise.token])
   if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
     toast(pt('privacy.copyUnsupported'), 'error')
     return
@@ -64,11 +76,12 @@ export async function copyItem(item: QueueItem): Promise<void> {
 /** Dragging a result out: the PNG as a file (chat apps, web pages) and as a download (Explorer). */
 export function dragResult(event: DragEvent, item: QueueItem): void {
   if (!item.result) return
-  const name = resultName(item.fileName, item.rename, '.png')
+  const name = item.result.disguise?.fileName ?? resultName(item.fileName, item.rename, '.png')
+  const type = name.toLowerCase().endsWith('.gif') ? 'image/gif' : 'image/png'
   const data = event.dataTransfer
   data.effectAllowed = 'copy'
-  data.items.add(new File([item.result.blob], name, { type: 'image/png' }))
-  data.setData('DownloadURL', `image/png:${name.replace(/:/g, '_')}:${new URL(item.result.url, location.href).href}`)
+  data.items.add(new File([item.result.blob], name, { type }))
+  data.setData('DownloadURL', `${type}:${name.replace(/:/g, '_')}:${new URL(item.result.url, location.href).href}`)
   data.setData(TOOL_RESULT_DRAG, '1')
 }
 

@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useT } from '../../../i18n'
 import introStyles from '../intake/Intake.module.css'
 import { IntakeButtonsMany } from '../intake/Intake'
 import { useIntakeFiles } from '../intake/useIntake'
@@ -23,6 +24,8 @@ function useLibraryHandoff(): void {
 
 function EmptyQueue() {
   const t = usePT()
+  const d = useT()
+  const disguise = usePrivacy((s) => s.options.mode === 'disguise')
   return (
     <section className={introStyles.zone} data-testid="intake-zone">
       <div className={introStyles.frame} aria-hidden />
@@ -30,7 +33,7 @@ function EmptyQueue() {
       <div className={introStyles.buttons}>
         <IntakeButtonsMany onFiles={addFiles} pickLabel={t('privacy.pick')} primary />
       </div>
-      <p className={introStyles.hint}>{t('privacy.hint')}</p>
+      <p className={introStyles.hint}>{disguise ? d('disguise.emptyHint') : t('privacy.hint')}</p>
     </section>
   )
 }
