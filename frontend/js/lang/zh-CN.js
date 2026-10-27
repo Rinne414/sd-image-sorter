@@ -48,6 +48,8 @@ window.I18nLang_zhCN = {
     'dup.confirmApplyAll': '保留每一组的建议最佳图片，把其余 {count} 张移入回收站？',
     'dup.deleted': '已把 {count} 张图片移入回收站',
     'dup.deleteFailed': '回收站操作失败',
+    'dup.deletedPartial': '已把 {count} 张图片移入回收站；{failed} 张没能移走。',
+    'dup.deleteUnknown': '没能确认这次移入回收站的结果。下方列表显示的是现在剩下的图。',
     'dup.alreadyRunning': '查重扫描已在进行中',
     'dup.scanStartFailed': '无法启动查重扫描',
     'dup.scanDone': '查重扫描完成',

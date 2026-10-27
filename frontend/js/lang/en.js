@@ -46,6 +46,8 @@ window.I18nLang_en = {
     'dup.confirmApplyAll': 'Keep the suggested best image of EVERY group and move the other {count} images to the trash?',
     'dup.deleted': 'Moved {count} images to trash',
     'dup.deleteFailed': 'Trash operation failed',
+    'dup.deletedPartial': 'Moved {count} images to trash; {failed} could not be moved.',
+    'dup.deleteUnknown': 'Could not find out how the move to the trash ended. The list below shows what is left.',
     'dup.alreadyRunning': 'A duplicate scan is already running',
     'dup.scanStartFailed': 'Could not start the duplicate scan',
     'dup.scanDone': 'Duplicate scan finished',

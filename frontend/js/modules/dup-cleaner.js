@@ -341,12 +341,15 @@
         } else if (!window.confirm(t('dup.confirmDelete', 'Move {count} images to the trash?', { count: ids.length }))) {
             return;
         }
-        const ok = await runDelete(ids);
-        if (ok) {
+        const outcome = await runDelete(ids);
+        if (!reportTrashOutcome(outcome)) return;
+        window.App?.markGalleryNeedsRefresh?.();
+        if (outcome.moved === ids.length) {
             card.remove();
             adjustSummaryAfterDelete(ids.length);
-            showToast(t('dup.deleted', 'Moved {count} images to trash', { count: ids.length }), 'success');
-            window.App?.markGalleryNeedsRefresh?.();
+        } else {
+            // Some pictures are still there: show the groups as they are now.
+            await loadGroups(true);
         }
     }
 
@@ -381,16 +384,37 @@
             return;
         }
         if (ids.length === 0) return;
-        const ok = await runDelete(ids);
-        if (ok) {
-            showToast(t('dup.deleted', 'Moved {count} images to trash', { count: ids.length }), 'success');
+        const outcome = await runDelete(ids);
+        if (reportTrashOutcome(outcome)) {
             window.App?.markGalleryNeedsRefresh?.();
             await loadGroups(true);
         }
     }
 
+    // Say what a trash run did: how many pictures moved, how many could not
+    // and the first reason. Returns false when nothing ran.
+    function reportTrashOutcome(outcome) {
+        if (!outcome) return false;
+        if (outcome.moved === null) {
+            showToast(t('dup.deleteUnknown', 'Could not find out how the move to the trash ended. The list below shows what is left.'), 'warning');
+            return true;
+        }
+        if (outcome.failed > 0) {
+            const line = t('dup.deletedPartial', 'Moved {count} images to trash; {failed} could not be moved.', {
+                count: outcome.moved,
+                failed: outcome.failed,
+            });
+            showToast(outcome.reason ? `${line} ${outcome.reason}` : line, 'warning');
+            return true;
+        }
+        showToast(t('dup.deleted', 'Moved {count} images to trash', { count: outcome.moved }), 'success');
+        return true;
+    }
+
+    // What the trash run did: { moved, failed, reason }, moved = null when the
+    // run was lost track of, or null when it did not run.
     async function runDelete(ids) {
-        if (STATE.deleting) return false;
+        if (STATE.deleting) return null;
         STATE.deleting = true;
         try {
             const useBackground = ids.length >= BACKGROUND_DELETE_THRESHOLD;
@@ -403,15 +427,26 @@
                     background: useBackground,
                 }),
             });
-            if (!r.ok) throw new Error(`delete ${r.status}`);
-            const data = await r.json();
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(data.error || data.detail || `HTTP ${r.status}`);
             if (useBackground && data.job_id) {
-                await waitForJob(data.job_id);
+                const job = await waitForJob(data.job_id);
+                if (!job) return { moved: null, failed: null, reason: '' };
+                const moved = Number(job.result?.deleted) || 0;
+                const sample = Array.isArray(job.error_samples) ? job.error_samples[0] : '';
+                // A finished job's message is its success line, not a reason.
+                const stopped = job.status === 'done' ? '' : job.message;
+                return { moved, failed: ids.length - moved, reason: sample || stopped || '' };
             }
-            return true;
-        } catch {
-            showToast(t('dup.deleteFailed', 'Trash operation failed'), 'error');
-            return false;
+            const failedList = Array.isArray(data.failed) ? data.failed : [];
+            const moved = Number(data.deleted) || 0;
+            return { moved, failed: ids.length - moved, reason: failedList[0]?.error || '' };
+        } catch (err) {
+            const context = t('dup.deleteFailed', 'Trash operation failed');
+            showToast(typeof window.formatUserError === 'function'
+                ? window.formatUserError(err, context)
+                : `${context}: ${err.message}`, 'error');
+            return null;
         } finally {
             STATE.deleting = false;
         }
@@ -422,12 +457,12 @@
             await new Promise((resolve) => setTimeout(resolve, POLL_MS));
             try {
                 const r = await fetch(`/api/bulk-jobs/${jobId}`);
-                if (!r.ok) return;
+                if (!r.ok) return null;
                 const job = await r.json();
                 updateProgress(job);
-                if (['done', 'cancelled', 'error'].includes(job.status)) return;
+                if (['done', 'cancelled', 'error'].includes(job.status)) return job;
             } catch {
-                return;
+                return null;
             }
         }
     }
