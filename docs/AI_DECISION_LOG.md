@@ -3346,3 +3346,26 @@ A new "🎌 Apply Anime LoRA defaults" button in Step B re-applies these in one 
   `AGENTS.md` is untracked and ignored again, next to `CLAUDE.md`. The local copy stays, so agents working in this checkout still read it; a fresh public clone has no agent instructions. History is not rewritten because nothing private was published. Release archives already excluded the file.
 - Do not regress:
   Do not add `AGENTS.md`, `CLAUDE.md`, handoffs or other agent files back to the repository, and keep CI and release tests independent of them.
+
+### ADR-AI-20261027-117: A picture that cannot be read keeps what was worked out from it
+
+- Status: accepted
+- Area: library data
+- Context:
+  ADR-style fix 39b636ae (2026-08-19) stopped an unreadable mark from deleting tags, but still dropped the pixel work: AI and natural-language captions, aesthetic scores, the AI rating, the CLIP embedding, `tagged_at` and the content fingerprint. Listing the gallery with a drive unplugged was enough, a caption from a cloud model the user pays for costs money to make again, and with the digest gone a different picture later at the same path kept the old picture's tagger tags.
+- Decision:
+  An unreadable mark clears nothing derived from the picture (`_should_clear_derived_state` is False for it). A scan or rewrite that cannot read the file also keeps the last readable `source_mtime_ns`/`source_size` (`_should_hold_source_pair_while_unreadable`), so the next readable scan reads the file again and compares digests: the same picture keeps everything, a different one loses the machine's work (hand-typed tags stay). Consumers that must leave unreadable rows out already filter `is_readable` (similarity, duplicates, style map ids, gallery, AI queues); the aesthetic counts now do too.
+- Do not regress:
+  Do not clear pixel caches on an unreadable mark, and do not record an unreadable file's mtime/size next to a kept digest.
+
+### ADR-AI-20261027-118: Exact caption token counts per base model, Krea 2 keeps 507
+
+- Status: accepted
+- Area: dataset check
+- Context:
+  3.9.0 counted Anima exactly and estimated every other base model; Krea 2's limit was written as 512.
+- Decision:
+  SDXL (and no base model) counts with CLIP ViT-L/14 (`openai/clip-vit-large-patch14` tokenizer.json, MIT): SDXL's two text encoders share its vocabulary and merges, and the fast tokenizer counted the same as transformers' CLIPTokenizer with ftfy (what kohya's sd-scripts uses) on 4,000 generated captions, without start and end tokens (75 fit). FLUX counts with T5 v1.1 XXL (512). Krea 2 counts with Qwen3-0.6B's tokenizer: Qwen/Qwen3-VL-4B-Instruct's has the same vocabulary, merges, pre-tokenizer and added tokens and gave the same ids on 4,000 captions (krea/Krea-2-Raw's own copy is gated). The diffusers Krea2Pipeline (v0.42.1) prefixes a 34-token system prompt, truncates at 512 + 34 - 5 and drops the prefix, so 507 tokens of a caption are read. Status and downloads are per profile; `test_token_budgets_contract.py` holds both interfaces' limits to the backend's.
+- Do not regress:
+  Do not put Krea 2 back at 512, and do not count another model with a tokenizer whose identity was not checked.
+
