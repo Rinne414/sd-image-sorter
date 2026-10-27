@@ -1560,6 +1560,17 @@ a:hover,
     color: var(--text);
 }
 
+/* On a picture (grid mode) the number and the name sit over light thumbnails
+   too: a 0.14 wash and a transparent strip left them nearly invisible there
+   (since the 2026-08 restyle). They get the dark chrome the select toggle uses. */
+#view-dataset .dataset-queue-grid-mode .dataset-queue-order {
+    background: var(--chrome-on-image);
+}
+
+#view-dataset .dataset-queue-grid-mode .dataset-queue-meta {
+    background: linear-gradient(180deg, rgba(14, 14, 15, 0), rgba(14, 14, 15, 0.82));
+}
+
 #view-dataset .dataset-selection-summary {
     color: var(--pink);
     font-family: var(--font-mono);
