@@ -1,71 +1,61 @@
-## v3.9.0 — 数据集检查新增三项 / Dataset Check: Subject Counts, Blur, Anima Tokens
+## v3.9.1 — 文件夹图检查 + 精确 token / Folder Checks + Exact Tokens
 
-数据集检查新增：人数标签冲突修正、糊图提示、Anima 精确 token 数。
+检查覆盖文件夹图，各底模精确计 token；读不到的图保留 AI 结果；多处卡顿修复。
 
-Dataset Check adds subject-count fixes, blur hints and exact Anima token counts.
+Checks cover folder pictures; exact tokens per model; unreadable pictures keep AI work.
 
 ---
 
 ## Fixed / 修复
 
-- **Subject-count conflicts in the Check step / 检查步骤的人数标签冲突**: a caption that says `1girl` and `2girls` (or `multiple girls`), or `solo` beside two or more people, is listed with a fix to preview. The fix keeps the higher count and takes `solo` off multi-subject pictures (`solo_focus` is left alone); you tick the pictures to change and apply them in one undoable step. The idea is from BooruDatasetTagManagerPlus; the code is new.
-  - 同一张图的 caption 里 `1girl` 和 `2girls`（或 `multiple girls`）并存，或多人图带 `solo`，会列出可预览的修正：保留较高的人数、去掉多人图上的 `solo`（不动 `solo_focus`），勾选要改的图后一步应用，可一步撤销。思路来自 BooruDatasetTagManagerPlus，代码为新写。
-- **Exact Anima token counts in the Check step / 检查步骤里的 Anima 精确 token 数**: with the base model set to Anima, every caption is counted with the two tokenizers Anima reads it with, Qwen3-0.6B and T5 v1.1 XXL, and "too long" means either count is over 512. The two small tokenizer files (about 14 MB, Apache-2.0) are downloaded once on request, pinned and SHA-256 verified; until then the old estimate stays and says it is an estimate. The idea is from dataset-annotation-studio (Apache-2.0); the counting code is new.
-  - 底模设为 Anima 时，每条 caption 都用 Anima 读取它的两个分词器（Qwen3-0.6B 和 T5 v1.1 XXL）精确计数，任一计数超过 512 就算太长。两个很小的分词器文件（约 14 MB，Apache-2.0）按需下载一次，固定版本并校验 SHA-256；在此之前仍用旧的估算，并标明是估算。思路来自 dataset-annotation-studio（Apache-2.0），计数代码为新写。
-- **Blurry and very flat pictures in the Check step / 检查步骤里的糊图和过平图**: pictures that may be soft or blurry (low Laplacian variance) or are very flat (almost one colour) are listed as hints with their numbers. They are scored on the CPU in a background job (300 pictures take about 3 seconds), cached per file, and never deleted. The blur threshold (default 50, chosen on 1,000 real anime pictures plus 10 blurred by hand; 0 skips it) can be changed; no threshold separates soft-shaded art from real blur, so the hint only says "may be". How it was chosen, and where it is weak, is written in `docs/MODELS_CONSIDERED.md`. The idea is from lora-dataset-studio (non-commercial licence, so only the idea; the code is new).
-  - 可能偏软或糊（拉普拉斯方差低）、或过于平（几乎同一种颜色）的图，会作为提示列出并带上数值。分数用 CPU 在后台任务里算（300 张约 3 秒），按文件缓存，从不删除文件。清晰度阈值可改（默认 50，依据 1,000 张真实二次元图和 10 张手工模糊的图；0 为不查糊图），没有任何阈值能把柔和上色和真的糊分开，所以提示只说“可能”；阈值怎么定的、哪里不准，写在 `docs/MODELS_CONSIDERED.md`。思路来自 lora-dataset-studio（非商业许可，只借思路，代码为新写）。
-- **The same three checks in the classic interface / 经典界面里的同样三项检查**: the classic Dataset Maker now has what Vopus got first. The Review Cockpit health check lists subject-count conflicts with a tick per picture, one Apply and one Undo. The Quality Audit gets "Blurry / flat" (a sharpness field, scored in the background with progress and a Stop button, shown as badges that filter the queue) and "Long captions" (an estimate until Anima's two tokenizer files, about 14 MB, are downloaded on request; then exact Qwen3 and T5 counts, also in the caption editor's counter).
-  - 经典数据集制作现在也有 Vopus 先得到的三项检查。审阅驾驶舱的健康检查会列出人数标签冲突，可逐张勾选、一键应用、一键撤销；审计里新增「糊图 / 过平」（清晰度输入框，后台评分，有进度和停止按钮，结果是可过滤队列的徽章）和「过长的 caption」（Anima 的两个分词器文件约 14 MB，按需下载前只是估算，下载后用 Qwen3 和 T5 精确计数，caption 编辑器下的计数也一样）。
-- **Limits of the new checks / 新检查的限制**: subject-count fixes work on Library pictures, not on folder pictures; a conflicting tag that comes from the batch's common tags cannot be removed from one picture's caption (a message says so), and Undo restores only the captions not edited after the fix. The blur threshold of 50 was chosen on 1,000 ComfyUI pictures judged by a model, not rated by people, plus copies blurred by hand: soft or dark anime art can still be listed, so raise the field (for example to 60) or set it to 0 to skip blur. Exact token counts are for Anima only; other base models keep the estimate.
-  - 人数标签修正只对图库里的图有效，文件夹里的图不行；冲突的标签如果来自这批图的通用标签，就没法只从一张图的 caption 里去掉（会有提示）；撤销只恢复修正之后没有再编辑过的 caption。清晰度阈值 50 是用 1,000 张 ComfyUI 图（由模型判断，不是人工评分）和手工模糊的副本定的：柔和或偏暗的二次元图仍可能被列出，可以把数值调高（例如 60），或设为 0 不查糊图。精确 token 数只针对 Anima，其他底模仍是估算。
-- **Dataset export waits for caption versions / 数据集导出等 caption 版本读完**: a project reads its saved caption versions after it opens, page by page in a large project. Until they are read, Export and Check are disabled and say "Reading the project's caption versions..."; before, they could be pressed and showed an English "Saved caption versions are not loaded" in either language, and the check stayed failed until it was run again. A failed read says "Can't read the project's caption versions right now. Reload the project, then export.", and its message no longer says "Could not save caption version".
-  - 项目打开后会读取保存的 caption 版本，大项目分页读取。读完之前「导出」和「检查」会停用，并显示「正在读取项目的 caption 版本...」；以前可以按下，中英文界面都会出现英文的 "Saved caption versions are not loaded"，检查会一直停在失败，要再跑一次。读取失败时提示「现在读不到项目的 caption 版本。重新载入项目后再导出。」，失败消息也不再写成「无法保存 caption 版本」。
-- **"Empty captions" in the classic Quality Audit / 经典审计里的「空 caption」**: Library pictures were judged by their Library tags, so a picture with a caption typed in the Dataset Maker was listed as "would export empty .txt files", and one whose caption was cleared there was not. The check now reads the caption each picture exports, for Library and folder pictures alike (Vopus already did).
-  - 图库里的图以前按图库标签判断，所以在数据集制作里打了 caption 的图会被列为「会导出空的 .txt」，在这里清空了 caption 的图反而不会。现在图库图和文件夹图一样，按每张图实际导出的 caption 判断（Vopus 本来就是这样）。
-- **Style Map recompute / 画风地图重新计算**: asking for a recompute again (or from a second tab) while the same map is being computed takes that result instead of computing it a second time.
-  - 同一张画风地图正在计算时再要求重新计算（或从另一个标签页），会直接用这次的结果，不再重算一遍。
+- **Pictures that cannot be read keep their AI work / 读不到的图保留 AI 结果**: A picture whose drive was unplugged, or whose file would not open, lost its AI and natural-language captions, aesthetic scores, AI rating and similarity data the moment the gallery listed it, and a caption from a paid cloud model cost money to make again. They stay now. When the file is back, the program compares it with what it had: the same picture keeps everything; a different picture at the same path loses the machine's work (it used to keep the old picture's AI tags), and hand-typed tags stay either way.
+  - 图所在的硬盘拔掉、或文件打不开时，图库一列出它，AI 和自然语言 caption、美学分数、AI 评级和相似度数据就会被清掉；用付费云端模型生成的 caption 还得再花钱重做。现在都会保留。文件回来后程序会和原来的比对：同一张图全部保留；同一路径换成了别的图时才清掉 AI 结果（以前反而会留下旧图的 AI 标签），手打的标签都保留。
+- **Dataset checks cover folder pictures / 数据集检查包含文件夹里的图**: Pictures imported from a folder were skipped by the health check ("local imports are not in the DB yet") and by character purity (CCIP), so a dataset built from a folder could not be checked. Both read them now, in the classic interface and Vopus: subject-count and trigger fixes apply to them too, and a flagged picture can be located. The health check's spelling, framing and frequency checks read the tags that export instead of the Library's tags.
+  - 从文件夹导入的图以前会被健康检查（“本地导入的图片尚未入库”）和角色纯度（CCIP）跳过，用文件夹做的数据集没法检查。现在经典界面和 Vopus 都会检查它们：人数标签和触发词的修正同样适用，被标出的图也能定位。健康检查的拼写、构图和频率检查改为读取实际导出的标签，而不是图库标签。
+- **Exact token counts for every base model / 所有底模都有精确 token 数**: Only Anima was counted exactly; now SDXL (and no base model) counts with CLIP, FLUX with T5 and Krea 2 with Qwen3, each with its own one-time download (2 to 14 MB). Krea 2 keeps 507 tokens of a caption, not 512: its prompt template takes the rest. The tokenizers were checked to count the same as the ones the trainers and the model use, on 4,000 captions each.
+  - 以前只有 Anima 能精确计数；现在 SDXL（以及未选底模）用 CLIP、FLUX 用 T5、Krea 2 用 Qwen3 计数，各自按需下载一次（2 到 14 MB）。Krea 2 的 caption 最多读 507 个 token，而不是 512：剩下的被它的提示词模板占用。每个分词器都在 4,000 条 caption 上核对过，与训练器和模型实际使用的计数一致。
+- **Common tags in the Vopus subject-count fix / Vopus 人数修正里的通用标签**: A count tag that came from the batch's common tags (such as "solo") could not be taken off one picture. The fix now offers to move it into the captions: every other picture keeps it, written into its caption where it is missing, then Apply takes it off the conflicting ones. One Undo puts both back, the tag in its old place among the common tags.
+  - 来自批次通用标签的人数标签（例如“solo”）以前没法只从一张图上去掉。现在修正会提供把它移进 caption：其他图都保留它（缺的会写进 caption），然后“应用”就能把它从有冲突的图上去掉。一次撤销会把两边都还原，标签回到通用标签里原来的位置。
+- **No more freezes from long work / 长时间操作不再卡住程序**: Sending pictures to the trash (about 35 ms each), duplicate cleanup, image protect/restore (3 to 13 s a picture), browsing a slow folder, listing a library on an unplugged drive (over ten minutes for 80,000 pictures before) and 34 other actions whose work grows with the library ran on the server's main loop and held up every other request. They run beside it now.
+  - 移到回收站（每张约 35 毫秒）、清理重复图、图片加密/还原（每张 3 到 13 秒）、浏览较慢的文件夹、列出拔掉硬盘上的图库（8 万张以前要十多分钟），以及另外 34 个随图库变大而变慢的操作，以前都在服务器主循环上执行，会卡住其他所有请求。现在都在旁边执行。
+- **Honest results / 结果如实说明**: Duplicate cleanup said "Moved N" with N = the pictures it asked to move; it now says how many moved and why the rest did not. A picture that went to the trash while its gallery entry could not be removed says so. Manual Sort says when it cannot save its place. Keep/Reject decisions that could not be saved to a collection keep a Retry. AI captions no longer read an error answer as "Done! 0 captioned". A failed combined export says why. Thirteen error messages showed "HTTP 500" instead of the reason; they show the reason.
+  - 清理重复图以前说“已移动 N 张”，N 是要移动的数量；现在会说实际移了几张、其余为什么没移。移进回收站但图库条目没能删掉的图会说明。手动排序存不了进度时会提示。留/汰整理里没能存进收藏的决定会保留“重试”。AI caption 不再把错误回应当成“完成！0 张”。合并导出失败会说明原因。13 处错误提示以前只显示“HTTP 500”，现在显示原因。
+- **Controls no longer stay stuck / 按钮不再卡住**: GIF/video censoring kept Start greyed out after one poll got no answer; it keeps asking, says when it lost contact and when it is back, and frees Start for a job the program no longer knows. The restart banner's buttons work again when a restart never comes back. A Vopus sort-by-rules undo that left some images can run again for them.
+  - GIF/视频打码只要一次轮询没有回应，“开始”就一直灰着；现在会继续询问，失去联系和恢复时都会提示，程序已不认得的任务会让“开始”恢复可用。重启一直没回来时，重启横幅上的按钮会恢复可用。Vopus 按规则整理的撤销若有几张没能还原，可以再撤销一次。
+- **Readable at a glance / 一眼看得清**: On light pictures the Dataset Maker grid's queue numbers and file names were nearly invisible (1.03:1 contrast); they sit on a dark backdrop now. The Censor queue's "1 selected" no longer wraps into two lines beside All / None / Filter. The folder browser opens the nearest folder that exists and says why, instead of jumping to the drive list.
+  - 在浅色图片上，数据集制作网格里的序号和文件名几乎看不见（对比度 1.03:1）；现在有深色底衬。打码队列里的“已选 1 张”不再挤成两行。文件夹浏览器打不开某个文件夹时，会打开最近一层能打开的文件夹并说明原因，不再直接跳到驱动器列表。
 
 ---
 
 ## Upgrading / 升级注意
 
-- Nothing to do. The exact Anima counts download two tokenizer files (about 14 MB, from Hugging Face, pinned and SHA-256 checked) and install the `tokenizers` package the first time you ask for them; until then the estimate is shown and labelled.
-  - 无需操作。第一次要 Anima 精确计数时，会下载两个分词器文件（约 14 MB，来自 Hugging Face，固定版本并校验 SHA-256）并安装 `tokenizers` 组件；在此之前显示估算，并标明是估算。
+- Nothing to do. Exact token counts for a base model download its tokenizer files the first time you ask (SDXL and FLUX about 2 MB, Krea 2 about 11 MB, Anima about 14 MB; files Anima already downloaded also count Krea 2 and FLUX). Pictures that were already marked unreadable before this update had their AI work cleared then; it cannot be brought back.
+  - 无需操作。某个底模第一次要精确 token 数时，会下载它的分词器文件（SDXL 和 FLUX 约 2 MB，Krea 2 约 11 MB，Anima 约 14 MB；Anima 已下载的文件也能给 Krea 2 和 FLUX 计数）。本次更新前已被标为读不到的图，当时清掉的 AI 结果无法找回。
 
 ---
 
 ## Validation / 验证
 
-GitHub CI run 40414067489 (Linux full suite with browser tests and click coverage, macOS, Windows, Linux portable x86_64 and aarch64): 5 of 5 green; backend 9,131 passed; browser tests 1,943 passed, 0 failed, 0 flaky. Locally, without retries: the 33 dataset, Find Moved Images and Smart Tag browser spec files (324 tests) and the audit spec (13 tests). The new tests for Export waiting on caption versions, the failed-read message, the Style Map recompute and the empty-caption check fail on 3.8.1's code and pass now. On a fresh 3.9.0 Windows package, as a new user with real pictures: a typed 1girl, 2girls, solo caption got the subject-count fix (2girls kept, 1girl and solo taken off, one Undo); the audit scored four pictures and listed the blurred and the flat one; Anima showed the estimate, downloaded its two tokenizers (14 MB, into the package's own folder) and then counted exactly.
-  - GitHub CI（40414067489：Linux 完整测试含浏览器测试和点击覆盖、macOS、Windows、Linux 便携版 x86_64 与 aarch64）5 项全部通过；后端 9,131 通过；浏览器测试 1,943 通过、0 失败、0 个偶发。本机（不重试）：数据集、查找移动的图片和 Smart Tag 的 33 个浏览器测试文件（324 个测试）以及审计测试（13 个）。新加的测试（导出等 caption 版本、读取失败的提示、画风地图重新计算、空 caption 检查）在 3.8.1 的代码上失败、现在通过。在全新的 3.9.0 Windows 包里以新用户身份用真实图片走了一遍：输入 1girl, 2girls, solo 的 caption 得到人数修正（保留 2girls、去掉 1girl 和 solo，可一步撤销）；审计给四张图评分，列出了糊图和过平的图；选 Anima 后先显示估算，下载两个分词器（14 MB，放在程序自己的文件夹里）后改为精确计数。
+VALIDATION_PENDING
 
 ---
 
 ## ⬇️ Which file should I download? / 我该下载哪一个？
 
-**Windows → `sd-image-sorter-v3.9.0-windows-portable.zip`** — extract, double-click `SD Image Sorter.exe` (desktop program) or `run-portable.bat` (browser mode).
+**Windows → `sd-image-sorter-v3.9.1-windows-portable.zip`** — extract, double-click `SD Image Sorter.exe` (desktop program) or `run-portable.bat` (browser mode).
 
-**Linux portable x86_64 → `sd-image-sorter-v3.9.0-linux-portable-x86_64.tar.gz`** — extract, run `./run-portable.sh`.
+**Linux portable x86_64 → `sd-image-sorter-v3.9.1-linux-portable-x86_64.tar.gz`** — extract, run `./run-portable.sh`.
 
-**Linux portable aarch64 → `sd-image-sorter-v3.9.0-linux-portable-aarch64.tar.gz`** — for ARM Linux, Raspberry Pi 5, and Graviton.
+**Linux portable aarch64 → `sd-image-sorter-v3.9.1-linux-portable-aarch64.tar.gz`** — for ARM Linux, Raspberry Pi 5, and Graviton.
 
-**Linux source install → `sd-image-sorter-v3.9.0-linux.tar.gz`** — for systems with Python 3.12+.
+**Linux source install → `sd-image-sorter-v3.9.1-linux.tar.gz`** — for systems with Python 3.12+.
 
 **Do NOT download / 不要下载：**
-- `sd-image-sorter-v3.9.0-app-patch.zip` — in-app updater only / 仅供更新器
-- `sd-image-sorter-v3.9.0-release-manifest.json` — updater metadata / 更新器元数据
+- `sd-image-sorter-v3.9.1-app-patch.zip` — in-app updater only / 仅供更新器
+- `sd-image-sorter-v3.9.1-release-manifest.json` — updater metadata / 更新器元数据
 
 ---
 
 ## Checksums
 
-| Asset | SHA-256 |
-|---|---|
-| `sd-image-sorter-v3.9.0-windows-portable.zip` | `c30feb6e2d7846fbc066ef3a6254df78c598cdb9f89fc6183b64c76668b97346` |
-| `sd-image-sorter-v3.9.0-app-patch.zip` | `564f539408af2259c9d306630b9ac718a4b52f7aa76178af9b8ce3b9c8a0f319` |
-| `sd-image-sorter-v3.9.0-linux.tar.gz` | `f12de609cee62028d23630b66b49b8bc4496f78f4198e5250b0879bf1f44b485` |
-| `sd-image-sorter-v3.9.0-linux-portable-x86_64.tar.gz` | `b0dd722e4a0778b43119574994df7aa660176a0e09525fe93b186f9acb0398d1` |
-| `sd-image-sorter-v3.9.0-linux-portable-aarch64.tar.gz` | `05c2621d3160460f4884e661c5c3bc1d72d9bd6fec5156a383b794276b57b003` |
-| `sd-image-sorter-v3.9.0-release-manifest.json` | `afdca974a24545ce56982ea0a66f6e732b970790b45a16ef662a3521817de532` |
-
-The manifest contains the five archive checksums; its own checksum is recorded above. / manifest 内含五个归档校验和，其自身校验和记录于上表。
+CHECKSUMS_PENDING
