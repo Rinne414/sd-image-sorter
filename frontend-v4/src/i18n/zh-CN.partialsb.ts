@@ -84,4 +84,5 @@ export const zhCNPartialsB = {
   'partialsb.tone.gold': '暖色',
   'partialsb.tone.red': '红色',
   'partialsb.tone.light': '浅色',
+  'partialsb.palette.sortQueue': '给队列分组排序（分级、美学、分辨率、我的方案）',
 } as const

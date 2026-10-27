@@ -188,6 +188,12 @@ function Palette() {
     if (useJobs.getState().jobs.length > 0) {
       list.push(mk('jobs', 'palette.group.library', 'palette.cmd.jobs', () => useJobs.getState().setDrawerOpen(true)))
     }
+    // The Order and Censor steps' Sort menu, while one is on screen.
+    if (s.page === 'batch' && document.querySelector('[data-testid="queue-sort"]')) {
+      list.push(mk('sort-queue', 'palette.group.batch', 'partialsb.palette.sortQueue', () =>
+        requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[data-testid="queue-sort"]')?.click()),
+      ))
+    }
     for (const kind of BATCH_KINDS) {
       list.push(mk(`new-batch-${kind}`, 'palette.group.batch', `batch.menu.new.${kind}`, () => askNewBatch(kind, [], 'page')))
     }

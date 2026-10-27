@@ -441,6 +441,14 @@ test('order: sorting by resolution, aesthetic score and rating groups the queue,
   expect(errors).toEqual([])
 })
 
+test('Ctrl K opens the queue Sort menu while the Order step is on screen', async ({ page }) => {
+  await openOrderStep(page)
+  await page.getByTestId('open-palette').click()
+  await page.keyboard.type('sort the queue')
+  await page.getByTestId('palette').getByRole('option').filter({ hasText: 'Sort the queue into groups' }).first().click()
+  await expect(page.getByTestId('queue-sort-menu')).toBeVisible()
+})
+
 test('profiles: make one, save it, sort by it, and delete it; the keys are the same in the censor step', async ({ page }) => {
   const errors = watchErrors(page)
   await page.setViewportSize({ width: 1366, height: 768 })

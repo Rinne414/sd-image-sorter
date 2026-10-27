@@ -82,4 +82,5 @@ export const enPartialsB: Record<keyof typeof zhCNPartialsB, string> = {
   'partialsb.tone.gold': 'Warm',
   'partialsb.tone.red': 'Red',
   'partialsb.tone.light': 'Light',
+  'partialsb.palette.sortQueue': 'Sort the queue into groups (rating, aesthetic, resolution, my profiles)',
 }
