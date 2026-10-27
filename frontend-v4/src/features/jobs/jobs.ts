@@ -16,6 +16,7 @@ import { driveOllama, ollamaAdoption } from './ollamaDriver' // ollama
 import { adoptArtist, driveArtist } from './artistDriver' // artist
 import { driveVideo } from './videoDriver' // video
 import { adoptVideoInstall } from './videoJob' // video
+import { driveMediaCensor } from './mediaCensorDriver' // mediacensor
 import { jobHeadline } from './headline'
 
 // Every long job the user started (or that was already running when V4
@@ -73,6 +74,7 @@ type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors'
   | 'ollama'
   | 'artist' // artist
   | 'video' // video
+  | 'mediacensor' // mediacensor
 
 // Censor work over a batch (detecting, SAM3 refining, filters) runs one at a time.
 const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind === 'refine' || kind === 'adjust' ? 'detect' : kind)
@@ -178,6 +180,7 @@ const DRIVERS: Record<Queue, Driver> = {
   sortundo: driveSortRules, // sortundo (the same batch-move slot)
   ollama: driveOllama, // ollama: an Ollama model download (it cannot be stopped)
   video: driveVideo, // video: the ffmpeg download for video support (it cannot be stopped)
+  mediacensor: driveMediaCensor, // mediacensor: GIF and video censoring (the backend runs one job at a time)
   artist: driveArtist, // artist: style identification (the backend runs one batch at a time)
 }
 
@@ -392,6 +395,7 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   ollama: ['vlm-local-models'], // ollama: the AI services page lists what Ollama has
   video: ['video-support', 'image-count', 'images', 'image'], // video: video support turns the library's videos into readable items
   artist: ['artist-stats', 'artist-images', 'images', 'image-count'], // artist: the style tool's numbers and lists, an artist: search
+  mediacensor: [], // mediacensor: the results are new files outside the library
 }
 
 let onUndo: ((job: Job) => Promise<void>) | null = null

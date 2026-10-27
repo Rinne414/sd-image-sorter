@@ -47,7 +47,7 @@ const JARGON = new Set([
   // keys
   ...['Ctrl', 'Shift', 'Alt', 'Enter', 'Esc', 'Tab', 'Backspace', 'Delete', 'Home', 'End', 'WASD', 'F2', 'F12'],
   // files and formats
-  ...['PNG', 'JPEG', 'JPG', 'jpg', 'WebP', 'JSON', 'json', 'JSONL', 'CSV', 'ZIP', 'zip', 'RAR', 'txt', 'onnx', 'pt', 'EXIF'],
+  ...['PNG', 'GIF', 'JPEG', 'JPG', 'jpg', 'WebP', 'JSON', 'json', 'JSONL', 'CSV', 'ZIP', 'zip', 'RAR', 'txt', 'onnx', 'pt', 'EXIF'],
   // hardware, web, units
   ...['GPU', 'CPU', 'CUDA', 'API', 'URL', 'HTTP', 'HTTPS', 'http', 'https', 'localhost', 'SOCKS', 'socks5', 'VPN', 'SSD', 'RGB', 'HDR', 'DPI'],
   ...['GB', 'MB', 'KB', 'B', 'MP', 'px', 'ms', 'ID', 'MIT', 'NSFW'],

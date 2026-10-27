@@ -17,6 +17,7 @@ import { openFolderPath } from '../library/fileActions'
 import { useBulkActions } from '../selection/actionOps'
 import { menuItemsOf } from '../selection/actions'
 import { tagNextSteps } from './nextSteps'
+import { MediaCensorResult } from '../censor/media/MediaCensorResult'
 
 /** Failures listed per job; the rest are counted. */
 const MAX_LISTED = 20
@@ -188,6 +189,7 @@ function JobRow({ job }: { job: Job }) {
           {t('missing.already.open', { n: p.alreadyIndexed ?? 0 })}
         </button>
       )}
+      <MediaCensorResult job={job} />
       <ImportNextSteps job={job} onLeave={() => setOpen(false)} />
       <TagNextSteps job={job} onLeave={() => setOpen(false)} />
       {job.undo && (

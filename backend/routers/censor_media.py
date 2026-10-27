@@ -18,7 +18,7 @@ import config
 from censor_transforms import MASK_STYLES
 from services import media_censor_service as media
 from services.media_censor_service import FrameSettings, MediaCensorJobs
-from utils.path_validation import ALLOWED_MODEL_EXTENSIONS, validate_folder_path
+from utils.path_validation import ALLOWED_MODEL_EXTENSIONS, validate_file_path, validate_folder_path
 
 router = APIRouter(prefix="/api/censor/media", tags=["censor"])
 
@@ -49,6 +49,22 @@ def _folder(path: str, *, create: bool = False) -> Path:
     return folder
 
 
+def _picked_files(paths: List[str], include_videos: bool) -> List[str]:
+    """The picked GIFs (and videos, when asked), each checked as a real file, once each."""
+    allowed = set(media.GIF_EXTENSIONS) | set(media.VIDEO_EXTENSIONS)
+    picked: List[str] = []
+    for raw in paths:
+        is_valid, error = validate_file_path(raw, allowed_extensions=allowed)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=f"{Path(raw).name}: {error}")
+        path = Path(raw)
+        if path.suffix.lower() in media.VIDEO_EXTENSIONS and not include_videos:
+            continue
+        if str(path) not in picked:
+            picked.append(str(path))
+    return picked
+
+
 class ListRequest(BaseModel):
     folder: str = Field(..., min_length=1)
 
@@ -63,7 +79,9 @@ async def list_media(request: ListRequest):
 
 
 class StartRequest(BaseModel):
-    folder: str = Field(..., min_length=1)
+    folder: str = ""
+    # Picked files (library items) instead of a whole folder; wins over ``folder``.
+    files: Optional[List[str]] = None
     output_folder: str = ""
     include_videos: bool = True
     model_type: str = Field("nudenet", pattern="^(nudenet|legacy|both)$")
@@ -96,14 +114,24 @@ def start_job(request: StartRequest):
             model_path = model_roots.resolve_model_file(model_path, ALLOWED_MODEL_EXTENSIONS)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-    source = _folder(request.folder)
+    if request.files:
+        sources = _picked_files(request.files, request.include_videos)
+        if not sources:
+            raise HTTPException(
+                status_code=400, detail="None of these files is a GIF or a video."
+            )
+    else:
+        if not request.folder.strip():
+            raise HTTPException(
+                status_code=400, detail="Choose a folder or some files to censor."
+            )
+        listed = media.list_media(_folder(request.folder))
+        sources = listed["gifs"] + (listed["videos"] if request.include_videos else [])
+        if not sources:
+            raise HTTPException(
+                status_code=400, detail="This folder has no GIFs or videos."
+            )
     output = _folder(request.output_folder or str(config.default_output_folder("video-censor")), create=True)
-    listed = media.list_media(source)
-    sources = listed["gifs"] + (listed["videos"] if request.include_videos else [])
-    if not sources:
-        raise HTTPException(
-            status_code=400, detail="This folder has no GIFs or videos."
-        )
     settings = FrameSettings(
         model_type=request.model_type,
         model_path=model_path,

@@ -128,3 +128,50 @@ def test_bad_requests_are_refused(test_client, tmp_path: Path) -> None:
     assert no_media.status_code == 400
     assert bad_style.status_code == 400
     assert missing.status_code == 400
+
+
+def test_a_job_can_censor_picked_files_instead_of_a_folder(
+    test_client, tmp_path: Path, monkeypatch
+) -> None:
+    _fresh_jobs(monkeypatch)
+    picked = _gif(tmp_path / "picked.gif")
+    _gif(tmp_path / "left-alone.gif")
+    output = tmp_path / "out"
+
+    started = test_client.post(
+        "/api/censor/media/start",
+        json={
+            "files": [str(picked), str(picked)],
+            "output_folder": str(output),
+            "detect_every": 1,
+        },
+    ).json()
+    snapshot = _wait(test_client, started["job_id"])
+
+    assert snapshot["status"] == "done"
+    assert [item["name"] for item in snapshot["files"]] == ["picked.gif"]
+    assert [path.name for path in output.iterdir()] == ["picked_censored.gif"]
+
+
+def test_picked_files_must_be_real_gifs_or_videos(test_client, tmp_path: Path) -> None:
+    picture = tmp_path / "still.png"
+    picture.write_bytes(b"x")
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"x")
+
+    wrong_kind = test_client.post(
+        "/api/censor/media/start", json={"files": [str(picture)]}
+    )
+    missing = test_client.post(
+        "/api/censor/media/start", json={"files": [str(tmp_path / "gone.gif")]}
+    )
+    only_videos_skipped = test_client.post(
+        "/api/censor/media/start",
+        json={"files": [str(video)], "include_videos": False},
+    )
+    nothing_chosen = test_client.post("/api/censor/media/start", json={})
+
+    assert wrong_kind.status_code == 400
+    assert missing.status_code == 400
+    assert only_videos_skipped.status_code == 400
+    assert nothing_chosen.status_code == 400

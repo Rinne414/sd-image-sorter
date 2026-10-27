@@ -21,6 +21,7 @@ import {
   type Target,
 } from './detectSettings'
 import styles from './DetectPanel.module.css'
+import { openMediaCensor } from './media/mediaStore'
 import { Section, Slider } from './PanelParts'
 import { detectAllTargets } from './review'
 import { initialEdit, keyOf, useCensorSession } from './session'
@@ -137,6 +138,12 @@ export function DetectPanel({ batch, item }: Props) {
         </div>
       </Section>
       <Sam3Tools batch={batch} item={item} busy={busy} />
+      <Section title={t('mediacensor.section')} testId="mediacensor-section">
+        <p className={tp.note}>{t('mediacensor.sectionNote')}</p>
+        <button type="button" className="btn" onClick={() => openMediaCensor()} title={t('mediacensor.openTip')} data-testid="mediacensor-open">
+          {t('mediacensor.open')}
+        </button>
+      </Section>
       {(detector === 'legacy' || detector === 'both') && <YoloChoice files={models.data?.models.find((m) => m.id === 'legacy')?.files ?? []} />}
     </>
   )

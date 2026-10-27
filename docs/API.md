@@ -1545,7 +1545,9 @@ optional ffmpeg component (Model Center card `video-ffmpeg`) is installed.
 
 #### POST /api/censor/media/start
 Auto-censor every GIF (and, with `include_videos` and ffmpeg ready, every
-video) in `folder` into `output_folder` (default: the `video-censor` folder
+video) in `folder`, or, when `files` (a list of paths) is given, exactly those
+files (each must be an existing GIF or video, otherwise 400; `folder` is then
+ignored), into `output_folder` (default: the `video-censor` folder
 under the output root, see Output folders; outputs
 are `<name>_censored.gif` / `.mp4`, never replacing a file). Detector settings
 mirror `/api/censor/detect` (`model_type` nudenet / legacy / both,

@@ -97,7 +97,7 @@ export async function loadCensorModels(): Promise<CensorModels | undefined> {
   }
 }
 
-function legacyTargets(models: CensorModels | undefined, path: string): boolean {
+export function legacyTargets(models: CensorModels | undefined, path: string): boolean {
   const legacy = models?.models.find((m) => m.id === 'legacy')
   const file = legacy?.files?.find((f) => f.path === (path || legacy.default_model_path))
   return !!file && (file.profile === 'privacy-censor' || file.recommended_for_censor === true)
