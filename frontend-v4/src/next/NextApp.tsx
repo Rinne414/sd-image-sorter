@@ -16,6 +16,7 @@ import { appKey } from '../features/library/keys'
 import { ShortcutSheet } from '../features/library/ShortcutSheet'
 import { GeneratorDialog } from '../features/generator/GeneratorDialog'
 import { SelectionDialogs } from '../features/selection/SelectionDialogs'
+import { MediaCensorHost } from '../features/censor/media/MediaCensorHost'
 import { RestartOverlay } from '../features/settings/RestartOverlay'
 import { SettingsPage } from '../features/settings/SettingsPage'
 // Keeps the interface zoom in step with the window (auto) from the first render.
@@ -94,6 +95,7 @@ export function NextApp() {
         <DropImport />
         <CollectHost />
         <SelectionDialogs />
+        <MediaCensorHost />
         <GeneratorDialog />
         <BatchDialogs />
         <RestartOverlay />

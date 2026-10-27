@@ -2831,10 +2831,24 @@
         "#media-censor-browse-output"
       ],
       "vopus": {
-        "missing": "Vopus cannot censor GIFs or videos"
+        "at": "#/batch",
+        "open": [
+          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]",
+          "[data-testid=\"censor-tab-detect\"]"
+        ],
+        "find": "[data-testid=\"mediacensor-open\"]",
+        "needs": "batch",
+        "note": "The Detect tab of the censor step opens the GIF and video dialog (folder or files, style, save folder, start/stop as a job in Jobs). The library's Censor... on picked GIFs or videos opens the same dialog with those files."
       },
       "next": {
-        "missing": "Censoring GIFs and videos is not in the new interface."
+        "at": "#/batch",
+        "open": [
+          "[data-testid=\"rail-step\"][data-step-id=\"censor\"]",
+          "[data-testid=\"censor-tab-detect\"]"
+        ],
+        "find": "[data-testid=\"mediacensor-open\"]",
+        "needs": "batch",
+        "note": "batch with a censor step (Pixiv kind); open it through the Censor menu or Batches. Detect tab > GIFs and videos; the library's Censor... on picked GIFs or videos opens the same dialog."
       }
     },
     {

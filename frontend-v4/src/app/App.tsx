@@ -13,6 +13,7 @@ import { useLibraryArrival } from '../features/libraries/useArrival'
 import { useLibraryExists } from '../features/libraries/useLibraryExists'
 import { GeneratorDialog } from '../features/generator/GeneratorDialog'
 import { SelectionDialogs } from '../features/selection/SelectionDialogs'
+import { MediaCensorHost } from '../features/censor/media/MediaCensorHost'
 import { appKey } from '../features/library/keys'
 import { LibraryPage } from '../features/library/LibraryPage'
 import { ShortcutSheet } from '../features/library/ShortcutSheet'
@@ -87,6 +88,7 @@ export function App() {
       <DropImport />
       <CollectHost />
       <SelectionDialogs />
+      <MediaCensorHost />
       <GeneratorDialog />
       <BatchDialogs />
       <RestartOverlay />

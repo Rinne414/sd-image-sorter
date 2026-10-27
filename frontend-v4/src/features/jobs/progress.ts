@@ -9,6 +9,7 @@ import { readScanExtras, type ScanExtras } from './scanExtras' // scan: stall + 
 import { readOllama } from './ollamaJob' // ollama: an Ollama model download, read in ollamaJob.ts
 import { readArtist } from './artistJob' // artist: style identification, read in artistJob.ts
 import { readVideoInstall } from './videoJob' // video: the ffmpeg download for video support, read in videoJob.ts
+import { readMediaCensor, type MediaContext, type MediaExtras } from './mediaCensorJob' // mediacensor: GIF and video censoring, read in mediaCensorJob.ts
 import { refusalOfProgress, type TaggerRefusal } from './taggerRefusal'
 // Reads the backend's progress payloads for long jobs into one shape.
 // move/copy: GET /api/move/progress · trash: GET /api/images/delete-selected/progress
@@ -58,6 +59,7 @@ export type JobKind =
   | 'ollama' // ollama: an Ollama model download (GET /api/vlm/local-models/pull/progress)
   | 'artist' // artist: style identification (GET /api/artists/batch-progress)
   | 'video' // video: the ffmpeg download for video support (GET /api/video-support)
+  | 'mediacensor' // mediacensor: censoring GIFs and videos (GET /api/censor/media/jobs/{id})
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
 
 export interface JobFailure {
@@ -97,6 +99,8 @@ export interface JobProgress {
   scan?: ScanExtras
   /** reconnect only: found files already in the library under another record. */
   alreadyIndexed?: number
+  /** mediacensor only: each file's state and where the results go. */
+  media?: MediaExtras
   currentItem: string | null
   message: string
 }
@@ -129,6 +133,7 @@ export interface ReadContext {
   reparseJobId?: string // reparse/reread: the metadata repair bulk job we started
   runToken?: string // sortrules/sortundo: the batch-move run we started
   ollamaModel?: string // ollama: the model we asked Ollama to pull
+  mediaCensor?: MediaContext // mediacensor: the job we started and where it saves
 }
 
 const KNOWN: ReadonlySet<string> = new Set(['running', 'cancelling', 'done', 'cancelled', 'error', 'idle'])
@@ -367,6 +372,8 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
       return readArtist(base, raw, prev) // artist
     case 'video': // video
       return readVideoInstall(base, raw) // video
+    case 'mediacensor': // mediacensor
+      return readMediaCensor(base, raw, ctx.mediaCensor ?? { jobId: '', folder: '' }, prev) // mediacensor
   }
 }
 

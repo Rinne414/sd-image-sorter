@@ -1,0 +1,118 @@
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+}
+
+.heading {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  font-weight: 600;
+}
+
+.group > .heading:first-child {
+  margin-top: 0;
+}
+
+.line,
+.note,
+.warn {
+  margin: 0;
+  font-size: var(--fs-2);
+}
+
+.line {
+  color: var(--text);
+}
+
+.note {
+  color: var(--muted);
+  font-size: var(--fs-1);
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.pathRow {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.path {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: var(--fs-2);
+}
+
+.path:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--fs-2);
+  cursor: pointer;
+}
+
+.check input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* The detector choices, one under another: their names are long. */
+.stack {
+  display: grid;
+  gap: 6px;
+}
+
+.stack > button {
+  justify-content: flex-start;
+}
+
+.targets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+}
+
+.advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--text);
+  font-size: var(--fs-2);
+}
+
+.advanced summary {
+  cursor: pointer;
+  color: var(--muted);
+  margin-bottom: 8px;
+}

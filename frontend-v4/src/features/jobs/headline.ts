@@ -3,6 +3,7 @@ import { tailOfPath } from '../../lib/paths'
 import type { Job } from './jobs'
 import type { JobKind } from './progress'
 import { queuedKey } from './queued'
+import { mediaCensorHeadline } from './mediaCensorHeadline' // mediacensor
 
 // What the Jobs drawer and a job's toast say about a job, by kind and state.
 // Pure (no stores, no requests), so it can be tested on its own.
@@ -38,6 +39,7 @@ const RUNNING: Record<JobKind, MessageKey> = {
   ollama: 'jobs.running.install', // ollama: "Downloading <model>"
   artist: 'tools.artist.job.running', // artist
   video: 'video.job.running', // video
+  mediacensor: 'mediacensor.job.running', // mediacensor (its headline: mediaCensorHeadline.ts)
 }
 
 const DONE: Record<JobKind, MessageKey> = {
@@ -69,6 +71,7 @@ const DONE: Record<JobKind, MessageKey> = {
   ollama: 'jobs.done.install', // ollama: "<model> is ready"
   artist: 'tools.artist.job.done', // artist
   video: 'video.job.done', // video
+  mediacensor: 'mediacensor.job.doneAll', // mediacensor
 }
 
 /** An install that can only be used after a restart says so, never "is ready". */
@@ -77,6 +80,7 @@ const doneKey = (job: Job): MessageKey =>
 
 /** One line that says what happened (or is happening) to this job. */
 export function jobHeadline(job: Job): string {
+  if (job.kind === 'mediacensor') return mediaCensorHeadline(job, tr) // mediacensor: counts files, not images
   const p = job.progress
   const params = { n: p.total || job.count, name: job.label ?? '' }
   const running = job.words?.running ?? RUNNING[job.kind]
