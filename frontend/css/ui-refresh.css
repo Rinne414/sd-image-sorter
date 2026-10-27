@@ -1596,10 +1596,13 @@ textarea:focus,
 #view-censor .queue-selection-count {
     display: inline-flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: center;
+    gap: 4px;
     min-width: 0;
-    min-height: 40px;
-    padding-inline: 12px;
+    /* As tall as the All / None / Filter buttons beside it (queue-mini-btn). */
+    min-height: 28px;
+    padding-inline: 6px;
+    white-space: nowrap;
 }
 
 #view-censor .queue-action-btn {
@@ -7903,19 +7906,6 @@ html:not(.lang-zh) .filter-sidebar .btn-ghost.full-width {
 
 #view-censor .sidebar-subtitle {
     line-height: 1.45;
-}
-
-#view-censor .queue-selection-count-row {
-    display: flex;
-    margin: 10px 0 8px;
-}
-
-#view-censor .queue-selection-count {
-    width: 100%;
-    justify-content: center;
-    min-height: 40px;
-    padding: 10px 12px;
-    border-radius: 14px;
 }
 
 #view-censor .queue-actions-row {

@@ -506,13 +506,31 @@ function updateQueueSelection() {
         img.setAttribute('aria-pressed', String(isSelected));
     });
 
-    // Update selection count indicator if it exists
+    // Update selection count indicator if it exists. A check and the number:
+    // the words wrapped in the toolbar's narrow fourth column at every width,
+    // so they are its tooltip and accessible name.
     const countEl = document.getElementById('queue-selection-count');
     if (countEl) {
         const count = CensorState.selectedItems.size;
-        countEl.textContent = count > 0
+        const label = count > 0
             ? censorT('censor.queueSelectionSummary', { count }, '{count} selected')
             : '';
+        countEl.replaceChildren();
+        if (count > 0) {
+            const svgNs = 'http://www.w3.org/2000/svg';
+            const icon = document.createElementNS(svgNs, 'svg');
+            icon.setAttribute('class', 'icon');
+            icon.setAttribute('aria-hidden', 'true');
+            const use = document.createElementNS(svgNs, 'use');
+            use.setAttribute('href', '#i-check');
+            icon.appendChild(use);
+            countEl.append(icon, document.createTextNode(String(count)));
+            countEl.title = label;
+            countEl.setAttribute('aria-label', label);
+        } else {
+            countEl.removeAttribute('title');
+            countEl.removeAttribute('aria-label');
+        }
         countEl.style.display = count > 0 ? 'inline-flex' : 'none';
     }
 
