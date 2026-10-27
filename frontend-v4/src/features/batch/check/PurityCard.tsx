@@ -8,17 +8,18 @@ import { runPurity, usePurityResults, usePurityStatus } from './purityRun'
 
 const useBusy = () => useJobs((s) => s.jobs.some((j) => (j.kind === 'purity' || j.kind === 'purityget') && !isFinished(j.progress.status)))
 
-/** The analysis needs at least this many Library images to compare. */
+/** The analysis needs at least this many images to compare. */
 const MIN_IMAGES = 2
 
 interface Props {
   batch: Batch
   ids: readonly number[]
-  folderCount: number
+  /** Folder images still on disk, by path: analysed by their files. */
+  paths: readonly string[]
 }
 
 /** Character purity (CCIP): run on demand (it is an AI model), advisory only. */
-export function PurityCard({ batch, ids, folderCount }: Props) {
+export function PurityCard({ batch, ids, paths }: Props) {
   const t = useT()
   const status = usePurityStatus()
   const busy = useBusy()
@@ -27,16 +28,16 @@ export function PurityCard({ batch, ids, folderCount }: Props) {
   const available = status.data?.available ?? false
   const value = threshold ?? status.data?.default_threshold ?? 0.178
   const outliers = outcome?.items.filter((i) => i.outlier).length ?? 0
-  const start = () => void runPurity(batch.id, [...ids], threshold, available)
+  const count = ids.length + paths.length
+  const start = () => void runPurity(batch.id, [...ids], [...paths], threshold, available)
 
   return (
     <section className={styles.block} data-testid="check-purity">
       <h2 className={styles.blockTitle}>{t('dataset.check.purity.title')}</h2>
       <p className={styles.note}>{t('dataset.check.purity.what')}</p>
-      {folderCount > 0 && <p className={styles.sourceNa}>{t('dataset.check.notForFolder', { n: folderCount })}</p>}
       {status.isError ? (
         <p className={styles.warn}>{t('dataset.check.failed', { reason: status.error.message })}</p>
-      ) : ids.length < MIN_IMAGES ? (
+      ) : count < MIN_IMAGES ? (
         <p className={styles.hint}>{t('dataset.check.purity.tooFew')}</p>
       ) : (
         <>
@@ -56,7 +57,7 @@ export function PurityCard({ batch, ids, folderCount }: Props) {
           </label>
           {!available && status.data && <p className={styles.hint}>{t('dataset.check.purity.download')}</p>}
           <button type="button" className="btn" disabled={busy || !status.data} onClick={start} data-testid="check-purity-run">
-            {busy ? t('dataset.check.purity.busy') : available ? t('dataset.check.purity.run', { n: ids.length }) : t('dataset.check.purity.downloadRun', { n: ids.length })}
+            {busy ? t('dataset.check.purity.busy') : available ? t('dataset.check.purity.run', { n: count }) : t('dataset.check.purity.downloadRun', { n: count })}
           </button>
         </>
       )}

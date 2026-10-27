@@ -168,7 +168,7 @@ export function CheckStep({ batch, next, onNext }: Props) {
           />
           {form && <TokenCountsCard profile={tokenProfile(form.targetModel)} chosen={form.targetModel !== ''} />}
           <MaskCard ids={scope.ids} folderCount={scope.folderCount} />
-          <PurityCard batch={batch} ids={scope.ids} folderCount={scope.folderCount} />
+          <PurityCard batch={batch} ids={scope.ids} paths={scope.paths} />
         </div>
         <section className={styles.issues} aria-label={t('dataset.check.issuesTitle')} data-testid="check-issues">
           <h2 className={styles.issuesTitle}>{t(heading.title, { n: heading.n })}</h2>

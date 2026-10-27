@@ -380,3 +380,78 @@ def test_second_start_conflicts_then_cancel_terminates(
     idle_cancel = test_client.post("/api/dataset/character-purity/cancel", json={})
     assert idle_cancel.status_code == 200
     assert idle_cancel.json()["status"] == "cancelled"
+
+
+def test_folder_pictures_are_analyzed_by_their_paths(test_client, monkeypatch, purity_images, tmp_path):
+    """A picture imported from a folder has no Library row: it goes by its path.
+
+    The Dataset Maker used to leave such pictures out ("local imports are not
+    in the DB yet"), so a dataset built from a folder could not be checked.
+    """
+    _install_fake(monkeypatch, FakeCcip(diff_matrix=DIFFS_3))
+    library_id = purity_images["image_ids"][0]
+    folder = tmp_path / "from-a-folder"
+    folder.mkdir()
+    near = folder / "near.png"
+    odd = folder / "odd.png"
+    for path in (near, odd):
+        path.write_bytes(b"fake image bytes")
+
+    response = test_client.post(
+        "/api/dataset/character-purity",
+        json={"image_ids": [library_id], "image_paths": [str(near), str(odd), str(folder / "gone.png")]},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["total"] == 4
+
+    progress = _wait_for_job(test_client, response.json()["job_id"])
+    assert progress["status"] == "done"
+    result = progress["result"]
+    assert result["failed"] == 1
+    # Library pictures keep their id; folder pictures are named by their path.
+    assert result["medoid_image_id"] == library_id and "medoid_path" not in result
+    assert result["items"][0] == {"image_id": 0, "path": str(odd), "distance": pytest.approx(0.40), "outlier": True}
+    assert result["items"][1]["path"] == str(near)
+
+
+def test_two_folder_pictures_are_enough(test_client, monkeypatch, tmp_path):
+    _install_fake(monkeypatch, FakeCcip(diff_matrix=[[0.0, 0.3], [0.3, 0.0]]))
+    paths = []
+    for name in ("a.png", "b.png"):
+        (tmp_path / name).write_bytes(b"fake image bytes")
+        paths.append(str(tmp_path / name))
+
+    response = test_client.post("/api/dataset/character-purity", json={"image_paths": paths})
+    assert response.status_code == 200, response.text
+    result = _wait_for_job(test_client, response.json()["job_id"])["result"]
+    assert result["medoid_image_id"] == 0 and result["medoid_path"] in paths
+
+
+def test_a_large_folder_import_goes_by_its_scan(test_client, monkeypatch, tmp_path):
+    """A folder too large to list in the page is sent as its scan, like the audit takes it."""
+    from PIL import Image
+
+    import services.dataset_session_service as dataset_session_service
+
+    _install_fake(monkeypatch, FakeCcip(diff_matrix=DIFFS_3))
+    folder = tmp_path / "big-folder"
+    folder.mkdir()
+    for index in range(4):
+        Image.new("RGB", (8, 8), (index * 40, 60, 90)).save(folder / f"pic{index}.png")
+    scan_dir = tmp_path / "scan-manifests"
+    scan_dir.mkdir()
+    monkeypatch.setattr(dataset_session_service, "_SCAN_DIR", scan_dir)
+    scan = dataset_session_service.scan_folder_for_dataset(str(folder), recursive=False, limit=1)
+    taken_out = str(folder / "pic3.png")
+
+    response = test_client.post(
+        "/api/dataset/character-purity",
+        json={"dataset_scan_tokens": [{"scan_token": scan["scan_token"], "exclude_paths": [taken_out]}]},
+    )
+    assert response.status_code == 200, response.text
+    # Four in the scan, one taken out of the dataset.
+    assert response.json()["total"] == 3
+    result = _wait_for_job(test_client, response.json()["job_id"])["result"]
+    assert {item["path"] for item in result["items"]} | {result.get("medoid_path")} <= {
+        str(folder / f"pic{index}.png") for index in range(3)
+    }

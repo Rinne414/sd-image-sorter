@@ -374,14 +374,15 @@ export function healthIssues(report: HealthReport, index: KeyIndex, o: { ratings
 // ---- character purity (CCIP) -------------------------------------------------------------
 
 export interface PurityResult {
-  items: { image_id: number; distance: number; outlier: boolean }[]
+  /** A folder image comes back with image_id 0 and its path. */
+  items: { image_id: number; path?: string; distance: number; outlier: boolean }[]
 }
 
 export function purityIssues(result: PurityResult, index: KeyIndex): CheckIssue[] {
   const notes: Record<string, string> = {}
   const keys: string[] = []
   for (const item of result.items) {
-    const key = item.outlier ? lookup(index, item.image_id, null) : null
+    const key = item.outlier ? lookup(index, item.image_id, item.path ?? null) : null
     if (!key) continue
     keys.push(key)
     notes[key] = item.distance.toFixed(2)

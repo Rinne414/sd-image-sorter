@@ -275,3 +275,41 @@ test('SDXL counts tokens exactly with CLIP: the card names the model and the 2 M
   await expect(long).toContainText('CLIP 600 tokens')
   expect(profiles.filter((p) => !p.endsWith('sdxl'))).toEqual([])
 })
+
+test('character purity reads the folder image too and names it when it looks like someone else', async ({ page }) => {
+  const started: Array<{ image_ids: number[]; image_paths: string[] }> = []
+  await page.route('**/api/dataset/character-purity/**', (route) => {
+    const url = route.request().url()
+    if (url.includes('/status')) {
+      return route.fulfill({ json: { available: true, preparing: false, prepare_error: null, default_threshold: 0.178, missing_files: [], download: { active: false } } })
+    }
+    const sent = started[0]
+    const result = {
+      medoid_image_id: ids[0], threshold: 0.178, extracted: 4, failed: 0,
+      items: [
+        { image_id: 0, path: sent.image_paths[0], distance: 0.5, outlier: true },
+        { image_id: ids[1], distance: 0.05, outlier: false },
+        { image_id: ids[2], distance: 0.04, outlier: false },
+        { image_id: ids[0], distance: 0, outlier: false },
+      ],
+    }
+    return route.fulfill({ json: { status: 'done', job_id: 'e2e-ccip', current: 4, total: 4, extracted: 4, failed: 0, result, message: '' } })
+  })
+  await page.route('**/api/dataset/character-purity', (route) => {
+    started.push(route.request().postDataJSON())
+    return route.fulfill({ json: { status: 'starting', job_id: 'e2e-ccip', total: 4, message: '' } })
+  })
+  await openCheck(page)
+
+  const card = page.getByTestId('check-purity')
+  await expect(card).not.toContainText('Not applicable')
+  await expect(card.getByTestId('check-purity-run')).toContainText('4')
+  await card.getByTestId('check-purity-run').click()
+  await expect(issue(page, 'character_outlier')).toBeVisible({ timeout: 15_000 })
+  expect(started[0].image_ids).toEqual(ids)
+  expect(started[0].image_paths).toHaveLength(1)
+  expect(started[0].image_paths[0]).toMatch(/two-girls\.png$/)
+  const keys = await issue(page, 'character_outlier').getByTestId('check-thumb').evaluateAll((els) => els.map((e) => e.getAttribute('data-key')))
+  expect(keys).toHaveLength(1)
+  expect(keys[0]).toMatch(/^dir:.*two-girls\.png$/)
+})

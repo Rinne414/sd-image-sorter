@@ -42,7 +42,6 @@
         _statusTimer: null,
         _jobId: null,
         _lastResult: null,
-        _skippedLocal: 0,
         _defaultThreshold: FALLBACK_THRESHOLD,
 
         get dm() { return window.DatasetMaker || null; },
@@ -64,14 +63,36 @@
             if (el) el.textContent = text || '';
         },
 
-        _galleryIds() {
+        /**
+         * The queue as the analysis takes it: Library ids, folder pictures by
+         * path, and a large folder import by its scan (as the audit sends it).
+         */
+        _queueSources() {
             const dm = this.dm;
-            if (!dm || !Array.isArray(dm.imageIds)) return { ids: [], skipped: 0 };
-            const ids = dm.imageIds
-                .filter((id) => !(dm.isLocalId && dm.isLocalId(id)))
-                .map(Number)
-                .filter((n) => Number.isFinite(n) && n > 0);
-            return { ids, skipped: dm.imageIds.length - ids.length };
+            const out = { ids: [], paths: [], scanTokens: [] };
+            if (!dm || !Array.isArray(dm.imageIds)) return out;
+            for (const raw of dm.imageIds) {
+                const id = Number(raw);
+                if (!Number.isFinite(id) || id === 0) continue;
+                if (!(dm.isLocalId && dm.isLocalId(id))) {
+                    out.ids.push(id);
+                } else if (!dm._localIdUsesManifest?.(id)) {
+                    const path = dm.localItemPaths?.get?.(id);
+                    if (path) out.paths.push(String(path));
+                }
+            }
+            out.scanTokens = dm._getDatasetScanTokenSources?.() || [];
+            return out;
+        },
+
+        /** The queue id of a folder picture named by its path, or null (not loaded into the queue). */
+        _idForPath(path) {
+            const paths = this.dm?.localItemPaths;
+            if (!path || !paths?.entries) return null;
+            for (const [id, known] of paths.entries()) {
+                if (String(known) === String(path)) return Number(id);
+            }
+            return null;
         },
 
         // ---- model availability / prepare ---------------------------------
@@ -150,15 +171,14 @@
         // ---- analysis job ---------------------------------------------------
 
         async run() {
-            const { ids, skipped } = this._galleryIds();
-            this._skippedLocal = skipped;
-            if (ids.length < 2) {
-                this._setStatus(t('Character purity needs at least 2 gallery images in the queue (local imports are not in the DB yet).',
-                    '角色纯度分析至少需要队列中的 2 张图库图片（本地导入的图片尚未入库）。'));
+            const { ids, paths, scanTokens } = this._queueSources();
+            if (ids.length + paths.length < 2 && scanTokens.length === 0) {
+                this._setStatus(t('Character purity needs at least 2 images in the queue.',
+                    '角色纯度分析至少需要队列中的 2 张图片。'));
                 return;
             }
             const thresholdValue = parseFloat($('ccip-threshold')?.value || '');
-            const body = { image_ids: ids };
+            const body = { image_ids: ids, image_paths: paths, dataset_scan_tokens: scanTokens };
             if (Number.isFinite(thresholdValue)) body.threshold = Math.min(1, Math.max(0, thresholdValue));
 
             const runBtn = $('ccip-run');
@@ -302,30 +322,20 @@
                 ), { extracted: result.extracted, lengthCount: outliers.length, threshold });
             wrap.appendChild(summary);
 
-            if (result.failed > 0 || this._skippedLocal > 0) {
+            if (result.failed > 0) {
                 const note = document.createElement('div');
                 note.className = 'ccip-note';
-                const parts = [];
-                if (result.failed > 0) {
-                    parts.push(t(`${result.failed} unreadable/missing images skipped`, `跳过 ${result.failed} 张缺失/无法读取的图片`));
-                }
-                if (this._skippedLocal > 0) {
-                    parts.push(I18n.format(t(
-                        `{_skippedLocal} local-import images skipped — not in the DB`,
-                        `跳过 {_skippedLocal} 张本地导入图片 — 尚未入库`,
-                    ), { _skippedLocal: this._skippedLocal }));
-                }
-                note.textContent = `(${parts.join(' · ')})`;
+                note.textContent = `(${t(`${result.failed} unreadable/missing images skipped`, `跳过 ${result.failed} 张缺失/无法读取的图片`)})`;
                 wrap.appendChild(note);
             }
 
-            wrap.appendChild(this._buildRow(result.medoid_image_id, null, {
+            wrap.appendChild(this._buildRow({ image_id: result.medoid_image_id, path: result.medoid_path }, null, {
                 label: t('Anchor — the most typical image of the set (medoid)', '锚点 — 全组最典型的一张图（medoid）'),
                 medoid: true,
             }));
 
             for (const item of outliers) {
-                wrap.appendChild(this._buildRow(item.image_id, item.distance, { outlier: true }));
+                wrap.appendChild(this._buildRow(item, item.distance, { outlier: true }));
             }
 
             const footer = document.createElement('div');
@@ -339,7 +349,10 @@
             this._setStatus('');
         },
 
-        _buildRow(imageId, distance, { label = '', medoid = false, outlier = false } = {}) {
+        /** One picture of the result: a Library id, or a folder picture's path (image_id 0). */
+        _buildRow(picture, distance, { label = '', medoid = false, outlier = false } = {}) {
+            const path = picture?.image_id ? '' : String(picture?.path || '');
+            const imageId = picture?.image_id ? Number(picture.image_id) : this._idForPath(path);
             const row = document.createElement('button');
             row.type = 'button';
             row.className = 'ccip-row' + (medoid ? ' ccip-row-medoid' : '') + (outlier ? ' ccip-row-outlier' : '');
@@ -349,12 +362,14 @@
             thumb.className = 'ccip-thumb';
             thumb.loading = 'lazy';
             thumb.alt = '';
-            thumb.src = `/api/image-thumbnail/${encodeURIComponent(imageId)}?size=128`;
+            thumb.src = imageId != null
+                ? (this.dm?._thumbSrc?.(imageId, 128) || `/api/image-thumbnail/${encodeURIComponent(imageId)}?size=128`)
+                : `/api/dataset/local-thumbnail?path=${encodeURIComponent(path)}&size=128`;
             row.appendChild(thumb);
 
             const text = document.createElement('span');
             text.className = 'ccip-row-text';
-            text.textContent = label || `#${imageId}`;
+            text.textContent = label || (path ? path.split(/[\\/]/).pop() : `#${imageId}`);
             row.appendChild(text);
 
             if (distance != null) {
@@ -365,7 +380,7 @@
             }
 
             row.addEventListener('click', () => {
-                this.dm?._setActive?.(imageId);
+                if (imageId != null) this.dm?._setActive?.(imageId);
             });
             return row;
         },

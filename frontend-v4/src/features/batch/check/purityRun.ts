@@ -7,8 +7,8 @@ import { busyText } from '../../jobs/busyText'
 import { pushRefusal } from '../../jobs/refusalToast'
 import type { PurityResult } from './checkIssues'
 
-// Character purity (CCIP): is every Library image of the batch the same
-// character? Advisory only: it names images, it changes nothing. The model
+// Character purity (CCIP): is every image of the batch (Library and folder
+// images) the same character? Advisory only: it names images, it changes nothing. The model
 // (about 150 MB) downloads on first use as a job, then the analysis runs as
 // another; the result is kept per batch for this visit.
 
@@ -33,6 +33,8 @@ export interface PurityOutcome extends PurityResult {
   failed: number
   /** The Library images that were sent. */
   ids: number[]
+  /** The folder images that were sent, by path. */
+  paths: string[]
 }
 
 export const usePurityResults = create<{ byBatch: Record<number, PurityOutcome | undefined> }>(() => ({ byBatch: {} }))
@@ -42,28 +44,30 @@ const toastError = (error: unknown) => {
   pushRefusal(busy ? busyText(error) : tr('error.generic', { reason: (error as Error).message }), error)
 }
 
-async function keepResult(batchId: number, jobId: string, ids: number[]): Promise<void> {
+async function keepResult(batchId: number, jobId: string, ids: number[], paths: string[]): Promise<void> {
   const raw = unwrap<{ result?: (PurityResult & { threshold: number; extracted: number; failed: number }) | null }>(
     await api.GET('/api/dataset/character-purity/progress', { params: { query: { job_id: jobId } } }),
   )
   if (!raw.result) return
-  const outcome: PurityOutcome = { ...raw.result, ids }
+  const outcome: PurityOutcome = { ...raw.result, ids, paths }
   usePurityResults.setState((s) => ({ byBatch: { ...s.byBatch, [batchId]: outcome } }))
 }
 
-async function analyse(batchId: number, ids: number[], threshold: number | null): Promise<boolean> {
+async function analyse(batchId: number, ids: number[], paths: string[], threshold: number | null): Promise<boolean> {
   try {
     const res = unwrap<{ job_id: string; total: number }>(
-      await api.POST('/api/dataset/character-purity', { body: { image_ids: ids, ...(threshold === null ? {} : { threshold }) } }),
+      await api.POST('/api/dataset/character-purity', {
+        body: { image_ids: ids, image_paths: paths, ...(threshold === null ? {} : { threshold }) },
+      }),
     )
     addJob({
       kind: 'purity',
-      count: ids.length,
+      count: ids.length + paths.length,
       ids,
       label: 'CCIP',
       ctx: { purityJobId: res.job_id },
       progress: startingProgress(res.total),
-      then: () => keepResult(batchId, res.job_id, ids),
+      then: () => keepResult(batchId, res.job_id, ids, paths),
     })
     return true
   } catch (error) {
@@ -72,20 +76,20 @@ async function analyse(batchId: number, ids: number[], threshold: number | null)
   }
 }
 
-/** Download the model first when it is not there, then analyse these Library images. */
-export async function runPurity(batchId: number, ids: number[], threshold: number | null, available: boolean): Promise<boolean> {
+/** Download the model first when it is not there, then analyse these Library and folder images. */
+export async function runPurity(batchId: number, ids: number[], paths: string[], threshold: number | null, available: boolean): Promise<boolean> {
   if (isQueueBusy('purity') || isQueueBusy('purityget')) {
     useToasts.getState().push(tr('jobs.busy'), 'error')
     return false
   }
-  if (available) return analyse(batchId, ids, threshold)
+  if (available) return analyse(batchId, ids, paths, threshold)
   try {
     unwrap(await api.POST('/api/dataset/character-purity/prepare'))
     addJob({
       kind: 'purityget',
       label: 'CCIP',
       progress: { ...startingProgress(0), unit: 'bytes' },
-      then: () => void analyse(batchId, ids, threshold),
+      then: () => void analyse(batchId, ids, paths, threshold),
     })
     return true
   } catch (error) {

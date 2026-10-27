@@ -7531,6 +7531,12 @@ export interface components {
         CharacterPurityRequest: {
             /** Image Ids */
             image_ids?: number[];
+            /** Image Paths */
+            image_paths?: string[];
+            /** Dataset Scan Tokens */
+            dataset_scan_tokens?: {
+                [key: string]: unknown;
+            }[];
             /** Threshold */
             threshold?: number | null;
         };

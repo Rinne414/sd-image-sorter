@@ -46,6 +46,11 @@ class CharacterPurityRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     image_ids: List[int] = Field(default_factory=list)
+    # Pictures imported from a folder (not in the Library), by absolute path.
+    image_paths: List[str] = Field(default_factory=list)
+    # A large folder import's pictures, by the folder scan that listed them
+    # ({"scan_token": ..., "exclude_paths": [...]}), as the audit takes them.
+    dataset_scan_tokens: List[Dict[str, Any]] = Field(default_factory=list, max_length=100)
     # None -> the CCIP variant's published threshold (0.178 for pruned-24).
     threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
@@ -61,6 +66,37 @@ class CharacterPurityStartResponse(BaseModel):
 def _get_ccip() -> Any:
     """Indirection point so tests can stub the ONNX-backed singleton."""
     return ccip.get_ccip()
+
+
+def _scan_token_paths(sources: Iterable[Dict[str, Any]]) -> List[str]:
+    """Every picture of the listed folder scans, minus the ones taken out of the dataset."""
+    from services.dataset_session.allowlist import register_scan_manifest_paths_for_session
+    from services.dataset_session.manifest_store import iter_scan_manifest_paths
+
+    out: List[str] = []
+    for source in sources or []:
+        token = str((source or {}).get("scan_token") or (source or {}).get("token") or "")
+        if not token:
+            continue
+        excluded = {str(path) for path in ((source or {}).get("exclude_paths") or []) if str(path)}
+        try:
+            out.extend(path for path in iter_scan_manifest_paths(token) if str(path) not in excluded)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        # The results show these pictures' thumbnails.
+        register_scan_manifest_paths_for_session(token)
+    return out
+
+
+def _unique_paths(values: Iterable[Any]) -> List[str]:
+    seen: set[str] = set()
+    out: List[str] = []
+    for raw in values or []:
+        path = str(raw or "").strip()
+        if path and path not in seen:
+            seen.add(path)
+            out.append(path)
+    return out
 
 
 def _iter_unique_image_ids(values: Iterable[Any]) -> Iterator[int]:
@@ -245,8 +281,12 @@ def _reset_job_state_for_tests() -> None:
         _PREPARE_STATE.update({"active": False, "error": None})
 
 
-def _resolve_image_paths(image_ids: List[int]) -> Dict[str, Any]:
-    """Map ids -> readable paths; missing rows / dead paths count as failed."""
+def _resolve_image_paths(image_ids: List[int], folder_paths: List[str] = ()) -> Dict[str, Any]:
+    """Map ids and folder pictures -> readable paths; missing rows / dead paths count as failed.
+
+    ``ids`` holds the Library id of each readable picture, 0 for a folder
+    picture (it has no Library row), in the same order as ``paths``.
+    """
     ordered_ids: List[int] = []
     paths: List[str] = []
     failed_ids: List[int] = []
@@ -261,7 +301,26 @@ def _resolve_image_paths(image_ids: List[int]) -> Dict[str, Any]:
                 continue
             ordered_ids.append(image_id)
             paths.append(path)
-    return {"ids": ordered_ids, "paths": paths, "failed_ids": failed_ids}
+    from services.dataset_session.scan import resolve_paths_for_dataset
+
+    # Every Library picture is named by its id; a folder picture by its path as sent.
+    named = [""] * len(paths)
+    failed_paths: List[str] = []
+    for path in folder_paths:
+        readable = resolve_paths_for_dataset([path])
+        if not readable:
+            failed_paths.append(path)
+            continue
+        ordered_ids.append(0)
+        paths.append(readable[0])
+        named.append(path)
+    return {
+        "ids": ordered_ids,
+        "paths": paths,
+        "named": named,
+        "failed_ids": failed_ids,
+        "failed_paths": failed_paths,
+    }
 
 
 def _build_result(
@@ -269,21 +328,27 @@ def _build_result(
     analysis: Dict[str, Any],
     *,
     failed: int,
+    extracted_paths: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     distances = analysis["distances"]
     outlier_flags = analysis["outlier_flags"]
+    paths = extracted_paths or [""] * len(extracted_ids)
     items = [
         {
             "image_id": int(image_id),
+            # A folder picture (image_id 0) is named by its path.
+            **({"path": path} if not image_id else {}),
             "distance": round(float(distance), 6),
             "outlier": bool(outlier),
         }
-        for image_id, distance, outlier in zip(extracted_ids, distances, outlier_flags)
+        for image_id, path, distance, outlier in zip(extracted_ids, paths, distances, outlier_flags)
     ]
     # Worst-first ranking so the UI leads with the most suspicious images.
     items.sort(key=lambda item: item["distance"], reverse=True)
+    medoid = analysis["medoid_index"]
     return {
-        "medoid_image_id": int(extracted_ids[analysis["medoid_index"]]),
+        "medoid_image_id": int(extracted_ids[medoid]),
+        **({"medoid_path": paths[medoid]} if not extracted_ids[medoid] else {}),
         "items": items,
         "threshold": float(analysis["threshold"]),
         "extracted": len(extracted_ids),
@@ -297,15 +362,17 @@ def start_character_purity(
     """Start a cancellable character-purity worker and return immediately."""
     global _JOB_RUN_ID, _JOB_THREAD, _JOB_CANCEL_EVENT, _JOB_PROGRESS
 
-    if not request.image_ids:
+    if not request.image_ids and not request.image_paths and not request.dataset_scan_tokens:
         raise HTTPException(
-            status_code=400, detail="image_ids is required. / 请先选择图片。"
+            status_code=400, detail="image_ids or image_paths is required. / 请先选择图片。"
         )
     image_ids = list(_iter_unique_image_ids(request.image_ids))
-    if len(image_ids) < 2:
+    folder_paths = _unique_paths([*request.image_paths, *_scan_token_paths(request.dataset_scan_tokens)])
+    total = len(image_ids) + len(folder_paths)
+    if total < 2:
         raise HTTPException(
             status_code=400,
-            detail="Character purity needs at least 2 gallery images. / 角色纯度分析至少需要 2 张图库图片。",
+            detail="Character purity needs at least 2 images. / 角色纯度分析至少需要 2 张图片。",
         )
     instance = _get_ccip()
     if not instance.is_available():
@@ -338,11 +405,11 @@ def start_character_purity(
             "job_id": job_id,
             "step": "starting",
             "current": 0,
-            "total": len(image_ids),
+            "total": total,
             "extracted": 0,
             "failed": 0,
             "result": None,
-            "message": f"Starting character-purity analysis for {count_text(len(image_ids), 'image')}...",
+            "message": f"Starting character-purity analysis for {count_text(total, 'image')}...",
             "message_key": "starting",
             "message_args": {},
             "started_at": started_at,
@@ -351,8 +418,8 @@ def start_character_purity(
 
     def worker() -> None:
         try:
-            resolved = _resolve_image_paths(image_ids)
-            failed = len(resolved["failed_ids"])
+            resolved = _resolve_image_paths(image_ids, folder_paths)
+            failed = len(resolved["failed_ids"]) + len(resolved["failed_paths"])
             _set_progress_if_current(
                 run_id,
                 {
@@ -372,7 +439,7 @@ def start_character_purity(
                         "status": "cancelling" if cancel_event.is_set() else "running",
                         "step": "extracting",
                         "current": done,
-                        "total": len(image_ids),
+                        "total": total,
                         "message": f"Embedding image {done}/{total}...",
                         "message_key": "embedding",
                         "message_args": {"done": done, "total": total},
@@ -389,6 +456,11 @@ def start_character_purity(
             extracted_ids = [
                 image_id
                 for index, image_id in enumerate(resolved["ids"])
+                if index not in failed_index_set
+            ]
+            extracted_paths = [
+                path
+                for index, path in enumerate(resolved["named"])
                 if index not in failed_index_set
             ]
 
@@ -423,14 +495,14 @@ def start_character_purity(
                 raise ccip.CCIPCancelled()
             diffs = instance.pairwise_diff(features)
             analysis = ccip.medoid_from_diffs(diffs, threshold=threshold)
-            result = _build_result(extracted_ids, analysis, failed=failed)
+            result = _build_result(extracted_ids, analysis, failed=failed, extracted_paths=extracted_paths)
             outliers = sum(1 for item in result["items"] if item["outlier"])
             _set_progress_if_current(
                 run_id,
                 {
                     "status": "done",
                     "step": "done",
-                    "current": len(image_ids),
+                    "current": total,
                     "extracted": result["extracted"],
                     "failed": result["failed"],
                     "result": result,
@@ -479,7 +551,7 @@ def start_character_purity(
     return CharacterPurityStartResponse(
         status="started",
         job_id=job_id,
-        total=len(image_ids),
-        message=f"Character-purity analysis started for {count_text(len(image_ids), 'image')}.",
+        total=total,
+        message=f"Character-purity analysis started for {count_text(total, 'image')}.",
         message_key="started",
     )
