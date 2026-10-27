@@ -512,10 +512,18 @@
         "#nav-customize-reset"
       ],
       "vopus": {
-        "missing": "Vopus has no way to customize or reorder the top-bar tabs"
+        "at": "#/library",
+        "open": [
+          "[data-testid=\"tools-menu\"]"
+        ],
+        "find": "[data-item=\"customize-places\"]"
       },
       "next": {
-        "missing": "Top bar tabs cannot be customised or reset in the new interface."
+        "at": "#/library",
+        "open": [
+          "[data-testid=\"next-more\"]"
+        ],
+        "find": "[data-item=\"customize-places\"]"
       }
     },
     {

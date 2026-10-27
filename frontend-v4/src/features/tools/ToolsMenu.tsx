@@ -3,6 +3,7 @@ import { useApp } from '../../state/store'
 import { Menu, type MenuItem } from '../../ui/Menu'
 import { useToasts } from '../../ui/toasts'
 import { quickCensor } from '../censor/quickCensor'
+import { useNavCustomizeOpen } from '../navcustom/navStore'
 import { useSelectionDialog } from '../selection/dialogs'
 import { TOOLS } from './registry'
 
@@ -38,6 +39,7 @@ export function ToolsMenu() {
       label: picks > 1 ? t('tools.editTagsMany', { n: picks }) : t('tools.editTags'),
       onSelect: onImages((ids) => useSelectionDialog.getState().showFor('edit-tags', ids, ids.length)),
     },
+    { id: 'customize-places', label: t('navcustom.open'), divider: true, onSelect: () => useNavCustomizeOpen.getState().setOpen(true) },
   ]
 
   return <Menu label={t('tools.menu')} title={t('tools.menuTitle')} items={items} align="right" current={page === 'tools'} testId="tools-menu" />

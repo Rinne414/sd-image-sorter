@@ -1,4 +1,24 @@
 import type { zhCNNavCustom } from './zh-CN.navcustom'
 
 export const enNavCustom: Record<keyof typeof zhCNNavCustom, string> = {
+  'navcustom.open': 'Customize top bar…',
+  'navcustom.openTitle': 'Choose which places sit in the top bar, and their order',
+  'navcustom.title': 'Customize top bar',
+  'navcustom.body': 'Tick the places to keep in the top bar and drag them or use the arrows to set the order. The rest wait under More, and Ctrl K finds them too.',
+  'navcustom.list': 'Places in the top bar',
+  'navcustom.show': 'Show {name} in the top bar',
+  'navcustom.drag': 'Drag to reorder',
+  'navcustom.moveUp': 'Move {name} up',
+  'navcustom.moveDown': 'Move {name} down',
+  'navcustom.inBar': 'In the bar',
+  'navcustom.inMore': 'Under More',
+  'navcustom.position': '{name} is now number {n}',
+  'navcustom.lastOne': 'The top bar keeps at least one place, or there would be nothing left to click. Tick another place first, then untick this one.',
+  'navcustom.reset': 'Restore defaults',
+  'navcustom.resetDone': 'Top bar restored to the defaults.',
+  'navcustom.resetNone': 'The top bar is already the default',
+  'navcustom.done': 'Done',
+  'navcustom.more': 'More',
+  'navcustom.moreTitle': 'Places hidden from the bar, and Customize top bar',
+  'navcustom.hiddenGroup': 'Hidden from the top bar',
 }
