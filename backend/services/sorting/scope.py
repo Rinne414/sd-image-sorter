@@ -167,14 +167,21 @@ class SortScopeMixin:
             max_waifu=max_waifu,
         )
 
-    def count_sort_scope(self, **filters: Any) -> Dict[str, int]:
+    def count_sort_scope(
+        self, image_ids: Optional[Any] = None, **filters: Any
+    ) -> Dict[str, int]:
         """Count what a session with these filters would queue.
 
         ``total`` matches the filters; ``sorted`` of them were already copied
         or moved by Auto-Separate or Manual Sort; ``remaining`` is what a
-        session that leaves sorted pictures out queues.
+        session that leaves sorted pictures out queues. With ``image_ids`` the
+        filters are not used and those readable pictures are counted.
         """
-        image_ids = self._select_sort_scope_ids(**filters)
+        image_ids = (
+            self._readable_picked_ids(image_ids)
+            if image_ids is not None
+            else self._select_sort_scope_ids(**filters)
+        )
         sorted_count = len(db_sorted_marks.sorted_ids_among(image_ids))
         return {
             "total": len(image_ids),

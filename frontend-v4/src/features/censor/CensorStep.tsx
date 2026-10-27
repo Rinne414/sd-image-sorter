@@ -108,7 +108,7 @@ export default function CensorStep({ batch, next, onNext }: Props) {
     <section className={styles.editor} aria-label={t('censor.editor')} data-testid="censor-editor">
       <EditorBar batch={batch} item={item} index={index} edit={edit} next={next} onNext={onNext} onGo={go} onRename={() => setDialog('rename')} finalName={finalName} />
       <div className={styles.work}>
-        <Filmstrip batchId={batch.id} items={items} current={index} onPick={go} />
+        <Filmstrip batch={batch} batchId={batch.id} items={items} current={index} onPick={go} />
         <div className={styles.stage}>
           <CanvasView key={item.image_id} imageId={item.image_id} ops={edit?.ops ?? NO_OPS} onCommit={(ops) => changeOps(batch.id, item, ops)} />
         </div>

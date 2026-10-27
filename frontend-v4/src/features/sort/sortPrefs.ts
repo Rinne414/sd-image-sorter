@@ -16,6 +16,8 @@ const SOUND_KEY = 'sort-audio-enabled'
 const FOCUS_KEY = 'manual_sort_zen_v1'
 const INFO_KEY = 'sd-v4-sort-info'
 const AUTO_PREVIEW_KEY = 'sd-v4-sort-auto-preview'
+// Shared with the classic page: '1' leaves pictures that were already sorted out, '0' keeps them in. Nothing stored: the sort decides (see SortSetup).
+const EXCLUDE_SORTED_KEY = 'manual_sort_exclude_sorted_v1'
 
 /** Allowed cooldown between two keys, as V3.5 offers it. */
 export const COOLDOWN_MIN_MS = 100
@@ -86,11 +88,14 @@ interface PrefsState {
   info: boolean
   /** Sort by condition shows the matching images as the rule changes (on unless switched off). */
   autoPreview: boolean
+  /** Leave out pictures Auto-Separate or an earlier sort already copied or moved; null: never chosen (a filter leaves them out, picks keep them). */
+  excludeSorted: boolean | null
   setCooldown: (ms: number) => void
   setSound: (on: boolean) => void
   setFocus: (on: boolean) => void
   setInfo: (on: boolean) => void
   setAutoPreview: (on: boolean) => void
+  setExcludeSorted: (on: boolean) => void
 }
 
 export const useSortPrefs = create<PrefsState>((set) => ({
@@ -99,6 +104,7 @@ export const useSortPrefs = create<PrefsState>((set) => ({
   focus: read(FOCUS_KEY) === '1',
   info: read(INFO_KEY) === '1',
   autoPreview: read(AUTO_PREVIEW_KEY) !== '0',
+  excludeSorted: read(EXCLUDE_SORTED_KEY) === '1' ? true : read(EXCLUDE_SORTED_KEY) === '0' ? false : null,
   setCooldown: (ms) => {
     const cooldownMs = clampCooldown(ms)
     write(COOLDOWN_KEY, String(cooldownMs))
@@ -119,6 +125,10 @@ export const useSortPrefs = create<PrefsState>((set) => ({
   setAutoPreview: (autoPreview) => {
     write(AUTO_PREVIEW_KEY, autoPreview ? '1' : '0')
     set({ autoPreview })
+  },
+  setExcludeSorted: (excludeSorted) => {
+    write(EXCLUDE_SORTED_KEY, excludeSorted ? '1' : '0')
+    set({ excludeSorted })
   },
 }))
 

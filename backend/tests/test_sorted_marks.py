@@ -289,6 +289,22 @@ def test_scope_count_and_start_routes_agree(test_client, tmp_path):
     assert by_query.json()["total_images"] == 2
 
 
+def test_scope_count_counts_exactly_the_given_ids(test_client, tmp_path):
+    test_db = test_client.test_db
+    ids = _library(test_db, tmp_path, 4)
+    marks.mark_image_sorted(ids[1], marks.SOURCE_MANUAL_SORT, "copy")
+
+    picked = test_client.post(
+        "/api/sort/scope-count", json={"image_ids": [ids[0], ids[1], 999999]}
+    )
+    assert picked.status_code == 200, picked.text
+    # The id that is not an image is dropped; one of the two real ones was sorted.
+    assert picked.json() == {"total": 2, "sorted": 1, "remaining": 1}
+
+    none = test_client.post("/api/sort/scope-count", json={"image_ids": []})
+    assert none.json() == {"total": 0, "sorted": 0, "remaining": 0}
+
+
 # ---------------------------------------------------------------------------
 # Undo says what it undid (item 8)
 # ---------------------------------------------------------------------------

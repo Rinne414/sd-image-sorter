@@ -34,6 +34,7 @@ from services.sorting_models import (
     ScanRequest,
     ScanStartResponse,
     SortFilterRequest,
+    SortScopeCountRequest,
     ValidatePathRequest,
 )
 from services.sorting_service import SortingService
@@ -628,7 +629,7 @@ def _manual_sort_filter_kwargs(request: SortFilterRequest) -> Dict[str, Any]:
 
 @router.post("/sort/scope-count")
 def count_sort_scope(
-    request: SortFilterRequest,
+    request: SortScopeCountRequest,
     service: SortingService = Depends(get_sorting_service),
 ):
     """Count what a Manual Sort session with these filters would queue.
@@ -637,9 +638,12 @@ def count_sort_scope(
     ignored) and returns ``{"total", "sorted", "remaining"}``: ``sorted`` of
     the ``total`` matches were already copied or moved by Auto-Separate or
     Manual Sort, and ``remaining`` is what a session started with
-    ``exclude_sorted`` queues.
+    ``exclude_sorted`` queues. With ``image_ids`` it counts exactly those
+    pictures (the picks, or the ids a filter resolved to) instead of a filter.
     """
-    return service.count_sort_scope(**_manual_sort_filter_kwargs(request))
+    return service.count_sort_scope(
+        **_manual_sort_filter_kwargs(request), image_ids=request.image_ids
+    )
 
 
 @router.post("/sort/start")

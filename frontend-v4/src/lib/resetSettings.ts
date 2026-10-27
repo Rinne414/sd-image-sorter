@@ -29,6 +29,7 @@ export const SETTING_KEYS: readonly string[] = [
   'manual_sort_cooldown_ms_v1',
   'sort-audio-enabled',
   'manual_sort_zen_v1',
+  'manual_sort_exclude_sorted_v1',
   'sd-v4-tag-options',
   'sd-v4-privacy-options',
   'sd-v4-privacy-disguise',

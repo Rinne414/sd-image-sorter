@@ -2,7 +2,9 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { useEffect, useMemo, useRef } from 'react'
 import { thumbnailUrl } from '../../api/client'
 import type { BatchItem } from '../../api/types'
+import type { Batch } from '../../api/types'
 import { useT, type MessageKey } from '../../i18n'
+import { QueueSortMenu } from '../batch/QueueSortMenu'
 import { byName } from '../batch/batchFilter'
 import { useStepViews, useViewKey } from '../batch/stepView'
 import styles from './Filmstrip.module.css'
@@ -23,6 +25,7 @@ export const STATE_LABEL: Record<ItemStatus, MessageKey> = {
 }
 
 interface Props {
+  batch: Batch
   batchId: number
   items: BatchItem[]
   current: number
@@ -34,7 +37,7 @@ interface Props {
  * to its censoring. The name filter (shared with Pick and Order) only narrows
  * the strip; the editor still steps through every image.
  */
-export function Filmstrip({ batchId, items, current, onPick }: Props) {
+export function Filmstrip({ batch, batchId, items, current, onPick }: Props) {
   const t = useT()
   const edits = useCensorSession((s) => s.edits)
   const picked = useCensorPanel((s) => (s.picked.batchId === batchId ? s.picked.ids : NONE))
@@ -71,6 +74,7 @@ export function Filmstrip({ batchId, items, current, onPick }: Props) {
         onChange={(e) => useStepViews.getState().setName(viewKey, e.target.value)}
         data-testid="censor-strip-filter"
       />
+      <QueueSortMenu batch={batch} compact />
       <div ref={scrollRef} className={styles.scroller}>
         {rows.length === 0 && items.length > 0 && <p className={styles.none}>{t('batch.filter.noneShown', { text: name.trim() })}</p>}
         <div className={styles.list} style={{ height: virtualizer.getTotalSize() }}>

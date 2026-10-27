@@ -614,6 +614,12 @@ class BatchMoveUndoRequest(BaseModel):
     run_token: str = Field(..., pattern=r"^[0-9a-f]{32}$")
 
 
+class SortScopeCountRequest(SortFilterRequest):
+    """Body of the setup page's count: a filter, or exactly these ``image_ids`` (V4)."""
+
+    image_ids: Optional[List[int]] = Field(default=None, max_length=5_000_000)
+
+
 class ManualSortStartRequest(SortFilterRequest):
     """Request model for starting manual sort without query-string size limits."""
 
