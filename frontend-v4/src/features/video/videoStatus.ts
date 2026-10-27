@@ -1,4 +1,5 @@
 import type { MessageKey, Params } from '../../i18n'
+import { installFailureText } from './installError'
 import type { VideoInstall, VideoSupport } from './videoApi'
 
 type Say = (key: MessageKey, params?: Params) => string
@@ -19,12 +20,16 @@ function progressText(install: VideoInstall, say: Say): string {
   return say('video.statusLooking')
 }
 
+/** Why the install failed, in words (never the code). */
+export const failureOf = (install: VideoInstall, say: Say): string =>
+  installFailureText({ code: install.error_code, params: install.error_params, message: install.error }, say)
+
 /** One honest sentence about video support: installing, failed, ready, or missing. */
 export function videoStatusText(state: VideoSupport | undefined, say: Say): string {
   if (!state) return say('video.statusChecking')
   const install = state.install
   if (install.state === 'running') return progressText(install, say)
-  if (install.state === 'failed') return say('video.statusFailed', { reason: install.error ?? '' })
+  if (install.state === 'failed') return say('video.statusFailed', { reason: failureOf(install, say) })
   if (state.available) {
     const where = state.source ? say(SOURCE[state.source] ?? 'video.sourcePath') : ''
     const reading = state.pending ? ` ${say('video.statusReading', { n: state.pending })}` : ''

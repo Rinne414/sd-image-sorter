@@ -573,7 +573,7 @@ test('Chinese: the page, a card and the bulk dialog have no English left but nam
   await expect(cardOf(page, 'clip').getByTestId('model-prepare')).toHaveText('立即准备')
   await expect(cardOf(page, 'wd14').getByTestId('other-taggers')).toContainText('需要约 8.3 GB 空闲显存')
   // strip the names, file names and jargon a Chinese UI keeps; no English words must remain
-  const allowed = /(WD14|WD|SwinV2|EVA02|ConvNeXt|ViT|Large|Camie|PixAI|OppaiOracle|CL Tagger|ToriiGate|Florence-2|Base|TIPO|CLIP|FastEmbed|Kaloscope|LSNet|Lucida|rembg|U2Net|YOLO|NudeNet|SAM|Hugging Face|HuggingFace|hf-mirror(\.com)?|ModelScope|Civitai|Danbooru|NVIDIA|CUDA|PyTorch|CPU|GPU|GGUF|Ollama|AI|WASD|app|data|models|yolo|json|txt|onnx|pt|pth|csv|kaloscope2\.0|lsnet_model|comfyui-lsnet-runtime|best_checkpoint|class_mapping|SD_IMAGE_SORTER_GPU_DUTY_CYCLE|off|v\d[\w.-]*|\d+(\.\d+)?\s?(MB|GB|%)|200M-ft|320n)/g
+  const allowed = /(ffmpeg|ffprobe|LGPL|VP9|PATH|SHA256|WD14|WD|SwinV2|EVA02|ConvNeXt|ViT|Large|Camie|PixAI|OppaiOracle|CL Tagger|ToriiGate|Florence-2|Base|TIPO|CLIP|FastEmbed|Kaloscope|LSNet|Lucida|rembg|U2Net|YOLO|NudeNet|SAM|Hugging Face|HuggingFace|hf-mirror(\.com)?|ModelScope|Civitai|Danbooru|NVIDIA|CUDA|PyTorch|CPU|GPU|GGUF|Ollama|AI|WASD|app|data|models|yolo|json|txt|onnx|pt|pth|csv|kaloscope2\.0|lsnet_model|comfyui-lsnet-runtime|best_checkpoint|class_mapping|SD_IMAGE_SORTER_GPU_DUTY_CYCLE|off|v\d[\w.-]*|\d+(\.\d+)?\s?(MB|GB|%)|200M-ft|320n)/g
   const text = (await page.getByTestId('model-center').innerText()).replace(allowed, '')
   expect(text.match(/[A-Za-z]{2,}/g) ?? []).toEqual([])
   await page.getByTestId('bulk-open').click()

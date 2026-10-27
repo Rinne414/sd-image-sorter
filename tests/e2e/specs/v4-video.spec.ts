@@ -301,7 +301,7 @@ test('the banner offers video support when the library has videos and ffmpeg is 
       available: false,
       install:
         phase === 'running' ? { state: 'running', phase: 'downloading', downloaded: 38_000_000, total: 77_000_000 }
-        : phase === 'failed' ? { state: 'failed', error: 'no network' }
+        : phase === 'failed' ? { state: 'failed', error: '<urlopen error [WinError 10061] ...>', error_code: 'video_install_unreachable', error_params: {} }
         : { state: 'idle' },
     }),
     () => {
@@ -324,7 +324,9 @@ test('the banner offers video support when the library has videos and ffmpeg is 
 
   // the download fails: said plainly, and it can be tried again
   phase = 'failed'
-  await expect(banner).toContainText('The install failed: no network', { timeout: 10_000 })
+  await expect(banner).toContainText('The install failed: The download site could not be reached', { timeout: 10_000 })
+  await expect(banner).not.toContainText('WinError')
+  await expect(banner).not.toContainText('video_install')
   await expect(page.getByTestId('video-banner-install')).toHaveText('Try again')
   await expect(page.getByTestId('video-banner-install')).toBeEnabled()
 
@@ -340,7 +342,7 @@ test('Settings › Models has the video support row in both languages', async ({
       available: false,
       install:
         phase === 'running' ? { state: 'running', phase: 'downloading', downloaded: 20_000_000, total: 77_000_000 }
-        : phase === 'failed' ? { state: 'failed', error: 'checksum did not match' }
+        : phase === 'failed' ? { state: 'failed', error: 'checksum did not match', error_code: 'video_install_site_refused', error_params: { status: 403 } }
         : { state: 'idle' },
     }),
     () => {
@@ -364,13 +366,14 @@ test('Settings › Models has the video support row in both languages', async ({
   await expect(page.getByTestId('video-support-status')).toContainText('Downloading ffmpeg: 20 of 77 MB...')
   await expect(page.getByTestId('video-support-progress')).toBeVisible()
   phase = 'failed'
-  await expect(page.getByTestId('video-support-status')).toContainText('The install failed: checksum did not match', { timeout: 10_000 })
+  await expect(page.getByTestId('video-support-status')).toContainText('The install failed: The download site answered 403 instead of the file', { timeout: 10_000 })
+  await expect(page.getByTestId('video-support-status')).not.toContainText('checksum did not match')
   await expect(page.getByTestId('video-support-install')).toHaveText('Try again')
 
   await page.evaluate(() => localStorage.setItem('sd-image-sorter-lang', 'zh-CN'))
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('video-support')).toContainText('视频支持')
-  await expect(page.getByTestId('video-support-status')).toContainText('安装失败')
+  await expect(page.getByTestId('video-support-status')).toContainText('安装失败：下载站点返回了 403')
   await expect(page.getByTestId('video-support-install')).toHaveText('重试')
 })
 

@@ -52,7 +52,7 @@ const JARGON = new Set([
   ...['GPU', 'CPU', 'CUDA', 'API', 'URL', 'HTTP', 'HTTPS', 'http', 'https', 'localhost', 'SOCKS', 'socks5', 'VPN', 'SSD', 'RGB', 'HDR', 'DPI'],
   ...['GB', 'MB', 'KB', 'B', 'MP', 'px', 'ms', 'ID', 'MIT', 'NSFW'],
   // video support
-  ...['ffmpeg', 'LGPL', 'VP9', 'PATH'],
+  ...['ffmpeg', 'ffprobe', 'LGPL', 'VP9', 'PATH', 'SHA256'],
   // generation and training words
   ...['SEED', 'CFG', 'caption', 'Caption', 'token', 'tokens', 'V3.5', 'Vopus'],
   // a language named in its own language (the language picker)

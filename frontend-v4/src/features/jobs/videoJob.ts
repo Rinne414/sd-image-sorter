@@ -1,4 +1,5 @@
-import { translate, useLang } from '../../i18n'
+import { translate, useLang, type MessageKey, type Params } from '../../i18n'
+import { installFailureText } from '../video/installError'
 import type { JobProgress } from './progress'
 
 // Reads the video support install for the Jobs drawer: GET /api/video-support
@@ -11,7 +12,7 @@ const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0
 const str = (v: unknown) => (typeof v === 'string' ? v : '')
 const obj = (v: unknown): Raw => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Raw) : {})
 
-const say = (key: 'video.statusUnpacking' | 'video.statusLooking') => translate(useLang.getState().lang, key)
+const say = (key: MessageKey, params?: Params) => translate(useLang.getState().lang, key, params)
 
 export function readVideoInstall(base: JobProgress, raw: Raw): JobProgress {
   const install = obj(raw.install)
@@ -23,7 +24,8 @@ export function readVideoInstall(base: JobProgress, raw: Raw): JobProgress {
     return { ...shown, status: 'running', currentItem, message: '' }
   }
   if (state === 'failed') {
-    return { ...shown, status: 'error', currentItem: null, message: str(install.error) || '?' }
+    const message = installFailureText({ code: str(install.error_code), params: obj(install.error_params), message: str(install.error) }, say)
+    return { ...shown, status: 'error', currentItem: null, message }
   }
   if (raw.available === true) return { ...shown, status: 'done', succeeded: 1, currentItem: null, message: '' }
   // Idle and still not installed: the backend restarted and forgot the run.

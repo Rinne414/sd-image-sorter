@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { api, unwrap } from '../../api/client'
+import { api, ApiError, unwrap } from '../../api/client'
 import { queryClient } from '../../api/queryClient'
 import { rawJson } from '../../api/raw'
 import { translate, useLang, type MessageKey, type Params } from '../../i18n'
@@ -7,6 +7,7 @@ import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
 import { addJob, isQueueBusy } from '../jobs/jobs'
 import { startedVideoInstall } from '../jobs/videoJob'
+import { installFailureText } from './installError'
 
 // What video support reads and does: the ffmpeg status and install, how many
 // videos the library holds, and a video's playback facts. These routes are not
@@ -18,6 +19,9 @@ export interface VideoInstall {
   downloaded?: number
   total?: number | null
   error?: string
+  /** The failure as a code and params (installError.ts says it in words). */
+  error_code?: string
+  error_params?: Record<string, unknown>
 }
 
 export interface VideoSupport {
@@ -105,7 +109,8 @@ export async function installVideoSupport(): Promise<void> {
     const install = await rawJson<VideoInstall>('POST', '/api/video-support/install', { body: {} })
     addJob({ kind: 'video', progress: startedVideoInstall(install as unknown as Record<string, unknown>), label: say('video.job.label') })
   } catch (error) {
-    useToasts.getState().push(say('video.installFailed', { reason: (error as Error).message }), 'error')
+    const failure = error instanceof ApiError ? { code: error.code, message: error.message } : { message: (error as Error).message }
+    useToasts.getState().push(say('video.installFailed', { reason: installFailureText(failure, say) }), 'error')
   }
   void queryClient.invalidateQueries({ queryKey: VIDEO_SUPPORT_KEY })
 }
