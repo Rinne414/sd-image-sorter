@@ -165,7 +165,10 @@ test('a pasted picture address asks first, and says why a download failed', asyn
   await paste(page, { text: 'http://127.0.0.1:9/never.png' })
   await page.getByTestId('collect-url-save').click()
   await expect(dialog).toHaveCount(0)
-  await expect(toasts(page).filter({ hasText: 'The picture could not be downloaded' })).toBeVisible()
+  // Nothing listens on port 9: said in words, not as the system's own error text.
+  const failed = toasts(page).filter({ hasText: 'The site could not be reached' })
+  await expect(failed).toBeVisible()
+  await expect(failed).not.toContainText('WinError')
 })
 
 test('text that is not an address is left to the browser', async ({ page }) => {

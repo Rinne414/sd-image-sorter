@@ -10,6 +10,7 @@ requested without it. No size limit; a read that stalls for
 from __future__ import annotations
 
 import ipaddress
+import logging
 import os
 import tempfile
 from dataclasses import dataclass
@@ -18,6 +19,8 @@ from typing import Any, Dict, Optional
 from urllib.parse import unquote, urlsplit
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 CONNECT_TIMEOUT_SECONDS = 15.0
 READ_TIMEOUT_SECONDS = 60.0
@@ -51,6 +54,46 @@ class DownloadError(Exception):
 
     def detail(self) -> Dict[str, Any]:
         return {"code": self.code, "message": self.message, "params": self.params}
+
+
+def network_error(exc: httpx.HTTPError) -> DownloadError:
+    """What went wrong, in words the page can say in either language.
+
+    The system's own text (``[WinError 10061] ...``, in the system's language)
+    goes to the log only.
+    """
+    logger.info("Picture download failed: %r", exc)
+    # A connect timeout is both a TimeoutException and a transport error: time first.
+    if isinstance(exc, httpx.TimeoutException):
+        return DownloadError(
+            "The site took too long to send the picture. Try again later.",
+            504,
+            code="collect_download_timeout",
+        )
+    if isinstance(exc, httpx.ConnectError):
+        return DownloadError(
+            "The site could not be reached. Check the address, the network and the proxy setting.",
+            502,
+            code="collect_site_unreachable",
+        )
+    if isinstance(exc, httpx.TooManyRedirects):
+        return DownloadError(
+            "The address kept redirecting and never reached a picture.",
+            502,
+            code="collect_too_many_redirects",
+        )
+    if isinstance(exc, (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError)):
+        return DownloadError(
+            "The connection broke off before the whole picture arrived. Try again.",
+            502,
+            code="collect_connection_broken",
+        )
+    return DownloadError(
+        f"The picture could not be downloaded: {exc}",
+        502,
+        code="collect_download_failed",
+        params={"reason": str(exc)},
+    )
 
 
 @dataclass(frozen=True)
@@ -148,12 +191,7 @@ def download_picture(
                 content_type = response.headers.get("content-type", "")
     except httpx.HTTPError as exc:
         tmp_path.unlink(missing_ok=True)
-        raise DownloadError(
-            f"The picture could not be downloaded: {exc}",
-            502,
-            code="collect_download_failed",
-            params={"reason": str(exc)},
-        ) from exc
+        raise network_error(exc) from exc
     except BaseException:
         tmp_path.unlink(missing_ok=True)
         raise

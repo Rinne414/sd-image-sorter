@@ -19,6 +19,10 @@ export const enCollect: Record<keyof typeof zhCNCollect, string> = {
   'collect.err.collect_site_refused':
     'The site answered {status} instead of the picture. If it only shows the picture to signed-in visitors, save it with the browser extension instead.',
   'collect.err.collect_download_failed': 'The picture could not be downloaded: {reason}',
+  'collect.err.collect_download_timeout': 'The site took too long to send the picture. Try again later.',
+  'collect.err.collect_site_unreachable': 'The site could not be reached. Check the address, the network and the proxy setting.',
+  'collect.err.collect_too_many_redirects': 'The address kept redirecting and never reached a picture.',
+  'collect.err.collect_connection_broken': 'The connection broke off before the whole picture arrived. Try again.',
   'collect.err.collect_not_picture': 'This is not a picture the program can read.',
   'collect.err.collect_too_large_to_convert': 'This picture is in a format the library does not show and is too large to convert to PNG.',
   'collect.err.collect_convert_failed': 'This picture could not be converted to PNG.',
