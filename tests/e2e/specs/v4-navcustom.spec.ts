@@ -267,6 +267,9 @@ for (const face of [VOPUS, NEXT]) {
             return gap.getBoundingClientRect().width / zoom
           })
           expect(room, `${lang} at ${viewport.width}`).toBeGreaterThan(200)
+          // short of that room the brand keeps only its mark (wide fonts): Home is still there by name
+          const brandName = face === VOPUS ? (lang === 'en' ? 'Home' : '首页') : lang === 'en' ? /SD Image Sorter/ : /SD 图片管理器/
+          await expect(page.locator('header').getByRole('button', { name: brandName }).first()).toBeInViewport({ ratio: 1 })
           const overlaps = await page.evaluate(() => {
             const items = [...document.querySelector('header')!.children]
               .map((el) => ({ what: (el.textContent || el.getAttribute('aria-label') || el.tagName).trim().slice(0, 24), r: el.getBoundingClientRect() }))

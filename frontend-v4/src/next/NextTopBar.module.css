@@ -29,6 +29,16 @@
   font-weight: 650;
 }
 
+/* Short of room for the AI chip, the update hint and Jobs: the mark stands in
+   for the name (which stays the button's name for a screen reader). */
+.bar[data-tight] .brand {
+  align-items: center;
+}
+
+.mark {
+  color: var(--text);
+}
+
 .version {
   color: var(--muted);
   font-size: var(--fs-2);

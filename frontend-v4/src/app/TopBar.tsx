@@ -1,6 +1,8 @@
+import { useRef } from 'react'
 import { useT, type MessageKey } from '../i18n'
 import { useApp } from '../state/store'
 import { useTheme, type ThemeMode } from '../theme'
+import { FrameMark } from '../ui/FrameMark'
 import { Icon } from '../ui/Icon'
 import { AiBusyChip } from '../features/jobs/AiBusyChip'
 import { JobsMenu } from '../features/jobs/JobsMenu'
@@ -13,6 +15,7 @@ import { ToolsMenu } from '../features/tools/ToolsMenu'
 import { Menu, type MenuItem } from '../ui/Menu'
 import { placeIsCurrent, TOPBAR_PLACES, useTopBarNav, type TopBarPlace } from './topBarPlaces'
 import styles from './TopBar.module.css'
+import { useTightBar } from './useTightBar'
 
 const PLACE_BY_ID = new Map<string, TopBarPlace>(TOPBAR_PLACES.map((p) => [p.id, p]))
 
@@ -47,6 +50,11 @@ export function TopBar() {
   const mode = useTheme((s) => s.mode)
   const theme = useTheme((s) => s.theme)
   const cycleTheme = useTheme((s) => s.cycle)
+  const brandRef = useRef<HTMLButtonElement>(null)
+  const gapRef = useRef<HTMLSpanElement>(null)
+  const importRef = useRef<HTMLButtonElement>(null)
+  // short of room (every place in the bar, a wide font): the brand keeps only its mark
+  const tight = useTightBar(gapRef, importRef, brandRef)
 
   const places = (ids: string[]) => ids.map((id) => PLACE_BY_ID.get(id)).filter((p): p is TopBarPlace => !!p)
   const tabs = places(shownIds(choice))
@@ -67,6 +75,7 @@ export function TopBar() {
     <>
       <header
         className={styles.bar}
+        data-tight={tight || undefined}
         onContextMenu={(e) => {
           e.preventDefault()
           setCustomizeOpen(true)
@@ -75,8 +84,8 @@ export function TopBar() {
         <button type="button" className={styles.skip} onClick={skipToContent} data-testid="skip-link">
           {t('browse.skip')}
         </button>
-        <button type="button" className={styles.brand} onClick={() => setPage('home')} aria-label={t('nav.home')} title={t('nav.home')}>
-          <FrameMark />
+        <button ref={brandRef} type="button" className={styles.brand} onClick={() => setPage('home')} aria-label={t('nav.home')} title={t('nav.home')}>
+          <FrameMark className={styles.mark} />
           <span className={styles.brandName}>SD Image Sorter</span>
           <span className={`${styles.version} mono`}>Vopus</span>
         </button>
@@ -105,12 +114,13 @@ export function TopBar() {
           />
         )}
 
-        <span className={styles.gap} />
+        <span ref={gapRef} className={styles.gap} />
 
         <AiBusyChip />
         <UpdateHint />
         <JobsMenu />
         <button
+          ref={importRef}
           type="button"
           className="btn"
           onClick={() => useSelectionDialog.getState().showFor('import', null, 1)}
@@ -160,20 +170,4 @@ function skipToContent(): void {
   if (!target) return
   if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1')
   target.focus()
-}
-
-/** A single frame of film with its sprocket holes: the app's mark. */
-function FrameMark() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden className={styles.mark}>
-      <rect x="1.5" y="3.5" width="19" height="15" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <rect x="5.5" y="7" width="11" height="8" fill="currentColor" />
-      {[3.2, 7.2, 11.2, 15.2].map((x) => (
-        <g key={x} fill="currentColor">
-          <rect x={x} y="4.6" width="2" height="1.2" />
-          <rect x={x} y="16.2" width="2" height="1.2" />
-        </g>
-      ))}
-    </svg>
-  )
 }

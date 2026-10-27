@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { useT, type MessageKey } from '../i18n'
 import { useApp } from '../state/store'
+import { FrameMark } from '../ui/FrameMark'
 import { Icon } from '../ui/Icon'
 import { Menu, type MenuItem } from '../ui/Menu'
 import { useToasts } from '../ui/toasts'
@@ -21,6 +22,7 @@ import { showLikeImage, useSimilar } from '../features/similar/similarStore'
 import { openClassic } from './classicLink'
 import { NEXT_PLACES, useNextNav } from './nextPlaces'
 import styles from './NextTopBar.module.css'
+import { useTightBar } from '../app/useTightBar'
 
 interface Place {
   id: string
@@ -57,6 +59,11 @@ export function NextTopBar() {
   const choice = useNextNav((s) => s.choice)
   const customizeOpen = useNavCustomizeOpen((s) => s.open)
   const setCustomizeOpen = useNavCustomizeOpen((s) => s.setOpen)
+  const brandRef = useRef<HTMLButtonElement>(null)
+  const gapRef = useRef<HTMLSpanElement>(null)
+  const findRef = useRef<HTMLButtonElement>(null)
+  // short of room (every place in the bar, a wide font): the app's mark stands in for the name
+  const tight = useTightBar(gapRef, findRef, brandRef)
 
   const places: Place[] = [
     { id: 'library', label: 'next.place.library', current: page === 'library', go: () => app().setPage('library') },
@@ -183,13 +190,21 @@ export function NextTopBar() {
     <>
       <header
         className={styles.bar}
+        data-tight={tight || undefined}
         onContextMenu={(e) => {
           e.preventDefault()
           setCustomizeOpen(true)
         }}
       >
-        <button type="button" className={styles.brand} onClick={() => app().setPage('home')} title={t('nav.home')}>
-          <span className={styles.name}>{t('next.brand')}</span>
+        <button
+          ref={brandRef}
+          type="button"
+          className={styles.brand}
+          onClick={() => app().setPage('home')}
+          title={t('nav.home')}
+          aria-label={tight ? `${t('next.brand')} · ${t('nav.home')}` : undefined}
+        >
+          {tight ? <FrameMark className={styles.mark} /> : <span className={styles.name}>{t('next.brand')}</span>}
           {stats.data?.app_version && <span className={styles.version}>{stats.data.app_version}</span>}
           <span className={styles.trial}>{t('next.trial')}</span>
         </button>
@@ -199,12 +214,12 @@ export function NextTopBar() {
           <Menu label={t('next.place.more')} items={more} current={hiddenCurrent || (page === 'tools' && !BAR_TOOLS.has(toolId))} testId="next-more" />
         </nav>
 
-        <span className={styles.gap} />
+        <span ref={gapRef} className={styles.gap} />
 
         <AiBusyChip />
         <UpdateHint />
         <JobsMenu />
-        <button type="button" className={`btn btn-ghost ${styles.find}`} onClick={() => app().setPaletteOpen(true)} data-testid="open-palette">
+        <button ref={findRef} type="button" className={`btn btn-ghost ${styles.find}`} onClick={() => app().setPaletteOpen(true)} data-testid="open-palette">
           <Icon name="search" size={14} />
           <span>{t('next.find')}</span>
           <kbd>Ctrl K</kbd>

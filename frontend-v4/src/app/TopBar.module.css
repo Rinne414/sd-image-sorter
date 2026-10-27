@@ -55,6 +55,12 @@
   white-space: nowrap;
 }
 
+/* Short of room for the AI chip, the update hint and Jobs: the mark and the
+   badge stay the Home button (its name is in the aria-label). */
+.bar[data-tight] .brandName {
+  display: none;
+}
+
 .version {
   font-size: var(--fs-1);
   color: var(--accent);
