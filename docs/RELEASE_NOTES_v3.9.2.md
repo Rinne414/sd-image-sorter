@@ -24,7 +24,8 @@ Long gallery refreshes say so; if your picture is deleted, the next one takes it
 
 ## Validation / 验证
 
-VALIDATION_PENDING
+GitHub CI run 40535707003 (Linux full suite with browser tests and click coverage, macOS, Windows, Linux portable x86_64 and aarch64): 5 of 5 green; backend 9,208 passed; browser tests 1,976 passed, 0 failed, 0 flaky; V Opus unit tests 1,183 passed. The three new gallery tests fail on 3.9.1's code and pass now. On a fresh 3.9.2 Windows package with 150 pictures scanned into the Library: a refresh in place held for two seconds showed "Updating the gallery…" on the disabled Load More button and gave it back afterwards; reading deep, the picture being read and ten above it were removed from the gallery (files kept), and after the refresh the next picture sat exactly where the reader's had been. No console errors.
+  - GitHub CI（40535707003：Linux 完整测试含浏览器测试和点击覆盖、macOS、Windows、Linux 便携版 x86_64 与 aarch64）5 项全部通过；后端 9,208 通过；浏览器测试 1,976 通过、0 失败、0 个偶发；V Opus 单元测试 1,183 通过。三个新的图库测试在 3.9.1 的代码上失败、现在通过。在全新的 3.9.2 Windows 包里把 150 张图扫描进图库：原地刷新被拖住两秒时，“加载更多”按钮变成不可点的“正在更新图库…”，刷新后恢复；往下看到深处后，把正在看的图和上面十张从图库移除（文件保留），刷新后紧接着的那张正好停在原来那张的位置。没有控制台错误。
 
 ---
 
