@@ -9,6 +9,7 @@ import { startFolderWatch } from '../features/settings/library/watchApi'
 import { DropImport } from '../features/import/DropImport'
 import { useLibraryArrival } from '../features/libraries/useArrival'
 import { useLibraryExists } from '../features/libraries/useLibraryExists'
+import { GeneratorDialog } from '../features/generator/GeneratorDialog'
 import { SelectionDialogs } from '../features/selection/SelectionDialogs'
 import { appKey } from '../features/library/keys'
 import { LibraryPage } from '../features/library/LibraryPage'
@@ -81,6 +82,7 @@ export function App() {
       <JobsRunner />
       <DropImport />
       <SelectionDialogs />
+      <GeneratorDialog />
       <BatchDialogs />
       <RestartOverlay />
       <Toasts />

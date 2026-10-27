@@ -11,6 +11,7 @@ import { useBatches, useBatchTemplates } from '../batch/batchApi'
 import { askNewBatch } from '../batch/dialogStore'
 import { quickCensor } from '../censor/quickCensor'
 import { scoreImages } from '../info/aesthetic'
+import { sendToGenerator } from '../generator/generatorStore'
 import { filterByModel } from '../info/modelFilter'
 import { copyAndSay, openImageFolder } from '../library/fileActions'
 import { useSimilarDialogs } from '../similar/dialogs'
@@ -114,6 +115,7 @@ export function useImageActions(id: number | null): ImageAction[] {
         openFolder: (x) => void openImageFolder(x),
         findSimilar: (x, near) => showLikeImage(x, name || `#${x}`, near),
         filterByModel: (model) => filterByModel('checkpoint', model),
+        sendToGenerator: (x) => sendToGenerator(x),
       },
     })
   }, [id, picked, path, name, facts, groups])

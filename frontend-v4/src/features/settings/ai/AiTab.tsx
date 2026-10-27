@@ -1,3 +1,4 @@
+import { ComfySettingsSection } from '../../generator/ComfySettingsSection'
 import styles from './Ai.module.css'
 import { useVlmSettings } from './aiApi'
 import { useAT } from './aiText'
@@ -36,6 +37,7 @@ function Loaded({ settings }: { settings: VlmSettings }) {
     <div className={styles.sections} data-testid="ai-services">
       <VlmSection draft={draft} settings={settings} />
       <OllamaSection draft={draft} settings={settings} />
+      <ComfySettingsSection />
       <ChatLog />
     </div>
   )

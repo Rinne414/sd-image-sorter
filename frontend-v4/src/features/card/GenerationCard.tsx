@@ -22,6 +22,7 @@ import { CopyButton, Section } from './CardParts'
 import { EdgeCodes, type EdgeFacts } from './sections/FilmEdge'
 import { CivitaiResources, Facts, NoParamsNote, OtherModels, PromptNodes, ReadingNote, SidecarCaption, useI2iLabel } from '../info/CardInfo'
 import { ColorSection } from '../info/ColorSection'
+import { sendToGenerator } from '../generator/generatorStore'
 import { copyAndSay, openImageFolder } from '../library/fileActions'
 import { menuItemsOf } from '../selection/actions'
 import { useImageActions } from '../selection/actionOps'
@@ -211,6 +212,11 @@ function CardBody({ id, variant, look, onWord }: BodyProps) {
           </button>
         )}
         {image && <CopyMenu id={id} />}
+        {image && (
+          <button type="button" className="btn" onClick={() => sendToGenerator(id)} title={t('generator.buttonTip')} data-testid="card-send-generator">
+            {t('generator.button')}
+          </button>
+        )}
         {variant === 'panel' && image && <OpenInReader id={id} />}
         {variant === 'panel' && image && <IdentifyButton id={id} />}
         {variant === 'panel' && (
@@ -405,8 +411,10 @@ function OpenInReader({ id }: { id: number }) {
 function CopyMenu({ id }: { id: number }) {
   const t = useT()
   const copy = useImageActions(id).find((a) => a.id === 'copy')
-  if (!copy?.children?.length) return null
-  return <Menu label={t('card.copy')} items={menuItemsOf(t, copy.children)} up align="right" testId="card-copy-menu" />
+  // Send to generator has a button of its own beside this menu.
+  const parts = copy?.children?.filter((a) => a.id !== 'send-generator') ?? []
+  if (parts.length === 0) return null
+  return <Menu label={t('card.copy')} items={menuItemsOf(t, parts)} up align="right" testId="card-copy-menu" />
 }
 
 function TagList({

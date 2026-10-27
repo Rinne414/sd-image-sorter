@@ -1806,10 +1806,14 @@
         "#btn-settings-comfyui-reset"
       ],
       "vopus": {
-        "missing": "Vopus has no Send to generator panel or ComfyUI address yet; the classic preview and right-click menu have it"
+        "at": "#/settings/ai",
+        "find": "[data-testid=\"settings-comfyui\"]",
+        "note": "ComfyUI address in Settings > AI services; the Send to generator dialog opens from the picture card button (card-send-generator), the right-click menu and Ctrl K"
       },
       "next": {
-        "missing": "The new interface has no Send to generator panel yet"
+        "at": "#/settings/ai",
+        "find": "[data-testid=\"settings-comfyui\"]",
+        "note": "Same components as Vopus: card button, right-click menu, Ctrl K, ComfyUI address in Settings > AI services"
       }
     },
     {

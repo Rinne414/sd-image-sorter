@@ -1,0 +1,177 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  color: var(--text-2);
+}
+
+.state {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.state[data-tone="error"] {
+  color: var(--danger);
+}
+
+.stored {
+  margin: 0;
+  padding: 7px 12px;
+  border-left: 2px solid var(--warn);
+  background: var(--wash);
+  color: var(--text);
+  font-size: var(--fs-2);
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-3);
+  font-weight: 600;
+}
+
+.lead,
+.facts {
+  margin: 0;
+  font-size: var(--fs-2);
+  line-height: 1.55;
+}
+
+.preview {
+  margin: 0;
+  max-height: 7.5em;
+  overflow: auto;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--wash);
+  color: var(--text);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.preview[data-empty] {
+  color: var(--muted);
+  font-family: inherit;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.runRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.runLabel {
+  color: var(--text);
+  font-size: var(--fs-2);
+  font-weight: 600;
+}
+
+.seeds {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.address {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.addressRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.addressInput {
+  flex: 1;
+  max-width: 420px;
+}
+
+.note {
+  margin: 0;
+  min-height: 1.4em;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.note[data-tone="ok"] {
+  color: var(--ok);
+}
+
+.note[data-tone="error"] {
+  color: var(--danger);
+}
+
+.foot {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+}
+
+.result {
+  flex: 1;
+  min-width: 0;
+  max-height: 7.5em;
+  overflow-y: auto;
+  font-size: var(--fs-2);
+  line-height: 1.45;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.result p {
+  margin: 0;
+}
+
+.result[data-tone="ok"] p {
+  color: var(--ok);
+}
+
+.result[data-tone="error"] p {
+  color: var(--danger);
+}
+
+.result ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--text-2);
+}
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
