@@ -59,4 +59,13 @@ GitHub CI run 40515556525 (Linux full suite with browser tests and click coverag
 
 ## Checksums
 
-CHECKSUMS_PENDING
+| Asset | SHA-256 |
+|---|---|
+| `sd-image-sorter-v3.9.1-windows-portable.zip` | `134e93ee6ea2053796b1d307822d3821b765a10bb975ba6448b60b4355a8d774` |
+| `sd-image-sorter-v3.9.1-app-patch.zip` | `9ceafc8b3321d2675341e3f7772ee5ca99969a19ab14f8ccbbe3d5a9ceb8928e` |
+| `sd-image-sorter-v3.9.1-linux.tar.gz` | `808018f0ee694c87291e6b913fbbc822c9afe43befa2e18b7da3f92849f2a94f` |
+| `sd-image-sorter-v3.9.1-linux-portable-x86_64.tar.gz` | `5f041670be91b1eca240ff570e57772e8eb1193461aced1c117d6e70715e5ff6` |
+| `sd-image-sorter-v3.9.1-linux-portable-aarch64.tar.gz` | `d02a2015083252d8ffb8870e1a30e6cee63ba3f58d4b81dcf44e60ff56f380bb` |
+| `sd-image-sorter-v3.9.1-release-manifest.json` | `9e7d2e95d9008792c56089b122e6744b6467e290e9ac369ef16092e9ac2e23f1` |
+
+The manifest contains the five archive checksums; its own checksum is recorded above. / manifest 内含五个归档校验和，其自身校验和记录于上表。
