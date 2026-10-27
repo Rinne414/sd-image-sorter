@@ -571,3 +571,43 @@ test('the filter summary reflects saved tags and strips data-i18n defaults', asy
   expect(probe.tagsHasI18n).toBe(false)
   expect(probe.generatorsHasI18n).toBe(false)
 })
+
+// ---------------------------------------------------------------------------
+// Keep/Reject decisions that could not be written to the favorites stay with a
+// Retry. They used to be dropped with the session: the toast said how many
+// failed and there was no way to save them.
+// ---------------------------------------------------------------------------
+
+test('cull decisions that could not be saved keep a Retry until they are saved', async ({ page }) => {
+  await gotoManualSetup(page)
+  await page.locator('.sort-mode-btn[data-sort-mode="cull"]').click()
+  await page.locator('#cull-keep-collection').selectOption('fav')
+  const posted: number[] = []
+  let failNext = true
+  await page.route('**/api/collections/favorites', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback()
+    const id = Number((route.request().postDataJSON() as { image_id: number }).image_id)
+    posted.push(id)
+    // Picture 902 cannot be written the first time.
+    if (id === 902 && failNext) {
+      failNext = false
+      return route.fulfill({ status: 500, json: { error: 'database is locked' } })
+    }
+    return route.fulfill({ json: { image_id: id, favorited: true } })
+  })
+  await page.route('**/api/sort/session', (route) => route.fulfill({ json: { status: 'ok' } }))
+
+  await page.evaluate(async () => {
+    const w = window as any
+    w.ManualSortState.cullDecisions = new Map([[901, 'keep'], [902, 'keep'], [903, 'reject']])
+    await w.finishCullSorting()
+  })
+
+  const warning = page.locator('#toast-container .toast').filter({ hasText: 'could not be saved' })
+  await expect(warning).toContainText('kept 2, rejected 1, but 1 could not be saved')
+  expect(posted).toEqual([901, 902])
+  await warning.getByRole('button', { name: 'Retry' }).click()
+  await expect(page.locator('#toast-container .toast').filter({ hasText: 'Cull complete: kept 2, rejected 1.' })).toBeVisible()
+  // Only the one that failed is written again.
+  expect(posted).toEqual([901, 902, 902])
+})

@@ -251,21 +251,25 @@ async function performCullAction(action, fast = false) {
 }
 
 // Route the tracked decisions to their destinations by reference (non-destructive).
-async function collectCullDecisions() {
+// The ones that could not be written come back in `unsaved`, so they can be tried again.
+async function collectCullDecisions(
+    map = ManualSortState.cullDecisions || new Map(),
+    dests = { keep: getCullDest('keep'), reject: getCullDest('reject') },
+) {
     const { API } = window.App;
-    const map = ManualSortState.cullDecisions || new Map();
-    const keepDest = getCullDest('keep');
-    const rejectDest = getCullDest('reject');
+    const keepDest = dests.keep;
+    const rejectDest = dests.reject;
 
     let attempted = 0;
     let failed = 0;
+    const unsaved = new Map();
 
     // Returns false only when a real write throws, so finishCullSorting can
     // report honestly instead of always showing a green success toast even
     // when every keep/reject failed (e.g. the destination collection was
     // deleted mid-session). A falsy/invalid dest is "nothing to write", not a
     // failure.
-    const route = async (id, dest) => {
+    const route = async (id, dest, decision) => {
         if (!dest) return true;
         const cid = dest === 'fav' ? null : Number(dest);
         if (dest !== 'fav' && (!Number.isInteger(cid) || cid <= 0)) return true;
@@ -276,21 +280,54 @@ async function collectCullDecisions() {
             return true;
         } catch (e) {
             failed += 1;
+            unsaved.set(id, decision);
             if (window.Logger) Logger.error('Failed to route cull decision:', e);
             return false;
         }
     };
 
     for (const [id, decision] of map.entries()) {
-        if (decision === 'keep') await route(id, keepDest);
-        else if (decision === 'reject') await route(id, rejectDest);
+        if (decision === 'keep') await route(id, keepDest, decision);
+        else if (decision === 'reject') await route(id, rejectDest, decision);
     }
-    return { attempted, failed };
+    return { attempted, failed, unsaved };
+}
+
+// Say how the routing went. Decisions that could not be written stay with a
+// Retry (to the destinations the cull ended with) until they are saved.
+function reportCullRouting(routeStats, counts, dests) {
+    const { showToast } = window.App;
+    if (routeStats.failed > 0) {
+        showToast(
+            formatManualSortText(
+                'manual.cullCompletePartial',
+                'Cull done — kept {kept}, rejected {rejected}, but {failed} could not be saved to your collections/favorites.',
+                '整理完成 — 保留 {kept}、剔除 {rejected}，但有 {failed} 张未能写入收藏夹/收藏。',
+                { kept: counts.kept, rejected: counts.rejected, failed: routeStats.failed }
+            ),
+            'warning',
+            {
+                persistent: true,
+                actionLabel: manualSortText('manual.cullRetry', 'Retry', '重试'),
+                onAction: async () => {
+                    const again = await collectCullDecisions(routeStats.unsaved, dests);
+                    reportCullRouting(again, counts, dests);
+                },
+            }
+        );
+        return;
+    }
+    showToast(
+        formatManualSortI18n(
+            'manual.cullComplete',
+            'Cull complete: kept {kept}, rejected {rejected}.',
+            { kept: counts.kept, rejected: counts.rejected }
+        ),
+        'success'
+    );
 }
 
 async function finishCullSorting(result) {
-    const { showToast } = window.App;
-
     ManualSortState.active = false;
     ManualSortState.undoAvailable = false;
     ManualSortState.redoAvailable = false;
@@ -309,28 +346,9 @@ async function finishCullSorting(result) {
         else if (decision === 'reject') rejectedCount += 1;
     }
 
-    const routeStats = await collectCullDecisions();
-
-    if (routeStats.failed > 0) {
-        showToast(
-            formatManualSortText(
-                'manual.cullCompletePartial',
-                'Cull done — kept {kept}, rejected {rejected}, but {failed} could not be saved to your collections/favorites.',
-                '整理完成 — 保留 {kept}、剔除 {rejected}，但有 {failed} 张未能写入收藏夹/收藏。',
-                { kept: keptCount, rejected: rejectedCount, failed: routeStats.failed }
-            ),
-            'warning'
-        );
-    } else {
-        showToast(
-            formatManualSortI18n(
-                'manual.cullComplete',
-                'Cull complete: kept {kept}, rejected {rejected}.',
-                { kept: keptCount, rejected: rejectedCount }
-            ),
-            'success'
-        );
-    }
+    const dests = { keep: getCullDest('keep'), reject: getCullDest('reject') };
+    const routeStats = await collectCullDecisions(map, dests);
+    reportCullRouting(routeStats, { kept: keptCount, rejected: rejectedCount }, dests);
 
     window.App.API.delete('/api/sort/session').catch(e => {
         if (window.Logger) Logger.warn('Failed to clean up cull session:', e);
