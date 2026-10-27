@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
+from starlette.concurrency import run_in_threadpool
 
 from obfuscation import (
     BIG_TOMATO_MODE,
@@ -51,6 +52,40 @@ def _safe_unlink(path: Optional[str]) -> None:
         os.unlink(path)
     except OSError:
         pass
+
+
+def _write_processed_preview(
+    content: bytes,
+    mode: str,
+    password: str,
+    preserve_metadata: bool,
+    legacy_pnginfo: bool,
+    compat_mode: str,
+) -> str:
+    """Scramble or unscramble the upload into a temp PNG and return its path.
+
+    Runs in the threadpool. The temp file is made only once the result exists,
+    so a refused picture leaves nothing behind.
+    """
+    text_chunks = extract_source_text_chunks_from_bytes(content) if preserve_metadata else []
+    process_fn = encode_image_bytes if mode == "encode" else decode_image_bytes
+    result_bytes = process_fn(
+        content,
+        password,
+        text_chunks=text_chunks,
+        preserve_metadata=preserve_metadata,
+        legacy_pnginfo=legacy_pnginfo,
+        compat_mode=compat_mode,
+    )
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_out:
+        tmp_out_path = tmp_out.name
+        try:
+            tmp_out.write(result_bytes)
+        except BaseException:
+            tmp_out.close()
+            _safe_unlink(tmp_out_path)
+            raise
+    return tmp_out_path
 
 
 async def _read_preview_upload(file: UploadFile) -> bytes:
@@ -130,8 +165,11 @@ class BatchProcessRequest(BaseModel):
     allow_overwrite: bool = Field(default=False, description="Allow replacing existing output files")
 
 
+# The file-path handlers are plain ``def`` so FastAPI runs them in its
+# threadpool: the pixel work takes seconds a picture (3 s for 1024x1536) and on
+# the event loop it held up every other request.
 @router.post("/encode")
-async def encode_single(request: SingleProcessRequest):
+def encode_single(request: SingleProcessRequest):
     """Encode (scramble) a single image."""
     image_path = _validate_source_image(request.image_path)
     output_path = _validate_output_path(request.output_path)
@@ -162,7 +200,7 @@ async def encode_single(request: SingleProcessRequest):
 
 
 @router.post("/decode")
-async def decode_single(request: SingleProcessRequest):
+def decode_single(request: SingleProcessRequest):
     """Decode (unscramble) a single image."""
     image_path = _validate_source_image(request.image_path)
     output_path = _validate_output_path(request.output_path)
@@ -193,7 +231,7 @@ async def decode_single(request: SingleProcessRequest):
 
 
 @router.post("/batch")
-async def batch(request: BatchProcessRequest):
+def batch(request: BatchProcessRequest):
     """Batch encode or decode multiple images."""
     if request.mode not in ("encode", "decode"):
         raise HTTPException(status_code=400, detail="mode must be 'encode' or 'decode'")
@@ -242,26 +280,18 @@ async def preview_process(
         raise HTTPException(status_code=400, detail="mode must be 'encode' or 'decode'")
 
     stem = os.path.splitext(os.path.basename(file.filename))[0] or "image"
-    tmp_out_path = None
     try:
         normalized_mode = normalize_compat_mode(compat_mode)
         content = await _read_preview_upload(file)
-        text_chunks = extract_source_text_chunks_from_bytes(content) if preserve_metadata else []
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_out:
-            tmp_out_path = tmp_out.name
-
-        process_fn = encode_image_bytes if mode == "encode" else decode_image_bytes
-        result_bytes = process_fn(
+        tmp_out_path = await run_in_threadpool(
+            _write_processed_preview,
             content,
+            mode,
             password or "",
-            text_chunks=text_chunks,
-            preserve_metadata=preserve_metadata,
-            legacy_pnginfo=legacy_pnginfo,
-            compat_mode=normalized_mode,
+            preserve_metadata,
+            legacy_pnginfo,
+            normalized_mode,
         )
-        with open(tmp_out_path, "wb") as handle:
-            handle.write(result_bytes)
 
         return FileResponse(
             tmp_out_path,
