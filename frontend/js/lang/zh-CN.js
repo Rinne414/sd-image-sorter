@@ -3285,6 +3285,7 @@ window.I18nLang_zhCN = {
     'folderBrowser.close': '关闭',
     'folderBrowser.select': '选择当前文件夹',
     'folderBrowser.errorPrefix': '错误：',
+    'folderBrowser.openedNearest': '打不开 {path}：{reason} 已改为显示能打开的最近一层文件夹。',
 
     // ========================
     // Toast Messages

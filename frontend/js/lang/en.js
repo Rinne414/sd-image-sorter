@@ -3111,6 +3111,7 @@ window.I18nLang_en = {
     'folderBrowser.close': 'Close',
     'folderBrowser.select': 'Select This Folder',
     'folderBrowser.errorPrefix': 'Error: ',
+    'folderBrowser.openedNearest': 'Could not open {path}: {reason} Showing the nearest folder that opens.',
 
     // ========================
     // Toast Messages

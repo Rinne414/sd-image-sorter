@@ -2892,6 +2892,14 @@ li > .icon {
 .folder-browser-empty,
 .folder-browser-loading { padding: 20px 12px; text-align: center; color: var(--muted); font-size: var(--fs-label); }
 .folder-browser-error { padding: 12px; text-align: center; color: var(--danger); font-size: var(--fs-label); }
+.folder-browser-notice {
+    padding: 6px 12px;
+    font-size: var(--fs-footnote);
+    color: var(--warning);
+    background: rgba(var(--warning-rgb), 0.08);
+    border-bottom: 1px solid var(--border);
+    overflow-wrap: anywhere;
+}
 .system-info-panel { margin-top: 4px; margin-bottom: 4px; }
 .system-info-content {
     padding: 6px 10px;

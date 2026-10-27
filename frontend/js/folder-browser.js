@@ -68,6 +68,11 @@ async function showFolderBrowser(inputElement) {
 window.showFolderBrowser = showFolderBrowser;
 window.hideFolderBrowser = hideFolderBrowser;
 
+function _endWithStop(text) {
+    const value = String(text || '').trim();
+    return /[.!?。！？]$/.test(value) ? value : value + '.';
+}
+
 /** Hide and destroy the folder browser panel. */
 function hideFolderBrowser() {
     const container = _folderBrowserState?.container || document.getElementById('folder-browser-container');
@@ -76,11 +81,27 @@ function hideFolderBrowser() {
 }
 
 /**
+ * The folder one level up, or '' (the drive list / top level) above a root.
+ * @param {string} path
+ * @returns {string}
+ */
+function _parentFolderPath(path) {
+    const trimmed = String(path || '').replace(/[\\/]+$/, '');
+    const cut = Math.max(trimmed.lastIndexOf('\\'), trimmed.lastIndexOf('/'));
+    if (cut < 0) return '';
+    const parent = trimmed.slice(0, cut);
+    if (!parent) return trimmed.startsWith('/') && trimmed.length > 1 ? '/' : '';
+    // "D:" alone means the drive root.
+    return /^[A-Za-z]:$/.test(parent) ? parent + '\\' : parent;
+}
+
+/**
  * Render the folder browser panel contents.
  * @param {HTMLElement} container - The container element
  * @param {string} path - Path to browse
+ * @param {string} [notice] - Why this is not the folder that was asked for
  */
-async function _renderFolderBrowser(container, path) {
+async function _renderFolderBrowser(container, path, notice = '') {
     container.innerHTML = `<div class="folder-browser"><div class="folder-browser-loading">${escapeHtml(fbT('folderBrowser.loading', 'Loading folders...'))}</div></div>`;
     try {
         const data = await fetchFolderContents(path);
@@ -105,6 +126,7 @@ async function _renderFolderBrowser(container, path) {
             '<button type="button" class="folder-browser-btn" id="folder-browser-up"' + parentDisabled +
             ' title="' + escapeHtml(fbT('folderBrowser.upTitle', 'Go to parent folder')) + '" aria-label="' + escapeHtml(fbT('folderBrowser.upTitle', 'Go to parent folder')) + '">&uarr; ' + escapeHtml(fbT('folderBrowser.up', 'Up')) + '</button>' +
             '<span class="folder-browser-path" title="' + escapeHtml(currentDisplay) + '">' + escapeHtml(currentDisplay) + '</span></div>' +
+            (notice ? '<div class="folder-browser-notice" role="status">' + escapeHtml(notice) + '</div>' : '') +
             '<div class="folder-browser-list">' + listHtml + '</div>' +
             '<div class="folder-browser-footer">' +
             '<button type="button" class="folder-browser-btn" id="folder-browser-cancel">' + escapeHtml(fbT('folderBrowser.cancel', 'Cancel')) + '</button>' +
@@ -113,8 +135,14 @@ async function _renderFolderBrowser(container, path) {
         _attachFolderBrowserEvents(container, data);
     } catch (err) {
         if (path) {
-            try { await _renderFolderBrowser(container, ''); return; }
-            catch (rootErr) { /* fall through */ }
+            // Open the nearest folder above that exists, and keep the first
+            // reason: it names the folder that was asked for.
+            const fallbackNotice = notice || fbT(
+                'folderBrowser.openedNearest',
+                'Could not open {path}: {reason} Showing the nearest folder that opens.'
+            ).replace('{path}', () => path).replace('{reason}', () => _endWithStop(err.message));
+            await _renderFolderBrowser(container, _parentFolderPath(path), fallbackNotice);
+            return;
         }
         container.innerHTML = '<div class="folder-browser">' +
             '<div class="folder-browser-error">' + escapeHtml(fbT('folderBrowser.errorPrefix', 'Error: ')) + escapeHtml(err.message) + '</div>' +
