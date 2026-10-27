@@ -9,6 +9,7 @@ Supports:
 import logging
 import os
 import tempfile
+import threading
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
@@ -42,6 +43,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/obfuscate", tags=["obfuscation"])
 PREVIEW_UPLOAD_READ_CHUNK_SIZE = 1024 * 1024
+# One picture at a time, as when this work ran on the event loop: the handlers
+# now run in the threadpool, and two large pictures at once would double the
+# peak memory and could race on the same output file.
+_PIXEL_WORK_LOCK = threading.Lock()
 
 
 def _safe_unlink(path: Optional[str]) -> None:
@@ -69,14 +74,15 @@ def _write_processed_preview(
     """
     text_chunks = extract_source_text_chunks_from_bytes(content) if preserve_metadata else []
     process_fn = encode_image_bytes if mode == "encode" else decode_image_bytes
-    result_bytes = process_fn(
-        content,
-        password,
-        text_chunks=text_chunks,
-        preserve_metadata=preserve_metadata,
-        legacy_pnginfo=legacy_pnginfo,
-        compat_mode=compat_mode,
-    )
+    with _PIXEL_WORK_LOCK:
+        result_bytes = process_fn(
+            content,
+            password,
+            text_chunks=text_chunks,
+            preserve_metadata=preserve_metadata,
+            legacy_pnginfo=legacy_pnginfo,
+            compat_mode=compat_mode,
+        )
     with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_out:
         tmp_out_path = tmp_out.name
         try:
@@ -176,14 +182,15 @@ def encode_single(request: SingleProcessRequest):
 
     try:
         compat_mode = normalize_compat_mode(request.compat_mode)
-        result = encode_image(
-            image_path,
-            output_path,
-            request.password,
-            request.preserve_metadata,
-            compat_mode=compat_mode,
-            allow_overwrite=request.allow_overwrite,
-        )
+        with _PIXEL_WORK_LOCK:
+            result = encode_image(
+                image_path,
+                output_path,
+                request.password,
+                request.preserve_metadata,
+                compat_mode=compat_mode,
+                allow_overwrite=request.allow_overwrite,
+            )
         return result
     except ImageTooLargeError as e:
         raise HTTPException(status_code=413, detail=str(e))
@@ -207,14 +214,15 @@ def decode_single(request: SingleProcessRequest):
 
     try:
         compat_mode = normalize_compat_mode(request.compat_mode)
-        result = decode_image(
-            image_path,
-            output_path,
-            request.password,
-            request.preserve_metadata,
-            compat_mode=compat_mode,
-            allow_overwrite=request.allow_overwrite,
-        )
+        with _PIXEL_WORK_LOCK:
+            result = decode_image(
+                image_path,
+                output_path,
+                request.password,
+                request.preserve_metadata,
+                compat_mode=compat_mode,
+                allow_overwrite=request.allow_overwrite,
+            )
         return result
     except ImageTooLargeError as e:
         raise HTTPException(status_code=413, detail=str(e))
@@ -243,17 +251,18 @@ def batch(request: BatchProcessRequest):
 
     try:
         compat_mode = normalize_compat_mode(request.compat_mode)
-        result = batch_process(
-            request.image_paths,
-            output_folder,
-            request.password,
-            request.mode,
-            request.preserve_metadata,
-            request.suffix,
-            legacy_pnginfo=request.legacy_pnginfo,
-            compat_mode=compat_mode,
-            allow_overwrite=request.allow_overwrite,
-        )
+        with _PIXEL_WORK_LOCK:
+            result = batch_process(
+                request.image_paths,
+                output_folder,
+                request.password,
+                request.mode,
+                request.preserve_metadata,
+                request.suffix,
+                legacy_pnginfo=request.legacy_pnginfo,
+                compat_mode=compat_mode,
+                allow_overwrite=request.allow_overwrite,
+            )
         return result
     except ImageTooLargeError as e:
         raise HTTPException(status_code=413, detail=str(e))

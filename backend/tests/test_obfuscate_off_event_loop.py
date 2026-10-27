@@ -136,3 +136,44 @@ def test_a_failed_preview_leaves_no_temp_file(test_client, tmp_path, monkeypatch
 
     assert response.status_code == 400, response.text
     assert list(temp_dir.iterdir()) == []
+
+
+def test_two_pictures_are_scrambled_one_at_a_time(test_client, tmp_path, monkeypatch):
+    """Off the loop the handlers could run side by side: twice the peak memory
+    on large pictures, and two writes racing on one output file."""
+    import threading
+
+    from routers import obfuscation as obfuscation_router
+
+    source = tmp_path / "pose.png"
+    source.write_bytes(_png_bytes())
+    monkeypatch.setattr(obfuscation_router, "_validate_source_image", lambda path: path)
+    monkeypatch.setattr(obfuscation_router, "_validate_output_path", lambda path: path)
+    running = 0
+    most = 0
+    guard = threading.Lock()
+
+    def counted_encode(*_args, **_kwargs):
+        nonlocal running, most
+        with guard:
+            running += 1
+            most = max(most, running)
+        time.sleep(0.2)
+        with guard:
+            running -= 1
+        return {"success": True}
+
+    monkeypatch.setattr(obfuscation_router, "encode_image", counted_encode)
+    request = obfuscation_router.SingleProcessRequest(
+        image_path=str(source), output_path=str(tmp_path / "out.png")
+    )
+    threads = [
+        threading.Thread(target=obfuscation_router.encode_single, args=(request,))
+        for _ in range(3)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert most == 1
