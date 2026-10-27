@@ -22,6 +22,7 @@ from services.bulk_job_service import (
     BulkJobHandle,
     get_bulk_job_service,
 )
+from services.dataset_session.scan_sources import scan_source_paths
 from services.image_quality_scores import (
     BLUR_REVIEW_BELOW,
     FLAT_REVIEW_ABOVE,
@@ -40,6 +41,8 @@ class DatasetQualityRequest(BaseModel):
 
     image_ids: List[int] = Field(default_factory=list)
     image_paths: List[str] = Field(default_factory=list)
+    # A large folder import goes by its scan ({scan_token, exclude_paths}).
+    dataset_scan_tokens: List[Dict[str, Any]] = Field(default_factory=list)
     # False: only read what is scored already, never start a job.
     start: bool = True
     blur_below: float = Field(default=BLUR_REVIEW_BELOW, ge=0.0, le=100_000.0)
@@ -72,12 +75,23 @@ def _active_job_id() -> Optional[str]:
 def post_dataset_quality(
     payload: DatasetQualityRequest, background_tasks: BackgroundTasks
 ) -> Dict[str, Any]:
-    if not payload.image_ids and not payload.image_paths:
+    if (
+        not payload.image_ids
+        and not payload.image_paths
+        and not payload.dataset_scan_tokens
+    ):
         raise HTTPException(
-            status_code=400, detail="Quality check needs image_ids or image_paths."
+            status_code=400,
+            detail="Quality check needs image_ids, image_paths or dataset_scan_tokens.",
         )
     try:
-        targets, gone = quality.resolve_targets(payload.image_ids, payload.image_paths)
+        scan_paths = scan_source_paths(payload.dataset_scan_tokens)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        targets, gone = quality.resolve_targets(
+            payload.image_ids, [*payload.image_paths, *scan_paths]
+        )
         state = quality.tally(targets, gone=gone)
     except Exception as exc:
         logger.exception("Dataset quality lookup failed")

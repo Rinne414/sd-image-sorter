@@ -70,22 +70,12 @@ def _get_ccip() -> Any:
 
 def _scan_token_paths(sources: Iterable[Dict[str, Any]]) -> List[str]:
     """Every picture of the listed folder scans, minus the ones taken out of the dataset."""
-    from services.dataset_session.allowlist import register_scan_manifest_paths_for_session
-    from services.dataset_session.manifest_store import iter_scan_manifest_paths
+    from services.dataset_session.scan_sources import scan_source_paths
 
-    out: List[str] = []
-    for source in sources or []:
-        token = str((source or {}).get("scan_token") or (source or {}).get("token") or "")
-        if not token:
-            continue
-        excluded = {str(path) for path in ((source or {}).get("exclude_paths") or []) if str(path)}
-        try:
-            out.extend(path for path in iter_scan_manifest_paths(token) if str(path) not in excluded)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        # The results show these pictures' thumbnails.
-        register_scan_manifest_paths_for_session(token)
-    return out
+    try:
+        return scan_source_paths(sources)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _unique_paths(values: Iterable[Any]) -> List[str]:

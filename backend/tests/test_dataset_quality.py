@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import random
 import time
 
@@ -226,6 +227,48 @@ def test_endpoint_reads_folder_paths_and_starts_no_job_when_told_not_to(
 
 def test_endpoint_refuses_an_empty_request(test_client):
     assert test_client.post("/api/dataset/quality", json={}).status_code == 400
+
+
+def test_a_folder_import_sent_by_its_scan_is_scored(test_client, pictures, tmp_path, monkeypatch):
+    """A large folder import reaches the check as its scan, not its paths.
+
+    3.9.0 took only ids and paths, so the Quality Audit never scored pictures
+    imported from a folder and said nothing about it.
+    """
+    import services.dataset_session_service as dataset_session_service
+
+    scan_dir = tmp_path / "scan-manifests"
+    scan_dir.mkdir()
+    monkeypatch.setattr(dataset_session_service, "_SCAN_DIR", scan_dir)
+    scan = dataset_session_service.scan_folder_for_dataset(
+        str(pictures), recursive=False, limit=1
+    )
+    source = {"scan_token": scan["scan_token"], "exclude_paths": [str(pictures / "sharp.png")]}
+
+    started = test_client.post(
+        "/api/dataset/quality", json={"dataset_scan_tokens": [source]}
+    ).json()
+    # Four files in the folder, one taken out of the dataset (broken.png is
+    # not listed by the scan: it is not a readable picture).
+    assert started["total"] + started["missing"] >= 2
+    assert started["started"] is True
+    final = test_client.post(
+        "/api/dataset/quality", json={"dataset_scan_tokens": [source], "start": False}
+    ).json()
+    assert final["pending"] == 0
+    flagged = {Path(item["abs_path"]).name: item["flags"] for item in final["items"]}
+    assert flagged.get("flat.png") == ["flat"]
+    assert "blurry" in flagged.get("soft.png", [])
+    assert "sharp.png" not in flagged
+
+
+def test_an_unknown_scan_is_refused_in_words(test_client):
+    reply = test_client.post(
+        "/api/dataset/quality",
+        json={"dataset_scan_tokens": [{"scan_token": "no-such-scan", "exclude_paths": []}]},
+    )
+    assert reply.status_code == 400
+    assert "scan token" in reply.text
 
 
 def test_a_second_request_joins_the_running_job(test_client, pictures):

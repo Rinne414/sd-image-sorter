@@ -72,11 +72,13 @@
         const extraTagCounts = {};
         for (const id of DM.imageIds) {
             if (DM.isLocalId && DM.isLocalId(id)) {
-                if (DM._localIdUsesManifest?.(id)) continue;
                 const p = DM.localItemPaths?.get?.(id);
                 if (!p) continue;
-                imagePaths.push(p);
+                // A folder scan's pictures go by the scan (below), but their
+                // typed captions still count, matched by path.
                 extraTagCounts[p] = captionTagCount(id);
+                if (DM._localIdUsesManifest?.(id)) continue;
+                imagePaths.push(p);
             } else {
                 imageIds.push(Number(id));
                 captionTagCounts[Number(id)] = captionTagCount(id);
@@ -135,7 +137,7 @@
                 : '';
             setStatus(baseStatus + phashStatus);
             // Blur / flat and long-caption hints (audit-hints.js) add their own badges to this report.
-            const hintNotes = await DM._runAuditHints?.({ imageIds, imagePaths, report: data }) || [];
+            const hintNotes = await DM._runAuditHints?.({ imageIds, imagePaths, scanSources: datasetScanTokens, report: data }) || [];
             if (hintNotes.length) setStatus([baseStatus + phashStatus, ...hintNotes].join(' '));
         } catch (e) {
             setStatus(e.message || String(e));

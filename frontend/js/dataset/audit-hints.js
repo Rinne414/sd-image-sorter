@@ -73,11 +73,18 @@
         return raw !== '' && Number.isFinite(value) && value >= 0 ? value : DEFAULT_BLUR_BELOW;
     }
 
-    async function askQuality(imageIds, imagePaths, blurBelow, start) {
+    // A large folder import goes by its scan ({ scan_token, exclude_paths }), as the audit sends it.
+    async function askQuality({ imageIds, imagePaths, scanSources }, blurBelow, start) {
         return readJson(await fetch(QUALITY_API, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image_ids: imageIds, image_paths: imagePaths, start, blur_below: blurBelow }),
+            body: JSON.stringify({
+                image_ids: imageIds,
+                image_paths: imagePaths,
+                dataset_scan_tokens: scanSources,
+                start,
+                blur_below: blurBelow,
+            }),
         }));
     }
 
@@ -105,25 +112,26 @@
     }
 
     /** Scores what is not scored yet (waiting for the job) and returns the final answer. */
-    async function scoreAll(imageIds, imagePaths, blurBelow) {
-        let answer = await askQuality(imageIds, imagePaths, blurBelow, true);
+    async function scoreAll(pictures, blurBelow) {
+        let answer = await askQuality(pictures, blurBelow, true);
         for (let round = 0; answer.pending > 0 && answer.job_id && round < MAX_ROUNDS && !running.stopped; round += 1) {
             running.jobId = answer.job_id;
             const status = await waitForJob(answer.job_id);
             running.jobId = null;
             if (status === 'cancelled') running.stopped = true;
             // After a stop only read what is scored; do not start another job.
-            answer = await askQuality(imageIds, imagePaths, blurBelow, !running.stopped);
+            answer = await askQuality(pictures, blurBelow, !running.stopped);
         }
         return answer;
     }
 
-    async function qualityPhase(imageIds, imagePaths, report, notes) {
-        if (imageIds.length + imagePaths.length === 0) return;
+    async function qualityPhase(pictures, report, notes) {
+        const { imageIds, imagePaths, scanSources } = pictures;
+        if (imageIds.length + imagePaths.length + scanSources.length === 0) return;
         running.stopped = false;
         setProgress(0, 0, true);
         try {
-            const answer = await scoreAll(imageIds, imagePaths, blurBelowFromInput());
+            const answer = await scoreAll(pictures, blurBelowFromInput());
             const items = Array.isArray(answer.items) ? answer.items : [];
             report.quality_items = items;
             const count = (flag) => items.filter((it) => (it.flags || []).includes(flag)).length;
@@ -165,10 +173,12 @@
         return typeof estimate === 'function' ? estimate.call(window.SeparationConsole, text) : Math.ceil(text.length / 4);
     }
 
-    /** Pictures whose caption is over the limit. Counts exactly when the base model's tokenizers are ready. */
+    /**
+     * Pictures whose caption is over the limit. Counts exactly when the base model's tokenizers are ready.
+     * Every queued picture, a folder scan's too: a caption exists only for the pictures in the queue.
+     */
     async function tokensPhase(report, notes) {
-        const ids = (DM.imageIds || []).map(Number)
-            .filter((id) => !(DM.isLocalId?.(id) && DM._localIdUsesManifest?.(id)));
+        const ids = (DM.imageIds || []).map(Number);
         if (ids.length === 0) return;
         const tok = tokens();
         const limit = tok.budget();
@@ -216,7 +226,7 @@
      * Runs the ticked hint checks and adds what they find to `report`, redrawing the
      * badges after each one. Returns the sentences to put after the audit's own status.
      */
-    async function runHints({ imageIds, imagePaths, report }) {
+    async function runHints({ imageIds, imagePaths, scanSources = [], report }) {
         const notes = [];
         const redraw = () => DM._renderAuditResults(report);
         if ($('dataset-audit-check-tokens')?.checked) {
@@ -224,7 +234,7 @@
             redraw();
         }
         if ($('dataset-audit-check-blur')?.checked) {
-            await qualityPhase(imageIds, imagePaths, report, notes);
+            await qualityPhase({ imageIds, imagePaths, scanSources }, report, notes);
             redraw();
         }
         return notes;

@@ -7764,6 +7764,10 @@ export interface components {
             image_ids?: number[];
             /** Image Paths */
             image_paths?: string[];
+            /** Dataset Scan Tokens */
+            dataset_scan_tokens?: {
+                [key: string]: unknown;
+            }[];
             /**
              * Start
              * @default true

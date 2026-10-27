@@ -3436,7 +3436,7 @@ Returns `{summary, items[], items_truncated, items_returned, duplicate_groups[]}
 
 Picture quality hints for the Dataset Check step: which pictures may be soft or blurry, or are very flat. CPU only, in the background, cached. Review only: nothing is changed, moved or deleted.
 
-Body: `{"image_ids": [1, 2, 3], "image_paths": ["C:/dataset/local_001.png"], "start": true, "blur_below": 50, "flat_above": 0.92}`. Either list may be empty but not both (`400`). `start: false` only reads what is scored already and never starts a job. `blur_below` and `flat_above` are optional and move the review thresholds (defaults 50 and 0.92, chosen on real pictures, see `docs/MODELS_CONSIDERED.md`).
+Body: `{"image_ids": [1, 2, 3], "image_paths": ["C:/dataset/local_001.png"], "dataset_scan_tokens": [{"scan_token": "...", "exclude_paths": []}], "start": true, "blur_below": 50, "flat_above": 0.92}`. A large folder import goes by its scan, as the audit takes it (an unknown scan is `400`). The lists may be empty but not all three (`400`). `start: false` only reads what is scored already and never starts a job. `blur_below` and `flat_above` are optional and move the review thresholds (defaults 50 and 0.92, chosen on real pictures, see `docs/MODELS_CONSIDERED.md`).
 
 Each picture is read once, on a grey copy of at most 512 px on the long side, and gets three numbers: `blur` (variance of the Laplacian, 0-255 grey; low is soft), `edge` (share of pixels with a gradient of 16 grey levels or more) and `flat` (share of 8x8 blocks where every colour channel moves by 4 levels or less). The numbers are cached per file (path, size, modification time and `scores_version`) in `<cache>/image-quality.sqlite3`; a changed file is scored again.
 

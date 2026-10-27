@@ -467,6 +467,53 @@ test.describe('the empty-caption check reads the captions the export writes', ()
     expect(audits[0].caption_tag_counts).toEqual({ 701: 3, 702: 0 })
     expect(audits[0].extra_tag_counts).toEqual({ 'C:/pics/local-one.png': 2 })
   })
+
+  // A folder import reaches the backend as its scan. 3.9.0 left its pictures out
+  // of the caption counts (all "untagged") and out of the blur and long-caption
+  // checks, which then said nothing.
+  test('pictures of a folder scan count their typed captions and get the blur and long-caption checks', async ({ page }) => {
+    await boot(page)
+    const audits: Array<Record<string, any>> = []
+    const quality: Array<Record<string, any>> = []
+    await page.route('**/api/dataset/audit', (route) => {
+      audits.push(route.request().postDataJSON() as Record<string, any>)
+      return json(route, EMPTY_AUDIT)
+    })
+    await page.route('**/api/dataset/quality', (route) => {
+      quality.push(route.request().postDataJSON() as Record<string, any>)
+      return json(route, qualityAnswer({
+        total: 2, scored: 2,
+        items: [{ image_id: 0, abs_path: 'C:/scan/scan-b.png', flags: ['flat'], blur: 900, flat_share: 0.97 }],
+      }))
+    })
+    await seedQueue(page, [
+      { id: -31, filename: 'scan-a.png', caption: 'sky, cloud' },
+      { id: -32, filename: 'scan-b.png', caption: LONG_CAPTION },
+    ])
+    await page.evaluate(() => {
+      const dm = (window as any).DatasetMaker
+      dm.localManifestTokens.set('scan-1', { total: 2, excludedPaths: new Set() })
+      for (const [id, name] of [[-31, 'scan-a.png'], [-32, 'scan-b.png']] as const) {
+        const path = `C:/scan/${name}`
+        dm.meta.set(id, { filename: name, width: 512, height: 512, abs_path: path, folder_scan_token: 'scan-1' })
+        dm.localItemPaths.set(id, path)
+      }
+      dm._updateCount?.()
+    })
+    // Opening the audit runs it, with both checks ticked by default.
+    await openAudit(page)
+
+    await expect.poll(() => quality.length).toBeGreaterThan(0)
+    const audit = audits[audits.length - 1]
+    // They go by the scan, with their typed captions counted by path.
+    expect(audit.image_paths).toEqual([])
+    expect(audit.dataset_scan_tokens).toEqual([{ scan_token: 'scan-1', exclude_paths: [] }])
+    expect(audit.extra_tag_counts).toEqual({ 'C:/scan/scan-a.png': 2, 'C:/scan/scan-b.png': 300 })
+    expect(quality[0].dataset_scan_tokens).toEqual([{ scan_token: 'scan-1', exclude_paths: [] }])
+    const status = page.locator('#dataset-audit-status')
+    await expect(status).toContainText('Long captions (over 75 tokens): 1 of 2 checked')
+    await expect(status).toContainText('Blur check: 2 pictures scored')
+  })
 })
 
 async function chooseAnima(page: Page) {
