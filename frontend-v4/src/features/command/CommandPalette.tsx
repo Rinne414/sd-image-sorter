@@ -77,19 +77,50 @@ const SHELL_OPS: ShellOps = {
   restart: () => void restartApp(),
 }
 
-/** Open a Settings tab and bring one of its sections into view, with the focus on its first control. */
+/** How long a section is waited for and kept in view while the tab above it still loads. */
+const REVEAL_MS = 3000
+/** Frames the section must stay put before the tab counts as settled. */
+const SETTLED_FRAMES = 10
+
+/**
+ * Open a Settings tab and bring one of its sections into view, with the focus
+ * on its first control. The tab may still be loading: the section is waited
+ * for, then kept in view while content above it grows, until it stays put, the
+ * user scrolls or clicks, or REVEAL_MS pass.
+ */
 function openSettingsAt(tab: SettingsTab, testId: string): void {
   useApp.getState().openSettings(tab)
-  const reveal = (tries: number) => {
+  const started = performance.now()
+  let userMoved = false
+  let focused = false
+  let lastTop: number | null = null
+  let still = 0
+  const onUser = () => (userMoved = true)
+  const events = ['wheel', 'pointerdown', 'keydown'] as const
+  for (const name of events) window.addEventListener(name, onUser, { capture: true, passive: true })
+  const done = () => {
+    for (const name of events) window.removeEventListener(name, onUser, { capture: true })
+  }
+  const step = () => {
+    if (userMoved || performance.now() - started > REVEAL_MS) return done()
     const section = document.querySelector<HTMLElement>(`[data-testid="${testId}"]`)
     if (section) {
-      section.scrollIntoView({ block: 'center' })
-      section.querySelector<HTMLElement>('button:not([disabled]), input, select')?.focus()
-      return
+      const top = section.getBoundingClientRect().top
+      if (top === lastTop) still += 1
+      else {
+        section.scrollIntoView({ block: 'center' })
+        lastTop = section.getBoundingClientRect().top
+        still = 0
+      }
+      if (!focused) {
+        section.querySelector<HTMLElement>('button:not([disabled]), input, select')?.focus({ preventScroll: true })
+        focused = true
+      }
+      if (still >= SETTLED_FRAMES) return done()
     }
-    if (tries > 0) requestAnimationFrame(() => reveal(tries - 1))
+    requestAnimationFrame(step)
   }
-  requestAnimationFrame(() => reveal(60))
+  requestAnimationFrame(step)
 }
 
 /** Free the loaded AI models and say what happened. */
