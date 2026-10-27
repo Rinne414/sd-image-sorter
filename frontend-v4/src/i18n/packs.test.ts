@@ -66,13 +66,8 @@ const JARGON_PHRASES = ['PNG Info', 'GPT Image', 'Clip skip', 'Hugging Face', 'L
 const TYPED = new Set([
   ...['general', 'sensitive', 'questionable', 'explicit', 'comfyui', 'nai', 'webui', 'forge', 'square', 'portrait', 'landscape'],
   ...['warm', 'cool', 'neutral', 'red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple', 'pink', 'brown', 'white', 'black', 'gray'],
-<<<<<<< HEAD
   ...['image', 'video', 'today', '7d', 'YYYY-MM-DD', 'YYYY-MM', 'YYYY', 'score', 'width', 'height', 'brightness', 'saturation', 'unrated'],
-  ...['off', 'data', 'models', 'imports', 'kaloscope2.0', 'mychar'],
-=======
-  ...['today', '7d', 'YYYY-MM-DD', 'YYYY-MM', 'YYYY', 'score', 'width', 'height', 'brightness', 'saturation', 'unrated'],
   ...['off', 'data', 'models', 'imports', 'collected', 'kaloscope2.0', 'mychar'],
->>>>>>> main
 ])
 
 /** Danbooru tags given as examples: tags are English by nature. */
