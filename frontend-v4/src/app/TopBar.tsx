@@ -30,7 +30,7 @@ const THEME_LABEL: Record<ThemeMode, MessageKey> = {
 
 /**
  * Logo, the places the user keeps in the bar (library, batch and sort until
- * they customize it; the rest wait under More), then: AI busy and a new version (only when there is
+ * they customize it; hidden pages wait under More, the Reader in Tools), then: AI busy and a new version (only when there is
  * one), jobs, import, Ctrl K, Tools, Settings, theme, back to V3.5. On the
  * settings and tools pages no tab is lit; ⚙ or Tools is.
  */
@@ -50,7 +50,8 @@ export function TopBar() {
 
   const places = (ids: string[]) => ids.map((id) => PLACE_BY_ID.get(id)).filter((p): p is TopBarPlace => !!p)
   const tabs = places(shownIds(choice))
-  const tucked = places(hiddenIds(choice))
+  // a hidden tool is in the Tools menu already, so More only shows for hidden pages
+  const tucked = places(hiddenIds(choice)).filter((p) => !p.inTools)
   const moreItems: MenuItem[] = [
     ...tucked.map((p) => ({
       id: `place-${p.id}`,

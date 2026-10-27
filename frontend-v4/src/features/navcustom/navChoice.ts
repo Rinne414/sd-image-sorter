@@ -8,6 +8,8 @@ export interface NavDef {
   id: string
   /** Shown in the bar until the user hides it (default true). */
   shown?: boolean
+  /** Hidden, it waits in the Tools menu instead of under More (a tool). */
+  inTools?: boolean
 }
 
 export interface NavChoice {

@@ -37,6 +37,7 @@ export function NavCustomizeDialog({ useStore, defs, labels, onClose }: Props) {
   const doneRef = useRef<HTMLButtonElement>(null)
 
   const name = (id: string) => labels[id] ?? id
+  const inTools = new Set(defs.filter((d) => d.inTools).map((d) => d.id))
   const atDefault = isDefaultChoice(choice, defs)
 
   // After a move the row has a new place; keep the keyboard on the arrow that
@@ -150,7 +151,7 @@ export function NavCustomizeDialog({ useStore, defs, labels, onClose }: Props) {
                 />
                 <span className={styles.name}>{name(id)}</span>
               </label>
-              <span className={styles.where}>{shown ? t('navcustom.inBar') : t('navcustom.inMore')}</span>
+              <span className={styles.where}>{shown ? t('navcustom.inBar') : inTools.has(id) ? t('navcustom.inTools') : t('navcustom.inMore')}</span>
               <span className={styles.moves}>
                 <button
                   type="button"
