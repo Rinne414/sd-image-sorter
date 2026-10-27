@@ -16,6 +16,7 @@ import { driveOllama, ollamaAdoption } from './ollamaDriver' // ollama
 import { adoptArtist, driveArtist } from './artistDriver' // artist
 import { driveVideo } from './videoDriver' // video
 import { adoptVideoInstall } from './videoJob' // video
+import { adoptStyleMap, driveStyleMap } from './styleMapDriver' // stylemap
 import { jobHeadline } from './headline'
 
 // Every long job the user started (or that was already running when V4
@@ -73,6 +74,7 @@ type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors'
   | 'ollama'
   | 'artist' // artist
   | 'video' // video
+  | 'stylemap' // stylemap
 
 // Censor work over a batch (detecting, SAM3 refining, filters) runs one at a time.
 const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind === 'refine' || kind === 'adjust' ? 'detect' : kind)
@@ -100,6 +102,8 @@ interface Driver {
   cancel: ((job: Job) => Promise<unknown>) | null
   /** After the job ends (an import clears its finished run so the next one may start). */
   settle?: (job: Job) => Promise<unknown>
+  /** stylemap: a job the backend can pause and resume. */
+  pause?: { pause: (job: Job) => Promise<unknown>; resume: (job: Job) => Promise<unknown> }
   /** Refreshed while the job runs, whenever more images have arrived. */
   liveKeys?: string[]
 }
@@ -179,9 +183,28 @@ const DRIVERS: Record<Queue, Driver> = {
   ollama: driveOllama, // ollama: an Ollama model download (it cannot be stopped)
   video: driveVideo, // video: the ffmpeg download for video support (it cannot be stopped)
   artist: driveArtist, // artist: style identification (the backend runs one batch at a time)
+  stylemap: driveStyleMap, // stylemap: the Style Map's index (pause, resume, stop)
 }
 
 export const canStop = (kind: JobKind) => DRIVERS[queueOf(kind)].cancel !== null
+
+/** stylemap: whether the drawer offers Pause / Resume for this kind of job. */
+export const canPause = (kind: JobKind) => DRIVERS[queueOf(kind)].pause !== undefined
+
+/** stylemap: pause or resume a job; the next poll shows the new state (the reason is said on failure). */
+export async function pauseJob(job: Job, pause: boolean): Promise<boolean> {
+  const control = DRIVERS[queueOf(job.kind)].pause
+  if (!control) return false
+  try {
+    await (pause ? control.pause(job) : control.resume(job))
+    // Only the flag: the job's counts may have moved on since this row was drawn.
+    useJobs.setState((s) => ({ jobs: s.jobs.map((j) => (j.id === job.id ? { ...j, progress: { ...j.progress, paused: pause } } : j)) }))
+    return true
+  } catch (error) {
+    useToasts.getState().push(tr('error.generic', { reason: (error as Error).message }), 'error')
+    return false
+  }
+}
 
 /** Polls in a row that may fail before a job is reported as lost. */
 const MAX_POLL_ERRORS = 5
@@ -337,6 +360,7 @@ export async function adoptRunningJobs(): Promise<void> {
     adopt('ollama', ollamaAdoption), // ollama
     adopt('artist', adoptArtist), // artist
     adopt('video', adoptVideoInstall), // video
+    adopt('stylemap', adoptStyleMap), // stylemap
     adopt('smarttag', adoptSmartTag),
     adopt('install', (raw) => {
       const result = (raw.prepare_result ?? {}) as Record<string, unknown>
@@ -392,6 +416,7 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   ollama: ['vlm-local-models'], // ollama: the AI services page lists what Ollama has
   video: ['video-support', 'image-count', 'images', 'image'], // video: video support turns the library's videos into readable items
   artist: ['artist-stats', 'artist-images', 'images', 'image-count'], // artist: the style tool's numbers and lists, an artist: search
+  stylemap: ['artist-stats', 'artist-images', 'images', 'image-count'], // stylemap: the index also stores each picture's artist guess
 }
 
 let onUndo: ((job: Job) => Promise<void>) | null = null

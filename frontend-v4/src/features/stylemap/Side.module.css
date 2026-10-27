@@ -1,0 +1,284 @@
+/* The map's side panel: what the space does, the picture under the pointer,
+   the nearest pictures of a picture, and how to read the map. */
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  padding: 14px 16px 24px;
+  overflow-y: auto;
+  background: var(--surface-1);
+  border-left: 1px solid var(--line);
+  scrollbar-gutter: stable;
+}
+
+.what {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--wash);
+  border-left: 2px solid var(--accent);
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+
+/* ---- the preview ---- */
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.previewBox {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  height: clamp(160px, calc(30 * var(--vh)), 360px);
+  overflow: hidden;
+  background: var(--stage);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.previewOpen {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: zoom-in;
+}
+
+.previewOpen img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.previewHint {
+  padding: 0 18px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.previewName {
+  overflow: hidden;
+  font-size: var(--fs-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.previewMembers {
+  color: var(--muted);
+  font-size: var(--fs-1);
+}
+
+/* ---- the nearest pictures ---- */
+.near {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.nearHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 30px;
+}
+
+.nearTitle {
+  margin: 0;
+  font-size: var(--fs-3);
+  font-weight: 600;
+}
+
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 84px;
+  padding: 10px;
+  background: transparent;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--text);
+  text-align: center;
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+
+.drop:hover:not(:disabled) {
+  background: var(--wash-hover);
+}
+
+.drop:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.drop[data-compact] {
+  min-height: 0;
+  padding: 6px 10px;
+}
+
+.near[data-over] .drop {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.dropMain {
+  font-size: var(--fs-3);
+}
+
+.dropSub {
+  color: var(--muted);
+  font-size: var(--fs-1);
+  line-height: 1.5;
+}
+
+.noteRow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.note {
+  margin: 0;
+  padding: 6px 8px;
+  background: var(--wash);
+  border-left: 2px solid var(--line-strong);
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}
+
+.note[data-tone="busy"] {
+  border-left-color: var(--accent);
+}
+
+.note[data-tone="warn"] {
+  border-left-color: var(--warn);
+}
+
+.note[data-tone="error"] {
+  border-left-color: var(--danger);
+  color: var(--text);
+}
+
+.nearFor {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.nearList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-align: left;
+}
+
+.row:hover {
+  background: var(--wash-hover);
+}
+
+.row[aria-current] {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.rowThumb {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  background: var(--surface-3);
+  border-radius: var(--radius-sm);
+}
+
+.rowText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rowName {
+  overflow: hidden;
+  font-size: var(--fs-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowFlag {
+  color: var(--muted);
+  font-size: var(--fs-1);
+  line-height: 1.4;
+}
+
+.row[data-weak] .rowName {
+  color: var(--muted);
+}
+
+.score {
+  flex: none;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.row[data-weak] .score {
+  color: var(--muted);
+}
+
+.nearNote {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  line-height: 1.5;
+}
+
+/* ---- how to read the map ---- */
+.help {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.help summary {
+  color: var(--text);
+  cursor: pointer;
+}
+
+.help ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding-left: 18px;
+  line-height: 1.5;
+}

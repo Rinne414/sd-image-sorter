@@ -306,6 +306,12 @@ A literal or extra hue is legitimate only when it encodes data. Registered:
 - **Marks drawn over pictures**: `--on-image`, `--ai-on-image`,
   `--ok-on-image` (they sit on arbitrary pixels, so they do not follow the
   theme's surfaces).
+- **Style Map dots** (`src/features/stylemap/colors.ts`, the same values as
+  the classic page): twelve category hues that stay clear of pure blue,
+  purple, pink and the accent, a grey for the folded "other" category, a
+  three-stop viridis ramp for scores and one neutral grey for "no data". They
+  go to the WebGL shader as they are, so a legend swatch and its dots are the
+  same colour; each legend chip names its category and count.
 
 A new hardcoded colour must encode data and be registered here; anything else
 uses the role tokens.

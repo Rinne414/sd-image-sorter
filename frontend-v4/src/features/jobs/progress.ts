@@ -9,6 +9,7 @@ import { readScanExtras, type ScanExtras } from './scanExtras' // scan: stall + 
 import { readOllama } from './ollamaJob' // ollama: an Ollama model download, read in ollamaJob.ts
 import { readArtist } from './artistJob' // artist: style identification, read in artistJob.ts
 import { readVideoInstall } from './videoJob' // video: the ffmpeg download for video support, read in videoJob.ts
+import { readStyleMap } from './styleMapJob' // stylemap: the Style Map's index job, read in styleMapJob.ts
 import { refusalOfProgress, type TaggerRefusal } from './taggerRefusal'
 // Reads the backend's progress payloads for long jobs into one shape.
 // move/copy: GET /api/move/progress · trash: GET /api/images/delete-selected/progress
@@ -58,6 +59,7 @@ export type JobKind =
   | 'ollama' // ollama: an Ollama model download (GET /api/vlm/local-models/pull/progress)
   | 'artist' // artist: style identification (GET /api/artists/batch-progress)
   | 'video' // video: the ffmpeg download for video support (GET /api/video-support)
+  | 'stylemap' // stylemap: the Style Map's style index (GET /api/style-map/vectors/progress)
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
 
 export interface JobFailure {
@@ -95,6 +97,8 @@ export interface JobProgress {
   updated: number
   /** scan only: no visible progress for a while; images left to another library. */
   scan?: ScanExtras
+  /** stylemap only: the run is paused (the drawer offers Resume). */
+  paused?: boolean
   /** reconnect only: found files already in the library under another record. */
   alreadyIndexed?: number
   currentItem: string | null
@@ -367,6 +371,8 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
       return readArtist(base, raw, prev) // artist
     case 'video': // video
       return readVideoInstall(base, raw) // video
+    case 'stylemap': // stylemap
+      return readStyleMap(base, raw, prev) // stylemap
   }
 }
 

@@ -1,0 +1,365 @@
+/* The map card: the canvas and what floats over it (landmarks, axis labels,
+   the axis card, the start card, "Reset view"). Overlays are placed by
+   transform only (Landmarks.tsx, AxisLabels.tsx); nothing here lays out. */
+.card {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--stage);
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  outline: none;
+  touch-action: none;
+}
+
+.canvas:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.loading {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 4;
+  padding: 4px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.reset {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  z-index: 4;
+}
+
+/* ---- nothing to draw yet ---- */
+.start {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  width: min(480px, calc(100% - 48px));
+  padding: 24px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float);
+  transform: translate(-50%, -50%);
+}
+
+.eyebrow {
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.startTitle {
+  margin: 0;
+  font-size: var(--fs-5);
+  font-weight: 600;
+}
+
+.startText {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+  line-height: 1.6;
+}
+
+.startDetail {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  word-break: break-all;
+}
+
+/* ---- region landmarks ---- */
+.landmarks {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.landmark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gap);
+  width: calc(var(--thumb) + 2 * var(--pad) + 16px);
+  padding: var(--pad);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float);
+  transform-origin: 0 0;
+  pointer-events: auto;
+  will-change: transform;
+}
+
+.landmark[hidden] {
+  display: none;
+}
+
+.landmark[data-compact="true"] {
+  width: calc(var(--thumb) + 2 * var(--pad));
+}
+
+.landmark[data-compact="true"] .landmarkText {
+  display: none;
+}
+
+/* Hovered: on top, full size, the second picture and every label. */
+.landmark[data-open] {
+  z-index: 2;
+  width: auto;
+  min-width: calc(var(--thumb) + 2 * var(--pad) + 16px);
+  max-width: calc(2 * var(--thumb) + 3 * var(--pad) + 24px);
+  border-color: var(--line-strong);
+}
+
+.landmarkThumbs {
+  display: flex;
+  gap: var(--pad);
+}
+
+.landmarkThumbs img {
+  width: var(--thumb);
+  height: var(--thumb);
+  object-fit: cover;
+  background: var(--surface-3);
+  border-radius: var(--radius-sm);
+}
+
+.landmarkText {
+  width: 100%;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-1);
+  line-height: 1.3;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.landmarkDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  color: var(--text);
+  font-size: var(--fs-1);
+  line-height: 1.4;
+}
+
+.landmarkCount {
+  color: var(--muted);
+}
+
+/* ---- axis labels on the floor grid ---- */
+.axisLabels {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.axisLabel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 260px;
+  padding: 2px 8px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: var(--fs-1);
+  line-height: 18px;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+.axisLabel[hidden] {
+  display: none;
+}
+
+.axisLabel > span:nth-child(3) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.axisLabel > span:empty {
+  display: none;
+}
+
+.axisLabel[data-weak] {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+
+.axisKey {
+  flex: none;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.axisLabel[data-weak] .axisKey {
+  color: var(--muted);
+}
+
+/* ---- the axis card ---- */
+.axesPanel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 380px;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 24px);
+  padding: 12px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float);
+}
+
+.axesHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.axesTitle {
+  margin: 0;
+  font-size: var(--fs-4);
+  font-weight: 600;
+}
+
+.axesNote {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}
+
+.axesBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.axesState {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.axis {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.axis:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.axisName {
+  font-size: var(--fs-3);
+  font-weight: 600;
+}
+
+.ends {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.end {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.endName {
+  color: var(--text-2);
+  font-size: var(--fs-1);
+}
+
+.endThumbs {
+  display: flex;
+  gap: 4px;
+}
+
+.endThumb {
+  padding: 0;
+  background: none;
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+}
+
+.endThumb:hover {
+  border-color: var(--line-strong);
+}
+
+.endThumb[aria-current] {
+  border-color: var(--accent);
+}
+
+.endThumb img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  background: var(--surface-3);
+  border-radius: var(--radius-sm);
+}
+
+.endTags {
+  color: var(--text);
+  font-size: var(--fs-1);
+  line-height: 1.4;
+}
+
+.axisWeak {
+  color: var(--muted);
+  font-size: var(--fs-1);
+}

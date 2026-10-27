@@ -466,13 +466,13 @@
         "#nav-tab-stylemap"
       ],
       "vopus": {
-        "partial": "No Style Map place; Similar and duplicates are dialogs in the Library (not a tab); Censor and Dataset exist only as steps inside a batch",
+        "partial": "Style Map is a Tools page (Tools menu, Ctrl K), not a tab of its own; Similar and duplicates are dialogs in the Library (not a tab); Censor and Dataset exist only as steps inside a batch",
         "at": "#/library",
         "find": "[data-testid=\"tools-menu\"]",
         "note": "Top-bar tabs are nav[aria-label=main] button (Library, Batch, Sort); the rest is in the Tools menu"
       },
       "next": {
-        "partial": "Style Map is only a link to the classic interface; Dataset maker is reached through batches, not a place tab",
+        "partial": "Dataset maker is reached through batches, not a place tab",
         "at": "#/library",
         "find": "[data-testid=\"next-place-library\"]"
       }
@@ -504,7 +504,7 @@
         "note": "Also tool-reverse, tool-promptlab, tool-artist, tool-lexicon, tool-privacy, censor, edit-tags"
       },
       "next": {
-        "partial": "Style Map in the More menu only opens the classic interface",
+        "partial": "Dataset maker in More opens the classic interface; Reader and Style Map are places in the bar, not repeated in More",
         "at": "#/library",
         "open": [
           "[data-testid=\"next-more\"]"
@@ -3205,10 +3205,20 @@
         "#stylemap-empty-similar"
       ],
       "vopus": {
-        "missing": "Vopus has no Style Map"
+        "at": "#/library",
+        "open": [
+          "[data-testid=\"tools-menu\"]",
+          "[data-item=\"tool-stylemap\"]"
+        ],
+        "find": "[data-testid=\"stylemap-index\"]",
+        "note": "Tools > Style Map (#/tools/stylemap), also Ctrl K. stylemap-index holds stylemap-build (Build / Refresh index), or while it runs stylemap-index-pause and stylemap-index-cancel (the same job in the Jobs drawer, job-pause); the start card has stylemap-empty-build or stylemap-empty-similar (build the similarity index); the layout line has stylemap-install-umap and stylemap-retry-layout"
       },
       "next": {
-        "missing": "Style Map exists only as a link to the classic interface."
+        "at": "#/library",
+        "open": [
+          "[data-testid=\"next-place-stylemap\"]"
+        ],
+        "find": "[data-testid=\"stylemap-index\"]"
       }
     },
     {
@@ -3228,10 +3238,22 @@
         "#stylemap-near-clear"
       ],
       "vopus": {
-        "missing": "Vopus has no Style Map"
+        "at": "#/library",
+        "open": [
+          "[data-testid=\"tools-menu\"]",
+          "[data-item=\"tool-stylemap\"]"
+        ],
+        "find": "[data-testid=\"stylemap-axes-toggle\"]",
+        "partial": "No box select yet (#stylemap-box-toggle comes with the selection, stage 2)",
+        "note": "stylemap-axes-toggle (axis card stylemap-axes-panel), stylemap-labels-toggle, stylemap-landmarks-toggle, stylemap-reset-view, stylemap-locate-input with stylemap-locate-clear and stylemap-locate-action, nearest pictures stylemap-near-drop with stylemap-near-clear and stylemap-near-action; box select comes with the selection (stage 2)"
       },
       "next": {
-        "missing": "Style Map exists only as a link to the classic interface."
+        "at": "#/library",
+        "open": [
+          "[data-testid=\"next-place-stylemap\"]"
+        ],
+        "find": "[data-testid=\"stylemap-axes-toggle\"]",
+        "partial": "No box select yet (#stylemap-box-toggle comes with the selection, stage 2)"
       }
     },
     {
@@ -3247,10 +3269,10 @@
         "#stylemap-sel-clear"
       ],
       "vopus": {
-        "missing": "Vopus has no Style Map"
+        "missing": "The Style Map page has no box select or send-to yet (stage 2 of the port)"
       },
       "next": {
-        "missing": "Style Map exists only as a link to the classic interface."
+        "missing": "The Style Map page has no box select or send-to yet (stage 2 of the port)"
       }
     },
     {

@@ -18,7 +18,7 @@ import { findLoadedImage } from '../api/loaded'
 import { quickCensor } from '../features/censor/quickCensor'
 import { pickImageFile } from '../features/similar/imageSearch'
 import { showLikeImage, useSimilar } from '../features/similar/similarStore'
-import { openClassic, type ClassicView } from './classicLink'
+import { openClassic } from './classicLink'
 import { NEXT_PLACES, useNextNav } from './nextPlaces'
 import styles from './NextTopBar.module.css'
 
@@ -40,6 +40,9 @@ function targetIds(): number[] {
 
 const app = () => useApp.getState()
 
+/** Tools that are places of their own in the bar (not repeated in More). */
+const BAR_TOOLS: ReadonlySet<string> = new Set(['reader', 'stylemap'])
+
 /**
  * The top edge of the new interface (docs/DESIGN.md §redesign-2026-10): the
  * name with its version, every place as a labelled tab, then background work,
@@ -54,20 +57,13 @@ export function NextTopBar() {
   const choice = useNextNav((s) => s.choice)
   const customizeOpen = useNavCustomizeOpen((s) => s.open)
   const setCustomizeOpen = useNavCustomizeOpen((s) => s.setOpen)
-  const classic = (id: string, label: MessageKey, view: ClassicView): Place => ({
-    id,
-    label,
-    current: false,
-    go: () => openClassic(view),
-    classic: true,
-  })
 
   const places: Place[] = [
     { id: 'library', label: 'next.place.library', current: page === 'library', go: () => app().setPage('library') },
     { id: 'batch', label: 'next.place.batch', current: page === 'batch', go: () => app().setPage('batch') },
     { id: 'sort', label: 'next.place.sort', current: page === 'sort', go: () => app().setPage('sort') },
     { id: 'reader', label: 'next.place.reader', current: page === 'tools' && toolId === 'reader', go: () => app().openTool('reader') },
-    classic('stylemap', 'next.place.stylemap', 'stylemap'),
+    { id: 'stylemap', label: 'next.place.stylemap', current: page === 'tools' && toolId === 'stylemap', go: () => app().openTool('stylemap') },
   ]
 
   const onImages = (run: (ids: number[]) => void) => () => {
@@ -126,7 +122,8 @@ export function NextTopBar() {
 
   const more: MenuItem[] = [
     ...hiddenItems,
-    ...TOOLS.filter((tool) => tool.id !== 'reader').map((tool, i) => ({
+    // Reader and Style Map are places in the bar; More lists the other tools.
+    ...TOOLS.filter((tool) => !BAR_TOOLS.has(tool.id)).map((tool, i) => ({
       id: `tool-${tool.id}`,
       divider: i === 0 && hiddenItems.length > 0 ? true : undefined,
       label: t(tool.label),
@@ -190,7 +187,7 @@ export function NextTopBar() {
 
         <nav className={styles.places} aria-label="main">
           {shownIds(choice).map((id) => bar[id])}
-          <Menu label={t('next.place.more')} items={more} current={hiddenCurrent || (page === 'tools' && toolId !== 'reader')} testId="next-more" />
+          <Menu label={t('next.place.more')} items={more} current={hiddenCurrent || (page === 'tools' && !BAR_TOOLS.has(toolId))} testId="next-more" />
         </nav>
 
         <span className={styles.gap} />

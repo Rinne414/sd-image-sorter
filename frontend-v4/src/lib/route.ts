@@ -10,7 +10,7 @@ export type MainPage = 'home' | 'library' | 'batch' | 'sort'
 export const SETTINGS_TABS = ['appearance', 'library', 'models', 'ai', 'disk', 'desktop', 'about'] as const
 export type SettingsTab = (typeof SETTINGS_TABS)[number]
 
-export const TOOL_IDS = ['reader', 'reverse', 'promptlab', 'artist', 'lexicon', 'privacy'] as const
+export const TOOL_IDS = ['reader', 'reverse', 'promptlab', 'artist', 'lexicon', 'privacy', 'stylemap'] as const
 export type ToolId = (typeof TOOL_IDS)[number]
 
 export type Route = { page: MainPage; batchId: number | null } | { page: 'settings'; tab: SettingsTab } | { page: 'tools'; tool: ToolId }

@@ -22,7 +22,7 @@ describe('toolsRegistry', () => {
   })
 
   it('"send to tool" offers one-image tools only for one image, and never a tool that takes none', () => {
-    expect(sendTargets(1).map((t) => t.id)).toEqual(['reader', 'reverse', 'promptlab', 'artist', 'privacy'])
+    expect(sendTargets(1).map((t) => t.id)).toEqual(['reader', 'reverse', 'promptlab', 'artist', 'privacy', 'stylemap'])
     expect(sendTargets(3).map((t) => t.id)).toEqual(['artist', 'privacy'])
     expect(sendTargets(0)).toEqual([])
   })

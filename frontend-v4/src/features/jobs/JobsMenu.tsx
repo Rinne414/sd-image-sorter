@@ -6,7 +6,7 @@ import { useApp } from '../../state/store'
 import { Icon } from '../../ui/Icon'
 import { useClickOutside, useLayer } from '../../ui/layers'
 import { useToasts } from '../../ui/toasts'
-import { canStop, jobHeadline, stopJob, undoJob, useJobs, type Job } from './jobs'
+import { canPause, canStop, jobHeadline, pauseJob, stopJob, undoJob, useJobs, type Job } from './jobs'
 import styles from './Jobs.module.css'
 import { buttonSummary } from './jobsSummary'
 import { isFinished } from './progress'
@@ -135,6 +135,11 @@ function JobRow({ job }: { job: Job }) {
             <span className={styles.item} title={p.currentItem ?? undefined}>
               {p.currentItem}
             </span>
+            {canPause(job.kind) && p.status === 'running' && (
+              <button type="button" className="btn" onClick={() => void pauseJob(job, !p.paused)} data-testid="job-pause">
+                {t(p.paused ? 'stylemap.index.resume' : 'stylemap.index.pause')}
+              </button>
+            )}
             {canStop(job.kind) && (
               <button type="button" className="btn" onClick={() => void stopJob(job)} disabled={p.status === 'cancelling'}>
                 {t('jobs.stop')}

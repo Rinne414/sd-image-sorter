@@ -38,6 +38,7 @@ const RUNNING: Record<JobKind, MessageKey> = {
   ollama: 'jobs.running.install', // ollama: "Downloading <model>"
   artist: 'tools.artist.job.running', // artist
   video: 'video.job.running', // video
+  stylemap: 'stylemap.job.running', // stylemap
 }
 
 const DONE: Record<JobKind, MessageKey> = {
@@ -69,6 +70,7 @@ const DONE: Record<JobKind, MessageKey> = {
   ollama: 'jobs.done.install', // ollama: "<model> is ready"
   artist: 'tools.artist.job.done', // artist
   video: 'video.job.done', // video
+  stylemap: 'stylemap.job.done', // stylemap
 }
 
 /** An install that can only be used after a restart says so, never "is ready". */

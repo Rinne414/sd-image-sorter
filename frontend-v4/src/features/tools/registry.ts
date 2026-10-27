@@ -21,6 +21,8 @@ export const TOOLS: readonly ToolEntry[] = [
   { id: 'artist', label: 'tools.artist', accepts: 'many', page: lazy(() => import('./artist/ArtistPage').then((m) => ({ default: m.ArtistPage }))) },
   { id: 'lexicon', label: 'tools.lexicon', accepts: null, page: lazy(() => import('./lexicon/LexiconPage').then((m) => ({ default: m.LexiconPage }))) },
   { id: 'privacy', label: 'tools.privacy', accepts: 'many', page: lazy(() => import('./privacy/PrivacyPage').then((m) => ({ default: m.PrivacyPage }))) },
+  // One image: the map turns to it and lists the pictures most like it. three.js stays in this page's own chunk.
+  { id: 'stylemap', label: 'stylemap.tool', accepts: 'one', page: lazy(() => import('../stylemap/StyleMapPage').then((m) => ({ default: m.StyleMapPage }))) },
 ]
 
 export function toolById(id: ToolId, tools: readonly ToolEntry[] = TOOLS): ToolEntry {

@@ -1,0 +1,476 @@
+/* 画风地图: the toolbar (space, dot colour, layout, index), the bar under it
+   (what the map covers, find a picture, view switches), then the map and the
+   side panel. Desktop only: 1366x768 and up (§desktop-layout). */
+.page {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(260px, calc(21 * var(--vw)), 380px);
+  min-height: 0;
+}
+
+/* ---- the toolbar ---- */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 20px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--line);
+}
+
+.spaces {
+  display: flex;
+  flex: none;
+  padding: 2px;
+  gap: 2px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+
+.space {
+  height: calc(var(--control-h) - 4px);
+  padding: 0 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+  white-space: nowrap;
+  border-radius: var(--radius-sm);
+  transition: background var(--t-fast) var(--ease);
+}
+
+.space:hover {
+  background: var(--wash-hover);
+  color: var(--text);
+}
+
+/* The chosen space wears the accent wash and edge, like a checked row. */
+.space[aria-checked="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--text);
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.fieldLabel {
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
+.select {
+  height: var(--control-h);
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-3);
+  border-radius: var(--radius);
+}
+
+/* ---- the legend ---- */
+.legendWrap {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.legend {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.legendNote {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 220px;
+  height: 26px;
+  padding: 0 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
+/* A data colour: the dots of this category are this exact colour (§color-exemptions). */
+.swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.chipLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chipCount {
+  color: var(--muted);
+}
+
+.more {
+  flex: none;
+  height: 26px;
+  padding: 0 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
+.more:hover {
+  background: var(--surface-3);
+}
+
+/* Off screen: the chips at their natural widths, for folding the row. */
+.measure {
+  position: absolute;
+  top: 0;
+  left: -10000px;
+  display: flex;
+  gap: 6px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.measure > span {
+  display: inline-flex;
+}
+
+.legendPop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: max-content;
+  max-width: 560px;
+  padding: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float);
+}
+
+.scale {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.ramp {
+  width: 120px;
+  height: 10px;
+  border-radius: var(--radius-sm);
+}
+
+/* ---- the layout line ---- */
+.layout {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.layoutText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background: var(--muted);
+  border-radius: 50%;
+}
+
+.dot[data-tone="busy"] {
+  background: var(--warn);
+}
+
+.dot[data-tone="ready"] {
+  background: var(--ok);
+}
+
+.dot[data-tone="failed"] {
+  background: var(--danger);
+}
+
+/* ---- the index ---- */
+.index {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.meter {
+  flex: none;
+  width: 110px;
+  height: 6px;
+  overflow: hidden;
+  background: var(--surface-3);
+  border-radius: 3px;
+}
+
+.meter span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--t-med) var(--ease);
+}
+
+.indexText {
+  flex: 0 1 auto;
+  min-width: 80px;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.indexDone {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  max-width: 320px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.indexDone[data-status="error"] {
+  color: var(--danger);
+}
+
+.indexDoneText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- the bar under the toolbar ---- */
+.subbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.scope {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.scopeText {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scopeText[data-error] {
+  color: var(--danger);
+}
+
+.scope :global(.btn) {
+  flex: none;
+}
+
+.switches {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+/* ---- find a picture ---- */
+.locate {
+  position: relative;
+  display: flex;
+  flex: 0 1 300px;
+  align-items: center;
+  gap: 6px;
+  min-width: 200px;
+  height: 30px;
+  padding: 0 2px 0 10px;
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--muted);
+}
+
+.locate:focus-within {
+  border-color: var(--accent);
+}
+
+.locateInput {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font-size: var(--fs-2);
+  outline: none;
+}
+
+.locatePop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: max(100%, 340px);
+  max-height: calc(60 * var(--vh));
+  padding: 8px;
+  overflow-y: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float);
+  color: var(--text);
+}
+
+.locatePop > :global(.btn) {
+  align-self: flex-start;
+}
+
+.locateList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.locateRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.locateRow[aria-selected="true"] {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.locateThumb {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  background: var(--surface-3);
+  border-radius: var(--radius-sm);
+}
+
+.rowText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rowName {
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowFlag {
+  color: var(--muted);
+  font-size: var(--fs-1);
+}
+
+.locateCount,
+.locateFoot {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-1);
+}
+
+.note {
+  margin: 0;
+  padding: 6px 8px;
+  background: var(--wash);
+  border-left: 2px solid var(--line-strong);
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}
+
+.note[data-tone="warn"] {
+  border-left-color: var(--warn);
+}
+
+.note[data-tone="error"] {
+  border-left-color: var(--danger);
+  color: var(--text);
+}

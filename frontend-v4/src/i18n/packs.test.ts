@@ -57,6 +57,8 @@ const JARGON = new Set([
   ...['SEED', 'CFG', 'caption', 'Caption', 'token', 'tokens', 'V3.5', 'Vopus'],
   // a language named in its own language (the language picker)
   'English',
+  // the Style Map's layouts, its optional style model and the graphics it needs
+  ...['UMAP', 'PCA', 'CSD', 'WebGL'],
 ])
 
 /** Jargon of more than one word. */
