@@ -343,8 +343,10 @@
                 bar.value = item.status === 'done' ? bar.max : item.frames_done || 0;
                 const status = document.createElement('span');
                 status.className = 'media-censor-status';
-                status.textContent = item.status === 'error' && item.error
-                    ? window.I18n.joinLabel(this._statusLabel(item.status), item.error)
+                // a cause the program names by code is said in the UI language
+                const reason = item.error_code ? this._t(`apiError.${item.error_code}`, item.error) : item.error;
+                status.textContent = item.status === 'error' && reason
+                    ? window.I18n.joinLabel(this._statusLabel(item.status), reason)
                     : item.status === 'done'
                         ? this._t('mediaCensor.doneFrames', 'Done · {count} frames censored', { count: item.censored_frames })
                         : this._statusLabel(item.status);

@@ -17,6 +17,23 @@ const missed = new Map<string, number>()
 
 const ENDED = new Set(['done', 'done_with_errors', 'cancelled'])
 
+/** Causes the program names by `error_code`; their words come from the language pack. */
+const ERROR_TEXT: Readonly<Record<string, MessageKey>> = {
+  censor_detector_missing: 'mediacensor.err.censor_detector_missing',
+}
+
+/** A file's failure the program names by code is said in the user's language. */
+function sayFileErrors(snapshot: unknown): unknown {
+  const files = (snapshot as { files?: unknown } | null)?.files
+  if (!Array.isArray(files)) return snapshot
+  const lang = useLang.getState().lang
+  const said = files.map((file: unknown) => {
+    const key = ERROR_TEXT[String((file as { error_code?: unknown } | null)?.error_code ?? '')]
+    return key ? { ...(file as object), error: translate(lang, key) } : file
+  })
+  return { ...(snapshot as object), files: said }
+}
+
 /** The program says the job is over (finished, or stopped). */
 const isEnded = (snapshot: unknown) => ENDED.has(String((snapshot as { status?: unknown } | null)?.status))
 
@@ -33,7 +50,7 @@ export async function lookAtMediaJob(id: string): Promise<unknown> {
     const snapshot = await getMediaJob(id)
     noteContact(id, true)
     if (isEnded(snapshot)) untrackMediaJob(id)
-    return snapshot
+    return sayFileErrors(snapshot)
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       missed.delete(id)

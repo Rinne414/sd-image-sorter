@@ -1572,8 +1572,9 @@ with `job_id`. Jobs run one at a time in the background.
 
 #### GET /api/censor/media/jobs/{job_id}
 Job snapshot: `{status, files: [{name, status, frames_done, frames_total,
-censored_frames, output, error}], done, total}`; status is queued, running,
-done, done_with_errors or cancelled.
+censored_frames, output, error, error_code}], done, total}`; status is queued, running,
+done, done_with_errors or cancelled. `error_code` names a known cause
+(`censor_detector_missing`: NudeNet is not installed) or is empty.
 
 #### POST /api/censor/media/jobs/{job_id}/reveal/{index}
 Show that file's output in the OS file manager.

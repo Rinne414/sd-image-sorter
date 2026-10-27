@@ -30,6 +30,7 @@ SOURCES = [
     "services/comfyui_client.py",
     "services/ext_pairing.py",
     "services/ffmpeg_install.py",
+    "nudenet_detector.py",
     "routers/collect.py",
     "routers/browser_extension.py",
     "routers/generator_recipe.py",

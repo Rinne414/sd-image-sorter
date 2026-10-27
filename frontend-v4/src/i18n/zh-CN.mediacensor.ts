@@ -56,6 +56,7 @@ export const zhCNMediaCensor = {
   'mediacensor.job.stopped': '已停止，{total} 个文件里处理了 {done} 个。处理完的存在 {folder}。',
   'mediacensor.job.stoppedNone': '已停止，还没有处理完任何文件，没有保存东西。',
   'mediacensor.job.failed': '没能打码：{reason}',
+  'mediacensor.err.censor_detector_missing': 'NudeNet 还没安装。请先在模型中心准备 NudeNet 检测器，再试一次。',
   'mediacensor.job.gone': '打码任务已经不在了（程序重启过）。它处理完的文件在输出文件夹里。',
   'mediacensor.result.queued': '等待',
   'mediacensor.result.running': '处理中',

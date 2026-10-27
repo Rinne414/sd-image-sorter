@@ -5759,6 +5759,7 @@ window.I18nLang_zhCN = {
     'apiError.collect_site_unreachable': '连不上这个网站。请检查地址、网络和代理设置。',
     'apiError.collect_too_many_redirects': '这个地址一直跳转，始终没到图片。',
     'apiError.collect_connection_broken': '图片还没传完，连接就断了。请再试一次。',
+    'apiError.censor_detector_missing': 'NudeNet 还没安装。请先在模型中心准备 NudeNet 检测器，再试一次。',
     'apiError.collect_not_picture': '这不是程序能读的图片。',
     'apiError.collect_too_large_to_convert': '这张图片的格式图库不能显示，而且太大，无法转成 PNG。',
     'apiError.collect_convert_failed': '这张图片没能转成 PNG。',

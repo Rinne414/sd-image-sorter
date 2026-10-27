@@ -26,6 +26,12 @@ _detector = None
 _detector_lock = threading.Lock()
 
 
+class DetectorNotInstalled(RuntimeError):
+    """The nudenet package is missing; preparing NudeNet in the Model Center installs it."""
+
+    code = "censor_detector_missing"
+
+
 def _resolve_app_model_path(package_module: object) -> str:
     """Return the verified NudeNet model path owned by the application."""
     model_dir = Path(get_nudenet_model_dir())
@@ -93,8 +99,9 @@ def _get_nudenet():
                     import nudenet as nudenet_module  # type: ignore
                     from nudenet import NudeDetector  # type: ignore
                 except ImportError:
-                    raise RuntimeError(
-                        "nudenet not installed. Run: pip install nudenet"
+                    raise DetectorNotInstalled(
+                        "NudeNet is not installed yet. Prepare the NudeNet detector "
+                        "in the Model Center, then try again."
                     )
                 logger.info("[NudeNet] Loading detector...")
                 local_model = _resolve_app_model_path(nudenet_module)
@@ -202,10 +209,12 @@ class NudeNetDetector:
         priority: int = PRIORITY_NORMAL,
     ) -> List[Dict]:
         """Run NudeNet detection on a PIL Image."""
+        # a detector that cannot load is not a picture that cannot be read
+        detector = self.detector
         try:
             detector_input = self._pil_to_detector_input(image)
             with exclusive_ai_runtime("nudenet-inference", priority=priority):
-                raw_detections = self.detector.detect(detector_input)
+                raw_detections = detector.detect(detector_input)
             return self._filter_detections(raw_detections, conf_threshold, exposed_only)
         except Exception as exc:
             raise RuntimeError(f"NudeNet could not read the image input: {exc}") from exc

@@ -5762,6 +5762,7 @@ window.I18nLang_en = {
     'apiError.collect_site_unreachable': 'The site could not be reached. Check the address, the network and the proxy setting.',
     'apiError.collect_too_many_redirects': 'The address kept redirecting and never reached a picture.',
     'apiError.collect_connection_broken': 'The connection broke off before the whole picture arrived. Try again.',
+    'apiError.censor_detector_missing': 'NudeNet is not installed yet. Prepare the NudeNet detector in the Model Center, then try again.',
     'apiError.collect_not_picture': 'This is not a picture the program can read.',
     'apiError.collect_too_large_to_convert': 'This picture is in a format the gallery does not show and is too large to convert to PNG.',
     'apiError.collect_convert_failed': 'This picture could not be converted to PNG.',

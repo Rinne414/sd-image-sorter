@@ -163,6 +163,31 @@ def test_a_job_runs_its_files_and_reports_each_one(tmp_path: Path, monkeypatch) 
     assert snapshot["done"] == snapshot["total"] == 2
 
 
+def test_a_missing_nudenet_is_named_by_code_not_as_an_unreadable_picture(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import sys
+
+    import nudenet_detector
+
+    gif = _write_gif(tmp_path / "one.gif", frames=2)
+    # the package cannot be imported, and nothing was loaded before
+    monkeypatch.setitem(sys.modules, "nudenet", None)
+    monkeypatch.setattr(nudenet_detector, "_detector", None)
+    monkeypatch.setattr(nudenet_detector, "_nudenet_instance", None)
+
+    snapshot = _wait(
+        MediaCensorJobs().start([str(gif)], str(tmp_path / "out"), FrameSettings())
+    )
+
+    item = snapshot["files"][0]
+    assert item["status"] == "error"
+    assert item["error_code"] == "censor_detector_missing"
+    assert "Model Center" in item["error"]
+    assert "pip install" not in item["error"]
+    assert "could not read the image" not in item["error"]
+
+
 def test_a_cancelled_job_stops_and_skips_the_rest(tmp_path: Path, monkeypatch) -> None:
     gifs = [str(_write_gif(tmp_path / f"g{index}.gif", frames=3)) for index in range(3)]
     jobs = MediaCensorJobs()

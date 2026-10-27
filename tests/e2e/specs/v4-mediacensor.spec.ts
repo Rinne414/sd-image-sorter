@@ -20,6 +20,10 @@ import { cleanupImages, dbPath, openLibrary, pageOverflow, repoRoot, runBackendS
  * manager (Show in folder, Open folder) is, so no window opens on the screen,
  * and the model download / ffmpeg install questions are answered by the spec.
  *
+ * Without the NudeNet package (a core install, as on CI) the folder job checks
+ * the honest failure instead, and the tests that need frames really detected
+ * are skipped.
+ *
  * Needs the V4 build: `cd frontend-v4 && npm run build`.
  */
 
@@ -36,6 +40,8 @@ const GIFS = 2
 const OWN_BATCH = 'v4mc batch'
 
 let realVideo = false
+let hasNudenet = false
+const NO_NUDENET = 'needs the NudeNet package (a full install); this machine has the core install'
 
 function seedMedia(): boolean {
   const out = runBackendScript(`
@@ -104,6 +110,7 @@ test.beforeAll(() => {
   cleanupImages(PREFIX, [DIR])
   seedImages({ prefix: PREFIX, token: TOKEN, count: PICTURES, dir: DIR })
   realVideo = seedMedia()
+  hasNudenet = runBackendScript('import importlib.util; print(importlib.util.find_spec("nudenet") is not None)') === 'True'
 })
 test.afterAll(() => {
   cleanBatches(false)
@@ -241,6 +248,12 @@ test('a folder job runs for real: progress in Jobs, honest end, the files writte
   await expect(page.getByTestId('mediacensor-dialog')).toHaveCount(0, { timeout: 30_000 })
   await expect(page.getByTestId('jobs-drawer')).toBeVisible()
   const expected = GIFS + VIDEOS()
+  if (!hasNudenet) {
+    // no detector on this machine: said in words (not as a picture that cannot be read), nothing written
+    await expect(headline(page)).toContainText('Could not censor: NudeNet is not installed yet. Prepare the NudeNet detector in the Model Center, then try again.', { timeout: 60_000 })
+    expect((fs.existsSync(OUT) ? fs.readdirSync(OUT) : []).filter((name) => name.includes('_censored'))).toEqual([])
+    return
+  }
   // synthetic frames hold nothing to cover: the job says so, and still writes the copies
   await expect(headline(page)).toContainText(new RegExp(`^(Nothing to cover was found in ${expected} files|Censored ${expected} files)`), { timeout: 180_000 })
   await expect(page.getByTestId('mediacensor-file')).toHaveCount(expected)
@@ -264,6 +277,7 @@ print(im.n_frames)
 })
 
 test('a GIF with something to find is really censored: the covered frames are counted and the pixels differ', async ({ page }) => {
+  test.skip(!hasNudenet, NO_NUDENET)
   await page.setViewportSize({ width: 1920, height: 1080 })
   const art = path.join(tmpRoot, DIR, 'art')
   const out = path.join(tmpRoot, DIR, 'out-art')
@@ -315,6 +329,7 @@ test('picked GIFs and videos from the library go to the dialog, the pictures to 
 })
 
 test('a picked GIF runs as a job with Stop, and Stop keeps what was done', async ({ page }) => {
+  test.skip(!hasNudenet, NO_NUDENET)
   await page.setViewportSize({ width: 1920, height: 1080 })
   await boot(page, '')
   await openLibrary(page, LONG_TOKEN, 1)
@@ -337,6 +352,7 @@ test('a picked GIF runs as a job with Stop, and Stop keeps what was done', async
 })
 
 test('a program that stops answering is said, and a job it no longer knows ends honestly', async ({ page }) => {
+  test.skip(!hasNudenet, NO_NUDENET)
   await page.setViewportSize({ width: 1920, height: 1080 })
   await boot(page, '')
   await openLibrary(page, LONG_TOKEN, 1)
@@ -368,6 +384,7 @@ test('a program that stops answering is said, and a job it no longer knows ends 
 })
 
 test('a running job is found again after the page reloads, and a job the program forgot says so', async ({ page }) => {
+  test.skip(!hasNudenet, NO_NUDENET)
   await page.setViewportSize({ width: 1920, height: 1080 })
   await boot(page, '')
   await openLibrary(page, LONG_TOKEN, 1)

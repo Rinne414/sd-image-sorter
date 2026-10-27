@@ -277,6 +277,7 @@ class MediaCensorJobs:
                 "censored_frames": 0,
                 "output": "",
                 "error": "",
+                "error_code": "",
             }
             for path in sources
         ]
@@ -364,6 +365,8 @@ class MediaCensorJobs:
             with job.lock:
                 item["status"] = "error"
                 item["error"] = str(exc) or type(exc).__name__
+                # a known cause the interface says in the user's language
+                item["error_code"] = getattr(exc, "code", "") or ""
             return
         with job.lock:
             item["status"] = "done"

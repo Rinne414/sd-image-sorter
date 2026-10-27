@@ -56,6 +56,7 @@ export const enMediaCensor: Record<keyof typeof zhCNMediaCensor, string> = {
   'mediacensor.job.stopped': 'Stopped after {done} of {total} files. The finished ones are in {folder}.',
   'mediacensor.job.stoppedNone': 'Stopped before any file was finished. Nothing was saved.',
   'mediacensor.job.failed': 'Could not censor: {reason}',
+  'mediacensor.err.censor_detector_missing': 'NudeNet is not installed yet. Prepare the NudeNet detector in the Model Center, then try again.',
   'mediacensor.job.gone': 'The censoring job is gone (the program was restarted). Files it finished are in the output folder.',
   'mediacensor.result.queued': 'Waiting',
   'mediacensor.result.running': 'Working',
