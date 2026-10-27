@@ -482,7 +482,8 @@ test('Censor on a mixed pick sends the picture to the censor step and the video 
   await expect(page.getByTestId('selection-bar')).toContainText('2')
   await page.getByTestId('open-palette').click()
   await page.keyboard.type('censor')
-  const entry = page.getByTestId('palette').getByRole('option').first()
+  // "Censor the picks…" by name: Ctrl K also offers the GIF and video censor for a folder.
+  const entry = page.getByTestId('palette').getByRole('option').filter({ hasText: 'Censor the picks' }).first()
   await expect(entry).not.toContainText('Not for videos')
   await entry.click()
   // the video is not dropped: it waits in the GIF and video censor

@@ -110,20 +110,47 @@ export const SPACE_LABEL: Record<Space, MessageKey> = {
   csd: 'stylemap.space.csd',
 }
 
-/** "2m 05s" style remaining time from a millisecond estimate. */
-export function formatRemaining(ms: number): string {
+/** A remaining time in the user's language: "2 分 05 秒" / "2m 05s" (the words live in the packs). */
+export function remainingText(ms: number): Sentence {
   const seconds = Math.max(0, Math.round(ms / 1000))
-  if (seconds < 60) return `${seconds}s`
+  if (seconds < 60) return { key: 'stylemap.time.seconds', params: { s: seconds } }
   const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ${String(seconds % 60).padStart(2, '0')}s`
+  if (minutes < 60) return { key: 'stylemap.time.minutes', params: { m: minutes, s: String(seconds % 60).padStart(2, '0') } }
   const hours = Math.floor(minutes / 60)
-  return `${hours}h ${String(minutes % 60).padStart(2, '0')}m`
+  return { key: 'stylemap.time.hours', params: { h: hours, m: String(minutes % 60).padStart(2, '0') } }
 }
 
-/** Time left from the pace so far; null until the pace is known (2 s in, something done). */
-export function remainingMs(processed: number, total: number, startedAt: number | null, now: number): number | null {
-  if (!startedAt || processed <= 0 || total <= processed) return null
-  const elapsed = now - startedAt
-  if (elapsed < 2000) return null
-  return (elapsed / processed) * (total - processed)
+/**
+ * How long an index job has really been working: from its start, minus the
+ * time it sat paused (a pause is not slow work, so it must not stretch the
+ * time left).
+ */
+export interface RunClock {
+  startedAt: number
+  /** Paused time of pauses that already ended. */
+  pausedMs: number
+  /** When the pause going on now began; null while it runs. */
+  pausedSince: number | null
+}
+
+export const startClock = (now: number, paused = false): RunClock => ({ startedAt: now, pausedMs: 0, pausedSince: paused ? now : null })
+
+/** The clock after the job was seen paused or running at `now` (the same clock when nothing changed). */
+export function followPause(clock: RunClock, paused: boolean, now: number): RunClock {
+  if (paused && clock.pausedSince === null) return { ...clock, pausedSince: now }
+  if (!paused && clock.pausedSince !== null) return { ...clock, pausedMs: clock.pausedMs + Math.max(0, now - clock.pausedSince), pausedSince: null }
+  return clock
+}
+
+/** Working time so far (paused time left out). */
+export function workingMs(clock: RunClock, now: number): number {
+  const pausing = clock.pausedSince === null ? 0 : Math.max(0, now - clock.pausedSince)
+  return Math.max(0, now - clock.startedAt - clock.pausedMs - pausing)
+}
+
+/** Time left from the pace so far (working time only); null until the pace is known (2 s of work, something done). */
+export function remainingMs(processed: number, total: number, workedMs: number | null): number | null {
+  if (workedMs === null || processed <= 0 || total <= processed) return null
+  if (workedMs < 2000) return null
+  return (workedMs / processed) * (total - processed)
 }

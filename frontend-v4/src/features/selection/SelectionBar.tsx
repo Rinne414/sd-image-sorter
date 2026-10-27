@@ -10,7 +10,8 @@ import { useToasts } from '../../ui/toasts'
 import { Stars } from '../card/Stars'
 import { menuItemsOf, say, type ImageAction } from './actions'
 import { useBulkActions } from './actionOps'
-import { invertPicks, matchingIds } from './invert'
+import { invertPicks } from './invert'
+import { coverKey, forgetCovered, selectAllMatches, useCovered } from './selectAll'
 import styles from './SelectionBar.module.css'
 
 interface Props {
@@ -29,9 +30,9 @@ export function SelectionBar({ params, total, about = false, images, hasMore }: 
   const selection = useApp((s) => s.selection)
   const clear = useApp((s) => s.clearSelection)
   const actions = useBulkActions(selection)
-  const [covered, setCovered] = useState<{ key: string; size: number } | null>(null)
+  const covered = useCovered((s) => s.covered)
   const [busy, setBusy] = useState<'all' | 'invert' | null>(null)
-  const key = JSON.stringify(params)
+  const key = coverKey(params ?? {})
 
   // Toasts sit above the bar instead of on top of it.
   useEffect(() => {
@@ -50,12 +51,7 @@ export function SelectionBar({ params, total, about = false, images, hasMore }: 
     if (!params) return
     setBusy('all')
     try {
-      const ids = await matchingIds(params)
-      const s = useApp.getState()
-      const have = new Set(s.selection)
-      const next = [...s.selection, ...ids.filter((id) => !have.has(id))]
-      s.setSelection(next)
-      setCovered({ key, size: next.length })
+      await selectAllMatches(params)
     } catch (error) {
       useToasts.getState().push(t('sel.selectAllFailed', { reason: (error as Error).message }), 'error')
     } finally {
@@ -67,7 +63,7 @@ export function SelectionBar({ params, total, about = false, images, hasMore }: 
     if (!params) return
     setBusy('invert')
     await invertPicks(params)
-    setCovered(null)
+    forgetCovered()
     setBusy(null)
   }
 

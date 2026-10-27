@@ -670,7 +670,7 @@ Save an image copy with edited metadata fields. The edit is written in the image
 Open an image's containing folder in the host file explorer.
 
 #### POST /api/images/by-ids
-Gallery rows (id, path, filename, generator, width, height, file_size, checkpoint, loras, user_rating, aesthetic_score, is_readable, metadata_status, created_at, library_order_time) for a list of image ids, in the order given. Body: `{ "image_ids": [12, 7, 30] }` (at most 2000). Ids that no longer exist or belong to another library are left out; repeats come back once. Returns `{ "images": [...], "count": n }`. Used by ranked views (similarity search, duplicate review).
+Gallery rows (id, path, filename, generator, width, height, file_size, checkpoint, loras, user_rating, aesthetic_score, is_readable, metadata_status, created_at, library_order_time, media_type) for a list of image ids, in the order given. Body: `{ "image_ids": [12, 7, 30] }` (at most 2000). Ids that no longer exist or belong to another library are left out; repeats come back once. Returns `{ "images": [...], "count": n }`. Used by ranked views (similarity search, duplicate review) and by Vopus's Censor action, which tells the stills of a pick from its GIFs (file name) and videos (`media_type`) with one request per 2000 ids.
 
 #### POST /api/open-path
 Open an existing folder in the host file explorer (Windows explorer, macOS open, Linux xdg-open). Body: `{ "path": "D:/exports/pixiv" }`. The path must pass the shared path validation and be an existing directory: a missing folder returns 404, a file or a suspicious path returns 400 and nothing is launched. The launcher receives an argument list (no shell). Returns `{ "success": true, "path": "<resolved folder>" }`.

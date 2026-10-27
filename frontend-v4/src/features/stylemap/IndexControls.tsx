@@ -3,9 +3,9 @@ import { useT } from '../../i18n'
 import { jobHeadline, pauseJob, stopJob, useJobs } from '../jobs/jobs'
 import { isFinished } from '../jobs/progress'
 import { Icon } from '../../ui/Icon'
-import { indexStartedAt, latestIndexJob, startStyleIndex } from './indexJob'
+import { indexClocks, latestIndexJob, startStyleIndex } from './indexJob'
 import { useMap } from './mapStore'
-import { formatRemaining, indexButton, remainingMs, startCard } from './status'
+import { indexButton, remainingMs, remainingText, startCard, workingMs } from './status'
 import styles from './StyleMap.module.css'
 
 /** How often the time left is worked out again while the index runs. */
@@ -30,10 +30,13 @@ export function IndexControls() {
     const total = Math.max(p.total, job.count)
     const done = Math.min(total, p.current)
     const percent = total > 0 ? Math.round((done / total) * 100) : 0
-    const startedAt = indexStartedAt.get(job.id) ?? null
-    const left = p.paused ? null : remainingMs(done, total, startedAt, now)
+    const clock = indexClocks.get(job.id)
+    const left = p.paused || !clock ? null : remainingMs(done, total, workingMs(clock, now))
     let text = t('stylemap.index.running', { done, total })
-    if (left !== null) text += ` · ${t('stylemap.index.remaining', { time: formatRemaining(left) })}`
+    if (left !== null) {
+      const time = remainingText(left)
+      text += ` · ${t('stylemap.index.remaining', { time: t(time.key, time.params) })}`
+    }
     if (p.paused) text += ` · ${t('stylemap.index.paused')}`
     return (
       <div className={styles.index} data-state={p.paused ? 'paused' : 'running'} data-testid="stylemap-index">

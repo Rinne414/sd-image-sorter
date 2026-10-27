@@ -157,6 +157,8 @@ export function LocateBox() {
   }
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // A key that confirms a Chinese (or any IME) composition belongs to the composition, not to the list.
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       if (!results.length) return
       e.preventDefault()

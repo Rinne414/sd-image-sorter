@@ -11,6 +11,11 @@ function loadedIndex(): Map<number, ImageSummary> {
   return index
 }
 
+/** Every loaded image by id, built once: for looking up many ids (findLoadedImage builds it per call). */
+export function loadedImages(): ReadonlyMap<number, ImageSummary> {
+  return loadedIndex()
+}
+
 /** An image the gallery has already loaded, found by id (null when not loaded). */
 export function findLoadedImage(id: number): ImageSummary | null {
   return loadedIndex().get(id) ?? null

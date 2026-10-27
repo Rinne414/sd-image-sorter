@@ -30,13 +30,18 @@ export function Landmarks({ scene }: { scene: StyleMapScene }) {
   const [size, setSize] = useState<CardSize>('large')
   const cards = useRef<(HTMLDivElement | null)[]>([])
   const lastView = useRef<SceneView | null>(null)
-  // The dots of each region, for lighting one (the nearest centre, as the regions were fitted).
-  const labels = useMemo(() => (shown.length ? assignRegions(scene.positions, scene.count, shown) : null), [shown, points, scene])
 
-  useEffect(() => setOpen(-1), [shown])
+  useEffect(() => setOpen(-1), [shown, points])
+  // Light the open card's region: its dots are the ones nearest its centre, as the regions were fitted.
+  // They are worked out when a card opens, from the dots the scene holds then (never during render:
+  // the canvas draws a new set of dots, the model's layout back after My axes, in an effect after this one).
   useEffect(() => {
-    scene.setFocus(labels, open >= 0 ? open : null)
-  }, [labels, open, scene])
+    if (open < 0 || !shown.length) {
+      scene.setFocus(null, null)
+      return
+    }
+    scene.setFocus(assignRegions(scene.positions, scene.count, shown), open)
+  }, [shown, open, scene])
   useEffect(() => () => scene.setFocus(null, null), [scene])
 
   useEffect(() => {
@@ -96,7 +101,7 @@ function LandmarkCard({ region, open, refFn, onEnter, onLeave }: { region: Regio
     <div ref={refFn} className={styles.landmark} data-open={open || undefined} hidden onMouseEnter={onEnter} onMouseLeave={onLeave} data-testid="stylemap-landmark">
       <div className={styles.landmarkThumbs}>
         {reps.slice(0, open ? 2 : 1).map((id) => (
-          <img key={id} src={thumbnailUrl(id, THUMB)} alt="" decoding="async" />
+          <img key={id} src={thumbnailUrl(id, THUMB)} alt="" decoding="async" draggable={false} />
         ))}
       </div>
       {line && !open && <div className={styles.landmarkText}>{line}</div>}

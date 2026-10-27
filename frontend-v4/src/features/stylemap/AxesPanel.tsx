@@ -150,7 +150,7 @@ function EndBlock({ label, end, active, onPick }: { label: string; end: AxisEnd 
             onClick={() => onPick(id)}
             data-testid="stylemap-axes-thumb"
           >
-            <img src={thumbnailUrl(id, THUMB)} alt="" decoding="async" />
+            <img src={thumbnailUrl(id, THUMB)} alt="" decoding="async" draggable={false} />
           </button>
         ))}
       </div>

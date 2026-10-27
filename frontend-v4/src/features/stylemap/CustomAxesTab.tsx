@@ -158,7 +158,7 @@ function CustomEnd({ axis, end }: { axis: AxisName; end: End }) {
           {ids.map((id) => (
             <span key={id} className={styles.chip} data-testid="stylemap-custom-chip" data-id={id}>
               <button type="button" className={styles.chipThumb} onClick={() => preview(id)} title={t('stylemap.axes.pickTip')}>
-                <img src={thumbnailUrl(id, THUMB)} alt="" loading="lazy" decoding="async" />
+                <img src={thumbnailUrl(id, THUMB)} alt="" loading="lazy" decoding="async" draggable={false} />
               </button>
               <button
                 type="button"
