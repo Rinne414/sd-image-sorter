@@ -1,9 +1,11 @@
+import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { findLoadedImage } from '../../api/loaded'
 import { useFavorites, useImageCount } from '../../api/queries'
 import { useT } from '../../i18n'
 import { parentFolder } from '../../lib/paths'
 import { useApp } from '../../state/store'
+import type { ImageQueryParams } from '../../lib/searchQuery'
 import { currentLibraryParams } from '../library/params'
 import { matchingIds } from '../selection/invert'
 import { rememberDestination } from '../selection/dialogs'
@@ -12,7 +14,9 @@ import { PresetBar } from './PresetBar'
 import { RulesBody } from './RulesBody'
 import { LastRunCard } from './RulesParts'
 import { useRules, useRulesRecord } from './rulesActions'
-import { HowTo, ModeSwitch, OperationPicker, OptionsPanel, ResumeCard, SlotRows, SourcePicker, type SourceChoice } from './SetupParts'
+import { countScope } from './sortApi'
+import { useSortPrefs } from './sortPrefs'
+import { HowTo, ModeSwitch, OperationPicker, OptionsPanel, ResumeCard, SlotRows, SortedOption, SourcePicker, type SourceChoice } from './SetupParts'
 import { SlotFolderDialog } from './SlotFolderDialog'
 import { SortConfirm } from './SortConfirm'
 import styles from './SortPage.module.css'
@@ -55,6 +59,16 @@ function useSources() {
   return { picks, params, filterCount, filterText, initial }
 }
 
+/** How many of the chosen images a sort already put somewhere (asked again whenever the choice changes). */
+function useScopeCount(enabled: boolean, choice: SourceChoice, picks: readonly number[], params: ImageQueryParams) {
+  const libraryId = useApp((s) => s.libraryId)
+  return useQuery({
+    queryKey: ['sort-scope', libraryId, choice, choice === 'picks' ? picks.join(',') : params],
+    enabled,
+    queryFn: async ({ signal }) => countScope(choice === 'picks' ? picks : await matchingIds(params), signal),
+  })
+}
+
 /** A new sort: how, which images, and (keys to folders) which folder behind each key, move or copy. */
 export function SortSetup() {
   const t = useT()
@@ -71,7 +85,15 @@ export function SortSetup() {
   // A key on Favorites is a collection key on the Favorites collection: its id is needed to start.
   const favoritesId = useFavorites().data?.collectionId ?? null
   const favoritesReady = setup.favorites.length === 0 || favoritesId !== null
-  const count = choice === 'picks' ? picks.length : filterCount
+  // Never chosen: the pictures you picked yourself stay in, and a filter ("auto-sort first, hand-sort the rest") leaves the sorted ones out.
+  const chosen = useSortPrefs((s) => s.excludeSorted)
+  const excludeSorted = chosen ?? choice === 'filter'
+  const scope = useScopeCount(setup.mode !== 'rules', choice, picks, params)
+  const base = choice === 'picks' ? picks.length : filterCount
+  // With the switch on, the number is what the sort will really queue.
+  const leaveOut = excludeSorted && setup.mode !== 'rules'
+  const count = leaveOut && scope.data ? scope.data.remaining : base
+  const allSorted = leaveOut && !!scope.data && scope.data.total > 0 && scope.data.remaining < MIN_IMAGES[setup.mode]
   const sourceFolder = useMemo(() => {
     const img = choice === 'picks' && picks[0] !== undefined ? findLoadedImage(picks[0]) : null
     return img ? parentFolder(img.path) : null
@@ -92,7 +114,15 @@ export function SortSetup() {
       return t('sort.start.failed', { reason: (error as Error).message })
     }
     if (ids.length < MIN_IMAGES[setup.mode]) return t(setup.mode === 'bracket' ? 'sort.start.needTwo' : 'sort.start.empty')
-    const result = await useSort.getState().start(ids, setup, replace, favoritesId)
+    if (leaveOut) {
+      try {
+        const left = (await countScope(ids)).remaining
+        if (left < MIN_IMAGES[setup.mode]) return t('partialsb.sorted.allDone')
+      } catch (error) {
+        return t('sort.start.failed', { reason: (error as Error).message })
+      }
+    }
+    const result = await useSort.getState().start(ids, setup, replace, favoritesId, leaveOut)
     if (result === 'conflict') return 'conflict'
     if (result !== 'ok') return t('sort.start.failed', { reason: result.error })
     if (setup.mode === 'slot') for (const path of Object.values(setup.folders)) if (path) rememberDestination(path)
@@ -140,6 +170,12 @@ export function SortSetup() {
                 </button>
               </p>
             )}
+            <SortedOption
+              sorted={scope.data ? scope.data.sorted : null}
+              total={scope.data ? scope.data.total : null}
+              on={excludeSorted}
+              onChange={(on) => useSortPrefs.getState().setExcludeSorted(on)}
+            />
             {setup.mode === 'slot' && <OperationPicker setup={setup} onChange={(operation) => update({ ...setup, operation })} />}
           </div>
           <div className={styles.column}>
@@ -161,7 +197,7 @@ export function SortSetup() {
             {startLabel(t, setup.mode, count)}
           </button>
           <p className={notice?.kind === 'error' ? styles.error : styles.note} role={notice?.kind === 'error' ? 'alert' : undefined}>
-            {notice ? notice.text : readyHint(t, setup, count)}
+            {notice ? notice.text : allSorted ? t('partialsb.sorted.allDone') : readyHint(t, setup, count)}
           </p>
         </div>
           </>

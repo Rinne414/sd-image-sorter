@@ -13,6 +13,7 @@ import { intersectPages, PAGE, type MatchPage, type MatchPages } from './batchMa
 import type { Entry } from './entries'
 import { favoriteKeys } from './librarySearch'
 import { NO_HISTORY, pushOrder, undoOrder, type OrderHistory } from './orderHistory'
+import type { Grouping } from './queueSortRun'
 
 // What each batch's steps show and can undo, per library and batch, while the
 // app is open: the name filter and condition (shared by Pick, Censor and
@@ -24,9 +25,12 @@ interface State {
   conditions: Readonly<Record<string, string>>
   favorites: Readonly<Record<string, boolean>>
   histories: Readonly<Record<string, OrderHistory>>
+  /** The sort the queue was last put in (the Order step marks where each group starts). */
+  groupings: Readonly<Record<string, Grouping>>
   setName: (key: string, text: string) => void
   setCondition: (key: string, text: string) => void
   setFavorites: (key: string, on: boolean) => void
+  setGrouping: (key: string, grouping: Grouping | null) => void
   /** Remember the order before a reorder. */
   record: (key: string, order: readonly string[]) => void
   /** The order before the last reorder, taken off the history; null when there is none. */
@@ -38,9 +42,15 @@ export const useStepViews = create<State>((set, get) => ({
   conditions: {},
   favorites: {},
   histories: {},
+  groupings: {},
   setName: (key, text) => set((s) => ({ names: { ...s.names, [key]: text } })),
   setCondition: (key, text) => set((s) => ({ conditions: { ...s.conditions, [key]: text } })),
   setFavorites: (key, on) => set((s) => ({ favorites: { ...s.favorites, [key]: on } })),
+  setGrouping: (key, grouping) =>
+    set((s) => {
+      const { [key]: _gone, ...rest } = s.groupings
+      return { groupings: grouping ? { ...rest, [key]: grouping } : rest }
+    }),
   record: (key, order) => set((s) => ({ histories: { ...s.histories, [key]: pushOrder(s.histories[key] ?? NO_HISTORY, order) } })),
   takeUndo: (key) => {
     const undo = undoOrder(get().histories[key] ?? NO_HISTORY)
@@ -123,6 +133,16 @@ function useConditionMatches(condition: string, onlyFavorites: boolean, entries:
     searching: settled !== text || (params !== null && query.isFetching) || (onlyFavorites && favorites.isFetching),
     error: params && query.error ? query.error.message : null,
   }
+}
+
+/** The batch entries a library search condition matches, asked once (a profile rule); an empty condition matches every entry. */
+export async function matchCondition(condition: string, entries: readonly Entry[]): Promise<ReadonlySet<string>> {
+  const text = condition.trim()
+  if (!text || isEverything(text)) return new Set(entries.map((entry) => entry.key))
+  const params = toImageParams(parseSearch(text), WHOLE_LIBRARY, 'newest')
+  const libraryIds = entries.flatMap((entry) => (entry.imageId === null ? [] : [entry.imageId])).sort((a, b) => a - b)
+  const found = await intersectPages(serverPages(params, new AbortController().signal), libraryIds)
+  return matchKeys(entries, [...found])
 }
 
 /** A step's view of a batch: the entries the name filter shows, and what the condition matches. */

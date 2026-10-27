@@ -26,6 +26,7 @@ import { zhCNAiPresets } from './zh-CN.aipresets'
 import { zhCNDisguise } from './zh-CN.disguise'
 import { zhCNNavCustom } from './zh-CN.navcustom'
 import { zhCNMediaCensor } from './zh-CN.mediacensor'
+import { zhCNPartialsB } from './zh-CN.partialsb'
 import { zhCNStyleMap } from './zh-CN.stylemap'
 import { zhCNCollections } from './zh-CN.collections'
 
@@ -57,6 +58,7 @@ export const zhCN = {
   ...zhCNDisguise,
   ...zhCNNavCustom,
   ...zhCNMediaCensor,
+  ...zhCNPartialsB,
   ...zhCNStyleMap,
   ...zhCNCollections,
   'app.name': 'SD Image Sorter',

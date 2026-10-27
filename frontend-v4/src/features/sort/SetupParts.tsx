@@ -139,6 +139,38 @@ export function SourcePicker({ picks, filterCount, filterText, choice, onChoice 
   )
 }
 
+interface SortedProps {
+  /** How many of the chosen images a sort already put somewhere; null while it is being counted. */
+  sorted: number | null
+  total: number | null
+  on: boolean
+  onChange: (on: boolean) => void
+}
+
+/** Leave out the pictures Auto-Separate or an earlier sort already copied or moved ("auto-sort first, hand-sort the rest"). */
+export function SortedOption({ sorted, total, on, onChange }: SortedProps) {
+  const t = useT()
+  const note =
+    sorted === null || total === null
+      ? t('partialsb.sorted.counting')
+      : sorted === 0
+        ? t('partialsb.sorted.none')
+        : t(on ? 'partialsb.sorted.left' : 'partialsb.sorted.included', { n: sorted, total })
+  return (
+    <fieldset className={styles.group} data-testid="sort-sorted">
+      <label className={styles.option} title={t('partialsb.sorted.tip')}>
+        <input type="checkbox" checked={on} onChange={(e) => onChange(e.target.checked)} data-testid="sort-exclude-sorted" />
+        <span className={styles.optionText}>
+          <span className={styles.optionTitle}>{t('partialsb.sorted.leaveOut')}</span>
+          <span className={styles.optionHint} title={note} data-testid="sort-sorted-note">
+            {note}
+          </span>
+        </span>
+      </label>
+    </fieldset>
+  )
+}
+
 interface SlotsProps {
   setup: SortSetup
   onChoose: (slot: SlotKey) => void

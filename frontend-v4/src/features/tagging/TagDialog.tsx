@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useModelStatus, useTaggerModels, type TaggerModel } from '../../api/queries'
-import { useT } from '../../i18n'
+import { useT, type MessageKey } from '../../i18n'
 import { useApp } from '../../state/store'
 import { Dialog } from '../../ui/Dialog'
 import { TagField } from '../../ui/TagField'
@@ -10,6 +10,7 @@ import { AdvancedFields, DescriberFields, MergeField, TaggerSwitch, type Describ
 import { useDescriber } from '../settings/ai/aiApi'
 import { useAT } from '../settings/ai/aiText'
 import { ModelGuideLink } from '../settings/models/ModelGuideLink'
+import { withPreset, type BlacklistPreset } from './blacklistPresets'
 import { CustomModelFields } from './CustomModelFields'
 import { GpuNotice, useTagStartPlan } from './GpuNotice'
 import styles from './TagDialog.module.css'
@@ -205,10 +206,33 @@ export function TagDialog({ ids, count, onClose, mode = 'tag' }: Props) {
               <TagField value={blacklistText} placeholder="watermark, signature" onChange={setBlacklistText} write={displayTag} testId="tag-blacklist" />
               <small className={styles.warn}>{t('tagging.blacklistWarn')}</small>
             </label>
+            <BlacklistPresets text={blacklistText} onChange={setBlacklistText} />
           </AdvancedFields>
         </div>
       )}
     </Dialog>
+  )
+}
+
+const PRESETS: readonly { id: BlacklistPreset; label: MessageKey; tip: MessageKey }[] = [
+  { id: 'quality', label: 'partialsb.bl.quality', tip: 'partialsb.bl.qualityTip' },
+  { id: 'meta', label: 'partialsb.bl.meta', tip: 'partialsb.bl.metaTip' },
+]
+
+/** One press adds a ready list to the blacklist box (the classic page's quality and meta buttons); Clear empties it. */
+function BlacklistPresets({ text, onChange }: { text: string; onChange: (text: string) => void }) {
+  const t = useT()
+  return (
+    <div className={`${styles.wideField} ${styles.presets}`} role="group" aria-label={t('partialsb.bl.group')} data-testid="tag-blacklist-presets">
+      {PRESETS.map((p) => (
+        <button key={p.id} type="button" className="btn btn-sm" title={t(p.tip)} onClick={() => onChange(withPreset(text, p.id))} data-testid={`tag-blacklist-${p.id}`}>
+          {t(p.label)}
+        </button>
+      ))}
+      <button type="button" className="btn btn-sm btn-ghost" disabled={text.trim() === ''} onClick={() => onChange('')} data-testid="tag-blacklist-clear">
+        {t('partialsb.bl.clear')}
+      </button>
+    </div>
   )
 }
 

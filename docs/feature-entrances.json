@@ -1576,21 +1576,19 @@
         "#btn-tag-prebl-clear"
       ],
       "vopus": {
-        "partial": "The tag dialog has a blacklist box but no quality / meta / clear preset buttons",
         "at": "#/library",
         "open": [
           "[data-testid=\"selection-bar\"] [data-action=\"tag\"]"
         ],
-        "find": "[data-testid=\"tag-blacklist\"]",
+        "find": "[data-testid=\"tag-blacklist-presets\"]",
         "needs": "picks"
       },
       "next": {
-        "partial": "There is a blacklist box but no quick quality / meta preset buttons",
         "at": "#/library",
         "open": [
           "[data-testid=\"selection-bar\"] [data-action=\"tag\"]"
         ],
-        "find": "[data-testid=\"tag-blacklist\"]",
+        "find": "[data-testid=\"tag-blacklist-presets\"]",
         "needs": "picks"
       }
     },
@@ -2307,14 +2305,12 @@
         "#btn-sort-scope-sorted-toggle"
       ],
       "vopus": {
-        "partial": "Image scope (picks / filter) exists but there is no 'include already sorted' toggle",
         "at": "#/sort",
-        "find": "[data-testid=\"sort-source\"]"
+        "find": "[data-testid=\"sort-exclude-sorted\"]"
       },
       "next": {
-        "partial": "Image scope exists (picks or the library filter) but there is no include-already-sorted switch",
         "at": "#/sort",
-        "find": "[data-testid=\"sort-source\"]"
+        "find": "[data-testid=\"sort-exclude-sorted\"]"
       }
     },
     {
@@ -2424,21 +2420,19 @@
         "#qs-profile-apply"
       ],
       "vopus": {
-        "partial": "No auto-sort by rating / aesthetic / resolution and no saved profiles; the order is moved by hand (the library can sort before picking)",
         "at": "#/batch",
         "open": [
           "[data-testid=\"rail-step\"][data-step-id=\"order\"]"
         ],
-        "find": "[data-testid=\"order-step\"]",
+        "find": "[data-testid=\"queue-sort\"]",
         "needs": "batch"
       },
       "next": {
-        "partial": "No auto-sort by rating, aesthetic or resolution with profiles; the queue is ordered by hand in the Order step",
         "at": "#/batch",
         "open": [
           "[data-testid=\"rail-step\"][data-step-id=\"order\"]"
         ],
-        "find": "[data-testid=\"order-step\"]",
+        "find": "[data-testid=\"queue-sort\"]",
         "needs": "batch"
       }
     },

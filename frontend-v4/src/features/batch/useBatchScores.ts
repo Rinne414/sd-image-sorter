@@ -9,6 +9,11 @@ import { idChunks, scoreMap } from './hoverPlace'
 const BY_IDS_CHUNK = 2000
 const NONE: ReadonlyMap<number, number> = new Map()
 
+/** The scores that exist for these Library ids, asked in chunks. */
+export async function fetchScores(ids: readonly number[]): Promise<ReadonlyMap<number, number>> {
+  return scoreMap((await Promise.all(idChunks(ids, BY_IDS_CHUNK).map(imagesByIds))).flat())
+}
+
 /** Aesthetic scores of the batch's Library images that have one (a badge on the Order step's tiles). */
 export function useBatchScores(entries: readonly Entry[]): ReadonlyMap<number, number> {
   const libraryId = useApp((s) => s.libraryId)
@@ -16,7 +21,7 @@ export function useBatchScores(entries: readonly Entry[]): ReadonlyMap<number, n
   const query = useQuery({
     queryKey: ['batch-scores', libraryId, ids.join(',')],
     enabled: ids.length > 0,
-    queryFn: async () => scoreMap((await Promise.all(idChunks(ids, BY_IDS_CHUNK).map(imagesByIds))).flat()),
+    queryFn: () => fetchScores(ids),
     staleTime: 60_000,
   })
   return query.data ?? NONE

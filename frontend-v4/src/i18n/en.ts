@@ -25,6 +25,7 @@ import { enAiPresets } from './en.aipresets'
 import { enDisguise } from './en.disguise'
 import { enNavCustom } from './en.navcustom'
 import { enMediaCensor } from './en.mediacensor'
+import { enPartialsB } from './en.partialsb'
 import { enStyleMap } from './en.stylemap'
 import { enCollections } from './en.collections'
 import type { MessageKey } from './zh-CN'
@@ -57,6 +58,7 @@ export const en: Record<MessageKey, string> = {
   ...enDisguise,
   ...enNavCustom,
   ...enMediaCensor,
+  ...enPartialsB,
   ...enStyleMap,
   ...enCollections,
   'app.name': 'SD Image Sorter',

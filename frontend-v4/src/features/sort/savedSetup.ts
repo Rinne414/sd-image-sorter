@@ -104,7 +104,7 @@ export function setupReady(setup: SortSetup): boolean {
  * touch files. A Favorites key is a collection key on the Favorites
  * collection (`favoritesId`); the backend favorites the image as the heart does.
  */
-export function startBody(ids: number[], setup: SortSetup, replace: boolean, favoritesId: number | null = null) {
+export function startBody(ids: number[], setup: SortSetup, replace: boolean, favoritesId: number | null = null, excludeSorted = false) {
   // Sort by condition never starts a session; a setup in that mode starts none.
   const mode: SortMode = setup.mode === 'rules' ? 'slot' : setup.mode
   const slot = mode === 'slot'
@@ -115,6 +115,7 @@ export function startBody(ids: number[], setup: SortSetup, replace: boolean, fav
     operation_mode: slot ? setup.operation : 'copy',
     replace_existing: replace,
     mode,
+    exclude_sorted: excludeSorted,
     // Filter settings the request model requires; unused when image_ids is given.
     tag_mode: 'and',
     prompt_match_mode: 'exact',

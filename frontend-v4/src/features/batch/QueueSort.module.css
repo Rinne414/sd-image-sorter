@@ -1,0 +1,188 @@
+/* Sorting a batch's queue into groups: the Sort menu, the profile editor and the marks in the Order step. */
+
+/* Group colours are tokens the interface already has; a group always carries its name too. */
+.dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.dot[data-tone='green'] {
+  background: var(--ok);
+}
+
+.dot[data-tone='gold'] {
+  background: var(--warn);
+}
+
+.dot[data-tone='red'] {
+  background: var(--danger);
+}
+
+.dot[data-tone='light'] {
+  background: var(--text);
+}
+
+/* In the narrow film strip the menu opens to the right of the button, over the picture. */
+.compact {
+  margin: 6px 8px 0;
+}
+
+.compact > button {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.menu {
+  min-width: 210px;
+}
+
+.none {
+  padding: 4px 10px 6px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
+/* ---- profile editor ---- */
+
+.help {
+  margin: 0 0 12px;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.select {
+  flex: 1;
+  min-width: 0;
+  height: var(--control-h);
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: var(--radius);
+}
+
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 8px;
+  color: var(--text-2);
+}
+
+.nameRow input,
+.rule input,
+.rule select {
+  height: var(--control-h);
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: var(--radius);
+}
+
+.nameRow input {
+  flex: 1;
+  min-width: 0;
+}
+
+.nameRow input:focus,
+.rule input:focus,
+.rule select:focus,
+.select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.rules {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rule {
+  display: grid;
+  grid-template-columns: auto minmax(90px, 1fr) 96px minmax(0, 2fr) auto auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.ruleName,
+.condition,
+.tone {
+  min-width: 0;
+}
+
+.addRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.note {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.warn {
+  margin-right: auto;
+  color: var(--warn);
+  font-size: var(--fs-2);
+}
+
+/* ---- the Order step: which sort is shown, and where each group starts ---- */
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.legendTitle {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.legendClear {
+  margin-left: auto;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 16px 0;
+  font-size: var(--fs-3);
+  font-weight: 600;
+}
+
+.headCount {
+  color: var(--muted);
+  font-weight: 400;
+}

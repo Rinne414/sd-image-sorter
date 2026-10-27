@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import type { Batch } from '../../api/types'
 import { useT, type MessageKey } from '../../i18n'
 import { unmatched } from './batchFilter'
@@ -12,10 +12,15 @@ import styles from './OrderStep.module.css'
 import { OrderTile } from './OrderTile'
 import { usePickKeys, useTileDrag } from './pickHooks'
 import { clickSelection, keepPresent, NO_PICKS, selectAll, type PickSelection } from './pickLogic'
+import { groupCounts, runsOf } from './queueSort'
+import type { Grouping } from './queueSortRun'
+import sortStyles from './QueueSort.module.css'
+import { QueueSortMenu } from './QueueSortMenu'
 import { StepBar } from './StepBar'
 import { useStepView, useStepViews } from './stepView'
 import { useBatchEntries } from './useBatchEntries'
 import { useBatchScores } from './useBatchScores'
+import { nameText } from './useQueueSort'
 import { renderedTileRects, useMarquee } from './useMarquee'
 
 const MOVES: readonly { how: GroupMove; label: MessageKey }[] = [
@@ -31,7 +36,7 @@ function useColumns(ref: React.RefObject<HTMLElement | null>): number {
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
-    const read = () => setCols(Math.max(1, getComputedStyle(el).gridTemplateColumns.split(' ').filter(Boolean).length))
+    const read = () => setCols(Math.max(1, getComputedStyle(el.querySelector('[data-grid]') ?? el).gridTemplateColumns.split(' ').filter(Boolean).length))
     read()
     const ro = new ResizeObserver(read)
     ro.observe(el)
@@ -72,6 +77,9 @@ export function OrderStep({ batch, next, onNext }: Props) {
   const moves = orderMoves(source, view.key)
   const hover = useHoverPreview()
   const scores = useBatchScores(source.entries)
+  const grouping = useStepViews((s) => s.groupings[view.key] ?? null)
+  const groupOf = useMemo(() => new Map(Object.entries(grouping?.of ?? {})), [grouping])
+  const runs = useMemo(() => runsOf(shownOrder, grouping?.groups ?? null, groupOf), [shownOrder, grouping, groupOf])
 
   useEffect(() => {
     gridRef.current?.querySelector<HTMLElement>(`[data-index="${at}"]`)?.scrollIntoView({ block: 'nearest' })
@@ -133,6 +141,7 @@ export function OrderStep({ batch, next, onNext }: Props) {
             {t(m.label)}
           </button>
         ))}
+        <QueueSortMenu batch={batch} />
         <button type="button" className="btn btn-ghost" disabled={!canUndo} onClick={undo} title={t('batch.order.undoTip')} data-testid="order-undo">
           {t('batch.order.undo')}
         </button>
@@ -148,6 +157,7 @@ export function OrderStep({ batch, next, onNext }: Props) {
         hiddenNote={t('batch.order.hiddenNote')}
         onSelectMatches={(keys) => setPicks({ keys, anchor: null })}
       />
+      {grouping && <GroupLegend grouping={grouping} keys={source.entries.map((entry) => entry.key)} onClear={() => useStepViews.getState().setGrouping(view.key, null)} />}
       <div
         ref={scrollRef}
         className={styles.scroller}
@@ -161,28 +171,44 @@ export function OrderStep({ batch, next, onNext }: Props) {
         {shown.length === 0 ? (
           <p className={styles.empty}>{source.entries.length === 0 ? t('batch.order.empty') : t('batch.filter.noneShown', { text: view.name.trim() })}</p>
         ) : (
-          <div ref={gridRef} className={styles.grid}>
-            {shown.map((entry, index) => (
-              <OrderTile
-                key={entry.key}
-                batch={batch}
-                entry={entry}
-                index={index}
-                position={positions.get(entry.key) ?? index}
-                cursor={index === at}
-                selected={selection.keys.has(entry.key)}
-                dim={unmatched(view.matches.keys, entry)}
-                dragging={carried?.has(entry.key) ?? false}
-                drop={carried?.has(entry.key) ? undefined : drag.sideOf(index)}
-                score={entry.imageId === null ? undefined : scores.get(entry.imageId)}
-                onClick={click}
-                onHover={hover.enter}
-                onLeave={hover.leave}
-                onDragStart={(i, e) => drag.start(i, shownOrder[i] ?? '', e)}
-                onDragOver={drag.over}
-                onDrop={drag.drop}
-                onDragEnd={drag.end}
-              />
+          <div ref={gridRef}>
+            {runs.map((run) => (
+              <Fragment key={run.start}>
+                {grouping && run.group && (
+                  <h3 className={sortStyles.head} data-testid="order-group-head" data-group={run.group.id}>
+                    <span className={sortStyles.dot} data-tone={run.group.tone} aria-hidden />
+                    {nameText(run.group.name, t)}
+                    <span className={sortStyles.headCount}>{run.end - run.start}</span>
+                  </h3>
+                )}
+                <div className={styles.grid} data-grid>
+                  {shown.slice(run.start, run.end).map((entry, offset) => {
+                    const index = run.start + offset
+                    return (
+                      <OrderTile
+                        key={entry.key}
+                        batch={batch}
+                        entry={entry}
+                        index={index}
+                        position={positions.get(entry.key) ?? index}
+                        cursor={index === at}
+                        selected={selection.keys.has(entry.key)}
+                        dim={unmatched(view.matches.keys, entry)}
+                        dragging={carried?.has(entry.key) ?? false}
+                        drop={carried?.has(entry.key) ? undefined : drag.sideOf(index)}
+                        score={entry.imageId === null ? undefined : scores.get(entry.imageId)}
+                        onClick={click}
+                        onHover={hover.enter}
+                        onLeave={hover.leave}
+                        onDragStart={(i, e) => drag.start(i, shownOrder[i] ?? '', e)}
+                        onDragOver={drag.over}
+                        onDrop={drag.drop}
+                        onDragEnd={drag.end}
+                      />
+                    )
+                  })}
+                </div>
+              </Fragment>
             ))}
           </div>
         )}
@@ -193,5 +219,31 @@ export function OrderStep({ batch, next, onNext }: Props) {
         {said}
       </p>
     </section>
+  )
+}
+
+interface LegendProps {
+  grouping: Grouping
+  keys: readonly string[]
+  onClear: () => void
+}
+
+/** Which sort the queue is in, how many images each group holds, and a way to hide the marks. */
+function GroupLegend({ grouping, keys, onClear }: LegendProps) {
+  const t = useT()
+  const counts = groupCounts(grouping.groups, keys, new Map(Object.entries(grouping.of)))
+  return (
+    <div className={sortStyles.legend} data-testid="order-groups">
+      <span className={sortStyles.legendTitle}>{t('partialsb.legend.title', { name: nameText(grouping.title, t) })}</span>
+      {grouping.groups.map((g, i) => (
+        <span key={g.id} className={sortStyles.legendItem} data-testid="order-group-legend" data-group={g.id}>
+          <span className={sortStyles.dot} data-tone={g.tone} aria-hidden />
+          {nameText(g.name, t)} <span className="mono">{counts[i] ?? 0}</span>
+        </span>
+      ))}
+      <button type="button" className={`btn btn-sm btn-ghost ${sortStyles.legendClear}`} onClick={onClear} data-testid="order-groups-clear">
+        {t('partialsb.legend.clear')}
+      </button>
+    </div>
   )
 }

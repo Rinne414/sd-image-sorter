@@ -29,10 +29,18 @@ export function orderMoves(source: BatchEntries, key: string) {
   }
   return {
     move: (keys: ReadonlySet<string>, shown: ReadonlySet<string> | null, how: GroupMove) => commit(moveInView(order, keys, shown, how)),
+    /** Put the queue in exactly this order (a sort), undoable like any move; null when it is the order already. */
+    set: (next: readonly string[]): readonly string[] | null => (next.length === order.length && next.every((k, i) => k === order[i]) ? null : commit(next)),
     drop: (keys: ReadonlySet<string>, overKey: string, after: boolean) => commit(dropGroup(order, keys, order.indexOf(overKey), after)),
     undo: (): readonly string[] | null => {
-      const before = useStepViews.getState().takeUndo(key)
-      if (before) source.reorder(before)
+      const views = useStepViews.getState()
+      const before = views.takeUndo(key)
+      if (before) {
+        source.reorder(before)
+        // Back to the order from before the sort: the sort's group marks no longer fit.
+        const sorted = views.groupings[key]
+        if (sorted && sorted.before.length === before.length && sorted.before.every((k, i) => k === before[i])) views.setGrouping(key, null)
+      }
       return before
     },
   }

@@ -211,3 +211,11 @@
   color: var(--ok);
   font-size: var(--fs-2);
 }
+
+/* The blacklist box's ready lists (quality, meta) and Clear. */
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: -4px;
+}
