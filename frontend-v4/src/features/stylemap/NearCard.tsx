@@ -4,6 +4,7 @@ import { useT } from '../../i18n'
 import { Icon } from '../../ui/Icon'
 import { withClip } from '../similar/clip'
 import { startIndexing } from '../similar/similarApi'
+import { useCustomShown } from './customStore'
 import { startStyleIndex } from './indexJob'
 import { listNote, neighbourDot, neighbourFlags, type Note } from './lookups'
 import { openPicture } from './MapLightbox'
@@ -26,6 +27,7 @@ export function NearCard() {
   const points = useMap((s) => s.points)
   const available = mapOnScreen() !== null
   const near = useNear()
+  const custom = useCustomShown() !== null
   const fileRef = useRef<HTMLInputElement>(null)
   const result = near.result
   const ofLibrary = near.source?.kind === 'library'
@@ -94,7 +96,9 @@ export function NearCard() {
               <NeighbourRow key={n.id} n={n} active={near.active === n.id} />
             ))}
           </ul>
-          <p className={styles.nearNote}>{t(listNote(result, ofLibrary).key, listNote(result, ofLibrary).params)}</p>
+          <p className={styles.nearNote} data-testid="stylemap-near-note">
+            {t(listNote(result, ofLibrary, custom).key, listNote(result, ofLibrary, custom).params)}
+          </p>
         </>
       )}
     </section>

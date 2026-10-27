@@ -3249,7 +3249,8 @@
         "#stylemap-locate-action",
         "#stylemap-locate-clear",
         "#stylemap-near-action",
-        "#stylemap-near-clear"
+        "#stylemap-near-clear",
+        "[data-modal-handoff=\"stylemap\"]"
       ],
       "vopus": {
         "at": "#/library",
@@ -3258,8 +3259,7 @@
           "[data-item=\"tool-stylemap\"]"
         ],
         "find": "[data-testid=\"stylemap-axes-toggle\"]",
-        "partial": "No box select yet (#stylemap-box-toggle comes with the selection, stage 2)",
-        "note": "stylemap-axes-toggle (axis card stylemap-axes-panel), stylemap-labels-toggle, stylemap-landmarks-toggle, stylemap-reset-view, stylemap-locate-input with stylemap-locate-clear and stylemap-locate-action, nearest pictures stylemap-near-drop with stylemap-near-clear and stylemap-near-action; box select comes with the selection (stage 2)"
+        "note": "stylemap-axes-toggle (axis card stylemap-axes-panel, tabs stylemap-axes-tab-model and stylemap-axes-tab-custom for My axes), stylemap-labels-toggle, stylemap-landmarks-toggle, stylemap-reset-view, stylemap-locate-input with stylemap-locate-clear and stylemap-locate-action, nearest pictures stylemap-near-drop with stylemap-near-clear and stylemap-near-action; box select is stylemap-drag-box (Left-drag: Turn / Box / Lasso, Shift + drag always boxes, Shift + click toggles a dot); the picture window's Style Map button is lightbox-stylemap (shared lightbox, also in /next/)"
       },
       "next": {
         "at": "#/library",
@@ -3267,7 +3267,7 @@
           "[data-testid=\"next-place-stylemap\"]"
         ],
         "find": "[data-testid=\"stylemap-axes-toggle\"]",
-        "partial": "No box select yet (#stylemap-box-toggle comes with the selection, stage 2)"
+        "note": "The same tool page as Vopus (box select stylemap-drag-box, My axes in the axis card, lightbox-stylemap in the picture window)"
       }
     },
     {
@@ -3283,10 +3283,23 @@
         "#stylemap-sel-clear"
       ],
       "vopus": {
-        "missing": "The Style Map page has no box select or send-to yet (stage 2 of the port)"
+        "at": "#/library",
+        "open": [
+          "[data-testid=\"tools-menu\"]",
+          "[data-item=\"tool-stylemap\"]"
+        ],
+        "find": "[data-testid=\"stylemap-sel-library\"]",
+        "needs": "dots picked on the map",
+        "note": "Pick dots (Shift + drag, or stylemap-drag-box / stylemap-drag-lasso then drag; Shift + click toggles one): the bar stylemap-selbar shows the count (stylemap-selbar-count) and sends the pictures to stylemap-sel-batch (Add to batch: new / template / recent, the library's batch menu), stylemap-sel-censor (Censor; GIFs and videos go to the media censor), stylemap-sel-dataset (new dataset batch), stylemap-sel-library (the Library shows exactly those pictures under pinned-banner, pinned-back or Esc shows everything) and stylemap-sel-clear (also Esc)"
       },
       "next": {
-        "missing": "The Style Map page has no box select or send-to yet (stage 2 of the port)"
+        "at": "#/library",
+        "open": [
+          "[data-testid=\"next-place-stylemap\"]"
+        ],
+        "find": "[data-testid=\"stylemap-sel-library\"]",
+        "needs": "dots picked on the map",
+        "note": "The same tool page and bar as Vopus; the /next/ library shows the pinned pictures under the same pinned-banner"
       }
     },
     {

@@ -46,6 +46,8 @@ export const SETTING_KEYS: readonly string[] = [
   'sd-stylemap-color-by',
   'sd-stylemap-landmarks',
   'sd-stylemap-axis-labels',
+  // Not here on purpose: the Style Map's own axes (`sd-stylemap-custom-axes:<library>`) are the
+  // user's work (example pictures and names), not a preference; a reset must not wipe them.
 ]
 
 /** Censor tool options share a prefix (brush, style, detection). */

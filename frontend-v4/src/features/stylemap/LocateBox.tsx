@@ -45,6 +45,10 @@ export function LocateBox() {
   /** The map a lost-map answer already rebuilt once (never in a loop, even when the server keeps losing it). */
   const rebuilt = useRef<string | null>(null)
   const timer = useRef(0)
+  /** The text the answer on screen was found for (a newer text may still be waiting for its search). */
+  const answeredFor = useRef<string | null>(null)
+  /** Enter was pressed while the answer was for an older text: the new answer's first picture is taken. */
+  const goOnAnswer = useRef(false)
   const boxRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
   const results = answer?.results ?? []
@@ -82,6 +86,17 @@ export function LocateBox() {
         if (mine === seq.current) await search(query)
         return
       }
+      answeredFor.current = query
+      // Enter was pressed before this answer came: go to its first picture now.
+      const first = found.results?.[0]
+      if (goOnAnswer.current && first) {
+        goOnAnswer.current = false
+        setAnswer(found)
+        setActive(0)
+        pick(first)
+        return
+      }
+      goOnAnswer.current = false
       setAnswer(found)
       setNote((found.results ?? []).length ? null : locateEmptyNote(found))
       setActive((found.results ?? []).length ? 0 : -1)
@@ -93,6 +108,7 @@ export function LocateBox() {
   // A new map: the dots of the old answer are gone; a typed query asks again.
   useEffect(() => {
     seq.current += 1
+    answeredFor.current = null
     setAnswer(null)
     setNote(null)
     setActive(-1)
@@ -102,6 +118,7 @@ export function LocateBox() {
 
   const onInput = (value: string) => {
     rebuilt.current = null
+    goOnAnswer.current = false
     setText(value)
     setOpen(true)
     window.clearTimeout(timer.current)
@@ -116,6 +133,8 @@ export function LocateBox() {
     seq.current += 1
     window.clearTimeout(timer.current)
     if (clearText) setText('')
+    answeredFor.current = null
+    goOnAnswer.current = false
     setAnswer(null)
     setNote(null)
     setIgnored([])
@@ -146,9 +165,12 @@ export function LocateBox() {
     } else if (e.key === 'Enter') {
       e.preventDefault()
       window.clearTimeout(timer.current)
-      const item = shown ? results[active] : undefined
+      // The list on screen may still be the answer to the text before the last keystrokes: never take that one.
+      const fresh = answeredFor.current === text.trim()
+      const item = shown && fresh ? results[active] : undefined
       if (item) pick(item)
       else if (text.trim()) {
+        goOnAnswer.current = !fresh
         setOpen(true)
         void search(text.trim())
       }

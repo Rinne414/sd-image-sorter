@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assignRegions, basePointSize, cloudArrays, coreBox, dotsInRect, floorGrid, GRID_PAD, indexOfId, MAX_POINT_SIZE, MIN_POINT_SIZE, nearestDot, projectPoints } from './geometry'
+import { assignRegions, basePointSize, cloudArrays, coreBox, dotsInPolygon, dotsInRect, floorGrid, GRID_PAD, indexOfId, insidePolygon, MAX_POINT_SIZE, MIN_POINT_SIZE, nearestDot, projectPoints } from './geometry'
 
 /** A column-major orthographic-like matrix: u = (x + 1) / 2, v = (1 - y) / 2, w = 1. */
 const IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
@@ -99,5 +99,38 @@ describe('dots on the canvas (box select)', () => {
   it('finds the nearest visible dot within the radius', () => {
     expect(nearestDot(projected, cloud.count, { u: 0.26, v: 0.25 }, { width: 100, height: 100, radiusPx: 9 })).toBe(0)
     expect(nearestDot(projected, cloud.count, { u: 0.5, v: 0.5 }, { width: 100, height: 100, radiusPx: 9 })).toBe(-1)
+  })
+
+  it('picks the visible dots inside a lasso, an odd outline included', () => {
+    const square = [
+      { u: 0.1, v: 0.1 },
+      { u: 0.4, v: 0.1 },
+      { u: 0.4, v: 0.4 },
+      { u: 0.1, v: 0.4 },
+    ]
+    expect(dotsInPolygon(projected, cloud.count, square)).toEqual([0])
+    // A "C" shape whose gap holds the dot at (0.75, 0.75): it is not picked.
+    const hook = [
+      { u: 0.6, v: 0.6 },
+      { u: 0.95, v: 0.6 },
+      { u: 0.95, v: 0.7 },
+      { u: 0.7, v: 0.7 },
+      { u: 0.7, v: 0.8 },
+      { u: 0.95, v: 0.8 },
+      { u: 0.95, v: 0.9 },
+      { u: 0.6, v: 0.9 },
+    ]
+    expect(dotsInPolygon(projected, cloud.count, hook)).toEqual([])
+    expect(dotsInPolygon(projected, cloud.count, square.slice(0, 2))).toEqual([])
+  })
+
+  it('a point is inside a polygon by the even-odd rule', () => {
+    const triangle = [
+      { u: 0, v: 0 },
+      { u: 1, v: 0 },
+      { u: 0, v: 1 },
+    ]
+    expect(insidePolygon({ u: 0.2, v: 0.2 }, triangle)).toBe(true)
+    expect(insidePolygon({ u: 0.8, v: 0.8 }, triangle)).toBe(false)
   })
 })

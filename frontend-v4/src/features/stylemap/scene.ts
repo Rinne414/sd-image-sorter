@@ -133,8 +133,8 @@ export interface SceneHandlers {
 }
 
 /**
- * A tool that takes the pointer before the orbit controls (the box select of
- * the next stage): `down` returns true when it handles this press.
+ * A tool that takes the pointer before the orbit controls (the box and lasso
+ * select, PickTool.tsx): `down` returns true when it handles this press.
  */
 export interface PointerTool {
   down: (event: PointerEvent) => boolean
@@ -279,6 +279,7 @@ export class StyleMapScene {
     this.hovered = -1
     this.focus = null
     this.selected = null
+    this.canvas.dataset.picked = '0'
     this.hoverRing.visible = false
     this.clearRings()
     this.ids = ids
@@ -349,14 +350,18 @@ export class StyleMapScene {
     this.repaintColors()
   }
 
-  /** Mark picked dots (1 per picked dot, point order); null clears. Used by the box select. */
+  /** Mark picked dots (1 per picked dot, point order); null clears. Used by the box and lasso select. */
   setSelected(flags: Uint8Array | null): void {
     this.selected = flags && flags.length === this.count ? flags : null
+    let picked = 0
+    if (this.selected) for (const flag of this.selected) picked += flag
+    // How many dots wear the pick mark (the end-to-end tests read it).
+    this.canvas.dataset.picked = String(picked)
     this.repaintColors()
   }
 
   /**
-   * Custom axes (next stage) move every dot; lookups still speak the server's
+   * The user's own axes (customStore.ts) move every dot; lookups still speak the server's
    * coordinates and `fn` turns them into a dot's shown position (null: not a dot).
    */
   setRemap(fn: ((xyz: [number, number, number], id?: number) => [number, number, number] | null) | null): void {

@@ -56,6 +56,18 @@
   color: var(--text);
 }
 
+/* "Style Map": find this picture on the map (a small text button beside the file buttons). */
+.mapBtn {
+  flex-shrink: 0;
+  height: 28px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.mapBtn:hover {
+  color: var(--text);
+}
+
 .barGap {
   flex: 1;
 }

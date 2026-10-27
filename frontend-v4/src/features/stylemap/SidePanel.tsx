@@ -28,6 +28,7 @@ export function SidePanel() {
         <ul>
           <li>{t('stylemap.help.rotate')}</li>
           <li>{t('stylemap.help.click')}</li>
+          <li>{t('stylemap.help.pick')}</li>
           <li>{t('stylemap.help.near')}</li>
           <li>{t('stylemap.help.members')}</li>
           <li>{t('stylemap.help.landmarks')}</li>

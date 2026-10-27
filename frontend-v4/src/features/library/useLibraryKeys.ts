@@ -10,6 +10,7 @@ import { useSimilar } from '../similar/similarStore'
 import { showCardMenuAtTile, useCardMenu } from './CardMenu'
 import type { GalleryHandle } from './Gallery'
 import { libraryKey, type LibraryKey } from './keys'
+import { clearPin, usePinned } from './pinnedSet'
 
 interface Deps {
   images: ImageSummary[]
@@ -40,6 +41,7 @@ function run(action: LibraryKey, d: Deps): boolean {
     case 'escape':
       if (s.selection.length) s.clearSelection()
       else if (useSimilar.getState().query) useSimilar.getState().clear()
+      else if (usePinned.getState().pin) clearPin()
       else if (d.escapeClearsInspect && id !== null) s.inspect(null)
       else return false
       return true

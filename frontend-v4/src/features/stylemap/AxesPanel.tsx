@@ -3,6 +3,9 @@ import { thumbnailUrl } from '../../api/urls'
 import { useT } from '../../i18n'
 import { Icon } from '../../ui/Icon'
 import { useLayer } from '../../ui/layers'
+import { AXIS_TITLE } from './customAxes'
+import { CustomAxesTab } from './CustomAxesTab'
+import { setAxesTab, useCustom, useCustomShown, type AxesTab } from './customStore'
 import { retryAxes, setAxesOpen, setPreview, useMap } from './mapStore'
 import styles from './MapCanvas.module.css'
 import { getScene } from './sceneHandle'
@@ -11,21 +14,64 @@ import { AXIS_NAMES, type AxisEnd, type AxisEntry, type AxisName } from './types
 
 const THUMB = 128
 
-const AXIS_TITLE = { x: 'stylemap.axes.x', y: 'stylemap.axes.y', z: 'stylemap.axes.z' } as const
+const TABS: readonly { id: AxesTab; label: 'stylemap.axes.tabModel' | 'stylemap.axes.tabCustom' }[] = [
+  { id: 'model', label: 'stylemap.axes.tabModel' },
+  { id: 'custom', label: 'stylemap.axes.tabCustom' },
+]
 
 /**
- * "What the axes mean": a card over the map with, for each axis, the
- * pictures at its two ends and the tags that set them apart (GET
- * /api/style-map/axes). A picture previews in the side panel and turns the
- * camera to its dot. Esc or × closes it. (The next stage adds a "my axes"
- * tab here: axes the user defines with example pictures.)
+ * "What the axes mean": a card over the map with two tabs. The model's axes:
+ * for each axis, the pictures at its two ends and the tags that set them
+ * apart (GET /api/style-map/axes); a picture previews in the side panel and
+ * turns the camera to its dot. My axes: the user defines an axis by example
+ * pictures and the map is laid out along it (CustomAxesTab.tsx). Esc or ×
+ * closes the card.
  */
 export function AxesPanel() {
   const t = useT()
-  const axes = useMap((s) => s.axes)
-  const [active, setActive] = useState<number | null>(null)
+  const tab = useCustom((s) => s.tab)
   const close = () => setAxesOpen(false)
   useLayer(true, close)
+
+  return (
+    <section className={styles.axesPanel} id="stylemap-axes-panel" aria-labelledby="stylemap-axes-title" data-testid="stylemap-axes-panel">
+      <header className={styles.axesHead}>
+        <h2 className={styles.axesTitle} id="stylemap-axes-title">
+          {t('stylemap.axes.title')}
+        </h2>
+        <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={close} aria-label={t('stylemap.axes.closeLabel')} title={t('stylemap.axes.closeLabel')} data-testid="stylemap-axes-close">
+          <Icon name="close" size={13} />
+        </button>
+      </header>
+      <div className={styles.axesTabs} role="tablist" aria-label={t('stylemap.axes.title')}>
+        {TABS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            id={`stylemap-axes-tab-${item.id}`}
+            aria-selected={tab === item.id}
+            aria-controls="stylemap-axes-tabpanel"
+            className={styles.axesTab}
+            onClick={() => setAxesTab(item.id)}
+            data-testid={`stylemap-axes-tab-${item.id}`}
+          >
+            {t(item.label)}
+          </button>
+        ))}
+      </div>
+      <div className={styles.axesTabPanel} role="tabpanel" id="stylemap-axes-tabpanel" aria-labelledby={`stylemap-axes-tab-${tab}`}>
+        {tab === 'custom' ? <CustomAxesTab /> : <ModelAxes />}
+      </div>
+    </section>
+  )
+}
+
+function ModelAxes() {
+  const t = useT()
+  const axes = useMap((s) => s.axes)
+  const custom = useCustomShown()
+  const [active, setActive] = useState<number | null>(null)
 
   const pick = (id: number) => {
     setActive(id)
@@ -33,6 +79,17 @@ export function AxesPanel() {
     const scene = getScene()
     const at = scene?.positionOf(id)
     if (scene && at) scene.flyTo(at, { exact: true })
+  }
+
+  // The model's meanings describe its own layout: hidden while the user's axes place the dots.
+  if (custom) {
+    return (
+      <div className={styles.axesBody}>
+        <div className={styles.axesState} data-testid="stylemap-axes-hidden">
+          {t('stylemap.custom.hiddenModel')}
+        </div>
+      </div>
+    )
   }
 
   let body
@@ -53,20 +110,12 @@ export function AxesPanel() {
   }
 
   return (
-    <section className={styles.axesPanel} id="stylemap-axes-panel" aria-labelledby="stylemap-axes-title" data-testid="stylemap-axes-panel">
-      <header className={styles.axesHead}>
-        <h2 className={styles.axesTitle} id="stylemap-axes-title">
-          {t('stylemap.axes.title')}
-        </h2>
-        <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={close} aria-label={t('stylemap.axes.closeLabel')} title={t('stylemap.axes.closeLabel')} data-testid="stylemap-axes-close">
-          <Icon name="close" size={13} />
-        </button>
-      </header>
+    <>
       <p className={styles.axesNote} data-umap={axes.layout === 'umap' || undefined}>
         {t(axes.layout === 'umap' ? 'stylemap.axes.umapNote' : 'stylemap.axes.note')}
       </p>
       <div className={styles.axesBody}>{body}</div>
-    </section>
+    </>
   )
 }
 

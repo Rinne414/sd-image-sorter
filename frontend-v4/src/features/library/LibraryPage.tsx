@@ -14,6 +14,8 @@ import { EmptyResult } from './EmptyResult'
 import { Gallery, type GalleryHandle } from './Gallery'
 import styles from './LibraryPage.module.css'
 import { libraryParams } from './params'
+import { PinnedBanner } from './PinnedBanner'
+import { pinnedParams, usePinned } from './pinnedSet'
 import { QueryBar } from './QueryBar'
 import { Rail } from './Rail'
 import { fetchImageAt } from './randomOpen'
@@ -38,10 +40,11 @@ export function LibraryPage() {
   const toggleFav = useToggleFavorite()
   useCollectPaste()
 
+  const pin = usePinned((s) => s.pin)
   const favoritesCollectionId = favorites.data?.collectionId ?? null
   const params = useMemo(
-    () => libraryParams({ queryText, scope, sort, sortReverse, favoritesCollectionId }),
-    [queryText, scope, sort, sortReverse, favoritesCollectionId],
+    () => pinnedParams(libraryParams({ queryText, scope, sort, sortReverse, favoritesCollectionId }), pin),
+    [queryText, scope, sort, sortReverse, favoritesCollectionId, pin],
   )
   const shown = useShownImages(params)
   const { images, total, similar } = shown
@@ -82,6 +85,7 @@ export function LibraryPage() {
         {adding && <AddingBanner target={adding} />}
         {!similar && <SortNotice params={params} found={!shown.loading && !shown.empty && !shown.error} />}
         {similar && <SimilarBanner query={similar} count={images.length} loading={shown.loading} error={shown.error} retry={shown.retry} />}
+        {!similar && <PinnedBanner />}
         <div className={styles.gridArea}>
           {!similar && shown.error ? (
             <div className={styles.notice}>

@@ -1,0 +1,39 @@
+/* Sits between the query bar and the grid while the grid shows a set of
+   pictures sent from the Style Map (the same shape as the similarity banner). */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 10px 6px 16px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--line);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 14px;
+  min-width: 0;
+}
+
+.title {
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note {
+  color: var(--text-2);
+  font-size: var(--fs-2);
+}
+
+.banner :global(.btn) {
+  flex: none;
+  white-space: nowrap;
+}
