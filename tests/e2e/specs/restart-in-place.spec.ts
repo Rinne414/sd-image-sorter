@@ -119,3 +119,38 @@ test('restarting while work runs asks first: No keeps it running, Yes restarts',
   expect(forced).toEqual([false, false, true])
   expect(await page.evaluate(() => (window as any).__beforeRestart ?? null)).toBeNull()
 })
+
+test('a restart that never comes back gives the banner its buttons again', async ({ page }) => {
+  // The wait for the new process is three minutes; the clock is run forward instead.
+  await page.clock.install()
+  const calls = await stubRestartFlow(page)
+  // This server never comes back with a new id.
+  await page.route('**/api/updates/boot-id', (route) => route.fulfill({ json: { boot_id: 'boot-same' } }))
+  await page.route('**/api/updates/restart', (route) => {
+    calls.restart += 1
+    return route.fulfill({ json: { status: 'scheduled', launcher: 'run.bat', mode: 'in_place', boot_id: 'boot-same' } })
+  })
+  await page.addInitScript(() => localStorage.setItem('sd-image-sorter-lang', 'en'))
+  await page.goto('/')
+  // After start-up: a resume queue found at start-up is resumed at once.
+  await page.waitForFunction(() => document.documentElement.dataset.appReady === '1' && typeof (window as any).showPrepareRestartPrompt === 'function')
+  // The banner sits above the model cards in the Model Center.
+  await page.locator('#btn-open-model-manager').click()
+  await page.locator('[data-settings-tab="models"]').click()
+  await page.evaluate(() => (window as any).showPrepareRestartPrompt({ items: [{ id: 'florence2', name: 'Florence-2 Base' }] }))
+
+  const banner = page.locator('#prepare-restart-banner')
+  const restart = banner.locator('[data-action="restart-and-continue"]')
+  // The wait starts once the restart is scheduled: its first look at the boot id.
+  const waiting = page.waitForRequest('**/api/updates/boot-id')
+  await restart.click()
+  await expect(restart).toBeDisabled()
+  await waiting
+  await page.clock.fastForward('03:05')
+
+  await expect(page.locator('#toast-container')).toContainText('The restart is taking longer than usual')
+  // Before: both stayed disabled until the page was reloaded.
+  await expect(restart).toBeEnabled()
+  await expect(banner.locator('[data-action="dismiss-restart-queue"]')).toBeEnabled()
+  expect(calls).toEqual({ restart: 1, prepare: 0 })
+})

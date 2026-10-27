@@ -286,6 +286,11 @@ async function requestAppRestartAndContinue({ reason, items } = {}) {
             }
             reloadWhenServerRestarts(result.boot_id).then((reloaded) => {
                 if (reloaded) return;
+                // The banner's buttons work again: restart once more, or dismiss.
+                _appRestartInFlight = false;
+                document.getElementById(PREPARE_RESUME_BANNER_ID)
+                    ?.querySelectorAll('button[data-action]')
+                    .forEach((button) => { button.disabled = false; });
                 if (typeof hideGlobalLoading === 'function') hideGlobalLoading();
                 if (typeof showToast === 'function') {
                     showToast(

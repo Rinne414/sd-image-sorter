@@ -13,6 +13,9 @@
  * window.VLMCaption object declared in vlm-caption/core.js, which loads
  * FIRST; vlm-caption/boot.js registers the DOMContentLoaded init LAST.
  */
+// Failed progress polls in a row (1.5 s apart) before the page says it lost contact.
+const VLM_LOST_CONTACT_POLLS = 4;
+
 Object.assign(window.VLMCaption, {
     // --- Batch Captioning ---
 
@@ -114,9 +117,27 @@ Object.assign(window.VLMCaption, {
     },
 
     async pollProgress() {
+        let data;
         try {
             const resp = await fetch('/api/vlm/caption-batch/progress');
-            const data = await resp.json();
+            // An error answer is not progress: read as "not running" it showed
+            // "Done! 0 captioned" while the captions were still being written.
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            data = await resp.json();
+        } catch (_) {
+            // Not reachable right now: the interval keeps asking; say so once.
+            this._missedPolls = (this._missedPolls || 0) + 1;
+            if (this._missedPolls === VLM_LOST_CONTACT_POLLS) {
+                this._announceBatch(this._t('vlm.noContact',
+                    'Lost contact with the program. The captions keep going there; this page is still asking.'), 'warning');
+            }
+            return;
+        }
+        if (this._missedPolls >= VLM_LOST_CONTACT_POLLS) {
+            this._announceBatch(this._t('vlm.contactBack', 'In contact with the program again.'), 'info');
+        }
+        this._missedPolls = 0;
+        try {
             this.lastProgress = data;
             this._updateProgressUI(data);
             if (document.getElementById('vlm-debug-chat-modal')?.classList.contains('visible')) {

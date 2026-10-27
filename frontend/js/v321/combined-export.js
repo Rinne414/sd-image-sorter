@@ -43,11 +43,14 @@ Object.assign(window.V321Integration, {
                 await this._runCombinedExport(value);
             } catch (err) {
                 const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
+                // Say which one failed (a copy or a download) and why.
+                const context = value === 'clipboard'
+                    ? i18n('batchExport.combinedCopyFailed', 'Could not copy combined export.')
+                    : i18n('batchExport.combinedDownloadFailed', 'Could not save the combined export.');
                 if (typeof window.showToast === 'function') {
-                    window.showToast(
-                        i18n('batchExport.combinedCopyFailed', 'Could not copy combined export.'),
-                        'error'
-                    );
+                    window.showToast(typeof window.formatUserError === 'function'
+                        ? window.formatUserError(err, context)
+                        : `${context} ${err?.message || ''}`.trim(), 'error');
                 } else {
                     window.console?.error?.('combined export failed', err);
                 }
@@ -84,7 +87,10 @@ Object.assign(window.V321Integration, {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
-            if (!r.ok) throw new Error('combined HTTP ' + r.status);
+            if (!r.ok) {
+                const failure = await r.json().catch(() => ({}));
+                throw new Error(failure.error || failure.detail || `HTTP ${r.status}`);
+            }
             const result = await r.json();
             if (!result.download_url) throw new Error('combined export did not return a download URL');
             this.markCaptionEditsExported();

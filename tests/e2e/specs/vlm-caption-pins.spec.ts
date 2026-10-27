@@ -564,6 +564,37 @@ test('pollProgress renders the AI-job-queue waiting state and keeps polling unti
   expect(probe.workflowDisplay).toBe('grid') // batch UI kept visible while queued
 })
 
+test('an error answer while captions run is not read as "done": the page says it lost contact and keeps the run', async ({ page }) => {
+  await makeWorkflowContextVisible(page)
+  let answer: 'error' | 'done' = 'error'
+  await page.route('**/api/vlm/caption-batch/progress', (route) => (answer === 'error'
+    ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'database is locked' }) })
+    : route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ running: false, total: 3, completed: 3, failed: 0, tokens_used: 0 }) })))
+
+  const during = await page.evaluate(async () => {
+    const V = (window as any).VLMCaption
+    V.isRunning = true
+    for (let i = 0; i < 4; i += 1) await V.pollProgress()
+    return { isRunning: V.isRunning, status: document.getElementById('vlm-batch-status')?.textContent || '' }
+  })
+  // Before: the first error answer read as "not running" and showed "Done! 0 captioned".
+  expect(during.isRunning).toBe(true)
+  expect(during.status).not.toContain('Done')
+  expect(during.status).toContain('Lost contact with the program.')
+
+  answer = 'done'
+  const after = await page.evaluate(async () => {
+    const V = (window as any).VLMCaption
+    await V.pollProgress()
+    const res = { isRunning: V.isRunning, status: document.getElementById('vlm-batch-status')?.textContent || '' }
+    V.stopPolling()
+    V.isRunning = false
+    return res
+  })
+  expect(after.isRunning).toBe(false)
+  expect(after.status).toContain('Done! 3 captioned')
+})
+
 // ---------------------------------------------------------------------------
 // 9. fetchModels — save-first, list returned models, select one into the input.
 // ---------------------------------------------------------------------------

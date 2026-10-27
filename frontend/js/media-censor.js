@@ -12,6 +12,8 @@
     'use strict';
 
     const POLL_MS = 1000;
+    // Failed polls in a row before the dialog says it lost contact (about 5 s).
+    const LOST_CONTACT_POLLS = 5;
     const VIDEO_SIZE_HINT = '~31 MB';
     const VIDEO_CONFIRM_BYTES = 31 * 1024 * 1024;
 
@@ -203,18 +205,42 @@
 
         async stop() {
             if (!this._jobId) return;
-            await fetch(`/api/censor/media/jobs/${encodeURIComponent(this._jobId)}/cancel`, { method: 'POST' });
+            try {
+                const response = await fetch(`/api/censor/media/jobs/${encodeURIComponent(this._jobId)}/cancel`, { method: 'POST' });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            } catch (error) {
+                this._toast(this._t('mediaCensor.stopFailed', 'Could not stop it: {reason}', { reason: error.message || String(error) }), 'error');
+            }
         },
 
         _poll() {
             clearTimeout(this._timer);
             this._timer = setTimeout(async () => {
-                const response = await fetch(`/api/censor/media/jobs/${encodeURIComponent(this._jobId)}`);
-                if (!response.ok) {
-                    this._setRunning(false);
+                let snapshot;
+                try {
+                    const response = await fetch(`/api/censor/media/jobs/${encodeURIComponent(this._jobId)}`);
+                    if (response.status === 404) {
+                        // The program no longer knows the job (it was restarted).
+                        this._setRunning(false);
+                        this._toast(this._t('mediaCensor.jobGone',
+                            'The censoring job is no longer running (the program was restarted). Files it finished are in the output folder.'), 'warning');
+                        return;
+                    }
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    snapshot = await response.json();
+                } catch (_) {
+                    // Not reachable right now (busy or restarting): keep asking, and say so once.
+                    this._missedPolls = (this._missedPolls || 0) + 1;
+                    if (this._missedPolls === LOST_CONTACT_POLLS) {
+                        this._toast(this._t('mediaCensor.noContact', 'Lost contact with the program. Still trying; the progress shows again when it answers.'), 'warning');
+                    }
+                    this._poll();
                     return;
                 }
-                const snapshot = await response.json();
+                if (this._missedPolls >= LOST_CONTACT_POLLS) {
+                    this._toast(this._t('mediaCensor.contactBack', 'In contact with the program again.'), 'info');
+                }
+                this._missedPolls = 0;
                 this._render(snapshot);
                 if (['done', 'done_with_errors', 'cancelled'].includes(snapshot.status)) {
                     this._setRunning(false);

@@ -308,6 +308,30 @@ test('clipboard output routes Start to export-combined, not export-batch', async
   await expect(page.locator('#batch-export-modal')).toBeHidden()
 })
 
+test('a refused combined download says it could not save and why, and Start works again', async ({ page }) => {
+  await openApp(page)
+  await page.route('**/api/tags/export-combined', (route) => route.fulfill({ status: 507, json: { error: 'Not enough disk space' } }))
+
+  await page.evaluate(() => (window as unknown as { showModal: (id: string) => void }).showModal('batch-export-modal'))
+  await page.locator('#batch-export-content-mode').selectOption('tags')
+  await page.locator('input[name="batch-export-output-mode"][value="download"]').check({ force: true })
+  await page.evaluate(() => {
+    const V = window.V321Integration
+    V.queueImageIds = [101, 102]
+    V.queueSelectionToken = null
+    const start = document.getElementById('btn-start-batch-export') as HTMLButtonElement | null
+    if (start) start.disabled = false
+  })
+  await page.locator('#btn-start-batch-export').click()
+
+  // Before: "Could not copy combined export." for a download too, and no reason.
+  const toast = page.locator('#toast-container .toast').last()
+  await expect(toast).toContainText('Could not save the combined export.')
+  await expect(toast).toContainText('Not enough disk space')
+  await expect(page.locator('#btn-start-batch-export')).toBeEnabled()
+  await expect(page.locator('#batch-export-modal')).toBeVisible()
+})
+
 // (8) LoRA preset selector (v321-ui.js:965-1103). bindExportPresetUI fetches
 // /api/tags/export-presets at init and renders the chips; collectTemplateOptions
 // serializes the LoRA config into the template_options object the export sends.

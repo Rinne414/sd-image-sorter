@@ -93,6 +93,47 @@ test('the dialog lists the folder, starts a job with the Censor page settings an
   expect(revealed[0]).toMatch(/\/reveal\/0$/)
 })
 
+const fileRow = (status: string) => ({ name: 'anim.gif', status, frames_done: 12, frames_total: 12, censored_frames: 7, output: '', error: '' })
+
+async function startJob(page: Page, folder: string, jobId: string): Promise<void> {
+  await page.route('**/api/censor/media/start', (route) => route.fulfill({
+    json: { job_id: jobId, id: jobId, status: 'queued', output_folder: folder, done: 0, total: 1, files: [fileRow('queued')] },
+  }))
+  await page.locator('#media-censor-folder').fill(folder)
+  await page.locator('#media-censor-folder').dispatchEvent('change')
+  await expect(page.locator('#media-censor-found')).toContainText('Found 1 GIF')
+  await page.locator('#media-censor-start').click()
+}
+
+test('no answer for a while: the dialog says it lost contact, keeps asking, and finishes when the program answers', async ({ page }) => {
+  const folder = mediaFolder()
+  await openDialog(page)
+  let polls = 0
+  await page.route('**/api/censor/media/jobs/job2', async (route) => {
+    polls += 1
+    // Six polls get no answer (a busy or restarting program), then it finishes.
+    if (polls <= 6) return route.abort('connectionrefused')
+    return route.fulfill({ json: { id: 'job2', status: 'done', done: 1, total: 1, error: '', files: [fileRow('done')] } })
+  })
+  await startJob(page, folder, 'job2')
+  await expect(page.locator('#media-censor-start')).toBeDisabled()
+  await expect(page.locator('#toast-container')).toContainText('Lost contact with the program. Still trying', { timeout: 15000 })
+  await expect(page.locator('#toast-container')).toContainText('Finished 1 of 1 file.', { timeout: 15000 })
+  await expect(page.locator('#toast-container')).toContainText('In contact with the program again.')
+  await expect(page.locator('#media-censor-start')).toBeEnabled()
+  await expect(page.locator('#media-censor-stop')).toBeHidden()
+})
+
+test('a job the program no longer knows (it restarted) says so and the dialog can start again', async ({ page }) => {
+  const folder = mediaFolder()
+  await openDialog(page)
+  await page.route('**/api/censor/media/jobs/job3', (route) => route.fulfill({ status: 404, json: { error: 'No such job' } }))
+  await startJob(page, folder, 'job3')
+  await expect(page.locator('#toast-container')).toContainText('The censoring job is no longer running (the program was restarted)')
+  await expect(page.locator('#media-censor-start')).toBeEnabled()
+  await expect(page.locator('#media-censor-stop')).toBeHidden()
+})
+
 test('the dialog fits at every desktop size', async ({ page }) => {
   await openDialog(page)
 
