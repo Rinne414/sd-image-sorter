@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.9.2] - 2026-10-28
+
+The gallery says when a refresh in place takes a while, and keeps your place when the picture you were reading leaves the results with others above it.
+
+图库原地刷新较久时会提示；你正在看的图和上面的图一起离开结果时，仍停在原处。
+
+### Fixed / 修复
+
+- **Long gallery refreshes say so / 图库刷新较久时会提示**: When a job finishes (tagging, scoring, captions) or pictures leave the results, the gallery reloads every page you scrolled through in place, and Load More waits meanwhile. It used to wait without a word; after a moment the Load More row now says "Updating the gallery…" and gives the button back when the refresh lands.
+  - 任务完成（打标、评分、caption）或有图离开结果时，图库会原地重新载入你看过的每一页，期间“加载更多”会等待。以前它不声不响地等；现在稍过片刻，“加载更多”那一行会显示“正在更新图库…”，刷新完成后按钮恢复可用。
+- **Your place survives a deleted selection / 删掉一批图后仍停在原处**: When the picture you were reading left the results together with pictures above it (a deleted selection, a move out of the Library), the gallery kept its scroll offset and landed rows further on. The picture right after yours now takes its place, else the nearest one before it.
+  - 你正在看的图和它上面的一些图一起离开结果时（删除了一批图、移出图库），图库以前只保持滚动位置，结果会落到好几行之后。现在由紧接在后面的那张图接替它的位置，没有的话就是前面最近的一张。
+
 ## [3.9.1] - 2026-10-27
 
 The dataset checks cover pictures imported from a folder and count tokens exactly for every base model; pictures that cannot be read keep their AI work; long actions no longer freeze the program, and several results say what really happened.

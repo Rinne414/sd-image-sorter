@@ -63,6 +63,10 @@
 - **更快**：图库翻页从 0.36 秒降到 0.045 秒；批量打标 1000 张从 170 秒降到 106 秒（实测）。
 - **中英文完整**：中文界面里的按钮提示也都是中文。
 
+### v3.9.2
+
+- **图库刷新提示**：原地刷新较久时“加载更多”一行会显示“正在更新图库…”；你正在看的图被删掉时，由紧接着的那张接替位置。
+
 ### v3.9.1
 
 - **检查覆盖文件夹里的图**：健康检查和角色纯度都会检查从文件夹导入的图；所有底模（SDXL、FLUX、Krea 2、Anima）都能精确计数 token；读不到的图保留 AI caption 和分数；删除、清理重复、加密等长操作不再卡住程序。
@@ -693,6 +697,10 @@ Eagle and Billfish are general asset managers and are not in this SD-workflow ta
 - **No hard stops**: caps and export gates became warnings with a choice.
 - **Faster**: gallery page 0.36 s to 0.045 s; Mass Tag on 1,000 images 170 s to 106 s (measured).
 - **Complete Chinese and English UI**, tooltips included.
+
+### v3.9.2
+
+- **Refresh notice**: a long refresh in place says "Updating the gallery…" in the Load More row; when the picture you were reading is deleted, the next one takes its place.
 
 ### v3.9.1
 
