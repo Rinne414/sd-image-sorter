@@ -190,8 +190,8 @@ class _DetectionMixin:
           3. image unreadable / corrupt / unsupported       -> 422
         Anything else keeps a 500 but now echoes the real error text (no longer
         cause-free). Reuses the detectors' own RuntimeError messages (e.g.
-        nudenet's "nudenet not installed. Run: pip install nudenet"), so the
-        actionable "pip install X" survives to the client.
+        NudeNet's "NudeNet is not installed yet. Prepare the NudeNet detector in
+        the Model Center..."), so the way out survives to the client.
         """
         from PIL import UnidentifiedImageError
 

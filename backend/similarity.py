@@ -150,7 +150,7 @@ def _get_embed_model():
                         )
                 except ImportError:
                     raise RuntimeError(
-                        "fastembed not installed. Run: pip install fastembed"
+                        "CLIP is not installed yet. Prepare CLIP similarity in the Model Center, then try again."
                     )
                 except Exception as exc:
                     if get_clip_local_model_path():
@@ -248,7 +248,7 @@ def _get_text_embed_model():
                         _text_embed_model = TextEmbedding(**model_kwargs)
                 except ImportError:
                     raise RuntimeError(
-                        "fastembed not installed. Run: pip install fastembed"
+                        "CLIP is not installed yet. Prepare CLIP similarity in the Model Center, then try again."
                     )
                 except Exception as exc:
                     raise RuntimeError(
