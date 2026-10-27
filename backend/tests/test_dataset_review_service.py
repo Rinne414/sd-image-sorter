@@ -1159,7 +1159,7 @@ def test_metadata_provenance_reports_unknown_tag_sources_without_model_guessing(
     assert issue["source_provider"] == "metadata_provenance"
     assert issue["heuristic"] is False
     evidence = {row["label_en"]: row["value_en"] for row in issue["evidence"]}
-    assert evidence["Persisted tag source"] == "3 legacy/unknown rows"
+    assert evidence["Saved tag source"] == "3 legacy/unknown rows"
     rendered = json.dumps(issue).lower()
     for unsupported_claim in ("wd14", "vlm", "translation", "sidecar"):
         assert unsupported_claim not in rendered
@@ -1745,7 +1745,7 @@ def test_sidecar_metadata_dependency_reports_only_persisted_extraction_evidence(
         if row["provider"] == "metadata_provenance"
     )
     assert provider["status"] == "available"
-    assert "persisted sidecar fallback evidence" in provider["reason_en"].lower()
+    assert "saved sidecar fallback evidence" in provider["reason_en"].lower()
 
 
 def test_sidecar_metadata_dependency_marks_legacy_records_partial_without_guessing(
@@ -2411,4 +2411,6 @@ def test_review_queue_discloses_unsupported_logical_items_and_calls_no_heavy_pro
     assert providers["scope"]["status"] == "partial"
     assert providers["caption_integrity"]["status"] == "partial"
     assert providers["persisted_duplicates"]["status"] == "not_requested"
-    assert "1 local-path" in providers["scope"]["reason_en"]
+    # 3 in the dataset, 1 in the Library: the other 2 came from a folder.
+    assert "Covers the 1 Library picture only: 2 pictures from a folder are not in the Library" in providers["scope"]["reason_en"]
+    assert "来自文件夹的 2 张图不在图库中" in providers["scope"]["reason_zh"]

@@ -206,12 +206,12 @@ test('empty database scope fails explicitly in the active language', async ({ pa
   await page.getByTestId('review-cockpit-refresh').click()
 
   await expect(page.getByTestId('review-cockpit-error')).toContainText(
-    '审阅驾驶舱至少需要一张已加载的数据库图片。',
+    '训练前健检和审计会检查文件夹里的图。',
   )
 
   await page.locator('#btn-language-toggle').click()
   await expect(page.getByTestId('review-cockpit-error')).toContainText(
-    'Review Cockpit needs at least one loaded database image.',
+    'The Health check and the Quality Audit check folder pictures.',
   )
 })
 

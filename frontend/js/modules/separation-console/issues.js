@@ -336,9 +336,10 @@
 
     function reviewErrorMessage(errorState) {
         if (errorState.code === REVIEW_ERROR_EMPTY_DATABASE_SCOPE) {
+            // These checks read what the Library stores; folder pictures have the Health check and the Quality Audit.
             return sepconT(
-                'Review Cockpit needs at least one loaded database image.',
-                '审阅驾驶舱至少需要一张已加载的数据库图片。',
+                'These checks read what the Library knows about each picture, and every picture here comes from a folder. The Health check and the Quality Audit check folder pictures.',
+                '这些检查读取图库为每张图记下的信息，而这里的图都来自文件夹。训练前健检和审计会检查文件夹里的图。',
             );
         }
         return errorState.message;

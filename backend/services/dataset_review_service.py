@@ -795,7 +795,7 @@ def _database_issues(
                     detail_en="The database entry no longer points to a file on disk. Restore or remove the entry before export.",
                     detail_zh="数据库记录指向的文件已不存在。导出前请恢复文件或移除该记录。",
                     evidence=[
-                        _evidence("Database image ID", "数据库图片 ID", image_id),
+                        _evidence("Library picture ID", "图库图片 ID", image_id),
                         _evidence("Stored path", "已存路径", record.path if record is not None else None),
                     ],
                     source_provider="database",
@@ -1006,7 +1006,7 @@ def _low_tag_confidence_issue(
         severity="medium",
         title_en="Current tags include low-confidence assignments",
         title_zh="当前标签包含低置信结果",
-        detail_en="These current persisted tags are below the existing 0.50 confidence bucket. Review the image before changing any tag.",
+        detail_en="These saved tags are below the existing 0.50 confidence bucket. Review the image before changing any tag.",
         detail_zh="这些当前已存标签低于现有的 0.50 置信区间。修改任何标签前请先查看图片。",
         evidence=[
             _localized_evidence(
@@ -1366,7 +1366,7 @@ def _metadata_provenance_issues(
         if unknown_tag_source_count:
             evidence.append(
                 _localized_evidence(
-                    "Persisted tag source",
+                    "Saved tag source",
                     "已存标签来源",
                     f"{count_text(unknown_tag_source_count, 'legacy/unknown row')}",
                     f"{unknown_tag_source_count} 条旧版/未知记录",
@@ -1449,9 +1449,9 @@ def _metadata_provenance_issues(
                 record=records.get(image_id),
                 kind=ReviewIssueKind.METADATA_PROVENANCE_RISK,
                 severity="medium",
-                title_en="Persisted metadata provenance needs review",
+                title_en="Where the saved metadata came from needs review",
                 title_zh="已存元数据来源需要审阅",
-                detail_en="Persisted evidence does not explicitly attribute every derived field. Review provenance before export.",
+                detail_en="The saved data does not say where every derived field came from. Review provenance before export.",
                 detail_zh="已存证据未明确标注每个派生字段的来源。请在导出前审阅来源信息。",
                 evidence=evidence,
                 source_provider="metadata_provenance",
@@ -1606,14 +1606,16 @@ def _partial_scope_reason(
     request: DatasetReviewRequest,
     database_count: int,
 ) -> Tuple[str, str]:
-    unmaterialized_count = request.logical_count - database_count - request.local_path_count
+    # Every picture that is not a Library row came from a folder (listed in the
+    # page or still in its scan); the Health check and the audit check those.
+    folder_count = request.logical_count - database_count
+    are, them = ("is", "it") if folder_count == 1 else ("are", "them")
     return (
-        f"Review covers {count_text(database_count, 'database image')} only; "
-        f"{count_text(request.local_path_count, 'local-path item')} and "
-        f"{unmaterialized_count} other logical item(s) are not materialized.",
-        f"当前仅审阅 {database_count} 张数据库图片；"
-        f"{request.local_path_count} 个本地路径项目和 "
-        f"{unmaterialized_count} 个其他逻辑项目尚未物化。",
+        f"Covers the {count_text(database_count, 'Library picture')} only: "
+        f"{count_text(folder_count, 'picture')} from a folder {are} not in the Library, "
+        f"so these checks skip {them}. The Health check and the Quality Audit check folder pictures.",
+        f"只检查图库里的 {database_count} 张图：来自文件夹的 {folder_count} 张图不在图库中，"
+        "这些检查会跳过它们。训练前健检和审计会检查文件夹里的图。",
     )
 
 
@@ -1633,8 +1635,8 @@ def _scope_provider_state(
     return ReviewProviderState(
         provider="scope",
         status="available",
-        reason_en="Every logical item in this review is a loaded database image.",
-        reason_zh="本次审阅中的每个逻辑项目都是已加载的数据库图片。",
+        reason_en="Every picture in this dataset is in the Library.",
+        reason_zh="本数据集的每张图都在图库里。",
         observed_at=None,
     )
 
@@ -1658,8 +1660,8 @@ def _file_provider_state(request: DatasetReviewRequest) -> ReviewProviderState:
     return ReviewProviderState(
         provider="file_integrity",
         status="available",
-        reason_en="Stored readability and current file presence were checked for every database image.",
-        reason_zh="已检查每张数据库图片的已存可读状态和当前文件是否存在。",
+        reason_en="Every Library picture was checked: its file is still there and it could be read when last scanned.",
+        reason_zh="已检查图库里的每张图：文件仍在，上次扫描时能读取。",
         observed_at=None,
     )
 
@@ -1688,8 +1690,8 @@ def _caption_provider_state(
     return ReviewProviderState(
         provider="caption_integrity",
         status="available",
-        reason_en="Current browser caption evidence covers every database image in scope.",
-        reason_zh="当前浏览器 caption 证据覆盖范围内的每张数据库图片。",
+        reason_en="The captions as they are on this page were checked for every Library picture.",
+        reason_zh="已按本页当前的 caption 检查图库里的每张图。",
         observed_at=None,
     )
 
@@ -1712,8 +1714,8 @@ def _tag_provider_state(request: DatasetReviewRequest) -> ReviewProviderState:
     return ReviewProviderState(
         provider="tag_integrity",
         status="available",
-        reason_en="Current persisted tag rows were checked for every database image without running inference.",
-        reason_zh="已检查每张数据库图片的当前已存标签，没有启动推理。",
+        reason_en="The saved tags of every Library picture were checked; no AI model was run.",
+        reason_zh="已检查图库里每张图保存的标签，没有运行 AI 模型。",
         observed_at=None,
     )
 
@@ -1809,12 +1811,12 @@ def _metadata_provenance_provider_state(
             provider="metadata_provenance",
             status="available",
             reason_en=(
-                "Persisted sidecar fallback evidence was checked for every database "
-                "image without reading source files or running inference."
+                "Saved sidecar fallback evidence was checked for every Library "
+                "picture without reading source files or running an AI model."
             ),
             reason_zh=(
-                "已检查每张数据库图片的已存 Sidecar 回退证据，"
-                "没有读取源文件或运行推理。"
+                "已检查图库里每张图已存的 Sidecar 回退证据，"
+                "没有读取源文件或运行 AI 模型。"
             ),
             observed_at=None,
         )
@@ -1823,13 +1825,13 @@ def _metadata_provenance_provider_state(
             provider="metadata_provenance",
             status="available",
             reason_en=(
-                "Persisted metadata, caption fields, and tag sources were checked "
-                "without reading source files or running inference. "
+                "Saved metadata, caption fields, and tag sources were checked "
+                "without reading source files or running an AI model. "
                 f"{writer_reason_en}"
             ),
             reason_zh=(
                 "已检查已存元数据、caption 字段和标签来源，"
-                f"没有读取源文件或运行推理。{writer_reason_zh}"
+                f"没有读取源文件或运行 AI 模型。{writer_reason_zh}"
             ),
             observed_at=None,
         )
@@ -1837,13 +1839,13 @@ def _metadata_provenance_provider_state(
         provider="metadata_provenance",
         status="available",
         reason_en=(
-            "Persisted metadata, caption fields, tag sources, and requested sidecar "
-            "fallback evidence were checked without reading source files or running inference. "
+            "Saved metadata, caption fields, tag sources, and requested sidecar "
+            "fallback evidence were checked without reading source files or running an AI model. "
             f"{writer_reason_en}"
         ),
         reason_zh=(
             "已检查已存元数据、caption 字段、标签来源和请求的 Sidecar 回退证据，"
-            f"没有读取源文件或运行推理。{writer_reason_zh}"
+            f"没有读取源文件或运行 AI 模型。{writer_reason_zh}"
         ),
         observed_at=None,
     )
@@ -1876,8 +1878,8 @@ def _dimension_provider_state(
     return ReviewProviderState(
         provider="dimensions",
         status="available",
-        reason_en="Stored dimensions were checked for every database image.",
-        reason_zh="已检查每张数据库图片的已存尺寸。",
+        reason_en="The saved size of every Library picture was checked.",
+        reason_zh="已检查图库里每张图保存的尺寸。",
         observed_at=None,
     )
 
@@ -1909,8 +1911,8 @@ def _aesthetic_provider_state(
     return ReviewProviderState(
         provider="aesthetic_scores",
         status="available",
-        reason_en="Stored aesthetic scores were checked without running inference.",
-        reason_zh="已检查现有美学评分，没有启动推理。",
+        reason_en="The saved aesthetic scores were checked; no AI model was run.",
+        reason_zh="已检查保存的美学评分，没有运行 AI 模型。",
         observed_at=None,
     )
 
@@ -1920,14 +1922,14 @@ def _duplicate_state_unavailable(reason: Literal["missing", "invalid"]) -> Revie
         return ReviewProviderState(
             provider="persisted_duplicates",
             status="not_available",
-            reason_en="A persisted duplicate scan has not been completed yet.",
+            reason_en="A saved duplicate scan has not been completed yet.",
             reason_zh="尚未完成可复用的重复图片扫描。",
             observed_at=None,
         )
     return ReviewProviderState(
         provider="persisted_duplicates",
         status="not_available",
-        reason_en="The persisted duplicate scan state is invalid or incompatible. Run the scan again.",
+        reason_en="The saved duplicate scan is invalid or from an older version. Run the scan again.",
         reason_zh="已保存的重复图片扫描状态无效或不兼容，请重新扫描。",
         observed_at=None,
     )
@@ -1996,7 +1998,7 @@ def _persisted_duplicate_evidence(
         return [], ReviewProviderState(
             provider="persisted_duplicates",
             status="not_requested",
-            reason_en="Persisted duplicate evidence was not requested.",
+            reason_en="Saved duplicate results were not asked for.",
             reason_zh="本次未请求已保存的重复图片证据。",
             observed_at=None,
         )
