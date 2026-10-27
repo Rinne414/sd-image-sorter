@@ -70,6 +70,34 @@ for (const lang of ['en', 'zh-CN'] as const) {
     await expect(page.locator('#gallery-sort')).toBeInViewport()
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0)
   })
+
+  // The row reads its own width (sidebar, language, a video library): it used to
+  // break at 1280 in English, at 1536-1680 with videos and at 2560 in Chinese.
+  test(`the search row stays on one line at every desktop width, with and without videos (${lang})`, async ({ page }) => {
+    await mockLibrary(page, 24, 0)
+    await open(page, lang)
+    for (const videos of [0, 3]) {
+      await page.evaluate((count) => (window as any).syncMediaToggle(count), videos)
+      for (const [width, height] of [[1280, 800], [1366, 768], [1536, 864], [1680, 1050], [1920, 1080], [2560, 1440]] as const) {
+        await page.setViewportSize({ width, height })
+        const where = `${width}px, ${videos ? 'videos' : 'no videos'}`
+        await expect.poll(() => page.evaluate(() => {
+          const rect = (selector: string) => document.querySelector(selector)!.getBoundingClientRect()
+          const chips = document.querySelector('.gallery-quick-chips') as HTMLElement
+          return {
+            oneLine: Math.abs(rect('.gallery-search-tools').top - rect('.gallery-search-box').top) < rect('.gallery-search-box').height,
+            sortInView: rect('#gallery-sort').right <= innerWidth,
+            pageOverflow: document.documentElement.scrollWidth - innerWidth > 0,
+            // the chips scroll only as the last step, never past 1280
+            chipsScroll: chips.scrollWidth > chips.clientWidth,
+          }
+        }), { message: where }).toEqual({ oneLine: true, sortInView: true, pageOverflow: false, chipsScroll: width === 1280 && videos > 0 && lang === 'en' })
+        if (width !== 1280) {
+          await page.locator('.gallery-search-row').screenshot({ path: test.info().outputPath(`search-row-${width}-${videos ? 'videos' : 'pictures'}.png`) })
+        }
+      }
+    }
+  })
 }
 
 test('missing files: Find Moved Files first, clearing records last; the empty gallery says why', async ({ page }) => {

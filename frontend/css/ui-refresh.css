@@ -11885,18 +11885,25 @@ html.lang-zh #view-censor .queue-action-btn span {
 /* ==========================================================================
    Aurora Phase 3 — Gallery toolbar: key:value search + quick chips (#25a)
    ========================================================================== */
+/* One line at every desktop width (DESIGN.md §gallery-toolbar). What fits
+   depends on the row's own width (the filter sidebar, the language and a
+   video library all change it), so the row is a size container and the
+   steps below read it instead of the window. */
 .gallery-search-row {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 8px 14px;
     border-bottom: 1px solid var(--border-subtle);
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    container: gallery-search / inline-size;
 }
 
+/* The box takes what the other parts leave, from 200px up to 480px. */
 .gallery-search-box {
     position: relative;
-    flex: 1 1 320px;
+    flex: 1 1 200px;
+    min-width: 200px;
     max-width: 480px;
 }
 
@@ -11938,11 +11945,29 @@ html.lang-zh #view-censor .queue-action-btn span {
     color: var(--text-primary);
 }
 
+/* Last step when even the compact row is too wide: the chips scroll like
+   the generator tabs instead of pushing the tools onto a second line. The
+   padding keeps their focus ring inside the scroller. */
 .gallery-quick-chips {
     display: flex;
     align-items: center;
     gap: 6px;
-    flex-wrap: wrap;
+    flex: 0 1 auto;
+    flex-wrap: nowrap;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 3px;
+    margin: -3px;
+}
+
+.gallery-quick-chips::-webkit-scrollbar {
+    display: none;
+}
+
+.gallery-quick-chips > .gallery-chip {
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 /* Right side of the search row: aspect toggle + sort (#25a "最新▾ · 调大小").
@@ -11957,16 +11982,11 @@ html.lang-zh #view-censor .queue-action-btn span {
     flex-shrink: 0;
 }
 
-/* A laptop (1500px and narrower, 1366 the target): the search row stays on
-   one line (DESIGN.md §gallery-toolbar). The box gives way first (down to
-   220px, back to 480px when there is room), the aspect toggle keeps its
-   icons (each title still names it) and the sort list narrows. */
-@media (max-width: 1500px) {
-    .gallery-search-box {
-        flex: 1 1 220px;
-        min-width: 200px;
-    }
-
+/* Step 1, when the row is too narrow for every label (a laptop, or a
+   video library whose media toggle joins the row): the toggles keep their
+   icons (each title still names it) and the sort list narrows. Without
+   videos that is below 1045px of row, with videos below 1270px. */
+@container gallery-search (max-width: 1045px) {
     .gallery-search-tools .aspect-quick-btn [data-i18n="common.all"],
     .gallery-search-tools .media-quick-btn .media-quick-label {
         display: none;
@@ -11977,15 +11997,38 @@ html.lang-zh #view-censor .queue-action-btn span {
         min-width: 9rem;
         max-width: 9rem;
     }
+}
 
-    /* With a video library the media toggle joins the row: the box starts
-       smaller and the quick chips and toggles are a little tighter. */
-    .gallery-search-row.has-media-toggle .gallery-search-box {
-        flex-basis: 180px;
-        min-width: 170px;
+@container gallery-search (max-width: 1270px) {
+    .gallery-search-row.has-media-toggle .gallery-search-tools .aspect-quick-btn [data-i18n="common.all"],
+    .gallery-search-row.has-media-toggle .gallery-search-tools .media-quick-btn .media-quick-label {
+        display: none;
     }
 
-    .gallery-search-row.has-media-toggle .gallery-chip {
+    .gallery-search-row.has-media-toggle .gallery-search-tools .sort-dropdown {
+        width: 9rem;
+        min-width: 9rem;
+        max-width: 9rem;
+    }
+}
+
+/* Step 2, narrower still: the chips and toggles pack tighter. */
+@container gallery-search (max-width: 940px) {
+    .gallery-quick-chips .gallery-chip {
+        padding: 5px 8px;
+    }
+
+    .gallery-search-tools {
+        gap: 6px;
+    }
+
+    .gallery-search-tools .aspect-quick-btn {
+        padding: 4px 7px;
+    }
+}
+
+@container gallery-search (max-width: 1060px) {
+    .gallery-search-row.has-media-toggle .gallery-quick-chips .gallery-chip {
         padding: 5px 8px;
     }
 

@@ -159,9 +159,9 @@ owner chose to improve the classic interface itself and keep its look
 sample. Lesson: fewer visible controls and no accent hue were the wrong
 premise for this owner, who values the visible tools. Done in classic, each
 pinned by `tests/e2e/specs/classic-gallery-fixes.spec.ts`:
-- On a 1366×768 laptop the search row stays on one line (the aspect
+- The search row stays on one line at every desktop width (the aspect
   toggle and sort no longer drop to a third toolbar row; grid starts 47 px
-  higher); see §gallery-toolbar.
+  higher at 1366); see §gallery-toolbar.
 - The missing-files banner puts Find Moved Files first and "Clear N
   records" last, in the danger colour behind a divider; a library whose
   every file is missing says so instead of "No images yet".
@@ -582,7 +582,7 @@ Implementation:
 - `.generator-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }`
 - Below 1500px, secondary actions (Random, Reconnect) are hidden via `@media (max-width: 1500px)`.
 - Below 1600px, the "X images" count is hidden. Generator tab counts stay on every tab so switching All / NovelAI / ComfyUI does not resize the pills; extra tabs scroll.
-- The search row (`.gallery-search-box` + `.gallery-search-tools`) is also one line: below 1500px the search box starts at 220px, the aspect toggle's "All" shows its icon only and the sort menu is 9.5rem (2026-10-23; it used to push the aspect toggle and sort onto a third row).
+- The search row (`.gallery-search-row`) is also one line, at every desktop width, in both languages, with or without a video library (`flex-wrap: nowrap`). It is a size container (`container: gallery-search`) and its steps read the row's own width, not the window's, because the filter sidebar, the language and the media toggle all change what fits. The search box takes what is left, 200 to 480px. Step 1 (row under 1045px, or under 1270px with the media toggle): the media toggle and the aspect toggle's "All" show icons only (their titles still name them) and the sort menu is 9rem. Step 2 (under 940px, or 1060px with videos): chips and toggles pack tighter. Last step: the quick chips scroll like the generator tabs; in practice only English with videos at 1280 with the sidebar open. Pinned at 1280-2560 in both languages by `classic-gallery-fixes.spec.ts` (2026-10-27; before, the row broke at 1280 in English, at 1536-1680 with videos and at 2560 in Chinese).
 
 Do NOT:
 - Use `flex-wrap: wrap` on these containers; users have explicitly rejected line breaks here.
