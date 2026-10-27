@@ -19,7 +19,11 @@ function mediaFolder(): string {
   return folder
 }
 
-async function openDialog(page: Page): Promise<void> {
+async function openDialog(page: Page, ffmpeg: 'ready' | 'missing' = 'ready'): Promise<void> {
+  // which ffmpeg video censoring would use is the program's answer; the other tests need videos to be possible
+  await page.route('**/api/censor/media/status', (route) =>
+    route.fulfill({ json: ffmpeg === 'ready' ? { video_ready: true, video_source: 'video_support' } : { video_ready: false, video_source: null } }),
+  )
   await page.addInitScript(() => localStorage.setItem('sd-image-sorter-lang', 'en'))
   await page.goto('/')
   await page.waitForFunction(() => document.documentElement.dataset.appReady === '1' && Boolean((window as any).MediaCensor))
@@ -132,6 +136,104 @@ test('a job the program no longer knows (it restarted) says so and the dialog ca
   await expect(page.locator('#toast-container')).toContainText('The censoring job is no longer running (the program was restarted)')
   await expect(page.locator('#media-censor-start')).toBeEnabled()
   await expect(page.locator('#media-censor-stop')).toBeHidden()
+})
+
+/** Video support as the program reports it; `installs` counts the install requests the page made. */
+async function stubVideoSupport(page: Page, options: { canInstall: boolean; installs: number[]; prepared: string[] }): Promise<void> {
+  const state = () => ({
+    available: options.installs.length > 0,
+    source: options.installs.length > 0 ? 'installed' : null,
+    can_install: options.canInstall,
+    estimated_mb: 77,
+    download_from: 'github.com/BtbN/FFmpeg-Builds',
+    install: { state: options.installs.length > 0 ? 'done' : 'idle' },
+    indexing: false, videos: 0, pending: 0, unreadable: 0,
+  })
+  await page.route('**/api/video-support', (route) => route.fulfill({ json: state() }))
+  await page.route('**/api/video-support/install', (route) => {
+    options.installs.push(Date.now())
+    return route.fulfill({ json: { state: 'running', phase: 'looking', downloaded: 0, total: null } })
+  })
+  // once it is installed the program answers that videos can be censored
+  await page.route('**/api/censor/media/status', (route) =>
+    route.fulfill({ json: { video_ready: options.installs.length > 0, video_source: options.installs.length > 0 ? 'video_support' : null } }),
+  )
+  // the folder listing reports it the same way (this machine may well have an ffmpeg of its own)
+  await page.route('**/api/censor/media/list', async (route) => {
+    const real = await route.fetch()
+    await route.fulfill({ response: real, json: { ...(await real.json()), video_ready: false, video_source: null } })
+  })
+  await page.route('**/api/models/prepare', (route) => {
+    options.prepared.push(String(route.request().postData()))
+    return route.fallback()
+  })
+}
+
+async function stubStart(page: Page, folder: string, started: Array<Record<string, unknown>>): Promise<void> {
+  await page.route('**/api/censor/media/start', (route) => {
+    started.push(route.request().postDataJSON())
+    return route.fulfill({ json: { job_id: 'jobv', id: 'jobv', status: 'queued', output_folder: folder, done: 0, total: 1, files: [fileRow('queued')] } })
+  })
+  await page.route('**/api/censor/media/jobs/jobv', (route) =>
+    route.fulfill({ json: { id: 'jobv', status: 'done', done: 1, total: 1, error: '', files: [fileRow('done')] } }),
+  )
+}
+
+test('videos with no ffmpeg ask for video support, one download, and go on by themselves when it is installed', async ({ page }) => {
+  const folder = mediaFolder()
+  const installs: number[] = []
+  const prepared: string[] = []
+  const started: Array<Record<string, unknown>> = []
+  await openDialog(page, 'missing')
+  await stubVideoSupport(page, { canInstall: true, installs, prepared })
+  await stubStart(page, folder, started)
+  await page.locator('#media-censor-folder').fill(folder)
+  await page.locator('#media-censor-folder').dispatchEvent('change')
+  await expect(page.locator('#media-censor-found')).toContainText('Found 1 GIF and 1 video.')
+  await expect(page.locator('#media-censor-found')).toContainText('Videos need video support (ffmpeg)')
+  await page.locator('#media-censor-start').click()
+  const confirm = page.locator('#confirm-modal.visible')
+  await expect(confirm).toContainText('Videos need video support (about 77 MB)')
+  await expect(confirm).toContainText('also lets the gallery play and read videos')
+  await page.locator('#btn-confirm-ok').click()
+  await expect.poll(() => installs.length).toBe(1)
+  await expect.poll(() => started.length, { timeout: 15000 }).toBe(1)
+  expect(started[0]).toMatchObject({ folder, include_videos: true })
+  // never a second ffmpeg from the Model Center
+  expect(prepared.filter((body) => body.includes('video-ffmpeg'))).toEqual([])
+})
+
+test('declining the video support install censors the GIFs only, and says so', async ({ page }) => {
+  const folder = mediaFolder()
+  const installs: number[] = []
+  const started: Array<Record<string, unknown>> = []
+  await openDialog(page, 'missing')
+  await stubVideoSupport(page, { canInstall: true, installs, prepared: [] })
+  await stubStart(page, folder, started)
+  await page.locator('#media-censor-folder').fill(folder)
+  await page.locator('#media-censor-folder').dispatchEvent('change')
+  await expect(page.locator('#media-censor-found')).toContainText('Found 1 GIF and 1 video.')
+  await page.locator('#media-censor-start').click()
+  await page.locator('#btn-confirm-cancel').click()
+  await expect.poll(() => started.length).toBe(1)
+  expect(started[0]).toMatchObject({ include_videos: false })
+  expect(installs).toEqual([])
+  await expect(page.locator('#toast-container')).toContainText('Video support is not installed, so only the GIFs are censored.')
+})
+
+test('a system with no ready-made ffmpeg says so and censors the GIFs only', async ({ page }) => {
+  const folder = mediaFolder()
+  const started: Array<Record<string, unknown>> = []
+  await openDialog(page, 'missing')
+  await stubVideoSupport(page, { canInstall: false, installs: [], prepared: [] })
+  await stubStart(page, folder, started)
+  await page.locator('#media-censor-folder').fill(folder)
+  await page.locator('#media-censor-folder').dispatchEvent('change')
+  await expect(page.locator('#media-censor-found')).toContainText('Found 1 GIF and 1 video.')
+  await page.locator('#media-censor-start').click()
+  await expect(page.locator('#toast-container')).toContainText('no ready-made ffmpeg for this system')
+  await expect.poll(() => started.length).toBe(1)
+  expect(started[0]).toMatchObject({ include_videos: false })
 })
 
 test('the dialog fits at every desktop size', async ({ page }) => {

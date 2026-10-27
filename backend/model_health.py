@@ -106,16 +106,17 @@ from model_health_paths import (
 
 
 def _video_ffmpeg_health() -> Dict[str, Any]:
-    """The optional ffmpeg component that video censoring runs on."""
+    """The ffmpeg that video censoring runs on: video support's, else imageio-ffmpeg's."""
     from services import video_censor
 
     ready = video_censor.is_available()
     return {
         "available": ready,
+        "source": video_censor.source_name(),
         "message_key": "models.videoFfmpeg.ready" if ready else "models.videoFfmpeg.missing",
         "message": "ffmpeg for video censoring is ready."
         if ready
-        else "Not installed. Click Prepare / Download (~31 MB) or start a video job to be asked.",
+        else "Not installed. Install video support (one download that also plays videos in the library).",
     }
 
 def _umap_runtime_available() -> bool:

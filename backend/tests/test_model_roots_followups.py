@@ -187,7 +187,7 @@ class TestMediaCensorJobsSingleton:
         built = []
 
         class _SlowJobs:
-            def __init__(self, *, video_censor):
+            def __init__(self, *, video_censor, video_suffix):
                 built.append(self)
                 time.sleep(0.05)  # widen the window two callers could fall into
 

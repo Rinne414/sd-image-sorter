@@ -473,7 +473,7 @@ async def get_bulk_bundle(service: ModelService = Depends(get_model_service)):
         "excluded": [
             {"id": "censor-legacy", "reason": "Privacy YOLO (Wenaka2004) is opt-in for content-safety reasons."},
             {"id": "censor-anime", "reason": "The anime censor detector is opt-in for content-safety reasons, like Privacy YOLO."},
-            {"id": "video-ffmpeg", "reason": "ffmpeg is only needed to censor videos; it installs on first use."},
+            {"id": "video-ffmpeg", "reason": "ffmpeg is only needed to censor videos; it comes with video support (Settings), one download that also plays videos."},
             {"id": "style-map-umap", "reason": "The UMAP layout only sharpens the style map; the map works without it (PCA)."},
             {"id": "toriigate", "reason": "ToriiGate is a ~9.6 GB BF16 captioner, not a gallery tagger; Florence-2 already covers local captions."},
             {"id": "oppai-oracle", "reason": "OppaiOracle V1.1 is a ~947 MB alternative tagger; the default WD14 already covers tagging."},

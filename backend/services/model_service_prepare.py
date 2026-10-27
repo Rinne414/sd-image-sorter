@@ -326,16 +326,20 @@ def _prepare_model(service: Any, model_id: str, *, source: Optional[str] = None,
         }, dependency_result)
 
     if normalized_model_id == "video-ffmpeg":
-        dependency_result = _svc().ensure_group("video")
-        restart_result = _svc()._dependency_restart_result(normalized_model_id, dependency_result)
-        if restart_result:
-            return restart_result
-        return _svc()._with_dependency_result({
+        from services import video_censor
+
+        # Never a second download: video censoring runs on video support's ffmpeg.
+        if not video_censor.is_available():
+            raise ValueError(
+                "ffmpeg for video censoring comes with video support: install it from "
+                "Settings (one download that also plays videos in the library)."
+            )
+        return {
             "status": "ok",
             "model_id": normalized_model_id,
             "message": "ffmpeg for video censoring is ready.",
             "paths": {},
-        }, dependency_result)
+        }
 
     if normalized_model_id == "style-map-umap":
         dependency_result = _svc().ensure_group("umap")

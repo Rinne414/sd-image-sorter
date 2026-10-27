@@ -11,6 +11,18 @@ export interface MediaListing {
   video_ready: boolean
 }
 
+/** Which ffmpeg video censoring would use: video support's, imageio-ffmpeg's, or none (video support is then offered). */
+export interface MediaStatus {
+  video_ready: boolean
+  video_source: 'video_support' | 'imageio' | 'path' | null
+}
+
+export const mediaStatusQuery = {
+  queryKey: ['media-censor-status'],
+  queryFn: ({ signal }: { signal?: AbortSignal }) => rawJson<MediaStatus>('GET', '/api/censor/media/status', { signal }),
+  staleTime: 5_000,
+}
+
 export interface MediaStarted {
   job_id: string
   output_folder: string

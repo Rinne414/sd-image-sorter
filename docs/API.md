@@ -1540,14 +1540,24 @@ Structured errors can include:
 
 #### POST /api/censor/media/list
 Body `{"folder": "..."}`. GIFs and videos directly in the folder:
-`{gifs: [paths], videos: [paths], video_ready}`; `video_ready` says whether the
-optional ffmpeg component (Model Center card `video-ffmpeg`) is installed.
+`{gifs: [paths], videos: [paths], video_ready, video_source}`; `video_ready` says
+whether an ffmpeg to censor videos with is there, `video_source` which one:
+`video_support` (the ffmpeg of "Install video support", used first),
+`imageio` (the one the optional imageio-ffmpeg package ships, the fallback),
+`path` (a lone `ffmpeg` on the PATH) or null.
+
+#### GET /api/censor/media/status
+`{video_ready, video_source}` as above, without a folder. With neither
+ffmpeg the page offers `POST /api/video-support/install`: one download that
+serves video playback and video censoring. The Model Center card `video-ffmpeg`
+only reports this (`download_supported: false`; preparing it never downloads a
+second ffmpeg and answers 400 while none is installed).
 
 #### POST /api/censor/media/start
 Auto-censor every GIF (and, with `include_videos` and ffmpeg ready, every
 video) in `folder`, or, when `files` (a list of paths) is given, exactly those
 files (each must be an existing GIF or video, otherwise 400; `folder` is then
-ignored), into `output_folder` (default: the `video-censor` folder
+ignored), into `output_folder` (a censored video is H.264 in `.mp4` when the ffmpeg has x264, otherwise VP9 in `.webm`; default: the `video-censor` folder
 under the output root, see Output folders; outputs
 are `<name>_censored.gif` / `.mp4`, never replacing a file). Detector settings
 mirror `/api/censor/detect` (`model_type` nudenet / legacy / both,
