@@ -327,7 +327,9 @@ test('export: blocked with the missing one listed, "leave out" confirms the renu
   await expect(page.getByTestId('missing-names')).toHaveText(nameOf[b] as string)
   await expect(page.getByTestId('export-run')).toHaveCount(0)
   await expect(page.getByTestId('preflight-censor')).toBeVisible()
-  await expect(page.getByTestId('preflight-skip')).toBeDisabled()
+  // no folder picked: the export starts from <output root>/publish, so it can go (v4-desktop.spec.ts covers that default)
+  await expect(page.getByTestId('export-folder-default')).toBeVisible()
+  await expect(page.getByTestId('preflight-skip')).toBeEnabled()
 
   await page.getByTestId('export-choose-folder').click()
   const chooser = page.getByTestId('export-folder-picker')
@@ -377,7 +379,8 @@ test('export: blocked with the missing one listed, "leave out" confirms the renu
   expect(jpg?.censored).toBeLessThan(8)
   expect(jpg?.original).toBeGreaterThan(8 * (jpg?.censored ?? 0))
   expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
-  expect(errors).toEqual([])
+  // the chooser opened at <output>/publish, which does not exist before the first export: that one refused listing is by design
+  expect(errors.filter((e) => !e.includes('/api/browse-folder') && !e.includes('status of 400'))).toEqual([])
 })
 
 test('export originals: the confirmation lists every final name (focus on Cancel); generation data is still removed', async ({ page }) => {

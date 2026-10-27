@@ -2,6 +2,8 @@ import type { Batch } from '../../api/types'
 import { useT } from '../../i18n'
 import { useCensorPanel } from '../censor/panel'
 import { isDirty, keyOf, rememberImage, useCensorSession } from '../censor/session'
+import { useOutputFolders } from '../output/outputApi'
+import { defaultFolder } from '../output/outputFolders'
 import { patchBatch } from './batchApi'
 import { clearExportRun, runExport, useExportRuns } from './exportApi'
 import { exportBody, watermarkProblem, type ExportSettings, type MissingPolicy } from './exportSettings'
@@ -41,7 +43,10 @@ interface Props {
  */
 export function ExportStep({ batch, onGo }: Props) {
   const t = useT()
-  const [settings, update] = useExportSettings(batch)
+  const [chosen, update] = useExportSettings(batch)
+  // No folder picked: the export goes to <output root>/publish, the same folder the server uses for a blank one.
+  const fallback = defaultFolder(useOutputFolders().data, 'publish')
+  const settings = chosen.output_folder.trim() || !fallback ? chosen : { ...chosen, output_folder: fallback }
   const run = useExportRuns((s) => s.runs[batch.id])
   const unsaved = useUnsavedCensor(batch)
   const serverMissing = run?.state === 'failed' && run.failure.kind === 'missing' ? run.failure.ids : []
@@ -70,7 +75,7 @@ export function ExportStep({ batch, onGo }: Props) {
       <StepBar count={t('batch.pick.count', { n: batch.items.length })} hint={t('batch.export.hint')} />
       <div className={styles.body}>
         <div className={styles.formScroll}>
-          <ExportForm settings={settings} update={update} disabled={run?.state === 'running'} />
+          <ExportForm settings={chosen} update={update} disabled={run?.state === 'running'} />
         </div>
         <PreflightPanel
           batch={batch}

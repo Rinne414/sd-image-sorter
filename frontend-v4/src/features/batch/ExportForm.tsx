@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useT, type MessageKey } from '../../i18n'
 import { FolderChooser } from '../../ui/FolderChooser'
+import { useOutputFolders } from '../output/outputApi'
+import { defaultFolder, startFolder } from '../output/outputFolders'
 import {
   METADATA_OPTIONS,
   OUTPUT_FORMATS,
@@ -51,19 +53,28 @@ export function ExportForm({ settings, update, disabled }: Props) {
   const t = useT()
   const [choosing, setChoosing] = useState(false)
   const recent = useMemo(() => recentFolders(RECENT_KEY), [choosing])
+  // With no folder picked the export goes to <output root>/publish (Settings › Disk & cache).
+  const outputs = useOutputFolders().data
+  const fallback = defaultFolder(outputs, 'publish')
+  const shown = settings.output_folder || fallback || ''
 
   return (
     <fieldset className={styles.form} disabled={disabled} data-testid="export-form">
       <section className={styles.group}>
         <h3 className={styles.groupTitle}>{t('batch.export.folder')}</h3>
         <div className={styles.folderRow}>
-          <span className={`${styles.folder} mono`} data-empty={!settings.output_folder || undefined} data-testid="export-folder" title={settings.output_folder}>
-            {settings.output_folder || t('batch.export.folderNone')}
+          <span className={`${styles.folder} mono`} data-empty={!shown || undefined} data-default={(!settings.output_folder && fallback) || undefined} data-testid="export-folder" title={shown}>
+            {shown || t('batch.export.folderNone')}
           </span>
           <button type="button" className="btn" onClick={() => setChoosing(true)} data-testid="export-choose-folder">
             {t('batch.export.chooseFolder')}
           </button>
         </div>
+        {!settings.output_folder && fallback && (
+          <p className={styles.folderDefault} data-testid="export-folder-default">
+            {t('desktop.out.exportDefault', { path: fallback })}
+          </p>
+        )}
       </section>
 
       <section className={styles.group} role="radiogroup" aria-label={t('batch.export.meta')}>
@@ -117,7 +128,7 @@ export function ExportForm({ settings, update, disabled }: Props) {
         <FolderChooser
           title={t('batch.export.chooseTitle')}
           confirmLabel={t('batch.export.chooseOk')}
-          start={settings.output_folder || recent[0] || null}
+          start={startFolder(settings.output_folder, outputs, 'publish', recent)}
           shortcuts={[{ heading: t('batch.export.recentFolders'), paths: recent, testId: 'export-recent' }]}
           onChoose={async (target) => {
             update({ output_folder: target })

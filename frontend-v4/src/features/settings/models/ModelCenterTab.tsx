@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from 'react'
 import { useT } from '../../../i18n'
 import { useJobs } from '../../jobs/jobs'
+import { BackgroundSection } from '../background/BackgroundSection'
 import { useSaved } from '../useSaved'
 import { BulkDialog } from './BulkDialog'
 import { useModelQueue } from './bulkRun'
@@ -43,6 +44,7 @@ export function ModelCenterTab() {
       <Overview summary={summarize(cards)} onBulk={() => setBulkOpen(true)} />
       <Explainer />
       <MirrorChoice />
+      <BackgroundSection />
       <CardGroup title="mc.group.essentials" cards={essentials} lit={lit} testId="model-group-essentials" />
       <CardGroup title="mc.group.others" cards={others} lit={lit} testId="model-group-others" />
       {bulkOpen && <BulkDialog onClose={() => setBulkOpen(false)} />}

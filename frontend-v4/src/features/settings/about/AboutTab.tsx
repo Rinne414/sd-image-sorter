@@ -6,6 +6,7 @@ import { SupportSection } from './SupportSection'
 import { SystemSection } from './SystemSection'
 import { UpdateSection } from './UpdateSection'
 import { webLink } from './updateState'
+import { RefreshSection } from '../refresh/RefreshSection'
 
 /** Settings › About & updates: version, updates, privacy, this computer, support. */
 export function AboutTab() {
@@ -15,6 +16,7 @@ export function AboutTab() {
       <UpdateSection />
       <PrivacySection />
       <SystemSection />
+      <RefreshSection />
       <SupportSection />
     </div>
   )

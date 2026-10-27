@@ -25,6 +25,11 @@ export const SETTINGS_PAGES: readonly SettingsTabEntry[] = [
   { id: 'ai', label: 'settings.tab.ai', page: lazy(() => import('./ai/AiTab').then((m) => ({ default: m.AiTab }))) },
   { id: 'disk', label: 'settings.tab.disk', page: lazy(() => import('./disk/DiskTab').then((m) => ({ default: m.DiskTab }))) },
   {
+    id: 'desktop',
+    label: 'desktop.tab',
+    page: lazy(() => import('./desktop/DesktopTab').then((m) => ({ default: m.DesktopTab }))),
+  },
+  {
     id: 'about',
     label: 'settings.tab.about',
     page: lazy(() => import('./about/AboutTab').then((m) => ({ default: m.AboutTab }))),
