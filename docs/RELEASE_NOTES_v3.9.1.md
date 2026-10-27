@@ -22,8 +22,8 @@ Checks cover folder pictures; exact tokens per model; unreadable pictures keep A
   - 清理重复图以前说“已移动 N 张”，N 是要移动的数量；现在会说实际移了几张、其余为什么没移。移进回收站但图库条目没能删掉的图会说明。手动排序存不了进度时会提示。留/汰整理里没能存进收藏的决定会保留“重试”。AI caption 不再把错误回应当成“完成！0 张”。合并导出失败会说明原因。13 处错误提示以前只显示“HTTP 500”，现在显示原因。
 - **Controls no longer stay stuck / 按钮不再卡住**: GIF/video censoring kept Start greyed out after one poll got no answer; it keeps asking, says when it lost contact and when it is back, and frees Start for a job the program no longer knows. The restart banner's buttons work again when a restart never comes back. A Vopus sort-by-rules undo that left some images can run again for them.
   - GIF/视频打码只要一次轮询没有回应，“开始”就一直灰着；现在会继续询问，失去联系和恢复时都会提示，程序已不认得的任务会让“开始”恢复可用。重启一直没回来时，重启横幅上的按钮会恢复可用。Vopus 按规则整理的撤销若有几张没能还原，可以再撤销一次。
-- **Readable at a glance / 一眼看得清**: On light pictures the Dataset Maker grid's queue numbers and file names were nearly invisible (1.03:1 contrast); they sit on a dark backdrop now. The Censor queue's "1 selected" no longer wraps into two lines beside All / None / Filter. The folder browser opens the nearest folder that exists and says why, instead of jumping to the drive list.
-  - 在浅色图片上，数据集制作网格里的序号和文件名几乎看不见（对比度 1.03:1）；现在有深色底衬。打码队列里的“已选 1 张”不再挤成两行。文件夹浏览器打不开某个文件夹时，会打开最近一层能打开的文件夹并说明原因，不再直接跳到驱动器列表。
+- **Readable at a glance / 一眼看得清**: On light pictures the Dataset Maker grid's queue numbers and file names were nearly invisible (1.03:1 contrast); they sit on a dark backdrop now. The Censor queue's "1 selected" no longer wraps into two lines beside All / None / Filter. The folder browser opens the nearest folder that exists and says why, instead of jumping to the drive list. The gallery's search row stays on one line at every desktop width; it broke onto two at 1280 in English, between 1536 and 1680 with a video library and at 2560 in Chinese.
+  - 在浅色图片上，数据集制作网格里的序号和文件名几乎看不见（对比度 1.03:1）；现在有深色底衬。打码队列里的“已选 1 张”不再挤成两行。文件夹浏览器打不开某个文件夹时，会打开最近一层能打开的文件夹并说明原因，不再直接跳到驱动器列表。图库的搜索栏在各种桌面宽度下都保持一行；以前英文在 1280、有视频的图库在 1536 到 1680、中文在 2560 时会折成两行。
 
 ---
 
