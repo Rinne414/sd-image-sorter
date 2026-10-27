@@ -37,12 +37,17 @@ The response reports partial failures per image instead of hiding them. The
 backend must not fall back to permanent deletion when trash is unavailable.
     """,
 )
-async def delete_selected_images(
+def delete_selected_images(
     request: DeleteSelectedImagesRequest,
     background_tasks: BackgroundTasks,
     service: ImageService = Depends(get_image_service),
 ):
-    """Move selected image files to OS trash with partial-failure reporting."""
+    """Move selected image files to OS trash with partial-failure reporting.
+
+    A plain ``def``, so FastAPI runs it in its threadpool: each file takes a
+    Recycle Bin call (~35 ms), and on the event loop a few hundred of them
+    froze every other request.
+    """
     if not request.confirm_delete_files:
         raise HTTPException(
             status_code=400,

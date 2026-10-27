@@ -348,11 +348,15 @@ async def get_ai_jobs_endpoint():
         403: {"description": "Cannot read directory"},
     }
 )
-async def browse_folder(
+def browse_folder(
     request: BrowseFolderRequest,
     service: SortingService = Depends(get_sorting_service),
 ):
-    """Browse a folder and list its subdirectories."""
+    """Browse a folder and list its subdirectories.
+
+    A plain ``def`` (threadpool): listing a wide folder or a slow drive looks
+    into every subfolder and must not hold up other requests.
+    """
     return service.browse_folder(request.path)
 
 
