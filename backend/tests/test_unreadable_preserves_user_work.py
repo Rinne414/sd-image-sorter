@@ -15,9 +15,10 @@ with no prompt and no notice, and "Find Moved Files" restores the row but cannot
 restore the tags. Hours of tagging could vanish because a USB drive was not
 plugged in when the gallery loaded.
 
-Content-derived caches (fingerprint, embedding, aesthetic score) are still
-cleared, because those must be recomputed from pixels we can no longer read.
-What the user typed or chose is kept.
+Content-derived work (fingerprint, embedding, captions, scores) is kept too:
+it still describes these pixels, and a caption from a paid cloud model costs
+money to make again. The next readable scan compares digests and decides
+(tests/test_unreadable_keeps_pixel_work.py).
 """
 
 from __future__ import annotations
@@ -72,8 +73,13 @@ class TestMarkingAnImageUnreadableKeepsWhatTheUserMade:
         assert row["metadata_status"] == "error"
         assert row["read_error"]
 
-    def test_pixel_derived_caches_are_still_cleared(self, test_db):
-        """Anything that must be recomputed from pixels we cannot read must go."""
+    def test_pixel_derived_work_survives_a_file_going_missing(self, test_db):
+        """This used to assert the work was cleared, which pinned a loss.
+
+        Nothing about the pixels changed, so what was worked out from them still
+        holds; a scan that can read the file again compares digests and drops it
+        only when the picture really changed.
+        """
         image_id = db.add_image(path=r"L:\lib\derived.png", filename="derived.png")
         with db.get_db() as conn:
             conn.execute(
@@ -102,11 +108,11 @@ class TestMarkingAnImageUnreadableKeepsWhatTheUserMade:
                 """,
                 (image_id,),
             ).fetchone()
-        assert row["content_fingerprint"] is None
-        assert row["embedding"] is None
-        assert row["aesthetic_score"] is None
-        assert row["ai_rating"] is None
-        assert row["ai_caption"] is None
+        assert row["content_fingerprint"] == "abc123"
+        assert row["embedding"] == b"\x00"
+        assert row["aesthetic_score"] == 7.5
+        assert str(row["ai_rating"]) == "4"
+        assert row["ai_caption"] == "a cached caption"
 
 
 class TestScanningDoesNotDestroyTags:

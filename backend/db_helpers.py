@@ -677,9 +677,14 @@ def _should_clear_derived_state(
     source_changed: bool,
     mark_unreadable: bool,
 ) -> bool:
-    """Decide whether the source change invalidates cached derived data."""
+    """Decide whether the source change invalidates cached derived data.
+
+    A write that could not read the file learned nothing about its pixels, so
+    it never invalidates anything: the tags, captions, scores, embedding and
+    digest stay until a scan that can read the file compares digests.
+    """
     if mark_unreadable:
-        return True
+        return False
     if not _has_derived_state(existing_row):
         return False
 
@@ -725,6 +730,26 @@ def _should_withhold_source_fingerprint(
         return False
     if _normalize_content_fingerprint(record.get("content_fingerprint")) is not None:
         return False
+    return _normalize_content_fingerprint(_row_value(existing_row, "content_fingerprint")) is not None
+
+
+def _should_hold_source_pair_while_unreadable(
+    existing_row: Optional[Dict[str, Any]],
+    *,
+    mark_unreadable: bool,
+) -> bool:
+    """An unreadable write keeps the last readable mtime/size.
+
+    The row keeps its digest and what was derived from it (see
+    ``_should_clear_derived_state``). Storing the unreadable file's mtime/size
+    next to that digest would let the next scan call the file unchanged and
+    trust a digest of pixels it never compared; keeping the old pair makes the
+    next scan read the file again, and its digest decides what stays.
+    """
+    if not mark_unreadable:
+        return False
+    if _has_derived_state(existing_row):
+        return True
     return _normalize_content_fingerprint(_row_value(existing_row, "content_fingerprint")) is not None
 
 

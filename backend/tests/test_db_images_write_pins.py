@@ -403,7 +403,7 @@ class TestReadabilityAndDerivedState:
         assert row["content_fingerprint"] == "fp-1"
         assert _tag_count(image_id) == 1
 
-    def test_mark_image_unreadable_clears_pixel_caches_but_keeps_the_tags(self, test_db):
+    def test_mark_image_unreadable_keeps_the_tags_and_the_pixel_work(self, test_db):
         """An unreachable file is not a changed file, so the tags still hold.
 
         This assertion used to require ``_tag_count == 0``, which pinned a
@@ -423,9 +423,11 @@ class TestReadabilityAndDerivedState:
         assert row["is_readable"] == 0
         assert row["read_error"] == "Truncated File Read"
         assert row["metadata_status"] == "error"
-        # Recomputed from pixels we can no longer read, so these must go.
-        assert row["tagged_at"] is None
-        assert row["content_fingerprint"] is None
+        # Not recomputed on a guess either: these used to be cleared, so a
+        # different picture back at the path had no digest to compare and kept
+        # the old picture's tags. The next readable scan's digest decides.
+        assert row["tagged_at"] is not None
+        assert row["content_fingerprint"] == "fp-1"
         # Entered against this image, and unrecoverable if dropped.
         assert _tag_count(image_id) == 1
 
@@ -464,9 +466,9 @@ class TestReadabilityAndDerivedState:
             assert row["is_readable"] == 0
             assert row["read_error"] == "File not found on disk"
             assert row["metadata_status"] == "error"
-            assert row["tagged_at"] is None
-            assert row["content_fingerprint"] is None
-            # Same rule as mark_image_unreadable: pixel caches go, tags stay.
+            assert row["tagged_at"] is not None
+            assert row["content_fingerprint"] == "fp-1"
+            # Same rule as mark_image_unreadable: nothing derived goes.
             assert _tag_count(image_id) == 1
 
         unrelated_id = image_ids_by_path[unrelated_path]

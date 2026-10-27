@@ -1040,17 +1040,21 @@ class TestImageCRUD:
         row = db.get_image_by_id(image_id)
         assert row["is_readable"] == 0
         assert row["metadata_status"] == "error"
-        # Recomputed from pixels we can no longer read, so these must go even
-        # though the caller asked to preserve derived state.
-        assert row["ai_caption"] is None
-        assert row["aesthetic_score"] is None
+        # A rewrite that could not read the file learned nothing about its
+        # pixels: the work derived from them stays (this used to assert it was
+        # cleared), and so does the last readable mtime/size, so the next scan
+        # reads the file again and its digest decides.
+        assert row["ai_caption"] == "stale caption"
+        assert row["aesthetic_score"] == 5.0
         with db.get_db() as conn:
-            embedding_value = conn.execute(
-                "SELECT embedding FROM images WHERE id = ?",
+            kept = conn.execute(
+                "SELECT embedding, content_fingerprint, source_mtime_ns, source_size FROM images WHERE id = ?",
                 (image_id,),
-            ).fetchone()["embedding"]
-        assert embedding_value is None
-        # ...but the labels stay. This used to assert they were deleted, which
+            ).fetchone()
+        assert kept["embedding"] == b"old-embedding"
+        assert kept["content_fingerprint"] == "fingerprint-1"
+        assert (kept["source_mtime_ns"], kept["source_size"]) == (100, 200)
+        # The labels stay as well. This used to assert they were deleted, which
         # pinned a data-loss bug: an unreadable mark means we could not look at
         # the file, not that the file changed, and the same write happens when a
         # scan meets a disconnected drive. Tags and predictions still describe

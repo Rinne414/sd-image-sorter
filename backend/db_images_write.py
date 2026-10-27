@@ -76,6 +76,7 @@ from db_helpers import (
     _is_source_fingerprint_changed,
     _should_clear_derived_state,
     _should_forget_content_fingerprint,
+    _should_hold_source_pair_while_unreadable,
     _should_withhold_source_fingerprint,
 )
 
@@ -299,13 +300,18 @@ def _upsert_image_record(
         source_changed = _is_source_fingerprint_changed(existing_row, record)
         incoming_source_mtime_ns = record.get("source_mtime_ns")
         incoming_source_size = record.get("source_size")
-        if metadata_status == "pending" or _should_withhold_source_fingerprint(
-            existing_row, record
+        if (
+            metadata_status == "pending"
+            or _should_withhold_source_fingerprint(existing_row, record)
+            or _should_hold_source_pair_while_unreadable(
+                existing_row, mark_unreadable=mark_unreadable
+            )
         ):
             # Placeholder scan rows should not consume the new source fingerprint
             # before the final metadata backfill has a chance to compare pixels.
             # Nor should a backfill that could not hash an incomparable row with
-            # derived state: the next scan's digest decides what to keep.
+            # derived state, or a scan that could not read the file at all: the
+            # next readable scan's digest decides what to keep.
             incoming_source_mtime_ns = None
             incoming_source_size = None
         if _should_clear_derived_state(
@@ -314,15 +320,8 @@ def _upsert_image_record(
             source_changed=source_changed,
             mark_unreadable=mark_unreadable,
         ):
-            # A scan that could not read the file has learned nothing about its
-            # pixels, so it may only drop the pixel caches. Deleting the tags
-            # here is the same data loss as mark_image_unreadable used to cause,
-            # reached by re-scanning with a drive disconnected.
-            if mark_unreadable:
-                _clear_image_pixel_caches(cursor, image_id)
-            else:
-                _clear_image_derived_state(cursor, image_id)
-        elif _should_forget_content_fingerprint(
+            _clear_image_derived_state(cursor, image_id)
+        elif not mark_unreadable and _should_forget_content_fingerprint(
             existing_row, record, source_changed=source_changed
         ):
             # The COALESCE below would otherwise keep a digest of pixels that
@@ -613,13 +612,19 @@ def update_image_metadata(
         mark_unreadable = (is_readable is False)
         stored_source_mtime_ns = source_mtime_ns
         stored_source_size = source_size
-        if metadata_status_normalized == "pending" or _should_withhold_source_fingerprint(
-            existing_row,
-            {
-                "source_mtime_ns": source_mtime_ns,
-                "source_size": source_size,
-                "content_fingerprint": content_fingerprint,
-            },
+        if (
+            metadata_status_normalized == "pending"
+            or _should_withhold_source_fingerprint(
+                existing_row,
+                {
+                    "source_mtime_ns": source_mtime_ns,
+                    "source_size": source_size,
+                    "content_fingerprint": content_fingerprint,
+                },
+            )
+            or _should_hold_source_pair_while_unreadable(
+                existing_row, mark_unreadable=mark_unreadable
+            )
         ):
             # Same rule as _upsert_image_record: a placeholder must not consume
             # the new mtime/size, or the backfill that follows could no longer
@@ -654,13 +659,8 @@ def update_image_metadata(
             )
             and not can_preserve_derived_state
         ):
-            # Same rule as the upsert above: unreadable means we could not look,
-            # not that the image changed.
-            if mark_unreadable:
-                _clear_image_pixel_caches(cursor, image_id)
-            else:
-                _clear_image_derived_state(cursor, image_id)
-        elif _should_forget_content_fingerprint(
+            _clear_image_derived_state(cursor, image_id)
+        elif not mark_unreadable and _should_forget_content_fingerprint(
             existing_row,
             {
                 "source_mtime_ns": source_mtime_ns,

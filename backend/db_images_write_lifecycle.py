@@ -15,10 +15,10 @@ The derived-state clear helpers stay in ``db_images_write``
 (tests/test_derived_state_contract.py pins their writer statements to that
 filename); the from-import below binds the SAME function object.
 
-The unreadable transitions call ``_clear_image_pixel_caches``, NOT
-``_clear_image_derived_state``: an unreachable file is not a changed file, so the
-pixel-derived caches go and the tags stay. Deleting them here is unrecoverable
-once a reconnect hands the row back.
+The unreadable transitions clear nothing: an unreachable file is not a changed
+file, so its tags, captions, scores, embedding and digest stay. The next scan
+that can read the file compares digests and drops the machine's work only when
+the pixels differ; a reconnect hands the row back with everything on it.
 
 Imports only from db_core / db_helpers / utils.source_paths /
 utils.reported_cause / db_images_write / stdlib; it must not import from
@@ -39,7 +39,7 @@ from db_helpers import (
     _normalize_indexed_image_path,
     _path_query_match_clause,
 )
-from db_images_write import _clear_image_pixel_caches, _sync_image_path_identity
+from db_images_write import _sync_image_path_identity
 
 
 def reconnect_image_source_path(
@@ -234,12 +234,12 @@ def _stored_unreadable_cause(read_error: Optional[str]) -> Optional[str]:
 def mark_image_unreadable(image_id: int, read_error: Optional[str]) -> None:
     """Mark an indexed image as unreadable so normal workflows exclude it.
 
-    Clears the pixel caches only. This runs on the "file not found" path — and
-    ``ImageService._filter_and_mark_missing_images`` reaches it from an ordinary
-    gallery listing — so an unplugged drive plus one page load used to delete
-    every tag on that drive with no prompt and no notice. Nothing about the
-    image changed; we just cannot see it, and ``reconnect_image_source_path``
-    can hand the row back at any time.
+    Clears nothing derived from the picture. This runs on the "file not found"
+    path, and ``ImageService._filter_and_mark_missing_images`` reaches it from
+    an ordinary gallery listing, so an unplugged drive plus one page load used
+    to delete every tag, AI caption, score and embedding on that drive with no
+    prompt and no notice. Nothing about the image changed; we just cannot see
+    it, and ``reconnect_image_source_path`` can hand the row back at any time.
     """
     stored_cause = _stored_unreadable_cause(read_error)
     with get_db() as conn:
@@ -251,10 +251,11 @@ def mark_images_unreadable(checked_paths: Dict[int, str], read_error: Optional[s
     """Mark rows unreadable in one transaction (same rule as ``mark_image_unreadable``).
 
     ``checked_paths`` maps each id to the path that was found missing; a row
-    whose path changed since (a move in between) is left as it is. Returns the
-    ids that were marked. The gallery listing marks every file it cannot find,
-    and a connection and a commit per row (~6 ms) held the listing of a library
-    on an unplugged drive for minutes.
+    whose path changed since (a move in between) is left as it is: the path is
+    part of the UPDATE itself, so no move can slip between check and mark.
+    Returns the ids that were marked. The gallery listing marks every file it
+    cannot find, and a connection and a commit per row (~6 ms) held the listing
+    of a library on an unplugged drive for minutes.
     """
     if not checked_paths:
         return []
@@ -263,35 +264,37 @@ def mark_images_unreadable(checked_paths: Dict[int, str], read_error: Optional[s
     with get_db() as conn:
         cursor = conn.cursor()
         for image_id, checked_path in checked_paths.items():
-            row = cursor.execute("SELECT path FROM images WHERE id = ?", (image_id,)).fetchone()
-            if row is None or row[0] != checked_path:
-                continue
-            _mark_unreadable(cursor, image_id, stored_cause)
-            marked.append(image_id)
+            if _mark_unreadable(cursor, image_id, stored_cause, only_at_path=checked_path):
+                marked.append(image_id)
     if marked:
         _invalidate_tags_cache()
     return marked
 
 
-def _mark_unreadable(cursor, image_id: int, stored_cause: Optional[str]) -> None:
-    _clear_image_pixel_caches(cursor, image_id)
+def _mark_unreadable(
+    cursor, image_id: int, stored_cause: Optional[str], *, only_at_path: Optional[str] = None
+) -> bool:
+    """Flag one row unreadable (optionally only while it has ``only_at_path``)."""
+    path_clause = "" if only_at_path is None else " AND path = ?"
+    path_params = () if only_at_path is None else (only_at_path,)
     cursor.execute(
-        """
+        f"""
         UPDATE images
         SET is_readable = 0,
             read_error = ?,
             metadata_status = 'error',
             indexed_at = CURRENT_TIMESTAMP
-        WHERE id = ?
+        WHERE id = ?{path_clause}
         """,
-        (stored_cause, image_id),
+        (stored_cause, image_id, *path_params),
     )
+    return cursor.rowcount > 0
 
 def mark_image_unreadable_by_path(path: str, read_error: Optional[str]) -> None:
     """Mark an existing image row as unreadable based on its file path.
 
-    Same rule as ``mark_image_unreadable``: pixel caches only, because being
-    unreachable is not the same fact as having changed.
+    Same rule as ``mark_image_unreadable``: nothing derived from the picture is
+    cleared, because being unreachable is not the same fact as having changed.
     """
     candidates = build_indexed_image_lookup_candidates(path)
     if not candidates:
@@ -300,24 +303,6 @@ def mark_image_unreadable_by_path(path: str, read_error: Optional[str]) -> None:
     with get_db() as conn:
         cursor = conn.cursor()
         clause, params = _path_query_match_clause(candidates)
-        last_image_id = 0
-        batch_size = 500
-        while True:
-            rows = cursor.execute(
-                f"""
-                SELECT id
-                FROM images
-                WHERE ({clause}) AND id > ?
-                ORDER BY id
-                LIMIT ?
-                """,
-                [*params, last_image_id, batch_size],
-            ).fetchall()
-            if not rows:
-                break
-            for row in rows:
-                _clear_image_pixel_caches(cursor, row["id"])
-            last_image_id = int(rows[-1]["id"])
         cursor.execute(
             f"""
             UPDATE images
