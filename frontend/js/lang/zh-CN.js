@@ -358,6 +358,7 @@ window.I18nLang_zhCN = {
     'comfort.warmthWarm': '暖',
     'gallery.loading': '正在加载图片...',
     'gallery.loadMore': '加载更多',
+    'gallery.refreshingInPlace': '正在更新图库…',
     'gallery.loadImagesFailed': '加载图片失败',
     'gallery.random': '随机',
     'gallery.randomTooltip': '从当前筛选结果中随机跳转到一张图片',

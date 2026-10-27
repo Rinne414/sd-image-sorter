@@ -356,6 +356,7 @@ window.I18nLang_en = {
     'comfort.warmthWarm': 'Warm',
     'gallery.loading': 'Loading images...',
     'gallery.loadMore': 'Load More Images',
+    'gallery.refreshingInPlace': 'Updating the gallery…',
     'gallery.loadImagesFailed': 'Failed to load images',
     'gallery.random': 'Random',
     'gallery.randomTooltip': 'Jump to a random image from the current filter',

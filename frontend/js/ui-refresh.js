@@ -213,7 +213,8 @@
             this._setButton('#empty-state-scan-btn', 'action.scan', 'i-folder', 'action.scan');
             // v3.2.2: also localize the new "Clear all filters" button
             this._setButton('#empty-state-clear-filters-btn', 'gallery.clearFilters', 'i-broom', 'gallery.clearFilters');
-            this._setText('#load-more-btn', 'gallery.loadMore');
+            // An in-place refresh puts its own key on the button meanwhile.
+            this._setText('#load-more-btn', document.getElementById('load-more-btn')?.dataset.i18n || 'gallery.loadMore');
             this._setText('#gallery-loading span', 'gallery.loading');
             this._setSummaryStrongs('#autosep-filter-summary', [
                 'summary.generators',

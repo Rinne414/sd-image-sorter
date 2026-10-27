@@ -260,22 +260,35 @@ Object.assign(window.Gallery, {
 
         if (!anchorItem?.dataset?.id) return null;
 
+        // When the reader's own picture leaves the results (deleted, moved out,
+        // filtered away), the nearest one that stays takes its place: the ones
+        // after it first, since they move up into its slot, then the ones before.
+        const NEIGHBOURS = 24;
+        const index = this._findImageIndexById(anchorItem.dataset.id);
+        const neighbours = index < 0 ? [] : [
+            ...this.images.slice(index + 1, index + 1 + NEIGHBOURS),
+            ...this.images.slice(Math.max(0, index - NEIGHBOURS), index).reverse(),
+        ].map((image) => String(image.id));
+
         return {
             imageId: anchorItem.dataset.id,
-            offset: anchorItem.getBoundingClientRect().top - scrollRect.top
+            offset: anchorItem.getBoundingClientRect().top - scrollRect.top,
+            neighbours,
         };
     },
 
     _restoreViewAnchor(anchor) {
         if (!anchor?.imageId) return false;
+        const imageId = [anchor.imageId, ...(anchor.neighbours || [])]
+            .find((id) => this._findImageIndexById(id) >= 0);
+        if (imageId === undefined) return false;
 
         const grid = document.getElementById('gallery-grid');
         const scrollContainer = this._getScrollContainer();
         if (!grid || !scrollContainer) return false;
         const isViewportScroll = this._isViewportScrollContainer(scrollContainer);
 
-        const targetIndex = this._findImageIndexById(anchor.imageId);
-        if (targetIndex < 0) return false;
+        const targetIndex = this._findImageIndexById(imageId);
 
         const currentPageTop = window.pageYOffset || document.documentElement.scrollTop || 0;
         const gridOffsetTop = isViewportScroll
@@ -292,14 +305,14 @@ Object.assign(window.Gallery, {
         };
 
         if (this.useVirtualScroll && this.virtualList) {
-            const layout = this.virtualList.getLayoutForIndex?.(targetIndex) || this.virtualList.getLayoutForKey?.(anchor.imageId);
+            const layout = this.virtualList.getLayoutForIndex?.(targetIndex) || this.virtualList.getLayoutForKey?.(imageId);
             if (!layout) return false;
             applyScroll(layout.top);
             return true;
         }
 
         const targetItem = Array.from(grid.querySelectorAll('.gallery-item'))
-            .find((item) => item.dataset.id === String(anchor.imageId));
+            .find((item) => item.dataset.id === String(imageId));
 
         if (!targetItem) return false;
 

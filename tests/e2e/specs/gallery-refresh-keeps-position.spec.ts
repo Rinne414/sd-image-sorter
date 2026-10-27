@@ -318,3 +318,55 @@ test('two refreshes that overlap still leave you on your image', async ({ page }
   expect(top).not.toBeNull()
   expect(Math.abs(top! - reader.top)).toBeLessThanOrEqual(4)
 })
+
+for (const count of [90, 400]) {
+  test(`when your own picture leaves the results, the next one takes its place (${count} results)`, async ({ page }) => {
+    const gallery = await mockPagedGallery(page, count)
+    await openGallery(page)
+
+    const reader = await readAt(page, 60)
+    // A deleted selection: the reader's picture and ten above it. Keeping the
+    // scroll offset alone would land rows further on; the picture after the
+    // reader's takes its place instead.
+    const { nextId, above } = await page.evaluate((id) => {
+      const images = (window as any).App.AppState.images
+      const index = images.findIndex((image: { id: number }) => String(image.id) === id)
+      return {
+        nextId: String(images[index + 1].id),
+        above: images.slice(index - 30, index - 20).map((image: { id: number }) => image.id),
+      }
+    }, reader.imageId)
+    gallery.deleted.add(Number(reader.imageId))
+    for (const id of above) gallery.deleted.add(id)
+    const requestsBefore = gallery.requests()
+    await page.evaluate(() => { void (window as any).App.loadImages(false, { keepPosition: true }) })
+    await waitForRefreshSettled(page, gallery, requestsBefore)
+
+    expect(await imageTop(page, reader.imageId)).toBeNull()
+    await expect.poll(() => imageTop(page, nextId)).not.toBeNull()
+    const top = await imageTop(page, nextId)
+    expect(Math.abs(top! - reader.top), `next ${nextId} at ${top}, reader was at ${reader.top}`).toBeLessThanOrEqual(4)
+  })
+}
+
+test('a long refresh in place says so in the Load More row, then gives the button back', async ({ page }) => {
+  const gallery = await mockPagedGallery(page, 400)
+  await openGallery(page)
+  const button = page.locator('#load-more-btn')
+  await expect(button).toHaveText('Load More Images')
+
+  // Load More is held while every loaded page is fetched again; past a moment the row says why.
+  const release = gallery.holdNext()
+  const requestsBefore = gallery.requests()
+  await page.evaluate(() => { void (window as any).App.loadImages(false, { keepPosition: true }) })
+  await expect(button).toHaveText('Updating the gallery…')
+  await expect(button).toBeDisabled()
+  await expect(page.locator('#gallery-load-more')).toHaveAttribute('aria-busy', 'true')
+
+  release()
+  await waitForRefreshSettled(page, gallery, requestsBefore)
+  await expect(button).toHaveText('Load More Images')
+  await expect(button).toBeEnabled()
+  await expect(button).toHaveAttribute('aria-label', 'Load more images')
+  await expect(page.locator('#gallery-load-more')).not.toHaveAttribute('aria-busy', 'true')
+})

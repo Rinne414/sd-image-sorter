@@ -98,6 +98,43 @@ async function fetchGalleryFromStart(filters, targetCount, pageLimit, signal) {
     return { ...page, images, total: first.total };
 }
 
+// A refresh in place (keepPosition) keeps the grid and holds Load More while
+// every loaded page is fetched again. When that takes a moment, the Load More
+// row says so instead of sitting idle where the reader waits for more.
+const GALLERY_REFRESH_NOTICE_DELAY_MS = 600;
+const GALLERY_REFRESH_NOTICE_KEY = 'gallery.refreshingInPlace';
+let _galleryRefreshNoticeTimer = null;
+
+function _setLoadMoreButtonKey(button, key, ariaKey, fallback, ariaFallback) {
+    // The keys move with the text, so a language switch meanwhile reads right.
+    button.dataset.i18n = key;
+    button.dataset.i18nAria = ariaKey;
+    button.textContent = appT(key, fallback);
+    button.setAttribute('aria-label', appT(ariaKey, ariaFallback));
+}
+
+function _showGalleryRefreshNotice() {
+    _galleryRefreshNoticeTimer = null;
+    const row = $('#gallery-load-more');
+    const button = $('#load-more-btn');
+    if (!row || !button) return;
+    row.style.display = 'flex';
+    row.setAttribute('aria-busy', 'true');
+    button.disabled = true;
+    _setLoadMoreButtonKey(button, GALLERY_REFRESH_NOTICE_KEY, GALLERY_REFRESH_NOTICE_KEY,
+        'Updating the gallery…', 'Updating the gallery…');
+}
+
+function _clearGalleryRefreshNotice() {
+    clearTimeout(_galleryRefreshNoticeTimer);
+    _galleryRefreshNoticeTimer = null;
+    const button = $('#load-more-btn');
+    if (!button || button.dataset.i18n !== GALLERY_REFRESH_NOTICE_KEY) return;
+    button.disabled = false;
+    _setLoadMoreButtonKey(button, 'gallery.loadMore', 'a11y.loadMoreImages', 'Load More Images', 'Load more images');
+    $('#gallery-load-more')?.removeAttribute('aria-busy');
+}
+
 async function loadImages(appendMode = false, options = {}) {
     if (typeof appendMode === 'object') {
         options = appendMode;
@@ -175,6 +212,11 @@ async function loadImages(appendMode = false, options = {}) {
     }
 
     AppState.isLoading = true;
+    // A newer load takes over whatever an earlier refresh showed.
+    _clearGalleryRefreshNotice();
+    if (keepsPosition) {
+        _galleryRefreshNoticeTimer = setTimeout(_showGalleryRefreshNotice, GALLERY_REFRESH_NOTICE_DELAY_MS);
+    }
     const galleryLoading = $('#gallery-loading');
     const showsLoading = !silent && !keepsPosition;
     if (galleryLoading && showsLoading) galleryLoading.style.display = 'flex';
@@ -317,6 +359,7 @@ async function loadImages(appendMode = false, options = {}) {
         if (isActiveLoad) {
             _activeImageLoadSequence = 0;
             AppState.isLoading = false;
+            _clearGalleryRefreshNotice();
             if (galleryLoading && !silent) {
                 galleryLoading.style.display = 'none';
             }
