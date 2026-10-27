@@ -505,10 +505,14 @@ test('pollProgress completion stops polling, renders the summary, refreshes gall
     w.loadImages = () => { loadImagesCalls += 1 }
     w.loadStats = () => { loadStatsCalls += 1 }
     let event: any = null
-    document.addEventListener('vlmBatchCompleted', (e: any) => { event = e.detail }, { once: true })
+    // the event is the last step of a finished poll (after the stop, the summary and the refresh)
+    const completed = new Promise<void>((resolve) => {
+      document.addEventListener('vlmBatchCompleted', (e: any) => { event = e.detail; resolve() }, { once: true })
+    })
     V.isRunning = true
     V.startPolling() // registers interval + fires an immediate pollProgress()
-    await new Promise((r) => setTimeout(r, 150))
+    // that poll is a real fetch: a busy machine can take far longer than a fixed 150 ms
+    await Promise.race([completed, new Promise((r) => setTimeout(r, 10_000))])
     V.stopPolling()
     return {
       isRunning: V.isRunning,
