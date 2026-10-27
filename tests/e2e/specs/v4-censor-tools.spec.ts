@@ -287,6 +287,9 @@ test('the bar shows the export name the server computes; F2 sets an own name, em
   await page.getByTestId('censor-rename').click()
   await page.getByTestId('censor-rename-input').fill('')
   await page.getByTestId('censor-rename-ok').click()
+  // The bar and its name preview update at once (the rule's name is still
+  // cached); the dialog closes only when the server confirmed the save.
+  await expect(dialog).toHaveCount(0)
   await expect(shown).toHaveText(byRule as string)
   expect((await apiItem(page, a)).output_name).toBeNull()
 })
