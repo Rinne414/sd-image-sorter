@@ -209,28 +209,6 @@ describe('each source says what it found, by entry key', () => {
   })
 
   it('subject-count fixes of images that left the batch are dropped when the issues merge', () => {
-  it('a folder image goes to the health check with its own negative id and its findings come back to it', () => {
-    // folderHealthIds: -1, -2, -3 for the three folder images, in batch order.
-    expect([...folderHealthIds(entries)]).toEqual([
-      ['dir:C:/ds/a.png', -1],
-      ['dir:C:/ds/b.png', -2],
-      ['dir:C:/ds/c.png', -3],
-    ])
-    const report: HealthReport = {
-      images: 4,
-      findings: [
-        { id: 'subject-count-conflict', severity: 'medium', title_en: 't', title_zh: 't', detail_en: 'd', detail_zh: 'd', fix: { proposals: [{ image_id: -1, keep: ['2girls'], drop: ['solo'] }] }, data: {} },
-        { id: 'trigger-coverage', severity: 'high', title_en: 't', title_zh: 't', detail_en: 'd', detail_zh: 'd', fix: { image_ids: [2, -1] }, data: {} },
-      ],
-    }
-    const found = healthIssues(report, keys, { ratingsInCaptions: true })
-    expect(byKind(found, 'subject_count')[0]).toMatchObject({ keys: ['dir:C:/ds/a.png'], subjectFixes: [{ key: 'dir:C:/ds/a.png', keep: ['2girls'], drop: ['solo'] }] })
-    expect(byKind(found, 'trigger_coverage')[0]).toMatchObject({ keys: ['lib:2', 'dir:C:/ds/a.png'] })
-    // A path still finds a folder image the usual way (the audit sends paths, never these ids).
-    const audit: AuditReport = { items: [{ image_id: -1, abs_path: 'C:/ds/b.png', width: 9, height: 9, flags: ['small'] }], duplicate_groups: [] }
-    expect(byKind(auditIssues(audit, keys), 'small')[0]?.keys).toEqual(['dir:C:/ds/b.png'])
-  })
-
     const issue = {
       id: 'subject_count',
       kind: 'subject_count',

@@ -230,6 +230,7 @@ test.describe('subject-count fixes in the health check', () => {
     await expect(box.locator('.dchk-note')).toHaveText('已修改 1 条 caption。')
     await expect(box.locator('[data-testid="check-subject-undo"]')).toHaveText('撤销（1）')
   })
+
   test('pictures imported from a folder are checked by their captions and can be fixed', async ({ page }) => {
     // The real backend: folder pictures have no Library row, only their captions.
     await boot(page)
@@ -263,37 +264,6 @@ test.describe('subject-count fixes in the health check', () => {
 })
 
 // ---- 2. blurry / flat pictures in the Quality Audit --------------------------------
-  test('pictures imported from a folder are checked by their captions and can be fixed', async ({ page }) => {
-    // The real backend: folder pictures have no Library row, only their captions.
-    await boot(page)
-    const sent: Array<Record<string, unknown>> = []
-    page.on('request', (request) => {
-      if (request.url().includes('/api/tags/consistency/report')) sent.push(request.postDataJSON())
-    })
-    await seedQueue(page, [
-      { id: -11, filename: 'folder-a.png', caption: '1girl, 2girls, solo, long_hair' },
-      { id: -12, filename: 'folder-b.png', caption: '1girl, solo', nl: 'A girl waves.' },
-    ])
-    await openReviewCockpit(page)
-    await page.locator('#sepcon-health-run').click()
-
-    const results = page.locator('#sepcon-health-results')
-    await expect(results).toContainText('2 images checked')
-    await expect(results).not.toContainText('local-import')
-    const box = page.locator('[data-testid="check-subject-fixes"]')
-    await expect(box.locator('[data-testid="check-subject-row"]')).toHaveCount(1)
-    await expect(box.locator('[data-testid="check-subject-row"][data-image-id="-11"]')).toBeVisible()
-    expect(sent[0].image_ids).toEqual([-11, -12])
-    expect(sent[0].effective_captions).toEqual([
-      { image_id: -11, caption: '1girl, 2girls, solo, long_hair', tags: '1girl, 2girls, solo, long_hair' },
-      { image_id: -12, caption: '1girl, solo, A girl waves.', tags: '1girl, solo' },
-    ])
-
-    await box.locator('[data-testid="check-subject-apply"]').click()
-    await expect(box.locator('.dchk-note')).toHaveText('Changed 1 caption.')
-    expect(await editsOf(page, [-11, -12])).toEqual({ '-11': '2girls, long_hair', '-12': null })
-  })
-
 async function openAudit(page: Page) {
   await page.locator('#dataset-tab-import').click()
   await page.locator('#btn-dataset-import-audit').click()
