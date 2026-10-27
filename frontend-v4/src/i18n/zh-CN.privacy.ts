@@ -8,7 +8,7 @@ export const zhCNPrivacy = {
   'privacy.pick': '选择图片…',
 
   // what it does, and how
-  'privacy.what': '打乱的是像素：分享出去的是一张看不出内容的噪点图，收到的人用同样的模式和密码就能还原。生成信息（提示词和参数）默认加密后留在图里，还原时一起解开；也可以不留。',
+  'privacy.what': '打乱的是像素：分享出去的是一张看不出内容的噪点图，收到的人用同样的模式和密码就能还原。',
   'privacy.mode': '模式',
   'privacy.mode.standard': '标准（兼容大番茄）',
   'privacy.mode.standard.hint': '可以设密码。对方在大番茄网站或这个工具里用同样的密码还原。',

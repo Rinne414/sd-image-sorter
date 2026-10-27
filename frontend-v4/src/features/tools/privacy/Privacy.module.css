@@ -2,7 +2,8 @@
 .page {
   position: relative;
   display: grid;
-  grid-template-columns: clamp(300px, calc(24 * var(--vw)), 420px) minmax(0, 1fr);
+  /* wide enough on a laptop that the modes and options fit without scrolling */
+  grid-template-columns: clamp(320px, calc(26 * var(--vw)), 420px) minmax(0, 1fr);
   height: 100%;
   min-height: 0;
 }

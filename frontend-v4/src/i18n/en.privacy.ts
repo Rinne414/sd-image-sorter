@@ -9,7 +9,7 @@ export const enPrivacy: Record<keyof typeof zhCNPrivacy, string> = {
   'privacy.pick': 'Choose images…',
 
   // what it does, and how
-  'privacy.what': 'It scrambles the pixels: what you share looks like noise, and the receiver restores it with the same mode and password. The generation details (prompt and settings) stay in the image, encrypted, and come back on restore; you can also leave them out.',
+  'privacy.what': 'It scrambles the pixels: what you share looks like noise, and the receiver restores it with the same mode and password.',
   'privacy.mode': 'Mode',
   'privacy.mode.standard': 'Standard (Big Tomato compatible)',
   'privacy.mode.standard.hint': 'Can take a password. The receiver restores it on the Big Tomato site or in this tool with the same password.',
