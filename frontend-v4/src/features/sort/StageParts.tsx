@@ -7,6 +7,7 @@ import { folderName } from '../../lib/paths'
 import { useApp } from '../../state/store'
 import { Icon } from '../../ui/Icon'
 import { GenerationCard } from '../card/GenerationCard'
+import { VideoBadge } from '../video/VideoBadge'
 import { useTargetName } from './keyTargets'
 import { SortConfirm } from './SortConfirm'
 import { perMinute, round } from './sortModes'
@@ -221,6 +222,7 @@ export function Picture({ id, name, children }: { id: number; name: string; chil
     <div className={styles.picture} data-testid="sort-image" data-id={id}>
       <img className={styles.under} src={thumbnailUrl(id, 384)} alt="" draggable={false} />
       <img className={styles.full} data-ready={ready || undefined} src={imageFileUrl(id)} alt={name} draggable={false} onLoad={() => setReady(true)} />
+      <VideoBadge img={{ filename: name }} />
       {children}
     </div>
   )

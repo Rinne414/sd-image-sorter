@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { badgeOf, canPreviewInBrowser, companionRecipe, formatDuration, isVideo, mediaFilterOf, stepTime, videoFacts, videoKey, withMediaFilter } from './videoMedia'
+import { scrubTime, badgeOf, canPreviewInBrowser, companionRecipe, formatDuration, isVideo, mediaFilterOf, stepTime, videoFacts, videoKey, withMediaFilter } from './videoMedia'
 
 describe('isVideo', () => {
   test('media_type decides; a missing one falls back to the file name', () => {
@@ -33,6 +33,17 @@ describe('canPreviewInBrowser', () => {
     expect(canPreviewInBrowser('h264')).toBe(true)
     expect(canPreviewInBrowser(null)).toBe(true)
     expect(canPreviewInBrowser('ProRes')).toBe(false)
+  })
+})
+
+describe('scrubTime', () => {
+  test('the pointer position maps onto the clip, clamped; nothing while the length is unknown', () => {
+    expect(scrubTime(0, 10)).toBe(0)
+    expect(scrubTime(0.5, 10)).toBe(5)
+    expect(scrubTime(1.4, 10)).toBe(10)
+    expect(scrubTime(-1, 10)).toBe(0)
+    expect(scrubTime(0.5, Number.NaN)).toBeNull()
+    expect(scrubTime(0.5, 0)).toBeNull()
   })
 })
 

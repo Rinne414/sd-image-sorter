@@ -3,6 +3,7 @@ import type { Batch } from '../../api/types'
 import { useT } from '../../i18n'
 import { formatScore } from '../../lib/imageInfo'
 import { entryThumb, type Entry } from './entries'
+import { VideoBadge } from '../video/VideoBadge'
 import { ItemBadges, ItemImage } from './ItemImage'
 import styles from './OrderStep.module.css'
 
@@ -82,5 +83,10 @@ export function OrderTile(p: Props) {
 function EntryImage({ batch, entry }: { batch: Batch; entry: Entry }) {
   if (entry.item) return <ItemImage batch={batch} item={entry.item} size={512} />
   const src = entryThumb(entry, 512)
-  return <div className={styles.plain}>{src && <img src={src} alt="" loading="lazy" decoding="async" draggable={false} />}</div>
+  return (
+    <div className={styles.plain}>
+      {src && <img src={src} alt="" loading="lazy" decoding="async" draggable={false} />}
+      <VideoBadge img={entry} />
+    </div>
+  )
 }

@@ -28,10 +28,11 @@ const PREFIX = 'v4video-'
 const TOKEN = 'v4videotoken'
 const DIR = 'v4-video'
 const PICTURES = 6
-const VIDEOS = 2
+const VIDEOS = 3
 const TOTAL = PICTURES + VIDEOS
 const CLIP_A = `${PREFIX}clip-a.webm`
 const CLIP_B = `${PREFIX}clip-b.webm`
+const CLIP_C = `${PREFIX}clip-c.webm`
 
 let realVideo = false
 
@@ -45,6 +46,7 @@ root = Path(${JSON.stringify(path.join(tmpRoot, DIR))})
 root.mkdir(parents=True, exist_ok=True)
 a = root / ${JSON.stringify(CLIP_A)}
 b = root / ${JSON.stringify(CLIP_B)}
+c = root / ${JSON.stringify(CLIP_C)}
 real = False
 ffmpeg = shutil.which("ffmpeg")
 if ffmpeg:
@@ -57,10 +59,11 @@ if ffmpeg:
 if not real:
     a.write_bytes(b"not a real video")
 shutil.copyfile(a, b)
+shutil.copyfile(a, c)
 with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
     cur = conn.cursor()
     cur.execute("INSERT OR IGNORE INTO libraries (id, name, is_default) VALUES (?, 'V4 e2e video', 0)", (${JSON.stringify(LIB)},))
-    for i, (name, codec) in enumerate([(${JSON.stringify(CLIP_A)}, "vp9"), (${JSON.stringify(CLIP_B)}, "prores")]):
+    for i, (name, codec) in enumerate([(${JSON.stringify(CLIP_A)}, "vp9"), (${JSON.stringify(CLIP_B)}, "prores"), (${JSON.stringify(CLIP_C)}, "vp9")]):
         p = (root / name).resolve()
         cur.execute(
             """INSERT INTO images (path, filename, generator, prompt, negative_prompt, metadata_json, width, height, file_size,
@@ -138,13 +141,16 @@ async function stubSupport(page: Page, state: () => SupportState, onInstall?: ()
   })
 }
 
-async function openVideoLibrary(page: Page, lang: 'en' | 'zh-CN' = 'en') {
-  await page.addInitScript((language) => {
-    localStorage.setItem('sd-image-sorter-lang', language)
-  }, lang)
+async function openVideoLibrary(page: Page) {
   await markModelsReady(page)
   await openLibrary(page, TOKEN, TOTAL, 'dark', LIB)
-  if (lang !== 'en') await expect(page.getByTestId('result-count')).toContainText(String(TOTAL))
+}
+
+/** Switch the language and reload (openLibrary seeds English once per session, so the choice survives the reload). */
+async function inChinese(page: Page) {
+  await page.evaluate(() => localStorage.setItem('sd-image-sorter-lang', 'zh-CN'))
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('gallery-scroller')).toBeVisible()
 }
 
 const tileOf = (page: Page, name: string) => page.locator(`[data-testid="tile"][title="${name}"]`)
@@ -405,6 +411,208 @@ test('the toggle is not there when the library has no videos', async ({ page }) 
   expect(answer.video_count ?? 0).toBe(0)
   await expect(page.getByTestId('media-toggle')).toHaveCount(0)
   await expect(page.getByTestId('video-banner')).toHaveCount(0)
+})
+
+const idOf = async (page: Page, name: string) => Number(await tileOf(page, name).getAttribute('data-id'))
+const toastWith = (page: Page, text: string | RegExp) => page.locator('[role="status"]', { hasText: text })
+
+test('picture-only actions are shown disabled for a video, with the reason; a picture keeps them', async ({ page }) => {
+  await openVideoLibrary(page)
+  await tileOf(page, CLIP_A).click({ button: 'right' })
+  const menu = page.getByTestId('card-menu')
+  await expect(menu).toBeVisible()
+  for (const id of ['similar', 'near', 'tag']) await expect(menu.locator(`[data-item="${id}"]`)).toBeDisabled()
+  await expect(menu.locator('[data-item="similar"]')).toContainText('Not for videos')
+  // what a video can do stays on; Censor sends it to the GIF and video censor
+  await expect(menu.locator('[data-item="censor"]')).toBeEnabled()
+  await expect(menu.locator('[data-item="censor"]')).not.toContainText('Not for videos')
+  await expect(menu.locator('[data-item="open"]')).toBeEnabled()
+  await expect(menu.locator('[data-item="move"]')).toBeEnabled()
+  await page.keyboard.press('Escape')
+  await page.getByTestId('tile').filter({ hasNot: page.getByTestId('video-badge') }).first().click({ button: 'right' })
+  for (const id of ['similar', 'near', 'tag', 'censor']) await expect(menu.locator(`[data-item="${id}"]`)).toBeEnabled()
+  await page.keyboard.press('Escape')
+})
+
+test('the card of a video disables find-similar and style identification', async ({ page }) => {
+  await openVideoLibrary(page)
+  await tileOf(page, CLIP_A).click()
+  await expect(page.getByTestId('card-find-similar')).toBeDisabled()
+  await expect(page.getByTestId('card-find-similar')).toHaveAttribute('title', /pictures only/)
+  await expect(page.getByTestId('card-identify-artist')).toBeDisabled()
+  await page.getByTestId('tile').filter({ hasNot: page.getByTestId('video-badge') }).first().click()
+  await expect(page.getByTestId('card-find-similar')).toBeEnabled()
+})
+
+test('a picked video: the bar disables Tag (Censor goes to the video censor), and Ctrl K lists Tag with the reason, says why and sends nothing', async ({ page }) => {
+  const sent: string[] = []
+  page.on('request', (req) => {
+    if (req.method() === 'POST' && /\/api\/(batches|censor|artists|aesthetic|tag)/.test(req.url())) sent.push(req.url())
+  })
+  await openVideoLibrary(page)
+  await tileOf(page, CLIP_A).click({ modifiers: ['Control'] })
+  const bar = page.getByTestId('selection-bar')
+  await expect(bar.locator('[data-action="tag"]')).toBeDisabled()
+  await bar.getByRole('button', { name: 'More' }).click()
+  await expect(page.locator('[data-item="censor"]')).toBeEnabled()
+  await page.keyboard.press('Escape')
+
+  await page.getByTestId('open-palette').click()
+  await page.keyboard.type('tag')
+  const palette = page.getByTestId('palette')
+  const entry = palette.getByRole('option').filter({ hasText: 'Not for videos' }).first()
+  await expect(entry).toBeVisible()
+  await entry.click()
+  await expect(toastWith(page, /Nothing was done: 1 video was left out/)).toBeVisible()
+  expect(sent).toEqual([])
+})
+
+test('Censor on a mixed pick sends the picture to the censor step and the video to the GIF and video censor', async ({ page }) => {
+  const bodies: Record<string, unknown>[] = []
+  await page.route('**/api/batches', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback()
+    bodies.push(route.request().postDataJSON() as Record<string, unknown>)
+    return route.fulfill({ status: 500, json: { detail: 'stubbed: nothing is created by this test' } })
+  })
+  await openVideoLibrary(page)
+  const picture = page.getByTestId('tile').filter({ hasNot: page.getByTestId('video-badge') }).first()
+  const pictureId = Number(await picture.getAttribute('data-id'))
+  await picture.click({ modifiers: ['Control'] })
+  await tileOf(page, CLIP_A).click({ modifiers: ['Control'] })
+  await expect(page.getByTestId('selection-bar')).toContainText('2')
+  await page.getByTestId('open-palette').click()
+  await page.keyboard.type('censor')
+  const entry = page.getByTestId('palette').getByRole('option').first()
+  await expect(entry).not.toContainText('Not for videos')
+  await entry.click()
+  // the video is not dropped: it waits in the GIF and video censor
+  await expect(page.getByTestId('mediacensor-dialog')).toBeVisible()
+  await expect(page.getByTestId('mediacensor-picks')).toContainText('1 video')
+  await expect.poll(() => bodies.length).toBe(1)
+  expect(bodies[0]!.image_ids).toEqual([pictureId])
+})
+
+test('Tag on a mixed pick opens for the pictures and names the videos it left out', async ({ page }) => {
+  await markModelsReady(page)
+  await openLibrary(page, TOKEN, TOTAL, 'dark', LIB)
+  await tileOf(page, CLIP_C).click({ modifiers: ['Control'] })
+  await page.getByTestId('tile').filter({ hasNot: page.getByTestId('video-badge') }).first().click({ modifiers: ['Control'] })
+  await page.getByTestId('selection-bar').locator('[data-action="tag"]').click()
+  await expect(toastWith(page, /1 video was left out/)).toBeVisible()
+  await expect(page.getByRole('dialog').first()).toBeVisible()
+  await page.keyboard.press('Escape')
+})
+
+test('the play mark shows wherever a video tile shows: the big image strip, Home and a batch', async ({ page }) => {
+  runBackendScript(`
+import sqlite3
+with sqlite3.connect(${JSON.stringify(dbPath)}) as conn:
+    conn.execute("UPDATE images SET user_rating = 5 WHERE filename = ?", (${JSON.stringify(CLIP_A)},))
+    conn.commit()
+print("ok")
+`)
+  await openVideoLibrary(page)
+  const clipId = await idOf(page, CLIP_A)
+  // the big image's film strip
+  await page.getByTestId('tile').filter({ hasNot: page.getByTestId('video-badge') }).first().dblclick()
+  await expect(page.getByTestId('lightbox')).toBeVisible()
+  await expect(page.getByTestId('lightbox').getByTestId('video-badge').first()).toBeVisible()
+  await page.keyboard.press('Escape')
+  // Home's starred film
+  await page.evaluate(() => {
+    location.hash = '#/home'
+  })
+  await expect(page.getByTestId('home-frame').filter({ has: page.getByTestId('video-badge') }).first()).toBeVisible({ timeout: 15_000 })
+  // a batch's pick step
+  const id = await page.evaluate(
+    async ({ lib, imageId }) => {
+      const res = await fetch('/api/batches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-SD-Library-Id': lib },
+        body: JSON.stringify({ kind: 'custom', name: 'v4video e2e batch', image_ids: [imageId] }),
+      })
+      return ((await res.json()) as { batch: { id: number } }).batch.id
+    },
+    { lib: LIB, imageId: clipId },
+  )
+  {
+    await page.evaluate((batchId) => {
+      location.hash = `#/batch/${batchId}`
+    }, id)
+    await expect(page.getByTestId('pick-tile').getByTestId('video-badge')).toBeVisible({ timeout: 15_000 })
+    await page.getByTestId('step-next').click()
+    await expect(page.getByTestId('order-tile').getByTestId('video-badge')).toBeVisible({ timeout: 15_000 })
+    await page.evaluate(async ({ lib, batchId }) => {
+      await fetch(`/api/batches/${batchId}`, { method: 'DELETE', headers: { 'X-SD-Library-Id': lib } })
+    }, { lib: LIB, batchId: id })
+  }
+})
+
+test('hovering a video tile plays it muted, scrubs across the tile, and only one plays at a time', async ({ page }) => {
+  test.skip(!realVideo, 'ffmpeg is not on this machine, so no real clip could be made')
+  await openVideoLibrary(page)
+  await page.getByTestId('media-video').click()
+  await expect(page.getByTestId('tile')).toHaveCount(VIDEOS)
+  const a = tileOf(page, CLIP_A)
+  const c = tileOf(page, CLIP_C)
+  // nothing is loaded until the pointer rests on a tile
+  await expect(page.getByTestId('video-hover')).toHaveCount(0)
+  const box = (await a.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  const hover = a.getByTestId('video-hover')
+  await expect(hover).toHaveAttribute('data-playing', 'true', { timeout: 10_000 })
+  expect(await hover.evaluate((v: HTMLVideoElement) => v.muted && v.loop)).toBe(true)
+  // scrub: the right edge is near the end, the left edge near the start
+  await page.mouse.move(box.x + box.width - 3, box.y + box.height / 2)
+  await expect.poll(() => hover.evaluate((v: HTMLVideoElement) => v.currentTime)).toBeGreaterThan(1.5)
+  await page.mouse.move(box.x + 3, box.y + box.height / 2)
+  await expect.poll(() => hover.evaluate((v: HTMLVideoElement) => v.currentTime)).toBeLessThan(0.5)
+  // a second tile takes over: the first stops
+  const other = (await c.boundingBox())!
+  await page.mouse.move(other.x + other.width / 2, other.y + other.height / 2)
+  await expect(c.getByTestId('video-hover')).toHaveCount(1, { timeout: 10_000 })
+  await expect(page.getByTestId('video-hover')).toHaveCount(1)
+  // leaving every tile stops the playing one
+  await page.mouse.move(2, 400)
+  await expect(page.getByTestId('video-hover')).toHaveCount(0)
+})
+
+test('a codec the browser cannot play keeps its still frame on hover', async ({ page }) => {
+  await openVideoLibrary(page)
+  await page.getByTestId('media-video').click()
+  const b = tileOf(page, CLIP_B)
+  const box = (await b.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.waitForTimeout(700)
+  await expect(page.getByTestId('video-hover')).toHaveCount(0)
+})
+
+test('with the card open at 1366x768 the search line, chips and counts fit in both languages', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openVideoLibrary(page)
+  for (const lang of ['en', 'zh-CN'] as const) {
+    if (lang === 'zh-CN') await inChinese(page)
+    const input = page.getByTestId('query-input')
+    await input.fill(`${TOKEN} media:video width>=100 height>=100 date:30d`)
+    await input.press('Enter')
+    await tileOf(page, CLIP_A).click()
+    await expect(page.getByTestId('generation-card')).toBeVisible()
+    const bar = page.getByTestId('query-bar')
+    const barBox = (await bar.boundingBox())!
+    for (const id of ['query-input', 'media-toggle', 'query-chips', 'result-count']) {
+      const box = (await page.getByTestId(id).boundingBox())!
+      expect(box.x, `${id} (${lang}) starts inside the bar`).toBeGreaterThanOrEqual(barBox.x - 1)
+      expect(box.x + box.width, `${id} (${lang}) ends inside the bar`).toBeLessThanOrEqual(barBox.x + barBox.width + 1)
+    }
+    // the chips lie in rows under the controls, not stacked one to a line beside a squeezed box
+    const chips = page.getByTestId('query-chips').locator('button')
+    const first = (await chips.first().boundingBox())!
+    const last = (await chips.last().boundingBox())!
+    expect(last.y - first.y, `chips (${lang}) wrap into at most two rows`).toBeLessThan(60)
+    expect((await input.boundingBox())!.width).toBeGreaterThanOrEqual(130)
+    expect(await bar.evaluate((el: HTMLElement) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0)
+    expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
+  }
 })
 
 for (const viewport of VIEWPORTS) {

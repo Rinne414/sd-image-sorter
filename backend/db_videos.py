@@ -106,6 +106,22 @@ def video_counts() -> Dict[str, int]:
     }
 
 
+def video_ids_among(image_ids: Iterable[int]) -> List[int]:
+    """Which of these image ids are videos (any library), in the order asked, each once."""
+    wanted = list(dict.fromkeys(int(i) for i in image_ids))
+    found: set = set()
+    with get_db() as conn:
+        for start in range(0, len(wanted), _CHUNK):
+            chunk = wanted[start : start + _CHUNK]
+            marks = ",".join("?" * len(chunk))
+            rows = conn.execute(
+                f"SELECT id FROM images WHERE media_type = 'video' AND id IN ({marks})",
+                chunk,
+            ).fetchall()
+            found.update(int(row[0]) for row in rows)
+    return [i for i in wanted if i in found]
+
+
 def get_video_row(image_id: int) -> Optional[Dict[str, Any]]:
     with get_db() as conn:
         row = conn.execute(

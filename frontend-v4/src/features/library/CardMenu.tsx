@@ -55,6 +55,7 @@ function CardMenuBody({ id, x, y, keyboard }: Open) {
     id: a.id,
     label: say(t, a.label),
     ...(a.hint ? { hint: a.hint } : {}),
+    ...(a.reason ? { hint: say(t, a.reason) } : {}),
     ...(a.danger ? { danger: true } : {}),
     ...(a.disabled ? { disabled: true } : {}),
     ...(a.group ? { group: say(t, a.group) } : {}),

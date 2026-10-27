@@ -5,6 +5,7 @@ import { uiZoom } from '../../lib/uiScale'
 import { useApp } from '../../state/store'
 import { Icon } from '../../ui/Icon'
 import { Lightbox } from '../lightbox/Lightbox'
+import { VideoBadge } from '../video/VideoBadge'
 import { frameRatio, framesThatFit, stepFrame, type FilmFrame } from './filmPick'
 import { useHT } from './homeText'
 import { seeAllStarred, type Film } from './useFilm'
@@ -146,6 +147,7 @@ function Frame({ frame: { image }, place, ratio, thumb, focusable, onFocus }: Fr
         data-image-id={image.id}
       >
         <img src={thumbnailUrl(image.id, thumb)} alt="" loading="lazy" decoding="async" draggable={false} />
+        <VideoBadge img={image} />
         {stars > 0 && (
           <span className={`${styles.stars} mono`} aria-hidden>
             <Icon name="star" filled size={11} />

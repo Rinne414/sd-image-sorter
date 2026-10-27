@@ -54,6 +54,15 @@
   background: var(--wash-hover);
 }
 
+.menu button:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+.menu button:disabled:hover {
+  background: none;
+}
+
 .menu li[data-danger] button {
   color: var(--danger);
 }

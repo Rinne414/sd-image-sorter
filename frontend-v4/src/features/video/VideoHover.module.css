@@ -1,0 +1,25 @@
+/* Over the thumbnail, under the tile's marks; it shows only once it is really playing, so the frame never flashes black. */
+.video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.video[data-playing] {
+  opacity: 1;
+}
+
+/* How far into the clip the pointer has scrubbed. */
+.bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(to right, var(--accent) var(--scrub, 0%), transparent var(--scrub, 0%));
+  pointer-events: none;
+}

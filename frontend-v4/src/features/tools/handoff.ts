@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import type { ToolId } from '../../lib/route'
 import { useApp } from '../../state/store'
+import { onlyPictures } from '../video/pictures'
+import { PICTURE_ONLY_TOOLS } from '../video/videoMedia'
 
 // Images handed from the library to a tool ("送到工具 ▸"): the tool page
 // takes them once, when it opens. The ids are copied when sent, so later
@@ -15,6 +17,17 @@ export const useHandoff = create<{ pending: Handoff | null }>(() => ({ pending: 
 
 /** Hand these images to a tool and open it. */
 export function sendToTool(tool: ToolId, ids: readonly number[]): void {
+  // The reverse-prompt, privacy and style tools read pixels: videos are left out, and how many is said.
+  if (PICTURE_ONLY_TOOLS.has(tool)) {
+    void onlyPictures(ids).then((pictures) => {
+      if (pictures.length > 0) hand(tool, pictures)
+    })
+    return
+  }
+  hand(tool, ids)
+}
+
+function hand(tool: ToolId, ids: readonly number[]): void {
   useHandoff.setState({ pending: { tool, ids: [...ids] } })
   useApp.getState().openTool(tool)
 }

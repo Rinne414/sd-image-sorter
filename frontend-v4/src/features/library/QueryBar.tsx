@@ -218,16 +218,6 @@ export function QueryBar({ total, about = false, inputRef, railToggle = true }: 
               ))}
             </ul>
           )}
-          <div className={styles.sub}>
-            <MediaToggle text={draft} current={parsed.scalars.mediaType ?? ''} onChange={(next) => setText(next, true)} />
-            {parsed.parts.length > 0 && (
-              <div className={styles.chips} data-testid="query-chips">
-                {parsed.parts.map((part, i) => (
-                  <Chip key={`${part.token}-${i}`} part={part} onRemove={() => removePart(part)} />
-                ))}
-              </div>
-            )}
-          </div>
         </div>
       )}
 
@@ -254,6 +244,19 @@ export function QueryBar({ total, about = false, inputRef, railToggle = true }: 
 
       <FilterPanel text={draft} onChange={(next) => setText(next, true)} />
       <SyntaxHelp onExample={(ex) => setText(draft ? `${draft.trimEnd()} ${ex}` : ex, true)} />
+      {/* A row of its own under the controls, as wide as the bar (CSS order puts it last): chips and the media toggle never squeeze the search box. It sits before the Sort and View menus in the markup so that those two stay the last boxes of the bar, where the entrance checks look for them. */}
+      {!semantic && (
+        <div className={styles.sub}>
+          <MediaToggle text={draft} current={parsed.scalars.mediaType ?? ''} onChange={(next) => setText(next, true)} />
+          {parsed.parts.length > 0 && (
+            <div className={styles.chips} data-testid="query-chips">
+              {parsed.parts.map((part, i) => (
+                <Chip key={`${part.token}-${i}`} part={part} onRemove={() => removePart(part)} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <Menu
         label={`${t('sort.label')}：${t(`sort.${sort}` as MessageKey)}${sortReverse && canReverse(sort) ? ' ↑' : ''}`}
         items={[

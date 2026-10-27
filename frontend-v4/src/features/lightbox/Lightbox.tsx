@@ -14,6 +14,7 @@ import { Icon } from '../../ui/Icon'
 import { useLayer } from '../../ui/layers'
 import { activeVideoControl } from '../video/videoControl'
 import { isVideo, videoKey } from '../video/videoMedia'
+import { VideoBadge } from '../video/VideoBadge'
 import { VideoStage } from '../video/VideoStage'
 import styles from './Lightbox.module.css'
 import { useZoom } from './useZoom'
@@ -330,6 +331,7 @@ ${t('info.zoom.hint')}`} data-testid="lightbox-zoom">
             onClick={() => open(img.id)}
           >
             <img src={thumbnailUrl(img.id, 256)} alt="" loading="lazy" decoding="async" draggable={false} />
+            <VideoBadge img={img} />
           </button>
         ))}
       </div>

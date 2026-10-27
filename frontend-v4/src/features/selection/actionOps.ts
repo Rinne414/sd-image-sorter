@@ -15,6 +15,7 @@ import { sendToGenerator } from '../generator/generatorStore'
 import { filterByModel } from '../info/modelFilter'
 import { copyAndSay, openImageFolder } from '../library/fileActions'
 import { useSimilarDialogs } from '../similar/dialogs'
+import { isKnownVideo, knownVideoCount, onlyPictures } from '../video/pictures'
 import { showLikeImage } from '../similar/similarStore'
 import { sortImages } from '../sort/sortStore'
 import { identifyArtists } from '../tools/artist/identify'
@@ -44,6 +45,7 @@ export function useBulkActions(ids: number[]): ImageAction[] {
         batches: recentBatches(batches.data),
         templates: templates.data?.templates ?? [],
         tools: sendTargets(ids.length),
+        videos: knownVideoCount(ids),
         ops: {
           rate: (list, stars) => rate({ ids: list, stars }),
           favorite: (list, on) => favorite({ ids: list, favorited: on }),
@@ -51,7 +53,11 @@ export function useBulkActions(ids: number[]): ImageAction[] {
           censor: (list) => void quickCensor(list),
           newBatch: (kind, list, template) => askNewBatch(kind, list, 'selection', template),
           addToBatch: (batch, list) => void addPicksTo(batch, list),
-          compare: (a, b) => useSimilarDialogs.getState().openCompare(a, b),
+          // Likeness is read from pictures: a video is never one of the two.
+          compare: (a, b) =>
+            void onlyPictures([a, b]).then((pictures) => {
+              if (pictures.length === 2) useSimilarDialogs.getState().openCompare(a, b)
+            }),
           score: (list) => void scoreImages(list),
           identifyArtist: (list) => void identifyArtists(list),
           sort: (list) => sortImages({ kind: 'picks', ids: [...list] }),
@@ -100,11 +106,13 @@ export function useImageActions(id: number | null): ImageAction[] {
   }, [facts, categories.data])
   const path = detail.data?.image.path ?? null
   const name = detail.data?.image.filename ?? ''
+  const video = detail.data ? detail.data.image.media_type === 'video' : id !== null && isKnownVideo(id)
   return useMemo(() => {
     if (id === null) return []
     return imageActions({
       id,
       picked,
+      video,
       path,
       facts,
       groups,
@@ -118,5 +126,5 @@ export function useImageActions(id: number | null): ImageAction[] {
         sendToGenerator: (x) => sendToGenerator(x),
       },
     })
-  }, [id, picked, path, name, facts, groups])
+  }, [id, picked, video, path, name, facts, groups])
 }

@@ -19,6 +19,13 @@ export const zhCNVideo = {
   'video.badgeTitle': '视频：双击打开并播放',
   'video.tileSpoken': '视频 {time}',
 
+  // picture-only actions
+  'video.pictureOnly': '不适用于视频',
+  'video.pictureOnlyTitle': '这个功能只适用于图片，不适用于视频。',
+  'video.leftOut': '有 {n} 个视频被跳过：这个功能只适用于图片。',
+  'video.leftOutAll': '什么也没做：{n} 个视频被跳过，这个功能只适用于图片。',
+  'video.scoreOnlyPictures': '评分和打标只适用于图片，视频会被跳过。',
+
   // player in the big image
   'video.player.label': '视频播放',
   'video.loopOn': '循环：开',

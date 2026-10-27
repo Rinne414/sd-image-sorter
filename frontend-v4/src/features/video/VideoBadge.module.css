@@ -1,8 +1,8 @@
-/* Over a thumbnail, above the hover caption strip (20px) so the two never overlap. */
+/* Over a thumbnail, in its bottom-left corner. */
 .badge {
   position: absolute;
   left: 6px;
-  bottom: 26px;
+  bottom: 6px;
   z-index: 1;
   display: inline-flex;
   align-items: center;
@@ -17,6 +17,11 @@
   font-size: var(--fs-1);
   white-space: nowrap;
   pointer-events: none;
+}
+
+/* The library grid: above the hover caption strip (20px), so the two never overlap. */
+.badge[data-above] {
+  bottom: 26px;
 }
 
 .badge svg {

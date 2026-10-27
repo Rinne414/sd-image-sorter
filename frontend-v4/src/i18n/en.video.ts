@@ -19,6 +19,13 @@ export const enVideo: Record<keyof typeof zhCNVideo, string> = {
   'video.badgeTitle': 'Video: double-click to open and play',
   'video.tileSpoken': 'Video {time}',
 
+  // picture-only actions
+  'video.pictureOnly': 'Not for videos',
+  'video.pictureOnlyTitle': 'This works on pictures only, not on videos.',
+  'video.leftOut': '{n} videos were left out: this works on pictures only.',
+  'video.leftOutAll': 'Nothing was done: {n} videos were left out, this works on pictures only.',
+  'video.scoreOnlyPictures': 'Scoring and tagging work on pictures only; videos are skipped.',
+
   // player in the big image
   'video.player.label': 'Video playback',
   'video.loopOn': 'Loop: on',

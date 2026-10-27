@@ -2,6 +2,7 @@ import type { BatchKind, BatchSummary } from '../../api/types'
 import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
 import { tr } from '../jobs/jobs'
+import { onlyPictures } from '../video/pictures'
 import { addLibraryPicks } from './datasetApi'
 
 // Adding Library picks to a batch from anywhere (selection actions, Ctrl K).
@@ -10,7 +11,10 @@ import { addLibraryPicks } from './datasetApi'
 export const RECENT_BATCHES = 5
 
 /** Add these images to an existing batch and say what happened, with a way to open it. */
-export async function addPicksTo(batch: { id: number; name: string; kind: BatchKind }, ids: number[]): Promise<boolean> {
+export async function addPicksTo(batch: { id: number; name: string; kind: BatchKind }, requested: number[]): Promise<boolean> {
+  // A batch runs picture steps (tags, censor, export): videos are left out, and how many is said.
+  const ids = await onlyPictures(requested)
+  if (ids.length === 0) return false
   const res = await addLibraryPicks(batch, ids)
   if (!res) return false
   const text =
