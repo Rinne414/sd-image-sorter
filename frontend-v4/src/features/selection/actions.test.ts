@@ -24,7 +24,7 @@ function bulkOps(): BulkOps {
 }
 
 function imageOps(): ImageOps {
-  return { open: vi.fn(), togglePick: vi.fn(), copy: vi.fn(), openFolder: vi.fn(), findSimilar: vi.fn(), filterByModel: vi.fn() }
+  return { open: vi.fn(), togglePick: vi.fn(), copy: vi.fn(), openFolder: vi.fn(), findSimilar: vi.fn(), filterByModel: vi.fn(), sendToGenerator: vi.fn() }
 }
 
 const batch = { id: 7, name: 'Summer', kind: 'pixiv' } as BatchSummary
@@ -179,7 +179,7 @@ describe('image actions', () => {
     expect(ids(list)).toEqual(['open', 'pick', 'similar', 'near', 'copy', 'open-folder'])
     // "Copy" holds each part of the image, then the tag groups under their own heading
     const copyItems = find(list, 'copy').children ?? []
-    expect(ids(copyItems.filter((c) => !c.group))).toEqual(['copy-prompt', 'copy-negative', 'copy-tags', 'copy-parameters', 'copy-path'])
+    expect(ids(copyItems.filter((c) => !c.group))).toEqual(['copy-prompt', 'copy-negative', 'copy-tags', 'copy-parameters', 'copy-path', 'send-generator'])
     expect(copyItems.find((c) => c.group)?.id).toBe('copy-group-all')
     for (const a of runnable(list)) a.run?.()
     expect(ops.open).toHaveBeenCalledWith(9)
@@ -187,6 +187,7 @@ describe('image actions', () => {
     expect(ops.findSimilar).toHaveBeenCalledWith(9, true)
     expect(ops.togglePick).toHaveBeenCalledWith(9)
     expect(ops.openFolder).toHaveBeenCalledWith(9)
+    expect(ops.sendToGenerator).toHaveBeenCalledWith(9)
     expect(ops.copy).toHaveBeenCalledWith('lowres', { key: 'lib.copy.negative' })
     expect(ops.copy).toHaveBeenCalledWith('D:\\out\\a.png', { key: 'lib.file.path' })
     expect(ops.copy).toHaveBeenCalledWith('school uniform', { key: 'lib.copy.group.clothing' })
@@ -218,10 +219,10 @@ describe('image actions', () => {
   it('while the details load the copy entries wait; missing parts are not offered', () => {
     const loading = imageActions({ id: 9, picked: false, path: null, facts: null, groups: null, ops: imageOps() })
     const waiting = find(loading, 'copy').children ?? []
-    expect(ids(waiting)).toEqual(['copy-loading'])
+    expect(ids(waiting)).toEqual(['copy-loading', 'send-generator'])
     expect(waiting[0]?.disabled).toBe(true)
     const bare = imageActions({ id: 9, picked: false, path: 'a.png', facts: { prompt: null, negative: null, tags: [], parameters: null, model: null }, groups: null, ops: imageOps() })
-    expect(ids(find(bare, 'copy').children ?? [])).toEqual(['copy-path'])
+    expect(ids(find(bare, 'copy').children ?? [])).toEqual(['copy-path', 'send-generator'])
   })
 })
 

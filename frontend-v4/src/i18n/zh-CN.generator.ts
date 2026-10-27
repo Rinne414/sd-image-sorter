@@ -1,4 +1,88 @@
 // Send to generator (ComfyUI address, queue, workflow). Spread into zh-CN.ts; every key here must exist
 // in en.generator.ts (the type enforces it). Keys start with 'generator.'.
 export const zhCNGenerator = {
+  // entrances
+  'generator.action': '送回生成器…',
+  'generator.palette': '把这张图片送回生成器',
+  'generator.button': '送回生成器',
+  'generator.buttonTip': '复制 WebUI 或 NovelAI 的参数，复制或保存 ComfyUI 工作流，或在 ComfyUI 里再跑一次',
+
+  // the dialog
+  'generator.title': '送回生成器',
+  'generator.loading': '正在读取生成参数…',
+  'generator.loadFailed': '读不到这张图片的生成参数：{reason}',
+  'generator.fromStored': '找不到图片文件：用的是图库里保存的副本。',
+  'generator.nothing': '这张图片没有记录生成参数，没有可以送回去的内容。WebUI、Forge、NovelAI 和 ComfyUI 生成的图片通常带有参数。',
+  'generator.previewLabel': '将要复制的文字',
+  'generator.noPrompt': '这张图片没有可复制的提示词',
+  'generator.nothingToCopy': '这张图片没有可复制的内容',
+  'generator.copyFailed': '复制失败：浏览器不让程序写入剪贴板。',
+
+  'generator.webui.title': 'WebUI / Forge',
+  'generator.webui.lead': '提示词、负面提示词和参数，WebUI 和 Forge 用生成按钮下方的箭头就能读回。',
+  'generator.webui.copy': '复制参数',
+  'generator.webui.copied': '已复制 WebUI 参数。粘贴到提示词框，再按生成按钮下方的箭头（读取生成参数）。',
+
+  'generator.nai.title': 'NovelAI',
+  'generator.nai.lead': '提示词和负面内容，用 NovelAI 的权重写法（{ } 和 n::），负面内容单独标出。',
+  'generator.nai.copy': '复制提示词和负面内容',
+  'generator.nai.copied': '已复制 NovelAI 的提示词和负面内容。',
+
+  // ComfyUI
+  'generator.comfy.title': 'ComfyUI',
+  'generator.comfy.none': '这张图片没有 ComfyUI 生成参数，可以用上面的复制按钮。',
+  'generator.comfy.full': '图片里有完整的工作流，也有运行用的参数。',
+  'generator.comfy.runOnly': '图片里只有运行用的参数，没有画布上的工作流。可以保存为 .json 再拖进 ComfyUI，也可以直接运行。',
+  'generator.comfy.workflowOnly': '图片里只有画布上的工作流，没有运行用的参数：可以复制或保存，不能直接再跑一次。',
+  'generator.comfy.seeds': '参数里的种子项：{n}',
+  'generator.comfy.copyWorkflow': '复制工作流',
+  'generator.comfy.copyWorkflowTip': '在 ComfyUI 画布上按 Ctrl+V 粘贴',
+  'generator.comfy.workflowCopied': '已复制工作流。点一下 ComfyUI 画布，按 Ctrl+V。',
+  'generator.comfy.saveWorkflow': '保存 .json',
+  'generator.comfy.saveWorkflowTip': '保存到工作流输出文件夹；把文件拖进 ComfyUI 即可载入',
+  'generator.comfy.saving': '正在保存…',
+  'generator.comfy.workflowSaved': '已保存 {name} 到 {folder}',
+
+  'generator.run.label': '再跑一次',
+  'generator.run.seed': '种子',
+  'generator.run.seedNew': '新种子',
+  'generator.run.seedSame': '相同种子',
+  'generator.run.button': '在 ComfyUI 运行',
+  'generator.run.tip': '把这组参数加入 {url} 的队列',
+  'generator.run.sending': '正在发送到 {url}…',
+  'generator.run.queuedNew': '已加入 {address} 的 ComfyUI 队列，使用新种子（改了 {count} 个种子项）。',
+  'generator.run.queuedSame': '已加入 {address} 的 ComfyUI 队列，使用相同种子。',
+  'generator.run.needsRecipe': '这张图片没有运行用的参数，不能直接再跑一次。',
+
+  // the address
+  'generator.address.title': 'ComfyUI 地址',
+  'generator.address.body': '「在 ComfyUI 运行」会把图片的生成参数发到这个地址。留空就用默认地址。',
+  'generator.address.label': 'ComfyUI 地址',
+  'generator.address.reset': '用默认地址',
+  'generator.address.resetTip': '清空，改用默认地址 {url}',
+  'generator.address.using': '现在用的是 {url}',
+  'generator.address.saved': 'ComfyUI 地址已保存',
+  'generator.address.loadFailed': '读不到 ComfyUI 地址：{reason}',
+  'generator.address.refused': '没有保存：{reason}',
+
+  // what the program says when ComfyUI or the picture does not cooperate
+  'generator.err.addressSpaces': 'ComfyUI 地址里不能有空格。',
+  'generator.err.addressScheme': 'ComfyUI 地址要以 http:// 或 https:// 开头。',
+  'generator.err.addressNoHost': 'ComfyUI 地址缺少主机，例如 http://127.0.0.1:8188。',
+  'generator.err.addressExtras': 'ComfyUI 地址里不要写用户名、? 或 #。',
+  'generator.err.addressHost': 'ComfyUI 地址里的主机名不对：请用 localhost、数字地址（如 127.0.0.1）或电脑名。',
+  'generator.err.addressPort': 'ComfyUI 地址里的端口要是 1 到 65535 之间的数字。',
+  'generator.err.addressPath': 'ComfyUI 地址的路径里有地址不能用的字符。',
+  'generator.err.badAddress': '设置里的 ComfyUI 地址不能用：{reason}',
+  'generator.err.unreachable': '连不上 {address} 的 ComfyUI。请先启动 ComfyUI，或检查上面的地址。',
+  'generator.err.timeout': '{address} 的 ComfyUI 没有及时回应，可能正忙，请再试一次。',
+  'generator.err.rejected': '{address} 的 ComfyUI 没有把这组参数加入队列：{reason}',
+  'generator.err.redirect': '{address} 的 ComfyUI 把请求转到了 {location}，程序没有跟过去。请检查上面的地址。',
+  'generator.err.badAnswer': '{address} 有程序回应，但不像 ComfyUI。请检查上面的地址。',
+  'generator.err.noRecipeSave': '这张图片没有可保存的 ComfyUI 工作流。',
+  'generator.err.noRecipeRun': '这张图片没有可运行的 ComfyUI 参数，但提示词仍可复制。',
+  'generator.err.imageGone': '这张图片已经不在图库里了。',
+  'generator.err.writeFailed': '工作流没能保存：{reason}',
+  'generator.err.settingFailed': '设置没能保存：{reason}',
+  'generator.err.other': '没有成功：{reason}',
 }

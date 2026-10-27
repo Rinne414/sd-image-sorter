@@ -12,6 +12,7 @@ import { startAutoRefresh } from '../features/library/autoRefreshRun'
 import { startFolderWatch } from '../features/settings/library/watchApi'
 import { appKey } from '../features/library/keys'
 import { ShortcutSheet } from '../features/library/ShortcutSheet'
+import { GeneratorDialog } from '../features/generator/GeneratorDialog'
 import { SelectionDialogs } from '../features/selection/SelectionDialogs'
 import { RestartOverlay } from '../features/settings/RestartOverlay'
 import { SettingsPage } from '../features/settings/SettingsPage'
@@ -88,6 +89,7 @@ export function NextApp() {
         <JobsRunner />
         <DropImport />
         <SelectionDialogs />
+        <GeneratorDialog />
         <BatchDialogs />
         <RestartOverlay />
         <Toasts />

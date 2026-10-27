@@ -221,6 +221,8 @@ export interface ImageOps {
   findSimilar: (id: number, near: boolean) => void
   /** Show the library's images made with this checkpoint (as the card's model name does). */
   filterByModel: (model: string) => void
+  /** Open "Send to generator" for it. */
+  sendToGenerator: (id: number) => void
 }
 
 export interface ImageFacts {
@@ -279,7 +281,7 @@ function byCategory(tags: string[], groups: GroupedTags | null, copy: ImageOps['
 }
 
 /** Everything that copies part of the image, as one "Copy" submenu (the menu stays short enough for a laptop). */
-function copyMenu(path: string | null, facts: ImageFacts | null, groups: GroupedTags | null, ops: ImageOps): ImageAction {
+function copyMenu(id: number, path: string | null, facts: ImageFacts | null, groups: GroupedTags | null, ops: ImageOps): ImageAction {
   const children: ImageAction[] = []
   const copy = (id: string, label: MessageKey, value: string | null, what: MessageKey = label) => {
     if (value) children.push({ id, section: 'copy', label: k(label), run: () => ops.copy(value, k(what)) })
@@ -290,6 +292,8 @@ function copyMenu(path: string | null, facts: ImageFacts | null, groups: Grouped
   if (facts?.tags.length) copy('copy-tags', 'lib.copy.tags', facts.tags.join(', '))
   copy('copy-parameters', 'card.copyAll', facts?.parameters ?? null)
   copy('copy-path', 'lib.file.copyPath', path, 'lib.file.path')
+  // The right-click menu is already as tall as a laptop screen allows: the generator entry lives here, not in a row of its own.
+  children.push({ id: 'send-generator', section: 'copy', label: k('generator.action'), palette: k('generator.palette'), run: () => ops.sendToGenerator(id) })
   if (facts?.tags.length) children.push(...byCategory(facts.tags, groups, ops.copy))
   return { id: 'copy', section: 'copy', label: k('card.copy'), children }
 }
@@ -308,7 +312,7 @@ export function imageActions({ id, picked, path, facts, groups, ops }: ImageInpu
     { id: 'similar', section: 'find', label: k('sim.find.similar'), palette: k('sim.find.similarPalette'), run: () => ops.findSimilar(id, false) },
     { id: 'near', section: 'find', label: k('sim.find.near'), palette: k('sim.find.nearPalette'), run: () => ops.findSimilar(id, true) },
     ...modelFilter(facts, ops),
-    copyMenu(path, facts, groups, ops),
+    copyMenu(id, path, facts, groups, ops),
     { id: 'open-folder', section: 'file', label: k('lib.file.openFolder'), run: () => ops.openFolder(id) },
   ]
 }

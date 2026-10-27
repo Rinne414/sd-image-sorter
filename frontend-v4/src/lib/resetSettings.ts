@@ -35,6 +35,7 @@ export const SETTING_KEYS: readonly string[] = [
   'sd-v4-caption-zh',
   'sd-tipo-model-v1',
   'sd-image-sorter-artist-defaults-v1',
+  'sd-v4-generator-seed-mode',
 ]
 
 /** Censor tool options share a prefix (brush, style, detection). */
