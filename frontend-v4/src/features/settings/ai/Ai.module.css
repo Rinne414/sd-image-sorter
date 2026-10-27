@@ -478,3 +478,40 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* A saved-preset change and its Undo, on one line. */
+.statusRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 8px;
+}
+
+.statusRow .note {
+  margin: 0;
+}
+
+/* "You already have a preset with this name": asked in place, Cancel focused. */
+.replace {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--warn);
+  background: var(--wash);
+}
+
+.replaceText {
+  margin: 0 0 8px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+/* The two lines of saved AI defaults. */
+.defaultsList {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}

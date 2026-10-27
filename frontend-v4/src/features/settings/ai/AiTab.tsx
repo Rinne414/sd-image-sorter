@@ -1,5 +1,6 @@
 import { ComfySettingsSection } from '../../generator/ComfySettingsSection'
 import styles from './Ai.module.css'
+import { AiDefaults } from './AiDefaults'
 import { useVlmSettings } from './aiApi'
 import { useAT } from './aiText'
 import { ChatLog } from './ChatLog'
@@ -38,6 +39,7 @@ function Loaded({ settings }: { settings: VlmSettings }) {
       <VlmSection draft={draft} settings={settings} />
       <OllamaSection draft={draft} settings={settings} />
       <ComfySettingsSection />
+      <AiDefaults />
       <ChatLog />
     </div>
   )

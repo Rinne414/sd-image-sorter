@@ -33,8 +33,10 @@ export interface VlmSettings {
   service_account_json_display?: string
 }
 
-/** GET /api/vlm/presets → presets[id]. */
+/** GET /api/vlm/presets → presets[id]. The built-in ones come first; `builtin: false` marks the user's own. */
 export interface Preset {
+  id?: string
+  builtin?: boolean
   name: string
   output_format?: string
   system_prompt?: string

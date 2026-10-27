@@ -1,4 +1,5 @@
 import type { Describer } from '../batch/datasetTag'
+import { readTaggerDefaults } from './savedDefaults'
 
 // The tag panel's choices, as the Library panel and a dataset batch's tag
 // step both keep them, and the request bodies they turn into. Pure except for
@@ -124,7 +125,8 @@ export function librarySmartTagBody(ids: number[], o: TagOptions, run: RunChoice
 
 // ---- remembered choices ----
 
-const OPTIONS_KEY = 'sd-v4-tag-options'
+export const TAG_OPTIONS_KEY = 'sd-v4-tag-options'
+const OPTIONS_KEY = TAG_OPTIONS_KEY
 
 interface StoredThresholds {
   general: number | null
@@ -162,9 +164,21 @@ function readCustom(c: Stored['custom']): CustomModel {
   return { profile, modelPath: str(c?.modelPath), tagsPath: str(c?.tagsPath) }
 }
 
+/** Where a start with nothing remembered begins: the saved defaults (Settings > AI > AI defaults), if there are any. */
+function storedFromDefaults(): Stored {
+  const d = readTaggerDefaults()
+  if (!d) return {}
+  return {
+    model: d.modelName,
+    ...(d.useGpu !== null ? { useGpu: d.useGpu } : {}),
+    thresholds: { [d.modelName]: { general: d.threshold, character: d.characterThreshold } },
+    custom: { profile: d.customProfile, modelPath: d.customModelPath, tagsPath: d.customTagsPath },
+  }
+}
+
 /** Last choices, so the next run starts where this one left off. Thresholds are per tagger. */
 export function loadTagOptions(fallbackModel: string): TagOptions {
-  const s = readStored()
+  const s = hasStoredTagOptions() ? readStored() : storedFromDefaults()
   const model = typeof s.model === 'string' && s.model ? s.model : fallbackModel
   const t = rememberedFrom(s, model)
   return {

@@ -1687,10 +1687,14 @@
         "#btn-vlm-preset-undo"
       ],
       "vopus": {
-        "missing": "Vopus lists saved presets in Settings > AI and applies them, but cannot save, rename or delete them yet; the classic VLM settings dialog has it"
+        "at": "#/settings/ai",
+        "find": "[data-testid=\"vlm-preset-save-as\"]",
+        "note": "Settings > AI > Prompts: save the prompts as a new preset, save changes into one of yours, rename, delete with Undo"
       },
       "next": {
-        "missing": "The new interface cannot save, rename or delete prompt presets yet"
+        "at": "#/settings/ai",
+        "find": "[data-testid=\"vlm-preset-save-as\"]",
+        "note": "same Settings > AI page as Vopus"
       }
     },
     {
@@ -3956,12 +3960,14 @@
         "#btn-settings-reset-ai-defaults"
       ],
       "vopus": {
-        "missing": "Vopus has no save / reset of AI defaults"
+        "at": "#/settings/ai",
+        "find": "[data-testid=\"ai-defaults-save\"]",
+        "note": "Settings > AI > AI defaults: save the tagger and style finder settings as the defaults (V3.5's own keys), reset them, Undo"
       },
       "next": {
-        "at": "#/tools/artist",
-        "find": "[data-testid=\"artist-reset\"]",
-        "note": "settings are saved automatically; Reset for the tagger is in tag-dialog, for the artist finder here"
+        "at": "#/settings/ai",
+        "find": "[data-testid=\"ai-defaults-save\"]",
+        "note": "same Settings > AI page as Vopus; the style finder's own Reset for its settings stays on its tool page"
       }
     },
     {

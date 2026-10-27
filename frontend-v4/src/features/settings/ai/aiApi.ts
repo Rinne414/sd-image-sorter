@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { api, unwrap } from '../../../api/client'
 import { queryClient } from '../../../api/queryClient'
+import type { PresetList } from './presets'
 import type { ChatEvent, LocalModels, Preset, ProbeResult, TestResult, VlmSettings } from './types'
 import { vlmReadiness, type SaveBody, type VlmReadiness } from './vlmForm'
 
@@ -26,10 +27,16 @@ export function useDescriber(): VlmReadiness | null {
   return settings.data ? vlmReadiness(settings.data) : null
 }
 
+export const PRESETS_KEY = ['vlm-presets'] as const
+
+/** The prompt presets (built-in first, then the user's own) and the reason the user's file could not be read, if any. */
 export function usePresets() {
   return useQuery({
-    queryKey: ['vlm-presets'],
-    queryFn: async ({ signal }) => unwrap<{ presets: Record<string, Preset> }>(await api.GET('/api/vlm/presets', { signal })).presets ?? {},
+    queryKey: PRESETS_KEY,
+    queryFn: async ({ signal }): Promise<PresetList> => {
+      const answer = unwrap<{ presets?: Record<string, Preset>; custom_presets_problem?: string }>(await api.GET('/api/vlm/presets', { signal }))
+      return { presets: answer.presets ?? {}, problem: typeof answer.custom_presets_problem === 'string' ? answer.custom_presets_problem : '' }
+    },
     staleTime: Infinity,
   })
 }

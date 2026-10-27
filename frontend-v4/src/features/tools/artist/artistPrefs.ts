@@ -5,7 +5,9 @@ import { create } from 'zustand'
 // result are skipped. They are remembered as they change, in the key V3.5
 // already uses, so both apps and right-click "识别画风" share them.
 
-const KEY = 'sd-image-sorter-artist-defaults-v1'
+/** Also V3.5's key for the same settings. */
+export const ARTIST_KEY = 'sd-image-sorter-artist-defaults-v1'
+const KEY = ARTIST_KEY
 
 export type ModelSource = 'huggingface' | 'modelscope' | 'local'
 export const MODEL_SOURCES: readonly ModelSource[] = ['huggingface', 'modelscope', 'local']

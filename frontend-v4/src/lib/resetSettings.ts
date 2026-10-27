@@ -36,6 +36,7 @@ export const SETTING_KEYS: readonly string[] = [
   'sd-tipo-model-v1',
   'sd-image-sorter-artist-defaults-v1',
   'sd-v4-generator-seed-mode',
+  'sd-image-sorter-tagger-defaults-v1',
 ]
 
 /** Censor tool options share a prefix (brush, style, detection). */
