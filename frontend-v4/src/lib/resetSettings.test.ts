@@ -54,3 +54,10 @@ describe('AI defaults', () => {
     expect(isSettingKey('sd-image-sorter-artist-defaults-v1')).toBe(true)
   })
 })
+
+describe('top bar places', () => {
+  test('both interfaces keep their customized bar as a preference, so Reset all settings restores it', () => {
+    expect(isSettingKey('sd-v4-nav-places')).toBe(true)
+    expect(isSettingKey('sd-next-nav-places')).toBe(true)
+  })
+})

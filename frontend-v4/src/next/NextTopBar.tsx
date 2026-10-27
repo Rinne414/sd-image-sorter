@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useT, type MessageKey } from '../i18n'
 import { useApp } from '../state/store'
 import { Icon } from '../ui/Icon'
@@ -5,6 +6,9 @@ import { Menu, type MenuItem } from '../ui/Menu'
 import { useToasts } from '../ui/toasts'
 import { AiBusyChip } from '../features/jobs/AiBusyChip'
 import { JobsMenu } from '../features/jobs/JobsMenu'
+import { NavCustomizeDialog } from '../features/navcustom/NavCustomizeDialog'
+import { hiddenIds, shownIds } from '../features/navcustom/navChoice'
+import { useNavCustomizeOpen } from '../features/navcustom/navStore'
 import { useSelectionDialog } from '../features/selection/dialogs'
 import { useAppStats } from '../features/settings/about/aboutApi'
 import { UpdateHint } from '../features/settings/about/UpdateHint'
@@ -15,6 +19,7 @@ import { quickCensor } from '../features/censor/quickCensor'
 import { pickImageFile } from '../features/similar/imageSearch'
 import { showLikeImage, useSimilar } from '../features/similar/similarStore'
 import { openClassic, type ClassicView } from './classicLink'
+import { NEXT_PLACES, useNextNav } from './nextPlaces'
 import styles from './NextTopBar.module.css'
 
 interface Place {
@@ -46,6 +51,9 @@ export function NextTopBar() {
   const toolId = useApp((s) => s.toolId)
   const picks = useApp((s) => s.selection.length)
   const stats = useAppStats()
+  const choice = useNextNav((s) => s.choice)
+  const customizeOpen = useNavCustomizeOpen((s) => s.open)
+  const setCustomizeOpen = useNavCustomizeOpen((s) => s.setOpen)
   const classic = (id: string, label: MessageKey, view: ClassicView): Place => ({
     id,
     label,
@@ -103,9 +111,24 @@ export function NextTopBar() {
     { id: 'similar-classic', label: t('next.similar.classic'), hint: t('next.place.classicHint'), divider: true, onSelect: () => openClassic('similar') },
   ]
 
+  // Places the user took out of the bar wait at the top of More: single places
+  // first, then the items of a hidden Censor or Similar menu under its name.
+  const hiddenSet = new Set(hiddenIds(choice))
+  const hiddenMenus: Record<string, MenuItem[]> = { censor: censorItems, similar: similarItems }
+  const hiddenPlaces: MenuItem[] = places
+    .filter((p) => hiddenSet.has(p.id))
+    .map((p) => ({ id: `place-${p.id}`, label: t(p.label), checked: p.current, group: t('navcustom.hiddenGroup'), onSelect: p.go }))
+  const hiddenGroups: MenuItem[] = Object.entries(hiddenMenus)
+    .filter(([id]) => hiddenSet.has(id))
+    .flatMap(([id, items]) => items.map((item) => ({ ...item, group: t(`next.place.${id}` as MessageKey), divider: undefined })))
+  const hiddenItems = [...hiddenPlaces, ...hiddenGroups]
+  const hiddenCurrent = places.some((p) => hiddenSet.has(p.id) && p.current)
+
   const more: MenuItem[] = [
-    ...TOOLS.filter((tool) => tool.id !== 'reader').map((tool) => ({
+    ...hiddenItems,
+    ...TOOLS.filter((tool) => tool.id !== 'reader').map((tool, i) => ({
       id: `tool-${tool.id}`,
+      divider: i === 0 && hiddenItems.length > 0 ? true : undefined,
       label: t(tool.label),
       checked: page === 'tools' && toolId === tool.id,
       onSelect: () => app().openTool(tool.id),
@@ -116,6 +139,7 @@ export function NextTopBar() {
       divider: true,
       onSelect: onImages((ids) => useSelectionDialog.getState().showFor('edit-tags', ids, ids.length)),
     },
+    { id: 'customize-places', label: t('navcustom.open'), divider: true, onSelect: () => setCustomizeOpen(true) },
     { id: 'dataset', label: t('next.more.dataset'), hint: t('next.place.classicHint'), divider: true, onSelect: () => openClassic('dataset') },
     { id: 'classic', label: t('next.more.classicUi'), divider: true, onSelect: () => openClassic() },
     { id: 'vopus', label: t('next.more.vopusUi'), onSelect: () => location.assign('/vopus/') },
@@ -126,67 +150,85 @@ export function NextTopBar() {
     useSelectionDialog.getState().showFor('tag', ids.length ? [...ids] : null, ids.length)
   }
 
+  // The bar in the user's order; a hidden place is not drawn (it waits in More).
+  const bar: Record<string, ReactNode> = {
+    ...Object.fromEntries(
+      places.map((p) => [
+        p.id,
+        <button
+          key={p.id}
+          type="button"
+          className={styles.place}
+          aria-current={p.current ? 'page' : undefined}
+          onClick={p.go}
+          title={p.classic ? `${t(p.label)} · ${t('next.place.classicHint')}` : undefined}
+          data-testid={`next-place-${p.id}`}
+        >
+          {t(p.label)}
+        </button>,
+      ]),
+    ),
+    censor: <Menu key="censor" label={t('next.place.censor')} items={censorItems} testId="next-censor" />,
+    similar: <Menu key="similar" label={t('next.place.similar')} items={similarItems} testId="next-similar" />,
+  }
+  const labels = Object.fromEntries(NEXT_PLACES.map((p) => [p.id, t(p.label)]))
+
   return (
-    <header className={styles.bar}>
-      <button type="button" className={styles.brand} onClick={() => app().setPage('home')} title={t('nav.home')}>
-        <span className={styles.name}>{t('next.brand')}</span>
-        {stats.data?.app_version && <span className={styles.version}>{stats.data.app_version}</span>}
-        <span className={styles.trial}>{t('next.trial')}</span>
-      </button>
-
-      <nav className={styles.places} aria-label="main">
-        {places.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            className={styles.place}
-            aria-current={p.current ? 'page' : undefined}
-            onClick={p.go}
-            title={p.classic ? `${t(p.label)} · ${t('next.place.classicHint')}` : undefined}
-            data-testid={`next-place-${p.id}`}
-          >
-            {t(p.label)}
-          </button>
-        ))}
-        <Menu label={t('next.place.censor')} items={censorItems} testId="next-censor" />
-        <Menu label={t('next.place.similar')} items={similarItems} testId="next-similar" />
-        <Menu label={t('next.place.more')} items={more} current={page === 'tools' && toolId !== 'reader'} testId="next-more" />
-      </nav>
-
-      <span className={styles.gap} />
-
-      <AiBusyChip />
-      <UpdateHint />
-      <JobsMenu />
-      <button type="button" className={`btn btn-ghost ${styles.find}`} onClick={() => app().setPaletteOpen(true)} data-testid="open-palette">
-        <Icon name="search" size={14} />
-        <span>{t('next.find')}</span>
-        <kbd>Ctrl K</kbd>
-      </button>
-      <button type="button" className="btn" onClick={aiTag} title={t('next.aiTagTitle')} data-testid="next-ai-tag">
-        {t('next.aiTag')}
-      </button>
-      <button
-        type="button"
-        className="btn btn-primary"
-        onClick={() => useSelectionDialog.getState().showFor('import', null, 1)}
-        data-testid="import-button"
+    <>
+      <header
+        className={styles.bar}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          setCustomizeOpen(true)
+        }}
       >
-        <Icon name="folder" size={15} />
-        {t('import.button')}
-      </button>
-      <button
-        type="button"
-        className="btn btn-ghost"
-        onClick={() => app().openSettings()}
-        aria-current={page === 'settings' ? 'page' : undefined}
-        title={t('settings.gear')}
-        aria-label={t('settings.title')}
-        data-testid="settings-button"
-      >
-        <Icon name="gear" />
-        <span className={styles.settingsLabel}>{t('settings.title')}</span>
-      </button>
-    </header>
+        <button type="button" className={styles.brand} onClick={() => app().setPage('home')} title={t('nav.home')}>
+          <span className={styles.name}>{t('next.brand')}</span>
+          {stats.data?.app_version && <span className={styles.version}>{stats.data.app_version}</span>}
+          <span className={styles.trial}>{t('next.trial')}</span>
+        </button>
+
+        <nav className={styles.places} aria-label="main">
+          {shownIds(choice).map((id) => bar[id])}
+          <Menu label={t('next.place.more')} items={more} current={hiddenCurrent || (page === 'tools' && toolId !== 'reader')} testId="next-more" />
+        </nav>
+
+        <span className={styles.gap} />
+
+        <AiBusyChip />
+        <UpdateHint />
+        <JobsMenu />
+        <button type="button" className={`btn btn-ghost ${styles.find}`} onClick={() => app().setPaletteOpen(true)} data-testid="open-palette">
+          <Icon name="search" size={14} />
+          <span>{t('next.find')}</span>
+          <kbd>Ctrl K</kbd>
+        </button>
+        <button type="button" className="btn" onClick={aiTag} title={t('next.aiTagTitle')} data-testid="next-ai-tag">
+          {t('next.aiTag')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => useSelectionDialog.getState().showFor('import', null, 1)}
+          data-testid="import-button"
+        >
+          <Icon name="folder" size={15} />
+          {t('import.button')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => app().openSettings()}
+          aria-current={page === 'settings' ? 'page' : undefined}
+          title={t('settings.gear')}
+          aria-label={t('settings.title')}
+          data-testid="settings-button"
+        >
+          <Icon name="gear" />
+          <span className={styles.settingsLabel}>{t('settings.title')}</span>
+        </button>
+      </header>
+      {customizeOpen && <NavCustomizeDialog useStore={useNextNav} defs={NEXT_PLACES} labels={labels} onClose={() => setCustomizeOpen(false)} />}
+    </>
   )
 }

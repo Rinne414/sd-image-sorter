@@ -1,0 +1,134 @@
+.body {
+  margin: 0 0 10px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px 3px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: var(--wash);
+}
+
+.row[data-on] {
+  background: var(--wash-hover);
+}
+
+.row:hover {
+  border-color: var(--line-strong);
+}
+
+.row[data-dragging] {
+  opacity: 0.5;
+}
+
+/* Where the dragged place will land: a rule on the edge it will take. */
+.row[data-over="before"]::before,
+.row[data-over="after"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+.row[data-over="before"]::before {
+  top: -2px;
+}
+
+.row[data-over="after"]::after {
+  bottom: -2px;
+}
+
+/* A grip of six dots: this row can be dragged. */
+.grip {
+  flex: none;
+  width: 12px;
+  height: 18px;
+  cursor: grab;
+  background-image: radial-gradient(circle, var(--faint) 1.2px, transparent 1.4px);
+  background-size: 6px 6px;
+  background-position: center;
+}
+
+.row[data-dragging] .grip {
+  cursor: grabbing;
+}
+
+.pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  cursor: pointer;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.row:not([data-on]) .name {
+  color: var(--muted);
+}
+
+.where {
+  flex: none;
+  min-width: 70px;
+  color: var(--faint);
+  font-size: var(--fs-2);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.moves {
+  flex: none;
+  display: flex;
+  gap: 2px;
+}
+
+.flip {
+  display: grid;
+  rotate: 180deg;
+}
+
+.notice {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--danger-soft);
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.spread {
+  flex: 1;
+}
+
+.live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}

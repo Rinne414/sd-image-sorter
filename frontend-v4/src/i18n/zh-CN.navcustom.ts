@@ -1,4 +1,24 @@
 // Customize and reorder the top-bar places. Spread into zh-CN.ts; every key here must exist
 // in en.navcustom.ts (the type enforces it). Keys start with 'navcustom.'.
 export const zhCNNavCustom = {
-}
+  'navcustom.open': '自定义顶栏…',
+  'navcustom.openTitle': '选择哪些页面放在顶栏，并调整顺序',
+  'navcustom.title': '自定义顶栏',
+  'navcustom.body': '勾选要放在顶栏的页面，拖动或用箭头调整顺序。没勾的页面收进「更多」，也能用 Ctrl K 找到。',
+  'navcustom.list': '顶栏的页面',
+  'navcustom.show': '在顶栏显示「{name}」',
+  'navcustom.drag': '拖动调整顺序',
+  'navcustom.moveUp': '上移「{name}」',
+  'navcustom.moveDown': '下移「{name}」',
+  'navcustom.inBar': '在顶栏',
+  'navcustom.inMore': '在「更多」里',
+  'navcustom.position': '「{name}」现在排第 {n} 位',
+  'navcustom.lastOne': '顶栏至少要留一个页面，否则就没有入口可点了。先勾选别的页面，再取消这一个。',
+  'navcustom.reset': '恢复默认',
+  'navcustom.resetDone': '已恢复默认顶栏。',
+  'navcustom.resetNone': '现在就是默认顶栏',
+  'navcustom.done': '完成',
+  'navcustom.more': '更多',
+  'navcustom.moreTitle': '收起的页面，和自定义顶栏',
+  'navcustom.hiddenGroup': '已从顶栏收起',
+} as const

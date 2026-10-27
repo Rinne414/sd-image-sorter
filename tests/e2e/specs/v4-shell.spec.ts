@@ -120,7 +120,8 @@ test('Tools menu: keyboard, Esc closes only the menu, tool pages, back', async (
   await expect(menu.getByRole('menuitem', { name: 'Reverse prompt' })).toBeFocused()
   await page.keyboard.press('ArrowUp')
   await page.keyboard.press('ArrowUp')
-  await expect(menu.getByRole('menuitem', { name: 'Edit tags…' })).toBeFocused()
+  // (the last item is Customize top bar…, after the tool and tag actions)
+  await expect(menu.getByRole('menuitem', { name: 'Customize top bar…' })).toBeFocused()
 
   // Esc closes the menu, gives the focus back to the button and leaves the page where it is
   await page.keyboard.press('Escape')

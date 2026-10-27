@@ -14,7 +14,9 @@ export const SETTING_KEYS: readonly string[] = [
   'sd-image-sorter-lang',
   'sd-v4-update-autocheck',
   'sd-v4-auto-refresh',
-  // panels shown or folded
+  // panels shown or folded, and which places the top bar shows (Customize top bar)
+  'sd-v4-nav-places',
+  'sd-next-nav-places',
   'sd-v4-rail-folded',
   'sd-v4-folder-tree',
   'sd-v4-lightbox-info',
