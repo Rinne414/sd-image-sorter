@@ -27,6 +27,7 @@ export const SETTING_KEYS: readonly string[] = [
   'manual_sort_zen_v1',
   'sd-v4-tag-options',
   'sd-v4-privacy-options',
+  'sd-v4-privacy-disguise',
   'sd-v4-reverse-options',
   'sd-v4-promptlab-mode',
   'sd-v4-export-format',

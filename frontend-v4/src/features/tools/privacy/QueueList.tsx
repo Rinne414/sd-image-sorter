@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { useT } from '../../../i18n'
 import { Dialog } from '../../../ui/Dialog'
 import styles from './Privacy.module.css'
 import { usePT } from './privacyText'
@@ -11,7 +12,11 @@ import { copyItem, downloadItem } from './share'
 
 function Preview({ item, showing, onShow, onClose }: { item: QueueItem; showing: Showing; onShow: (s: Showing) => void; onClose: () => void }) {
   const t = usePT()
+  const d = useT()
   const result = item.result
+  // a disguise shows the cover (what a chat list shows); the real picture is the original
+  const resultLabel = result?.disguise ? d('disguise.item.cover') : t('privacy.item.result')
+  const resultUrl = result?.disguise?.coverUrl ?? result?.url
   const shown = showing === 'result' && result ? 'result' : 'source'
   const footer = (
     <>
@@ -19,7 +24,7 @@ function Preview({ item, showing, onShow, onClose }: { item: QueueItem; showing:
         <div className={styles.segmented} role="group" aria-label={t('privacy.preview.show')}>
           {(['source', 'result'] as const).map((s) => (
             <button key={s} type="button" className="btn" aria-pressed={shown === s} onClick={() => onShow(s)} data-testid={`privacy-preview-${s}`}>
-              {t(s === 'source' ? 'privacy.item.source' : 'privacy.item.result')}
+              {s === 'source' ? t('privacy.item.source') : resultLabel}
             </button>
           ))}
         </div>
@@ -34,9 +39,9 @@ function Preview({ item, showing, onShow, onClose }: { item: QueueItem; showing:
     </>
   )
   return (
-    <Dialog title={resultName(item.fileName, item.rename, '.png')} onClose={onClose} footer={footer} wide="x" testId="privacy-preview">
+    <Dialog title={result?.disguise?.fileName ?? resultName(item.fileName, item.rename, '.png')} onClose={onClose} footer={footer} wide="x" testId="privacy-preview">
       <div className={styles.previewStage}>
-        <img className={styles.previewImage} src={shown === 'result' ? result!.url : sourceSrc(item, true)} alt={t(shown === 'result' ? 'privacy.item.result' : 'privacy.item.source')} data-testid="privacy-preview-image" data-showing={shown} />
+        <img className={styles.previewImage} src={shown === 'result' ? resultUrl : sourceSrc(item, true)} alt={shown === 'result' ? resultLabel : t('privacy.item.source')} data-testid="privacy-preview-image" data-showing={shown} />
       </div>
     </Dialog>
   )

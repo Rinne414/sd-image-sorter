@@ -281,6 +281,14 @@
   border-left-color: var(--accent);
 }
 
+.card[data-state="packed"] {
+  border-left-color: var(--ok);
+}
+
+.card[data-state="needs-cover"] {
+  border-left-color: var(--warn);
+}
+
 .card[data-state="failed"] {
   border-left-color: var(--danger);
 }

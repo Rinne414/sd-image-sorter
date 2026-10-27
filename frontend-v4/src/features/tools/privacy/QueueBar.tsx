@@ -1,4 +1,6 @@
+import { useT } from '../../../i18n'
 import { IntakeButtonsMany } from '../intake/Intake'
+import { CopyAllButton, DisguiseNotices } from './disguise/DisguiseBar'
 import { isHuge } from './engine/imageSize'
 import styles from './Privacy.module.css'
 import { usePT } from './privacyText'
@@ -12,17 +14,24 @@ import { downloadAll } from './share'
 
 function RunLine() {
   const t = usePT()
+  const d = useT()
   const run = usePrivacy((s) => s.run)
   const summary = usePrivacy((s) => s.summary)
+  const disguise = usePrivacy((s) => s.options.mode === 'disguise')
   const huge = usePrivacy((s) => s.items.filter((it) => isHuge(it.size)).length)
   const handled = run ? run.done + run.failed : 0
+  const progress = run && { done: handled, total: run.total }
 
   return (
     <div className={styles.runLine}>
       {run ? (
         <>
           <span className={styles.runText} role="status" data-testid="privacy-progress">
-            {run.stopping ? t('privacy.stopping') : t(run.direction === 'encode' ? 'privacy.running.encode' : 'privacy.running.decode', { done: handled, total: run.total })}
+            {run.stopping
+              ? t('privacy.stopping')
+              : disguise
+                ? d(run.direction === 'encode' ? 'disguise.running.make' : 'disguise.running.restore', progress!)
+                : t(run.direction === 'encode' ? 'privacy.running.encode' : 'privacy.running.decode', progress!)}
           </span>
           <span className={styles.progress} aria-hidden>
             <span style={{ width: `${run.total ? (handled / run.total) * 100 : 0}%` }} />
@@ -49,8 +58,10 @@ function RunLine() {
 
 export function QueueBar() {
   const t = usePT()
+  const d = useT()
   const count = usePrivacy((s) => s.items.length)
   const running = usePrivacy((s) => s.run !== null)
+  const disguise = usePrivacy((s) => s.options.mode === 'disguise')
   const zipping = usePrivacy((s) => s.zipping)
   const hasResults = usePrivacy((s) => s.items.some((it) => it.result))
 
@@ -67,18 +78,20 @@ export function QueueBar() {
           </button>
         </div>
         <div className={styles.barGroup}>
+          {disguise && <CopyAllButton />}
           <button type="button" className="btn" onClick={() => void downloadAll()} disabled={!hasResults || zipping} title={t('privacy.downloadAll.hint')} data-testid="privacy-download-all">
             {zipping ? t('privacy.zipping') : t('privacy.downloadAll')}
           </button>
-          <button type="button" className="btn" onClick={() => void runAll('decode')} disabled={running} title={t('privacy.restoreAll.hint')} data-testid="privacy-restore-all">
-            {t('privacy.restoreAll')}
+          <button type="button" className="btn" onClick={() => void runAll('decode')} disabled={running} title={disguise ? d('disguise.restore.hint') : t('privacy.restoreAll.hint')} data-testid="privacy-restore-all">
+            {disguise ? d('disguise.restore') : t('privacy.restoreAll')}
           </button>
-          <button type="button" className="btn btn-primary" onClick={() => void runAll('encode')} disabled={running} title={t('privacy.protectAll.hint')} data-testid="privacy-protect-all">
-            {t('privacy.protectAll')}
+          <button type="button" className="btn btn-primary" onClick={() => void runAll('encode')} disabled={running} title={disguise ? d('disguise.make.hint') : t('privacy.protectAll.hint')} data-testid="privacy-protect-all">
+            {disguise ? d('disguise.make') : t('privacy.protectAll')}
           </button>
         </div>
       </div>
       <RunLine />
+      {disguise && <DisguiseNotices />}
     </header>
   )
 }
