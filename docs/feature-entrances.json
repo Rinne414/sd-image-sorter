@@ -3613,10 +3613,24 @@
         "#btn-dataset-add-to-collection"
       ],
       "vopus": {
-        "missing": "Vopus has no collections to add dataset images to; a dataset is itself a batch"
+        "at": "#/batch",
+        "open": [
+          "[data-testid=\"rail-step\"][data-step-id=\"pick\"]",
+          "[data-testid=\"pick-select-all\"]"
+        ],
+        "find": "[data-testid=\"pick-add-to-batch\"]",
+        "needs": "batch",
+        "note": "A batch is V Opus's group of images (classic collections open as batches): the pick step's selection goes into a new, template or recent batch"
       },
       "next": {
-        "missing": "Dataset images cannot be added to a collection in the new interface."
+        "at": "#/batch",
+        "open": [
+          "[data-testid=\"rail-step\"][data-step-id=\"pick\"]",
+          "[data-testid=\"pick-select-all\"]"
+        ],
+        "find": "[data-testid=\"pick-add-to-batch\"]",
+        "needs": "batch",
+        "note": "same pick step as V Opus"
       }
     },
     {

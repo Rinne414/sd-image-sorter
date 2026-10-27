@@ -74,6 +74,11 @@ export function PickStep({ batch, next, onNext }: Props) {
   const viewable = useMemo(() => entries.filter((e): e is Entry & { imageId: number } => e.imageId !== null), [entries])
   const summaries = useMemo(() => viewable.map(entrySummary), [viewable])
   const folderCount = useMemo(() => source.entries.filter((e) => e.ref.kind === 'folder').length, [source.entries])
+  // The selected Library images: they can also go into another batch.
+  const pickedImageIds = useMemo(
+    () => entries.flatMap((e) => (selection.keys.has(e.key) && e.imageId !== null ? [e.imageId] : [])),
+    [entries, selection],
+  )
 
   const inner = Math.max(0, width - 2 * PAD)
   const cols = Math.max(1, Math.floor((inner + GAP) / (TILE_TARGET + GAP)))
@@ -181,6 +186,7 @@ export function PickStep({ batch, next, onNext }: Props) {
         total={source.entries.length}
         folderCount={folderCount}
         selected={selection.keys.size}
+        pickedImageIds={pickedImageIds}
         isDataset={source.isDataset}
         next={next}
         onNext={onNext}

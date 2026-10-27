@@ -1,6 +1,10 @@
 import { useRef } from 'react'
 import { useT } from '../../i18n'
 import { useApp } from '../../state/store'
+import { Menu } from '../../ui/Menu'
+import { menuItemsOf } from '../selection/actions'
+import { useBulkActions } from '../selection/actionOps'
+import { useToasts } from '../../ui/toasts'
 import { openFolderDialog, uploadInto, useDatasetImport } from './datasetImport'
 import { stepLabel } from './labels'
 import styles from './PickStep.module.css'
@@ -10,6 +14,8 @@ interface Props {
   total: number
   folderCount: number
   selected: number
+  /** The selected images that are in the Library (folder images have no id). */
+  pickedImageIds: number[]
   isDataset: boolean
   next: string | null
   onNext: (step: string) => void
@@ -40,6 +46,7 @@ export function PickBar(p: Props) {
           <span className={styles.selectedCount} data-testid="pick-selected">
             {t('dataset.selected', { n: p.selected })}
           </span>
+          <AddPicksToBatch batchId={p.batchId} ids={p.pickedImageIds} folderPicked={p.selected - p.pickedImageIds.length} />
           <button type="button" className="btn" onClick={p.onRemoveSelected} data-testid="pick-remove-selected">
             {t('dataset.removeSelected', { n: p.selected })}
           </button>
@@ -96,4 +103,32 @@ export function PickBar(p: Props) {
       )}
     </div>
   )
+}
+
+/**
+ * The selected images into another batch, the way the Library's selection bar
+ * does it (a new batch, a template, a recent batch). A batch is V Opus's group of
+ * images, so this is where classic's "add to a collection" lives.
+ */
+function AddPicksToBatch({ batchId, ids, folderPicked }: { batchId: number; ids: number[]; folderPicked: number }) {
+  const t = useT()
+  const actions = useBulkActions(ids)
+  const batch = actions.find((a) => a.id === 'batch')
+  if (ids.length === 0 || !batch) {
+    return (
+      <button type="button" className="btn" disabled title={t('collections.folderOnly')} data-testid="pick-add-to-batch">
+        {t('batch.menu.label')}
+      </button>
+    )
+  }
+  const children = (batch.children ?? [])
+    .filter((c) => c.id !== `batch-add-${batchId}`)
+    .map((c) => ({
+      ...c,
+      run: () => {
+        c.run?.()
+        if (folderPicked > 0) useToasts.getState().push(t('collections.folderLeftOut', { n: folderPicked }), 'info')
+      },
+    }))
+  return <Menu label={t('batch.menu.label')} items={menuItemsOf(t, children)} testId="pick-add-to-batch" />
 }
