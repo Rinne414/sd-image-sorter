@@ -269,6 +269,8 @@ export const zhCNSort = {
   'sort.rules.moreFailures': '还有 {n} 张没列出来。',
   'sort.rules.gone': '这次的进度已经被后来的任务替换，数字看不到了；撤销仍然可以做。',
   'sort.rules.undo': '撤销这次',
+  'sort.rules.undoLeft': '撤销剩下的 {n} 张',
+  'sort.rules.undoLeftHint': '把挡住它们的原因去掉后（原位置的别的文件、在别处打开的文件），再撤销一次就会把这些也放回去。',
   'sort.rules.undoHintMove': '把移走的图放回原来的位置。之后又被移动过、或原来的位置被别的文件占了的图不会动，会列出来。',
   'sort.rules.undoHintCopy': '删掉这次复制出来的文件；之后改过的复制品会留下，会列出来。',
   'sort.rules.undoing': '正在撤销 {at} / {total} 张…',

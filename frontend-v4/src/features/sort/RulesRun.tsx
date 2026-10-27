@@ -80,10 +80,11 @@ export function RulesRun({ record }: { record: RunRecord }) {
   const [problem, setProblem] = useState<string | null>(null)
   const copy = record.operation === 'copy'
 
-  // A finished undo is remembered, so the run is not offered for undo again.
+  // A finished undo is remembered, so the run is not offered for undo again;
+  // one that left images (another file in their old place) can run again for those.
   useEffect(() => {
-    if (run?.kind === 'undo' && run.status === 'done' && record.phase !== 'undone') useRules.getState().set({ ...record, phase: 'undone' })
-  }, [run?.kind, run?.status, record])
+    if (run?.kind === 'undo' && run.status === 'done' && run.failed === 0 && record.phase !== 'undone') useRules.getState().set({ ...record, phase: 'undone' })
+  }, [run?.kind, run?.status, run?.failed, record])
 
   const undo = async () => {
     setProblem(await undoRulesRun(record))
@@ -97,7 +98,8 @@ export function RulesRun({ record }: { record: RunRecord }) {
   }
 
   const running = run !== null && isRunning(run)
-  const canUndo = run !== null && !running && record.phase !== 'undone' && (run.kind === 'sort' || run.status === 'cancelled' || run.status === 'lost')
+  const undoLeft = run !== null && run.kind === 'undo' && run.status === 'done' && run.failed > 0
+  const canUndo = run !== null && !running && record.phase !== 'undone' && (run.kind === 'sort' || run.status === 'cancelled' || run.status === 'lost' || undoLeft)
   const split = record.splitBy === 'none' ? '' : ` · ${splitName(t, record.splitBy)}`
   const op = t(copy ? 'sort.rules.op.copied' : 'sort.rules.op.moved')
 
@@ -131,7 +133,7 @@ export function RulesRun({ record }: { record: RunRecord }) {
             {problem}
           </p>
         )}
-        {canUndo && <p className={styles.note}>{t(copy ? 'sort.rules.undoHintCopy' : 'sort.rules.undoHintMove')}</p>}
+        {canUndo && <p className={styles.note}>{undoLeft ? t('sort.rules.undoLeftHint') : t(copy ? 'sort.rules.undoHintCopy' : 'sort.rules.undoHintMove')}</p>}
         <div className={styles.doneActions}>
           {running ? (
             <>
@@ -146,7 +148,7 @@ export function RulesRun({ record }: { record: RunRecord }) {
             <>
               {canUndo && (
                 <button type="button" className="btn" onClick={() => void undo()} data-testid="sort-rules-undo">
-                  {t('sort.rules.undo')}
+                  {undoLeft && run ? t('sort.rules.undoLeft', { n: run.failed }) : t('sort.rules.undo')}
                 </button>
               )}
               {record.groups.length <= 1 && (

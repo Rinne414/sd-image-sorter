@@ -113,16 +113,24 @@ test('the library search moves every match into subfolders; undo puts them back 
     expect(fs.existsSync(path.join(dest, 'nai', name))).toBe(false)
   }
   expect(fs.existsSync(path.join(dest, 'nai', files[0]!))).toBe(true)
-  await expect(page.getByTestId('sort-rules-undo')).toHaveCount(0)
 
-  // a reload comes back to the same run; then the setup remembers it
+  // a reload comes back to the same run, and the one left can be undone once its old place is free
   await page.reload()
   await expect(run(page)).toHaveAttribute('data-kind', 'undo')
   await expect(page.getByTestId('sort-rules-failures')).toContainText(files[0]!)
+  await expect(page.getByTestId('sort-rules-undo')).toHaveText('Undo the 1 image left')
+  fs.rmSync(src(files[0]!))
+  await page.getByTestId('sort-rules-undo').click()
+  // the run as a whole: every image back in place now
+  await expect(page.getByTestId('sort-rules-headline')).toHaveText('Undone: 6 images back in place.')
+  await expect(page.getByTestId('sort-rules-failures')).toHaveCount(0)
+  await expect(page.getByTestId('sort-rules-undo')).toHaveCount(0)
+  expect(fs.existsSync(src(files[0]!))).toBe(true)
+  expect(fs.existsSync(path.join(dest, 'nai', files[0]!))).toBe(false)
+
+  // then the setup remembers it
   await page.getByTestId('sort-rules-again').click()
   await expect(page.getByTestId('sort-rules-last')).toContainText('was undone')
-  fs.rmSync(src(files[0]!))
-  fs.renameSync(path.join(dest, 'nai', files[0]!), src(files[0]!))
 })
 
 test('picks can be copied without a split; undo deletes the copies and keeps the originals', async ({ page }) => {

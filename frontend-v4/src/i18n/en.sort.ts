@@ -266,6 +266,8 @@ export const enSort: Record<keyof typeof zhCNSort, string> = {
   'sort.rules.moreFailures': '{n} more are not listed.',
   'sort.rules.gone': 'A later job has replaced this run’s progress, so its numbers are gone; it can still be undone.',
   'sort.rules.undo': 'Undo this run',
+  'sort.rules.undoLeft': 'Undo the {n} images left',
+  'sort.rules.undoLeftHint': 'Once what kept them is gone (another file in their old place, a file open elsewhere), the undo puts these back too.',
   'sort.rules.undoHintMove': 'Puts the moved images back where they were. Images moved again since, or whose old place another file has taken, stay where they are and are listed.',
   'sort.rules.undoHintCopy': 'Deletes the copies this run made; copies changed since are kept and listed.',
   'sort.rules.undoing': 'Undoing {at} of {total}…',
