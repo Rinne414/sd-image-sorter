@@ -20,6 +20,11 @@ export interface ImageSummary {
   metadata_status: string | null
   created_at: string | null
   library_order_time: string | null
+  /** 'image' or 'video' (a video library item); older rows may leave it out. */
+  media_type?: string | null
+  duration_seconds?: number | null
+  video_codec?: string | null
+  video_probe_state?: string | null
 }
 
 export interface ImagesPage {
@@ -52,6 +57,9 @@ export interface ImageDetail extends ImageSummary {
   color_saturation?: number | null
   color_temperature?: string | null
   brightness_distribution?: string | null
+  video_fps?: number | null
+  video_has_audio?: number | boolean | null
+  video_probe_error?: string | null
 }
 
 export interface ImageDetailResponse {

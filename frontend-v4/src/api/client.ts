@@ -38,7 +38,7 @@ export class ApiError extends Error {
   }
 }
 
-function detailOf(body: unknown): string | null {
+export function detailOf(body: unknown): string | null {
   if (!body || typeof body !== 'object') return null
   const { detail, message, error } = body as { detail?: unknown; message?: unknown; error?: unknown }
   if (typeof detail === 'string') return detail
@@ -49,7 +49,7 @@ function detailOf(body: unknown): string | null {
   return null
 }
 
-function codeOf(body: unknown): string | null {
+export function codeOf(body: unknown): string | null {
   const code = body && typeof body === 'object' ? (body as { code?: unknown }).code : null
   return typeof code === 'string' ? code : null
 }

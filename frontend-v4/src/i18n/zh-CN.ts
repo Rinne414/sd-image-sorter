@@ -18,6 +18,16 @@ import { zhCNLibrarySettings } from './zh-CN.library-settings'
 import { zhCNPromptLab } from './zh-CN.promptlab'
 import { zhCNAi } from './zh-CN.ai'
 import { zhCNNext } from './zh-CN.next'
+import { zhCNCollect } from './zh-CN.collect'
+import { zhCNDesktop } from './zh-CN.desktop'
+import { zhCNVideo } from './zh-CN.video'
+import { zhCNGenerator } from './zh-CN.generator'
+import { zhCNAiPresets } from './zh-CN.aipresets'
+import { zhCNDisguise } from './zh-CN.disguise'
+import { zhCNNavCustom } from './zh-CN.navcustom'
+import { zhCNMediaCensor } from './zh-CN.mediacensor'
+import { zhCNStyleMap } from './zh-CN.stylemap'
+import { zhCNCollections } from './zh-CN.collections'
 
 export const zhCN = {
   ...zhCNPublish,
@@ -39,6 +49,16 @@ export const zhCN = {
   ...zhCNPromptLab,
   ...zhCNAi,
   ...zhCNNext,
+  ...zhCNCollect,
+  ...zhCNDesktop,
+  ...zhCNVideo,
+  ...zhCNGenerator,
+  ...zhCNAiPresets,
+  ...zhCNDisguise,
+  ...zhCNNavCustom,
+  ...zhCNMediaCensor,
+  ...zhCNStyleMap,
+  ...zhCNCollections,
   'app.name': 'SD Image Sorter',
   'nav.home': '首页',
   'nav.library': '图库',

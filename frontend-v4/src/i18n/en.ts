@@ -17,6 +17,16 @@ import { enLibrarySettings } from './en.library-settings'
 import { enPromptLab } from './en.promptlab'
 import { enAi } from './en.ai'
 import { enNext } from './en.next'
+import { enCollect } from './en.collect'
+import { enDesktop } from './en.desktop'
+import { enVideo } from './en.video'
+import { enGenerator } from './en.generator'
+import { enAiPresets } from './en.aipresets'
+import { enDisguise } from './en.disguise'
+import { enNavCustom } from './en.navcustom'
+import { enMediaCensor } from './en.mediacensor'
+import { enStyleMap } from './en.stylemap'
+import { enCollections } from './en.collections'
 import type { MessageKey } from './zh-CN'
 
 export const en: Record<MessageKey, string> = {
@@ -39,6 +49,16 @@ export const en: Record<MessageKey, string> = {
   ...enPromptLab,
   ...enAi,
   ...enNext,
+  ...enCollect,
+  ...enDesktop,
+  ...enVideo,
+  ...enGenerator,
+  ...enAiPresets,
+  ...enDisguise,
+  ...enNavCustom,
+  ...enMediaCensor,
+  ...enStyleMap,
+  ...enCollections,
   'app.name': 'SD Image Sorter',
   'nav.home': 'Home',
   'nav.library': 'Library',
