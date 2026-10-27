@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { useApp } from '../../state/store'
+import { onlyPictures } from '../video/pictures'
 
 // Which selection dialog is open. The selection bar, the Delete key and the
 // command palette all open the same dialogs through here. The picks are
@@ -34,6 +35,9 @@ interface DialogState {
   close: () => void
 }
 
+/** Tagging and describing read the picture: videos are left out of what these dialogs work on. */
+const PICTURE_DIALOGS: ReadonlySet<SelectionDialog> = new Set<SelectionDialog>(['tag', 'describe'])
+
 export const useSelectionDialog = create<DialogState>((set) => ({
   open: null,
   ids: [],
@@ -42,9 +46,23 @@ export const useSelectionDialog = create<DialogState>((set) => ({
   show: (dialog) => {
     const ids = useApp.getState().selection
     if (ids.length === 0) return
+    if (PICTURE_DIALOGS.has(dialog)) {
+      void onlyPictures(ids).then((pictures) => {
+        if (pictures.length > 0) set({ open: dialog, ids: pictures, count: pictures.length, hint: null })
+      })
+      return
+    }
     set({ open: dialog, ids: [...ids], count: ids.length, hint: null })
   },
-  showFor: (dialog, ids, count, hint) => set({ open: dialog, ids: ids ? [...ids] : null, count, hint: hint ?? null }),
+  showFor: (dialog, ids, count, hint) => {
+    if (ids && ids.length > 0 && PICTURE_DIALOGS.has(dialog)) {
+      void onlyPictures(ids).then((pictures) => {
+        if (pictures.length > 0) set({ open: dialog, ids: pictures, count: pictures.length, hint: hint ?? null })
+      })
+      return
+    }
+    set({ open: dialog, ids: ids ? [...ids] : null, count, hint: hint ?? null })
+  },
   close: () => set({ open: null, ids: [], count: 0, hint: null }),
 }))
 

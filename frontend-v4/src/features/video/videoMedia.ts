@@ -7,6 +7,9 @@ import { isKey, replaceTokens } from '../../lib/queryEdit'
 
 export type MediaFilter = '' | 'image' | 'video'
 
+/** Tools that read the picture's pixels: "Send to tool" leaves videos out for these. */
+export const PICTURE_ONLY_TOOLS: ReadonlySet<string> = new Set(['reverse', 'artist', 'privacy'])
+
 const VIDEO_NAME = /\.(mp4|webm|mkv|mov|m4v)$/i
 const DEFAULT_FPS = 24
 
@@ -41,6 +44,12 @@ export function badgeOf(image: Pick<ImageSummary, 'duration_seconds' | 'video_pr
 
 export function canPreviewInBrowser(codec: string | null | undefined): boolean {
   return !codec || !NON_BROWSER_CODECS.has(String(codec).toLowerCase())
+}
+
+/** Where scrubbing a tile lands: the pointer's share of the tile's width (0 left edge, 1 right edge) of the clip; null while the length is unknown. */
+export function scrubTime(fraction: number, duration: number): number | null {
+  if (!Number.isFinite(duration) || duration <= 0) return null
+  return Math.min(1, Math.max(0, fraction)) * duration
 }
 
 /** Where a frame step lands: one frame (or the default 24 per second) either way, kept inside the clip. */

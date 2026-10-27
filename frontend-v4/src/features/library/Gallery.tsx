@@ -11,6 +11,7 @@ import { Icon } from '../../ui/Icon'
 import { PickMark } from '../../ui/PickMark'
 import { NEAR_DUPLICATE, percent } from '../similar/ranking'
 import { VideoBadge } from '../video/VideoBadge'
+import { VideoHover } from '../video/VideoHover'
 import { formatDuration, isVideo } from '../video/videoMedia'
 import { useCardMenu } from './CardMenu'
 import { dragPayload, INTERNAL_DRAG } from './drag'
@@ -369,7 +370,8 @@ const Tile = memo(function Tile(p: TileProps) {
         decoding="async"
         draggable={false}
       />
-      <VideoBadge img={p.img} />
+      {isVideo(p.img) && <VideoHover id={p.img.id} codec={p.img.video_codec} />}
+      <VideoBadge img={p.img} aboveCaption />
       <div className={styles.edge}>
         {p.score !== undefined ? (
           <span className={`${styles.score} mono`} data-near={p.score >= NEAR_DUPLICATE || undefined} data-testid="tile-score">

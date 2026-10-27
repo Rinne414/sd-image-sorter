@@ -17,6 +17,9 @@ export interface MenuItem {
   group?: string
   /** Class for the item's row, e.g. to show it only when its bar is narrow. */
   className?: string
+  /** Shown but not choosable; `title` and `hint` say why. */
+  disabled?: boolean
+  title?: string
 }
 
 interface Props {
@@ -33,7 +36,7 @@ interface Props {
   testId?: string
 }
 
-const ITEM = '[role="menuitem"], [role="menuitemcheckbox"]'
+const ITEM = '[role="menuitem"]:not([disabled]), [role="menuitemcheckbox"]:not([disabled])'
 
 /** Move the focus among the items: ↑↓ wrap around, Home and End go to the ends. */
 function moveFocus(list: HTMLElement | null, key: string): boolean {
@@ -121,6 +124,8 @@ export function Menu({ label, items, title, align = 'left', up = false, primary 
                 role={item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
                 aria-checked={item.checked}
                 data-item={item.id}
+                disabled={item.disabled}
+                title={item.title}
                 onClick={() => {
                   close()
                   item.onSelect()

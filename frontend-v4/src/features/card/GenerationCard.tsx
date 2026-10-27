@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { thumbnailUrl } from '../../api/client'
 import { useCategories, useFavorites, useImageDetail, useSetRating, useToggleFavorite } from '../../api/queries'
 import type { ImageTag, TagCategory } from '../../api/types'
+import { isVideo } from '../video/videoMedia'
 import { useT } from '../../i18n'
 import { fileSize } from '../../lib/format'
 import { readImageInfo } from '../../lib/imageInfo'
@@ -175,6 +176,7 @@ function CardBody({ id, variant, look, onWord }: BodyProps) {
           ai={image.ai_caption}
           nl={image.nl_caption}
           editable={variant === 'panel'}
+          video={isVideo(image)}
         />
       )}
 
@@ -210,7 +212,14 @@ function CardBody({ id, variant, look, onWord }: BodyProps) {
           </button>
         )}
         {variant === 'panel' && image && (
-          <button type="button" className="btn" onClick={() => showLikeImage(id, image.filename, false)} data-testid="card-find-similar">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => showLikeImage(id, image.filename, false)}
+            disabled={isVideo(image)}
+            title={isVideo(image) ? t('video.pictureOnlyTitle') : undefined}
+            data-testid="card-find-similar"
+          >
             {t('sim.find.similar')}
           </button>
         )}
@@ -221,7 +230,7 @@ function CardBody({ id, variant, look, onWord }: BodyProps) {
           </button>
         )}
         {variant === 'panel' && image && <OpenInReader id={id} />}
-        {variant === 'panel' && image && <IdentifyButton id={id} />}
+        {variant === 'panel' && image && <IdentifyButton id={id} video={isVideo(image)} />}
         {variant === 'panel' && (
           <button type="button" className="btn btn-ghost" onClick={() => void reparse(id)} title={t('card.reparseHint')}>
             {t('card.reparse')}
@@ -308,7 +317,7 @@ function Frame({ id, edge, plain }: { id: number; edge: EdgeFacts; plain: boolea
 }
 
 /** The image's captions; in the side card they can be written or cleared. */
-function CaptionSection({ id, ai, nl, editable }: { id: number; ai: string | null; nl: string | null; editable: boolean }) {
+function CaptionSection({ id, ai, nl, editable, video }: { id: number; ai: string | null; nl: string | null; editable: boolean; video: boolean }) {
   const t = useT()
   const [editing, setEditing] = useState(false)
   const [aiText, setAiText] = useState(ai ?? '')
@@ -362,7 +371,14 @@ function CaptionSection({ id, ai, nl, editable }: { id: number; ai: string | nul
   // A description by AI (the tag panel, tagging off): the tags stay as they are.
   const edit = editable ? (
     <>
-      <button type="button" className={styles.more} onClick={() => useSelectionDialog.getState().showFor('describe', [id], 1)} data-testid="card-describe">
+      <button
+        type="button"
+        className={styles.more}
+        onClick={() => useSelectionDialog.getState().showFor('describe', [id], 1)}
+        disabled={video}
+        title={video ? t('video.pictureOnlyTitle') : undefined}
+        data-testid="card-describe"
+      >
         {t('dataset.tag.describeOne')}
       </button>
       <button type="button" className={styles.more} onClick={() => setEditing(true)}>

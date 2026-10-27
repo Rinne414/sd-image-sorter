@@ -1,6 +1,7 @@
 import type { DragEvent, MouseEvent } from 'react'
 import { useT } from '../../i18n'
 import { Icon } from '../../ui/Icon'
+import { VideoBadge } from '../video/VideoBadge'
 import { entryThumb, type Entry } from './entries'
 import styles from './PickStep.module.css'
 
@@ -69,6 +70,7 @@ export function PickTile(p: Props) {
           <span className={styles.gone}>{t('dataset.fileGone')}</span>
         )}
         <span className={`${styles.order} mono`}>{p.position + 1}</span>
+        <VideoBadge img={entry} />
         <button
           type="button"
           className={styles.remove}

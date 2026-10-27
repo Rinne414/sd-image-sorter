@@ -7,6 +7,7 @@ import type { ProjectSettings } from './datasetSettings'
 import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
 import { tr } from '../jobs/jobs'
+import { onlyPictures } from '../video/pictures'
 import { addToBatch, batchKey, enqueue, markRemoving, refreshLists, removingKey, useRemoving } from './batchApi'
 import {
   inOrder,
@@ -255,7 +256,10 @@ export function addFolderImages(batchId: number, images: readonly ScannedImage[]
 }
 
 /** Add Library picks to any batch: a dataset batch's go into its project. */
-export async function addLibraryPicks(batch: { id: number; kind: BatchKind }, imageIds: number[]): Promise<AddCount | null> {
+export async function addLibraryPicks(batch: { id: number; kind: BatchKind }, requested: number[]): Promise<AddCount | null> {
+  // A batch runs picture steps (tags, censor, export): videos are left out, and how many is said.
+  const imageIds = await onlyPictures(requested)
+  if (imageIds.length === 0) return null
   if (batch.kind === 'dataset') return addLibraryImages(batch.id, imageIds)
   const res = await addToBatch(batch.id, imageIds)
   return res && { added: res.added, skipped: res.skipped }

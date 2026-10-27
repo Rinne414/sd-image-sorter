@@ -2911,6 +2911,9 @@ Download the LGPL shared ffmpeg build from GitHub (BtbN/FFmpeg-Builds), check it
 
 Errors: `403` `Only this program's own page can install video support.`; `409` `code: "video_install_unsupported"` (`No ready-made ffmpeg for this system; install ffmpeg with your package manager`).
 
+#### POST /api/videos/which
+Which of these images are videos. Body `{"image_ids": [1, 2, 3]}`; answers `{"video_ids": [2]}` (those that are videos, in the order asked, each once; ids that do not exist are left out). Read only. The V Opus interface uses it so that picture-only actions (censor, similarity, scoring, captioning, privacy and reverse-prompt tools, datasets) can leave videos out of a mixed selection and say how many.
+
 #### GET /api/videos/{image_id}/playback
 How to play one video. `plays_in_browser` is whether the browser is expected to play the original (by codec); when it cannot, `converted` tells whether a playable preview exists (`status` is `none`, `queued`, `running`, `done` or `failed`), and `converted_url` is where it is served.
 

@@ -5,6 +5,7 @@ import { useApp } from '../../state/store'
 import { Dialog } from '../../ui/Dialog'
 import { useToasts } from '../../ui/toasts'
 import { tr } from '../jobs/jobs'
+import { onlyPictures } from '../video/pictures'
 import { copyBatch, createBatch, deleteBatch, saveTemplate, useBatches, useBatchTemplates } from './batchApi'
 import { DatasetDeleteBody, useDatasetDeleteFacts } from './DatasetDelete'
 import { useUnlinkedProjects } from './datasetApi'
@@ -71,7 +72,13 @@ function CreateDialog({ dialog, onClose }: { dialog: Extract<BatchDialog, { type
   const go = async () => {
     if (!value.trim() || busy) return
     setBusy(true)
-    const batch = await createBatch({ kind, name: value, templateId: template?.id ?? null, imageIds })
+    // A batch runs picture steps (tags, censor, export): videos are left out, and how many is said.
+    const pictures = imageIds.length > 0 ? await onlyPictures(imageIds) : []
+    if (imageIds.length > 0 && pictures.length === 0) {
+      setBusy(false)
+      return
+    }
+    const batch = await createBatch({ kind, name: value, templateId: template?.id ?? null, imageIds: pictures })
     setBusy(false)
     if (!batch) return
     onClose()

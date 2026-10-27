@@ -137,6 +137,7 @@
 
 /* A dataset image (no censored copy to wait for): the same box as ItemImage's. */
 .plain {
+  position: relative;
   display: grid;
   width: 100%;
   height: 100%;

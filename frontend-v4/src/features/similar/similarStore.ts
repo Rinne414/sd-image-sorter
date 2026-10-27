@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { useApp } from '../../state/store'
+import { onlyPictures } from '../video/pictures'
 import { DEFAULT_THRESHOLD, type SearchOptions } from './searchRequest'
 
 // "Find a different way": the library can show images ranked by likeness
@@ -43,9 +44,13 @@ export function showUpload(file: File): void {
 
 /** Find images like one of the library's own, in the library. */
 export function showLikeImage(id: number, name: string, near: boolean): void {
-  const s = useApp.getState()
-  if (s.page !== 'library') s.setPage('library')
-  useSimilar.getState().show({ kind: 'image', id, name, near })
+  // Likeness is read from the picture: a video is never the example.
+  void onlyPictures([id]).then((pictures) => {
+    if (pictures.length === 0) return
+    const s = useApp.getState()
+    if (s.page !== 'library') s.setPage('library')
+    useSimilar.getState().show({ kind: 'image', id, name, near })
+  })
 }
 
 // Ranked results and collections belong to one library.

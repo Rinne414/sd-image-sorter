@@ -7,10 +7,11 @@ Range, so seeking works); thumbnails by ``GET /api/image-thumbnail/{id}``.
 from __future__ import annotations
 
 import os
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
 import db_videos
 from app_security import require_own_page
@@ -80,6 +81,22 @@ def install_video_support(request: Request) -> Dict[str, Any]:
             status_code=409,
             detail={"code": "video_install_unsupported", "message": str(exc)},
         ) from exc
+
+
+class WhichAreVideosRequest(BaseModel):
+    image_ids: List[int] = Field(default_factory=list)
+
+
+@router.post(
+    "/videos/which",
+    summary="Which of these images are videos",
+    description=(
+        "Picture-only actions (censor, similarity, scoring, captioning) leave videos "
+        "out; this says which of the given ids to leave out. Read only."
+    ),
+)
+def which_are_videos(request: WhichAreVideosRequest) -> Dict[str, Any]:
+    return {"video_ids": db_videos.video_ids_among(request.image_ids)}
 
 
 @router.get(

@@ -155,7 +155,16 @@ function BarAction({ action }: { action: ImageAction }) {
   }
   const prefetch = action.id === 'tag' ? prefetchTagging : undefined
   return (
-    <button type="button" className="btn" onClick={action.run} onPointerEnter={prefetch} onFocus={prefetch} data-action={action.id}>
+    <button
+      type="button"
+      className="btn"
+      onClick={action.run}
+      disabled={action.disabled}
+      title={action.reason ? say(t, action.reason) : undefined}
+      onPointerEnter={prefetch}
+      onFocus={prefetch}
+      data-action={action.id}
+    >
       {label}
     </button>
   )

@@ -62,7 +62,7 @@ export function Facts({ id, image, gen, info }: { id: number; image: ImageDetail
       <div className={styles.fact}>
         <dt className={cardStyles.label}>{t('info.aes.label')}</dt>
         <dd>
-          <AestheticValue id={id} score={image.aesthetic_score} />
+          <AestheticValue id={id} score={image.aesthetic_score} video={image.media_type === 'video'} />
         </dd>
       </div>
       {info.img2img && (
@@ -118,7 +118,7 @@ function HashCode({ hash }: { hash: string }) {
 }
 
 /** The score, or the offer to score this image (a job; the model downloads first the first time). */
-function AestheticValue({ id, score }: { id: number; score: number | null }) {
+function AestheticValue({ id, score, video }: { id: number; score: number | null; video: boolean }) {
   const t = useT()
   const models = useModelStatus()
   const scoring = useJobs((s) => s.jobs.some((j) => j.kind === 'aesthetic' && !isFinished(j.progress.status) && (j.ids.length === 0 || j.ids.includes(id))))
@@ -138,8 +138,8 @@ function AestheticValue({ id, score }: { id: number; score: number | null }) {
         type="button"
         className={cardStyles.more}
         onClick={() => void scoreImages([id])}
-        disabled={scoring}
-        title={firstUse ? t('info.aes.firstUse') : undefined}
+        disabled={scoring || video}
+        title={video ? t('video.pictureOnlyTitle') : firstUse ? t('info.aes.firstUse') : undefined}
         data-testid="card-score"
       >
         {scoring ? t('info.aes.scoring') : t('info.aes.scoreOne')}

@@ -5,6 +5,7 @@ import { useApp } from '../../state/store'
 import { tr } from '../jobs/jobs'
 import { createBatch, patchBatch } from '../batch/batchApi'
 import { defaultBatchName } from '../batch/batchLogic'
+import { onlyPictures } from '../video/pictures'
 
 // "打码…" from the library (selection bar More, Ctrl K): the picks become a
 // custom batch with just pick → censor → export, opened on its censor step.
@@ -18,7 +19,10 @@ function takenNames(): string[] {
     .map((b) => b.name)
 }
 
-export async function quickCensor(imageIds: number[]): Promise<boolean> {
+export async function quickCensor(requested: number[]): Promise<boolean> {
+  if (requested.length === 0) return false
+  // The censor editor works on pictures: videos are left out, and how many is said.
+  const imageIds = await onlyPictures(requested)
   if (imageIds.length === 0) return false
   const name = defaultBatchName(tr('censor.quick.name'), new Date(), useLang.getState().lang, takenNames())
   const batch = await createBatch({ kind: 'custom', name, imageIds })

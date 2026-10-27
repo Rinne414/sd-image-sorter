@@ -185,6 +185,7 @@
 }
 
 .frame {
+  position: relative;
   flex: none;
   height: 100%;
   aspect-ratio: 1;

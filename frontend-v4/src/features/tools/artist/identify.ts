@@ -6,6 +6,7 @@ import { useToasts } from '../../../ui/toasts'
 import { adoptArtist, driveArtist } from '../../jobs/artistDriver'
 import { installThen } from '../../jobs/installJob'
 import { addJob, isQueueBusy, startingProgress, tr, type Job } from '../../jobs/jobs'
+import { onlyPictures } from '../../video/pictures'
 import { artistModelState, type ModelState } from './artistModel'
 import { modelConfig, useArtistPrefs } from './artistPrefs'
 import { summarize } from './artistSummary'
@@ -74,7 +75,10 @@ async function start(ids: number[]): Promise<void> {
 }
 
 /** Identify these images; false (with the reason said) when nothing could start. */
-export async function identifyArtists(ids: readonly number[]): Promise<boolean> {
+export async function identifyArtists(requested: readonly number[]): Promise<boolean> {
+  if (requested.length === 0) return false
+  // Style identification reads pixels: videos are left out, and how many is said.
+  const ids = await onlyPictures(requested)
   if (ids.length === 0) return false
   if (isQueueBusy('artist')) {
     toast(art('artist.job.busy'), 'error')

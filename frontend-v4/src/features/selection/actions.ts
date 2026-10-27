@@ -4,6 +4,7 @@ import type { ToolId } from '../../lib/route'
 import { TAG_GROUPS, type GroupedTags, type TagGroupId } from '../../lib/tagGroups'
 import type { MenuItem } from '../../ui/Menu'
 import { BATCH_KINDS } from '../batch/labels'
+import { PICTURE_ONLY_TOOLS } from '../video/videoMedia'
 import type { SelectionDialog } from './dialogs'
 
 // What can be done to library images, as ONE list. The selection bar, Ctrl K
@@ -33,6 +34,8 @@ export interface ImageAction {
   group?: Msg
   /** Shown but not choosable (a tag group with no tags, still loading). */
   disabled?: boolean
+  /** Why it is disabled, when the reason is worth saying ("Not for videos"): shown beside it, and Ctrl K still lists it. */
+  reason?: Msg
   children?: ImageAction[]
   run?: () => void
 }
@@ -54,6 +57,10 @@ export function menuTarget(clickedId: number, selection: readonly number[]): Act
 
 const k = (key: MessageKey, params?: Params): Msg => (params ? { key, params } : { key })
 const text = (value: string): Msg => ({ text: value })
+
+/** What a picture-only action looks like when everything it would work on is a video. */
+const notForVideos: Pick<ImageAction, 'disabled' | 'reason'> = { disabled: true, reason: k('video.pictureOnly') }
+const pictureOnly = (allVideos: boolean): Pick<ImageAction, 'disabled' | 'reason'> => (allVideos ? notForVideos : {})
 
 // ---- actions on a set of images (the picks, or one right-clicked card) ----
 
@@ -90,18 +97,21 @@ export interface BulkInput {
   templates: readonly BatchTemplate[]
   /** Tools that take these images; none: no "Send to tool". */
   tools?: readonly ToolTarget[]
+  /** How many of them are known to be videos: when all are, the picture-only actions are shown disabled; when only some are, they run on the pictures and say how many were left out. */
+  videos?: number
   ops: BulkOps
 }
 
 /** Star steps offered by "Rate", best first; 0 clears. */
 export const RATE_STEPS = [5, 4, 3, 2, 1, 0] as const
 
-function batchChildren({ ids, batches, templates, ops }: BulkInput): ImageAction[] {
+function batchChildren({ ids, batches, templates, ops }: BulkInput, pic: Pick<ImageAction, 'disabled' | 'reason'>): ImageAction[] {
   const section = 'mark'
   return [
     ...BATCH_KINDS.map<ImageAction>((kind) => ({
       id: `batch-new-${kind}`,
       section,
+      ...pic,
       group: k('batch.menu.new'),
       label: k(`batch.menu.new.${kind}`),
       palette: k(`palette.cmd.picksToNew.${kind}`),
@@ -110,6 +120,7 @@ function batchChildren({ ids, batches, templates, ops }: BulkInput): ImageAction
     ...templates.map<ImageAction>((tpl) => ({
       id: `batch-tpl-${tpl.id}`,
       section,
+      ...pic,
       group: k('batch.menu.templates'),
       label: text(`${tpl.name}…`),
       palette: k('lib.palette.picksToTemplate', { name: tpl.name }),
@@ -118,6 +129,7 @@ function batchChildren({ ids, batches, templates, ops }: BulkInput): ImageAction
     ...batches.map<ImageAction>((batch) => ({
       id: `batch-add-${batch.id}`,
       section,
+      ...pic,
       group: k('batch.menu.recent'),
       label: text(batch.name),
       palette: k('palette.cmd.picksTo', { name: batch.name }),
@@ -140,8 +152,9 @@ function rateChildren({ ids, ops }: BulkInput): ImageAction[] {
 export function bulkActions(input: BulkInput): ImageAction[] {
   const { ids, favorited, ops } = input
   const dialog = (d: SelectionDialog) => () => ops.dialog(d, ids)
+  const pic = pictureOnly((input.videos ?? 0) > 0 && input.videos === ids.length)
   return [
-    { id: 'batch', section: 'mark', bar: 'main', label: k('batch.menu.label'), children: batchChildren(input) },
+    { id: 'batch', section: 'mark', bar: 'main', label: k('batch.menu.label'), children: batchChildren(input, pic) },
     { id: 'rate', section: 'mark', bar: 'main', label: k('sel.rate'), children: rateChildren(input) },
     {
       id: 'favorite',
@@ -152,24 +165,24 @@ export function bulkActions(input: BulkInput): ImageAction[] {
       palette: favorited ? k('lib.palette.unfavorite') : k('lib.palette.favorite'),
       run: () => ops.favorite(ids, !favorited),
     },
-    { id: 'tag', section: 'work', bar: 'main', label: k('sel.tag'), palette: k('palette.cmd.tag'), run: dialog('tag') },
+    { id: 'tag', section: 'work', bar: 'main', label: k('sel.tag'), palette: k('palette.cmd.tag'), ...pic, run: dialog('tag') },
     { id: 'move', section: 'files', bar: 'main', label: k('sel.move'), palette: k('palette.cmd.move'), run: dialog('move') },
-    { id: 'censor', section: 'work', bar: 'more', label: k('sel.censor'), palette: k('palette.cmd.censorPicks'), run: () => ops.censor(ids) },
+    { id: 'censor', section: 'work', bar: 'more', label: k('sel.censor'), palette: k('palette.cmd.censorPicks'), ...pic, run: () => ops.censor(ids) },
     { id: 'copy', section: 'files', bar: 'more', label: k('sel.copy'), palette: k('palette.cmd.copy'), run: dialog('copy') },
     ...sortAction(ids, ops),
     { id: 'edit-tags', section: 'work', bar: 'more', label: k('sel.editTags'), palette: k('palette.cmd.editTags'), run: dialog('edit-tags') },
-    analyzeAction(ids, ops),
+    analyzeAction(ids, ops, pic),
     { id: 'export', section: 'files', bar: 'more', label: k('sel.exportData'), palette: k('palette.cmd.exportData'), run: dialog('export') },
     { id: 'move-library', section: 'files', bar: 'more', label: k('sel.moveLibrary'), palette: k('palette.cmd.moveLibrary'), run: dialog('move-library') },
-    ...compareAction(ids, ops),
-    ...sendToAction(input),
+    ...compareAction(ids, ops, pic),
+    ...sendToAction(input, pic),
     { id: 'remove', section: 'danger', bar: 'more', danger: true, hint: 'Del', label: k('sel.remove'), palette: k('palette.cmd.remove'), run: dialog('remove') },
     { id: 'trash', section: 'danger', bar: 'more', danger: true, label: k('sel.trash'), palette: k('palette.cmd.trash'), run: dialog('trash') },
   ]
 }
 
 /** The AI reads of the images, as one submenu (the right-click menu must fit a laptop screen). */
-function analyzeAction(ids: number[], ops: BulkOps): ImageAction {
+function analyzeAction(ids: number[], ops: BulkOps, pic: Pick<ImageAction, 'disabled' | 'reason'>): ImageAction {
   const section = 'work'
   return {
     id: 'analyze',
@@ -177,9 +190,9 @@ function analyzeAction(ids: number[], ops: BulkOps): ImageAction {
     bar: 'more',
     label: k('tools.analyze'),
     children: [
-      { id: 'aesthetic', section, label: k('info.aes.scorePicks'), palette: k('info.aes.scorePicksPalette'), run: () => ops.score(ids) },
-      { id: 'artist', section, label: k('tools.artist.identify'), palette: k('tools.artist.identifyPalette'), run: () => ops.identifyArtist(ids) },
-      { id: 'describe', section, label: k('dataset.tag.describeAction'), palette: k('dataset.tag.describePalette'), run: () => ops.dialog('describe', ids) },
+      { id: 'aesthetic', section, label: k('info.aes.scorePicks'), palette: k('info.aes.scorePicksPalette'), ...pic, run: () => ops.score(ids) },
+      { id: 'artist', section, label: k('tools.artist.identify'), palette: k('tools.artist.identifyPalette'), ...pic, run: () => ops.identifyArtist(ids) },
+      { id: 'describe', section, label: k('dataset.tag.describeAction'), palette: k('dataset.tag.describePalette'), ...pic, run: () => ops.dialog('describe', ids) },
     ],
   }
 }
@@ -191,20 +204,21 @@ function sortAction(ids: number[], ops: BulkOps): ImageAction[] {
 }
 
 /** "Compare these two" exists only when exactly two images are the target. */
-function compareAction(ids: number[], ops: BulkOps): ImageAction[] {
+function compareAction(ids: number[], ops: BulkOps, pic: Pick<ImageAction, 'disabled' | 'reason'>): ImageAction[] {
   const [a, b] = ids
   if (ids.length !== 2 || a === undefined || b === undefined) return []
-  return [{ id: 'compare', section: 'work', bar: 'more', label: k('sim.compare'), palette: k('sim.comparePalette'), run: () => ops.compare(a, b) }]
+  return [{ id: 'compare', section: 'work', bar: 'more', label: k('sim.compare'), palette: k('sim.comparePalette'), ...pic, run: () => ops.compare(a, b) }]
 }
 
 /** "Send to tool ▸": one entry per tool that takes these images. */
-function sendToAction({ ids, tools = [], ops }: BulkInput): ImageAction[] {
+function sendToAction({ ids, tools = [], ops }: BulkInput, pic: Pick<ImageAction, 'disabled' | 'reason'>): ImageAction[] {
   if (tools.length === 0) return []
   const children = tools.map<ImageAction>((tool) => ({
     id: `send-${tool.id}`,
     section: 'work',
     label: k(tool.label),
     palette: { key: 'tools.palette.send', keyParams: { tool: tool.label } },
+    ...(PICTURE_ONLY_TOOLS.has(tool.id) ? pic : {}),
     run: () => ops.sendToTool(tool.id, ids),
   }))
   return [{ id: 'send-to', section: 'work', bar: 'more', label: k('tools.sendTo'), children }]
@@ -239,6 +253,8 @@ export interface ImageFacts {
 export interface ImageInput {
   id: number
   picked: boolean
+  /** The image is a video: finding similar pictures is shown disabled. */
+  video?: boolean
   path: string | null
   /** null while the details load. */
   facts: ImageFacts | null
@@ -305,12 +321,13 @@ function modelFilter(facts: ImageFacts | null, ops: ImageOps): ImageAction[] {
   return [{ id: 'filter-model', section: 'find', label: k('lib.menu.filterModel'), palette: k('lib.palette.filterModel'), run: () => ops.filterByModel(model) }]
 }
 
-export function imageActions({ id, picked, path, facts, groups, ops }: ImageInput): ImageAction[] {
+export function imageActions({ id, picked, video = false, path, facts, groups, ops }: ImageInput): ImageAction[] {
+  const pic = pictureOnly(video)
   return [
     { id: 'open', section: 'image', hint: 'Enter', label: k('card.openFull'), palette: k('palette.cmd.openFull'), run: () => ops.open(id) },
     { id: 'pick', section: 'image', hint: 'Space', label: k(picked ? 'lib.menu.unpick' : 'lib.menu.pick'), run: () => ops.togglePick(id) },
-    { id: 'similar', section: 'find', label: k('sim.find.similar'), palette: k('sim.find.similarPalette'), run: () => ops.findSimilar(id, false) },
-    { id: 'near', section: 'find', label: k('sim.find.near'), palette: k('sim.find.nearPalette'), run: () => ops.findSimilar(id, true) },
+    { id: 'similar', section: 'find', label: k('sim.find.similar'), palette: k('sim.find.similarPalette'), ...pic, run: () => ops.findSimilar(id, false) },
+    { id: 'near', section: 'find', label: k('sim.find.near'), palette: k('sim.find.nearPalette'), ...pic, run: () => ops.findSimilar(id, true) },
     ...modelFilter(facts, ops),
     copyMenu(id, path, facts, groups, ops),
     { id: 'open-folder', section: 'file', label: k('lib.file.openFolder'), run: () => ops.openFolder(id) },
@@ -335,11 +352,15 @@ export function say(t: Translate, msg: Msg): string {
 }
 
 /** Ctrl K wording of an action. */
-export const paletteText = (t: Translate, action: ImageAction): string => say(t, action.palette ?? action.label)
+export const paletteText = (t: Translate, action: ImageAction): string => {
+  const base = say(t, action.palette ?? action.label)
+  return action.reason ? `${base} · ${say(t, action.reason)}` : base
+}
 
 /** Every runnable action with its children flattened, for Ctrl K. */
 export function runnable(actions: readonly ImageAction[]): ImageAction[] {
-  return actions.flatMap((a) => (a.children ? runnable(a.children) : a.run && !a.disabled ? [a] : []))
+  // Disabled with a reason stays listed (running it says why, e.g. "Not for videos"); disabled without one is hidden.
+  return actions.flatMap((a) => (a.children ? runnable(a.children) : a.run && (!a.disabled || a.reason) ? [a] : []))
 }
 
 /**
@@ -355,6 +376,8 @@ export function menuItemsOf(t: Translate, actions: readonly ImageAction[]): Menu
         id: a.id,
         label: say(t, a.label),
         onSelect: () => a.run?.(),
+        ...(a.disabled ? { disabled: true } : {}),
+        ...(a.reason ? { title: say(t, a.reason), hint: say(t, a.reason) } : {}),
         ...(a.hint ? { hint: a.hint } : {}),
         ...(a.group ? { group: say(t, a.group) } : {}),
         ...(a.danger ? { danger: true } : {}),

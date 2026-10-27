@@ -1,6 +1,7 @@
 .bar {
   position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 6px;
   padding: 10px 12px 10px 12px;
@@ -48,9 +49,11 @@
   background: var(--surface-2);
 }
 
-/* Under the box: the media toggle (when the library has videos) and the chips of what the line was read as. */
+/* Under the controls, the bar's full width: the media toggle (when the library has videos) and the chips of what the line was read as. */
 .sub {
+  order: 1;
   display: flex;
+  flex: 1 0 100%;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;

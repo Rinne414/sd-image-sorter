@@ -10,6 +10,7 @@ import { busyText } from '../jobs/busyText'
 import { pushRefusal } from '../jobs/refusalToast'
 import { readProgress } from '../jobs/progress'
 import { matchingIds } from '../selection/invert'
+import { onlyPictures } from '../video/pictures'
 import type { ModelCard } from '../tagging/taggers'
 import { aestheticModelState, unscoredParams } from './scoring'
 
@@ -49,8 +50,11 @@ function busy(): boolean {
 }
 
 /** Score these images, in order (the picks, one image, a filter's unscored ones). */
-export async function scoreImages(ids: readonly number[]): Promise<boolean> {
-  if (ids.length === 0 || busy()) return false
+export async function scoreImages(requested: readonly number[]): Promise<boolean> {
+  if (requested.length === 0 || busy()) return false
+  // Videos are not scored: they are left out, and how many is said.
+  const ids = await onlyPictures(requested)
+  if (ids.length === 0) return false
   return withModel(() => {
     if (busy()) return
     startPageRun(ids)

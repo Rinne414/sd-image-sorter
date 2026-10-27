@@ -5,6 +5,7 @@ import { parseSearch, toImageParams } from '../../../lib/searchQuery'
 import { apiSort } from '../../../lib/sort'
 import { useApp } from '../../../state/store'
 import { Dialog } from '../../../ui/Dialog'
+import { VideoBadge } from '../../video/VideoBadge'
 import { usePL } from './plText'
 import styles from './PromptLab.module.css'
 
@@ -72,6 +73,7 @@ export function ImagePicker({ title, onPick, onClose }: Props) {
           <li key={img.id}>
             <button type="button" className={styles.pickTile} onClick={() => onPick(img.id)} title={img.filename} data-id={img.id}>
               <img src={thumbnailUrl(img.id, 256)} alt="" loading="lazy" />
+              <VideoBadge img={img} />
               <span className={styles.pickName}>{img.filename}</span>
             </button>
           </li>

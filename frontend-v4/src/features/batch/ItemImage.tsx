@@ -3,6 +3,7 @@ import { thumbnailUrl } from '../../api/client'
 import type { Batch, BatchItem } from '../../api/types'
 import { useT } from '../../i18n'
 import { parseReviewed } from '../censor/ops'
+import { VideoBadge } from '../video/VideoBadge'
 import { useCensoredUrl } from './exportApi'
 import styles from './ItemImage.module.css'
 
@@ -39,6 +40,7 @@ export function ItemImage({ batch, item, size }: Props) {
   return (
     <div ref={ref} className={styles.box}>
       {src && <img src={src} alt="" decoding="async" draggable={false} data-censored={item.has_censored || undefined} />}
+      <VideoBadge img={item} />
     </div>
   )
 }
