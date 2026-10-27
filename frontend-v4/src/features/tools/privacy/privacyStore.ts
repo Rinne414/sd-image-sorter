@@ -8,8 +8,9 @@ import type { Direction, WorkerProblem } from './protocol'
 // are Blobs in memory until removed. Only the settings are remembered across
 // reloads, never the password.
 
-export type PrivacyMode = 'standard' | 'simple'
+export type PrivacyMode = 'standard' | 'simple' | 'disguise'
 
+/** The scramble family a mode belongs to; a chat disguise does not scramble, so its value is never used. */
 export const compatOf = (mode: PrivacyMode): CompatMode => (mode === 'simple' ? 'small_tomato' : 'big_tomato')
 
 export interface PrivacyOptions {
@@ -21,6 +22,19 @@ export interface PrivacyOptions {
 
 export type ItemSource = { kind: 'file'; file: File; url: string } | { kind: 'library'; id: number }
 
+/** A made disguise: the file the program wrote, and the cover a chat list will show. */
+export interface DisguiseMade {
+  token: string
+  fileName: string
+  outputPath: string
+  width: number
+  height: number
+  bytes: number
+  frames: number
+  /** The cover as a picture (data URL). */
+  coverUrl: string
+}
+
 export interface ItemResult {
   blob: Blob
   url: string
@@ -30,13 +44,20 @@ export interface ItemResult {
   height: number
   crc: number
   carried: number
+  /** Set for a made disguise. */
+  disguise?: DisguiseMade
+  /** Set when this is the real picture taken out of a disguise. */
+  restored?: boolean
 }
 
-export type ItemState = 'waiting' | 'working' | 'done' | 'failed'
+export type ItemState = 'waiting' | 'working' | 'done' | 'failed' | 'needs-cover' | 'packed'
 
 export interface ItemProblem {
-  code: WorkerProblem | 'library'
+  code: WorkerProblem | 'library' | 'needs-cover' | 'server'
+  /** The words the problem came with; for 'needs-cover' the program's reason code. */
   detail: string
+  /** The program's HTTP status, for 'server'. */
+  status?: number
 }
 
 export interface QueueItem {
@@ -67,6 +88,8 @@ export interface RunSummary {
   done: number
   failed: number
   stopped: boolean
+  /** The whole line, when the run words its own end (a chat disguise run). */
+  text?: string
 }
 
 interface PrivacyState {
@@ -86,7 +109,7 @@ export function readOptions(raw: string | null): PrivacyOptions {
     const saved = JSON.parse(raw ?? 'null') as Partial<PrivacyOptions> | null
     if (!saved || typeof saved !== 'object') return { ...DEFAULT_OPTIONS }
     return {
-      mode: saved.mode === 'simple' ? 'simple' : 'standard',
+      mode: saved.mode === 'simple' || saved.mode === 'disguise' ? saved.mode : 'standard',
       keepInfo: typeof saved.keepInfo === 'boolean' ? saved.keepInfo : DEFAULT_OPTIONS.keepInfo,
       legacyInfo: saved.legacyInfo === true,
       advancedOpen: saved.advancedOpen === true,
@@ -144,14 +167,21 @@ function release(item: QueueItem): void {
 }
 
 /** Put a new result on an item (dropping the one it replaces); a result for an item removed meanwhile is dropped. */
-export function setResult(key: number, result: ItemResult, size: Size): void {
+export function setResult(key: number, result: ItemResult, size: Size | null): void {
   const item = findItem(key)
   if (!item) {
     URL.revokeObjectURL(result.url)
     return
   }
   if (item.result) URL.revokeObjectURL(item.result.url)
-  patchItem(key, { state: 'done', problem: null, result, size })
+  patchItem(key, size ? { state: 'done', problem: null, result, size } : { state: 'done', problem: null, result })
+}
+
+/** Change an item and drop the result it had (that picture is no longer what the item says). */
+export function dropResult(key: number, patch: Partial<QueueItem>): void {
+  const item = findItem(key)
+  if (item?.result) URL.revokeObjectURL(item.result.url)
+  patchItem(key, { ...patch, result: null })
 }
 
 export function removeItem(key: number): void {

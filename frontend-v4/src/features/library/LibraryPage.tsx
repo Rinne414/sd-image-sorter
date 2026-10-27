@@ -4,6 +4,7 @@ import { useT } from '../../i18n'
 import { useApp } from '../../state/store'
 import { AddingBanner } from '../batch/AddingBanner'
 import { GenerationCard } from '../card/GenerationCard'
+import { useCollectPaste } from '../collect/useCollectPaste'
 import { SortNotice } from '../info/SortNotice'
 import { Lightbox } from '../lightbox/Lightbox'
 import { SelectionBar } from '../selection/SelectionBar'
@@ -35,6 +36,7 @@ export function LibraryPage() {
   const favorites = useFavorites()
   const setRating = useSetRating()
   const toggleFav = useToggleFavorite()
+  useCollectPaste()
 
   const favoritesCollectionId = favorites.data?.collectionId ?? null
   const params = useMemo(

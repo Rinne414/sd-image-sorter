@@ -1,7 +1,8 @@
-import { useApp } from '../../../state/store'
 import { useToasts } from '../../../ui/toasts'
+import { runDisguise, stopDisguise } from './disguise/disguiseRun'
 import { pt } from './privacyText'
-import { compatOf, findItem, patchItem, setResult, usePrivacy, type ItemProblem, type QueueItem, type RunSummary } from './privacyStore'
+import { LibraryReadError, originalOf } from './source'
+import { compatOf, findItem, patchItem, setResult, usePrivacy, type ItemProblem, type RunSummary } from './privacyStore'
 import type { Direction } from './protocol'
 import { runProcess, Stopped, stopProcessing, WorkerFailure } from './workerClient'
 
@@ -9,18 +10,6 @@ import { runProcess, Stopped, stopProcessing, WorkerFailure } from './workerClie
 // each ALWAYS from its original (V3.5 re-processed the previous result, so
 // pressing Protect twice scrambled twice). The settings are taken when the run
 // starts; Cancel stops the image in progress at once and leaves the rest.
-
-class LibraryReadError extends Error {}
-
-/** The original's bytes: the file brought in, or the library file fetched again. */
-async function originalOf(item: QueueItem): Promise<Blob> {
-  if (item.source.kind === 'file') return item.source.file
-  const res = await fetch(`/api/image-file/${item.source.id}`, { headers: { 'X-SD-Library-Id': useApp.getState().libraryId } }).catch((error: Error) => {
-    throw new LibraryReadError(error.message)
-  })
-  if (!res.ok) throw new LibraryReadError(`${res.status} ${res.statusText}`.trim())
-  return res.blob()
-}
 
 function problemOf(error: unknown): ItemProblem {
   if (error instanceof WorkerFailure) return { code: error.problem, detail: error.message }
@@ -64,6 +53,7 @@ async function runOne(key: number, direction: Direction, settings: RunSettings):
 
 /** One line for the end of a run (the toast and the line above the queue). */
 export function summaryText(s: RunSummary): string {
+  if (s.text) return s.text
   if (s.stopped) return pt('privacy.summary.stopped', { done: s.done + s.failed, total: s.total })
   const main = pt(s.direction === 'encode' ? 'privacy.summary.encode' : 'privacy.summary.decode', { done: s.done, total: s.total })
   return s.failed ? pt('privacy.summary.failed', { main, n: s.failed }) : main
@@ -72,6 +62,8 @@ export function summaryText(s: RunSummary): string {
 export async function runAll(direction: Direction): Promise<void> {
   const state = usePrivacy.getState()
   if (state.run || state.items.length === 0) return
+  // a chat disguise is made by the program, not by the scramble worker
+  if (state.options.mode === 'disguise') return runDisguise(direction)
   const keys = state.items.map((it) => it.key)
   const settings = { password: state.password, keepInfo: state.options.keepInfo, legacyInfo: state.options.legacyInfo, compat: compatOf(state.options.mode) }
   stopRequested = false
@@ -108,4 +100,5 @@ export function stopRun(): void {
   stopRequested = true
   usePrivacy.setState({ run: { ...run, stopping: true } })
   stopProcessing()
+  stopDisguise()
 }

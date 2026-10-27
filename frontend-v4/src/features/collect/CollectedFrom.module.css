@@ -1,0 +1,36 @@
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  min-width: 0;
+  font-size: var(--fs-2);
+}
+
+.label {
+  color: var(--muted);
+}
+
+.name {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.when {
+  color: var(--muted);
+  font-size: var(--fs-1);
+}
+
+.link {
+  color: var(--text-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line-strong);
+}
+
+.link:hover {
+  color: var(--text);
+  text-decoration-color: var(--text);
+}

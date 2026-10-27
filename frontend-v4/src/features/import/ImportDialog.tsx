@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useFolders, useLibraryHealth } from '../../api/queries'
 import { useT } from '../../i18n'
 import { FolderChooser } from '../../ui/FolderChooser'
+import { pasteFromClipboard } from '../collect/collectActions'
 import { useSelectionDialog } from '../selection/dialogs'
 import styles from './ImportDialog.module.css'
 import { recentImports, startImport, type ImportOptions } from './importJob'
@@ -22,6 +23,12 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
 
   const extra = (
     <div className={styles.options}>
+      <div className={styles.paste}>
+        <span className={styles.hint}>{t('collect.paste.rowHint')}</span>
+        <button type="button" className="btn" onClick={() => void pasteFromClipboard()} data-testid="import-paste-picture">
+          {t('collect.paste.button')}
+        </button>
+      </div>
       <label className={styles.check}>
         <input type="checkbox" checked={o.recursive} onChange={(e) => setO({ ...o, recursive: e.target.checked })} />
         {t('import.recursive')}

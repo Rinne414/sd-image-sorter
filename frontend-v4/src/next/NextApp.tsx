@@ -4,6 +4,7 @@ import { BatchDialogs } from '../features/batch/BatchDialogs'
 import { BatchPage } from '../features/batch/BatchPage'
 import { CommandPalette } from '../features/command/CommandPalette'
 import { HomePage } from '../features/home/HomePage'
+import { CollectHost } from '../features/collect/CollectHost'
 import { DropImport } from '../features/import/DropImport'
 import { JobsRunner } from '../features/jobs/JobsRunner'
 import { useLibraryArrival } from '../features/libraries/useArrival'
@@ -88,6 +89,7 @@ export function NextApp() {
         <HealthDialog />
         <JobsRunner />
         <DropImport />
+        <CollectHost />
         <SelectionDialogs />
         <GeneratorDialog />
         <BatchDialogs />

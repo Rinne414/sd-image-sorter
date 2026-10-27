@@ -13,14 +13,17 @@ Runs in a background thread; ``status()`` reports progress for the UI.
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import logging
 import platform
 import re
 import shutil
+import socket
 import sys
 import tarfile
 import threading
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -38,6 +41,27 @@ class InstallError(RuntimeError):
     def __init__(self, message: str, code: str) -> None:
         super().__init__(message)
         self.code = code
+
+
+def failure_code(exc: Exception) -> Tuple[str, Dict[str, Any]]:
+    """The code and params the page says a failed install with, in its language.
+
+    Network failures get their own codes: the system's text (``<urlopen error
+    [WinError 10061] ...>``, in the system's language) stays in the log. An
+    HTTP error's ``code`` is its status number, not one of ours.
+    """
+    if isinstance(exc, InstallError):
+        return exc.code, {"reason": str(exc)}
+    if isinstance(exc, urllib.error.HTTPError):
+        return "video_install_site_refused", {"status": exc.code}
+    reason = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+    if isinstance(reason, (socket.timeout, TimeoutError)):
+        return "video_install_timeout", {}
+    if isinstance(exc, urllib.error.URLError):
+        return "video_install_unreachable", {}
+    if isinstance(exc, (ConnectionError, http.client.IncompleteRead)):
+        return "video_install_connection_broken", {}
+    return "video_install_failed", {"reason": str(exc)}
 
 RELEASE_API = "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/tags/latest"
 HTTP_TIMEOUT_SECONDS = 60
@@ -178,11 +202,12 @@ class FfmpegInstaller:
         except Exception as exc:
             logger.warning("Video support install failed: %s", exc)
             # error_code + error_params let the page say it in its language.
+            code, params = failure_code(exc)
             self._set(
                 state="failed",
                 error=str(exc),
-                error_code=getattr(exc, "code", "video_install_failed"),
-                error_params={"reason": str(exc)},
+                error_code=code,
+                error_params=params,
             )
         finally:
             shutil.rmtree(work, ignore_errors=True)

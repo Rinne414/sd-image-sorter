@@ -1,5 +1,10 @@
 import { memo, useState } from 'react'
 import { thumbnailUrl } from '../../../api/urls'
+import { useT } from '../../../i18n'
+import { revealMadeFile } from './disguise/disguiseShare'
+import { formatBytes } from './disguise/disguiseModel'
+import disguiseStyles from './disguise/Disguise.module.css'
+import { problemText as serverProblemText, reasonText } from './disguise/disguiseText'
 import { isHuge, megapixels } from './engine/imageSize'
 import { stemOf } from './names'
 import styles from './Privacy.module.css'
@@ -46,10 +51,15 @@ function NameField({ item }: { item: QueueItem }) {
 /** "PNG", "JPG", "WEBP"… from the original's name (two files can share a stem). */
 const formatOf = (fileName: string): string => /\.([a-z0-9]+)$/i.exec(fileName)?.[1]?.toUpperCase() ?? ''
 
-function statusText(item: QueueItem, t: ReturnType<typeof usePT>): string {
+function statusText(item: QueueItem, t: ReturnType<typeof usePT>, d: ReturnType<typeof useT>): string {
   if (item.state === 'working') return t('privacy.item.working')
   if (item.state === 'failed') return t('privacy.item.failed', { reason: problemText(item, t) })
+  if (item.state === 'needs-cover') return d('disguise.item.needsCover', { reason: reasonText(item.problem?.detail ?? '') })
+  if (item.state === 'packed') return d('disguise.item.packed')
   if (!item.result) return t('privacy.item.waiting')
+  const made = item.result.disguise
+  if (made) return d('disguise.item.done', { width: made.width, height: made.height, size: formatBytes(made.bytes) })
+  if (item.result.restored) return d('disguise.item.restored')
   const mode = t(item.result.compat === 'small_tomato' ? 'privacy.mode.simple.short' : 'privacy.mode.standard.short')
   const done = t(item.result.direction === 'encode' ? 'privacy.item.encoded' : 'privacy.item.decoded', { mode })
   return item.result.carried ? `${done} · ${t('privacy.item.carried')}` : done
@@ -60,6 +70,7 @@ const PROBLEM: Record<string, PrivacyKey> = { decode: 'privacy.err.decode', 'too
 function problemText(item: QueueItem, t: ReturnType<typeof usePT>): string {
   const problem = item.problem
   if (!problem) return ''
+  if (problem.code === 'server') return serverProblemText(problem.status, problem.detail)
   return t(PROBLEM[problem.code] ?? 'privacy.err.encode', { detail: problem.detail })
 }
 
@@ -67,6 +78,7 @@ type OnOpen = (key: number, showing: Showing) => void
 
 function Pictures({ item, onOpen }: { item: QueueItem; onOpen: OnOpen }) {
   const t = usePT()
+  const d = useT()
   const result = item.result
   // a file the browser cannot show gets words instead of the broken-image icon
   const [unreadable, setUnreadable] = useState(false)
@@ -84,7 +96,7 @@ function Pictures({ item, onOpen }: { item: QueueItem; onOpen: OnOpen }) {
       </span>
       {result ? (
         <button type="button" className={styles.thumb} onClick={() => onOpen(item.key, 'result')} title={`${t('privacy.item.open')} · ${t('privacy.item.dragOut')}`} data-testid="privacy-item-result">
-          <img src={result.url} alt={t('privacy.item.result')} decoding="async" draggable onDragStart={(e) => dragResult(e, item)} />
+          <img src={result.disguise?.coverUrl ?? result.url} alt={result.disguise ? d('disguise.item.cover') : t('privacy.item.result')} decoding="async" draggable onDragStart={(e) => dragResult(e, item)} />
         </button>
       ) : (
         <div className={styles.placeholder} data-working={item.state === 'working' || undefined}>
@@ -98,6 +110,8 @@ function Pictures({ item, onOpen }: { item: QueueItem; onOpen: OnOpen }) {
 /** Only a card whose image changed renders again, so a long queue stays quick during a run. */
 export const QueueCard = memo(function QueueCard({ item, onOpen }: { item: QueueItem; onOpen: OnOpen }) {
   const t = usePT()
+  const d = useT()
+  const made = item.result?.disguise
   const hasResult = !!item.result
   const blockedTitle = hasResult ? undefined : t('privacy.item.processFirst')
   return (
@@ -106,8 +120,13 @@ export const QueueCard = memo(function QueueCard({ item, onOpen }: { item: Queue
       {/* a new name from elsewhere (or a reset to the original's) starts a fresh draft */}
       <NameField key={item.rename ?? item.fileName} item={item} />
       <p className={item.state === 'failed' ? styles.statusProblem : styles.status} data-testid="privacy-item-status">
-        {statusText(item, t)}
+        {statusText(item, t, d)}
       </p>
+      {made && (
+        <p className={disguiseStyles.saved} data-testid="disguise-item-saved">
+          {d('disguise.item.saved', { path: made.outputPath })}
+        </p>
+      )}
       <p className={styles.meta}>
         {item.source.kind === 'library' && <span className={styles.badge}>{t('privacy.item.fromLibrary')}</span>}
         <span>{formatOf(item.fileName)}</span>
@@ -119,12 +138,17 @@ export const QueueCard = memo(function QueueCard({ item, onOpen }: { item: Queue
         </p>
       )}
       <div className={styles.actions}>
-        <button type="button" className="btn" onClick={() => void copyItem(item)} disabled={!hasResult} title={blockedTitle ?? t('privacy.item.copy.hint')} data-testid="privacy-item-copy">
+        <button type="button" className="btn" onClick={() => void copyItem(item)} disabled={!hasResult} title={blockedTitle ?? (made ? d('disguise.item.copy.hint') : t('privacy.item.copy.hint'))} data-testid="privacy-item-copy">
           {t('privacy.item.copy')}
         </button>
         <button type="button" className="btn" onClick={() => void downloadItem(item)} disabled={!hasResult} title={blockedTitle} data-testid="privacy-item-download">
           {t('privacy.item.download')}
         </button>
+        {made && (
+          <button type="button" className="btn" onClick={() => void revealMadeFile(made.token)} title={d('disguise.item.reveal.hint')} data-testid="disguise-item-reveal">
+            {d('disguise.item.reveal')}
+          </button>
+        )}
         <button type="button" className={`btn btn-ghost ${styles.remove}`} onClick={() => removeItem(item.key)} disabled={item.state === 'working'} data-testid="privacy-item-remove">
           {t('privacy.item.remove')}
         </button>

@@ -1,3 +1,5 @@
+import { useT } from '../../../i18n'
+import { DisguiseAdvanced, DisguiseSettings } from './disguise/DisguiseSettings'
 import { isSitePassword } from './engine/password'
 import styles from './Privacy.module.css'
 import { usePT, type PrivacyKey } from './privacyText'
@@ -5,12 +7,14 @@ import { setOptions, setPassword, usePrivacy, type PrivacyMode } from './privacy
 
 // The left column: what the tool does, the mode, the password, and whether
 // the generation details travel. Locked while a run goes on (the run took the
-// settings when it started).
+// settings when it started). The chat disguise swaps the scramble's own
+// settings for the cover's.
 
-const MODES: PrivacyMode[] = ['standard', 'simple']
+const MODES: PrivacyMode[] = ['standard', 'simple', 'disguise']
 
 function Modes({ mode }: { mode: PrivacyMode }) {
   const t = usePT()
+  const d = useT()
   return (
     <fieldset className={styles.modes}>
       <legend className={styles.subLabel}>{t('privacy.mode')}</legend>
@@ -18,8 +22,8 @@ function Modes({ mode }: { mode: PrivacyMode }) {
         <label key={m} className={styles.mode}>
           <input type="radio" name="privacy-mode" checked={mode === m} onChange={() => setOptions({ mode: m })} data-testid={`privacy-mode-${m}`} />
           <span>
-            <span className={styles.modeName}>{t(`privacy.mode.${m}` as PrivacyKey)}</span>
-            <span className={styles.hint}>{t(`privacy.mode.${m}.hint` as PrivacyKey)}</span>
+            <span className={styles.modeName}>{m === 'disguise' ? d('disguise.mode') : t(`privacy.mode.${m}` as PrivacyKey)}</span>
+            <span className={styles.hint}>{m === 'disguise' ? d('disguise.mode.hint') : t(`privacy.mode.${m}.hint` as PrivacyKey)}</span>
           </span>
         </label>
       ))}
@@ -69,18 +73,24 @@ function Check({ checked, onChange, label, hint, testId }: { checked: boolean; o
 
 export function SettingsPanel() {
   const t = usePT()
+  const d = useT()
   const options = usePrivacy((s) => s.options)
   const running = usePrivacy((s) => s.run !== null)
+  const disguise = options.mode === 'disguise'
 
   return (
     <aside className={styles.settings} data-testid="privacy-settings">
       <p className={styles.what} data-testid="privacy-what">
-        {t('privacy.what')}
+        {disguise ? d('disguise.what') : t('privacy.what')}
       </p>
       <fieldset className={styles.fields} disabled={running}>
         <Modes mode={options.mode} />
         {options.mode === 'standard' && <PasswordField />}
-        <Check checked={options.keepInfo} onChange={(keepInfo) => setOptions({ keepInfo })} label="privacy.keepInfo" hint="privacy.keepInfo.hint" testId="privacy-keep-info" />
+        {disguise ? (
+          <DisguiseSettings />
+        ) : (
+          <Check checked={options.keepInfo} onChange={(keepInfo) => setOptions({ keepInfo })} label="privacy.keepInfo" hint="privacy.keepInfo.hint" testId="privacy-keep-info" />
+        )}
         {options.mode === 'simple' && (
           <p className={styles.note} data-testid="privacy-jpeg-note">
             {t('privacy.jpegNote')}
@@ -90,7 +100,7 @@ export function SettingsPanel() {
           <summary className={styles.summary} data-testid="privacy-advanced">
             {t('privacy.advanced')}
           </summary>
-          <Check checked={options.legacyInfo} onChange={(legacyInfo) => setOptions({ legacyInfo })} label="privacy.legacyInfo" hint="privacy.legacyInfo.hint" testId="privacy-legacy-info" />
+          {disguise ? <DisguiseAdvanced /> : <Check checked={options.legacyInfo} onChange={(legacyInfo) => setOptions({ legacyInfo })} label="privacy.legacyInfo" hint="privacy.legacyInfo.hint" testId="privacy-legacy-info" />}
         </details>
       </fieldset>
       {running && <p className={styles.hint}>{t('privacy.runningLocked')}</p>}

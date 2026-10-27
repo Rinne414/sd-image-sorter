@@ -1,0 +1,115 @@
+.lead {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.hint {
+  margin: 8px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+
+.install {
+  margin-top: 12px;
+}
+
+.install summary {
+  width: fit-content;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  cursor: pointer;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.card ol {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+
+.pathRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: auto;
+}
+
+.path {
+  flex: 1 1 100%;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: var(--fs-1);
+  overflow-wrap: anywhere;
+}
+
+.paired {
+  margin-top: 18px;
+}
+
+.pairedTitle {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-3);
+  font-weight: 600;
+}
+
+.list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.item {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 14px;
+  padding: 8px 2px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.item:last-child {
+  border-bottom: 0;
+}
+
+.name {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.id {
+  color: var(--text-2);
+  font-size: var(--fs-1);
+  overflow-wrap: anywhere;
+}
+
+.when {
+  color: var(--muted);
+  font-size: var(--fs-1);
+}

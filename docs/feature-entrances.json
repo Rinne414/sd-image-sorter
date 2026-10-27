@@ -212,10 +212,20 @@
         "#btn-collect-url-cancel"
       ],
       "vopus": {
-        "missing": "Vopus has no paste-to-collect yet; Ctrl+V in the classic gallery and Paste picture in its import dialog have it"
+        "at": "#/library",
+        "open": [
+          "[data-testid=\"import-button\"]"
+        ],
+        "find": "[data-testid=\"import-paste-picture\"]",
+        "note": "Ctrl+V on the library page saves a pasted picture or asks about a pasted picture address"
       },
       "next": {
-        "missing": "The new interface has no paste-to-collect yet"
+        "at": "#/library",
+        "open": [
+          "[data-testid=\"import-button\"]"
+        ],
+        "find": "[data-testid=\"import-paste-picture\"]",
+        "note": "Ctrl+V on the library page saves a pasted picture or asks about a pasted picture address"
       }
     },
     {
@@ -234,10 +244,14 @@
         "#modal-collected-source"
       ],
       "vopus": {
-        "missing": "Vopus has no browser extension settings, pairing prompt or source line yet; pairing and Revoke are in classic Settings, and collected pictures appear in every interface"
+        "at": "#/settings/library",
+        "find": "[data-testid=\"ext-settings\"]",
+        "note": "The pairing prompt (ext-pair-dialog) opens wherever you are when a browser extension asks; the source line shows on a collected picture's card"
       },
       "next": {
-        "missing": "The new interface has no browser extension settings, pairing prompt or source line yet"
+        "at": "#/settings/library",
+        "find": "[data-testid=\"ext-settings\"]",
+        "note": "The pairing prompt (ext-pair-dialog) opens wherever you are when a browser extension asks; the source line shows on a collected picture's card"
       }
     },
     {
@@ -2110,10 +2124,14 @@
         "#disguise-output-folder"
       ],
       "vopus": {
-        "missing": "Vopus Privacy has no cover-picture disguise option"
+        "at": "#/tools/privacy",
+        "find": "[data-testid=\"privacy-mode-disguise\"]",
+        "note": "the Chat disguise mode of Privacy; its cover, pack and save-folder settings appear once it is chosen; make and restore are privacy-protect-all and privacy-restore-all with files in the queue"
       },
       "next": {
-        "missing": "Privacy scramble has no cover-picture (disguise) feature."
+        "at": "#/tools/privacy",
+        "find": "[data-testid=\"privacy-mode-disguise\"]",
+        "note": "same Privacy page, reached from More > Privacy scramble: the Chat disguise mode"
       }
     },
     {

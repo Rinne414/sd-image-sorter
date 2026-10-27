@@ -1,4 +1,113 @@
 // Privacy: cover-picture disguise. Spread into zh-CN.ts; every key here must exist
 // in en.disguise.ts (the type enforces it). Keys start with 'disguise.'.
 export const zhCNDisguise = {
+  // the mode
+  'disguise.mode': '聊天伪装',
+  'disguise.mode.hint': '给图片套上一张无害的封面：聊天列表里看到的是封面，点开才是真图。',
+  'disguise.what': '封面是聊天列表里看到的样子，点开才显示真图。成品写在这台电脑的文件夹里，可以当文件粘贴到聊天窗口，也可以还原出真图。',
+  'disguise.local': '图片由这台电脑上的程序处理，不会上传到任何地方。',
+  'disguise.emptyHint': '图库里的图：选中后点「更多」→「送到工具」→「隐私混淆」，或右键一张图。聊天伪装由这台电脑上的程序制作，图片不会上传到任何地方。',
+
+  // the cover
+  'disguise.cover': '封面',
+  'disguise.cover.default': '默认封面',
+  'disguise.cover.mosaic': '同一张图自动打码',
+  'disguise.cover.text': '文字卡片',
+  'disguise.cover.blur': '模糊后的原图',
+  'disguise.cover.upload': '我选的一张图',
+  'disguise.cover.noDefault': '还没有默认封面',
+  'disguise.cover.setDefault': '设置默认封面…',
+  'disguise.cover.clearDefault': '移除',
+  'disguise.cover.choose': '选择图片…',
+  'disguise.cover.useAsDefault': '设为默认封面',
+  'disguise.cover.defaultAlt': '默认封面',
+  'disguise.cover.uploadAlt': '选好的封面',
+  'disguise.cover.textLabel': '卡片上的字',
+  'disguise.cover.textPlaceholder': '点开查看',
+  'disguise.cover.cardColor': '卡片颜色',
+  'disguise.cover.textColor': '文字颜色',
+  'disguise.cover.mosaicNote': '用「打码」页的检测设置，只对图库里的图有效。没检测到东西的图会标出来，由你换一种封面。',
+  'disguise.cover.blurNote': '封面是原图模糊后的样子。',
+  'disguise.cover.defaultSaved': '默认封面已保存',
+  'disguise.cover.defaultFailed': '没能保存默认封面：{reason}',
+  'disguise.cover.defaultRemoved': '默认封面已移除',
+  'disguise.cover.pickFirst': '先选一张封面图。',
+
+  // packing, size, saving
+  'disguise.pack': '把所有图合成一个文件（点开后依次播放）',
+  'disguise.seconds': '每张停留的秒数',
+  'disguise.packFormat': '做成',
+  'disguise.packFormat.disguise': '一张伪装图（动态 PNG）',
+  'disguise.packFormat.gif': '循环播放的动图（没有封面）',
+  'disguise.scrub': '去掉图片里藏的提示词和其它信息',
+  'disguise.scrub.hint': '成品里不带任何生成信息。',
+  'disguise.maxSide': '最长边（像素，0 = 原尺寸）',
+  'disguise.folder': '保存到文件夹',
+  'disguise.folder.placeholder': '留空 = 程序数据里的伪装文件夹',
+  'disguise.folder.choose': '选择…',
+  'disguise.folder.chooseTitle': '伪装图保存到哪里',
+  'disguise.folder.chooseOk': '保存到这里',
+
+  // the buttons above the queue, and the run
+  'disguise.make': '做成伪装图',
+  'disguise.make.hint': '按左边的设置，给队列里每一张做一张伪装图，写进保存文件夹。每次都从原图开始。',
+  'disguise.restore': '还原真图',
+  'disguise.restore.hint': '把队列里的伪装图还原成里面藏的真图；不是伪装图的会标出来。',
+  'disguise.running.make': '正在制作 {done}/{total}…',
+  'disguise.running.restore': '正在还原 {done}/{total}…',
+  'disguise.summary.made': '已做成 {n} 张伪装图，保存在 {folder}。',
+  'disguise.summary.pack': '已把 {n} 张图合成一个文件 {name}，保存在 {folder}。',
+  'disguise.summary.gif': '已把 {n} 张图做成一个循环播放的动图 {name}，保存在 {folder}。',
+  'disguise.summary.waiting': '{n} 张需要换封面。',
+  'disguise.summary.failed': '{n} 张失败，原因写在各张图下面。',
+  'disguise.summary.restored': '已还原 {done}/{total} 张，可以在各张图上下载或复制。',
+  'disguise.summary.stopped': '已在当前这张做完后停止：处理了 {done}/{total} 张。',
+  'disguise.summary.none': '没有做成任何伪装图。',
+
+  // one image in the queue
+  'disguise.item.done': '已做成伪装图 · {width}×{height} · {size}',
+  'disguise.item.saved': '已保存：{path}',
+  'disguise.item.needsCover': '需要换封面：{reason}',
+  'disguise.item.packed': '在合成的文件里',
+  'disguise.item.restored': '已还原 · 里面藏的真图',
+  'disguise.item.cover': '封面',
+  'disguise.item.copy.hint': '把成品当文件复制，可以直接粘贴到聊天窗口',
+  'disguise.item.reveal': '在文件夹中显示',
+  'disguise.item.reveal.hint': '打开保存文件夹并选中这个文件，拖进聊天窗口也行',
+  'disguise.item.noResult': '还没做',
+
+  // why a picture needs another cover
+  'disguise.reason.nothing_detected': '没有找到要打码的地方',
+  'disguise.reason.detector_unavailable': '打码检测还没准备好（在模型中心下载检测模型）',
+  'disguise.reason.not_in_library': '自动打码只能用于图库里的图',
+  'disguise.reason.no_default_cover': '还没有设置默认封面',
+  'disguise.reason.no_upload': '还没有选封面图',
+  'disguise.reason.unknown': '未知原因（{reason}）',
+
+  // the bar and the pack card
+  'disguise.bar.needsCover': '{n} 张需要换封面（{reasons}）',
+  'disguise.bar.redoFailed': '这几张改用默认封面',
+  'disguise.bar.redoAll': '全部改用默认封面',
+  'disguise.pack.info': '{name} · {frames} 张图 · {width}×{height} · {size}',
+  'disguise.pack.saved': '已保存：{path}',
+  'disguise.pack.copy': '复制文件',
+  'disguise.pack.download': '下载',
+  'disguise.pack.coverAlt': '合成文件的封面',
+  'disguise.copyAll': '全部当文件复制',
+
+  // copy and reveal
+  'disguise.copied': '已当文件复制，可以粘贴到聊天窗口。',
+  'disguise.copyUnsupported': '这台电脑不能在这里复制文件。请点「在文件夹中显示」，再把文件拖进聊天窗口。',
+  'disguise.copyFailed': '没能复制：其它程序正占用剪贴板，关掉它们再试。',
+  'disguise.revealFailed': '没能打开文件夹：{reason}',
+  'disguise.download.failed': '没能下载：{reason}',
+
+  // problems
+  'disguise.err.notDisguise': '这不是伪装图。',
+  'disguise.err.damaged': '里面藏的图已损坏，读不出来。',
+  'disguise.err.tooLarge': '这张图太大，不能安全处理。',
+  'disguise.err.unreadable': '读不了这张图。',
+  'disguise.err.libraryGone': '图库里已经没有这张图了。',
+  'disguise.err.folder': '保存文件夹不能用：{detail}',
+  'disguise.err.generic': '没能处理这张图（{detail}）',
 }
