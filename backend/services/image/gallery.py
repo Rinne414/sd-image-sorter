@@ -113,30 +113,52 @@ class GalleryMixin:
             )
 
     def _filter_and_mark_missing_images(self, images: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], int]:
-        """Drop rows whose backing files no longer exist and persist that state in SQLite."""
-        live_images: List[Dict[str, Any]] = []
-        missing_count = 0
+        """Drop rows whose backing files no longer exist and persist that state in SQLite.
 
-        for image in images:
-            image_id = int(image.get("id") or 0)
-            primary_path = str(image.get("path") or "")
-            resolved_path = resolve_existing_indexed_image_path(primary_path, backend_file=_svc()._BACKEND_FILE)
-            if resolved_path:
+        A row whose file is not at its listed path is read again in one query (it
+        may have moved meanwhile), and the rows still missing are marked in one
+        transaction: a read, a connection and a commit per row held the listing
+        of a library on an unplugged drive for minutes.
+        """
+        backend_file = _svc()._BACKEND_FILE
+        found = [
+            bool(resolve_existing_indexed_image_path(str(image.get("path") or ""), backend_file=backend_file))
+            for image in images
+        ]
+        recheck_ids = [
+            int(image.get("id") or 0)
+            for image, is_found in zip(images, found)
+            if not is_found and int(image.get("id") or 0) > 0
+        ]
+        current_rows = db.get_images_by_ids(recheck_ids) if recheck_ids else {}
+
+        live_images: List[Dict[str, Any]] = []
+        missing_paths: Dict[int, str] = {}
+        missing_count = 0
+        for image, is_found in zip(images, found):
+            if is_found:
                 live_images.append(image)
                 continue
-
-            current_image = db.get_image_by_id(image_id) if image_id > 0 else None
-            if current_image:
-                current_path = str(current_image.get("path") or "")
-                current_resolved_path = resolve_existing_indexed_image_path(current_path, backend_file=_svc()._BACKEND_FILE)
-                if current_resolved_path:
-                    live_images.append(current_image)
+            image_id = int(image.get("id") or 0)
+            listed_path = str(image.get("path") or "")
+            current_row = current_rows.get(image_id)
+            current_path = str(current_row.get("path") or "") if current_row else ""
+            if (
+                current_path
+                and current_path != listed_path
+                and resolve_existing_indexed_image_path(current_path, backend_file=backend_file)
+            ):
+                moved_image = db.get_image_by_id(image_id)
+                if moved_image:
+                    live_images.append(moved_image)
                     continue
-
             missing_count += 1
-            if image_id > 0:
-                db.mark_image_unreadable(image_id, "File not found on disk")
+            if current_row:
+                # Only while it still has this path: a move after this read keeps the row.
+                missing_paths[image_id] = current_path
 
+        if missing_paths:
+            db.mark_images_unreadable(missing_paths, "File not found on disk")
         return live_images, missing_count
 
     def set_user_rating(self, image_id: int, stars: int) -> Dict[str, Any]:

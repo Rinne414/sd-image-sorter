@@ -79,7 +79,7 @@ it back unchanged.
         }
     }
 )
-async def get_images(
+def get_images(
     generators: Optional[str] = Query(
         default=None,
         description="Comma-separated list of generators to filter. Options include comfyui, nai, webui, forge, reforge, fooocus, unknown, and others.",
@@ -376,7 +376,11 @@ async def get_images(
     ),
     service: ImageService = Depends(get_image_service),
 ):
-    """Retrieve images with optional filtering using cursor-based pagination."""
+    """Retrieve images with optional filtering using cursor-based pagination.
+
+    A plain ``def`` (threadpool): a page can mean checking and marking many
+    missing files (an unplugged drive), which must not hold up other requests.
+    """
     # v3.2.2: accept singular forms (``generator``, ``tag``, ``rating``,
     # ``checkpoint``, ``lora``) as aliases for the plural query params so
     # ``?generator=nai`` etc. no longer silently return the entire library.

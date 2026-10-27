@@ -175,6 +175,7 @@ from db_images_write import (
     update_reparsed_prompt_fields,
     update_reparsed_sidecar_caption,
     mark_image_unreadable,
+    mark_images_unreadable,
     mark_image_unreadable_by_path,
     mark_image_readable,
     delete_image,

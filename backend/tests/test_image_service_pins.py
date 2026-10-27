@@ -546,7 +546,7 @@ class TestFileServingPaths:
         f.write_bytes(b"x")
         marked = []
         monkeypatch.setattr(
-            image_service.db, "mark_image_unreadable", lambda *a, **k: marked.append(a)
+            image_service.db, "mark_images_unreadable", lambda *a, **k: marked.append(a)
         )
         live, missing = svc._filter_and_mark_missing_images([{"id": 1, "path": str(f)}])
         assert missing == 0
@@ -556,18 +556,21 @@ class TestFileServingPaths:
     def test_filter_and_mark_flags_missing_rows(self, tmp_path, monkeypatch):
         svc = ImageService()
         marked = []
-        monkeypatch.setattr(image_service.db, "get_image_by_id", lambda _i: None)
+        gone = str(tmp_path / "gone.png")
+        # The missing rows of a batch are read again and marked in one go,
+        # each with the path that was checked.
+        monkeypatch.setattr(
+            image_service.db, "get_images_by_ids", lambda _ids: {5: {"id": 5, "path": gone}}
+        )
         monkeypatch.setattr(
             image_service.db,
-            "mark_image_unreadable",
-            lambda image_id, reason: marked.append((image_id, reason)),
+            "mark_images_unreadable",
+            lambda checked, reason: marked.append((dict(checked), reason)),
         )
-        live, missing = svc._filter_and_mark_missing_images(
-            [{"id": 5, "path": str(tmp_path / "gone.png")}]
-        )
+        live, missing = svc._filter_and_mark_missing_images([{"id": 5, "path": gone}])
         assert missing == 1
         assert live == []
-        assert marked == [(5, "File not found on disk")]
+        assert marked == [({5: gone}, "File not found on disk")]
 
 
 # ---------------------------------------------------------------------------

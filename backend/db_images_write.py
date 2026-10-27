@@ -867,6 +867,7 @@ from db_images_write_lifecycle import (
     mark_pending_images_metadata_error,
     update_image_path,
     mark_image_unreadable,
+    mark_images_unreadable,
     mark_image_unreadable_by_path,
     mark_image_readable,
     delete_image,

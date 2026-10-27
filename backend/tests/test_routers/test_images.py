@@ -323,13 +323,15 @@ class TestGetImages:
         )
 
         original_get_image_by_id = db.get_image_by_id
+        original_get_images_by_ids = db.get_images_by_ids
 
-        def move_before_missing_mark(row_id):
-            if int(row_id) == image_id:
+        # The listing reads the rows it could not find again before marking them.
+        def move_before_missing_mark(row_ids):
+            if image_id in [int(row_id) for row_id in row_ids]:
                 db.update_image_path(image_id, str(new_path))
-            return original_get_image_by_id(row_id)
+            return original_get_images_by_ids(row_ids)
 
-        monkeypatch.setattr(image_service.db, "get_image_by_id", move_before_missing_mark)
+        monkeypatch.setattr(image_service.db, "get_images_by_ids", move_before_missing_mark)
 
         response = test_client.get("/api/images?limit=10&search=move%20race%20token")
 

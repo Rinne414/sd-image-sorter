@@ -26,7 +26,7 @@ utils.reported_cause / db_images_write / stdlib; it must not import from
 """
 import os
 from datetime import datetime
-from typing import Optional, List
+from typing import Dict, Optional, List
 
 from utils.reported_cause import normalize_reported_cause
 from utils.source_paths import build_indexed_image_lookup_candidates
@@ -243,20 +243,49 @@ def mark_image_unreadable(image_id: int, read_error: Optional[str]) -> None:
     """
     stored_cause = _stored_unreadable_cause(read_error)
     with get_db() as conn:
-        cursor = conn.cursor()
-        _clear_image_pixel_caches(cursor, image_id)
-        cursor.execute(
-            """
-            UPDATE images
-            SET is_readable = 0,
-                read_error = ?,
-                metadata_status = 'error',
-                indexed_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (stored_cause, image_id),
-        )
+        _mark_unreadable(conn.cursor(), image_id, stored_cause)
     _invalidate_tags_cache()
+
+
+def mark_images_unreadable(checked_paths: Dict[int, str], read_error: Optional[str]) -> List[int]:
+    """Mark rows unreadable in one transaction (same rule as ``mark_image_unreadable``).
+
+    ``checked_paths`` maps each id to the path that was found missing; a row
+    whose path changed since (a move in between) is left as it is. Returns the
+    ids that were marked. The gallery listing marks every file it cannot find,
+    and a connection and a commit per row (~6 ms) held the listing of a library
+    on an unplugged drive for minutes.
+    """
+    if not checked_paths:
+        return []
+    stored_cause = _stored_unreadable_cause(read_error)
+    marked: List[int] = []
+    with get_db() as conn:
+        cursor = conn.cursor()
+        for image_id, checked_path in checked_paths.items():
+            row = cursor.execute("SELECT path FROM images WHERE id = ?", (image_id,)).fetchone()
+            if row is None or row[0] != checked_path:
+                continue
+            _mark_unreadable(cursor, image_id, stored_cause)
+            marked.append(image_id)
+    if marked:
+        _invalidate_tags_cache()
+    return marked
+
+
+def _mark_unreadable(cursor, image_id: int, stored_cause: Optional[str]) -> None:
+    _clear_image_pixel_caches(cursor, image_id)
+    cursor.execute(
+        """
+        UPDATE images
+        SET is_readable = 0,
+            read_error = ?,
+            metadata_status = 'error',
+            indexed_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (stored_cause, image_id),
+    )
 
 def mark_image_unreadable_by_path(path: str, read_error: Optional[str]) -> None:
     """Mark an existing image row as unreadable based on its file path.
