@@ -16,7 +16,6 @@ them assert on source text alone.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import re
 import shutil
@@ -231,7 +230,8 @@ def test_sort_start_route_forwards_every_gallery_filter():
             return True
 
     request = ss.ManualSortStartRequest(**_snake_sample())
-    asyncio.run(start_sort_session(request=request, service=FakeService()))
+    # A plain def route (FastAPI runs it in the threadpool).
+    start_sort_session(request=request, service=FakeService())
 
     assert not _missing(seen, [_snake(key) for key in _canonical_keys()])
 
@@ -310,7 +310,8 @@ def test_select_all_routes_forward_every_gallery_filter(route_name):
             return capture
 
     request = SelectionTokenRequest(**{key: SAMPLE_VALUES[key] for key in _canonical_keys()})
-    asyncio.run(route(request=request, service=FakeService()))
+    # Plain def routes (FastAPI runs them in the threadpool).
+    route(request=request, service=FakeService())
 
     assert not _missing(seen, [_snake(key) for key in _canonical_keys()])
 
