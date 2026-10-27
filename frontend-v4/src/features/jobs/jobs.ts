@@ -16,7 +16,8 @@ import { driveOllama, ollamaAdoption } from './ollamaDriver' // ollama
 import { adoptArtist, driveArtist } from './artistDriver' // artist
 import { driveVideo } from './videoDriver' // video
 import { adoptVideoInstall } from './videoJob' // video
-import { driveMediaCensor } from './mediaCensorDriver' // mediacensor
+import { driveMediaCensor, lookAtMediaJob } from './mediaCensorDriver' // mediacensor
+import { trackedMediaJobs } from '../censor/media/mediaTracked' // mediacensor
 import { adoptStyleMap, driveStyleMap } from './styleMapDriver' // stylemap
 import { jobHeadline } from './headline'
 
@@ -357,6 +358,7 @@ export async function adoptRunningJobs(): Promise<void> {
     }),
     adopt('embed', (raw) => (raw.running === true ? { kind: 'embed', progress: readProgress('embed', raw) } : null)),
     adoptDuplicateScan(),
+    adoptMediaCensor(), // mediacensor
     adopt('aesthetic', adoptAesthetic),
     adopt('reparse', adoptReparse), // reparse/reread
     adopt('sortrules', adoptSortRules), // sortrules/sortundo
@@ -372,6 +374,22 @@ export async function adoptRunningJobs(): Promise<void> {
       return { kind: 'install', progress: readProgress('install', raw, ctx), ctx, label: result.model_id }
     }),
   ])
+}
+
+/**
+ * GIF / video censor jobs this browser started before a reload (mediaTracked.ts).
+ * A job the program still knows comes back with its progress (or its end, if it
+ * ended while the page was away); one it no longer knows (it was restarted) comes
+ * back saying so.
+ */
+async function adoptMediaCensor(): Promise<void> {
+  for (const tracked of trackedMediaJobs()) {
+    if (useJobs.getState().jobs.some((j) => j.kind === 'mediacensor' && j.ctx.mediaCensor?.jobId === tracked.id)) continue
+    const ctx = { mediaCensor: { jobId: tracked.id, folder: tracked.folder } }
+    // An unanswered look reads as "still running, no contact": the polling goes on and says so.
+    const progress = readProgress('mediacensor', await lookAtMediaJob(tracked.id), ctx)
+    addJob({ kind: 'mediacensor', count: tracked.count, label: tracked.label, destination: tracked.folder, ctx, progress })
+  }
 }
 
 /** A duplicate scan the backend is still running (it keeps its bulk job id for us). */
@@ -417,7 +435,7 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   sortrules: ['images', 'image', 'folders', 'image-count', 'library-health', 'missing-summary'], // sortrules
   sortundo: ['images', 'image', 'folders', 'image-count', 'library-health', 'missing-summary'], // sortundo
   ollama: ['vlm-local-models'], // ollama: the AI services page lists what Ollama has
-  video: ['video-support', 'image-count', 'images', 'image'], // video: video support turns the library's videos into readable items
+  video: ['video-support', 'media-censor-status', 'image-count', 'images', 'image'], // video: video support turns the library's videos into readable items
   artist: ['artist-stats', 'artist-images', 'images', 'image-count'], // artist: the style tool's numbers and lists, an artist: search
   mediacensor: [], // mediacensor: the results are new files outside the library
   stylemap: ['artist-stats', 'artist-images', 'images', 'image-count'], // stylemap: the index also stores each picture's artist guess

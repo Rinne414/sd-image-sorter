@@ -3,6 +3,7 @@ import { useToasts } from '../../../ui/toasts'
 import { addJob, startingProgress, useJobs } from '../../jobs/jobs'
 import { mediaStartBody, type MediaDetection, type MediaOptions, type MediaSource } from './mediaBody'
 import { startMedia } from './mediaApi'
+import { trackMediaJob } from './mediaTracked'
 
 // Starting the GIF / video censor: the request, then a job in the Jobs drawer
 // that follows it. A refusal is said in the toast with the backend's reason.
@@ -31,6 +32,8 @@ export async function beginMediaJob(run: MediaRun): Promise<boolean> {
       destination: started.output_folder,
       ctx: { mediaCensor: { jobId: started.job_id, folder: started.output_folder } },
     })
+    // So a reload finds the job again (mediaTracked.ts).
+    trackMediaJob({ id: started.job_id, label: run.label, folder: started.output_folder, count: run.count })
     useJobs.getState().setDrawerOpen(true)
     return true
   } catch (error) {

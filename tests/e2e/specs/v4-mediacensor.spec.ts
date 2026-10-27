@@ -244,7 +244,8 @@ test('a folder job runs for real: progress in Jobs, honest end, the files writte
   // synthetic frames hold nothing to cover: the job says so, and still writes the copies
   await expect(headline(page)).toContainText(new RegExp(`^(Nothing to cover was found in ${expected} files|Censored ${expected} files)`), { timeout: 180_000 })
   await expect(page.getByTestId('mediacensor-file')).toHaveCount(expected)
-  await expect.poll(() => fs.readdirSync(OUT).sort()).toEqual(
+  // the video is H.264 in .mp4, or VP9 in .webm when the ffmpeg in use has no x264
+  await expect.poll(() => fs.readdirSync(OUT).map((name) => name.replace(/.webm$/, '.mp4')).sort()).toEqual(
     ['v4mc-clip-a_censored.gif', 'v4mc-clip-b_censored.gif', ...(realVideo ? ['v4mc-clip_censored.mp4'] : [])].sort(),
   )
   const reveal = page.waitForRequest((req) => /\/reveal\/0$/.test(req.url()))
@@ -366,40 +367,92 @@ test('a program that stops answering is said, and a job it no longer knows ends 
   expect((await page.request.post(`/api/censor/media/jobs/${jobId}/cancel`)).ok()).toBe(true)
 })
 
-test('a video asks for ffmpeg first when it is not installed', async ({ page }) => {
+test('a running job is found again after the page reloads, and a job the program forgot says so', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await boot(page, '')
+  await openLibrary(page, LONG_TOKEN, 1)
+  await page.getByTestId('tile').first().click()
+  await page.keyboard.press('Control+a')
+  await page.getByTestId('selection-bar').getByRole('button', { name: 'More' }).click()
+  await page.getByRole('menuitem', { name: 'Censor…' }).click()
+  const started = page.waitForResponse((res) => res.url().endsWith('/api/censor/media/start'))
+  await page.getByTestId('mediacensor-start').click()
+  const jobId = ((await (await started).json()) as { job_id: string }).job_id
+  await expect(page.getByTestId('job').first()).toContainText('Censoring v4mc-long.gif…', { timeout: 30_000 })
+  expect(await page.evaluate(() => localStorage.getItem('sd-v4-media-jobs'))).toContain(jobId)
+
+  // reload: the same job is back in the drawer, still running, and it can still be stopped
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.getByTestId('jobs-button').click()
+  const job = page.getByTestId('job').first()
+  await expect(job).toContainText('Censoring v4mc-long.gif…', { timeout: 30_000 })
+  await expect(job.getByRole('button', { name: 'Stop' })).toBeVisible()
+  const cancel = page.waitForRequest((req) => req.url().includes(`/jobs/${jobId}/cancel`))
+  await job.getByRole('button', { name: 'Stop' }).click()
+  await cancel
+  await expect(headline(page)).toContainText(/^(Stopped before any file was finished|Nothing to cover was found in 1 file|Censored 1 file)/, { timeout: 25_000 })
+  // seen to its end: it is not brought back again
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('sd-v4-media-jobs'))).toBeNull()
+
+  // a job id the program does not know (it was restarted): said, once
+  await page.evaluate(() =>
+    localStorage.setItem('sd-v4-media-jobs', JSON.stringify([{ id: 'forgotten000', label: 'old.gif', folder: 'D:/out', count: 1 }])),
+  )
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.getByTestId('jobs-button').click()
+  await expect(headline(page)).toContainText('The censoring job is gone (the program was restarted)', { timeout: 15_000 })
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('sd-v4-media-jobs'))).toBeNull()
+})
+
+test('a video asks for video support first when no ffmpeg is installed, one download for both', async ({ page }) => {
   test.skip(!realVideo, 'needs ffmpeg on this machine to make a video')
   await page.setViewportSize({ width: 1920, height: 1080 })
-  const prepared: Record<string, unknown>[] = []
-  await page.route('**/api/models/status', (route) =>
-    route.fulfill({ json: { models: [{ id: 'censor-nudenet', status: 'ready', available: true }, { id: 'video-ffmpeg', status: 'missing', available: false }] } }),
-  )
+  const installs: number[] = []
+  const support = (canInstall: boolean) => ({
+    available: false, source: null, can_install: canInstall, estimated_mb: 77, download_from: 'github.com/BtbN/FFmpeg-Builds',
+    install: installs.length ? { state: 'running', phase: 'downloading', downloaded: 1_000_000, total: 77_000_000 } : { state: 'idle' },
+    indexing: false, videos: 0, pending: 0, unreadable: 0,
+  })
+  let canInstall = true
+  const noFfmpeg = { video_ready: false, video_source: null }
+  await page.route('**/api/video-support', (route) => route.fulfill({ json: support(canInstall) }))
+  await page.route('**/api/video-support/install', (route) => {
+    installs.push(Date.now())
+    return route.fulfill({ json: support(true).install })
+  })
+  await page.route('**/api/censor/media/status', (route) => route.fulfill({ json: noFfmpeg }))
   await page.route('**/api/censor/media/list', async (route) => {
     const real = await route.fetch()
-    await route.fulfill({ response: real, json: { ...(await real.json()), video_ready: false } })
+    await route.fulfill({ response: real, json: { ...(await real.json()), ...noFfmpeg } })
   })
-  await page.route('**/api/models/prepare', async (route) => {
-    prepared.push(route.request().postDataJSON())
-    await route.fulfill({ json: { status: 'downloading', model_id: 'video-ffmpeg', run_id: 1 } })
+  let preparedFfmpeg = false
+  await page.route('**/api/models/prepare', (route) => {
+    preparedFfmpeg = preparedFfmpeg || String(route.request().postData()).includes('video-ffmpeg')
+    return route.fallback()
   })
-  // nothing downloads: the question is answered, and the download only shows once it was asked for
-  await page.route('**/api/models/download-progress', (route) =>
-    route.fulfill({
-      json: prepared.length
-        ? { active: true, downloaded: 1, total: 10, prepare_result: { active: true, model_id: 'video-ffmpeg', run_id: 1 } }
-        : { active: false, downloaded: 0, total: 0, prepare_result: { active: false, run_id: 0 } },
-    }),
-  )
-  await openDialogFromCensorStep(page, batchId, 'en', 'vopus', false)
-  await expect(page.getByTestId('mediacensor-video-note')).toContainText('Videos need the ffmpeg component first')
+  await openDialogFromCensorStep(page, batchId)
+  await expect(page.getByTestId('mediacensor-video-note')).toContainText('Videos need video support first (about 77 MB; it also plays the videos in your library)')
   await page.getByTestId('mediacensor-start').click()
-  await expect.poll(() => prepared.map((p) => p.model_id)).toEqual(['video-ffmpeg'])
+  await expect.poll(() => installs.length).toBe(1)
   await expect(page.getByTestId('mediacensor-dialog')).toHaveCount(0)
-  await expect(page.getByText('Installing ffmpeg first')).toBeVisible()
+  await expect(page.getByText('Installing video support first')).toBeVisible()
+  // the install is the video support job; no second ffmpeg is asked for
+  await page.getByTestId('jobs-button').click()
+  await expect(page.getByTestId('job').first()).toBeVisible()
+  await page.keyboard.press('Escape')
+  expect(preparedFfmpeg).toBe(false)
   // GIFs alone need nothing installed
   await page.getByTestId('mediacensor-open').click()
   await page.getByTestId('mediacensor-videos').uncheck()
   await expect(page.getByTestId('mediacensor-video-note')).toHaveCount(0)
+  await expect(page.getByTestId('mediacensor-start')).toBeEnabled()
+  // a system without a ready-made ffmpeg: said, and the videos have to be left out
+  canInstall = false
+  await page.getByTestId('mediacensor-videos').check()
+  await expect(page.getByTestId('mediacensor-video-note')).toContainText('no ready-made ffmpeg for this system')
+  await expect(page.getByTestId('mediacensor-start')).toBeDisabled()
 })
+
 
 test('the new interface opens the same dialog for picked GIFs', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })

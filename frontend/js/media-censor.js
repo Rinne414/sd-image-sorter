@@ -14,8 +14,9 @@
     const POLL_MS = 1000;
     // Failed polls in a row before the dialog says it lost contact (about 5 s).
     const LOST_CONTACT_POLLS = 5;
-    const VIDEO_SIZE_HINT = '~31 MB';
-    const VIDEO_CONFIRM_BYTES = 31 * 1024 * 1024;
+    // Shown when the program does not know the size of the video support download yet.
+    const VIDEO_SUPPORT_MB = 77;
+    const VIDEO_INSTALL_POLL_MS = 1500;
 
     function byId(id) {
         return document.getElementById(id);
@@ -125,11 +126,74 @@
                     videos: body.videos.length,
                 });
                 if (body.videos.length && !body.video_ready) {
-                    text += ' ' + this._t('mediaCensor.videoNeedsFfmpeg', 'Videos need the ffmpeg component (~31 MB); you will be asked to install it.');
+                    text += ' ' + this._t('mediaCensor.videoNeedsFfmpeg', 'Videos need video support (ffmpeg); you will be asked to install it.');
                 }
                 found.textContent = text;
             }
             return body;
+        },
+
+        // Videos run on ONE ffmpeg: video support's when it is installed, else the one the
+        // optional imageio-ffmpeg package ships. With neither, the install offered is video
+        // support (the same download also plays and reads the gallery's videos), never a
+        // second copy of ffmpeg. Resolves true once videos can be censored.
+        async _videoToolsReady(listing) {
+            const api = window.App?.API || window.API;
+            const askReady = async () => {
+                try {
+                    return Boolean((await api.get('/api/censor/media/status')).video_ready);
+                } catch (_error) {
+                    return Boolean(listing?.video_ready);
+                }
+            };
+            if (await askReady()) return true;
+            const support = window.VideoSupport;
+            if (!support) return false;
+            await support.refresh();
+            if (support.state && support.state.can_install === false) {
+                this._toast(this._t('mediaCensor.videoNoBuild',
+                    'There is no ready-made ffmpeg for this system. Install ffmpeg with your package manager, or leave the videos out.'), 'warning');
+                return false;
+            }
+            if (support.state?.install?.state !== 'running') {
+                const mb = support.state?.estimated_mb || VIDEO_SUPPORT_MB;
+                const confirmed = await new Promise((resolve) => {
+                    const ask = window.App?.showConfirm || window.showConfirm;
+                    const title = this._t('mediaCensor.videoInstallTitle', 'Install video support?');
+                    const message = this._t('mediaCensor.videoInstallMessage',
+                        'Videos need video support (about {mb} MB). It is one download that also lets the gallery play and read videos. The censoring starts by itself when it is installed.', { mb });
+                    if (typeof ask === 'function') ask(title, message, () => resolve(true), () => resolve(false), { tone: 'primary' });
+                    else resolve(window.confirm(message));
+                });
+                if (!confirmed) return false;
+                await support.install();
+            }
+            return this._waitForVideoSupport(support, askReady);
+        },
+
+        // Follows the install in the folder line until video support is there or it failed.
+        async _waitForVideoSupport(support, askReady) {
+            const found = byId('media-censor-found');
+            const startButton = byId('media-censor-start');
+            if (startButton) startButton.disabled = true;
+            try {
+                for (;;) {
+                    await new Promise((resolve) => setTimeout(resolve, VIDEO_INSTALL_POLL_MS));
+                    await support.refresh();
+                    if (found) found.textContent = support.statusText();
+                    const install = support.state?.install || {};
+                    if (install.state === 'running') continue;
+                    if (install.state === 'failed') {
+                        this._toast(this._t('mediaCensor.videoInstallFailed', 'Video support was not installed, so only the GIFs are censored.'), 'error');
+                        return false;
+                    }
+                    return await askReady();
+                }
+            } finally {
+                if (startButton) startButton.disabled = false;
+                if (found) found.textContent = '';
+                this.list();
+            }
         },
 
         // The Censor page's current detection settings (see censor/state.js).
@@ -157,16 +221,9 @@
             const listing = this._listing || await this.list();
             if (!listing) return;
             let includeVideos = Boolean(byId('media-censor-videos')?.checked) && listing.videos.length > 0;
-            if (includeVideos && !listing.video_ready && typeof window.ensureFeatureModel === 'function') {
-                const ensured = await window.ensureFeatureModel('video-ffmpeg', {
-                    label: 'ffmpeg',
-                    sizeHint: VIDEO_SIZE_HINT,
-                    confirmBytes: VIDEO_CONFIRM_BYTES,
-                });
-                if (!ensured?.ok) {
-                    includeVideos = false;
-                    this._toast(this._t('mediaCensor.videosSkipped', 'ffmpeg is not installed, so only the GIFs are censored.'), 'warning');
-                }
+            if (includeVideos && !(await this._videoToolsReady(listing))) {
+                includeVideos = false;
+                this._toast(this._t('mediaCensor.videosSkipped', 'Video support is not installed, so only the GIFs are censored.'), 'warning');
             }
             if (!listing.gifs.length && !includeVideos) {
                 this._toast(this._t('mediaCensor.nothingToDo', 'Nothing to censor in this folder.'), 'warning');

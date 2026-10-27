@@ -103,16 +103,20 @@ export function useLibraryVideoCount(): number {
 }
 
 /** Ask the backend to install ffmpeg; it runs in the background and shows in the Jobs drawer. */
-export async function installVideoSupport(): Promise<void> {
-  if (isQueueBusy('video')) return
+export async function installVideoSupport(then?: () => void | Promise<void>): Promise<boolean> {
+  if (isQueueBusy('video')) return false
+  let started = false
   try {
     const install = await rawJson<VideoInstall>('POST', '/api/video-support/install', { body: {} })
-    addJob({ kind: 'video', progress: startedVideoInstall(install as unknown as Record<string, unknown>), label: say('video.job.label') })
+    // `then` runs when the install ends well (the GIF and video censor goes on from there).
+    addJob({ kind: 'video', progress: startedVideoInstall(install as unknown as Record<string, unknown>), label: say('video.job.label'), then })
+    started = true
   } catch (error) {
     const failure = error instanceof ApiError ? { code: error.code, message: error.message } : { message: (error as Error).message }
     useToasts.getState().push(say('video.installFailed', { reason: installFailureText(failure, say) }), 'error')
   }
   void queryClient.invalidateQueries({ queryKey: VIDEO_SUPPORT_KEY })
+  return started
 }
 
 export const getPlayback = (id: number, signal?: AbortSignal) => rawJson<Playback>('GET', `/api/videos/${id}/playback`, { signal })

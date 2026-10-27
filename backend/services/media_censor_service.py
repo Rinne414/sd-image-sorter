@@ -249,12 +249,18 @@ class MediaJob:
 class MediaCensorJobs:
     """One worker thread; jobs run one after another so the GPU is never shared."""
 
-    def __init__(self, video_censor: Optional[Callable[..., int]] = None):
+    def __init__(
+        self,
+        video_censor: Optional[Callable[..., int]] = None,
+        video_suffix: Optional[Callable[[], str]] = None,
+    ):
         self._jobs: Dict[str, MediaJob] = {}
         self._queue: List[MediaJob] = []
         self._lock = threading.Lock()
         self._worker: Optional[threading.Thread] = None
         self._video_censor = video_censor
+        # The extension a censored video gets (it depends on the encoders the ffmpeg in use has).
+        self._video_suffix = video_suffix or (lambda: ".mp4")
 
     def start(
         self, sources: Iterable[str], output_folder: str, settings: FrameSettings
@@ -327,7 +333,7 @@ class MediaCensorJobs:
     def _run_file(self, job: MediaJob, item: Dict[str, Any]) -> None:
         source = Path(item["source"])
         is_video = source.suffix.lower() in VIDEO_EXTENSIONS
-        output_suffix = ".mp4" if is_video else source.suffix.lower()
+        output_suffix = self._video_suffix() if is_video else source.suffix.lower()
         with job.lock:
             item["status"] = "running"
 

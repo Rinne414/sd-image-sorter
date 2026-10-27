@@ -746,12 +746,14 @@ def _build_inventory(health: Dict[str, Any]) -> List[Dict[str, Any]]:
             "message": video_ffmpeg.get("message") or "Not installed.",
             "message_key": video_ffmpeg.get("message_key") or "models.videoFfmpeg.missing",
             "path": "",
-            "download_supported": True,
+            # One ffmpeg for video support and for censoring: it is installed as video
+            # support (Settings), never as a second copy from here.
+            "download_supported": False,
             "external_links": [
-                {"label": "imageio-ffmpeg", "url": "https://github.com/imageio/imageio-ffmpeg"},
+                {"label": "FFmpeg-Builds", "url": "https://github.com/BtbN/FFmpeg-Builds"},
             ],
             "setup_steps": [
-                "Click Prepare / Download to install imageio-ffmpeg (~31 MB), which brings its own ffmpeg.",
+                "Install video support in Settings: one download (about 77 MB) that plays videos in the library and censors them.",
                 "Only needed to censor videos; GIFs work without it.",
             ],
         },

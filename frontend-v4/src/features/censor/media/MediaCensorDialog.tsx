@@ -5,15 +5,15 @@ import { useApp } from '../../../state/store'
 import { Dialog } from '../../../ui/Dialog'
 import { FolderChooser } from '../../../ui/FolderChooser'
 import { useToasts } from '../../../ui/toasts'
-import { useModelStatus } from '../../../api/queries'
-import { installAllThen, type InstallTarget } from '../../jobs/installJob'
+import { isQueueBusy } from '../../jobs/jobs'
+import { installVideoSupport, useVideoSupport } from '../../video/videoApi'
 import { censorModelsQuery } from '../detectApi'
 import { DownloadConfirm } from '../DownloadConfirm'
 import { legacyTargets, useDownloadAsk, withModels } from '../detectRun'
 import { DETECTORS, effectiveDetector, TARGETS, useDetectSettings, CONFIDENCE_MAX, CONFIDENCE_MIN, type DetectorId } from '../detectSettings'
 import { Slider } from '../PanelParts'
 import { mediaCards, mediaDetection } from './mediaBody'
-import { listMedia, type MediaListing } from './mediaApi'
+import { listMedia, mediaStatusQuery, type MediaListing } from './mediaApi'
 import { countMoving } from './mediaKind'
 import { beginMediaJob, runLabel } from './mediaRun'
 import { BLOCK_MAX, BLOCK_MIN, EVERY_MAX, EVERY_MIN, HOLD_MAX, HOLD_MIN, MEDIA_STYLES, useMediaSettings, type MediaStyle } from './mediaSettings'
@@ -25,8 +25,8 @@ import styles from './MediaCensorDialog.module.css'
 // how to cover it, and where to save. Start hands the work to the Jobs drawer.
 
 const LIST_DELAY_MS = 350
-/** The component that decodes and encodes video (Model Center card video-ffmpeg, about 31 MB). */
-const FFMPEG: InstallTarget = { card: 'video-ffmpeg', variant: null, label: 'ffmpeg' }
+/** Shown when the program does not know the size of the video support download. */
+const VIDEO_SUPPORT_MB = 77
 
 const DETECTOR_LABEL: Record<DetectorId, MessageKey> = {
   both: 'censor.detector.both',
@@ -105,7 +105,8 @@ function MediaCensorDialog() {
   const detect = useDetectSettings()
   const media = useMediaSettings()
   const models = useQuery(censorModelsQuery)
-  const modelStatus = useModelStatus()
+  const mediaStatus = useQuery(mediaStatusQuery)
+  const support = useVideoSupport()
   const [folder, setFolder] = useState(media.source)
   const [includeVideos, setIncludeVideos] = useState(true)
   const [choosing, setChoosing] = useState<'source' | 'output' | null>(null)
@@ -114,10 +115,11 @@ function MediaCensorDialog() {
 
   const counts = picks ? countMoving(picks) : { gifs: listing?.gifs.length ?? 0, videos: listing?.videos.length ?? 0 }
   const withVideos = includeVideos && counts.videos > 0
-  const ffmpegCard = modelStatus.data?.models.find((m) => m.id === 'video-ffmpeg')
-  // The folder listing asks the backend itself; before it answers (and for picked files) the model card says.
-  const videoReady = listing?.video_ready ?? ffmpegCard?.status === 'ready'
+  // Video support's ffmpeg, or the one imageio-ffmpeg brings: the program says which is there (the folder listing and the status ask it the same way).
+  const videoReady = listing?.video_ready ?? mediaStatus.data?.video_ready ?? false
   const needsInstall = withVideos && !videoReady
+  // No ready-made ffmpeg for this system: nothing to offer but leaving the videos out.
+  const cannotInstall = needsInstall && support.data?.can_install === false
   const fileCount = counts.gifs + (withVideos ? counts.videos : 0)
 
   const chosen = effectiveDetector(detect.detector, models.data?.recommended_backend)
@@ -161,10 +163,13 @@ function MediaCensorDialog() {
       if (await beginMediaJob(run)) close()
       setStarting(false)
     }
-    // Videos need the ffmpeg component: Start is the go-ahead to install it, and the censoring goes on by itself after.
+    // Videos need ffmpeg: Start is the go-ahead to install video support (one download that also
+    // plays the library's videos), and the censoring goes on by itself after.
     const proceed = async () => {
       if (!needsInstall) return post()
-      if (await installAllThen([FFMPEG], () => void post())) {
+      if (isQueueBusy('video')) {
+        toast(t('mediacensor.videos.installing'), 'error')
+      } else if (await installVideoSupport(() => post())) {
         toast(t('mediacensor.videos.installFirst'))
         close()
       }
@@ -182,7 +187,7 @@ function MediaCensorDialog() {
     }
   }
 
-  const canStart = !starting && fileCount > 0 && !('error' in detection)
+  const canStart = !starting && fileCount > 0 && !cannotInstall && !('error' in detection)
   const footer = (
     <>
       <button type="button" className="btn btn-ghost" onClick={close}>
@@ -240,7 +245,7 @@ function MediaCensorDialog() {
           )}
           {needsInstall && (
             <p className={styles.warn} data-testid="mediacensor-video-note">
-              {t('mediacensor.videos.needSupport')}
+              {cannotInstall ? t('mediacensor.videos.noBuild') : t('mediacensor.videos.needSupport', { mb: support.data?.estimated_mb ?? VIDEO_SUPPORT_MB })}
             </p>
           )}
 

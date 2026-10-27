@@ -35,7 +35,10 @@ def get_jobs() -> MediaCensorJobs:
             if _jobs is None:
                 from services import video_censor
 
-                _jobs = MediaCensorJobs(video_censor=video_censor.censor_video)
+                _jobs = MediaCensorJobs(
+                    video_censor=video_censor.censor_video,
+                    video_suffix=video_censor.output_suffix,
+                )
     return _jobs
 
 
@@ -75,7 +78,22 @@ async def list_media(request: ListRequest):
     from services import video_censor
 
     listed = media.list_media(_folder(request.folder))
-    return {**listed, "video_ready": video_censor.is_available()}
+    return {
+        **listed,
+        "video_ready": video_censor.is_available(),
+        "video_source": video_censor.source_name(),
+    }
+
+
+@router.get("/status")
+async def media_status():
+    """Whether videos can be censored, and with which ffmpeg (video support first)."""
+    from services import video_censor
+
+    return {
+        "video_ready": video_censor.is_available(),
+        "video_source": video_censor.source_name(),
+    }
 
 
 class StartRequest(BaseModel):
