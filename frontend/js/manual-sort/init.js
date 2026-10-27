@@ -295,6 +295,24 @@ async function initManualSort() {
         }
     });
 
+    // The session left behind could not be read back when the program
+    // started, so its place and undo history are gone from Manual Sort.
+    function showManualSortRestoreFailure(failure) {
+        const kept = failure.quarantine_path
+            ? formatManualSortText(
+                'manual.restoreFailedKept',
+                'The file was kept as {path}.',
+                '这个文件已另存为 {path}。',
+                { path: failure.quarantine_path }
+            )
+            : manualSortText('manual.restoreFailedLost', 'The file could not be kept.', '这个文件没能保留下来。');
+        showToast(manualSortText(
+            'manual.restoreFailed',
+            'The Manual Sort session you left could not be restored: its saved file could not be read.',
+            '上次的手动排序进度没能恢复：保存进度的文件读不出来。'
+        ) + ' ' + kept, 'warning', { persistent: true });
+    }
+
     // Check for saved session on the server
     try {
         const session = await window.App.API.get('/api/sort/current').catch(e => {
@@ -304,6 +322,7 @@ async function initManualSort() {
         if (session && !session.done && (session.image || session.champion)) {
             renderManualSortResumeBanner(session, { visible: true });
         }
+        if (session?.restore_failure) showManualSortRestoreFailure(session.restore_failure);
     } catch(e) {
         if (window.Logger) Logger.warn('Failed to check sort session:', e);
     }

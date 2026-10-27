@@ -42,6 +42,9 @@ const ManualSortState = {
     inheritedCurrentGalleryFilters: false,
     scopeMeta: null,
     resumeBannerSessionSnapshot: null,
+    // The server could not write this session's file: warned once, until a
+    // write works again.
+    sessionSaveWarned: false,
     // v3.3.0 USR-4: optional action cooldown (opt-in, default OFF). When > 0,
     // presses within the window after the previous action completes are
     // ignored so an autoclicker can't fire a chaotic burst. lastActionCompletedAt

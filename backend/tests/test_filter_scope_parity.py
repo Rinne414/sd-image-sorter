@@ -227,6 +227,9 @@ def test_sort_start_route_forwards_every_gallery_filter():
             seen.update(kwargs)
             return {"total_images": 0}
 
+        def is_sort_session_saved(self):
+            return True
+
     request = ss.ManualSortStartRequest(**_snake_sample())
     asyncio.run(start_sort_session(request=request, service=FakeService()))
 

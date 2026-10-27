@@ -602,6 +602,17 @@ def undo_batch_move(
 
 
 
+def _with_session_save_state(service: SortingService, result: Any) -> Any:
+    """Add whether Manual Sort could write its place to disk.
+
+    A session resumes after a restart only from that file, so the page warns
+    while it is not being written. Read after the call, so it covers its save.
+    """
+    if isinstance(result, dict):
+        return {**result, "session_saved": service.is_sort_session_saved()}
+    return result
+
+
 def _manual_sort_filter_kwargs(request: SortFilterRequest) -> Dict[str, Any]:
     """Every filter of a Manual Sort request, as service keyword arguments.
 
@@ -665,7 +676,7 @@ async def start_sort_session(
     already copied or moved; the response's ``excluded_sorted`` says how many.
     """
     if request is not None:
-        return service.start_sort_session(
+        return _with_session_save_state(service, service.start_sort_session(
             **_manual_sort_filter_kwargs(request),
             folders=request.folders,
             operation_mode=request.operation_mode,
@@ -674,9 +685,9 @@ async def start_sort_session(
             mode=request.mode,
             exclude_sorted=request.exclude_sorted,
             image_ids=request.image_ids,
-        )
+        ))
 
-    return service.start_sort_session(
+    return _with_session_save_state(service, service.start_sort_session(
         generators=generators,
         tags=tags,
         tag_mode=tag_mode,
@@ -704,7 +715,7 @@ async def start_sort_session(
         exclude_loras=exclude_loras,
         mode=mode,
         exclude_sorted=exclude_sorted,
-    )
+    ))
 
 
 @router.get("/sort/current")
@@ -712,7 +723,7 @@ async def get_current_sort_image(
     service: SortingService = Depends(get_sorting_service),
 ):
     """Get the current image in the sort session."""
-    return service.get_current_sort_image()
+    return _with_session_save_state(service, service.get_current_sort_image())
 
 
 @router.post("/sort/action")
@@ -726,7 +737,7 @@ def sort_action(
     v3.3.1: ``collect`` adds the current image to the collection mapped to
     ``folder_key`` by reference (no file move) and advances the cursor.
     """
-    return service.sort_action(action, folder_key)
+    return _with_session_save_state(service, service.sort_action(action, folder_key))
 
 
 @router.post("/sort/set-folders")
@@ -735,7 +746,7 @@ async def set_sort_folders(
     service: SortingService = Depends(get_sorting_service),
 ):
     """Set folder destinations for sort keys."""
-    return service.set_sort_folders(config)
+    return _with_session_save_state(service, service.set_sort_folders(config))
 
 
 @router.get("/sort/folders")

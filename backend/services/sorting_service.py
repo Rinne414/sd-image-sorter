@@ -224,6 +224,9 @@ class SortingService(
 
         self._sort_session: Dict[str, Any] = self._build_default_sort_session_state()
         self._sort_session_lock = threading.Lock()
+        # Why the last write of the Manual Sort session file failed; None = it
+        # worked. A session resumes after a restart only from that file.
+        self._sort_session_save_error: Optional[str] = None
         self._scan_progress_proxy = MutableStateProxy(self.get_scan_progress, self.set_scan_progress)
         self._sort_session_proxy = MutableStateProxy(self.get_sort_session, self.set_sort_session)
         
@@ -329,10 +332,17 @@ class SortingService(
         return _get_library_health_cached(int(sample_limit))
 
     def _save_session_to_disk(self) -> None:
-        """Persist session to disk."""
+        """Persist session to disk; a failure is kept so the page can say so."""
         try:
             data = self._build_persisted_sort_session_payload()
             session_file = self._get_session_file_candidates()[0]
             write_persisted_session(session_file, data)
         except Exception as e:
+            self._sort_session_save_error = str(e) or type(e).__name__
             logger.warning("Failed to save session to disk: %s", e)
+        else:
+            self._sort_session_save_error = None
+
+    def is_sort_session_saved(self) -> bool:
+        """Whether the last write of the Manual Sort session reached the disk."""
+        return self._sort_session_save_error is None

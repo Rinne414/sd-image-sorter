@@ -395,7 +395,26 @@ function syncPreviewImages(imageIds = [], currentImage = null) {
     }
 }
 
+// A session resumes after a restart only from the file the server writes
+// after each step; say once when that write fails.
+function noteManualSortSessionSaved(isSaved) {
+    if (isSaved) {
+        ManualSortState.sessionSaveWarned = false;
+        return;
+    }
+    if (ManualSortState.sessionSaveWarned) return;
+    ManualSortState.sessionSaveWarned = true;
+    showToast(manualSortText(
+        'manual.sessionNotSaved',
+        'Manual Sort could not save its place to disk. Sorting still works, but if the program closes, this session cannot be resumed.',
+        '手动排序没能把进度存到磁盘。排序照常进行，但程序关闭后，这次的进度无法恢复。'
+    ), 'warning', { duration: 8000 });
+}
+
 function updateHistoryControlState(state = {}) {
+    if (typeof state.session_saved === 'boolean') {
+        noteManualSortSessionSaved(state.session_saved);
+    }
     if (typeof state.undo_available === 'boolean') {
         ManualSortState.undoAvailable = state.undo_available;
     }

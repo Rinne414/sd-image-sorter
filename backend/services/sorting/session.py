@@ -799,5 +799,6 @@ class SortSessionMixin:
         """Clear the current sort session."""
         with self._sort_session_lock:
             self._sort_session = self._build_default_sort_session_state()
+            self._sort_session_save_error = None
         remove_session_files(self._get_session_file_candidates())
         return {'status': 'ok'}
