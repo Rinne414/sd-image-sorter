@@ -63,6 +63,10 @@
 - **更快**：图库翻页从 0.36 秒降到 0.045 秒；批量打标 1000 张从 170 秒降到 106 秒（实测）。
 - **中英文完整**：中文界面里的按钮提示也都是中文。
 
+### v3.10.0
+
+- **V Opus 补齐经典功能**：画风地图、视频（筛选、播放、安装）、GIF/视频打码、收集与浏览器扩展、发送到生成器、聊天伪装、提示词预设、桌面设置、自定义顶栏等都进了 V Opus 和新界面，并都能用 Ctrl K 找到。
+
 ### v3.9.2
 
 - **图库刷新提示**：原地刷新较久时“加载更多”一行会显示“正在更新图库…”；你正在看的图被删掉时，由紧接着的那张接替位置。
@@ -697,6 +701,10 @@ Eagle and Billfish are general asset managers and are not in this SD-workflow ta
 - **No hard stops**: caps and export gates became warnings with a choice.
 - **Faster**: gallery page 0.36 s to 0.045 s; Mass Tag on 1,000 images 170 s to 106 s (measured).
 - **Complete Chinese and English UI**, tooltips included.
+
+### v3.10.0
+
+- **V Opus has every classic feature**: the Style Map, videos (filter, playback, install), GIF and video censoring, collecting and the browser extension, Send to generator, the chat disguise, prompt presets, desktop settings, top-bar customization and the rest are in V Opus and the new interface, each with Ctrl K.
 
 ### v3.9.2
 
