@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { thumbnailUrl } from '../../api/urls'
 import { useT } from '../../i18n'
+import { useCustomShown } from './customStore'
 import { assignRegions } from './geometry'
 import { useMap } from './mapStore'
 import styles from './MapCanvas.module.css'
@@ -22,7 +23,9 @@ export function Landmarks({ scene }: { scene: StyleMapScene }) {
   const regions = useMap((s) => s.regions)
   const on = useMap((s) => s.landmarksOn)
   const points = useMap((s) => s.points)
-  const shown = useMemo(() => (on ? regions.slice(0, MAX_LANDMARKS) : []), [on, regions])
+  // The regions describe the model's layout: never drawn over the user's own axes.
+  const custom = useCustomShown() !== null
+  const shown = useMemo(() => (on && !custom ? regions.slice(0, MAX_LANDMARKS) : []), [on, custom, regions])
   const [open, setOpen] = useState(-1)
   const [size, setSize] = useState<CardSize>('large')
   const cards = useRef<(HTMLDivElement | null)[]>([])

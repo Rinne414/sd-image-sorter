@@ -7,6 +7,7 @@ import { toSelectionBody } from '../../lib/selectionBody'
 import { installThen } from '../jobs/installJob'
 import { tr } from '../jobs/jobs'
 import { currentLibraryParams } from '../library/params'
+import { clearPin, usePinned } from '../library/pinnedSet'
 import { modelConfig, useArtistPrefs } from '../tools/artist/artistPrefs'
 import { cachedMapQuery, isFiltered, mapQuery, mapSignature, scopeParams, type MapScope, type ModelChoice } from './mapRequest'
 import { loadPrefs, writePref } from './prefs'
@@ -119,6 +120,9 @@ function clearLayoutTimer(): void {
 
 function filterWords(): string {
   const s = useApp.getState()
+  // A set of pictures sent from the map is the whole filter while it is shown.
+  const pin = usePinned.getState().pin
+  if (pin) return tr('stylemap.pin.title', { n: pin.count })
   const parts = [s.queryText.trim(), s.scope.folder ?? '', ...s.scope.generators]
   if (s.scope.favorites) parts.push('★')
   return parts.filter(Boolean).join(' · ')
@@ -344,6 +348,7 @@ export const setPreview = (preview: Preview | null): void => set({ preview })
 
 /** Map the whole library: the library's own filter is cleared (the library page shows everything too). */
 export function showWholeLibrary(): void {
+  clearPin()
   const app = useApp.getState()
   app.setQueryText('')
   app.setScope({ generators: [], folder: null, favorites: false })

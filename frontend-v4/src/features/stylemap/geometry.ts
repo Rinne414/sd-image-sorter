@@ -3,7 +3,7 @@ import type { PointRow, Region } from './types'
 // The cloud's numbers, without three.js: dot size, the central mass that the
 // camera fit and the floor grid follow, the typed arrays the scene draws from,
 // which region a dot belongs to, and where dots land on the canvas (the box
-// select of the next stage reads projectPoints / dotsInRect / nearestDot).
+// and lasso select read projectPoints / dotsInRect / dotsInPolygon / nearestDot).
 
 // World-unit dot size ~ 0.6 / sqrt(n): ~10 px dots with gaps at 500 points on
 // a 1920 canvas, ~1.5 px dots that still draw the shape at 50k.
@@ -183,6 +183,44 @@ export function dotsInRect(projected: Float32Array, count: number, a: UV, b: UV)
     const u = projected[at]!
     const v = projected[at + 1]!
     if (u >= left && u <= right && v >= top && v <= bottom) hits.push(i)
+  }
+  return hits
+}
+
+/** True when `point` lies inside the outline (even-odd rule; corners in drawing order, closed back to the first). */
+export function insidePolygon(point: UV, polygon: readonly UV[]): boolean {
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+    const a = polygon[i]!
+    const b = polygon[j]!
+    if (a.v > point.v !== b.v > point.v && point.u < ((b.u - a.u) * (point.v - a.v)) / (b.v - a.v) + a.u) inside = !inside
+  }
+  return inside
+}
+
+/** Indices of the visible dots inside a drawn outline (the lasso); fewer than three corners hold nothing. */
+export function dotsInPolygon(projected: Float32Array, count: number, polygon: readonly UV[]): number[] {
+  if (polygon.length < 3) return []
+  let left = Infinity
+  let right = -Infinity
+  let top = Infinity
+  let bottom = -Infinity
+  for (const p of polygon) {
+    left = Math.min(left, p.u)
+    right = Math.max(right, p.u)
+    top = Math.min(top, p.v)
+    bottom = Math.max(bottom, p.v)
+  }
+  const hits: number[] = []
+  const point = { u: 0, v: 0 }
+  for (let i = 0; i < count; i += 1) {
+    const at = i * 3
+    if (!projected[at + 2]) continue
+    point.u = projected[at]!
+    point.v = projected[at + 1]!
+    // Outside the outline's box: no need to walk its edges.
+    if (point.u < left || point.u > right || point.v < top || point.v > bottom) continue
+    if (insidePolygon(point, polygon)) hits.push(i)
   }
   return hits
 }

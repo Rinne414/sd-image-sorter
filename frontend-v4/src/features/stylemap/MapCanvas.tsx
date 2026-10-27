@@ -7,6 +7,7 @@ import { useJobs } from '../jobs/jobs'
 import { AxesPanel } from './AxesPanel'
 import { AxisLabels } from './AxisLabels'
 import { buildPointColors } from './colors'
+import { useCustomShown } from './customStore'
 import { cloudArrays } from './geometry'
 import { indexRunning, startStyleIndex } from './indexJob'
 import { Landmarks } from './Landmarks'
@@ -14,15 +15,21 @@ import styles from './MapCanvas.module.css'
 import { openPicture } from './MapLightbox'
 import { mapOnScreen, setPreview, useMap } from './mapStore'
 import { ringsNow, useNear } from './nearStore'
+import { picksMapChanged, usePicks } from './pickStore'
+import { PicksBar } from './PicksBar'
+import { PickTool } from './PickTool'
 import { StyleMapScene } from './scene'
 import { emitCamera, setScene } from './sceneHandle'
 import { hasPoints, startCard } from './status'
 
 /**
  * The 3-D view: drag to rotate, wheel to zoom, right-drag (or the arrow keys)
- * to pan. Pointing at a dot previews its picture; a click opens it. Over the
- * canvas: the landmarks, the axis labels, the axis card, the start card when
- * there is nothing to draw, and "Reset view".
+ * to pan. Pointing at a dot previews its picture; a click opens it; Shift +
+ * drag (or the box / lasso switch) picks dots. Over the canvas: the
+ * landmarks, the axis labels, the axis card, the start card when there is
+ * nothing to draw, "Reset view" and the bar that sends the picked pictures.
+ * With the user's own axes applied the dots are drawn where those axes put
+ * them (customStore.ts).
  */
 export function MapCanvas() {
   const t = useT()
@@ -35,6 +42,8 @@ export function MapCanvas() {
   const axesOpen = useMap((s) => s.axesOpen)
   const theme = useTheme((s) => s.theme)
   const near = useNear()
+  const custom = useCustomShown()
+  const hasPicks = usePicks((s) => s.picked.size > 0)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -60,20 +69,23 @@ export function MapCanvas() {
     }
   }, [])
 
-  // Effects run in this order on one render: the dots, then their colours, then the rings.
+  // Effects run in this order on one render: the dots (and the picks still on them), then their colours, then the rings.
   useEffect(() => {
     if (!scene) return
     const rows = points?.status === 'ok' ? (points.points ?? []) : []
-    scene.setPoints(cloudArrays(rows, points?.points_layout))
-  }, [scene, points])
+    // Lookups keep speaking the server's coordinates: the remap finds their moved dots.
+    scene.setRemap(custom ? custom.remap : null)
+    scene.setPoints(cloudArrays(custom ? custom.rows : rows, points?.points_layout))
+    picksMapChanged(scene)
+  }, [scene, points, custom])
 
   useEffect(() => {
     scene?.setBaseColors(colors ? buildPointColors(colors, scene.ids) : null)
-  }, [scene, points, colors])
+  }, [scene, points, custom, colors])
 
   useEffect(() => {
     scene?.setRings(ringsNow(near, mapOnScreen()?.signature ?? null))
-  }, [scene, points, near])
+  }, [scene, points, custom, near])
 
   useEffect(() => {
     scene?.applyTheme()
@@ -81,7 +93,7 @@ export function MapCanvas() {
 
   const drawn = hasPoints(points)
   return (
-    <div className={styles.card} data-testid="stylemap-canvas-card">
+    <div className={styles.card} data-custom={custom ? true : undefined} data-picks={(hasPicks && drawn) || undefined} data-testid="stylemap-canvas-card">
       <canvas
         ref={canvasRef}
         className={styles.canvas}
@@ -91,6 +103,7 @@ export function MapCanvas() {
       />
       {scene && drawn && <AxisLabels scene={scene} />}
       {scene && drawn && <Landmarks scene={scene} />}
+      {scene && <PickTool scene={scene} />}
       {loading && <span className={styles.loading}>{t('stylemap.loading')}</span>}
       {unsupported ? <Unsupported detail={unsupported} /> : <StartCard />}
       {scene && drawn && (
@@ -99,6 +112,7 @@ export function MapCanvas() {
         </button>
       )}
       {axesOpen && <AxesPanel />}
+      {scene && drawn && <PicksBar />}
     </div>
   )
 }

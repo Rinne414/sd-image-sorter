@@ -24,6 +24,71 @@
   outline-offset: -2px;
 }
 
+/* A drag picks dots (box or lasso chosen): the pointer says so. */
+.canvas[data-drag="box"],
+.canvas[data-drag="lasso"] {
+  cursor: crosshair;
+}
+
+/* ---- picking dots: the shape being drawn, and the bar that sends the pick ---- */
+.pickBox {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+}
+
+.pickLasso {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.pickLasso polygon {
+  fill: var(--accent-soft);
+  stroke: var(--accent);
+  stroke-width: 1.5px;
+  stroke-linejoin: round;
+}
+
+.picks {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 24px);
+  padding: 6px 6px 6px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float);
+  transform: translateX(-50%);
+}
+
+.picks :global(.btn) {
+  flex: none;
+  white-space: nowrap;
+}
+
+.picksCount {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-right: 6px;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .loading {
   position: absolute;
   top: 12px;
@@ -253,6 +318,11 @@
   box-shadow: var(--shadow-float);
 }
 
+/* Dots are picked: the card stops above the pick bar (its foot, Apply in My axes, stays in view). */
+.card[data-picks] .axesPanel {
+  max-height: calc(100% - 24px - 64px);
+}
+
 .axesHead {
   display: flex;
   align-items: center;
@@ -264,6 +334,48 @@
   margin: 0;
   font-size: var(--fs-4);
   font-weight: 600;
+}
+
+/* Two tabs: the model's axes and the user's own (the chosen tab wears the accent wash and edge). */
+.axesTabs {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+
+.axesTab {
+  flex: 1 1 0;
+  height: calc(var(--control-h) - 4px);
+  padding: 0 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-3);
+  white-space: nowrap;
+  border-radius: var(--radius-sm);
+  transition: background var(--t-fast) var(--ease);
+}
+
+.axesTab:hover {
+  background: var(--wash-hover);
+  color: var(--text);
+}
+
+.axesTab[aria-selected="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--text);
+}
+
+.axesTabPanel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
 }
 
 .axesNote {

@@ -100,12 +100,16 @@ export function neighbourFlags(n: Neighbour): MessageKey[] {
 /** Where a neighbour's dot is, or null when it has none on this map. */
 export const neighbourDot = (n: Neighbour): [number, number, number] | null => (n.located && isXyz(n) ? [n.x, n.y, n.z] : null)
 
-/** The note under the list. */
-export function listNote(answer: NearAnswer, ofLibrary: boolean): Note {
+/**
+ * The note under the list. With the user's own axes on (`custom`), a dropped
+ * picture's estimated spot belongs to the model's layout and is not marked.
+ */
+export function listNote(answer: NearAnswer, ofLibrary: boolean, custom = false): Note {
   if (!(answer.neighbors ?? []).length) return { key: 'stylemap.near.nothing', tone: 'info' }
   const threshold = Number(answer.weak_threshold ?? 0).toFixed(2)
   if (ofLibrary) return { key: 'stylemap.near.libraryNote', params: { threshold }, tone: 'info' }
   if (!answer.query) return { key: 'stylemap.near.noPlace', tone: 'info' }
+  if (custom) return { key: 'stylemap.near.customNote', tone: 'info' }
   return { key: 'stylemap.near.note', params: { threshold }, tone: 'info' }
 }
 

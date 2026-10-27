@@ -60,6 +60,9 @@ describe('the nearest pictures', () => {
     expect(listNote(answer, true).key).toBe('stylemap.near.libraryNote')
     expect(listNote({ ...answer, query: null }, false).key).toBe('stylemap.near.noPlace')
     expect(listNote({ ...answer, neighbors: [] }, false).key).toBe('stylemap.near.nothing')
+    // The user's own axes are on: a dropped picture's estimated spot cannot be marked.
+    expect(listNote(answer, false, true).key).toBe('stylemap.near.customNote')
+    expect(listNote(answer, true, true).key).toBe('stylemap.near.libraryNote')
   })
 })
 

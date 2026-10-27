@@ -1,0 +1,146 @@
+/* "My axes" inside the axis card: the axes scroll, the state lines and the
+   two buttons stay at the bottom of the card. */
+.tab {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.axisHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: var(--control-h);
+}
+
+.end {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.count {
+  margin-left: 6px;
+  color: var(--muted);
+}
+
+.name {
+  width: 100%;
+  min-width: 0;
+  height: var(--control-h);
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-2);
+  border-radius: var(--radius);
+}
+
+.name:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.chip {
+  position: relative;
+  display: block;
+  width: 44px;
+  height: 44px;
+}
+
+.chipThumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.chipThumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.chipThumb:hover {
+  border-color: var(--line-strong);
+}
+
+/* The x sits on the thumbnail's corner, on its own solid chip so it reads on any picture. */
+.chipRemove {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-1);
+  color: var(--text);
+  border-radius: 50%;
+}
+
+.chipRemove:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--on-image);
+}
+
+.folded {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.foot {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+}
+
+.note {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  line-height: 1.45;
+}
+
+.note[data-tone="ok"] {
+  color: var(--ok);
+}
+
+.note[data-tone="warn"] {
+  color: var(--warn);
+}
+
+.note[data-tone="error"] {
+  color: var(--danger);
+}
+
+.note[data-tone="busy"] {
+  color: var(--text-2);
+}

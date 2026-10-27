@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { isTypingTarget } from '../../lib/format'
 import { claimFileDrops } from '../../ui/dropClaim'
 import { layerCount } from '../../ui/layers'
 import { useJobs } from '../jobs/jobs'
@@ -9,6 +10,7 @@ import { MapCanvas } from './MapCanvas'
 import { MapLightbox } from './MapLightbox'
 import { afterIndexJob, closeMap, mapOnScreen, openMap, useMap } from './mapStore'
 import { explainLibrary, lookupFile, lookupLibrary, nearMapChanged, setDragging } from './nearStore'
+import { clearPicks, usePicks } from './pickStore'
 import { SidePanel } from './SidePanel'
 import styles from './StyleMap.module.css'
 import { SubBar } from './SubBar'
@@ -31,6 +33,7 @@ export function StyleMapPage() {
   useNearFollowsMap()
   useLibraryHandoff()
   usePageDrop()
+  useEscapeClearsPicks()
 
   return (
     <div className={styles.page} data-testid="stylemap-page">
@@ -91,6 +94,24 @@ function useLibraryHandoff(): void {
     if (mapOnScreen()) lookupLibrary(id)
     else explainLibrary(id, useMap.getState().space, points.status === 'empty' || (points.total_images ?? 0) === 0)
   }, [points, loading, pending])
+}
+
+/**
+ * Esc clears the picked dots. It reaches the page only when nothing floats
+ * above it (ui/layers.ts takes Esc for the top layer first: a menu, the axis
+ * card, a shape being drawn), and a field being typed in keeps its own Esc.
+ */
+function useEscapeClearsPicks(): void {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || layerCount() > 0 || isTypingTarget(e.target)) return
+      if (usePicks.getState().picked.size === 0) return
+      e.preventDefault()
+      clearPicks()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 }
 
 const hasFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files')

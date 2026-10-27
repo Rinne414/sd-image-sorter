@@ -1,8 +1,42 @@
 import { useT } from '../../i18n'
 import { LocateBox } from './LocateBox'
 import { setAxesOpen, setLabels, setLandmarks, showWholeLibrary, useMap } from './mapStore'
+import { setDragMode, usePicks } from './pickStore'
+import { DRAG_MODES } from './selection'
 import { scopeSentence, unlocatableCount } from './status'
 import styles from './StyleMap.module.css'
+
+const DRAG_LABEL = { rotate: 'stylemap.drag.rotate', box: 'stylemap.drag.box', lasso: 'stylemap.drag.lasso' } as const
+const DRAG_TIP = { rotate: 'stylemap.drag.rotateTip', box: 'stylemap.drag.boxTip', lasso: 'stylemap.drag.lassoTip' } as const
+
+/** What a left-drag on the map does: turn it, draw a box, or draw around dots (Shift + drag always draws a box). */
+function DragSwitch() {
+  const t = useT()
+  const mode = usePicks((s) => s.mode)
+  return (
+    <div className={styles.drag} title={t('stylemap.drag.tip')}>
+      <span className={styles.fieldLabel} id="stylemap-drag-label">
+        {t('stylemap.drag.label')}
+      </span>
+      <div className={styles.spaces} role="radiogroup" aria-labelledby="stylemap-drag-label" data-testid="stylemap-drag">
+        {DRAG_MODES.map((m) => (
+          <button
+            key={m}
+            type="button"
+            role="radio"
+            aria-checked={mode === m}
+            className={styles.space}
+            onClick={() => setDragMode(m)}
+            title={t(DRAG_TIP[m])}
+            data-testid={`stylemap-drag-${m}`}
+          >
+            {t(DRAG_LABEL[m])}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 /**
  * What the map covers (the library filter it draws, with a way to draw the
@@ -42,6 +76,7 @@ export function SubBar() {
         )}
       </div>
       <LocateBox />
+      <DragSwitch />
       <div className={styles.switches}>
         <button
           type="button"

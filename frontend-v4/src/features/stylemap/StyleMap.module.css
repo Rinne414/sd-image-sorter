@@ -342,6 +342,14 @@
   gap: 6px;
 }
 
+/* What a left-drag does: turn, box, lasso (the same chosen-option look as the space switch). */
+.drag {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
 /* ---- find a picture ---- */
 .locate {
   position: relative;

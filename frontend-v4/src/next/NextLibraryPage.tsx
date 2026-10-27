@@ -10,6 +10,8 @@ import { CardMenu } from '../features/library/CardMenu'
 import { EmptyResult } from '../features/library/EmptyResult'
 import { Gallery, type GalleryHandle } from '../features/library/Gallery'
 import { libraryParams } from '../features/library/params'
+import { PinnedBanner } from '../features/library/PinnedBanner'
+import { pinnedParams, usePinned } from '../features/library/pinnedSet'
 import { fetchImageAt } from '../features/library/randomOpen'
 import { useLibraryKeys } from '../features/library/useLibraryKeys'
 import { useShownImages } from '../features/library/useShownImages'
@@ -48,10 +50,11 @@ export function NextLibraryPage() {
   const toggleFav = useToggleFavorite()
   useCollectPaste()
 
+  const pin = usePinned((s) => s.pin)
   const favoritesCollectionId = favorites.data?.collectionId ?? null
   const params = useMemo(
-    () => libraryParams({ queryText, scope, sort, sortReverse, favoritesCollectionId }),
-    [queryText, scope, sort, sortReverse, favoritesCollectionId],
+    () => pinnedParams(libraryParams({ queryText, scope, sort, sortReverse, favoritesCollectionId }), pin),
+    [queryText, scope, sort, sortReverse, favoritesCollectionId, pin],
   )
   const shown = useShownImages(params)
   const { images, total, similar } = shown
@@ -93,6 +96,7 @@ export function NextLibraryPage() {
         {adding && <AddingBanner target={adding} />}
         {!similar && <SortNotice params={params} found={!shown.loading && !shown.empty && !shown.error} />}
         {similar && <SimilarBanner query={similar} count={images.length} loading={shown.loading} error={shown.error} retry={shown.retry} />}
+        {!similar && <PinnedBanner />}
         <div className={styles.gridArea}>
           {!similar && shown.error ? (
             <div className={styles.notice}>

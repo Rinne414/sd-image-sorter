@@ -1,5 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useT } from '../../i18n'
+import { readDefinitions } from './customAxes'
+import { useCustom, useCustomShown } from './customStore'
 import { GRID_PAD } from './geometry'
 import { useMap } from './mapStore'
 import styles from './MapCanvas.module.css'
@@ -15,18 +17,25 @@ const ENDS: readonly End[] = ['low', 'high']
  * What the two ends of each axis stand for, written on the floor grid: the
  * axis letter, an arrow that points the way the end lies on screen, and the
  * end's strongest tags (a faint dash when the tags cannot name the
- * difference). A visual aid: the "axis meanings" card says the same in words.
+ * difference). With the user's own axes applied, only those axes are
+ * labelled, with the names the user gave their ends. A visual aid: the
+ * "axis meanings" card says the same in words.
  */
 export function AxisLabels({ scene }: { scene: StyleMapScene }) {
   const t = useT()
   const on = useMap((s) => s.labelsOn)
   const axes = useMap((s) => s.axes)
   const points = useMap((s) => s.points)
+  const shownCustom = useCustomShown()
+  const defs = useCustom((s) => s.defs)
+  const custom = useMemo(() => (shownCustom ? readDefinitions(defs).names : null), [shownCustom, defs])
   const nodes = useRef(new Map<string, HTMLDivElement>())
-  const data = axes.state === 'ok' ? axes.data?.axes : undefined
+  const data = axes.state === 'ok' && !custom ? axes.data?.axes : undefined
+  const labelled: AxisName[] = custom ? AXIS_NAMES.filter((axis) => custom[axis]) : data ? [...AXIS_NAMES] : []
+  const labelledKey = labelled.join('')
 
   useEffect(() => {
-    if (!on || !data) return
+    if (!on || !labelledKey) return
     const place = (view: SceneView) => {
       const anchors = axisAnchors(scene.core, scene.floorY, scene.cloudTopY, GRID_PAD)
       const placed: Rect[] = []
@@ -60,16 +69,26 @@ export function AxisLabels({ scene }: { scene: StyleMapScene }) {
       }
     }
     return onCamera(place)
-  }, [on, data, points, scene, t])
+  }, [on, data, custom, labelledKey, points, scene, t])
 
-  if (!on || !data) return null
+  if (!on || !labelled.length) return null
+
+  const words = (axis: AxisName, end: End): string | null => {
+    if (custom) {
+      const names = custom[axis]
+      const name = end === 'low' ? names?.a : names?.b
+      return name || t(end === 'low' ? 'stylemap.custom.endA' : 'stylemap.custom.endB')
+    }
+    const entry = data?.[axis]
+    const tags = entry?.weak ? null : endTags(entry?.[end])
+    return tags ? tags.map((tag) => tagName(t, tag)).join(' · ') : null
+  }
+
   return (
-    <div className={styles.axisLabels} aria-hidden data-testid="stylemap-axis-labels">
-      {AXIS_NAMES.flatMap((axis) =>
+    <div className={styles.axisLabels} aria-hidden data-custom={custom ? true : undefined} data-testid="stylemap-axis-labels">
+      {labelled.flatMap((axis) =>
         ENDS.map((end) => {
-          const entry = data[axis as AxisName]
-          const tags = entry?.weak ? null : endTags(entry?.[end])
-          const words = tags ? tags.map((tag) => tagName(t, tag)).join(' · ') : '—'
+          const text = words(axis, end)
           return (
             <div
               key={`${axis}-${end}`}
@@ -78,14 +97,14 @@ export function AxisLabels({ scene }: { scene: StyleMapScene }) {
                 else nodes.current.delete(`${axis}-${end}`)
               }}
               className={styles.axisLabel}
-              data-weak={tags ? undefined : true}
+              data-weak={text ? undefined : true}
               data-axis={axis}
               data-end={end}
               hidden
             >
               <span className={styles.axisKey}>{axis.toUpperCase()}</span>
               <span data-arrow="before" />
-              <span>{words}</span>
+              <span>{text ?? '—'}</span>
               <span data-arrow="after" />
             </div>
           )

@@ -2,6 +2,7 @@ import { queryClient } from '../../api/queryClient'
 import { parseSearch, toImageParams, type ImageQueryParams } from '../../lib/searchQuery'
 import { apiSort } from '../../lib/sort'
 import { useApp, type Scope } from '../../state/store'
+import { pinnedParams, usePinned } from './pinnedSet'
 import type { SortBase } from '../../lib/sort'
 
 // The gallery's current /api/images parameters, from the query line, the
@@ -24,9 +25,9 @@ export function libraryParams({ queryText, scope, sort, sortReverse, favoritesCo
   )
 }
 
-/** The params the library page is showing right now. */
+/** The params the library page is showing right now (a set of pictures sent from the Style Map included). */
 export function currentLibraryParams(): ImageQueryParams {
   const s = useApp.getState()
   const favorites = queryClient.getQueryData<{ collectionId: number | null }>(['favorites', s.libraryId])
-  return libraryParams({ ...s, favoritesCollectionId: favorites?.collectionId ?? null })
+  return pinnedParams(libraryParams({ ...s, favoritesCollectionId: favorites?.collectionId ?? null }), usePinned.getState().pin)
 }

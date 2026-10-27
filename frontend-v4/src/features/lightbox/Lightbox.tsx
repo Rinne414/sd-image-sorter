@@ -10,6 +10,7 @@ import { GenerationCard } from '../card/GenerationCard'
 import { Stars } from '../card/Stars'
 import { copyAndSay, openImageFolder } from '../library/fileActions'
 import { lightboxKey, type LightboxKey } from '../library/keys'
+import { sendToTool } from '../tools/handoff'
 import { Icon } from '../../ui/Icon'
 import { useLayer } from '../../ui/layers'
 import { activeVideoControl } from '../video/videoControl'
@@ -239,6 +240,20 @@ export function Lightbox({ images, total, totalAbout = false, hasMore, fetchMore
             data-testid="lightbox-copy-path"
           >
             <Icon name="copy" size={14} />
+          </button>
+        )}
+        {!video && (
+          <button
+            type="button"
+            className={`btn btn-ghost btn-sm ${styles.mapBtn}`}
+            onClick={() => {
+              close()
+              sendToTool('stylemap', [id])
+            }}
+            title={t('stylemap.lightbox.tip')}
+            data-testid="lightbox-stylemap"
+          >
+            {t('stylemap.lightbox.show')}
           </button>
         )}
         <span className={styles.barGap} />
