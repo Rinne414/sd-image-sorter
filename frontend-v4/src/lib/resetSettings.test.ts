@@ -47,3 +47,10 @@ describe('reset all settings', () => {
     expect(isSettingKey('sd-v4-censor-pen-color')).toBe(true)
   })
 })
+
+describe('AI defaults', () => {
+  test('both saved defaults (the keys V3.5 uses) are preferences, so Reset all settings removes them', () => {
+    expect(isSettingKey('sd-image-sorter-tagger-defaults-v1')).toBe(true)
+    expect(isSettingKey('sd-image-sorter-artist-defaults-v1')).toBe(true)
+  })
+})

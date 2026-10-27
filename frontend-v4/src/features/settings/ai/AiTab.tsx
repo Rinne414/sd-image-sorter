@@ -1,4 +1,5 @@
 import styles from './Ai.module.css'
+import { AiDefaults } from './AiDefaults'
 import { useVlmSettings } from './aiApi'
 import { useAT } from './aiText'
 import { ChatLog } from './ChatLog'
@@ -36,6 +37,7 @@ function Loaded({ settings }: { settings: VlmSettings }) {
     <div className={styles.sections} data-testid="ai-services">
       <VlmSection draft={draft} settings={settings} />
       <OllamaSection draft={draft} settings={settings} />
+      <AiDefaults />
       <ChatLog />
     </div>
   )
