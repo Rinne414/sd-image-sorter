@@ -61,3 +61,28 @@ test('a folder that opens shows no notice', async ({ page }) => {
   await expect(panel.locator('.folder-browser-path')).toHaveText('D:\\Pics')
   await expect(panel.locator('.folder-browser-notice')).toHaveCount(0)
 })
+
+test('a request that gets no answer at all says so instead of walking up', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  const asked: string[] = []
+  await page.route('**/api/browse-folder', (route) => {
+    asked.push(route.request().postDataJSON().path as string)
+    return route.abort('connectionrefused')
+  })
+  await page.addInitScript(() => {
+    localStorage.setItem('aurora-entry-skip', '1')
+    localStorage.setItem('sd-image-sorter-lang', 'en')
+  })
+  await page.goto('/')
+  await page.waitForFunction(() => typeof (window as any).showFolderBrowser === 'function')
+  await page.evaluate(() => {
+    const input = document.getElementById('scan-folder-path') as HTMLInputElement
+    input.value = 'D:\Pics\SD'
+    return (window as any).showFolderBrowser(input)
+  })
+
+  const panel = page.locator('#folder-browser-container .folder-browser')
+  await expect(panel.locator('.folder-browser-error')).toContainText('Error: ')
+  await expect(panel.locator('.folder-browser-notice')).toHaveCount(0)
+  expect(asked).toEqual(['D:\Pics\SD'])
+})

@@ -24,7 +24,10 @@ async function fetchFolderContents(path) {
     });
     if (!resp.ok) {
         const errData = await resp.json().catch(function() { return {}; });
-        throw new Error(errData.error || errData.detail || 'Failed to browse folder');
+        const error = new Error(errData.error || errData.detail || 'Failed to browse folder');
+        // The program answered: this folder cannot be listed (a folder above may).
+        error.folderRefused = true;
+        throw error;
     }
     return resp.json();
 }
@@ -134,9 +137,10 @@ async function _renderFolderBrowser(container, path, notice = '') {
             '</div></div>';
         _attachFolderBrowserEvents(container, data);
     } catch (err) {
-        if (path) {
+        if (path && err.folderRefused) {
             // Open the nearest folder above that exists, and keep the first
-            // reason: it names the folder that was asked for.
+            // reason: it names the folder that was asked for. A request that
+            // got no answer at all is shown as it is: no folder above would open.
             const fallbackNotice = notice || fbT(
                 'folderBrowser.openedNearest',
                 'Could not open {path}: {reason} Showing the nearest folder that opens.'
