@@ -490,10 +490,11 @@ test('health check uses effective captions and fixes only the project draft', as
   await expect(out).toContainText('[warn] Trigger word missing from 2 images')
   expect(reportCalls).toHaveLength(1)
   expect(reportCalls[0].image_ids).toEqual([601, 602, 603])
+  // The tag list as it exports goes along: the tag-level checks read it.
   expect(reportCalls[0].effective_captions).toEqual([
-    { image_id: 601, caption: 'mychar, 1girl' },
-    { image_id: 602, caption: '1girl' },
-    { image_id: 603, caption: '1girl' },
+    { image_id: 601, caption: 'mychar, 1girl', tags: 'mychar, 1girl' },
+    { image_id: 602, caption: '1girl', tags: '1girl' },
+    { image_id: 603, caption: '1girl', tags: '1girl' },
   ])
   expect(reportCalls[0].training_purpose).toBe('character')
 
@@ -508,9 +509,9 @@ test('health check uses effective captions and fixes only the project draft', as
   await expect.poll(() => reportCalls.length).toBe(2)
   expect(bulkEndpointCalled).toBe(false)
   expect(reportCalls[1].effective_captions).toEqual([
-    { image_id: 601, caption: 'mychar, 1girl' },
-    { image_id: 602, caption: 'mychar, 1girl' },
-    { image_id: 603, caption: 'mychar, 1girl' },
+    { image_id: 601, caption: 'mychar, 1girl', tags: 'mychar, 1girl' },
+    { image_id: 602, caption: 'mychar, 1girl', tags: 'mychar, 1girl' },
+    { image_id: 603, caption: 'mychar, 1girl', tags: 'mychar, 1girl' },
   ])
   await expect(out).toContainText('no issues found')
   expect(await page.evaluate(() => {
@@ -565,6 +566,7 @@ test('health check composes Both captions before checking trigger coverage', asy
   expect(reportCalls[0].effective_captions).toEqual([{
     image_id: 601,
     caption: '1girl, smile, Hero_Token, A person.',
+    tags: '1girl, smile',
   }])
   await expect(page.locator('#sepcon-health-results')).toContainText('no issues found')
 })
@@ -588,7 +590,7 @@ test('NL leak scan: a blacklisted trait still present in a natural-language capt
   await expect(leaks).toContainText('appears in 1 NL caption')
 })
 
-test('local-only queue: gallery-scored flows report no gallery images instead of firing requests', async ({ page }) => {
+test('local-only queue: gallery-scored flows report no gallery images; the health check reads captions', async ({ page }) => {
   await boot(page)
   // A queue of only local-import ids (negative) — no DB-scored images.
   await page.evaluate(() => {
@@ -609,9 +611,37 @@ test('local-only queue: gallery-scored flows report no gallery images instead of
   await clickRowAction(page, /^1girl$/, 3)
   await expect(page.locator('#sepcon-gaps')).toContainText('No gallery images in the queue')
 
-  // The health check shows the same guard.
+  // The health check reads captions, which a folder picture has too.
   await page.locator('#sepcon-health-run').click()
-  await expect(page.locator('#sepcon-health-results')).toContainText('No gallery images in the queue')
+  await expect(page.locator('#sepcon-health-results')).toContainText('1 image checked')
+  await expect(page.locator('#sepcon-health-results')).not.toContainText('No gallery images')
 
   expect(coverageHit).toBe(false)
+})
+
+test('a sentence-only caption sends no tag list to the tag-level checks', async ({ page }) => {
+  const reportCalls: Array<Record<string, any>> = []
+  await boot(page)
+  await seedQueue(page, [
+    { id: 601, filename: 'nl.png', caption: '1girl, smile', nl: 'A girl smiles.' },
+    { id: 602, filename: 'nl-empty.png', caption: '1girl, frown', nl: '' },
+  ])
+  await page.evaluate(() => {
+    const dm = (window as any).DatasetMaker
+    dm.captionType.set(601, 'nl')
+    dm.captionType.set(602, 'nl')
+  })
+  await page.route('**/api/tags/consistency/report', async (route) => {
+    reportCalls.push(route.request().postDataJSON() as Record<string, any>)
+    await route.fulfill({ json: { images: 2, findings: [] } })
+  })
+  await openConsole(page)
+  await page.locator('#sepcon-health-run').click()
+
+  await expect.poll(() => reportCalls.length).toBe(1)
+  // An empty sentence exports the tags instead (CaptionCore.compose), so they count.
+  expect(reportCalls[0].effective_captions).toEqual([
+    { image_id: 601, caption: 'A girl smiles.', tags: '' },
+    { image_id: 602, caption: '1girl, frown', tags: '1girl, frown' },
+  ])
 })

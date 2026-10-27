@@ -39,6 +39,9 @@ const EMPTY_AUDIT = {
 }
 
 const TOKENIZER_STATUS = {
+  profile: 'anima',
+  model: 'Anima',
+  limit: 512,
   available: false,
   tokenizers_package: true,
   files: [
@@ -227,9 +230,69 @@ test.describe('subject-count fixes in the health check', () => {
     await expect(box.locator('.dchk-note')).toHaveText('已修改 1 条 caption。')
     await expect(box.locator('[data-testid="check-subject-undo"]')).toHaveText('撤销（1）')
   })
+  test('pictures imported from a folder are checked by their captions and can be fixed', async ({ page }) => {
+    // The real backend: folder pictures have no Library row, only their captions.
+    await boot(page)
+    const sent: Array<Record<string, unknown>> = []
+    page.on('request', (request) => {
+      if (request.url().includes('/api/tags/consistency/report')) sent.push(request.postDataJSON())
+    })
+    await seedQueue(page, [
+      { id: -11, filename: 'folder-a.png', caption: '1girl, 2girls, solo, long_hair' },
+      { id: -12, filename: 'folder-b.png', caption: '1girl, solo', nl: 'A girl waves.' },
+    ])
+    await openReviewCockpit(page)
+    await page.locator('#sepcon-health-run').click()
+
+    const results = page.locator('#sepcon-health-results')
+    await expect(results).toContainText('2 images checked')
+    await expect(results).not.toContainText('local-import')
+    const box = page.locator('[data-testid="check-subject-fixes"]')
+    await expect(box.locator('[data-testid="check-subject-row"]')).toHaveCount(1)
+    await expect(box.locator('[data-testid="check-subject-row"][data-image-id="-11"]')).toBeVisible()
+    expect(sent[0].image_ids).toEqual([-11, -12])
+    expect(sent[0].effective_captions).toEqual([
+      { image_id: -11, caption: '1girl, 2girls, solo, long_hair', tags: '1girl, 2girls, solo, long_hair' },
+      { image_id: -12, caption: '1girl, solo, A girl waves.', tags: '1girl, solo' },
+    ])
+
+    await box.locator('[data-testid="check-subject-apply"]').click()
+    await expect(box.locator('.dchk-note')).toHaveText('Changed 1 caption.')
+    expect(await editsOf(page, [-11, -12])).toEqual({ '-11': '2girls, long_hair', '-12': null })
+  })
 })
 
 // ---- 2. blurry / flat pictures in the Quality Audit --------------------------------
+  test('pictures imported from a folder are checked by their captions and can be fixed', async ({ page }) => {
+    // The real backend: folder pictures have no Library row, only their captions.
+    await boot(page)
+    const sent: Array<Record<string, unknown>> = []
+    page.on('request', (request) => {
+      if (request.url().includes('/api/tags/consistency/report')) sent.push(request.postDataJSON())
+    })
+    await seedQueue(page, [
+      { id: -11, filename: 'folder-a.png', caption: '1girl, 2girls, solo, long_hair' },
+      { id: -12, filename: 'folder-b.png', caption: '1girl, solo', nl: 'A girl waves.' },
+    ])
+    await openReviewCockpit(page)
+    await page.locator('#sepcon-health-run').click()
+
+    const results = page.locator('#sepcon-health-results')
+    await expect(results).toContainText('2 images checked')
+    await expect(results).not.toContainText('local-import')
+    const box = page.locator('[data-testid="check-subject-fixes"]')
+    await expect(box.locator('[data-testid="check-subject-row"]')).toHaveCount(1)
+    await expect(box.locator('[data-testid="check-subject-row"][data-image-id="-11"]')).toBeVisible()
+    expect(sent[0].image_ids).toEqual([-11, -12])
+    expect(sent[0].effective_captions).toEqual([
+      { image_id: -11, caption: '1girl, 2girls, solo, long_hair', tags: '1girl, 2girls, solo, long_hair' },
+      { image_id: -12, caption: '1girl, solo, A girl waves.', tags: '1girl, solo' },
+    ])
+
+    await box.locator('[data-testid="check-subject-apply"]').click()
+    await expect(box.locator('.dchk-note')).toHaveText('Changed 1 caption.')
+    expect(await editsOf(page, [-11, -12])).toEqual({ '-11': '2girls, long_hair', '-12': null })
+  })
 
 async function openAudit(page: Page) {
   await page.locator('#dataset-tab-import').click()
@@ -446,7 +509,12 @@ async function chooseAnima(page: Page) {
 
 const LONG_CAPTION = Array.from({ length: 300 }, (_, i) => `detail_${i.toString(36)}x`).join(', ')
 
-test.describe('exact Anima token counts', () => {
+/** The status as the backend answers it: for the profile the page asked about. */
+const profileOf = (route: Route) => new URL(route.request().url()).searchParams.get('profile') || 'anima'
+
+const ANIMA_METRICS = [{ id: 'qwen3_0_6b', label: 'Qwen3-0.6B' }, { id: 't5_v1_1_xxl', label: 'T5 v1.1 XXL' }]
+
+test.describe('exact token counts per base model', () => {
   test('estimate first with the download asked for (14 MB), exact counts once the tokenizers are there', async ({ page }) => {
     await boot(page)
     let available = false
@@ -455,15 +523,16 @@ test.describe('exact Anima token counts', () => {
     const prepareCalls: string[] = []
     await page.route('**/api/dataset/audit', (route) => json(route, EMPTY_AUDIT))
     await page.route('**/api/dataset/quality', (route) => json(route, qualityAnswer({})))
-    await page.route('**/api/dataset/caption-tokens/status', (route) => json(route, {
+    await page.route('**/api/dataset/caption-tokens/status**', (route) => json(route, {
       ...TOKENIZER_STATUS,
+      profile: profileOf(route),
       available,
       preparing: preparing > 0 && !available,
       files: TOKENIZER_STATUS.files.map((f) => ({ ...f, present: available })),
       download_bytes: available ? 0 : TOKENIZER_STATUS.download_bytes,
     }))
-    await page.route('**/api/dataset/caption-tokens/prepare', (route) => {
-      prepareCalls.push('prepare')
+    await page.route('**/api/dataset/caption-tokens/prepare**', (route) => {
+      prepareCalls.push(profileOf(route))
       preparing = 1
       // The download "finishes" a moment later.
       setTimeout(() => { available = true }, 1500)
@@ -473,7 +542,7 @@ test.describe('exact Anima token counts', () => {
       const body = route.request().postDataJSON() as { profile: string; texts: string[] }
       counted.push(body)
       await json(route, {
-        profile: 'anima', available: true, metrics: [], missing: [],
+        profile: 'anima', limit: 512, available: true, metrics: ANIMA_METRICS, missing: [],
         counts: body.texts.map((text) => (text.length > 1000
           ? { qwen3_0_6b: 640, t5_v1_1_xxl: 655 }
           : { qwen3_0_6b: 8, t5_v1_1_xxl: 9 })),
@@ -506,11 +575,14 @@ test.describe('exact Anima token counts', () => {
 
     await page.locator('#btn-dataset-audit-tokens-prepare').click()
     await expect(page.locator('#btn-dataset-audit-tokens-prepare')).toHaveText('Downloading…')
-    await expect(page.locator('#dataset-audit-tokens-note')).toContainText('Exact token counts are ready', { timeout: 15000 })
-    expect(prepareCalls).toHaveLength(1)
+    await expect(page.locator('#dataset-audit-tokens-note')).toHaveText(
+      'Exact token counts are ready: every caption is counted with Qwen3-0.6B + T5 v1.1 XXL, as the Anima text encoder reads it.',
+      { timeout: 15000 },
+    )
+    expect(prepareCalls).toEqual(['anima'])
 
     await page.locator('#btn-dataset-audit-run').click()
-    await expect(page.locator('#dataset-audit-status')).toContainText('exact counts with Qwen3-0.6B and T5 v1.1 XXL')
+    await expect(page.locator('#dataset-audit-status')).toContainText('exact counts with Qwen3-0.6B + T5 v1.1 XXL')
     await expect(page.locator('.dataset-audit-badge[data-flag="too_long"]')).toContainText('1')
     const auditCall = counted.find((c) => c.texts.length === 2)
     expect(auditCall).toMatchObject({ profile: 'anima' })
@@ -524,33 +596,75 @@ test.describe('exact Anima token counts', () => {
     await expect(counter).toHaveAttribute('title', /Over 512 tokens/)
   })
 
-  test('another base model counts with the estimate and never asks for the tokenizers', async ({ page }) => {
+  test('SDXL counts with CLIP: its own 2 MB download, 75 tokens, CLIP counts in the editor', async ({ page }) => {
     await boot(page)
-    const asked: string[] = []
+    let available = false
+    const statusProfiles: string[] = []
+    const prepared: string[] = []
+    const counted: Array<{ profile: string; texts: string[] }> = []
     await page.route('**/api/dataset/audit', (route) => json(route, EMPTY_AUDIT))
     await page.route('**/api/dataset/quality', (route) => json(route, qualityAnswer({})))
-    await page.route('**/api/dataset/caption-tokens**', (route) => {
-      asked.push(route.request().url())
-      return json(route, TOKENIZER_STATUS)
+    await page.route('**/api/dataset/caption-tokens/status**', (route) => {
+      statusProfiles.push(profileOf(route))
+      return json(route, {
+        profile: 'sdxl', model: 'SDXL', limit: 75, available, tokenizers_package: true,
+        files: [{ id: 'clip_vit_l_14', label: 'CLIP ViT-L/14', size_bytes: 2224003, present: available }],
+        download_bytes: available ? 0 : 2224003, download_bytes_total: 2224003, preparing: false, step: '', error: null,
+      })
     })
-    await seedQueue(page, [{ id: 701, filename: 'long.png', caption: LONG_CAPTION }])
+    await page.route('**/api/dataset/caption-tokens/prepare**', (route) => {
+      prepared.push(profileOf(route))
+      available = true
+      return json(route, { status: 'started' })
+    })
+    await page.route('**/api/dataset/caption-tokens', async (route) => {
+      const body = route.request().postDataJSON() as { profile: string; texts: string[] }
+      counted.push(body)
+      await json(route, {
+        profile: 'sdxl', limit: 75, available: true, metrics: [{ id: 'clip_vit_l_14', label: 'CLIP ViT-L/14' }], missing: [],
+        counts: body.texts.map((text) => ({ clip_vit_l_14: text.length > 1000 ? 600 : 5 })),
+      })
+    })
+    await seedQueue(page, [
+      { id: 701, filename: 'long.png', caption: LONG_CAPTION },
+      { id: 702, filename: 'short.png', caption: '1girl, solo' },
+    ])
     await page.evaluate(() => {
       const select = document.getElementById('dataset-target-model') as HTMLSelectElement
       select.value = 'sdxl'
       select.dispatchEvent(new Event('change', { bubbles: true }))
     })
+
     await openAudit(page)
     await expect(page.locator('label:has(#dataset-audit-check-tokens)')).toContainText('over 75 tokens')
-    await expect(page.locator('#dataset-audit-status')).toContainText('These are estimates')
-    await expect(page.locator('#dataset-audit-tokens-prepare')).toBeHidden()
-    expect(asked.filter((u) => !u.endsWith('/status'))).toEqual([])
+    await expect(page.locator('#dataset-audit-tokens-note')).toContainText(
+      'Token counts for SDXL are only estimates until its tokenizer files are here (CLIP ViT-L/14): about 2 MB, downloaded once.',
+    )
+    await expect(page.locator('#btn-dataset-audit-tokens-prepare')).toHaveText('Download for exact counts (2 MB)')
+    expect(counted).toEqual([])
+
+    await page.locator('#btn-dataset-audit-tokens-prepare').click()
+    await expect(page.locator('#dataset-audit-tokens-note')).toHaveText(
+      'Exact token counts are ready: every caption is counted with CLIP ViT-L/14, as the SDXL text encoder reads it.',
+    )
+    await page.locator('#btn-dataset-audit-run').click()
+    await expect(page.locator('#dataset-audit-status')).toContainText('exact counts with CLIP ViT-L/14')
+    await expect(page.locator('.dataset-audit-badge[data-flag="too_long"]')).toContainText('1')
+    expect(prepared).toEqual(['sdxl'])
+    expect(new Set(statusProfiles)).toEqual(new Set(['sdxl']))
+    expect(counted.every((c) => c.profile === 'sdxl')).toBe(true)
+
+    await page.locator('#btn-dataset-audit-close').click()
+    await page.locator('#dataset-tab-workbench').click()
+    await page.evaluate(() => { (window as any).DatasetMaker._setActive(702); (window as any).DatasetMaker._setActive(701) })
+    await expect(page.locator('#dataset-token-counter')).toContainText('300 tags · CLIP 600 tokens')
   })
 
   test('the download prompt reads in Chinese', async ({ page }) => {
     await boot(page, 'zh-CN')
     await page.route('**/api/dataset/audit', (route) => json(route, EMPTY_AUDIT))
     await page.route('**/api/dataset/quality', (route) => json(route, qualityAnswer({})))
-    await page.route('**/api/dataset/caption-tokens/status', (route) => json(route, TOKENIZER_STATUS))
+    await page.route('**/api/dataset/caption-tokens/status**', (route) => json(route, { ...TOKENIZER_STATUS, profile: profileOf(route) }))
     await seedQueue(page, [{ id: 701, filename: 'long.png', caption: LONG_CAPTION }])
     await chooseAnima(page)
     await openAudit(page)

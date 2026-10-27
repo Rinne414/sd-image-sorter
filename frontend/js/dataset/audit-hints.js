@@ -165,7 +165,7 @@
         return typeof estimate === 'function' ? estimate.call(window.SeparationConsole, text) : Math.ceil(text.length / 4);
     }
 
-    /** Pictures whose caption is over the limit. Counts exactly when Anima's tokenizers are ready. */
+    /** Pictures whose caption is over the limit. Counts exactly when the base model's tokenizers are ready. */
     async function tokensPhase(report, notes) {
         const ids = (DM.imageIds || []).map(Number)
             .filter((id) => !(DM.isLocalId?.(id) && DM._localIdUsesManifest?.(id)));
@@ -175,35 +175,33 @@
         const texts = ids.map((id) => tok.finalCaption(id));
         let exact = null;
         let failure = '';
-        if (tok.isAnima()) {
-            await tok.refreshStatus();
-            if (tok.ready()) {
-                try {
-                    exact = await tok.countExact(texts);
-                } catch (error) {
-                    failure = error instanceof Error ? error.message : String(error);
-                }
+        await tok.refreshStatus();
+        if (tok.ready()) {
+            try {
+                exact = await tok.countExact(texts);
+            } catch (error) {
+                failure = error instanceof Error ? error.message : String(error);
             }
         }
         const items = [];
         ids.forEach((id, i) => {
             const counted = exact ? exact[i] : null;
-            const used = counted ? Math.max(counted.qwen, counted.t5) : estimateTokens(texts[i]);
+            const used = counted ? counted.tokens : estimateTokens(texts[i]);
             if (used <= limit) return;
             items.push({
                 image_id: id > 0 ? id : 0,
                 abs_path: id < 0 ? String(DM.localItemPaths?.get?.(id) || '') : '',
                 flags: ['too_long'],
                 tokens: used,
-                ...(counted ? { qwen: counted.qwen, t5: counted.t5 } : {}),
+                ...(counted ? { exact: tok.describe(counted) } : {}),
             });
         });
         report.token_items = items;
         withSummary(report, { too_long_count: items.length });
         notes.push(exact
             ? t('dataset.auditTokensExact',
-                'Long captions: {count} of {total} captions are over {budget} tokens (exact counts with Qwen3-0.6B and T5 v1.1 XXL).',
-                { count: items.length, total: ids.length, budget: limit })
+                'Long captions (over {budget} tokens): {count} of {total} checked; exact counts with {tokenizers}.',
+                { count: items.length, total: ids.length, budget: limit, tokenizers: tok.tokenizerLabels().join(' + ') })
             : t('dataset.auditTokensEstimate',
                 'Long captions: {count} of {total} captions look over {budget} tokens (estimated: about one token per four letters, wrong for Chinese and long words).',
                 { count: items.length, total: ids.length, budget: limit }));
@@ -234,7 +232,7 @@
 
     // ---- the modal's controls ------------------------------------------------
 
-    /** The limit next to the checkbox and the download prompt for Anima's tokenizers. */
+    /** The limit next to the checkbox and the download prompt for the base model's tokenizers. */
     function renderTokenPrompt() {
         const tok = tokens();
         if (!tok) return;
@@ -245,11 +243,14 @@
         const button = $('btn-dataset-audit-tokens-prepare');
         if (!wrap || !note || !button) return;
         const status = tok.status;
-        wrap.hidden = !(tok.isAnima() && status);
+        wrap.hidden = !status;
         if (wrap.hidden) return;
+        const model = tok.modelLabel();
+        const tokenizers = tok.tokenizerLabels().join(' + ');
         if (status.available) {
             note.textContent = t('dataset.auditTokensReady',
-                'Exact token counts are ready: every caption is counted with Qwen3-0.6B and T5 v1.1 XXL, the two tokenizers Anima reads it with.');
+                'Exact token counts are ready: every caption is counted with {tokenizers}, as the {model} text encoder reads it.',
+                { model, tokenizers });
             button.hidden = true;
             return;
         }
@@ -257,7 +258,8 @@
         const failure = status.error || tok.statusError;
         note.textContent = [
             t('dataset.auditTokensDownloadNote',
-                'Token counts for Anima are only estimates until its two tokenizer files are here: about {mb} MB, downloaded once.', { mb }),
+                'Token counts for {model} are only estimates until its tokenizer files are here ({tokenizers}): about {mb} MB, downloaded once.',
+                { mb, model, tokenizers }),
             status.tokenizers_package === false
                 ? t('dataset.auditTokensPackage', 'The small tokenizers package is installed first.') : '',
             failure ? t('dataset.auditTokensFailed', 'Exact counts failed: {reason}', { reason: failure }) : '',
@@ -280,7 +282,7 @@
         DM._showAuditModal = function () {
             showModal.call(this);
             renderTokenPrompt();
-            if (tokens().isAnima()) void tokens().refreshStatus();
+            void tokens().refreshStatus();
         };
         renderTokenPrompt();
     }

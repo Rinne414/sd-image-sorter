@@ -276,3 +276,86 @@ def test_consistency_report_has_no_subject_finding_when_counts_agree(
 
     assert response.status_code == 200
     assert "subject-count-conflict" not in {f["id"] for f in response.json()["findings"]}
+
+
+def test_consistency_report_checks_folder_pictures_by_their_captions(test_client, tmp_path):
+    """A picture imported from a folder has no Library row; its caption is what trains.
+
+    The Dataset Maker sends it with its own negative id. It used to be left out
+    of the whole check ("local imports are not in the DB yet"), so a subject-count
+    conflict or a missing trigger in a folder picture was never reported.
+    """
+    import database as db
+
+    library_id = _add_image(db, tmp_path, "mix-lib.png", ["ohwx", "1girl", "general"])
+    folder_id = -7
+    response = test_client.post("/api/tags/consistency/report", json={
+        "image_ids": [library_id, folder_id],
+        "trigger": "ohwx",
+        "training_purpose": "character",
+        "effective_captions": [
+            {"image_id": library_id, "caption": "ohwx, 1girl", "tags": "ohwx, 1girl"},
+            {"image_id": folder_id, "caption": "1girl, 2girls, solo", "tags": "1girl, 2girls, solo"},
+        ],
+    })
+
+    assert response.status_code == 200, response.text
+    report = response.json()
+    assert report["images"] == 2
+    findings = {f["id"]: f for f in report["findings"]}
+    assert findings["subject-count-conflict"]["fix"]["proposals"] == [
+        {"image_id": folder_id, "keep": ["2girls"], "drop": ["1girl", "solo"]},
+    ]
+    assert findings["trigger-coverage"]["fix"]["image_ids"] == [folder_id]
+    # Rating rows are Library tags: the folder picture is neither missing nor doubled.
+    assert "rating-missing" not in findings
+    assert "rating-duplicates" not in findings
+
+
+def test_consistency_report_tag_checks_read_the_exported_tags(test_client, tmp_path):
+    """Spellings, framing and frequencies come from the tags that export.
+
+    The Library still says 'blue_eyes' on both pictures and 'portrait' on one;
+    the captions as edited in the Dataset Maker say otherwise, and they train.
+    """
+    import database as db
+
+    ids = [
+        _add_image(db, tmp_path, "tags-0.png", ["blue_eyes", "portrait", "general"]),
+        _add_image(db, tmp_path, "tags-1.png", ["blue_eyes", "general"]),
+    ]
+    response = test_client.post("/api/tags/consistency/report", json={
+        "image_ids": ids,
+        "trigger": "",
+        "effective_captions": [
+            {"image_id": ids[0], "caption": "Blue Eyes, full body", "tags": "Blue Eyes, full body"},
+            {"image_id": ids[1], "caption": "blue_eyes, full_body. She smiles.", "tags": "blue_eyes, full_body"},
+        ],
+    })
+
+    assert response.status_code == 200, response.text
+    report = response.json()
+    findings = {f["id"]: f for f in report["findings"]}
+    groups = {g["canonical"]: g["spellings"] for g in findings["spelling-variants"]["data"]["groups"]}
+    # The second spelling of "full body" counts as well: the trainer reads two words.
+    assert groups == {"blue eyes": ["Blue Eyes", "blue_eyes"], "full body": ["full body", "full_body"]}
+    assert report["shot_distribution"]["full body"] == 2
+    assert report["shot_distribution"]["portrait"] == 0
+    frequencies = {row["tag"]: row["count"] for row in report["tag_frequencies"]}
+    assert "general" not in frequencies
+    assert "she smiles." not in frequencies
+
+
+def test_consistency_report_refuses_folder_pictures_without_captions(test_client):
+    response = test_client.post("/api/tags/consistency/report", json={"image_ids": [-3]})
+
+    assert response.status_code == 400
+
+
+def test_consistency_report_refuses_id_zero(test_client):
+    response = test_client.post("/api/tags/consistency/report", json={
+        "image_ids": [0],
+        "effective_captions": [{"image_id": 0, "caption": "1girl"}],
+    })
+
+    assert response.status_code == 400

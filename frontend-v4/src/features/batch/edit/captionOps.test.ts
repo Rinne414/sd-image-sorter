@@ -118,6 +118,23 @@ describe('many captions', () => {
     ])
   })
 
+  it('gives each listed image its own tags at its own end and leaves the rest alone', () => {
+    const contents = new Map([
+      ['a', c('1girl, smile')],
+      ['b', c('2girls, smile')],
+      ['c', c('1girl, dress')],
+    ])
+    const adds = new Map([
+      ['a', { tags: ['solo'], position: 'front' as const }],
+      ['c', { tags: ['solo'], position: 'back' as const }],
+    ])
+    const changes = planOp(contents, ['a', 'b', 'c'], { kind: 'addEach', adds }, categoryOf)
+    expect(changes.map((ch) => [ch.key, ch.after.booru_caption])).toEqual([
+      ['a', 'solo, 1girl, smile'],
+      ['c', '1girl, dress, solo'],
+    ])
+  })
+
   it('counts each tag once per caption, most used first, in its usual spelling', () => {
     const rows = tagFrequency([
       ['a', c('long_hair, smile, smile')],

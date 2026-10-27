@@ -1,9 +1,23 @@
-"""Exact caption token counts with the tokenizers Anima reads its captions with.
+"""Exact caption token counts with the tokenizers each base model reads captions with.
 
-Anima's text side is Qwen3-0.6B plus a T5 v1.1 XXL tokenizer, so a caption has
-two lengths: Qwen3 tokens (no special tokens added) and T5 tokens (one end
-token added). The estimate the Check step used before ("one token per four
-letters") is only close for CLIP; these two numbers are exact.
+* Anima: Qwen3-0.6B plus a T5 v1.1 XXL tokenizer, so a caption has two lengths:
+  Qwen3 tokens (no special tokens added) and T5 tokens (one end token added).
+* FLUX: T5 v1.1 XXL, 512 tokens (the CLIP-L pooled vector is a summary).
+* Krea 2: a Qwen3-VL encoder. Its tokenizer is Qwen3's: the same vocabulary,
+  merges, pre-tokenizer and added tokens as Qwen3-0.6B's tokenizer.json
+  (Qwen/Qwen3-VL-4B-Instruct, checked 2026-10-27, and the same token ids on
+  4,000 generated captions), so the Qwen3-0.6B file counts it. The diffusers
+  Krea2Pipeline (v0.42.1, ``get_text_hidden_states``) puts a 34-token system
+  prefix before the caption, truncates at 512 + 34 - 5 and drops the prefix, so
+  a caption keeps 507 tokens, not 512.
+* SDXL (and no base model chosen): CLIP ViT-L/14. SDXL's two text encoders
+  share its vocabulary and merges (stabilityai/stable-diffusion-xl-base-1.0
+  tokenizer and tokenizer_2), and the fast tokenizer.json counted the same as
+  transformers' CLIPTokenizer with ftfy (what kohya's sd-scripts uses) on 4,000
+  generated captions. Counted without the start and end tokens: 75 fit.
+
+The estimate the Check step used before ("one token per four letters") is only
+close for CLIP; these numbers are exact.
 
 The tokenizer files are small data files, fetched once on first use through
 ``pinned_download`` (a Hugging Face commit and a SHA-256 for each file, so a
@@ -33,7 +47,7 @@ import logging
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import config
 import pinned_download
@@ -79,10 +93,43 @@ SPECS: Dict[str, TokenizerSpec] = {
         add_special_tokens=True,
         collapse_spaces=True,
     ),
+    # OpenAI's CLIP tokenizer (MIT, github.com/openai/CLIP); its normalizer
+    # already folds whitespace runs and case, as CLIP's own tokenizer does.
+    "clip_vit_l_14": TokenizerSpec(
+        id="clip_vit_l_14",
+        label="CLIP ViT-L/14",
+        file=pinned_download.PinnedFile(
+            repo="openai/clip-vit-large-patch14",
+            revision="32bd64288804d66eefd0ccbe215aa642df71cc41",
+            remote_path="tokenizer.json",
+            sha256="a83e0809aa4c3af7208b2df632a7a69668c6d48775b3c3fe4e1b1199d1f8b8f4",
+            size_bytes=2_224_003,
+        ),
+        add_special_tokens=False,
+        collapse_spaces=False,
+    ),
 }
 
-#: Which tokenizers a base model's captions are counted with.
-PROFILES: Dict[str, Sequence[str]] = {"anima": ("qwen3_0_6b", "t5_v1_1_xxl")}
+
+@dataclass(frozen=True)
+class CountProfile:
+    """How one base model reads a caption: with which tokenizers, and how many tokens fit."""
+
+    label: str
+    tokenizers: Tuple[str, ...]
+    #: Tokens of the caption the model keeps; a count over it is cut.
+    limit: int
+
+
+#: Which tokenizers a base model's captions are counted with, by target model.
+#: No base model chosen counts as CLIP (``sdxl``), as the estimate always did.
+PROFILES: Dict[str, CountProfile] = {
+    "sdxl": CountProfile("SDXL", ("clip_vit_l_14",), 75),
+    "flux": CountProfile("FLUX", ("t5_v1_1_xxl",), 512),
+    "krea2": CountProfile("Krea 2", ("qwen3_0_6b",), 507),
+    "anima": CountProfile("Anima", ("qwen3_0_6b", "t5_v1_1_xxl"), 512),
+}
+DEFAULT_PROFILE = "anima"
 
 _PACKAGE_REQUIREMENT = "tokenizers"
 
@@ -166,15 +213,20 @@ _prepare_lock = threading.Lock()
 _prepare_state: Dict[str, Any] = {"active": False, "error": None, "step": ""}
 
 
-def _profile_specs(profile: str) -> List[TokenizerSpec]:
+def _profile(profile: str) -> CountProfile:
     if profile not in PROFILES:
         raise ValueError(
             f"No tokenizer profile named {profile!r}; supported: {', '.join(PROFILES)}"
         )
-    return [SPECS[spec_id] for spec_id in PROFILES[profile]]
+    return PROFILES[profile]
 
 
-def get_status() -> Dict[str, Any]:
+def _profile_specs(profile: str) -> List[TokenizerSpec]:
+    return [SPECS[spec_id] for spec_id in _profile(profile).tokenizers]
+
+
+def get_status(profile: str = DEFAULT_PROFILE) -> Dict[str, Any]:
+    """Whether ``profile``'s tokenizers are here; a file another model needs does not count."""
     files = [
         {
             "id": spec.id,
@@ -182,12 +234,15 @@ def get_status() -> Dict[str, Any]:
             "size_bytes": spec.file.size_bytes,
             "present": _is_verified(spec),
         }
-        for spec in SPECS.values()
+        for spec in _profile_specs(profile)
     ]
     package = tokenizers_installed()
     with _prepare_lock:
         state = dict(_prepare_state)
     return {
+        "profile": profile,
+        "model": PROFILES[profile].label,
+        "limit": PROFILES[profile].limit,
         "available": package and all(f["present"] for f in files),
         "tokenizers_package": package,
         "files": files,
@@ -208,9 +263,11 @@ def count_tokens(profile: str, texts: Sequence[str]) -> Dict[str, Any]:
     specs = _profile_specs(profile)
     metrics = [{"id": s.id, "label": s.label} for s in specs]
     missing = [s.id for s in specs if not _is_verified(s)]
+    limit = PROFILES[profile].limit
     if missing or not tokenizers_installed():
         return {
             "profile": profile,
+            "limit": limit,
             "available": False,
             "metrics": metrics,
             "missing": missing,
@@ -227,6 +284,7 @@ def count_tokens(profile: str, texts: Sequence[str]) -> Dict[str, Any]:
             row[spec.id] = len(encoding.ids)
     return {
         "profile": profile,
+        "limit": limit,
         "available": True,
         "metrics": metrics,
         "missing": [],
@@ -237,14 +295,15 @@ def count_tokens(profile: str, texts: Sequence[str]) -> Dict[str, Any]:
 # ---- first use: the package and the files ---------------------------------------
 
 
-def prepare_blocking() -> None:
-    """Install ``tokenizers`` when missing, then fetch each pinned file; raises on failure."""
+def prepare_blocking(profile: str = DEFAULT_PROFILE) -> None:
+    """Install ``tokenizers`` when missing, then fetch ``profile``'s pinned files; raises on failure."""
+    specs = _profile_specs(profile)
     if not tokenizers_installed():
         with _prepare_lock:
             _prepare_state["step"] = "package"
         _install_package()
     download = _download_file()
-    for spec in SPECS.values():
+    for spec in specs:
         with _prepare_lock:
             _prepare_state["step"] = spec.id
         pinned_download.fetch(
@@ -257,9 +316,9 @@ def prepare_blocking() -> None:
         _loaded.clear()
 
 
-def start_prepare() -> Dict[str, Any]:
-    """Run ``prepare_blocking`` on a background thread; one at a time."""
-    status = get_status()
+def start_prepare(profile: str = DEFAULT_PROFILE) -> Dict[str, Any]:
+    """Run ``prepare_blocking`` for ``profile`` on a background thread; one at a time."""
+    status = get_status(profile)
     if status["available"]:
         return {"status": "ready"}
     with _prepare_lock:
@@ -270,7 +329,7 @@ def start_prepare() -> Dict[str, Any]:
     def worker() -> None:
         error: Optional[str] = None
         try:
-            prepare_blocking()
+            prepare_blocking(profile)
         except Exception as exc:  # noqa: BLE001 - shown through the status endpoint
             logger.exception("Tokenizer download failed")
             error = str(exc)

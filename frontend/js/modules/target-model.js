@@ -86,11 +86,13 @@
             captionType: 'nl',
             dialect: 'natural',
             captionProfile: 'krea2_long_nl',
-            tokenBudget: 512,
+            // 512 tokens, 5 of them the end of its prompt template: 507 are the caption
+            // (backend caption_tokenizer_service.PROFILES, pinned by test_frontend_contract).
+            tokenBudget: 507,
             captionHelpKeys: KREA2_CAPTION_HELP_KEYS,
             hint: () => t(
-                'Train LoRAs on krea/Krea-2-Raw, then run them on Krea 2 Turbo for inference. Its Qwen3-VL encoder supports 512 tokens, and training used predominantly long natural-language captions. Use Smart Tag\'s Krea 2 Long NL profile; tags remain useful for library search and review, not as a Krea 2 training tag-count target.',
-                'LoRA 请在 krea/Krea-2-Raw 上训练，再用于 Krea 2 Turbo 推理。其 Qwen3-VL 编码器支持 512 tokens，训练数据主要采用自然语言长 caption。请使用 Smart Tag 的 Krea 2 长 NL 配置；标签仍适合图库检索与审核，但不是 Krea 2 训练的标签数量目标。'),
+                'Train LoRAs on krea/Krea-2-Raw, then run them on Krea 2 Turbo for inference. Its Qwen3-VL encoder reads 507 tokens of a caption (512 with its prompt template), and training used predominantly long natural-language captions. Use Smart Tag\'s Krea 2 Long NL profile; tags remain useful for library search and review, not as a Krea 2 training tag-count target.',
+                'LoRA 请在 krea/Krea-2-Raw 上训练，再用于 Krea 2 Turbo 推理。其 Qwen3-VL 编码器读取 caption 的前 507 个 token（加上提示词模板共 512），训练数据主要采用自然语言长 caption。请使用 Smart Tag 的 Krea 2 长 NL 配置；标签仍适合图库检索与审核，但不是 Krea 2 训练的标签数量目标。'),
             applyLabel: () => t('Set every image to NL captions', '全部图片设为自然语言 caption'),
         },
         anima: {

@@ -22,6 +22,10 @@ export interface IssueActions {
   unifyStyle: (keys: readonly string[]) => void
   /** Take the contradicting count tags out of these captions (one undoable change). */
   fixSubjects: (fixes: readonly SubjectFix[]) => Promise<void>
+  /** The batch's common tags these fixes would take off. */
+  commonTagsIn: (fixes: readonly SubjectFix[]) => string[]
+  /** Move each common tag into the captions of every image but its `without`, then out of the common tags. */
+  moveCommonTags: (moves: readonly { tag: string; without: readonly string[] }[]) => Promise<void>
 }
 
 const REMOVE: ReadonlySet<IssueKind> = new Set(['file_changed', 'file_missing', 'unreadable', 'empty_caption', 'small', 'low_aesthetic', 'blurry', 'flat', 'character_outlier'])
@@ -44,10 +48,10 @@ const SETTINGS: ReadonlySet<IssueKind> = new Set(['trigger_missing', 'trigger_co
 /** Their images have no caption to edit (the file is gone or changed). */
 const LOCKED: ReadonlySet<IssueKind> = new Set(['file_changed', 'file_missing', 'unreadable'])
 
-/** One note: a number ("123": about that many tokens) or two exact Anima counts ("123/130"). */
+/** One note: a number ("123": about that many tokens) or the exact counts as words ("Qwen3 300 · T5 310"). */
 function noteText(t: ReturnType<typeof useT>, key: MessageKey, value: string): string {
-  const [qwen, t5] = value.split('/')
-  return t5 !== undefined && key === 'dataset.check.tokens' ? t('dataset.check.tokensExact', { q: Number(qwen), t5: Number(t5) }) : t(key, { n: Number(value) })
+  const exact = key === 'dataset.check.tokens' && !Number.isFinite(Number(value))
+  return exact ? t('dataset.check.tokensExact', { counts: value }) : t(key, { n: Number(value) })
 }
 
 /** The kinds whose note is one number, and how each is worded. */
@@ -87,7 +91,14 @@ export function IssueCard({ issue, entries, actions, scope }: Props) {
       </header>
       <p className={styles.detail}>{detail}</p>
       {issue.subjectFixes ? (
-        <SubjectFixes fixes={issue.subjectFixes} entries={entries} onApply={actions.fixSubjects} onOpen={actions.open} />
+        <SubjectFixes
+          fixes={issue.subjectFixes}
+          entries={entries}
+          common={actions.commonTagsIn(issue.subjectFixes)}
+          onApply={actions.fixSubjects}
+          onMoveCommon={actions.moveCommonTags}
+          onOpen={actions.open}
+        />
       ) : issue.groups ? (
         <div className={styles.groups}>
           {issue.groups.map((group) => (

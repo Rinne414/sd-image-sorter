@@ -47,12 +47,20 @@ export interface BulkRequest {
   initial: ReadonlyMap<string, CaptionContent>
   entries: ReadonlyMap<string, Entry>
   categoryOf: CategoryOf
+  /** Run first when the change is undone: puts back what it did beside the captions. */
+  restore?: () => Promise<boolean>
 }
 
 /** Undo one bulk change (each image as it was); a change is undone once. */
 export async function undoBulk(batchId: number, record: LastBulk, entries: ReadonlyMap<string, Entry>): Promise<boolean> {
   if (record.undone) return false
   record.undone = true
+  // What it changed beside the captions goes back first; when it cannot, the
+  // captions stay too (they only make sense together) and it can be tried again.
+  if (record.restore && !(await record.restore())) {
+    record.undone = false
+    return false
+  }
   if (useLastBulk.getState().last[batchId] === record) setLastBulk(batchId, null)
   const out = await undoWritten(batchId, record.written, entries)
   report(out)
@@ -73,7 +81,7 @@ export async function runBulk(batch: Batch, session: CaptionSession, request: Bu
   }
   const out = await writeChanges(batch.id, changes, request.entries, heads)
   if (out.written.length > 0) {
-    const record: LastBulk = { label: request.label, written: out.written, undone: false }
+    const record: LastBulk = { label: request.label, written: out.written, undone: false, restore: request.restore }
     setLastBulk(batch.id, record)
     toast(tr('dataset.bulk.done', { n: out.written.length, what: request.label }), 'info', {
       label: tr('toast.undo'),

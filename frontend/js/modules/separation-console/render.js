@@ -43,20 +43,20 @@ Object.assign(SeparationConsole, {
             }
             const text = box.value || '';
             const tagCount = text.split(',').map(s => s.trim()).filter(Boolean).length;
-            // Anima with its tokenizers downloaded: the exact counts (Qwen3 and T5),
-            // asked for in the background; until they arrive, and for every other
-            // model, the labelled estimate.
-            const exact = this.dm?._captionTokens?.exactFor?.(text) || null;
-            const tokens = exact ? Math.max(exact.qwen, exact.t5) : this.estimateTokens(text);
+            // The base model's tokenizers downloaded: its exact counts, asked for
+            // in the background; until they arrive, the labelled estimate.
+            const tok = this.dm?._captionTokens;
+            const exact = tok?.exactFor?.(text) || null;
+            const tokens = exact ? exact.tokens : this.estimateTokens(text);
             // Budget follows the LoRA-setup target model when one is chosen
             // (CLIP 75 / T5+Qwen-VL 512); unset targets keep the historical
             // CLIP default because it is the strictest common case.
             const budget = window.TargetModel?.tokenBudget?.() || 75;
             counter.textContent = exact
                 ? I18n.format(sepconT(
-                    `{tagCount} tags · Qwen3 {qwen} · T5 {t5} tokens`,
-                    `{tagCount} 个标签 · Qwen3 {qwen} · T5 {t5} tokens`,
-                ), { tagCount, qwen: exact.qwen, t5: exact.t5 })
+                    `{tagCount} tags · {counts} tokens`,
+                    `{tagCount} 个标签 · {counts} tokens`,
+                ), { tagCount, counts: tok.describe(exact) })
                 : I18n.format(sepconT(
                     `{tagCount} tags · ≈{tokens} tokens`,
                     `{tagCount} 个标签 · ≈{tokens} tokens`,
@@ -83,17 +83,19 @@ Object.assign(SeparationConsole, {
             counter.title = over
                 ? advice
                 : exact
-                    ? sepconT(`Exact token counts with Qwen3-0.6B and T5 v1.1 XXL, the tokenizers Anima reads captions with (budget ${budget}).`,
-                        `用 Qwen3-0.6B 和 T5 v1.1 XXL 得到的精确 token 数，这是 Anima 读取 caption 用的两个分词器（预算 ${budget}）。`)
+                    ? I18n.format(sepconT(
+                        'Exact token counts with {tokenizers}, as the {model} text encoder reads captions (budget {budget}).',
+                        '用 {tokenizers} 得到的精确 token 数，这是 {model} 读取 caption 用的分词器（预算 {budget}）。',
+                    ), { tokenizers: tok.tokenizerLabels().join(' + '), model: tok.modelLabel(), budget })
                     : sepconT(`Estimated tokens (budget ~${budget} for the chosen target model; CLIP default when unset).`,
                         `估算 token 数（当前目标模型预算约 ${budget}；未选择时按 CLIP 预算）。`);
         },
 
-        // Anima, tokenizers not downloaded yet: say the count is an estimate and
-        // offer the one-time download right where the estimate is shown.
+        // The base model's tokenizers not downloaded yet: say the count is an
+        // estimate and offer the one-time download right where it is shown.
         _appendExactCountsPrompt(counter) {
             const tok = this.dm?._captionTokens;
-            if (!tok || !tok.isAnima() || !tok.status || tok.status.available) return;
+            if (!tok || !tok.status || tok.status.available) return;
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'btn btn-ghost btn-small dataset-token-counter-get';

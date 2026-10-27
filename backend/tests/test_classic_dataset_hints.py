@@ -118,6 +118,7 @@ const out = {
     { image_id: 5, keep: ['2girls'], drop: ['1girl'] },
     { image_id: 5, keep: [], drop: ['solo'] },
     { image_id: -1, keep: [], drop: ['solo'] },
+    { image_id: 0, keep: [], drop: ['solo'] },
     { image_id: 6, keep: [], drop: [] },
     { image_id: 7, drop: ['solo'] },
   ] } }).map((p) => p.image_id),
@@ -138,5 +139,6 @@ process.stdout.write(JSON.stringify(out));
         "untouched": "1girl,smile",
         "tight": "1girl,smile",
         "all": "",
-        "proposals": [5, 7],
+        # A folder picture keeps its own negative id; 0 is no picture.
+        "proposals": [5, -1, 7],
     }

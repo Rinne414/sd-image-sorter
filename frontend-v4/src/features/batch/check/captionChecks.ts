@@ -1,25 +1,35 @@
 import { captionTransforms } from '../captionRules'
-import type { DatasetForm, TargetModel } from '../datasetSettings'
+import { splitList, type DatasetForm, type TargetModel } from '../datasetSettings'
 import { splitTags, tagKey } from '../edit/captionContent'
 import { ownEmpty } from '../edit/marks'
 import { offStyleTags, styleOf } from '../edit/tagStyle'
 import type { CaptionContent } from '../datasetTag'
-import { issue, type CheckIssue, type TagPair } from './checkIssues'
+import { issue, type CheckIssue, type SubjectFix, type TagPair } from './checkIssues'
 
 // What the final captions (as the export writes them) say: empty ones, ones
 // longer than the base model reads, tags that always go together, tags on one
 // image only. Pure: the captions come from export-preview.
 
-/** Tokens the base model's text encoder reads (V3.5 target-model profiles): CLIP 75, T5 / Qwen 512. */
-const TOKEN_BUDGET: Record<TargetModel, number> = { '': 75, sdxl: 75, flux: 512, krea2: 512, anima: 512 }
+/**
+ * Tokens of a caption the base model's text encoder keeps: CLIP 75, T5 / Qwen
+ * 512, Krea 2 507 (the rest of its 512 is the prompt template). Pinned to the
+ * backend's caption_tokenizer_service.PROFILES by test_frontend_contract.
+ */
+const TOKEN_BUDGET: Record<TargetModel, number> = { '': 75, sdxl: 75, flux: 512, krea2: 507, anima: 512 }
 
 export const tokenBudget = (model: TargetModel): number => TOKEN_BUDGET[model]
 
-/** Exact counts of one caption with the two tokenizers Anima uses (Qwen3-0.6B and T5 v1.1 XXL), by entry key. */
-export type ExactTokens = ReadonlyMap<string, { qwen: number; t5: number }>
+/** Exact counts of one caption with each tokenizer of the base model, and the largest of them. */
+export interface ExactCount {
+  counts: readonly { label: string; tokens: number }[]
+  tokens: number
+}
 
-/** The longer of the two Anima counts: either one over the budget cuts the caption. */
-export const longestExact = (c: { qwen: number; t5: number }): number => Math.max(c.qwen, c.t5)
+/** Exact counts of the final captions, by entry key. */
+export type ExactTokens = ReadonlyMap<string, ExactCount>
+
+/** "CLIP 80" or "Qwen3 300 · T5 310": the exact counts of one caption, for its note. */
+export const describeExact = (c: ExactCount): string => c.counts.map((x) => `${x.label} ${x.tokens}`).join(' · ')
 
 /**
  * An estimate of the CLIP tokens of a caption (V3.5's QW-1 counter): exact
@@ -44,6 +54,16 @@ export function captionTagKeys(caption: string): Set<string> {
 
 /** The folded tags the batch rules put in front of every caption. */
 export const ruleTagKeys = (form: DatasetForm): Set<string> => new Set(captionTransforms(form).prepend.map(tagKey))
+
+/**
+ * The batch's common tags (as written there) that these fixes would take off:
+ * the rules put them on every caption, so no single caption can lose them
+ * until they are moved into the captions themselves.
+ */
+export function commonTagsIn(fixes: readonly SubjectFix[], form: DatasetForm): string[] {
+  const dropped = new Set(fixes.flatMap((fix) => fix.drop.map(tagKey)))
+  return splitList(form.commonTags).filter((tag) => dropped.has(tagKey(tag)))
+}
 
 /** Tags reach this many captions before their pairs are looked at (the health check's numbers). */
 const PAIR_MIN_COUNT = 3
@@ -115,15 +135,15 @@ export function companions(finals: ReadonlyMap<string, string>, tag: string, ski
 }
 
 /**
- * Issues the final captions show. `exact` (Anima only, once its tokenizers are
- * downloaded) replaces the estimate: a caption is too long when either of its
- * two counts is over the budget, and its note names both ("123/130"). A caption
- * the exact counts do not cover yet keeps the estimate, so no caption goes
- * unchecked while they load; `params.exact` says whether every one was counted.
+ * Issues the final captions show. `exact` (once the base model's tokenizers are
+ * downloaded) replaces the estimate: a caption is too long when any of its
+ * counts is over the budget, and its note names them ("Qwen3 300 · T5 310"). A
+ * caption the exact counts do not cover yet keeps the estimate, so no caption
+ * goes unchecked while they load; `params.exact` says whether every one was counted.
  */
 export function captionIssues(finals: ReadonlyMap<string, string>, form: DatasetForm, exact: ExactTokens | null = null): CheckIssue[] {
   const budget = tokenBudget(form.targetModel)
-  const useExact = form.targetModel === 'anima' ? exact : null
+  const useExact = exact
   const empty: string[] = []
   const long: string[] = []
   const notes: Record<string, string> = {}
@@ -132,10 +152,10 @@ export function captionIssues(finals: ReadonlyMap<string, string>, form: Dataset
     if (ownEmpty(caption, form)) empty.push(key)
     const counted = useExact?.get(key)
     if (!counted) allExact = false
-    const tokens = counted ? longestExact(counted) : estimateTokens(caption)
+    const tokens = counted ? counted.tokens : estimateTokens(caption)
     if (tokens > budget) {
       long.push(key)
-      notes[key] = counted ? `${counted.qwen}/${counted.t5}` : String(tokens)
+      notes[key] = counted ? describeExact(counted) : String(tokens)
     }
   }
   const skip = ruleTagKeys(form)

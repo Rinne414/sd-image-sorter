@@ -109,13 +109,25 @@ export function issue(kind: IssueKind, source: IssueSource, fields: Partial<Chec
   return { id: kind, kind, severity: SEVERITY[kind], keys: [], sources: [source], ...fields }
 }
 
-/** Finds entries by Library id or by folder path (any slashes, any letter case: Windows paths). */
+/**
+ * Finds entries by Library id, by folder path (any slashes, any letter case:
+ * Windows paths), or by the negative id a folder image goes to the health check
+ * with (it has no Library id; see folderHealthIds).
+ */
 export interface KeyIndex {
   byId: ReadonlyMap<number, string>
   byPath: ReadonlyMap<string, string>
+  byFolderId: ReadonlyMap<number, string>
 }
 
 const foldPath = (path: string) => pathKey(path).toLowerCase()
+
+/** The folder images' ids for the health check: -1, -2, ... in batch order, by entry key. */
+export function folderHealthIds(entries: readonly Entry[]): ReadonlyMap<string, number> {
+  const ids = new Map<string, number>()
+  for (const e of entries) if (e.ref.kind === 'folder') ids.set(e.key, -(ids.size + 1))
+  return ids
+}
 
 export function keyIndex(entries: readonly Entry[]): KeyIndex {
   const byId = new Map<number, string>()
@@ -124,12 +136,15 @@ export function keyIndex(entries: readonly Entry[]): KeyIndex {
     if (e.ref.kind === 'library') byId.set(e.ref.imageId, e.key)
     else byPath.set(foldPath(e.ref.path), e.key)
   }
-  return { byId, byPath }
+  const byFolderId = new Map<number, string>()
+  for (const [key, id] of folderHealthIds(entries)) byFolderId.set(id, key)
+  return { byId, byPath, byFolderId }
 }
 
 function lookup(index: KeyIndex, imageId: number, path: string | null | undefined): string | null {
   if (imageId > 0) return index.byId.get(imageId) ?? null
-  return path ? (index.byPath.get(foldPath(path)) ?? null) : null
+  if (path) return index.byPath.get(foldPath(path)) ?? null
+  return index.byFolderId.get(imageId) ?? null
 }
 
 const present = <T>(v: T | null | undefined): v is T => v !== null && v !== undefined

@@ -19280,7 +19280,9 @@ export interface operations {
     };
     post_caption_tokens_prepare_api_dataset_caption_tokens_prepare_post: {
         parameters: {
-            query?: never;
+            query?: {
+                profile?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -19302,7 +19304,9 @@ export interface operations {
     };
     get_caption_tokens_status_api_dataset_caption_tokens_status_get: {
         parameters: {
-            query?: never;
+            query?: {
+                profile?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;

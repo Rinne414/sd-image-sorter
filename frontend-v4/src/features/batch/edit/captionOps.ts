@@ -16,6 +16,8 @@ export type BulkOp =
   | { kind: 'remove'; tags: string[] }
   /** Each image loses its own tags (by entry key): a fix that differs from one picture to the next. */
   | { kind: 'removeEach'; drops: ReadonlyMap<string, readonly string[]> }
+  /** Each image gains its own tags at its own end (by entry key); images not listed stay as they are. */
+  | { kind: 'addEach'; adds: ReadonlyMap<string, { tags: readonly string[]; position: Position }> }
   | { kind: 'replace'; find: string; replace: string; mode: FindMode; target: FindTarget; ignoreCase: boolean }
   | { kind: 'dedupe' }
   | { kind: 'removeCategories'; categories: string[] }
@@ -116,6 +118,10 @@ export function applyOp(content: CaptionContent, op: BulkOp, categoryOf: Categor
       return removeTags(content, op.tags)
     case 'removeEach':
       return removeTags(content, op.drops.get(key) ?? [])
+    case 'addEach': {
+      const add = op.adds.get(key)
+      return add ? addTags(content, add.tags, add.position) : content
+    }
     case 'replace': {
       if (op.mode === 'tag') return op.find.trim() ? replaceTag(content, op.find, op.replace) : content
       const pattern = findPattern(op.find, op.mode, op.ignoreCase)

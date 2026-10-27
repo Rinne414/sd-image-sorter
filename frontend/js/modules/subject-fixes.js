@@ -41,14 +41,17 @@
         return kept.join(',').replace(/^\s+/, '');
     }
 
-    /** Valid proposals of a finding, one per picture, as `{image_id, keep, drop}`. */
+    /**
+     * Valid proposals of a finding, one per picture, as `{image_id, keep, drop}`.
+     * A picture imported from a folder has its own negative id.
+     */
     function proposalsOf(finding) {
         const raw = Array.isArray(finding?.fix?.proposals) ? finding.fix.proposals : [];
         const seen = new Set();
         const out = [];
         for (const item of raw) {
             const id = item?.image_id;
-            if (!Number.isSafeInteger(id) || id <= 0 || seen.has(id)) continue;
+            if (!Number.isSafeInteger(id) || id === 0 || seen.has(id)) continue;
             if (!Array.isArray(item.drop) || item.drop.length === 0) continue;
             seen.add(id);
             out.push({

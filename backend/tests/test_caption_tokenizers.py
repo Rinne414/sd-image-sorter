@@ -38,6 +38,7 @@ def _word_tokenizer(
 
 QWEN_BYTES = _word_tokenizer(["1girl", "solo", "smile", "blue", "eyes"], eos=False)
 T5_BYTES = _word_tokenizer(["1girl", "solo", "smile", "blue", "eyes"], eos=True)
+CLIP_BYTES = _word_tokenizer(["1girl", "solo", "smile"], eos=False)
 
 
 def _pinned(data: bytes, name: str) -> pinned_download.PinnedFile:
@@ -69,6 +70,13 @@ def specs(tmp_path, monkeypatch):
             add_special_tokens=True,
             collapse_spaces=True,
         ),
+        "clip_vit_l_14": svc.TokenizerSpec(
+            "clip_vit_l_14",
+            "CLIP ViT-L/14",
+            _pinned(CLIP_BYTES, "clip"),
+            add_special_tokens=False,
+            collapse_spaces=False,
+        ),
     }
     monkeypatch.setattr(svc, "SPECS", fake)
     monkeypatch.setattr(svc, "_loaded", {})
@@ -76,7 +84,7 @@ def specs(tmp_path, monkeypatch):
 
 
 def _install(specs, which=("qwen3_0_6b", "t5_v1_1_xxl")):
-    data = {"qwen3_0_6b": QWEN_BYTES, "t5_v1_1_xxl": T5_BYTES}
+    data = {"qwen3_0_6b": QWEN_BYTES, "t5_v1_1_xxl": T5_BYTES, "clip_vit_l_14": CLIP_BYTES}
     for key in which:
         path = svc.tokenizer_path(specs[key])
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -143,7 +151,7 @@ def test_a_changed_file_is_not_trusted(specs):
 
 def test_unknown_profile_is_refused(specs):
     with pytest.raises(ValueError):
-        svc.count_tokens("sdxl", ["solo"])
+        svc.count_tokens("nope", ["solo"])
 
 
 def test_prepare_downloads_pinned_files_once_and_verifies_them(specs, monkeypatch):
@@ -290,3 +298,67 @@ def test_the_real_tokenizers_agree_with_numbers_measured_elsewhere(monkeypatch):
 
     assert result["available"] is True
     assert result["counts"][0]["t5_v1_1_xxl"] == 26
+
+
+def test_each_base_model_counts_with_its_own_tokenizers_and_says_its_limit(specs):
+    _install(specs, which=("qwen3_0_6b", "t5_v1_1_xxl", "clip_vit_l_14"))
+
+    sdxl = svc.count_tokens("sdxl", ["1girl, solo"])
+    flux = svc.count_tokens("flux", ["1girl, solo"])
+    krea2 = svc.count_tokens("krea2", ["1girl, solo"])
+
+    assert sdxl["counts"] == [{"clip_vit_l_14": 3}] and sdxl["limit"] == 75
+    assert flux["counts"] == [{"t5_v1_1_xxl": 4}] and flux["limit"] == 512
+    # Krea 2 keeps 507: the rest of its 512 is the prompt template.
+    assert krea2["counts"] == [{"qwen3_0_6b": 3}] and krea2["limit"] == 507
+
+
+def test_a_base_model_is_ready_when_its_own_files_are_here(specs):
+    """Anima's files already count Krea 2 (Qwen3) and FLUX (T5); SDXL needs CLIP."""
+    _install(specs)
+
+    assert svc.get_status("anima")["available"] is True
+    assert svc.get_status("krea2")["available"] is True
+    assert svc.get_status("flux")["available"] is True
+    sdxl = svc.get_status("sdxl")
+    assert sdxl["available"] is False
+    assert [f["id"] for f in sdxl["files"]] == ["clip_vit_l_14"]
+    assert sdxl["download_bytes"] == len(CLIP_BYTES)
+    assert (sdxl["model"], sdxl["limit"]) == ("SDXL", 75)
+
+
+def test_preparing_a_base_model_fetches_only_its_files(specs, monkeypatch):
+    fetched = []
+
+    def fake_fetch(pinned, dest, download, *, model_name=""):
+        fetched.append(pinned.repo)
+        Path(dest).parent.mkdir(parents=True, exist_ok=True)
+        Path(dest).write_bytes({"test/clip": CLIP_BYTES}[pinned.repo])
+        return Path(dest)
+
+    monkeypatch.setattr(svc, "_download_file", lambda: None)
+    monkeypatch.setattr(pinned_download, "fetch", fake_fetch)
+
+    svc.prepare_blocking("sdxl")
+
+    assert fetched == ["test/clip"]
+    assert svc.get_status("sdxl")["available"] is True
+    assert svc.get_status("anima")["available"] is False
+
+
+def test_the_endpoints_take_the_base_model(test_client, specs):
+    _install(specs, which=("clip_vit_l_14",))
+
+    status = test_client.get("/api/dataset/caption-tokens/status", params={"profile": "sdxl"})
+    counted = test_client.post(
+        "/api/dataset/caption-tokens", json={"profile": "sdxl", "texts": ["solo, smile"]}
+    )
+
+    assert status.json()["available"] is True
+    assert counted.json()["counts"] == [{"clip_vit_l_14": 3}]
+    assert test_client.get(
+        "/api/dataset/caption-tokens/status", params={"profile": "nope"}
+    ).status_code == 400
+    assert test_client.post(
+        "/api/dataset/caption-tokens/prepare", params={"profile": "nope"}
+    ).status_code == 400

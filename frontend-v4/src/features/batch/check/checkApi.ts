@@ -11,7 +11,7 @@ import { rowKey, type PreviewRow } from '../edit/captionContent'
 import { PREVIEW_CHUNK } from '../edit/initialContents'
 import { useProjectChanging } from '../datasetApi'
 import { rereadAfterRefusedPreview, retryPreview } from '../datasetTagApi'
-import { readAuditReport, type AuditReport, type HealthReport, type ReviewIssueRow } from './checkIssues'
+import { folderHealthIds, readAuditReport, type AuditReport, type HealthReport, type ReviewIssueRow } from './checkIssues'
 import type { CheckOptions } from './checkOptions'
 
 // The check step's requests. Each source is its own query, so issues show as
@@ -194,13 +194,21 @@ export function useFolderAesthetic(batch: Batch, entries: readonly Entry[], o: C
   })
 }
 
-/** The health check reads at most this many Library images (the backend says when it stopped short). */
+/** The health check reads at most this many images (the backend says when it stopped short). */
 const HEALTH_MAX_IDS = 20_000
 
-/** Health by purpose: trigger, composition, ratings, over the Library images with their final captions. */
+/**
+ * Health by purpose: trigger, composition, ratings, over the images with their
+ * final captions. A folder image goes with its negative id (folderHealthIds);
+ * it has no Library tags, so only its caption is checked.
+ */
 export function useHealth(batch: Batch, entries: readonly Entry[], form: DatasetForm | null, finals: Finals | undefined, run: number) {
   const library = useApp((s) => s.libraryId)
-  const pairs = entries.flatMap((e) => (e.imageId === null ? [] : [[e.imageId, finals?.captions.get(e.key) ?? ''] as const]))
+  const folderIds = folderHealthIds(entries)
+  const pairs = entries.flatMap((e) => {
+    const id = e.imageId ?? (e.status === 'ok' ? (folderIds.get(e.key) ?? null) : null)
+    return id === null ? [] : [[id, finals?.captions.get(e.key) ?? ''] as const]
+  })
   const unique = [...new Map(pairs).entries()].slice(0, HEALTH_MAX_IDS)
   const signature = unique.map(([id, c]) => `${id}:${c}`).join('\n')
   return useQuery({
@@ -211,7 +219,9 @@ export function useHealth(batch: Batch, entries: readonly Entry[], form: Dataset
         await api.POST('/api/tags/consistency/report', {
           body: {
             image_ids: unique.map(([id]) => id),
-            effective_captions: unique.map(([image_id, caption]) => ({ image_id, caption })),
+            // The final caption is what trains: the composition check reads
+            // its tags (the Library's could be edited or ruled out of it).
+            effective_captions: unique.map(([image_id, caption]) => ({ image_id, caption, tags: caption })),
             trigger: (form as DatasetForm).trigger.trim(),
             training_purpose: (form as DatasetForm).purpose ?? '',
           } as never,

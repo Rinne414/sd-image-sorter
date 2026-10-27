@@ -20,8 +20,8 @@ const WARNING_TEXT: Record<NonNullable<SourceState['warning']>, MessageKey> = {
   healthCut: 'dataset.check.warn.healthCut',
 }
 
-/** Sources that read only the Library's own records (folder images are not in them). */
-const LIBRARY_ONLY: ReadonlySet<SourceState['id']> = new Set(['health', 'review'])
+/** Sources that read only the Library's own records (folder images are not in them). Health reads captions, which folder images have too. */
+const LIBRARY_ONLY: ReadonlySet<SourceState['id']> = new Set(['review'])
 
 interface Props {
   sources: readonly SourceState[]

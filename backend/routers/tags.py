@@ -220,10 +220,13 @@ def suggest_tags(
 
 
 @router.post("/tags/consistency/report")
-async def consistency_report(request: ConsistencyReportRequest):
+def consistency_report(request: ConsistencyReportRequest):
     """Pre-training dataset health check (BE-5'): trigger hygiene, composition
     balance, tag-set consistency. Read-only: findings describe explicit
-    Dataset Maker actions instead of mutating anything here."""
+    Dataset Maker actions instead of mutating anything here.
+
+    A plain ``def`` (threadpool): it reads the tags of up to 20,000 pictures.
+    """
     from services.dataset_consistency_service import build_consistency_report
 
     if not request.image_ids and not request.selection_token:

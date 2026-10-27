@@ -1,13 +1,17 @@
 /**
- * Dataset Maker — exact caption token counts for Anima (Qwen3-0.6B and T5 v1.1 XXL).
+ * Dataset Maker — exact caption token counts for the chosen base model.
  *
- * Backend: GET /api/dataset/caption-tokens/status, POST .../prepare (installs
- * the small `tokenizers` package when it is missing and downloads the two
- * tokenizer files once, about 14 MB, on request) and POST /api/dataset/caption-tokens.
+ * SDXL (and no base model chosen) counts with CLIP ViT-L/14, FLUX with T5 v1.1
+ * XXL, Krea 2 with Qwen3 and Anima with Qwen3-0.6B and T5 v1.1 XXL
+ * (backend/services/caption_tokenizer_service.py says why each is exact).
+ *
+ * Backend: GET /api/dataset/caption-tokens/status?profile=, POST .../prepare?profile=
+ * (installs the small `tokenizers` package when it is missing and downloads the
+ * model's tokenizer files once, 2 to 14 MB, on request) and POST /api/dataset/caption-tokens.
  *
  * Until the files are there every count stays the labelled estimate
  * (SeparationConsole.estimateTokens) and nothing waits on the download. A
- * caption is too long when either exact count is over the budget.
+ * caption is too long when any of its exact counts is over the budget.
  *
  * Used by the caption editor's token counter and by the "Long captions" check of
  * the Quality Audit.
@@ -18,21 +22,25 @@
     const DM = window.DatasetMaker;
 
     const API = '/api/dataset/caption-tokens';
-    const PROFILE = 'anima';
+    // The base models the backend counts for; no choice counts as CLIP, as the estimate does.
+    const PROFILES = ['sdxl', 'flux', 'krea2', 'anima'];
+    const DEFAULT_PROFILE = 'sdxl';
     const POLL_MS = 1000;
     // Captions asked for per request (the audit counts the whole queue).
     const CHUNK = 400;
     // Exact counts kept for the editor's live counter, newest last.
     const CACHE_LIMIT = 200;
     const COUNTER_DELAY_MS = 250;
-    // What the download is when the status has not said yet (about 14 MB).
-    const DEFAULT_MB = 14;
+    // What the download is when the status has not said yet.
+    const DEFAULT_MB = 2;
     const MB = 1000000;
+    // Short names for the counter ("CLIP 16 · T5 18").
+    const SHORT_LABELS = { clip_vit_l_14: 'CLIP', qwen3_0_6b: 'Qwen3', t5_v1_1_xxl: 'T5' };
 
     const state = {
         status: null,
         statusRequest: null,
-        statusTried: false,
+        statusTriedFor: '',
         statusError: null,
         preparing: null,
         cache: new Map(),
@@ -49,8 +57,15 @@
         return window.TargetModel?.current?.() || '';
     }
 
-    function isAnima() {
-        return targetModel() === PROFILE;
+    /** The tokenizer profile of the chosen base model. */
+    function profile() {
+        const model = targetModel();
+        return PROFILES.includes(model) ? model : DEFAULT_PROFILE;
+    }
+
+    /** The status of the chosen model's tokenizers, or null while it has not been read. */
+    function currentStatus() {
+        return state.status?.profile === profile() ? state.status : null;
     }
 
     /** The token limit of the chosen base model (the CLIP one when none is chosen). */
@@ -59,11 +74,22 @@
     }
 
     function ready() {
-        return isAnima() && state.status?.available === true;
+        return currentStatus()?.available === true;
+    }
+
+    /** The base model's name ("SDXL", "Krea 2", ...); CLIP when none is chosen (it counts as CLIP). */
+    function modelLabel() {
+        return targetModel() ? (currentStatus()?.model || '') : 'CLIP';
+    }
+
+    /** The tokenizers the chosen model counts with, by name ("CLIP ViT-L/14", ...). */
+    function tokenizerLabels() {
+        const files = currentStatus()?.files;
+        return Array.isArray(files) ? files.map((f) => String(f.label || f.id)) : [];
     }
 
     function sizeMb() {
-        const bytes = Number(state.status?.download_bytes);
+        const bytes = Number(currentStatus()?.download_bytes);
         return Number.isFinite(bytes) && bytes > 0 ? Math.max(1, Math.round(bytes / MB)) : DEFAULT_MB;
     }
 
@@ -73,11 +99,12 @@
         return JSON.parse(body);
     }
 
-    /** Looks at the tokenizer files again. Keeps the last answer when the request fails. */
+    /** Looks at the chosen model's tokenizer files again. Keeps the last answer when the request fails. */
     function refreshStatus() {
         if (state.statusRequest) return state.statusRequest;
-        state.statusTried = true;
-        state.statusRequest = fetch(`${API}/status`)
+        const asked = profile();
+        state.statusTriedFor = asked;
+        state.statusRequest = fetch(`${API}/status?profile=${encodeURIComponent(asked)}`)
             .then(readJson)
             .then((status) => {
                 state.status = status;
@@ -91,16 +118,19 @@
             .finally(() => {
                 state.statusRequest = null;
                 changed();
+                // The model changed while this was out: look again for the new one.
+                if (profile() !== asked) void refreshStatus();
             });
         return state.statusRequest;
     }
 
-    /** Starts the one-time download and follows it until it ends. Resolves with the last status. */
+    /** Starts the one-time download for the chosen model and follows it until it ends. */
     function prepare() {
         if (state.preparing) return state.preparing;
+        const asked = profile();
         state.preparing = (async () => {
             try {
-                await readJson(await fetch(`${API}/prepare`, { method: 'POST' }));
+                await readJson(await fetch(`${API}/prepare?profile=${encodeURIComponent(asked)}`, { method: 'POST' }));
                 for (;;) {
                     const status = await refreshStatus();
                     if (!status || !status.preparing) break;
@@ -110,7 +140,6 @@
                 state.statusError = error instanceof Error ? error.message : String(error);
             } finally {
                 state.preparing = null;
-                state.cache.clear();
                 await refreshStatus();
             }
             return state.status;
@@ -120,22 +149,34 @@
     }
 
     /**
-     * Exact counts of the texts, `[{qwen, t5}]` in the same order, or null when the
-     * tokenizers are not there (no number is guessed).
+     * Exact counts of the texts with the chosen model's tokenizers, in the same
+     * order: `[{counts: [{label, tokens}], tokens}]` (tokens = the largest count),
+     * or null when the tokenizers are not there (no number is guessed).
      */
     async function countExact(texts) {
+        const asked = profile();
         const out = [];
         for (let start = 0; start < texts.length; start += CHUNK) {
             const response = await fetch(API, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ profile: PROFILE, texts: texts.slice(start, start + CHUNK) }),
+                body: JSON.stringify({ profile: asked, texts: texts.slice(start, start + CHUNK) }),
             });
             const answer = await readJson(response);
-            if (!answer.available || !Array.isArray(answer.counts)) return null;
-            for (const c of answer.counts) out.push({ qwen: Number(c.qwen3_0_6b), t5: Number(c.t5_v1_1_xxl) });
+            if (!answer.available || !Array.isArray(answer.counts) || !Array.isArray(answer.metrics)) return null;
+            for (const row of answer.counts) out.push(exactRow(answer.metrics, row));
         }
         return out;
+    }
+
+    function exactRow(metrics, row) {
+        const counts = metrics.map((m) => ({ label: SHORT_LABELS[m.id] || String(m.label || m.id), tokens: Number(row[m.id]) }));
+        return { counts, tokens: Math.max(...counts.map((c) => c.tokens)) };
+    }
+
+    /** "CLIP 16" or "Qwen3 10 · T5 12": the exact counts of one caption, for a label. */
+    function describe(exact) {
+        return exact.counts.map((c) => `${c.label} ${c.tokens}`).join(' · ');
     }
 
     /** The caption of one picture as it exports: tag box and natural-language text composed by its type. */
@@ -151,21 +192,21 @@
      * when they arrive, so the live counter can redraw.
      */
     function exactFor(text) {
-        if (!isAnima()) return null;
-        // One look on its own; a failed look is not repeated until something asks again.
-        if (!state.status && !state.statusTried) void refreshStatus();
+        // One look per model on its own; a failed look is not repeated until something asks again.
+        if (!currentStatus() && state.statusTriedFor !== profile()) void refreshStatus();
         if (!ready()) return null;
-        const known = state.cache.get(text);
+        const key = `${profile()}\n${text}`;
+        const known = state.cache.get(key);
         if (known) return known;
-        if (state.counterRequested !== text) {
-            state.counterRequested = text;
+        if (state.counterRequested !== key) {
+            state.counterRequested = key;
             if (state.counterTimer) window.clearTimeout(state.counterTimer);
             state.counterTimer = window.setTimeout(async () => {
                 state.counterTimer = null;
                 try {
                     const counted = await countExact([text]);
                     if (!counted) return;
-                    state.cache.set(text, counted[0]);
+                    state.cache.set(key, counted[0]);
                     if (state.cache.size > CACHE_LIMIT) state.cache.delete(state.cache.keys().next().value);
                     changed();
                 } catch (_) {
@@ -177,23 +218,26 @@
     }
 
     DM._captionTokens = Object.freeze({
-        isAnima,
+        profile,
         ready,
         budget,
         sizeMb,
+        modelLabel,
+        tokenizerLabels,
+        describe,
         finalCaption,
         refreshStatus,
         prepare,
         countExact,
         exactFor,
-        get status() { return state.status; },
+        get status() { return currentStatus(); },
         get statusError() { return state.statusError; },
-        get preparing() { return state.preparing !== null || state.status?.preparing === true; },
+        get preparing() { return state.preparing !== null || currentStatus()?.preparing === true; },
     });
 
     function bindTargetModel() {
         document.getElementById('dataset-target-model')?.addEventListener('change', () => {
-            if (isAnima()) void refreshStatus();
+            void refreshStatus();
             changed();
         });
     }

@@ -4,16 +4,18 @@ import type { Batch } from '../../../api/types'
 import { useT } from '../../../i18n'
 import { useApp } from '../../../state/store'
 import { useToasts } from '../../../ui/toasts'
-import { projectKey, readdEntries } from '../datasetApi'
+import { projectKey, readdEntries, saveProjectSettings } from '../datasetApi'
 import { runBulk } from '../edit/bulkRun'
+import { splitTags, tagKey } from '../edit/captionContent'
 import { renderInitialContents } from '../edit/initialContents'
+import { withCommonTag } from '../edit/tagLists'
 import { styleOf } from '../edit/tagStyle'
 import { captionHolder } from '../edit/useCaptionSession'
 import { stepLabel } from '../labels'
 import { setSettingsPanel } from '../settingsPanel'
 import { StepBar } from '../StepBar'
 import { useBatchEntries } from '../useBatchEntries'
-import { ruleTagKeys } from './captionChecks'
+import { commonTagsIn, ruleTagKeys } from './captionChecks'
 import { ChecksPanel } from './ChecksPanel'
 import { checkHeading } from './checkHeading'
 import { loadCheckOptions, saveCheckOptions, type CheckOptions } from './checkOptions'
@@ -21,6 +23,7 @@ import styles from './CheckStep.module.css'
 import { IssueCard, type IssueActions } from './IssueCard'
 import { PurityCard } from './PurityCard'
 import { TokenCountsCard } from './TokenCountsCard'
+import { tokenProfile } from './tokenApi'
 import { autoMaskImages, MaskCard } from '../masks/MaskCard'
 import { MaskEditor, openMaskEditor, useMaskEditor } from '../masks/MaskEditor'
 import type { TagDetailScope } from './TagDetail'
@@ -43,7 +46,7 @@ export function CheckStep({ batch, next, onNext }: Props) {
   const { entries, remove, loading, error } = useBatchEntries(batch)
   const [options, setOptions] = useState<CheckOptions>(loadCheckOptions)
   const [run, setRun] = useState(0)
-  const { issues, sources, form, finals, scope, unchecked } = useChecks(batch, entries, options, run)
+  const { issues, sources, form, finals, heads, scope, unchecked } = useChecks(batch, entries, options, run)
   // The mask editor belongs to this step: leaving the step closes it.
   useEffect(() => () => useMaskEditor.setState({ open: null }), [])
   const byKey = useMemo(() => new Map(entries.map((e) => [e.key, e])), [entries])
@@ -97,6 +100,47 @@ export function CheckStep({ batch, next, onNext }: Props) {
         useToasts.getState().push(t('error.generic', { reason: error instanceof Error ? error.message : String(error) }), 'error')
       }
     },
+    commonTagsIn: (fixes) => (form ? commonTagsIn(fixes, form) : []),
+    moveCommonTags: async (moves) => {
+      if (!form || moves.length === 0) return
+      const style = styleOf(form.normalizeUnderscores)
+      const quoted = moves.map((m) => `“${m.tag}”`).join(', ')
+      const common = (add: boolean) => () => saveProjectSettings(batch.id, (current) => moves.reduce((s, m) => withCommonTag(s, m.tag, add, style), current))
+      try {
+        // Every other image keeps the tag: written into its own caption where it is
+        // not there yet, at the end the rules put it (edited captions get the common
+        // tags in front, never-edited ones at the end of the template), so its
+        // final caption stays as it was.
+        const unedited = entries.filter((e) => !heads?.get(e.key)?.content)
+        const initial = unedited.length ? await renderInitialContents(form, unedited) : new Map()
+        const adds = new Map<string, { tags: string[]; position: 'front' | 'back' }>()
+        for (const { tag, without } of moves) {
+          const skip = new Set(without)
+          for (const e of entries) {
+            const edited = heads?.get(e.key)?.content
+            const own = edited ?? initial.get(e.key)
+            if (skip.has(e.key) || !own || splitTags(own.booru_caption).some((x) => tagKey(x) === tagKey(tag))) continue
+            const add = adds.get(e.key) ?? { tags: [], position: edited ? 'front' : 'back' }
+            add.tags.push(tag)
+            adds.set(e.key, add)
+          }
+        }
+        if (adds.size > 0) {
+          const op = { kind: 'addEach', adds } as const
+          const changed = await runBulk(batch, captionHolder(batch.id).session, { label: t('dataset.check.subjectMoveLabel', { tags: quoted }), op, keys: [...adds.keys()], initial, entries: byKey, categoryOf: () => 'unknown', restore: common(true) })
+          if (changed < adds.size) return // nothing or only some written: the common tags stay as they are
+        }
+        if (!(await common(false)())) return
+        if (adds.size === 0) {
+          useToasts.getState().push(t('dataset.check.subjectMovedOnly', { tags: quoted }), 'info', {
+            label: t('toast.undo'),
+            run: () => void common(true)().then((ok) => ok && useToasts.getState().push(t('dataset.check.subjectMoveUndone', { tags: quoted }), 'info')),
+          })
+        }
+      } catch (error) {
+        useToasts.getState().push(t('error.generic', { reason: error instanceof Error ? error.message : String(error) }), 'error')
+      }
+    },
     unifyStyle: (keys) => {
       if (!form) return
       const op = { kind: 'style', style: styleOf(form.normalizeUnderscores) } as const
@@ -122,7 +166,7 @@ export function CheckStep({ batch, next, onNext }: Props) {
             total={entries.length}
             onSettings={() => setSettingsPanel(true)}
           />
-          {form?.targetModel === 'anima' && <TokenCountsCard />}
+          {form && <TokenCountsCard profile={tokenProfile(form.targetModel)} chosen={form.targetModel !== ''} />}
           <MaskCard ids={scope.ids} folderCount={scope.folderCount} />
           <PurityCard batch={batch} ids={scope.ids} folderCount={scope.folderCount} />
         </div>

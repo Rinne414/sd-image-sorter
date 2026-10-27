@@ -510,6 +510,23 @@ button.thumb:focus-visible .pic {
   gap: 10px;
 }
 
+/* A count tag from the batch's common tags: say so, and offer to move it into the captions. */
+.subjectCommon {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.subjectCommon > p {
+  flex: 1 1 320px;
+  margin: 0;
+}
+
 .subjectList {
   display: grid;
   gap: 6px;

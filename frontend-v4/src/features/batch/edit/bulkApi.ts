@@ -217,6 +217,8 @@ export interface LastBulk {
   written: Written[]
   /** Set once it has been undone (from the toast or the panel), so it is undone once. */
   undone: boolean
+  /** Puts back what the change did beside the captions (a batch setting); false when that failed. */
+  restore?: () => Promise<boolean>
 }
 
 export const useLastBulk = create<{ last: Record<number, LastBulk | null> }>(() => ({ last: {} }))

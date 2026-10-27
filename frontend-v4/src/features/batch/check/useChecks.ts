@@ -11,7 +11,7 @@ import { useMaskStatus } from '../masks/maskApi'
 import type { CheckOptions } from './checkOptions'
 import { usePurityResults } from './purityRun'
 import { useImageQuality, useQualityProgress, type QualityProgress } from './qualityApi'
-import { useExactTokens, useTokenizerStatus } from './tokenApi'
+import { tokenProfile, useExactTokens, useTokenizerStatus } from './tokenApi'
 
 /** What one source is doing: not for these images, still asking, done (and what it covered), or failed. */
 export type SourceStatus = 'na' | 'checking' | 'done' | 'failed'
@@ -53,8 +53,7 @@ export function useChecks(batch: Batch, entries: readonly Entry[], o: CheckOptio
   const audit = useAudit(batch, entries, o, run)
   const aesthetic = useFolderAesthetic(batch, entries, o, run)
   const quality = useImageQuality(batch, entries, o, run)
-  const anima = form?.targetModel === 'anima'
-  const tokenizers = useTokenizerStatus(anima)
+  const tokenizers = useTokenizerStatus(tokenProfile(form?.targetModel ?? ''), !!form)
   const exact = useExactTokens(batch, form, finals.data, !!tokenizers.data?.available)
   const qualityProgress = useQualityProgress((s) => s.byBatch[batch.id] ?? null)
   const health = useHealth(batch, entries, form, finals.data, run)
@@ -87,7 +86,7 @@ export function useChecks(batch: Batch, entries: readonly Entry[], o: CheckOptio
   const captionCount = finals.data ? finals.data.captions.size + finals.data.failed.size : 0
   const sources: SourceState[] = [
     stateOf('captions', heads.isError ? heads : { ...finals, isFetching: finals.isFetching || heads.isFetching || exact.isFetching }, entries.length > 0, captionCount),
-    stateOf('health', health, scope.ids.length > 0, health.data?.images ?? 0, health.data?.images_truncated ? 'healthCut' : null),
+    stateOf('health', health, scope.ids.length + scope.paths.length > 0, health.data?.images ?? 0, health.data?.images_truncated ? 'healthCut' : null),
     stateOf('review', review, scope.ids.length > 0, scope.ids.length),
     stateOf('audit', audit, scope.ids.length + scope.paths.length > 0, audit.data?.sent.length ?? 0, auditWarning),
     stateOf('quality', quality, scope.ids.length + scope.paths.length > 0, quality.data?.sent.length ?? 0, null, qualityProgress),
@@ -96,5 +95,5 @@ export function useChecks(batch: Batch, entries: readonly Entry[], o: CheckOptio
   // Images added after the last costly check (the audit and review queue run again only when asked).
   const sent = audit.data ? new Set(audit.data.sent) : null
   const unchecked = sent ? sentKeys(entries).filter((key) => !sent.has(key)).length : 0
-  return { issues, sources, form, finals: finals.data, scope, unchecked }
+  return { issues, sources, form, finals: finals.data, heads: heads.data, scope, unchecked }
 }

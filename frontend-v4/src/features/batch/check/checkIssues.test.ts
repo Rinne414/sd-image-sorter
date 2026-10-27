@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { DatasetForm } from '../datasetSettings'
 import type { Entry } from '../entries'
-import { captionIssues, cooccurringPairs, estimateTokens, tagHolders, tokenBudget } from './captionChecks'
+import { captionIssues, commonTagsIn, cooccurringPairs, estimateTokens, tagHolders, tokenBudget } from './captionChecks'
 import {
   auditIssues,
+  folderHealthIds,
   healthIssues,
   keyIndex,
   maskIssues,
@@ -47,6 +48,7 @@ const dir = (path: string, status: Entry['status'] = 'ok'): Entry => ({
 
 const entries = [lib(1), lib(2), lib(3), dir('C:\\ds\\a.png'), dir('C:\\ds\\b.png', 'changed'), dir('C:\\ds\\c.png', 'missing')]
 const order = entries.map((e) => e.key)
+const animaCount = (qwen: number, t5: number) => ({ counts: [{ label: 'Qwen3', tokens: qwen }, { label: 'T5', tokens: t5 }], tokens: Math.max(qwen, t5) })
 const keys = keyIndex(entries)
 
 const form = (over: Partial<DatasetForm> = {}): DatasetForm => ({
@@ -175,7 +177,60 @@ describe('each source says what it found, by entry key', () => {
     expect(byKind(healthIssues(finding(null), keys, { ratingsInCaptions: true }), 'subject_count')).toEqual([])
   })
 
+  it('names the common tags a subject fix would take off, as the settings write them', () => {
+    const fixes = [
+      { key: 'lib:1', keep: ['2girls'], drop: ['1girl', 'solo'] },
+      { key: 'lib:2', keep: [], drop: ['Solo'] },
+    ]
+    expect(commonTagsIn(fixes, form({ commonTags: 'solo, masterpiece' }))).toEqual(['solo'])
+    expect(commonTagsIn(fixes, form({ commonTags: 'masterpiece' }))).toEqual([])
+  })
+
+  it('a folder image goes to the health check with its own negative id and its findings come back to it', () => {
+    // folderHealthIds: -1, -2, -3 for the three folder images, in batch order.
+    expect([...folderHealthIds(entries)]).toEqual([
+      ['dir:C:/ds/a.png', -1],
+      ['dir:C:/ds/b.png', -2],
+      ['dir:C:/ds/c.png', -3],
+    ])
+    const report: HealthReport = {
+      images: 4,
+      findings: [
+        { id: 'subject-count-conflict', severity: 'medium', title_en: 't', title_zh: 't', detail_en: 'd', detail_zh: 'd', fix: { proposals: [{ image_id: -1, keep: ['2girls'], drop: ['solo'] }] }, data: {} },
+        { id: 'trigger-coverage', severity: 'high', title_en: 't', title_zh: 't', detail_en: 'd', detail_zh: 'd', fix: { image_ids: [2, -1] }, data: {} },
+      ],
+    }
+    const found = healthIssues(report, keys, { ratingsInCaptions: true })
+    expect(byKind(found, 'subject_count')[0]).toMatchObject({ keys: ['dir:C:/ds/a.png'], subjectFixes: [{ key: 'dir:C:/ds/a.png', keep: ['2girls'], drop: ['solo'] }] })
+    expect(byKind(found, 'trigger_coverage')[0]).toMatchObject({ keys: ['lib:2', 'dir:C:/ds/a.png'] })
+    // A path still finds a folder image the usual way (the audit sends paths, never these ids).
+    const audit: AuditReport = { items: [{ image_id: -1, abs_path: 'C:/ds/b.png', width: 9, height: 9, flags: ['small'] }], duplicate_groups: [] }
+    expect(byKind(auditIssues(audit, keys), 'small')[0]?.keys).toEqual(['dir:C:/ds/b.png'])
+  })
+
   it('subject-count fixes of images that left the batch are dropped when the issues merge', () => {
+  it('a folder image goes to the health check with its own negative id and its findings come back to it', () => {
+    // folderHealthIds: -1, -2, -3 for the three folder images, in batch order.
+    expect([...folderHealthIds(entries)]).toEqual([
+      ['dir:C:/ds/a.png', -1],
+      ['dir:C:/ds/b.png', -2],
+      ['dir:C:/ds/c.png', -3],
+    ])
+    const report: HealthReport = {
+      images: 4,
+      findings: [
+        { id: 'subject-count-conflict', severity: 'medium', title_en: 't', title_zh: 't', detail_en: 'd', detail_zh: 'd', fix: { proposals: [{ image_id: -1, keep: ['2girls'], drop: ['solo'] }] }, data: {} },
+        { id: 'trigger-coverage', severity: 'high', title_en: 't', title_zh: 't', detail_en: 'd', detail_zh: 'd', fix: { image_ids: [2, -1] }, data: {} },
+      ],
+    }
+    const found = healthIssues(report, keys, { ratingsInCaptions: true })
+    expect(byKind(found, 'subject_count')[0]).toMatchObject({ keys: ['dir:C:/ds/a.png'], subjectFixes: [{ key: 'dir:C:/ds/a.png', keep: ['2girls'], drop: ['solo'] }] })
+    expect(byKind(found, 'trigger_coverage')[0]).toMatchObject({ keys: ['lib:2', 'dir:C:/ds/a.png'] })
+    // A path still finds a folder image the usual way (the audit sends paths, never these ids).
+    const audit: AuditReport = { items: [{ image_id: -1, abs_path: 'C:/ds/b.png', width: 9, height: 9, flags: ['small'] }], duplicate_groups: [] }
+    expect(byKind(auditIssues(audit, keys), 'small')[0]?.keys).toEqual(['dir:C:/ds/b.png'])
+  })
+
     const issue = {
       id: 'subject_count',
       kind: 'subject_count',
@@ -243,13 +298,13 @@ describe('the final captions', () => {
       ['lib:3', caption],
     ])
     const exact = new Map([
-      ['lib:1', { qwen: 300, t5: 510 }],
-      ['lib:2', { qwen: 520, t5: 100 }],
-      ['lib:3', { qwen: 512, t5: 513 }],
+      ['lib:1', animaCount(300, 510)],
+      ['lib:2', animaCount(520, 100)],
+      ['lib:3', animaCount(512, 513)],
     ])
     const over = byKind(captionIssues(captions, anima, exact), 'too_long')[0]
     expect(over?.keys).toEqual(['lib:2', 'lib:3'])
-    expect(over?.notes).toEqual({ 'lib:2': '520/100', 'lib:3': '512/513' })
+    expect(over?.notes).toEqual({ 'lib:2': 'Qwen3 520 · T5 100', 'lib:3': 'Qwen3 512 · T5 513' })
     expect(over?.params).toEqual({ budget: 512, exact: 1 })
     // the estimate of this short caption is far under the budget: the exact counts are what flagged it
     expect(estimateTokens(caption)).toBeLessThan(512)
@@ -262,7 +317,7 @@ describe('the final captions', () => {
       ['lib:1', 'mychar, solo'],
       ['lib:2', long],
     ])
-    const over = byKind(captionIssues(captions, anima, new Map([['lib:1', { qwen: 4, t5: 5 }]])), 'too_long')[0]
+    const over = byKind(captionIssues(captions, anima, new Map([['lib:1', animaCount(4, 5)]])), 'too_long')[0]
     expect(over?.keys).toEqual(['lib:2'])
     expect(Number(over?.notes?.['lib:2'])).toBeGreaterThan(512)
     expect(over?.params?.exact).toBe(0)
@@ -270,10 +325,15 @@ describe('the final captions', () => {
     expect(byKind(captionIssues(captions, anima, null), 'too_long')[0]?.params?.exact).toBe(0)
   })
 
-  it('exact counts are only used for Anima', () => {
-    const captions = new Map([['lib:1', 'mychar, solo']])
-    const exact = new Map([['lib:1', { qwen: 9999, t5: 9999 }]])
-    expect(byKind(captionIssues(captions, form({ targetModel: 'flux' }), exact), 'too_long')).toEqual([])
+  it('every base model uses its exact counts against its own budget (Krea 2 keeps 507)', () => {
+    const captions = new Map([['lib:1', 'mychar, solo'], ['lib:2', 'mychar, solo']])
+    const clip = (n: number) => ({ counts: [{ label: 'CLIP', tokens: n }], tokens: n })
+    const qwen = (n: number) => ({ counts: [{ label: 'Qwen3', tokens: n }], tokens: n })
+    const sdxl = byKind(captionIssues(captions, form({ targetModel: 'sdxl' }), new Map([['lib:1', clip(75)], ['lib:2', clip(76)]])), 'too_long')[0]
+    expect(sdxl).toMatchObject({ keys: ['lib:2'], notes: { 'lib:2': 'CLIP 76' }, params: { budget: 75, exact: 1 } })
+    const krea = byKind(captionIssues(captions, form({ targetModel: 'krea2' }), new Map([['lib:1', qwen(507)], ['lib:2', qwen(508)]])), 'too_long')[0]
+    expect(krea).toMatchObject({ keys: ['lib:2'], params: { budget: 507, exact: 1 } })
+    expect(tokenBudget('')).toBe(75)
   })
 
   it('tags that always go together are paired; the rule tags are left out', () => {

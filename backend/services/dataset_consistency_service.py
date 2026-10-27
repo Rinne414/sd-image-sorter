@@ -41,7 +41,9 @@ COOCCURRENCE_MIN_JACCARD = 0.9
 MAX_PAYLOAD_IDS = 10_000
 MAX_CAPTION_LENGTH = 100_000
 
-PositiveStrictInt = Annotated[int, Field(strict=True, gt=0)]
+# A Library picture has its positive id; a picture imported from a folder has
+# no Library row and is sent with a negative id (the Dataset Maker's own).
+PictureId = Annotated[int, Field(strict=True)]
 
 
 class EffectiveCaption(BaseModel):
@@ -49,8 +51,12 @@ class EffectiveCaption(BaseModel):
 
     model_config = ConfigDict(extra="ignore", strict=True)
 
-    image_id: PositiveStrictInt
+    image_id: PictureId
     caption: str = Field(max_length=MAX_CAPTION_LENGTH)
+    # The tag list as it exports (empty when only the sentence exports). The
+    # tag-level checks read it; without it a Library picture falls back to its
+    # Library tags and a folder picture to its caption.
+    tags: Optional[str] = Field(default=None, max_length=MAX_CAPTION_LENGTH)
 
 
 class ConsistencyReportRequest(BaseModel):
@@ -58,7 +64,7 @@ class ConsistencyReportRequest(BaseModel):
 
     model_config = ConfigDict(extra="ignore", strict=True)
 
-    image_ids: Optional[List[PositiveStrictInt]] = Field(
+    image_ids: Optional[List[PictureId]] = Field(
         default=None,
         max_length=MAX_REPORT_IMAGES,
     )
@@ -74,7 +80,13 @@ class ConsistencyReportRequest(BaseModel):
     def validate_effective_caption_scope(self) -> "ConsistencyReportRequest":
         if self.image_ids is not None and len(set(self.image_ids)) != len(self.image_ids):
             raise ValueError("image_ids must not contain duplicate values")
+        if self.image_ids is not None and 0 in self.image_ids:
+            raise ValueError("image_ids must not contain 0")
         if self.effective_captions is None:
+            if self.image_ids is not None and any(value < 0 for value in self.image_ids):
+                raise ValueError(
+                    "negative image_ids are pictures from a folder and need effective_captions"
+                )
             if self.trigger.strip():
                 raise ValueError(
                     "effective_captions is required when trigger coverage is checked"
@@ -99,12 +111,32 @@ def _fold(tag: str) -> str:
     return " ".join(str(tag or "").strip().lower().replace("_", " ").split())
 
 
-def _caption_tags(caption: str) -> set[str]:
-    return {
-        folded
+def _caption_tokens(caption: str) -> List[str]:
+    """The comma- or line-separated parts of a caption, as written."""
+    return [
+        token.strip()
         for token in str(caption).replace("\r", "\n").replace(",", "\n").split("\n")
-        if (folded := _fold(token))
-    }
+        if token.strip()
+    ]
+
+
+def _caption_tags(caption: str) -> set[str]:
+    return {folded for token in _caption_tokens(caption) if (folded := _fold(token))}
+
+
+def _written_tags(
+    image_id: int, rows: List[Dict[str, Any]], entry: Optional["EffectiveCaption"]
+) -> List[str]:
+    """The tags this picture trains with, as written.
+
+    The exported tag list when the caller sent it; a folder picture has no
+    Library tags, so its caption stands in; otherwise the Library's tags.
+    """
+    if entry is not None and entry.tags is not None:
+        return _caption_tokens(entry.tags)
+    if image_id < 0:
+        return _caption_tokens(entry.caption) if entry is not None else []
+    return [str(row.get("tag") or "") for row in rows]
 
 
 def _resolve_scope_ids(request: ConsistencyReportRequest) -> Tuple[List[int], int]:
@@ -114,7 +146,7 @@ def _resolve_scope_ids(request: ConsistencyReportRequest) -> Tuple[List[int], in
         ids: List[int] = []
         for value in request.image_ids:
             image_id = int(value)
-            if image_id > 0 and image_id not in seen:
+            if image_id != 0 and image_id not in seen:
                 seen.add(image_id)
                 ids.append(image_id)
         return ids[:MAX_REPORT_IMAGES], len(ids)
@@ -170,7 +202,9 @@ def build_consistency_report(request: ConsistencyReportRequest) -> Dict[str, Any
         }
 
     effective_captions = None
+    entries: Dict[int, EffectiveCaption] = {}
     if request.effective_captions is not None:
+        entries = {item.image_id: item for item in request.effective_captions}
         effective_captions = {
             item.image_id: _caption_tags(item.caption)
             for item in request.effective_captions
@@ -198,31 +232,34 @@ def build_consistency_report(request: ConsistencyReportRequest) -> Dict[str, Any
 
     for start in range(0, total, 500):
         chunk = ids[start : start + 500]
-        tag_map = db.get_image_tags_map(chunk)
+        library_chunk = [image_id for image_id in chunk if image_id > 0]
+        tag_map = db.get_image_tags_map(library_chunk) if library_chunk else {}
         for image_id in chunk:
             rows = tag_map.get(image_id) or []
             folded: List[str] = []
-            rating_rows = 0
             shot_bucket = None
-            for row in rows:
-                raw = str(row.get("tag") or "")
+            for raw in _written_tags(image_id, rows, entries.get(image_id)):
                 key = _fold(raw)
                 if not key:
                     continue
                 folded.append(key)
                 raw_spellings.setdefault(key, set()).add(raw.strip())
-                if key in RATING_TAG_NAMES:
-                    rating_rows += 1
                 if shot_bucket is None and key in SHOT_DISTANCE_TAGS:
                     shot_bucket = key
             unique = sorted(set(folded))
             tags_by_image[image_id] = unique
             tag_counts.update(unique)
             shot_counts[shot_bucket or "unspecified"] += 1
-            if rating_rows == 0:
-                rating_zero.append(image_id)
-            elif rating_rows > 1:
-                rating_multi.append(image_id)
+            # Rating rows are Library tags (the tagger's, fixed by
+            # /api/tags/fix-ratings); a folder picture has none to check.
+            if image_id > 0:
+                rating_rows = sum(
+                    1 for row in rows if _fold(str(row.get("tag") or "")) in RATING_TAG_NAMES
+                )
+                if rating_rows == 0:
+                    rating_zero.append(image_id)
+                elif rating_rows > 1:
+                    rating_multi.append(image_id)
             # What trains is the final caption; the Library's own tags only
             # stand in when the caller sent no captions.
             plan = resolve_subject_counts(
@@ -306,7 +343,8 @@ def build_consistency_report(request: ConsistencyReportRequest) -> Dict[str, Any
             fix={"endpoint": "/api/tags/fix-ratings", "body": {}},
             data={"image_ids": rating_multi[:50]},
         ))
-    if rating_zero and len(rating_zero) < total:
+    library_total = sum(1 for image_id in ids if image_id > 0)
+    if rating_zero and len(rating_zero) < library_total:
         findings.append(_finding(
             "rating-missing", "info",
             f"No rating tag: {count_text(len(rating_zero), 'image')}",

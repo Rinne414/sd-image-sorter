@@ -1,14 +1,19 @@
 import { useState } from 'react'
 import { useT } from '../../../i18n'
 import { entryThumb, type Entry } from '../entries'
+import { tagKey } from '../edit/captionContent'
 import type { SubjectFix } from './checkIssues'
 import styles from './CheckStep.module.css'
 
 interface Props {
   fixes: readonly SubjectFix[]
   entries: ReadonlyMap<string, Entry>
+  /** Common tags of the batch these fixes would take off (the rules put them on every caption). */
+  common: readonly string[]
   /** Applies the ticked fixes (one undoable change). */
   onApply: (fixes: readonly SubjectFix[]) => Promise<void>
+  /** Moves each common tag into the captions of the images that keep it, so its `without` can lose it. */
+  onMoveCommon: (moves: readonly { tag: string; without: readonly string[] }[]) => Promise<void>
   onOpen: (key: string) => void
 }
 
@@ -20,7 +25,7 @@ const SHOWN_ROWS = 30
  * it keeps and the ones it loses, a tick box each (all ticked to start with),
  * and one button that writes the ticked ones.
  */
-export function SubjectFixes({ fixes, entries, onApply, onOpen }: Props) {
+export function SubjectFixes({ fixes, entries, common, onApply, onMoveCommon, onOpen }: Props) {
   const t = useT()
   const [off, setOff] = useState<ReadonlySet<string>>(new Set())
   const [all, setAll] = useState(false)
@@ -41,9 +46,27 @@ export function SubjectFixes({ fixes, entries, onApply, onOpen }: Props) {
       setBusy(false)
     }
   }
+  const moveCommon = async () => {
+    setBusy(true)
+    try {
+      // The ticked images are the ones to lose the tag; every other image keeps it.
+      await onMoveCommon(common.map((tag) => ({ tag, without: ticked.filter((fix) => fix.drop.some((d) => tagKey(d) === tagKey(tag))).map((fix) => fix.key) })))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const commonText = common.map((tag) => `“${tag}”`).join(', ')
 
   return (
     <div className={styles.subjectFixes} data-testid="check-subject-fixes">
+      {common.length > 0 && (
+        <div className={styles.subjectCommon} data-testid="check-subject-common">
+          <p className={styles.note}>{t('dataset.check.subjectCommonNote', { tags: commonText })}</p>
+          <button type="button" className="btn" disabled={busy} onClick={() => void moveCommon()} data-testid="check-subject-move-common">
+            {t('dataset.check.subjectMoveCommon', { tags: commonText })}
+          </button>
+        </div>
+      )}
       <ul className={styles.subjectList}>
         {shown.map((fix) => {
           const entry = entries.get(fix.key)

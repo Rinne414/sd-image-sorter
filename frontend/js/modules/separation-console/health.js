@@ -26,12 +26,17 @@ Object.assign(SeparationConsole, {
             }
             return ids.map((imageId) => {
                 const captionType = dm._captionTypeFor(imageId);
-                const caption = window.CaptionCore.compose(
-                    dm._booruTextFor(imageId),
-                    dm._nlTextFor(imageId),
-                    captionType,
-                );
-                return { image_id: imageId, caption: String(caption || '') };
+                const booru = dm._booruTextFor(imageId);
+                const nl = dm._nlTextFor(imageId);
+                const caption = window.CaptionCore.compose(booru, nl, captionType);
+                // The tag list as it exports: none when only the sentence exports
+                // (compose falls back to the tags when the sentence is empty).
+                const sentenceOnly = captionType === 'nl' && String(nl || '').trim() !== '';
+                return {
+                    image_id: imageId,
+                    caption: String(caption || ''),
+                    tags: sentenceOnly ? '' : String(booru || ''),
+                };
             });
         },
 
@@ -41,14 +46,14 @@ Object.assign(SeparationConsole, {
             if (!out) return;
             // Mirrors MAX_REPORT_IMAGES in dataset_consistency_service.py. A
             // larger queue is checked up to this many and the result says so.
+            // Pictures imported from a folder go with their own negative ids:
+            // the check reads their captions, like every other picture's.
             const maxCheckedImages = 20000;
-            const galleryIds = this._queueIds().filter(id => id > 0);
-            const ids = galleryIds.slice(0, maxCheckedImages);
-            const skipped = this._queueIds().length - galleryIds.length;
+            const queueIds = this._queueIds().filter(id => id !== 0);
+            const ids = queueIds.slice(0, maxCheckedImages);
             if (ids.length === 0) {
                 out.hidden = false;
-                out.textContent = sepconT('No gallery images in the queue (local imports are not in the DB yet).',
-                    '队列中没有图库图片（本地导入的图片尚未入库）。');
+                out.textContent = sepconT('No images in the queue.', '队列中没有图片。');
                 return;
             }
             if (btn) btn.disabled = true;
@@ -67,7 +72,7 @@ Object.assign(SeparationConsole, {
                 });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 this._lastHealthReport = await response.json();
-                this._renderHealth(out, this._lastHealthReport, skipped, galleryIds.length);
+                this._renderHealth(out, this._lastHealthReport, queueIds.length);
             } catch (e) {
                 out.textContent = sepconT('Health check failed: ', '健检失败：') + String(e.message || e);
             } finally {
@@ -75,7 +80,7 @@ Object.assign(SeparationConsole, {
             }
         },
 
-        _renderHealth(out, report, skippedLocal, galleryTotal = 0) {
+        _renderHealth(out, report, queueTotal = 0) {
             out.textContent = '';
             const zh = sepconT('en', 'zh') === 'zh';
             const summary = document.createElement('div');
@@ -91,16 +96,7 @@ Object.assign(SeparationConsole, {
                     `已检查 {images} 张图 — {findingCount} 项发现：`,
                 ), { images: report.images, findingCount });
             out.appendChild(summary);
-            if (skippedLocal > 0) {
-                const note = document.createElement('div');
-                note.className = 'sepcon-health-note';
-                note.textContent = I18n.format(sepconT(
-                    `({skippedLocal} local-import images skipped — not in the DB)`,
-                    `（跳过 {skippedLocal} 张本地导入图片 — 尚未入库）`,
-                ), { skippedLocal });
-                out.appendChild(note);
-            }
-            const scopeTotal = Math.max(Number(report.images_in_scope || 0), Number(galleryTotal || 0));
+            const scopeTotal = Math.max(Number(report.images_in_scope || 0), Number(queueTotal || 0));
             if (report.images_truncated || scopeTotal > Number(report.images || 0)) {
                 const note = document.createElement('div');
                 note.className = 'sepcon-health-note';
@@ -140,8 +136,8 @@ Object.assign(SeparationConsole, {
             const imageIds = finding.fix.image_ids;
             const trigger = finding.fix.trigger;
             if (!Array.isArray(imageIds)
-                || imageIds.some((imageId) => !Number.isSafeInteger(imageId) || imageId <= 0)) {
-                throw new TypeError('Trigger coverage fix image_ids must be positive safe integers.');
+                || imageIds.some((imageId) => !Number.isSafeInteger(imageId) || imageId === 0)) {
+                throw new TypeError('Trigger coverage fix image_ids must be non-zero safe integers.');
             }
             if (typeof trigger !== 'string' || !trigger.trim()) {
                 throw new TypeError('Trigger coverage fix trigger must be a non-empty string.');
