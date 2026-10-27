@@ -59,7 +59,7 @@ is limited (notably JPEG / some WebP viewers).
         409: {"description": "Output path already exists and overwrite was not confirmed"},
     },
 )
-async def save_edited_image_metadata(
+def save_edited_image_metadata(
     request: SaveEditedMetadataRequest,
     service: ImageService = Depends(get_image_service),
 ):
@@ -173,7 +173,7 @@ async def get_image_preview_by_path(
 
 
 @router.get("/thumbnail-cache/stats")
-async def get_thumbnail_cache_statistics(
+def get_thumbnail_cache_statistics(
     service: ImageService = Depends(get_image_service),
 ):
     """Get thumbnail cache statistics."""
@@ -181,7 +181,7 @@ async def get_thumbnail_cache_statistics(
 
 
 @router.post("/thumbnail-cache/clear")
-async def clear_thumbnail_cache(
+def clear_thumbnail_cache(
     service: ImageService = Depends(get_image_service),
 ):
     """Clear all cached thumbnails."""
@@ -189,7 +189,7 @@ async def clear_thumbnail_cache(
 
 
 @router.post("/thumbnail-cache/cleanup")
-async def cleanup_thumbnail_cache(
+def cleanup_thumbnail_cache(
     max_age_days: int = Query(default=30, ge=1, le=365),
     service: ImageService = Depends(get_image_service),
 ):

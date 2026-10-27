@@ -136,7 +136,7 @@ Remove selected database rows from the local gallery without deleting the backin
 image files from disk. Re-scanning the source folder can add them back later.
     """,
 )
-async def remove_selected_images(
+def remove_selected_images(
     request: RemoveSelectedImagesRequest,
     background_tasks: BackgroundTasks,
     service: ImageService = Depends(get_image_service),

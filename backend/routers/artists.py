@@ -576,7 +576,7 @@ async def get_artist_diagnostics():
 
 
 @router.get("/stats", response_model=StatsResponse)
-async def get_stats():
+def get_stats():
     """Get artist identification statistics."""
     service = get_artist_service()
     return StatsResponse(
@@ -585,7 +585,7 @@ async def get_stats():
 
 
 @router.get("/images/{artist_name}", response_model=ArtistImageListResponse)
-async def get_artist_images(
+def get_artist_images(
     artist_name: str,
     limit: int = Query(default=120, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
@@ -603,7 +603,7 @@ async def get_artist_images(
 
 
 @router.get("/list")
-async def list_artists(
+def list_artists(
     service: ArtistService = Depends(get_artist_service),
 ):
     """Get the list of known artists."""
@@ -635,7 +635,7 @@ async def lookup_artist_vocabulary(
 
 
 @router.delete("/clear")
-async def clear_predictions(
+def clear_predictions(
     service: ArtistService = Depends(get_artist_service),
 ):
     """Clear the artist predictions of the current library's images."""

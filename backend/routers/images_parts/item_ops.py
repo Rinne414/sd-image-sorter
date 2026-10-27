@@ -34,7 +34,7 @@ Supports re-parsing for:
         500: {"description": "Failed to reparse", "content": {"application/json": {"example": {"detail": "Failed to reparse metadata"}}}}
     }
 )
-async def reparse_image(
+def reparse_image(
     image_id: int,
     service: ImageService = Depends(get_image_service),
 ):

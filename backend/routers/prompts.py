@@ -202,7 +202,7 @@ async def get_category_tags(
 
 
 @router.post("/categorize")
-async def categorize_tags(
+def categorize_tags(
     tags: List[str],
     service: PromptService = Depends(get_prompt_service),
 ):
@@ -419,7 +419,7 @@ async def delete_preset(
 
 
 @router.get("/stats")
-async def prompt_stats(
+def prompt_stats(
     tag_limit: int = Query(100, ge=1, le=10000),
     high_tag_limit: int = Query(100, ge=1, le=10000),
     checkpoint_limit: int = Query(30, ge=1, le=5000),
@@ -444,7 +444,7 @@ async def prompt_stats(
 
 
 @router.get("/compare")
-async def compare_prompts(
+def compare_prompts(
     id_a: int = Query(..., description="First image ID"),
     id_b: int = Query(..., description="Second image ID"),
     service: PromptService = Depends(get_prompt_service),

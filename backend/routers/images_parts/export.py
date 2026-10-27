@@ -35,7 +35,7 @@ sending a giant ID payload. Missing explicit IDs are reported in `missing_ids`
 instead of failing the whole export.
     """,
 )
-async def export_selection_data(
+def export_selection_data(
     request: ExportSelectionRequest,
     service: ImageService = Depends(get_image_service),
 ):
@@ -61,7 +61,7 @@ selection, this endpoint resolves the full matching result set in backend sort
 order, not just the thumbnails currently mounted in the DOM.
     """,
 )
-async def get_selection_ids(
+def get_selection_ids(
     request: SelectionIdsRequest,
     service: ImageService = Depends(get_image_service),
 ):
@@ -184,7 +184,7 @@ other filters as they are. `total` is the sum (the All tab); `exact` has the
 same meaning as on `/api/images/count`.
     """,
 )
-async def count_filtered_images_by_generator(
+def count_filtered_images_by_generator(
     request: SelectionIdsRequest,
     service: ImageService = Depends(get_image_service),
 ):
@@ -206,7 +206,7 @@ image count per pin. The request body is the same filter payload as
 after SQL, so the count can over-report for those payloads.
     """,
 )
-async def count_filtered_images(
+def count_filtered_images(
     request: SelectionIdsRequest,
     service: ImageService = Depends(get_image_service),
 ):

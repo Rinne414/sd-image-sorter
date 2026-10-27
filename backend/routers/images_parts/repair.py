@@ -154,7 +154,7 @@ indexed as a different row, the review is marked `conflict` and 409 is returned
         409: {"description": "Reconnect run active, review already resolved, or found-path conflict"},
     },
 )
-async def confirm_repair(
+def confirm_repair(
     request: RepairConfirmRequest,
     service: ImageService = Depends(get_image_service),
 ):
@@ -220,7 +220,7 @@ shadow it.
         }
     },
 )
-async def get_missing_images_summary(
+def get_missing_images_summary(
     service: ImageService = Depends(get_image_service),
 ):
     """Group unreadable rows by location, with reachability and what clearing costs."""
@@ -262,7 +262,7 @@ images carry work a rescan cannot restore.
         }
     },
 )
-async def clear_missing_images(
+def clear_missing_images(
     request: ClearMissingImagesRequest,
     service: ImageService = Depends(get_image_service),
 ):

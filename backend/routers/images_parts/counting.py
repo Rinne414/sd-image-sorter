@@ -38,7 +38,7 @@ shadow it.
         }
     },
 )
-async def count_images(
+def count_images(
     generators: Optional[str] = Query(default=None, description="Comma-separated generators to filter."),
     generator: Optional[str] = Query(default=None, description="Singular alias for generators.", deprecated=True),
     tags: Optional[str] = Query(default=None, description="Comma-separated tags (AND by default)."),

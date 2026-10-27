@@ -459,7 +459,7 @@ def get_checkpoints_library(
 
 
 @router.get("/tags/export")
-async def export_tags(
+def export_tags(
     service: TaggingService = Depends(get_tagging_service),
 ):
     """Export all image tags as JSON for backup/transfer."""
@@ -467,7 +467,7 @@ async def export_tags(
 
 
 @router.post("/tags/import")
-async def import_tags(
+def import_tags(
     request: TagImportRequest,
     service: TaggingService = Depends(get_tagging_service),
 ):
@@ -598,7 +598,7 @@ def get_pipeline_queue(
 
 
 @router.post("/tags/export-batch")
-async def export_tags_batch(
+def export_tags_batch(
     request: BatchTagExportRequest,
     background_tasks: BackgroundTasks,
     service: TaggingService = Depends(get_tagging_service),
@@ -663,7 +663,7 @@ async def download_combined_export(token: str):
 
 
 @router.post("/tags/fix-ratings")
-async def fix_rating_tags(
+def fix_rating_tags(
     service: TaggingService = Depends(get_tagging_service),
 ):
     """Clean up duplicate rating tags in existing database."""
@@ -675,7 +675,7 @@ async def fix_rating_tags(
 
 
 @router.post("/tags/export-preview")
-async def export_preview(
+def export_preview(
     request: ExportPreviewRequest,
     service: TaggingService = Depends(get_tagging_service),
 ):

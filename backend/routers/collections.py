@@ -147,7 +147,7 @@ async def delete_collection(collection_id: int):
 
 
 @router.get("/{collection_id}/images")
-async def list_collection_images(collection_id: int):
+def list_collection_images(collection_id: int):
     """Return the source image ids in a collection (newest-added first)."""
     _require_visible(collection_id)
     if not db.collection_exists(collection_id):
@@ -167,7 +167,7 @@ async def set_membership(collection_id: int, request: MembershipRequest):
 
 
 @router.post("/{collection_id}/items/bulk")
-async def set_membership_bulk(collection_id: int, request: BulkMembershipRequest):
+def set_membership_bulk(collection_id: int, request: BulkMembershipRequest):
     """Add/remove many images to/from a collection in one call (reference, no copy).
 
     Scope is an explicit id list or a gallery filtered-selection token

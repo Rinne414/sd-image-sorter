@@ -274,7 +274,7 @@ _bind_lazy_sorting_compat_state()
         }
     }
 )
-async def validate_path(
+def validate_path(
     request: ValidatePathRequest,
     service: SortingService = Depends(get_sorting_service),
 ):
@@ -361,7 +361,7 @@ def browse_folder(
 
 
 @router.post("/resolve-drop")
-async def resolve_drop(
+def resolve_drop(
     data: Dict[str, Any],
     service: SortingService = Depends(get_sorting_service),
 ):
@@ -473,7 +473,7 @@ async def reset_scan_progress(
     summary="Unregister a library root",
     description="v3.3.2 Library Navigation: remove a registered library root. Indexed images stay in the gallery — only the source registration is removed.",
 )
-async def remove_library_root(
+def remove_library_root(
     root_id: int,
     service: SortingService = Depends(get_sorting_service),
 ):
@@ -643,7 +643,7 @@ def count_sort_scope(
 
 
 @router.post("/sort/start")
-async def start_sort_session(
+def start_sort_session(
     request: Optional[ManualSortStartRequest] = Body(default=None),
     generators: Optional[str] = Query(default=None),
     tags: Optional[str] = Query(default=None),

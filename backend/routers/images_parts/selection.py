@@ -32,7 +32,7 @@ is exact for indexed filters and marked as an estimate when prompt post-filterin
 may still remove SQL false positives.
     """,
 )
-async def create_selection_token(
+def create_selection_token(
     request: SelectionTokenRequest,
     service: ImageService = Depends(get_image_service),
 ):
@@ -96,7 +96,7 @@ async def create_selection_token(
     summary="Fetch one filtered selection ID chunk",
     description="Fetch one ordered image-ID chunk from a token created by `/api/images/selection-token`.",
 )
-async def get_selection_chunk(
+def get_selection_chunk(
     selection_token: str = Query(..., min_length=1),
     offset: int = Query(0, ge=0),
     limit: int = Query(2000, ge=1, le=10000),
