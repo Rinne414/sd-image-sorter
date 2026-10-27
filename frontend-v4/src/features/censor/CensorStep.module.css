@@ -109,3 +109,15 @@
   padding: 24px;
   color: var(--text-2);
 }
+
+.emptyBody {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  max-width: 46ch;
+  text-align: center;
+}
+
+.emptyBody p {
+  margin: 0;
+}

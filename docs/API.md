@@ -3161,6 +3161,12 @@ Compute color data for one image synchronously. Returns the persisted analysis p
 #### POST /api/colors/cancel
 Request a cooperative cancel of the running color-analysis job. Completed images are kept; in-flight work stops at the next image boundary.
 
+#### POST /api/colors/pause
+Hold the running color-analysis job at the next image boundary (`400` when none runs). Finished images are kept and `/api/colors/progress` reports `paused: true`. Only this program's own page may call it.
+
+#### POST /api/colors/resume
+Carry on a paused color-analysis job from where it stopped (`400` when none runs). Only this program's own page may call it.
+
 ### VLM Captioning
 
 Added in v3.2.1. Multi-provider Vision Language Model captioning pipeline alongside WD14 / Camie / PixAI / ToriiGate taggers. See `vlm_providers/` for the provider implementations.

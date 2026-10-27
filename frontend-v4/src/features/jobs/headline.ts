@@ -41,6 +41,7 @@ const RUNNING: Record<JobKind, MessageKey> = {
   video: 'video.job.running', // video
   mediacensor: 'mediacensor.job.running', // mediacensor (its headline: mediaCensorHeadline.ts)
   stylemap: 'stylemap.job.running', // stylemap
+  recomfy: 'partialsa.repair.comfy.running', // partialsa
 }
 
 const DONE: Record<JobKind, MessageKey> = {
@@ -74,6 +75,7 @@ const DONE: Record<JobKind, MessageKey> = {
   video: 'video.job.done', // video
   mediacensor: 'mediacensor.job.doneAll', // mediacensor
   stylemap: 'stylemap.job.done', // stylemap
+  recomfy: 'partialsa.repair.comfy.done', // partialsa
 }
 
 /** An install that can only be used after a restart says so, never "is ready". */

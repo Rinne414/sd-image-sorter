@@ -13,10 +13,11 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 import database as db
+from app_security import require_own_page
 from color_analyzer import analyze_image_colors
 from utils.source_paths import resolve_existing_indexed_image_path
 
@@ -27,6 +28,7 @@ router = APIRouter(prefix="/api/colors", tags=["colors"])
 _state_lock = threading.Lock()
 _state: Dict[str, Any] = {
     "running": False,
+    "paused": False,
     "cancel_requested": False,
     "total": 0,
     "completed": 0,
@@ -54,6 +56,9 @@ def _resolve_image_path(image: Dict[str, Any]) -> str:
 # silently stop mid-run and leave running=True forever.
 _analysis_task: Optional["asyncio.Task"] = None
 
+# How often a paused run looks again for a resume or a cancel.
+_PAUSE_POLL_SECONDS = 0.2
+
 
 def _set_analysis_task(task: Optional["asyncio.Task"]) -> None:
     """Retain the analysis task so it cannot be garbage-collected."""
@@ -75,6 +80,7 @@ def _on_analysis_task_done(task: "asyncio.Task") -> None:
     # the next start is not rejected by a ghost run.
     with _state_lock:
         _state["running"] = False
+        _state["paused"] = False
         _state["current_image"] = ""
 
 
@@ -118,6 +124,7 @@ async def start_analysis(request: AnalyzeRequest):
         # check. /progress shows running=True with total=0 while resolving.
         _state.update({
             "running": True,
+            "paused": False,
             "cancel_requested": False,
             "total": 0,
             "completed": 0,
@@ -153,7 +160,30 @@ async def cancel_analysis():
         if not _state["running"]:
             raise HTTPException(400, "No analysis in progress")
         _state["cancel_requested"] = True
+        _state["paused"] = False
     return {"status": "cancel_requested"}
+
+
+@router.post("/pause")
+async def pause_analysis(http_request: Request):
+    """Hold the running analysis at the next image; done work is kept."""
+    require_own_page(http_request, "pause color analysis")
+    with _state_lock:
+        if not _state["running"]:
+            raise HTTPException(400, "No analysis in progress")
+        _state["paused"] = True
+    return {"status": "paused"}
+
+
+@router.post("/resume")
+async def resume_analysis(http_request: Request):
+    """Carry on a paused analysis from where it stopped."""
+    require_own_page(http_request, "resume color analysis")
+    with _state_lock:
+        if not _state["running"]:
+            raise HTTPException(400, "No analysis in progress")
+        _state["paused"] = False
+    return {"status": "resumed"}
 
 
 @router.get("/missing-count")
@@ -187,6 +217,11 @@ async def _run_analysis(image_ids: List[int]) -> None:
     loop = asyncio.get_running_loop()
 
     for image_id in image_ids:
+        while True:
+            with _state_lock:
+                if _state["cancel_requested"] or not _state["paused"]:
+                    break
+            await asyncio.sleep(_PAUSE_POLL_SECONDS)
         with _state_lock:
             if _state["cancel_requested"]:
                 break
@@ -227,4 +262,5 @@ async def _run_analysis(image_ids: List[int]) -> None:
 
     with _state_lock:
         _state["running"] = False
+        _state["paused"] = False
         _state["current_image"] = ""

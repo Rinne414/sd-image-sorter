@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { useT } from '../../i18n'
-import { useApp } from '../../state/store'
+import { openLibraryToAdd } from './addFromLibrary'
 import { Menu } from '../../ui/Menu'
 import { menuItemsOf } from '../selection/actions'
 import { useBulkActions } from '../selection/actionOps'
@@ -30,11 +30,7 @@ export function PickBar(p: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
   const importing = useDatasetImport((s) => (s.batchId === p.batchId ? s.label : null))
 
-  const addFromLibrary = () => {
-    const s = useApp.getState()
-    s.setAdding({ batchId: p.batchId })
-    s.setPage('library')
-  }
+  const addFromLibrary = () => openLibraryToAdd(p.batchId)
 
   return (
     <div className={styles.bar} data-testid="pick-bar">

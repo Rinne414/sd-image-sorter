@@ -137,7 +137,16 @@ export function NextTopBar() {
       onSelect: onImages((ids) => useSelectionDialog.getState().showFor('edit-tags', ids, ids.length)),
     },
     { id: 'customize-places', label: t('navcustom.open'), divider: true, onSelect: () => setCustomizeOpen(true) },
-    { id: 'dataset', label: t('next.more.dataset'), hint: t('next.place.classicHint'), divider: true, onSelect: () => openClassic('dataset') },
+    // A new dataset batch, as Home's Dataset card makes one: pick in the library, the banner there makes the batch.
+    {
+      id: 'dataset',
+      label: t('next.more.dataset'),
+      divider: true,
+      onSelect: () => {
+        app().setAdding({ kind: 'dataset' })
+        app().setPage('library')
+      },
+    },
     { id: 'classic', label: t('next.more.classicUi'), divider: true, onSelect: () => openClassic() },
     { id: 'vopus', label: t('next.more.vopusUi'), onSelect: () => location.assign('/vopus/') },
   ]

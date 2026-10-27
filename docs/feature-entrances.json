@@ -67,14 +67,14 @@
         "#entry-hero-swap"
       ],
       "vopus": {
-        "partial": "Home has only three start cards (Pixiv, Dataset, Sort); Reader, Privacy, Similar and Models are reached from the Tools menu and Settings, not as cards",
         "at": "#/home",
-        "find": "[data-testid=\"home-start-sort\"]"
+        "find": "[data-testid=\"home-tool-reader\"]",
+        "note": "home-tool-reader, -privacy, -similar, -duplicates, -models, -all; Censor and Sort are the start cards"
       },
       "next": {
-        "partial": "Home has only three start cards (Pixiv set, dataset, organize); censor, reader, privacy, similar and models are in the top bar and Settings, not on the first screen",
         "at": "#/home",
-        "find": "[data-testid=\"home-start-sort\"]"
+        "find": "[data-testid=\"home-tool-reader\"]",
+        "note": "same cards as V Opus Home (shared page)"
       }
     },
     {
@@ -466,15 +466,14 @@
         "#nav-tab-stylemap"
       ],
       "vopus": {
-        "partial": "Style Map is a Tools page (Tools menu, Ctrl K), not a tab of its own; Similar and duplicates are dialogs in the Library (not a tab); Censor and Dataset exist only as steps inside a batch",
         "at": "#/library",
         "find": "[data-testid=\"tools-menu\"]",
-        "note": "Top-bar tabs are nav[aria-label=main] button (Library, Batch, Sort); the rest is in the Tools menu"
+        "note": "Places are customizable (Customize top bar). Library, Batch and Sort are tabs (nav[aria-label=main] button); Style Map is a Tools page (Tools menu, Ctrl K); Similar and duplicates are Library dialogs; Censor and Dataset are steps of a batch"
       },
       "next": {
-        "partial": "Dataset maker is reached through batches, not a place tab",
         "at": "#/library",
-        "find": "[data-testid=\"next-place-library\"]"
+        "find": "[data-testid=\"next-place-library\"]",
+        "note": "Places are customizable. Dataset is made in a batch (More > Dataset maker starts one); Censor and Similar are menus in the bar"
       }
     },
     {
@@ -504,12 +503,12 @@
         "note": "Also tool-reverse, tool-promptlab, tool-artist, tool-lexicon, tool-privacy, censor, edit-tags"
       },
       "next": {
-        "partial": "Dataset maker in More opens the classic interface; Reader and Style Map are places in the bar, not repeated in More",
         "at": "#/library",
         "open": [
           "[data-testid=\"next-more\"]"
         ],
-        "find": "[data-item=\"tool-reverse\"]"
+        "find": "[data-item=\"dataset\"]",
+        "note": "Dataset maker starts a V Opus dataset batch (pick in the library, the banner makes the batch), as Home does; Reader and Style Map are places in the bar, not repeated in More"
       }
     },
     {
@@ -952,16 +951,15 @@
         "#btn-new-collection"
       ],
       "vopus": {
-        "partial": "Collections are not browsed or created in the gallery; they only appear on the Batch page to be turned into a batch, and picks go to batches",
         "at": "#/batch",
         "find": "[data-testid=\"batch-list\"]",
-        "note": "collection-row appears there when collections exist"
+        "note": "A batch is V Opus's group of images: classic collections open as batches (Batch page, collection-row appears when collections exist) and new groups are made as batches"
       },
       "next": {
-        "partial": "Existing collections can only be turned into a batch; collections cannot be created or filled here",
         "at": "#/batch",
         "find": "[data-testid=\"collection-row\"]",
-        "needs": "collection"
+        "needs": "collection",
+        "note": "A batch is the group of images: collections open as batches (collection-row on the Batch page) and new groups are made as batches"
       }
     },
     {
@@ -979,9 +977,9 @@
         "note": "Restore: rail-expand in the query bar"
       },
       "next": {
-        "partial": "There is no sidebar to collapse; its lists are in the scope menu at the top",
         "at": "#/library",
-        "find": "[data-testid=\"next-scope-crumb\"]"
+        "find": "[data-testid=\"next-scope-crumb\"]",
+        "note": "There is no sidebar to collapse: its lists are in the scope menu at the top"
       }
     },
     {
@@ -1019,16 +1017,15 @@
         "#btn-color-backfill-dismiss"
       ],
       "vopus": {
-        "partial": "Analysis starts from the rail status row or the card's colour section, but there is no pause or hide-while-running; the Jobs drawer can only stop it",
         "at": "#/library",
         "find": "[data-testid=\"library-status\"]",
-        "note": "Rail row button 'Analyse' shown only when images lack colours; card-colors-analyse inside an open card"
+        "note": "Rail row 'Analyse' shown only when images lack colours; while it runs the row shows the count with Pause / Resume (colors-pause) and Hide (colors-hide); the Jobs drawer pauses and stops it too; card-colors-analyse inside an open card"
       },
       "next": {
         "at": "#/library",
         "find": "[data-testid=\"next-footer\"]",
         "needs": "colors missing",
-        "note": "footer row offers Analyse; the card also has card-colors-analyse"
+        "note": "footer row offers Analyse; while it runs the row shows the count with Pause / Resume and Hide; the card also has card-colors-analyse"
       }
     },
     {
@@ -1040,14 +1037,16 @@
         "#gallery-unreadable-banner-dismiss"
       ],
       "vopus": {
-        "partial": "Unreadable files are a permanent rail status row; it cannot be hidden for now",
         "at": "#/library",
-        "find": "[data-testid=\"library-status\"]"
+        "find": "[data-testid=\"status-hide-unreadable\"]",
+        "needs": "missing files",
+        "note": "Hide for now on the unreadable-files row: hidden while the number stays the same in this session, back when it changes; the library report always lists them"
       },
       "next": {
-        "partial": "No banner to hide; the footer line lists unreadable files with a fix button but cannot be dismissed",
         "at": "#/library",
-        "find": "[data-testid=\"next-footer\"]"
+        "find": "[data-testid=\"status-hide-unreadable\"]",
+        "needs": "missing files",
+        "note": "same Hide for now on the footer row"
       }
     },
     {
@@ -1170,16 +1169,16 @@
         "#btn-add-selected-to-collection"
       ],
       "vopus": {
-        "partial": "Picks are added to a batch (Add to batch menu), not to a collection",
         "at": "#/library",
         "find": "[data-testid=\"add-to-batch\"]",
-        "needs": "picks"
+        "needs": "picks",
+        "note": "A batch is V Opus's group of images: picks go to a batch (Add to batch menu), and a classic collection opens as a batch"
       },
       "next": {
-        "partial": "Picks go to a batch, not to a collection",
         "at": "#/library",
         "find": "[data-testid=\"add-to-batch\"]",
-        "needs": "picks"
+        "needs": "picks",
+        "note": "Picks go to a batch, the group of images here; a classic collection opens as a batch"
       }
     },
     {
@@ -2243,12 +2242,15 @@
       "vopus": {
         "at": "#/sort",
         "find": "[data-testid=\"sort-presets\"]",
-        "note": "No separate settings dialog: copy / move and split options sit in the rules form and are saved with presets"
+        "note": "No separate settings dialog: copy / move and split options sit in the rules form and are saved with presets; the switch Preview automatically (sort-auto-preview) is in its Preview part"
       },
       "next": {
-        "partial": "No separate settings; there is no switch for the automatic preview (it is always on)",
         "at": "#/sort",
-        "find": "[data-testid=\"sort-mode-rules\"]"
+        "open": [
+          "[data-testid=\"sort-mode-rules\"]"
+        ],
+        "find": "[data-testid=\"sort-auto-preview\"]",
+        "note": "The switch Preview automatically when the rule changes sits in the Preview part of the rules form; off shows a Show preview button"
       }
     },
     {
@@ -2868,11 +2870,10 @@
         "#btn-censor-empty-open-gallery"
       ],
       "vopus": {
-        "partial": "An empty censor step only says to add images in Pick first; it has no button that opens the gallery",
         "at": "#/batch",
-        "find": "[data-testid=\"batch-view\"]",
-        "needs": "batch",
-        "note": "Pick step has add-from-library"
+        "find": "[data-testid=\"censor-empty-open-library\"]",
+        "needs": "empty censor step",
+        "note": "An empty censor step opens the Library in add-to-this-batch mode; the Pick step has add-from-library"
       },
       "next": {
         "at": "#/batch",
@@ -3975,15 +3976,14 @@
         "#settings-ui-scale"
       ],
       "vopus": {
-        "partial": "Sound and focus mode are set on the Sort page, not in Settings; first screen, star-5 film and UI scale are in Settings > Appearance",
         "at": "#/settings/appearance",
-        "find": "[data-testid=\"setting-start\"]",
-        "note": "setting-film, setting-scale; sort-sound-option / sort-focus-option on #/sort"
+        "find": "[data-testid=\"setting-sound\"]",
+        "note": "Settings > Appearance: first screen setting-start, film setting-film, UI scale setting-scale, sort sound setting-sound and focus mode setting-focus (the same stored values as the Sort page options sort-sound-option, sort-focus-option)"
       },
       "next": {
         "at": "#/settings/appearance",
         "find": "[data-testid=\"setting-scale\"]",
-        "note": "first screen: setting-start; hero film: setting-film; sound and focus mode: sort-sound-option, sort-focus-option on #/sort"
+        "note": "first screen: setting-start; hero film: setting-film; sound setting-sound and focus mode setting-focus here too (same values as sort-sound-option, sort-focus-option on #/sort)"
       }
     },
     {
@@ -4128,16 +4128,15 @@
         "#btn-metadata-reparse"
       ],
       "vopus": {
-        "partial": "Only as rail status fixes (read errors / recover missing text) and the card's Read again; nothing in Settings",
-        "at": "#/library",
-        "find": "[data-testid=\"library-status\"]",
-        "note": "Fix buttons appear only when such images exist"
+        "at": "#/settings/library",
+        "find": "[data-testid=\"repair-comfy-start\"]",
+        "note": "Settings > Library > Repair prompts and text: recover missing text (repair-recover-start) and read every ComfyUI prompt again (repair-comfy-start), each a job with progress and a result line; the rail fixes and the card Read again remain"
       },
       "next": {
-        "at": "#/library",
-        "find": "[data-testid=\"next-footer\"]",
-        "needs": "metadata issues",
-        "note": "footer rows Read again and Recover text; per image: Read again on the card"
+        "at": "#/settings/library",
+        "find": "[data-testid=\"repair-comfy-start\"]",
+        "needs": "",
+        "note": "same Settings > Library section; footer rows Read again and Recover text; per image: Read again on the card"
       }
     },
     {

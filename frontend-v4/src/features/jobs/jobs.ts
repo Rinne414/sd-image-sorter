@@ -19,6 +19,7 @@ import { adoptVideoInstall } from './videoJob' // video
 import { driveMediaCensor, lookAtMediaJob } from './mediaCensorDriver' // mediacensor
 import { trackedMediaJobs } from '../censor/media/mediaTracked' // mediacensor
 import { adoptStyleMap, driveStyleMap } from './styleMapDriver' // stylemap
+import { driveColors } from './colorsDriver' // partialsa
 import { jobHeadline } from './headline'
 
 // Every long job the user started (or that was already running when V4
@@ -78,6 +79,7 @@ type Queue = 'move' | 'trash' | 'remove' | 'tag' | 'install' | 'tags' | 'colors'
   | 'video' // video
   | 'mediacensor' // mediacensor
   | 'stylemap' // stylemap
+  | 'recomfy' // partialsa: every ComfyUI prompt read again
 
 // Censor work over a batch (detecting, SAM3 refining, filters) runs one at a time.
 const queueOf = (kind: JobKind): Queue => (kind === 'copy' ? 'move' : kind === 'refine' || kind === 'adjust' ? 'detect' : kind)
@@ -132,10 +134,7 @@ const DRIVERS: Record<Queue, Driver> = {
     poll: async () => unwrap(await api.GET('/api/models/download-progress')),
     cancel: null,
   },
-  colors: {
-    poll: async () => unwrap(await api.GET('/api/colors/progress')),
-    cancel: async () => unwrap(await api.POST('/api/colors/cancel')),
-  },
+  colors: driveColors, // partialsa: colour analysis (pause, resume, stop)
   reconnect: {
     poll: async () => unwrap(await api.GET('/api/images/reconnect-missing/progress')),
     cancel: async () => unwrap(await api.POST('/api/images/reconnect-missing/cancel')),
@@ -181,6 +180,7 @@ const DRIVERS: Record<Queue, Driver> = {
   dsexport: driveDatasetExport,
   reparse: driveReparse,
   reread: driveReparse, // reparse/reread share the backend's one slot (409 while either runs)
+  recomfy: driveReparse, // partialsa: the same slot
   sortrules: driveSortRules, // sortrules
   sortundo: driveSortRules, // sortundo (the same batch-move slot)
   ollama: driveOllama, // ollama: an Ollama model download (it cannot be stopped)
@@ -366,6 +366,7 @@ export async function adoptRunningJobs(): Promise<void> {
     adopt('artist', adoptArtist), // artist
     adopt('video', adoptVideoInstall), // video
     adopt('stylemap', adoptStyleMap), // stylemap
+    adopt('colors', adoptColors), // partialsa
     adopt('smarttag', adoptSmartTag),
     adopt('install', (raw) => {
       const result = (raw.prepare_result ?? {}) as Record<string, unknown>
@@ -390,6 +391,13 @@ async function adoptMediaCensor(): Promise<void> {
     const progress = readProgress('mediacensor', await lookAtMediaJob(tracked.id), ctx)
     addJob({ kind: 'mediacensor', count: tracked.count, label: tracked.label, destination: tracked.folder, ctx, progress })
   }
+}
+
+/** partialsa: a colour analysis already running when V4 opened (a reload, or the classic page started it). */
+function adoptColors(raw: NonNullable<Raw>): NewJob | null {
+  if (raw.running !== true) return null
+  const progress = readProgress('colors', raw)
+  return { kind: 'colors', progress, count: progress.total }
 }
 
 /** A duplicate scan the backend is still running (it keeps its bulk job id for us). */
@@ -439,6 +447,7 @@ const REFRESH_KEYS: Record<JobKind, string[]> = {
   artist: ['artist-stats', 'artist-images', 'images', 'image-count'], // artist: the style tool's numbers and lists, an artist: search
   mediacensor: [], // mediacensor: the results are new files outside the library
   stylemap: ['artist-stats', 'artist-images', 'images', 'image-count'], // stylemap: the index also stores each picture's artist guess
+  recomfy: ['images', 'image', 'image-count', 'library-health'], // partialsa: re-read prompts change gallery rows
 }
 
 let onUndo: ((job: Job) => Promise<void>) | null = null

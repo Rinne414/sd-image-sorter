@@ -25,7 +25,8 @@ export function LibraryFooter() {
   const name = displayName(current?.name, current?.is_default, t)
 
   const open = (rows ?? []).filter((r) => r.n > 0)
-  const ordered = [...open.filter((r) => !r.quiet), ...open.filter((r) => r.quiet)]
+  // A run going on (its live count) comes first: its Pause is the thing to reach.
+  const ordered = [...open.filter((r) => r.text), ...open.filter((r) => !r.text && !r.quiet), ...open.filter((r) => !r.text && r.quiet)]
   const shown = ordered.slice(0, ROWS_SHOWN)
   const openReport = () => useStatusDialogs.getState().setReport(true)
 
@@ -43,13 +44,18 @@ export function LibraryFooter() {
       <ul className={styles.rows}>
         {rows !== null && shown.length === 0 && <li className={styles.clean}>{t('next.footer.clean')}</li>}
         {shown.map((r) => (
-          <li key={r.key} data-quiet={r.quiet || undefined}>
-            <span>{t(r.key, { n: r.n })}</span>
+          <li key={r.key} data-quiet={r.quiet || undefined} data-testid={r.id ? `status-row-${r.id}` : undefined}>
+            <span>{r.text ?? t(r.key, { n: r.n })}</span>
             {r.action && (
-              <button type="button" className={styles.fix} onClick={r.action.run} disabled={r.action.busy}>
+              <button type="button" className={styles.fix} onClick={r.action.run} disabled={r.action.busy} data-testid={r.action.testId}>
                 {r.action.label}
               </button>
             )}
+            {r.extra?.map((x) => (
+              <button key={x.label} type="button" className={styles.fix} onClick={x.run} title={x.title} data-testid={x.testId}>
+                {x.label}
+              </button>
+            ))}
           </li>
         ))}
         <li>

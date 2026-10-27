@@ -1,23 +1,40 @@
+import { useEffect } from 'react'
 import { useLibraryHealth, useMissingCount } from '../../api/queries'
 import { useT, type MessageKey } from '../../i18n'
 import { useApp } from '../../state/store'
 import { scoreLibrary } from '../info/aesthetic'
-import { useJobs } from '../jobs/jobs'
+import { pauseJob, useJobs } from '../jobs/jobs'
 import { isFinished, type JobKind } from '../jobs/progress'
+import { useToasts } from '../../ui/toasts'
 import { useSelectionDialog } from '../selection/dialogs'
 import { useSimilarStatus } from '../similar/status'
 import { startColorAnalysis, useColorsMissing } from './colorAnalysis'
 import { readErrorsOnly, shouldOfferTextRecovery } from './health'
+import { stillHidden, useRowHides } from './hideRows'
 import { startRepair, useTextRecoveryLeft } from './reparse'
 
 // The rail's library status: only what needs attention, each with its fix.
 
+export interface StatusAction {
+  label: string
+  run: () => void
+  busy?: boolean
+  title?: string
+  testId?: string
+}
+
 export interface StatusRow {
   key: MessageKey
   n: number
+  /** Names the row for tests and for the screen reader (status-row-<id>). */
+  id?: string
   /** Quiet rows are chores, not problems (colour analysis). */
   quiet?: boolean
-  action?: { label: string; run: () => void; busy?: boolean }
+  /** Its own sentence instead of the key's (a run's live count). */
+  text?: string
+  action?: StatusAction
+  /** Smaller ways out beside the action: hide the row. */
+  extra?: StatusAction[]
 }
 
 export function useRunning(kind: JobKind): boolean {
@@ -45,26 +62,69 @@ export function useStatusRows(): StatusRow[] | null {
   const showFor = useSelectionDialog((s) => s.showFor)
   const libraryId = useApp((s) => s.libraryId)
   const left = useTextRecoveryLeft((s) => s.byLibrary[libraryId])
-  const analysing = useRunning('colors')
   const scoring = useRunning('aesthetic')
   const recovering = useRunning('reparse')
   const rereading = useRunning('reread')
   const similar = useSimilarStatus()
   const pendingFix = usePendingFix()
-  if (!health.data) return null
-  const c = health.data.issue_counts
-  const untagged = c.untagged ?? 0
+  const colorsJob = useJobs((s) => s.jobs.find((j) => j.kind === 'colors' && !isFinished(j.progress.status)))
+  const hiddenColorsJob = useRowHides((s) => s.colorsJobId)
+  const hiddenAt = useRowHides((s) => s.unreadableAt)
+  const c = health.data?.issue_counts
   // The missing-files summary groups every unreadable row; its count is the live one.
-  const missingN = missing.data ?? c.unreadable ?? 0
+  const missingN = missing.data ?? c?.unreadable ?? 0
+  // Unreadable rows the summary has not counted yet (it refreshes on its own clock).
+  const uncounted = Math.max(0, (c?.unreadable ?? 0) - missingN)
+  const unreadableTotal = missingN + uncounted
+  // A different number is news: the hidden line comes back.
+  useEffect(() => {
+    if (health.data && hiddenAt !== null && !stillHidden(hiddenAt, unreadableTotal)) useRowHides.getState().showUnreadable()
+  }, [health.data, hiddenAt, unreadableTotal])
+  if (!health.data || !c) return null
+  const untagged = c.untagged ?? 0
+  const unreadableHidden = stillHidden(hiddenAt, unreadableTotal)
+  const hideUnreadable: StatusAction = {
+    label: t('partialsa.unreadable.hide'),
+    title: t('partialsa.unreadable.hideTitle'),
+    run: () => {
+      useRowHides.getState().hideUnreadable(unreadableTotal)
+      useToasts.getState().push(t('partialsa.unreadable.hidden'), 'info')
+    },
+    testId: 'status-hide-unreadable',
+  }
   const handleMissing = { label: t('status.handleMissing'), run: () => showFor('missing', null, missingN) }
   const readErrors = readErrorsOnly(health.data)
   const missingText = c.missing_text ?? 0
+  // Colour analysis: the chore to start; while it runs, its live count with Pause or Resume and Hide.
+  const colorsRow = (): StatusRow => {
+    const missingColors = colors.data?.missing ?? 0
+    if (!colorsJob) {
+      return { key: 'status.colorsMissing', id: 'colors', n: missingColors, quiet: true, action: { label: t('status.analyse'), run: () => void startColorAnalysis(), testId: 'colors-analyse' } }
+    }
+    const p = colorsJob.progress
+    const paused = p.paused === true
+    const done = p.current.toLocaleString()
+    const total = (p.total || colorsJob.count).toLocaleString()
+    return {
+      key: 'status.colorsMissing',
+      id: 'colors',
+      n: hiddenColorsJob === colorsJob.id ? 0 : Math.max(missingColors, 1),
+      quiet: true,
+      text: t(paused ? 'partialsa.colors.paused' : 'partialsa.colors.running', { done, total }),
+      action: {
+        label: t(paused ? 'partialsa.colors.resume' : 'partialsa.colors.pause'),
+        run: () => void pauseJob(colorsJob, !paused),
+        busy: p.status !== 'running',
+        testId: 'colors-pause',
+      },
+      extra: [{ label: t('partialsa.colors.hide'), title: t('partialsa.colors.hideTitle'), run: () => useRowHides.getState().hideColors(colorsJob.id), testId: 'colors-hide' }],
+    }
+  }
   return [
     { key: 'status.pending', n: c.metadata_pending ?? 0, quiet: true, action: pendingFix },
     { key: 'rail.untagged', n: untagged, action: { label: t('sel.tag'), run: () => showFor('tag', null, untagged) } },
-    { key: 'rail.missing', n: missingN, action: handleMissing },
-    // Unreadable rows the summary has not counted yet (it refreshes on its own clock).
-    { key: 'rail.unreadable', n: Math.max(0, (c.unreadable ?? 0) - missingN), action: handleMissing },
+    { key: 'rail.missing', id: 'missing', n: unreadableHidden ? 0 : missingN, action: handleMissing, extra: [hideUnreadable] },
+    { key: 'rail.unreadable', id: 'unreadable', n: unreadableHidden ? 0 : uncounted, action: handleMissing, extra: [hideUnreadable] },
     {
       key: 'rail.metaError',
       n: readErrors,
@@ -76,12 +136,7 @@ export function useStatusRows(): StatusRow[] | null {
       quiet: true,
       action: { label: t(recovering ? 'status.fix.recovering' : 'status.fix.recover'), run: () => void startRepair('reparse', missingText), busy: recovering },
     },
-    {
-      key: 'status.colorsMissing',
-      n: colors.data?.missing ?? 0,
-      quiet: true,
-      action: { label: analysing ? t('status.analysing') : t('status.analyse'), run: () => void startColorAnalysis(), busy: analysing },
-    },
+    colorsRow(),
     {
       key: 'info.aes.missing',
       n: c.missing_aesthetic ?? 0,

@@ -591,6 +591,11 @@
   min-width: 0;
 }
 
+.previewSwitch {
+  display: flex;
+  margin: 0 0 10px;
+}
+
 .rulePreview .thumbs img {
   width: 56px;
   height: 56px;

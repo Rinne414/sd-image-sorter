@@ -27,6 +27,7 @@ import { enNavCustom } from './en.navcustom'
 import { enMediaCensor } from './en.mediacensor'
 import { enStyleMap } from './en.stylemap'
 import { enCollections } from './en.collections'
+import { enPartialsA } from './en.partialsa'
 import type { MessageKey } from './zh-CN'
 
 export const en: Record<MessageKey, string> = {
@@ -59,6 +60,7 @@ export const en: Record<MessageKey, string> = {
   ...enMediaCensor,
   ...enStyleMap,
   ...enCollections,
+  ...enPartialsA,
   'app.name': 'SD Image Sorter',
   'nav.home': 'Home',
   'nav.library': 'Library',

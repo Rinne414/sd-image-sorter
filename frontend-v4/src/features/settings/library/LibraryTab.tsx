@@ -10,6 +10,7 @@ import { useLT } from '../libraryText'
 import { useSaved } from '../useSaved'
 import { ClearSection } from './ClearSection'
 import styles from './LibrarySettings.module.css'
+import { RepairSection } from './RepairSection'
 import { SourcesSection } from './SourcesSection'
 import { TagBackupSection } from './TagBackupSection'
 
@@ -25,6 +26,7 @@ export function LibraryTab() {
       <AutoRefreshSection />
       <LibrariesSection />
       <TagBackupSection />
+      <RepairSection />
       <ExtensionSection />
       <ClearSection />
     </div>

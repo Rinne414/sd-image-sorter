@@ -306,13 +306,18 @@ function StatusBody({ shown }: { shown: StatusRow[] }) {
       ) : (
         <ul className={styles.issues}>
           {shown.map((r) => (
-            <li key={r.key} data-quiet={r.quiet || undefined}>
-              <span>{t(r.key, { n: r.n })}</span>
+            <li key={r.key} data-quiet={r.quiet || undefined} data-testid={r.id ? `status-row-${r.id}` : undefined}>
+              <span>{r.text ?? t(r.key, { n: r.n })}</span>
               {r.action && (
-                <button type="button" className={styles.fix} onClick={r.action.run} disabled={r.action.busy}>
+                <button type="button" className={styles.fix} onClick={r.action.run} disabled={r.action.busy} data-testid={r.action.testId}>
                   {r.action.label}
                 </button>
               )}
+              {r.extra?.map((x) => (
+                <button key={x.label} type="button" className={styles.fix} onClick={x.run} title={x.title} data-testid={x.testId}>
+                  {x.label}
+                </button>
+              ))}
             </li>
           ))}
         </ul>

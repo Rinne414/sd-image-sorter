@@ -25,7 +25,7 @@ export function adoptReparse(raw: Raw) {
   const running = raw.job as Raw | null | undefined
   if (raw.active !== true || typeof raw.job_id !== 'string' || !running) return null
   const result = (running.result ?? {}) as Raw
-  const kind: JobKind = result.scope === 'metadata_error' ? 'reread' : 'reparse'
+  const kind: JobKind = raw.scope === 'comfyui' ? 'recomfy' : result.scope === 'metadata_error' ? 'reread' : 'reparse'
   const ctx = { reparseJobId: raw.job_id }
   return { kind, ctx, progress: readProgress(kind, running, ctx) }
 }

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useState } from 'react'
 import type { Batch, BatchItem } from '../../api/types'
 import { useT, type MessageKey } from '../../i18n'
 import { Icon } from '../../ui/Icon'
+import { openLibraryToAdd } from '../batch/addFromLibrary'
 import { stepLabel } from '../batch/labels'
 import { CanvasView, isDrawing } from './CanvasView'
 import { ChangesConfirm } from './ChangesConfirm'
@@ -90,7 +91,18 @@ export default function CensorStep({ batch, next, onNext }: Props) {
     runKey(action, { batchId: batch.id, item, index, go, review })
   })
 
-  if (!item) return <section className={styles.empty}>{t('censor.empty')}</section>
+  if (!item) {
+    return (
+      <section className={styles.empty} data-testid="censor-empty">
+        <div className={styles.emptyBody}>
+          <p>{t('censor.empty')}</p>
+          <button type="button" className="btn btn-primary" onClick={() => openLibraryToAdd(batch.id)} data-testid="censor-empty-open-library">
+            {t('partialsa.censorEmpty.open')}
+          </button>
+        </div>
+      </section>
+    )
+  }
 
   return (
     <section className={styles.editor} aria-label={t('censor.editor')} data-testid="censor-editor">

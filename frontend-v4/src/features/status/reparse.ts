@@ -8,9 +8,13 @@ import { addJob, isQueueBusy, startingProgress, tr } from '../jobs/jobs'
 // the backend): recover missing text from stored raw metadata and the files,
 // and re-read files whose generation details failed to read.
 
-export type RepairKind = 'reparse' | 'reread'
+export type RepairKind = 'reparse' | 'reread' | 'recomfy'
 
-const SCOPE: Record<RepairKind, 'missing_prompt' | 'metadata_error'> = { reparse: 'missing_prompt', reread: 'metadata_error' }
+const SCOPE: Record<RepairKind, 'missing_prompt' | 'metadata_error' | 'comfyui'> = {
+  reparse: 'missing_prompt',
+  reread: 'metadata_error',
+  recomfy: 'comfyui',
+}
 
 // How many images still had no text when a recovery run last ended, per
 // library: another run finds nothing new until that number grows.
@@ -48,7 +52,7 @@ async function noteWhatIsLeft(libraryId: string): Promise<void> {
 }
 
 export async function startRepair(kind: RepairKind, count: number): Promise<boolean> {
-  if (isQueueBusy('reparse') || isQueueBusy('reread')) {
+  if (isQueueBusy('reparse') || isQueueBusy('reread') || isQueueBusy('recomfy')) {
     useToasts.getState().push(tr('status.repair.busy'), 'error')
     return false
   }

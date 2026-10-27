@@ -28,6 +28,7 @@ import { zhCNNavCustom } from './zh-CN.navcustom'
 import { zhCNMediaCensor } from './zh-CN.mediacensor'
 import { zhCNStyleMap } from './zh-CN.stylemap'
 import { zhCNCollections } from './zh-CN.collections'
+import { zhCNPartialsA } from './zh-CN.partialsa'
 
 export const zhCN = {
   ...zhCNPublish,
@@ -59,6 +60,7 @@ export const zhCN = {
   ...zhCNMediaCensor,
   ...zhCNStyleMap,
   ...zhCNCollections,
+  ...zhCNPartialsA,
   'app.name': 'SD Image Sorter',
   'nav.home': '首页',
   'nav.library': '图库',
