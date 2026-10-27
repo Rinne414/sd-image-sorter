@@ -10,6 +10,7 @@ import { readOllama } from './ollamaJob' // ollama: an Ollama model download, re
 import { readArtist } from './artistJob' // artist: style identification, read in artistJob.ts
 import { readVideoInstall } from './videoJob' // video: the ffmpeg download for video support, read in videoJob.ts
 import { readMediaCensor, type MediaContext, type MediaExtras } from './mediaCensorJob' // mediacensor: GIF and video censoring, read in mediaCensorJob.ts
+import { readStyleMap } from './styleMapJob' // stylemap: the Style Map's index job, read in styleMapJob.ts
 import { refusalOfProgress, type TaggerRefusal } from './taggerRefusal'
 // Reads the backend's progress payloads for long jobs into one shape.
 // move/copy: GET /api/move/progress · trash: GET /api/images/delete-selected/progress
@@ -60,6 +61,7 @@ export type JobKind =
   | 'artist' // artist: style identification (GET /api/artists/batch-progress)
   | 'video' // video: the ffmpeg download for video support (GET /api/video-support)
   | 'mediacensor' // mediacensor: censoring GIFs and videos (GET /api/censor/media/jobs/{id})
+  | 'stylemap' // stylemap: the Style Map's style index (GET /api/style-map/vectors/progress)
 export type JobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'error' | 'idle'
 
 export interface JobFailure {
@@ -97,6 +99,8 @@ export interface JobProgress {
   updated: number
   /** scan only: no visible progress for a while; images left to another library. */
   scan?: ScanExtras
+  /** stylemap only: the run is paused (the drawer offers Resume). */
+  paused?: boolean
   /** reconnect only: found files already in the library under another record. */
   alreadyIndexed?: number
   /** mediacensor only: each file's state and where the results go. */
@@ -374,6 +378,8 @@ export function readProgress(kind: JobKind, payload: unknown, ctx: ReadContext =
       return readVideoInstall(base, raw) // video
     case 'mediacensor': // mediacensor
       return readMediaCensor(base, raw, ctx.mediaCensor ?? { jobId: '', folder: '' }, prev) // mediacensor
+    case 'stylemap': // stylemap
+      return readStyleMap(base, raw, prev) // stylemap
   }
 }
 

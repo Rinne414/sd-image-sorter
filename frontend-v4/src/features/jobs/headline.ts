@@ -40,6 +40,7 @@ const RUNNING: Record<JobKind, MessageKey> = {
   artist: 'tools.artist.job.running', // artist
   video: 'video.job.running', // video
   mediacensor: 'mediacensor.job.running', // mediacensor (its headline: mediaCensorHeadline.ts)
+  stylemap: 'stylemap.job.running', // stylemap
 }
 
 const DONE: Record<JobKind, MessageKey> = {
@@ -72,6 +73,7 @@ const DONE: Record<JobKind, MessageKey> = {
   artist: 'tools.artist.job.done', // artist
   video: 'video.job.done', // video
   mediacensor: 'mediacensor.job.doneAll', // mediacensor
+  stylemap: 'stylemap.job.done', // stylemap
 }
 
 /** An install that can only be used after a restart says so, never "is ready". */

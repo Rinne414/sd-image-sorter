@@ -41,6 +41,11 @@ export const SETTING_KEYS: readonly string[] = [
   'sd-image-sorter-artist-defaults-v1',
   'sd-v4-generator-seed-mode',
   'sd-image-sorter-tagger-defaults-v1',
+  // the Style Map: what places the pictures, the dot colour, landmarks and axis labels (shared with the classic page)
+  'sd-stylemap-space',
+  'sd-stylemap-color-by',
+  'sd-stylemap-landmarks',
+  'sd-stylemap-axis-labels',
 ]
 
 /** Censor tool options share a prefix (brush, style, detection). */
