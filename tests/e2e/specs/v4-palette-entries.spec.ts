@@ -84,3 +84,20 @@ test('Hard refresh reloads the interface on a fresh address and keeps the page',
   await runEntry(page, 'hard refresh', 'Hard refresh the interface')
   await expect(page).toHaveURL(/[?&]_t=\d+.*#\/settings\/about/)
 })
+
+test('on the Style Map, Ctrl K offers its drag modes and My axes', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('sd-image-sorter-lang', 'en')
+    localStorage.setItem('sd-v4-update-autocheck', '0')
+  })
+  await page.goto('/vopus/#/tools/stylemap')
+  await expect(page.getByTestId('open-palette')).toBeVisible()
+  await page.getByTestId('open-palette').click()
+  await page.keyboard.type('style map')
+  const options = page.getByTestId('palette').getByRole('option')
+  for (const label of ['left-drag turns the map', 'left-drag draws a box', 'left-drag draws a lasso', 'open My axes']) {
+    await expect(options.filter({ hasText: label }).first()).toBeVisible()
+  }
+  await options.filter({ hasText: 'left-drag draws a box' }).first().click()
+  await expect(page.getByTestId('palette')).toHaveCount(0)
+})

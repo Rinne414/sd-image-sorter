@@ -31,6 +31,11 @@ import { useSimilar } from '../similar/similarStore'
 import { useOtherLibrary } from '../sort/StageParts'
 import { continueSort, sortImages, useSortPending } from '../sort/sortStore'
 import { useStatusDialogs } from '../status/dialogs'
+import { clearPicks, setDragMode, usePicks } from '../stylemap/pickStore'
+import { setAxesTab } from '../stylemap/customStore'
+import { setAxesOpen } from '../stylemap/mapStore'
+import { clearPin, showPinned, usePinned } from '../library/pinnedSet'
+import { sendToTool } from '../tools/handoff'
 import { useRowHides } from '../status/hideRows'
 import { useUpdates } from '../settings/about/updateStore'
 import { unloadMessages } from '../settings/background/background'
@@ -193,6 +198,31 @@ function Palette() {
       list.push(mk('sort-queue', 'palette.group.batch', 'partialsb.palette.sortQueue', () =>
         requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('[data-testid="queue-sort"]')?.click()),
       ))
+    }
+    // The Style Map's own commands, while it is on screen.
+    if (s.page === 'tools' && s.toolId === 'stylemap') {
+      list.push(mk('stylemap-axes-mine', 'palette.group.tools', 'stylemap.palette.myAxes', () => {
+        setAxesTab('custom')
+        setAxesOpen(true)
+      }))
+      list.push(mk('stylemap-drag-rotate', 'palette.group.tools', 'stylemap.palette.dragRotate', () => setDragMode('rotate')))
+      list.push(mk('stylemap-drag-box', 'palette.group.tools', 'stylemap.palette.dragBox', () => setDragMode('box')))
+      list.push(mk('stylemap-drag-lasso', 'palette.group.tools', 'stylemap.palette.dragLasso', () => setDragMode('lasso')))
+      const picked = usePicks.getState()
+      if (picked.picked.size > 0) {
+        list.push(mk('stylemap-clear', 'palette.group.tools', 'stylemap.palette.clear', () => clearPicks()))
+        if (picked.status === 'ready' && picked.ids.length > 0) {
+          const ids = [...picked.ids]
+          list.push(mk('stylemap-library', 'palette.group.tools', 'stylemap.palette.library', () => void showPinned(ids)))
+        }
+      }
+    }
+    if (usePinned.getState().pin) {
+      list.push(mk('library-show-everything', 'palette.group.library', 'stylemap.palette.showEverything', () => clearPin()))
+    }
+    const onMap = s.lightboxId ?? inspectedId
+    if (onMap !== null) {
+      list.push(mk('show-on-map', 'palette.group.image', 'stylemap.palette.showOnMap', () => sendToTool('stylemap', [onMap])))
     }
     for (const kind of BATCH_KINDS) {
       list.push(mk(`new-batch-${kind}`, 'palette.group.batch', `batch.menu.new.${kind}`, () => askNewBatch(kind, [], 'page')))

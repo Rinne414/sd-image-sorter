@@ -302,4 +302,12 @@ export const enStyleMap: Record<keyof typeof zhCNStyleMap, string> = {
   'stylemap.custom.hiddenModel': 'Your own axes are on, so the model\'s axis meanings (they describe the original layout) are hidden. Press "Back to the model layout" in My axes to see them again.',
   'stylemap.custom.layoutChanged': 'The map changed meanwhile; apply again',
   'stylemap.near.customNote': 'Your own axes are on, so the estimated spot of your picture cannot be marked. The closest pictures are listed below.',
+  'stylemap.palette.clear': 'Style Map: clear the picked dots',
+  'stylemap.palette.library': 'Style Map: show the picked pictures in the Library',
+  'stylemap.palette.myAxes': 'Style Map: open My axes',
+  'stylemap.palette.dragRotate': 'Style Map: left-drag turns the map',
+  'stylemap.palette.dragBox': 'Style Map: left-drag draws a box',
+  'stylemap.palette.dragLasso': 'Style Map: left-drag draws a lasso',
+  'stylemap.palette.showEverything': 'Library: show everything (leave the Style Map pictures)',
+  'stylemap.palette.showOnMap': 'Show this picture on the Style Map',
 }

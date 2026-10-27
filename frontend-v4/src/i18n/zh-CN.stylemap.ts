@@ -317,4 +317,12 @@ export const zhCNStyleMap = {
   'stylemap.custom.hiddenModel': '“我的轴”已应用，所以模型算出的轴的含义（描述的是原本的排法）已隐藏。在“我的轴”里点“恢复模型的排法”即可再看到。',
   'stylemap.custom.layoutChanged': '地图在这期间变了，请再应用一次',
   'stylemap.near.customNote': '“我的轴”已应用，无法标出你的图的估计位置；下面是最像的图。',
+  'stylemap.palette.clear': '画风地图：清除选中的点',
+  'stylemap.palette.library': '画风地图：在图库中显示选中的图片',
+  'stylemap.palette.myAxes': '画风地图：打开我的轴',
+  'stylemap.palette.dragRotate': '画风地图：左键拖动为旋转',
+  'stylemap.palette.dragBox': '画风地图：左键拖动为框选',
+  'stylemap.palette.dragLasso': '画风地图：左键拖动为套索',
+  'stylemap.palette.showEverything': '图库：显示全部（离开来自画风地图的图片）',
+  'stylemap.palette.showOnMap': '在画风地图上显示这张图',
 }
