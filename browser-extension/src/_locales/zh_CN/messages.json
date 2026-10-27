@@ -206,6 +206,18 @@
   "apiError_collect_download_failed": {
     "message": "图片没能下载：$1"
   },
+  "apiError_collect_download_timeout": {
+    "message": "网站发送图片太慢，超时了。请稍后再试。"
+  },
+  "apiError_collect_site_unreachable": {
+    "message": "连不上这个网站。请检查地址、网络和程序的代理设置。"
+  },
+  "apiError_collect_too_many_redirects": {
+    "message": "这个地址一直跳转，始终没到图片。"
+  },
+  "apiError_collect_connection_broken": {
+    "message": "图片还没传完，连接就断了。请再试一次。"
+  },
   "apiError_collect_not_picture": {
     "message": "这不是程序能读的图片。"
   },

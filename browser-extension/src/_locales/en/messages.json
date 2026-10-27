@@ -206,6 +206,18 @@
   "apiError_collect_download_failed": {
     "message": "The picture could not be downloaded: $1"
   },
+  "apiError_collect_download_timeout": {
+    "message": "The site took too long to send the picture. Try again later."
+  },
+  "apiError_collect_site_unreachable": {
+    "message": "The site could not be reached. Check the address, the network and the program's proxy setting."
+  },
+  "apiError_collect_too_many_redirects": {
+    "message": "The address kept redirecting and never reached a picture."
+  },
+  "apiError_collect_connection_broken": {
+    "message": "The connection broke off before the whole picture arrived. Try again."
+  },
   "apiError_collect_not_picture": {
     "message": "This is not a picture the program can read."
   },
