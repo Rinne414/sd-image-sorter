@@ -11,7 +11,6 @@ from pathlib import Path
 
 import pytest
 
-from routers import censor_media
 from services import media_censor_service as media
 from services import video_censor, video_tools
 from services.media_censor_service import FrameSettings, MediaCensorJobs
