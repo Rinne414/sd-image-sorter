@@ -57,6 +57,24 @@
         }
     }
 
+    // A request the browser cuts off because the page is being left (a reload,
+    // another address) is no failure worth a warning: it goes to the debug
+    // tier. A leave the user cancels (a "discard changes?" prompt) stops
+    // counting after LEAVING_GRACE_MS.
+    const LEAVING_GRACE_MS = 3000;
+    let leavingSince = 0;
+    window.addEventListener('beforeunload', () => { leavingSince = Date.now(); });
+    window.addEventListener('pagehide', () => { leavingSince = Date.now(); });
+    window.addEventListener('pageshow', () => { leavingSince = 0; });
+
+    function isCutOffByLeaving(args) {
+        if (!leavingSince || Date.now() - leavingSince > LEAVING_GRACE_MS) return false;
+        return args.some((arg) => arg && (
+            arg.name === 'AbortError'
+            || (arg instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(arg.message || ''))
+        ));
+    }
+
     const Logger = {
         /**
          * Debug messages - only shown when DEBUG is true
@@ -85,6 +103,7 @@
          * Use for recoverable errors or deprecated usage
          */
         warn: function(...args) {
+            if (isCutOffByLeaving(args)) return Logger.debug(...args);
             addToHistory('warn', args);
             console.warn('[WARN]', ...args);
         },
@@ -94,6 +113,7 @@
          * Use for caught exceptions and operational failures
          */
         error: function(...args) {
+            if (isCutOffByLeaving(args)) return Logger.debug(...args);
             addToHistory('error', args);
             console.error('[ERROR]', ...args);
         },
