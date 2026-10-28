@@ -128,6 +128,8 @@ window.I18nLang_en = {
     'nav.tools': 'Tools',
     'rail.backToEntry': 'Back to the mission entry page',
     'gallerySearch.placeholder': 'tag:silver_hair score>=7 -tag:blurry free text…',
+    'gallerySearch.placeholderMedium': 'tag:silver_hair score>=7 free text…',
+    'gallerySearch.placeholderShort': 'Search…',
     'gallerySearch.aria': 'Search gallery (supports key:value)',
     'gallerySearch.quickFilters': 'Quick filters',
     'gallerySearch.chipHasParams': 'Has params',

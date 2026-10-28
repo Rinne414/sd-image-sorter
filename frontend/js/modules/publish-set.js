@@ -310,7 +310,7 @@
             if (!response.ok) return;
             const data = await response.json();
             if (data && data.folders && data.folders.publish) {
-                $('pub-folder').placeholder = t('pub.folderDefault', 'Empty = {path}', { path: data.folders.publish });
+                window.fitPathPlaceholder($('pub-folder'), (path) => t('pub.folderDefault', 'Empty = {path}', { path }), data.folders.publish);
             }
         } catch (err) { /* the placeholder is only a hint */ }
     }

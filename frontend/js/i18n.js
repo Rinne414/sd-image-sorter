@@ -263,6 +263,13 @@
                 var key = el.getAttribute('data-i18n-placeholder');
                 if (key) {
                     el.placeholder = this.t(key);
+                    // shorter hints for a narrow field: the first that fits is shown (modules/core/path-input.js)
+                    var shortKeys = (el.getAttribute('data-i18n-placeholder-short') || '').split(/\s+/).filter(Boolean);
+                    if (shortKeys.length && typeof window.fitPlaceholder === 'function') {
+                        var texts = [this.t(key)];
+                        for (var s = 0; s < shortKeys.length; s++) texts.push(this.t(shortKeys[s]));
+                        window.fitPlaceholder(el, texts);
+                    }
                 }
             }
 

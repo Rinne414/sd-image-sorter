@@ -130,6 +130,8 @@ window.I18nLang_zhCN = {
     'nav.tools': '工具',
     'rail.backToEntry': '回到任务入口页',
     'gallerySearch.placeholder': 'tag:silver_hair score>=7 -tag:blurry 自由文本…',
+    'gallerySearch.placeholderMedium': 'tag:silver_hair score>=7 自由文本…',
+    'gallerySearch.placeholderShort': '搜索…',
     'gallerySearch.aria': '搜索图库（支持 key:value）',
     'gallerySearch.clear': '清空搜索',
     'gallerySearch.quickFilters': '快捷筛选',

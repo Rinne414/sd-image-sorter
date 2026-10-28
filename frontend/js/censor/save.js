@@ -70,7 +70,7 @@ async function refreshCensorDefaultOutputFolder() {
         const response = await window.App.API.get('/api/output-folders');
         const folder = response?.folders?.censor;
         if (folder) {
-            input.placeholder = censorT('save.outputFolderDefault', { path: folder }, 'Empty = {path}');
+            window.fitPathPlaceholder(input, (path) => censorT('save.outputFolderDefault', { path }, 'Empty = {path}'), folder);
         }
     } catch (error) {
         Logger.warn('Could not read the default output folder', error);

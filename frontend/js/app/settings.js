@@ -290,7 +290,7 @@ async function syncSettingsOutputRoot() {
     try {
         const data = await API.get('/api/output-folders');
         if (document.activeElement !== input) input.value = data.custom_root || '';
-        input.placeholder = appT('settings.outputRootPlaceholder', 'Empty = {path}', { path: data.builtin_root });
+        window.fitPathPlaceholder(input, (path) => appT('settings.outputRootPlaceholder', 'Empty = {path}', { path }), data.builtin_root);
         current.textContent = appT('settings.outputRootCurrent', 'Saves with an empty folder field go to {path}', { path: data.root });
     } catch (error) {
         current.textContent = appT('settings.outputRootLoadFailed', 'Could not read the save folder.');

@@ -344,7 +344,10 @@ test('workbench renders pairs, drag reorders, and exports through the UI', async
   await page.locator('#pub-folder').fill('')
   const placeholder = await page.locator('#pub-folder').getAttribute('placeholder')
   expect(placeholder).toMatch(/^Empty = .*output.publish$/)
-  const builtinPublish = String(placeholder).replace(/^Empty = /, '')
+  // the hint drops leading folders when the path does not fit; the tooltip keeps all of it
+  const hint = await page.locator('#pub-folder').getAttribute('title')
+  expect(hint).toMatch(/^Empty = .*output.publish$/)
+  const builtinPublish = String(hint).replace(/^Empty = /, '')
   await page.locator('#pub-prefix').fill('blank_')
   await page.locator('#btn-pub-export').click()
   await page.locator('#btn-pub-uncensored-include').click()
