@@ -32,7 +32,8 @@ V Opus and the new interface have every classic feature: Style Map, video, colle
 
 ## Validation / 验证
 
-VALIDATION_PENDING
+GitHub CI run 40653033109 (Linux full suite with browser tests and click coverage, macOS, Windows, Linux portable x86_64 and aarch64): 5 of 5 green; backend 9,235 passed; browser tests 2,174 passed, 0 failed, 0 flaky; V Opus unit tests 1,474 passed. The top bar, Privacy, search line and model page checks also passed under the wider Linux fonts in WSL. On a fresh 3.10.0 Windows package with 40 pictures, a GIF and a video scanned in: the Videos filter, the Style Map with its build offer, Censor GIFs and videos from Ctrl K (found 1 GIF and 1 video), Send to generator (WebUI, NovelAI and ComfyUI recipes), Customize top bar (no More until a page is hidden), the Desktop settings tab, the chat disguise and the new interface's seven places all opened with no console errors at 1366x768 and 2560x1440. With no ffmpeg on the PATH, Install video support downloaded the real 78 MB build from GitHub, checked it and installed it in about 5 seconds, and the video then played. The desktop program started its backend, showed 3.10.0 and stopped the backend on Quit.
+  - GitHub CI（40653033109：Linux 完整测试含浏览器测试和点击覆盖、macOS、Windows、Linux 便携版 x86_64 与 aarch64）5 项全部通过；后端 9,235 通过；浏览器测试 2,174 通过、0 失败、0 个偶发；V Opus 单元测试 1,474 通过。顶栏、隐私工具、搜索栏和模型页的检查在 WSL 里用更宽的 Linux 字体也通过。在全新的 3.10.0 Windows 包里扫描 40 张图、1 个 GIF 和 1 段视频后：视频筛选、画风地图及其建立索引的提示、用 Ctrl K 打开 GIF/视频打码（找到 1 个 GIF 和 1 段视频）、发送到生成器（WebUI、NovelAI、ComfyUI 三种参数）、自定义顶栏（收起页面前不出现“更多”）、“桌面”设置页、聊天伪装，以及新界面的七个页面，在 1366x768 和 2560x1440 下都能打开，没有控制台错误。在 PATH 里没有 ffmpeg 时，“安装视频支持”从 GitHub 下载了真实的 78 MB 版本，校验并安装用时约 5 秒，之后视频可以播放。桌面程序能启动后台、显示 3.10.0，退出时会停止后台。
 
 ---
 
