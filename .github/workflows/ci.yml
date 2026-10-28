@@ -56,6 +56,20 @@ jobs:
           name: backend-coverage-xml
           path: backend/coverage.xml
 
+      # A browser test that fails only here can be seen: its screenshot,
+      # page snapshot and trace (videos are left out to keep it small).
+      - name: Upload failed browser test evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failures
+          path: |
+            artifacts/playwright-runs/*/test-results/**/*.png
+            artifacts/playwright-runs/*/test-results/**/*.md
+            artifacts/playwright-runs/*/test-results/**/*.zip
+          if-no-files-found: ignore
+          retention-days: 14
+
   windows-risk-areas:
     runs-on: windows-latest
     steps:
