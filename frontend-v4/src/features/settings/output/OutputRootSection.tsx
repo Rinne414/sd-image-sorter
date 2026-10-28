@@ -60,7 +60,7 @@ export function OutputRootSection() {
         <input
           className={`${styles.input} mono`}
           value={typed ?? out.custom_root}
-          placeholder={t('desktop.out.placeholder', { path: out.builtin_root })}
+          placeholder={t('desktop.out.placeholder')}
           spellCheck={false}
           autoComplete="off"
           aria-label={t('desktop.out.label')}

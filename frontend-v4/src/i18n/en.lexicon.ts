@@ -8,7 +8,7 @@ export const enLexicon: Record<keyof typeof zhCNLexicon, string> = {
   'lex.tab.loras': 'LoRAs',
   'lex.tab.checkpoints': 'Models',
   'lex.find': 'Find',
-  'lex.find.placeholder': 'Part of a name (underscores and spaces match)',
+  'lex.find.placeholder': 'Part of a name (_ = space)',
   'lex.sort': 'Sort',
   'lex.sort.count': 'By images',
   'lex.sort.name': 'By name A–Z',

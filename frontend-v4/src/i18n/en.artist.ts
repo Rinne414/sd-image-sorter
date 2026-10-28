@@ -5,6 +5,7 @@ export const enArtist: Record<keyof typeof zhCNArtist, string> = {
 
   'artist.vocab.title': 'Is my artist in the vocabulary?',
   'artist.vocab.placeholder': 'Artist names, separated by commas',
+  'artist.vocab.placeholderShort': 'Artist names',
   'artist.vocab.check': 'Check',
   'artist.vocab.size': 'This model knows {n} artists.',
   'artist.vocab.notLoaded': 'The style model is not loaded yet, so its vocabulary cannot be read. Identify once, then check again.',

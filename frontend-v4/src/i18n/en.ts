@@ -138,6 +138,8 @@ export const en: Record<MessageKey, string> = {
   'gen.others': 'Other',
 
   'query.placeholder': 'Search prompts or filenames, or use tag:silver_hair  gen:nai  ★4',
+  'query.placeholder.medium': 'Search prompts or filenames',
+  'query.placeholder.short': 'Search',
   'query.help': 'Search syntax',
   'query.clear': 'Clear',
   'query.warning': "Didn't understand: {token}",

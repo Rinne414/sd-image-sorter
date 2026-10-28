@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLibrarySuggest } from '../../api/queries'
 import { useT, type MessageKey } from '../../i18n'
+import { useFittingPlaceholder } from '../../lib/fittingPlaceholder'
 import { generatorName } from '../../lib/format'
 import { SYNTAX_ROWS, parseSearch, suggestionContext, withoutToken, type Part } from '../../lib/searchQuery'
 import { SORTS, canReverse } from '../../lib/sort'
@@ -56,6 +57,8 @@ export function QueryBar({ total, about = false, inputRef, railToggle = true }: 
   const railOpen = useApp((s) => s.railOpen)
   const toggleRail = useApp((s) => s.toggleRail)
   const semantic = useSimilar((s) => s.semantic)
+  // the full hint with its examples when the box is wide enough, shorter ones on a narrow bar
+  const placeholder = useFittingPlaceholder(inputRef, [t('query.placeholder'), t('query.placeholder.medium'), t('query.placeholder.short')], semantic)
   const drop = useImageDrop()
   const [draft, setDraft] = useState(queryText)
   const [caret, setCaret] = useState(0)
@@ -158,7 +161,7 @@ export function QueryBar({ total, about = false, inputRef, railToggle = true }: 
             ref={inputRef}
             className={styles.input}
             value={draft}
-            placeholder={t('query.placeholder')}
+            placeholder={placeholder}
             spellCheck={false}
             autoComplete="off"
             role="combobox"

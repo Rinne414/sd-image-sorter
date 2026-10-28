@@ -138,6 +138,8 @@ export const zhCN = {
   'gen.others': '其他',
 
   'query.placeholder': '搜提示词或文件名，也可以用 tag:silver_hair  gen:nai  ★4',
+  'query.placeholder.medium': '搜提示词或文件名',
+  'query.placeholder.short': '搜索',
   'query.help': '搜索写法',
   'query.clear': '清空',
   'query.warning': '看不懂：{token}',

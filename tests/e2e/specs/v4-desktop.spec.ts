@@ -375,7 +375,7 @@ test('Disk: the output root is typed, chosen with the folder chooser, refused wi
   // back to the program folder
   await page.getByTestId('output-root-reset').click()
   await expect(input).toHaveValue('')
-  await expect(input).toHaveAttribute('placeholder', /^Empty = /)
+  await expect(input).toHaveAttribute('placeholder', 'Empty: the program folder')
   expect(errors.filter((e) => !e.includes('400'))).toEqual([])
 })
 

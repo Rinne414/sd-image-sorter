@@ -67,7 +67,7 @@ export const enDesktop: Record<keyof typeof zhCNDesktop, string> = {
   'desktop.out.title': 'Where saves go',
   'desktop.out.current': 'Exports and saves with no folder picked go to a folder per feature under {path}; a name already taken gets _2 added.',
   'desktop.out.label': 'Folder for saves',
-  'desktop.out.placeholder': 'Empty = {path}',
+  'desktop.out.placeholder': 'Empty: the program folder',
   'desktop.out.browse': 'Choose folder...',
   'desktop.out.reset': 'Use the program folder',
   'desktop.out.saved': 'Save folder updated',

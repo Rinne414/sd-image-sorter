@@ -6,6 +6,7 @@ export const zhCNArtist = {
   // is my artist in the vocabulary?
   'artist.vocab.title': '我的画师在词表里吗？',
   'artist.vocab.placeholder': '画师名，多个用逗号分开',
+  'artist.vocab.placeholderShort': '画师名',
   'artist.vocab.check': '查询',
   'artist.vocab.size': '这个模型认识 {n} 位画师。',
   'artist.vocab.notLoaded': '画风模型还没载入，读不到词表。先识别一次，再来查。',

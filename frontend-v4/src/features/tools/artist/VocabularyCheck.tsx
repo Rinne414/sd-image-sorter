@@ -1,4 +1,5 @@
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
+import { useFittingPlaceholder } from '../../../lib/fittingPlaceholder'
 import { checkVocabulary } from './artistApi'
 import { parseNames } from './artistModel'
 import styles from './Artist.module.css'
@@ -39,6 +40,8 @@ export function VocabularyCheck() {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [answer, setAnswer] = useState<Answer | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const placeholder = useFittingPlaceholder(inputRef, [t('artist.vocab.placeholder'), t('artist.vocab.placeholderShort')])
 
   const check = async () => {
     const names = parseNames(text)
@@ -60,10 +63,11 @@ export function VocabularyCheck() {
       </label>
       <div className={styles.inline}>
         <input
+          ref={inputRef}
           id={inputId}
           className={styles.input}
           value={text}
-          placeholder={t('artist.vocab.placeholder')}
+          placeholder={placeholder}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && void check()}
           data-testid="artist-vocab-input"

@@ -67,7 +67,7 @@ export const zhCNDesktop = {
   'desktop.out.title': '保存位置',
   'desktop.out.current': '导出和保存时没有另选文件夹，就存到 {path} 下各功能自己的文件夹里；重名时在文件名后加 _2。',
   'desktop.out.label': '保存位置的文件夹',
-  'desktop.out.placeholder': '留空 = {path}',
+  'desktop.out.placeholder': '留空：程序文件夹',
   'desktop.out.browse': '选择文件夹…',
   'desktop.out.reset': '用程序自带文件夹',
   'desktop.out.saved': '保存位置已更新',
