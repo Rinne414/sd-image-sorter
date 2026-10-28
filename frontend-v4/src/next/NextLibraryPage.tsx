@@ -22,6 +22,7 @@ import { LibraryFooter } from './LibraryFooter'
 import styles from './NextLibraryPage.module.css'
 import { withPromptWord } from './promptWord'
 import { ScopeLine } from './ScopeLine'
+import { useDeferredOpen } from './useDeferredOpen'
 import { VideoBanner } from '../features/video/VideoBanner'
 
 /** Grid cells are portrait: most generated images are 2:3, so a square cell cuts heads and feet. */
@@ -85,8 +86,9 @@ export function NextLibraryPage() {
     s.setQueryText(withPromptWord(s.queryText, word))
   }, [])
 
-  // The recipe column only while an image is inspected: never an empty column.
-  const showCard = cardOpen && inspectedId !== null
+  // The recipe column only while an image is inspected: never an empty column. It
+  // opens a moment after the click, so a double-click opens the picture it began on.
+  const showCard = useDeferredOpen(cardOpen && inspectedId !== null)
 
   return (
     <div className={styles.page} data-card={showCard || undefined}>

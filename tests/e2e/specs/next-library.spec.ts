@@ -66,6 +66,30 @@ for (const viewport of VIEWPORTS) {
   })
 }
 
+test('a double-click opens the picture it began on: the first click does not move the grid', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openNext(page)
+  // not the first tile: the column narrowing the grid moved every later tile
+  const tile = page.getByTestId('tile').nth(5)
+  const name = await tile.getAttribute('title')
+  const before = (await tile.boundingBox())!
+  await tile.click()
+  // where the second click of a double-click lands, the same tile is still there
+  const atPointer = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('[data-testid="tile"]')?.getAttribute('title') ?? null, {
+    x: before.x + before.width / 2,
+    y: before.y + before.height / 2,
+  })
+  expect(atPointer).toBe(name)
+  // the recipe column follows a moment later
+  await expect(page.getByTestId('generation-card')).toContainText(PREFIX)
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('generation-card')).toHaveCount(0)
+  // a real double-click opens that picture big
+  await page.getByTestId('tile').nth(5).dblclick()
+  await expect(page.getByTestId('lightbox')).toBeVisible()
+  await page.keyboard.press('Escape')
+})
+
 test('picks get numbered badges and the action bar', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await openNext(page)
