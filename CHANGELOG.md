@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **The guide names places as the program shows them / 引导里的名字和程序里一致**: The first-run guide sent users to a "Settings & Models" gear that is called Settings, with models in Model Center, and listed tabs (Picture library, Sort pictures, Censor edit) the top bar does not show. The gear, its dialog and the guide now use the top bar's and Settings' own names, and a check fails when a label changes without the guide.
+  - 新手引导让用户去点「设置与模型」齿轮，但它其实叫「设置」，模型在「模型中心」；列出的页面（图片库、整理图片、打码编辑）顶栏上也没有。现在齿轮、它的窗口和引导都用顶栏和设置里的真实名字；以后改了名字却没改引导，检查会失败。
 - **New library and Rename library work in the desktop program / 桌面程序里能新建和重命名图库**: Both asked for the name with the browser's prompt box, which the desktop program does not have (it throws "prompt() is not supported"), so the buttons did nothing there. They, and naming a collection or a sorting section, now ask in the program's own dialog. A check fails if a page uses the browser prompt box again.
   - 这两个按钮用浏览器自带的输入框询问名称，而桌面程序没有这种输入框（会报错 "prompt() is not supported"），所以在桌面程序里按了没反应。现在它们，以及给合集或整理分组命名，都改用程序自己的对话框。如果再有页面使用浏览器输入框，检查会失败。
 - **A picture picked with Win+V opens with one click / 用 Win+V 选的图点一下就能读**: Windows' clipboard history (Win+V) pastes into the window it thinks was last used, so a picture picked there often never reached the Reader. The classic Reader's "Paste from Clipboard" button now reads the clipboard at once (the picked picture is on it), instead of waiting for Ctrl+V; where the browser does not allow reading the clipboard it still waits for Ctrl+V. V Opus's Paste button already read the clipboard.
