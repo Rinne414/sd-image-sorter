@@ -24,7 +24,8 @@ Reader takes pictures from QQ. Imports no longer write _real.png unasked.
 
 ## Validation / 验证
 
-To be filled in from the GitHub CI run on the release commit.
+Released before the full GitHub CI run finished, at the owner's request. GitHub CI on the code before the last small fix (6b03f21d): Windows, macOS and both Linux portable checks green; the Linux full suite was still running at release time. Local checks on the release code: backend tests for every changed area 235 passed (1 skipped, POSIX only); the Reader's browser tests 45 passed; V Opus unit tests 219 passed. On a fresh 3.10.1 Windows package: in the desktop program, a real Ctrl+V of a picture copied in QQ read the 1024x1536 original with its full ComfyUI prompt; a paste carrying only QQ's <img src="file://..."> opened the picture with its prompt in the classic and V Opus Reader, and a real file drag and a real Ctrl+V still worked; an import wrote no _real.png, and with the new option ticked it wrote one only for the real disguise, not for the one whose hidden picture equals its cover; classic in English and Chinese and V Opus showed no console errors; the desktop program started its backend, showed 3.10.1 and stopped the backend on Quit.
+  - 应作者要求，在 GitHub CI 完整测试跑完之前发布。最后一个小修正之前的代码（6b03f21d）在 GitHub CI 上：Windows、macOS 和两个 Linux 便携版检查通过；发布时 Linux 完整测试仍在运行。本地检查：所有改动范围的后端测试 235 通过（1 个仅限 POSIX 的跳过）；读图的浏览器测试 45 通过；V Opus 单元测试 219 通过。在全新的 3.10.1 Windows 包里：在桌面程序中，从 QQ 复制的图片按真实 Ctrl+V，读出了 1024x1536 的原图和完整的 ComfyUI 提示词；只带 QQ 那种 <img src="file://..."> 的粘贴，在经典界面和 V Opus 的读图里都打开了图片和提示词，真实拖入文件和真实 Ctrl+V 也照常可用；导入没有生成任何 _real.png，勾选新选项后只为真正的伪装图生成了一份，藏着的图与显示的图相同的那张没有生成；经典界面中英文和 V Opus 都没有控制台错误；桌面程序能启动后台、显示 3.10.1，退出时会停止后台。
 
 ---
 
