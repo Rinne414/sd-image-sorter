@@ -4129,7 +4129,6 @@ window.I18nLang_zhCN = {
     'apiError.local_picture_missing': '在给出的位置找不到 {name}。如果是 QQ 里的图，先在 QQ 里点开看一次大图（让原图下载好），再复制或拖进来。',
     'apiError.local_picture_unreadable': '{name} 打不开，不是完整的图片：{reason}',
     'reader.pasteLimitation': '从剪贴板贴进来的图，经常没有完整提示词。想读完整信息，请直接拖原图 PNG。',
-    'reader.clipboardWarning': '这张图是从剪贴板贴进来的，提示词或模型信息可能不完整。想读全信息，请直接打开原图。',
     'reader.clipboardWarningMissingMeta': '这张剪贴板图片没有带上原始图片信息。想看提示词、模型和参数，请直接拖放或选择原始 PNG。',
     'reader.clipboardWarningPromptFallback': '这张剪贴板图片没有完整提示词。想读取原始提示词，请打开原图 PNG。',
     'reader.clipboardWarningParamsFallback': '这张剪贴板图片没有完整出图参数。想查看原始参数，请打开原图 PNG。',

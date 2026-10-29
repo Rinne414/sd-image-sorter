@@ -130,12 +130,8 @@ test.describe('Image Reader live parse', () => {
     await expect(page.locator('#reader-generator')).toHaveText('ComfyUI', { timeout: 10000 })
     await expect(page.locator('#reader-prompt-text')).toContainText('stelle', { timeout: 10000 })
     await expect(page.locator('#reader-checkpoint')).toContainText('z_image_turbo_bf16', { timeout: 10000 })
-    await expect(page.locator('#reader-status')).toContainText(
-      /prompt or model details may be incomplete|提示词或模型信息可能不完整/,
-      {
-        timeout: 10000,
-      },
-    )
+    // Its info came with the file: no "may be incomplete" warning.
+    await expect(page.locator('#reader-status')).toBeHidden()
   })
 
   test('drag-drop parses the same real ComfyUI metadata path as file upload', async ({ page }) => {

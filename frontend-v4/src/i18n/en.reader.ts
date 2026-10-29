@@ -26,7 +26,6 @@ export const enReader: Record<keyof typeof zhCNReader, string> = {
   'reader.clear': 'Clear',
   'reader.reading': 'Reading the generation details…',
   'reader.readFailed': 'Could not read this image’s generation details: {reason}',
-  'reader.pastedMayMiss': 'This image was pasted from the clipboard: browsers and chat apps often drop part of the generation details when an image is copied. For the full record, drop the original file or click "Choose image…".',
   'reader.pastedNoParams': 'This image carries no generation details. A pasted image has usually lost them when it was copied: drop the original file, or click "Choose image…".',
   'reader.openInReader': 'Open in Reader',
   'reader.openInReaderHint': 'See all of this image’s generation details in the Reader, where they can also be edited and saved as a new image',

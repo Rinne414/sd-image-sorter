@@ -3955,7 +3955,6 @@ window.I18nLang_en = {
     'apiError.local_picture_missing': '{name} is not at the location that came with it. For a QQ picture, open it in QQ once so the original is downloaded, then copy or drag it again.',
     'apiError.local_picture_unreadable': '{name} could not be opened as a picture: {reason}',
     'reader.pasteLimitation': 'Clipboard images often lose prompt details. Drag the original PNG if you want the full image info.',
-    'reader.clipboardWarning': 'This image came from the clipboard, so prompt or model details may be incomplete. Open the original file for the full info.',
     'reader.clipboardWarningMissingMeta': 'This clipboard image did not include the original image info. Open the original PNG to read prompt, model, and parameters.',
     'reader.clipboardWarningPromptFallback': 'This clipboard image does not contain the full prompt. Open the original PNG to read it.',
     'reader.clipboardWarningParamsFallback': 'This clipboard image does not contain the full generation parameters. Open the original PNG to inspect them.',

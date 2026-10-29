@@ -70,10 +70,10 @@ Object.assign(window.ImageReader, {
                 );
             }
 
-            return this._t(
-                'reader.clipboardWarning',
-                'Clipboard paste often loses the original image info. If something looks incomplete, open the original file instead.',
-            );
+            // A clipboard bitmap never carries generation info, so info that was
+            // found came with the file itself (QQ and Explorer copy the file):
+            // it is complete, and a "may be incomplete" warning would be false.
+            return '';
         },
 
         _clipboardMetadataMissing(result, sourceKind) {

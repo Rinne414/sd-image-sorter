@@ -86,11 +86,6 @@ export function Stage({ source, data, onFile, onClear }: { source: ImageSource; 
         </div>
         <EdgeCodes gen={view?.gen ?? null} generator={view?.generator ?? null} part="bottom" />
       </figure>
-      {source.kind === 'upload' && source.origin === 'paste' && view?.prompt && (
-        <p className={styles.note} data-testid="reader-paste-note">
-          {r('reader.pastedMayMiss')}
-        </p>
-      )}
       <div className={styles.stageActions}>
         <IntakeButtons onFile={onFile} />
         <button type="button" className="btn btn-ghost" onClick={onClear} data-testid="reader-clear">

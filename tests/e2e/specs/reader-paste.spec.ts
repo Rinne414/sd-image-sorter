@@ -122,14 +122,12 @@ test.describe('Image Reader — Paste from Clipboard', () => {
       document.dispatchEvent(evt)
     }, TINY_PNG_BASE64)
 
-    // The reader should show the preview, result panel, and clipboard warning.
+    // The reader shows the preview and result panel. The pasted file carried its
+    // info, so there is no "may be incomplete" warning (it would be false).
     await expect(page.locator('#reader-image-preview')).toBeVisible({ timeout: 5000 })
     await expect(page.locator('#reader-generator')).toHaveText('WebUI', { timeout: 5000 })
     await expect(page.locator('#reader-prompt-text')).toContainText('test paste prompt')
-    await expect(page.locator('#reader-status')).toContainText(
-      /prompt or model details may be incomplete|提示词或模型信息可能不完整/,
-      { timeout: 5000 },
-    )
+    await expect(page.locator('#reader-status')).toBeHidden()
   })
 
   test('paste button arms clipboard capture and the next paste event uses the same pipeline', async ({ page }) => {

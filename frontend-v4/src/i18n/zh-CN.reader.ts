@@ -29,7 +29,6 @@ export const zhCNReader = {
   'reader.clear': '清空',
   'reader.reading': '正在读取生成信息…',
   'reader.readFailed': '读不出这张图的生成信息：{reason}',
-  'reader.pastedMayMiss': '这张图是从剪贴板粘贴的：复制图片时，浏览器和聊天软件常常会去掉一部分生成信息。要以原文件为准，请拖入原文件或点「选择图片…」。',
   'reader.pastedNoParams': '这张图里没有生成信息。从剪贴板粘贴的图，生成信息通常已在复制时被去掉：请拖入原文件，或点「选择图片…」。',
   'reader.openInReader': '在读图中打开',
   'reader.openInReaderHint': '在「读图」里看这张图的全部生成信息，也可以改了以后另存',

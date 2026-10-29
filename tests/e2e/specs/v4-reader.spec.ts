@@ -177,7 +177,8 @@ test('a real Ctrl+V paste reads the image; a pasted image without details says w
   await openReader(page)
   await pasteFile(page, sample('nai'))
   await expect(page.getByTestId('reader-generator')).toHaveText('NovelAI')
-  await expect(page.getByTestId('reader-paste-note')).toContainText('pasted from the clipboard')
+  // Its info came with the file: no "may be missing" note.
+  await expect(page.getByTestId('reader-paste-note')).toHaveCount(0)
 
   await pasteFile(page, NO_METADATA)
   await expect(page.getByTestId('reader-no-params')).toContainText('A pasted image has usually lost them')
