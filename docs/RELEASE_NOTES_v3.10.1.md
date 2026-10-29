@@ -46,3 +46,14 @@ Released before the full GitHub CI run finished, at the owner's request. GitHub 
 ---
 
 ## Checksums
+
+| Asset | SHA-256 |
+|---|---|
+| `sd-image-sorter-v3.10.1-windows-portable.zip` | `0f34eff03ccaf5191d5f07d96ec462f39587b5088879ef054a6f164248423033` |
+| `sd-image-sorter-v3.10.1-app-patch.zip` | `3d2bccc915e8f8649730ccdcf00f99e60eb265d44234d77dd3270c04dc458cab` |
+| `sd-image-sorter-v3.10.1-linux.tar.gz` | `e2eb75a4e2f424b391323560276058a9dd3bbd8b595a14c410d5431f03fd92a4` |
+| `sd-image-sorter-v3.10.1-linux-portable-x86_64.tar.gz` | `a19adf8b88308ef19671bdac086c5b04f9d27ad6816a548c5d19029c84501134` |
+| `sd-image-sorter-v3.10.1-linux-portable-aarch64.tar.gz` | `280060721692004dad20a98dd6daf845851b1aea696f844cef80dce7a0a879ea` |
+| `sd-image-sorter-v3.10.1-release-manifest.json` | `f7fed6c06dc7ea20c5a08efae3d916b2313c541a1ca202c643f801f2e31da88f` |
+
+The manifest contains the five archive checksums; its own checksum is recorded above. / manifest 内含五个归档校验和，其自身校验和记录于上表。
