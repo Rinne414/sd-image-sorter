@@ -347,7 +347,9 @@
       "zh": "导入诊断与日志",
       "classic": [
         "#btn-copy-scan-diagnostics",
+        "#btn-settings-copy-diagnostics",
         "#btn-open-scan-log",
+        "#btn-settings-open-log",
         "#btn-copy-scan-log-path",
         "#btn-stop-scan-from-diagnostics"
       ],
@@ -584,6 +586,7 @@
       "zh": "检查更新",
       "classic": [
         "#btn-app-update",
+        "#btn-settings-check-update",
         "#entry-update-btn"
       ],
       "vopus": {

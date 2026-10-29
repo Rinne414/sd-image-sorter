@@ -6042,6 +6042,32 @@
                         </button>
                     </div>
                 </section>
+                <!-- About: version, updates and support in one place (the support actions were only on a stalled import's card). -->
+                <section class="settings-home-panel" id="settings-about" aria-labelledby="settings-about-title">
+                    <div class="settings-home-header">
+                        <h3 id="settings-about-title" data-i18n="settings.aboutTitle">About</h3>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-copy">
+                            <strong id="settings-about-version">Version</strong>
+                            <span data-i18n="settings.aboutUpdateBody">The check asks GitHub for a newer version. Nothing changes until you press Update.</span>
+                        </div>
+                        <button type="button" class="btn btn-ghost" id="btn-settings-check-update">
+                            <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg></span>
+                            <span data-i18n="settings.aboutCheckUpdate">Check for updates</span>
+                        </button>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-copy">
+                            <strong data-i18n="settings.aboutSupportTitle">Report a problem</strong>
+                            <span data-i18n="settings.aboutSupportBody">Copy the diagnostics (version, system and recent log lines) and paste them into your message, or open the folder with the log file.</span>
+                        </div>
+                        <div class="settings-inline-control">
+                            <button type="button" class="btn btn-ghost btn-small" id="btn-settings-copy-diagnostics" data-i18n="settings.aboutCopyDiagnostics">Copy diagnostics</button>
+                            <button type="button" class="btn btn-ghost btn-small" id="btn-settings-open-log" data-i18n="settings.aboutOpenLog">Open log folder</button>
+                        </div>
+                    </div>
+                </section>
                 <!-- Reset all settings (owner baseline): preferences back to default, work stays. -->
                 <section class="settings-reset-all" id="settings-reset-all">
                     <h3 data-i18n="settings.resetAllTitle">Reset all settings</h3>
@@ -8736,6 +8762,7 @@
     <script src="/static/js/collect.js"></script>
     <script src="/static/js/browser-extension.js"></script>
     <script src="/static/js/desktop-settings.js"></script>
+    <script src="/static/js/settings-about.js"></script>
     <script src="/static/js/desktop-bridge.js"></script>
     <script src="/static/js/autosep.js"></script>
     <!-- Auto-Separate family (decomposed VERBATIM from the former 1,981-line
