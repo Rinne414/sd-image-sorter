@@ -365,7 +365,16 @@ function initBootListenersShell() {
     $('#tag-advanced-options')?.addEventListener('toggle', (event) => {
         writeStoredBoolean(TAG_ADVANCED_OPEN_KEY, Boolean(event.currentTarget?.open));
     });
-    ['scan-force-reparse', 'scan-cleanup-missing', 'scan-auto-tag'].forEach((id) => {
+    // A standing choice (which folders receive disguises), so it is remembered;
+    // while it is on, the Advanced section opens so the tick is always seen.
+    const restoreDisguised = document.getElementById('scan-restore-disguised');
+    if (restoreDisguised) {
+        restoreDisguised.checked = readStoredBoolean(SCAN_RESTORE_DISGUISED_KEY, false);
+        restoreDisguised.addEventListener('change', () => {
+            writeStoredBoolean(SCAN_RESTORE_DISGUISED_KEY, restoreDisguised.checked);
+        });
+    }
+    ['scan-force-reparse', 'scan-cleanup-missing', 'scan-restore-disguised', 'scan-auto-tag'].forEach((id) => {
         document.getElementById(id)?.addEventListener('change', () => syncScanAdvancedUi());
     });
     syncScanAdvancedUi({ resetToPreference: true });

@@ -31,6 +31,11 @@ describe('what an import says beyond its counts', () => {
     expect(extras.otherLibrary).toEqual({ count: 2, paths: ['D:/a.png', 'D:/b.png'] })
   })
 
+  test('an import that restored chat disguises says how many, and how many failed', () => {
+    expect(readScanExtras({ status: 'done', disguise_restored: 3, disguise_restore_failed: 1 }).disguises).toEqual({ restored: 3, failed: 1 })
+    expect(readScanExtras({ status: 'done' }).disguises).toEqual({ restored: 0, failed: 0 })
+  })
+
   test('a search for missing files counts the found files that were already in the library', () => {
     const p = readProgress('reconnect', { status: 'done', matched: 2, review_pending_total: 1, conflicts: 3 })
     expect(p).toMatchObject({ succeeded: 2, toReview: 1, alreadyIndexed: 3 })

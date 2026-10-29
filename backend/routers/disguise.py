@@ -344,16 +344,20 @@ async def reveal_result(request: RevealRequest):
 async def restore_upload(file: UploadFile = File(...)):
     """Return the real picture(s) of an uploaded disguise: PNG, or APNG for a pack."""
     data = await _read_upload(file)
+    not_a_disguise = HTTPException(
+        status_code=400, detail="This picture is not a disguise image."
+    )
     if disguise_apng.probe_disguise(data) is None:
-        raise HTTPException(
-            status_code=400, detail="This picture is not a disguise image."
-        )
+        raise not_a_disguise
     try:
-        frames = await run_in_threadpool(disguise_apng.extract_real_frames, data)
+        frames = await run_in_threadpool(disguise_apng.extract_hidden_frames, data)
     except disguise_apng.DisguiseReadError as exc:
         raise HTTPException(
             status_code=400, detail="The hidden picture is damaged and cannot be read."
         ) from exc
+    if frames is None:
+        # It hides only a copy of what it shows: there is nothing to restore.
+        raise not_a_disguise
     stem = Path(file.filename or "picture").stem
     return Response(
         content=disguise_apng.encode_restored(frames),

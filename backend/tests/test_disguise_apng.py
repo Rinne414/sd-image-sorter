@@ -277,6 +277,42 @@ def test_restore_ignores_files_that_are_not_disguises(tmp_path: Path) -> None:
     assert not (tmp_path / "plain_real.png").exists()
 
 
+def test_a_file_whose_hidden_picture_is_its_cover_hides_nothing() -> None:
+    picture = _solid((40, 30), RED)
+    data = disguise.build_disguise(picture, [picture])
+
+    assert disguise.probe_disguise(data) is not None
+    assert disguise.extract_hidden_frames(data) is None
+
+
+def test_a_hidden_picture_one_shade_off_the_cover_is_still_hidden() -> None:
+    data = disguise.build_disguise(
+        _solid((40, 30), RED), [_solid((40, 30), (201, 40, 40, 255))]
+    )
+
+    frames = disguise.extract_hidden_frames(data)
+
+    assert [_center(frame.image) for frame in frames] == [(201, 40, 40, 255)]
+
+
+def test_a_pack_that_repeats_its_cover_still_hides_the_other_picture() -> None:
+    cover = _solid((40, 30), BLUE)
+    data = disguise.build_disguise(cover, [cover, _solid((40, 30), RED)])
+
+    frames = disguise.extract_hidden_frames(data)
+
+    assert [_center(frame.image) for frame in frames] == [BLUE, RED]
+
+
+def test_restore_never_writes_a_copy_of_the_visible_picture(tmp_path: Path) -> None:
+    source = tmp_path / "same_twice.png"
+    picture = _solid((40, 30), RED)
+    source.write_bytes(disguise.build_disguise(picture, [picture]))
+
+    assert disguise.restore_next_to(source) is None
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["same_twice.png"]
+
+
 def _library_with_a_received_disguise(tmp_path: Path) -> Path:
     library = tmp_path / "library"
     library.mkdir()
@@ -290,7 +326,9 @@ def test_a_scan_restores_a_received_disguise_and_indexes_both_files(
 ) -> None:
     library = _library_with_a_received_disguise(tmp_path)
 
-    result = scan_folder(str(library), recursive=False, metadata_workers=1)
+    result = scan_folder(
+        str(library), recursive=False, metadata_workers=1, restore_disguised=True
+    )
 
     restored = library / "qq_image_real.png"
     assert restored.is_file()
@@ -302,10 +340,14 @@ def test_a_scan_restores_a_received_disguise_and_indexes_both_files(
 
 def test_a_rescan_does_not_restore_the_same_file_again(test_db, tmp_path: Path) -> None:
     library = _library_with_a_received_disguise(tmp_path)
-    scan_folder(str(library), recursive=False, metadata_workers=1)
+    scan_folder(
+        str(library), recursive=False, metadata_workers=1, restore_disguised=True
+    )
     first_bytes = (library / "qq_image_real.png").read_bytes()
 
-    result = scan_folder(str(library), recursive=False, metadata_workers=1)
+    result = scan_folder(
+        str(library), recursive=False, metadata_workers=1, restore_disguised=True
+    )
 
     assert result["disguise_restored"] == 0
     assert (library / "qq_image_real.png").read_bytes() == first_bytes
@@ -316,15 +358,66 @@ def test_a_rescan_does_not_restore_the_same_file_again(test_db, tmp_path: Path) 
     ]
 
 
-def test_a_scan_can_leave_disguises_alone(test_db, tmp_path: Path) -> None:
+def test_a_default_scan_writes_nothing_into_the_folder(test_db, tmp_path: Path) -> None:
     library = _library_with_a_received_disguise(tmp_path)
 
+    result = scan_folder(str(library), recursive=False, metadata_workers=1)
+
+    assert result["disguise_restored"] == 0
+    assert result["disguise_restore_failed"] == 0
+    assert sorted(path.name for path in library.iterdir()) == [
+        "normal.png",
+        "qq_image.png",
+    ]
+    assert db.get_image_by_path(str(library / "qq_image.png")) is not None
+
+
+def test_ticking_the_option_later_restores_disguises_already_imported(
+    test_db, tmp_path: Path
+) -> None:
+    library = _library_with_a_received_disguise(tmp_path)
+    scan_folder(str(library), recursive=False, metadata_workers=1)
+
     result = scan_folder(
-        str(library), recursive=False, metadata_workers=1, restore_disguised=False
+        str(library), recursive=False, metadata_workers=1, restore_disguised=True
+    )
+
+    restored = library / "qq_image_real.png"
+    assert result["disguise_restored"] == 1
+    assert restored.is_file()
+    assert db.get_image_by_path(str(restored)) is not None
+
+
+@pytest.mark.parametrize("catch_up", [True, False], ids=["catch-up", "new-file"])
+def test_folder_watching_never_writes_a_real_picture(
+    test_db, tmp_path: Path, catch_up: bool
+) -> None:
+    from services.folder_watch import _scan_root
+
+    library = _library_with_a_received_disguise(tmp_path)
+    root = db.add_library_root(str(library))
+
+    _scan_root(root, None if catch_up else [str(library / "qq_image.png")], lambda: False)
+
+    assert db.get_image_by_path(str(library / "qq_image.png")) is not None
+    assert not (library / "qq_image_real.png").exists()
+
+
+def test_an_opted_in_scan_skips_a_file_that_hides_its_own_cover(
+    test_db, tmp_path: Path
+) -> None:
+    library = tmp_path / "library"
+    library.mkdir()
+    picture = _solid((40, 30), RED)
+    (library / "same_twice.png").write_bytes(disguise.build_disguise(picture, [picture]))
+
+    result = scan_folder(
+        str(library), recursive=False, metadata_workers=1, restore_disguised=True
     )
 
     assert result["disguise_restored"] == 0
-    assert not (library / "qq_image_real.png").exists()
+    assert result["disguise_restore_failed"] == 0
+    assert sorted(path.name for path in library.iterdir()) == ["same_twice.png"]
 
 
 def test_a_failed_restore_is_reported_and_the_scan_goes_on(
@@ -337,7 +430,9 @@ def test_a_failed_restore_is_reported_and_the_scan_goes_on(
 
     monkeypatch.setattr(disguise, "_write_new_file", refuse_to_write)
 
-    result = scan_folder(str(library), recursive=False, metadata_workers=1)
+    result = scan_folder(
+        str(library), recursive=False, metadata_workers=1, restore_disguised=True
+    )
 
     assert result["disguise_restored"] == 0
     assert result["disguise_restore_failed"] == 1
@@ -348,7 +443,9 @@ def test_a_failed_restore_is_reported_and_the_scan_goes_on(
 def test_the_scan_total_counts_the_restored_picture(test_db, tmp_path: Path) -> None:
     library = _library_with_a_received_disguise(tmp_path)
 
-    result = scan_folder(str(library), recursive=False, metadata_workers=1)
+    result = scan_folder(
+        str(library), recursive=False, metadata_workers=1, restore_disguised=True
+    )
 
     assert result["total"] == 3
     assert result["new"] == 3
@@ -357,12 +454,35 @@ def test_the_scan_total_counts_the_restored_picture(test_db, tmp_path: Path) -> 
 def test_the_scan_summary_says_how_many_real_pictures_were_restored(test_client, tmp_path: Path) -> None:
     library = _library_with_a_received_disguise(tmp_path)
 
+    test_client.post(
+        "/api/scan",
+        json={"folder_path": str(library), "recursive": False, "restore_disguised": True},
+    )
+    progress = test_client.get("/api/scan/progress").json()
+
+    assert progress["status"] == "done"
+    assert progress["disguise_restored"] == 1
+    assert "还原了 1 张伪装图" in progress["message"]
+    assert "Restored 1 disguise image;" in progress["message"]
+    assert (library / "qq_image_real.png").is_file()
+
+
+def test_an_import_that_did_not_ask_writes_nothing_and_says_nothing(
+    test_client, tmp_path: Path
+) -> None:
+    library = _library_with_a_received_disguise(tmp_path)
+
     test_client.post("/api/scan", json={"folder_path": str(library), "recursive": False})
     progress = test_client.get("/api/scan/progress").json()
 
     assert progress["status"] == "done"
-    assert "还原了 1 张伪装图" in progress["message"]
-    assert "Restored 1 disguise image;" in progress["message"]
+    assert progress["disguise_restored"] == 0
+    assert "伪装图" not in progress["message"]
+    assert "disguise" not in progress["message"]
+    assert sorted(path.name for path in library.iterdir()) == [
+        "normal.png",
+        "qq_image.png",
+    ]
 
 
 def test_the_scan_summary_names_restores_that_failed(test_client, tmp_path: Path, monkeypatch) -> None:
@@ -373,8 +493,12 @@ def test_the_scan_summary_names_restores_that_failed(test_client, tmp_path: Path
 
     monkeypatch.setattr(disguise, "_write_new_file", refuse_to_write)
 
-    test_client.post("/api/scan", json={"folder_path": str(library), "recursive": False})
+    test_client.post(
+        "/api/scan",
+        json={"folder_path": str(library), "recursive": False, "restore_disguised": True},
+    )
     progress = test_client.get("/api/scan/progress").json()
 
+    assert progress["disguise_restore_failed"] == 1
     assert "1 张伪装图没能还原" in progress["message"]
     assert "1 disguise image could not be restored" in progress["message"]

@@ -479,6 +479,7 @@ function hasActiveScanAdvancedOptions() {
     return Boolean(
         $('#scan-force-reparse')?.checked ||
         $('#scan-cleanup-missing')?.checked ||
+        $('#scan-restore-disguised')?.checked ||
         $('#scan-auto-tag')?.checked
     );
 }

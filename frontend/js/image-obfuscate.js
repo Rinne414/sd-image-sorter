@@ -97,8 +97,9 @@
             const onDrop = (event) => {
                 event.preventDefault();
                 dropZone.classList.remove('drag-over');
-                const files = Array.from(event.dataTransfer?.files || []);
-                if (files.length) this._addFiles(files);
+                // A picture dragged out of QQ or another chat app is its file location.
+                const dropped = window.LocalPicture.take(event.dataTransfer, (files) => this._addFiles(files), { many: true });
+                if (!dropped.taken) window.LocalPicture.tellMissing(dropped.reason);
             };
 
             dropZone.addEventListener('dragover', onDragOver);
@@ -123,15 +124,24 @@
                 const readerActive = readerView.classList.contains('active');
                 if (!panelActive || !readerActive) return;
 
-                const clipboardItems = Array.from(event.clipboardData?.items || []);
-                const imageFiles = clipboardItems
-                    .filter((item) => item.type.startsWith('image/'))
-                    .map((item) => item.getAsFile())
-                    .filter(Boolean);
+                // Pasting text into a field stays a text paste; a picture still joins the queue.
+                const target = event.target;
+                if (target instanceof Element && target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]')) {
+                    const imageFiles = window.LocalPicture.inspect(event.clipboardData).files;
+                    if (!imageFiles.length) return;
+                    event.preventDefault();
+                    this._addFiles(imageFiles);
+                    return;
+                }
 
-                if (!imageFiles.length) return;
+                // A picture copied in QQ or another chat app is its file location:
+                // the original file wins over the pasted bitmap.
                 event.preventDefault();
-                this._addFiles(imageFiles);
+                const pasted = window.LocalPicture.take(event.clipboardData, (files) => this._addFiles(files), {
+                    many: true,
+                    preferLocation: true,
+                });
+                if (!pasted.taken) window.LocalPicture.tellMissing(pasted.reason, { clipboard: true });
             });
         },
 
@@ -314,7 +324,7 @@
         },
 
         _addFiles(files) {
-            const imageFiles = files.filter((file) => file && String(file.type || '').startsWith('image/'));
+            const imageFiles = files.filter((file) => window.LocalPicture.isPictureFile(file));
             if (!imageFiles.length) {
                 window.App?.showToast?.(this._t('tools.noImageFiles', 'No image files found'), 'error');
                 return;

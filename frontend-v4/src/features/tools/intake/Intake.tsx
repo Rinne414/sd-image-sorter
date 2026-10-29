@@ -2,20 +2,28 @@ import { useRef } from 'react'
 import { useToasts } from '../../../ui/toasts'
 import { tt, useTT, type ToolKey } from '../toolText'
 import styles from './Intake.module.css'
-import { imagesOf, readClipboardImage, type IntakeOrigin } from './intakeFiles'
+import type { Inspected } from '../../../lib/localPicture'
+import { imagesOf, readClipboard, type IntakeOrigin } from './intakeFiles'
+import { takePictures, tellMissing } from './localIntake'
 
 type OnFile = (file: File, origin: IntakeOrigin) => void
 type OnFiles = (files: File[], origin: IntakeOrigin) => void
 
-/** Paste from the clipboard by button; a browser that will not hand it over is told to use Ctrl+V. */
-async function pasteByButton(onFiles: OnFiles): Promise<void> {
+/**
+ * Paste from the clipboard by button; a browser that will not hand it over is
+ * told to use Ctrl+V. A picture copied in QQ or another chat app is its file
+ * location: the original is read from disk (it comes in as a drop, whole).
+ */
+async function pasteByButton(onFiles: OnFiles, many: boolean): Promise<void> {
+  let found: Inspected
   try {
-    const file = await readClipboardImage()
-    if (file) onFiles([file], 'paste')
-    else useToasts.getState().push(tt('intake.noImageInClipboard'), 'info')
+    found = await readClipboard()
   } catch {
     useToasts.getState().push(tt('intake.pasteBlocked'), 'info')
+    return
   }
+  const taken = takePictures(found, (files, how) => onFiles(files, how === 'location' ? 'drop' : 'paste'), { many, preferLocation: true })
+  if (taken.reason) tellMissing(taken.reason, true)
 }
 
 function Buttons({ take, many, primary, pickLabel }: { take: OnFiles; many: boolean; primary: boolean; pickLabel?: string }) {
@@ -39,7 +47,7 @@ function Buttons({ take, many, primary, pickLabel }: { take: OnFiles; many: bool
       <button type="button" className={primary ? 'btn btn-primary' : 'btn'} onClick={() => input.current?.click()} data-testid="intake-pick">
         {pickLabel ?? t('intake.pick')}
       </button>
-      <button type="button" className="btn" onClick={() => void pasteByButton(take)} title={t('intake.pasteHint')} data-testid="intake-paste">
+      <button type="button" className="btn" onClick={() => void pasteByButton(take, many)} title={t('intake.pasteHint')} data-testid="intake-paste">
         {t('intake.paste')} <kbd>Ctrl V</kbd>
       </button>
     </>

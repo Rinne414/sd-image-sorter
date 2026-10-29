@@ -5,14 +5,16 @@ import { FolderChooser } from '../../ui/FolderChooser'
 import { pasteFromClipboard } from '../collect/collectActions'
 import { useSelectionDialog } from '../selection/dialogs'
 import styles from './ImportDialog.module.css'
-import { recentImports, startImport, type ImportOptions } from './importJob'
+import { recentImports, startImport, storedRestoreDisguised, storeRestoreDisguised, type ImportOptions } from './importJob'
 
-const START: ImportOptions = { recursive: true, forceReparse: false, cleanupMissing: false, verifyFiles: false, tagAfter: false }
+const START: Omit<ImportOptions, 'restoreDisguised'> = { recursive: true, forceReparse: false, cleanupMissing: false, verifyFiles: false, tagAfter: false }
 
 /** Pick a folder to import; the everyday option is visible, the slower ones fold away. */
 export function ImportDialog({ onClose }: { onClose: () => void }) {
   const t = useT()
-  const [o, setO] = useState<ImportOptions>(START)
+  const [o, setO] = useState<ImportOptions>(() => ({ ...START, restoreDisguised: storedRestoreDisguised() }))
+  // A remembered "restore disguises" opens the advanced options so the tick is seen.
+  const [advancedOpen] = useState(o.restoreDisguised)
   const recent = useMemo(recentImports, [])
   const hint = useSelectionDialog((s) => s.hint)
   const folders = useFolders()
@@ -33,7 +35,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
         <input type="checkbox" checked={o.recursive} onChange={(e) => setO({ ...o, recursive: e.target.checked })} />
         {t('import.recursive')}
       </label>
-      <details className={styles.advanced}>
+      <details className={styles.advanced} open={advancedOpen}>
         <summary>{t('tagging.advanced')}</summary>
         <label className={styles.check}>
           <input type="checkbox" checked={o.forceReparse} onChange={(e) => setO({ ...o, forceReparse: e.target.checked })} />
@@ -48,6 +50,19 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
           {t('import.cleanupMissing')}
         </label>
         {o.cleanupMissing && <p className={styles.warn}>{t('import.cleanupWarn')}</p>}
+        <label className={styles.check}>
+          <input
+            type="checkbox"
+            checked={o.restoreDisguised}
+            onChange={(e) => {
+              storeRestoreDisguised(e.target.checked)
+              setO({ ...o, restoreDisguised: e.target.checked })
+            }}
+            data-testid="import-restore-disguised"
+          />
+          {t('import.restoreDisguised')}
+        </label>
+        <p className={styles.indented}>{t('import.restoreDisguisedHint')}</p>
         <label className={styles.check}>
           <input type="checkbox" checked={o.tagAfter} onChange={(e) => setO({ ...o, tagAfter: e.target.checked })} data-testid="import-tag-after" />
           {t('import.tagAfter')}

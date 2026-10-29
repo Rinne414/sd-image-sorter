@@ -234,6 +234,7 @@ Object.assign(API, {
             quick_import: options.quickImport ?? true,
             force_reparse: options.forceReparse ?? false,
             cleanup_missing: options.cleanupMissing ?? false,
+            restore_disguised: options.restoreDisguised ?? false,
         });
     },
 

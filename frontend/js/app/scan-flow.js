@@ -179,6 +179,8 @@ async function startScan() {
     const quickImport = !($('#scan-verify-files')?.checked ?? false);
     const forceReparse = $('#scan-force-reparse')?.checked ?? false;
     const cleanupMissing = $('#scan-cleanup-missing')?.checked ?? false;
+    // Off unless ticked: it writes <name>_real.png files into the folder.
+    const restoreDisguised = $('#scan-restore-disguised')?.checked ?? false;
 
     try {
         addRecentFolder(folderPath);
@@ -188,6 +190,7 @@ async function startScan() {
             quickImport,
             forceReparse,
             cleanupMissing,
+            restoreDisguised,
         });
 
         const progressContainer = $('#scan-progress-container');

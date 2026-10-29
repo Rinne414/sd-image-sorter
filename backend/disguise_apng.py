@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, Iterator, Optional, Sequence, Union
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 logger = logging.getLogger(__name__)
 
@@ -328,6 +328,33 @@ def _open_source(source: Source) -> BinaryIO:
 
 def extract_real_frames(source: Source) -> list[RealFrame]:
     """Decode the real picture(s) of a disguise, keep-alive frames left out."""
+    return _decode_disguise(source)[1]
+
+
+def extract_hidden_frames(source: Source) -> Optional[list[RealFrame]]:
+    """The real picture(s) of a disguise, or None when nothing is hidden.
+
+    Some files carry the visible picture again as their animation. Every real
+    frame is then pixel-identical to the cover, so restoring it would only
+    write a second copy of a picture the user already has: such a file counts
+    as no disguise.
+    """
+    cover, frames = _decode_disguise(source)
+    if all(_same_pixels(frame.image, cover) for frame in frames):
+        return None
+    return frames
+
+
+def _same_pixels(first: Image.Image, second: Image.Image) -> bool:
+    if first.size != second.size:
+        return False
+    # Per-band extrema: getbbox() would look at the alpha band only.
+    extrema = ImageChops.difference(first, second).getextrema()
+    return all(high == 0 for _low, high in extrema)
+
+
+def _decode_disguise(source: Source) -> tuple[Image.Image, list[RealFrame]]:
+    """The cover (the still picture) and the real frames, keep-alive frames left out."""
     with _open_source(source) as handle:
         info_handle = io.BytesIO(handle.read())
     if _probe_handle(info_handle) is None:
@@ -342,6 +369,7 @@ def extract_real_frames(source: Source) -> list[RealFrame]:
     try:
         with Image.open(info_handle) as image:
             canvas = image.size
+            cover = image.convert("RGBA")
             frames: list[RealFrame] = []
             # Frame 0 is the still picture (the cover); frame i is fcTL i-1.
             for index, control in enumerate(controls, start=1):
@@ -357,7 +385,7 @@ def extract_real_frames(source: Source) -> list[RealFrame]:
         raise DisguiseReadError(f"Cannot decode the real picture: {exc}") from exc
     if not frames:
         raise DisguiseReadError("The disguise holds no real picture")
-    return frames
+    return cover, frames
 
 
 def encode_restored(frames: Sequence[RealFrame]) -> bytes:
@@ -389,8 +417,9 @@ def restored_path_for(path: Union[str, os.PathLike]) -> Path:
 def restore_next_to(path: Union[str, os.PathLike]) -> Optional[Path]:
     """Write the real picture of a disguise beside it as ``<name>_real.png``.
 
-    Returns the new path, or None when the file is not a disguise or the
-    target name is already taken (an existing file is never replaced).
+    Returns the new path, or None when the file is not a disguise, hides only
+    a copy of its cover (see :func:`extract_hidden_frames`), or the target
+    name is already taken (an existing file is never replaced).
     Raises DisguiseReadError when the disguise cannot be decoded and OSError
     when the file cannot be written.
     """
@@ -399,7 +428,14 @@ def restore_next_to(path: Union[str, os.PathLike]) -> Optional[Path]:
     target = restored_path_for(path)
     if target.exists():
         return None
-    data = encode_restored(extract_real_frames(path))
+    frames = extract_hidden_frames(path)
+    if frames is None:
+        logger.info(
+            "Not restoring %s: its hidden picture is the same as the visible one",
+            Path(path).name,
+        )
+        return None
+    data = encode_restored(frames)
     if not _write_new_file(target, data):
         return None
     logger.info("Restored the real picture of disguise %s", Path(path).name)

@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import { expect, test, type Page } from '../fixtures/click-ledger'
 
@@ -430,4 +431,61 @@ test('fits the desktop sizes with nothing cut off', async ({ page }) => {
     await expect(page.getByTestId('intake-zone')).toBeVisible()
     await expect(page.getByTestId('intake-pick')).toBeInViewport()
   }
+})
+
+// QQ and other chat apps hand a picture over as its file location (a copied
+// picture is `<img src="file://L:\...\x.png">`, a dragged one a file:// link):
+// the Reader reads the original from disk and shows it as a dropped file.
+test('a picture handed over as its file location (QQ) is read from disk, by paste and by drop', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await openReader(page)
+  const asked: string[] = []
+  page.on('request', (request) => {
+    if (request.url().includes('/api/local-picture')) asked.push(JSON.parse(request.postData() || '{}').path)
+  })
+
+  // A paste carrying only HTML, in QQ's own shape: file:// straight before the path, nothing encoded.
+  const src = `file://${sample('nai')}`
+  await page.evaluate((value) => {
+    const data = new DataTransfer()
+    data.setData('text/html', `<html><body><!--StartFragment--><img src="${value}" /><!--EndFragment--></body></html>`)
+    document.body.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+  }, src)
+  await expect(page.getByTestId('reader-generator')).toHaveText('NovelAI')
+  await expect(page.getByTestId('reader-file-name')).toHaveText('v4reader-nai.png')
+  // The original file, not a pasted copy: no "may have lost details" note.
+  await expect(page.getByTestId('reader-paste-note')).toHaveCount(0)
+  expect(asked).toEqual([src])
+
+  // A drop carrying only a text/uri-list file:// link (percent-encoded).
+  const dt = await page.evaluateHandle((uri) => {
+    const data = new DataTransfer()
+    data.setData('text/uri-list', uri)
+    return data
+  }, pathToFileURL(sample('a1111')).href)
+  await page.dispatchEvent('[data-testid="reader-page"]', 'dragenter', { dataTransfer: dt })
+  await expect(page.getByTestId('intake-drop-overlay')).toBeVisible()
+  await page.dispatchEvent('[data-testid="reader-page"]', 'drop', { dataTransfer: dt })
+  await expect(page.getByTestId('intake-drop-overlay')).toHaveCount(0)
+  await expect(page.getByTestId('reader-generator')).toHaveText('WebUI')
+  await expect(page.getByTestId('reader-file-name')).toHaveText('v4reader-a1111.png')
+})
+
+test('a location whose file is gone, and a paste with no picture at all, each say why', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await openReader(page)
+  await page.evaluate((value) => {
+    const data = new DataTransfer()
+    data.setData('text/plain', `<img src="${value}" />`)
+    document.body.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+  }, `file://${path.join(OUT, 'gone.png')}`)
+  await expect(page.getByText(/gone\.png is not at the location that came with it/)).toBeVisible()
+
+  await page.evaluate(() => {
+    const data = new DataTransfer()
+    data.setData('text/plain', 'just some words')
+    document.body.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+  })
+  await expect(page.getByText('There is no image on the clipboard, and no picture file location either.', { exact: false })).toBeVisible()
+  await expect(page.getByTestId('intake-zone')).toBeVisible()
 })

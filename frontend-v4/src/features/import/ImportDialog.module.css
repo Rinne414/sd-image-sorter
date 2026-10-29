@@ -58,3 +58,10 @@
   color: var(--muted);
   font-size: var(--fs-2);
 }
+
+/* A note that belongs to the checkbox above it, lined up with its label. */
+.indented {
+  margin: 0 0 0 22px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}

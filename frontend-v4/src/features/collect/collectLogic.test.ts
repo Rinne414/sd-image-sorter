@@ -7,12 +7,9 @@ import {
   nextRequest,
   pairingName,
   pastedPictureUrl,
-  pictureFromItems,
   safeWebUrl,
   sourceLine,
 } from './collectLogic'
-
-const file = (name: string) => new File(['x'], name)
 
 describe('pastedPictureUrl', () => {
   it('takes one web address, trimmed', () => {
@@ -24,22 +21,6 @@ describe('pastedPictureUrl', () => {
     expect(pastedPictureUrl('ftp://example.com/a.png')).toBeNull()
     expect(pastedPictureUrl('javascript:alert(1)')).toBeNull()
     expect(pastedPictureUrl('')).toBeNull()
-  })
-})
-
-describe('pictureFromItems', () => {
-  it('returns the first picture file', () => {
-    const png = file('a.png')
-    const items = [
-      { kind: 'string', type: 'text/plain', getAsFile: () => null },
-      { kind: 'file', type: 'application/pdf', getAsFile: () => file('a.pdf') },
-      { kind: 'file', type: 'image/png', getAsFile: () => png },
-    ]
-    expect(pictureFromItems(items)).toBe(png)
-  })
-  it('returns null when there is no picture', () => {
-    expect(pictureFromItems([{ kind: 'string', type: 'text/plain', getAsFile: () => null }])).toBeNull()
-    expect(pictureFromItems([])).toBeNull()
   })
 })
 

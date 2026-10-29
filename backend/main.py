@@ -146,6 +146,7 @@ from services import (
 from services.folder_watch import get_folder_watch_service
 from services.video_index import get_video_indexer
 from routers import background_models
+from routers import local_picture
 from model_residency import start_idle_sweeper, stop_idle_sweeper
 
 
@@ -444,6 +445,7 @@ app.include_router(generator_recipe.router)
 app.include_router(browser_extension.ext_router)
 app.include_router(browser_extension.router)
 app.include_router(collect.router)
+app.include_router(local_picture.router)
 app.include_router(videos.router)
 app.include_router(file_manager.router)
 app.include_router(image_lookup.router)

@@ -248,12 +248,13 @@ class ScanMixin:
 
             try:
                 logger.info(
-                    "Scan started: folder=%s recursive=%s quick_import=%s cleanup_missing=%s force_reparse=%s metadata_workers=%s metadata_backlog_limit=%s metadata_timeout=%ss heartbeat=%ss",
+                    "Scan started: folder=%s recursive=%s quick_import=%s cleanup_missing=%s force_reparse=%s restore_disguised=%s metadata_workers=%s metadata_backlog_limit=%s metadata_timeout=%ss heartbeat=%ss",
                     normalized_folder_path,
                     request.recursive,
                     request.quick_import,
                     request.cleanup_missing,
                     request.force_reparse,
+                    request.restore_disguised,
                     image_manager_module.DEFAULT_METADATA_WORKERS,
                     image_manager_module._metadata_backlog_limit(image_manager_module.DEFAULT_METADATA_WORKERS),
                     image_manager_module.SCAN_METADATA_TIMEOUT_SECONDS,
@@ -432,6 +433,7 @@ class ScanMixin:
                     force_reparse=request.force_reparse,
                     cleanup_missing=request.cleanup_missing,
                     quick_import=request.quick_import,
+                    restore_disguised=request.restore_disguised,
                 )
                 now = time.time()
                 errors = result.get("errors", 0)
@@ -586,6 +588,8 @@ class ScanMixin:
                         "message": summary,
                         "message_key": "done",
                         "missing_text_notice": missing_text_notice,
+                        "disguise_restored": restored_count,
+                        "disguise_restore_failed": restore_failed,
                         "message_item": "",
                         "current_item": None,
                         "started_at": self._scan_progress.get("started_at"),

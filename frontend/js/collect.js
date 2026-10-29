@@ -112,19 +112,26 @@
         return !top || top.modal.id === 'scan-modal';
     }
 
+    // A picture copied in QQ or another chat app is its file location
+    // (<img src="file://...">); LocalPicture reads the original from disk.
+    function takePasted(transfer) {
+        return window.LocalPicture.take(transfer, ([file]) => savePictureFile(file), { preferLocation: true });
+    }
+
     function onPaste(event) {
         if (!pasteTargetActive(event)) return;
-        const items = Array.from(event.clipboardData?.items || []);
-        const file = items.find((item) => item.kind === 'file' && item.type.startsWith('image/'))?.getAsFile();
-        if (file) {
+        const pasted = takePasted(event.clipboardData);
+        if (pasted.taken) {
             event.preventDefault();
-            savePictureFile(file);
             return;
         }
         const text = (event.clipboardData?.getData('text/plain') || '').trim();
         if (PICTURE_URL_RE.test(text)) {
             event.preventDefault();
             offerUrl(text);
+        } else if (pasted.reason === 'not-picture') {
+            event.preventDefault();
+            window.LocalPicture.tellMissing(pasted.reason);
         }
     }
 
@@ -134,16 +141,9 @@
             return;
         }
         try {
-            const items = await navigator.clipboard.read();
-            for (const item of items) {
-                const type = item.types.find((kind) => kind.startsWith('image/'));
-                if (type) {
-                    const blob = await item.getType(type);
-                    await savePictureFile(new File([blob], `pasted.${type.slice(6)}`, { type }));
-                    return;
-                }
-            }
-            const text = (await navigator.clipboard.readText()).trim();
+            const transfer = await window.LocalPicture.transferFromClipboard(await navigator.clipboard.read());
+            if (takePasted(transfer).taken) return;
+            const text = (transfer.getData('text/plain') || '').trim();
             if (PICTURE_URL_RE.test(text)) {
                 offerUrl(text);
                 return;

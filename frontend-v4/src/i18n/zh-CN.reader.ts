@@ -5,8 +5,20 @@ export const zhCNReader = {
   'intake.pick': '选择图片…',
   'intake.paste': '粘贴',
   'intake.pasteHint': '读剪贴板里的图片（浏览器可能先问一次）；在页面上直接按 Ctrl+V 也可以。',
-  'intake.noImageInClipboard': '剪贴板里没有图片。',
+  'intake.noImageInClipboard': '剪贴板里没有图片，也没有图片的文件位置。请重新复制图片，或直接把文件拖进来。',
   'intake.pasteBlocked': '浏览器没有让这个按钮读剪贴板：请在页面上直接按 Ctrl+V 粘贴。',
+  // a picture that arrives as its file location (QQ and other chat apps)
+  'intake.local.reading': '这张图是以文件位置的形式传过来的（QQ 等聊天软件复制图片时就是这样），正在从磁盘读取原图…',
+  'intake.local.fellBack': '原文件打不开（{reason}），所以改用粘贴来的副本。它可能已经丢了生成信息。',
+  'intake.local.readFailed': '按文件位置打开图片失败：{reason}',
+  'intake.local.webOnly': '只拿到了网址，没有图片本身。请先把图片保存到电脑上，再把文件拖进来。',
+  'intake.local.notPicture': '这不是图片文件。程序能读 PNG、JPG、WebP、GIF、BMP 和 TIFF。',
+  'intake.local.nothingDropped': '拖进来的内容里没有图片，也没有图片的文件位置。请从文件夹把图片文件拖进来，或点「选择图片…」。',
+  'intake.local.err.local_picture_bad_path': '这不是这台电脑上的完整文件位置。',
+  'intake.local.err.local_picture_network': '{name} 在网络共享上。请先复制到这台电脑，或直接拖入文件本身。',
+  'intake.local.err.local_picture_not_picture': '{name} 不是程序能读的图片（PNG、JPG、WebP、GIF、BMP 或 TIFF）。',
+  'intake.local.err.local_picture_missing': '在给出的位置找不到 {name}。如果是 QQ 里的图，先在 QQ 里点开看一次大图（让原图下载好），再复制或拖进来。',
+  'intake.local.err.local_picture_unreadable': '{name} 打不开，不是完整的图片：{reason}',
 
   // the page
   'reader.lead': '把一张图拖到这个页面的任何地方，或按 Ctrl+V 粘贴，就能看到它的全部生成信息。',

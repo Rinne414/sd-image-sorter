@@ -149,6 +149,8 @@ function filterStateStorageKey(libraryId) {
     return `${FILTER_STATE_KEY}:${id || 'main'}`;
 }
 const SCAN_ADVANCED_OPEN_KEY = 'sd-image-sorter-scan-advanced-open';
+// Shared with V Opus (same origin): restore chat disguises while importing.
+const SCAN_RESTORE_DISGUISED_KEY = 'sd-image-sorter-scan-restore-disguised';
 const TAG_ADVANCED_OPEN_KEY = 'sd-image-sorter-tag-advanced-open';
 const UI_SCALE_STORAGE_KEY = 'ui_scale_v1';
 const TAGGER_DEFAULTS_STORAGE_KEY = 'sd-image-sorter-tagger-defaults-v1';

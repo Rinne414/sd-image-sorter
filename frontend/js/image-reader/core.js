@@ -74,10 +74,12 @@
                 container.addEventListener('drop', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    const files = e.dataTransfer?.files;
-                    if (files?.length > 0) {
-                        this._handleFile(files[0], { sourceKind: 'file' });
-                    }
+                    // The privacy tool shares this view and takes its own drops.
+                    if (!this._isReaderToolActive()) return;
+                    const dropped = window.LocalPicture.take(e.dataTransfer, ([file]) => {
+                        this._handleFile(file, { sourceKind: 'file' });
+                    });
+                    if (!dropped.taken) window.LocalPicture.tellMissing(dropped.reason);
                 });
             }
 
@@ -133,24 +135,16 @@
                     }
                     return;
                 }
-                for (const item of items) {
-                    if (item.kind === 'file' && item.type.startsWith('image/')) {
-                        const file = item.getAsFile();
-                        if (file) {
-                            e.preventDefault();
-                            const sourceKind = this._awaitingClipboardPaste ? 'clipboard-button' : 'clipboard-shortcut';
-                            this._setClipboardPasteState(false);
-                            this._handleFile(file, { sourceKind });
-                            return;
-                        }
-                    }
-                }
-
-                if (this._awaitingClipboardPaste) {
-                    e.preventDefault();
-                    this._setClipboardPasteState(false);
-                    window.App?.showToast?.(this._t('reader.pasteNoImage', 'No image found in clipboard'), 'error');
-                }
+                // QQ and other chat apps copy a picture as its file location
+                // (<img src="file://...">). The original file wins over a pasted
+                // bitmap, which has lost the generation details.
+                const sourceKind = this._awaitingClipboardPaste ? 'clipboard-button' : 'clipboard-shortcut';
+                const pasted = window.LocalPicture.take(e.clipboardData, ([file], how) => {
+                    this._handleFile(file, { sourceKind: how === 'location' ? 'file' : sourceKind });
+                }, { preferLocation: true });
+                e.preventDefault();
+                this._setClipboardPasteState(false);
+                if (!pasted.taken) window.LocalPicture.tellMissing(pasted.reason, { clipboard: true });
             });
             document.querySelectorAll('[data-reader-histogram-mode]').forEach((button) => {
                 button.addEventListener('click', () => {

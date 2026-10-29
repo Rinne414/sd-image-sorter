@@ -27,10 +27,12 @@ Object.assign(window.ImageReader, {
                 e.preventDefault();
                 e.stopPropagation();
                 dropZone.classList.remove('drag-over');
-                const files = e.dataTransfer?.files;
-                if (files?.length > 0) {
-                    this._handleFile(files[0], { sourceKind: 'file' });
-                }
+                // A picture dragged out of QQ or another chat app can arrive as
+                // its file location only: LocalPicture reads it from disk.
+                const dropped = window.LocalPicture.take(e.dataTransfer, ([file]) => {
+                    this._handleFile(file, { sourceKind: 'file' });
+                });
+                if (!dropped.taken) window.LocalPicture.tellMissing(dropped.reason);
             });
 
             dropZone.addEventListener('click', () => fileInput?.click());
@@ -107,7 +109,8 @@ Object.assign(window.ImageReader, {
         },
 
         async _handleFile(file, options = {}) {
-            if (!file.type.startsWith('image/')) {
+            // A blank MIME type counts when the name is a picture's (Windows can leave it empty).
+            if (!window.LocalPicture.isPictureFile(file)) {
                 window.App?.showToast?.(this._t('reader.invalidFile', 'Please drop an image file'), 'error');
                 return;
             }

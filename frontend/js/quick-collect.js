@@ -131,6 +131,17 @@
         return Array.from(dataTransfer?.files || []);
     }
 
+    // Results list instead of toasts; "reading from disk" is not worth a line.
+    function sayInList(message, type) {
+        if (type !== 'info') addResult(type === 'error' ? 'error' : 'warn', [message]);
+    }
+
+    function missingLine(reason, options) {
+        return reason === 'web-only'
+            ? t('quickCollect.linkOnly', 'That was a link, not a file. Save the picture first, then drop the file here.')
+            : window.LocalPicture.missingText(reason, options);
+    }
+
     function onDrop(event) {
         event.preventDefault();
         document.getElementById('qc-drop').classList.remove('is-over');
@@ -139,24 +150,25 @@
             upload(files);
             return;
         }
-        const types = Array.from(event.dataTransfer?.types || []);
-        if (types.includes('text/uri-list') || types.includes('text/plain')) {
-            addResult('warn', [t('quickCollect.linkOnly', 'That was a link, not a file. Save the picture first, then drop the file here.')]);
-        }
+        // A picture dragged out of QQ or another chat app is its file location.
+        const dropped = window.LocalPicture.take(event.dataTransfer, upload, { many: true, say: sayInList });
+        if (!dropped.taken) addResult('warn', [missingLine(dropped.reason)]);
     }
 
     function onPaste(event) {
-        const pictures = Array.from(event.clipboardData?.items || [])
-            .filter((item) => item.kind === 'file' && PICTURE_TYPES.test(item.type))
-            .map((item, index) => {
-                const blob = item.getAsFile();
-                const ext = item.type.split('/')[1].replace('jpeg', 'jpg');
-                const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-                return new File([blob], `pasted-${stamp}-${index + 1}.${ext}`, { type: item.type });
-            });
-        if (!pictures.length) return;
         event.preventDefault();
-        upload(pictures);
+        // A picture copied in a chat app is its file location: the original
+        // file wins over the pasted bitmap, which has lost its generation details.
+        const pasted = window.LocalPicture.take(event.clipboardData, (files, how) => {
+            // Pasted bitmaps are all called image.png: give each its own name.
+            upload(how === 'location' ? files : files.map((file, index) => {
+                if (!PICTURE_TYPES.test(file.type)) return file;
+                const ext = file.type.split('/')[1].replace('jpeg', 'jpg');
+                const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+                return new File([file], `pasted-${stamp}-${index + 1}.${ext}`, { type: file.type });
+            }));
+        }, { many: true, preferLocation: true, say: sayInList });
+        if (!pasted.taken) addResult('warn', [missingLine(pasted.reason, { clipboard: true })]);
     }
 
     function bind() {

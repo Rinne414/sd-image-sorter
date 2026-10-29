@@ -205,6 +205,9 @@ class ScanProgressResponse(BaseModel):
     message_detail_code: str = ""
     message_detail_args: Dict[str, Any] = Field(default_factory=dict)
     missing_text_notice: bool = False
+    # Real pictures written beside chat-disguise images (restore_disguised scans).
+    disguise_restored: int = 0
+    disguise_restore_failed: int = 0
     current_item: Optional[str]
     started_at: Optional[float]
     updated_at: Optional[float]
@@ -281,6 +284,9 @@ class ScanRequest(BaseModel):
     force_reparse: bool = False
     cleanup_missing: bool = False
     quick_import: bool = True
+    # Write the real picture of each received chat-disguise PNG beside it as
+    # <name>_real.png. Off by default: it adds files to the user's folder.
+    restore_disguised: bool = False
 
     @field_validator("folder_path")
     @classmethod

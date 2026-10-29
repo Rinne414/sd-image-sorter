@@ -1,8 +1,52 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import { pathToFileURL } from 'node:url'
+
 import { test, expect, type Page } from '../fixtures/click-ledger'
+import { tmpRoot } from '../fixtures/v4-seed'
 
 // Tiny 1x1 PNG (base64), used to simulate a clipboard image payload.
 const TINY_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgYAAAAAMAAWgmWQ0AAAAASUVORK5CYII='
+
+// A picture on disk, handed over by its location the way QQ does it. The
+// server fully decodes it, so it must be a valid PNG (the clipboard stub above
+// has a bad IDAT checksum, which a browser tolerates and Pillow refuses).
+const LOCATION_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEklEQVR4nGOUqzjBwMDAxAAGAA/oAWIgQMaHAAAAAElFTkSuQmCC'
+const LOCATION_DIR = path.join(tmpRoot, 'reader-paste-location')
+const LOCATION_PICTURE = path.join(LOCATION_DIR, 'qq 图片.png')
+
+function writeLocationPicture(): string {
+  fs.mkdirSync(LOCATION_DIR, { recursive: true })
+  fs.writeFileSync(LOCATION_PICTURE, Buffer.from(LOCATION_PNG_BASE64, 'base64'))
+  return LOCATION_PICTURE
+}
+
+/** Answer /api/parse-image with a stub and remember the uploaded file names. */
+async function stubParse(page: Page, prompt: string): Promise<string[]> {
+  const uploads: string[] = []
+  await page.route('**/api/parse-image', async (route) => {
+    const body = route.request().postDataBuffer()?.toString('utf8') || ''
+    uploads.push(/filename="([^"]*)"/.exec(body)?.[1] || '')
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        generator: 'webui',
+        prompt,
+        negative_prompt: '',
+        width: 1,
+        height: 1,
+        file_size: 70,
+        checkpoint: '',
+        loras: [],
+        metadata: { _parsed: { generation_params: { steps: 20 } } },
+      }),
+    })
+  })
+  return uploads
+}
 
 // Reach the Reader the way a user does: the top-bar tab. The view keeps its
 // inline display:none (CSS .view.active shows it), so a test that rewrote
@@ -210,5 +254,78 @@ test.describe('Image Reader — Paste from Clipboard', () => {
         timeout: 5000,
       },
     )
+  })
+})
+
+// QQ and other chat apps hand a picture over as its file location: a copied
+// picture is `<img src="file://L:\...\x.png">` (HTML), a dragged one a
+// file:// link. The Reader reads the original from disk (POST
+// /api/local-picture) and goes on as for a dropped file.
+test.describe('Image Reader — a picture handed over as its file location', () => {
+  test('a paste carrying only <img src="file://..."> reads the original file from disk', async ({ page }) => {
+    const picture = writeLocationPicture()
+    await openReaderView(page)
+    const uploads = await stubParse(page, 'qq location prompt')
+    const asked: string[] = []
+    page.on('request', (request) => {
+      if (request.url().includes('/api/local-picture')) asked.push(JSON.parse(request.postData() || '{}').path)
+    })
+
+    // QQ's own shape: file:// straight before the drive, backslashes, nothing encoded.
+    const src = `file://${picture}`
+    await page.evaluate((value) => {
+      const dt = new DataTransfer()
+      dt.setData('text/html', `<html><body><!--StartFragment--><img src="${value}" /><!--EndFragment--></body></html>`)
+      document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true } as ClipboardEventInit))
+    }, src)
+
+    await expect(page.locator('#reader-prompt-text')).toContainText('qq location prompt', { timeout: 10000 })
+    expect(asked).toEqual([src])
+    expect(uploads).toEqual(['qq 图片.png'])
+    // The original file, not a clipboard copy: no "details may be lost" warning.
+    await expect(page.locator('#reader-status')).toBeHidden()
+  })
+
+  test('a drop carrying only a text/uri-list file:// link reads the original file from disk', async ({ page }) => {
+    const picture = writeLocationPicture()
+    await openReaderView(page)
+    const uploads = await stubParse(page, 'dragged location prompt')
+
+    const dt = await page.evaluateHandle((uri) => {
+      const data = new DataTransfer()
+      data.setData('text/uri-list', uri)
+      return data
+    }, pathToFileURL(picture).href)
+    await page.dispatchEvent('#reader-drop-zone', 'dragover', { dataTransfer: dt })
+    await page.dispatchEvent('#reader-drop-zone', 'drop', { dataTransfer: dt })
+
+    await expect(page.locator('#reader-prompt-text')).toContainText('dragged location prompt', { timeout: 10000 })
+    expect(uploads).toEqual(['qq 图片.png'])
+  })
+
+  test('a location whose file is gone, and a drop with no picture at all, each say why', async ({ page }) => {
+    await openReaderView(page)
+    let parsed = 0
+    await page.route('**/api/parse-image', (route) => {
+      parsed += 1
+      return route.abort()
+    })
+
+    await page.evaluate((value) => {
+      const dt = new DataTransfer()
+      dt.setData('text/plain', `<img src="${value}" />`)
+      document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true } as ClipboardEventInit))
+    }, `file://${path.join(LOCATION_DIR, 'gone.png')}`)
+    await expect(page.locator('#toast-container')).toContainText(/gone\.png/, { timeout: 10000 })
+    await expect(page.locator('#toast-container')).toContainText(/QQ/)
+
+    const dt = await page.evaluateHandle(() => {
+      const data = new DataTransfer()
+      data.setData('text/plain', 'just some words')
+      return data
+    })
+    await page.dispatchEvent('#reader-drop-zone', 'drop', { dataTransfer: dt })
+    await expect(page.locator('#toast-container')).toContainText(/no picture file location|也没有图片的文件位置/)
+    expect(parsed).toBe(0)
   })
 })

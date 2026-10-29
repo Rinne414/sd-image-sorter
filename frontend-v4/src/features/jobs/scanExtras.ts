@@ -23,6 +23,8 @@ export interface ScanStall {
 export interface ScanExtras {
   stall: ScanStall | null
   otherLibrary: { count: number; paths: string[] }
+  /** Real pictures saved beside chat disguises (an import that asked for it), and ones that failed. */
+  disguises: { restored: number; failed: number }
 }
 
 function readStall(raw: Raw): ScanStall | null {
@@ -43,5 +45,9 @@ export function readScanExtras(raw: Raw): ScanExtras {
   const paths = Array.isArray(raw.skipped_other_library_paths)
     ? raw.skipped_other_library_paths.filter((p): p is string => typeof p === 'string' && p.length > 0)
     : []
-  return { stall: readStall(raw), otherLibrary: { count: num(raw.skipped_other_library), paths } }
+  return {
+    stall: readStall(raw),
+    otherLibrary: { count: num(raw.skipped_other_library), paths },
+    disguises: { restored: num(raw.disguise_restored), failed: num(raw.disguise_restore_failed) },
+  }
 }

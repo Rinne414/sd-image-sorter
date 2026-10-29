@@ -1,4 +1,5 @@
 import { ApiError } from '../../../api/client'
+import { inspect, isPictureFile, type Inspected } from '../../../lib/localPicture'
 import { useApp } from '../../../state/store'
 import type { ParseResult } from '../reader/readerAdapter'
 
@@ -10,9 +11,8 @@ import type { ParseResult } from '../reader/readerAdapter'
 /** How an image came in; a pasted one has usually lost its generation details. */
 export type IntakeOrigin = 'drop' | 'pick' | 'paste'
 
-const IMAGE_NAME = /\.(png|jpe?g|webp|bmp|gif|avif|tiff?)$/i
-
-export const isImageFile = (f: File): boolean => f.type.startsWith('image/') || IMAGE_NAME.test(f.name)
+/** An image by its MIME type, or by its name when the type is blank. */
+export const isImageFile = isPictureFile
 
 /** A drag that carries a tool's own result (Privacy's scrambled image): never taken back in as a new file. */
 export const TOOL_RESULT_DRAG = 'application/x-sd-tool-result'
@@ -27,29 +27,29 @@ export function firstImage(files: Iterable<File> | ArrayLike<File> | null | unde
   return imagesOf(files)[0] ?? null
 }
 
-/** The images a paste carries, each named so a tool can say where it came from. */
-export function pastedImages(data: DataTransfer | null): File[] {
-  if (!data) return []
-  let files = imagesOf(data.files)
-  if (!files.length) files = imagesOf([...data.items].flatMap((i) => (i.kind === 'file' ? [i.getAsFile()] : [])).filter((f): f is File => !!f))
-  return files.map((file) => (file.name ? file : new File([file], 'clipboard.png', { type: file.type || 'image/png' })))
-}
+/** A pasted image, named so a tool can say where it came from. */
+export const withName = (file: File): File => (file.name ? file : new File([file], 'clipboard.png', { type: file.type || 'image/png' }))
 
-/** The image a paste carries (the first, when it carries several). */
-export function pastedImage(data: DataTransfer | null): File | null {
-  return pastedImages(data)[0] ?? null
-}
-
-/** The clipboard's image, read by the Paste button (the browser may ask first); null when it holds none. */
-export async function readClipboardImage(): Promise<File | null> {
-  const items = await navigator.clipboard.read()
-  for (const item of items) {
-    const type = item.types.find((t) => t.startsWith('image/'))
-    if (!type) continue
-    const blob = await item.getType(type)
-    return new File([blob], `clipboard.${type.split('/')[1] || 'png'}`, { type })
+/**
+ * What the clipboard holds, read by the Paste button (the browser may ask
+ * first): its image, and its HTML and text, where a chat app such as QQ puts a
+ * copied picture's file location instead of the picture.
+ */
+export async function readClipboard(): Promise<Inspected> {
+  const files: File[] = []
+  const text = { uriList: '', html: '', plain: '' }
+  for (const item of await navigator.clipboard.read()) {
+    for (const type of item.types) {
+      if (type.startsWith('image/') && !files.length) {
+        files.push(new File([await item.getType(type)], `clipboard.${type.split('/')[1] || 'png'}`, { type }))
+      } else if (type === 'text/html' && !text.html) {
+        text.html = await (await item.getType(type)).text()
+      } else if (type === 'text/plain' && !text.plain) {
+        text.plain = await (await item.getType(type)).text()
+      }
+    }
   }
-  return null
+  return inspect(files, text)
 }
 
 /** Read an image's generation details without adding it to the library. */

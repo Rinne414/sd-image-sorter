@@ -29,6 +29,7 @@ SOURCES = [
     "services/collect_importer.py",
     "services/comfyui_client.py",
     "services/ext_pairing.py",
+    "services/local_picture.py",
     "services/ffmpeg_install.py",
     "nudenet_detector.py",
     "routers/collect.py",

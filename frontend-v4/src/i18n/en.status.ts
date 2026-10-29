@@ -106,6 +106,8 @@ export const enStatus: Record<keyof typeof zhCNStatus, string> = {
   'import.next.claim': 'Move {n} into this library',
   'import.next.claimed': 'Moved {n} into this library',
   'import.next.otherLibrary': '{n} already belong to another library; left there.',
+  'import.next.restored': 'Chat disguise images restored: {n}. Each real picture is saved next to its original as _real.png.',
+  'import.next.restoreFailed': 'Chat disguise images that could not be restored: {n}.',
   'import.diag.title': 'The import looks stuck',
   'import.diag.body': 'No visible progress for {seconds} s. It may be waiting on a slow, broken or network-drive file. If it does not recover in a minute or two, copy the diagnostics for support.',
   'import.diag.step': 'Step',

@@ -107,6 +107,8 @@ export const zhCNStatus = {
   'import.next.claim': '把 {n} 张移入这个图库',
   'import.next.claimed': '已把 {n} 张移入这个图库',
   'import.next.otherLibrary': '{n} 张已经属于别的图库，没有动它们。',
+  'import.next.restored': '已还原聊天伪装图：{n} 张，真图以 _real.png 存在原图旁边。',
+  'import.next.restoreFailed': '没能还原的聊天伪装图：{n} 张。',
   'import.diag.title': '导入看起来卡住了',
   'import.diag.body': '已经 {seconds} 秒没有进展。可能在等一个很慢、损坏或在网络盘上的文件。一两分钟还不恢复的话，复制诊断信息发给开发者。',
   'import.diag.step': '步骤',

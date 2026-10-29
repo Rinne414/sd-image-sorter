@@ -39,7 +39,7 @@ const JARGON = new Set([
   // models, products, services
   ...['LoRA', 'ONNX', 'WD14', 'WD', 'VLM', 'CLIP', 'CCIP', 'TIPO', 'ToriiGate', 'Ollama', 'Kaloscope', 'PixAI', 'Camie', 'kohya', 'DINOv3'],
   ...['ComfyUI', 'NovelAI', 'NAI', 'Pixiv', 'Krea', 'Flux', 'FLUX', 'YOLO', 'SAM', 'SAM3', 'NudeNet', 'OppaiOracle', 'Anima', 'Danbooru'],
-  ...['Chrome', 'Edge', 'Firefox'],
+  ...['Chrome', 'Edge', 'Firefox', 'QQ'],
   ...['Booru', 'Civitai', 'GitHub', 'HuggingFace', 'ModelScope', 'NVIDIA', 'OpenAI', 'Gemini', 'Anthropic', 'Claude', 'Google', 'Vertex'],
   ...['OpenRouter', 'Qwen', 'JoyCaption', 'EVA02', 'SwinV2', 'ViT', 'U2Net', 'UNet', 'rembg', 'Lucida', 'LSNet', 'PyTorch', 'Python'],
   ...['OneTrainer', 'SDXL', 'SD', 'Pony', 'Illustrious', 'NoobAI', 'A1111', 'WebUI', 'Forge', 'SynthID', 'ControlNet', 'FastEmbed', 'T5'],
@@ -47,7 +47,7 @@ const JARGON = new Set([
   // keys
   ...['Ctrl', 'Shift', 'Alt', 'Enter', 'Esc', 'Tab', 'Backspace', 'Delete', 'Home', 'End', 'WASD', 'F2', 'F12'],
   // files and formats
-  ...['PNG', 'GIF', 'JPEG', 'JPG', 'jpg', 'WebP', 'JSON', 'json', 'JSONL', 'CSV', 'ZIP', 'zip', 'RAR', 'txt', 'onnx', 'pt', 'EXIF'],
+  ...['PNG', 'GIF', 'JPEG', 'JPG', 'jpg', 'WebP', 'BMP', 'TIFF', 'JSON', 'json', 'JSONL', 'CSV', 'ZIP', 'zip', 'RAR', 'txt', 'onnx', 'pt', 'EXIF'],
   // hardware, web, units
   ...['GPU', 'CPU', 'CUDA', 'API', 'URL', 'HTTP', 'HTTPS', 'http', 'https', 'localhost', 'SOCKS', 'socks5', 'VPN', 'SSD', 'RGB', 'HDR', 'DPI'],
   ...['GB', 'MB', 'KB', 'B', 'MP', 'px', 'ms', 'ID', 'MIT', 'NSFW'],

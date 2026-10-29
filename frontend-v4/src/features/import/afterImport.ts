@@ -67,6 +67,9 @@ export async function afterImport(job: Job, tagAfter: boolean, untaggedBefore: n
       : undefined
   const text = jobHeadline(job) + (tagAfter ? tr('import.thenTagging') : '')
   useToasts.getState().push(text, troubled ? 'error' : 'info', action)
+  const disguises = p.scan?.disguises
+  if (disguises && disguises.restored > 0) useToasts.getState().push(tr('import.next.restored', { n: disguises.restored }), 'info')
+  if (disguises && disguises.failed > 0) useToasts.getState().push(tr('import.next.restoreFailed', { n: disguises.failed }), 'error')
   const other = p.scan?.otherLibrary
   if (other && other.count > 0 && other.paths.length > 0) {
     useToasts.getState().push(tr('import.next.otherLibrary', { n: other.count }), 'info', {

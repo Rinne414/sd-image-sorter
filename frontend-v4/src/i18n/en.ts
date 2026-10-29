@@ -92,6 +92,8 @@ export const en: Record<MessageKey, string> = {
   'import.verifyFiles': 'Check every file, not just size and date (slower)',
   'import.cleanupMissing': 'Also clear records of files that are gone from this folder',
   'import.cleanupWarn': 'Their ratings, tags and collections are deleted with them.',
+  'import.restoreDisguised': 'Restore chat disguise images (adds _real.png files)',
+  'import.restoreDisguisedHint': 'This writes new files into the folder you import. Skipped when the hidden picture is the same as the one shown.',
   'import.storageHint': 'Folders on a local SSD import best; network and cloud drives read slowly and can look stuck.',
   'import.libraryFolders': 'Library folders',
   'import.phaseFiles': 'Finding images and adding them',

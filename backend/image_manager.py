@@ -242,7 +242,7 @@ def scan_folder(
     quick_import: bool = True,
     metadata_workers: int = DEFAULT_METADATA_WORKERS,
     precise_total: bool = True,
-    restore_disguised: bool = True,
+    restore_disguised: bool = False,
     only_paths: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
     """
@@ -254,7 +254,10 @@ def scan_folder(
         progress_callback: Optional callback(current, total, filename)
         stop_requested: Optional callback returning True when the scan should stop
         restore_disguised: For each new or changed chat-disguise PNG, write its
-            real picture beside it as ``<name>_real.png`` and index both
+            real picture beside it as ``<name>_real.png`` and index both. Off
+            unless the user ticks it in the scan dialog: it writes new files
+            into their folder. A file whose hidden picture equals its cover is
+            never copied.
         only_paths: Import just these files (the folder watcher's new or
             changed pictures) instead of walking ``folder_path``. Each one goes
             through the same unchanged check, other-library skip and metadata
@@ -1035,6 +1038,11 @@ def scan_folder(
                             result["unchanged"] += 1
                             generator = existing.get("generator") or "unknown"
                             result["by_generator"][generator] = result["by_generator"].get(generator, 0) + 1
+                            if restore_disguised and filename.lower().endswith(".png"):
+                                # Ticked after the folder was imported: an indexed
+                                # disguise is restored too (never twice: an
+                                # existing <name>_real.png is left alone).
+                                _restore_disguise_beside(image_path)
                             continue
 
                         if restore_disguised and filename.lower().endswith(".png"):

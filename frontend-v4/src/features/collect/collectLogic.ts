@@ -12,23 +12,6 @@ export function pastedPictureUrl(text: string): string | null {
   return PICTURE_URL.test(trimmed) ? trimmed : null
 }
 
-interface ClipboardItemLike {
-  kind: string
-  type: string
-  getAsFile: () => File | null
-}
-
-/** The first picture file among pasted items. */
-export function pictureFromItems(items: readonly ClipboardItemLike[]): File | null {
-  for (const item of items) {
-    if (item.kind === 'file' && item.type.startsWith('image/')) {
-      const file = item.getAsFile()
-      if (file) return file
-    }
-  }
-  return null
-}
-
 /** "collected/2026-10-23": the last two parts of the folder the picture was saved in. */
 export function folderTail(folder: string): string {
   return folder.split(/[\\/]/).filter(Boolean).slice(-2).join('/')

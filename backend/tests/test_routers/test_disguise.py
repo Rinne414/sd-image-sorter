@@ -276,6 +276,18 @@ def test_restore_refuses_a_picture_that_is_not_a_disguise(test_client) -> None:
     assert response.status_code == 400
 
 
+def test_restore_refuses_a_file_whose_hidden_picture_is_its_cover(test_client) -> None:
+    picture = Image.new("RGBA", (60, 40), RED)
+    content = disguise_apng.build_disguise(picture, [picture])
+
+    response = test_client.post(
+        "/api/disguise/restore", files={"file": ("same.png", content, "image/png")}
+    )
+
+    assert response.status_code == 400
+    assert "not a disguise" in response.json()["error"]
+
+
 def test_copy_puts_the_made_files_on_the_clipboard(
     test_client, data_dir, monkeypatch
 ) -> None:
@@ -363,7 +375,9 @@ def test_a_scan_of_the_output_folder_leaves_our_own_disguises_alone(
     ).json()
     shutil.copyfile(FIXTURES / "reference_tool_single.png", out / "from_friend.png")
 
-    result = scan_folder(str(out), recursive=False, metadata_workers=1)
+    result = scan_folder(
+        str(out), recursive=False, metadata_workers=1, restore_disguised=True
+    )
 
     assert made["status"] == "ok"
     assert result["disguise_restored"] == 1

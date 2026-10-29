@@ -47,8 +47,9 @@ function _scanDoneText(progress) {
     const updated = num(progress.updated ?? progress.result?.updated);
     const removed = num(progress.removed ?? progress.result?.removed);
     const issues = num(progress.errors ?? progress.result?.errors);
-    const restored = num(progress.result?.disguise_restored);
-    const restoreFailed = num(progress.result?.disguise_restore_failed);
+    // Top-level since the progress response model drops `result`.
+    const restored = num(progress.disguise_restored ?? progress.result?.disguise_restored);
+    const restoreFailed = num(progress.disguise_restore_failed ?? progress.result?.disguise_restore_failed);
     if (updated) parts.push(I18n.format(appT('scan.msg.doneUpdated', 'Updated: {count}.'), { count: String(updated) }));
     if (removed) parts.push(I18n.format(appT('scan.msg.doneRemoved', 'Missing records removed: {count}.'), { count: String(removed) }));
     if (issues) parts.push(I18n.format(appT('scan.msg.doneIssues', 'Images with issues: {count}.'), { count: String(issues) }));

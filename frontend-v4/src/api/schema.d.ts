@@ -10716,6 +10716,11 @@ export interface components {
              * @default true
              */
             quick_import: boolean;
+            /**
+             * Restore Disguised
+             * @default false
+             */
+            restore_disguised: boolean;
         };
         /**
          * ScanStartResponse

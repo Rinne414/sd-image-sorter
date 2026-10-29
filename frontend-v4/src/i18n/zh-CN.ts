@@ -92,6 +92,8 @@ export const zhCN = {
   'import.verifyFiles': '逐个核对文件，不只看大小和日期（更慢）',
   'import.cleanupMissing': '同时清掉这个文件夹里已经不存在的文件的记录',
   'import.cleanupWarn': '这些记录的评分、标签和合集会一起删掉。',
+  'import.restoreDisguised': '还原聊天伪装图：在原图旁另存一份 _real.png',
+  'import.restoreDisguisedHint': '会往导入的文件夹里写入新文件；藏着的图和显示的图一样时跳过。',
   'import.storageHint': '本地 SSD 上的文件夹最稳；网络盘和云盘读文件慢，看起来会像卡住。',
   'import.libraryFolders': '图库里的文件夹',
   'import.phaseFiles': '正在找图片并加入图库',

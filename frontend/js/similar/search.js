@@ -254,14 +254,14 @@ Object.assign(window.SimilarImages, {
         event.preventDefault();
         this.setUploadDropzoneActive(false);
 
-        const files = Array.from(event.dataTransfer?.files || []);
-        const imageFile = files.find((file) => file.type.startsWith('image/'));
-        if (!imageFile) {
-            window.App.showToast(this._t('similar.dropImageToSearch', 'Drop an image file to search'), 'warning');
-            return;
+        // A picture dragged out of QQ or another chat app is its file location.
+        const dropped = window.LocalPicture.take(event.dataTransfer, ([imageFile]) => this.searchByUpload(imageFile));
+        if (!dropped.taken) {
+            const message = dropped.reason === 'empty'
+                ? this._t('similar.dropImageToSearch', 'Drop an image file to search')
+                : window.LocalPicture.missingText(dropped.reason);
+            window.App.showToast(message, 'warning');
         }
-
-        this.searchByUpload(imageFile);
     },
 
 });

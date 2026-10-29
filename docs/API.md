@@ -678,6 +678,13 @@ Open an existing folder in the host file explorer (Windows explorer, macOS open,
 #### POST /api/parse-image
 Parse uploaded image metadata without inserting into library DB.
 
+#### POST /api/local-picture
+Read a picture on this computer by its location, for a drop or paste that carried the location instead of the picture (QQ and other chat apps copy `<img src="file://L:\Tencent Files\...\x.png">` and drag out `file://` links). Body: `{"path": "..."}` (1 to 8192 characters): a Windows path (`L:\pics\a.png`, `L:/pics/a.png`, a share `\\server\share\a.png`), a POSIX path off Windows, or a `file:` URL in any shape apps write: `file:///C:/My%20Pictures/a.png` (percent-decoded), `file://L:\Tencent Files\...\a.png` (unencoded, backslashes; a name with a literal `%` or `#` is also tried as written), `file://localhost/...`, `file://server/share/...`. Surrounding quotes are ignored. **Only this program's own page may call it.**
+
+Returns the picture's bytes with its `Content-Type`, `Cache-Control: no-store` and `X-Picture-Name` (the file name, percent-encoded). The page wraps them in a `File` and sends that on its usual way (the Reader to `POST /api/parse-image`, Collect to `POST /api/collect/paste`, Quick collect to `POST /api/import-files`), so a picture read this way behaves like a dropped file and keeps its generation details.
+
+Only `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.bmp`, `.tif` and `.tiff` files are read, after the shared path validation (no `..`, no relative path) and a full decode. Errors carry `code`, `message` and `params`: `400` `local_picture_bad_path` (not a full file location on this computer, or a POSIX path on Windows); `400` `local_picture_network` (`name`: a network share `\\host\share`, `file://host/...`, or a `\\?\` / `\\.\` device path; refused before any file access, because looking up a share makes Windows sign in to that host with the user's credentials); `403` `Only this program's own page can read a picture by its location.`; `404` `local_picture_missing` (`name`, `path`: nothing at that location); `415` `local_picture_not_picture` (`name`: not a picture extension); `422` `local_picture_unreadable` (`name`, `reason`: the file is not a decodable picture).
+
 ### Libraries
 
 #### GET /api/libraries
@@ -909,9 +916,11 @@ Validate folder path.
 #### POST /api/scan
 Start folder scan. The default scan path is single-pass streaming: progress reports discovered/imported work as it walks the directory and does not pre-count the entire folder tree before import. Exact up-front totals are intentionally not part of the default request contract for large or network-backed libraries.
 
+Body: `folder_path` (required), `recursive` (default `true`), `quick_import` (default `true`), `force_reparse` (default `false`), `cleanup_missing` (default `false`), `restore_disguised` (default `false`). With `restore_disguised: true`, each new or changed chat-disguise PNG gets its real picture written beside it as `<name>_real.png` (an existing file is never replaced), and both are indexed; a disguise whose hidden picture is pixel-identical to its cover is skipped, and disguises made by this program are left alone. This is the only scan option that writes into the scanned folder, so it is off unless the user asks; library rescans, idle auto-refresh, folder watching and collected pictures never restore.
+
 #### GET /api/scan/progress
 Get scan progress.
-The payload includes step-oriented fields such as `step`, `current_item`, `started_at`, `updated_at`, `recent_errors`, `metadata_pending`, `attention_required`, `attention_message`, `stalled_seconds`, `diagnostics_available`, and `diagnostics_endpoint`. When `attention_required=true`, clients should show a visible stalled-scan warning and offer diagnostics copy/open actions instead of leaving the user with a frozen-looking progress bar. Corrupt / truncated files are reported by filename and excluded from the normal library. `message` is a bilingual display string kept for API compatibility; clients localise from `message_key` (`syncing_index`, `counting_before`, `scanning`, `processing`, `counting`, `counted`, `cleanup`, `library_ready_metadata`, `library_ready_import`, `reading_details`, `importing_details`, `skipped_unreadable`, `cancelling`, `cancelled`, `done`, `error`, `aborted`) plus the existing counters, `message_item` (the file name behind `processing` / `skipped_unreadable`), `missing_text_notice` (true on a done state when most imported images stored no text), `message_detail` (on `error`: the English text of a scan error raised by the app itself; empty for unexpected errors), `message_detail_code` and `message_detail_args` (a stable reason code with its parameters: `library_root_persist_failed` {path}, `scan_root_inaccessible` {path, reason}, `missing_cleanup_unverifiable` {path}, `folder_not_found` {path}, `not_a_directory` {path}, `folder_is_link` {path}; clients show their own sentence for a known code and `message_detail` otherwise). `POST /api/scan` also returns `message_key: "started"`.
+The payload includes step-oriented fields such as `step`, `current_item`, `started_at`, `updated_at`, `recent_errors`, `metadata_pending`, `attention_required`, `attention_message`, `stalled_seconds`, `diagnostics_available`, and `diagnostics_endpoint`. When `attention_required=true`, clients should show a visible stalled-scan warning and offer diagnostics copy/open actions instead of leaving the user with a frozen-looking progress bar. Corrupt / truncated files are reported by filename and excluded from the normal library. `message` is a bilingual display string kept for API compatibility; clients localise from `message_key` (`syncing_index`, `counting_before`, `scanning`, `processing`, `counting`, `counted`, `cleanup`, `library_ready_metadata`, `library_ready_import`, `reading_details`, `importing_details`, `skipped_unreadable`, `cancelling`, `cancelled`, `done`, `error`, `aborted`) plus the existing counters, `message_item` (the file name behind `processing` / `skipped_unreadable`), `missing_text_notice` (true on a done state when most imported images stored no text), `disguise_restored` and `disguise_restore_failed` (on a done state: real pictures written beside chat disguises, and disguises that could not be restored; 0 unless the scan asked for `restore_disguised`), `message_detail` (on `error`: the English text of a scan error raised by the app itself; empty for unexpected errors), `message_detail_code` and `message_detail_args` (a stable reason code with its parameters: `library_root_persist_failed` {path}, `scan_root_inaccessible` {path, reason}, `missing_cleanup_unverifiable` {path}, `folder_not_found` {path}, `not_a_directory` {path}, `folder_is_link` {path}; clients show their own sentence for a known code and `message_detail` otherwise). `POST /api/scan` also returns `message_key: "started"`.
 
 #### POST /api/scan/acknowledge
 Atomically claim and clear the exact completed manual scan observed by the client. The JSON request body requires positive integer `run_id` and `source` set to `"manual"`. Returns `409` when that identity is no longer the pending terminal result; callers that lose this claim must not repeat completion side effects.
@@ -2552,8 +2561,10 @@ A chat disguise is one PNG that shows a cover as its still picture and the real
 picture(s) as its APNG animation: chat-list thumbnails show the cover, opening
 the image plays the real picture. Pixels are scrubbed by default (no metadata,
 no prompt hidden in pixel bits). Disguises made here are remembered by SHA-256,
-so a library scan does not restore them; a scan restores received disguises
-beside the original as `<name>_real.png` (see `scan_folder(restore_disguised)`).
+so a library scan does not restore them; a scan started with
+`restore_disguised: true` restores received disguises beside the original as
+`<name>_real.png` (off by default, see `POST /api/scan`). A file whose hidden
+picture is pixel-identical to its cover hides nothing and is not a disguise.
 
 #### POST /api/disguise/make
 Multipart form. `sources` is a JSON list in frame order of `{"image_id": n}`
@@ -2584,7 +2595,8 @@ file selected (Explorer `/select,`, macOS `open -R`, Linux opens the folder).
 
 #### POST /api/disguise/restore
 Upload a disguise (`file`); returns its real picture as PNG, or an ordinary
-looping APNG for a pack. 400 when the upload is not a disguise.
+looping APNG for a pack. 400 when the upload is not a disguise, including a
+file whose hidden picture is the same as its cover.
 
 #### GET /api/disguise/default-cover/info
 `{"exists": false}` or `{"exists": true, "version": <mtime ns>}`; the page asks this

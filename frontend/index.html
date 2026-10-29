@@ -6569,6 +6569,14 @@
                         </div>
                         <div class="form-group">
                             <label class="checkbox-label">
+                                <input type="checkbox" id="scan-restore-disguised" aria-describedby="scan-restore-disguised-hint">
+                                <span class="checkbox-custom" aria-hidden="true"></span>
+                                <span class="checkbox-text" id="scan-restore-disguised-label" data-i18n="scan.restoreDisguisedLabel">Restore chat disguise images (adds _real.png files)</span>
+                            </label>
+                            <small class="helper-text" id="scan-restore-disguised-hint" data-i18n="scan.restoreDisguisedHint">This writes new files into the folder you import. Skipped when the hidden picture is the same as the one shown.</small>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
                                 <input type="checkbox" id="scan-auto-tag">
                                 <span class="checkbox-custom" aria-hidden="true"></span>
                                 <span class="checkbox-text" id="scan-auto-tag-label" data-i18n="scan.autoTagLabel">Auto-tag after import (slower)</span>
@@ -8576,6 +8584,7 @@
     <script src="/static/js/guide-translations.js"></script>
     <script src="/static/js/i18n.js"></script>
     <script src="/static/js/api-error-text.js"></script>
+    <script src="/static/js/modules/core/local-picture.js"></script>
     <!-- guide.js decomposition (contextual-guide family; smart-tag precedent).
          Classic static tags sharing one global lexical scope: copy (data
          consts) -> engine (the window.Guide singleton object) -> boot (LAST:

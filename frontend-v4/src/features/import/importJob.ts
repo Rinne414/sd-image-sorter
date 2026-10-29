@@ -14,11 +14,32 @@ export interface ImportOptions {
   verifyFiles: boolean
   /** Afterwards, tag every untagged image with the last tagging settings. */
   tagAfter: boolean
+  /** Save the real picture of each chat disguise beside it as <name>_real.png (writes into the folder). */
+  restoreDisguised: boolean
 }
 
 // Shared with V3.5 (same origin), so both apps offer the same recent folders.
 const RECENT_KEY = 'sd-image-sorter-recent-folders'
 const RECENT_MAX = 5
+// Shared with V3.5 too, in its '1' / '0' form: restoring disguises is a
+// standing choice about the folders someone imports, so it is remembered.
+const RESTORE_DISGUISED_KEY = 'sd-image-sorter-scan-restore-disguised'
+
+export function storedRestoreDisguised(): boolean {
+  try {
+    return localStorage.getItem(RESTORE_DISGUISED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function storeRestoreDisguised(on: boolean): void {
+  try {
+    localStorage.setItem(RESTORE_DISGUISED_KEY, on ? '1' : '0')
+  } catch {
+    // storage blocked: the choice just won't be remembered
+  }
+}
 
 export function recentImports(): string[] {
   try {
@@ -64,6 +85,7 @@ export async function startImport(folder: string, o: ImportOptions, untagged = 0
           force_reparse: o.forceReparse,
           cleanup_missing: o.cleanupMissing,
           quick_import: !o.verifyFiles,
+          restore_disguised: o.restoreDisguised,
         },
       }),
     )

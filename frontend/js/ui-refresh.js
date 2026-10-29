@@ -399,6 +399,7 @@
             this._setText('#scan-verify-files-label', 'scan.verifyFilesLabel');
             this._setText('#scan-force-reparse-label', 'scan.forceReparseLabel');
             this._setText('#scan-cleanup-missing-label', 'scan.cleanupMissingLabel');
+            this._setText('#scan-restore-disguised-label', 'scan.restoreDisguisedLabel');
             this._setText('#scan-auto-tag-label', 'scan.autoTagLabel');
             var scanCancelBtn = document.querySelector('#btn-cancel-scan');
             if (!scanCancelBtn || scanCancelBtn.dataset.liveLabel !== '1') {
