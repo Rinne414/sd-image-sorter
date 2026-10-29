@@ -632,11 +632,10 @@
 
     async function createLibraryInteractive() {
         const suggested = _t('library.newNamePlaceholder', 'New library');
-        let name = suggested;
-        if (typeof window.showInputModal === 'function') {
-            // optional if exists
-        }
-        name = window.prompt(
+        // The program's own dialog: the desktop program (Electron) has no
+        // browser prompt box: it throws, so the button did nothing there.
+        let name = await window.App.showInputModal(
+            _t('library.createTitle', 'New library'),
             _t('library.createPrompt', 'Name for the new library:'),
             suggested,
         );
@@ -674,7 +673,8 @@
 
     async function renameLibraryInteractive(id, currentName) {
         const suggested = currentName || _t('library.newNamePlaceholder', 'New library');
-        const nameRaw = window.prompt(
+        const nameRaw = await window.App.showInputModal(
+            _t('library.renameTitle', 'Rename library'),
             _t('library.renamePrompt', 'Rename library:'),
             suggested,
         );

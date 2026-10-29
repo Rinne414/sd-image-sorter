@@ -388,6 +388,7 @@ window.I18nLang_en = {
     'library.deleteFailed': 'Could not delete library',
     'library.goneSwitched': 'The library that was open no longer exists (it may have been deleted in another window). Switched to “{name}”.',
     'library.cannotDeleteMain': 'The main library cannot be deleted. Clear it instead.',
+    'library.createTitle': 'New library',
     'library.renameTitle': 'Rename library',
     'library.renamePrompt': 'Rename library:',
     'library.renamedToast': 'Library renamed to “{name}”',

@@ -390,6 +390,7 @@ window.I18nLang_zhCN = {
     'library.deleteFailed': '无法删除图库',
     'library.goneSwitched': '刚才打开的图库已不存在（可能在另一个窗口里删除了），已切换到「{name}」。',
     'library.cannotDeleteMain': '主图库不能删除，请改用「清空当前图库」。',
+    'library.createTitle': '新建图库',
     'library.renameTitle': '重命名图库',
     'library.renamePrompt': '重命名图库：',
     'library.renamedToast': '图库已重命名为「{name}」',

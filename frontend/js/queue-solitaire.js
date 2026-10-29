@@ -1490,9 +1490,7 @@
             'Rename {count} images in "{section}". Enter a base name such as "keep".',
             { count: section.items.length, section: section.name }
         );
-        const baseName = window.App?.showInputModal
-            ? await window.App.showInputModal(title, message, section.name.toLowerCase().replace(/\s+/g, '_'))
-            : window.prompt(message, section.name.toLowerCase().replace(/\s+/g, '_'));
+        const baseName = await window.App.showInputModal(title, message, section.name.toLowerCase().replace(/\s+/g, '_'));
         if (!baseName) return;
 
         const cs = getCensorState();
@@ -1657,9 +1655,7 @@
     async function addNewSection() {
         const title = t('queueSolitaire.newSectionTitle', 'New Section');
         const message = t('queueSolitaire.newSectionMessage', 'Enter a section name:');
-        const name = window.App?.showInputModal
-            ? await window.App.showInputModal(title, message, `Section ${state.sections.length}`)
-            : window.prompt(message, `Section ${state.sections.length}`);
+        const name = await window.App.showInputModal(title, message, `Section ${state.sections.length}`);
         if (!name) return;
         addSection(name);
         render();

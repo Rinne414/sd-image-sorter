@@ -242,16 +242,11 @@
         async createPrompt() {
             const app = appRef();
             try {
-                let name = null;
-                if (typeof app.showInputModal === 'function') {
-                    name = await app.showInputModal(
-                        t('collections.create', 'New collection'),
-                        t('collections.namePrompt', 'Enter a name for the collection:'),
-                        ''
-                    );
-                } else {
-                    name = window.prompt(t('collections.namePrompt', 'Enter a name for the collection:'), '');
-                }
+                let name = await app.showInputModal(
+                    t('collections.create', 'New collection'),
+                    t('collections.namePrompt', 'Enter a name for the collection:'),
+                    ''
+                );
                 name = (name || '').trim();
                 if (!name) return;
 
@@ -268,16 +263,11 @@
         async renamePrompt(id, currentName) {
             const app = appRef();
             try {
-                let name = null;
-                if (typeof app.showInputModal === 'function') {
-                    name = await app.showInputModal(
-                        t('collections.rename', 'Rename collection'),
-                        t('collections.namePrompt', 'Enter a name for the collection:'),
-                        currentName || ''
-                    );
-                } else {
-                    name = window.prompt(t('collections.namePrompt', 'Enter a name for the collection:'), currentName || '');
-                }
+                let name = await app.showInputModal(
+                    t('collections.rename', 'Rename collection'),
+                    t('collections.namePrompt', 'Enter a name for the collection:'),
+                    currentName || ''
+                );
                 name = (name || '').trim();
                 if (!name || name === currentName) return;
 
