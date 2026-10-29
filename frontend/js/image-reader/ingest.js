@@ -90,6 +90,27 @@ Object.assign(window.ImageReader, {
         },
 
         async _handlePaste() {
+            // Read the clipboard at once where the browser allows it. A picture
+            // picked in Windows' clipboard history (Win+V) is then on the
+            // clipboard even when Win+V's own paste never reached this page
+            // (it pastes into the window it thinks was last used), so one click
+            // here opens it. Without permission, fall back to arming Ctrl+V.
+            if (navigator.clipboard?.read && window.LocalPicture) {
+                let transfer = null;
+                try {
+                    transfer = await window.LocalPicture.transferFromClipboard(await navigator.clipboard.read());
+                } catch (_error) {
+                    transfer = null;
+                }
+                if (transfer) {
+                    const pasted = window.LocalPicture.take(transfer, ([file], how) => {
+                        this._handleFile(file, { sourceKind: how === 'location' ? 'file' : 'clipboard-button' });
+                    }, { preferLocation: true });
+                    if (!pasted.taken) window.LocalPicture.tellMissing(pasted.reason, { clipboard: true });
+                    return;
+                }
+            }
+
             this._setClipboardPasteState(true);
 
             const dropZone = document.getElementById('reader-drop-zone');

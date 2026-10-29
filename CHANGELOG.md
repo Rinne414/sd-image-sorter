@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **A picture picked with Win+V opens with one click / 用 Win+V 选的图点一下就能读**: Windows' clipboard history (Win+V) pastes into the window it thinks was last used, so a picture picked there often never reached the Reader. The classic Reader's "Paste from Clipboard" button now reads the clipboard at once (the picked picture is on it), instead of waiting for Ctrl+V; where the browser does not allow reading the clipboard it still waits for Ctrl+V. V Opus's Paste button already read the clipboard.
+  - Windows 的剪贴板历史（Win+V）会把内容粘贴到它认为“上一个使用中”的窗口，所以在那里选的图常常到不了读图。经典界面读图的“从剪贴板粘贴”按钮现在会直接读取剪贴板（选中的图就在上面），不再等你按 Ctrl+V；浏览器不允许读取剪贴板时，仍然等 Ctrl+V。V Opus 的“粘贴”按钮本来就会直接读取。
 - **Settings says where the desktop program is / 设置会说明桌面程序在哪里**: In-app updates never install the desktop program, so an install from before 3.8.0 that was updated in the program has no `SD Image Sorter.exe`, and nothing said so. Opened in a browser on Windows, classic Settings > General and V Opus Settings > Desktop now say whether the program folder holds it; when it does not, they say how to get it (quit, extract the full Windows package over the same folder; the `data` folder is not in the package, so the library, settings and models stay) and link the download page.
   - 程序内更新从不安装桌面程序，所以 3.8.0 之前装的、一直在程序里更新的，文件夹里没有 `SD Image Sorter.exe`，而且没有任何提示。现在在 Windows 上用浏览器打开时，经典界面的「设置 > 常规」和 V Opus 的「设置 > 桌面版」会说明程序文件夹里有没有它；没有时，会说明怎么获取（退出程序，把完整的 Windows 包解压到原来的文件夹并覆盖；`data` 文件夹不在包里，图库、设置和模型都会保留），并附上下载页链接。
 
