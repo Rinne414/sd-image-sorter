@@ -551,6 +551,11 @@ window.I18nLang_en = {
     'desktop.shortcutReset': 'Use Ctrl+Alt+Space',
     'desktop.quickCollectBody': 'A small window that stays on top: drop or paste pictures into it to add them. Also in the tray menu.',
     'desktop.quickCollectOpen': 'Open',
+    'desktop.browserHereTitle': 'The desktop program is in this folder',
+    'desktop.browserHereBody': 'Double-click SD Image Sorter.exe in the program folder. The tray, start at login and the global shortcut are set there.',
+    'desktop.browserMissingTitle': 'The desktop program is not in this folder',
+    'desktop.browserMissingBody': 'In-app updates do not install the desktop program (tray, start at login, global shortcut). To get it: quit the program, download the full Windows package, extract it into this folder and replace the files, then double-click SD Image Sorter.exe. Your library, settings and models are in the data folder, which the package does not contain, so they stay.',
+    'desktop.downloadPage': 'Open the download page',
     'desktop.dragFailed': 'Could not start dragging the files: {error}',
     'desktop.settingFailed': 'Could not change this setting: {error}',
     // Quick collect window

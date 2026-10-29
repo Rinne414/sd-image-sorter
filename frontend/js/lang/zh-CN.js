@@ -553,6 +553,11 @@ window.I18nLang_zhCN = {
     'desktop.shortcutReset': '用 Ctrl+Alt+Space',
     'desktop.quickCollectBody': '一个置顶的小窗口：把图拖进去或粘贴进去就会收入图库。托盘菜单里也有。',
     'desktop.quickCollectOpen': '打开',
+    'desktop.browserHereTitle': '桌面程序就在这个文件夹里',
+    'desktop.browserHereBody': '双击程序文件夹里的 SD Image Sorter.exe 打开。托盘、开机启动和全局快捷键都在那里设置。',
+    'desktop.browserMissingTitle': '这个文件夹里没有桌面程序',
+    'desktop.browserMissingBody': '程序内更新不会装上桌面程序（托盘、开机启动、全局快捷键）。要用的话：先退出程序，下载完整的 Windows 包，解压到这个文件夹并覆盖，再双击 SD Image Sorter.exe。图库、设置和模型都在 data 文件夹里，完整包不含它，所以都会保留。',
+    'desktop.downloadPage': '打开下载页',
     'desktop.dragFailed': '无法开始拖出文件：{error}',
     'desktop.settingFailed': '无法更改这项设置：{error}',
     // 快速收集窗口

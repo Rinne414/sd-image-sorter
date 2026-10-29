@@ -6026,6 +6026,22 @@
                         </button>
                     </div>
                 </section>
+                <!-- In a browser on Windows: where the desktop program is, or how to get it (in-app updates never install it). -->
+                <section class="settings-home-panel settings-desktop-panel" id="settings-desktop-browser" aria-labelledby="settings-desktop-browser-title" hidden>
+                    <div class="settings-home-header">
+                        <h3 id="settings-desktop-browser-title" data-i18n="desktop.title">Desktop</h3>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-copy">
+                            <strong id="settings-desktop-browser-heading" data-i18n="desktop.browserHereTitle">The desktop program is in this folder</strong>
+                            <span id="settings-desktop-browser-body" data-i18n="desktop.browserHereBody">Double-click SD Image Sorter.exe in the program folder. The tray, start at login and the global shortcut are set there.</span>
+                        </div>
+                        <button type="button" class="btn btn-ghost" id="btn-settings-desktop-download" hidden>
+                            <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg></span>
+                            <span data-i18n="desktop.downloadPage">Open the download page</span>
+                        </button>
+                    </div>
+                </section>
                 <!-- Reset all settings (owner baseline): preferences back to default, work stays. -->
                 <section class="settings-reset-all" id="settings-reset-all">
                     <h3 data-i18n="settings.resetAllTitle">Reset all settings</h3>

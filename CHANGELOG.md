@@ -5,6 +5,13 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed / 修复
+
+- **Settings says where the desktop program is / 设置会说明桌面程序在哪里**: In-app updates never install the desktop program, so an install from before 3.8.0 that was updated in the program has no `SD Image Sorter.exe`, and nothing said so. Opened in a browser on Windows, classic Settings > General and V Opus Settings > Desktop now say whether the program folder holds it; when it does not, they say how to get it (quit, extract the full Windows package over the same folder; the `data` folder is not in the package, so the library, settings and models stay) and link the download page.
+  - 程序内更新从不安装桌面程序，所以 3.8.0 之前装的、一直在程序里更新的，文件夹里没有 `SD Image Sorter.exe`，而且没有任何提示。现在在 Windows 上用浏览器打开时，经典界面的「设置 > 常规」和 V Opus 的「设置 > 桌面版」会说明程序文件夹里有没有它；没有时，会说明怎么获取（退出程序，把完整的 Windows 包解压到原来的文件夹并覆盖；`data` 文件夹不在包里，图库、设置和模型都会保留），并附上下载页链接。
+
 ## [3.10.1] - 2026-10-30
 
 ### Fixed / 修复

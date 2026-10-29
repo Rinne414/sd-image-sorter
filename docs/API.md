@@ -3056,6 +3056,9 @@ Key response fields:
 
 The release manifest (`release-manifest.json`) may carry `shell_version` (the desktop program version the package was built with) and `min_shell_version` (the oldest desktop program the release runs on). When the running desktop program is older than `min_shell_version`, the status sets `shell_update_required` and explains in `update_unavailable_reason` that the full package must be downloaded instead (the explanation is bilingual).
 
+#### GET /api/updates/desktop-program
+Whether this install holds the desktop program: `{windows, installed, launcher, download_url}`. `installed` is true when both `SD Image Sorter.exe` (the launcher) at the package root and `desktop/sd-image-sorter-shell.exe` exist. The in-app updater never installs the desktop program, so an install made before 3.8.0 and updated in place, or a source checkout, answers `false`; classic Settings > General and V Opus Settings > Desktop, opened in a browser on Windows, then say how to get it (the full Windows package, extracted over the program folder; `data/` is not in the package and stays). `download_url` is the releases page of the latest release. Reads the disk only, never the network.
+
 #### GET /api/updates/channel
 Get active update channel configuration.
 

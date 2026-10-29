@@ -4,6 +4,8 @@
  * and a button for Quick collect. Values live in the shell
  * (data/config/desktop-shell.json, start at login in the OS); this module
  * reads and writes them through window.sdDesktop (desktop-bridge.js starts it).
+ * In a browser on Windows a separate note says where the desktop program is,
+ * or how to get it when this folder has none.
  */
 (function () {
     'use strict';
@@ -136,6 +138,48 @@
         bind();
         refresh();
     }
+
+    /**
+     * In a browser on Windows: say where the desktop program is, or, when this
+     * folder has none (in-app updates never install it), how to get it.
+     */
+    async function showBrowserNote() {
+        const panel = el('settings-desktop-browser');
+        if (!panel || window.sdDesktop) return;
+        let state = null;
+        try {
+            const response = await fetch('/api/updates/desktop-program', { headers: { Accept: 'application/json' } });
+            state = response.ok ? await response.json() : null;
+        } catch (_error) {
+            state = null;
+        }
+        if (!state?.windows || window.sdDesktop) return;
+        const t = (key, fallback) => {
+            const value = window.I18n?.t?.(key);
+            return value && value !== key ? value : fallback;
+        };
+        const words = state.installed
+            ? ['desktop.browserHereTitle', 'The desktop program is in this folder',
+                'desktop.browserHereBody', 'Double-click SD Image Sorter.exe in the program folder. The tray, start at login and the global shortcut are set there.']
+            : ['desktop.browserMissingTitle', 'The desktop program is not in this folder',
+                'desktop.browserMissingBody', 'In-app updates do not install the desktop program (tray, start at login, global shortcut). To get it: quit the program, download the full Windows package, extract it into this folder and replace the files, then double-click SD Image Sorter.exe. Your library, settings and models are in the data folder, which the package does not contain, so they stay.'];
+        // Move the keys with the words: the i18n pass re-applies data-i18n.
+        [['settings-desktop-browser-heading', 0], ['settings-desktop-browser-body', 2]].forEach(([id, at]) => {
+            const node = el(id);
+            if (!node) return;
+            node.dataset.i18n = words[at];
+            node.textContent = t(words[at], words[at + 1]);
+        });
+        const download = el('btn-settings-desktop-download');
+        if (download) {
+            download.hidden = Boolean(state.installed);
+            download.onclick = () => window.open(state.download_url, '_blank', 'noopener');
+        }
+        panel.hidden = false;
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', showBrowserNote);
+    else showBrowserNote();
 
     window.DesktopSettings = { start, acceleratorFrom, displayShortcut };
 })();

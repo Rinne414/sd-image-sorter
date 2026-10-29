@@ -323,7 +323,7 @@ Eagle、Billfish 是通用素材库，不列入这张 SD 工作流细表。详�
 4. 只想用浏览器：双击 `run-portable.bat`，浏览器会自动打开 `http://localhost:8487`（请用近两年的桌面浏览器：Chrome / Edge 89+、Firefox 108+、Safari 16.4+；画风地图需要 WebGL）。两种启动方式用的是同一个文件夹里的同一份数据，不要同时开两个
 5. 首次使用请点击右上角 **Setup Now** 下载所需的 AI 模型
 6. 退出：托盘图标右键 → 退出。关闭窗口只是收到托盘，文件夹监看继续工作（可在 设置 > 桌面 里改成关闭即退出）
-7. 程序内更新只更新程序文件，不会替换 `SD Image Sorter.exe`。如果某个版本需要新的桌面程序，「检查更新」会告诉你去下载完整包，不会半途更新
+7. 程序内更新只更新程序文件，不会替换 `SD Image Sorter.exe`，也不会装上它。如果某个版本需要新的桌面程序，「检查更新」会告诉你去下载完整包，不会半途更新。3.8.0 之前装的、一直在程序里更新的，文件夹里没有桌面程序：先退出程序，把完整包解压到原来的文件夹并覆盖即可（`data` 文件夹不在包里，图库、设置和模型都会保留），设置页的「桌面」一栏也会这样提示
 
 ### Linux
 
@@ -816,7 +816,7 @@ Every build lives under **Assets** on the **[Releases page](https://github.com/R
 4. Prefer the browser? Double-click `run-portable.bat`: your browser opens `http://localhost:8487` (use a desktop browser from the last two years: Chrome / Edge 89+, Firefox 108+, Safari 16.4+; the Style Map needs WebGL). Both ways use the same data in the same folder; do not run both at once
 5. First time? Click **Setup Now** (top-right) to download the AI models you need
 6. To quit: right-click the tray icon and choose Quit. Closing the window only sends the program to the tray, where folder watching keeps working (Settings > Desktop can make closing quit instead)
-7. The in-app update replaces program files but never `SD Image Sorter.exe`. When a release needs a newer desktop program, "Check update" tells you to download the full package instead of updating half-way
+7. The in-app update replaces program files but never `SD Image Sorter.exe`, and never installs it. When a release needs a newer desktop program, "Check update" tells you to download the full package instead of updating half-way. An install from before 3.8.0 that was updated in the program has no desktop program: quit the program and extract the full package over the same folder (the `data` folder is not in the package, so your library, settings and models stay). Settings > Desktop says the same
 
 On NVIDIA machines, first launch may spend extra time at `Checking Windows ONNX Runtime package state...` while installing CUDA / cuDNN runtime wheels. The launcher now shows real pip progress there; it is not frozen.
 

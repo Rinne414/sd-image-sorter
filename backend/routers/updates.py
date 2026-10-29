@@ -16,6 +16,7 @@ import app_lifecycle
 from services.busy_jobs import collect_busy_jobs
 from services.service_provider import ServiceProvider
 from services.update_service import UpdateService
+from services.shell_compat import desktop_program_state
 
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,14 @@ def get_boot_id() -> dict:
 def get_update_status(force: bool = Query(False)) -> dict:
     """Check the configured release channel for a newer package version."""
     return get_update_service().get_status(force=force)
+
+
+@router.get("/desktop-program")
+def get_desktop_program() -> dict:
+    """Whether this install holds the desktop program (Settings > Desktop says how to get it)."""
+    import services.update_service as update_module
+
+    return desktop_program_state(update_module.PACKAGE_ROOT)
 
 
 @router.get("/channel")

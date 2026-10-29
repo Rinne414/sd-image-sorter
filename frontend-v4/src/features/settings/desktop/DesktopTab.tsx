@@ -5,6 +5,7 @@ import { Section } from '../about/Section'
 import { SettingRow } from '../SettingRow'
 import styles from './Desktop.module.css'
 import { acceleratorFrom, DEFAULT_SHORTCUT, displayShortcut } from './shortcut'
+import { useDesktopProgram } from './desktopProgram'
 import { openQuickCollect, type DesktopSettings } from './shell'
 import { useDesktopSettings } from './useDesktopSettings'
 
@@ -26,6 +27,7 @@ export function DesktopTab() {
       ) : (
         <Section title={t('desktop.browser.title')} testId="desktop-browser-note">
           <p className={styles.lead}>{t('desktop.browser.body')}</p>
+          <WhereIsTheProgram />
         </Section>
       )}
       <Section title={t('desktop.collect.title')} testId="desktop-collect">
@@ -36,6 +38,28 @@ export function DesktopTab() {
         </SettingRow>
         {!shell && <p className={styles.hint}>{t('desktop.browser.collectNote')}</p>}
       </Section>
+    </div>
+  )
+}
+
+/** In a browser on Windows: where the desktop program is, or how to get it (in-app updates never install it). */
+function WhereIsTheProgram() {
+  const t = useT()
+  const { data } = useDesktopProgram(true)
+  if (!data?.windows) return null
+  if (data.installed) {
+    return (
+      <p className={styles.hint} data-testid="desktop-program-here">
+        {t('desktop.browser.here')}
+      </p>
+    )
+  }
+  return (
+    <div className={styles.missing} data-testid="desktop-program-missing">
+      <p className={styles.hint}>{t('desktop.browser.missing')}</p>
+      <a className="btn" href={data.download_url} target="_blank" rel="noopener noreferrer" data-testid="desktop-program-download">
+        {t('desktop.browser.download')}
+      </a>
     </div>
   )
 }

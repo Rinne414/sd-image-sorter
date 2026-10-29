@@ -17,7 +17,18 @@ from __future__ import annotations
 
 import os
 import re
+from pathlib import Path
 from typing import Any, Mapping, Optional
+
+from app_info import GITHUB_REPOSITORY_URL
+
+# Where the Windows package keeps the desktop program (scripts/release_shell.py
+# builds it; test_release_shell pins the names equal): the launcher the user
+# double-clicks at the package root, the Electron shell in desktop/.
+LAUNCHER_EXE_NAME = "SD Image Sorter.exe"
+SHELL_DIRNAME = "desktop"
+SHELL_EXE_NAME = "sd-image-sorter-shell.exe"
+FULL_PACKAGE_PAGE = f"{GITHUB_REPOSITORY_URL}/releases/latest"
 
 SHELL_VERSION_ENV = "SD_IMAGE_SORTER_SHELL_VERSION"
 
@@ -70,4 +81,26 @@ def shell_requirement(
             f"/ {latest_version} 版需要更新桌面程序：当前是 {shell_version}，需要 {minimum} 或更新，"
             "程序内更新无法替换它。请从发布页下载完整包（windows-portable.zip）后使用。"
         ),
+    }
+
+
+def desktop_program_state(
+    package_root: Path, is_windows: Optional[bool] = None
+) -> dict[str, Any]:
+    """Whether this install holds the desktop program, and where to get it.
+
+    The in-app updater never installs the desktop program (see the module
+    docstring), so an install made before it existed (3.8.0) and then updated
+    in place, or a source checkout, has none. Settings tells such a user that
+    the full Windows package brings it; on Linux and macOS there is none.
+    """
+    root = Path(package_root)
+    installed = (root / LAUNCHER_EXE_NAME).is_file() and (
+        root / SHELL_DIRNAME / SHELL_EXE_NAME
+    ).is_file()
+    return {
+        "windows": os.name == "nt" if is_windows is None else is_windows,
+        "installed": installed,
+        "launcher": LAUNCHER_EXE_NAME,
+        "download_url": FULL_PACKAGE_PAGE,
     }

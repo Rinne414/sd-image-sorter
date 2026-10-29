@@ -280,6 +280,28 @@
       }
     },
     {
+      "id": "desktop.get-program",
+      "area": "settings",
+      "en": "Get the desktop program: in a browser, Settings says where SD Image Sorter.exe is or, when the folder has none, how to get it",
+      "zh": "获取桌面程序：在浏览器里，设置会说明 SD Image Sorter.exe 在哪里；文件夹里没有时，说明怎么获取",
+      "classic": [
+        "#settings-desktop-browser",
+        "#btn-settings-desktop-download"
+      ],
+      "vopus": {
+        "at": "#/settings/desktop",
+        "find": "[data-testid=\"desktop-program-download\"]",
+        "needs": "no desktop program",
+        "note": "Shown in a browser on Windows when the program folder has no desktop program (in-app updates never install it): says how to get it and links the full package; with the program there it says to double-click SD Image Sorter.exe"
+      },
+      "next": {
+        "at": "#/settings/desktop",
+        "find": "[data-testid=\"desktop-program-download\"]",
+        "needs": "no desktop program",
+        "note": "Shown in a browser on Windows when the program folder has no desktop program (in-app updates never install it): says how to get it and links the full package; with the program there it says to double-click SD Image Sorter.exe"
+      }
+    },
+    {
       "id": "desktop.quick-collect",
       "area": "library",
       "en": "Quick collect: drop or paste pictures into a small window to add them (copies in output/collected)",
