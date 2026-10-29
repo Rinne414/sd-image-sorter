@@ -337,12 +337,12 @@
                 'No file on disk is deleted or moved. These records point at files that are not there, and re-scanning the folder brings them back if the files return.'
             );
 
-        var confirm = (window.App && window.App.showConfirm) || window.showConfirm;
-        if (typeof confirm !== 'function') {
+        var ask = (window.App && window.App.showConfirm) || window.showConfirm;
+        if (typeof ask !== 'function') {
             performClear(location);
             return;
         }
-        confirm(title, body, function () { performClear(location); });
+        ask(title, body, function () { performClear(location); });
     }
 
     async function performClear(location) {

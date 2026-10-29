@@ -228,14 +228,7 @@ function _confirmRestartWhileBusy(jobs) {
         'Still running: {jobs}. Restarting stops it; you can start it again afterwards. Restart anyway?',
         { jobs: list },
     );
-    return new Promise((resolve) => {
-        const ask = window.App?.showConfirm || window.showConfirm;
-        if (typeof ask === 'function') {
-            ask(title, message, () => resolve(true), () => resolve(false));
-            return;
-        }
-        resolve(window.confirm(message));
-    });
+    return confirmAsync({ title, message });
 }
 
 async function requestAppRestartAndContinue({ reason, items } = {}) {

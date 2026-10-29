@@ -147,15 +147,28 @@ test('queue multi-select: ctrl toggles one, shift selects a range, select-all / 
   expect(result.afterClear).toEqual([])
 })
 
-test('_removeSelectedImages removes the selected set (confirm accepted)', async ({ page }) => {
+test('_removeSelectedImages asks in the program dialog: Cancel keeps, OK removes the selected set', async ({ page }) => {
   await seedQueue(page)
-  const result = await page.evaluate(() => {
+  const ask = page.locator('#confirm-modal.visible')
+  const startRemoving = () => page.evaluate(() => {
     const dm = (window as any).DatasetMaker
-    window.confirm = () => true
     dm._queueSelection = new Set([701, 703])
-    dm._removeSelectedImages()
+    ;(window as any).__removing = dm._removeSelectedImages()
+  })
+  const settled = () => page.evaluate(async () => {
+    const dm = (window as any).DatasetMaker
+    await (window as any).__removing
     return { ids: [...dm.imageIds], selection: [...dm._queueSelection] }
   })
+
+  await startRemoving()
+  await expect(ask.locator('#confirm-message')).toContainText('Remove 2 selected images from the dataset?')
+  await ask.locator('#btn-confirm-cancel').click()
+  expect(await settled()).toEqual({ ids: [701, 702, 703, 704], selection: [701, 703] })
+
+  await startRemoving()
+  await ask.locator('#btn-confirm-ok').click()
+  const result = await settled()
   expect(result.ids).toEqual([702, 704])
   expect(result.selection).toEqual([])
 })

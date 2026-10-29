@@ -293,12 +293,7 @@
             && !form.selection_token
             && !form.dataset_scan_token
         ) {
-            const noImagesMsg = smartTagT('smartTag.noImages', 'No images in Dataset Maker. Add images first.');
-            if (typeof window.showToast === 'function') {
-                window.showToast(noImagesMsg, 'warning');
-            } else {
-                alert(noImagesMsg);
-            }
+            window.showToast(smartTagT('smartTag.noImages', 'No images in Dataset Maker. Add images first.'), 'warning');
             return;
         }
         if ((form.image_ids.length + form.image_paths.length) > LARGE_EXPLICIT_SOURCE_LIMIT
@@ -322,13 +317,8 @@
             syncNaturalLanguageHint();
             refreshOllamaWarning();
             smartTag$('#smart-tag-natural-section')?.scrollIntoView({ block: 'nearest' });
-            const notReadyMsg = smartTagT('smartTag.nlNotConfiguredRun',
-                'Natural-language captioning is on, but no captioner is set up. Nothing was downloaded. Set one up in VLM Settings, or turn natural-language captioning off.');
-            if (typeof window.showToast === 'function') {
-                window.showToast(notReadyMsg, 'error');
-            } else {
-                alert(notReadyMsg);
-            }
+            window.showToast(smartTagT('smartTag.nlNotConfiguredRun',
+                'Natural-language captioning is on, but no captioner is set up. Nothing was downloaded. Set one up in VLM Settings, or turn natural-language captioning off.'), 'error');
             return;
         }
 
@@ -349,10 +339,12 @@
                 + Number(form.dataset_scan_token ? (getDatasetSources().datasetScanTotal || 0) : 0);
             const total = explicitTotal + tokenTotal;
             if (total > 100) {
-                const proceed = window.confirm(I18n.format(
-                    smartTagT('smartTag.confirmOverwriteCaptions', 'This will overwrite existing captions on {total} images. Continue?'),
-                    { total },
-                ));
+                const proceed = await window.App.confirmAsync({
+                    message: I18n.format(
+                        smartTagT('smartTag.confirmOverwriteCaptions', 'This will overwrite existing captions on {total} images. Continue?'),
+                        { total },
+                    ),
+                });
                 if (!proceed) return;
             }
         }
@@ -433,12 +425,10 @@
             startProgressPolling();
         } catch (err) {
             showProgress(false);
-            const msg = err.message || String(err);
-            if (typeof window.showToast === 'function') {
-                window.showToast(`Smart Tag failed to start: ${msg}`, 'error');
-            } else {
-                alert(`Smart Tag failed to start: ${msg}`);
-            }
+            window.showToast(I18n.format(smartTagT('smartTag.failedToast', 'Smart Tag failed: {reason}{extra}'), {
+                reason: err.message || String(err),
+                extra: '',
+            }), 'error');
         }
     }
 

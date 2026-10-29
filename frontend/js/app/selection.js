@@ -220,7 +220,7 @@ async function updateFilteredSelectionExclusions(rawExcludedIds) {
     }
 }
 
-function confirmLargeFilteredSelection(total) {
+async function confirmLargeFilteredSelection(total) {
     const normalizedTotal = Number(total || 0);
     if (normalizedTotal <= FILTERED_SELECTION_CONFIRM_THRESHOLD) {
         return true;
@@ -231,7 +231,7 @@ function confirmLargeFilteredSelection(total) {
         'This will select {count} filtered images using a compact selection token. Continue?',
         { count: normalizedTotal }
     );
-    return window.confirm(confirmMessage);
+    return confirmAsync({ message: confirmMessage, danger: false });
 }
 
 function shouldFallbackToSelectionIds(error) {
@@ -246,7 +246,7 @@ async function resolveFilteredSelectionIdsViaChunks(filterPayload, options = {})
     }
 
     const totalEstimate = Number(tokenPayload?.total_estimate || 0);
-    if (!confirmLargeFilteredSelection(totalEstimate)) {
+    if (!(await confirmLargeFilteredSelection(totalEstimate))) {
         return { cancelled: true, imageIds: [] };
     }
 
@@ -263,7 +263,7 @@ async function resolveFilteredSelectionIdsViaLegacyEndpoint(filterPayload) {
     const result = await API.getSelectionIds(filterPayload);
     const imageIds = normalizeSelectionImageIds(result?.image_ids);
     const total = Number(result?.total || imageIds.length || 0);
-    if (!confirmLargeFilteredSelection(total)) {
+    if (!(await confirmLargeFilteredSelection(total))) {
         return { cancelled: true, imageIds: [] };
     }
     return { cancelled: false, imageIds, selectionToken: null, total };

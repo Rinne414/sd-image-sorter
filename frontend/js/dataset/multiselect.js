@@ -69,13 +69,13 @@
         this._updateMultiSelectUI();
     };
 
-    DM._removeSelectedImages = function () {
+    DM._removeSelectedImages = async function () {
         const selected = Array.from(this._queueSelection).map(Number);
         if (selected.length === 0) return;
         const msg = this._t('dataset.confirmRemoveSelected',
             'Remove {count} selected images from the dataset? Original files are not affected.',
             { count: selected.length });
-        if (!window.confirm(msg)) return;
+        if (!(await window.App.confirmAsync({ message: msg }))) return;
 
         this._supersedeCaptionFetch?.();
         const removeSet = new Set(selected);

@@ -160,20 +160,14 @@ Object.assign(window.ReversePrompt, {
         const model = this._tipoSelectedModel();
         const size = this._tipoSizeHint(model);
         if (!(await this._tipoWeightsInstalled())) {
-            const confirmed = await new Promise((resolve) => {
-                const ask = window.App?.showConfirm;
-                const message = this._t(
+            const confirmed = await window.App.confirmAsync({
+                title: this._t('reverse.tipoDownloadTitle', 'Download TIPO?', '下载 TIPO？'),
+                message: this._t(
                     'reverse.tipoDownloadWarn',
                     'This TIPO model is not downloaded yet. The first run downloads about {size} into your data folder, and results appear once that finishes. Download it now?',
                     '这个 TIPO 模型还没有下载。首次运行会把约 {size} 的文件下载到你的数据文件夹，下载完成之前不会有任何结果。现在下载吗？',
                     { size }
-                );
-                const title = this._t('reverse.tipoDownloadTitle', 'Download TIPO?', '下载 TIPO？');
-                if (typeof ask === 'function') {
-                    ask(title, message, () => resolve(true), () => resolve(false));
-                } else {
-                    resolve(window.confirm(message));
-                }
+                ),
             });
             if (!confirmed) return;
         }

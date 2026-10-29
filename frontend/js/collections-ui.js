@@ -308,11 +308,7 @@
                     toast(t('collections.deleteFailed', 'Failed to delete collection'), 'error');
                 }
             };
-            if (typeof app.showConfirm === 'function') {
-                app.showConfirm(t('collections.delete', 'Delete collection'), confirmMessage, runDelete);
-            } else if (window.confirm(confirmMessage)) {
-                runDelete();
-            }
+            app.showConfirm(t('collections.delete', 'Delete collection'), confirmMessage, runDelete);
         },
 
         async openAddToCollectionPicker(imageIds, options = {}) {

@@ -253,11 +253,7 @@
                 doClear();
                 return;
             }
-            if (window.App?.showConfirm) {
-                window.App.showConfirm(title, msg, doClear);
-                return;
-            }
-            if (window.confirm(msg)) doClear();
+            window.App.showConfirm(title, msg, doClear);
         },
 
         // v3.4.4 fix #4: tiny "✓ preview updated" cue so users see the

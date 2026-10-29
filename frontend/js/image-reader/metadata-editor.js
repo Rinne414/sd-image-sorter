@@ -124,11 +124,7 @@ Object.assign(window.ImageReader, {
                 '{path} already exists, or it is the image you are editing. Replace it?',
                 { path: outputPath },
             );
-            if (window.App?.showConfirm) {
-                window.App.showConfirm(title, message, () => this._saveEditedMetadata(true));
-            } else if (window.confirm(message)) {
-                this._saveEditedMetadata(true);
-            }
+            window.App.showConfirm(title, message, () => this._saveEditedMetadata(true));
         },
 
         _markGalleryRefreshForIndexedOverwrite(savedOutputPath, originalSourcePath = this._currentOriginalSourcePath) {

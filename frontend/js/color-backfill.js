@@ -448,14 +448,7 @@
         },
 
         _toast(message, level) {
-            // Prefer the existing global toast if available; fall back to console.
-            if (window.showToast) {
-                window.showToast(message, level || "info");
-                return;
-            }
-            if (level === "error" && typeof window.alert === "function") {
-                window.alert(message);
-            }
+            window.showToast?.(message, level || "info");
         },
     };
 

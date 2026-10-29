@@ -146,6 +146,7 @@ function buildAppContext() {
         showModal,
         hideModal,
         showInputModal,
+        confirmAsync,
         showGlobalLoading,
         hideGlobalLoading,
         createProgressTracker,

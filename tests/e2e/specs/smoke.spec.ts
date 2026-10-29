@@ -4050,30 +4050,18 @@ test.describe('Smoke Tests', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    await page.evaluate(() => {
-      ;(window as Window & { __confirmCalls?: string[] }).__confirmCalls = []
-      const originalConfirm = window.confirm
-      window.confirm = (message?: string) => {
-        ;(window as Window & { __confirmCalls?: string[] }).__confirmCalls?.push(String(message || ''))
-        return false
-      }
-      ;(window as Window & { __restoreConfirm?: () => void }).__restoreConfirm = () => {
-        window.confirm = originalConfirm
-      }
-    })
-
     await page.locator('#btn-toggle-select').click()
     await page.locator('#btn-select-all').click()
 
+    // The program's own dialog asks; it is not dangerous, so it starts on OK.
+    const ask = page.locator('#confirm-modal.visible')
+    await expect(ask.locator('#confirm-message')).toContainText('12000')
+    await expect(ask.locator('#btn-confirm-ok')).toBeFocused()
+    await ask.locator('#btn-confirm-cancel').click()
+    await expect(ask).toHaveCount(0)
+
     await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(0)
     expect(selectionChunkRequests).toBe(0)
-    await expect.poll(async () => {
-      return await page.evaluate(() => (window as Window & { __confirmCalls?: string[] }).__confirmCalls || [])
-    }).toContainEqual(expect.stringContaining('12000'))
-
-    await page.evaluate(() => {
-      ;(window as Window & { __restoreConfirm?: () => void }).__restoreConfirm?.()
-    })
   })
 
   test('gallery batch actions should separate remove-from-gallery from move-to-trash', async ({ page }) => {

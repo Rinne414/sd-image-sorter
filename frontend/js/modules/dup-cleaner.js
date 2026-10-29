@@ -332,15 +332,13 @@
             showToast(t('dup.nothingChecked', 'Nothing is checked in this group'), 'info');
             return;
         }
-        if (ids.length >= group.members.length) {
-            const confirmAll = window.confirm(t(
+        const message = ids.length >= group.members.length
+            ? t(
                 'dup.confirmWholeGroup',
                 'Every image in this group is checked, so the whole group goes to the trash, keeper included. Continue?',
-            ));
-            if (!confirmAll) return;
-        } else if (!window.confirm(t('dup.confirmDelete', 'Move {count} images to the trash?', { count: ids.length }))) {
-            return;
-        }
+            )
+            : t('dup.confirmDelete', 'Move {count} images to the trash?', { count: ids.length });
+        if (!(await window.App.confirmAsync({ message }))) return;
         const outcome = await runDelete(ids);
         if (!reportTrashOutcome(outcome)) return;
         window.App?.markGalleryNeedsRefresh?.();
@@ -357,11 +355,13 @@
         if (!STATE.summary || STATE.deleting) return;
         const redundant = STATE.summary.redundant_count || 0;
         if (redundant === 0) return;
-        const confirmed = window.confirm(t(
-            'dup.confirmApplyAll',
-            'Keep the suggested best image of EVERY group and move the other {count} images to the trash?',
-            { count: redundant },
-        ));
+        const confirmed = await window.App.confirmAsync({
+            message: t(
+                'dup.confirmApplyAll',
+                'Keep the suggested best image of EVERY group and move the other {count} images to the trash?',
+                { count: redundant },
+            ),
+        });
         if (!confirmed) return;
 
         // Collect losers across ALL groups from the persisted scan (not just

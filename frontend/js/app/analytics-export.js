@@ -11,6 +11,7 @@ let _confirmAbort = null;
 
 // options.tone: 'danger' (default, the red confirm button) or 'primary' (a plain
 // amber confirm button for questions that are not destructive).
+// options.focusOk: start on OK instead of Cancel, so Enter says yes.
 function showConfirm(title, message, onOk, onCancel, options = {}) {
     lockDynamicI18nText('#confirm-title', 'modal.confirm');
     lockDynamicI18nText('#confirm-message', 'modal.confirmAction');
@@ -52,8 +53,9 @@ function showConfirm(title, message, onOk, onCancel, options = {}) {
         answer(false, { hide: false });
     });
 
-    // It has no close button: start on Cancel, the safe answer.
-    showModal('confirm-modal', { initialFocus: $('#btn-confirm-cancel') });
+    // It has no close button: start on Cancel, the safe answer, unless the
+    // caller says the question is not dangerous.
+    showModal('confirm-modal', { initialFocus: $(options.focusOk ? '#btn-confirm-ok' : '#btn-confirm-cancel') });
 }
 
 function showRandomImage() {

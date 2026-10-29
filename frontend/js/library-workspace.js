@@ -715,13 +715,13 @@
             }
             return;
         }
-        const ok = window.confirm(
-            _t(
+        const ok = await window.App.confirmAsync({
+            message: _t(
                 'library.deleteConfirm',
                 'Delete library “{name}”? Its indexed images, collections and dataset projects are removed. Files on disk are kept. Other libraries are not affected.',
                 { name: name || id },
             ),
-        );
+        });
         if (!ok) return;
         try {
             const res = await fetch(`/api/libraries/${encodeURIComponent(id)}`, {

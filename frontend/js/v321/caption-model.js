@@ -390,7 +390,7 @@ Object.assign(window.V321Integration, {
         const clean = String(category || '').trim().toLowerCase();
         if (!clean) return;
         const count = this._queueActionCount();
-        if (!confirm(this._i18n('batchExport.confirmCategoryRemoveAll', `Remove ${clean} tags from all ${count} images during export?`, { count, category: clean }))) return;
+        if (!(await window.App.confirmAsync({ message: this._i18n('batchExport.confirmCategoryRemoveAll', `Remove ${clean} tags from all ${count} images during export?`, { count, category: clean }) }))) return;
         this._addCaptionCategoryTransform(clean);
 
         // Update the loaded preview sample best-effort so the user sees the

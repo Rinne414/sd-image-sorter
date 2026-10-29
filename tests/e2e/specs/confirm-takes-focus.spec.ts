@@ -44,3 +44,32 @@ test('the confirmation says it is an alert dialog with its title and message', a
   await expect(dialog).toBeVisible()
   await expect(dialog).toHaveAccessibleDescription('Files stay on disk')
 })
+
+// App.confirmAsync stands in for the browser's confirm() box everywhere.
+test('confirmAsync: a question that is not dangerous starts on OK, so Enter says yes', async ({ page }) => {
+  const answer = page.evaluate(() => (window as any).App.confirmAsync({
+    title: 'Select all?', message: 'A question', danger: false,
+  }))
+  await expect(page.locator('#btn-confirm-ok')).toBeFocused()
+  await expect(page.locator('#btn-confirm-ok')).not.toHaveClass(/danger/)
+  await page.keyboard.press('Enter')
+  expect(await answer).toBe(true)
+  await expect(page.locator('#confirm-modal')).not.toHaveClass(/visible/)
+  await expect(page.locator('#confirm-opener')).toBeFocused()
+})
+
+test('confirmAsync: a dangerous question starts on Cancel; Enter and Escape both answer no', async ({ page }) => {
+  const ask = () => page.evaluate(() => (window as any).App.confirmAsync({ message: 'Remove 2 images?' }))
+  let answer = ask()
+  await expect(page.locator('#btn-confirm-cancel')).toBeFocused()
+  await expect(page.locator('#btn-confirm-ok')).toHaveClass(/danger/)
+  await page.keyboard.press('Enter')
+  expect(await answer).toBe(false)
+
+  answer = ask()
+  await expect(page.locator('#confirm-modal')).toHaveClass(/visible/)
+  await expect(page.locator('#btn-confirm-cancel')).toBeFocused()
+  await page.keyboard.press('Escape')
+  expect(await answer).toBe(false)
+  await expect(page.locator('#confirm-modal')).not.toHaveClass(/visible/)
+})

@@ -351,10 +351,7 @@ Object.assign(window.VLMCaption, {
         const title = I18n.format(this._t('vlm.confirmWholeViewTitle', 'Caption {count} images with the VLM?'), { count: shown });
         const body = this._t('vlm.confirmWholeViewBody',
             'Nothing is selected, so every image the current Gallery filter shows gets a caption. A paid API provider bills for each image.');
-        if (typeof window.showConfirm !== 'function') return window.confirm(`${title}\n\n${body}`);
-        return new Promise((resolve) => {
-            window.showConfirm(title, body, () => resolve(true), () => resolve(false));
-        });
+        return window.App.confirmAsync({ title, message: body });
     },
 
     _extractFailedImageIds(data) {

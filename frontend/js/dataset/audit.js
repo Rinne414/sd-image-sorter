@@ -293,7 +293,7 @@
         updateAuditResidueStrip();
     }
 
-    function removeAuditMatches(flag = preferredAuditFlag()) {
+    async function removeAuditMatches(flag = preferredAuditFlag()) {
         if (!flag) {
             setStatus(DM._t('dataset.auditNeedIssue', 'Choose an audit issue first.'));
             return;
@@ -317,7 +317,7 @@
         const msg = DM._t('dataset.auditConfirmRemove',
             'Remove {count} matching images from this dataset? Original files will not be deleted.',
             { count: stats.total });
-        if (!window.confirm(msg)) return;
+        if (!(await window.App.confirmAsync({ message: msg }))) return;
 
         const removeIds = new Set(stats.loadedIds.map(Number));
         for (const path of flaggedPaths) {

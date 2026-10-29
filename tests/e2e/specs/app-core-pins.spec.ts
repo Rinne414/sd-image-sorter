@@ -50,7 +50,7 @@ test('window.App is sealed and exposes the load-bearing public surface', async (
     // Names read by OTHER frontend/js files at runtime (grep `window.App.` and
     // `App.`). The future split's facade MUST keep every one of these callable.
     const requiredFns = [
-      'showToast', 'showConfirm', 'showInputModal', 'showModal', 'hideModal', 'closeModal',
+      'showToast', 'showConfirm', 'confirmAsync', 'showInputModal', 'showModal', 'hideModal', 'closeModal',
       'createGuideOverlay', 'copyTextToClipboard', 'showGlobalLoading', 'hideGlobalLoading',
       'createProgressTracker', 'resetProgressTracker', 'updateProgressTracker', 'buildProgressText',
       'formatDurationCompact', 'formatSize', 'loadImages', 'loadStats', 'beginTaggingProgress',

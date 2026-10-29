@@ -258,13 +258,13 @@ Object.assign(window.VLMCaption, {
     },
 
     _confirmReplacePreset(existingId, name) {
-        const confirm = window.App?.showConfirm;
+        const ask = window.App?.showConfirm;
         const replace = () => this._savePresetFields(existingId, { closeNameRow: true });
-        if (typeof confirm !== 'function') {
+        if (typeof ask !== 'function') {
             this._showPresetStatus(this._tp('vlmSettings.presetNameTaken', 'You already have a preset called “{name}”.', { name }), 'warning');
             return;
         }
-        confirm(
+        ask(
             this._t('vlmSettings.presetReplaceTitle', 'Replace this preset?'),
             this._tp('vlmSettings.presetReplaceMessage',
                 'You already have a preset called “{name}”. Replace its prompts with the ones in the boxes?', { name }),

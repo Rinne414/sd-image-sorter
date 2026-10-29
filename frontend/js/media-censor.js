@@ -158,12 +158,10 @@
             if (support.state?.install?.state !== 'running') {
                 const mb = support.state?.estimated_mb || VIDEO_SUPPORT_MB;
                 const confirmed = await new Promise((resolve) => {
-                    const ask = window.App?.showConfirm || window.showConfirm;
                     const title = this._t('mediaCensor.videoInstallTitle', 'Install video support?');
                     const message = this._t('mediaCensor.videoInstallMessage',
                         'Videos need video support (about {mb} MB). It is one download that also lets the gallery play and read videos. The censoring starts by itself when it is installed.', { mb });
-                    if (typeof ask === 'function') ask(title, message, () => resolve(true), () => resolve(false), { tone: 'primary' });
-                    else resolve(window.confirm(message));
+                    window.App.showConfirm(title, message, () => resolve(true), () => resolve(false), { tone: 'primary' });
                 });
                 if (!confirmed) return false;
                 await support.install();

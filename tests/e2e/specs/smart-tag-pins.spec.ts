@@ -1060,7 +1060,7 @@ test('run() with a valid scope but both Booru and NL disabled short-circuits bef
 // 11. Destructive-replace confirm — >100 images in replace mode gates the POST.
 // ---------------------------------------------------------------------------
 
-test('replace mode over 100 images requires window.confirm; declining blocks the POST, accepting allows it', async ({ page }) => {
+test('replace mode over 100 images asks in the program dialog; Cancel blocks the POST, OK allows it', async ({ page }) => {
   let startCalls = 0
   await page.route('**/api/smart-tag/start', (route) => {
     startCalls += 1
@@ -1076,15 +1076,18 @@ test('replace mode over 100 images requires window.confirm; declining blocks the
   await page.locator('#smart-tag-enable-vlm').uncheck() // booru-only, merge stays "replace"
   await expect(page.locator('#smart-tag-image-count')).toHaveText('101')
 
-  // Decline the overwrite confirm -> no POST.
-  await page.evaluate(() => { (window as any).confirm = () => false })
+  // Cancel the overwrite question -> no POST.
+  const ask = page.locator('#confirm-modal.visible')
   await page.locator('#btn-smart-tag-run').click()
+  await expect(ask.locator('#confirm-message')).toContainText('This will overwrite existing captions on 101 images.')
+  await ask.locator('#btn-confirm-cancel').click()
+  await expect(ask).toHaveCount(0)
   await page.waitForTimeout(200)
   expect(startCalls).toBe(0)
 
-  // Accept -> the POST fires.
-  await page.evaluate(() => { (window as any).confirm = () => true })
+  // OK -> the POST fires.
   await page.locator('#btn-smart-tag-run').click()
+  await ask.locator('#btn-confirm-ok').click()
   await expect.poll(() => startCalls).toBe(1)
 })
 

@@ -298,7 +298,8 @@ Object.assign(window.V321Integration, {
             const tags = input.value.split(',').map(t => t.trim()).filter(Boolean);
             if (!tags.length) return;
             const count = this._queueActionCount();
-            if (!confirm(this._i18n('batchExport.confirmAddAll', `Add "${tags.join(', ')}" to all ${count} images?`, { tags: tags.join(', '), count }))) return;
+            const message = this._i18n('batchExport.confirmAddAll', `Add "${tags.join(', ')}" to all ${count} images?`, { tags: tags.join(', '), count });
+            if (!(await window.App.confirmAsync({ message, danger: false }))) return;
             for (const tag of tags) await this._applyTokenToAll(tag, 'add', getPosition());
             input.value = '';
         });
@@ -306,7 +307,7 @@ Object.assign(window.V321Integration, {
             const tags = input.value.split(',').map(t => t.trim()).filter(Boolean);
             if (!tags.length) return;
             const count = this._queueActionCount();
-            if (!confirm(this._i18n('batchExport.confirmRemoveAll', `Remove "${tags.join(', ')}" from all ${count} images?`, { tags: tags.join(', '), count }))) return;
+            if (!(await window.App.confirmAsync({ message: this._i18n('batchExport.confirmRemoveAll', `Remove "${tags.join(', ')}" from all ${count} images?`, { tags: tags.join(', '), count }) }))) return;
             for (const tag of tags) await this._applyTokenToAll(tag, 'remove');
             input.value = '';
         });
@@ -408,7 +409,7 @@ Object.assign(window.V321Integration, {
             this._renderPreviewWorkbench();
         }, 'batchExport.cleanupAllImages', 'All images', 'dedupe-all', async () => {
             const count = this._queueActionCount();
-            if (!confirm(this._i18n('batchExport.confirmCleanupAll', `Remove duplicate tags from all ${count} images?`, { count }))) return;
+            if (!(await window.App.confirmAsync({ message: this._i18n('batchExport.confirmCleanupAll', `Remove duplicate tags from all ${count} images?`, { count }) }))) return;
             await this._cleanupAllPreviewCaptions({ dedupe: true });
         });
         addRow('batchExport.cleanupBlacklistLabel', 'Blacklist', 'batchExport.cleanupCurrent', 'Current', 'blacklist-current', () => {
@@ -420,7 +421,7 @@ Object.assign(window.V321Integration, {
             const count = this._queueActionCount();
             const blacklist = this._getBlacklistTokens();
             const preview = blacklist.length ? blacklist.slice(0, 10).join(', ') + (blacklist.length > 10 ? '...' : '') : '(empty)';
-            if (!confirm(this._i18n('batchExport.confirmBlacklistAll', `Remove blacklisted tags [${preview}] from all ${count} images?`, { preview, count }))) return;
+            if (!(await window.App.confirmAsync({ message: this._i18n('batchExport.confirmBlacklistAll', `Remove blacklisted tags [${preview}] from all ${count} images?`, { preview, count }) }))) return;
             await this._cleanupAllPreviewCaptions({ blacklist: true, dedupe: true });
         });
         // Pencil icon for editing blacklist inline, appended to the Blacklist row
@@ -459,7 +460,7 @@ Object.assign(window.V321Integration, {
         }, 'batchExport.cleanupAllImages', 'All images', 'boilerplate-all', async () => {
             const count = this._queueActionCount();
             const boilerplate = this._getLoraBoilerplateTokens().slice(0, 8).join(', ') + '...';
-            if (!confirm(this._i18n('batchExport.confirmBoilerplateAll', `Remove quality/rating tags [${boilerplate}] from all ${count} images?`, { boilerplate, count }))) return;
+            if (!(await window.App.confirmAsync({ message: this._i18n('batchExport.confirmBoilerplateAll', `Remove quality/rating tags [${boilerplate}] from all ${count} images?`, { boilerplate, count }) }))) return;
             await this._cleanupAllPreviewCaptions({ boilerplate: true, dedupe: true });
         });
         // Category batch removal row

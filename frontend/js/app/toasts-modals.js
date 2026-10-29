@@ -594,6 +594,22 @@ function closeFilterModal() {
     resetFilterModalController();
 }
 
+// The program's own yes/no question as a promise: the browser's question box
+// looks unfinished ("127.0.0.1 says", untranslated buttons; an OS box in the
+// desktop program). Resolves true on OK, false on anything else (Cancel, the
+// backdrop, Escape, a newer question replacing this one). A dangerous question
+// (the default: removing, deleting, overwriting) has the red button and starts
+// on Cancel, so a stray Enter keeps things as they are; any other question
+// starts on OK, so Enter says yes.
+function confirmAsync({ title = '', message = '', danger = true } = {}) {
+    return new Promise((resolve) => {
+        showConfirm(title, message, () => resolve(true), () => resolve(false), {
+            tone: danger ? 'danger' : 'primary',
+            focusOk: !danger,
+        });
+    });
+}
+
 // Custom input modal (replaces native prompt())
 let inputModalResolve = null;
 

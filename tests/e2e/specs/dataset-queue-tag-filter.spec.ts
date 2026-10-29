@@ -390,8 +390,8 @@ test('removing the selected images moves on to an image the filter shows', async
     .click({ modifiers: ['Control'] })
   expect(await selectionIds(page)).toEqual([901])
 
-  page.once('dialog', (dialog) => dialog.accept())
   await page.locator('#btn-dataset-queue-remove-selected').click()
+  await page.locator('#confirm-modal.visible #btn-confirm-ok').click()
   await expect.poll(() => page.evaluate(() => Number((window as any).DatasetMaker.activeId))).toBe(906)
   expect(await shownIds(page)).toEqual([906])
 })

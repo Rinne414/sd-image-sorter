@@ -171,9 +171,12 @@
         }
     };
 
-    DM._removeActive = function () {
+    DM._removeActive = async function () {
         if (this.activeId == null) return;
-        this._removeImageById(Number(this.activeId), { confirm: true });
+        const id = Number(this.activeId);
+        const msg = this._t('dataset.confirmRemove', 'Remove this image from the dataset?');
+        if (!(await window.App.confirmAsync({ message: msg }))) return;
+        this._removeImageById(id);
         this._saveSession();
     };
 
@@ -194,7 +197,7 @@
             localPath: this.localItemPaths?.get?.(id),
             localDsId: this.localItemDsIds?.get?.(id),
         };
-        this._removeImageById(id, { confirm: false });
+        this._removeImageById(id);
         this._reviewUndoStack.push(snapshot);
         this._saveSession();
         this._toast?.(
@@ -238,13 +241,9 @@
         );
     };
 
-    DM._removeImageById = function (imageId, options = {}) {
+    DM._removeImageById = function (imageId) {
         const id = Number(imageId);
         if (!this.imageIds.includes(id)) return;
-        if (options.confirm) {
-            const msg = this._t('dataset.confirmRemove', 'Remove this image from the dataset?');
-            if (!window.confirm(msg)) return;
-        }
         this._supersedeCaptionFetch?.();
         const idx = this.imageIds.indexOf(id);
         const shownIdx = this._queueIdsForCurrentFilter().indexOf(id);

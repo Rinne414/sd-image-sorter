@@ -275,11 +275,7 @@
                 }
             };
             const message = t('libraryRoots.removeConfirm', 'Remove this folder from the library? It stops being a source; the image files stay on disk.');
-            if (typeof appRef().showConfirm === 'function') {
-                appRef().showConfirm(t('libraryRoots.remove', 'Remove folder'), message, run);
-            } else if (window.confirm(message)) {
-                run();
-            }
+            appRef().showConfirm(t('libraryRoots.remove', 'Remove folder'), message, run);
         },
     };
 

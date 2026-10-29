@@ -5,8 +5,8 @@
  * the "Local Model Management" section (applyPreset moved to
  * vlm-caption/prompt-presets.js with the saved presets, issue #21) —
  * _populateModelSuggestions (datalist), loadRecommendedModels (Ollama
- * install/run branches + model cards), confirmDeleteModel (App.showConfirm /
- * window.confirm fallback), deleteModel, pullModel, _startPullPolling and
+ * install/run branches + model cards), confirmDeleteModel (App.showConfirm),
+ * deleteModel, pullModel, _startPullPolling and
  * startOllama. The mid-literal `_pullPollInterval: null` data prop (pre-cut
  * line 770) stays verbatim in its original slot between pullModel and
  * _startPullPolling (pinned shape — do NOT hoist it into the core state
@@ -218,11 +218,7 @@ Object.assign(window.VLMCaption, {
         });
         const runDelete = () => { void this.deleteModel(normalized, trigger); };
 
-        if (typeof window.App?.showConfirm === 'function') {
-            window.App.showConfirm(title, message, runDelete);
-        } else if (window.confirm(message)) {
-            runDelete();
-        }
+        window.App.showConfirm(title, message, runDelete);
     },
 
     async deleteModel(modelName, trigger = null) {

@@ -220,9 +220,15 @@ test('review modal renders groups; keep-best sends exactly the losers to the tra
       body: JSON.stringify({ deleted: deleteBody.image_ids.length, errors: [] }),
     })
   })
-  page.on('dialog', (dialog) => dialog.accept())
-
   await group.getByTestId('dup-keep-best').click()
+  // The program's own dialog asks first; Cancel sends nothing.
+  const ask = page.locator('#confirm-modal.visible')
+  await expect(ask.locator('#confirm-message')).toContainText('Move 2 images to the trash?')
+  await ask.locator('#btn-confirm-cancel').click()
+  await expect(ask).toHaveCount(0)
+  expect(deleteBody).toBe(null)
+  await group.getByTestId('dup-keep-best').click()
+  await ask.locator('#btn-confirm-ok').click()
   await expect.poll(() => deleteBody).not.toBe(null)
   expect(deleteBody.confirm_delete_files).toBe(true)
   expect(deleteBody.image_ids.sort()).toEqual(fixtureIds.slice(1, 3).sort())
@@ -258,9 +264,8 @@ test('transitive similarity never sends the non-matching endpoint to trash', asy
       body: JSON.stringify({ deleted: deleteBody.image_ids.length, errors: [] }),
     })
   })
-  page.on('dialog', (dialog) => dialog.accept())
-
   await group.getByTestId('dup-keep-best').click()
+  await page.locator('#confirm-modal.visible #btn-confirm-ok').click()
   await expect.poll(() => deleteBody).not.toBe(null)
   expect(deleteBody.image_ids).toEqual([chainIds[1]])
   expect(deleteBody.image_ids).not.toContain(chainIds[2])

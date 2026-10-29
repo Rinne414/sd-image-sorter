@@ -36,13 +36,19 @@ async function openCleanup(page: Page, deleteAnswer: unknown, status = 200) {
     localStorage.setItem('aurora-entry-skip', '1')
     localStorage.setItem('sd-image-sorter-lang', 'en')
   })
-  page.on('dialog', (dialog) => dialog.accept())
   await page.goto('/')
   await page.waitForFunction(() => document.documentElement.dataset.appReady === '1')
   await page.locator('#nav-tools-toggle').click()
   await page.locator('#nav-tools-dup-cleaner').click()
   await expect(page.locator('#dup-cleaner-modal.visible')).toBeVisible()
   await expect(page.locator('.dup-group')).toHaveCount(1)
+}
+
+// Keep the best one; the program's own dialog asks before the trash run.
+async function keepBest(page: Page) {
+  await page.getByTestId('dup-keep-best').click()
+  await expect(page.locator('#confirm-modal.visible #confirm-message')).toContainText('Move 2 images to the trash?')
+  await page.locator('#confirm-modal.visible #btn-confirm-ok').click()
 }
 
 test('a trash run that moved only some pictures says how many and why, and keeps the group', async ({ page }) => {
@@ -53,7 +59,7 @@ test('a trash run that moved only some pictures says how many and why, and keeps
     trash_used: true,
   })
 
-  await page.getByTestId('dup-keep-best').click()
+  await keepBest(page)
 
   const toast = page.locator('#toast-container .toast.warning').last()
   await expect(toast).toContainText('Moved 1 image to trash; 1 could not be moved.')
@@ -65,7 +71,7 @@ test('a trash run that moved only some pictures says how many and why, and keeps
 test('a trash run that moved every picture says so and takes the group off the list', async ({ page }) => {
   await openCleanup(page, { deleted: 2, failed: [], permanent_delete: false, trash_used: true })
 
-  await page.getByTestId('dup-keep-best').click()
+  await keepBest(page)
 
   await expect(page.locator('#toast-container .toast.success').last()).toContainText('Moved 2 images to trash')
   await expect(page.locator('.dup-group')).toHaveCount(0)
@@ -74,7 +80,7 @@ test('a trash run that moved every picture says so and takes the group off the l
 test('a trash run the program refused says why', async ({ page }) => {
   await openCleanup(page, { error: 'Cannot delete while another delete is running', type: 'HTTPException', status_code: 409 }, 409)
 
-  await page.getByTestId('dup-keep-best').click()
+  await keepBest(page)
 
   await expect(page.locator('#toast-container .toast.error').last())
     .toContainText('Cannot delete while another delete is running')

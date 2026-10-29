@@ -1185,19 +1185,20 @@
     // -------- Removing items: clean up local maps --------
 
     const original_removeImageById = DM._removeImageById;
-    DM._removeImageById = function (imageId, options = {}) {
+    DM._removeImageById = function (imageId) {
         const id = Number(imageId);
         if (this.isLocalId(id)) this._markLocalManifestExcluded(id);
-        return original_removeImageById.call(this, imageId, options);
+        return original_removeImageById.call(this, imageId);
     };
 
     const original_removeActive = DM._removeActive;
-    DM._removeActive = function () {
+    DM._removeActive = async function () {
         const id = Number(this.activeId);
         const wasLocal = this.isLocalId(id);
-        if (wasLocal) this._markLocalManifestExcluded(id);
-        original_removeActive.call(this);
-        if (wasLocal) {
+        await original_removeActive.call(this);
+        // Still in the queue: the user said no, so nothing changes. A removed
+        // one was already excluded from its folder manifest by _removeImageById.
+        if (wasLocal && !this.imageIds.includes(id)) {
             this.localItemPaths.delete(id);
             this.localItemDsIds.delete(id);
             // Removing from the current dataset must not erase saved

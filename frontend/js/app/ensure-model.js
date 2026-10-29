@@ -64,12 +64,7 @@ function featureInstallT(key, fallback, params) {
 
 function featureInstallConfirm(title, message) {
     return new Promise((resolve) => {
-        const ask = window.App?.showConfirm || window.showConfirm;
-        if (typeof ask === 'function') {
-            ask(title, message, () => resolve(true), () => resolve(false), { tone: 'primary' });
-            return;
-        }
-        resolve(window.confirm(message));
+        showConfirm(title, message, () => resolve(true), () => resolve(false), { tone: 'primary' });
     });
 }
 

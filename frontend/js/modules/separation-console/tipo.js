@@ -67,13 +67,9 @@ Object.assign(SeparationConsole, {
                 const message = sepconT(
                     `This TIPO model is not downloaded yet. The first run fetches about ${size} into your data folder, and nothing happens until that finishes. Download it now?`,
                     `这个 TIPO 模型还没有下载。首次运行会把约 ${size} 的文件下载到你的数据文件夹，下载完成之前不会有任何结果。现在下载吗？`);
-                const confirmed = await new Promise((resolve) => {
-                    const ask = window.App?.showConfirm;
-                    if (typeof ask === 'function') {
-                        ask(sepconT('Download TIPO?', '下载 TIPO？'), message, () => resolve(true), () => resolve(false));
-                    } else {
-                        resolve(window.confirm(message));
-                    }
+                const confirmed = await window.App.confirmAsync({
+                    title: sepconT('Download TIPO?', '下载 TIPO？'),
+                    message,
                 });
                 if (!confirmed) {
                     panel.hidden = true;
