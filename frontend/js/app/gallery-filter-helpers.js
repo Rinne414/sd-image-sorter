@@ -40,6 +40,15 @@ function _galleryHasActiveFilter() {
     return false;
 }
 
+/**
+ * An empty library (not an empty filter result) folds the gallery toolbar:
+ * generator chips, search, sort and zoom have nothing to act on yet and
+ * crowded the first view. They come back with the first picture.
+ */
+function _syncGalleryLibraryEmpty(isLibraryEmpty) {
+    document.getElementById('view-gallery')?.classList.toggle('gallery-library-empty', Boolean(isLibraryEmpty));
+}
+
 function _applyGalleryEmptyStateVariant(emptyState) {
     if (!emptyState) return;
     // v3.3.1 FEAT-COLLECTIONS: when the gallery is scoped to a collection
@@ -50,6 +59,7 @@ function _applyGalleryEmptyStateVariant(emptyState) {
     const filterActive = _galleryHasActiveFilter() || browsingCollection;
     emptyState.classList.toggle('empty-state-no-matches', filterActive);
     emptyState.classList.toggle('empty-state-no-library', !filterActive);
+    _syncGalleryLibraryEmpty(!filterActive);
 
     // Look up the title/hint strings; fall back to English if i18n
     // hasn't loaded yet.

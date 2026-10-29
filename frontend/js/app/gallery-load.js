@@ -341,6 +341,8 @@ async function loadImages(appendMode = false, options = {}) {
                 // had just tried a tag filter that returned nothing - they
                 // would think their entire library disappeared.
                 _applyGalleryEmptyStateVariant(emptyState);
+            } else {
+                _syncGalleryLibraryEmpty(false);
             }
         }
         loadSucceeded = true;
@@ -384,6 +386,8 @@ async function loadImages(appendMode = false, options = {}) {
                 emptyState.style.display = shouldShow ? 'flex' : 'none';
                 if (shouldShow) {
                     _applyGalleryEmptyStateVariant(emptyState);
+                } else {
+                    _syncGalleryLibraryEmpty(false);
                 }
             }
         }

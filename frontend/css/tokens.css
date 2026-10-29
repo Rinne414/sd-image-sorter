@@ -1875,6 +1875,30 @@ html.gallery-comfort-room .filter-sidebar {
     margin-top: 18px;
 }
 
+/* Four getting-started steps as a 2 x 2 grid: auto-fit laid them out as three
+   and a lone fourth with dead space beside it (DESIGN.md rule 18). */
+#gallery-empty-state .onboarding-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+
+/* The empty library card fits a 1366 x 768 screen: 80 px above and below
+   pushed its last line off the screen. */
+#gallery-empty-state.empty-state-no-library {
+    padding-block: clamp(12px, 3vh, 80px);
+}
+
+/* Short content left the gallery panel ending mid-screen on large screens,
+   a visible edge across the page: the panel reaches the bottom instead. */
+#view-gallery.gallery-library-empty .gallery-container {
+    min-height: calc(100vh - 56px);
+}
+
+/* No single character left alone on the hint's last line. */
+#gallery-empty-state .empty-state-card > p {
+    text-wrap: balance;
+}
+
 #gallery-empty-state .onboarding-tip {
     margin-top: 12px;
     text-align: center;

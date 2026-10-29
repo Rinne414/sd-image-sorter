@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **The empty gallery fits the screen / 空图库的引导完整显示**: The four getting-started steps sat as three plus a lone fourth with empty space beside it; they are now two by two. On a 1366 x 768 screen the card lost less of its lower part (less space above and below), the hint no longer leaves one character on its own line, and on large screens the gallery panel reaches the bottom instead of ending mid-screen.
+  - 四个新手步骤原来排成三个加孤零零的第四个，旁边一片空白；现在排成两行两列。在 1366 x 768 的屏幕上，卡片上下的空白变小，被切掉的部分更少；提示文字不再剩一个字单独一行；大屏幕上图库面板一直延伸到底部，不再在半屏处断开。
 - **Settings has an About section / 设置里有了“关于”**: Classic Settings now shows the version, a Check for updates button, and the two support actions, Copy diagnostics and Open log folder, which were reachable only from the card a stalled import shows. V Opus already had them under Settings > About.
   - 经典界面的设置里现在显示版本号，有“检查更新”按钮，还有两个反馈问题时用的操作：复制诊断信息、打开日志文件夹。以前它们只出现在导入卡住时的卡片上。V Opus 的“设置 > 关于与更新”本来就有。
 - **The guide names places as the program shows them / 引导里的名字和程序里一致**: The first-run guide sent users to a "Settings & Models" gear that is called Settings, with models in Model Center, and listed tabs (Picture library, Sort pictures, Censor edit) the top bar does not show. The gear, its dialog and the guide now use the top bar's and Settings' own names, and a check fails when a label changes without the guide.
