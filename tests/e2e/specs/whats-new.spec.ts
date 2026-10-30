@@ -69,3 +69,21 @@ test('an install updated before the notice existed still hears about it', async 
   await page.goto('/')
   await expect(toast(page)).toBeVisible({ timeout: 10000 })
 })
+
+test('V Opus shows the same notice once, sharing what classic already showed', async ({ page }) => {
+  await serveWhatsNew(page, false)
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('whats-new-test-seeded')) {
+      localStorage.setItem('sd-whats-new-seen-version', '9.9.8')
+      sessionStorage.setItem('whats-new-test-seeded', '1')
+    }
+  })
+  await page.goto('/vopus/')
+  const shown = page.getByText(/9\.9\.9/).first()
+  await expect(shown).toBeVisible({ timeout: 10000 })
+  await expect(page.getByRole('button', { name: /Full notes|完整说明/ })).toBeVisible()
+  // The remembered version is shared with classic: classic now says nothing.
+  await page.goto('/')
+  await page.waitForTimeout(3500)
+  await expect(toast(page)).toHaveCount(0)
+})

@@ -141,4 +141,6 @@ export const enStatus: Record<keyof typeof zhCNStatus, string> = {
   'missing.already.ok': 'Remove {n}',
   'missing.already.removed': 'Removed {n} old records',
   'missing.already.open': 'Deal with the {n} already in the library',
+  'whatsNew.toast': 'Updated to {version}. {summary}',
+  'whatsNew.fullNotes': 'Full notes',
 }

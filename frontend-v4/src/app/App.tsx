@@ -6,6 +6,7 @@ import { HomePage } from '../features/home/HomePage'
 import { JobsRunner } from '../features/jobs/JobsRunner'
 import { startAutoRefresh } from '../features/library/autoRefreshRun'
 import { listenForCollected } from '../features/settings/desktop/collected'
+import { startWhatsNew } from '../features/whatsnew/whatsNew'
 import { startFolderWatch } from '../features/settings/library/watchApi'
 import { CollectHost } from '../features/collect/CollectHost'
 import { DropImport } from '../features/import/DropImport'
@@ -46,6 +47,8 @@ export function App() {
   useEffect(() => startFolderWatch(), [])
   // Quick collect (its own small window) added pictures: show them.
   useEffect(() => listenForCollected(), [])
+  // After an update: say once what changed (shared with classic).
+  useEffect(() => startWhatsNew(), [])
 
   // Browser and mouse Back go up one level instead of leaving the program.
   useBackNav()

@@ -142,4 +142,6 @@ export const zhCNStatus = {
   'missing.already.ok': '移除 {n} 条',
   'missing.already.removed': '已移除 {n} 条旧记录',
   'missing.already.open': '处理已在图库里的 {n} 个',
+  'whatsNew.toast': '已更新到 {version}。{summary}',
+  'whatsNew.fullNotes': '完整说明',
 }
