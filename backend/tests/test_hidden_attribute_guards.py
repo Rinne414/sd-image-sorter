@@ -132,7 +132,13 @@ def test_desktop_settings_panel_is_guarded_and_only_the_shell_shows_it():
     css = (FRONTEND / "css" / "tokens.css").read_text(encoding="utf-8")
     assert ".settings-home-panel[hidden]" in css
     script = (FRONTEND / "js" / "desktop-settings.js").read_text(encoding="utf-8")
-    # The only place that reveals the panel is start(), which the desktop
-    # bridge calls when the page runs inside the desktop shell.
-    assert script.count("panel.hidden = false") == 1
-    assert "function start(desktop" in script
+    # The only place that reveals the shell's panel is start(), which the
+    # desktop bridge calls when the page runs inside the desktop shell. The
+    # browser gets its own note panel (where the desktop program is).
+    start = script.split("function start(desktop", 1)[1].split("\n    }\n", 1)[0]
+    assert "el('settings-desktop-panel')" in start
+    assert "panel.hidden = false" in start
+    assert script.count("settings-desktop-panel") == 1
+    note = script.split("async function showBrowserNote", 1)[1].split("\n    }\n", 1)[0]
+    assert "el('settings-desktop-browser')" in note
+    assert "window.sdDesktop" in note
