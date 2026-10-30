@@ -63,6 +63,10 @@
 - **更快**：图库翻页从 0.36 秒降到 0.045 秒；批量打标 1000 张从 170 秒降到 106 秒（实测）。
 - **中英文完整**：中文界面里的按钮提示也都是中文。
 
+### v3.10.2
+
+- **桌面程序更顺手**：桌面程序里能新建和重命名图库；所有询问都改用程序自己的对话框；更新后第一次打开会说明改了什么；设置里有了“关于”（版本、检查更新、复制诊断信息）。
+
 ### v3.10.1
 
 - **QQ 图片能读图**：从 QQ 复制或拖出的图片可以直接在读图里打开；导入不再擅自在原文件夹生成 `_real.png`，还原聊天伪装图改为导入时的选项，默认关闭。
@@ -705,6 +709,10 @@ Eagle and Billfish are general asset managers and are not in this SD-workflow ta
 - **No hard stops**: caps and export gates became warnings with a choice.
 - **Faster**: gallery page 0.36 s to 0.045 s; Mass Tag on 1,000 images 170 s to 106 s (measured).
 - **Complete Chinese and English UI**, tooltips included.
+
+### v3.10.2
+
+- **Desktop program fixes**: New and Rename library work in the desktop program; every question uses the program's own dialog; the first start after an update says what changed; Settings has an About section (version, update check, diagnostics).
 
 ### v3.10.1
 
