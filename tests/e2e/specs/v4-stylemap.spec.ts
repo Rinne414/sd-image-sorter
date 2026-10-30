@@ -1,5 +1,7 @@
 import path from 'node:path'
 
+import type { Response } from '@playwright/test'
+
 import { expect, test, type Page } from '../fixtures/click-ledger'
 
 import { markModelsReady } from '../fixtures/model-status'
@@ -646,10 +648,20 @@ test('the Library keeps the set from the map across a reload until "Show everyth
 
   // A reload shows the same set again, with its banner (the picks of the last visit are not kept, as always).
   const setId = (await pins()).main!.id
-  const shown = page.waitForResponse((res) => res.url().includes('/api/images?') && res.url().includes(`collection_id=${setId}`))
+  // Only the reloaded page's answers count: the page before it may still be
+  // asking for the set when the reload starts, and that answer loses its body.
+  const totals: number[] = []
+  let reloaded = false
+  page.once('framenavigated', () => { reloaded = true })
+  const onAnswer = (res: Response) => {
+    if (!reloaded || !res.url().includes('/api/images?') || !res.url().includes(`collection_id=${setId}`)) return
+    res.json().then((body: { total: number }) => totals.push(body.total), () => { /* cancelled: no body to read */ })
+  }
+  page.on('response', onAnswer)
   await page.reload()
   await expect(page.getByTestId('pinned-banner')).toContainText(`${WITH_VECTORS} pictures from the Style Map`)
-  expect(((await (await shown).json()) as { total: number }).total).toBe(WITH_VECTORS)
+  await expect.poll(() => totals).toContain(WITH_VECTORS)
+  page.off('response', onAnswer)
 
   // "Show everything" forgets it: the next reload shows the whole search.
   await page.getByTestId('pinned-back').click()
