@@ -130,12 +130,12 @@ test.describe('Image Reader — Paste from Clipboard', () => {
     await expect(page.locator('#reader-status')).toBeHidden()
   })
 
-  test('with clipboard access the paste button reads the clipboard at once (a picture picked with Win+V)', async ({ page }) => {
+  test('with clipboard access the paste button reads the clipboard at once', async ({ page }) => {
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
     await openReaderView(page)
     const uploads = await stubParse(page, 'win v picked prompt')
 
-    // Win+V puts the picked item on the clipboard; the button reads it, no Ctrl+V needed.
+    // The button reads what is on the clipboard; no Ctrl+V needed.
     await page.evaluate(async (b64) => {
       const binary = atob(b64)
       const bytes = new Uint8Array(binary.length)

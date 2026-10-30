@@ -3956,7 +3956,7 @@ window.I18nLang_en = {
     'reader.dropText': 'Drop an image here',
     'reader.dropHint': 'or click to choose one',
     'reader.pasteButton': 'Paste from Clipboard',
-    'reader.pasteHint': 'click the button to read the clipboard (a picture picked with Win+V too), or press Ctrl+V',
+    'reader.pasteHint': 'click the button to read the clipboard, or press Ctrl+V (Win+V works too)',
     'reader.pasteNoImage': 'No image found in clipboard',
     'reader.pasteArmed': 'Ready. Press Ctrl+V now.',
     // A picture that arrives as its file location (QQ and other chat apps)

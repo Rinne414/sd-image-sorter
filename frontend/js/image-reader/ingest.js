@@ -90,11 +90,10 @@ Object.assign(window.ImageReader, {
         },
 
         async _handlePaste() {
-            // Read the clipboard at once where the browser allows it. A picture
-            // picked in Windows' clipboard history (Win+V) is then on the
-            // clipboard even when Win+V's own paste never reached this page
-            // (it pastes into the window it thinks was last used), so one click
-            // here opens it. Without permission, fall back to arming Ctrl+V.
+            // Read the clipboard at once where the browser allows it, so one
+            // click opens what is on it. Without permission, fall back to
+            // arming Ctrl+V. (Win+V needs neither: Windows sends Ctrl+V to the
+            // window in front, which the page-wide paste listener takes.)
             if (navigator.clipboard?.read && window.LocalPicture) {
                 let transfer = null;
                 try {

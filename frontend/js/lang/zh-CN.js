@@ -4130,7 +4130,7 @@ window.I18nLang_zhCN = {
     'reader.dropText': '把图片拖到这里',
     'reader.dropHint': '或点击选择图片',
     'reader.pasteButton': '从剪贴板粘贴',
-    'reader.pasteHint': '点按钮直接读取剪贴板（Win+V 里选的图也行），或按 Ctrl+V',
+    'reader.pasteHint': '点按钮直接读取剪贴板，或按 Ctrl+V（Win+V 也行）',
     'reader.pasteNoImage': '剪贴板中没有图片',
     'reader.pasteArmed': '准备好了，现在按 Ctrl+V。',
     // A picture that arrives as its file location (QQ and other chat apps)
