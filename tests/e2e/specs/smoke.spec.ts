@@ -1440,6 +1440,8 @@ test.describe('Smoke Tests', () => {
         }),
       })
     })
+    // An empty library folds the toolbar (nothing to sort yet): give it a picture.
+    await mockGalleryImages(page, [{ id: 9101 }])
 
     await openMainPage(page)
 
@@ -7825,6 +7827,8 @@ test.describe('Smoke Tests', () => {
         },
       })
     })
+    // An empty library folds the toolbar, generator rail included: give it a picture.
+    await mockGalleryImages(page, [{ id: 9102 }])
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')

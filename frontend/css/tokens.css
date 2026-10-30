@@ -1882,6 +1882,19 @@ html.gallery-comfort-room .filter-sidebar {
 }
 
 
+/* An empty library (not an empty filter result, not every file missing) folds
+   the gallery header and search row: chips, filters, sort and zoom have nothing
+   to act on yet. They come back with the first picture; the live import status
+   in the same toolbar stays. */
+#view-gallery.gallery-library-empty:not(:has(.empty-state-all-missing)) #gallery-toolbar > .gallery-header,
+#view-gallery.gallery-library-empty:not(:has(.empty-state-all-missing)) #gallery-search-row {
+    display: none;
+}
+
+/* With nothing else in it, the toolbar's own frame would stay as an empty strip. */
+#view-gallery.gallery-library-empty:not(:has(.empty-state-all-missing)) #gallery-toolbar:not(:has(> #metadata-status-chip:not([hidden]))) {
+    display: none;
+}
 /* The empty library card fits a 1366 x 768 screen: 80 px above and below
    pushed its last line off the screen. */
 #gallery-empty-state.empty-state-no-library {
