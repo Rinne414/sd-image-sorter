@@ -38,7 +38,8 @@ Desktop program creates and renames libraries; questions use its own dialogs; up
 
 ## Validation / 验证
 
-To be filled in from the GitHub CI run on the release commit.
+GitHub CI run 41002289936 (Linux full suite with browser tests and click coverage, macOS, Windows, Linux portable x86_64 and aarch64): 5 of 5 green; backend 9,302 passed; browser tests 2,187 passed, 0 failed, 0 flaky; V Opus unit tests 1,487 passed. On a fresh 3.10.2 Windows package: in the desktop program, New library asked in the program's own dialog and created the library, and every top-bar page, each Settings tab, the import dialog, Help, the update check and the tag library opened with no console error, no failed request and no browser box. In the browser, classic in English and Chinese, V Opus and the new interface opened with no console errors; Settings > About showed 3.10.2; an empty library folded the gallery toolbar and the whole card fitted 1366x768 in both languages; a fresh install showed no after-update notice. Win+V was checked by hand on Windows 11: the picked picture reaches the page like Ctrl+V.
+  - GitHub CI（41002289936：Linux 完整测试含浏览器测试和点击覆盖、macOS、Windows、Linux 便携版 x86_64 与 aarch64）5 项中 5 项通过；后端 9,302 通过；浏览器测试 2,187 通过、0 失败、0 个偶发；V Opus 单元测试 1,487 通过。在全新的 3.10.2 Windows 包里：在桌面程序中，“新建图库”用程序自己的对话框询问并建好了图库；顶栏每个页面、设置的每个分页、导入对话框、帮助、检查更新和标签库都能打开，没有控制台错误、没有失败的请求、没有浏览器对话框。在浏览器里，经典界面中英文、V Opus 和新界面都没有控制台错误；“设置 > 关于”显示 3.10.2；空图库会收起图库工具栏，引导卡片在 1366x768 下中英文都完整显示；全新安装不会显示更新说明。Win+V 已在 Windows 11 上人工实测：选中的图会像 Ctrl+V 一样送进页面。
 
 ---
 
