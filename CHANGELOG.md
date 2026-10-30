@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **After an update the program says what changed / 更新后会说明改了什么**: The first time the classic interface opens after an update, a notice shows the new version's summary from its release notes, in the interface language, with a Full notes link; it shows once and leaves after 15 seconds. A fresh install shows nothing. An install updated from a version before this notice existed still gets it when its library holds pictures.
+  - 更新后第一次打开经典界面时，会显示新版本发布说明里的摘要（跟随界面语言），并附“完整说明”链接；只显示一次，15 秒后自动消失。全新安装不会显示。从还没有这个提示的旧版本更新上来时，只要图库里有图片，也会显示。
 - **The empty gallery fits the screen / 空图库的引导完整显示**: The four getting-started steps sat as three plus a lone fourth with empty space beside it; they are now two by two. On a 1366 x 768 screen the card lost less of its lower part (less space above and below), the hint no longer leaves one character on its own line, and on large screens the gallery panel reaches the bottom instead of ending mid-screen.
   - 四个新手步骤原来排成三个加孤零零的第四个，旁边一片空白；现在排成两行两列。在 1366 x 768 的屏幕上，卡片上下的空白变小，被切掉的部分更少；提示文字不再剩一个字单独一行；大屏幕上图库面板一直延伸到底部，不再在半屏处断开。
 - **Settings has an About section / 设置里有了“关于”**: Classic Settings now shows the version, a Check for updates button, and the two support actions, Copy diagnostics and Open log folder, which were reachable only from the card a stalled import shows. V Opus already had them under Settings > About.

@@ -3059,6 +3059,9 @@ The release manifest (`release-manifest.json`) may carry `shell_version` (the de
 #### GET /api/updates/desktop-program
 Whether this install holds the desktop program: `{windows, installed, launcher, download_url}`. `installed` is true when both `SD Image Sorter.exe` (the launcher) at the package root and `desktop/sd-image-sorter-shell.exe` exist. The in-app updater never installs the desktop program, so an install made before 3.8.0 and updated in place, or a source checkout, answers `false`; classic Settings > General and V Opus Settings > Desktop, opened in a browser on Windows, then say how to get it (the full Windows package, extracted over the program folder; `data/` is not in the package and stays). `download_url` is the releases page of the latest release. Reads the disk only, never the network.
 
+#### GET /api/updates/whats-new
+What the running version changed, for a one-time notice after an update: `{available, version, title, summary_zh, summary_en, notes_url, updated, previous_version}`. `title` and the two summaries come from the top of the package's `release-notes.md` (title line, then the Chinese and English summary before the first `---`); `available` is false when that file is missing or belongs to another version. `updated` says whether this run follows another version: the first call of each server run records the running version in `<state dir>/last-run-version.json`; with no earlier record, a library that already holds pictures counts as updated (an install from before the record existed) and an empty one does not. `previous_version` is the recorded older version, or null. The classic page shows the summary once per window after an update (`localStorage` `sd-whats-new-seen-version`) with a link to `notes_url`. Reads the disk only, never the network.
+
 #### GET /api/updates/channel
 Get active update channel configuration.
 

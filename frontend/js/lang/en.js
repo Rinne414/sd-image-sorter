@@ -305,6 +305,8 @@ window.I18nLang_en = {
     'gallery.imageCountMissingTip': '{total} indexed in this library; not at the recorded location: {missing} originals.',
     'gallery.noImages': 'No images yet',
     'library.clearShort': 'Clear library…',
+    'whatsNew.toast': 'Updated to {version}. {summary}',
+    'whatsNew.fullNotes': 'Full notes',
     'settings.aboutTitle': 'About',
     'settings.aboutVersion': 'Version {version}',
     'settings.aboutVersionUnknown': 'Version unknown',

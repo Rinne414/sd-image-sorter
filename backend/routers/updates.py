@@ -17,6 +17,7 @@ from services.busy_jobs import collect_busy_jobs
 from services.service_provider import ServiceProvider
 from services.update_service import UpdateService
 from services.shell_compat import desktop_program_state
+from services.whats_new import note_running_version, read_whats_new
 
 
 logger = logging.getLogger(__name__)
@@ -78,6 +79,20 @@ def get_desktop_program() -> dict:
     import services.update_service as update_module
 
     return desktop_program_state(update_module.PACKAGE_ROOT)
+
+
+@router.get("/whats-new")
+def get_whats_new() -> dict:
+    """The running version's summary from its release notes (a one-time notice after an update)."""
+    from app_info import APP_VERSION
+    from config import STATE_DIR
+    from db_images_lookup import get_image_count
+    import services.update_service as update_module
+
+    return {
+        **read_whats_new(update_module.PACKAGE_ROOT, APP_VERSION),
+        **note_running_version(STATE_DIR, APP_VERSION, lambda: get_image_count() > 0),
+    }
 
 
 @router.get("/channel")

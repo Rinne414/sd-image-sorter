@@ -308,6 +308,8 @@ window.I18nLang_zhCN = {
     'gallery.imageCountMissingTip': '图库共索引 {total} 张；其中 {missing} 张原始文件不在原位。',
     'gallery.noImages': '还没有图片',
     'library.clearShort': '清空图库…',
+    'whatsNew.toast': '已更新到 {version}。{summary}',
+    'whatsNew.fullNotes': '完整说明',
     'settings.aboutTitle': '关于',
     'settings.aboutVersion': '版本 {version}',
     'settings.aboutVersionUnknown': '版本未知',
