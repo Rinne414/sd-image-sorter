@@ -567,6 +567,7 @@ window.I18nLang_en = {
     'desktop.browserHereBody': 'Double-click SD Image Sorter.exe in the program folder. The tray, start at login and the global shortcut are set there.',
     'desktop.browserMissingTitle': 'The desktop program is not in this folder',
     'desktop.browserMissingBody': 'In-app updates do not install the desktop program (tray, start at login, global shortcut). To get it: quit the program, download the full Windows package, extract it into this folder and replace the files, then double-click SD Image Sorter.exe. Your library, settings and models are in the data folder, which the package does not contain, so they stay.',
+    'desktop.browserSourceBody': 'The desktop program (tray, start at login, global shortcut) comes with the full Windows package; running from the source code has none.',
     'desktop.downloadPage': 'Open the download page',
     'desktop.dragFailed': 'Could not start dragging the files: {error}',
     'desktop.settingFailed': 'Could not change this setting: {error}',

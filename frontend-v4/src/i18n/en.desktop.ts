@@ -7,6 +7,7 @@ export const enDesktop: Record<keyof typeof zhCNDesktop, string> = {
   'desktop.browser.body': 'You opened this in a browser. Start at login, the tray and the global shortcut only work in the desktop program\'s own window, so they cannot be changed here. Open the desktop program and come back to set them.',
   'desktop.browser.here': 'The desktop program is in the program folder: double-click SD Image Sorter.exe there.',
   'desktop.browser.missing': 'The desktop program is not in this folder: in-app updates do not install it. To get it, quit the program, download the full Windows package, extract it into this folder and replace the files, then double-click SD Image Sorter.exe. Your library, settings and models are in the data folder, which the package does not contain, so they stay.',
+  'desktop.browser.source': 'The desktop program is not in this folder: it comes with the full Windows package, and running from the source code has none.',
   'desktop.browser.download': 'Open the download page',
   'desktop.browser.collectNote': 'Quick collect also works in a browser: it opens a small window.',
   'desktop.program.title': 'Desktop program',

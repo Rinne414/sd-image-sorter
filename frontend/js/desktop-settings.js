@@ -158,11 +158,18 @@
             const value = window.I18n?.t?.(key);
             return value && value !== key ? value : fallback;
         };
-        const words = state.installed
-            ? ['desktop.browserHereTitle', 'The desktop program is in this folder',
-                'desktop.browserHereBody', 'Double-click SD Image Sorter.exe in the program folder. The tray, start at login and the global shortcut are set there.']
-            : ['desktop.browserMissingTitle', 'The desktop program is not in this folder',
+        let words;
+        if (state.installed) {
+            words = ['desktop.browserHereTitle', 'The desktop program is in this folder',
+                'desktop.browserHereBody', 'Double-click SD Image Sorter.exe in the program folder. The tray, start at login and the global shortcut are set there.'];
+        } else if (state.portable) {
+            words = ['desktop.browserMissingTitle', 'The desktop program is not in this folder',
                 'desktop.browserMissingBody', 'In-app updates do not install the desktop program (tray, start at login, global shortcut). To get it: quit the program, download the full Windows package, extract it into this folder and replace the files, then double-click SD Image Sorter.exe. Your library, settings and models are in the data folder, which the package does not contain, so they stay.'];
+        } else {
+            // Run from the source code: the desktop program comes only with the full package.
+            words = ['desktop.browserMissingTitle', 'The desktop program is not in this folder',
+                'desktop.browserSourceBody', 'The desktop program (tray, start at login, global shortcut) comes with the full Windows package; running from the source code has none.'];
+        }
         // Move the keys with the words: the i18n pass re-applies data-i18n.
         [['settings-desktop-browser-heading', 0], ['settings-desktop-browser-body', 2]].forEach(([id, at]) => {
             const node = el(id);

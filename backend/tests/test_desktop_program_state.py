@@ -66,7 +66,22 @@ def test_the_endpoint_reports_the_running_install(test_client, tmp_path, monkeyp
     assert answer.status_code == 200
     body = answer.json()
     assert body["installed"] is True
-    assert set(body) == {"windows", "installed", "launcher", "download_url"}
+    assert set(body) == {"windows", "installed", "portable", "launcher", "download_url"}
 
     monkeypatch.setattr(update_module, "PACKAGE_ROOT", tmp_path / "empty")
     assert test_client.get("/api/updates/desktop-program").json()["installed"] is False
+
+
+def test_only_a_portable_package_may_be_told_to_extract_over_its_folder(tmp_path):
+    # A portable package runs its own Python; a source checkout (with .git, even
+    # when a python folder sits in it) must never be told to extract over itself.
+    portable = tmp_path / "portable"
+    (portable / "python").mkdir(parents=True)
+    (portable / "python" / "python.exe").write_bytes(b"MZ")
+    assert desktop_program_state(portable, is_windows=True)["portable"] is True
+    checkout = tmp_path / "checkout"
+    (checkout / "python").mkdir(parents=True)
+    (checkout / "python" / "python.exe").write_bytes(b"MZ")
+    (checkout / ".git").mkdir()
+    assert desktop_program_state(checkout, is_windows=True)["portable"] is False
+    assert desktop_program_state(tmp_path / "source-zip", is_windows=True)["portable"] is False

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 export interface DesktopProgram {
   windows: boolean
   installed: boolean
+  portable: boolean
   launcher: string
   download_url: string
 }

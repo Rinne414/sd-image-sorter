@@ -56,7 +56,7 @@ function WhereIsTheProgram() {
   }
   return (
     <div className={styles.missing} data-testid="desktop-program-missing">
-      <p className={styles.hint}>{t('desktop.browser.missing')}</p>
+      <p className={styles.hint}>{t(data.portable ? 'desktop.browser.missing' : 'desktop.browser.source')}</p>
       <a className="btn" href={data.download_url} target="_blank" rel="noopener noreferrer" data-testid="desktop-program-download">
         {t('desktop.browser.download')}
       </a>

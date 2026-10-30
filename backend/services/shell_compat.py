@@ -29,6 +29,7 @@ LAUNCHER_EXE_NAME = "SD Image Sorter.exe"
 SHELL_DIRNAME = "desktop"
 SHELL_EXE_NAME = "sd-image-sorter-shell.exe"
 FULL_PACKAGE_PAGE = f"{GITHUB_REPOSITORY_URL}/releases/latest"
+PORTABLE_PYTHON = Path("python") / "python.exe"
 
 SHELL_VERSION_ENV = "SD_IMAGE_SORTER_SHELL_VERSION"
 
@@ -101,6 +102,9 @@ def desktop_program_state(
     return {
         "windows": os.name == "nt" if is_windows is None else is_windows,
         "installed": installed,
+        # A portable package runs its own Python; only there may the full
+        # package be extracted over the folder (never over a source checkout).
+        "portable": (root / PORTABLE_PYTHON).is_file() and not (root / ".git").exists(),
         "launcher": LAUNCHER_EXE_NAME,
         "download_url": FULL_PACKAGE_PAGE,
     }
