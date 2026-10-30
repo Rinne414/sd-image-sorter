@@ -35,13 +35,14 @@ export const withName = (file: File): File => (file.name ? file : new File([file
  * first): its image, and its HTML and text, where a chat app such as QQ puts a
  * copied picture's file location instead of the picture.
  */
-export async function readClipboard(): Promise<Inspected> {
+/** `baseName` names a pasted picture: the Reader says "clipboard", collecting saves it as "pasted". */
+export async function readClipboard(baseName = 'clipboard'): Promise<Inspected> {
   const files: File[] = []
   const text = { uriList: '', html: '', plain: '' }
   for (const item of await navigator.clipboard.read()) {
     for (const type of item.types) {
       if (type.startsWith('image/') && !files.length) {
-        files.push(new File([await item.getType(type)], `clipboard.${type.split('/')[1] || 'png'}`, { type }))
+        files.push(new File([await item.getType(type)], `${baseName}.${type.split('/')[1] || 'png'}`, { type }))
       } else if (type === 'text/html' && !text.html) {
         text.html = await (await item.getType(type)).text()
       } else if (type === 'text/plain' && !text.plain) {

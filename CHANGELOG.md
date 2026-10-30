@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **Pasted pictures are named "pasted" again in V Opus / V Opus 粘贴的图片重新以 pasted 命名**: Since 3.10.1, V Opus's Paste picture button saved a picture from the clipboard as clipboard.png instead of pasted.png (as before, and as classic does). Found by the full browser test run.
+  - 从 3.10.1 起，V Opus 的“粘贴图片”按钮把剪贴板里的图片存成 clipboard.png，而不是以前（和经典界面一样）的 pasted.png。由完整的浏览器测试发现。
 - **After an update the program says what changed / 更新后会说明改了什么**: The first time the program opens after an update (classic or V Opus; seen in one counts for both), a notice shows the new version's summary from its release notes, in the interface language, with a Full notes link; it shows once and leaves after 15 seconds. A fresh install shows nothing. An install updated from a version before this notice existed still gets it when its library holds pictures.
   - 更新后第一次打开程序时（经典界面或 V Opus，在一个里看过就不会在另一个里再出现），会显示新版本发布说明里的摘要（跟随界面语言），并附“完整说明”链接；只显示一次，15 秒后自动消失。全新安装不会显示。从还没有这个提示的旧版本更新上来时，只要图库里有图片，也会显示。
 - **The empty gallery fits the screen / 空图库的引导完整显示**: The four getting-started steps sat as three plus a lone fourth with empty space beside it; they are now two by two. On a 1366 x 768 screen the card lost less of its lower part (less space above and below), the hint no longer leaves one character on its own line, and on large screens the gallery panel reaches the bottom instead of ending mid-screen.

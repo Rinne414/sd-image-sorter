@@ -101,7 +101,8 @@ export async function pasteFromClipboard(): Promise<void> {
     return
   }
   try {
-    if (takeFound(await readClipboard())) return
+    // Saved as pasted.<ext> (then made unique), as before and as classic does.
+    if (takeFound(await readClipboard('pasted'))) return
     const url = pastedPictureUrl(await navigator.clipboard.readText())
     if (url) {
       useCollect.getState().offerUrl(url)
