@@ -634,7 +634,11 @@ test('similar pairs: 60 % lists the pairs most alike first, opens full size, and
       localStorage.setItem('sd-library-workspace-v1', JSON.stringify({ v: 2, currentId: library }))
     }, PAIRS_LIBRARY)
     await page.goto('/vopus/#/library', { waitUntil: 'domcontentloaded' })
+    // Ctrl K before the app has mounted is lost (seen once on CI, 2026-10-30):
+    // wait for the library, then for the palette itself before typing.
+    await expect(page.getByTestId('tile').first()).toBeVisible()
     await page.keyboard.press('Control+k')
+    await expect(page.getByTestId('palette')).toBeVisible()
     await page.keyboard.type('duplicate')
     await page.keyboard.press('Enter')
     const dialog = page.getByTestId('duplicates-dialog')
