@@ -1901,6 +1901,13 @@ html.gallery-comfort-room .filter-sidebar {
     padding-block: clamp(12px, 3vh, 80px);
 }
 
+/* The picture grid holds nothing yet, but its padding kept a 24 px strip above
+   the card, enough to push the English card's last line off a 1366 x 768
+   screen. :empty keeps any rendered picture safe from this rule. */
+#view-gallery.gallery-library-empty #gallery-grid:empty {
+    padding-block: 0;
+}
+
 /* Short content left the gallery panel ending mid-screen on large screens,
    a visible edge across the page: the panel reaches the bottom instead. */
 #view-gallery.gallery-library-empty .gallery-container {
