@@ -53,15 +53,20 @@ for (const lang of ['en', 'zh-CN'] as const) {
   test(`the media toggle shows only with videos and the row still fits at 1366x768 (${lang})`, async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 768 })
     await mockLibrary(page, 24, 0)
+    // The count comes from the stats the page loads. Calling syncMediaToggle(3)
+    // by hand left AppState.analytics.videoCount at 0, so any later filter sync
+    // (boot, a late image response) hid the toggle again and the test flaked.
+    let videoCount = 0
     await page.route('**/api/stats', async (route) => {
       const response = await route.fetch()
-      await route.fulfill({ response, json: { ...(await response.json()), video_count: 0 } })
+      await route.fulfill({ response, json: { ...(await response.json()), video_count: videoCount } })
     })
     await open(page, lang)
     await expect(page.locator('#media-quick-toggle')).toBeHidden()
 
     // A library with videos: the toggle joins the row and the row stays one line.
-    await page.evaluate(() => (window as any).syncMediaToggle(3))
+    videoCount = 3
+    await page.evaluate(() => (window as any).loadStats())
     await expect(page.locator('#media-quick-toggle')).toBeVisible()
     const box = await page.locator('.gallery-search-box').boundingBox()
     const tools = await page.locator('.gallery-search-tools').boundingBox()
