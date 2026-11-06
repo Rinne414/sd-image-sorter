@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from color_analyzer import _analyze_pil_image, dominant_color_tags_from_json
+from color_analyzer import _analyze_pil_image, classify_hex_color, dominant_color_tags_from_json
 from hsv_palette import COLOR_ALGORITHM_VERSION, hsv_palette
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -64,6 +64,19 @@ def test_a_small_real_colour_survives_a_big_background():
 def test_noise_below_one_percent_is_not_a_main_colour():
     result = hsv_palette(_pixels([((20, 60, 220), 995), ((230, 20, 20), 5)]))
     assert len(result) == 1
+
+
+@pytest.mark.parametrize(
+    ("hex_color", "expected"),
+    [
+        ("#3C282D", "brown"),  # dark hair or shadow with a little red in it
+        ("#4A2A30", "brown"),
+        ("#8B0000", "red"),  # a dark red that is still clearly red
+        ("#D71E1E", "red"),
+    ],
+)
+def test_a_dark_muted_red_is_not_called_red(hex_color, expected):
+    assert classify_hex_color(hex_color) == expected
 
 
 def test_top_limits_the_answer_and_empty_input_gives_nothing():

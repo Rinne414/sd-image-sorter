@@ -210,6 +210,8 @@ DOMINANT_COLOR_TAGS = [
 # A dominant color must cover at least this share of the frame to count as
 # "this image is <color>".
 MIN_DOMINANT_PCT = 15.0
+DARK_MUTED_RED_VALUE = 0.35
+DARK_MUTED_RED_SATURATION = 0.50
 
 
 def classify_hex_color(hex_color: str) -> Optional[str]:
@@ -251,6 +253,9 @@ def classify_hex_color(hex_color: str) -> Optional[str]:
 
     # Brown = dark, muted warm hues.
     if 15 <= h <= 50 and v <= 0.62:
+        return "brown"
+    # The same for reds: only a shadow of red, not something a person calls red.
+    if (h >= 340 or h < 15) and v <= DARK_MUTED_RED_VALUE and s <= DARK_MUTED_RED_SATURATION:
         return "brown"
 
     # Pink = light desaturated reds OR the magenta band. Deep saturated
