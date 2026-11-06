@@ -329,6 +329,10 @@ async function loadImages(appendMode = false, options = {}) {
             detail: { appendMode: Boolean(appendMode) },
         }));
 
+        // The listing marks the rows it cannot find: tell the banner before the
+        // empty card is chosen, so a renamed folder is never "no images yet".
+        window.UnreadableBanner?.afterGalleryLoad?.({ missingSkipped: result.missing_skipped });
+
         const emptyState = $('#gallery-empty-state');
         if (emptyState) {
             const shouldShow = AppState.images.length === 0;

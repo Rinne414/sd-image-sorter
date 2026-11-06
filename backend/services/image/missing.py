@@ -148,6 +148,52 @@ def classify_missing_location(raw_path: str) -> tuple:
     return REASON_LOCATION_UNREACHABLE, location
 
 
+def _home_dir() -> Path:
+    return Path.home()
+
+
+def _is_too_broad_to_search(candidate: Path) -> bool:
+    """A drive root, the user's home, or a folder above the home: never suggested.
+
+    Searching those means walking a whole drive. The user can still type one by
+    hand; we just never fill it in for them.
+    """
+    if candidate.parent == candidate:
+        return True
+    try:
+        home = _home_dir().resolve()
+        resolved = candidate.resolve()
+    except OSError:
+        return True
+    return resolved == home or resolved in home.parents
+
+
+def suggest_search_folder(location: str) -> str:
+    """The folder Find Moved Files should look in for rows that claimed ``location``.
+
+    Moved pictures usually sit in a sibling of the folder they left, so this is
+    the nearest parent of ``location`` that still exists and holds something.
+    Empty when no sensible folder exists (relative or foreign path, nothing
+    readable above it, or only a drive root or home folder left).
+    """
+    if not location or not str(location).strip():
+        return ""
+    try:
+        start = Path(location)
+    except (TypeError, ValueError):
+        return ""
+    if not start.is_absolute():
+        return ""
+
+    for candidate in start.parents:
+        if not _is_readable_dir(candidate):
+            continue
+        if _is_too_broad_to_search(candidate) or not _has_any_entry(candidate):
+            return ""
+        return str(candidate)
+    return ""
+
+
 class MissingFilesMixin:
     """Missing-file cleanup slice of ImageService (assembled in services/image_service.py)."""
 
@@ -242,6 +288,13 @@ class MissingFilesMixin:
             for group in ordered[:MAX_REPORTED_GROUPS]
         ]
 
+        # Where Find Moved Files should look: decided by the group with the most
+        # rows, and only when that place is one we can see (an unplugged drive
+        # has nothing to search).
+        suggested_search_folder = ""
+        if ordered and ordered[0]["clearable"]:
+            suggested_search_folder = suggest_search_folder(ordered[0]["location"])
+
         return {
             "total": total,
             "clearable_total": clearable_total,
@@ -252,6 +305,7 @@ class MissingFilesMixin:
             "groups": reported,
             "groups_truncated": len(ordered) > MAX_REPORTED_GROUPS,
             "unreachable_locations": unreachable_locations,
+            "suggested_search_folder": suggested_search_folder,
         }
 
     def clear_missing_images(self, location: Optional[str] = None) -> Dict[str, Any]:

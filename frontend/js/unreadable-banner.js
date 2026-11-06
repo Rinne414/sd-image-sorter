@@ -34,6 +34,11 @@
         cachedCount: null,
         summary: null,
         inFlight: null,
+        // Newest request / newest look: an answer from an older one is dropped.
+        requestSeq: 0,
+        refreshSeq: 0,
+        // A look asked for while the gallery was loading waits for that load.
+        deferred: false,
         detailsOpen: false,
         clearing: false
     };
@@ -299,24 +304,37 @@
         if (!force && state.summary && (now - state.cachedAt) < CACHE_MS) {
             return state.summary;
         }
-        if (state.inFlight) return state.inFlight;
+        // A forced read never joins one already running: that one may have been
+        // asked before the gallery listing marked its missing rows, and says 0.
+        if (!force && state.inFlight) return state.inFlight;
 
-        state.inFlight = (async function () {
+        var seq = ++state.requestSeq;
+        var request = (async function () {
             try {
                 var data = await apiGet('/api/images/missing-summary');
                 var summary = data && typeof data.total === 'number' ? data : emptySummary();
-                state.summary = summary;
-                state.cachedCount = summary.total;
-                state.cachedAt = Date.now();
+                // Only the newest answer is kept, so a slow old one cannot
+                // put a stale 0 back for the next 60 seconds.
+                if (seq === state.requestSeq) {
+                    state.summary = summary;
+                    state.cachedCount = summary.total;
+                    state.cachedAt = Date.now();
+                }
                 return summary;
             } catch (e) {
                 // Soft-fail: never break the gallery because the audit failed.
                 return state.summary || emptySummary();
             } finally {
-                state.inFlight = null;
+                if (state.inFlight === request) state.inFlight = null;
             }
         })();
-        return state.inFlight;
+        state.inFlight = request;
+        return request;
+    }
+
+    function galleryIsLoading() {
+        var appState = window.App && window.App.AppState;
+        return Boolean(appState && appState.isLoading);
     }
 
     function requestClear(location, count, workCount) {
@@ -390,7 +408,16 @@
     }
 
     async function refresh(force) {
+        // Mid-load the rows are only partly marked, so the answer would be a
+        // wrong count (or 0). The load asks again when it ends.
+        if (!force && galleryIsLoading()) {
+            state.deferred = true;
+            return;
+        }
+        state.deferred = false;
+        var mine = ++state.refreshSeq;
         var summary = await fetchSummary(force);
+        if (mine !== state.refreshSeq) return;
         if ((summary.total || 0) > 0) {
             showBanner(summary);
         } else {
@@ -408,11 +435,8 @@
         if (cta && !cta.dataset.bound) {
             cta.dataset.bound = '1';
             cta.addEventListener('click', function () {
-                var openModal = window.App && window.App.showModal
-                    ? window.App.showModal
-                    : window.showModal;
-                if (typeof openModal === 'function') {
-                    openModal('reconnect-modal');
+                if (typeof window.openReconnectModal === 'function') {
+                    window.openReconnectModal();
                 } else {
                     var trigger = $('#btn-reconnect-missing');
                     if (trigger) trigger.click();
@@ -466,14 +490,42 @@
         setTimeout(function () { refresh(false); }, 1500);
     }
 
+    function invalidate() {
+        state.cachedCount = null;
+        state.summary = null;
+        state.cachedAt = 0;
+    }
+
+    /**
+     * The gallery listing just ended. It marks the rows it cannot find, so a
+     * summary read before now can be 0 or short: when it skipped any, forget
+     * that answer, count them at once (the empty card must not say "no images
+     * yet" while the new summary is on its way) and read the summary again.
+     */
+    function afterGalleryLoad(info) {
+        var skipped = Number(info && info.missingSkipped) || 0;
+        if (skipped > 0) {
+            invalidate();
+            state.cachedCount = skipped;
+            refresh(true);
+        } else if (state.deferred) {
+            // The load is still flagged as running until its caller returns.
+            queueMicrotask(function () { refresh(false); });
+        }
+    }
+
+    /** Where Find Moved Files should look first: '' when the backend has no sensible folder. */
+    async function suggestedSearchFolder() {
+        var summary = await fetchSummary(false);
+        return (summary && summary.suggested_search_folder) || '';
+    }
+
     window.UnreadableBanner = {
         init: init,
         refresh: refresh,
-        invalidate: function () {
-            state.cachedCount = null;
-            state.summary = null;
-            state.cachedAt = 0;
-        },
+        invalidate: invalidate,
+        afterGalleryLoad: afterGalleryLoad,
+        suggestedSearchFolder: suggestedSearchFolder,
         // Last known unreadable-row count (null = not checked yet). Read by
         // the gallery image-count label to explain shown/total mismatches.
         getLastCount: function () {

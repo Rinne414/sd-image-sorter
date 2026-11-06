@@ -5,6 +5,7 @@ import { Dialog } from '../../ui/Dialog'
 import { FolderChooser } from '../../ui/FolderChooser'
 import styles from './MissingDialog.module.css'
 import { clearMissing, startReconnect, useMissingGroups, useRepairReviews, type MissingGroup } from './missing'
+import { chooserStart } from './chooserStart'
 import { AlreadySection, ClearAllConfirm, ReviewRow } from './MissingParts'
 
 const REASON: Record<MissingGroup['reason'], MessageKey> = {
@@ -113,7 +114,7 @@ export function MissingDialog({ onClose }: { onClose: () => void }) {
         <FolderChooser
           title={t('missing.chooseTitle')}
           confirmLabel={t('missing.chooseOk')}
-          start={formerHomes[0] ?? null}
+          start={chooserStart(summary.data, formerHomes)}
           shortcuts={[{ heading: t('missing.formerHomes'), paths: formerHomes }]}
           allowNewFolder={false}
           onChoose={startReconnect}

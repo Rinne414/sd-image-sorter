@@ -227,7 +227,7 @@ function initBootListenersShell() {
         }
     });
 
-    $('#btn-reconnect-missing')?.addEventListener('click', () => showModal('reconnect-modal'));
+    $('#btn-reconnect-missing')?.addEventListener('click', () => openReconnectModal());
     $('#btn-browse-reconnect-folder')?.addEventListener('click', () => {
         const input = $('#reconnect-folder-path');
         if (input && typeof window.showFolderBrowser === 'function') {

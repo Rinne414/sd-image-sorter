@@ -133,6 +133,24 @@ function validateReconnectFolderPath() {
     return true;
 }
 
+/**
+ * Open Find Moved Files with the folder to search already filled in: the
+ * nearest folder above the missing files that still exists, worked out by the
+ * backend from the data. The user still presses Start; an empty box is the
+ * only thing filled, so what they typed stays theirs.
+ */
+function openReconnectModal() {
+    showModal('reconnect-modal');
+    const input = $('#reconnect-folder-path');
+    if (!input || input.value.trim() || !window.UnreadableBanner?.suggestedSearchFolder) return;
+    window.UnreadableBanner.suggestedSearchFolder().then((folder) => {
+        if (!folder || input.value.trim()) return;
+        input.value = folder;
+        validateReconnectFolderPath();
+    }).catch(() => {});
+}
+window.openReconnectModal = openReconnectModal;
+
 function _setReconnectRunningUi(isRunning) {
     const startBtn = $('#btn-start-reconnect');
     const cancelBtn = $('#btn-cancel-reconnect');

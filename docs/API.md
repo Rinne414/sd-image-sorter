@@ -46,11 +46,13 @@ Response shape:
   "images": [],
   "next_cursor": "eyJpZCI6MTIzNCwic29ydF92YWx1ZSI6IjIwMjQtMDEtMTVUMTA6MzA6MDBaIiwidiI6MX0",
   "has_more": true,
-  "total": 500
+  "total": 500,
+  "missing_skipped": 0
 }
 ```
 
 Notes:
+- `missing_skipped` is how many rows this request found without a file on disk and left out (it marks them unreadable as it goes). A client that gets an empty or short page with `missing_skipped > 0` should read `GET /api/images/missing-summary` again: a summary read while the listing was still running can have said 0.
 - Treat `cursor` / `next_cursor` as opaque tokens. Pass `next_cursor` back unchanged.
 - Legacy integer cursors are still accepted for backward compatibility, but clients should not generate or parse cursors themselves.
 - Cursor pagination is intended for `sort_by=newest` and `sort_by=oldest`
@@ -623,6 +625,8 @@ The bias is deliberate and asymmetric: refusing to clear something that is genui
 
 `clearable_user_work_total` is the same count restricted to groups that can actually be cleared, and it is the figure a confirmation prompt should quote. The two differ whenever a blocked location holds tagged images: those keep their tags precisely because they are never cleared, so quoting the library-wide total would warn about a loss that cannot happen.
 
+`suggested_search_folder` is where Find Moved Files should look first: the nearest parent that still exists and holds something, taken from the group with the most rows. It is an empty string when that group is on a location we cannot read, when nothing sensible exists, or when only a drive root, the user's home folder or a folder above it is left; those are never suggested. The client may fill the search box with it. Nothing starts by itself.
+
 At most 12 groups are returned (`groups_truncated` says whether more exist); `total`, `clearable_total`, `blocked_total`, `user_work_total` and `location_total` always cover the whole library, and `unreachable_locations` names every blocked location even beyond the group cap.
 
 Example response:
@@ -637,6 +641,7 @@ Example response:
   "location_total": 6,
   "groups_truncated": false,
   "unreachable_locations": [],
+  "suggested_search_folder": "L:/datasets",
   "groups": [
     {
       "location": "L:/datasets/retired-lora",

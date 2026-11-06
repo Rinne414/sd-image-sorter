@@ -399,6 +399,7 @@ class GalleryMixin:
                 "next_offset": None,
                 "has_more": has_more,
                 "total": total,
+                "missing_skipped": total_missing,
             }
 
         page_offset = max(0, offset or 0)
@@ -529,6 +530,7 @@ class GalleryMixin:
             "next_offset": page_offset + len(images) if has_more else None,
             "has_more": has_more,
             "total": total,
+            "missing_skipped": total_missing,
         }
 
     def get_image_count(

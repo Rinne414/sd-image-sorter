@@ -29,6 +29,8 @@ export interface MissingSummary {
   clearable_user_work_total?: number
   groups: MissingGroup[]
   groups_truncated: boolean
+  /** Where the moved files are most likely to be now; '' when the backend has no sensible folder. */
+  suggested_search_folder?: string
 }
 
 export function useMissingGroups() {
