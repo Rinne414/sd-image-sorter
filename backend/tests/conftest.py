@@ -10,6 +10,7 @@ Provides:
 import os
 import sys
 import json
+import shutil
 import tempfile
 import time
 import uuid
@@ -27,6 +28,25 @@ os.environ.setdefault("SD_IMAGE_SORTER_SCAN_METADATA_EXECUTOR", "thread")
 # via monkeypatch when it needs to exercise the probe path.
 os.environ.setdefault("SD_IMAGE_SORTER_PYPI_MIRROR", "official")
 os.environ.setdefault("SD_IMAGE_SORTER_TORCH_CUDA_MIRROR", "official")
+
+# Every data path goes to a temporary folder before the backend is imported, so
+# a test without its own database cannot write to the real library. Paste tests
+# had been adding rows to it on every run (tests/test_data_isolation.py).
+_SESSION_DATA = Path(tempfile.mkdtemp(prefix="sd-sorter-test-data-"))
+for _name, _relative in (
+    ("SD_IMAGE_SORTER_DATA_DIR", ""),
+    ("SD_IMAGE_SORTER_DB_PATH", "images.db"),
+    ("SD_IMAGE_SORTER_CONFIG_DIR", "config"),
+    ("SD_IMAGE_SORTER_STATE_DIR", "state"),
+    ("SD_IMAGE_SORTER_TMP_DIR", "tmp"),
+    ("SD_IMAGE_SORTER_UPDATE_DIR", "update"),
+    ("SD_IMAGE_SORTER_THUMBNAIL_DIR", "thumbnails"),
+    ("SD_IMAGE_SORTER_OUTPUT_DIR", "output"),
+    ("SD_IMAGE_SORTER_FAVORITES_PATH", "favorites"),
+    ("SD_IMAGE_SORTER_CACHE_DIR", "cache"),
+    ("SD_IMAGE_SORTER_LOG_FILE_PATH", "logs/backend.log"),
+):
+    os.environ[_name] = str(_SESSION_DATA / _relative)
 
 # Windows + conda can accumulate a PATH longer than the 32767-char env var
 # limit. When unittest.mock.patch.dict tries to restore the original env on
@@ -56,6 +76,10 @@ def pytest_configure(config):
     inside ``data/``; the xdist controller picks it up front, as done here.
     """
     config._tmp_path_factory.getbasetemp()
+
+
+def pytest_unconfigure(config):
+    shutil.rmtree(_SESSION_DATA, ignore_errors=True)
 
 
 # ============================================================================
