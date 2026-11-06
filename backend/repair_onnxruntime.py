@@ -398,6 +398,16 @@ def get_install_state() -> Dict[str, Any]:
     }
 
 
+def _pip_runner():
+    """pip_runner sits next to this script; embedded Python does not search there by itself."""
+    backend_dir = str(Path(__file__).resolve().parent)
+    if backend_dir not in sys.path:
+        sys.path.insert(0, backend_dir)
+    import pip_runner
+
+    return pip_runner
+
+
 def _run_pip(args: List[str], *, stream: bool = False) -> subprocess.CompletedProcess[str]:
     command = [sys.executable, "-m", "pip", "--disable-pip-version-check", *args]
     if stream:
@@ -409,7 +419,7 @@ def _run_pip(args: List[str], *, stream: bool = False) -> subprocess.CompletedPr
         return subprocess.run(command, check=True, text=True)
 
     try:
-        return subprocess.run(command, check=True, capture_output=True, text=True)
+        return _pip_runner().run_pip(command)
     except subprocess.CalledProcessError as exc:
         if exc.stdout:
             print(exc.stdout, end="", file=sys.stdout)

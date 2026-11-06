@@ -727,7 +727,7 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             "set \"STATE_DIR=!DATA_DIR!\\state\"\n"
             "set \"THUMBNAIL_DIR=!DATA_DIR!\\thumbnails\"\n"
             "for %%D in (\"!DATA_DIR!\" \"!UPDATE_DIR!\" \"!TMP_DIR!\" \"!CACHE_DIR!\" \"!MODELS_DIR!\" \"!FAVORITES_DIR!\" \"!CONFIG_DIR!\" \"!STATE_DIR!\" \"!THUMBNAIL_DIR!\") do (\n"
-            "    if not exist \"%%~D\" mkdir \"%%~D\"\n"
+            "    if not exist \"%%~D\" mkdir \"%%~D\" 2>nul\n"
             ")\n"
             "set \"SD_IMAGE_SORTER_LAUNCHER=run-portable.bat\"\n"
             "set \"SD_IMAGE_SORTER_DATA_DIR=!DATA_DIR!\"\n"
@@ -776,6 +776,12 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             "set \"PYTHONNOUSERSITE=1\"\n"
             "\n"
             "echo [OK] Using embedded Python: !PYTHON_CMD!\n"
+            "\n"
+            "REM -- Everything below installs into this folder: say now if it cannot be written.\n"
+            "\"!PYTHON_CMD!\" backend\\launcher_folder_check.py --launcher \"%~f0\"\n"
+            "set \"FOLDER_CHECK_EXIT=!ERRORLEVEL!\"\n"
+            "if \"!FOLDER_CHECK_EXIT!\"==\"10\" exit /b 0\n"
+            "if \"!FOLDER_CHECK_EXIT!\"==\"11\" exit /b 1\n"
             "\n"
             "REM -- If Feature Setup requested a lightweight runtime reset, clear only pip-installed packages.\n"
             "set \"RUNTIME_REBUILD_MARKER=!STATE_DIR!\\rebuild-core-venv.json\"\n"
@@ -1101,8 +1107,9 @@ FAVORITES_DIR="$DATA_DIR/favorites"
 CONFIG_DIR="$DATA_DIR/config"
 STATE_DIR="$DATA_DIR/state"
 THUMBNAIL_DIR="$DATA_DIR/thumbnails"
+# A folder that cannot be written is explained by the folder check below.
 mkdir -p "$DATA_DIR" "$UPDATE_DIR" "$TMP_DIR" "$CACHE_DIR" \\
-    "$MODELS_DIR" "$FAVORITES_DIR" "$CONFIG_DIR" "$STATE_DIR" "$THUMBNAIL_DIR"
+    "$MODELS_DIR" "$FAVORITES_DIR" "$CONFIG_DIR" "$STATE_DIR" "$THUMBNAIL_DIR" 2>/dev/null || true
 
 export SD_IMAGE_SORTER_LAUNCHER="run-portable.sh"
 export SD_IMAGE_SORTER_DATA_DIR="$DATA_DIR"
@@ -1156,6 +1163,11 @@ export PATH="$PYTHON_DIR/bin:$PATH"
 export PYTHONNOUSERSITE=1
 
 echo "[OK] Using bundled Python: $PYTHON_CMD"
+
+# Everything below installs into this folder: say now if it cannot be written.
+FOLDER_CHECK_EXIT=0
+"$PYTHON_CMD" backend/launcher_folder_check.py --launcher "$0" || FOLDER_CHECK_EXIT=$?
+if [ "$FOLDER_CHECK_EXIT" -eq 11 ]; then exit 1; fi
 "$PYTHON_CMD" --version
 
 # Lightweight runtime rebuild marker (Setup Now -> Rebuild lightweight runtime).

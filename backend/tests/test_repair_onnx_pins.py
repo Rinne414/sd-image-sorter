@@ -588,7 +588,8 @@ def test_module_has_no_non_stdlib_top_level_imports():
             if node.level == 0 and node.module:
                 roots.add(node.module.split(".")[0])
 
-    non_stdlib = roots - set(sys.stdlib_module_names)
+    # pip_runner and install_progress are stdlib-only themselves (test_pip_runner pins it).
+    non_stdlib = roots - set(sys.stdlib_module_names) - {"pip_runner"}
     assert non_stdlib == set(), (
         f"repair_onnxruntime.py gained non-stdlib top-level import(s): {sorted(non_stdlib)}. "
         "This module must stay stdlib-only (it runs when onnxruntime is broken)."

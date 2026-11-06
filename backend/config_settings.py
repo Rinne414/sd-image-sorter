@@ -32,6 +32,8 @@ import tempfile
 import threading
 import time
 
+from folder_access import require_writable
+
 # NOTE(decomposition): keep the historical logger channel ("config") so log
 # routing and output stay identical to the pre-split single-file module.
 logger = logging.getLogger("config")
@@ -205,6 +207,7 @@ def _write_app_settings(settings: dict) -> None:
     path = _cfg().APP_SETTINGS_CONFIG_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(settings, indent=2, sort_keys=True)
+    require_writable(path.parent)
     fd, tmp_name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent))
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:

@@ -5,6 +5,7 @@ import subprocess
 import sys
 import traceback
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -565,7 +566,11 @@ def test_captured_pip_failure_redacts_index_credentials_before_print(monkeypatch
             stderr="Could not fetch https://token-value@mirror.example/simple/torch",
         )
 
-    monkeypatch.setattr(repair_torch_runtime.subprocess, "run", fail_run)
+    monkeypatch.setattr(
+        repair_torch_runtime,
+        "_pip_runner",
+        lambda: SimpleNamespace(run_pip=fail_run),
+    )
 
     with pytest.raises(subprocess.CalledProcessError):
         repair_torch_runtime._run_pip(["install", "torch"], stream=False)

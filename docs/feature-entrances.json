@@ -4138,6 +4138,25 @@
       }
     },
     {
+      "id": "settings.network-proxy",
+      "area": "settings",
+      "en": "Network proxy: one port for model downloads, package installs and update checks, with a connection test",
+      "zh": "网络代理：一个端口，模型下载、装包和检查更新都走它，并可测试连接",
+      "classic": [
+        "#network-proxy-section"
+      ],
+      "vopus": {
+        "at": "#/settings/models",
+        "find": "[data-testid=\"network-proxy\"]",
+        "note": "On the Model Center page, below the download source"
+      },
+      "next": {
+        "at": "#/settings/models",
+        "find": "[data-testid=\"network-proxy\"]",
+        "note": "Same Model Center page as Vopus"
+      }
+    },
+    {
       "id": "settings.metadata-repair",
       "area": "settings",
       "en": "Re-read ComfyUI prompts, recover missing text",

@@ -128,6 +128,9 @@ function JobRow({ job }: { job: Job }) {
           {p.phase && (
             <p className={styles.note}>{t(p.phase === 'details' ? 'import.phaseDetails' : 'import.phaseFiles')}</p>
           )}
+          {p.installStage && (
+            <p className={styles.note} data-testid="job-install-stage">{t(p.installStage === 'installing' ? 'jobs.install.installing' : 'jobs.install.resolving')}</p>
+          )}
           <div className={styles.meter} role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={p.current}>
             <span style={{ width: `${total ? (p.current / total) * 100 : 0}%` }} />
           </div>

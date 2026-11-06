@@ -20,6 +20,8 @@ from urllib.parse import unquote, urlsplit
 
 import httpx
 
+from folder_access import require_writable
+
 logger = logging.getLogger(__name__)
 
 CONNECT_TIMEOUT_SECONDS = 15.0
@@ -159,6 +161,7 @@ def download_picture(
     # A proxy from the environment is for the internet, not for this machine.
     trust_env = not _is_loopback(urlsplit(url).hostname)
     dest_dir.mkdir(parents=True, exist_ok=True)
+    require_writable(dest_dir)
     fd, tmp_name = tempfile.mkstemp(
         prefix=".collect-", suffix=".part", dir=str(dest_dir)
     )

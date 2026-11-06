@@ -336,6 +336,8 @@ function renderModelManager(models = []) {
                     } else if (p?.active) {
                         const mb = (p.downloaded / 1048576).toFixed(0);
                         button.textContent = `${p.filename || 'Downloading'}: ${mb} MB...`;
+                    } else if (p?.stage) {
+                        button.textContent = window.featureInstallStageText(p);
                     }
                     const pr = p?.prepare_result;
                     if (pr && !pr.active && pr.model_id === modelId && pr.status) {

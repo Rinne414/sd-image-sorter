@@ -43,6 +43,7 @@ from model_health import (
     get_sam3_checkpoint_path,
     get_torch_onnx_runtime_health,
 )
+import install_progress
 from optional_dependencies import DependencyInstallResult, ensure_group, ensure_group_with_soft_deps
 
 # ---------------------------------------------------------------------------
@@ -92,7 +93,16 @@ _MAX_PRIVACY_YOLO_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
 _MAX_ARTIST_RUNTIME_ZIP_ENTRIES = 1024
 _MAX_ARTIST_RUNTIME_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
 _model_logger = logging.getLogger(__name__)
-_download_progress = {"active": False, "url": "", "downloaded": 0, "total": 0, "filename": ""}
+_download_progress = {
+    "active": False,
+    "url": "",
+    "downloaded": 0,
+    "total": 0,
+    "filename": "",
+    "stage": "",
+    "file_index": 0,
+    "package_count": 0,
+}
 _download_progress_lock = threading.Lock()
 
 
@@ -273,6 +283,9 @@ def _set_download_progress(**updates: Any) -> None:
         _download_progress.update(updates)
 
 
+install_progress.set_listener(_set_download_progress)
+
+
 def _direct_download_file(url: str, dest: Path, *, timeout: int = 300) -> Path:
     dest.parent.mkdir(parents=True, exist_ok=True)
     _model_logger.info("Downloading %s → %s", url, dest)
@@ -360,14 +373,16 @@ def _repair_torch_runtime_if_possible() -> Dict[str, Any]:
 
     _model_logger.info("Checking the shared PyTorch runtime before preparing a GPU model")
     try:
-        completed = subprocess.run(
-            [sys.executable, str(repair_script), "--auto", "--json"],
-            cwd=str(repair_script.parent),
-            capture_output=True,
-            text=True,
-            timeout=int(os.environ.get("SD_IMAGE_SORTER_TORCH_REPAIR_TIMEOUT", "3600") or "3600"),
-            check=False,
-        )
+        with install_progress.relay_child_progress() as child_env:
+            completed = subprocess.run(
+                [sys.executable, str(repair_script), "--auto", "--json"],
+                cwd=str(repair_script.parent),
+                capture_output=True,
+                text=True,
+                timeout=int(os.environ.get("SD_IMAGE_SORTER_TORCH_REPAIR_TIMEOUT", "3600") or "3600"),
+                check=False,
+                env={**os.environ, **child_env},
+            )
     except (OSError, subprocess.SubprocessError, ValueError) as exc:
         return _torch_runtime_failure_result(
             f"Could not start the PyTorch runtime repair: {type(exc).__name__}: {exc}",

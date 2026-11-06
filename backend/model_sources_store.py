@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
 
 import model_sources
+from folder_access import require_writable
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +105,7 @@ class ModelSourcesStore:
         tmp_name = None
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
+            require_writable(self.path.parent)
             with tempfile.NamedTemporaryFile(
                 "w",
                 encoding="utf-8",

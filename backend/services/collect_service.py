@@ -24,6 +24,7 @@ from typing import Any, BinaryIO, Dict, Optional, Tuple
 from PIL import Image
 
 import config
+from folder_access import require_writable
 from utils.path_validation import sanitize_filename
 from utils.unique_names import first_free_path
 
@@ -206,6 +207,7 @@ def store_collected_file(tmp_path: Path, suggested_name: Optional[str]) -> Saved
 
 def new_temp_file(folder: Path) -> Tuple[int, Path]:
     folder.mkdir(parents=True, exist_ok=True)
+    require_writable(folder)
     fd, name = tempfile.mkstemp(prefix=".collect-", suffix=".part", dir=str(folder))
     return fd, Path(name)
 

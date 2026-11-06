@@ -371,6 +371,8 @@ export const zhCN = {
   'jobs.in': '在 {path} 里找',
   'jobs.review': '去确认 {n} 个',
   'jobs.startedElsewhere': '在别处开始的',
+  'jobs.install.resolving': '正在确认要装哪些 Python 包',
+  'jobs.install.installing': '正在解压 Python 包。这一步没有百分比，大的包要几分钟。',
   'jobs.busy': '同类的工作还在进行，等它结束再开始。',
   'jobs.lost': '和后台失去联系：{reason}',
   'jobs.reset': '这个工作被重置了',

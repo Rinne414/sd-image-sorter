@@ -371,6 +371,8 @@ export const en: Record<MessageKey, string> = {
   'jobs.in': 'in {path}',
   'jobs.review': 'Review {n}',
   'jobs.startedElsewhere': 'Started elsewhere',
+  'jobs.install.resolving': 'Working out which Python packages are needed',
+  'jobs.install.installing': 'Unpacking Python packages. This step has no percentage; large ones take a few minutes.',
   'jobs.busy': 'A job like this is still running; start this one when it ends.',
   'jobs.lost': 'Lost contact with the app: {reason}',
   'jobs.reset': 'This job was reset',

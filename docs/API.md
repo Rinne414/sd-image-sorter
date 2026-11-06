@@ -1325,7 +1325,21 @@ Where the trusted folders apply (SEC1b / SEC1c):
   a `.pt` outside the roots, whoever calls it. Library, export and move
   folders are not affected.
 
+#### GET /api/network/proxy
+
+The saved proxy (`proxy`, empty for none) and the one the system already names (`system_proxy`). Own page only, because a saved address can hold a password.
+
+#### POST /api/network/proxy
+
+Body `{ "proxy": "7890" }`: a port, `host:port` or a full `http`/`https` URL; empty turns it off. SOCKS is refused because urllib and pip cannot use it. Saved and used at once for downloads, pip and update checks; local addresses never use it. 400 with a sentence to show when the address is not valid; 409 while a feature install is running. Own page only.
+
+#### POST /api/network/proxy/test
+
+Body as above. Tries the download sites through that proxy (directly when empty) and saves nothing: `{ "proxy", "results": [{ "name", "ok", "ms", "error" }] }`, `error` being `timeout`, `unreachable` or `failed`. Own page only.
+
 #### GET /api/models/download-progress
+
+`stage` says what a feature install is doing: `resolving`, `downloading` (with `filename`, `downloaded`, `total`, `file_index`), `installing` (with `package_count`; pip gives no percentage for this step) or empty when idle. pip and Hugging Face downloads both report here.
 Get active model download progress (bytes downloaded, total size). `prepare_result` describes the latest prepare, with its `run_id` (0 when none ran since the app started). `finished_prepares` maps run ids (as strings) to the results of the last 32 finished prepares (the same fields as `prepare_result`, `active: false`), so a page that missed the moment its run handed over to the next one still learns how its own run ended; a run no longer listed there has to be treated as lost.
 
 #### GET /api/models/sources/detect

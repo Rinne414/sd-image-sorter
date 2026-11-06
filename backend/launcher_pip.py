@@ -13,6 +13,12 @@ from importlib import metadata
 from pathlib import Path
 from typing import TextIO
 
+BACKEND_DIR = str(Path(__file__).resolve().parent)
+if BACKEND_DIR not in sys.path:  # embedded Python does not search next to the script
+    sys.path.insert(0, BACKEND_DIR)
+
+from folder_access import require_writable  # noqa: E402
+
 
 PIP_MARKER_IGNORE_RE = re.compile(
     r"^Ignoring .+: markers .+ don't match your environment$"
@@ -114,6 +120,7 @@ def prepare_pip_args(pip_args: list[str]) -> tuple[list[str], Path | None]:
     # Same directory first, so relative includes inside the file keep working.
     for directory in (source.resolve().parent, Path(tempfile.gettempdir())):
         try:
+            require_writable(directory)
             handle, name = tempfile.mkstemp(
                 prefix=FILTERED_FILE_PREFIX, suffix=".txt", dir=directory
             )
@@ -177,6 +184,13 @@ def stream_filtered_pip_output(output: TextIO) -> None:
             print(held_line, end="", flush=True)
 
 
+def _apply_saved_proxy() -> None:
+    """The proxy saved in the Model Center also carries the launcher's pip."""
+    import network_proxy
+
+    network_proxy.apply_from_settings_file(os.environ.get("SD_IMAGE_SORTER_CONFIG_DIR"))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     pip_args = list(sys.argv[1:] if argv is None else argv)
     if not pip_args:
@@ -184,6 +198,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     remove_stale_filtered_files(Path(__file__).resolve().parent)
+    _apply_saved_proxy()
     pip_args, temp_requirements = prepare_pip_args(pip_args)
     try:
         return _run_pip(pip_args)

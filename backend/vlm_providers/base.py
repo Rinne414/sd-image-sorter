@@ -11,6 +11,8 @@ from urllib.parse import urlsplit, urlunsplit
 import httpx
 from PIL import Image
 
+import network_proxy
+
 # The segment-shape rules ("is this comma segment a tag or leaked prose?") moved
 # to ``caption_format`` in 2026-08 so this parser and the sidecar caption-format
 # classifier share ONE implementation instead of two that drift. Rebound under
@@ -307,6 +309,9 @@ def make_async_client(config: VLMConfig, timeout: Optional[float] = None) -> htt
     actual_timeout = timeout if timeout is not None else config.timeout_seconds
     proxies = config.get_proxies()
     kwargs: Dict[str, Any] = {"timeout": actual_timeout}
+    # The program's network proxy is for the internet, not a server at home.
+    if not proxies and network_proxy.is_local_address(config.endpoint):
+        kwargs["trust_env"] = False
     if proxies:
         # httpx 0.28+ uses 'proxy' singular; older accepts 'proxies' dict.
         # Try modern API first.

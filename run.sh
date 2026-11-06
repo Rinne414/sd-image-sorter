@@ -32,7 +32,8 @@ CONFIG_DIR="${DATA_DIR}/config"
 STATE_DIR="${DATA_DIR}/state"
 THUMBNAIL_DIR="${DATA_DIR}/thumbnails"
 
-mkdir -p "${DATA_DIR}" "${UPDATE_DIR}" "${TMP_DIR}" "${CACHE_DIR}" "${MODELS_DIR}" "${FAVORITES_DIR}" "${CONFIG_DIR}" "${STATE_DIR}" "${THUMBNAIL_DIR}"
+# A folder that cannot be written is explained by the folder check below.
+mkdir -p "${DATA_DIR}" "${UPDATE_DIR}" "${TMP_DIR}" "${CACHE_DIR}" "${MODELS_DIR}" "${FAVORITES_DIR}" "${CONFIG_DIR}" "${STATE_DIR}" "${THUMBNAIL_DIR}" 2>/dev/null || true
 
 export SD_IMAGE_SORTER_LAUNCHER="run.sh"
 export SD_IMAGE_SORTER_DATA_DIR="${DATA_DIR}"
@@ -127,6 +128,11 @@ fi
 
 echo "[OK] Python $PY_VER detected."
 echo
+
+# Everything below installs into this folder: say now if it cannot be written.
+FOLDER_CHECK_EXIT=0
+"$PYTHON_CMD" backend/launcher_folder_check.py --launcher "$0" || FOLDER_CHECK_EXIT=$?
+if [ "$FOLDER_CHECK_EXIT" -eq 11 ]; then exit 1; fi
 
 # Torch 2.13 has no Intel Mac wheel and its Apple Silicon wheel targets macOS 14.
 # Keep the core app available instead of silently installing advisory-heavy legacy Torch.

@@ -5,6 +5,24 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed / 修复
+
+- **Main colours**: the gallery, Reader and Censor palettes and the colour filter now find main colours in HSV. RGB filled the top places with light and dark versions of one colour; on 400 real pictures near-duplicate pairs fell from 2.04 to 0.82 per picture and colour-filter tags a picture should have but did not from 54.1% to 15.2%. Pictures analysed before count as needing analysis; their old colours keep working until then.
+  - 图库、图片读取器和打码页的色板，以及颜色筛选，现在用 HSV 找主色。RGB 会让同一种颜色的深浅版本占满前几名；在 400 张真实图片上，每张图的近似重复色从 2.04 对降到 0.82 对，该有却没有的颜色标签从 54.1% 降到 15.2%。之前分析过的图会显示为需要分析，分析前旧颜色继续可用。
+- **Install progress**: installing a feature shows the real file, megabytes, percent, speed and time left, for Python packages and Hugging Face downloads alike. Steps with no percentage say what they are doing and the bar moves.
+  - 安装功能时会显示真实的文件名、MB、百分比、速度和剩余时间，Python 包和 Hugging Face 下载都一样。没有百分比的步骤会说明正在做什么，进度条也在动。
+- **Install failures say why**: a failed package install says the folder cannot be written, a file is in use, the network failed, the disk is full or the path is too long, instead of "returned non-zero exit status 1". A folder that cannot be written is no longer mistaken for a locked file and retried.
+  - 装包失败会说明原因：文件夹没有写入权限、文件被占用、网络不通、磁盘满了或路径太长，不再只显示“returned non-zero exit status 1”。没有写入权限不再被当成文件被占用而重试。
+- **Starting from a folder without write permission**: the launchers say so before installing anything and offer to open again as administrator, instead of failing one install at a time.
+  - 从没有写入权限的文件夹启动时，启动脚本会在安装前说明，并可以用管理员身份重新打开，不再一个个安装失败才发现。
+
+### Added / 新增
+
+- **Network proxy** (Model Center): enter the port of Clash, v2rayN or a similar tool once, and model downloads, package installs and update checks all use it, so TUN mode is not needed. Includes a connection test and one click for the system proxy; local addresses never use it.
+  - **网络代理**（模型中心）：填一次 Clash、v2rayN 等工具的端口，模型下载、装包和检查更新都会走它，不用开 TUN 模式。可以测试连接，也可以一键用系统代理；本机地址不走代理。
+
 ## [3.10.2] - 2026-10-30
 
 Desktop program creates and renames libraries; questions use its own dialogs; updates say what's new.

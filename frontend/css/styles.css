@@ -2887,6 +2887,24 @@ body::before {
         transition: width 0.2s ease;
     }
 
+    .feature-model-install-bar.is-indeterminate .feature-model-install-fill {
+        width: 35%;
+        animation: feature-model-install-slide 1.4s ease-in-out infinite;
+    }
+
+    @keyframes feature-model-install-slide {
+        from { transform: translateX(-100%); }
+        to { transform: translateX(290%); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .feature-model-install-bar.is-indeterminate .feature-model-install-fill {
+            width: 100%;
+            opacity: 0.35;
+            animation: none;
+        }
+    }
+
     .feature-model-install-actions {
         display: flex;
         flex-wrap: wrap;

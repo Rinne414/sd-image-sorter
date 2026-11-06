@@ -98,6 +98,8 @@ export interface JobProgress {
   toReview: number
   /** scan only: finding and adding files, then reading their generation details. */
   phase: 'files' | 'details' | null
+  /** install only: the steps between downloads, which have no byte counts. */
+  installStage?: 'resolving' | 'installing'
   /** scan only: images already in the library whose details were read again. */
   updated: number
   /** scan only: no visible progress for a while; images left to another library. */
@@ -243,7 +245,9 @@ function readBulk(base: JobProgress, raw: Raw, ctx: ReadContext): JobProgress {
 
 /** A model prepare still downloading: its bytes and file. */
 function installDownloading(base: JobProgress, raw: Raw): JobProgress {
-  return { ...base, status: 'running', unit: 'bytes', current: num(raw.downloaded), total: num(raw.total), currentItem: str(raw.filename) || null, message: '' }
+  const stage = str(raw.stage)
+  const installStage = stage === 'resolving' || stage === 'installing' ? stage : undefined
+  return { ...base, status: 'running', unit: 'bytes', current: num(raw.downloaded), total: num(raw.total), currentItem: str(raw.filename) || null, message: '', installStage }
 }
 
 /** How a finished model prepare ended (`result`: its prepare_result). */

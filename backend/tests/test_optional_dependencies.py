@@ -504,7 +504,7 @@ def test_install_packages_refuses_system_python_without_opt_in(monkeypatch):
     monkeypatch.delenv("SD_IMAGE_SORTER_ALLOW_SYSTEM_PIP_INSTALL", raising=False)
 
     calls = []
-    monkeypatch.setattr(optional_dependencies.subprocess, "run", lambda *args, **kwargs: calls.append((args, kwargs)))
+    monkeypatch.setattr(optional_dependencies, "run_pip", lambda *args, **kwargs: calls.append((args, kwargs)))
 
     try:
         optional_dependencies.install_packages(["torch>=2.0.0"])
@@ -534,7 +534,7 @@ def test_install_packages_allows_virtualenv(monkeypatch):
     def fake_run(command, **kwargs):
         calls.append((command, kwargs))
 
-    monkeypatch.setattr(optional_dependencies.subprocess, "run", fake_run)
+    monkeypatch.setattr(optional_dependencies, "run_pip", fake_run)
     monkeypatch.setattr(optional_dependencies.importlib, "invalidate_caches", lambda: None)
 
     optional_dependencies.install_packages(["fastembed>=0.4.0"])
@@ -560,7 +560,7 @@ def test_install_packages_allows_portable_python(monkeypatch, tmp_path):
     def fake_run(command, **kwargs):
         calls.append((command, kwargs))
 
-    monkeypatch.setattr(optional_dependencies.subprocess, "run", fake_run)
+    monkeypatch.setattr(optional_dependencies, "run_pip", fake_run)
     monkeypatch.setattr(optional_dependencies.importlib, "invalidate_caches", lambda: None)
 
     optional_dependencies.install_packages(["fastembed>=0.4.0"])
@@ -671,6 +671,7 @@ def _record_pip_calls(
             stderr="",
         )
 
+    monkeypatch.setattr(optional_dependencies, "run_pip", fake_run)
     monkeypatch.setattr(optional_dependencies.subprocess, "run", fake_run)
     monkeypatch.setattr(optional_dependencies.importlib, "invalidate_caches", lambda: None)
     return calls

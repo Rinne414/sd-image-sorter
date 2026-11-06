@@ -25,7 +25,7 @@ set "STATE_DIR=%DATA_DIR%\state"
 set "THUMBNAIL_DIR=%DATA_DIR%\thumbnails"
 
 for %%D in ("%DATA_DIR%" "%UPDATE_DIR%" "%TMP_DIR%" "%CACHE_DIR%" "%MODELS_DIR%" "%FAVORITES_DIR%" "%CONFIG_DIR%" "%STATE_DIR%" "%THUMBNAIL_DIR%") do (
-    if not exist "%%~D" mkdir "%%~D"
+    if not exist "%%~D" mkdir "%%~D" 2>nul
 )
 
 set "SD_IMAGE_SORTER_LAUNCHER=run.bat"
@@ -154,6 +154,12 @@ if !PY_MAJOR! EQU 3 if !PY_MINOR! LSS 12 (
 
 echo [OK] Python !PY_VER!
 echo.
+
+REM -- Everything below installs into this folder: say now if it cannot be written.
+"!PYTHON_CMD!" backend\launcher_folder_check.py --launcher "%~f0"
+set "FOLDER_CHECK_EXIT=!ERRORLEVEL!"
+if "!FOLDER_CHECK_EXIT!"=="10" exit /b 0
+if "!FOLDER_CHECK_EXIT!"=="11" exit /b 1
 
 REM -- Detect first run
 set FIRST_RUN=0

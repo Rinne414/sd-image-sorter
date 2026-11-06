@@ -156,7 +156,16 @@ def test_recommended_model_ids_is_frozenset_with_exact_members():
 
 def test_download_progress_default_shape():
     progress = model_service.get_download_progress()
-    assert set(progress) == {"active", "url", "downloaded", "total", "filename"}
+    assert set(progress) == {
+        "active",
+        "url",
+        "downloaded",
+        "total",
+        "filename",
+        "stage",
+        "file_index",
+        "package_count",
+    }
 
 
 # ===========================================================================

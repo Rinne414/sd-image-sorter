@@ -17,6 +17,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+import install_progress
 from optional_dependencies import (
     UnsafeDependencyInstallError,
     UnsupportedOptionalDependencyError,
@@ -489,6 +490,7 @@ def _run_prepare_blocking(service: ModelService, model_id: str, source: Optional
         variant or "default",
     )
     try:
+        install_progress.watch_hub_downloads()
         result = service.prepare_model(model_id, source=source, variant=variant)
         result_status = str(result.get("status") or "ok")
         prepare_status = (

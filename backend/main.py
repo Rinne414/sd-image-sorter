@@ -134,6 +134,7 @@ from exceptions import (
 )
 
 # Import routers
+import network_proxy
 from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, disguise, censor_media, aesthetic, updates, disk, vlm, colors, tags_bulk, dataset, dataset_quality, caption_tokens, dataset_projects, annotations, smart_tag, collections, entry, libraries, duplicates, publish, metadata_repair, masks, style_map, output_folders, batches, batch_uploads, file_manager, image_lookup, interface, folder_watch, generator_recipe, browser_extension, collect, videos
 
 # Import services
@@ -146,6 +147,7 @@ from services import (
 from services.folder_watch import get_folder_watch_service
 from services.video_index import get_video_indexer
 from routers import background_models
+from routers import network
 from routers import local_picture
 from model_residency import start_idle_sweeper, stop_idle_sweeper
 
@@ -264,6 +266,8 @@ async def lifespan(app: FastAPI):
     config_warnings = validate_config()
     for warning in config_warnings:
         logger.warning(f"Configuration warning: {warning}")
+
+    network_proxy.apply_saved_proxy()
 
     db.init_db()
 
@@ -414,6 +418,7 @@ app.include_router(similarity.router)
 app.include_router(artists.router)
 app.include_router(style_map.router)
 app.include_router(models.router)
+app.include_router(network.router)
 app.include_router(obfuscation.router)
 app.include_router(disguise.router)
 app.include_router(censor_media.router)

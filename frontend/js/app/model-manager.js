@@ -34,6 +34,7 @@ async function openModelManager(initialTab) {
     // The folders models may be read from; the card and the one-time
     // "add the ComfyUI I found?" question load beside the status call.
     window.ModelSources?.open();
+    window.NetworkProxy?.open();
 
     try {
         const result = await API.getModelStatus();
@@ -419,6 +420,13 @@ async function runBulkDownload(items) {
                     const detail = appT('models.bulkProgressDetail', '{index}/{total}: {name} {pct}%', { index: completed + 1, total, name: item.name || item.id, pct });
                     updateBanner(detail);
                     button.innerHTML = `<span aria-hidden="true">⏳</span> <span>${escapeHtml(detail)}</span>`;
+                } else if (!p?.active && p?.stage) {
+                    updateBanner(appT('models.bulkStageDetail', '{index}/{total}: {name}: {stage}', {
+                        index: completed + 1,
+                        total,
+                        name: item.name || item.id,
+                        stage: window.featureInstallStageText(p),
+                    }));
                 }
             } catch (err) {
                 pollErrorStreak += 1;

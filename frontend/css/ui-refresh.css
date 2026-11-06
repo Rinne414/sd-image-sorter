@@ -2552,6 +2552,23 @@ html:has(#view-gallery.active) {
 .model-card-source {
     overflow-wrap: anywhere;
 }
+#network-proxy-input {
+    flex: 0 1 240px;
+}
+.network-proxy-results {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 18px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12px;
+}
+.network-proxy-result {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
 
 /* MODELS-07: full-width section dividers inside the model grid (Essentials /
    Additional). grid-column: 1 / -1 makes each heading span every column. */

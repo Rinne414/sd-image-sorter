@@ -16,9 +16,10 @@ Those platforms fail closed instead of attempting a source build.
 from __future__ import annotations
 
 import platform
-import subprocess
 import sys
 from collections.abc import Callable
+
+from pip_runner import run_pip
 
 CPU_WHEEL_INDEX = "https://abetlen.github.io/llama-cpp-python/whl/cpu"
 LLAMA_CPP_SPEC = "llama-cpp-python>=0.3.24"
@@ -75,10 +76,9 @@ def install_cpu_wheel(*, runner: Callable[..., object] | None = None) -> None:
     """pip-install the CPU wheel into the current interpreter.
 
     ``runner`` is the subprocess.run seam tests patch; production passes
-    nothing and uses ``subprocess.run``.
+    nothing and uses ``pip_runner.run_pip``, which reports its progress.
     """
     require_cpu_wheel_platform()
-    run = runner or subprocess.run
     command = [
         sys.executable,
         "-m",
@@ -87,4 +87,7 @@ def install_cpu_wheel(*, runner: Callable[..., object] | None = None) -> None:
         "install",
         *build_pip_install_args(),
     ]
-    run(command, check=True, text=True, capture_output=True)
+    if runner is None:
+        run_pip(command)
+    else:
+        runner(command, check=True, text=True, capture_output=True)

@@ -22,6 +22,12 @@ from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
 from packaging.version import InvalidVersion, Version
 
+from pip_runner import (
+    PipInstallError,
+    explain_pip_failure,
+    install_folder_is_writable,
+    run_pip,
+)
 from runtime_dependency_check import (
     ORT_DISTRIBUTION_NAMES,
     InstalledDistribution,
@@ -444,7 +450,7 @@ def _assert_safe_install_target(packages: Sequence[str]) -> None:
 
 _log = logging.getLogger(__name__)
 
-_WINDOWS_DLL_LOCK_MARKERS = ("WinError 5", "Access is denied", "存取被拒")
+_WINDOWS_DLL_LOCK_MARKERS = ("WinError 5", "Access is denied", "存取被拒", "拒绝访问")
 
 _ORT_CONSUMER_IMPORTS: dict[str, str] = {
     "fastembed": "fastembed",
@@ -587,21 +593,20 @@ def _install_without_dependencies(
     package_spec: str,
     index_args: Sequence[str],
 ) -> None:
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "--disable-pip-version-check",
-            "install",
-            "--no-deps",
-            *index_args,
-            package_spec,
-        ],
-        check=True,
-        text=True,
-        capture_output=True,
-    )
+    command = [
+        sys.executable,
+        "-m",
+        "pip",
+        "--disable-pip-version-check",
+        "install",
+        "--no-deps",
+        *index_args,
+        package_spec,
+    ]
+    try:
+        run_pip(command)
+    except subprocess.CalledProcessError as error:
+        raise PipInstallError(error, explain_pip_failure(error.output or "")) from error
     importlib.invalidate_caches()
 
 
@@ -704,24 +709,24 @@ def _install_with_resolver(
         return False
 
     try:
-        subprocess.run(
-            [sys.executable, "-m", "pip", "--disable-pip-version-check", "install", *index_args, *packages],
-            check=True,
-            text=True,
-            capture_output=True,
-        )
+        run_pip([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", *index_args, *packages])
     except subprocess.CalledProcessError as exc:
-        stderr = (exc.stderr or "") + (exc.stdout or "")
-        if platform.system() == "Windows" and any(m in stderr for m in _WINDOWS_DLL_LOCK_MARKERS):
+        output = (exc.stderr or "") + (exc.stdout or "")
+        # "Access is denied" is a locked DLL only when the folder itself can be
+        # written; otherwise retrying hides the real reason from the user.
+        if (
+            platform.system() == "Windows"
+            and any(m in output for m in _WINDOWS_DLL_LOCK_MARKERS)
+            and install_folder_is_writable()
+        ):
             _log.warning(
                 "pip install hit a locked DLL (another model loaded the same native library). "
                 "Retrying with --no-deps to install the pure-Python portion..."
             )
-            subprocess.run(
-                [sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--no-deps", *index_args, *packages],
-                check=True,
-                text=True,
-            )
+            try:
+                run_pip([sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--no-deps", *index_args, *packages])
+            except subprocess.CalledProcessError as retry_error:
+                raise PipInstallError(retry_error, explain_pip_failure(retry_error.output or output)) from retry_error
             # --no-deps skips transitive dependencies. Run a second pass that
             # asks pip to resolve and install only the missing sub-dependencies.
             # We use --no-deps on the main package again but explicitly install
@@ -748,8 +753,7 @@ def _install_with_resolver(
                 pass  # best effort
             importlib.invalidate_caches()
             return True
-        else:
-            raise
+        raise PipInstallError(exc, explain_pip_failure(output)) from exc
     importlib.invalidate_caches()
     return False
 

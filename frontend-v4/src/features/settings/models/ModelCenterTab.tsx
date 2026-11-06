@@ -11,6 +11,7 @@ import { ModelCard } from './ModelCard'
 import { groupCards, summarize, type Summary } from './modelCards'
 import { saveMirror, useMirror, useModelCards } from './modelsApi'
 import { useMT, type ModelKey } from './modelText'
+import { NetworkProxySection } from './NetworkProxySection'
 import { RestartBanner } from './RestartBanner'
 import type { ModelCenterCard } from './types'
 import { VideoSupportSection } from '../../video/VideoSupportSection'
@@ -45,6 +46,7 @@ export function ModelCenterTab() {
       <Overview summary={summarize(cards)} onBulk={() => setBulkOpen(true)} />
       <Explainer />
       <MirrorChoice />
+      <NetworkProxySection />
       <BackgroundSection />
       <CardGroup title="mc.group.essentials" cards={essentials} lit={lit} testId="model-group-essentials" />
       <CardGroup title="mc.group.others" cards={others} lit={lit} testId="model-group-others" />

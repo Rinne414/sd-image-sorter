@@ -186,8 +186,10 @@ function _setInstallOverlay(label, statusText, percent) {
     if (barEl) barEl.hidden = false;
     if (actionsEl) actionsEl.hidden = true;
     if (fillEl) {
-        const width = Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : 0;
-        fillEl.style.width = `${width}%`;
+        // No percentage yet: a moving bar says "working", an empty one says "stuck".
+        const known = Number.isFinite(percent);
+        barEl?.classList.toggle('is-indeterminate', !known);
+        fillEl.style.width = known ? `${Math.max(0, Math.min(100, percent))}%` : '';
     }
 }
 
@@ -291,20 +293,48 @@ function _showInstallRestartPrompt(spec, result) {
     }
 }
 
-function _formatProgressStatus(label, progress) {
+/** What setup is doing between downloads (no byte counts exist here), or '' when nothing is reported. */
+function featureInstallStageText(progress) {
+    if (progress?.stage === 'resolving') {
+        return featureInstallT('featureInstall.stageResolving', 'Working out which Python packages are needed…');
+    }
+    if (progress?.stage === 'installing') {
+        const count = Number(progress.package_count || 0);
+        return count > 0
+            ? featureInstallT(
+                'featureInstall.stageInstallingCount',
+                'Unpacking {count} Python packages. This step has no percentage; large ones take a few minutes.',
+                { count },
+            )
+            : featureInstallT(
+                'featureInstall.stageInstalling',
+                'Unpacking Python packages. This step has no percentage; large ones take a few minutes.',
+            );
+    }
+    return '';
+}
+
+function _formatProgressStatus(label, progress, rate) {
     const downloaded = Number(progress?.downloaded || 0);
     const total = Number(progress?.total || 0);
     const filename = progress?.filename || label;
     if (progress?.active && total > 0) {
-        const percent = Math.round((downloaded / total) * 100);
+        const percent = Math.min(100, Math.round((downloaded / total) * 100));
         const mb = (downloaded / 1048576).toFixed(0);
         const totalMb = (total / 1048576).toFixed(0);
+        const bytesText = featureInstallT(
+            'featureInstall.progressBytes',
+            '{name}: {downloaded} / {total} MB ({percent}%)',
+            { name: filename, downloaded: mb, total: totalMb, percent },
+        );
         return {
-            text: featureInstallT(
-                'featureInstall.progressBytes',
-                '{name}: {downloaded} / {total} MB ({percent}%)',
-                { name: filename, downloaded: mb, total: totalMb, percent },
-            ),
+            text: rate > 0
+                ? featureInstallT('featureInstall.progressRate', '{progress}, {speed} MB/s, about {left} left', {
+                    progress: bytesText,
+                    speed: (rate / 1048576).toFixed(1),
+                    left: _formatElapsed(((total - downloaded) / rate) * 1000),
+                })
+                : bytesText,
             percent,
         };
     }
@@ -316,16 +346,36 @@ function _formatProgressStatus(label, progress) {
                 '{name}: {downloaded} MB…',
                 { name: filename, downloaded: mb },
             ),
-            percent: 0,
+            percent: null,
         };
     }
     return {
-        text: featureInstallT(
-            'featureInstall.progressUnknown',
-            'Installing {name}…',
-            { name: label },
-        ),
-        percent: 0,
+        text: featureInstallStageText(progress)
+            || featureInstallT('featureInstall.stagePreparing', 'Getting ready…'),
+        percent: null,
+    };
+}
+
+// Bytes per second over the last few seconds of the current file; 0 until measured.
+const FEATURE_INSTALL_RATE_WINDOW_MS = 3000;
+
+function _createRateMeter() {
+    let mark = null;
+    let rate = 0;
+    return (progress) => {
+        const now = Date.now();
+        const downloaded = Number(progress?.downloaded || 0);
+        const file = progress?.filename || '';
+        if (!progress?.active || !mark || mark.file !== file || downloaded < mark.downloaded) {
+            mark = progress?.active ? { file, downloaded, at: now } : null;
+            rate = 0;
+            return rate;
+        }
+        if (now - mark.at >= FEATURE_INSTALL_RATE_WINDOW_MS) {
+            rate = ((downloaded - mark.downloaded) / (now - mark.at)) * 1000;
+            mark = { file, downloaded, at: now };
+        }
+        return rate;
     };
 }
 
@@ -344,6 +394,7 @@ async function _pollPrepareUntilSettled(modelId, label) {
     let lastProgressAt = Date.now();
     let stallWarned = false;
     let pollErrorStreak = 0;
+    const measureRate = _createRateMeter();
 
     while (true) {
         let payload;
@@ -380,7 +431,7 @@ async function _pollPrepareUntilSettled(modelId, label) {
             }
         }
 
-        const formatted = _formatProgressStatus(label, payload);
+        const formatted = _formatProgressStatus(label, payload, measureRate(payload));
         const statusText = payload?.active
             ? formatted.text
             : featureInstallT('featureInstall.stillWorking', '{status} ({elapsed} so far)', {
@@ -445,11 +496,7 @@ async function ensureFeatureModel(modelId, options = {}) {
             return { ok: false, conflict: true };
         }
         if (live?.prepare_result?.active && activeId === modelId) {
-            _setInstallOverlay(
-                label,
-                featureInstallT('featureInstall.progressUnknown', 'Installing {name}…', { name: label }),
-                0,
-            );
+            _setInstallOverlay(label, featureInstallT('featureInstall.stagePreparing', 'Getting ready…'), null);
             const attached = await _pollPrepareUntilSettled(modelId, label);
             return _finishPrepareResult(attached, { modelId, label, variant }, showToast);
         }
@@ -472,11 +519,7 @@ async function ensureFeatureModel(modelId, options = {}) {
     }
 
     _installInBackground = false;
-    _setInstallOverlay(
-        label,
-        featureInstallT('featureInstall.progressUnknown', 'Installing {name}…', { name: label }),
-        0,
-    );
+    _setInstallOverlay(label, featureInstallT('featureInstall.stagePreparing', 'Getting ready…'), null);
 
     let prepareResponse;
     try {
@@ -586,5 +629,6 @@ function _finishPrepareResult(result, spec, showToast) {
 }
 
 window.ensureFeatureModel = ensureFeatureModel;
+window.featureInstallStageText = featureInstallStageText;
 window.prepareSpecForTagger = prepareSpecForTagger;
 window.FEATURE_INSTALL_CONFIRM_BYTES = FEATURE_INSTALL_CONFIRM_BYTES;
