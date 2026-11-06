@@ -13,6 +13,7 @@ an import cycle with the ``database`` facade.
 """
 from typing import Optional, List, Dict, Any, Iterator
 
+from hsv_palette import COLOR_ALGORITHM_VERSION
 from db_core import (
     get_db,
 )
@@ -188,29 +189,42 @@ def get_image_by_id(image_id: int) -> Optional[Dict[str, Any]]:
 
 
 def get_images_missing_color_data(limit: int = 100) -> List[Dict[str, Any]]:
-    """Find images that haven't had color analysis run yet (for lazy backfill)."""
+    """Find images never analyzed or measured by an older color algorithm (for lazy backfill)."""
     lib_sql, lib_params = _library_clause()
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
             f"""
             SELECT id, path FROM images
-            WHERE avg_brightness IS NULL AND is_readable = 1 AND media_type = 'image' AND {lib_sql}
+            WHERE (avg_brightness IS NULL OR color_version < ?) AND is_readable = 1 AND media_type = 'image' AND {lib_sql}
             LIMIT ?
             """,
-            (*lib_params, limit),
+            (COLOR_ALGORITHM_VERSION, *lib_params, limit),
         )
         return [{"id": row[0], "path": row[1]} for row in cursor.fetchall()]
 
 
 def count_images_missing_color_data() -> int:
-    """Count images still needing color analysis. Uses indexed column; constant memory."""
+    """Count images still needing color analysis, older measurements included. Uses indexed columns; constant memory."""
     lib_sql, lib_params = _library_clause()
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            f"SELECT COUNT(*) FROM images WHERE avg_brightness IS NULL AND is_readable = 1 AND media_type = 'image' AND {lib_sql}",
-            lib_params,
+            f"SELECT COUNT(*) FROM images WHERE (avg_brightness IS NULL OR color_version < ?) AND is_readable = 1 AND media_type = 'image' AND {lib_sql}",
+            (COLOR_ALGORITHM_VERSION, *lib_params),
+        )
+        row = cursor.fetchone()
+        return int(row[0] if row else 0)
+
+
+def count_images_outdated_color_data() -> int:
+    """Count images with usable colors from an older algorithm: sorts work, the next run measures them again."""
+    lib_sql, lib_params = _library_clause()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"SELECT COUNT(*) FROM images WHERE avg_brightness IS NOT NULL AND color_version < ? AND is_readable = 1 AND media_type = 'image' AND {lib_sql}",
+            (COLOR_ALGORITHM_VERSION, *lib_params),
         )
         row = cursor.fetchone()
         return int(row[0] if row else 0)

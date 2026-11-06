@@ -8,11 +8,13 @@ directly from feature code — ``db_images_write`` itself imports this module
 at the end of its body, so a direct import that wins the race would trip
 the managed import cycle and fail loudly.
 
-Imports only from db_core / typing; it must not import from ``database``.
+Imports only from db_core / hsv_palette (standard library only) / typing; it
+must not import from ``database``.
 """
 from typing import Optional, List, Dict, Any
 
 from db_core import get_db
+from hsv_palette import COLOR_ALGORITHM_VERSION
 
 
 def update_image_caption(image_id: int, caption: str, nl_caption: Optional[str] = None) -> None:
@@ -98,6 +100,7 @@ def update_image_colors(image_id: int, color_data: Dict[str, Any]) -> None:
             UPDATE images
             SET dominant_colors = ?,
                 dominant_color_tags = ?,
+                color_version = ?,
                 avg_brightness = ?,
                 color_temperature = ?,
                 color_saturation = ?,
@@ -109,6 +112,7 @@ def update_image_colors(image_id: int, color_data: Dict[str, Any]) -> None:
             (
                 color_data.get("dominant_colors"),
                 color_data.get("dominant_color_tags"),
+                int(color_data.get("color_version", COLOR_ALGORITHM_VERSION)),
                 color_data.get("avg_brightness"),
                 color_data.get("color_temperature"),
                 color_data.get("color_saturation"),

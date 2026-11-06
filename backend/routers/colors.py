@@ -188,9 +188,15 @@ async def resume_analysis(http_request: Request):
 
 @router.get("/missing-count")
 async def missing_count():
-    """How many images still need color analysis; also includes total readable count."""
+    """How many images still need color analysis; also includes total readable count.
+
+    ``missing`` includes ``outdated``: pictures measured by an older color
+    algorithm. Their brightness and saturation are still right, so color sorts
+    only ask about ``missing - outdated``.
+    """
     return {
         "missing": db.count_images_missing_color_data(),
+        "outdated": db.count_images_outdated_color_data(),
         "total": db.count_all_image_ids(),
     }
 

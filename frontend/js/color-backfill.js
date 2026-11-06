@@ -72,7 +72,8 @@
             if (dismissed && Date.now() - dismissed < BANNER_DISMISS_TTL_MS) {
                 return;
             }
-            const missing = await this._fetchMissingCount();
+            // Pictures measured by an older colour algorithm still sort correctly.
+            const missing = await this._fetchNeverAnalyzedCount();
             if (missing <= 0) {
                 this.hideBanner();
                 return;
@@ -442,6 +443,17 @@
                 if (!resp.ok) return 0;
                 const data = await resp.json();
                 return Number(data.missing) || 0;
+            } catch (_) {
+                return 0;
+            }
+        },
+
+        async _fetchNeverAnalyzedCount() {
+            try {
+                const resp = await (window.apiFetch || fetch)("/api/colors/missing-count");
+                if (!resp.ok) return 0;
+                const data = await resp.json();
+                return Math.max(0, (Number(data.missing) || 0) - (Number(data.outdated) || 0));
             } catch (_) {
                 return 0;
             }

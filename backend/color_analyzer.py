@@ -14,6 +14,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from PIL import Image
 
+from hsv_palette import COLOR_ALGORITHM_VERSION, hsv_palette
+
 logger = logging.getLogger(__name__)
 
 
@@ -21,8 +23,8 @@ logger = logging.getLogger(__name__)
 HIST_BUCKETS = 16
 # Resize dimension for color analysis
 ANALYSIS_SIZE = 64
-# Max distinct colors to extract via PIL quantize (then we keep top 5)
-QUANTIZE_COLORS = 8
+# How many main colors a picture stores
+DOMINANT_COLOR_COUNT = 5
 
 
 def analyze_image_colors(image_path: str) -> Optional[Dict[str, Any]]:
@@ -52,8 +54,7 @@ def analyze_image_colors(image_path: str) -> Optional[Dict[str, Any]]:
 
 def _analyze_pil_image(img: Image.Image) -> Dict[str, Any]:
     """Analyze a small PIL RGB image."""
-    # Dominant colors via PIL quantize
-    dominant = _extract_dominant_colors(img, QUANTIZE_COLORS, top_n=5)
+    dominant = hsv_palette(img.tobytes(), top=DOMINANT_COLOR_COUNT)
 
     # HSV stats
     hsv = img.convert("HSV")
@@ -69,6 +70,7 @@ def _analyze_pil_image(img: Image.Image) -> Dict[str, Any]:
     return {
         "dominant_colors": dominant_json,
         "dominant_color_tags": dominant_color_tags_from_json(dominant_json),
+        "color_version": COLOR_ALGORITHM_VERSION,
         "avg_brightness": float(avg_v),
         "color_temperature": temperature,
         "color_saturation": float(avg_s),
@@ -76,29 +78,6 @@ def _analyze_pil_image(img: Image.Image) -> Dict[str, Any]:
         "brightness_skew": float(skew),
         "brightness_distribution": distribution,
     }
-
-
-def _extract_dominant_colors(img: Image.Image, num_colors: int, top_n: int) -> List[Dict[str, Any]]:
-    """Extract top N dominant colors using PIL quantize.
-
-    Returns list of {hex, pct} sorted by pct desc.
-    """
-    quantized = img.quantize(colors=num_colors, method=Image.Quantize.MEDIANCUT)
-    palette = quantized.getpalette() or []
-    color_counts = sorted(
-        (count, idx) for count, idx in (quantized.getcolors() or [])
-    )
-    color_counts.reverse()  # Descending by count
-
-    total_pixels = sum(c for c, _ in color_counts) or 1
-    results: List[Dict[str, Any]] = []
-    for count, idx in color_counts[:top_n]:
-        if idx * 3 + 2 >= len(palette):
-            continue
-        r, g, b = palette[idx * 3], palette[idx * 3 + 1], palette[idx * 3 + 2]
-        pct = round(count / total_pixels * 100, 1)
-        results.append({"hex": f"#{r:02X}{g:02X}{b:02X}", "pct": pct})
-    return results
 
 
 def _avg_hsv(hsv_img: Image.Image) -> Tuple[float, float, float]:

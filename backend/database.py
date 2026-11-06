@@ -315,6 +315,7 @@ from db_images_read import (
     get_image_by_id,
     get_images_missing_color_data,
     count_images_missing_color_data,
+    count_images_outdated_color_data,
     get_image_by_path,
     get_images_by_ids,
     get_untagged_images,

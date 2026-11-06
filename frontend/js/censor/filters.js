@@ -167,20 +167,10 @@
             const rH = new Uint32Array(256);
             const gH = new Uint32Array(256);
             const bH = new Uint32Array(256);
-            const buckets = {};
 
             for (let i = 0; i < data.length; i += 4) {
                 const r = data[i], g = data[i+1], b = data[i+2];
                 rH[r]++; gH[g]++; bH[b]++;
-                const br = Math.round(r / 32) * 32;
-                const bg = Math.round(g / 32) * 32;
-                const bb = Math.round(b / 32) * 32;
-                const key = `${br},${bg},${bb}`;
-                if (!buckets[key]) buckets[key] = { count: 0, sumR: 0, sumG: 0, sumB: 0 };
-                buckets[key].count++;
-                buckets[key].sumR += r;
-                buckets[key].sumG += g;
-                buckets[key].sumB += b;
             }
 
             // Draw histogram
@@ -212,18 +202,12 @@
 
             // Palette
             if (paletteEl) {
-                const sorted = Object.values(buckets).sort((a, b) => b.count - a.count).slice(0, 6);
-                const total = sorted.reduce((s, b) => s + b.count, 0);
-                paletteEl.innerHTML = sorted.map(b => {
-                    const ar = Math.round(b.sumR / b.count);
-                    const ag = Math.round(b.sumG / b.count);
-                    const ab = Math.round(b.sumB / b.count);
-                    const hex = '#' + [ar, ag, ab].map(v => v.toString(16).padStart(2, '0')).join('');
-                    return `<div class="modal-color-swatch" onclick="navigator.clipboard.writeText('${hex}')" title="${hex}">
+                paletteEl.innerHTML = window.hsvPalette(data, 6).map(({ hex }) => (
+                    `<div class="modal-color-swatch" onclick="navigator.clipboard.writeText('${hex}')" title="${hex}">
                         <span class="swatch-dot" style="background:${hex}"></span>
                         <span>${hex}</span>
-                    </div>`;
-                }).join('');
+                    </div>`
+                )).join('');
             }
 
             previewEl.style.display = '';

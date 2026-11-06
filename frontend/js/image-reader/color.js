@@ -34,7 +34,6 @@ Object.assign(window.ImageReader, {
                 const gHist = new Uint32Array(256);
                 const bHist = new Uint32Array(256);
                 const lHist = new Uint32Array(256);
-                const buckets = {};
 
                 for (let i = 0; i < data.length; i += 4) {
                     const r = data[i];
@@ -44,16 +43,6 @@ Object.assign(window.ImageReader, {
                     gHist[g]++;
                     bHist[b]++;
                     lHist[Math.round(0.299 * r + 0.587 * g + 0.114 * b)]++;
-
-                    const br = Math.round(r / 32) * 32;
-                    const bg = Math.round(g / 32) * 32;
-                    const bb = Math.round(b / 32) * 32;
-                    const key = `${br},${bg},${bb}`;
-                    if (!buckets[key]) buckets[key] = { count: 0, sumR: 0, sumG: 0, sumB: 0 };
-                    buckets[key].count++;
-                    buckets[key].sumR += r;
-                    buckets[key].sumG += g;
-                    buckets[key].sumB += b;
                 }
 
                 const ctx = histCanvas.getContext('2d');
@@ -112,23 +101,13 @@ Object.assign(window.ImageReader, {
                     drawChannel(rHist, 'rgba(239,68,68,0.35)');
                 }
 
-                const sorted = Object.values(buckets)
-                    .sort((a, b) => b.count - a.count)
-                    .slice(0, 9);
-                const total = sorted.reduce((sum, bucket) => sum + bucket.count, 0) || 1;
-
-                paletteEl.innerHTML = sorted.map((bucket) => {
-                    const avgR = Math.round(bucket.sumR / bucket.count);
-                    const avgG = Math.round(bucket.sumG / bucket.count);
-                    const avgB = Math.round(bucket.sumB / bucket.count);
-                    const hex = `#${[avgR, avgG, avgB].map(v => v.toString(16).padStart(2, '0')).join('')}`;
-                    const pct = ((bucket.count / total) * 100).toFixed(1);
-                    return `<div class="reader-color-swatch" onclick="navigator.clipboard.writeText('${hex}')" title="Copy ${hex}">
+                paletteEl.innerHTML = window.hsvPalette(data, 9).map(({ hex, pct }) => (
+                    `<div class="reader-color-swatch" onclick="navigator.clipboard.writeText('${hex}')" title="Copy ${hex}">
                         <span class="swatch-dot" style="background:${hex}"></span>
                         <span>${this._escapeHtml(hex)}</span>
-                        <span class="reader-color-share">${this._escapeHtml(pct)}%</span>
-                    </div>`;
-                }).join('');
+                        <span class="reader-color-share">${this._escapeHtml(pct.toFixed(1))}%</span>
+                    </div>`
+                )).join('');
 
                 section.style.display = '';
             } catch (_) {

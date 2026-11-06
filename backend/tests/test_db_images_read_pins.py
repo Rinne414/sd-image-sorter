@@ -559,7 +559,14 @@ class TestLightReaders:
         with db.get_db() as conn:
             conn.execute("UPDATE images SET avg_brightness = ? WHERE id = ?", (0.5, a))
 
+        # Measured by the older RGB way: usable, but the next run measures it again.
+        assert db.count_images_missing_color_data() == 2
+        assert db.count_images_outdated_color_data() == 1
+
+        db.update_image_colors(a, {"avg_brightness": 0.5})
+
         assert db.count_images_missing_color_data() == 1
+        assert db.count_images_outdated_color_data() == 0
         assert {row["id"] for row in db.get_images_missing_color_data()} == {b}
 
     def test_untagged_and_total_id_counts(self, test_db):

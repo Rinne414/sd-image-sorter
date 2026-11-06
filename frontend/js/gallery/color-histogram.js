@@ -31,26 +31,12 @@ Object.assign(window.Gallery, {
                 const bHist = new Uint32Array(256);
                 const lHist = new Uint32Array(256); // luminance
 
-                // Color palette buckets
-                const buckets = {};
-
                 for (let i = 0; i < data.length; i += 4) {
                     const r = data[i], g = data[i+1], b = data[i+2];
                     rHist[r]++;
                     gHist[g]++;
                     bHist[b]++;
                     lHist[Math.round(0.299 * r + 0.587 * g + 0.114 * b)]++;
-
-                    // Bucket for palette
-                    const br = Math.round(r / 32) * 32;
-                    const bg = Math.round(g / 32) * 32;
-                    const bb = Math.round(b / 32) * 32;
-                    const key = `${br},${bg},${bb}`;
-                    if (!buckets[key]) buckets[key] = { count: 0, sumR: 0, sumG: 0, sumB: 0 };
-                    buckets[key].count++;
-                    buckets[key].sumR += r;
-                    buckets[key].sumG += g;
-                    buckets[key].sumB += b;
                 }
 
                 // Draw histogram on canvas
@@ -111,23 +97,13 @@ Object.assign(window.Gallery, {
                 }
 
                 // === Color Palette ===
-                const sorted = Object.values(buckets)
-                    .sort((a, b) => b.count - a.count)
-                    .slice(0, 9);
-                const paletteTotal = sorted.reduce((s, b) => s + b.count, 0);
-
-                paletteEl.innerHTML = sorted.map(b => {
-                    const avgR = Math.round(b.sumR / b.count);
-                    const avgG = Math.round(b.sumG / b.count);
-                    const avgB = Math.round(b.sumB / b.count);
-                    const hex = '#' + [avgR, avgG, avgB].map(v => v.toString(16).padStart(2, '0')).join('');
-                    const pct = ((b.count / paletteTotal) * 100).toFixed(1);
-                    return `<div class="modal-color-swatch" onclick="navigator.clipboard.writeText('${hex}')" title="Click to copy ${hex}">
+                paletteEl.innerHTML = window.hsvPalette(data, 9).map(({ hex, pct }) => (
+                    `<div class="modal-color-swatch" onclick="navigator.clipboard.writeText('${hex}')" title="Click to copy ${hex}">
                         <span class="swatch-dot" style="background:${hex}"></span>
                         <span>${hex}</span>
-                        <span style="opacity:0.5">${pct}%</span>
-                    </div>`;
-                }).join('');
+                        <span style="opacity:0.5">${pct.toFixed(1)}%</span>
+                    </div>`
+                )).join('');
 
                 container.style.display = '';
             } catch (e) {
