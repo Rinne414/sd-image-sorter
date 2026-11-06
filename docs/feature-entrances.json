@@ -2,7 +2,7 @@
   "about": [
     "Every user-facing feature entrance, with the classic interface (/) as the baseline (owner, 2026-10-23, M203).",
     "classic: selectors in frontend/index.html; each must still exist. Every <button id> there belongs to a feature or to not_entrances.",
-    "vopus / next: where the same feature is entered in /vopus/ and /next/, or 'missing' with what is not ported yet.",
+    "vopus / next: where the same feature is entered in /vopus/ and /next/, or 'missing' with what is not ported yet. /next/ is frozen since 2026-11-07: it lost to classic (owner, 2026-10-23), so it keeps every feature it has and a new feature may simply say 'missing' there. Undo: revert this line and the matching one in CLAUDE.md.",
     "Never delete a feature or a selector to make a check pass. A removal the owner agreed to goes to 'removed' with date, reason and the owner's words.",
     "Checks: backend/tests/test_feature_entrances.py (fast, static) and tests/e2e/specs/feature-entrances.spec.ts (real browser)."
   ],
