@@ -33,6 +33,8 @@ export interface ImagesPage {
   next_offset: number | null
   has_more: boolean
   total: number
+  /** Rows the listing left out because their file cannot be found (a renamed folder, an unplugged drive). */
+  missing_skipped?: number
 }
 
 export interface ImageTag {

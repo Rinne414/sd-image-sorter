@@ -21,6 +21,8 @@ export const enBrowse: Record<keyof typeof zhCNBrowse, string> = {
   'browse.empty.title': 'This library has no images yet',
   'browse.empty.hint': 'Import a folder, or drop images onto the window.',
   'browse.empty.import': 'Import images…',
+  'browse.empty.missingTitle': 'The images of this library cannot be found on disk',
+  'browse.empty.missingHint': 'The library has {n} images, but the files are not where they were: usually the folder was moved or renamed, or the drive is unplugged. Find them again in their new folder, or import a folder.',
   'browse.noMatch.hint': 'Try other words, or clear the filters to see every image in this library.',
   'browse.noMatch.clear': 'Clear filters',
 

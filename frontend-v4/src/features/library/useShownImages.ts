@@ -27,6 +27,8 @@ export interface Shown {
   loading: boolean
   error: Error | null
   empty: boolean
+  /** Rows the listing skipped because their files cannot be found; an empty grid with some is not an empty library. */
+  missingSkipped: number
   retry: () => void
 }
 
@@ -63,6 +65,7 @@ export function useShownImages(params: ImageQueryParams): Shown {
       loading: ranked.isPending,
       error: ranked.error,
       empty: ranked.isSuccess && rankedImages.length === 0,
+      missingSkipped: 0,
       retry: () => void ranked.refetch(),
     }
   }
@@ -81,6 +84,7 @@ export function useShownImages(params: ImageQueryParams): Shown {
     loading: filter.isPending,
     error: filter.error,
     empty: filter.isSuccess && filterImages.length === 0,
+    missingSkipped: filter.data?.pages[0]?.missing_skipped ?? 0,
     retry: () => void filter.refetch(),
   }
 }

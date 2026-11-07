@@ -99,7 +99,7 @@ export function LibraryPage() {
               <p>{t('sim.banner.empty')}</p>
             </div>
           ) : shown.empty ? (
-            <EmptyResult params={params} />
+            <EmptyResult params={params} missingSkipped={shown.missingSkipped} />
           ) : (
             <Gallery
               // another library with the same search is another grid (its own scroll place)

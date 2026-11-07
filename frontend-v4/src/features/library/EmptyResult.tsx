@@ -8,16 +8,33 @@ import styles from './LibraryPage.module.css'
 
 /**
  * An empty grid says which kind of empty it is: a library with no images yet
- * offers the import; a search that found nothing offers to clear it (and, for
- * a colour search, the missing colour analysis).
+ * offers the import; a library whose files cannot be found (a renamed folder)
+ * says so and offers Find Moved Files; a search that found nothing offers to
+ * clear it (and, for a colour search, the missing colour analysis).
  */
-export function EmptyResult({ params }: { params: Record<string, unknown> }) {
+export function EmptyResult({ params, missingSkipped = 0 }: { params: Record<string, unknown>; missingSkipped?: number }) {
   const t = useT()
   const queryText = useApp((s) => s.queryText)
   const scope = useApp((s) => s.scope)
   const colors = useColorsMissing()
 
   if (isBrowsingAll({ queryText, scope })) {
+    if (missingSkipped > 0) {
+      return (
+        <div className={styles.notice} data-testid="library-files-missing">
+          <p className={styles.noticeTitle}>{t('browse.empty.missingTitle')}</p>
+          <p>{t('browse.empty.missingHint', { n: missingSkipped })}</p>
+          <div className={styles.noticeActions}>
+            <button type="button" className="btn btn-primary" onClick={() => useSelectionDialog.getState().showFor('missing', null, missingSkipped)}>
+              {t('missing.find')}
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => useSelectionDialog.getState().showFor('import', null, 1)}>
+              {t('browse.empty.import')}
+            </button>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className={styles.notice} data-testid="library-empty">
         <p className={styles.noticeTitle}>{t('browse.empty.title')}</p>

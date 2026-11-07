@@ -23,6 +23,8 @@ export const zhCNBrowse = {
   'browse.empty.title': '这个图库还没有图片',
   'browse.empty.hint': '导入一个文件夹，或者把图片拖进窗口。',
   'browse.empty.import': '导入图片…',
+  'browse.empty.missingTitle': '这个图库的图都找不到原文件',
+  'browse.empty.missingHint': '图库里有 {n} 张图，但原文件不在原来的位置：多半是文件夹被搬走、改名，或在没接上的硬盘里。到新的文件夹里把它们找回来，或导入新的文件夹。',
   'browse.noMatch.hint': '换个关键词，或者清除筛选，看这个图库里的全部图片。',
   'browse.noMatch.clear': '清除筛选',
 
