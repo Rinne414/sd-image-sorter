@@ -1,5 +1,4 @@
 ﻿# SD Image Sorter
- <img width="1054" height="1144" alt="da71e64a20a4462388898572de22720e0cf3d737" src="https://github.com/user-attachments/assets/6f88d686-0743-4fb8-a93b-2cb42b44b184" />
 
 <p align="center">
   <b>Local-first AI image command center for Stable Diffusion creators.</b>
