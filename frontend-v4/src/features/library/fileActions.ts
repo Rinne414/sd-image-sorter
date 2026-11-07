@@ -1,4 +1,4 @@
-import { api, unwrap } from '../../api/client'
+import { api, detailOf, unwrap } from '../../api/client'
 import { copyText } from '../../lib/format'
 import { useToasts } from '../../ui/toasts'
 import { tr } from '../jobs/jobs'
@@ -34,8 +34,7 @@ export async function openFolderPath(path: string): Promise<boolean> {
       return false
     }
     if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as { detail?: unknown; message?: unknown } | null
-      const reason = typeof body?.detail === 'string' ? body.detail : typeof body?.message === 'string' ? body.message : res.statusText
+      const reason = detailOf(await res.json().catch(() => null)) ?? res.statusText
       toast(tr('lib.file.openFailed', { reason }), 'error')
       return false
     }

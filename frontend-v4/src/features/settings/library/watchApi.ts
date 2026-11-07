@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import { queryClient } from '../../../api/queryClient'
+import { useLang } from '../../../i18n'
+import { pickLanguageHalf } from '../../../lib/bilingual'
 import { useToasts } from '../../../ui/toasts'
 import { lt } from '../libraryText'
 import { rootName } from './roots'
@@ -27,7 +29,7 @@ async function requestJson(method: 'GET' | 'PATCH', url: string, body?: unknown)
     const detail = data && typeof data === 'object' ? (data as { detail?: unknown; message?: unknown }) : {}
     const inner = detail.detail && typeof detail.detail === 'object' ? (detail.detail as { message?: unknown }).message : detail.detail
     const reason = typeof inner === 'string' ? inner : typeof detail.message === 'string' ? detail.message : res.statusText
-    throw new Error(reason || `HTTP ${res.status}`)
+    throw new Error(reason ? pickLanguageHalf(reason, useLang.getState().lang) : `HTTP ${res.status}`)
   }
   return data
 }

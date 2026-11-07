@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { api, ApiError, unwrap } from '../../api/client'
+import { api, ApiError, detailOf, unwrap } from '../../api/client'
 import type { CollectionRow, ImageSummary } from '../../api/types'
 import { useApp } from '../../state/store'
 import { useToasts } from '../../ui/toasts'
@@ -24,9 +24,8 @@ export const NEAR_LIMIT = 200
 const library = () => useApp.getState().libraryId
 
 async function readError(res: Response): Promise<ApiError> {
-  const body = (await res.json().catch(() => null)) as { detail?: unknown; message?: unknown } | null
-  const reason = typeof body?.detail === 'string' ? body.detail : typeof body?.message === 'string' ? body.message : res.statusText
-  return new ApiError(res.status, reason, null, body)
+  const body: unknown = await res.json().catch(() => null)
+  return new ApiError(res.status, detailOf(body) ?? res.statusText, null, body)
 }
 
 async function post<T>(url: string, body: BodyInit, json = true): Promise<T> {

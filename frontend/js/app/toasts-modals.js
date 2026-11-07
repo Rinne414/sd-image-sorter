@@ -34,7 +34,11 @@ function addRecentFolder(path) {
     localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(updated));
 }
 
-function showToast(message, type = 'info', options = {}) {
+function showToast(rawMessage, type = 'info', options = {}) {
+    // A server sentence passed on as is: "<English> / <中文>" shows one half.
+    const message = typeof rawMessage === 'string' && typeof window.pickUiLanguageHalf === 'function'
+        ? window.pickUiLanguageHalf(rawMessage)
+        : rawMessage;
     let container = $('#toast-container');
 
     // Create container if it doesn't exist

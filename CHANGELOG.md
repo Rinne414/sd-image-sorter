@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 装包失败会说明原因：文件夹没有写入权限、文件被占用、网络不通、磁盘满了或路径太长，不再只显示“returned non-zero exit status 1”。没有写入权限不再被当成文件被占用而重试。
 - **Starting from a folder without write permission**: the launchers say so before installing anything and offer to open again as administrator, instead of failing one install at a time.
   - 从没有写入权限的文件夹启动时，启动脚本会在安装前说明，并可以用管理员身份重新打开，不再一个个安装失败才发现。
+- **Messages from the program's server in one language**: the server writes its reasons in English and Chinese together, and toasts and error lines showed both ("代理没有保存成功：Enter an HTTP or mixed port ... / 请填 ..."). Classic and V Opus now show only the half for the interface language.
+  - 服务器写的原因是中英两句连在一起，提示和错误信息以前两句都显示（例如“代理没有保存成功：Enter an HTTP or mixed port ... / 请填 ...”）。经典界面和 V Opus 现在只显示界面语言那一句。
+- **A SOCKS proxy address says why it is refused**: it now says SOCKS is not supported because pip and some downloads cannot use it, and to enter the HTTP or mixed port instead.
+  - 填 SOCKS 代理地址时，现在会说明不支持 SOCKS 的原因（pip 和部分下载用不了），并提示改填 HTTP 或混合端口。
+- **The library menu keeps your last open or close**: a menu reopened while a new library was being set up closed by itself, and pressing Esc while the menu was loading did not stop it from opening.
+  - 新建图库时，如果在设置完成前重新打开图库菜单，菜单会自己关掉；菜单还在加载时按 Esc 也拦不住它弹出来。现在都以你最后一次操作为准。
 
 ### Added / 新增
 

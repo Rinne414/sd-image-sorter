@@ -440,11 +440,14 @@ test('a detector that did not run is reported as a detector error, with one batc
   await notes.locator('[data-guide-close]').click()
   await expect(notes).toHaveCount(0)
 
-  // The badge keeps the reason after the toast is gone.
+  // The badge keeps the reason after the toast is gone, in the interface
+  // language only (the backend sends "<English> / <中文>").
   await firstBadge.click()
-  await expect(page.locator('#toast-container .toast.warning .toast-message').last()).toContainText(
-    `Legacy YOLO: ${failureDetail(IMAGES[0].id)}`
+  const reason = page.locator('#toast-container .toast.warning .toast-message').last()
+  await expect(reason).toContainText(
+    `Legacy YOLO: The detection model could not be loaded (opset 22 is not supported, image ${IMAGES[0].id})`
   )
+  await expect(reason).not.toContainText('检测模型无法加载')
 
   await page.evaluate(() => (window as any).I18n.setLang('zh-CN'))
   await expect(firstBadge).toHaveText('检测器出错')

@@ -4,6 +4,7 @@ import { translate, useLang } from '../i18n'
 import { debugMiddleware } from '../lib/debug'
 import { useApp } from '../state/store'
 import { checkAnswer } from './answer'
+import { pickLanguageHalf } from '../lib/bilingual'
 
 // Typed requests: path + query params are checked against the backend's
 // OpenAPI schema (regenerate with `npm run gen:api`).
@@ -38,7 +39,7 @@ export class ApiError extends Error {
   }
 }
 
-export function detailOf(body: unknown): string | null {
+function rawDetailOf(body: unknown): string | null {
   if (!body || typeof body !== 'object') return null
   const { detail, message, error } = body as { detail?: unknown; message?: unknown; error?: unknown }
   if (typeof detail === 'string') return detail
@@ -47,6 +48,12 @@ export function detailOf(body: unknown): string | null {
   if (typeof message === 'string') return message
   if (typeof error === 'string') return error
   return null
+}
+
+/** The server's reason, in the interface language when it sent "<English> / <中文>". */
+export function detailOf(body: unknown): string | null {
+  const reason = rawDetailOf(body)
+  return reason === null ? null : pickLanguageHalf(reason, useLang.getState().lang)
 }
 
 export function codeOf(body: unknown): string | null {

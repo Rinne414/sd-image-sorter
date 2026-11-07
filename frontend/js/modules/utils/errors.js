@@ -15,6 +15,30 @@ function localizeErrorText(enText, zhText) {
     return isZhCn() ? zhText : enText;
 }
 
+// Backend sentences arrive as "<English> / <中文>" so either interface can
+// show them; the interface shows its own half. Anything else comes back
+// unchanged: an English line that only names a Chinese folder, or a Chinese
+// line that mentions "Linux / macOS", is not split. Same rule as Vopus
+// (frontend-v4/src/lib/bilingual.ts).
+const BILINGUAL_SEPARATOR = ' / ';
+const BILINGUAL_MIN_CJK = 3;
+const BILINGUAL_LETTERS_PER_CJK = 3;
+
+function pickUiLanguageHalf(text) {
+    const value = String(text ?? '');
+    const firstCjk = value.search(/[㐀-鿿]/);
+    if (firstCjk <= 0) return value;
+    const cut = value.lastIndexOf(BILINGUAL_SEPARATOR, firstCjk);
+    if (cut <= 0) return value;
+    const english = value.slice(0, cut).trim();
+    const chinese = value.slice(cut + BILINGUAL_SEPARATOR.length).trim();
+    const cjk = (chinese.match(/[㐀-鿿]/g) || []).length;
+    const letters = (chinese.match(/[A-Za-z]/g) || []).length;
+    const isChinese = cjk >= BILINGUAL_MIN_CJK && cjk * BILINGUAL_LETTERS_PER_CJK >= letters;
+    if (!/[A-Za-z]/.test(english) || !isChinese) return value;
+    return isZhCn() ? chinese : english;
+}
+
 function getErrorMessageMap() {
     return {
         // Network errors
@@ -143,10 +167,11 @@ function formatUserError(error, context = '') {
     }
 
     // Preserve short, human-readable backend messages instead of collapsing them
-    const hasTechnicalJargon = /(?:\b(?:ENOENT|EACCES|EPERM|ENOSPC|CUDA|undefined|null|TypeError|ReferenceError|SyntaxError)\b|https?:\/\/|\/api\/|[A-Za-z]:\\| at .+\(|stack trace)/i.test(errorMsg);
+    const shown = pickUiLanguageHalf(errorMsg);
+    const hasTechnicalJargon = /(?:\b(?:ENOENT|EACCES|EPERM|ENOSPC|CUDA|undefined|null|TypeError|ReferenceError|SyntaxError)\b|https?:\/\/|\/api\/|[A-Za-z]:\\| at .+\(|stack trace)/i.test(shown);
 
-    if (!hasTechnicalJargon && errorMsg.length < 180) {
-        return withContext(errorMsg);
+    if (!hasTechnicalJargon && shown.length < 180) {
+        return withContext(shown);
     }
     
     // Return generic message with context
@@ -204,6 +229,7 @@ function showUserError(error, context = '', showToast = null) {
 // Export to global namespace
 if (typeof window !== 'undefined') {
     window.formatUserError = formatUserError;
+    window.pickUiLanguageHalf = pickUiLanguageHalf;
     window.showUserError = showUserError;
     window.isCancellationError = isCancellationError;
     window.ERROR_MESSAGE_MAP = getErrorMessageMap();
