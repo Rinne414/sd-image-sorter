@@ -167,6 +167,23 @@ test.describe('Navigation — top bar (rail reverted, owner 2026-07-05)', () => 
 })
 
 test.describe('Aurora Phase 3 — gallery toolbar', () => {
+  // An empty library folds the toolbar away (3.10.2), so these tests bring one
+  // picture of their own instead of relying on specs that ran before them.
+  const toolbarDir = path.join(fixtureRoot, 'toolbar')
+  const toolbarNames = ['aurora-toolbar-1.png']
+
+  test.beforeAll(async ({ request }) => {
+    deleteRowsByFilenames(toolbarNames)
+    await fs.rm(toolbarDir, { recursive: true, force: true })
+    makePng(path.join(toolbarDir, toolbarNames[0]), 'purple')
+    await scanFolder(request, toolbarDir)
+  })
+
+  test.afterAll(async () => {
+    deleteRowsByFilenames(toolbarNames)
+    await fs.rm(toolbarDir, { recursive: true, force: true })
+  })
+
   test('key:value search routes tokens into the filter store', async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 900 })
     await openMainPage(page)

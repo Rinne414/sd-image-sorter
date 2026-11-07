@@ -24,11 +24,22 @@ test('a quoted path pasted into a folder field loses its quotes, a search keeps 
   await expect(page.locator('#scan-folder-feedback')).not.toContainText(/unsupported|不支持/i)
 
   await page.keyboard.press('Escape')
+})
+
+test('a quoted search keeps its quotes', async ({ page }) => {
+  // An empty library folds the search away (3.10.2): show one picture.
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#789"/></svg>'
+  await page.route(/\/api\/image-(thumbnail|file)\/\d+/, (route) => route.fulfill({ status: 200, contentType: 'image/svg+xml', body: svg }))
+  await page.route('**/api/images**', async (route) => {
+    if (new URL(route.request().url()).pathname !== '/api/images') return route.fallback()
+    await route.fulfill({
+      json: { images: [{ id: 5501, filename: 'quote.png', path: '/mock/quote.png', width: 64, height: 64 }], total: 1, has_more: false, next_cursor: null },
+    })
+  })
+  await page.goto('/')
   const search = page.locator('#gallery-search-input')
-  if (await search.count()) {
-    await search.fill('"exact phrase"')
-    await expect(search).toHaveValue('"exact phrase"')
-  }
+  await search.fill('"exact phrase"')
+  await expect(search).toHaveValue('"exact phrase"')
 })
 
 test('batch rename can start numbering at 0', async ({ page }) => {
