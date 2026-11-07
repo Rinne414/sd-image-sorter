@@ -61,6 +61,38 @@ def test_the_message_names_the_folder_and_the_way_out(blocked, capsys):
     assert "D:\\SD-Image-Sorter" in said
 
 
+def test_linux_and_macos_get_their_own_way_out(blocked, monkeypatch, capsys):
+    # Seen in WSL: a Linux user was told to move the folder to D:\\ and that
+    # it would then no longer need administrator rights.
+    monkeypatch.setattr(check.sys, "platform", "linux")
+    check.check_folder(blocked, "run.sh", ask=_answers("q"), restart=_never_restart)
+    said = capsys.readouterr().out
+    assert str(blocked) in said
+    assert "~/SD-Image-Sorter" in said
+    assert "D:\\" not in said
+    assert "管理员" not in said
+    assert "[A]" not in said
+
+
+@pytest.mark.parametrize("runtime", ["backend/venv", "python"])
+def test_linux_package_folders_are_checked_too(monkeypatch, tmp_path, runtime):
+    packages = tmp_path / runtime / "lib" / "python3.12" / "site-packages"
+    packages.mkdir(parents=True)
+    monkeypatch.setattr(
+        check, "folder_is_writable", lambda folder: folder != str(packages)
+    )
+    assert check.unwritable_folders(tmp_path) == [packages]
+
+
+def test_run_sh_names_the_folder_when_the_venv_cannot_be_made():
+    # Seen in WSL: "go on anyway" in a read-only folder failed with
+    # "you may need: sudo apt install python3-venv", the wrong way out.
+    script = (ROOT / "run.sh").read_text(encoding="utf-8")
+    failure = script[script.index("-m venv backend/venv") :][:900]
+    assert '[ -w "backend" ]' in failure
+    assert "cannot be written" in failure
+
+
 def test_a_opens_the_launcher_again_as_administrator(blocked):
     opened = []
 

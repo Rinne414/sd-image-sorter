@@ -186,7 +186,12 @@ if [ "$FIRST_RUN" -eq 1 ]; then
     echo "[1/3] Creating Python virtual environment..."
     if ! "$PYTHON_CMD" -m venv backend/venv; then
         echo "[ERROR] Failed to create virtual environment."
-        echo "        On Debian/Ubuntu, you may need: sudo apt install python3-venv"
+        if [ -w "backend" ]; then
+            echo "        On Debian/Ubuntu, you may need: sudo apt install python3-venv"
+        else
+            echo "        This folder cannot be written: ${ROOT_DIR}/backend"
+            echo "        Move the whole folder into your home folder, for example ~/SD-Image-Sorter, or make it yours."
+        fi
         exit 1
     fi
     echo "      Done."
