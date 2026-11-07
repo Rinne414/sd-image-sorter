@@ -15,14 +15,14 @@ const count = (text: string, pattern: RegExp): number => text.match(pattern)?.le
  * or a Chinese line that mentions "Linux / macOS", is not split.
  */
 export function pickLanguageHalf(text: string, lang: Lang): string {
-  const firstCjk = text.search(/[㐀-鿿]/)
+  const firstCjk = text.search(/[\u3400-\u9fff]/)
   if (firstCjk <= 0) return text
   const cut = text.lastIndexOf(SEPARATOR, firstCjk)
   if (cut <= 0) return text
   const english = text.slice(0, cut).trim()
   const chinese = text.slice(cut + SEPARATOR.length).trim()
   const isEnglish = /[A-Za-z]/.test(english)
-  const cjk = count(chinese, /[㐀-鿿]/g)
+  const cjk = count(chinese, /[\u3400-\u9fff]/g)
   const isChinese = cjk >= MIN_CJK && cjk * LETTERS_PER_CJK >= count(chinese, /[A-Za-z]/g)
   if (!isEnglish || !isChinese) return text
   return lang === 'zh-CN' ? chinese : english

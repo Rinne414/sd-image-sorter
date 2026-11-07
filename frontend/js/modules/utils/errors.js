@@ -26,13 +26,13 @@ const BILINGUAL_LETTERS_PER_CJK = 3;
 
 function pickUiLanguageHalf(text) {
     const value = String(text ?? '');
-    const firstCjk = value.search(/[㐀-鿿]/);
+    const firstCjk = value.search(/[\u3400-\u9fff]/);
     if (firstCjk <= 0) return value;
     const cut = value.lastIndexOf(BILINGUAL_SEPARATOR, firstCjk);
     if (cut <= 0) return value;
     const english = value.slice(0, cut).trim();
     const chinese = value.slice(cut + BILINGUAL_SEPARATOR.length).trim();
-    const cjk = (chinese.match(/[㐀-鿿]/g) || []).length;
+    const cjk = (chinese.match(/[\u3400-\u9fff]/g) || []).length;
     const letters = (chinese.match(/[A-Za-z]/g) || []).length;
     const isChinese = cjk >= BILINGUAL_MIN_CJK && cjk * BILINGUAL_LETTERS_PER_CJK >= letters;
     if (!/[A-Za-z]/.test(english) || !isChinese) return value;
