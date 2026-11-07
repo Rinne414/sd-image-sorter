@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 装包失败会说明原因：文件夹没有写入权限、文件被占用、网络不通、磁盘满了或路径太长，不再只显示“returned non-zero exit status 1”。没有写入权限不再被当成文件被占用而重试。
 - **Starting from a folder without write permission**: the launchers say so before installing anything and offer to open again as administrator, instead of failing one install at a time.
   - 从没有写入权限的文件夹启动时，启动脚本会在安装前说明，并可以用管理员身份重新打开，不再一个个安装失败才发现。
+- **Install progress on slow connections**: large Hugging Face files arrive in steps of about 64 MB (40 s apart at 1.5 MB/s, measured through a slowed proxy), and between steps the speed and the time left disappeared. The speed is now the file's average, the time left counts down between steps, the time so far shows until the first step arrives, "may have stalled" waits for several of the gaps it has seen, and the line is wide enough to stay on one line.
+  - Hugging Face 的大文件是一段一段到的（每段约 64 MB；用限速代理实测，1.5 MB/s 时每 40 秒一段），两段之间速度和剩余时间会消失。现在速度按整个文件的平均算，剩余时间在两段之间继续倒数，第一段到之前显示已进行的时间，“可能卡住了”的提醒会按已出现过的间隔放宽，这一行也够宽，不再折成两行。
 - **Messages from the program's server in one language**: the server writes its reasons in English and Chinese together, and toasts and error lines showed both ("代理没有保存成功：Enter an HTTP or mixed port ... / 请填 ..."). Classic and V Opus now show only the half for the interface language.
   - 服务器写的原因是中英两句连在一起，提示和错误信息以前两句都显示（例如“代理没有保存成功：Enter an HTTP or mixed port ... / 请填 ...”）。经典界面和 V Opus 现在只显示界面语言那一句。
 - **A SOCKS proxy address says why it is refused**: it now says SOCKS is not supported because pip and some downloads cannot use it, and to enter the HTTP or mixed port instead.

@@ -2850,7 +2850,8 @@ body::before {
     }
 
     .feature-model-install-card {
-        width: min(100%, 420px);
+        /* Wide enough for "file: 71 / 446 MB (16%), 1.1 MB/s, about 5 min 46 s left" on one line. */
+        width: min(100%, 520px);
         background: var(--glass-bg, #1c1c1c);
         border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.12));
         border-radius: 16px;
@@ -2871,6 +2872,8 @@ body::before {
         font-size: 13px;
         color: var(--text-secondary);
         word-break: break-word;
+        /* The speed line changes every poll; no lone "秒" on a line of its own. */
+        text-wrap: pretty;
     }
 
     .feature-model-install-bar {

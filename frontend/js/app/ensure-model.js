@@ -314,10 +314,11 @@ function featureInstallStageText(progress) {
     return '';
 }
 
-function _formatProgressStatus(label, progress, rate) {
+function _formatProgressStatus(label, progress, measure) {
     const downloaded = Number(progress?.downloaded || 0);
     const total = Number(progress?.total || 0);
     const filename = progress?.filename || label;
+    const rate = Number(measure?.rate || 0);
     if (progress?.active && total > 0) {
         const percent = Math.min(100, Math.round((downloaded / total) * 100));
         const mb = (downloaded / 1048576).toFixed(0);
@@ -327,12 +328,17 @@ function _formatProgressStatus(label, progress, rate) {
             '{name}: {downloaded} / {total} MB ({percent}%)',
             { name: filename, downloaded: mb, total: totalMb, percent },
         );
+        // The bytes arrive after the last step; the time left keeps counting down.
+        const leftMs = rate > 0
+            ? Math.max(FEATURE_INSTALL_MIN_LEFT_MS, ((total - downloaded) / rate) * 1000 - Number(measure?.sinceStepMs || 0))
+            : 0;
         return {
             text: rate > 0
                 ? featureInstallT('featureInstall.progressRate', '{progress}, {speed} MB/s, about {left} left', {
                     progress: bytesText,
                     speed: (rate / 1048576).toFixed(1),
-                    left: _formatElapsed(((total - downloaded) / rate) * 1000),
+                    // "5 min 46 s" moves to the next line whole, never split after "5 min".
+                    left: _formatElapsed(leftMs).replace(/ /g, '\u00a0'),
                 })
                 : bytesText,
             percent,
@@ -356,26 +362,40 @@ function _formatProgressStatus(label, progress, rate) {
     };
 }
 
-// Bytes per second over the last few seconds of the current file; 0 until measured.
-const FEATURE_INSTALL_RATE_WINDOW_MS = 3000;
+// Speed of the current file: the bytes it gained since it was first seen,
+// over the time until its latest step. Hugging Face's Xet transfer reports a
+// file in large steps (about 64 MB, 40 s apart at 1.5 MB/s): a speed read over
+// the last few seconds was 0 between steps, so the speed and the time left
+// vanished on exactly the slow connections that need them. 0 until measured.
+const FEATURE_INSTALL_RATE_MIN_SPAN_MS = 3000;
+const FEATURE_INSTALL_MIN_LEFT_MS = 1000;
+// "May have stalled" waits at least this many of the longest step gaps seen.
+const FEATURE_INSTALL_STALL_GAPS = 3;
 
+/** Returns measure(progress, now) -> { rate (bytes/s), sinceStepMs, longestGapMs }. */
 function _createRateMeter() {
-    let mark = null;
-    let rate = 0;
-    return (progress) => {
-        const now = Date.now();
+    let file = null;
+    return (progress, now = Date.now()) => {
         const downloaded = Number(progress?.downloaded || 0);
-        const file = progress?.filename || '';
-        if (!progress?.active || !mark || mark.file !== file || downloaded < mark.downloaded) {
-            mark = progress?.active ? { file, downloaded, at: now } : null;
-            rate = 0;
-            return rate;
+        const name = progress?.filename || '';
+        if (!progress?.active) {
+            file = null;
+            return { rate: 0, sinceStepMs: 0, longestGapMs: 0 };
         }
-        if (now - mark.at >= FEATURE_INSTALL_RATE_WINDOW_MS) {
-            rate = ((downloaded - mark.downloaded) / (now - mark.at)) * 1000;
-            mark = { file, downloaded, at: now };
+        if (!file || file.name !== name || downloaded < file.lastBytes) {
+            file = { name, startBytes: downloaded, startAt: now, lastBytes: downloaded, lastStepAt: now, longestGapMs: 0 };
+        } else if (downloaded > file.lastBytes) {
+            file.longestGapMs = Math.max(file.longestGapMs, now - file.lastStepAt);
+            file.lastBytes = downloaded;
+            file.lastStepAt = now;
         }
-        return rate;
+        const gained = file.lastBytes - file.startBytes;
+        const span = file.lastStepAt - file.startAt;
+        return {
+            rate: gained > 0 && span >= FEATURE_INSTALL_RATE_MIN_SPAN_MS ? (gained / span) * 1000 : 0,
+            sinceStepMs: now - file.lastStepAt,
+            longestGapMs: file.longestGapMs,
+        };
     };
 }
 
@@ -413,14 +433,17 @@ async function _pollPrepareUntilSettled(modelId, label) {
         // Only a byte download can stall visibly. Package installs and
         // downloads that report no bytes show the elapsed time instead of a
         // false "stalled" warning.
+        const measure = measureRate(payload);
         const signature = payload?.active
             ? `${payload.filename || ''}:${payload.downloaded || 0}`
             : null;
+        // A download that arrives in large steps is not stalled between them.
+        const stallMs = Math.max(FEATURE_INSTALL_STALL_MS, FEATURE_INSTALL_STALL_GAPS * measure.longestGapMs);
         if (signature !== lastSignature) {
             lastSignature = signature;
             lastProgressAt = Date.now();
             stallWarned = false;
-        } else if (signature !== null && !stallWarned && Date.now() - lastProgressAt > FEATURE_INSTALL_STALL_MS) {
+        } else if (signature !== null && !stallWarned && Date.now() - lastProgressAt > stallMs) {
             stallWarned = true;
             const toast = window.App?.showToast || window.showToast;
             if (typeof toast === 'function') {
@@ -431,8 +454,10 @@ async function _pollPrepareUntilSettled(modelId, label) {
             }
         }
 
-        const formatted = _formatProgressStatus(label, payload, measureRate(payload));
-        const statusText = payload?.active
+        const formatted = _formatProgressStatus(label, payload, measure);
+        // Until a speed is known (a slow first step can take a minute), the
+        // running time shows the install is alive.
+        const statusText = payload?.active && measure.rate > 0
             ? formatted.text
             : featureInstallT('featureInstall.stillWorking', '{status} ({elapsed} so far)', {
                 status: formatted.text,
@@ -632,3 +657,5 @@ window.ensureFeatureModel = ensureFeatureModel;
 window.featureInstallStageText = featureInstallStageText;
 window.prepareSpecForTagger = prepareSpecForTagger;
 window.FEATURE_INSTALL_CONFIRM_BYTES = FEATURE_INSTALL_CONFIRM_BYTES;
+// The overlay's speed and time-left line, for tests that feed it a timeline.
+window.FeatureInstallProgress = { createRateMeter: _createRateMeter, formatStatus: _formatProgressStatus };
