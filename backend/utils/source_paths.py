@@ -4,7 +4,7 @@ Helpers for resolving indexed source image paths across Windows and POSIX runtim
 import os
 import re
 from pathlib import PurePosixPath, PureWindowsPath
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from utils.path_validation import normalize_user_path
 
@@ -355,8 +355,26 @@ def resolve_existing_indexed_image_path(
     *,
     backend_file: str,
     allow_symlink: bool = False,
+    folder_realpaths: Optional[Dict[str, str]] = None,
 ) -> Optional[str]:
-    """Resolve an indexed image path to an existing absolute path."""
+    """Resolve an indexed image path to an existing absolute path.
+
+    ``folder_realpaths``: a caller checking many pictures (a gallery page checks
+    about 200) passes one dict, and each folder's real path is looked up once.
+    The file itself is never a link here (``islink`` refuses it first), so its
+    real path is its folder's real path plus its name; on Windows realpath
+    opens every file it is given, most of a page's time at 100,000 pictures.
+    """
+
+    def real_path(candidate_path: str) -> str:
+        if folder_realpaths is None:
+            return os.path.realpath(candidate_path)
+        folder, name = os.path.split(candidate_path)
+        real_folder = folder_realpaths.get(folder)
+        if real_folder is None:
+            real_folder = os.path.realpath(folder)
+            folder_realpaths[folder] = real_folder
+        return os.path.join(real_folder, name)
 
     def accept(candidate: str) -> Optional[str]:
         candidate_path = os.path.abspath(normalize_user_path(candidate))
@@ -365,7 +383,7 @@ def resolve_existing_indexed_image_path(
         if not allow_symlink:
             if os.path.islink(candidate_path):
                 return None
-            if not _paths_match_for_runtime(candidate_path, os.path.realpath(candidate_path)):
+            if not _paths_match_for_runtime(candidate_path, real_path(candidate_path)):
                 return None
         return candidate_path
 

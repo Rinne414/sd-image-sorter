@@ -112,19 +112,36 @@ class GalleryMixin:
                 )
             )
 
-    def _filter_and_mark_missing_images(self, images: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], int]:
+    def _filter_and_mark_missing_images(
+        self, images: List[Dict[str, Any]], need: Optional[int] = None
+    ) -> tuple[List[Dict[str, Any]], int]:
         """Drop rows whose backing files no longer exist and persist that state in SQLite.
 
         A row whose file is not at its listed path is read again in one query (it
         may have moved meanwhile), and the rows still missing are marked in one
         transaction: a read, a connection and a commit per row held the listing
         of a library on an unplugged drive for minutes.
+
+        ``need``: stop once that many rows were found on disk; the rows after it
+        are left out unchecked (a cursor page reads them again next time).
         """
         backend_file = _svc()._BACKEND_FILE
-        found = [
-            bool(resolve_existing_indexed_image_path(str(image.get("path") or ""), backend_file=backend_file))
-            for image in images
-        ]
+        # One page's pictures share a few folders: resolve each folder once.
+        folder_realpaths: Dict[str, str] = {}
+        found: List[bool] = []
+        for image in images:
+            if need is not None and sum(found) >= need:
+                break
+            found.append(
+                bool(
+                    resolve_existing_indexed_image_path(
+                        str(image.get("path") or ""),
+                        backend_file=backend_file,
+                        folder_realpaths=folder_realpaths,
+                    )
+                )
+            )
+        images = images[: len(found)]
         recheck_ids = [
             int(image.get("id") or 0)
             for image, is_found in zip(images, found)
@@ -146,7 +163,9 @@ class GalleryMixin:
             if (
                 current_path
                 and current_path != listed_path
-                and resolve_existing_indexed_image_path(current_path, backend_file=backend_file)
+                and resolve_existing_indexed_image_path(
+                    current_path, backend_file=backend_file, folder_realpaths=folder_realpaths
+                )
             ):
                 moved_image = db.get_image_by_id(image_id)
                 if moved_image:
@@ -377,7 +396,11 @@ class GalleryMixin:
                 if total < 0:
                     total = result.get("total", -1)
 
-                live_images, missing_count = self._filter_and_mark_missing_images(result.get("images", []))
+                # Check only what this page still shows: the cursor is the last
+                # picture shown, so unchecked rows come back on the next page.
+                live_images, missing_count = self._filter_and_mark_missing_images(
+                    result.get("images", []), need=limit + 1 - len(collected)
+                )
                 total_missing += missing_count
                 collected.extend(live_images)
 

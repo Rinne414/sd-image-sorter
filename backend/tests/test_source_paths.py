@@ -195,6 +195,75 @@ def test_resolve_existing_indexed_image_path_allows_symlink_when_explicitly_enab
     assert resolved == str(link)
 
 
+def _link_folder(link: Path, target: Path) -> None:
+    """A symlink to a folder, or on Windows without the right a junction."""
+    try:
+        link.symlink_to(target, target_is_directory=True)
+        return
+    except (OSError, NotImplementedError):
+        pass
+    if os.name != "nt":
+        pytest.skip("folder links not available")
+    import _winapi
+
+    try:
+        _winapi.CreateJunction(str(target), str(link))
+    except OSError:
+        pytest.skip("folder links not available")
+
+
+@pytest.mark.parametrize("shared_folders", [False, True])
+def test_a_picture_reached_through_a_linked_folder_is_refused(tmp_path: Path, shared_folders):
+    real = tmp_path / "real"
+    real.mkdir()
+    (real / "picture.png").write_bytes(b"png")
+    linked = tmp_path / "linked"
+    _link_folder(linked, real)
+    folder_realpaths = {} if shared_folders else None
+
+    def resolve(path: Path):
+        return resolve_existing_indexed_image_path(
+            str(path),
+            backend_file="/repo/backend/services/image_service.py",
+            folder_realpaths=folder_realpaths,
+        )
+
+    assert resolve(real / "picture.png") == str(real / "picture.png")
+    assert resolve(linked / "picture.png") is None
+    assert resolve(real / "gone.png") is None
+
+
+def test_one_listing_resolves_each_folder_once(tmp_path: Path, monkeypatch):
+    # A gallery page checks about 200 pictures; os.path.realpath opens each one
+    # on Windows (about 0.2 ms), most of a page's time at 100,000 pictures.
+    folder = tmp_path / "pictures"
+    folder.mkdir()
+    paths = []
+    for index in range(200):
+        picture = folder / f"p{index:03d}.png"
+        picture.write_bytes(b"png")
+        paths.append(picture)
+    calls = []
+    real_realpath = os.path.realpath
+
+    def counting_realpath(path, *args, **kwargs):
+        calls.append(path)
+        return real_realpath(path, *args, **kwargs)
+
+    monkeypatch.setattr("utils.source_paths.os.path.realpath", counting_realpath)
+    folder_realpaths = {}
+    found = [
+        resolve_existing_indexed_image_path(
+            str(path),
+            backend_file="/repo/backend/services/image_service.py",
+            folder_realpaths=folder_realpaths,
+        )
+        for path in paths
+    ]
+    assert found == [str(path) for path in paths]
+    assert len(calls) == 1
+
+
 def test_resolve_indexed_image_path_for_cleanup_returns_none_only_when_missing(tmp_path: Path):
     missing = tmp_path / "missing.png"
 
