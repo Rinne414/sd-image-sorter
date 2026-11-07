@@ -113,7 +113,10 @@ const GENERATOR_TAB_RESOLVING_TITLE = 'Generator counts are still resolving whil
  * @param {{resolving?: boolean, filtered?: boolean, title?: string}} [state]
  *   filtered: the numbers are what the current filters leave
  */
+let _lastGeneratorTabCounts = null;
+
 function renderGeneratorTabCounts(genCounts, total, { resolving = false, filtered = false, title = '' } = {}) {
+    _lastGeneratorTabCounts = { genCounts, total, state: { resolving, filtered, title } };
     const counts = genCounts || {};
     const libraryCounts = AppState.analytics?.generatorCounts || {};
     const resolvingTitle = appT(GENERATOR_TAB_RESOLVING_TITLE_KEY, GENERATOR_TAB_RESOLVING_TITLE);
@@ -167,6 +170,13 @@ function renderGeneratorTabCounts(genCounts, total, { resolving = false, filtere
     if (othersTab) othersTab.title = othersHint;
     syncGeneratorRailOverflow();
 }
+
+// The tab hints are text written by script: write them again in the new language.
+document.addEventListener('languageChanged', () => {
+    if (_lastGeneratorTabCounts) {
+        renderGeneratorTabCounts(_lastGeneratorTabCounts.genCounts, _lastGeneratorTabCounts.total, _lastGeneratorTabCounts.state);
+    }
+});
 
 // The tabs count what the current filters leave, so each one shows what
 // clicking it would show. The generator filters themselves are left out (the

@@ -87,6 +87,14 @@ Object.assign(window.Gallery, {
                 this._setGeneratorText(generatorEl, generator);
             }
             item.setAttribute('aria-label', `${image?.filename || 'Image'} - ${generatorLabel}`);
+            // Badges and buttons written by script keep the old language otherwise.
+            const orderBadge = item.querySelector('.gallery-item-order');
+            if (orderBadge) orderBadge.title = this._t('gallery.order', null, 'Current gallery order');
+            const favoriteTitle = this._t('collections.favoriteToggle', null, 'Favorite');
+            item.querySelectorAll('.gallery-item-fav').forEach((button) => {
+                button.title = favoriteTitle;
+                button.setAttribute('aria-label', favoriteTitle);
+            });
         });
 
         const modalGenerator = document.getElementById('modal-generator');

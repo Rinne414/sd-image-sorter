@@ -881,6 +881,9 @@
         wireEntry();
         applyLibraryDefaultScope();
         refreshFromServer();
+        // The default library's name and the chip titles are written by script,
+        // so the i18n pass over the markup never reaches them.
+        document.addEventListener('languageChanged', () => refreshEntryHome());
         document.addEventListener('i18n-applied', () => refreshEntryHome());
         // The gallery sidebar's and Settings' entrances run the library menu's clear (rule 11).
         for (const id of ['btn-sidebar-clear-library', 'btn-settings-clear-library']) {

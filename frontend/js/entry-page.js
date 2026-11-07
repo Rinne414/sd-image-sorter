@@ -937,7 +937,8 @@
 
         // Dynamic strings (credit line, tile subs, stats) re-render on
         // language switch; data-i18n nodes are handled by I18n.applyToDOM.
-        window.addEventListener('languageChanged', () => {
+        // The event is dispatched on document and does not bubble to window.
+        document.addEventListener('languageChanged', () => {
             if (state.visible) render();
         });
         window.addEventListener('library-workspace-changed', () => {

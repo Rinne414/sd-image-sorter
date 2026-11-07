@@ -212,6 +212,9 @@
         document.addEventListener('i18n-applied', () => {
             refreshZenButton();
         });
+        document.addEventListener('languageChanged', () => {
+            refreshZenButton();
+        });
     }
 
     window.ComfortApp = {

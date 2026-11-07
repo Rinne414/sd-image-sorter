@@ -138,6 +138,9 @@ Object.assign(window.ArtistIdent, {
 
         document.addEventListener('languageChanged', () => {
             requestAnimationFrame(() => this.refreshAvailabilityState());
+            // The model notice and the vocabulary line are written by script.
+            void this.loadDiagnostics();
+            void this.refreshVocabularyState();
         });
     },
 

@@ -30,4 +30,5 @@ document.addEventListener('languageChanged', () => {
     SimilarImages.loadStats();
     SimilarImages.loadScopeOptions();
     SimilarImages.refreshWorkflowStatus();
+    SimilarImages.loadModelStatus();
 });

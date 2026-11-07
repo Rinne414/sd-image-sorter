@@ -13,6 +13,8 @@ function initPromptLab() {
     if (promptLabInitialized) return;
     promptLabInitialized = true;
     PromptLab.init();
+    // Cards, hints and empty states are written by script: write them again in the new language.
+    document.addEventListener('languageChanged', () => PromptLab.loadStats());
 }
 
 window.initPromptLab = initPromptLab;

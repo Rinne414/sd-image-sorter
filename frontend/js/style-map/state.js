@@ -631,6 +631,7 @@ export function createStyleMap() {
         // rapid changes are debounced into one points request.
         window.addEventListener('gallery-filters-changed', onFilterChanged);
         document.addEventListener('i18n-applied', repaint);
+        document.addEventListener('languageChanged', repaint);
         // The view's `active` class is the only signal that the user left.
         new MutationObserver(() => {
             if (!isViewActive()) dispose();

@@ -540,7 +540,8 @@
             }
         });
 
-        window.addEventListener('languageChanged', () => {
+        // The event is dispatched on document and does not bubble to window.
+        document.addEventListener('languageChanged', () => {
             renderChip(activeMission());
             renderSteps();
             renderCustomize();

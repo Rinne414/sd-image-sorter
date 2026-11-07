@@ -36,6 +36,8 @@
                 try { sessionStorage.setItem(DISMISS_KEY, '1'); } catch (_e) { /* private mode */ }
                 this._render();
             });
+            // The status line and the banner are written by script.
+            document.addEventListener('languageChanged', () => this._render());
             this.refresh();
         },
 
