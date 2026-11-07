@@ -200,6 +200,43 @@
         if (backdrop) backdrop.addEventListener('click', close);
     }
 
+    function isTypingTarget(target) {
+        return target instanceof Element
+            && Boolean(target.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]'));
+    }
+
+    /**
+     * Ctrl K (Cmd K on a Mac) opens the catalog from anywhere, and closes it
+     * again. It is the one browser key the program takes. It stays out of the
+     * way while typing in a field, with other modifiers held, while another
+     * dialog is open, and while an input method is composing text.
+     */
+    function onShortcut(event) {
+        if (event.key !== 'k' && event.key !== 'K') return;
+        if (event.ctrlKey === event.metaKey || event.altKey || event.shiftKey) return;
+        if (event.repeat || event.isComposing || event.defaultPrevented) return;
+        if (isTypingTarget(event.target)) return;
+        const catalog = document.getElementById('entry-catalog-modal');
+        if (!catalog) return;
+        const isOpen = catalog.classList.contains('visible');
+        if (!isOpen && document.querySelector('.modal.visible')) return;
+        event.preventDefault();
+        if (isOpen) close(); else open();
+    }
+
+    document.addEventListener('keydown', onShortcut);
+
+    function wireButton() {
+        const button = document.getElementById('btn-all-features');
+        if (button) button.addEventListener('click', open);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', wireButton);
+    } else {
+        wireButton();
+    }
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', wire);
     } else {

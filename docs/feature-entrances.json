@@ -83,7 +83,8 @@
       "en": "All features list",
       "zh": "全部功能列表",
       "classic": [
-        "#entry-all-tools"
+        "#entry-all-tools",
+        "#btn-all-features"
       ],
       "vopus": {
         "at": "#/home",

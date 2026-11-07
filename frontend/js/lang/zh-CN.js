@@ -2354,6 +2354,8 @@ window.I18nLang_zhCN = {
     'modal.tagsUndoPartial': '只撤销了一部分：这次修改之后又改过的部分保留原样',
     'modal.tagsUndoNothing': '没有变化：标签本来就和这次修改之前一样',
     'modal.tagsSaveFailed': '更新标签失败',
+    'catalog.openTooltip': '全部功能（Ctrl K）',
+    'catalog.openLabel': '全部功能',
     'server.gone': '程序已经停止，现在读不到也存不了。请重新打开程序；它回来后，这条提示会自己消失。',
     'server.retry': '再试一次',
     'server.back': '程序已恢复。',

@@ -37,6 +37,7 @@
     <link rel="stylesheet" href="/static/css/collect.css">
     <link rel="stylesheet" href="/static/css/video.css">
     <link rel="stylesheet" href="/static/css/server-watch.css">
+    <link rel="stylesheet" href="/static/css/catalog-key.css">
     <!-- tokens.css must stay the LAST stylesheet: it owns the Graphite palette
          and remaps every legacy token defined by the sheets above. -->
     <link rel="stylesheet" href="/static/css/tokens.css">
@@ -654,6 +655,10 @@
                 </button>
                 <span class="nav-actions-divider" aria-hidden="true"></span>
                 <!-- Group 2: Content tools (frequent) -->
+                <button id="btn-all-features" class="btn btn-ghost btn-icon-only nav-catalog-key" type="button" title="All features (Ctrl K)" aria-label="All features" aria-keyshortcuts="Control+K" data-i18n-title="catalog.openTooltip" data-i18n-aria="catalog.openLabel">
+                    <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></span>
+                    <kbd aria-hidden="true">Ctrl K</kbd>
+                </button>
                 <button id="btn-tags-library" class="btn btn-ghost btn-icon-only" title="Browse all tags and prompts" aria-label="Open tags and prompts library" data-i18n-title="action.libraryTooltip" data-i18n-aria="action.library">
                     <span aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span>
                 </button>

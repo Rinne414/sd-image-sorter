@@ -1,0 +1,19 @@
+/* The top-bar entrance to the feature catalog. On laptop widths it is an icon
+   with the shortcut in its tooltip (the bar is already tight there); on wide
+   screens the shortcut is printed on the button. */
+.nav-actions .btn.nav-catalog-key kbd {
+    display: none;
+}
+
+@media (min-width: 1700px) {
+    .nav-actions .btn.nav-catalog-key {
+        max-width: none;
+        gap: 6px;
+        padding-inline: 10px;
+    }
+
+    .nav-actions .btn.nav-catalog-key kbd {
+        display: inline-block;
+        margin-left: 0;
+    }
+}

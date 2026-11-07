@@ -2170,6 +2170,8 @@ window.I18nLang_en = {
     'modal.tagsUndoPartial': 'Partly undone: the parts changed again after this edit were kept',
     'modal.tagsUndoNothing': 'Nothing was changed: the tags were already as before this edit',
     'modal.tagsSaveFailed': 'Failed to update tags',
+    'catalog.openTooltip': 'All features (Ctrl K)',
+    'catalog.openLabel': 'All features',
     'server.gone': 'The program stopped, so nothing can be loaded or saved right now. Open the program again; this message goes away when it is back.',
     'server.retry': 'Try again',
     'server.back': 'The program is back.',
