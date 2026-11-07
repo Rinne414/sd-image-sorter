@@ -642,6 +642,9 @@
         if (name == null) return;
         name = String(name).trim();
         if (!name) return;
+        // Close now, not after the switch and gallery reload below: a menu
+        // the user reopens meanwhile must not vanish under the pointer.
+        closeMenu();
         try {
             const res = await fetch('/api/libraries', {
                 method: 'POST',
@@ -657,7 +660,6 @@
             if (data.library && data.library.id) {
                 await setCurrentLibraryId(data.library.id);
             }
-            closeMenu();
             if (typeof window.showToast === 'function') {
                 window.showToast(
                     _t('library.createdToast', 'Library “{name}” created', { name: data.library.name }),
@@ -723,6 +725,7 @@
             ),
         });
         if (!ok) return;
+        closeMenu();
         try {
             const res = await fetch(`/api/libraries/${encodeURIComponent(id)}`, {
                 method: 'DELETE',
@@ -739,7 +742,6 @@
                 await setCurrentLibraryId(DEFAULT_ID, { reloadGallery: true });
             }
             await refreshFromServer();
-            closeMenu();
             if (typeof window.showToast === 'function') {
                 window.showToast(
                     _t('library.deletedToast', 'Library “{name}” deleted', { name: name || id }),
@@ -808,11 +810,17 @@
         }
     }
 
+    // The menu shows only after the server answers. A close or a newer open
+    // made in that time wins: Esc pressed while it loads keeps it closed.
+    let _menuRequest = 0;
+
     function openMenu() {
         const menu = document.getElementById('entry-library-menu');
         const switcher = document.getElementById('entry-library-switcher');
         if (!menu || !switcher) return;
+        const request = ++_menuRequest;
         refreshFromServer().then(() => {
+            if (request !== _menuRequest) return;
             renderMenu(menu);
             menu.hidden = false;
             fitMenuToViewport(menu);
@@ -821,6 +829,7 @@
     }
 
     function closeMenu() {
+        _menuRequest += 1;
         const menu = document.getElementById('entry-library-menu');
         const switcher = document.getElementById('entry-library-switcher');
         if (menu) menu.hidden = true;
