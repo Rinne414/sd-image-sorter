@@ -60,6 +60,13 @@ test('gallery card badges and the generator hint follow a live language switch',
 })
 
 test('the entry page lines and the mission chip follow a live language switch', async ({ page }) => {
+  // The "new today" line shows only for a library with new pictures; the
+  // test backend's library may still be empty when this spec runs first.
+  await page.route('**/api/entry/summary**', async (route) => {
+    const response = await route.fetch()
+    const summary = await response.json()
+    await route.fulfill({ response, json: { ...summary, library_total: 3, added_today: 3, unviewed: 3 } })
+  })
   await open(page, 'zh-CN', false)
   await expect(page.locator('#entry-page')).toContainText('今天新进')
   await page.evaluate(() => (window as any).I18n.setLang('en'))
