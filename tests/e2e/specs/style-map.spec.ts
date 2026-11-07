@@ -183,7 +183,10 @@ test.describe('Style Map', () => {
     await expect(page.locator('.nav-tab[data-view="stylemap"]')).toHaveCount(1)
 
     // Narrow + English (the tightest bar): the sixth default tab still fits
-    // and no tab is tucked; the mirror stays hidden.
+    // and no tab is tucked; the mirror stays hidden. Back on the Gallery first:
+    // a reload returns to the page the user was on.
+    await page.locator('.nav-tab[data-view="gallery"]').click()
+    await expect(page.locator('#view-gallery')).toBeVisible()
     await page.evaluate(() => localStorage.setItem('sd-image-sorter-lang', 'en'))
     await page.setViewportSize({ width: 1366, height: 768 })
     await page.reload()
@@ -855,9 +858,10 @@ test.describe('Style Map', () => {
     await expect(map.legendChips.first()).toHaveAttribute('title', /L:\/pics\/set A/)
     expect(pointsCalls).toBe(1)
 
-    // The choice survives a reload and is the first thing asked for.
+    // The choice survives a reload and is the first thing asked for. A reload
+    // returns to the Style Map by itself (clicking its tab again would redraw it).
     await page.reload()
-    await map.open()
+    await expect(map.view).toHaveClass(/active/)
     await expect.poll(() => map.pointCount()).toBe(30)
     await expect(map.colorBySelect).toHaveValue('folder')
     await expect.poll(() => colorsUrls.length).toBe(4)
