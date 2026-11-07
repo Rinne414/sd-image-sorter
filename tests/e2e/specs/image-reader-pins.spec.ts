@@ -196,6 +196,9 @@ test('a parsed result renders the generator badge, checkpoint clean-name, quick 
   const facts = page.locator('#reader-quick-facts .reader-quick-fact')
   await expect(facts).toHaveCount(6)
   await expect(page.locator('#reader-quick-facts')).toContainText('12345')
+  // The model is said once: the chips carry it, the row below keeps only the hash.
+  await expect(page.locator('#reader-checkpoint-item')).toBeHidden()
+  await expect(page.locator('#reader-model-hash')).toHaveText('abc123')
 
   // Empty-state was dropped; the container now carries the image layout flag.
   await expect(page.locator('#reader-drop-zone')).toBeHidden()

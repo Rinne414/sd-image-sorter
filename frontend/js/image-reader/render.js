@@ -235,6 +235,12 @@ Object.assign(window.ImageReader, {
                     hashRow.style.display = 'none';
                 }
             }
+            // The quick-facts row above already says the model; this row keeps the
+            // model only when that row could not (no name), and the hash when there is one.
+            const cpItem = document.getElementById('reader-checkpoint-item');
+            if (cpItem) cpItem.style.display = cpClean ? 'none' : '';
+            const metaRow = cpItem?.closest('.reader-meta-row');
+            if (metaRow) metaRow.style.display = cpClean && (!hashRow || hashRow.style.display === 'none') ? 'none' : '';
 
             // LoRAs — strip paths, show clean names, tooltip for full path
             const lorasEl = document.getElementById('reader-loras');

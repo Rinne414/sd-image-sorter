@@ -552,7 +552,11 @@ ${String(value)}`)
             const pathParts = normalizedPath.replace(/\\/g, '/').split('/');
             pathParts.pop();
             const parentFolder = pathParts.pop() || '';
-            pathEl.textContent = normalizedPath;
+            // The file name is the title above; the path line is where it lives.
+            const fileName = String(image.filename || '');
+            pathEl.textContent = fileName && normalizedPath.endsWith(fileName)
+                ? (normalizedPath.slice(0, -fileName.length).replace(/[\\/]+$/, '') || normalizedPath)
+                : normalizedPath;
             pathEl.title = image.path || '';
             if (subfolderEl) {
                 subfolderEl.textContent = parentFolder || '';

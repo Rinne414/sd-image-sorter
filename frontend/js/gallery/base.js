@@ -191,7 +191,9 @@ const Gallery = {
         prompt: true,
         negative: true,
         params: true,
-        modelAssets: true,
+        // The model and LoRA names are already in the summary line and the LoRAs
+        // section; this block repeats them with its parser details, so it starts folded.
+        modelAssets: false,
         loras: true,
         nodes: false,
         color: true,

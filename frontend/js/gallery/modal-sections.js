@@ -438,7 +438,7 @@ Object.assign(window.Gallery, {
         // --- Generation Parameters ---
         const paramsSection = $('#modal-params-section');
         const paramsGrid = $('#modal-params-grid');
-        const paramEntries = this._buildGenerationParamEntries(image, parsedData);
+        const paramEntries = this._dropRepeatedParamEntries(this._buildGenerationParamEntries(image, parsedData), image);
         if (paramEntries.length > 0) {
             paramsSection.style.display = '';
             paramsGrid.innerHTML = paramEntries.map(({ label, value }) => `
@@ -520,6 +520,36 @@ Object.assign(window.Gallery, {
     },
 
     /**
+     * The settings block keeps what the summary line and the key-parameter bar
+     * above it do not already say: a value shown there is not listed again.
+     * (The metadata editor builds its own full list and is not affected.)
+     */
+    _dropRepeatedParamEntries(entries, image) {
+        const barIdByLabel = {
+            'Steps': 'kp-steps',
+            'CFG scale': 'kp-cfg',
+            'Sampler': 'kp-sampler',
+            'Scheduler': 'kp-scheduler',
+            'Seed': 'kp-seed',
+            'Denoise': 'kp-denoise',
+            'Denoising strength': 'kp-denoise',
+        };
+        const isBarShown = (id) => {
+            const el = document.getElementById(id);
+            return Boolean(el) && el.style.display !== 'none';
+        };
+        const numbers = (text) => (String(text).match(/\d+/g) || []).slice(0, 2).join('x');
+        const summarySize = numbers(document.getElementById('modal-size')?.textContent || '');
+        const checkpoint = String(image?.checkpoint || '').trim();
+        return entries.filter(({ label, value }) => {
+            if (barIdByLabel[label]) return !isBarShown(barIdByLabel[label]);
+            if (label === 'Model') return !checkpoint || String(value).trim() !== checkpoint;
+            if (label === 'Size') return !summarySize || numbers(value) !== summarySize;
+            return true;
+        });
+    },
+
+    /**
      * Initialize collapsible section toggle handlers (called once).
      */
     _initSectionToggles() {
@@ -547,7 +577,7 @@ Object.assign(window.Gallery, {
                 if (collapseKey) this.modalSectionState[collapseKey] = true;
             } else {
                 target.style.display = 'none';
-                if (icon) icon.textContent = '▶';
+                if (icon) icon.textContent = '▼'; // folded: CSS turns it a quarter turn
                 toggle.classList.add('section-collapsed');
                 if (collapseKey) this.modalSectionState[collapseKey] = false;
             }
@@ -584,7 +614,7 @@ Object.assign(window.Gallery, {
             target.style.display = expanded ? '' : 'none';
             toggle.classList.toggle('section-collapsed', !expanded);
             const icon = toggle.querySelector('.collapse-icon');
-            if (icon) icon.textContent = expanded ? '▼' : '▶';
+            if (icon) icon.textContent = '▼'; // folded: CSS turns it a quarter turn
         });
     },
 
