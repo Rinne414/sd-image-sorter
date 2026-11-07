@@ -990,9 +990,18 @@
         const go = window.App?.switchView || window.switchView;
         if (linked && typeof go === 'function') {
             go(linked);
+            window.ViewMemory?.start();
+            return;
+        }
+        // A reload goes back to the page the user was on, not to the entry page or the Gallery.
+        const remembered = window.ViewMemory?.savedView();
+        if (remembered && typeof go === 'function') {
+            go(remembered);
+            window.ViewMemory.start();
             return;
         }
         if (!isSkipped()) show();
+        window.ViewMemory?.start();
     }
 
     if (document.readyState === 'loading') {
