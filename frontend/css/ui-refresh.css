@@ -2396,7 +2396,8 @@ html:has(#view-gallery.active) {
     margin: 0;
 }
 .model-network-settings {
-    flex: 1 1 420px;
+    /* wide enough for the whole summary line: on a narrow modal it moves to its own row */
+    flex: 1 1 620px;
     min-width: 0;
     border: 1px solid var(--border-subtle);
     border-radius: 12px;
