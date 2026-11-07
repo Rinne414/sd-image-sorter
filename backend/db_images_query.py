@@ -19,6 +19,7 @@ from db_helpers import (
     normalize_prompt_match_mode,
     _rows_to_dicts,
 )
+from db_search_index import SearchPlan
 from db_query import (
     _IMAGE_COLUMNS_FULL,
     _IMAGE_COLUMNS_WITH_PROMPT,
@@ -190,11 +191,12 @@ def get_images(
         # Apply checkpoint filter
         conditions, params = _apply_checkpoint_filter(conditions, params, checkpoints)
 
+        plan = SearchPlan(conn, ordered_scan=sort_by in ("newest", "oldest"))
         # Apply lora filter (SQL-level)
-        conditions, params = _apply_lora_filter(conditions, params, loras)
+        conditions, params = _apply_lora_filter(conditions, params, loras, plan)
 
         # Apply search filter
-        conditions, params = _apply_search_filter(conditions, params, search_query)
+        conditions, params = _apply_search_filter(conditions, params, search_query, plan)
 
         # Apply prompt terms filter
         conditions, params = _apply_prompt_terms_filter(
@@ -202,6 +204,7 @@ def get_images(
             params,
             prompt_terms,
             normalized_prompt_match_mode,
+            plan,
         )
 
         # Apply dimension filters
@@ -401,11 +404,12 @@ def get_filtered_image_count(
         # Apply checkpoint filter
         conditions, params = _apply_checkpoint_filter(conditions, params, checkpoints)
 
+        plan = SearchPlan(conn)
         # Apply lora filter (SQL-level)
-        conditions, params = _apply_lora_filter(conditions, params, loras)
+        conditions, params = _apply_lora_filter(conditions, params, loras, plan)
 
         # Apply search filter
-        conditions, params = _apply_search_filter(conditions, params, search_query)
+        conditions, params = _apply_search_filter(conditions, params, search_query, plan)
 
         # Apply prompt terms filter
         conditions, params = _apply_prompt_terms_filter(
@@ -413,6 +417,7 @@ def get_filtered_image_count(
             params,
             prompt_terms,
             prompt_match_mode,
+            plan,
         )
 
         # Apply dimension filters
@@ -617,11 +622,12 @@ def get_filtered_image_ids(
         # Apply checkpoint filter
         conditions, params = _apply_checkpoint_filter(conditions, params, checkpoints)
 
+        plan = SearchPlan(conn)
         # Apply lora filter (SQL-level)
-        conditions, params = _apply_lora_filter(conditions, params, loras)
+        conditions, params = _apply_lora_filter(conditions, params, loras, plan)
 
         # Apply search filter
-        conditions, params = _apply_search_filter(conditions, params, search_query)
+        conditions, params = _apply_search_filter(conditions, params, search_query, plan)
 
         # Apply prompt terms filter
         conditions, params = _apply_prompt_terms_filter(
@@ -629,6 +635,7 @@ def get_filtered_image_ids(
             params,
             prompt_terms,
             normalized_prompt_match_mode,
+            plan,
         )
 
         # Apply dimension filters

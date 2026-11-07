@@ -63,6 +63,7 @@ from db_query import (
     _supports_cursor_sort,
     _fetch_post_filtered_page,
 )
+from db_search_index import SearchPlan
 from utils.pagination_cursor import encode_image_cursor_from_image
 
 
@@ -166,6 +167,7 @@ def get_images_paginated(
 
         # Build base query with sorting subqueries
         query = _build_base_query(sort_by, select_cols)
+        plan = SearchPlan(conn, ordered_scan=sort_by in ("newest", "oldest"))
 
         # Initialize conditions and params
         conditions: List[str] = []
@@ -187,10 +189,10 @@ def get_images_paginated(
         conditions, params = _apply_checkpoint_filter(conditions, params, checkpoints)
 
         # Apply lora filter (SQL-level)
-        conditions, params = _apply_lora_filter(conditions, params, loras)
+        conditions, params = _apply_lora_filter(conditions, params, loras, plan)
 
         # Apply search filter
-        conditions, params = _apply_search_filter(conditions, params, search_query)
+        conditions, params = _apply_search_filter(conditions, params, search_query, plan)
 
         # Apply prompt terms filter
         conditions, params = _apply_prompt_terms_filter(
@@ -198,6 +200,7 @@ def get_images_paginated(
             params,
             prompt_terms,
             normalized_prompt_match_mode,
+            plan,
         )
 
         # Apply dimension filters
@@ -443,6 +446,7 @@ def _get_filtered_count(
     Uses simplified query for performance on large datasets.
     """
     cursor = conn.cursor()
+    plan = SearchPlan(conn)
 
     query = "SELECT COUNT(DISTINCT i.id) FROM images i"
     conditions: List[str] = []
@@ -464,10 +468,10 @@ def _get_filtered_count(
     conditions, params = _apply_checkpoint_filter(conditions, params, checkpoints)
 
     # Apply lora filter (SQL-level)
-    conditions, params = _apply_lora_filter(conditions, params, loras)
+    conditions, params = _apply_lora_filter(conditions, params, loras, plan)
 
     # Apply search filter
-    conditions, params = _apply_search_filter(conditions, params, search_query)
+    conditions, params = _apply_search_filter(conditions, params, search_query, plan)
 
     # Apply prompt terms filter
     conditions, params = _apply_prompt_terms_filter(
@@ -475,6 +479,7 @@ def _get_filtered_count(
         params,
         prompt_terms,
         prompt_match_mode,
+        plan,
     )
 
     # Apply dimension filters

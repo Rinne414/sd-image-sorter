@@ -26,8 +26,10 @@ AESTHETIC_COLUMNS = (
 )
 REPAIRED_TABLES = ("image_style_vectors", "sorted_images")
 BATCH_TABLES = ("batches", "batch_items", "batch_templates")
-# Tables later migrations add (064 collected_sources).
+# Tables later migrations add (064 collected_sources). 067 adds the search index:
+# two virtual tables with their shadow tables, and the token vocabulary.
 TABLES_AFTER_062 = ("collected_sources",)
+SEARCH_INDEX_TABLE_PREFIXES = ("image_text_fts", "prompt_token_vocab")
 
 
 def _schema_version(conn: sqlite3.Connection) -> int:
@@ -176,9 +178,11 @@ def test_a_main_051_database_comes_up_through_060_061_and_062(tmp_path, monkeypa
         assert after == _schema(new)
     # Only the batch migrations added anything: 062 changed nothing here.
     # (Tables of migrations after 062 are not part of this question.)
-    assert {name for kind, name in after - before if kind == "table"} - set(
-        TABLES_AFTER_062
-    ) == set(BATCH_TABLES)
+    assert {
+        name
+        for kind, name in after - before
+        if kind == "table" and not name.startswith(SEARCH_INDEX_TABLE_PREFIXES)
+    } - set(TABLES_AFTER_062) == set(BATCH_TABLES)
 
 
 def test_a_fresh_database_lands_on_062(test_db):

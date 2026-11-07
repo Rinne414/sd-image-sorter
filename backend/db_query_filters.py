@@ -36,6 +36,7 @@ from db_helpers import (
     _favorite_image_ids_query,
     _folder_scope_query_match_clause,
 )
+from db_search_index import SearchPlan, lora_condition
 
 
 def _apply_tag_filter(query: str, tags: Optional[List[str]], params: List[Any],
@@ -168,11 +169,14 @@ def _apply_checkpoint_filter(conditions: List[str], params: List[Any],
 
 
 def _apply_lora_filter(conditions: List[str], params: List[Any],
-                       loras: Optional[List[str]]) -> tuple:
+                       loras: Optional[List[str]],
+                       plan: Optional[SearchPlan] = None) -> tuple:
     """Apply LoRA filtering (OR logic - image has ANY of the selected loras).
 
     Uses the image_loras junction table for efficient indexed lookups
-    instead of LIKE scans on TEXT columns.
+    instead of LIKE scans on TEXT columns (migration 067 indexes
+    ``LOWER(lora_name)``, so the lookup is a list of picture ids, not a
+    probe per picture).
 
     Args:
         conditions: Current WHERE conditions list
@@ -188,10 +192,9 @@ def _apply_lora_filter(conditions: List[str], params: List[Any],
     lora_conditions = []
     for lora in loras:
         lora_normalized = normalize_lora_name(lora)
-        lora_conditions.append(
-            "EXISTS (SELECT 1 FROM image_loras il WHERE il.image_id = i.id AND LOWER(il.lora_name) = ?)"
-        )
-        params.append(lora_normalized)
+        clause, clause_params = lora_condition(plan, lora_normalized)
+        lora_conditions.append(clause)
+        params.extend(clause_params)
 
     conditions.append(f"({' OR '.join(lora_conditions)})")
 
@@ -221,7 +224,8 @@ _CHARACTER_PROMPT_TEXT_NORMALIZED_SQL = (
 
 
 def _apply_search_filter(conditions: List[str], params: List[Any],
-                         search_query: Optional[str]) -> tuple:
+                         search_query: Optional[str],
+                         plan: Optional[SearchPlan] = None) -> tuple:
     """Apply free-text search over filename, checkpoint, prompt and caption.
 
     Normalizes: lowercase and replace underscore with space.
@@ -238,6 +242,9 @@ def _apply_search_filter(conditions: List[str], params: List[Any],
         conditions: Current WHERE conditions list
         params: Current parameter list
         search_query: Search term to look for
+        plan: When given and the search index can serve every needle, an
+            ``i.id IN (...)`` condition limits the pictures tested; the
+            conditions below still decide, so the result is the same.
 
     Returns:
         Tuple of (modified conditions, modified params)
@@ -276,6 +283,17 @@ def _apply_search_filter(conditions: List[str], params: List[Any],
         like = f"%{escape_like_pattern(normalized_search)}%"
         caption_params.append(like)
         caption_params.append(like)
+
+    if plan is not None:
+        # One needle per branch: file name, checkpoint, caption/character text
+        # (all in the picture text) and the prompt tokens (token index).
+        prefilter = plan.text_prefilter(
+            [raw_search.lower(), checkpoint_search, normalized_search],
+            prompt_tokens[:8],
+        )
+        if prefilter:
+            conditions.append(prefilter[0])
+            params.extend(prefilter[1])
 
     conditions.append(
         "("
@@ -327,7 +345,8 @@ def _apply_folder_filter(conditions: List[str], params: List[Any],
 
 def _apply_prompt_terms_filter(conditions: List[str], params: List[Any],
                                prompt_terms: Optional[List[str]],
-                               prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT) -> tuple:
+                               prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
+                               plan: Optional[SearchPlan] = None) -> tuple:
     """Apply multi-prompt filter (AND logic - image text must contain ALL terms).
 
     Each term must appear in the image's ``prompt``, its ``sidecar_caption``
@@ -382,6 +401,15 @@ def _apply_prompt_terms_filter(conditions: List[str], params: List[Any],
         if not normalized_term:
             continue
         like_pattern = f"%{escape_like_pattern(normalized_term)}%"
+        if plan is not None:
+            # Contains mode reads the three texts; exact mode also the token index.
+            is_contains = match_mode == PROMPT_MATCH_MODE_CONTAINS
+            prefilter = plan.text_prefilter(
+                [normalized_term], [] if is_contains else [normalized_term]
+            )
+            if prefilter:
+                conditions.append(prefilter[0])
+                params.extend(prefilter[1])
         if match_mode == PROMPT_MATCH_MODE_CONTAINS:
             conditions.append(
                 f"({_PROMPT_NORMALIZED_SQL} LIKE ? ESCAPE '\\'"

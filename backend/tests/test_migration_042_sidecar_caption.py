@@ -112,6 +112,11 @@ def test_init_db_upgrade_backfills_missing_sidecar_caption(tmp_path, monkeypatch
             "INSERT INTO images (path, filename, generator, prompt) VALUES (?, ?, ?, ?)",
             ("/legacy/kept.png", "kept.png", "webui", "1girl, smile"),
         )
+        # A database at schema 41 predates the search index (migration 067), whose
+        # triggers read sidecar_caption and would block the column drop below.
+        from db_search_index import drop_search_index
+
+        drop_search_index(raw)
         raw.execute("ALTER TABLE images DROP COLUMN sidecar_caption")
         raw.execute("UPDATE schema_version SET version = 41 WHERE id = 1")
         raw.commit()

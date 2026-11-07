@@ -232,7 +232,12 @@ class TestCaptionStatisticsStaySeparate:
         from services.prompt_service import PromptService
 
         _seed_row(test_db, name="pre-migration.png", prompt="z" * 30)
+        from db_search_index import drop_search_index
+
         with test_db.get_db() as conn:
+            # The search index (migration 067) reads sidecar_caption, so a schema
+            # from before 042 has none.
+            drop_search_index(conn)
             conn.execute("ALTER TABLE images DROP COLUMN sidecar_caption")
             columns = {row[1] for row in conn.execute("PRAGMA table_info(images)").fetchall()}
         assert "sidecar_caption" not in columns, "precondition: pre-042 schema reproduced"

@@ -512,10 +512,12 @@ class TestListFilterClauses:
         # "model.ckpt" collapses onto "Model" (same identity key) and is dropped.
         assert p == ["Model", "Other"]
 
-    def test_lora_filter_ors_exists_probes_with_normalized_names(self):
+    def test_lora_filter_ors_id_lookups_with_normalized_names(self):
         c, p = _apply_lora_filter([], [], ["MyLora.safetensors", "Other:0.8"])
         assert len(c) == 1
-        assert c[0].count("EXISTS (SELECT 1 FROM image_loras il") == 2
+        # One id lookup per LoRA (migration 067 indexes LOWER(lora_name)); it
+        # replaced the EXISTS probe that ran once per picture.
+        assert c[0].count("i.id IN (SELECT il.image_id FROM image_loras il") == 2
         assert " OR " in c[0]
         assert p == ["mylora", "other"]
 

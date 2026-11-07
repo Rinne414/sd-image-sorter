@@ -47,6 +47,11 @@ This project now treats SQLite schema changes as versioned application code, not
 - Migrations 060 and 061 came from the V Opus line, which numbered them while the classic line added 049-051. A
   database V Opus had taken to 061 therefore skipped 049-051; migration 062 runs those three again (each is additive
   and idempotent), so it repairs such a database and changes nothing on any other.
+- Migration 067 adds the trigram search index (`image_text_fts`, `prompt_token_vocab` and its trigram table) and a
+  `LOWER(lora_name)` index. They are derived data kept current by triggers on `images` and `image_prompt_tokens`; the
+  queries only use them to narrow which pictures the original LIKE conditions test, so a database whose SQLite has no
+  FTS5 trigram tokenizer (older than 3.34) skips them and searches as before. `db_search_index.drop_search_index()`
+  removes them (a rewound schema needs that, because the triggers read `sidecar_caption`).
 
 ## Downgrade Policy
 
