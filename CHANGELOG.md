@@ -29,11 +29,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 填 SOCKS 代理地址时，现在会说明不支持 SOCKS 的原因（pip 和部分下载用不了），并提示改填 HTTP 或混合端口。
 - **The library menu keeps your last open or close**: a menu reopened while a new library was being set up closed by itself, and pressing Esc while the menu was loading did not stop it from opening.
   - 新建图库时，如果在设置完成前重新打开图库菜单，菜单会自己关掉；菜单还在加载时按 Esc 也拦不住它弹出来。现在都以你最后一次操作为准。
+- **A renamed or moved library folder says so**: the gallery could show "No images yet" with no notice when its folder had been renamed. It now says the files cannot be found, and Find Moved Files opens on the folder most likely to hold them (classic and V Opus).
+  - 图库文件夹被改名或移走时，图库可能只显示“还没有图片”，没有任何提示。现在会说明找不到这些文件，“查找移动的文件”也会直接填好最可能的文件夹（经典界面和 V Opus）。
+- **Dark muted red is brown in the colour filter**: dark hair and shadows such as #3C282D no longer count as red.
+  - 颜色筛选里，像 #3C282D 这样的深色头发和阴影不再算作红色，而是棕色。
+- **Escape in the preview's tag or caption editor**: it closes the open editor first and never drops what was typed on a single press.
+  - 在预览里编辑标签或描述时，按 Esc 先关闭正在编辑的框，按一下不会丢掉已输入的文字。
+- **Confirms name the count**: Remove and Recycle Bin say how many pictures and what happens to them; a copy sort no longer asks and says what started.
+  - “移除”和“移到回收站”的确认会写明多少张图、会发生什么；复制方式的分拣不再询问，而是说明已经开始了什么。
+- **Labels follow a live language switch**: the library name, gallery card badges, generator hints, the entry page, Similar, Prompt Lab, Artist and video status were written by script and kept the old language until a reload.
+  - 图库名称、图库卡片标记、生成器提示、首页、相似图、提示词实验室、画师识别和视频状态这些由脚本写入的文字，以前切换语言后要刷新才会变；现在会立即跟着切换。
 
 ### Added / 新增
 
 - **Network proxy** (Model Center): enter the port of Clash, v2rayN or a similar tool once, and model downloads, package installs and update checks all use it, so TUN mode is not needed. Includes a connection test and one click for the system proxy; local addresses never use it.
   - **网络代理**（模型中心）：填一次 Clash、v2rayN 等工具的端口，模型下载、装包和检查更新都会走它，不用开 TUN 模式。可以测试连接，也可以一键用系统代理；本机地址不走代理。
+- **One banner when the program's server stops**: instead of failing requests one by one, the page says the server stopped; refreshing a folder and the preview give a reason and a Retry.
+  - 程序的服务器停止时，页面会用一条横幅说明，不再让请求一个个失败；刷新文件夹和预览失败时会说明原因并提供“重试”。
+- **Ctrl K opens the feature catalog anywhere**, with a button in the top bar.
+  - 在任何页面按 Ctrl K 都能打开功能目录，顶栏也有按钮。
+- **Automatic update check** (classic): once a day the program checks for a new version and only reminds; nothing changes until you press update. Off switch in Settings.
+  - **自动检查更新**（经典界面）：每天检查一次新版本，只提醒，不按“更新”就什么都不会变。可以在设置里关闭。
+- **A reload returns to the page you were on** instead of the Gallery.
+  - 刷新页面后会回到原来所在的页面，而不是回到图库。
+
+### Changed / 变更
+
+- **Search at 100,000 pictures**: a text index makes the search box and prompt filters about ten times faster on large libraries (prompt search 1.2 s to about 0.1 s), with the same results. A word nearly every picture contains, such as `1girl`, still takes about 0.2 s to count exactly.
+  - **10 万张图的搜索**：新增的文本索引让搜索框和提示词筛选在大图库上快了约十倍（提示词搜索从 1.2 秒降到约 0.1 秒），结果完全相同。像 `1girl` 这种几乎每张图都有的词，精确计数仍要约 0.2 秒。
+- **Model Center puts the model cards first**: download source, model folders and the proxy fold into one line that says their state, and it opens by itself when something there needs a look.
+  - **模型中心先显示模型卡片**：下载源、模型文件夹和代理收进一行，直接写明状态；其中有需要处理的问题时会自动展开。
+- **The picture preview and the Reader show each fact once**: duplicated fields are folded.
+  - 图片预览和读图里每项信息只显示一次，重复的字段折叠起来。
+- **A chain of single-child folders is one row** in the gallery's folder tree.
+  - 图库文件夹树里，只有一个子文件夹的连续层级合并成一行。
+- **Neutral silver accent**: the interface accent is a neutral silver in classic and V Opus, so colour on screen comes from the pictures and data. Data colours are unchanged.
+  - **中性银色强调色**：经典界面和 V Opus 的强调色改为中性银色，屏幕上的颜色只来自图片和数据。数据颜色不变。
 
 ## [3.10.2] - 2026-10-30
 
