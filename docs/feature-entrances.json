@@ -588,6 +588,7 @@
       "classic": [
         "#btn-app-update",
         "#btn-settings-check-update",
+        "#btn-settings-auto-update",
         "#entry-update-btn"
       ],
       "vopus": {

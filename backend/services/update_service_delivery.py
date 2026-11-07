@@ -172,6 +172,9 @@ class _UpdateDeliveryMixin:
         return "unsupported"
 
     def _read_release_json(self) -> dict[str, Any]:
+        # Browser test runs set this so no automatic check ever reaches the network.
+        if os.environ.get("SD_IMAGE_SORTER_UPDATE_CHECK_OFFLINE") == "1":
+            raise RuntimeError("Update checks are switched off for this run")
         channel = self._channel_state()
         req = urllib.request.Request(channel["api_url"], headers=_HTTP_HEADERS)
         with urllib.request.urlopen(req, timeout=20) as response:

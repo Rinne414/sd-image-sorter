@@ -290,6 +290,8 @@ export default defineConfig({
       // Saves that fall back to the built-in output folder stay in the run's data dir.
       SD_IMAGE_SORTER_OUTPUT_DIR: path.join(e2eDataDir, 'output'),
       SD_IMAGE_SORTER_DISABLE_ENV_FILES: '1',
+      // The classic interface checks for updates by itself; tests never reach GitHub.
+      SD_IMAGE_SORTER_UPDATE_CHECK_OFFLINE: '1',
       SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY: '1',
       // Never look for a ComfyUI install or the global Hugging Face cache on the
       // machine that runs the tests; the Model Center answers come from the specs.

@@ -6065,6 +6065,15 @@
                     </div>
                     <div class="settings-row">
                         <div class="settings-row-copy">
+                            <strong data-i18n="settings.autoUpdateTitle">Check for updates by itself</strong>
+                            <span data-i18n="settings.autoUpdateBody">Once, 30 seconds after the program opens, at most once a day. It only reminds you; nothing is installed until you press Update.</span>
+                        </div>
+                        <button type="button" class="btn btn-ghost settings-sound-toggle" id="btn-settings-auto-update" aria-pressed="true">
+                            <span id="settings-auto-update-label" data-i18n="settings.autoUpdateOn">On</span>
+                        </button>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-copy">
                             <strong data-i18n="settings.aboutSupportTitle">Report a problem</strong>
                             <span data-i18n="settings.aboutSupportBody">Copy the diagnostics (version, system and recent log lines) and paste them into your message, or open the folder with the log file.</span>
                         </div>
@@ -8672,6 +8681,7 @@
     <script src="/static/js/app/gallery-filter-helpers.js"></script>
     <script src="/static/js/app/toasts-modals.js"></script>
     <script src="/static/js/app/update-popup.js"></script>
+    <script src="/static/js/app/update-auto-check.js"></script>
     <script src="/static/js/app/progress-trackers.js"></script>
     <script src="/static/js/app/analytics-export.js"></script>
     <script src="/static/js/app/handoffs.js"></script>

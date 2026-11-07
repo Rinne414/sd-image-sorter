@@ -96,6 +96,30 @@ function isSortAudioEnabled() {
     return localStorage.getItem('sort-audio-enabled') === 'true';
 }
 
+function syncSettingsAutoUpdateControl() {
+    const btn = document.getElementById('btn-settings-auto-update');
+    if (!btn) return;
+    const enabled = isAutoUpdateCheckEnabled();
+    const label = document.getElementById('settings-auto-update-label');
+    btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    btn.classList.toggle('is-muted', !enabled);
+    btn.setAttribute(
+        'aria-label',
+        enabled
+            ? appT('settings.autoUpdateToggleOff', 'Turn off the automatic update check')
+            : appT('settings.autoUpdateToggleOn', 'Turn on the automatic update check')
+    );
+    if (label) {
+        label.dataset.i18n = enabled ? 'settings.autoUpdateOn' : 'settings.autoUpdateOff';
+        label.textContent = enabled ? appT('settings.autoUpdateOn', 'On') : appT('settings.autoUpdateOff', 'Off');
+    }
+}
+
+function toggleSettingsAutoUpdate() {
+    setAutoUpdateCheckEnabled(!isAutoUpdateCheckEnabled());
+    syncSettingsAutoUpdateControl();
+}
+
 function syncSettingsSoundControl() {
     const btn = document.getElementById('btn-settings-sound-toggle');
     if (!btn) return;
@@ -335,7 +359,7 @@ const SETTING_RESET_KEYS = [
     'sd-image-sorter-lang', 'ui_scale_v1', 'sort-audio-enabled',
     'aurora-entry-skip', 'aurora-entry-hero-off', 'aurora-entry-hero-mode',
     'sd-comfort-zen', 'sd-comfort-warmth', 'library_auto_refresh_enabled',
-    'sd-image-sorter-debug-enabled',
+    'sd-image-sorter-debug-enabled', 'sd-image-sorter-update-autocheck',
     // tabs, panels shown or folded, gallery view
     'aurora-nav-tabs', 'gallery-view-mode', 'sd-sorter:grid-size', 'desktop-sidebar-collapsed',
     'sd-image-sorter-scan-advanced-open', 'sd-image-sorter-tag-advanced-open',
@@ -390,6 +414,7 @@ function resetAllSettingsInteractive() {
 
 function syncSettingsControls() {
     syncSettingsSoundControl();
+    syncSettingsAutoUpdateControl();
     syncSettingsUiScaleControl();
     syncSettingsPreferenceStatus();
     syncSettingsOutputRoot();
@@ -400,6 +425,12 @@ function initSettingsControls() {
     if (soundBtn && soundBtn.dataset.bound !== '1') {
         soundBtn.dataset.bound = '1';
         soundBtn.addEventListener('click', toggleSettingsSound);
+    }
+
+    const autoUpdateBtn = document.getElementById('btn-settings-auto-update');
+    if (autoUpdateBtn && autoUpdateBtn.dataset.bound !== '1') {
+        autoUpdateBtn.dataset.bound = '1';
+        autoUpdateBtn.addEventListener('click', toggleSettingsAutoUpdate);
     }
 
     // Owner 2026-07-05: toggle rows read as "not working" — only the small
