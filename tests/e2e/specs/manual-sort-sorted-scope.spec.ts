@@ -94,7 +94,6 @@ test('the setup count leaves already sorted pictures out and can include them ag
   // The choice reaches the session start…
   await page.locator('.folder-path-input[data-key="w"]').fill('C:/sorted-scope-spec/w')
   await page.locator('#btn-start-sorting').click()
-  await page.locator('#btn-confirm-ok').click()
   await expect.poll(() => startBodies.length).toBe(1)
   expect(startBodies[0].exclude_sorted).toBe(false)
 
@@ -107,7 +106,6 @@ test('the setup count leaves already sorted pictures out and can include them ag
   await expect(countText).toHaveText('范围内约 22 张图片')
   await page.locator('.folder-path-input[data-key="w"]').fill('C:/sorted-scope-spec/w')
   await page.locator('#btn-start-sorting').click()
-  await page.locator('#btn-confirm-ok').click()
   await expect.poll(() => startBodies.length).toBe(2)
   expect(startBodies[1].exclude_sorted).toBe(true)
 })

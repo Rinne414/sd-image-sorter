@@ -75,7 +75,8 @@ async function deleteGalleryImagesByIds(imageIds) {
     }
 
     const examples = selectionToken ? '' : getSelectedGalleryExamples(ids);
-    const title = appT('selection.deleteConfirmTitle', 'Move selected image files to Trash?');
+    const title = I18n.format(appT('selection.deleteConfirmTitle', 'Move {count} image files to the Recycle Bin?'), { count: count });
+    const okLabel = I18n.format(appT('selection.deleteConfirmOk', 'Move {count} to Recycle Bin'), { count: count });
     const message = I18n.format(appT(
         'selection.deleteConfirmBody',
         'This moves {count} original files to the Recycle Bin / Trash and removes them from the gallery. To clean up records only, use Remove from Gallery. Examples: {examples}'
@@ -175,7 +176,7 @@ async function deleteGalleryImagesByIds(imageIds) {
                 'error'
             );
         }
-    });
+    }, null, { okLabel });
 }
 
 function deleteSelectedGalleryImages() {
@@ -193,7 +194,8 @@ async function removeGalleryImagesByIds(imageIds) {
     }
 
     const examples = selectionToken ? '' : getSelectedGalleryExamples(ids);
-    const title = appT('selection.removeConfirmTitle', 'Remove selected images from gallery?');
+    const title = I18n.format(appT('selection.removeConfirmTitle', 'Remove {count} images from the gallery?'), { count: count });
+    const okLabel = I18n.format(appT('selection.removeConfirmOk', 'Remove {count} from gallery'), { count: count });
     const message = I18n.format(appT(
         'selection.removeConfirmBody',
         'This removes {count} records from this gallery only. Files stay on disk, and scanning again brings them back. Examples: {examples}'
@@ -291,7 +293,7 @@ async function removeGalleryImagesByIds(imageIds) {
                 'error'
             );
         }
-    });
+    }, null, { okLabel });
 }
 
 function removeSelectedGalleryImages() {

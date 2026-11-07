@@ -6440,8 +6440,7 @@ test.describe('Smoke Tests', () => {
 
     await page.locator('.folder-path-input[data-key="a"]').fill(MOCK_MANUAL_SORT_DESTINATION)
     await page.locator('#btn-start-sorting').click()
-    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
-    await page.locator('#btn-confirm-ok').click()
+    // Copy mode (the default) asks nothing: the originals stay where they are.
     await expect(page.locator('#sort-interface')).toBeVisible()
 
     const currentImage = page.locator('#current-image')
@@ -6751,9 +6750,7 @@ test.describe('Smoke Tests', () => {
     await openSortingSubView(page, 'manual')
     await page.locator('.folder-path-input[data-key="a"]').fill(MOCK_MANUAL_SORT_DESTINATION)
     await page.locator('#btn-start-sorting').click()
-    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
-    await page.locator('#btn-confirm-ok').click()
-
+    // Copy mode (the default) asks nothing: the originals stay where they are.
     await expect(page.locator('#sort-interface')).toBeVisible()
     expect(startArtist).toBe('Mock Artist')
     expect(previewArtist).toBe('Mock Artist')

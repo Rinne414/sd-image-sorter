@@ -12,6 +12,8 @@ let _confirmAbort = null;
 // options.tone: 'danger' (default, the red confirm button) or 'primary' (a plain
 // accent confirm button for questions that are not destructive).
 // options.focusOk: start on OK instead of Cancel, so Enter says yes.
+// options.okLabel: the confirm button names the action ("Remove 12") instead of
+// the generic answer; the generic label returns when the dialog closes.
 function showConfirm(title, message, onOk, onCancel, options = {}) {
     lockDynamicI18nText('#confirm-title', 'modal.confirm');
     lockDynamicI18nText('#confirm-message', 'modal.confirmAction');
@@ -19,6 +21,10 @@ function showConfirm(title, message, onOk, onCancel, options = {}) {
     $('#confirm-message').textContent = message || appT('modal.confirmAction', 'This action cannot be undone.');
     // The button is shared: set its tone on every open, so one dialog never leaks into the next.
     $('#btn-confirm-ok').classList.toggle('danger', options.tone !== 'primary');
+    if (options.okLabel) {
+        lockDynamicI18nText('#btn-confirm-ok', 'modal.yes');
+        $('#btn-confirm-ok').textContent = options.okLabel;
+    }
 
     // Each dialog answers exactly once. Anything but OK counts as Cancel:
     // the Cancel button, the backdrop, Escape, or a newer dialog replacing

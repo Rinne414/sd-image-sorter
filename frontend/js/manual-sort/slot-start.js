@@ -170,14 +170,16 @@ async function startSorting() {
                 : 'Starting a sort session will move images to the configured folders.\n\nAction mode: {mode}\n{scope}\nAre you sure?',
             { scope: scopeLine, mode: operationLabel }
         );
-    const confirmed = await new Promise(resolve => {
+    // Copying leaves the originals where they are, so there is nothing to
+    // confirm; the start says what is happening once the session is up. Only a
+    // move asks first.
+    const confirmed = operationMode === 'copy' || await new Promise(resolve => {
         window.App.showConfirm(
             manualSortText('manual.startSortingTitle', 'Start Sorting', '确认开始排序'),
             confirmMessage,
             () => resolve(true),
             () => resolve(false),
-            // Copying leaves the originals in place; only a move gets the red button.
-            { tone: operationMode === 'copy' ? 'primary' : 'danger' }
+            { tone: 'danger' }
         );
     });
     if (!confirmed) return;
@@ -307,6 +309,17 @@ async function startSorting() {
 
         // Play start sound
         window.AudioManager?.play('start');
+
+        if (operationMode === 'copy') {
+            showToast(
+                formatManualSortI18n(
+                    'manual.startedCopy',
+                    'Sorting started in copy mode: {count} pictures. The originals stay where they are.',
+                    { count: result.total_images }
+                ),
+                'info'
+            );
+        }
 
     } catch (error) {
         showToast(formatUserError(error, manualSortText('manual.startFailed', 'Failed to start sorting', '开始排序失败')), "error");

@@ -2110,10 +2110,11 @@ test('starting a different mode over a paused session asks before discarding, ne
   await page.locator('input[name="manual-sort-operation"][value="copy"]').check({ force: true })
   await page.locator('.folder-path-input[data-key="w"]').fill(manualSortTop)
   await page.locator('.folder-path-input[data-key="d"]').fill(manualSortRight)
+  // Copy mode asks nothing and says what is happening instead.
   await page.locator('#btn-start-sorting').click()
-  await expect(page.locator('#confirm-modal.visible')).toBeVisible()
-  await page.locator('#btn-confirm-ok').click()
   await expect(page.locator('#sort-interface')).toBeVisible()
+  await expect(page.locator('#toast-container')).toContainText('copy mode')
+  await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
   await page.keyboard.press('D')
   await expect(page.locator('#sort-sorted-count')).toHaveText('1')
 

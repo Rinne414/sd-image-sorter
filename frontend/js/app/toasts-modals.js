@@ -455,6 +455,7 @@ function hideModal(modalId) {
         if (modalId === 'confirm-modal') {
             unlockDynamicI18nText('#confirm-title', 'modal.confirm', 'Are you sure?');
             unlockDynamicI18nText('#confirm-message', 'modal.confirmAction', 'This action cannot be undone.');
+            unlockDynamicI18nText('#btn-confirm-ok', 'modal.yes', 'Yes, proceed');
         } else if (modalId === 'input-modal') {
             unlockDynamicI18nText('#input-modal-title', 'modal.enterValue', 'Enter Value');
             const messageEl = $('#input-modal-message');
