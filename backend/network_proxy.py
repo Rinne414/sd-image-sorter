@@ -62,14 +62,22 @@ _lock = threading.Lock()
 _launch_env: Dict[str, Optional[str]] = {}
 
 
+WHAT_TO_TYPE = (
+    "Enter an HTTP or mixed port such as 7890, or an address such as 127.0.0.1:7890. / "
+    "请填 HTTP 或混合端口（如 7890）或地址（如 127.0.0.1:7890）。"
+)
+SOCKS_REFUSED = (
+    "SOCKS is not supported: pip and some downloads cannot use it. Enter the HTTP or "
+    "mixed port of your proxy tool instead, such as 7890. / "
+    "不支持 SOCKS：pip 和部分下载用不了。请改填代理工具的 HTTP 或混合端口，如 7890。"
+)
+
+
 class InvalidProxyError(ValueError):
     """What was typed is not a port or a proxy address; str() is the sentence to show."""
 
-    def __init__(self) -> None:
-        super().__init__(
-            "Enter an HTTP or mixed port such as 7890, or an address such as 127.0.0.1:7890. / "
-            "请填 HTTP 或混合端口（如 7890）或地址（如 127.0.0.1:7890）。"
-        )
+    def __init__(self, sentence: str = WHAT_TO_TYPE) -> None:
+        super().__init__(sentence)
 
 
 def _valid_port(port: Optional[int]) -> bool:
@@ -90,6 +98,8 @@ def normalize_proxy(value: Any) -> str:
         port = parts.port
     except ValueError as error:
         raise InvalidProxyError() from error
+    if parts.scheme.lower().startswith("socks"):
+        raise InvalidProxyError(SOCKS_REFUSED)
     has_extra = parts.path not in ("", "/") or parts.query or parts.fragment
     if (
         parts.scheme.lower() not in ALLOWED_SCHEMES

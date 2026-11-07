@@ -78,6 +78,16 @@ def test_anything_else_is_refused_with_a_sentence(typed):
         network_proxy.normalize_proxy(typed)
 
 
+@pytest.mark.parametrize("typed", ["socks5://127.0.0.1:7897", "SOCKS5H://127.0.0.1:1080", "socks4://h:1080"])
+def test_a_socks_address_says_socks_is_not_supported_and_why(typed):
+    # A Clash or v2rayN user who copies the SOCKS line must learn what to type instead.
+    with pytest.raises(network_proxy.InvalidProxyError) as caught:
+        network_proxy.normalize_proxy(typed)
+    english, chinese = str(caught.value).split(" / ")
+    assert "SOCKS" in english and "pip" in english and "7890" in english
+    assert "SOCKS" in chinese and "7890" in chinese
+
+
 def test_saving_points_downloads_and_child_programs_at_it():
     network_proxy.save_proxy("7890")
     for name in network_proxy.PROXY_ENV_NAMES:
