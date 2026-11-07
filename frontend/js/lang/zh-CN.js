@@ -2354,6 +2354,7 @@ window.I18nLang_zhCN = {
     'modal.tagsUndoPartial': '只撤销了一部分：这次修改之后又改过的部分保留原样',
     'modal.tagsUndoNothing': '没有变化：标签本来就和这次修改之前一样',
     'modal.tagsSaveFailed': '更新标签失败',
+    'modal.editEscapeKeep': '还有没保存的修改。再按一次 Esc 放弃修改，或点“保存”。',
     'modal.tagsSavePartial': '新标签已保存，但删除标签失败。',
     'modal.showMore': '显示更多',
     'modal.showLess': '收起',

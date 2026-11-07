@@ -108,3 +108,50 @@ for (const how of ['close button', 'backdrop'] as const) {
     await expect(page.locator('#image-modal.visible')).toHaveCount(0)
   })
 }
+
+// Escape closes one layer: the editor first, then the preview. Typed text is
+// never thrown away by a single Escape.
+test('Escape in the tag editor with typed text keeps the editor and the preview', async ({ page }) => {
+  await openFirstPreview(page)
+  await page.locator('#btn-edit-modal-tags').click()
+  const input = page.locator('#modal-tags-add-input')
+  await input.fill('unsaved_tag')
+  await input.press('Escape')
+  await expect(page.locator('#image-modal.visible')).toBeVisible()
+  await expect(page.locator('#modal-tags-editor')).toBeVisible()
+  await expect(input).toHaveValue('unsaved_tag')
+})
+
+test('a second Escape leaves the tag editor, a third closes the preview', async ({ page }) => {
+  await openFirstPreview(page)
+  await page.locator('#btn-edit-modal-tags').click()
+  const input = page.locator('#modal-tags-add-input')
+  await input.fill('unsaved_tag')
+  await input.press('Escape')
+  await input.press('Escape')
+  await expect(page.locator('#modal-tags-editor')).toBeHidden()
+  await expect(page.locator('#image-modal.visible')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#image-modal.visible')).toHaveCount(0)
+})
+
+test('Escape in a tag editor with nothing typed closes only the editor', async ({ page }) => {
+  await openFirstPreview(page)
+  await page.locator('#btn-edit-modal-tags').click()
+  await page.locator('#modal-tags-add-input').press('Escape')
+  await expect(page.locator('#modal-tags-editor')).toBeHidden()
+  await expect(page.locator('#image-modal.visible')).toBeVisible()
+})
+
+test('Escape in the caption editor with typed text keeps the editor and the text', async ({ page }) => {
+  await openFirstPreview(page)
+  await page.locator('#btn-edit-caption').click()
+  const box = page.locator('#modal-caption-edit-ai')
+  await box.fill('a caption I am still writing')
+  await box.press('Escape')
+  await expect(page.locator('#image-modal.visible')).toBeVisible()
+  await expect(box).toHaveValue('a caption I am still writing')
+  await box.press('Escape')
+  await expect(page.locator('#modal-caption-editor')).toBeHidden()
+  await expect(page.locator('#image-modal.visible')).toBeVisible()
+})

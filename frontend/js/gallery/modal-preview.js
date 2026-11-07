@@ -340,6 +340,8 @@ ${String(value)}`)
             } else if (e.key === 'Escape') {
                 // A dialog above answered this keypress and closed first.
                 if (typeof claimEscape === 'function' && !claimEscape(e)) return;
+                // An open tag or caption editor takes this Escape; the preview stays.
+                if (this._escapeInlineEditor()) return;
                 document.removeEventListener('keydown', this._modalKeydownHandler);
                 this._modalKeydownHandler = null;
                 const closeModal = window.App?.closeModal || window.closeModal;
@@ -418,7 +420,9 @@ ${String(value)}`)
             }
         };
 
-        showModal?.('image-modal');
+        // Typing in an editor never reaches the key handler above, so the
+        // dialog's own Escape asks the editor first as well.
+        showModal?.('image-modal', { onEscape: () => (this._escapeInlineEditor() ? false : undefined) });
         if (modalInfoScrollState) {
             this._restoreModalInfoScrollState(modalInfoScrollState);
         } else {

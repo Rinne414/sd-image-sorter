@@ -18,9 +18,42 @@ Object.assign(window.Gallery, {
         return ['general', 'sensitive', 'questionable', 'explicit'];
     },
 
+    // Escape closes one layer. With a tag or caption editor open it is the
+    // editor's turn, not the preview's. Typed work is never thrown away by one
+    // Escape: with unsaved changes the first press keeps the editor and says
+    // so, the second press gives the changes up and closes the editor.
+    // Returns true when the editor answered the key and the preview stays.
+    _escapeInlineEditor() {
+        const editing = this._tagsEditMode ? 'tags' : (this._captionEditMode ? 'caption' : '');
+        if (!editing) return false;
+        if (this._editorHasUnsaved(editing) && this._escapeWarnedFor !== editing) {
+            this._escapeWarnedFor = editing;
+            window.App?.showToast?.(this._t('modal.editEscapeKeep', null,
+                'You have unsaved changes. Press Esc again to discard them, or press Save.'), 'info');
+            return true;
+        }
+        if (editing === 'tags') this._exitTagEdit(); else this._exitCaptionEdit();
+        document.querySelector(editing === 'tags' ? '#btn-edit-modal-tags' : '#btn-edit-caption')?.focus();
+        return true;
+    },
+
+    _editorHasUnsaved(editing) {
+        if (editing === 'tags') {
+            const typed = (document.querySelector('#modal-tags-add-input')?.value || '').trim();
+            const working = JSON.stringify(this._tagEditWorking || []);
+            return typed !== '' || working !== JSON.stringify(this._tagEditOriginal || []);
+        }
+        const image = this._lastModalImage || {};
+        const ai = (document.querySelector('#modal-caption-edit-ai')?.value ?? '').trim();
+        const nl = (document.querySelector('#modal-caption-edit-nl')?.value ?? '').trim();
+        return ai !== (image.ai_caption || '').trim() || nl !== (image.nl_caption || '').trim();
+    },
+
     _bindTagEditOnce() {
         if (this._tagEditBound) return;
         this._tagEditBound = true;
+        // Any new typing or tag change re-arms the unsaved-changes warning.
+        document.querySelector('#modal-tags-editor')?.addEventListener('input', () => { this._escapeWarnedFor = ''; });
         document.querySelector('#btn-edit-modal-tags')?.addEventListener('click', () => {
             if (this._tagsEditMode) this._exitTagEdit(); else this._enterTagEdit();
         });
@@ -58,6 +91,7 @@ Object.assign(window.Gallery, {
 
     _exitTagEdit() {
         this._tagsEditMode = false;
+        this._escapeWarnedFor = '';
         const list = document.querySelector('#modal-tags-list');
         const editor = document.querySelector('#modal-tags-editor');
         if (editor) editor.hidden = true;
@@ -77,6 +111,7 @@ Object.assign(window.Gallery, {
                 const idx = Number(btn.dataset.idx);
                 if (Number.isInteger(idx)) {
                     this._tagEditWorking.splice(idx, 1);
+                    this._escapeWarnedFor = '';
                     this._renderTagEditChips();
                 }
             });
@@ -251,6 +286,7 @@ Object.assign(window.Gallery, {
     _bindCaptionEditOnce() {
         if (this._captionEditBound) return;
         this._captionEditBound = true;
+        document.querySelector('#modal-caption-editor')?.addEventListener('input', () => { this._escapeWarnedFor = ''; });
         document.querySelector('#btn-edit-caption')?.addEventListener('click', () => {
             if (this._captionEditMode) this._exitCaptionEdit(); else this._enterCaptionEdit();
         });
@@ -279,6 +315,7 @@ Object.assign(window.Gallery, {
 
     _exitCaptionEdit() {
         this._captionEditMode = false;
+        this._escapeWarnedFor = '';
         const view = document.querySelector('#modal-caption-view');
         const editor = document.querySelector('#modal-caption-editor');
         if (editor) editor.hidden = true;
