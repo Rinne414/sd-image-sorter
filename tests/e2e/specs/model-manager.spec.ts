@@ -25,7 +25,8 @@ async function openModelManager(page: Page) {
   await expect(page.locator('#model-manager-modal')).toBeVisible()
   // v3.5.0: the modal is tabbed (rule 6); model cards live in the AI Models tab.
   await page.locator('[data-settings-tab="models"]').click()
-  await expect(page.locator('.model-card').first()).toBeVisible({ timeout: 15_000 })
+  // the model cards, not the folded download settings above them
+  await expect(page.locator('#model-manager-grid .model-card').first()).toBeVisible({ timeout: 15_000 })
 }
 
 async function mockMinimalModelStatus(page: Page) {
@@ -215,6 +216,8 @@ test.describe('Model Manager', () => {
     const closeButton = page.locator('#model-manager-close')
     await expect(closeButton).toBeVisible()
     await expect(closeButton).toBeEnabled()
+    // The download source sits in the folded download settings; open them like a user.
+    await page.locator('#model-network-settings > summary').click()
     await page.locator('#model-mirror-select').selectOption('hf-mirror')
 
     // On this Windows e2e env the subprocess torch/timm probe may fail,

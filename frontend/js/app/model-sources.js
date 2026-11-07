@@ -198,6 +198,13 @@
         const rows = buildRows();
         const hints = (state.detect?.sources || []).filter((source) => source.network_not_trusted);
         const scanning = isScanRunning();
+        window.ModelNetworkSettings?.set('sources', {
+            count: rows.length,
+            attention: (state.failed && !state.detect)
+                || rows.some((row) => row.missing || row.pending)
+                || hints.length > 0
+                || pendingSuggestions().length > 0,
+        });
         host.innerHTML = `
             <article class="model-card model-sources-card" data-testid="model-sources-card" aria-labelledby="model-sources-title">
                 <div class="model-sources-head">
@@ -383,6 +390,7 @@
         });
         if (!yes) {
             writeLater(rows.map((row) => row.root));
+            render();
             return;
         }
         await addAndRefresh(rows.map((row) => row.root));
@@ -438,6 +446,7 @@
 
     /** Called each time the Model Center opens. */
     function open() {
+        window.ModelNetworkSettings?.arm();
         bind();
         state.askedThisOpen = false;
         state.formOpen = false;

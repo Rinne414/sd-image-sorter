@@ -7,7 +7,7 @@
 (function () {
     'use strict';
 
-    const state = { saved: '', system: '', draft: '', results: null, testing: false, saving: false, note: '', bound: false };
+    const state = { saved: '', system: '', draft: '', results: null, testing: false, saving: false, note: '', bound: false, failed: false };
 
     function section() {
         return document.getElementById('network-proxy-section');
@@ -43,6 +43,7 @@
         const host = section();
         if (!host) return;
         const offerSystem = state.system && state.system !== state.saved;
+        window.ModelNetworkSettings?.set('proxy', { address: hostAndPort(state.saved), attention: state.failed });
         host.innerHTML = `
             <article class="model-card model-sources-card" data-testid="network-proxy-card" aria-labelledby="network-proxy-title">
                 <div class="model-card-title" id="network-proxy-title">${escapeHtml(appT('network.proxy.title', 'Network proxy'))}</div>
@@ -64,7 +65,9 @@
             state.saved = status.proxy || '';
             state.system = status.system_proxy || '';
             state.draft = state.saved;
+            state.failed = false;
         } catch (_error) {
+            state.failed = true;
             state.note = appT('network.proxy.loadFailed', 'Could not read the proxy setting right now.');
         }
         render();

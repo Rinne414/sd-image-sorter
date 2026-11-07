@@ -255,6 +255,14 @@ async function openCenter(page: Page, lang: 'zh-CN' | 'en' = 'zh-CN') {
   await page.locator('#btn-open-model-manager').click()
   await page.locator('[data-settings-tab="models"]').click()
   await expect(page.locator('.model-card[data-model-id="wd14"]')).toBeVisible()
+  await openDownloadSettings(page)
+}
+
+/** The folders and the proxy sit in the folded download settings; a closed one is opened like a user would. */
+async function openDownloadSettings(page: Page) {
+  const details = page.locator('#model-network-settings')
+  if (!(await details.evaluate((el) => (el as HTMLDetailsElement).open))) await details.locator('summary').click()
+  await expect(details.locator('.model-network-body')).toBeVisible()
 }
 
 const sourcesCard = (page: Page) => page.locator('[data-testid="model-sources-card"]')

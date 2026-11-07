@@ -2359,11 +2359,109 @@ html:has(#view-gallery.active) {
     cursor: progress;
 }
 
-.model-manager-bulk-help {
-    flex: 1 1 240px;
+/* Model Center top row: bulk download, counts and the folded download settings
+   share one row, so the first model card starts high on the screen. */
+.model-manager-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+    margin: 0 0 6px;
+}
+.model-manager-toolbar .model-manager-bulk-actions {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+}
+.model-manager-toolbar .model-manager-bulk-actions .btn-bulk-download {
+    min-height: 38px;
+    padding: 7px 16px;
+}
+.model-manager-toolbar .model-manager-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0;
+}
+.model-manager-toolbar .model-manager-stat {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 12px;
+}
+.model-manager-toolbar .model-manager-stat strong {
+    display: inline;
+    margin: 0;
+}
+.model-network-settings {
+    flex: 1 1 420px;
+    min-width: 0;
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+}
+.model-network-settings[open] {
+    flex-basis: 100%;
+}
+.model-network-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px 14px;
+    padding: 8px 14px;
+    cursor: pointer;
+    list-style: none;
+}
+.model-network-summary::-webkit-details-marker {
+    display: none;
+}
+.model-network-summary::after {
+    content: "▸";
+    flex: 0 0 auto;
+    margin-left: auto;
+    color: var(--text-muted);
+}
+.model-network-settings[open] > .model-network-summary::after {
+    content: "▾";
+}
+.model-network-summary:focus-visible {
+    border-radius: 12px;
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 1px;
+}
+.model-network-title {
+    flex: 0 0 auto;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.model-network-state {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--text-secondary);
-    font-size: 12.5px;
-    line-height: 1.5;
+}
+.model-network-flag {
+    margin-left: 10px;
+    padding: 2px 8px;
+    border-radius: 8px;
+    background: rgba(var(--accent-primary-rgb), 0.18);
+    color: var(--text-primary);
+    font-weight: 600;
+}
+.model-network-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 2px 14px 14px;
+}
+.model-network-body .model-sources-section:not(:empty) {
+    margin-bottom: 0;
+}
+.model-network-body #model-mirror-row {
+    margin-bottom: 0 !important;
 }
 
 .prepare-restart-banner {

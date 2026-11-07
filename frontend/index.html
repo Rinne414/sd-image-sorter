@@ -6082,16 +6082,27 @@
                 </section>
                 </div>
                 <div data-settings-panel="models" hidden>
-                <div class="model-manager-summary" id="model-manager-summary"></div>
-                <div class="model-manager-bulk-actions" id="model-manager-bulk-actions">
-                    <button class="btn btn-primary btn-bulk-download" id="btn-bulk-download-models" type="button" data-i18n="models.bulkDownload" data-i18n-title="models.bulkDownloadTitle" title="Choose recommended models and optional gated models to download">
-                        <span aria-hidden="true">⬇️</span>
-                        <span data-i18n="models.bulkDownload">Download selected models</span>
-                    </button>
-                    <span class="model-manager-bulk-help" data-i18n="models.bulkDownloadHelp">Pick the recommended models for tagging, censoring, similarity, scoring, artist ID, segmentation, local captions and training masks. CL Tagger v2 stays unchecked until you authorize its official Hugging Face download.</span>
+                <!-- One row: the bulk download, the counts, and the download settings folded to one line
+                     that says their state. The cards start right below it. -->
+                <div class="model-manager-toolbar" id="model-manager-toolbar">
+                    <div class="model-manager-bulk-actions" id="model-manager-bulk-actions">
+                        <button class="btn btn-primary btn-bulk-download" id="btn-bulk-download-models" type="button" data-i18n="models.bulkDownload" data-i18n-title="models.bulkDownloadHelp" title="Pick the recommended models for tagging, censoring, similarity, scoring, artist ID, segmentation, local captions and training masks. CL Tagger v2 stays unchecked until you authorize its official Hugging Face download.">
+                            <span aria-hidden="true">⬇️</span>
+                            <span data-i18n="models.bulkDownload">Download selected models</span>
+                        </button>
+                    </div>
+                    <div class="model-manager-summary" id="model-manager-summary"></div>
+                    <details class="model-network-settings" id="model-network-settings">
+                        <summary class="model-network-summary">
+                            <span class="model-network-title" data-i18n="models.net.title">Download settings</span>
+                            <span class="model-network-state" id="model-network-state"></span>
+                        </summary>
+                        <div class="model-network-body">
+                            <div class="model-sources-section" id="model-sources-section"></div>
+                            <div class="model-sources-section" id="network-proxy-section"></div>
+                        </div>
+                    </details>
                 </div>
-                <div class="model-sources-section" id="model-sources-section"></div>
-                <div class="model-sources-section" id="network-proxy-section"></div>
                 <div class="model-manager-grid" id="model-manager-grid"></div>
 
                 <!-- Manual-upgrade safety hint: downloaded models live in data/models.
@@ -8701,6 +8712,7 @@
     <script src="/static/js/app/filters-apply.js"></script>
     <script src="/static/js/app/settings.js"></script>
     <script src="/static/js/app/model-manager.js"></script>
+    <script src="/static/js/app/model-network-settings.js"></script>
     <script src="/static/js/app/model-sources.js"></script>
     <script src="/static/js/app/network-proxy.js"></script>
     <script src="/static/js/app/model-manager-render.js"></script>
