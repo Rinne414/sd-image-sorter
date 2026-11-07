@@ -29,7 +29,7 @@
     font-size: 0.58rem;
     font-weight: 700;
     line-height: 1;
-    color: var(--accent, #D895A8);
+    color: var(--accent, #D6D8DC);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     pointer-events: none;
@@ -37,7 +37,7 @@
 }
 
 .nav-ai-busy-chip .icon {
-    color: var(--accent, #D895A8);
+    color: var(--accent, #D6D8DC);
 }
 
 /* Long enough that the guard itself calls the lease abnormal — a different

@@ -12,25 +12,34 @@ wrong — see `docs/AI_PRINCIPLES.md` for the authority order.
 
 The owner: "I want to redesign the sorter, don't make them rules... I still
 thinking the sorter frontend is far to a 'suitable product'." So today's look
-(top bar, sakura accent, 10/12/14/16 px radii, font stack, rules 12, 15 and 22
+(top bar, silver accent, 10/12/14/16 px radii, font stack, rules 12, 15 and 22
 below, and the look of `docs/DESIGN_VOPUS.md`) describes the current classic
 and Vopus interfaces. It is history for the redesign, not a rule for it. Small
 fixes to classic and Vopus stay consistent with their current look.
 
 **Accent colour, 2026-11-07:** the amber accent is gone (the owner does not
-like amber). Classic and Vopus now use one dusty sakura, a low-chroma
-cherry-blossom pink: the pictures here are anime illustration, it stays calm
-beside colourful images, and it is not a model-default accent. Values: classic
-dark `--accent #D895A8` (hover `#E4A9B9`, active `#C27C91`, ink on a solid
-accent `#1A1216`, wash 12 %, line 45 %); Vopus dark `#D895A8` and Vopus
-light `#944059` (a deeper rose so it reads as text; the light wash is 10 %).
-The film edge print is `#D895A8` in both Vopus themes. Colour only: layout,
+like amber). Classic and Vopus use one neutral silver with no hue (a first
+try with a dusty sakura pink, the same day, was replaced): a tool for judging
+pictures should not tint them, so the only colour on screen comes from the
+pictures and from data colours. Reason: a blind test on 2026-11-07 (6 isolated
+sessions) showed every hue is some model's default: no constraints chose blue
+twice, the owner's constraints chose jade twice and rose once, a cross-domain
+control chose pistachio, and none chose a neutral. Values: classic dark
+`--accent #D6D8DC` (hover `#E6E7EA`, active `#B9BBC0`, ink on a solid
+accent `#141517`, wash 12 %, line 45 %); Vopus dark `#D6D8DC`; Vopus light
+`#2A2B2E` (a dark ink accent on the cream paper; wash 10 %). The film edge
+print is `#D6D8DC` in both Vopus themes. Contrast: accent text 13.5:1 on the
+classic canvas, ink on the solid fill 12.8:1 (hover 14.8:1, active 9.5:1);
+Vopus accent text 9.8:1 or more on every dark surface and 10.9:1 or more on
+every light one. Accent text is close to body text, so an active, selected or
+focused state is also carried by the wash or the line, never by the text
+colour alone. Colour only: layout,
 shape, fonts and text did not change, and `/next/` kept its own tokens.
 Status colours (warning, success, danger), generator chips, tag categories, the
 hue filter dots, the WASD direction keys, stars and the style-map palette are
-data and stay as they were. To undo: `git revert` the commit "style: dusty
-sakura accent", or put back the old values (classic `#C8873C`, Vopus dark
-`#e2a03f`, Vopus light `#844e03`) in `frontend/css/tokens.css` and
+data and stay as they were. To undo: `git revert` the commit "style: neutral
+silver accent" (and the earlier sakura one), or put back the old amber values
+(classic `#C8873C`, Vopus dark `#e2a03f`, Vopus light `#844e03`) in `frontend/css/tokens.css` and
 `frontend-v4/src/design/tokens.css`. The look lines below that say "amber"
 describe the look before this date.
 
@@ -309,7 +318,7 @@ the craft layer below still apply to every interface.)
 
 12. **One accent. Color is not a category system.**
     Graphite surfaces are true-neutral (R=G=B). Exactly one accent
-    (`--accent`, dusty sakura since 2026-11-07; amber before) marks the primary action and the
+    (`--accent`, neutral silver since 2026-11-07; amber before) marks the primary action and the
     selected state. Status colours (success / warning / danger) are data
     and always sit next to a glyph. Historical names `--blue` / `--pink` /
     `--purple` in older CSS remap onto this: blue and pink are the accent,
@@ -718,7 +727,7 @@ Registered data-viz palettes:
 - **Style map point colouring** (`frontend/js/style-map/colors.js`, S4a,
   2026-10-01): the dots of the 3-D map encode a data field the user picks
   (generator, folder, artist, three aesthetic scores). Twelve fixed category
-  hues, chosen to stay clear of pure blue, purple, pink and the accent (sakura since 2026-11-07):
+  hues, chosen to stay clear of pure blue, purple, pink and the accent (silver since 2026-11-07):
   red `#D8524B`, salmon `#E8927C`, olive `#A9A331`, yellow-green `#7FB83C`,
   green `#36A853`, deep green `#1E7F55`, mint `#5FC9A6`, teal `#239E9A`, cyan
   `#3BA7D1`, slate `#1F6F8E`, brown `#8B5E3C`, mustard `#E0C84D`; the folded

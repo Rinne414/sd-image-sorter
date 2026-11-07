@@ -36,7 +36,7 @@
     --bg-hover: rgba(44, 44, 44, 0.92);
     --bg-elevated: rgba(32, 32, 32, 0.95);
 
-    --accent-primary: #D895A8;
+    --accent-primary: #D6D8DC;
     --accent-primary-rgb: 124, 139, 255;
     --accent-secondary: var(--accent);
     --accent-secondary-rgb: 51, 214, 224;
@@ -1380,7 +1380,7 @@ body::before {
     }
 
     .gallery-item-fav:focus-visible {
-        outline: 2px solid var(--accent-primary, #D895A8);
+        outline: 2px solid var(--accent-primary, #D6D8DC);
         outline-offset: 2px;
         opacity: 1;
     }
@@ -2883,7 +2883,7 @@ body::before {
     .feature-model-install-fill {
         height: 100%;
         width: 0%;
-        background: var(--accent, #D895A8);
+        background: var(--accent, #D6D8DC);
         transition: width 0.2s ease;
     }
 
@@ -3220,7 +3220,7 @@ body::before {
     }
 
     .civitai-link {
-        color: var(--accent-primary, #D895A8);
+        color: var(--accent-primary, #D6D8DC);
         text-decoration: none;
         margin-left: 8px;
         font-size: 11px;

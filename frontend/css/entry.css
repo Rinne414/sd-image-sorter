@@ -594,7 +594,7 @@ body.entry-active {
 /* Empty-library scan CTA on the Library tile: lift it out of the quiet-subtitle
    grey so the first real step reads as actionable (blue = next action). */
 .entry-fn .fn-sub.is-cta {
-    color: var(--blue, #D895A8);
+    color: var(--blue, #D6D8DC);
     font-weight: 600;
 }
 
@@ -644,7 +644,7 @@ body.entry-active {
 }
 
 .entry-library-switcher:hover {
-    color: var(--blue, #D895A8);
+    color: var(--blue, #D6D8DC);
 }
 
 .entry-library-name {
@@ -676,7 +676,7 @@ body.entry-active {
 }
 
 .entry-library-sub.is-cta {
-    color: var(--blue, #D895A8);
+    color: var(--blue, #D6D8DC);
     font-weight: 600;
 }
 
@@ -692,7 +692,7 @@ body.entry-active {
     border: none;
     border-radius: 10px;
     padding: 9px 18px;
-    background: var(--blue, #D895A8);
+    background: var(--blue, #D6D8DC);
     color: var(--on-accent, #161616);
     font: inherit;
     font-size: 14px;
@@ -701,7 +701,7 @@ body.entry-active {
 }
 
 .entry-library-enter:hover {
-    background: var(--blue-hover, #E4A9B9);
+    background: var(--blue-hover, #E6E7EA);
 }
 
 .entry-library-manage {
@@ -816,7 +816,7 @@ body.entry-active {
     border: 1px dashed rgba(255, 255, 255, 0.16);
     border-radius: 8px;
     background: transparent;
-    color: var(--blue, #D895A8);
+    color: var(--blue, #D6D8DC);
     font: inherit;
     font-size: 12px;
     font-weight: 700;

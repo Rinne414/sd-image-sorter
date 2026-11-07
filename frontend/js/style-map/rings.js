@@ -57,7 +57,7 @@ function drawTexture(kind, accent, muted) {
 export class RingPool {
     constructor(scene) {
         this.scene = scene;
-        const accent = cssVar('--accent', '#D895A8');
+        const accent = cssVar('--accent', '#D6D8DC');
         const muted = cssVar('--muted', '#8A8A90');
         this.materials = Object.fromEntries(RING_KINDS.map((kind) => [
             kind,

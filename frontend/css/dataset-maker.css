@@ -2322,7 +2322,7 @@
     line-height: 1.4;
 }
 #view-dataset .dataset-tag-pill:focus-visible {
-    outline: 2px solid var(--blue, #D895A8);
+    outline: 2px solid var(--blue, #D6D8DC);
     outline-offset: 1px;
 }
 :is(#view-dataset, #caption-editor-modal) .dataset-tag-pill-category-quality {
@@ -3386,7 +3386,7 @@
 }
 
 .dataset-template-help summary:hover {
-    color: var(--accent-hover, #E4A9B9);
+    color: var(--accent-hover, #E6E7EA);
 }
 
 .dataset-template-vars {

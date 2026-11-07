@@ -1,7 +1,7 @@
 /* V4 design tokens. One owner for every colour, size and shape.
 
    Two themes, both taken from how photographers cull a shoot:
-   - "darkroom" (dark): warm near-black, paper-white type, sakura edge print.
+   - "darkroom" (dark): warm near-black, paper-white type, silver edge print.
    - "proof" (light): a contact sheet on proof paper, ink-black type.
    Shared marks: a vermilion china-marker for picked frames, cyanotype blue
    for anything a model produced. No gradients, glows or blur; one spot colour
@@ -32,9 +32,9 @@
   /* roles */
   --ink-button: #ece6da; /* primary buttons are printed in paper white */
   --on-ink-button: #131210;
-  --accent: #d895a8; /* dusty sakura edge print: focus, active, counts */
-  --accent-soft: rgba(216, 149, 168, 0.12);
-  --accent-line: rgba(216, 149, 168, 0.5);
+  --accent: #d6d8dc; /* neutral silver edge print: focus, active, counts (no hue: the pictures carry the colour) */
+  --accent-soft: rgba(214, 216, 220, 0.12);
+  --accent-line: rgba(214, 216, 220, 0.5);
   --marker: #e4553c; /* china marker: picked frames */
   --marker-soft: rgba(228, 85, 60, 0.14);
   --on-marker: #1a0c08;
@@ -52,7 +52,7 @@
   /* film (the same black rebate in both themes, as on a contact print) */
   --film: #0e0d0c;
   --film-hole: rgba(236, 230, 218, 0.17);
-  --edge-print: #d895a8;
+  --edge-print: #d6d8dc;
   --tile-caption-bg: rgba(13, 12, 11, 0.82);
   --on-image: #f3eee4; /* marks drawn over thumbnails (the favourite heart) */
   --ai-on-image: #8fbde6; /* a model's marks drawn over pictures (detected regions) */
@@ -102,9 +102,9 @@
 
   --ink-button: #1c1a17;
   --on-ink-button: #f6f3ed;
-  --accent: #944059;
-  --accent-soft: rgba(148, 64, 89, 0.1);
-  --accent-line: rgba(148, 64, 89, 0.45);
+  --accent: #2a2b2e;
+  --accent-soft: rgba(42, 43, 46, 0.1);
+  --accent-line: rgba(42, 43, 46, 0.45);
   --marker: #b5311a;
   --marker-soft: rgba(181, 49, 26, 0.1);
   --on-marker: #fff8f4;
@@ -121,7 +121,7 @@
 
   --film: #151412;
   --film-hole: rgba(238, 234, 226, 0.2);
-  --edge-print: #d895a8;
+  --edge-print: #d6d8dc;
   --tile-caption-bg: rgba(21, 20, 18, 0.8);
   --on-image: #f3eee4;
   --ai-on-image: #8fbde6;

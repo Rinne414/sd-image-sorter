@@ -144,8 +144,8 @@
 
 .caption-autocomplete-item:hover .cap-ac-info-btn,
 .caption-autocomplete-item.active .cap-ac-info-btn {
-    border-color: var(--accent-line, rgba(216, 149, 168, 0.45));
-    color: var(--accent, #D895A8);
+    border-color: var(--accent-line, rgba(214, 216, 220, 0.45));
+    color: var(--accent, #D6D8DC);
 }
 
 .cap-ac-info {
@@ -245,7 +245,7 @@
 }
 
 .cap-ac-info-dialect {
-    border-top-color: var(--accent-line, rgba(216, 149, 168, 0.45));
+    border-top-color: var(--accent-line, rgba(214, 216, 220, 0.45));
     color: var(--text-secondary, #A6A6AB);
 }
 

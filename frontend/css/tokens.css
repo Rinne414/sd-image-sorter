@@ -13,7 +13,7 @@
      1. Surfaces are TRUE NEUTRAL graphite. No blue, indigo or violet cast.
         A hue-tinted "dark theme" is the single loudest generated-UI tell, and
         a tinted chrome also lies about the colour of the images on screen.
-     2. Exactly ONE accent (--accent, a dusty sakura pink). It marks the
+     2. Exactly ONE accent (--accent, a neutral silver). It marks the
         primary action and the active/selected state. Nothing else. It is
         never a gradient, never a glow, never decoration.
      3. Panels are flat and separated by 1px hairlines. Shadows are neutral
@@ -44,21 +44,27 @@
     --muted: #8A8A90;           /* 5.62:1 — still AA at 12px */
     --text-disabled: #5A5A60;   /* non-interactive only */
 
-    /* ===== The one accent: dusty sakura (2026-11-07) =====
-       A low-chroma cherry-blossom pink, chosen because the pictures here are
-       anime illustration; it stays calm beside colourful images and is not a
-       model-default accent. The owner dislikes amber, which it replaces.
-       8.07:1 as text on --bg, 7.69:1 for --on-accent ink on the solid fill,
-       so it works as text AND as a button surface. Dusty and pale on purpose:
-       it must stay clearly apart from --danger (a saturated coral red).
-       To go back: git revert the "style: dusty sakura" commit. */
-    --accent: #D895A8;
-    --accent-rgb: 216, 149, 168;
-    --accent-bright: #E4A9B9;   /* hover: +1 step */
-    --accent-deep: #C27C91;     /* active: -1 step */
-    --accent-soft: rgba(216, 149, 168, 0.12);   /* selected row/tile wash */
-    --accent-line: rgba(216, 149, 168, 0.45);   /* selected outline */
-    --on-accent: #1A1216;       /* ink on a solid accent fill */
+    /* ===== The one accent: neutral silver (2026-11-07) =====
+       No hue in the interface: the only colour on screen comes from the
+       pictures and from data colours. A tool for judging pictures should not
+       tint them. A blind test (2026-11-07, 6 isolated sessions) showed every
+       hue is some model's default: no constraints chose blue twice, the
+       owner's constraints chose jade twice and rose once, a cross-domain
+       control chose pistachio, none chose a neutral. Amber and then sakura
+       pink were dropped before this.
+       13.52:1 as text on --bg; 12.80:1 for --on-accent ink on the solid fill
+       (14.78:1 on hover, 9.51:1 active). Accent text is close to body text
+       (--text), so an active, selected or focused state never relies on the
+       text colour alone: it also gets the --accent-soft wash or the
+       --accent-line outline.
+       To go back: git revert the "style: neutral silver accent" commit. */
+    --accent: #D6D8DC;
+    --accent-rgb: 214, 216, 220;
+    --accent-bright: #E6E7EA;   /* hover: +1 step */
+    --accent-deep: #B9BBC0;     /* active: -1 step */
+    --accent-soft: rgba(214, 216, 220, 0.12);   /* selected row/tile wash */
+    --accent-line: rgba(214, 216, 220, 0.45);   /* selected outline */
+    --on-accent: #141517;       /* ink on a solid accent fill */
 
     /* ===== Status — data, always paired with a glyph ===== */
     --success: #5FB37E;
@@ -312,7 +318,7 @@ textarea:focus-visible,
     outline-offset: 2px;
 }
 
-/* Primary action: one solid ACCENT (sakura) button per screen, dark ink.
+/* Primary action: one solid ACCENT (silver) button per screen, dark ink.
    There is no gradient anywhere — not for cross-step actions, not for the
    brand. Hover = +1 lightness step, active = −1. */
 .btn-primary {
