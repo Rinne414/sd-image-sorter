@@ -1860,8 +1860,10 @@ test('gallery folder tree stays usable above the selection footer on supported d
     await page.evaluate(() => new Promise((resolve) => {
       requestAnimationFrame(() => requestAnimationFrame(resolve))
     }))
-    const otherBranchPath = `${parentPath}/branch-other`
-    const otherBranchToggle = page.locator(`#folder-tree [data-action="toggle"][data-path="${otherBranchPath}"]`)
+    // branch-other holds one folder and no pictures of its own, so the tree shows it
+    // together with that folder (one row, no toggle); the sidebar-layout folder is the branch.
+    await expect(page.locator(`#folder-tree .folder-row-open[data-path="${parentPath}/branch-other/child"]`)).toHaveCount(1)
+    const otherBranchToggle = page.locator(`#folder-tree [data-action="toggle"][data-path="${parentPath}"]`)
     await expect(otherBranchToggle).toHaveCount(1)
     if (await otherBranchToggle.getAttribute('aria-expanded') === 'true') {
       await otherBranchToggle.click()

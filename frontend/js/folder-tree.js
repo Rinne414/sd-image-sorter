@@ -55,6 +55,7 @@
 
     const FolderTreeUI = {
         _folders: [],
+        _libraryDirs: new Set(),
         _tree: null,
         _expanded: new Set(),
         _active: null,
@@ -88,6 +89,7 @@
                 const folders = Array.isArray(result?.folders) ? result.folders : [];
                 const previous = new Set(this._folders.map((path) => normalizePath(path)));
                 this._folders = folders;
+                this._libraryDirs = new Set(folders.map((path) => normalizePath(path)));
                 this._tree = this._buildTree(folders);
                 // Sync the highlighted/active folder from the persisted gallery
                 // filter so a reload keeps the tree and the gallery in step.
@@ -148,6 +150,42 @@
             }
         },
 
+        /**
+         * The folders that share one row: a folder that holds no pictures of its
+         * own and has a single sub-folder is shown together with it, the way an
+         * IDE compacts them (C:/Users/me/Pictures). Filtering by the last folder
+         * gives the same pictures as filtering by any folder above it.
+         */
+        _chainFrom(node) {
+            const chain = [node];
+            let current = node;
+            while (current.children.size === 1 && !this._libraryDirs.has(current.path)) {
+                current = [...current.children.values()][0];
+                chain.push(current);
+            }
+            return chain;
+        },
+
+        /** "C:/Users/me/AppData/Local/pictures" -> "C:/…/Local/pictures" (the full path is the tooltip). */
+        _chainLabel(chain) {
+            const names = chain.map((node) => node.name);
+            const shown = names.length > 3 ? [names[0], '…', ...names.slice(-2)] : names;
+            return names[0] === '/' ? `/${shown.slice(1).join('/')}` : shown.join('/');
+        },
+
+        /** The row's folder button for a path; a path inside a chain finds the chain's row. */
+        _openButtonFor(path) {
+            const container = document.getElementById('folder-tree');
+            return [...(container?.querySelectorAll('.folder-row-open') || [])].find((row) => {
+                if (normalizePath(row.dataset.path) === path) return true;
+                try {
+                    return JSON.parse(row.dataset.chain || '[]').some((entry) => normalizePath(entry) === path);
+                } catch (_error) {
+                    return false;
+                }
+            });
+        },
+
         /** Make sure every ancestor of `path` is expanded so it's visible. */
         _expandAncestors(path) {
             const segs = normalizePath(path).split('/');
@@ -191,8 +229,7 @@
             requestAnimationFrame(() => {
                 if (this._active !== activePath) return;
                 const container = document.getElementById('folder-tree');
-                const activeRow = [...(container?.querySelectorAll('.folder-row-open') || [])]
-                    .find((row) => normalizePath(row.dataset.path) === activePath);
+                const activeRow = this._openButtonFor(activePath);
                 if (!activeRow || !container) return;
 
                 const revealWithin = (scroller) => {
@@ -218,8 +255,7 @@
         _isActiveVisible() {
             if (!this._active) return false;
             const container = document.getElementById('folder-tree');
-            const activeRow = [...(container?.querySelectorAll('.folder-row-open') || [])]
-                .find((row) => normalizePath(row.dataset.path) === this._active);
+            const activeRow = this._openButtonFor(this._active);
             const sidebarScroll = container?.closest('.filter-sidebar-scroll');
             if (!activeRow || !container || !sidebarScroll) return false;
 
@@ -230,12 +266,17 @@
             });
         },
 
-        _nodeHtml(node, depth) {
+        _nodeHtml(start, depth) {
+            const chain = this._chainFrom(start);
+            const node = chain.at(-1);
             const hasKids = node.children.size > 0;
             const isExpanded = this._expanded.has(node.path);
-            const isActive = this._active != null && this._active === node.path;
+            const isActive = this._active != null && chain.some((link) => link.path === this._active);
             const pad = 6 + depth * 14;
             const safePath = escapeHtml(node.path);
+            const chainAttr = chain.length > 1
+                ? ` data-chain="${escapeHtml(JSON.stringify(chain.map((link) => link.path)))}"`
+                : '';
 
             const toggle = hasKids
                 ? `<button type="button" class="folder-row-toggle" data-action="toggle" data-path="${safePath}" `
@@ -246,10 +287,10 @@
             let html = `<div class="folder-row${isActive ? ' is-active' : ''}" `
                 + `style="padding-left:${pad}px" data-path="${safePath}">`
                 + toggle
-                + `<button type="button" class="folder-row-open" data-action="browse" data-path="${safePath}" `
+                + `<button type="button" class="folder-row-open" data-action="browse" data-path="${safePath}"${chainAttr} `
                 + `aria-pressed="${isActive ? 'true' : 'false'}" title="${safePath}">`
                 + '<span class="folder-row-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg></span>'
-                + `<span class="folder-row-name">${escapeHtml(node.name)}</span>`
+                + `<span class="folder-row-name">${escapeHtml(this._chainLabel(chain))}</span>`
                 + '</button></div>';
 
             if (hasKids && isExpanded) {

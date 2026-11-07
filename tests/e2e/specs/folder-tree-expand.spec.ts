@@ -27,11 +27,13 @@ test('folders imported after an empty start are unfolded down to the folder', as
 
   folders = [DEEP]
   await page.evaluate(() => (window as any).FolderTreeUI.refresh())
+  // A chain of single-child folders is one row (see folder-tree-compact.spec.ts):
+  // its last folder is the row's path, and it is in view without any click.
   await expect(page.locator('#folder-tree')).toContainText('imgs')
-  await expect(page.locator('#folder-tree').getByText('imgs', { exact: true })).toBeVisible()
+  await expect(page.locator(`#folder-tree .folder-row-open[data-path="${DEEP}"]`)).toBeVisible()
 
   folders = [DEEP, SECOND]
   await page.evaluate(() => (window as any).FolderTreeUI.refresh())
-  await expect(page.locator('#folder-tree').getByText('october', { exact: true })).toBeVisible()
-  await expect(page.locator('#folder-tree').getByText('imgs', { exact: true })).toBeVisible()
+  await expect(page.locator(`#folder-tree .folder-row-open[data-path="${SECOND}"]`)).toBeVisible()
+  await expect(page.locator(`#folder-tree .folder-row-open[data-path="${DEEP}"]`)).toBeVisible()
 })
