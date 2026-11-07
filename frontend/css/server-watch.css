@@ -1,0 +1,29 @@
+/* The banner that says the program's server stopped (modules/server-watch.js).
+   Colours come from the shared tokens only. */
+.server-gone-banner {
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10050;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    max-width: min(760px, calc(100vw - 48px));
+    padding: 12px 16px;
+    border: 1px solid var(--warning);
+    border-radius: 10px;
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.server-gone-banner .server-gone-message {
+    flex: 1 1 auto;
+}
+
+.server-gone-banner button {
+    flex: 0 0 auto;
+}

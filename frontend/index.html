@@ -36,6 +36,7 @@
     <link rel="stylesheet" href="/static/css/send-to-generator.css">
     <link rel="stylesheet" href="/static/css/collect.css">
     <link rel="stylesheet" href="/static/css/video.css">
+    <link rel="stylesheet" href="/static/css/server-watch.css">
     <!-- tokens.css must stay the LAST stylesheet: it owns the Graphite palette
          and remaps every legacy token defined by the sheets above. -->
     <link rel="stylesheet" href="/static/css/tokens.css">
@@ -8609,6 +8610,9 @@
     </div>
 
     <script src="/static/js/logger.js"></script>
+    <!-- Wraps fetch once: a request that cannot reach this server triggers one
+         quick check and, if the server is really gone, a single banner. -->
+    <script src="/static/js/modules/server-watch.js"></script>
     <!-- Core modules used by app.js. Keep these before the main application script. -->
     <script src="/static/js/modules/core/storage-utils.js"></script>
     <script src="/static/js/modules/core/request-manager.js"></script>

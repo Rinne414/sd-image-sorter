@@ -71,7 +71,7 @@
 
             const refreshBtn = document.getElementById('btn-refresh-folders');
             if (refreshBtn) {
-                refreshBtn.addEventListener('click', () => this.refresh());
+                refreshBtn.addEventListener('click', () => this.refresh({ manual: true }));
             }
             const container = document.getElementById('folder-tree');
             if (container) {
@@ -83,7 +83,7 @@
             await this.refresh();
         },
 
-        async refresh() {
+        async refresh(options = {}) {
             try {
                 const result = await appRef().API?.listLibraryFolders?.();
                 const folders = Array.isArray(result?.folders) ? result.folders : [];
@@ -110,7 +110,24 @@
                 this._scheduleActiveVisibility();
             } catch (error) {
                 log('warn', 'Failed to load library folders', error);
+                if (options.manual) this._explainRefreshFailure(error);
             }
+        },
+
+        /** A refresh the user asked for failed: say why, and offer another try. */
+        _explainRefreshFailure(error) {
+            const reason = window.ServerWatch?.isNetworkFailure(error)
+                ? t('server.noAnswer', 'the program is not answering')
+                : (typeof formatUserError === 'function' ? formatUserError(error) : String(error?.message || error));
+            appRef().showToast?.(
+                t('folders.refreshFailed', 'Could not refresh the folders: {reason}', { reason }),
+                'error',
+                {
+                    duration: 8000,
+                    actionLabel: t('folders.retry', 'Try again'),
+                    onAction: () => this.refresh({ manual: true }),
+                },
+            );
         },
 
         /** Build a nested tree (Map of children) from a flat list of dir paths. */

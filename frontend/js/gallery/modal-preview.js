@@ -269,6 +269,7 @@ ${String(value)}`)
         this._renderModalRating(summaryImage || { id: imageId, user_rating: 0 });
         $('#modal-prompt-text').textContent = summaryImage?.prompt || this._t('modal.loadingPrompt', null, 'Loading prompt…');
         $('#modal-negative-text').textContent = this._t('modal.loadingNegative', null, 'Loading…');
+        delete $('#modal-loading-state').dataset.i18nLocked;
         $('#modal-loading-state').textContent = this._t('modal.loadingDetails', null, 'Loading details…');
         $('#modal-loading-state').style.display = '';
         document.querySelector('#modal-tags-list').textContent = this._t('modal.loadingTags', null, 'Loading tags…');
@@ -502,9 +503,28 @@ ${String(value)}`)
             if (requestId !== this.currentPreviewRequestId) {
                 return;
             }
-            $('#modal-loading-state').textContent = this._t('modal.failedLoadDetails', null, 'Failed to load details');
-            showToast?.(this._t('modal.failedLoadDetails', null, 'Failed to load details'), 'error');
+            this._showDetailsFailure(imageId, error);
         }
+    },
+
+    /** The details could not be loaded: the reason and a retry, in the loading line. */
+    _showDetailsFailure(imageId, error) {
+        const state = document.querySelector('#modal-loading-state');
+        if (!state) return;
+        const reason = window.ServerWatch?.isNetworkFailure(error)
+            ? this._t('server.noAnswer', null, 'the program is not answering')
+            : formatUserError(error, '');
+        const message = document.createElement('span');
+        message.textContent = this._t('modal.loadFailedReason', { reason }, 'Could not load the details: {reason}');
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'btn btn-small';
+        retry.textContent = this._t('modal.loadRetry', null, 'Try again');
+        retry.addEventListener('click', () => this.openPreview(imageId));
+        state.textContent = '';
+        state.append(message, ' ', retry);
+        state.dataset.i18nLocked = '1';
+        state.style.display = '';
     },
 
     /** "512×640 • 4.2 KB"; only the file size while the pixel size is not read yet. */
