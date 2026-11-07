@@ -10,7 +10,7 @@
    instead of a black box. The thumbnail covers it once loaded. */
 .gallery-item.is-video,
 .gallery-item.is-video .gallery-item-media {
-    background: #18181a url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='none' stroke='%23c8873c' stroke-width='1.2'/%3E%3Cpath d='M10 7.8v8.4l6.3-4.2z' fill='%23c8873c'/%3E%3C/svg%3E") center / 34% no-repeat;
+    background: #18181a url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='none' stroke='%23d895a8' stroke-width='1.2'/%3E%3Cpath d='M10 7.8v8.4l6.3-4.2z' fill='%23d895a8'/%3E%3C/svg%3E") center / 34% no-repeat;
 }
 
 .gallery-video-badge {
@@ -38,7 +38,7 @@
     height: 0;
     border-top: 4px solid transparent;
     border-bottom: 4px solid transparent;
-    border-left: 7px solid var(--accent, #C8873C);
+    border-left: 7px solid var(--accent, #D895A8);
 }
 
 .gallery-video-hover {
@@ -67,7 +67,7 @@
     height: 3px;
     background: linear-gradient(
         to right,
-        var(--accent, #C8873C) var(--scrub, 0%),
+        var(--accent, #D895A8) var(--scrub, 0%),
         rgba(255, 255, 255, 0.18) var(--scrub, 0%)
     );
     pointer-events: none;
@@ -110,7 +110,7 @@
 }
 
 .modal-video-bar .btn[aria-pressed="true"] {
-    color: var(--accent, #C8873C);
+    color: var(--accent, #D895A8);
 }
 
 .modal-video-note {
@@ -130,8 +130,8 @@
 
 /* ---------- Gallery banner ---------- */
 .gallery-banner-video {
-    background: var(--accent-soft, rgba(200, 135, 60, 0.12));
-    border-color: var(--accent-line, rgba(200, 135, 60, 0.45));
+    background: var(--accent-soft, rgba(216, 149, 168, 0.12));
+    border-color: var(--accent-line, rgba(216, 149, 168, 0.45));
 }
 
 .gallery-banner-video .gallery-banner-copy {

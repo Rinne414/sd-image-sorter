@@ -125,7 +125,7 @@ export class StyleMapScene {
         this.controls.minDistance = 0.2;
         this.controls.maxDistance = 20;
 
-        this.hoverColor = colorFrom('--accent', '#C8873C');
+        this.hoverColor = colorFrom('--accent', '#D895A8');
         // Per-dot base colours (3 floats each), written by setBaseColors;
         // the no-data grey until a colours answer arrives.
         this.baseColors = new Float32Array(0);
@@ -172,7 +172,7 @@ export class StyleMapScene {
         this.scene.add(this.frame);
 
         this.ring = new THREE.Sprite(new THREE.SpriteMaterial({
-            map: ringTexture(cssVar('--accent', '#C8873C')),
+            map: ringTexture(cssVar('--accent', '#D895A8')),
             transparent: true,
             depthTest: false,
         }));

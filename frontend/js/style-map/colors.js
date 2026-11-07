@@ -7,7 +7,7 @@
  *
  * Palette (registered in docs/DESIGN.md §color-exemptions "Style map point
  * colouring"): twelve fixed category hues that stay clear of pure blue,
- * purple, pink and the amber accent; a viridis ramp for scores; one neutral
+ * purple, pink and the accent; a viridis ramp for scores; one neutral
  * grey for "no data". The hex values are written to the shader as they are
  * (the point shader outputs raw values), so a legend swatch and its dots
  * are the same colour on screen.

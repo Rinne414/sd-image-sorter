@@ -320,7 +320,7 @@ body.entry-active {
        still reads through, the labels stay legible against any cover. */
     background: rgba(14, 14, 14, 0.93);
     /* Owner FB (2026-09-30): the column read "too square" next to the rest of
-       the app. Same corner and faint amber frame as the other cards, plus a
+       the app. Same corner and faint accent frame as the other cards, plus a
        soft shadow so the tiles sit above the cover art. */
     border: 1px solid rgba(var(--accent-rgb), 0.18);
     border-radius: 14px;
@@ -594,7 +594,7 @@ body.entry-active {
 /* Empty-library scan CTA on the Library tile: lift it out of the quiet-subtitle
    grey so the first real step reads as actionable (blue = next action). */
 .entry-fn .fn-sub.is-cta {
-    color: var(--blue, #DFB98E);
+    color: var(--blue, #D895A8);
     font-weight: 600;
 }
 
@@ -644,7 +644,7 @@ body.entry-active {
 }
 
 .entry-library-switcher:hover {
-    color: var(--blue, #DBB180);
+    color: var(--blue, #D895A8);
 }
 
 .entry-library-name {
@@ -676,7 +676,7 @@ body.entry-active {
 }
 
 .entry-library-sub.is-cta {
-    color: var(--blue, #DBB180);
+    color: var(--blue, #D895A8);
     font-weight: 600;
 }
 
@@ -692,7 +692,7 @@ body.entry-active {
     border: none;
     border-radius: 10px;
     padding: 9px 18px;
-    background: var(--blue, #DBB180);
+    background: var(--blue, #D895A8);
     color: var(--on-accent, #161616);
     font: inherit;
     font-size: 14px;
@@ -701,7 +701,7 @@ body.entry-active {
 }
 
 .entry-library-enter:hover {
-    background: var(--blue-hover, #E2C19A);
+    background: var(--blue-hover, #E4A9B9);
 }
 
 .entry-library-manage {
@@ -816,7 +816,7 @@ body.entry-active {
     border: 1px dashed rgba(255, 255, 255, 0.16);
     border-radius: 8px;
     background: transparent;
-    color: var(--blue, #DBB180);
+    color: var(--blue, #D895A8);
     font: inherit;
     font-size: 12px;
     font-weight: 700;

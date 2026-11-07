@@ -26,5 +26,5 @@ def test_video_cards_have_the_play_mark_tile_behind_the_thumbnail():
     body = match.group(1)
     assert "#18181a" in body  # the server tile's background (24, 24, 26)
     assert (
-        "data:image/svg+xml" in body and "%23c8873c" in body
-    )  # its play mark (200, 135, 60)
+        "data:image/svg+xml" in body and "%23d895a8" in body
+    )  # its play mark (216, 149, 168)

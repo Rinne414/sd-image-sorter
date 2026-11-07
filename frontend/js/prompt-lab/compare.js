@@ -46,7 +46,7 @@ Object.assign(window.PromptLab, {
                     </div>
                 </div>
                 <div class="promptlab-diff-card">
-                    <h5 style="color:#E7CAA9;">${this._t('promptlab.onlyInImage', 'Only in {name}', { name: result.image_a.filename })} (${result.prompt_only_a.length})</h5>
+                    <h5 style="color:var(--accent-bright);">${this._t('promptlab.onlyInImage', 'Only in {name}', { name: result.image_a.filename })} (${result.prompt_only_a.length})</h5>
                     <div class="promptlab-diff-tags">${renderTags(result.prompt_only_a, 'only-a') || `<span style="color:var(--text-muted)">${this._t('promptlab.none', 'None')}</span>`}</div>
                     <div class="promptlab-action-buttons" style="margin-top:10px;">
                         <button class="btn btn-secondary btn-small" data-action="build-image" data-image-id="${result.image_a.id}">${this._t('promptlab.openImageABuild', 'Open Image A in Build')}</button>

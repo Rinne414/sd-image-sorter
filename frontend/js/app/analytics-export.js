@@ -10,7 +10,7 @@
 let _confirmAbort = null;
 
 // options.tone: 'danger' (default, the red confirm button) or 'primary' (a plain
-// amber confirm button for questions that are not destructive).
+// accent confirm button for questions that are not destructive).
 // options.focusOk: start on OK instead of Cancel, so Enter says yes.
 function showConfirm(title, message, onOk, onCancel, options = {}) {
     lockDynamicI18nText('#confirm-title', 'modal.confirm');

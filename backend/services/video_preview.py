@@ -112,12 +112,12 @@ def video_placeholder_thumbnail(size: int) -> bytes:
     center = side // 2
     draw.ellipse(
         (center - radius, center - radius, center + radius, center + radius),
-        outline=(200, 135, 60), width=max(2, side // 64),
+        outline=(216, 149, 168), width=max(2, side // 64),
     )
     tip = radius // 2
     draw.polygon(
         [(center - tip // 2, center - tip), (center - tip // 2, center + tip), (center + tip, center)],
-        fill=(200, 135, 60),
+        fill=(216, 149, 168),
     )
     buffer = io.BytesIO()
     image.save(buffer, format="WEBP", quality=85)

@@ -7,7 +7,7 @@ import type { ColorsAnswer, LegendEntry } from './types'
 //
 // Data colours (docs/DESIGN_VOPUS.md §color-exemptions "Style Map dots"),
 // the same as the classic page: twelve category hues that stay clear of pure
-// blue, purple, pink and the amber accent; a viridis ramp for scores; one
+// blue, purple, pink and the accent; a viridis ramp for scores; one
 // neutral grey for "no data". They go to the shader as they are, so a legend
 // swatch and its dots are the same colour on screen.
 

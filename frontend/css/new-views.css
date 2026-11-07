@@ -1071,7 +1071,7 @@
     min-width: 3.5ch;
     justify-content: flex-end;
     font-weight: 700;
-    color: #E5C6A2;
+    color: var(--accent-bright);
 }
 
 .artist-rank {
@@ -1176,7 +1176,7 @@
 .artist-image-confidence {
     font-size: 11px;
     font-weight: 700;
-    color: #E5C6A2;
+    color: var(--accent-bright);
 }
 
 .artist-image-name {

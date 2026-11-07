@@ -101,8 +101,8 @@
 /* First-visit hint. This was a looping pulse animation; motion is functional
    only now, so the unseen state is carried by a static accent outline instead. */
 .guide-btn--pulse {
-    border-color: var(--accent-line, rgba(200, 135, 60, 0.45));
-    color: var(--accent, #C8873C);
+    border-color: var(--accent-line, rgba(216, 149, 168, 0.45));
+    color: var(--accent, #D895A8);
 }
 
 .guide-overlay {

@@ -1,7 +1,7 @@
 /**
  * Marker rings for the nearest-picture lookup (S4c): a pool of camera-facing
- * sprites over the point cloud. The query point is a large filled amber disc,
- * a near neighbour a thin amber ring, a far one (below the weak threshold) a
+ * sprites over the point cloud. The query point is a large filled accent disc,
+ * a near neighbour a thin accent ring, a far one (below the weak threshold) a
  * grey dashed ring. Sprites are reused between lookups; the ones not needed
  * are hidden, never destroyed, so repeated drops allocate nothing.
  */
@@ -57,7 +57,7 @@ function drawTexture(kind, accent, muted) {
 export class RingPool {
     constructor(scene) {
         this.scene = scene;
-        const accent = cssVar('--accent', '#C8873C');
+        const accent = cssVar('--accent', '#D895A8');
         const muted = cssVar('--muted', '#8A8A90');
         this.materials = Object.fromEntries(RING_KINDS.map((kind) => [
             kind,

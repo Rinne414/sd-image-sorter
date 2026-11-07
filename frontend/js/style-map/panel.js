@@ -188,7 +188,7 @@ export class StyleMapPanel {
     }
 
     /**
-     * The toolbar button says whether there is work to do: an amber primary
+     * The toolbar button says whether there is work to do: an accent primary
      * "Build" while pictures lack style data, a secondary "Refresh" once
      * every picture has it. The label moves with its i18n key so a language
      * switch keeps the right words.

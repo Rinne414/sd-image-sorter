@@ -69,7 +69,7 @@
   opacity: 1;
 }
 
-/* On film the amber edge print is the focus colour in both themes. */
+/* On film the sakura edge print is the focus colour in both themes. */
 .frame:focus-visible,
 .more:focus-visible {
   outline: 2px solid var(--edge-print);

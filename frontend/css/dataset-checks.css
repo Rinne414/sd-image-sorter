@@ -51,7 +51,7 @@
     display: block;
     width: 0;
     height: 100%;
-    background: var(--accent-secondary, #D29C5E);
+    background: var(--accent-secondary, #D895A8);
     transition: width 160ms ease;
 }
 

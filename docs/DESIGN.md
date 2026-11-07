@@ -12,10 +12,27 @@ wrong — see `docs/AI_PRINCIPLES.md` for the authority order.
 
 The owner: "I want to redesign the sorter, don't make them rules... I still
 thinking the sorter frontend is far to a 'suitable product'." So today's look
-(top bar, amber accent, 10/12/14/16 px radii, font stack, rules 12, 15 and 22
+(top bar, sakura accent, 10/12/14/16 px radii, font stack, rules 12, 15 and 22
 below, and the look of `docs/DESIGN_VOPUS.md`) describes the current classic
 and Vopus interfaces. It is history for the redesign, not a rule for it. Small
 fixes to classic and Vopus stay consistent with their current look.
+
+**Accent colour, 2026-11-07:** the amber accent is gone (the owner does not
+like amber). Classic and Vopus now use one dusty sakura, a low-chroma
+cherry-blossom pink: the pictures here are anime illustration, it stays calm
+beside colourful images, and it is not a model-default accent. Values: classic
+dark `--accent #D895A8` (hover `#E4A9B9`, active `#C27C91`, ink on a solid
+accent `#1A1216`, wash 12 %, line 45 %); Vopus dark `#D895A8` and Vopus
+light `#944059` (a deeper rose so it reads as text; the light wash is 10 %).
+The film edge print is `#D895A8` in both Vopus themes. Colour only: layout,
+shape, fonts and text did not change, and `/next/` kept its own tokens.
+Status colours (warning, success, danger), generator chips, tag categories, the
+hue filter dots, the WASD direction keys, stars and the style-map palette are
+data and stay as they were. To undo: `git revert` the commit "style: dusty
+sakura accent", or put back the old values (classic `#C8873C`, Vopus dark
+`#e2a03f`, Vopus light `#844e03`) in `frontend/css/tokens.css` and
+`frontend-v4/src/design/tokens.css`. The look lines below that say "amber"
+describe the look before this date.
 
 **Product decisions that stand:** desktop and laptop only (1366×768 to
 2560×1440 and up), Simplified Chinese plus English, no feature or entrance
@@ -292,7 +309,7 @@ the craft layer below still apply to every interface.)
 
 12. **One accent. Color is not a category system.**
     Graphite surfaces are true-neutral (R=G=B). Exactly one accent
-    (`--accent`, restrained amber) marks the primary action and the
+    (`--accent`, dusty sakura since 2026-11-07; amber before) marks the primary action and the
     selected state. Status colours (success / warning / danger) are data
     and always sit next to a glyph. Historical names `--blue` / `--pink` /
     `--purple` in older CSS remap onto this: blue and pink are the accent,
@@ -355,7 +372,7 @@ checked on every screen, not only the one that was reported.
     from rule 12; never build a data colour from `--blue` / `--purple`, which
     resolve to the accent.
 22. **Keep the look the owner likes.** Rounded corners (radius tokens
-    10 / 12 / 14 / 16px), visible card frames, the amber accent, buttons that
+    10 / 12 / 14 / 16px), visible card frames, the accent colour, buttons that
     look like buttons, some depth. A flat, borderless, square, grey pass was
     rejected on 2026-09-30 and reverted. Change the look with one sample and
     before/after screenshots (1366×768 and 1920×1080) first, never site-wide
@@ -701,7 +718,7 @@ Registered data-viz palettes:
 - **Style map point colouring** (`frontend/js/style-map/colors.js`, S4a,
   2026-10-01): the dots of the 3-D map encode a data field the user picks
   (generator, folder, artist, three aesthetic scores). Twelve fixed category
-  hues, chosen to stay clear of pure blue, purple, pink and the amber accent:
+  hues, chosen to stay clear of pure blue, purple, pink and the accent (sakura since 2026-11-07):
   red `#D8524B`, salmon `#E8927C`, olive `#A9A331`, yellow-green `#7FB83C`,
   green `#36A853`, deep green `#1E7F55`, mint `#5FC9A6`, teal `#239E9A`, cyan
   `#3BA7D1`, slate `#1F6F8E`, brown `#8B5E3C`, mustard `#E0C84D`; the folded

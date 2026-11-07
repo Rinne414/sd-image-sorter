@@ -25,7 +25,7 @@
     --bg-card: var(--surface-panel);
     --bg-card-solid: var(--surface-card-solid);
     --bg-hover: var(--surface-hover);
-    --accent-primary: #E2C099;
+    --accent-primary: #D895A8;
     --accent-primary-rgb: 124, 139, 255;
     --accent-secondary: var(--accent);
     --accent-secondary-rgb: 51, 214, 224;
@@ -384,7 +384,7 @@ body::after {
 
 .tab-step {
     background: rgba(var(--accent-primary-rgb), 0.18);
-    color: #E6C9A7;
+    color: var(--accent-bright);
 }
 
 .nav-tab.active .tab-step {
@@ -835,7 +835,7 @@ textarea:focus,
     border-radius: 999px;
     background: rgba(var(--accent-primary-rgb), 0.16);
     border: 1px solid rgba(var(--accent-primary-rgb), 0.24);
-    color: #EBD4BA;
+    color: var(--accent-bright);
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.08em;
@@ -1754,7 +1754,7 @@ html:has(#view-gallery.active) {
 }
 
 .gallery-scope-btn:focus-visible {
-    outline: 2px solid var(--accent-primary, #DBB180);
+    outline: 2px solid var(--accent-primary, #D895A8);
     outline-offset: 1px;
 }
 
@@ -2473,9 +2473,9 @@ html:has(#view-gallery.active) {
     gap: 12px 16px;
     margin: 0 0 16px;
     padding: 14px 16px;
-    border: 1px solid var(--accent, #d39f64);
+    border: 1px solid var(--accent, #D895A8);
     border-radius: 14px;
-    background: rgba(211, 159, 100, 0.12);
+    background: var(--accent-soft, rgba(216, 149, 168, 0.12));
 }
 
 .prepare-restart-banner-copy {
@@ -2979,7 +2979,7 @@ html:has(#view-gallery.active) {
     width: 26px;
     height: 26px;
     background: rgba(var(--accent-primary-rgb), 0.18);
-    color: #E5C6A2;
+    color: var(--accent-bright);
     border-radius: 50%;
     font-weight: 700;
     font-size: 13px;
@@ -3012,7 +3012,7 @@ html:has(#view-gallery.active) {
 }
 
 .onboarding-step-copy em {
-    color: #E5C6A2;
+    color: var(--accent-bright);
     font-style: normal;
     font-weight: 600;
     background: rgba(var(--accent-primary-rgb), 0.10);
@@ -3869,7 +3869,7 @@ html:has(#view-gallery.active) {
     border: 1px solid rgba(var(--accent-primary-rgb), 0.3);
     border-radius: 999px;
     background: rgba(var(--accent-primary-rgb), 0.14);
-    color: #ECD6BC;
+    color: var(--accent-bright);
     font-size: var(--fs-label);
     font-weight: 700;
     letter-spacing: 0.02em;
@@ -5716,11 +5716,11 @@ html:has(#view-gallery.active) {
     color: var(--text-primary, #fff);
     /* --accent was never defined, so the off-palette fallback rendered —
        point at the real Aurora token. */
-    border-color: var(--blue, #DFB98D);
+    border-color: var(--blue, #D895A8);
 }
 
 .btn-group-action:focus-visible {
-    outline: 2px solid var(--blue, #DFB98D);
+    outline: 2px solid var(--blue, #D895A8);
     outline-offset: 2px;
 }
 
@@ -6499,7 +6499,7 @@ html:has(#view-gallery.active) {
  * Reminds the user that we only checked the embedded metadata
  * (EXIF + C2PA), not the invisible in-pixel watermark (SynthID).
  * Sits right under the .modal-meta row so it's visible without
- * scrolling but unobtrusive. Color-coded amber so it reads as
+ * scrolling but unobtrusive. Color-coded accent so it reads as
  * "FYI", not as an error. */
 .modal-ai-provider-note {
     display: flex;
@@ -9166,7 +9166,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     border-radius: 10px;
     border: 1px solid rgba(var(--accent-primary-rgb), 0.26);
     background: rgba(var(--accent-primary-rgb), 0.10);
-    color: #E9CFB2;
+    color: var(--accent-bright);
     font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.02em;
@@ -10793,7 +10793,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 .nav-tools-toggle.menu-open {
     background: rgba(var(--accent-primary-rgb), 0.14);
     border-color: var(--border-color);
-    color: #EFDBC5;
+    color: var(--accent-bright);
     box-shadow: inset 0 0 0 1px rgba(var(--accent-primary-rgb), 0.12);
 }
 .nav-tools-caret {
@@ -10844,12 +10844,12 @@ html.lang-zh #view-censor .queue-action-btn span {
     padding: 1px 7px;
     border-radius: 8px;
     background: rgba(var(--accent-rgb), 0.16);
-    color: #E5C7A4;
+    color: var(--accent-bright);
 }
 
 .nav-tools-mirror.active {
     background: rgba(var(--accent-primary-rgb), 0.14);
-    color: #EFDBC5;
+    color: var(--accent-bright);
 }
 
 /* ==========================================================================
@@ -11217,7 +11217,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     box-shadow: inset 0 0 0 1px rgba(var(--accent-primary-rgb, 124, 139, 255), 0.28);
 }
 .sepcon-view-tab:focus-visible {
-    outline: 2px solid var(--accent-primary, #E2C099);
+    outline: 2px solid var(--accent-primary, #D895A8);
     outline-offset: 2px;
 }
 .sepcon-view-refresh {
@@ -11238,7 +11238,7 @@ html.lang-zh #view-censor .queue-action-btn span {
     background: rgba(255, 255, 255, 0.05);
 }
 .sepcon-view-refresh:focus-visible {
-    outline: 2px solid var(--accent-primary, #E2C099);
+    outline: 2px solid var(--accent-primary, #D895A8);
     outline-offset: 2px;
 }
 .sepcon-issues-panel {

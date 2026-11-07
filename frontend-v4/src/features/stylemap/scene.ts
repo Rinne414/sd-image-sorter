@@ -206,7 +206,7 @@ export class StyleMapScene {
     this.controls.minDistance = 0.2
     this.controls.maxDistance = 20
     this.controls.listenToKeyEvents(canvas)
-    this.hoverColor = colorFrom('--accent', '#e2a03f')
+    this.hoverColor = colorFrom('--accent', '#d895a8')
     this.material = new THREE.ShaderMaterial({
       uniforms: { scale: { value: 1 }, fogNear: { value: 0 }, fogFar: { value: 1 }, farAlpha: { value: FAR_ALPHA } },
       vertexShader: VERTEX_SHADER,
@@ -265,8 +265,8 @@ export class StyleMapScene {
   applyTheme(): void {
     this.scene.background = colorFrom('--stage', '#0a0909')
     ;(this.frame.material as THREE.LineBasicMaterial).color = colorFrom('--line-strong', '#3d3a34')
-    this.hoverColor = colorFrom('--accent', '#e2a03f')
-    const accent = cssVar('--accent', '#e2a03f')
+    this.hoverColor = colorFrom('--accent', '#d895a8')
+    const accent = cssVar('--accent', '#d895a8')
     const muted = cssVar('--muted', '#989184')
     const hover = this.hoverRing.material
     hover.map?.dispose()

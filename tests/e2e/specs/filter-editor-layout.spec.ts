@@ -4,7 +4,7 @@ import { expect, test, type Page } from '../fixtures/click-ledger'
  * Filter editor layout (owner review 2026-09-30, DESIGN.md rules 18-21):
  * - the model / LoRA lists were capped in a short scroll box while the right
  *   column ended above empty space; they now grow to the left column's height;
- * - cyan / blue / purple / pink colour dots all read as amber;
+ * - cyan / blue / purple / pink colour dots all read as the accent;
  * - the aspect-ratio label repeated the panel title (尺寸与比例);
  * - empty tag / prompt trays left a blank band with a divider.
  */

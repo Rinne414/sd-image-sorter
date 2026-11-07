@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 /**
  * --accent-contrast was light text when these rules were written; the Graphite
- * tokens made it the dark ink that goes on a solid amber fill. Two places kept
+ * tokens made it the dark ink that goes on a solid accent fill. Two places kept
  * using it as text on a dark surface and went dark on dark: the Queue Manager
  * title and the selected LoRA preset chip. Both must read at WCAG AA (4.5:1)
  * against what is actually behind them.

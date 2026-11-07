@@ -13,7 +13,7 @@
      1. Surfaces are TRUE NEUTRAL graphite. No blue, indigo or violet cast.
         A hue-tinted "dark theme" is the single loudest generated-UI tell, and
         a tinted chrome also lies about the colour of the images on screen.
-     2. Exactly ONE accent (--accent, a restrained amber). It marks the
+     2. Exactly ONE accent (--accent, a dusty sakura pink). It marks the
         primary action and the active/selected state. Nothing else. It is
         never a gradient, never a glow, never decoration.
      3. Panels are flat and separated by 1px hairlines. Shadows are neutral
@@ -44,18 +44,21 @@
     --muted: #8A8A90;           /* 5.62:1 — still AA at 12px */
     --text-disabled: #5A5A60;   /* non-interactive only */
 
-    /* ===== The one accent: restrained amber =====
-       Chosen for the instrument-panel register of real desktop tools. It is
-       deliberately outside the cyan/violet/magenta range that reads as
-       generated. 6.42:1 as text on --bg; 6.42:1 for --on-accent ink on the
-       solid fill, so it works as text AND as a button surface. */
-    --accent: #C8873C;
-    --accent-rgb: 200, 135, 60;
-    --accent-bright: #D8974C;   /* hover: +1 step */
-    --accent-deep: #AE7231;     /* active: -1 step */
-    --accent-soft: rgba(200, 135, 60, 0.12);   /* selected row/tile wash */
-    --accent-line: rgba(200, 135, 60, 0.45);   /* selected outline */
-    --on-accent: #17120A;       /* ink on a solid accent fill */
+    /* ===== The one accent: dusty sakura (2026-11-07) =====
+       A low-chroma cherry-blossom pink, chosen because the pictures here are
+       anime illustration; it stays calm beside colourful images and is not a
+       model-default accent. The owner dislikes amber, which it replaces.
+       8.07:1 as text on --bg, 7.69:1 for --on-accent ink on the solid fill,
+       so it works as text AND as a button surface. Dusty and pale on purpose:
+       it must stay clearly apart from --danger (a saturated coral red).
+       To go back: git revert the "style: dusty sakura" commit. */
+    --accent: #D895A8;
+    --accent-rgb: 216, 149, 168;
+    --accent-bright: #E4A9B9;   /* hover: +1 step */
+    --accent-deep: #C27C91;     /* active: -1 step */
+    --accent-soft: rgba(216, 149, 168, 0.12);   /* selected row/tile wash */
+    --accent-line: rgba(216, 149, 168, 0.45);   /* selected outline */
+    --on-accent: #1A1216;       /* ink on a solid accent fill */
 
     /* ===== Status — data, always paired with a glyph ===== */
     --success: #5FB37E;
@@ -127,8 +130,8 @@
        describe a colour or a meaning; they exist only because hundreds of
        rules in the older sheets still reference them. What they actually
        resolve to now:
-         --blue   -> --accent  (the one amber; former "next action")
-         --pink   -> --accent  (the one amber; former "user selection")
+         --blue   -> --accent  (the one accent; former "next action")
+         --pink   -> --accent  (the one accent; former "user selection")
          --purple -> #B7B7BD   (neutral grey; former "AI output")
        So --blue and --pink are the SAME colour, and nothing is blue, pink or
        violet anywhere in the app. The old three-accent semantics are gone:
@@ -309,7 +312,7 @@ textarea:focus-visible,
     outline-offset: 2px;
 }
 
-/* Primary action: one solid ACCENT (amber) button per screen, dark ink.
+/* Primary action: one solid ACCENT (sakura) button per screen, dark ink.
    There is no gradient anywhere — not for cross-step actions, not for the
    brand. Hover = +1 lightness step, active = −1. */
 .btn-primary {
@@ -819,7 +822,7 @@ textarea:focus-visible,
     background: var(--empty-bg);
 }
 
-/* Onboarding step numbers: blue = next action, not decorative amber. */
+/* Onboarding step numbers: blue = next action, not a decorative colour. */
 .onboarding-step {
     background: var(--wash);
     border: 1px solid var(--border);
@@ -2416,8 +2419,8 @@ li > .icon {
     color: var(--text);
 }
 
-/* Status cards must not borrow the accent — amber-filled means "do this",
-   amber-outlined-with-a-glyph means "read this". Warnings get the yellow
+/* Status cards must not borrow the accent — accent-filled means "do this",
+   accent-outlined-with-a-glyph means "read this". Warnings get the yellow
    status token so the two never look like the same thing. */
 .scope-status-card.is-warning,
 .gallery-banner-warning,
@@ -2775,7 +2778,7 @@ li > .icon {
 /* --- Stuck-job recovery: a secondary action, never a competing one --------
    Offered inside a progress panel once a job has been stranded in
    `cancelling`. It sits beside the panel's own Cancel/Hide controls, so it
-   stays on the neutral surface with a hairline border — the amber accent
+   stays on the neutral surface with a hairline border — the accent
    belongs to the primary action alone. */
 
 .btn-reset-operation {

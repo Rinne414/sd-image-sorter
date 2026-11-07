@@ -6,7 +6,7 @@
   border-left: 1px solid var(--line);
 }
 
-/* Brush / Detect / Review: printed tabs on a rule, the open one underlined in amber. */
+/* Brush / Detect / Review: printed tabs on a rule, the open one underlined in the accent. */
 .tabs {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

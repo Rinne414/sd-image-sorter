@@ -618,7 +618,7 @@ a.reader-lora-tag:hover { opacity: 0.8; text-decoration: underline; }
 }
 
 .reader-hash-name { font-size: var(--fs-footnote); color: var(--text-muted); white-space: nowrap; }
-.reader-hash-value { font-size: var(--fs-label); font-family: var(--font-mono); color: var(--accent-primary, #DDB586); text-decoration: none; }
+.reader-hash-value { font-size: var(--fs-label); font-family: var(--font-mono); color: var(--accent-primary, #D895A8); text-decoration: none; }
 .reader-hash-value:hover { text-decoration: underline; }
 .reader-hash-badge { font-size: 0.6rem; font-family: var(--font-mono); color: var(--text-muted); background: rgba(255,255,255,0.05); padding: 1px 3px; border-radius: 3px; margin-left: 3px; }
 
