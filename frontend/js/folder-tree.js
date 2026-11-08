@@ -190,6 +190,17 @@
             return names[0] === '/' ? `/${shown.slice(1).join('/')}` : shown.join('/');
         },
 
+        /**
+         * The chain label with its leading folders in a span a look may hide, so
+         * the row can show just the folder's own name (the tooltip has the path).
+         */
+        _chainLabelHtml(chain) {
+            const label = this._chainLabel(chain);
+            const cut = label.lastIndexOf('/');
+            if (cut <= 0 || cut === label.length - 1) return escapeHtml(label);
+            return `<span class="folder-row-prefix">${escapeHtml(label.slice(0, cut + 1))}</span>${escapeHtml(label.slice(cut + 1))}`;
+        },
+
         /** The row's folder button for a path; a path inside a chain finds the chain's row. */
         _openButtonFor(path) {
             const container = document.getElementById('folder-tree');
@@ -307,7 +318,7 @@
                 + `<button type="button" class="folder-row-open" data-action="browse" data-path="${safePath}"${chainAttr} `
                 + `aria-pressed="${isActive ? 'true' : 'false'}" title="${safePath}">`
                 + '<span class="folder-row-icon" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg></span>'
-                + `<span class="folder-row-name">${escapeHtml(this._chainLabel(chain))}</span>`
+                + `<span class="folder-row-name">${this._chainLabelHtml(chain)}</span>`
                 + '</button></div>';
 
             if (hasKids && isExpanded) {
