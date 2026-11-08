@@ -1290,3 +1290,63 @@ html[data-look="pro"] #view-gallery .gallery-header {
 html[data-look="pro"] #view-gallery #gallery-search-row {
     margin-top: 0;
 }
+
+/* ---- From blind round 6 (pro 6/5) ---- */
+
+/* No empty strip between two lines under the library row: Filters comes
+   first in the page but shows last, so Folders carried the "next section"
+   line and gap at the very top. */
+html[data-look="pro"] .filter-sidebar-scroll {
+    padding-top: 8px;
+}
+
+html[data-look="pro"] .filter-sidebar .sidebar-section[data-sidebar-section="folders"] {
+    border-top: 0;
+    margin-top: 0;
+    padding-top: 4px;
+}
+
+/* Zero counts stay (every row has a count) but step back. */
+html[data-look="pro"] #collections-list .collection-row-count.is-zero {
+    opacity: 0.45;
+}
+
+/* Fold arrows are visible marks, not faint dust. */
+html[data-look="pro"] #collections-list .collection-row-fold,
+html[data-look="pro"] #folder-tree .folder-row-toggle {
+    color: var(--text-secondary);
+}
+
+/* One style for the icon groups: the aspect switch drops its frame like the
+   view buttons beside it; the chosen part is the lifted grey in both. */
+html[data-look="pro"] #view-gallery .aspect-quick-toggle {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    padding: 0;
+    gap: 2px;
+}
+
+html[data-look="pro"] #view-gallery .aspect-quick-btn {
+    width: 32px;
+    min-width: 32px;
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] #view-gallery .aspect-quick-btn:not(.is-active):hover {
+    background: var(--surface-3);
+}
+
+/* Bold only where it ranks: Group runs and the quick chips are regular
+   controls, not bold text. */
+html[data-look="pro"] #view-gallery #btn-group-runs,
+html[data-look="pro"] #view-gallery .gallery-chip {
+    font-weight: 500;
+}
+
+/* Small grey words a step brighter (version, the Ctrl K key, chip labels). */
+html[data-look="pro"] .brand-version,
+html[data-look="pro"] .nav-catalog-key kbd,
+html[data-look="pro"] #view-gallery .gallery-chip {
+    color: var(--text-secondary);
+}
