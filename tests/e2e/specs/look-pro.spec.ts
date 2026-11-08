@@ -193,7 +193,7 @@ test('pro look: the gallery toolbar has one control height and the grid starts w
   await open(page, 'pro')
   await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible()
   const look = await page.evaluate(() => {
-    const controls = ['#generator-tabs', '.view-btn[data-size="grid"]', '#btn-group-runs', '#gallery-search-input', '#btn-search-help', '#btn-pro-filters', '#gallery-sort', '#sort-reverse-btn']
+    const controls = ['#generator-tabs', '.view-btn[data-size="grid"]', '#btn-group-runs', '#gallery-search-input', '#btn-pro-filters', '#gallery-sort', '#sort-reverse-btn']
     const heights = [...new Set(controls.map((sel) => Math.round(document.querySelector(sel)!.getBoundingClientRect().height)))]
     const left = (sel: string) => Math.round(document.querySelector(sel)!.getBoundingClientRect().left)
     return { heights, edgeGap: Math.abs(left('#gallery-grid .gallery-item') - left('#gallery-search-input')) }

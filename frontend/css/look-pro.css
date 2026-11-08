@@ -1589,3 +1589,58 @@ html[data-look="pro"] .pro-filter-popover .pro-filter-popover-more {
 html[data-look="pro"] .pro-filter-popover[hidden] {
     display: none;
 }
+
+/* ---- From blind round 9 (pro 5.5/5) ---- */
+
+/* A narrower sidebar leaves the pictures more room (no owner ruling on its
+   width; today's look keeps 320-360 px). */
+html[data-look="pro"] {
+    --sidebar-width: clamp(260px, 17vw, 300px);
+}
+
+/* Sidebar hierarchy: the library name leads, section titles are small labels,
+   items are the readable size. */
+html[data-look="pro"] #sidebar-library-name {
+    font-size: 15px;
+}
+
+html[data-look="pro"] .sidebar-section-title {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+/* "More" shows one sign: the chevron (the three dots repeated it). */
+html[data-look="pro"] #nav-tools-toggle .tab-icon {
+    display: none;
+}
+
+/* The search syntax help sits inside the search field's right end. */
+html[data-look="pro"] #view-gallery .gallery-search-box #gallery-search-input {
+    padding-right: 34px;
+}
+
+html[data-look="pro"] #view-gallery #btn-search-help {
+    position: relative;
+    z-index: 1;
+    margin-left: -38px;
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    min-height: 28px;
+}
+
+/* Group runs reads as a mode: an icon before the word, the lifted grey when on. */
+html[data-look="pro"] #view-gallery #btn-group-runs::before {
+    content: "";
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    background: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m12 3 9 4.5-9 4.5-9-4.5z'/%3E%3Cpath d='m3 16.5 9 4.5 9-4.5'/%3E%3Cpath d='m3 12 9 4.5L21 12'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m12 3 9 4.5-9 4.5-9-4.5z'/%3E%3Cpath d='m3 16.5 9 4.5 9-4.5'/%3E%3Cpath d='m3 12 9 4.5L21 12'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* The grid's top padding matches its sides. */
+html[data-look="pro"] #view-gallery #gallery-grid {
+    padding-top: 14px;
+}

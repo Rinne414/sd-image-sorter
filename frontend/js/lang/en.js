@@ -257,7 +257,7 @@ window.I18nLang_en = {
     'action.library': 'Library',
     'nav.tagLibrary': 'Tags and prompts',
     'library.switchTitle': 'Switch or manage libraries',
-    'gallerySearch.filterButton': 'Filter',
+    'gallerySearch.filterButton': 'Quick filters',
     'gallerySearch.moreConditions': 'More conditions…',
     'action.libraryTooltip': 'Browse all tags and prompts in your library',
     'action.help': 'Help',
