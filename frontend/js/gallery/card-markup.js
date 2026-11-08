@@ -196,7 +196,7 @@ Object.assign(window.Gallery, {
         try {
             const options = this._buildVirtualListOptions(grid, scrollContainer, viewMode);
             this.virtualList = new VirtualListClass(options);
-            this.virtualList.init(this.images);
+            this.virtualList.init(this._displayItems ? this._displayItems() : this.images);
             this.useVirtualScroll = true;
             this._scheduleVisibleLargeImageUpgrade();
 
@@ -217,6 +217,9 @@ Object.assign(window.Gallery, {
      */
     createVirtualGalleryItem(index, image, viewMode) {
         const { AppState } = getGalleryAppContext();
+        // With "Group runs" the grid position differs from the picture's place
+        // in Gallery.images; range selection and the order badge use the latter.
+        const flatIndex = Number.isInteger(image._flatIndex) ? image._flatIndex : index;
         const genColors = this._getGenColors();
         const generatorValue = this._normalizeGenerator(image.generator);
         const generatorLabel = this._formatGeneratorLabel(generatorValue);
@@ -233,16 +236,18 @@ Object.assign(window.Gallery, {
         if (isLarge) {
             item.classList.add('large-card');
         }
-        if (isGalleryImageSelected(AppState, image.id)) {
+        // A stack (Group runs) is marked only when every picture of its run is selected.
+        const isSelected = this._isTileSelected(AppState, image.id, image._stack?.ids);
+        if (isSelected) {
             item.classList.add('selected');
         }
         item.dataset.id = image.id;
-        item.dataset.index = index;
+        item.dataset.index = flatIndex;
         item.draggable = true;
         item.setAttribute('tabindex', '0');
         item.setAttribute('role', 'gridcell');
         item.setAttribute('aria-label', `${image.filename || 'Image'} - ${generatorLabel}`);
-        item.setAttribute('aria-selected', isGalleryImageSelected(AppState, image.id) ? 'true' : 'false');
+        item.setAttribute('aria-selected', isSelected ? 'true' : 'false');
 
         // A card rendered mid-flick waits for its picture until the gallery settles.
         const deferThumb = Boolean(this._thumbGate?.shouldDefer());
@@ -255,8 +260,9 @@ Object.assign(window.Gallery, {
             !deferThumb
         );
         if (deferThumb) this._thumbGate.defer(item);
-        this._attachGalleryOrderBadge(item, index);
+        this._attachGalleryOrderBadge(item, flatIndex);
         this._decorateVideoCard?.(item, image);
+        this._decorateRunStack?.(item, image);
 
         // Add event listeners
         item.addEventListener('click', (event) => {
@@ -269,7 +275,9 @@ Object.assign(window.Gallery, {
                 this.toggleFavorite(image.id);
                 return;
             }
-            if (AppState.selectionMode) {
+            if (AppState.selectionMode && image._stack) {
+                this._handleStackSelection(event, image._stack.ids, flatIndex);
+            } else if (AppState.selectionMode) {
                 this.handleSelectionInteraction(event, image.id, Number(item.dataset.index));
             } else {
                 this.openPreview(image.id);
@@ -284,7 +292,9 @@ Object.assign(window.Gallery, {
         item.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                if (AppState.selectionMode) {
+                if (AppState.selectionMode && image._stack) {
+                    this._handleStackSelection(e, image._stack.ids, flatIndex);
+                } else if (AppState.selectionMode) {
                     this.handleSelectionInteraction(e, image.id, Number(item.dataset.index));
                 } else {
                     this.openPreview(image.id);

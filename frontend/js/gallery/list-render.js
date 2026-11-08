@@ -30,9 +30,10 @@ Object.assign(window.Gallery, {
             (wantsWaterfall ? this._isWaterfallVirtualList() : !this._isWaterfallVirtualList())
         );
 
+        this.syncRunGroupingButton?.();
         if (canReuseVirtual) {
             this.useVirtualScroll = true;
-            this.virtualList.setItems(images);
+            this.virtualList.setItems(this._displayItems ? this._displayItems() : images);
             this._scheduleVisibleLargeImageUpgrade();
             return;
         }
@@ -87,9 +88,14 @@ Object.assign(window.Gallery, {
             return;
         }
 
-        // If using virtual scrolling, append to virtual list
+        // If using virtual scrolling, append to virtual list. With runs grouped
+        // the last stack may grow across the page boundary: regroup the whole list.
         if (this.useVirtualScroll && this.virtualList) {
-            this.virtualList.appendItems(newImages);
+            if (this._runGroupingActive?.()) {
+                this.virtualList.setItems(this._displayItems());
+            } else {
+                this.virtualList.appendItems(newImages);
+            }
             return;
         }
 

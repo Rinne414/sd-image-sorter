@@ -1048,6 +1048,10 @@
                             <button class="view-btn" data-size="waterfall" title="Waterfall view" aria-label="Waterfall view" aria-pressed="false" data-i18n-title="gallery.viewWaterfall" data-i18n-aria="gallery.viewWaterfall">
                                 <span aria-hidden="true">▥</span>
                             </button>
+                            <!-- Group runs (gallery/run-stack-view.js): one stack per generation run. -->
+                            <button type="button" class="view-btn group-runs-btn" id="btn-group-runs" aria-pressed="false"
+                                    title="Show each generation run (same prompt, model and size, minutes apart) as one stack"
+                                    data-i18n="gallery.groupRuns">Group runs</button>
                             <!-- Owner FB-3: visible thumbnail-size control. Same state as the
                                  [ / ] shortcuts (app.js updateGridSize, 'sd-sorter:grid-size'). -->
                             <div class="grid-size-control" role="group" aria-label="Thumbnail size"
@@ -8767,6 +8771,8 @@
     <script src="/static/js/gallery/generator-note.js"></script>
     <script src="/static/js/gallery/virtual-layout.js"></script>
     <script src="/static/js/gallery/thumb-gate.js"></script>
+    <script src="/static/js/gallery/run-groups.js"></script>
+    <script src="/static/js/gallery/run-stack-view.js"></script>
     <script src="/static/js/gallery/card-markup.js"></script>
     <script src="/static/js/gallery/list-render.js"></script>
     <script src="/static/js/gallery/selection.js"></script>

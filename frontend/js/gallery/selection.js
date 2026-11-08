@@ -27,8 +27,10 @@ Object.assign(window.Gallery, {
     },
 
     getVisibleGalleryIds() {
+        // A stack tile stands for every picture of its run.
         return Array.from(document.querySelectorAll('#gallery-grid .gallery-item[data-id]'))
-            .map((item) => Number(item.dataset.id))
+            .flatMap((item) => (item.dataset.runIds ? item.dataset.runIds.split(',') : [item.dataset.id]))
+            .map((id) => Number(id))
             .filter((id) => Number.isFinite(id));
     },
 
@@ -36,8 +38,9 @@ Object.assign(window.Gallery, {
         const { AppState, updateSelectionState, updateSelectionUI } = getGalleryAppContext();
         if (!Number.isInteger(startIndex) || !Number.isInteger(endIndex)) return;
 
-        const lower = Math.max(0, Math.min(startIndex, endIndex));
-        const upper = Math.min(AppState.images.length - 1, Math.max(startIndex, endIndex));
+        let lower = Math.max(0, Math.min(startIndex, endIndex));
+        let upper = Math.min(AppState.images.length - 1, Math.max(startIndex, endIndex));
+        if (this._widenRangeToStacks) [lower, upper] = this._widenRangeToStacks(lower, upper);
         updateSelectionState((selection) => {
             const nextIds = selectionBaseForScope(selection, 'loaded', { additive });
             for (let index = lower; index <= upper; index += 1) {
@@ -168,16 +171,20 @@ Object.assign(window.Gallery, {
             selection.selectionTotal = 0;
         });
 
-        // Update DOM element if it exists in the current view
+        // Update DOM element if it exists in the current view. A stack tile
+        // (Group runs) carries its first picture's id: it stays marked only
+        // while every picture of its run is selected.
         const item = document.querySelector(`.gallery-item[data-id="${normalizedImageId}"]`);
+        const runIds = item?.dataset.runIds ? item.dataset.runIds.split(',') : null;
+        const tileSelected = runIds ? this._isTileSelected(AppState, normalizedImageId, runIds) : isNowSelected;
         if (item) {
-            item.classList.toggle('selected', isNowSelected);
-            item.setAttribute('aria-selected', isNowSelected ? 'true' : 'false');
+            item.classList.toggle('selected', tileSelected);
+            item.setAttribute('aria-selected', tileSelected ? 'true' : 'false');
         }
 
         // Update virtual list's rendered item directly if available
         if (this.useVirtualScroll && this.virtualList) {
-            this.virtualList.toggleItemClass(normalizedImageId, 'selected', isNowSelected);
+            this.virtualList.toggleItemClass(normalizedImageId, 'selected', tileSelected);
         }
 
         // Also update legacy VirtualGallery if it's active
@@ -189,11 +196,18 @@ Object.assign(window.Gallery, {
         if (updateSelectionUI) updateSelectionUI();
     },
 
+    /** A tile is selected when its picture is; a stack when every picture of its run is. */
+    _isTileSelected(AppState, imageId, runIds) {
+        return runIds && runIds.length
+            ? runIds.every((id) => isGalleryImageSelected(AppState, id))
+            : isGalleryImageSelected(AppState, imageId);
+    },
+
     syncSelectionState() {
         const { AppState, updateSelectionUI } = getGalleryAppContext();
         document.querySelectorAll('.gallery-item').forEach((item) => {
-            const imageId = item.dataset.id;
-            const isSelected = isGalleryImageSelected(AppState, imageId);
+            const runIds = item.dataset.runIds ? item.dataset.runIds.split(',') : null;
+            const isSelected = this._isTileSelected(AppState, item.dataset.id, runIds);
             item.classList.toggle('selected', isSelected);
             item.setAttribute('aria-selected', isSelected ? 'true' : 'false');
         });

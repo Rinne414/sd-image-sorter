@@ -64,6 +64,7 @@ from db_query import (
     _fetch_post_filtered_page,
 )
 from db_search_index import SearchPlan
+from run_keys import RUN_KEY_SELECT, attach_run_keys
 from utils.pagination_cursor import encode_image_cursor_from_image
 
 
@@ -163,7 +164,8 @@ def get_images_paginated(
         normalized_prompt_match_mode = normalize_prompt_match_mode(prompt_match_mode)
         needs_prompt_post_filter = bool(prompt_terms) and normalized_prompt_match_mode == PROMPT_MATCH_MODE_EXACT
         needs_post_filter = needs_prompt_post_filter or bool(loras)
-        select_cols = _IMAGE_COLUMNS_FULL if needs_post_filter else _IMAGE_COLUMNS_LIGHTWEIGHT
+        # The prompt is read only to make each picture's run key (Group runs).
+        select_cols = _IMAGE_COLUMNS_FULL if needs_post_filter else f"{_IMAGE_COLUMNS_LIGHTWEIGHT}, {RUN_KEY_SELECT}"
 
         # Build base query with sorting subqueries
         query = _build_base_query(sort_by, select_cols)
@@ -326,6 +328,7 @@ def get_images_paginated(
         has_more = len(results) > limit
         if has_more:
             results = results[:limit]  # Remove the extra item
+        attach_run_keys(results)
 
         # Get total count for the filter combination
         # Performance optimization: skip expensive COUNT query when not needed

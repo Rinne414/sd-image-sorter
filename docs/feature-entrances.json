@@ -819,6 +819,21 @@
       }
     },
     {
+      "id": "gallery.group-runs",
+      "area": "gallery",
+      "en": "Group runs (one stack per generation run)",
+      "zh": "同批合并（每批生成合成一叠）",
+      "classic": [
+        "#btn-group-runs"
+      ],
+      "vopus": {
+        "missing": "not ported yet: classic first, V Opus after the owner has seen it (2026-11-08)"
+      },
+      "next": {
+        "missing": "/next/ is frozen since 2026-11-07; new features are not ported to it"
+      }
+    },
+    {
       "id": "gallery.thumb-size",
       "area": "gallery",
       "en": "Thumbnail size",

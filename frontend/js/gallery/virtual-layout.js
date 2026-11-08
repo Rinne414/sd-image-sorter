@@ -305,7 +305,10 @@ Object.assign(window.Gallery, {
         };
 
         if (this.useVirtualScroll && this.virtualList) {
-            const layout = this.virtualList.getLayoutForIndex?.(targetIndex) || this.virtualList.getLayoutForKey?.(imageId);
+            // targetIndex is the picture's place in Gallery.images; with runs grouped
+            // the virtual list counts grid positions instead.
+            const gridIndex = this._displayIndexForFlat ? this._displayIndexForFlat(targetIndex) : targetIndex;
+            const layout = this.virtualList.getLayoutForIndex?.(gridIndex) || this.virtualList.getLayoutForKey?.(imageId);
             if (!layout) return false;
             applyScroll(layout.top);
             return true;
@@ -466,6 +469,11 @@ Object.assign(window.Gallery, {
 
         if (resolvedViewMode === 'large') {
             return imageCount > 0 && typeof window.VirtualList !== 'undefined';
+        }
+
+        // Stacks are drawn by the virtual list at any count (run-stack-view.js).
+        if (imageCount > 0 && this._runGroupingActive?.() && typeof window.VirtualList !== 'undefined') {
+            return true;
         }
 
         if (typeof window.VirtualList === 'undefined') {

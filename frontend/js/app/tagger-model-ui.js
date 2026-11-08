@@ -22,7 +22,8 @@ function setGalleryViewMode(mode) {
     AppState.pagination.pageSize = getDefaultGalleryPageSize(nextMode);
     localStorage.setItem(GALLERY_VIEW_MODE_KEY, nextMode);
 
-    $$('.view-btn').forEach(btn => {
+    // Only the size buttons: "Group runs" shares the row and keeps its own state.
+    $$('.view-btn[data-size]').forEach(btn => {
         const isActive = btn.dataset.size === nextMode;
         btn.classList.toggle('active', isActive);
         btn.setAttribute('aria-pressed', String(isActive));
