@@ -1082,3 +1082,11 @@ html[data-look="pro"] #view-similar .similar-header > .guide-btn {
     right: 16px;
     margin: 0;
 }
+
+/* The library picker in the top bar names the library; the gallery title
+   already shows how many pictures it holds ("68" appeared five times,
+   blind judge round 3). The sidebar's row keeps the count: it says what
+   Clear library would empty. */
+html[data-look="pro"] #nav-library-chip-label .library-name-count {
+    display: none;
+}

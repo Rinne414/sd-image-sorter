@@ -261,14 +261,31 @@
         };
     }
 
+    /**
+     * "<name> · <count>" as two spans, so a look can drop the count where the
+     * gallery title already shows it (look-pro.css); the text reads the same.
+     */
+    function writeNameAndCount(el, name, imageCount) {
+        const count = Number(imageCount || 0);
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'library-name-text';
+        nameSpan.textContent = name;
+        if (count <= 0) {
+            el.replaceChildren(nameSpan);
+            return;
+        }
+        const countSpan = document.createElement('span');
+        countSpan.className = 'library-name-count';
+        countSpan.textContent = ` · ${count.toLocaleString()}`;
+        el.replaceChildren(nameSpan, countSpan);
+    }
+
     /** The gallery sidebar's line: which library a clear would empty. */
     function refreshSidebarLine() {
         const nameEl = document.getElementById('sidebar-library-name');
         if (!nameEl) return;
         const current = getCurrentLibrary();
-        nameEl.textContent = current.image_count > 0
-            ? `${current.name} · ${current.image_count.toLocaleString()}`
-            : current.name;
+        writeNameAndCount(nameEl, current.name, current.image_count);
         const button = document.getElementById('btn-sidebar-clear-library');
         if (button) {
             button.title = _t('library.clearTitle', 'Clears only the records of "{name}"; the image files on disk stay. You are asked first.', { name: current.name });
@@ -281,10 +298,7 @@
         const label = document.getElementById('nav-library-chip-label');
         if (!chip || !label) return;
         const current = getCurrentLibrary();
-        const count = Number(current.image_count || 0);
-        label.textContent = count > 0
-            ? `${current.name} · ${count}`
-            : current.name;
+        writeNameAndCount(label, current.name, current.image_count);
         chip.hidden = false;
         chip.title = _t(
             'nav.libraryChipTitle',
