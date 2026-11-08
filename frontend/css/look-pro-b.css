@@ -390,14 +390,10 @@ html[data-look-variant="b"] #sidebar-body-filters .pro-add-filter:hover {
     color: var(--text);
 }
 
-/* ---- The top bar reads as an app, not a web admin (round 16: icon + label
-   tabs, a pill button and a Ctrl K pill). Page tabs are their names; their
-   icons come back when the bar folds the tabs to icons. The two actions use
-   the control corner; the shortcut stays printed, as plain grey text. ---- */
-html[data-look-variant="b"] .nav-bar:not(.nav-tabs-icon-only) .nav-tab .tab-icon {
-    display: none;
-}
-
+/* ---- The top bar reads as an app, not a web admin (round 16: a pill button
+   and a Ctrl K pill). The two actions use the control corner; the shortcut
+   stays printed, as plain grey text. Page tabs keep their icons: round 17
+   counted them as the one thing A did better. ---- */
 html[data-look-variant="b"] #btn-scan,
 html[data-look-variant="b"] #btn-tag {
     border-radius: var(--pro-r-control);
