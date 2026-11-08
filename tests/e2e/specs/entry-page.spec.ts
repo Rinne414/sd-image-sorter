@@ -8,6 +8,7 @@ import type { Request, Response } from '@playwright/test'
 
 import { expect, test } from '../fixtures/click-ledger'
 import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
+import { isIntentionalAbort } from '../fixtures/request-noise'
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..')
 const backendMain = path.join(repoRoot, 'backend', 'main.py')
@@ -401,6 +402,7 @@ test.describe('Entry page (opted in)', () => {
       if (new URL(request.url()).pathname === '/api/entry/summary') summaryRequests.push(request)
     })
     page.on('requestfailed', (request) => {
+      if (isIntentionalAbort(request)) return
       if (request.url().startsWith(backend.baseURL)) {
         requestProblems.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText || 'failed'}`)
       }

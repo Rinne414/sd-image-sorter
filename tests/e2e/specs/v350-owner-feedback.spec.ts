@@ -1,6 +1,7 @@
 import { expect, test } from '../fixtures/click-ledger'
 import { markModelsReady } from '../fixtures/model-status'
 import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
+import { isIntentionalAbort } from '../fixtures/request-noise'
 
 /**
  * Owner feedback batch 2026-07-05 (v3.5.0): regression tests for
@@ -78,6 +79,7 @@ test('visible Aesthetic controls follow the active task across start, cancel, an
     }
   })
   page.on('requestfailed', (request) => {
+    if (isIntentionalAbort(request)) return
     requestProblems.push(`${request.method()} ${request.url()} ${request.failure()?.errorText || ''}`.trim())
   })
   page.on('response', (response) => {

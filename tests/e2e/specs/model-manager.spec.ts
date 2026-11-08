@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { isIntentionalAbort } from '../fixtures/request-noise'
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..')
 const defaultPort = process.env.PW_WEB_SERVER_PORT || process.env.SD_IMAGE_SORTER_PORT || '19087'
@@ -252,6 +253,7 @@ test.describe('Model Manager', () => {
       })
       page.on('pageerror', (error) => pageFailures.push(error.message))
       page.on('requestfailed', (request) => {
+        if (isIntentionalAbort(request)) return
         failedRequests.push(`${request.method()} ${new URL(request.url()).pathname}`)
       })
       page.on('response', (response) => {

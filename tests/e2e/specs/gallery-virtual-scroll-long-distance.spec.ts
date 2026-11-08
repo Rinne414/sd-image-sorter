@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
+import { isIntentionalAbort } from '../fixtures/request-noise'
 
 const IMAGE_COUNT = 6221
 const IMAGE_ID_BASE = 700000
@@ -72,6 +73,7 @@ function observeRuntimeProblems(page: Page): RuntimeProblems {
   })
   page.on('pageerror', (error) => problems.page.push(error.message))
   page.on('requestfailed', (request) => {
+    if (isIntentionalAbort(request)) return
     if (isSameOriginAppRequest(request.url())) {
       problems.requests.push(`${request.method()} ${request.url()} ${request.failure()?.errorText || 'failed'}`)
     }

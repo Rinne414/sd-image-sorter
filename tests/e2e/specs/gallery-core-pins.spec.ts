@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '../fixtures/click-ledger'
 import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
+import { isIntentionalAbort } from '../fixtures/request-noise'
 
 /**
  * Characterization pins for the gallery.js god-file (4,708 lines) — "step 0" of a
@@ -216,6 +217,7 @@ test('refresh replaces the settled empty state with skeletons until the image re
     pageErrors.push(error.message)
   })
   page.on('requestfailed', (request) => {
+    if (isIntentionalAbort(request)) return
     requestFailures.push(`${request.method()} ${request.url()}`)
   })
   page.on('response', (response) => {
@@ -292,6 +294,7 @@ test('failed refresh removes skeletons and restores the settled Gallery state', 
     pageErrors.push(error.message)
   })
   page.on('requestfailed', (request) => {
+    if (isIntentionalAbort(request)) return
     requestFailures.push(`${request.method()} ${request.url()}`)
   })
   page.on('response', (response) => {

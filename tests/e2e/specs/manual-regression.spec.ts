@@ -7,6 +7,7 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from '.
 import { observeManualScanTerminal } from '../fixtures/scan-terminal-observer'
 import { markModelsReady } from '../fixtures/model-status'
 import { resizeAndSettleUiScale } from '../fixtures/ui-scale'
+import { isIntentionalAbort } from '../fixtures/request-noise'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -1736,6 +1737,7 @@ test('gallery folder tree stays usable above the selection footer on supported d
     if (message.type() === 'error') consoleErrors.push(message.text())
   })
   page.on('requestfailed', (request) => {
+    if (isIntentionalAbort(request)) return
     requestFailures.push(`${request.method()} ${request.url()}`)
   })
   page.on('response', (response) => {
@@ -2402,6 +2404,7 @@ test('Keep/Reject cull should switch modes, keep/reject/skip, and route kept ima
     }
   })
   page.on('requestfailed', (failedRequest) => {
+    if (isIntentionalAbort(failedRequest)) return
     requestProblems.push(`${failedRequest.method()} ${failedRequest.url()} ${failedRequest.failure()?.errorText || ''}`.trim())
   })
   page.on('response', (response) => {
