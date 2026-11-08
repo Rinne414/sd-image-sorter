@@ -202,6 +202,29 @@ def test_static_assets_set_no_cache_header(fake_index_app):
     assert response.headers.get("cache-control") == "no-cache"
 
 
+def test_a_script_with_its_current_token_is_cached_for_good(fake_index_app):
+    """The page asks for 219 classic scripts with the ?v= token GET / adds; the
+    token changes with the file, so the browser may keep them instead of asking
+    for each one again on every start. A stale or missing token revalidates."""
+    main_module = fake_index_app
+    client = TestClient(main_module.app)
+
+    from app_info import APP_VERSION
+    from app_static import static_cache_bust_token
+
+    mount = next(route for route in main_module.app.routes if getattr(route, "name", "") == "static")
+    token = static_cache_bust_token(
+        "/static/js/app.js", frontend_path=str(mount.app.directory), app_version=APP_VERSION
+    )
+    current = client.get(f"/static/js/app.js?v={token}")
+    assert current.status_code == 200
+    assert current.headers.get("cache-control") == "public, max-age=31536000, immutable"
+
+    stale = client.get("/static/js/app.js?v=0.0.0.deadbeef")
+    assert stale.status_code == 200
+    assert stale.headers.get("cache-control") == "no-cache"
+
+
 def test_cache_bust_regex_is_anchored_to_static_paths():
     """Sanity-check the regex itself — must not match arbitrary src= matches.
 

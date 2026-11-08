@@ -7,6 +7,7 @@ import os
 import re
 import zlib
 from pathlib import Path
+from urllib.parse import parse_qs
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
@@ -18,16 +19,39 @@ logger = logging.getLogger("sd-image-sorter")
 # The Vite build of the second interface, Vopus.
 FRONTEND_V4_DIST_PATH = Path(__file__).resolve().parent.parent / "frontend-v4" / "dist"
 
+IMMUTABLE_CACHE = "public, max-age=31536000, immutable"
+
 _STATIC_CACHE_BUST_RE = re.compile(r'((?:src|href)=")(/static/[^"?]+\.(?:js|css))(")')
 
 
 class NoCacheStaticFiles(StaticFiles):
-    """Serve frontend JS/CSS with ``Cache-Control: no-cache``."""
+    """Serve frontend JS/CSS; a URL carrying the file's current ``?v=`` token is kept for good.
+
+    GET / adds the token to the 219 classic scripts, and the token changes with
+    the file, so the browser need not ask for each one again on every start
+    (measured 2026-11-08: about a second of a warm start was spent there). A
+    bare URL (a script appended at runtime) or a stale token revalidates.
+    """
 
     async def get_response(self, path: str, scope):  # type: ignore[override]
         response = await super().get_response(path, scope)
-        response.headers["Cache-Control"] = "no-cache"
+        response.headers["Cache-Control"] = (
+            IMMUTABLE_CACHE if response.status_code == 200 and self._has_current_token(path, scope) else "no-cache"
+        )
         return response
+
+    def _has_current_token(self, path: str, scope) -> bool:
+        from app_info import APP_VERSION
+
+        tokens = parse_qs(scope.get("query_string", b"").decode("latin-1")).get("v")
+        if not tokens or not self.directory:
+            return False
+        current = static_cache_bust_token(
+            "/static/" + path.replace(os.sep, "/"),
+            frontend_path=str(self.directory),
+            app_version=APP_VERSION,
+        )
+        return tokens[0] == current
 
 
 def static_cache_bust_token(asset_path: str, *, frontend_path: str, app_version: str) -> str:
@@ -93,7 +117,7 @@ class ImmutableStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope):  # type: ignore[override]
         response = await super().get_response(path, scope)
         if response.status_code == 200:
-            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            response.headers["Cache-Control"] = IMMUTABLE_CACHE
         return response
 
 
