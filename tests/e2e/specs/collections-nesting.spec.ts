@@ -212,6 +212,22 @@ test('a dragged stack carries its whole run unless the stack itself is picked', 
   expect(result.whole).toEqual([result.cover])
 })
 
+test('an empty collection teaches how to fill it, also after a language switch', async ({ page }) => {
+  const empty = await make(page, 'Empty')
+  await open(page)
+  await row(page, empty).locator('[data-action="browse"]').click()
+  const title = page.locator('#gallery-empty-state h3')
+  const hint = page.locator('#gallery-empty-state h3 + p')
+  await expect(title).toHaveText('No images in this collection yet')
+  await expect(hint).toContainText('Drag pictures from the gallery onto this collection')
+  // The language refresh rewrote this as "No images match your filters" before.
+  await page.evaluate(() => (window as any).I18n.setLang('zh-CN'))
+  await expect(title).toHaveText('此合集还没有图片')
+  await expect(hint).toContainText('拖到侧栏的这个合集上')
+  await page.evaluate(() => (window as any).I18n.setLang('en'))
+  await expect(title).toHaveText('No images in this collection yet')
+})
+
 test('deleting a collection keeps the ones inside it, one level up', async ({ page }) => {
   const parent = await make(page, 'Parent')
   const child = await make(page, 'Child', parent)

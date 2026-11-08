@@ -518,7 +518,7 @@ window.I18nLang_zhCN = {
     'collections.clearBrowse': '停止浏览此合集',
     'collections.empty': '还没有合集',
     'collections.emptyImages': '此合集还没有图片',
-    'collections.emptyImagesHint': '右键点击图片并选择「加入合集…」来填充此合集。',
+    'collections.emptyImagesHint': '从图库把图片拖到侧栏的这个合集上，或右键点击图片选择「加入合集…」。',
     'collections.favoritesEmpty': '还没有收藏',
     'collections.favoritesEmptyHint': '点击任意图片上的心形按钮即可加入收藏。',
     'collections.addTo': '加入合集',

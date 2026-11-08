@@ -59,6 +59,8 @@ function _applyGalleryEmptyStateVariant(emptyState) {
     const filterActive = _galleryHasActiveFilter() || browsingCollection;
     emptyState.classList.toggle('empty-state-no-matches', filterActive);
     emptyState.classList.toggle('empty-state-no-library', !filterActive);
+    // An empty collection teaches how to fill it; ui-refresh.js keeps this copy.
+    emptyState.classList.toggle('empty-state-collection', browsingCollection);
     _syncGalleryLibraryEmpty(!filterActive);
 
     // Look up the title/hint strings; fall back to English if i18n

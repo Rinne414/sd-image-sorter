@@ -516,7 +516,7 @@ window.I18nLang_en = {
     'collections.clearBrowse': 'Stop browsing this collection',
     'collections.empty': 'No collections yet',
     'collections.emptyImages': 'No images in this collection yet',
-    'collections.emptyImagesHint': 'Right-click an image and choose "Add to collection…" to fill this collection.',
+    'collections.emptyImagesHint': 'Drag pictures from the gallery onto this collection in the sidebar, or right-click a picture and choose "Add to collection…".',
     'collections.favoritesEmpty': 'No favorites yet',
     'collections.favoritesEmptyHint': 'Click the heart on any image to add it to Favorites.',
     'collections.addTo': 'Add to collection',

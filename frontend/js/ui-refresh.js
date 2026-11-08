@@ -200,7 +200,14 @@
             // hard-coding the no-images keys, otherwise this method
             // overwrites the variant-specific copy on every refresh.
             var emptyState = document.getElementById('gallery-empty-state');
-            if (emptyState && emptyState.classList.contains('empty-state-no-matches')) {
+            if (emptyState && emptyState.classList.contains('empty-state-collection')) {
+                // An empty collection (or Favorites) set its own copy: write the
+                // same keys again in the new language, never the "no matches" text.
+                var collectionTitle = emptyState.querySelector('h3');
+                var collectionHint = emptyState.querySelector('p');
+                if (collectionTitle && collectionTitle.dataset.i18n) this._setText('#gallery-empty-state h3', collectionTitle.dataset.i18n);
+                if (collectionHint && collectionHint.dataset.i18n) this._setText('#gallery-empty-state p', collectionHint.dataset.i18n);
+            } else if (emptyState && emptyState.classList.contains('empty-state-no-matches')) {
                 this._setText('#gallery-empty-state h3', 'gallery.noMatchesTitle');
                 this._setText('#gallery-empty-state p', 'gallery.noMatchesHint');
             } else if (emptyState && emptyState.classList.contains('empty-state-all-missing')) {

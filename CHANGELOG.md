@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed / 修复
 
+- **An empty collection says how to fill it**: it showed "No images match your filters, try removing some filters" (the language refresh overwrote its own message); it now says the collection is empty and to drag pictures onto it or use Add to collection, in both languages.
+  - **空合集会说明怎么加入图片**：以前显示“没有符合条件的图片，试试去掉几个筛选条件”（语言刷新覆盖了它自己的提示）；现在会说明这个合集还是空的，可以把图片拖进来或用“加入合集”，中英文都一样。
 - **A V Opus page that fails no longer blanks the program**: an error while a page draws now shows what failed, the reason, Reload and Back to the library in place of that page, and the top bar keeps working; errors outside drawing are said in a message. Before, one such error left the whole V Opus window empty.
   - V Opus 某一页画面出错时不再整个程序变空白：会在那一页的位置说明出了什么错、原因，并提供“刷新”和“回到图库”，顶栏照常能用；画面以外的错误会用提示说明。以前只要出一次这种错，整个 V Opus 窗口就会变成空白。
 - **Main colours**: the gallery, Reader and Censor palettes and the colour filter now find main colours in HSV. RGB filled the top places with light and dark versions of one colour; on 400 real pictures near-duplicate pairs fell from 2.04 to 0.82 per picture and colour-filter tags a picture should have but did not from 54.1% to 15.2%. Pictures analysed before count as needing analysis; their old colours keep working until then.
