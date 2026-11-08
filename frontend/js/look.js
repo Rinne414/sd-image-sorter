@@ -10,7 +10,8 @@
     'use strict';
 
     const KEY = 'sd-look';
-    const LOOKS = new Set(['pro']);
+    // pro-b: identity proposal B, worn on top of the pro look (data-look-variant).
+    const LOOKS = new Set(['pro', 'pro-b']);
 
     function read() {
         try {
@@ -22,8 +23,11 @@
     }
 
     function apply(look) {
-        if (look) document.documentElement.setAttribute('data-look', look);
-        else document.documentElement.removeAttribute('data-look');
+        const root = document.documentElement;
+        if (look) root.setAttribute('data-look', look === 'pro-b' ? 'pro' : look);
+        else root.removeAttribute('data-look');
+        if (look === 'pro-b') root.setAttribute('data-look-variant', 'b');
+        else root.removeAttribute('data-look-variant');
     }
 
     apply(read());

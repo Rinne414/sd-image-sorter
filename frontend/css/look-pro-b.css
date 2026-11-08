@@ -1,0 +1,113 @@
+/* ==========================================================================
+   look-pro-b.css - identity proposal B, worn on top of the pro look.
+
+   Chosen in Settings > Appearance as "Professional, proposal B (trial)"
+   (js/look.js sets data-look="pro" plus data-look-variant="b"). Blind judges
+   (2026-11-08, rounds 6-10) kept naming identity, not polish: "every label at
+   the same size", "one thin icon at one size", "five loose icons". B answers
+   those three and nothing else, so A and B can be compared side by side:
+   - a type scale with real steps (title 20/700, library 16/700, labels
+     12/700, items 14/400);
+   - the top bar's tools as one grouped capsule, icons 18 px at a 1.75
+     stroke, the main actions set apart;
+   - a tighter, more photographic grid (8 px gaps, 6 px corners).
+   Every rule is scoped to html[data-look-variant="b"]; proposal A (the pro
+   look) and today's look are untouched. Picks are unconfirmed: the owner
+   chooses between A and B.
+   ========================================================================== */
+
+/* ---- Type scale with real steps ---- */
+
+html[data-look-variant="b"] #image-count {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+html[data-look-variant="b"] #sidebar-library-name {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+html[data-look-variant="b"] .sidebar-section-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+}
+
+html[data-look-variant="b"] .filter-sidebar .sidebar-section + .sidebar-section {
+    margin-top: 18px;
+    padding-top: 14px;
+}
+
+html[data-look-variant="b"] .nav-bar .nav-tab.active {
+    font-weight: 600;
+}
+
+html[data-look-variant="b"] .pro-inspector-name {
+    font-size: 17px;
+    font-weight: 700;
+}
+
+/* ---- The top bar's tools as one grouped capsule ---- */
+
+html[data-look-variant="b"] .nav-actions {
+    gap: 0;
+}
+
+html[data-look-variant="b"] .nav-actions .nav-actions-divider {
+    display: none;
+}
+
+html[data-look-variant="b"] #btn-open-model-manager,
+html[data-look-variant="b"] #btn-language-toggle,
+html[data-look-variant="b"] #btn-app-update,
+html[data-look-variant="b"] #btn-all-features,
+html[data-look-variant="b"] #btn-help {
+    height: 34px;
+    min-height: 34px;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+html[data-look-variant="b"] #btn-open-model-manager {
+    border-radius: 10px 0 0 10px;
+    padding-left: 10px;
+}
+
+html[data-look-variant="b"] #btn-help {
+    border-radius: 0 10px 10px 0;
+    padding-right: 10px;
+}
+
+html[data-look-variant="b"] #btn-open-model-manager:hover,
+html[data-look-variant="b"] #btn-language-toggle:hover,
+html[data-look-variant="b"] #btn-app-update:hover,
+html[data-look-variant="b"] #btn-all-features:hover,
+html[data-look-variant="b"] #btn-help:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+html[data-look-variant="b"] #btn-scan {
+    margin-left: 14px;
+}
+
+html[data-look-variant="b"] #btn-tag {
+    margin-left: 8px;
+}
+
+html[data-look-variant="b"] .nav-bar .icon {
+    stroke-width: 1.75;
+}
+
+/* ---- A tighter, more photographic grid ---- */
+
+html[data-look-variant="b"] #view-gallery #gallery-grid {
+    gap: 8px;
+}
+
+html[data-look-variant="b"] #view-gallery #gallery-grid .gallery-item {
+    border-radius: 6px;
+}
