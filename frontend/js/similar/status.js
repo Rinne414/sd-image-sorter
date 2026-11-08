@@ -304,7 +304,9 @@ Object.assign(window.SimilarImages, {
             banner.className = classes.join(' ');
             const title = result.available
                 ? this._t('similar.setupReadyTitle', 'Similarity setup is ready')
-                : this._t('similar.setupNeedsTitle', 'CLIP will download when you start indexing');
+                // The card above already says CLIP downloads with the first index;
+                // this banner is the other way: install it ahead of time.
+                : this._t('similar.setupInstallFirstTitle', 'Prefer to install CLIP first?');
             // When CLIP is missing, the status card above already says the size
             // and where to install it; do not repeat the sentence here.
             const description = result.available

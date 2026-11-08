@@ -175,11 +175,16 @@ test('pro look: the sidebar and gallery first rows share one line; the pinned to
   const look = await page.evaluate(() => {
     const middle = (sel: string) => { const r = document.querySelector(sel)!.getBoundingClientRect(); return (r.top + r.bottom) / 2 }
     const bg = getComputedStyle(document.getElementById('gallery-toolbar')!).backgroundColor
+    const header = document.querySelector('#view-gallery .gallery-header')!.getBoundingClientRect()
+    const container = document.querySelector('#view-gallery .gallery-container')!.getBoundingClientRect()
     return {
+      // A banner (missing or unreadable files) may sit above the header and
+      // push it down on purpose; the rows are compared only without one.
+      bannerAbove: header.top - container.top > 4,
       offset: Math.abs(middle('#sidebar-library-line') - middle('#view-gallery .gallery-header')),
       toolbarSeeThrough: bg === 'transparent' || /rgba\([^)]*,\s*0\)$/.test(bg),
     }
   })
-  expect(look.offset).toBeLessThanOrEqual(2)
+  if (!look.bannerAbove) expect(look.offset).toBeLessThanOrEqual(2)
   expect(look.toolbarSeeThrough).toBe(false)
 })

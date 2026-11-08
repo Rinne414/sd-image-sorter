@@ -1069,3 +1069,16 @@ html[data-look="pro"] .brand-version {
 html[data-look="pro"] #image-count {
     font-size: 18px;
 }
+
+/* Similar: the page guide button sat alone on a row of its own under the
+   cards (a one-button row); it belongs in the header's corner. */
+html[data-look="pro"] #view-similar .similar-header {
+    position: relative;
+}
+
+html[data-look="pro"] #view-similar .similar-header > .guide-btn {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    margin: 0;
+}
