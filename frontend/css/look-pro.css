@@ -929,11 +929,6 @@ html[data-look="pro"] .autosep-pane-action-body #btn-execute-autosep {
     margin-top: auto;
 }
 
-/* An empty collection shows no "0": a column of zeros read as noise, and as
-   counts that contradict the open collection (blind judges, round 2). */
-html[data-look="pro"] #collections-list .collection-row-count.is-zero {
-    visibility: hidden;
-}
 
 /* Solid accent left on the other pages after the tint change: numbers,
    step markers, the active tool and the guide hint read as data or state,
@@ -1240,3 +1235,41 @@ html[data-look="pro"] #view-gallery .aspect-quick-toggle {
 html[data-look="pro"] #view-gallery .aspect-quick-btn {
     border-radius: 6px;
 }
+
+/* ---- From blind round 5 ----
+   Every collection shows its count, zeros included (rounds 3-5 asked for
+   counts on every row or none; hiding zeros made the open one look odd). */
+
+/* "All" was written in two switches side by side; the aspect switch shows
+   its icon, and the word stays for screen readers. */
+html[data-look="pro"] #view-gallery #aspect-quick-toggle .aspect-quick-btn[data-aspect=""] > span[data-i18n] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+/* Group runs is a toggle like the view buttons, not a third button style. */
+html[data-look="pro"] #view-gallery #btn-group-runs {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+}
+
+html[data-look="pro"] #view-gallery #btn-group-runs:hover {
+    background: var(--surface-3);
+}
+
+html[data-look="pro"] #view-gallery #btn-group-runs[aria-pressed="true"] {
+    background: var(--pro-chosen-bg);
+    color: var(--text);
+}
+
+/* Section titles share one left edge: the sidebar's collapse button moves
+   to the end of the Filters header instead of standing before its title. */
+html[data-look="pro"] .sidebar-section-head > #btn-collapse-desktop-sidebar {
+    order: 99;
+}
+
