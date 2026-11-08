@@ -1,3 +1,5 @@
+import type { Locator } from '@playwright/test'
+
 import { expect, test, type Page } from '../fixtures/click-ledger'
 
 import { dbPath, openLibrary, pageOverflow, runBackendScript, tmpRoot } from '../fixtures/v4-seed'
@@ -159,16 +161,26 @@ test('each library keeps its own search; a reload keeps it; both empty states of
   await expect(page.getByTestId('no-matches')).toHaveCount(0)
 })
 
+/**
+ * Open the folder tree down to this spec's folder. Alone in the database the
+ * chain down to .tmp/v4-browse is one open top row; next to other specs'
+ * folders it is a closed row under .tmp, and when another spec has pictures
+ * outside .tmp (tests/e2e/fixtures), .tmp itself is a closed row too.
+ */
+async function openSeedFolder(tree: Locator) {
+  for (const name of [/^\.tmp: folders inside$/, /v4-browse: folders inside$/]) {
+    const opener = tree.getByRole('button', { name })
+    if ((await opener.count()) && (await opener.getAttribute('aria-expanded')) === 'false') await opener.click()
+  }
+  await expect(tree.getByRole('button', { name: /v4-browse$/ })).toBeVisible()
+}
+
 test('folder tree: a parent that only holds subfolders can be chosen, and scopes everything under it', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   await openLibrary(page, TOKEN, COUNT)
   const tree = page.getByTestId('folder-tree')
   const parent = tree.getByRole('button', { name: /^parent$/ })
-  // alone in the database, the chain down to .tmp/v4-browse is one open top row;
-  // next to other specs' folders it is a closed row under .tmp
-  await expect(tree.getByRole('button', { name: /v4-browse$/ })).toBeVisible()
-  const opener = tree.getByRole('button', { name: /v4-browse: folders inside$/ })
-  if ((await opener.count()) && (await opener.getAttribute('aria-expanded')) === 'false') await opener.click()
+  await openSeedFolder(tree)
   await expect(parent).toBeVisible()
   // parent's own subfolders start closed
   await expect(tree.getByRole('button', { name: /^a$/ })).toHaveCount(0)
@@ -199,8 +211,7 @@ test('6e: the folders opened and closed by hand stay so after a reload, per libr
   await page.setViewportSize({ width: 1366, height: 768 })
   await openLibrary(page, TOKEN, COUNT)
   const tree = page.getByTestId('folder-tree')
-  const opener = tree.getByRole('button', { name: /v4-browse: folders inside$/ })
-  if ((await opener.count()) && (await opener.getAttribute('aria-expanded')) === 'false') await opener.click()
+  await openSeedFolder(tree)
   const parentOpener = tree.getByRole('button', { name: 'parent: folders inside' })
   await expect(parentOpener).toHaveAttribute('aria-expanded', 'false')
   await parentOpener.click()

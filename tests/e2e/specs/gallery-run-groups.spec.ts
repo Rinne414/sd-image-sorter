@@ -47,7 +47,7 @@ test('runs are next to each other, share a key and stay within ten minutes', asy
 
   // The grid's items read the pictures themselves: a rating set later shows through.
   const ratingShows = await page.evaluate(() => {
-    const images = [{ id: 1, run_key: 'a', created_at: '2026-11-08T10:00:00' }, { id: 2, run_key: 'a', created_at: '2026-11-08T10:01:00' }]
+    const images: Array<Record<string, unknown>> = [{ id: 1, run_key: 'a', created_at: '2026-11-08T10:00:00' }, { id: 2, run_key: 'a', created_at: '2026-11-08T10:01:00' }]
     const [stack] = (window as any).GalleryRunGroups.groupRuns(images)
     images[0].user_rating = 5
     return stack.user_rating

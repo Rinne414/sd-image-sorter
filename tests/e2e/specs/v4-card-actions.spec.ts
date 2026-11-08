@@ -445,6 +445,9 @@ test('the rail: a collapse button, folding sections, both remembered after a rel
   const folders = rail.getByRole('button', { name: 'Folders', exact: true })
   const folderRow = rail.getByRole('button', { name: /v4-cact$/ })
   await expect(folders).toHaveAttribute('aria-expanded', 'true')
+  // when another spec has pictures outside .tmp (tests/e2e/fixtures), .tmp is a closed row
+  const tmpOpener = rail.getByRole('button', { name: /^\.tmp: folders inside$/ })
+  if ((await tmpOpener.count()) && (await tmpOpener.getAttribute('aria-expanded')) === 'false') await tmpOpener.click()
   await expect(folderRow).toBeVisible()
   await folders.click()
   await expect(folders).toHaveAttribute('aria-expanded', 'false')
