@@ -19,6 +19,7 @@ function showConfirm(title, message, onOk, onCancel, options = {}) {
     lockDynamicI18nText('#confirm-message', 'modal.confirmAction');
     $('#confirm-title').textContent = title || appT('modal.confirm', 'Are you sure?');
     $('#confirm-message').textContent = message || appT('modal.confirmAction', 'This action cannot be undone.');
+    window.ConfirmDetails?.render({ list: options.list, note: options.note });
     // The button is shared: set its tone on every open, so one dialog never leaks into the next.
     $('#btn-confirm-ok').classList.toggle('danger', options.tone !== 'primary');
     if (options.okLabel) {

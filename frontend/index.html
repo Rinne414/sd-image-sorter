@@ -48,6 +48,7 @@
     <script src="/static/js/ui-scale.js"></script>
     <script src="/static/js/look.js"></script>
     <script src="/static/js/modules/ui-icon.js"></script>
+    <script src="/static/js/modules/confirm-details.js"></script>
     <!-- First: an error nothing else caught is said on screen, never silent (error-fallback.js). -->
     <script src="/static/js/error-fallback.js"></script>
 </head>
@@ -5883,7 +5884,7 @@
                     </div>
                     <div class="settings-row">
                         <div class="settings-row-copy">
-                            <strong data-i18n="settings.appearanceTitle">Appearance</strong>
+                            <strong data-i18n="settings.appearanceTitle">Interface scale</strong>
                             <span id="settings-ui-scale-current" data-i18n="settings.uiScaleBody">UI scale follows your desktop size</span>
                         </div>
                         <label class="settings-inline-control">
@@ -7320,11 +7321,14 @@
         </div>
 
         <!-- Confirm Modal -->
-        <div class="modal" id="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+        <div class="modal" id="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message confirm-list confirm-note">
             <div class="modal-backdrop"></div>
             <div class="modal-content modal-small">
                 <h3 id="confirm-title" data-i18n="modal.confirm">Are you sure?</h3>
                 <p id="confirm-message" data-i18n="modal.confirmAction">This action cannot be undone.</p>
+                <!-- Optional rows and a quiet note (js/modules/confirm-details.js). -->
+                <ul class="confirm-list" id="confirm-list" hidden></ul>
+                <p class="confirm-note" id="confirm-note" hidden></p>
                 <div class="modal-actions">
                     <button class="btn btn-ghost" id="btn-confirm-cancel" data-i18n="modal.cancel">Cancel</button>
                     <button class="btn btn-primary danger" id="btn-confirm-ok" data-i18n="modal.yes">Yes, proceed</button>

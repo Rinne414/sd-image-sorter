@@ -13367,3 +13367,53 @@ html .nav-bar.nav-measuring * {
     width: 16px;
     height: 16px;
 }
+
+/* The confirm dialog's optional rows and note (js/modules/confirm-details.js):
+   folders as real rows with their counts aligned, the reassurance quieter. */
+.confirm-list {
+    display: grid;
+    margin: 12px 0 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.confirm-list[hidden],
+.confirm-note[hidden] {
+    display: none;
+}
+
+.confirm-list li {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.confirm-list li + li {
+    border-top: 1px solid var(--border-subtle);
+}
+
+.confirm-list-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--text-primary);
+}
+
+.confirm-list-meta {
+    flex: 0 0 auto;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.confirm-note {
+    margin: 12px 0 0;
+    color: var(--text-muted);
+    font-size: 12.5px;
+    line-height: 1.5;
+}

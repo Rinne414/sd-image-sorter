@@ -69,3 +69,62 @@ test('Settings > Appearance switches the look, and it is remembered', async ({ p
   await expect(page.locator('html')).toHaveAttribute('data-look', 'pro')
   await expect(page.locator('#settings-look')).toHaveValue('pro')
 })
+
+test('pro look: the gallery chrome uses the accent only for the main action', async ({ page }) => {
+  await open(page, 'pro')
+  // Blind judges (2026-11-08) counted the accent in nine places at once.
+  const accented = await page.evaluate(() => {
+    const isAccent = (c: string) => /rgba?\(213, 35, 122/.test(c)
+    return [...document.querySelectorAll('.nav-bar *, #view-gallery .gallery-header *, #gallery-toolbar *')]
+      .filter((el) => {
+        const r = el.getBoundingClientRect()
+        if (r.width < 2 || r.height < 2) return false
+        const cs = getComputedStyle(el)
+        return isAccent(cs.backgroundColor) || (isAccent(cs.borderTopColor) && parseFloat(cs.borderTopWidth) > 0)
+      })
+      .map((el) => el.id || (el as HTMLElement).className)
+  })
+  expect(accented).toEqual(['btn-scan'])
+})
+
+test('pro look: Settings is a content-width column whose On/Off controls are switches', async ({ page }) => {
+  await open(page, 'pro')
+  await page.evaluate(() => (window as any).openModelManager('general'))
+  const dialog = page.locator('#model-manager-modal .modal-content')
+  await expect(dialog).toBeVisible()
+  expect((await dialog.boundingBox())!.width).toBeLessThanOrEqual(1120)
+
+  const sound = page.locator('#btn-settings-sound-toggle')
+  const box = (await sound.boundingBox())!
+  expect([Math.round(box.width), Math.round(box.height)]).toEqual([44, 26])
+  const knob = () => sound.evaluate((el) => getComputedStyle(el, '::after').transform)
+  const before = await sound.getAttribute('aria-pressed')
+  const knobBefore = await knob()
+  await sound.click()
+  await expect(sound).not.toHaveAttribute('aria-pressed', before!)
+  expect(await knob()).not.toBe(knobBefore)
+  // the words stay for screen readers
+  await expect(sound).toHaveAccessibleName(/.+/)
+  await sound.click()
+  await expect(sound).toHaveAttribute('aria-pressed', before!)
+})
+
+test('the confirm dialog shows rows and a note, and the next question starts without them', async ({ page }) => {
+  await open(page, null)
+  await page.evaluate(() => (window as any).showConfirm('Found ComfyUI', 'These folders hold 10 models:', null, null, {
+    tone: 'primary',
+    list: [{ text: 'I:\ComfyUI', meta: '4 models' }, { text: 'I:\hf-cache\hub', meta: '6 models' }],
+    note: 'The program only reads these files.',
+  }))
+  const modal = page.locator('#confirm-modal')
+  await expect(modal.locator('#confirm-list li')).toHaveCount(2)
+  await expect(modal.locator('#confirm-list li').first()).toContainText('4 models')
+  await expect(modal.locator('#confirm-note')).toHaveText('The program only reads these files.')
+  await page.click('#btn-confirm-cancel')
+
+  await page.evaluate(() => (window as any).showConfirm('Delete?', 'This cannot be undone.', null, null))
+  await expect(modal.locator('#confirm-message')).toHaveText('This cannot be undone.')
+  await expect(modal.locator('#confirm-list')).toBeHidden()
+  await expect(modal.locator('#confirm-note')).toBeHidden()
+  await page.click('#btn-confirm-cancel')
+})

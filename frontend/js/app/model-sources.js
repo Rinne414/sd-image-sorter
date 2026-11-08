@@ -272,7 +272,7 @@
 
     // ---- adding and removing ---------------------------------------------------
 
-    function confirmDialog({ title, message, okText, cancelText, align = 'left' }) {
+    function confirmDialog({ title, message, okText, cancelText, align = 'left', list, note }) {
         return new Promise((resolve) => {
             const restore = () => {
                 unlockDynamicI18nText('#btn-confirm-ok', 'modal.yes', 'Yes, proceed');
@@ -283,7 +283,7 @@
                     messageEl.style.textAlign = '';
                 }
             };
-            showConfirm(title, message, () => { restore(); resolve(true); }, () => { restore(); resolve(false); }, { tone: 'primary' });
+            showConfirm(title, message, () => { restore(); resolve(true); }, () => { restore(); resolve(false); }, { tone: 'primary', list, note });
             const messageEl = document.getElementById('confirm-message');
             if (messageEl) {
                 messageEl.style.whiteSpace = 'pre-line';
@@ -355,22 +355,25 @@
         return (state.detect?.suggestions || []).filter((row) => !later.has(pathKey(row.root)));
     }
 
-    function askMessage(rows) {
-        const total = _formatBulkBytes(state.detect?.suggested_reusable_bytes);
+    /** The question's words: a lead line, one row per folder when there are several, and a quiet note. */
+    function askContent(rows) {
+        // A size never breaks between the number and its unit.
+        const total = String(_formatBulkBytes(state.detect?.suggested_reusable_bytes)).replace(/ /g, '\u00a0');
         const count = (row) => (Array.isArray(row.models) ? row.models.length : 0);
         const all = rows.reduce((sum, row) => sum + count(row), 0);
         const name = kindLabel(rows[0].kind);
-        const head = rows.length === 1
+        const message = rows.length === 1
             ? appT('models.sources.askOne', '{path} holds {count} models this program uses (about {size}).', { path: rows[0].root, count: all, size: total })
-            : [
-                appT('models.sources.askMany', 'These folders hold {count} models this program uses (about {size}):', { count: all, size: total }),
-                ...rows.map((row) => appT('models.sources.askLine', '• {path} — {count} models', { path: row.root, count: count(row) })),
-            ].join('\n');
-        return [
-            head,
+            : appT('models.sources.askMany', 'These folders hold {count} models this program uses (about {size}):', { count: all, size: total });
+        const list = rows.length === 1 ? [] : rows.map((row) => ({
+            text: row.root,
+            meta: appT('models.sources.askLineCount', '{count} models', { count: count(row) }),
+        }));
+        const note = [
             appT('models.sources.askUse', 'Add it to the trusted folders and use them directly, without downloading them again.'),
             appT('models.sources.askReadOnly', 'The program only reads these files. It never changes {name}.', { name }),
-        ].join('\n');
+        ].join(' ');
+        return { message, list, note };
     }
 
     async function maybeAsk() {
@@ -383,7 +386,7 @@
             title: hasComfy
                 ? appT('models.sources.askTitleComfy', 'Found ComfyUI')
                 : appT('models.sources.askTitleModels', 'Found models you can reuse'),
-            message: askMessage(rows),
+            ...askContent(rows),
             okText: appT('models.sources.askUseOk', 'Add and use'),
             cancelText: appT('models.sources.askLater', 'Later'),
             align: 'left',

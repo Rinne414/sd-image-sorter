@@ -513,8 +513,10 @@ test.describe('the one-time question', () => {
     await expect(dialog).toBeVisible()
     await expect(dialog.locator('#confirm-title')).toHaveText('找到 ComfyUI')
     await expect(dialog.locator('#confirm-message')).toContainText(`${COMFY} 里有 5 个本程序要用的模型（约 5.90 GB）。`)
-    await expect(dialog.locator('#confirm-message')).toContainText('加入信任文件夹后直接使用，不再重复下载。')
-    await expect(dialog.locator('#confirm-message')).toContainText('程序只读取这些文件，不会修改 ComfyUI。')
+    // The reassurance is the quiet note under the message; one folder needs no list.
+    await expect(dialog.locator('#confirm-note')).toContainText('加入信任文件夹后直接使用，不再重复下载。')
+    await expect(dialog.locator('#confirm-note')).toContainText('程序只读取这些文件，不会修改 ComfyUI。')
+    await expect(dialog.locator('#confirm-list')).toBeHidden()
     await expect(dialog.locator('#btn-confirm-cancel')).toHaveText('以后再说')
     await expect(dialog.locator('#btn-confirm-ok')).toHaveText('加入并使用')
     await dialog.locator('#btn-confirm-cancel').click()
@@ -548,7 +550,9 @@ test.describe('the one-time question', () => {
 
     const dialog = page.locator('#confirm-modal')
     await expect(dialog.locator('#confirm-message')).toContainText('这些文件夹里共有 8 个本程序要用的模型（约 7.10 GB）：')
-    await expect(dialog.locator('#confirm-message')).toContainText(`• ${HUB} — 3 个模型`)
+    // Each folder is a row with its count (js/modules/confirm-details.js), not a typed bullet line.
+    const hubRow = dialog.locator('#confirm-list li').filter({ hasText: HUB })
+    await expect(hubRow.locator('.confirm-list-meta')).toHaveText('3 个模型')
     await dialog.locator('#btn-confirm-ok').click()
 
     await expect.poll(() => server.posts.map((post) => post.path)).toEqual([COMFY, HUB])
@@ -594,7 +598,7 @@ test.describe('the one-time question', () => {
     await expect(dialog.locator('#confirm-title')).toHaveText('Found ComfyUI')
     await expect(dialog.locator('#btn-confirm-cancel')).toHaveText('Later')
     await expect(dialog.locator('#btn-confirm-ok')).toHaveText('Add and use')
-    await expect(dialog.locator('#confirm-message')).toContainText('never changes ComfyUI')
+    await expect(dialog.locator('#confirm-note')).toContainText('never changes ComfyUI')
   })
 
   test('the question uses the plain button and a real danger confirm afterwards is still red', async ({ page }) => {

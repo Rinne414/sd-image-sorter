@@ -77,7 +77,7 @@ function renderModelManager(models = []) {
         if (!mirrorRow) {
             mirrorRow = document.createElement('div');
             mirrorRow.id = 'model-mirror-row';
-            mirrorRow.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:10px 14px;margin-bottom:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(var(--accent-rgb), 0.08);border-radius:12px;';
+            mirrorRow.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:10px 14px;margin-bottom:12px;background:rgba(255,255,255,0.03);border:1px solid var(--border-subtle);border-radius:12px;';
             // Download source, then the folders models may be read from (both inside the
             // folded download settings), then the cards.
             const anchor = document.getElementById('model-sources-section');

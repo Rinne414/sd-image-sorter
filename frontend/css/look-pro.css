@@ -498,3 +498,321 @@ html[data-look="pro"] #btn-language-toggle {
 html[data-look="pro"] #btn-language-toggle:hover {
     background: var(--surface-3);
 }
+
+/* ---- Settings: a content-width dialog of grouped rows (UI audit #6) ----
+   The dialog filled 90% of the screen, so each label sat a screen-width away
+   from its control; the title repeated the chosen tab; On/Off were buttons. */
+
+html[data-look="pro"] #model-manager-modal .modal-content {
+    width: min(1120px, calc(100vw - 64px));
+    max-width: min(1120px, calc(100vw - 64px));
+    border-radius: var(--pro-r-panel);
+}
+
+/* The chosen tab already names the page; the heading stays for screen readers. */
+html[data-look="pro"] #model-manager-modal .modal-header {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+html[data-look="pro"] #model-manager-modal .modal-close {
+    width: 32px;
+    height: 32px;
+    border-color: transparent;
+    background: transparent;
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] #model-manager-modal .modal-close:hover {
+    background: var(--surface-3);
+}
+
+/* Compact tabs in the middle of the bar; the chosen one lifted, not coloured. */
+html[data-look="pro"] #model-manager-modal .settings-modal-tabs {
+    justify-content: center;
+    gap: 2px;
+    padding: 2px 0 10px;
+    border: 0;
+    border-bottom: 1px solid var(--hairline-2);
+    border-radius: 0;
+    background: var(--surface-2);
+}
+
+html[data-look="pro"] #model-manager-modal .settings-modal-tab {
+    flex: 0 0 auto;
+    padding: 7px 16px;
+    border: 0;
+    border-radius: var(--pro-r-control);
+    color: var(--muted);
+    font-size: var(--pro-fs-body);
+    font-weight: 600;
+}
+
+html[data-look="pro"] #model-manager-modal .settings-modal-tab:hover {
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+html[data-look="pro"] #model-manager-modal .settings-modal-tab.active {
+    background: var(--pro-chosen-bg);
+    border: 0;
+    color: var(--text);
+}
+
+/* General: one readable column of grouped rows. */
+html[data-look="pro"] #model-manager-modal [data-settings-panel="general"] {
+    max-width: 760px;
+    margin: 0 auto;
+}
+
+html[data-look="pro"] #model-manager-modal .settings-home-panel {
+    gap: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+html[data-look="pro"] #model-manager-modal .settings-home-header h3 {
+    margin: 4px 4px 8px;
+    color: var(--muted);
+    font-size: var(--pro-fs-label);
+    font-weight: 600;
+}
+
+html[data-look="pro"] #model-manager-modal .settings-home-panel > .settings-row {
+    min-height: 56px;
+    margin: 0;
+    padding: 10px 16px;
+    border-radius: 0;
+    background: var(--surface-3);
+    box-shadow: inset 0 -1px 0 var(--hairline-2);
+}
+
+html[data-look="pro"] #model-manager-modal .settings-home-header + .settings-row {
+    border-top-left-radius: var(--pro-r-panel);
+    border-top-right-radius: var(--pro-r-panel);
+}
+
+html[data-look="pro"] #model-manager-modal .settings-home-panel > .settings-row:has(+ details),
+html[data-look="pro"] #model-manager-modal .settings-home-panel > .settings-row:last-child {
+    border-bottom-left-radius: var(--pro-r-panel);
+    border-bottom-right-radius: var(--pro-r-panel);
+    box-shadow: none;
+}
+
+html[data-look="pro"] #model-manager-modal .settings-home-panel > .settings-row.settings-row-toggle {
+    margin: 0;
+    padding: 10px 16px;
+}
+
+html[data-look="pro"] #model-manager-modal .settings-home-panel > .settings-row.settings-row-toggle:hover {
+    background: color-mix(in srgb, var(--surface-3) 88%, #FFFFFF);
+}
+
+html[data-look="pro"] #model-manager-modal .settings-row-copy strong {
+    font-size: var(--pro-fs-body);
+    font-weight: 600;
+}
+
+html[data-look="pro"] #model-manager-modal .settings-row-copy span {
+    font-size: var(--pro-fs-label);
+    line-height: 1.45;
+}
+
+/* The small word before a menu repeats the row's title; screen readers keep it. */
+html[data-look="pro"] #model-manager-modal .settings-inline-control > span:first-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+/* On/Off is a switch: the knob shows the state at a glance. The button keeps
+   its words for screen readers; a switch that is on is the accent, as on every
+   operating system. */
+html[data-look="pro"] #model-manager-modal .settings-row > .btn[aria-pressed] {
+    position: relative;
+    flex: 0 0 auto;
+    width: 44px;
+    min-width: 44px;
+    height: 26px;
+    min-height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: 13px;
+    background: rgba(255, 255, 255, 0.18);
+    opacity: 1;
+    transition: background 160ms ease;
+}
+
+html[data-look="pro"] #model-manager-modal .settings-row > .btn[aria-pressed] > * {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+html[data-look="pro"] #model-manager-modal .settings-row > .btn[aria-pressed]::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #FFFFFF;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    transition: transform 160ms ease;
+}
+
+html[data-look="pro"] #model-manager-modal .settings-row > .btn[aria-pressed="true"] {
+    background: var(--accent);
+    border: 0;
+}
+
+html[data-look="pro"] #model-manager-modal .settings-row > .btn[aria-pressed="true"]::after {
+    transform: translateX(18px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html[data-look="pro"] #model-manager-modal .settings-row > .btn[aria-pressed],
+    html[data-look="pro"] #model-manager-modal .settings-row > .btn[aria-pressed]::after {
+        transition: none;
+    }
+}
+
+/* Folded sections read as more rows of the same list. */
+html[data-look="pro"] #model-manager-modal .settings-home-panel > details {
+    margin-top: 12px;
+    border: 0;
+    border-radius: var(--pro-r-panel);
+    background: var(--surface-3);
+}
+
+/* Every fold arrow: a quiet line chevron instead of an accent text glyph. */
+html[data-look="pro"] .guided-advanced-summary::after,
+html[data-look="pro"] .tag-runtime-advanced-summary::after {
+    content: "";
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+    background: var(--muted);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+html[data-look="pro"] .guided-advanced-panel[open],
+html[data-look="pro"] .tag-runtime-advanced[open] {
+    border-color: var(--hairline-2);
+}
+
+/* Every menu draws the same quiet arrow instead of the browser's white one. */
+html[data-look="pro"] select.input-field:not([multiple]):not([size]) {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 30px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23A6A6AB' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 9px center;
+    background-size: 14px 14px;
+}
+
+html[data-look="pro"] #model-manager-modal .modal-close {
+    min-width: 32px;
+    min-height: 32px;
+    margin-bottom: -32px;
+}
+
+/* A path or address field needs the row's width: the words above, the field
+   and its buttons below, instead of the words squeezed into a narrow column. */
+html[data-look="pro"] #model-manager-modal .settings-output-row,
+html[data-look="pro"] #model-manager-modal .settings-comfyui-row {
+    flex-wrap: wrap;
+    row-gap: 10px;
+}
+
+html[data-look="pro"] #model-manager-modal .settings-output-row > .settings-row-copy,
+html[data-look="pro"] #model-manager-modal .settings-comfyui-row > .settings-row-copy,
+html[data-look="pro"] #model-manager-modal .settings-output-row > :last-child,
+html[data-look="pro"] #model-manager-modal .settings-comfyui-row > :last-child {
+    flex: 1 1 100%;
+    max-width: none;
+    min-width: 0;
+}
+
+/* ---- Model Center: one primary (download the chosen models) ----
+   Every card carried a filled accent button, an accent badge and an accent
+   edge, so nothing led. Card actions are secondary, "recommended" is a quiet
+   label, "missing" reads as a plain state, links are text. */
+html[data-look="pro"] #model-manager-grid .model-card,
+html[data-look="pro"] #model-manager-grid .model-card.is-recommended,
+html[data-look="pro"] #model-manager-grid .model-card.is-ready {
+    border-color: var(--hairline-2);
+    box-shadow: none;
+    border-radius: var(--pro-r-panel);
+}
+
+html[data-look="pro"] #model-manager-modal .model-card-badge {
+    background: var(--surface-3);
+    color: var(--muted);
+    letter-spacing: 0;
+}
+
+html[data-look="pro"] #model-manager-modal .model-card-status {
+    font-size: var(--pro-fs-label);
+    font-weight: 600;
+}
+
+html[data-look="pro"] #model-manager-modal .model-card-status.is-missing {
+    background: var(--surface-3);
+    color: var(--text-secondary);
+}
+
+html[data-look="pro"] #model-manager-modal .btn.btn-primary.btn-prepare-model,
+html[data-look="pro"] #model-manager-modal .btn.btn-primary.btn-small {
+    background: var(--surface-3);
+    border-color: var(--border-strong);
+    color: var(--text);
+}
+
+html[data-look="pro"] #model-manager-modal .btn.btn-primary.btn-prepare-model:hover,
+html[data-look="pro"] #model-manager-modal .btn.btn-primary.btn-small:hover {
+    background: color-mix(in srgb, var(--surface-3) 80%, #FFFFFF);
+    border-color: var(--border-strong);
+}
+
+html[data-look="pro"] #model-manager-modal summary {
+    color: var(--text-secondary);
+}
+
+html[data-look="pro"] #model-manager-modal summary:hover {
+    color: var(--text);
+}
+
+html[data-look="pro"] #model-mirror-row {
+    border-color: var(--hairline-2);
+}
+
+/* Dataset Audit: its panels, bars and score ring were drawn in the accent.
+   Inside this panel the accent variables mean a light neutral, so data reads
+   as data; buttons use --accent and keep the one primary colour. */
+html[data-look="pro"] #model-manager-modal [data-settings-panel="audit"] {
+    --accent-primary: #C9C9CE;
+    --accent-primary-rgb: 201, 201, 206;
+    --accent-secondary: #C9C9CE;
+    --accent-secondary-rgb: 201, 201, 206;
+    --accent-rgb: 201, 201, 206;
+}
+
+/* Focus is the cyan outline everywhere; the close buttons drew an accent glow too. */
+html[data-look="pro"] .modal-close:focus-visible {
+    box-shadow: none;
+}
