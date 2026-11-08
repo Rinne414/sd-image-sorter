@@ -13473,3 +13473,10 @@ html:lang(zh) {
 .nav-tools-item.nav-tools-proxy {
     display: none;
 }
+
+/* The empty library's lead is capped at 48ch: about 48 Latin letters but
+   only about 25 Chinese characters, so the Chinese sentence always broke
+   mid-word ("就可 / 以开始"). Chinese gets an em cap of the same reading width. */
+html:lang(zh) #gallery-empty-state .empty-state-onboarding > p {
+    max-width: 30em;
+}

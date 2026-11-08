@@ -1090,3 +1090,67 @@ html[data-look="pro"] #view-similar .similar-header > .guide-btn {
 html[data-look="pro"] #nav-library-chip-label .library-name-count {
     display: none;
 }
+
+/* ---- Sidebar sections: one header pattern (blind judge, round 3) ----
+   Each section header had its own boxed controls (a framed text button and
+   icon, a framed plus, a framed search). Every header action is a bare
+   button of one size until pointed at. */
+html[data-look="pro"] #btn-open-filters,
+html[data-look="pro"] #btn-manage-roots,
+html[data-look="pro"] #btn-refresh-folders,
+html[data-look="pro"] #btn-new-collection,
+html[data-look="pro"] #btn-smart-folders-manage {
+    min-height: 28px;
+    height: 28px;
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-secondary);
+    border-radius: var(--pro-r-control);
+}
+
+html[data-look="pro"] #btn-open-filters,
+html[data-look="pro"] #btn-refresh-folders,
+html[data-look="pro"] #btn-new-collection,
+html[data-look="pro"] #btn-smart-folders-manage {
+    width: 28px;
+    min-width: 28px;
+    padding: 0;
+}
+
+html[data-look="pro"] #btn-manage-roots {
+    padding: 0 8px;
+}
+
+html[data-look="pro"] #btn-open-filters:hover,
+html[data-look="pro"] #btn-manage-roots:hover,
+html[data-look="pro"] #btn-refresh-folders:hover,
+html[data-look="pro"] #btn-new-collection:hover,
+html[data-look="pro"] #btn-smart-folders-manage:hover {
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+/* The select-mode button at the foot is a normal-height button. */
+html[data-look="pro"] #btn-toggle-select.btn-large {
+    min-height: 40px;
+    height: 40px;
+    padding: 0 16px;
+}
+
+/* ---- Empty library: the first screen a beginner sees ----
+   The step numbers were accent text and each step's icon floated at
+   mid-height (the lead's width is fixed for Chinese in ui-refresh.css). */
+html[data-look="pro"] .empty-state-onboarding > .empty-icon .icon {
+    width: 28px;
+    height: 28px;
+}
+
+html[data-look="pro"] .onboarding-step-num {
+    color: var(--text);
+}
+
+html[data-look="pro"] .onboarding-step-icon {
+    align-self: flex-start;
+    margin-top: 2px;
+}

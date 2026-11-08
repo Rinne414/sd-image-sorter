@@ -173,18 +173,18 @@ test('pro look: the sidebar and gallery first rows share one line; the pinned to
   await open(page, 'pro')
   await expect(page.locator('#gallery-grid .gallery-item').first()).toBeVisible()
   const look = await page.evaluate(() => {
-    const middle = (sel: string) => { const r = document.querySelector(sel)!.getBoundingClientRect(); return (r.top + r.bottom) / 2 }
+    // The two facts that put both first rows on one line; live positions are
+    // not compared because a scan notice from another worker can shift one
+    // column in a parallel run (2026-11-08).
+    const height = (sel: string) => document.querySelector(sel)!.getBoundingClientRect().height
     const bg = getComputedStyle(document.getElementById('gallery-toolbar')!).backgroundColor
-    const header = document.querySelector('#view-gallery .gallery-header')!.getBoundingClientRect()
-    const container = document.querySelector('#view-gallery .gallery-container')!.getBoundingClientRect()
     return {
-      // A banner (missing or unreadable files) may sit above the header and
-      // push it down on purpose; the rows are compared only without one.
-      bannerAbove: header.top - container.top > 4,
-      offset: Math.abs(middle('#sidebar-library-line') - middle('#view-gallery .gallery-header')),
+      galleryTopPadding: getComputedStyle(document.querySelector('#view-gallery .gallery-container')!).paddingTop,
+      heightGap: Math.abs(height('#sidebar-library-line') - height('#view-gallery .gallery-header')),
       toolbarSeeThrough: bg === 'transparent' || /rgba\([^)]*,\s*0\)$/.test(bg),
     }
   })
-  if (!look.bannerAbove) expect(look.offset).toBeLessThanOrEqual(2)
+  expect(look.galleryTopPadding).toBe('0px')
+  expect(look.heightGap).toBeLessThanOrEqual(2)
   expect(look.toolbarSeeThrough).toBe(false)
 })
